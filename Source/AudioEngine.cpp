@@ -26,15 +26,17 @@ void AudioEngine::initialise() {
     midiMessageCollector.reset(deviceManager.getAudioDeviceSetup().sampleRate);
 
     // Enable all available MIDI inputs by default
-#if JUCE_LINUX || JUCE_BSD || JUCE_MAC || JUCE_IOS
     for (auto& info : juce::MidiInput::getAvailableDevices()) {
+        juce::Logger::writeToLog("Attempting to open MIDI input: " + info.name);
         auto input = juce::MidiInput::createNewDevice(info.name, this);
         if (input != nullptr) {
             input->start();
             midiInputs.push_back(std::move(input));
+            juce::Logger::writeToLog("Successfully opened MIDI input: " + info.name);
+        } else {
+            juce::Logger::writeToLog("Failed to open MIDI input: " + info.name);
         }
     }
-#endif
 
     if (!gsynth::PresetManager::loadDefaultPreset(mainProcessorGraph)) {
         createDefaultPatch(); // Fallback
@@ -234,13 +236,21 @@ void AudioEngine::createDefaultPatch() {
 }
 
 void AudioEngine::handleIncomingMidiMessage(juce::MidiInput* source, const juce::MidiMessage& message) {
+    std::cout << "MIDI Received from: " << source->getName().toStdString()
+              << " message: " << message.getDescription().toStdString() << std::endl;
+    bool routed = false;
     for (auto* node : mainProcessorGraph.getNodes()) {
         if (auto* extMidi = dynamic_cast<ExternalMidiModule*>(node->getProcessor())) {
-            // Check if device matches (using name match for now)
+            std::cout << "Checking against ExternalMidiModule: " << extMidi->getName().toStdString() << std::endl;
             if (source->getName() == extMidi->getName()) {
+                std::cout << "Routing to ExternalMidiModule: " << extMidi->getName().toStdString() << std::endl;
                 extMidi->pushMidiMessage(message);
+                routed = true;
             }
         }
+    }
+    if (!routed) {
+        std::cout << "No ExternalMidiModule found for device: " << source->getName().toStdString() << std::endl;
     }
     midiMessageCollector.addMessageToQueue(message);
 }
@@ -256,6 +266,21 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     juce::AudioBuffer<float> buffer(const_cast<float**>(outputChannelData), numOutputChannels, numSamples);
     juce::MidiBuffer midiMessages;
     midiMessageCollector.removeNextBlockOfMessages(midiMessages, numSamples);
+
+    // Collect MIDI from active ExternalMidiModules
+    for (auto* node : mainProcessorGraph.getNodes()) {
+        if (auto* extMidi = dynamic_cast<ExternalMidiModule*>(node->getProcessor())) {
+            juce::MidiBuffer extMidiMessages;
+            // We shouldn't call processBlock on the module directly as the graph does that.
+            // The module's internal buffer is populated by handleIncomingMidiMessage.
+            // Let's pass an empty buffer to processBlock to just collect the MIDI.
+            juce::AudioBuffer<float> silentBuffer(numOutputChannels, numSamples);
+            silentBuffer.clear();
+            extMidi->processBlock(silentBuffer, extMidiMessages);
+            midiMessages.addEvents(extMidiMessages, 0, numSamples, 0);
+        }
+    }
+
     mainProcessorGraph.processBlock(buffer, midiMessages);
 }
 

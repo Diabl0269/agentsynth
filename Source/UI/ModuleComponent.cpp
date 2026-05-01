@@ -142,10 +142,21 @@ void ModuleComponent::createControls() {
         auto* deviceCombo = comboBoxes.add(new juce::ComboBox("Device"));
         deviceCombo->addItem("None", 1);
         int i = 2;
-        for (auto& info : juce::MidiInput::getAvailableDevices()) {
+        auto devices = juce::MidiInput::getAvailableDevices();
+        for (auto& info : devices) {
             deviceCombo->addItem(info.name, i++);
         }
         deviceCombo->setSelectedId(1, juce::dontSendNotification);
+
+        deviceCombo->onChange = [extMidi, deviceCombo, devices]() {
+            int selectedId = deviceCombo->getSelectedId();
+            if (selectedId > 1) {
+                extMidi->setMidiDeviceName(devices[selectedId - 2].name);
+            } else {
+                extMidi->setMidiDeviceName("External MIDI");
+            }
+        };
+
         addAndMakeVisible(deviceCombo);
         comboLabels.add(new juce::Label("Device", "Device"));
         addAndMakeVisible(comboLabels.getLast());

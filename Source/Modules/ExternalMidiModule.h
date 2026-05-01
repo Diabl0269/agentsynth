@@ -47,6 +47,8 @@ public:
         incomingMessages.addEvent(msg, 0);
     }
 
+    void setMidiDeviceName(const juce::String& newName) { setModuleName(newName); }
+
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return true; }
 
