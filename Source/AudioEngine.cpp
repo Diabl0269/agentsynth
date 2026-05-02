@@ -178,7 +178,7 @@ void AudioEngine::updateModuleNames() {
         if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor())) {
             if (module->getModuleType() == ModuleType::ExternalMidi)
                 continue; // Do not rename External MIDI modules as their name matches the device name
-            
+
             juce::String baseName = module->getName();
             int lastSpace = baseName.lastIndexOf(" ");
             if (lastSpace != -1 && baseName.substring(lastSpace + 1).containsOnly("0123456789"))
