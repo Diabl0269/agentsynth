@@ -55,6 +55,7 @@ public:
     void toggleModBypass(juce::AudioProcessorGraph::NodeID attenuverterNodeID);
     bool isModBypassed(juce::AudioProcessorGraph::NodeID attenuverterNodeID) const;
     void updateModuleNames();
+    void ensureMidiDeviceOpen(const juce::String& deviceName);
 
 private:
     juce::AudioDeviceManager deviceManager;

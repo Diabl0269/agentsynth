@@ -19,18 +19,20 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
 
     if (auto* modBase = dynamic_cast<ModuleBase*>(module)) {
         if (auto* vb = modBase->getVisualBuffer()) {
-            scopeComponent = std::make_unique<ScopeComponent>(*vb);
-            addAndMakeVisible(scopeComponent.get());
+            if (getType(module) != ModuleType::ExternalMidi) {
+                scopeComponent = std::make_unique<ScopeComponent>(*vb);
+                addAndMakeVisible(scopeComponent.get());
 
-            scopeToggle = std::make_unique<juce::ToggleButton>("Show Scope");
-            bool isFilter = (getType(module) == ModuleType::Filter);
-            scopeToggle->setToggleState(!isFilter, juce::dontSendNotification);
-            scopeComponent->setVisible(!isFilter);
-            scopeToggle->onClick = [this] {
-                scopeComponent->setVisible(scopeToggle->getToggleState());
-                updateLayout();
-            };
-            addAndMakeVisible(scopeToggle.get());
+                scopeToggle = std::make_unique<juce::ToggleButton>("Show Scope");
+                bool isFilter = (getType(module) == ModuleType::Filter);
+                scopeToggle->setToggleState(!isFilter, juce::dontSendNotification);
+                scopeComponent->setVisible(!isFilter);
+                scopeToggle->onClick = [this] {
+                    scopeComponent->setVisible(scopeToggle->getToggleState());
+                    updateLayout();
+                };
+                addAndMakeVisible(scopeToggle.get());
+            }
         }
     }
 
@@ -148,10 +150,12 @@ void ModuleComponent::createControls() {
         }
         deviceCombo->setSelectedId(1, juce::dontSendNotification);
 
-        deviceCombo->onChange = [extMidi, deviceCombo, devices]() {
+        deviceCombo->onChange = [extMidi, deviceCombo, devices, this]() {
             int selectedId = deviceCombo->getSelectedId();
             if (selectedId > 1) {
-                extMidi->setMidiDeviceName(devices[selectedId - 2].name);
+                juce::String deviceName = devices[selectedId - 2].name;
+                owner.getAudioEngine().ensureMidiDeviceOpen(deviceName);
+                extMidi->setMidiDeviceName(deviceName);
             } else {
                 extMidi->setMidiDeviceName("External MIDI");
             }

@@ -9,6 +9,7 @@ public:
         : ModuleBase("External MIDI", 0, 0) {
         addParameter(deviceIndexParam = new juce::AudioParameterInt("deviceIndex", "Device", 0, 100, 0));
         addParameter(channelParam = new juce::AudioParameterInt("channel", "Channel", 0, 16, 0)); // 0 = All
+        enableVisualBuffer(true);
     }
 
     ~ExternalMidiModule() override = default;
@@ -43,6 +44,31 @@ public:
         } else {
             midiMessages = incomingMessages;
         }
+
+        // Push activity to visual buffer for the activity LED
+        if (auto* vb = getVisualBuffer()) {
+            float activity = notesHeld > 0 ? 1.0f : 0.0f;
+            for (const auto metadata : midiMessages) {
+                auto msg = metadata.getMessage();
+                
+                if (msg.isNoteOn()) {
+                    notesHeld++;
+                } else if (msg.isNoteOff() && notesHeld > 0) {
+                    notesHeld--;
+                } else if (msg.isAllNotesOff() || msg.isAllSoundOff()) {
+                    notesHeld = 0;
+                }
+
+                if (!msg.isActiveSense() && !msg.isMidiClock()) {
+                    activity = 1.0f;
+                }
+            }
+            int numSamples = buffer.getNumSamples() > 0 ? buffer.getNumSamples() : 512;
+            for (int i = 0; i < numSamples; ++i) {
+                vb->pushSample(activity);
+            }
+        }
+
         incomingMessages.clear();
     }
 
@@ -63,6 +89,7 @@ private:
     juce::AudioParameterInt* channelParam;
     juce::MidiBuffer incomingMessages;
     juce::CriticalSection lock;
+    int notesHeld = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ExternalMidiModule)
 };

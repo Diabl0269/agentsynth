@@ -30,12 +30,6 @@ void AudioEngine::initialise() {
         std::cout << "Attempting to open MIDI input: " << info.name.toStdString()
                   << " (ID: " << info.identifier.toStdString() << ")" << std::endl;
 
-        // Skip Bluetooth devices that might cause crashes if privacy isn't granted yet
-        if (info.name.containsIgnoreCase("Bluetooth")) {
-            std::cout << "Skipping potentially privacy-sensitive device: " << info.name.toStdString() << std::endl;
-            continue;
-        }
-
         auto input = juce::MidiInput::openDevice(info.identifier, this);
         if (input != nullptr) {
             input->start();
@@ -60,6 +54,26 @@ void AudioEngine::shutdown() {
     midiInputs.clear();
 #endif
     mainProcessorGraph.clear();
+}
+
+void AudioEngine::ensureMidiDeviceOpen(const juce::String& deviceName) {
+    for (auto& input : midiInputs) {
+        if (input->getName() == deviceName) {
+            return; // Already open
+        }
+    }
+
+    for (auto& info : juce::MidiInput::getAvailableDevices()) {
+        if (info.name == deviceName) {
+            auto input = juce::MidiInput::openDevice(info.identifier, this);
+            if (input != nullptr) {
+                input->start();
+                midiInputs.push_back(std::move(input));
+                std::cout << "Successfully opened newly requested MIDI input: " << info.name.toStdString() << std::endl;
+            }
+            break;
+        }
+    }
 }
 
 std::vector<AudioEngine::ModRoutingInfo> AudioEngine::getActiveModRoutings() const {
@@ -162,6 +176,9 @@ void AudioEngine::updateModuleNames() {
     std::map<juce::String, int> typeCounts;
     for (auto* node : mainProcessorGraph.getNodes()) {
         if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor())) {
+            if (module->getModuleType() == ModuleType::ExternalMidi)
+                continue; // Do not rename External MIDI modules as their name matches the device name
+            
             juce::String baseName = module->getName();
             int lastSpace = baseName.lastIndexOf(" ");
             if (lastSpace != -1 && baseName.substring(lastSpace + 1).containsOnly("0123456789"))
