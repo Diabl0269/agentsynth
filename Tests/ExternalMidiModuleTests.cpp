@@ -31,8 +31,8 @@ TEST_F(ExternalMidiModuleTest, ProcessesIncomingMidi) {
 
 TEST_F(ExternalMidiModuleTest, FiltersByChannel) {
     // Set channel to 2
-    auto* channelParam = (juce::AudioParameterInt*)module->getParameters()[1];
-    channelParam->setValueNotifyingHost(channelParam->convertTo0to1(3)); // Value 3 = Channel 3
+    auto* channelParam = (juce::AudioParameterInt*)module->getParameters()[2];
+    *channelParam = 3;
 
     auto msg1 = juce::MidiMessage::noteOn(1, 60, (juce::uint8)100);
     auto msg2 = juce::MidiMessage::noteOn(2, 60, (juce::uint8)100);
