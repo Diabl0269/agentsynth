@@ -1,4 +1,5 @@
 #include "ModuleComponent.h"
+#include "../Modules/ExternalMidiModule.h"
 #include "../Modules/ModuleBase.h"
 #include "../Modules/SequencerModule.h"
 #include "GraphEditor.h"
@@ -18,18 +19,20 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
 
     if (auto* modBase = dynamic_cast<ModuleBase*>(module)) {
         if (auto* vb = modBase->getVisualBuffer()) {
-            scopeComponent = std::make_unique<ScopeComponent>(*vb);
-            addAndMakeVisible(scopeComponent.get());
+            if (getType(module) != ModuleType::ExternalMidi) {
+                scopeComponent = std::make_unique<ScopeComponent>(*vb);
+                addAndMakeVisible(scopeComponent.get());
 
-            scopeToggle = std::make_unique<juce::ToggleButton>("Show Scope");
-            bool isFilter = (getType(module) == ModuleType::Filter);
-            scopeToggle->setToggleState(!isFilter, juce::dontSendNotification);
-            scopeComponent->setVisible(!isFilter);
-            scopeToggle->onClick = [this] {
-                scopeComponent->setVisible(scopeToggle->getToggleState());
-                updateLayout();
-            };
-            addAndMakeVisible(scopeToggle.get());
+                scopeToggle = std::make_unique<juce::ToggleButton>("Show Scope");
+                bool isFilter = (getType(module) == ModuleType::Filter);
+                scopeToggle->setToggleState(!isFilter, juce::dontSendNotification);
+                scopeComponent->setVisible(!isFilter);
+                scopeToggle->onClick = [this] {
+                    scopeComponent->setVisible(scopeToggle->getToggleState());
+                    updateLayout();
+                };
+                addAndMakeVisible(scopeToggle.get());
+            }
         }
     }
 
@@ -137,6 +140,54 @@ void ModuleComponent::createControls() {
             midiKeyboard->getKeyboardState(), juce::MidiKeyboardComponent::horizontalKeyboard);
         keyboardComponent->setWantsKeyboardFocus(true);
         addAndMakeVisible(keyboardComponent.get());
+    } else if (auto* extMidi = dynamic_cast<ExternalMidiModule*>(module)) {
+        auto* deviceCombo = comboBoxes.add(new juce::ComboBox("Device"));
+        deviceCombo->addItem("None", 1);
+        int i = 2;
+        auto devices = juce::MidiInput::getAvailableDevices();
+        for (auto& info : devices) {
+            deviceCombo->addItem(info.name, i++);
+        }
+        deviceCombo->setSelectedId(1, juce::dontSendNotification);
+
+        deviceCombo->onChange = [extMidi, deviceCombo, devices, this]() {
+            int selectedId = deviceCombo->getSelectedId();
+            if (selectedId > 1) {
+                juce::String deviceName = devices[selectedId - 2].name;
+                owner.getAudioEngine().ensureMidiDeviceOpen(deviceName);
+                extMidi->setMidiDeviceName(deviceName);
+            } else {
+                extMidi->setMidiDeviceName("External MIDI");
+            }
+        };
+
+        addAndMakeVisible(deviceCombo);
+        comboLabels.add(new juce::Label("Device", "Device"));
+        addAndMakeVisible(comboLabels.getLast());
+
+        auto* channelCombo = comboBoxes.add(new juce::ComboBox("Channel"));
+        channelCombo->addItem("All", 1);
+        for (int c = 1; c <= 16; ++c) {
+            channelCombo->addItem("Channel " + juce::String(c), c + 1);
+        }
+        channelCombo->setSelectedId(1, juce::dontSendNotification);
+
+        channelCombo->onChange = [extMidi, channelCombo]() {
+            int selectedId = channelCombo->getSelectedId();
+            // selectedId 1 -> param 0 (All)
+            // selectedId 2 -> param 1 (Channel 1)
+            // selectedId 17 -> param 16 (Channel 16)
+            auto* param = dynamic_cast<juce::AudioParameterInt*>(extMidi->getParameters()[1]);
+            if (param != nullptr) {
+                // If ID is 1, we set 0 (All).
+                // If ID is 2, we set 1 (Ch1).
+                param->setValueNotifyingHost(param->convertTo0to1(selectedId - 1));
+            }
+        };
+
+        addAndMakeVisible(channelCombo);
+        comboLabels.add(new juce::Label("Channel", "Channel"));
+        addAndMakeVisible(comboLabels.getLast());
     } else {
         const auto& params = module->getParameters();
 
@@ -757,7 +808,8 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                      {{"Sequencer", ModuleType::Sequencer},
                       {"Poly Sequencer", ModuleType::PolySequencer},
                       {"MIDI Keyboard", ModuleType::MidiKeyboard},
-                      {"Poly MIDI", ModuleType::PolyMidi}}},
+                      {"Poly MIDI", ModuleType::PolyMidi},
+                      {"External MIDI", ModuleType::ExternalMidi}}},
                     {"Envelopes & Control", {{"ADSR", ModuleType::ADSR}, {"VCA", ModuleType::VCA}}},
                     {"Filters", {{"Filter", ModuleType::Filter}}},
                     {"Modulation FX",

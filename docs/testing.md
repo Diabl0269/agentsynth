@@ -31,6 +31,7 @@ Headless DSP tests that render audio through individual modules and verify outpu
 | FX module tests | 46 | Delay (passthrough, feedback), Distortion (clipping, drive), Reverb (room size), Chorus, Phaser, Compressor, Flanger, Limiter |
 | AntiClickTest | 4 | ADSR minimum release, smooth parameter transitions |
 | EdgeCaseTests | 21 | Zero-length buffers, extreme parameters, single-sample buffers, rapid parameter changes, large buffers |
+| AudioRenderingTests | 26 | Snapshot-based tests comparing bit-perfect output against reference files; covers full chains (Osc->Filter->VCA), modulation accuracy, and External MIDI input |
 
 ### Integration Tests (~38 tests)
 
@@ -98,6 +99,17 @@ When adding a new audio module:
 1. **Unit tests** in `Tests/<ModuleName>Tests.cpp` — test DSP output, parameter handling, edge cases
 2. **E2E coverage** — add the module's name string to the `moduleTypes` array in `E2EWorkflowTest.DropAllModuleTypes_NoCrash`
 3. **Add to `Tests/CMakeLists.txt`**
+
+## Snapshot Testing
+
+The `AudioRenderingTests` suite compares rendered audio against "golden" reference files stored in `Tests/reference/`.
+
+- **To run**: `./build/Tests/GravisynthTests --gtest_filter="AudioRenderingTest.Snapshot*"`
+- **To update references**: If you intentionally change DSP logic (e.g., a better filter algorithm) and want to update the baseline:
+  ```bash
+  bash scripts/update-reference.sh
+  ```
+- **To listen**: Use `scripts/play-reference.sh <filename>` (requires `ffplay` or `aplay`).
 
 ## CI
 

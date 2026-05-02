@@ -6,7 +6,9 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_core/juce_core.h>
 
-class AudioEngine : public juce::AudioIODeviceCallback {
+class AudioEngine
+    : public juce::AudioIODeviceCallback
+    , public juce::MidiInputCallback {
 public:
     AudioEngine();
     ~AudioEngine() override;
@@ -20,6 +22,8 @@ public:
 
     void audioDeviceAboutToStart(juce::AudioIODevice* device) override;
     void audioDeviceStopped() override;
+
+    void handleIncomingMidiMessage(juce::MidiInput* source, const juce::MidiMessage& message) override;
 
     juce::AudioProcessorGraph& getGraph() { return mainProcessorGraph; }
     juce::AudioDeviceManager& getDeviceManager() { return deviceManager; }
@@ -51,6 +55,7 @@ public:
     void toggleModBypass(juce::AudioProcessorGraph::NodeID attenuverterNodeID);
     bool isModBypassed(juce::AudioProcessorGraph::NodeID attenuverterNodeID) const;
     void updateModuleNames();
+    void ensureMidiDeviceOpen(const juce::String& deviceName);
 
 private:
     juce::AudioDeviceManager deviceManager;
@@ -58,6 +63,9 @@ private:
     juce::AudioProcessorPlayer processorPlayer;
 
     void createDefaultPatch();
+
+    juce::MidiMessageCollector midiMessageCollector;
+    std::vector<std::unique_ptr<juce::MidiInput>> midiInputs;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioEngine)
 };

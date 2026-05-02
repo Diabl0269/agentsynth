@@ -23,6 +23,7 @@ enum class ModuleType {
     PolySequencer,
     MidiKeyboard,
     PolyMidi,
+    ExternalMidi,
     Attenuverter,
     Delay,
     Distortion,

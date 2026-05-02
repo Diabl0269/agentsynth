@@ -2,6 +2,7 @@
 #include "../AI/AIStateMapper.h"
 #include "../Modules/ADSRModule.h"
 #include "../Modules/AttenuverterModule.h"
+#include "../Modules/ExternalMidiModule.h"
 #include "../Modules/FX/ChorusModule.h"
 #include "../Modules/FX/CompressorModule.h"
 #include "../Modules/FX/DelayModule.h"
@@ -882,6 +883,8 @@ void GraphEditor::itemDropped(const SourceDetails& dragSourceDetails) {
         newProcessor = std::make_unique<LimiterModule>();
     else if (name == "Poly MIDI")
         newProcessor = std::make_unique<PolyMidiModule>();
+    else if (name == "External MIDI")
+        newProcessor = std::make_unique<ExternalMidiModule>();
     else if (name == "Voice Mixer")
         newProcessor = std::make_unique<VoiceMixerModule>();
 

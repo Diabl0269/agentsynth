@@ -37,6 +37,7 @@ add_executable(GravisynthTests
     IntegrationTests.cpp
     UndoRedoTests.cpp
     E2EWorkflowTests.cpp
+    ExternalMidiModuleTests.cpp
     PresetManagerTests.cpp
     ModuleBypassTests.cpp
     VisualSignalFlowTests.cpp
@@ -44,6 +45,7 @@ add_executable(GravisynthTests
     OscillatorCVModulationTests.cpp
     SettingsWindowTests.cpp
     ShortcutManagerTests.cpp
+    AudioRenderingTests.cpp
     ../Source/MainComponent.cpp
     ../Source/UI/GraphEditor.cpp
     ../Source/UI/ModMatrixComponent.cpp

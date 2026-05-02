@@ -281,7 +281,7 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
     : appProperties(appProperties) {
     auto* audioSelector = new juce::AudioDeviceSelectorComponent(deviceManager, 0, 2, // min/max inputs
                                                                  0, 2,                // min/max outputs
-                                                                 false, false,        // midis
+                                                                 true, true,          // midi
                                                                  false, false         // bit depths
     );
     tabs.addTab("Audio", juce::Colours::darkgrey, audioSelector, true);

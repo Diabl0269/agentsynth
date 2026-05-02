@@ -1,7 +1,9 @@
 #include "AIStateMapper.h"
 #include "../Modules/ADSRModule.h"
 #include "../Modules/AttenuverterModule.h"
+#include "../Modules/ExternalMidiModule.h"
 #include "../Modules/FX/ChorusModule.h"
+
 #include "../Modules/FX/CompressorModule.h"
 #include "../Modules/FX/DelayModule.h"
 #include "../Modules/FX/DistortionModule.h"
@@ -56,7 +58,8 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Compressor", []() { return std::make_unique<CompressorModule>(); }},
     {"Flanger", []() { return std::make_unique<FlangerModule>(); }},
     {"Limiter", []() { return std::make_unique<LimiterModule>(); }},
-    {"Voice Mixer", []() { return std::make_unique<VoiceMixerModule>(); }}};
+    {"Voice Mixer", []() { return std::make_unique<VoiceMixerModule>(); }},
+    {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }}};
 
 bool AIStateMapper::validatePatchJSON(const juce::var& json) {
     if (!json.isObject()) {
@@ -160,6 +163,8 @@ static juce::String getFactoryTypeName(juce::AudioProcessor* processor) {
             return "Limiter";
         case ModuleType::VoiceMixer:
             return "Voice Mixer";
+        case ModuleType::ExternalMidi:
+            return "External MIDI";
         }
     }
     return processor->getName();
@@ -798,7 +803,7 @@ juce::var AIStateMapper::getPatchSchema() {
                           "Input\", \"Oscillator\", \"Filter\", \"VCA\", \"ADSR\", \"Sequencer\", \"LFO\", "
                           "\"Distortion\", \"Delay\", \"Reverb\", \"MIDI Keyboard\", \"Amp Env\", \"Filter Env\", "
                           "\"Poly MIDI\", \"Poly Sequencer\", \"Chorus\", \"Phaser\", "
-                          "\"Compressor\", \"Flanger\", \"Limiter\"]}"));
+                          "\"Compressor\", \"Flanger\", \"Limiter\", \"External MIDI\"]}"));
     nodeProperties->setProperty("params", juce::JSON::parse("{\"type\": \"object\"}"));
 
     nodeItems->setProperty("properties", juce::var(nodeProperties.get()));
