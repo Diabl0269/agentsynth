@@ -37,6 +37,7 @@ add_executable(GravisynthTests
     IntegrationTests.cpp
     UndoRedoTests.cpp
     E2EWorkflowTests.cpp
+    ExternalMidiModuleTests.cpp
     PresetManagerTests.cpp
     ModuleBypassTests.cpp
     VisualSignalFlowTests.cpp

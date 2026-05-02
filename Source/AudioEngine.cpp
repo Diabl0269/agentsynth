@@ -27,14 +27,22 @@ void AudioEngine::initialise() {
 
     // Enable all available MIDI inputs by default
     for (auto& info : juce::MidiInput::getAvailableDevices()) {
-        juce::Logger::writeToLog("Attempting to open MIDI input: " + info.name);
-        auto input = juce::MidiInput::createNewDevice(info.name, this);
+        std::cout << "Attempting to open MIDI input: " << info.name.toStdString()
+                  << " (ID: " << info.identifier.toStdString() << ")" << std::endl;
+
+        // Skip Bluetooth devices that might cause crashes if privacy isn't granted yet
+        if (info.name.containsIgnoreCase("Bluetooth")) {
+            std::cout << "Skipping potentially privacy-sensitive device: " << info.name.toStdString() << std::endl;
+            continue;
+        }
+
+        auto input = juce::MidiInput::openDevice(info.identifier, this);
         if (input != nullptr) {
             input->start();
             midiInputs.push_back(std::move(input));
-            juce::Logger::writeToLog("Successfully opened MIDI input: " + info.name);
+            std::cout << "Successfully opened MIDI input: " << info.name.toStdString() << std::endl;
         } else {
-            juce::Logger::writeToLog("Failed to open MIDI input: " + info.name);
+            std::cout << "Failed to open MIDI input: " << info.name.toStdString() << std::endl;
         }
     }
 
@@ -268,18 +276,13 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     midiMessageCollector.removeNextBlockOfMessages(midiMessages, numSamples);
 
     // Collect MIDI from active ExternalMidiModules
-    for (auto* node : mainProcessorGraph.getNodes()) {
-        if (auto* extMidi = dynamic_cast<ExternalMidiModule*>(node->getProcessor())) {
-            juce::MidiBuffer extMidiMessages;
-            // We shouldn't call processBlock on the module directly as the graph does that.
-            // The module's internal buffer is populated by handleIncomingMidiMessage.
-            // Let's pass an empty buffer to processBlock to just collect the MIDI.
-            juce::AudioBuffer<float> silentBuffer(numOutputChannels, numSamples);
-            silentBuffer.clear();
-            extMidi->processBlock(silentBuffer, extMidiMessages);
-            midiMessages.addEvents(extMidiMessages, 0, numSamples, 0);
-        }
-    }
+    // The ExternalMidiModule is just a processor in the graph.
+    // It should collect messages in handleIncomingMidiMessage,
+    // and then processBlock should output those to its MIDI output port.
+    // If we call processBlock on it, we might be clearing its buffer too early.
+    // Let's rely on the graph to process all nodes.
+
+    // MIDI messages from collector are already in midiMessages.
 
     mainProcessorGraph.processBlock(buffer, midiMessages);
 }

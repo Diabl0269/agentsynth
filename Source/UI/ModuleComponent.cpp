@@ -167,6 +167,20 @@ void ModuleComponent::createControls() {
             channelCombo->addItem("Channel " + juce::String(c), c + 1);
         }
         channelCombo->setSelectedId(1, juce::dontSendNotification);
+
+        channelCombo->onChange = [extMidi, channelCombo]() {
+            int selectedId = channelCombo->getSelectedId();
+            // selectedId 1 -> param 0 (All)
+            // selectedId 2 -> param 1 (Channel 1)
+            // selectedId 17 -> param 16 (Channel 16)
+            auto* param = dynamic_cast<juce::AudioParameterInt*>(extMidi->getParameters()[1]);
+            if (param != nullptr) {
+                // If ID is 1, we set 0 (All).
+                // If ID is 2, we set 1 (Ch1).
+                param->setValueNotifyingHost(param->convertTo0to1(selectedId - 1));
+            }
+        };
+
         addAndMakeVisible(channelCombo);
         comboLabels.add(new juce::Label("Channel", "Channel"));
         addAndMakeVisible(comboLabels.getLast());

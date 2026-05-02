@@ -24,20 +24,24 @@ public:
         }
 
         const juce::ScopedLock sl(lock);
-
         // Filter messages by channel
         int targetChannel = channelParam->get();
+        // targetChannel is 0=All, 1=Ch1, 2=Ch2, ...
+
+        // Debug:
+        // std::cout << "Filtering MIDI, targetChannel: " << targetChannel << std::endl;
+
         if (targetChannel > 0) {
             juce::MidiBuffer filtered;
-            for (const auto metadata : incomingMessages) {
-                auto msg = metadata.getMessage();
+            for (auto it = incomingMessages.begin(); it != incomingMessages.end(); ++it) {
+                auto msg = (*it).getMessage();
                 if (msg.getChannel() == targetChannel) {
-                    filtered.addEvent(msg, metadata.samplePosition);
+                    filtered.addEvent(msg, (*it).samplePosition);
                 }
             }
-            midiMessages.swapWith(filtered);
+            midiMessages = filtered;
         } else {
-            midiMessages.swapWith(incomingMessages);
+            midiMessages = incomingMessages;
         }
         incomingMessages.clear();
     }

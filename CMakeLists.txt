@@ -109,6 +109,8 @@ juce_add_gui_app(Gravisynth
     PRODUCT_NAME "Gravisynth"
     VERSION "0.13.2"
     BUNDLE_ID "com.gravisynth.app"
+    BLUETOOTH_PERMISSION_ENABLED TRUE
+    BLUETOOTH_PERMISSION_TEXT "We need Bluetooth access to connect to your external MIDI devices."
 )
 
 juce_generate_juce_header(Gravisynth)
