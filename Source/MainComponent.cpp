@@ -120,7 +120,7 @@ MainComponent::MainComponent(std::unique_ptr<gsynth::AIProvider> provider)
     };
 
     addAndMakeVisible(toggleModMatrixButton);
-    toggleModMatrixButton.setButtonText("Hide Matrix");
+    toggleModMatrixButton.setButtonText(graphEditor.isModMatrixVisible() ? "Hide Matrix" : "Show Matrix");
     toggleModMatrixButton.setComponentID("toggleModMatrix");
     toggleModMatrixButton.onClick = [this] {
         graphEditor.toggleModMatrixVisibility();
