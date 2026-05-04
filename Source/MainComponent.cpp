@@ -42,6 +42,8 @@ MainComponent::MainComponent(std::unique_ptr<gsynth::AIProvider> provider)
     addAndMakeVisible(graphEditor);
     addAndMakeVisible(moduleLibrary);
     addAndMakeVisible(aiChatComponent);
+    aiChatComponent.setVisible(isAiPanelVisible);
+    graphEditor.getModMatrix().setVisible(graphEditor.isModMatrixVisible());
 
     // Buttons
     addAndMakeVisible(saveButton);
