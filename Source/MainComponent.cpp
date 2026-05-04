@@ -238,6 +238,18 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
+    case GravisynthCommands::toggleModMatrix: {
+        result.setInfo("Toggle Mod Matrix", "Toggle the modulation matrix panel", "View", 0);
+        auto kp = shortcutManager.getBinding("toggleModMatrix");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case GravisynthCommands::toggleAiPanel: {
+        result.setInfo("Toggle AI Panel", "Toggle the AI chat panel", "View", 0);
+        auto kp = shortcutManager.getBinding("toggleAiPanel");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
     default:
         break;
     }
