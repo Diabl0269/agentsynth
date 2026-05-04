@@ -104,7 +104,7 @@ When adding a new audio module:
 
 The `AudioRenderingTests` suite compares rendered audio against "golden" reference files stored in `Tests/reference/`.
 
-- **To run**: `./build/Tests/GravisynthTests --gtest_filter="AudioRenderingTest.Snapshot*"`
+- **To run**: `./build/Tests/AgentSynthTests --gtest_filter="AudioRenderingTest.Snapshot*"`
 - **To update references**: If you intentionally change DSP logic (e.g., a better filter algorithm) and want to update the baseline:
   ```bash
   bash scripts/update-reference.sh

@@ -15,10 +15,10 @@ echo "==> Removing old reference files..."
 rm -f "$REF_DIR"/*.raw
 
 echo "==> Building tests..."
-cmake --build "$REPO_ROOT/build" --target GravisynthTests -j"$(sysctl -n hw.logicalcpu 2>/dev/null || nproc)"
+cmake --build "$REPO_ROOT/build" --target AgentSynthTests -j"$(sysctl -n hw.logicalcpu 2>/dev/null || nproc)"
 
 echo "==> Running snapshot tests to generate new references..."
-"$REPO_ROOT/build/Tests/GravisynthTests" --gtest_filter="AudioRenderingTest.Snapshot*"
+"$REPO_ROOT/build/Tests/AgentSynthTests" --gtest_filter="AudioRenderingTest.Snapshot*"
 
 echo "==> Done. New reference files:"
 ls -la "$REF_DIR"/*.raw 2>/dev/null || echo "(none generated — check test output)"

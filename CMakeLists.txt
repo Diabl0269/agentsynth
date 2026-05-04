@@ -108,7 +108,7 @@ endif()
 juce_add_gui_app(AgentSynth
     PRODUCT_NAME "AgentSynth"
     VERSION "0.13.2"
-    BUNDLE_ID "com.gravisynth.app"
+    BUNDLE_ID "com.agentsynth.app"
     BLUETOOTH_PERMISSION_ENABLED TRUE
     BLUETOOTH_PERMISSION_TEXT "We need Bluetooth access to connect to your external MIDI devices."
 )
