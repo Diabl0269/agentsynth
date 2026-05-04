@@ -1,4 +1,3 @@
-#include "../Source/GravisynthUndoManager.h"
 #include "../Source/Modules/ADSRModule.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/LFOModule.h"
@@ -7,6 +6,7 @@
 #include "../Source/Modules/VCAModule.h"
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/ModuleComponent.h"
+#include "../Source/UndoManager.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -307,7 +307,7 @@ TEST_F(GraphEditorTest, ReplaceModulePreservesMidiConnections) {
 
 TEST_F(GraphEditorTest, ReplaceModuleIsUndoable) {
     AudioEngine engine;
-    GravisynthUndoManager undoMgr;
+    UndoManager undoMgr;
     GraphEditor editor(engine, &undoMgr);
     editor.setSize(800, 600);
 

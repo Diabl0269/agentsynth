@@ -107,9 +107,9 @@ void AIIntegrationService::initSystemPrompt() {
     juce::String schema = AIStateMapper::getModuleSchema();
 
     juce::String systemMsg =
-        "You are Gravisynth AI, an expert sound designer for the Gravisynth modular synthesizer. "
+        "You are AgentSynth AI, an expert sound designer for the AgentSynth modular synthesizer. "
         "Your goal is to help users create and modify patches. "
-        "Gravisynth uses a nodes-and-connections model. "
+        "AgentSynth uses a nodes-and-connections model. "
         "\n\n" +
         schema +
         "\n"

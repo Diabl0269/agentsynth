@@ -1,10 +1,10 @@
-# Gravisynth
+# AgentSynth
 
 A **modular synthesizer** application built with JUCE and C++20, featuring a node-based graph editor for sound design.
 
 ## Overview
 
-Gravisynth provides a visual patching environment where audio modules can be freely connected to create complex sounds. Each module processes audio and/or control signals, enabling everything from simple subtractive synthesis to elaborate modulation chains.
+AgentSynth provides a visual patching environment where audio modules can be freely connected to create complex sounds. Each module processes audio and/or control signals, enabling everything from simple subtractive synthesis to elaborate modulation chains.
 
 ### Module Graph
 Modules connect via inputs and outputs:
@@ -33,20 +33,20 @@ Modules connect via inputs and outputs:
 - **Poly Sequencer**: Multi-voice pattern sequencing.
 
 ### Modulation System
-Gravisynth uses a hidden **Attenuverter** node architecture for modulation routing:
+AgentSynth uses a hidden **Attenuverter** node architecture for modulation routing:
 - **Smart Cables**: CV connections display an interactive depth knob at the cable midpoint. Drag to adjust depth (bipolar ±100%), double-click to delete.
 - **Mod Matrix Panel**: A panel listing all active CV connections with labelled sliders. Fully synced with the smart cable knobs in real time.
 - **Panel Toggles**: Top-bar **Hide AI** and **Hide Matrix** buttons collapse panels to give the graph more space.
 
 ### AI Integration
-> **Note**: The AI integration is currently in an experimental state and may not function as expected. There are plans to migrate the AI harness into a separate, closed-source project in the future. The core Gravisynth engine and modular synth will remain open-source forever.
+> **Note**: The AI integration is currently in an experimental state and may not function as expected. There are plans to migrate the AI harness into a separate, closed-source project in the future. The core AgentSynth engine and modular synth will remain open-source forever.
 
 - **AI Sound Designer**: Describe a sound in natural language and the AI generates the complete patch (modules, parameters, and connections).
 - **One-Click Apply**: Instantly apply AI-generated patches to the graph editor.
 
 ## Building
 
-Gravisynth uses CMake for its build system.
+AgentSynth uses CMake for its build system.
 
 ### Prerequisites
 -   A C++20 compatible compiler (e.g., Clang, GCC, MSVC)
@@ -75,20 +75,20 @@ Gravisynth uses CMake for its build system.
 
 3.  **Build the application:**
     ```bash
-    cmake --build build --target Gravisynth
+    cmake --build build --target AgentSynth
     ```
-    This will compile the application. On macOS, the executable will be found at `build/Gravisynth_artefacts/<BuildType>/Gravisynth.app`. On other platforms, the path might vary (e.g., `build/<BuildType>/Gravisynth`).
+    This will compile the application. On macOS, the executable will be found at `build/AgentSynth_artefacts/<BuildType>/AgentSynth.app`. On other platforms, the path might vary (e.g., `build/<BuildType>/AgentSynth`).
 
 4.  **Run the application:**
     *   **macOS:**
         ```bash
-        open build/Gravisynth_artefacts/Release/Gravisynth.app
+        open build/AgentSynth_artefacts/Release/AgentSynth.app
         # or
-        open build/Gravisynth_artefacts/Debug/Gravisynth.app
+        open build/AgentSynth_artefacts/Debug/AgentSynth.app
         ```
     *   **Linux/Windows (example for Release):**
         ```bash
-        ./build/Release/Gravisynth
+        ./build/Release/AgentSynth
         ```
 
 ## Development
@@ -103,18 +103,18 @@ Gravisynth uses CMake for its build system.
 
 ## Testing
 
-Gravisynth uses GoogleTest for unit testing.
+AgentSynth uses GoogleTest for unit testing.
 
 ### Running Unit Tests
 
 1.  **Build the test suite:**
     ```bash
-    cmake --build build --target GravisynthTests
+    cmake --build build --target AgentSynthTests
     ```
 
 2.  **Execute the tests:**
     ```bash
-    ./build/Tests/GravisynthTests
+    ./build/Tests/AgentSynthTests
     ```
 
 ### Code Coverage
@@ -141,7 +141,7 @@ This script will build the project with coverage flags, run the tests, and gener
 - **Polyphonic Modulation**: Route LFOs/envelopes per voice.
 
 ### Vision: AI-Powered Sound Design
-*Note: This roadmap for AI features will be fulfilled by a separate closed-source project in the future. Gravisynth itself remains the open-source foundation.*
+*Note: This roadmap for AI features will be fulfilled by a separate closed-source project in the future. AgentSynth itself remains the open-source foundation.*
 
 - [x] **Local AI Integration**: Support for Ollama and local models.
 - [x] **Natural Language Patching**: Text-to-patch generation.

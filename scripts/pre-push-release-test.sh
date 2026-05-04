@@ -19,9 +19,9 @@ if [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
 fi
 
 # Incremental build
-cmake --build "$BUILD_DIR" --target GravisynthTests -- -j$(sysctl -n hw.ncpu 2>/dev/null || nproc)
+cmake --build "$BUILD_DIR" --target AgentSynthTests -- -j$(sysctl -n hw.ncpu 2>/dev/null || nproc)
 
 # Run tests
-"$BUILD_DIR/Tests/GravisynthTests"
+"$BUILD_DIR/Tests/AgentSynthTests"
 
 echo "Pre-push: All tests passed in Release mode."

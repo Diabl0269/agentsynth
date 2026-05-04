@@ -21,7 +21,7 @@
 #include "../Modules/VoiceMixerModule.h"
 #include "ModuleComponent.h"
 
-GraphEditor::GraphEditor(AudioEngine& engine, GravisynthUndoManager* undoMgr)
+GraphEditor::GraphEditor(AudioEngine& engine, UndoManager* undoMgr)
     : audioEngine(engine)
     , content(*this)
     , modMatrix(engine, undoMgr)
@@ -213,7 +213,7 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     }
 
     g.setColour(juce::Colours::white);
-    g.drawText("Gravisynth (Double click to refresh)", getLocalBounds().removeFromTop(20), juce::Justification::centred,
+    g.drawText("AgentSynth (Double click to refresh)", getLocalBounds().removeFromTop(20), juce::Justification::centred,
                true);
 }
 

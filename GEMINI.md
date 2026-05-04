@@ -10,8 +10,8 @@ This is a **modular synthesizer** application built with JUCE and C++20, featuri
 
 The project follows a modular architecture with:
 
-1. **Core Library (`GravisynthCore`)**: Contains all audio processing modules and core logic
-2. **Application Layer (`Gravisynth`)**: GUI application built on JUCE that uses the core library
+1. **Core Library (`AgentSynthCore`)**: Contains all audio processing modules and core logic
+2. **Application Layer (`AgentSynth`)**: GUI application built on JUCE that uses the core library
 3. **UI Components**: Graph editor and module components for visual patching
 
 ### Key Components
@@ -22,7 +22,7 @@ The project follows a modular architecture with:
 - **ModuleComponent**: Auto-UI generation from module parameters with type-safe layout switching via `ModuleType` enum
 - **AttenuverterModule**: Intermediary module for modulation routing with bypass and CV amount control; exposes `lastOutputPeak`/`lastModValue` atomics for UI visualization
 - **Port Labels**: Virtual `getInputPortLabel()`/`getOutputPortLabel()` on ModuleBase, overridden per-module for descriptive port names in the UI
-- **GravisynthUndoManager**: Snapshot-based undo/redo system wrapping `juce::UndoManager`, captures full graph state on every change
+- **UndoManager**: Snapshot-based undo/redo system wrapping `juce::UndoManager`, captures full graph state on every change
 - **AI Integration** (`Source/AI/`): AIIntegrationService orchestrates LLM-powered features via OllamaProvider; AIStateMapper translates graph state for AI context
 
 ### Audio Modules
@@ -63,10 +63,10 @@ cmake --build build
 
 ### Run Tests
 ```bash
-cmake --build build --target GravisynthTests
-./build/Tests/GravisynthTests
+cmake --build build --target AgentSynthTests
+./build/Tests/AgentSynthTests
 # Run only E2E workflow tests:
-./build/Tests/GravisynthTests --gtest_filter="E2EWorkflow*"
+./build/Tests/AgentSynthTests --gtest_filter="E2EWorkflow*"
 ```
 
 ### Build and Test (Release)
@@ -134,7 +134,7 @@ Shortcuts are configurable in Settings → General tab (click a binding to rebin
 
 - `CMakeLists.txt`: Main build configuration (version 0.13.2)
 - `Source/AudioEngine.h/cpp`: Audio processing engine, device management, and modulation matrix
-- `Source/GravisynthUndoManager.h/cpp`: Snapshot-based undo/redo with `SnapshotAction`, safe detach/reattach lifecycle
+- `Source/UndoManager.h/cpp`: Snapshot-based undo/redo with `SnapshotAction`, safe detach/reattach lifecycle
 - `Source/Modules/ModuleBase.h`: Base class with `ModuleType` enum, `ModulationTarget`, `ModulationCategory`
 - `Source/Modules/OscillatorModule.h`: Oscillator with PolyBLEP/PolyBLAMP anti-aliasing, waveform crossfade, and CV feedback fix (channel 0 shared between CV input and audio output, saved before overwrite)
 - `Source/Modules/FilterModule.h`: Multi-mode filter (LadderFilter for LPF/HPF/BPF + SVF for notch), atomic modulated params for visualizer, type parameter

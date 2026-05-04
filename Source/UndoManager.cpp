@@ -1,4 +1,4 @@
-#include "GravisynthUndoManager.h"
+#include "UndoManager.h"
 #include "AI/AIStateMapper.h"
 #include "UI/GraphEditor.h"
 
@@ -181,9 +181,9 @@ private:
 
 // =============================================================================
 
-GravisynthUndoManager::GravisynthUndoManager() {}
+UndoManager::UndoManager() {}
 
-void GravisynthUndoManager::recordStructuralChange(juce::AudioProcessorGraph& graph, std::function<void()> mutation) {
+void UndoManager::recordStructuralChange(juce::AudioProcessorGraph& graph, std::function<void()> mutation) {
     auto beforeState = gsynth::AIStateMapper::graphToJSON(graph);
 
     undoManager.beginNewTransaction();
@@ -205,17 +205,15 @@ void GravisynthUndoManager::recordStructuralChange(juce::AudioProcessorGraph& gr
         }));
 }
 
-void GravisynthUndoManager::recordParameterChange(juce::AudioProcessorGraph& graph,
-                                                  juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId,
-                                                  float oldValue, float newValue) {
+void UndoManager::recordParameterChange(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId,
+                                        const juce::String& paramId, float oldValue, float newValue) {
     // The firstPerform flag will skip the first perform() since the parameter
     // was already changed by the user.
     undoManager.perform(new ParameterChangeAction(graph, nodeId, paramId, oldValue, newValue));
 }
 
-void GravisynthUndoManager::recordPositionChange(juce::AudioProcessorGraph& graph,
-                                                 juce::AudioProcessorGraph::NodeID nodeId, int oldX, int oldY, int newX,
-                                                 int newY, std::function<void()> postRestore) {
+void UndoManager::recordPositionChange(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId,
+                                       int oldX, int oldY, int newX, int newY, std::function<void()> postRestore) {
     undoManager.beginNewTransaction();
 
     // The firstPerform flag will skip the first perform() since the position
@@ -223,11 +221,11 @@ void GravisynthUndoManager::recordPositionChange(juce::AudioProcessorGraph& grap
     undoManager.perform(new PositionChangeAction(graph, nodeId, oldX, oldY, newX, newY, postRestore));
 }
 
-void GravisynthUndoManager::captureBeforeState(juce::AudioProcessorGraph& graph) {
+void UndoManager::captureBeforeState(juce::AudioProcessorGraph& graph) {
     capturedBeforeState = gsynth::AIStateMapper::graphToJSON(graph);
 }
 
-void GravisynthUndoManager::pushSnapshotFromCapture(juce::AudioProcessorGraph& graph) {
+void UndoManager::pushSnapshotFromCapture(juce::AudioProcessorGraph& graph) {
     if (capturedBeforeState.isVoid())
         return;
 

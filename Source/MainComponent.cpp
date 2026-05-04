@@ -7,8 +7,8 @@ MainComponent::MainComponent(std::unique_ptr<gsynth::AIProvider> provider)
     , aiService(audioEngine.getGraph())
     , aiChatComponent(aiService) {
     // Setup ApplicationProperties
-    propertiesOptions.applicationName = "Gravisynth";
-    propertiesOptions.folderName = "Gravisynth";
+    propertiesOptions.applicationName = "AgentSynth";
+    propertiesOptions.folderName = "AgentSynth";
     propertiesOptions.filenameSuffix = "settings";
     propertiesOptions.osxLibrarySubFolder = "Application Support";
     propertiesOptions.storageFormat = juce::PropertiesFile::storeAsXML;
@@ -199,37 +199,37 @@ void MainComponent::paint(juce::Graphics& g) {
 }
 
 void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
-    commands.addArray({GravisynthCommands::openSettings, GravisynthCommands::savePreset, GravisynthCommands::openPreset,
-                       GravisynthCommands::undo, GravisynthCommands::redo});
+    commands.addArray({AgentSynthCommands::openSettings, AgentSynthCommands::savePreset, AgentSynthCommands::openPreset,
+                       AgentSynthCommands::undo, AgentSynthCommands::redo});
 }
 
 void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationCommandInfo& result) {
     switch (commandID) {
-    case GravisynthCommands::openSettings: {
+    case AgentSynthCommands::openSettings: {
         result.setInfo("Open Settings", "Open the settings window", "General", 0);
         auto kp = shortcutManager.getBinding("openSettings");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
-    case GravisynthCommands::savePreset: {
+    case AgentSynthCommands::savePreset: {
         result.setInfo("Save Preset", "Save the current preset", "General", 0);
         auto kp = shortcutManager.getBinding("savePreset");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
-    case GravisynthCommands::openPreset: {
+    case AgentSynthCommands::openPreset: {
         result.setInfo("Open Preset", "Open a preset file", "General", 0);
         auto kp = shortcutManager.getBinding("openPreset");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
-    case GravisynthCommands::undo: {
+    case AgentSynthCommands::undo: {
         result.setInfo("Undo", "Undo the last action", "Edit", 0);
         auto kp = shortcutManager.getBinding("undo");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
-    case GravisynthCommands::redo: {
+    case AgentSynthCommands::redo: {
         result.setInfo("Redo", "Redo the last undone action", "Edit", 0);
         auto kp = shortcutManager.getBinding("redo");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
@@ -242,22 +242,22 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
 
 bool MainComponent::perform(const InvocationInfo& info) {
     switch (info.commandID) {
-    case GravisynthCommands::openSettings:
+    case AgentSynthCommands::openSettings:
         if (settingsButton.onClick)
             settingsButton.onClick();
         return true;
-    case GravisynthCommands::savePreset:
+    case AgentSynthCommands::savePreset:
         if (saveButton.onClick)
             saveButton.onClick();
         return true;
-    case GravisynthCommands::openPreset:
+    case AgentSynthCommands::openPreset:
         openPresetFromFile();
         return true;
-    case GravisynthCommands::undo:
+    case AgentSynthCommands::undo:
         if (undoManager.canUndo())
             undoManager.undo();
         return true;
-    case GravisynthCommands::redo:
+    case AgentSynthCommands::redo:
         if (undoManager.canRedo())
             undoManager.redo();
         return true;
@@ -272,7 +272,7 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
     auto action = shortcutManager.getActionForKeyPress(key);
     if (action.isEmpty())
         return false;
-    auto cmdId = GravisynthCommands::getCommandForAction(action);
+    auto cmdId = AgentSynthCommands::getCommandForAction(action);
     if (cmdId == 0)
         return false;
     return commandManager.invokeDirectly(cmdId, true);

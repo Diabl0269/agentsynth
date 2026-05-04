@@ -11,7 +11,7 @@ static ModuleType getType(juce::AudioProcessor* module) {
 }
 
 ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGraph::NodeID nId, GraphEditor& owner,
-                                 GravisynthUndoManager* undoMgr)
+                                 UndoManager* undoMgr)
     : module(m)
     , nodeId(nId)
     , owner(owner)

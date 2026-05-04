@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Gravisynth is built on a modular graph architecture using JUCE's `AudioProcessorGraph` (implicitly managed by `AudioEngine`).
+AgentSynth is built on a modular graph architecture using JUCE's `AudioProcessorGraph` (implicitly managed by `AudioEngine`).
 
 ## Core Components
 

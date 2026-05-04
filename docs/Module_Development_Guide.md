@@ -1,10 +1,10 @@
-# Gravisynth Module Development Guide
+# AgentSynth Module Development Guide
 
-This guide provides comprehensive instructions for developers looking to create new audio processing modules for the Gravisynth modular synthesizer. It covers the essential steps, coding standards, and best practices to ensure seamless integration and high-quality results.
+This guide provides comprehensive instructions for developers looking to create new audio processing modules for the AgentSynth modular synthesizer. It covers the essential steps, coding standards, and best practices to ensure seamless integration and high-quality results.
 
 ## 1. Module Structure and Setup
 
-All audio modules in Gravisynth inherit from `ModuleBase`, which in turn extends `juce::AudioProcessor`. This provides a consistent foundation for all modules.
+All audio modules in AgentSynth inherit from `ModuleBase`, which in turn extends `juce::AudioProcessor`. This provides a consistent foundation for all modules.
 
 ### Basic Steps:
 
@@ -66,10 +66,10 @@ All audio modules in Gravisynth inherit from `ModuleBase`, which in turn extends
     } // namespace gsynth
     ```
 
-3.  **Add to `GravisynthCore` in `CMakeLists.txt`:**
-    Ensure your new module's `.cpp` file is included in the `GravisynthCore` target.
+3.  **Add to `AgentSynthCore` in `CMakeLists.txt`:**
+    Ensure your new module's `.cpp` file is included in the `AgentSynthCore` target.
     ```cmake
-    target_sources(GravisynthCore PUBLIC
+    target_sources(AgentSynthCore PUBLIC
         # ... other source files
         Source/Modules/MyNewModule.cpp
     )
@@ -94,9 +94,9 @@ All audio modules in Gravisynth inherit from `ModuleBase`, which in turn extends
 
 All module parameters should be defined in the constructor using `addParameter()`. Use `juce::AudioParameterFloat`, `juce::AudioParameterInt`, `juce::AudioParameterChoice`, etc.
 
-**Fully Modular Architecture Rule:** To ensure Gravisynth remains a truly modular environment, *every relevant continuous parameter in a module MUST expose a dedicated CV Input Port. However, modules MUST NOT explicitly define internal "Modulation Depth" or "Modulation Amount" parameters.* 
+**Fully Modular Architecture Rule:** To ensure AgentSynth remains a truly modular environment, *every relevant continuous parameter in a module MUST expose a dedicated CV Input Port. However, modules MUST NOT explicitly define internal "Modulation Depth" or "Modulation Amount" parameters.* 
 
-Instead of hardcoding internal modulation amounts or matrices, Gravisynth delegates all CV scaling to the host environment. The Graph automatically instantiates `Attenuverter` nodes on every CV connection cable. Modulation sources should provide raw normalized signals (e.g. [-1.0, 1.0] or [0.0, 1.0]), and the receiving node should map this raw incoming CV directly to its full native modulation range (e.g. +/- 4 octaves, or +/- 12 semitones). Users control depth dynamically via the smart cables. Do not crowd the module UI with redundant "Mod Amount" knobs!
+Instead of hardcoding internal modulation amounts or matrices, AgentSynth delegates all CV scaling to the host environment. The Graph automatically instantiates `Attenuverter` nodes on every CV connection cable. Modulation sources should provide raw normalized signals (e.g. [-1.0, 1.0] or [0.0, 1.0]), and the receiving node should map this raw incoming CV directly to its full native modulation range (e.g. +/- 4 octaves, or +/- 12 semitones). Users control depth dynamically via the smart cables. Do not crowd the module UI with redundant "Mod Amount" knobs!
 
 ```cpp
 MyNewModule::MyNewModule()
@@ -117,7 +117,7 @@ MyNewModule::MyNewModule()
 
 ## 4. DSP Standards for Professional Sound Quality
 
-Adhering to these standards ensures the highest audio quality for Gravisynth modules:
+Adhering to these standards ensures the highest audio quality for AgentSynth modules:
 
 *   **Parameter Smoothing**: For any continuous parameters (e.g., gain, cutoff, frequency), use `juce::SmoothedValue<float>` to avoid clicks and zipper noise when parameters are automated or changed rapidly.
     ```cpp
@@ -148,7 +148,7 @@ Adhering to these standards ensures the highest audio quality for Gravisynth mod
 
 ## 5. State Management (Preset Save/Load)
 
-Override `getStateInformation()` and `setStateInformation()` to allow your module's parameters and internal state to be saved and loaded as part of a Gravisynth patch.
+Override `getStateInformation()` and `setStateInformation()` to allow your module's parameters and internal state to be saved and loaded as part of a AgentSynth patch.
 
 ```cpp
 void MyNewModule::getStateInformation(juce::MemoryBlock& destData) override {
@@ -203,7 +203,7 @@ All new modules **must** have unit tests in the `Tests/` directory.
 2.  **Add to `Tests/CMakeLists.txt`:**
     Ensure your test file is compiled as part of the test suite.
     ```cmake
-    target_sources(GravisynthTests PUBLIC
+    target_sources(AgentSynthTests PUBLIC
         # ... other test files
         Tests/MyNewModuleTests.cpp
     )
@@ -211,12 +211,12 @@ All new modules **must** have unit tests in the `Tests/` directory.
 
 3.  **Run Tests:**
     ```bash
-    cmake --build build --target GravisynthTests
-    ./build/Tests/GravisynthTests
+    cmake --build build --target AgentSynthTests
+    ./build/Tests/AgentSynthTests
     ```
 
 ### E2E Coverage
 
 New modules are automatically covered by E2E workflow tests in `Tests/E2EWorkflowTests.cpp`. The `DropAllModuleTypes_NoCrash` test drops every registered module type and verifies it creates a graph node without crashing. If you add a new module type, add its name string to the `moduleTypes` array in that test.
 
-By following this guide, you can contribute robust and high-quality audio modules to Gravisynth.
+By following this guide, you can contribute robust and high-quality audio modules to AgentSynth.

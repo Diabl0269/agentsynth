@@ -18,7 +18,7 @@ TEST_F(ADSRTest, StartsIdle) {
     // Initially should output 0
     adsr.processBlock(buffer, midiMessages);
     // Since ADSR modifies buffer in place (multiplying?), typically ADSR is a
-    // control signal or VCA? In Gravisynth, ADSRModule might just generate an
+    // control signal or VCA? In AgentSynth, ADSRModule might just generate an
     // envelope or apply it. Checking code... wait, I need to check ADSRModule
     // implementation to know if it's a generator or processor. Assuming standard
     // VCA-like behavior or just check "getNextSample" if exposed? "ModuleBase"

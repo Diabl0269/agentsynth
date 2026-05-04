@@ -1,6 +1,6 @@
 # FX Modules Reference
 
-Technical documentation for the Gravisynth effects suite.
+Technical documentation for the AgentSynth effects suite.
 
 ## Distortion Module
 - **Algorithm**: Nonlinear soft-clipping using a `tanh`-based curve: `f(x) = x / (1 + |x|)`.

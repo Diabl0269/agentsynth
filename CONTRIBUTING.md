@@ -1,4 +1,4 @@
-# Contributing to Gravisynth
+# Contributing to AgentSynth
 
 ## Development Setup
 
@@ -10,7 +10,7 @@
    ```
 3. Run tests:
    ```bash
-   ./build/Tests/GravisynthTests
+   ./build/Tests/AgentSynthTests
    ```
 
 ## Pull Request Workflow

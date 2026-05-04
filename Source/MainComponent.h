@@ -2,12 +2,12 @@
 
 #include "AI/AIIntegrationService.h"
 #include "AudioEngine.h"
-#include "GravisynthUndoManager.h"
 #include "PresetManager.h"
 #include "ShortcutManager.h"
 #include "UI/AIChatComponent.h"
 #include "UI/GraphEditor.h"
 #include "UI/ModuleLibraryComponent.h"
+#include "UndoManager.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -56,7 +56,7 @@ public:
         if (redoButton.onClick)
             redoButton.onClick();
     }
-    GravisynthUndoManager& getUndoManager() { return undoManager; }
+    UndoManager& getUndoManager() { return undoManager; }
     AudioEngine& getAudioEngine() { return audioEngine; }
     void openPresetFromFile();
 
@@ -64,7 +64,7 @@ private:
     // AIIntegrationService::Listener
     void aiPatchApplied() override;
 
-    GravisynthUndoManager undoManager;
+    UndoManager undoManager;
     AudioEngine audioEngine;
     GraphEditor graphEditor;
     ModuleLibraryComponent moduleLibrary;

@@ -2,7 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-namespace GravisynthCommands {
+namespace AgentSynthCommands {
 enum CommandIDs { openSettings = 0x100, savePreset, openPreset, undo, redo };
 
 inline juce::CommandID getCommandForAction(const juce::String& actionId) {
@@ -18,7 +18,7 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return redo;
     return 0;
 }
-} // namespace GravisynthCommands
+} // namespace AgentSynthCommands
 
 class ShortcutManager {
 public:

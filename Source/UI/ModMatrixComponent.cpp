@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <map>
 
-ModMatrixComponent::ModMatrixComponent(AudioEngine& engine, GravisynthUndoManager* undoMgr)
+ModMatrixComponent::ModMatrixComponent(AudioEngine& engine, UndoManager* undoMgr)
     : audioEngine(engine)
     , undoManager(undoMgr) {
     addAndMakeVisible(viewport);

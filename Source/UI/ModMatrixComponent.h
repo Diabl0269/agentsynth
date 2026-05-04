@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../AudioEngine.h"
-#include "../GravisynthUndoManager.h"
+#include "../UndoManager.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 
@@ -9,7 +9,7 @@ class ModMatrixComponent
     : public juce::Component
     , public juce::Timer {
 public:
-    ModMatrixComponent(AudioEngine& engine, GravisynthUndoManager* undoMgr = nullptr);
+    ModMatrixComponent(AudioEngine& engine, UndoManager* undoMgr = nullptr);
     ~ModMatrixComponent() override;
 
     void paint(juce::Graphics& g) override;
@@ -28,7 +28,7 @@ public:
 
 private:
     AudioEngine& audioEngine;
-    GravisynthUndoManager* undoManager = nullptr;
+    UndoManager* undoManager = nullptr;
     bool isSourceMenuFlat = false;
 
     juce::TextButton addButton{"Add Modulation"};

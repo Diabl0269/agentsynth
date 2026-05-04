@@ -33,8 +33,8 @@ protected:
     void SetUp() override {
         // Set up ApplicationProperties with temporary storage for testing
         juce::PropertiesFile::Options options;
-        options.applicationName = "GravisynthSettingsTest";
-        options.folderName = "GravisynthSettingsTest";
+        options.applicationName = "AgentSynthSettingsTest";
+        options.folderName = "AgentSynthSettingsTest";
         options.osxLibrarySubFolder = "Application Support";
 
         appProperties.setStorageParameters(options);

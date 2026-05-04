@@ -2,9 +2,9 @@
 #include "ShortcutManager.h"
 #include <JuceHeader.h>
 
-class GravisynthApplication : public juce::JUCEApplication {
+class AgentSynthApplication : public juce::JUCEApplication {
 public:
-    GravisynthApplication() {}
+    AgentSynthApplication() {}
 
     const juce::String getApplicationName() override { return ProjectInfo::projectName; }
     const juce::String getApplicationVersion() override { return ProjectInfo::versionString; }
@@ -65,13 +65,13 @@ public:
             if (auto* mc = dynamic_cast<MainComponent*>(getContentComponent())) {
                 auto& cm = mc->getCommandManager();
                 if (menuIndex == 0) {
-                    menu.addCommandItem(&cm, GravisynthCommands::savePreset);
-                    menu.addCommandItem(&cm, GravisynthCommands::openPreset);
+                    menu.addCommandItem(&cm, AgentSynthCommands::savePreset);
+                    menu.addCommandItem(&cm, AgentSynthCommands::openPreset);
                     menu.addSeparator();
-                    menu.addCommandItem(&cm, GravisynthCommands::openSettings);
+                    menu.addCommandItem(&cm, AgentSynthCommands::openSettings);
                 } else if (menuIndex == 1) {
-                    menu.addCommandItem(&cm, GravisynthCommands::undo);
-                    menu.addCommandItem(&cm, GravisynthCommands::redo);
+                    menu.addCommandItem(&cm, AgentSynthCommands::undo);
+                    menu.addCommandItem(&cm, AgentSynthCommands::redo);
                 }
             }
             return menu;
@@ -88,4 +88,4 @@ private:
 };
 
 //==============================================================================
-START_JUCE_APPLICATION(GravisynthApplication)
+START_JUCE_APPLICATION(AgentSynthApplication)

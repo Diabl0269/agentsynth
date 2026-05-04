@@ -1,5 +1,4 @@
 #include "../Source/AI/AIProvider.h"
-#include "../Source/GravisynthUndoManager.h"
 #include "../Source/Modules/ADSRModule.h"
 #include "../Source/Modules/FX/ChorusModule.h"
 #include "../Source/Modules/FX/CompressorModule.h"
@@ -20,6 +19,7 @@
 #include "../Source/PresetManager.h"
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/ModuleComponent.h"
+#include "../Source/UndoManager.h"
 #include "MainComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -59,10 +59,10 @@ protected:
     GraphEditor& editor() { return mainComp->getGraphEditor(); }
     AudioEngine& engine() { return mainComp->getAudioEngine(); }
     juce::AudioProcessorGraph& graph() { return engine().getGraph(); }
-    GravisynthUndoManager& undoMgr() { return *undoMgrPtr(); }
+    UndoManager& undoMgr() { return *undoMgrPtr(); }
 
     // Access undo manager - note: MainComponent doesn't expose it yet, so we'll need a workaround
-    GravisynthUndoManager* undoMgrPtr() {
+    UndoManager* undoMgrPtr() {
         // For now, we'll use the GraphEditor's undoManager indirectly
         // This is a limitation of current testing hooks
         return nullptr; // Will be addressed with new hooks

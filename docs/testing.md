@@ -4,11 +4,11 @@ All tests use GoogleTest and run headless (no audio device, no GUI window). ~310
 
 ```bash
 # Run all tests
-cmake --build build --target GravisynthTests
-./build/Tests/GravisynthTests
+cmake --build build --target AgentSynthTests
+./build/Tests/AgentSynthTests
 
 # Run a specific suite
-./build/Tests/GravisynthTests --gtest_filter="E2EWorkflow*"
+./build/Tests/AgentSynthTests --gtest_filter="E2EWorkflow*"
 
 # Check coverage (threshold: 80%)
 bash scripts/coverage.sh

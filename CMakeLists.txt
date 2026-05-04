@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(Gravisynth VERSION 0.13.2)
+project(AgentSynth VERSION 0.13.2)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 20)
@@ -29,11 +29,11 @@ if(ENABLE_COVERAGE)
 endif()
 
 # Create the core library
-add_library(GravisynthCore STATIC
+add_library(AgentSynthCore STATIC
     Source/AudioEngine.cpp
     Source/AudioEngine.h
-    Source/GravisynthUndoManager.cpp
-    Source/GravisynthUndoManager.h
+    Source/UndoManager.cpp
+    Source/UndoManager.h
     Source/PresetManager.cpp
     Source/PresetManager.h
     # Modules
@@ -67,7 +67,7 @@ add_library(GravisynthCore STATIC
 )
 
 # Link Core against JUCE
-target_link_libraries(GravisynthCore PUBLIC
+target_link_libraries(AgentSynthCore PUBLIC
     juce::juce_core
     juce::juce_events
     juce::juce_graphics
@@ -81,7 +81,7 @@ target_link_libraries(GravisynthCore PUBLIC
     juce::juce_dsp
 )
 
-target_compile_definitions(GravisynthCore PUBLIC JUCE_WEB_BROWSER=0)
+target_compile_definitions(AgentSynthCore PUBLIC JUCE_WEB_BROWSER=0)
 
 if(UNIX AND NOT APPLE)
     find_package(PkgConfig REQUIRED)
@@ -90,33 +90,33 @@ if(UNIX AND NOT APPLE)
     find_package(CURL REQUIRED)
 
     # Link to Core so JUCE modules compiled within it find the headers
-    target_link_libraries(GravisynthCore PUBLIC ${GTK3_LIBRARIES} CURL::libcurl)
-    target_include_directories(GravisynthCore PUBLIC ${GTK3_INCLUDE_DIRS})
+    target_link_libraries(AgentSynthCore PUBLIC ${GTK3_LIBRARIES} CURL::libcurl)
+    target_include_directories(AgentSynthCore PUBLIC ${GTK3_INCLUDE_DIRS})
 endif()
 
-target_include_directories(GravisynthCore PUBLIC
+target_include_directories(AgentSynthCore PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/Source
 )
 
 if(MSVC)
-    target_compile_options(GravisynthCore PRIVATE /W4)
+    target_compile_options(AgentSynthCore PRIVATE /W4)
 else()
-    target_compile_options(GravisynthCore PRIVATE -Wall -Wextra)
+    target_compile_options(AgentSynthCore PRIVATE -Wall -Wextra)
 endif()
 
 # Create the application target
-juce_add_gui_app(Gravisynth
-    PRODUCT_NAME "Gravisynth"
+juce_add_gui_app(AgentSynth
+    PRODUCT_NAME "AgentSynth"
     VERSION "0.13.2"
     BUNDLE_ID "com.gravisynth.app"
     BLUETOOTH_PERMISSION_ENABLED TRUE
     BLUETOOTH_PERMISSION_TEXT "We need Bluetooth access to connect to your external MIDI devices."
 )
 
-juce_generate_juce_header(Gravisynth)
+juce_generate_juce_header(AgentSynth)
 
 # Add source files
-target_sources(Gravisynth PRIVATE
+target_sources(AgentSynth PRIVATE
     Source/Main.cpp
     Source/MainComponent.cpp
     Source/MainComponent.h
@@ -135,8 +135,8 @@ target_sources(Gravisynth PRIVATE
 )
 
 # Link against JUCE modules
-target_link_libraries(Gravisynth PRIVATE
-    GravisynthCore # Link to our core library
+target_link_libraries(AgentSynth PRIVATE
+    AgentSynthCore # Link to our core library
     juce::juce_core
     juce::juce_events
     juce::juce_graphics
@@ -151,18 +151,18 @@ target_link_libraries(Gravisynth PRIVATE
     juce::juce_dsp
 )
 
-target_compile_definitions(Gravisynth PRIVATE JUCE_WEB_BROWSER=0)
+target_compile_definitions(AgentSynth PRIVATE JUCE_WEB_BROWSER=0)
 
 if(UNIX AND NOT APPLE)
-    target_link_libraries(Gravisynth PRIVATE ${GTK3_LIBRARIES})
-    target_include_directories(Gravisynth PRIVATE ${GTK3_INCLUDE_DIRS})
+    target_link_libraries(AgentSynth PRIVATE ${GTK3_LIBRARIES})
+    target_include_directories(AgentSynth PRIVATE ${GTK3_INCLUDE_DIRS})
 endif()
 
 # Enable strict warnings to catch issues early
 if(MSVC)
-    target_compile_options(Gravisynth PRIVATE /W4)
+    target_compile_options(AgentSynth PRIVATE /W4)
 else()
-    target_compile_options(Gravisynth PRIVATE -Wall -Wextra)
+    target_compile_options(AgentSynth PRIVATE -Wall -Wextra)
 endif()
 
 add_subdirectory(Tests)

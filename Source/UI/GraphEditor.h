@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../AudioEngine.h"
-#include "../GravisynthUndoManager.h"
+#include "../UndoManager.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
 class ModuleComponent;
@@ -12,7 +12,7 @@ class GraphEditor
     , public juce::Timer
     , public juce::DragAndDropTarget {
 public:
-    GraphEditor(AudioEngine& engine, GravisynthUndoManager* undoMgr = nullptr);
+    GraphEditor(AudioEngine& engine, UndoManager* undoMgr = nullptr);
     ~GraphEditor() override;
 
     AudioEngine& getAudioEngine() { return audioEngine; }
@@ -92,7 +92,7 @@ private:
     juce::AudioProcessorGraph::NodeID draggingAttenuverterNodeId;
     float attenDragStartValue = 0.0f;
 
-    GravisynthUndoManager* undoManager = nullptr;
+    UndoManager* undoManager = nullptr;
     std::vector<AudioEngine::ModulationDisplayInfo> cachedModDisplayInfo;
 
     void updateTransform();

@@ -1,15 +1,15 @@
 #include "../Source/AI/AIStateMapper.h"
-#include "../Source/GravisynthUndoManager.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/VCAModule.h"
+#include "../Source/UndoManager.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
 class UndoRedoTest : public ::testing::Test {
 protected:
     juce::AudioProcessorGraph graph;
-    GravisynthUndoManager undoManager;
+    UndoManager undoManager;
 
     void SetUp() override { graph.clear(); }
 };
