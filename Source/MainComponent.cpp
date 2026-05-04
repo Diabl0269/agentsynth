@@ -200,7 +200,8 @@ void MainComponent::paint(juce::Graphics& g) {
 
 void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
     commands.addArray({GravisynthCommands::openSettings, GravisynthCommands::savePreset, GravisynthCommands::openPreset,
-                       GravisynthCommands::undo, GravisynthCommands::redo});
+                       GravisynthCommands::undo, GravisynthCommands::redo, GravisynthCommands::toggleModMatrix,
+                       GravisynthCommands::toggleAiPanel});
 }
 
 void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationCommandInfo& result) {
@@ -260,6 +261,12 @@ bool MainComponent::perform(const InvocationInfo& info) {
     case GravisynthCommands::redo:
         if (undoManager.canRedo())
             undoManager.redo();
+        return true;
+    case GravisynthCommands::toggleModMatrix:
+        toggleModMatrixButton.triggerClick();
+        return true;
+    case GravisynthCommands::toggleAiPanel:
+        toggleAiPanelButton.triggerClick();
         return true;
     default:
         return false;
