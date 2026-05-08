@@ -148,23 +148,23 @@ protected:
 TEST_F(E2EWorkflowTest, InitialState_HasDefaultPatch) {
     EXPECT_GT(nodeCount(), 0) << "Default patch should have nodes";
     EXPECT_GT(connectionCount(), 0) << "Default patch should have connections";
-    EXPECT_TRUE(editor().isModMatrixVisible()) << "Mod matrix should be visible by default";
+    EXPECT_FALSE(editor().isModMatrixVisible()) << "Mod matrix should be hidden by default";
 }
 
 TEST_F(E2EWorkflowTest, TogglePanels_AIAndModMatrix) {
     // Test AI panel toggle
-    EXPECT_TRUE(mainComp->isAiPanelConfiguredVisible()) << "AI panel should be visible initially";
+    EXPECT_FALSE(mainComp->isAiPanelConfiguredVisible()) << "AI panel should be hidden initially";
     mainComp->simulateToggleAiPanelClick();
-    EXPECT_FALSE(mainComp->isAiPanelConfiguredVisible()) << "AI panel should be hidden after toggle";
+    EXPECT_TRUE(mainComp->isAiPanelConfiguredVisible()) << "AI panel should be visible after toggle";
     mainComp->simulateToggleAiPanelClick();
-    EXPECT_TRUE(mainComp->isAiPanelConfiguredVisible()) << "AI panel should be visible after second toggle";
+    EXPECT_FALSE(mainComp->isAiPanelConfiguredVisible()) << "AI panel should be hidden after second toggle";
 
     // Test ModMatrix toggle
-    EXPECT_TRUE(editor().isModMatrixVisible()) << "ModMatrix should be visible initially";
+    EXPECT_FALSE(editor().isModMatrixVisible()) << "ModMatrix should be hidden initially";
     mainComp->simulateToggleModMatrixClick();
-    EXPECT_FALSE(editor().isModMatrixVisible()) << "ModMatrix should be hidden after toggle";
+    EXPECT_TRUE(editor().isModMatrixVisible()) << "ModMatrix should be visible after toggle";
     mainComp->simulateToggleModMatrixClick();
-    EXPECT_TRUE(editor().isModMatrixVisible()) << "ModMatrix should be visible after second toggle";
+    EXPECT_FALSE(editor().isModMatrixVisible()) << "ModMatrix should be hidden after second toggle";
 }
 
 TEST_F(E2EWorkflowTest, UndoRedoButtons_DisabledOnFreshApp) {
