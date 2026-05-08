@@ -21,47 +21,47 @@ private:
 
 class MainComponentTest : public ::testing::Test {};
 
-TEST_F(MainComponentTest, AIPanelIsVisibleByDefault) {
+TEST_F(MainComponentTest, AIPanelIsHiddenByDefault) {
     MainComponent mainComp(std::make_unique<MockProvider>());
-    EXPECT_TRUE(mainComp.isAiPanelConfiguredVisible());
+    EXPECT_FALSE(mainComp.isAiPanelConfiguredVisible());
 }
 
 TEST_F(MainComponentTest, ToggleAIPanelHidesAndShows) {
     MainComponent mainComp(std::make_unique<MockProvider>());
 
-    EXPECT_TRUE(mainComp.isAiPanelConfiguredVisible());
-
-    mainComp.simulateToggleAiPanelClick();
     EXPECT_FALSE(mainComp.isAiPanelConfiguredVisible());
 
     mainComp.simulateToggleAiPanelClick();
     EXPECT_TRUE(mainComp.isAiPanelConfiguredVisible());
+
+    mainComp.simulateToggleAiPanelClick();
+    EXPECT_FALSE(mainComp.isAiPanelConfiguredVisible());
 }
 
-TEST_F(MainComponentTest, ModMatrixIsVisibleByDefault) {
+TEST_F(MainComponentTest, ModMatrixIsHiddenByDefault) {
     MainComponent mainComp(std::make_unique<MockProvider>());
-    EXPECT_TRUE(mainComp.getGraphEditor().isModMatrixVisible());
+    EXPECT_FALSE(mainComp.getGraphEditor().isModMatrixVisible());
 }
 
 TEST_F(MainComponentTest, ToggleModMatrixHidesAndShows) {
     MainComponent mainComp(std::make_unique<MockProvider>());
 
-    EXPECT_TRUE(mainComp.getGraphEditor().isModMatrixVisible());
-
-    mainComp.simulateToggleModMatrixClick();
     EXPECT_FALSE(mainComp.getGraphEditor().isModMatrixVisible());
 
     mainComp.simulateToggleModMatrixClick();
     EXPECT_TRUE(mainComp.getGraphEditor().isModMatrixVisible());
+
+    mainComp.simulateToggleModMatrixClick();
+    EXPECT_FALSE(mainComp.getGraphEditor().isModMatrixVisible());
 }
 
 TEST_F(MainComponentTest, CommandManagerHasCommands) {
     MainComponent mainComp(std::make_unique<MockProvider>());
     auto& cm = mainComp.getCommandManager();
-    // Verify all 5 commands are registered
+    // Verify all 7 commands are registered (5 original + 2 new toggles)
     juce::Array<juce::CommandID> commands;
     mainComp.getAllCommands(commands);
-    EXPECT_EQ(commands.size(), 5);
+    EXPECT_EQ(commands.size(), 7);
 }
 
 TEST_F(MainComponentTest, RedoShortcutViaKeyPressed) {
