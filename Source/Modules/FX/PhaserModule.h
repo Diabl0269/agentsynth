@@ -13,6 +13,7 @@ public:
                          new juce::AudioParameterFloat("centreFreq", "Centre Freq (Hz)", 200.0f, 10000.0f, 1300.0f));
         addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", -1.0f, 1.0f, 0.0f));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 0.5f));
+        addMuteParameter();
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
@@ -30,8 +31,10 @@ public:
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
-        if (isBypassed())
+        if (isBypassed() || isMuted()) {
+            buffer.clear();
             return;
+        }
 
         juce::ignoreUnused(midiMessages);
 

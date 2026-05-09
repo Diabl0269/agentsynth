@@ -13,6 +13,7 @@ public:
         addParameter(sustainParam = new juce::AudioParameterFloat("sustain", "Sustain", 0.0f, 1.0f, 0.0f));
         addParameter(releaseParam = new juce::AudioParameterFloat("release", "Release", 0.01f, 5.0f, 0.1f));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
+        addMuteParameter();
         enableVisualBuffer(true);
     }
 
@@ -23,7 +24,7 @@ public:
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
-        if (isBypassed() || buffer.getNumSamples() == 0 || buffer.getNumChannels() == 0) {
+        if (isBypassed() || isMuted() || buffer.getNumSamples() == 0 || buffer.getNumChannels() == 0) {
             buffer.clear();
             return;
         }

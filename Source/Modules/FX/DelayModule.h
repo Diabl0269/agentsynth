@@ -9,6 +9,7 @@ public:
         addParameter(timeParam = new juce::AudioParameterFloat("time", "Time (ms)", 1.0f, 1000.0f, 250.0f));
         addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", 0.0f, 0.95f, 0.5f));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 0.3f));
+        addMuteParameter();
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
@@ -28,8 +29,10 @@ public:
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
-        if (isBypassed())
+        if (isBypassed() || isMuted()) {
+            buffer.clear();
             return;
+        }
 
         juce::ignoreUnused(midiMessages);
 

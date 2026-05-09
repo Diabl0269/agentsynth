@@ -53,6 +53,14 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         bypassButton->setColour(juce::TextButton::textColourOffId, juce::Colours::white);
         bypassButton->setColour(juce::TextButton::textColourOnId, juce::Colours::black);
         addAndMakeVisible(*bypassButton);
+
+        muteButton = std::make_unique<juce::TextButton>("M");
+        muteButton->setClickingTogglesState(true);
+        muteButton->setColour(juce::TextButton::buttonColourId, juce::Colours::darkgrey);
+        muteButton->setColour(juce::TextButton::buttonOnColourId, juce::Colours::red);
+        muteButton->setColour(juce::TextButton::textColourOffId, juce::Colours::white);
+        muteButton->setColour(juce::TextButton::textColourOnId, juce::Colours::black);
+        addAndMakeVisible(*muteButton);
     }
 
     setTitle(module->getName());
@@ -88,6 +96,7 @@ void ModuleComponent::detachFromProcessor() {
     }
     if (processorAlive) {
         bypassAttachment.reset();
+        muteAttachment.reset();
         sliderAttachments.clear();
         comboAttachments.clear();
         buttonAttachments.clear();
@@ -95,6 +104,7 @@ void ModuleComponent::detachFromProcessor() {
         // Processor already freed — leak attachments to avoid use-after-free
         // in ~ParameterAttachment which calls parameter->removeListener()
         (void)bypassAttachment.release();
+        (void)muteAttachment.release();
         while (sliderAttachments.size() > 0)
             (void)sliderAttachments.removeAndReturn(sliderAttachments.size() - 1);
         while (comboAttachments.size() > 0)
@@ -232,7 +242,7 @@ void ModuleComponent::createControls() {
                 label->setJustificationType(juce::Justification::centred);
                 addAndMakeVisible(label);
             } else if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param)) {
-                if (boolParam->paramID == "bypassed")
+                if (boolParam->paramID == "bypassed" || boolParam->paramID == "muted")
                     continue;
 
                 auto* toggle = toggles.add(new juce::ToggleButton(boolParam->getName(100)));
@@ -250,7 +260,9 @@ void ModuleComponent::createControls() {
                 if (boolParam->paramID == "bypassed") {
                     bypassAttachment =
                         std::make_unique<juce::ButtonParameterAttachment>(*boolParam, *bypassButton, nullptr);
-                    break;
+                } else if (boolParam->paramID == "muted") {
+                    muteAttachment =
+                        std::make_unique<juce::ButtonParameterAttachment>(*boolParam, *muteButton, nullptr);
                 }
             }
         }
@@ -575,6 +587,9 @@ void ModuleComponent::resized() {
 
     if (bypassButton)
         bypassButton->setBounds(getWidth() - 26, 2, 22, 20);
+
+    if (muteButton)
+        muteButton->setBounds(getWidth() - 48, 2, 22, 20);
 
     if (getType(module) == ModuleType::Sequencer) {
         // --- Sequencer Specific Layout ---

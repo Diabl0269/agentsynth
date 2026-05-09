@@ -48,12 +48,20 @@ public:
         addParameter(bypassedParam = new juce::AudioParameterBool("bypassed", "Bypassed", false));
     }
 
+    void addMuteParameter() {
+        if (!mutedParam)
+            addParameter(mutedParam = new juce::AudioParameterBool("muted", "Muted", false));
+    }
+
     ~ModuleBase() override = default;
 
     const juce::String getName() const override { return moduleName; }
 
     bool isBypassed() const { return bypassedParam->get(); }
     void setBypassed(bool b) { bypassedParam->setValueNotifyingHost(b ? 1.0f : 0.0f); }
+
+    bool isMuted() const { return mutedParam->get(); }
+    void setMuted(bool m) { mutedParam->setValueNotifyingHost(m ? 1.0f : 0.0f); }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override = 0;
     void releaseResources() override {}
@@ -121,6 +129,7 @@ public:
 
 protected:
     juce::AudioParameterBool* bypassedParam = nullptr;
+    juce::AudioParameterBool* mutedParam = nullptr;
 
 private:
     juce::String moduleName;

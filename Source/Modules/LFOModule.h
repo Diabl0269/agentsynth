@@ -37,6 +37,7 @@ public:
 
         // Glide (S&H only)
         addParameter(glideParam = new juce::AudioParameterFloat("glide", "Glide", 0.0f, 1.0f, 0.0f));
+        addMuteParameter();
     }
 
     void prepareToPlay(double sampleRate, int /*samplesPerBlock*/) override {
@@ -47,7 +48,7 @@ public:
     void releaseResources() override {}
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
-        if (isBypassed() || buffer.getNumSamples() == 0 || buffer.getNumChannels() == 0) {
+        if (isBypassed() || isMuted() || buffer.getNumSamples() == 0 || buffer.getNumChannels() == 0) {
             buffer.clear();
             return;
         }

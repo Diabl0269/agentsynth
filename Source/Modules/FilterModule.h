@@ -15,7 +15,7 @@ public:
                          "filterType", "Filter Type",
                          juce::StringArray{"LPF24", "LPF12", "HPF24", "HPF12", "BPF24", "BPF12", "Notch"}, 0));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
-
+        addMuteParameter();
         enableVisualBuffer(true);
     }
 
@@ -35,6 +35,11 @@ public:
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& /*midiMessages*/) override {
         if (isBypassed())
             return;
+
+        if (isMuted()) {
+            buffer.clear();
+            return;
+        }
 
         smoothedCutoff.setTargetValue(*cutoffParam);
         applyFilterType(filterTypeParam->getIndex());
