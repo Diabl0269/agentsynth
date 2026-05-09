@@ -24,9 +24,8 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
                 addAndMakeVisible(scopeComponent.get());
 
                 scopeToggle = std::make_unique<juce::ToggleButton>("Show Scope");
-                bool isFilter = (getType(module) == ModuleType::Filter);
-                scopeToggle->setToggleState(!isFilter, juce::dontSendNotification);
-                scopeComponent->setVisible(!isFilter);
+                scopeToggle->setToggleState(false, juce::dontSendNotification);
+                scopeComponent->setVisible(false);
                 scopeToggle->onClick = [this] {
                     scopeComponent->setVisible(scopeToggle->getToggleState());
                     updateLayout();

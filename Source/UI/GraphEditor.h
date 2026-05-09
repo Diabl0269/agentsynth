@@ -74,7 +74,7 @@ private:
     AudioEngine& audioEngine;
     GraphContentComponent content;
     ModMatrixComponent modMatrix;
-    bool isMatrixVisible = true;
+    bool isMatrixVisible = false;
 
     // Navigation State
     float zoomLevel = 1.0f;

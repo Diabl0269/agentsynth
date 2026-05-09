@@ -42,6 +42,8 @@ MainComponent::MainComponent(std::unique_ptr<gsynth::AIProvider> provider)
     addAndMakeVisible(graphEditor);
     addAndMakeVisible(moduleLibrary);
     addAndMakeVisible(aiChatComponent);
+    aiChatComponent.setVisible(isAiPanelVisible);
+    graphEditor.getModMatrix().setVisible(graphEditor.isModMatrixVisible());
 
     // Buttons
     addAndMakeVisible(saveButton);
@@ -120,7 +122,7 @@ MainComponent::MainComponent(std::unique_ptr<gsynth::AIProvider> provider)
     };
 
     addAndMakeVisible(toggleModMatrixButton);
-    toggleModMatrixButton.setButtonText("Hide Matrix");
+    toggleModMatrixButton.setButtonText(graphEditor.isModMatrixVisible() ? "Hide Matrix" : "Show Matrix");
     toggleModMatrixButton.setComponentID("toggleModMatrix");
     toggleModMatrixButton.onClick = [this] {
         graphEditor.toggleModMatrixVisibility();
@@ -200,7 +202,8 @@ void MainComponent::paint(juce::Graphics& g) {
 
 void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
     commands.addArray({GravisynthCommands::openSettings, GravisynthCommands::savePreset, GravisynthCommands::openPreset,
-                       GravisynthCommands::undo, GravisynthCommands::redo});
+                       GravisynthCommands::undo, GravisynthCommands::redo, GravisynthCommands::toggleModMatrix,
+                       GravisynthCommands::toggleAiPanel});
 }
 
 void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationCommandInfo& result) {
@@ -235,6 +238,18 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
+    case GravisynthCommands::toggleModMatrix: {
+        result.setInfo("Toggle Mod Matrix", "Toggle the modulation matrix panel", "View", 0);
+        auto kp = shortcutManager.getBinding("toggleModMatrix");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case GravisynthCommands::toggleAiPanel: {
+        result.setInfo("Toggle AI Panel", "Toggle the AI chat panel", "View", 0);
+        auto kp = shortcutManager.getBinding("toggleAiPanel");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
     default:
         break;
     }
@@ -260,6 +275,12 @@ bool MainComponent::perform(const InvocationInfo& info) {
     case GravisynthCommands::redo:
         if (undoManager.canRedo())
             undoManager.redo();
+        return true;
+    case GravisynthCommands::toggleModMatrix:
+        toggleModMatrixButton.triggerClick();
+        return true;
+    case GravisynthCommands::toggleAiPanel:
+        toggleAiPanelButton.triggerClick();
         return true;
     default:
         return false;

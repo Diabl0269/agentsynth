@@ -20,7 +20,7 @@ TEST_F(GraphEditorTest, InitializationAndResizing) {
     GraphEditor editor(engine);
     editor.setSize(800, 600);
 
-    EXPECT_TRUE(editor.isModMatrixVisible());
+    EXPECT_FALSE(editor.isModMatrixVisible());
     EXPECT_NO_THROW(editor.resized());
 }
 TEST_F(GraphEditorTest, ToggleModMatrixVisibility) {
@@ -28,11 +28,11 @@ TEST_F(GraphEditorTest, ToggleModMatrixVisibility) {
     GraphEditor editor(engine);
     editor.setSize(800, 600);
 
-    EXPECT_TRUE(editor.isModMatrixVisible());
-    editor.toggleModMatrixVisibility();
     EXPECT_FALSE(editor.isModMatrixVisible());
     editor.toggleModMatrixVisibility();
     EXPECT_TRUE(editor.isModMatrixVisible());
+    editor.toggleModMatrixVisibility();
+    EXPECT_FALSE(editor.isModMatrixVisible());
 }
 
 TEST_F(GraphEditorTest, DropModuleCreatesNode) {

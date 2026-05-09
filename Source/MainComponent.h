@@ -81,7 +81,7 @@ private:
 
     gsynth::AIIntegrationService aiService;
     gsynth::AIChatComponent aiChatComponent;
-    bool isAiPanelVisible = true;
+    bool isAiPanelVisible = false;
 
     juce::ApplicationProperties appProperties;
     juce::PropertiesFile::Options propertiesOptions;

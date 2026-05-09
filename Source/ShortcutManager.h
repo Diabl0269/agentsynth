@@ -3,7 +3,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace GravisynthCommands {
-enum CommandIDs { openSettings = 0x100, savePreset, openPreset, undo, redo };
+enum CommandIDs { openSettings = 0x100, savePreset, openPreset, undo, redo, toggleModMatrix, toggleAiPanel };
 
 inline juce::CommandID getCommandForAction(const juce::String& actionId) {
     if (actionId == "openSettings")
@@ -16,6 +16,10 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return undo;
     if (actionId == "redo")
         return redo;
+    if (actionId == "toggleModMatrix")
+        return toggleModMatrix;
+    if (actionId == "toggleAiPanel")
+        return toggleAiPanel;
     return 0;
 }
 } // namespace GravisynthCommands
@@ -85,6 +89,8 @@ public:
         bindings["undo"] = juce::KeyPress('z', juce::ModifierKeys::commandModifier, 0);
         bindings["redo"] =
             juce::KeyPress('z', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+        bindings["toggleModMatrix"] = juce::KeyPress('m', juce::ModifierKeys::commandModifier, 0);
+        bindings["toggleAiPanel"] = juce::KeyPress('a', juce::ModifierKeys::commandModifier, 0);
     }
 
     static juce::String keyPressToDisplayString(const juce::KeyPress& key) {
@@ -145,6 +151,10 @@ public:
             return "Undo";
         if (actionId == "redo")
             return "Redo";
+        if (actionId == "toggleModMatrix")
+            return "Toggle Mod Matrix";
+        if (actionId == "toggleAiPanel")
+            return "Toggle AI Panel";
         return actionId;
     }
 
@@ -167,7 +177,8 @@ private:
     std::map<juce::String, juce::KeyPress> bindings;
     juce::ApplicationProperties* appProperties = nullptr;
 
-    juce::StringArray actionIds{"openSettings", "savePreset", "openPreset", "undo", "redo"};
+    juce::StringArray actionIds{"openSettings", "savePreset",      "openPreset",   "undo",
+                                "redo",         "toggleModMatrix", "toggleAiPanel"};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShortcutManager)
 };
