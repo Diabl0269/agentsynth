@@ -11,7 +11,8 @@ public:
                          new juce::AudioParameterFloat("threshold", "Threshold (dB)", -20.0f, 0.0f, -1.0f));
         addParameter(releaseParam = new juce::AudioParameterFloat("release", "Release (ms)", 1.0f, 500.0f, 100.0f));
         addParameter(inputGainParam =
-                         new juce::AudioParameterFloat("inputGain", "Input Gain (dB)", -12.0f, 12.0f, 0.0f));
+                         new juce::AudioParameterFloat("inputGain", "Input Gain (dB)", -20.0f, 20.0f, 0.0f));
+        addMuteParameter();
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
@@ -27,8 +28,10 @@ public:
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
-        if (isBypassed())
+        if (isBypassed() || isMuted()) {
+            buffer.clear();
             return;
+        }
 
         juce::ignoreUnused(midiMessages);
 

@@ -12,6 +12,7 @@ public:
         addParameter(wetParam = new juce::AudioParameterFloat("wet", "Wet", 0.0f, 1.0f, 0.33f));
         addParameter(dryParam = new juce::AudioParameterFloat("dry", "Dry", 0.0f, 1.0f, 0.4f));
         addParameter(widthParam = new juce::AudioParameterFloat("width", "Width", 0.0f, 1.0f, 1.0f));
+        addMuteParameter();
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
@@ -20,8 +21,10 @@ public:
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
-        if (isBypassed() || buffer.getNumSamples() == 0 || buffer.getNumChannels() == 0)
+        if (isBypassed() || isMuted() || buffer.getNumSamples() == 0 || buffer.getNumChannels() == 0) {
+            buffer.clear();
             return;
+        }
 
         juce::ignoreUnused(midiMessages);
 

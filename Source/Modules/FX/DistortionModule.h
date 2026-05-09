@@ -17,7 +17,7 @@ public:
         addParameter(oversamplingParam = new juce::AudioParameterChoice("oversampling", "Oversampling",
                                                                         juce::StringArray{"Off", "2x", "4x"},
                                                                         1)); // default 2x preserves backward compat
-
+        addMuteParameter();
         oversamplingParam->addListener(this);
         enableVisualBuffer(true);
     }
@@ -70,6 +70,11 @@ public:
 
         if (numSamples == 0 || numChannels == 0)
             return;
+
+        if (isMuted()) {
+            buffer.clear();
+            return;
+        }
 
         if (isBypassed()) {
             for (int ch = 2; ch < numChannels; ++ch)

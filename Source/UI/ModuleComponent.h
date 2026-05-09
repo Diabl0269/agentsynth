@@ -79,6 +79,8 @@ private:
 
     std::unique_ptr<juce::TextButton> bypassButton;
     std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
+    std::unique_ptr<juce::TextButton> muteButton;
+    std::unique_ptr<juce::ButtonParameterAttachment> muteAttachment;
 
     GravisynthUndoManager* undoManager = nullptr;
     std::map<int, float> gestureStartValues;

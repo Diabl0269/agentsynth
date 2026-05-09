@@ -11,6 +11,7 @@ public:
     {
         addParameter(gainParam = new juce::AudioParameterFloat("gain", "Gain", 0.0f, 1.0f, 0.5f));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
+        addMuteParameter();
         enableVisualBuffer(true);
     }
 
@@ -27,6 +28,11 @@ public:
         int numChannels = buffer.getNumChannels();
         if (numChannels == 0 || numSamples == 0)
             return;
+
+        if (isMuted()) {
+            buffer.clear();
+            return;
+        }
 
         if (isBypassed()) {
             // Clear CV channels (CV starts at 1 in mono, 8 in poly)

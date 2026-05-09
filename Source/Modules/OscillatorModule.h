@@ -18,7 +18,7 @@ public:
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
         addParameter(unisonParam = new juce::AudioParameterInt(juce::ParameterID("unison", 1), "Unison", 1, 8, 1));
         addParameter(detuneParam = new juce::AudioParameterFloat("detune", "Detune", 0.0f, 100.0f, 0.0f));
-
+        addMuteParameter();
         enableVisualBuffer(true);
     }
 
@@ -37,7 +37,7 @@ public:
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
-        if (isBypassed()) {
+        if (isBypassed() || isMuted()) {
             buffer.clear();
             return;
         }
