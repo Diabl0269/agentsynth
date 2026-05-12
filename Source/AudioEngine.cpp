@@ -119,7 +119,8 @@ std::vector<AudioEngine::ModulationDisplayInfo> AudioEngine::getModulationDispla
             info.modSignalValue = atten->getLastModValue();
             info.modSignalPeak = atten->getLastOutputPeak();
             info.isBypassed = false;
-            if (auto* bp = dynamic_cast<juce::AudioParameterBool*>(node->getProcessor()->getParameters()[2]))
+            // Parameter 0 is bypassed, Parameter 1 is amount
+            if (auto* bp = dynamic_cast<juce::AudioParameterBool*>(node->getProcessor()->getParameters()[0]))
                 info.isBypassed = bp->get();
 
             bool foundDest = false;

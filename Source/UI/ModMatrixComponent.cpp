@@ -214,14 +214,14 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
     // Attach to attenuverter params
     if (auto* node = owner.audioEngine.getGraph().getNodeForId(attenuverterId)) {
         const auto& params = node->getProcessor()->getParameters();
+        if (params.size() > 0) {
+            if (auto* bParam = dynamic_cast<juce::AudioParameterBool*>(params[0])) {
+                bypassAttachment = std::make_unique<juce::ButtonParameterAttachment>(*bParam, bypassToggle);
+            }
+        }
         if (params.size() > 1) {
             if (auto* param = dynamic_cast<juce::AudioParameterFloat*>(params[1])) {
                 amountAttachment = std::make_unique<juce::SliderParameterAttachment>(*param, amountSlider);
-            }
-        }
-        if (params.size() > 2) {
-            if (auto* bParam = dynamic_cast<juce::AudioParameterBool*>(params[2])) {
-                bypassAttachment = std::make_unique<juce::ButtonParameterAttachment>(*bParam, bypassToggle);
             }
         }
 
