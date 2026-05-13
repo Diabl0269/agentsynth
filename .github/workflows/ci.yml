@@ -197,11 +197,40 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-deps-
 
+    - name: Cache ccache
+      uses: actions/cache@v4
+      with:
+        path: C:\Users\runneradmin\AppData\Local\ccache
+        key: ${{ runner.os }}-ccache-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-ccache-
+
+    - name: Configure ccache
+      shell: bash
+      run: |
+        mkdir -p C:/Users/runneradmin/AppData/Local/ccache
+        ccache --set-config=max_size=500M
+        ccache --zero-stats
+      env:
+        CCACHE_DIR: C:/Users/runneradmin/AppData/Local/ccache
+
     - name: Configure CMake
-      run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      run: |
+        cmake -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+      env:
+        CCACHE_DIR: C:/Users/runneradmin/AppData/Local/ccache
 
     - name: Build
       run: cmake --build build --config Release
+
+    - name: ccache Stats
+      shell: bash
+      run: ccache --show-stats
+      env:
+        CCACHE_DIR: C:/Users/runneradmin/AppData/Local/ccache
 
     - name: Run Tests
       run: ./build/Tests/Release/GravisynthTests.exe
