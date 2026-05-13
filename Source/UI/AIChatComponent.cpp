@@ -208,6 +208,14 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     sendButton.setButtonText("Send");
     sendButton.onClick = [this]() { sendButtonClicked(); };
 
+    addAndMakeVisible(newChatButton);
+    newChatButton.setButtonText("New Chat");
+    newChatButton.onClick = [this]() {
+        aiService.clearHistory();
+        messages.clear();
+        updateChatDisplay();
+    };
+
     addAndMakeVisible(modelPicker);
     modelPicker.onChange = [this]() {
         juce::String model = modelPicker.getText();
@@ -259,6 +267,10 @@ void AIChatComponent::timerCallback() {
 
 void AIChatComponent::resized() {
     auto b = getLocalBounds().reduced(10);
+
+    // Top row: New Chat
+    auto topArea = b.removeFromTop(40);
+    newChatButton.setBounds(topArea.removeFromLeft(100));
 
     auto bottomArea = b.removeFromBottom(70); // Increased height for both rows
 

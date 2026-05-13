@@ -40,6 +40,7 @@ private:
     juce::Component messageList;
     juce::TextEditor inputField;
     juce::TextButton sendButton;
+    juce::TextButton newChatButton;
     juce::ComboBox modelPicker;
 
     void sendButtonClicked();
