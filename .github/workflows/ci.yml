@@ -205,6 +205,9 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-ccache-
 
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+
     - name: Configure ccache
       shell: bash
       run: |
@@ -215,11 +218,10 @@ jobs:
         CCACHE_DIR: C:/Users/runneradmin/AppData/Local/ccache
 
     - name: Configure CMake
-      shell: bash
       run: |
-        cmake -B build -G Ninja \
-          -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+        cmake -B build -G Ninja ^
+          -DCMAKE_BUILD_TYPE=Release ^
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache ^
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
       env:
         CCACHE_DIR: C:/Users/runneradmin/AppData/Local/ccache
