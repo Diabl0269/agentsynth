@@ -34,9 +34,8 @@ protected:
         // Set up ApplicationProperties with temporary storage for testing
         juce::PropertiesFile::Options options;
         options.applicationName = "GravisynthSettingsTest";
-        options.folderName = "GravisynthSettingsTest";
-        options.osxLibrarySubFolder = "Application Support";
-
+        options.filenameSuffix = "test";
+        options.storageFormat = juce::PropertiesFile::storeAsXML;
         appProperties.setStorageParameters(options);
 
         // Initialize AI service with mock provider
@@ -45,7 +44,7 @@ protected:
         aiService->setProvider(std::make_unique<MockSettingsProvider>());
 
         // Initialize AI chat component
-        aiChatComponent = std::make_unique<gsynth::AIChatComponent>(*aiService);
+        aiChatComponent = std::make_unique<gsynth::AIChatComponent>(*aiService, appProperties);
     }
 
     void TearDown() override {

@@ -19,7 +19,7 @@ class AIChatComponent
 #endif
 {
 public:
-    AIChatComponent(AIIntegrationService& service);
+    AIChatComponent(AIIntegrationService& service, juce::ApplicationProperties& props);
     ~AIChatComponent() override;
 
     void resized() override;
@@ -33,6 +33,7 @@ private:
     class PatchCard;
 
     AIIntegrationService& aiService;
+    juce::ApplicationProperties& appProperties;
     bool isWaitingForResponse = false;
 
     juce::Viewport viewport;

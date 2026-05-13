@@ -166,8 +166,9 @@ private:
 };
 
 //==============================================================================
-AIChatComponent::AIChatComponent(AIIntegrationService& service)
-    : aiService(service) {
+AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::ApplicationProperties& props)
+    : aiService(service)
+    , appProperties(props) {
 
 #ifdef NDEBUG
     juce::Logger::writeToLog("AIChatComponent initialized (Release)");
@@ -208,7 +209,12 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service)
     sendButton.onClick = [this]() { sendButtonClicked(); };
 
     addAndMakeVisible(modelPicker);
-    modelPicker.onChange = [this]() { aiService.setModel(modelPicker.getText()); };
+    modelPicker.onChange = [this]() {
+        juce::String model = modelPicker.getText();
+        aiService.setModel(model);
+        appProperties.getUserSettings()->setValue("aiModel", model);
+        appProperties.getUserSettings()->saveIfNeeded();
+    };
 
     refreshModels();
 
@@ -464,11 +470,20 @@ void AIChatComponent::refreshModels() {
                 modelPicker.addItem(models[i], i + 1);
             }
 
-            // Select the current model, or default to first available
+            // Select the saved model, current model, or default to first available
+            juce::String savedModel = appProperties.getUserSettings()->getValue("aiModel", "");
             juce::String current = aiService.getCurrentModel();
-            int index = current.isNotEmpty() ? models.indexOf(current) : -1;
+
+            int index = -1;
+            if (savedModel.isNotEmpty() && models.contains(savedModel)) {
+                index = models.indexOf(savedModel);
+            } else if (current.isNotEmpty()) {
+                index = models.indexOf(current);
+            }
+
             if (index != -1) {
                 modelPicker.setSelectedId(index + 1, juce::dontSendNotification);
+                aiService.setModel(models[index]);
             } else {
                 modelPicker.setSelectedId(1, juce::dontSendNotification);
                 aiService.setModel(models[0]);

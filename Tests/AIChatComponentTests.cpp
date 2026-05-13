@@ -35,7 +35,14 @@ TEST_F(AIChatComponentTest, InitializationAndResizing) {
     gsynth::AIIntegrationService service(engine.getGraph());
     service.setProvider(std::make_unique<MockChatProvider>());
 
-    gsynth::AIChatComponent chatComponent(service);
+    juce::ApplicationProperties props;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Test";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(options);
+
+    gsynth::AIChatComponent chatComponent(service, props);
     chatComponent.setSize(400, 600);
 
     EXPECT_NO_THROW(chatComponent.resized());
@@ -46,7 +53,14 @@ TEST_F(AIChatComponentTest, SendMessageUpdatesUIAndHistory) {
     gsynth::AIIntegrationService service(engine.getGraph());
     service.setProvider(std::make_unique<MockChatProvider>());
 
-    gsynth::AIChatComponent chatComponent(service);
+    juce::ApplicationProperties props;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Test";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(options);
+
+    gsynth::AIChatComponent chatComponent(service, props);
     chatComponent.setSize(400, 600);
 
     juce::TextEditor* inputField = nullptr;

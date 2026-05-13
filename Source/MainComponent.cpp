@@ -5,7 +5,7 @@
 MainComponent::MainComponent(std::unique_ptr<gsynth::AIProvider> provider)
     : graphEditor(audioEngine, &undoManager)
     , aiService(audioEngine.getGraph())
-    , aiChatComponent(aiService) {
+    , aiChatComponent(aiService, appProperties) {
     // Setup ApplicationProperties
     propertiesOptions.applicationName = "Gravisynth";
     propertiesOptions.folderName = "Gravisynth";
@@ -112,7 +112,7 @@ MainComponent::MainComponent(std::unique_ptr<gsynth::AIProvider> provider)
     };
 
     addAndMakeVisible(toggleAiPanelButton);
-    toggleAiPanelButton.setButtonText("Hide AI");
+    toggleAiPanelButton.setButtonText(isAiPanelVisible ? "Hide AI" : "Show AI");
     toggleAiPanelButton.setComponentID("toggleAiPanel");
     toggleAiPanelButton.onClick = [this] {
         isAiPanelVisible = !isAiPanelVisible;
