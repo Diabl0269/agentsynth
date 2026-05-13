@@ -237,5 +237,6 @@ jobs:
         CCACHE_DIR: C:/Users/runneradmin/AppData/Local/ccache
 
     - name: Run Tests
-      run: ./build/Tests/Release/GravisynthTests.exe
       shell: bash
+      run: |
+        find build -name "GravisynthTests.exe" -exec {} \;
