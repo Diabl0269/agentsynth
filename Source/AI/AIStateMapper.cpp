@@ -868,8 +868,47 @@ juce::var AIStateMapper::getPatchSchema() {
     removeModulations->setProperty("items", juce::var(rmModItems.get()));
     properties->setProperty("removeModulations", juce::var(removeModulations.get()));
 
+    // 7. Parameter Choices (for AI reference)
+    juce::DynamicObject::Ptr paramChoices = new juce::DynamicObject();
+    paramChoices->setProperty("type", "object");
+    juce::DynamicObject::Ptr paramChoicesProps = new juce::DynamicObject();
+
+    for (const auto& entry : moduleFactory) {
+        auto processor = entry.second();
+        if (!processor)
+            continue;
+
+        juce::DynamicObject::Ptr modParams = new juce::DynamicObject();
+        modParams->setProperty("type", "object");
+        juce::DynamicObject::Ptr modParamsProps = new juce::DynamicObject();
+
+        for (auto* param : processor->getParameters()) {
+            if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param)) {
+                juce::DynamicObject::Ptr choiceDef = new juce::DynamicObject();
+                choiceDef->setProperty("type", "string");
+
+                // Create a JSON array string for the enum
+                juce::Array<juce::var> choicesArray;
+                for (const auto& c : choice->choices)
+                    choicesArray.add(c);
+                choiceDef->setProperty("enum", juce::var(choicesArray));
+
+                modParamsProps->setProperty(choice->paramID, juce::var(choiceDef.get()));
+            }
+        }
+        if (modParamsProps->getProperties().size() > 0) {
+            modParams->setProperty("properties", juce::var(modParamsProps.get()));
+            paramChoicesProps->setProperty(entry.first, juce::var(modParams.get()));
+        }
+    }
+    paramChoices->setProperty("properties", juce::var(paramChoicesProps.get()));
+    properties->setProperty("parameterChoices", juce::var(paramChoices.get()));
+
     schema->setProperty("properties", juce::var(properties.get()));
     schema->setProperty("required", juce::Array<juce::var>({"nodes", "connections"}));
+
+    // DEBUG: Log the final schema string to diagnose format issues
+    juce::Logger::writeToLog("Generated AI Schema: " + juce::JSON::toString(juce::var(schema.get())));
 
     return juce::var(schema.get());
 }

@@ -26,16 +26,32 @@ TEST_F(MainComponentTest, AIPanelIsHiddenByDefault) {
     EXPECT_FALSE(mainComp.isAiPanelConfiguredVisible());
 }
 
-TEST_F(MainComponentTest, ToggleAIPanelHidesAndShows) {
+TEST_F(MainComponentTest, ToggleAIPanelButtonTextMatchesVisibility) {
     MainComponent mainComp(std::make_unique<MockProvider>());
 
-    EXPECT_FALSE(mainComp.isAiPanelConfiguredVisible());
+    // Find the toggle button
+    juce::TextButton* toggleBtn = nullptr;
+    for (auto* child : mainComp.getChildren()) {
+        if (auto* btn = dynamic_cast<juce::TextButton*>(child)) {
+            if (btn->getComponentID() == "toggleAiPanel")
+                toggleBtn = btn;
+        }
+    }
+    ASSERT_NE(toggleBtn, nullptr);
 
+    // Should be hidden by default -> "Show AI"
+    EXPECT_FALSE(mainComp.isAiPanelConfiguredVisible());
+    EXPECT_EQ(toggleBtn->getButtonText(), "Show AI");
+
+    // Toggle -> "Hide AI"
     mainComp.simulateToggleAiPanelClick();
     EXPECT_TRUE(mainComp.isAiPanelConfiguredVisible());
+    EXPECT_EQ(toggleBtn->getButtonText(), "Hide AI");
 
+    // Toggle back -> "Show AI"
     mainComp.simulateToggleAiPanelClick();
     EXPECT_FALSE(mainComp.isAiPanelConfiguredVisible());
+    EXPECT_EQ(toggleBtn->getButtonText(), "Show AI");
 }
 
 TEST_F(MainComponentTest, ModMatrixIsHiddenByDefault) {

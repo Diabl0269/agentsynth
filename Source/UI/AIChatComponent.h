@@ -19,13 +19,15 @@ class AIChatComponent
 #endif
 {
 public:
-    AIChatComponent(AIIntegrationService& service);
+    AIChatComponent(AIIntegrationService& service, juce::ApplicationProperties& props);
     ~AIChatComponent() override;
 
     void resized() override;
     void paint(juce::Graphics& g) override;
 
     void refreshModels();
+    void sendButtonClicked();
+    void triggerSend() { sendButtonClicked(); }
 
 private:
     void timerCallback() override;
@@ -33,15 +35,16 @@ private:
     class PatchCard;
 
     AIIntegrationService& aiService;
+    juce::ApplicationProperties& appProperties;
     bool isWaitingForResponse = false;
 
     juce::Viewport viewport;
     juce::Component messageList;
     juce::TextEditor inputField;
     juce::TextButton sendButton;
+    juce::TextButton newChatButton;
     juce::ComboBox modelPicker;
 
-    void sendButtonClicked();
     void updateChatDisplay();
     void scrollToBottom();
 
