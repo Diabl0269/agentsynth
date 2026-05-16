@@ -1,0 +1,8 @@
+{
+  "track_id": "build_opt_20260511",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-05-11T11:45:00Z",
+  "updated_at": "2026-05-11T11:45:00Z",
+  "description": "Improve build times by decoupling tests and adding ccache; improve maintainability by restructuring Tests directory hierarchy."
+}

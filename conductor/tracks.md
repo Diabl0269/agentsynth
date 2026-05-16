@@ -11,4 +11,3 @@ This file tracks all major tracks for the project. Each track has its own detail
 --- 
 
 - [x] **Track: Improve build times by decoupling tests and adding ccache; improve maintainability by restructuring Tests directory hierarchy.** 
-*Link: [./tracks/build_opt_20260511/](./tracks/build_opt_20260511/)*
