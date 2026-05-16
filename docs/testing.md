@@ -4,6 +4,7 @@ All tests use GoogleTest and run headless (no audio device, no GUI window). ~310
 
 ```bash
 # Run all tests
+cmake -B build -DENABLE_TESTS=ON
 cmake --build build --target GravisynthTests
 ./build/Tests/GravisynthTests
 
@@ -13,6 +14,8 @@ cmake --build build --target GravisynthTests
 # Check coverage (threshold: 80%)
 bash scripts/coverage.sh
 ```
+
+By default, builds skip tests to save time. Use the `-DENABLE_TESTS=ON` flag to enable them.
 
 ## Test Layers
 
