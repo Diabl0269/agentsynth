@@ -19,6 +19,7 @@
 #include "../Modules/PolyMidiModule.h"
 #include "../Modules/PolySequencerModule.h"
 #include "../Modules/SequencerModule.h"
+#include "../Modules/TimelineModule.h"
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
 #include <functional> // For std::function
@@ -59,7 +60,8 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Flanger", []() { return std::make_unique<FlangerModule>(); }},
     {"Limiter", []() { return std::make_unique<LimiterModule>(); }},
     {"Voice Mixer", []() { return std::make_unique<VoiceMixerModule>(); }},
-    {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }}};
+    {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }},
+    {"Timeline", []() { return std::make_unique<TimelineModule>(); }}};
 
 bool AIStateMapper::validatePatchJSON(const juce::var& json) {
     if (!json.isObject()) {
@@ -165,6 +167,8 @@ static juce::String getFactoryTypeName(juce::AudioProcessor* processor) {
             return "Voice Mixer";
         case ModuleType::ExternalMidi:
             return "External MIDI";
+        case ModuleType::Timeline:
+            return "Timeline";
         }
     }
     return processor->getName();
@@ -803,7 +807,7 @@ juce::var AIStateMapper::getPatchSchema() {
                           "Input\", \"Oscillator\", \"Filter\", \"VCA\", \"ADSR\", \"Sequencer\", \"LFO\", "
                           "\"Distortion\", \"Delay\", \"Reverb\", \"MIDI Keyboard\", \"Amp Env\", \"Filter Env\", "
                           "\"Poly MIDI\", \"Poly Sequencer\", \"Chorus\", \"Phaser\", "
-                          "\"Compressor\", \"Flanger\", \"Limiter\", \"External MIDI\"]}"));
+                          "\"Compressor\", \"Flanger\", \"Limiter\", \"External MIDI\", \"Timeline\"]}"));
     nodeProperties->setProperty("params", juce::JSON::parse("{\"type\": \"object\"}"));
 
     nodeItems->setProperty("properties", juce::var(nodeProperties.get()));
