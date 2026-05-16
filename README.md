@@ -107,12 +107,19 @@ Gravisynth uses GoogleTest for unit testing.
 
 ### Running Unit Tests
 
-1.  **Build the test suite:**
+By default, builds skip tests to save time. To build the test suite, configure with `-DENABLE_TESTS=ON`:
+
+1.  **Configure CMake with tests enabled:**
+    ```bash
+    cmake -Bbuild -S. -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON
+    ```
+
+2.  **Build the test suite:**
     ```bash
     cmake --build build --target GravisynthTests
     ```
 
-2.  **Execute the tests:**
+3.  **Execute the tests:**
     ```bash
     ./build/Tests/GravisynthTests
     ```
