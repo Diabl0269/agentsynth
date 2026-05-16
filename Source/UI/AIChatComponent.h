@@ -26,6 +26,8 @@ public:
     void paint(juce::Graphics& g) override;
 
     void refreshModels();
+    void sendButtonClicked();
+    void triggerSend() { sendButtonClicked(); }
 
 private:
     void timerCallback() override;
@@ -43,7 +45,6 @@ private:
     juce::TextButton newChatButton;
     juce::ComboBox modelPicker;
 
-    void sendButtonClicked();
     void updateChatDisplay();
     void scrollToBottom();
 

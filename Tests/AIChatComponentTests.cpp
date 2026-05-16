@@ -82,7 +82,7 @@ TEST_F(AIChatComponentTest, SendMessageUpdatesUIAndHistory) {
     inputField->setText("Create a fat bass synth");
 
     // Call the method directly.
-    chatComponent.sendButtonClicked();
+    chatComponent.triggerSend();
 
     // Allow for event processing
     juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
