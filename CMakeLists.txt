@@ -2,6 +2,13 @@ cmake_minimum_required(VERSION 3.22)
 
 project(Gravisynth VERSION 0.13.2)
 
+# Enable ccache if available
+find_program(CCACHE_PROGRAM ccache)
+if(CCACHE_PROGRAM)
+    set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+endif()
+
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -17,6 +24,7 @@ FetchContent_MakeAvailable(juce)
 
 # Coverage Option
 option(ENABLE_COVERAGE "Enable code coverage testing" OFF)
+option(ENABLE_TESTS "Enable building test suite" OFF)
 
 if(ENABLE_COVERAGE)
     if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
@@ -165,5 +173,7 @@ else()
     target_compile_options(Gravisynth PRIVATE -Wall -Wextra)
 endif()
 
-add_subdirectory(Tests)
+if(ENABLE_TESTS)
+    add_subdirectory(Tests)
+endif()
 
