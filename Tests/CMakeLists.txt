@@ -47,6 +47,7 @@ add_executable(GravisynthTests
     SettingsWindowTests.cpp
     ShortcutManagerTests.cpp
     AudioRenderingTests.cpp
+    TimelineTests.cpp
     ../Source/MainComponent.cpp
     ../Source/UI/GraphEditor.cpp
     ../Source/UI/ModMatrixComponent.cpp

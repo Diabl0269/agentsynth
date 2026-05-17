@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: system-ui, sans-serif; padding: 2rem; background-color: #f4f4f9; }
+        .container { display: flex; flex-direction: column; gap: 20px; max-width: 800px; margin: 0 auto; }
+        .box { border: 2px solid #ccc; padding: 15px; border-radius: 8px; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .title { font-weight: bold; font-size: 1.4em; margin-bottom: 15px; color: #333; }
+        .diagram { background: #eef; padding: 20px; border: 1px dashed #77a; border-radius: 4px; font-family: monospace; line-height: 1.5; color: #222; }
+        .recommendation { border: 3px solid #4a90e2; }
+    </style>
+</head>
+<body>
+    <h1 style="text-align:center;">Gravisynth Timeline Design Approaches</h1>
+    <div class="container">
+        <div class="box">
+            <div class="title">Option 1: Global Timeline (DAW-style)</div>
+            <div class="diagram">
+                [ Master HUD: Play / Pause / Stop / Loop ]<br>
+                ------------------------------------------<br>
+                [ Arrangement View (Clips / Automation) ]<br>
+                ------------------------------------------<br>
+                [ Graph Editor (Modular Patch) ]
+            </div>
+            <p><strong>Workflow:</strong> Dedicated, non-modular arrangement view. Clear master control, standard DAW UX.</p>
+        </div>
+
+        <div class="box">
+            <div class="title">Option 2: Timeline Module (Node-based)</div>
+            <div class="diagram">
+                [ Graph Editor ]<br>
+                [ Timeline Node A ] --(MIDI)--> [ Filter ]<br>
+                [ Timeline Node B ] --(MIDI)--> [ Osc ]
+            </div>
+            <p><strong>Workflow:</strong> Patchable timeline nodes. Highly flexible routing, but lacks unified transport control.</p>
+        </div>
+
+        <div class="box recommendation">
+            <div class="title">Recommendation: Hybrid (Timeline Nodes + Master HUD)</div>
+            <div class="diagram">
+                [ Global Transport Sync HUD ]<br>
+                -----------------------------<br>
+                [ Graph Editor ]<br>
+                [ Timeline Node ] --MIDI--> [ Synth ]
+            </div>
+            <p><strong>Workflow:</strong> Timeline Nodes perform the data orchestration, Master HUD manages global transport. Flexibility of modular + sync of a DAW.</p>
+        </div>
+    </div>
+</body>
+</html>

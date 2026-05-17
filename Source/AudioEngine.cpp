@@ -14,7 +14,8 @@
 #include "PresetManager.h"
 #include <map>
 
-AudioEngine::AudioEngine() {}
+AudioEngine::AudioEngine()
+    : transportManager(TransportManager::getInstance()) {}
 
 AudioEngine::~AudioEngine() { shutdown(); }
 

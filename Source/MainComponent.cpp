@@ -40,6 +40,8 @@ MainComponent::MainComponent(std::unique_ptr<gsynth::AIProvider> provider)
     shortcutManager.onBindingsChanged = [this] { updateCommandShortcuts(); };
     startTimerHz(10);
     addAndMakeVisible(graphEditor);
+    addAndMakeVisible(arrangementView);
+    arrangementView.setVisible(false);
     addAndMakeVisible(moduleLibrary);
     addAndMakeVisible(aiChatComponent);
     aiChatComponent.setVisible(isAiPanelVisible);
@@ -129,6 +131,25 @@ MainComponent::MainComponent(std::unique_ptr<gsynth::AIProvider> provider)
         toggleModMatrixButton.setButtonText(graphEditor.isModMatrixVisible() ? "Hide Matrix" : "Show Matrix");
         resized();
     };
+
+    addAndMakeVisible(toggleArrangementButton);
+    toggleArrangementButton.setButtonText("Arrangement");
+    toggleArrangementButton.setComponentID("toggleArrangement");
+    toggleArrangementButton.onClick = [this] {
+        isArrangementViewVisible = !isArrangementViewVisible;
+        arrangementView.setVisible(isArrangementViewVisible);
+        graphEditor.setVisible(!isArrangementViewVisible);
+        toggleArrangementButton.setButtonText(isArrangementViewVisible ? "Graph Editor" : "Arrangement");
+        resized();
+    };
+
+    addAndMakeVisible(playButton);
+    playButton.setButtonText("Play");
+    playButton.onClick = [this] { TransportManager::getInstance().play(); };
+
+    addAndMakeVisible(pauseButton);
+    pauseButton.setButtonText("Pause");
+    pauseButton.onClick = [this] { TransportManager::getInstance().pause(); };
 
     addAndMakeVisible(settingsButton);
     settingsButton.setButtonText("Settings");
@@ -312,11 +333,18 @@ void MainComponent::resized() {
     // Position toggle buttons on the right side of the header
     toggleAiPanelButton.setBounds(header.removeFromRight(100).reduced(2));
     toggleModMatrixButton.setBounds(header.removeFromRight(100).reduced(2));
+    pauseButton.setBounds(header.removeFromRight(80).reduced(2));
+    playButton.setBounds(header.removeFromRight(80).reduced(2));
 
     if (isAiPanelVisible) {
         aiChatComponent.setBounds(bounds.removeFromRight((int)aiPaneWidth));
     }
 
     moduleLibrary.setBounds(bounds.removeFromLeft(200));
-    graphEditor.setBounds(bounds);
+
+    if (isArrangementViewVisible) {
+        arrangementView.setBounds(bounds);
+    } else {
+        graphEditor.setBounds(bounds);
+    }
 }

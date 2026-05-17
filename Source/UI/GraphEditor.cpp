@@ -17,6 +17,7 @@
 #include "../Modules/OscillatorModule.h"
 #include "../Modules/PolyMidiModule.h"
 #include "../Modules/SequencerModule.h"
+#include "../Modules/TimelineModule.h"
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
 #include "ModuleComponent.h"
@@ -859,6 +860,8 @@ void GraphEditor::itemDropped(const SourceDetails& dragSourceDetails) {
         newProcessor = std::make_unique<VCAModule>();
     else if (name == "Sequencer")
         newProcessor = std::make_unique<SequencerModule>();
+    else if (name == "Timeline")
+        newProcessor = std::make_unique<TimelineModule>();
     else if (name == "LFO")
         newProcessor = std::make_unique<LFOModule>();
     else if (name == "Distortion")

@@ -6,6 +6,7 @@
 #include "PresetManager.h"
 #include "ShortcutManager.h"
 #include "UI/AIChatComponent.h"
+#include "UI/ArrangementView.h"
 #include "UI/GraphEditor.h"
 #include "UI/ModuleLibraryComponent.h"
 #include <juce_audio_utils/juce_audio_utils.h>
@@ -67,6 +68,7 @@ private:
     GravisynthUndoManager undoManager;
     AudioEngine audioEngine;
     GraphEditor graphEditor;
+    ArrangementView arrangementView;
     ModuleLibraryComponent moduleLibrary;
 
     juce::TextButton saveButton;
@@ -76,12 +78,16 @@ private:
     juce::TextButton redoButton;
     juce::TextButton toggleAiPanelButton;
     juce::TextButton toggleModMatrixButton;
+    juce::TextButton toggleArrangementButton;
+    juce::TextButton playButton;
+    juce::TextButton pauseButton;
 
     std::unique_ptr<juce::FileChooser> fileChooser;
 
     gsynth::AIIntegrationService aiService;
     gsynth::AIChatComponent aiChatComponent;
     bool isAiPanelVisible = false;
+    bool isArrangementViewVisible = false;
 
     juce::ApplicationProperties appProperties;
     juce::PropertiesFile::Options propertiesOptions;
