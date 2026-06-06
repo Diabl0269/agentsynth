@@ -14,17 +14,51 @@ void OllamaProvider::setModel(const juce::String& name) { currentModel = name; }
 juce::String OllamaProvider::getCurrentModel() const { return currentModel; }
 
 void OllamaProvider::fetchAvailableModels(std::function<void(const juce::StringArray& models, bool success)> callback) {
-    // Run on a separate thread to avoid blocking UI
+    // Run on a separate thread to avoid blocking the caller (the message thread).
+    //
+    // CRITICAL: we must NOT join() on the caller's thread. The old code joined the
+    // previous discovery thread here, which blocked the UI for up to the connection
+    // timeout (was 120s) when Ollama was unreachable. Instead we guard with an
+    // atomic in-flight flag: if a discovery is already running, this call returns
+    // immediately (and reports failure asynchronously) without ever blocking.
+    bool expected = false;
+    if (!discoveryInFlight.compare_exchange_strong(expected, true)) {
+        // A discovery worker is already running. Do not block the caller and do not
+        // launch a second worker. Report "no result yet" asynchronously so callers
+        // relying on the callback still get one without us touching the UI synchronously.
+        if (callback) {
+            if (isTestMode) {
+                callback(juce::StringArray{}, false);
+            } else {
+                juce::MessageManager::callAsync([callback]() { callback(juce::StringArray{}, false); });
+            }
+        }
+        return;
+    }
+
+    // No worker was in flight. A previous worker may have finished but not yet been
+    // joined; joining a finished thread returns immediately (no blocking). We only
+    // ever reach here when discoveryInFlight just transitioned false->true, so there
+    // is no concurrent worker to wait on.
     if (discoveryThread.joinable())
         discoveryThread.join();
+
     discoveryThread = std::thread([this, callback]() {
+        // Clear the in-flight flag when this worker exits, no matter which path it
+        // takes, so a subsequent fetch can run.
+        struct InFlightGuard {
+            std::atomic<bool>& flag;
+            ~InFlightGuard() { flag.store(false); }
+        } inFlightGuard{discoveryInFlight};
+
         DBG("AI Discovery STARTED: " + ollamaHost + "/api/tags");
         juce::URL url(ollamaHost + "/api/tags");
         juce::StringArray models;
         bool success = false;
 
-        if (auto stream = createStream(url, juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress)
-                                                .withConnectionTimeoutMs(120000))) {
+        if (auto stream = createStream(
+                url,
+                juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress).withConnectionTimeoutMs(4000))) {
             juce::String responseText = stream->readEntireStreamAsString();
             // DBG("AI Discovery Response (before JSON parse): [" + responseText + "]"); // Potentially expensive
             // DBG("AI Discovery Response: " + responseText); // Redundant

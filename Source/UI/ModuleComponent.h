@@ -87,7 +87,9 @@ private:
     juce::Point<int> dragStartPosition;
 
     float cachedRMS = 0.0f;
+    float lastPaintedRMS = -1.0f;
     std::vector<float> rmsReadBuffer;
+    int lastActiveStep = -1;
 
     void createControls();
     void updateLayout();

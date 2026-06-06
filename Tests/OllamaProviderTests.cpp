@@ -1,4 +1,5 @@
 #include "../Source/AI/OllamaProvider.h" // Correct path
+#include <chrono>                        // For steady_clock timing
 #include <future>                        // For std::promise/std::future
 #include <gtest/gtest.h>
 #include <juce_core/juce_core.h>
@@ -204,6 +205,73 @@ TEST_F(OllamaProviderTest, SendPromptSuccessWithMock) {
     ASSERT_TRUE(std::get<1>(result));            // Should be successful
     ASSERT_FALSE(std::get<0>(result).isEmpty()); // Response should not be empty
     ASSERT_TRUE(std::get<0>(result).contains("Mocked AI response."));
+}
+
+// A stream whose read() blocks for ~300ms to simulate a slow/unreachable Ollama
+// server during model discovery. Mirrors SlowInputStream but with a fixed delay
+// used specifically by the non-blocking discovery test.
+class BlockingDiscoveryStream : public juce::InputStream {
+public:
+    bool failedToOpen() const { return false; }
+    juce::int64 getTotalLength() override { return 1; }
+    juce::int64 getPosition() override { return readCalled ? 1 : 0; }
+    bool setPosition(juce::int64 newPosition) override {
+        juce::ignoreUnused(newPosition);
+        return false;
+    }
+    bool isExhausted() override { return readCalled; }
+
+    int read(void* destBuffer, int maxBytesToRead) override {
+        juce::ignoreUnused(destBuffer, maxBytesToRead);
+        if (readCalled)
+            return 0;
+        // Sleep in small increments so the worker can still be stopped cleanly.
+        int elapsed = 0;
+        while (elapsed < 300) {
+            if (juce::Thread::currentThreadShouldExit())
+                return 0;
+            juce::Thread::sleep(50);
+            elapsed += 50;
+        }
+        readCalled = true;
+        return 0;
+    }
+
+private:
+    bool readCalled = false;
+};
+
+// REGRESSION LOCK (UI-hang fix): fetchAvailableModels() must NOT block the caller
+// (the message thread). Even when the underlying stream is slow/unreachable, the
+// call must return immediately because discovery runs on a worker thread. A second
+// immediate call must also return immediately (it must not join the first worker).
+TEST_F(OllamaProviderTest, FetchAvailableModelsDoesNotBlockCaller) {
+    auto blockingFactory = [](const juce::URL& url,
+                              const juce::URL::InputStreamOptions& options) -> std::unique_ptr<juce::InputStream> {
+        juce::ignoreUnused(url, options);
+        return std::make_unique<BlockingDiscoveryStream>();
+    };
+
+    gsynth::OllamaProvider provider{"http://mock-host:11434", blockingFactory};
+    provider.setTestMode(true);
+
+    using clock = std::chrono::steady_clock;
+
+    auto t0 = clock::now();
+    provider.fetchAvailableModels([](const juce::StringArray&, bool) {});
+    auto firstCallMs = std::chrono::duration_cast<std::chrono::milliseconds>(clock::now() - t0).count();
+
+    auto t1 = clock::now();
+    provider.fetchAvailableModels([](const juce::StringArray&, bool) {});
+    auto secondCallMs = std::chrono::duration_cast<std::chrono::milliseconds>(clock::now() - t1).count();
+
+    EXPECT_LT(firstCallMs, 50) << "First fetchAvailableModels() blocked the caller for " << firstCallMs
+                               << " ms (the worker stream sleeps ~300ms; the call must return immediately)";
+    EXPECT_LT(secondCallMs, 50) << "Second fetchAvailableModels() blocked the caller for " << secondCallMs
+                                << " ms (it must NOT join/wait on the first in-flight discovery)";
+
+    // Let the worker finish so the destructor join is fast and clean.
+    provider.stopThread(5000);
 }
 
 TEST_F(OllamaProviderTest, SendPromptTimeoutFails) {

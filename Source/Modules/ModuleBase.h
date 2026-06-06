@@ -13,6 +13,16 @@ struct ModulationTarget {
 
 enum class ModulationCategory { Envelope, LFO, Oscillator, Sequencer, Filter, FX, Other };
 
+enum class PortRole { Audio, ModCV, Pitch, Gate, Midi, Other };
+
+struct LogicalPort {
+    int visibleJackIndex =
+        0; // which visible jack (0..getVisible*PortCount()-1) a wire to this raw channel should anchor to
+    PortRole role = PortRole::Other;
+    bool isPolyGroupHead = false; // true only for the lowest raw channel of a poly fan
+    int polyVoiceSpan = 1;        // 1 = mono; N = head of an N-voice fan
+};
+
 enum class ModuleType {
     Oscillator,
     Filter,
@@ -118,6 +128,35 @@ public:
     virtual int getVisibleOutputPortCount() const { return getTotalNumOutputChannels(); }
     virtual ModulationCategory getModulationCategory() const { return ModulationCategory::Other; }
     virtual ModuleType getModuleType() const = 0;
+
+    virtual LogicalPort mapInputChannel(int rawChannel) const {
+        LogicalPort p;
+        int vis = getVisibleInputPortCount();
+        p.visibleJackIndex = (vis > 0) ? juce::jlimit(0, vis - 1, rawChannel) : 0;
+        p.role = PortRole::Other;
+        p.isPolyGroupHead = (rawChannel < vis);
+        p.polyVoiceSpan = 1;
+        return p;
+    }
+
+    virtual LogicalPort mapOutputChannel(int rawChannel) const {
+        LogicalPort p;
+        int vis = getVisibleOutputPortCount();
+        p.visibleJackIndex = (vis > 0) ? juce::jlimit(0, vis - 1, rawChannel) : 0;
+        p.role = PortRole::Other;
+        p.isPolyGroupHead = (rawChannel < vis);
+        p.polyVoiceSpan = 1;
+        return p;
+    }
+
+    // Decouples display-advertising from JSON auto-promotion (used by AIStateMapper in a LATER increment; defined now).
+    // Default: a channel is auto-promotable iff it is one of this module's getModulationTargets() channelIndex values.
+    virtual bool isAutoPromotableModTarget(int dstChannel) const {
+        for (const auto& t : getModulationTargets())
+            if (t.channelIndex == dstChannel)
+                return true;
+        return false;
+    }
 
     VisualBuffer* getVisualBuffer() { return visualBuffer.get(); }
     void enableVisualBuffer(bool enable) {

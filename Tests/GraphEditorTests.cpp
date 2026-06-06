@@ -2,9 +2,11 @@
 #include "../Source/Modules/ADSRModule.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/LFOModule.h"
+#include "../Source/Modules/ModuleBase.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/SequencerModule.h"
 #include "../Source/Modules/VCAModule.h"
+#include "../Source/PresetManager.h"
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/ModuleComponent.h"
 #include <gtest/gtest.h>
@@ -303,6 +305,66 @@ TEST_F(GraphEditorTest, ReplaceModulePreservesMidiConnections) {
         }
     }
     EXPECT_TRUE(midiConnFound);
+}
+
+// Inc-4: Verify that for the Poly Pad preset's PolyBus (ADSR->VCA) routing,
+// sourceVisibleJack and destVisibleJack are within their module's visible port counts.
+// This guarantees getPortCenter() lands on a real rendered jack, not a phantom y.
+// Placed in AudioEngine-level fixture (no GUI needed) to keep the test headless.
+TEST_F(GraphEditorTest, PolyBusWireResolvesToVisibleJacks) {
+    AudioEngine engine;
+    engine.initialise();
+    engine.getGraph().clear();
+
+    bool loaded = gsynth::PresetManager::loadPreset(6, engine.getGraph());
+    ASSERT_TRUE(loaded) << "Poly Pad preset (index 6) must load successfully";
+
+    auto routings = engine.getModulationRoutings();
+
+    // Find the PolyBus routing
+    const AudioEngine::ModulationRouting* polyRouting = nullptr;
+    for (const auto& r : routings) {
+        if (r.kind == AudioEngine::RoutingKind::PolyBus) {
+            polyRouting = &r;
+            break;
+        }
+    }
+    ASSERT_NE(polyRouting, nullptr) << "Expected a PolyBus routing in the Poly Pad preset";
+
+    // Locate source and dest processors to query their visible port counts.
+    auto& graph = engine.getGraph();
+    juce::AudioProcessor* srcProcessor = nullptr;
+    juce::AudioProcessor* dstProcessor = nullptr;
+    for (auto* node : graph.getNodes()) {
+        if (node->nodeID == polyRouting->sourceNodeID)
+            srcProcessor = node->getProcessor();
+        if (node->nodeID == polyRouting->destNodeID)
+            dstProcessor = node->getProcessor();
+    }
+    ASSERT_NE(srcProcessor, nullptr) << "Source node must exist in graph";
+    ASSERT_NE(dstProcessor, nullptr) << "Dest node must exist in graph";
+
+    // Get visible port counts — use ModuleBase if available, else fall back.
+    int srcVisibleOuts = srcProcessor->getTotalNumOutputChannels();
+    int dstVisibleIns = dstProcessor->getTotalNumInputChannels();
+    if (auto* mb = dynamic_cast<ModuleBase*>(srcProcessor))
+        srcVisibleOuts = mb->getVisibleOutputPortCount();
+    if (auto* mb = dynamic_cast<ModuleBase*>(dstProcessor))
+        dstVisibleIns = mb->getVisibleInputPortCount();
+
+    // Key assertions: both visible jacks must be within the visible range,
+    // so paint() / getPortCenter() will use a real jack (not a phantom y).
+    EXPECT_LT(polyRouting->sourceVisibleJack, srcVisibleOuts)
+        << "PolyBus sourceVisibleJack (" << polyRouting->sourceVisibleJack
+        << ") must be < source visible output count (" << srcVisibleOuts << ")";
+    EXPECT_GE(polyRouting->sourceVisibleJack, 0) << "PolyBus sourceVisibleJack must be non-negative";
+
+    EXPECT_LT(polyRouting->destVisibleJack, dstVisibleIns)
+        << "PolyBus destVisibleJack (" << polyRouting->destVisibleJack << ") must be < dest visible input count ("
+        << dstVisibleIns << ")";
+    EXPECT_GE(polyRouting->destVisibleJack, 0) << "PolyBus destVisibleJack must be non-negative";
+
+    engine.shutdown();
 }
 
 TEST_F(GraphEditorTest, ReplaceModuleIsUndoable) {

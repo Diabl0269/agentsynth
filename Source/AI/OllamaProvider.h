@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AIProvider.h"
+#include <atomic>
 #include <juce_core/juce_core.h>
 #include <juce_events/juce_events.h>
 #include <thread>
@@ -29,6 +30,12 @@ public:
 
     ~OllamaProvider() override {
         stopThread(2000);
+        // Join the discovery worker so it cannot touch our members after we are
+        // destroyed (it captures `this`). With the short 4s connection timeout
+        // and the in-flight guard ensuring at most ONE worker exists, this join
+        // can block for at most ~4s in the worst case (server unreachable), never
+        // the old 120s. We never reassign a joinable thread (the worker is only
+        // launched when none is in flight), so std::terminate cannot fire here.
         if (discoveryThread.joinable())
             discoveryThread.join();
     }
@@ -60,6 +67,10 @@ private:
     InputStreamFactory createStream; // Member variable for the stream factory
     bool isTestMode = false;
     std::thread discoveryThread;
+    // Guards against (a) blocking the caller (we never join on the message thread)
+    // and (b) ever having two discovery workers alive at once. Set true before a
+    // worker launches, cleared by the worker when it finishes.
+    std::atomic<bool> discoveryInFlight{false};
 
     struct Request {
         std::vector<Message> conversation;

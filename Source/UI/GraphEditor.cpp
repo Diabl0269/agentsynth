@@ -20,6 +20,9 @@
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
 #include "ModuleComponent.h"
+#include <set>
+#include <tuple>
+#include <unordered_map>
 
 GraphEditor::GraphEditor(AudioEngine& engine, GravisynthUndoManager* undoMgr)
     : audioEngine(engine)
@@ -44,6 +47,23 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     auto& graph = editor.audioEngine.getGraph();
     g.setColour(juce::Colours::yellow);
 
+    // Build a set of raw edges that Pass-2 (PolyBus / DirectCV wires) will draw,
+    // so Pass-1 does not render them a second time in a conflicting generic style.
+    // AttenuverterChain edges are intentionally excluded — they are handled by the
+    // existing attenuverter branch inside Pass-1.
+    using EdgeKey = std::tuple<uint32_t, int, uint32_t, int>;
+    std::set<EdgeKey> pass2HandledEdges;
+    for (const auto& routing : editor.cachedModRoutings) {
+        if (routing.kind == AudioEngine::RoutingKind::DirectCV) {
+            pass2HandledEdges.emplace(routing.sourceNodeID.uid, routing.sourceChannelIndex, routing.destNodeID.uid,
+                                      routing.destChannelIndex);
+        } else if (routing.kind == AudioEngine::RoutingKind::PolyBus) {
+            for (int i = 0; i < routing.voiceCount; ++i)
+                pass2HandledEdges.emplace(routing.sourceNodeID.uid, routing.sourceChannelIndex + i,
+                                          routing.destNodeID.uid, routing.destChannelIndex + i);
+        }
+    }
+
     for (auto& connection : graph.getConnections()) {
         auto* node1 = graph.getNodeForId(connection.source.nodeID);
         auto* node2 = graph.getNodeForId(connection.destination.nodeID);
@@ -66,6 +86,16 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
                 if (connection.destination.channelIndex >= dstMb->getVisibleInputPortCount())
                     continue;
             }
+        }
+
+        // Skip raw edges that Pass-2 (PolyBus / DirectCV) will draw to avoid
+        // double-rendering in conflicting styles.
+        if (connection.source.channelIndex != juce::AudioProcessorGraph::midiChannelIndex &&
+            connection.destination.channelIndex != juce::AudioProcessorGraph::midiChannelIndex) {
+            EdgeKey ek{connection.source.nodeID.uid, connection.source.channelIndex, connection.destination.nodeID.uid,
+                       connection.destination.channelIndex};
+            if (pass2HandledEdges.count(ek))
+                continue;
         }
 
         if (dynamic_cast<AttenuverterModule*>(node2->getProcessor()) != nullptr) {
@@ -183,6 +213,85 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
             }
         }
     }
+
+    // ---- Draw PolyBus / DirectCV modulation wires ----
+    // Build a nodeID -> ModuleComponent* lookup map once for O(1) per routing.
+    std::unordered_map<uint32_t, ModuleComponent*> nodeCompMap;
+    for (auto* comp : moduleComponents) {
+        if (comp == nullptr)
+            continue;
+        // Match against graph nodes by processor pointer.
+        for (auto* node : graph.getNodes()) {
+            if (node->getProcessor() == comp->getModule()) {
+                nodeCompMap[node->nodeID.uid] = comp;
+                break;
+            }
+        }
+    }
+
+    for (const auto& routing : editor.cachedModRoutings) {
+        if (routing.kind == AudioEngine::RoutingKind::AttenuverterChain)
+            continue; // Already rendered by the existing loop above.
+
+        auto srcIt = nodeCompMap.find(routing.sourceNodeID.uid);
+        auto dstIt = nodeCompMap.find(routing.destNodeID.uid);
+        if (srcIt == nodeCompMap.end() || dstIt == nodeCompMap.end())
+            continue;
+
+        auto* srcComp = srcIt->second;
+        auto* dstComp = dstIt->second;
+        if (srcComp == nullptr || dstComp == nullptr)
+            continue;
+
+        // getPortCenter now clamps out-of-range indices to the last visible jack,
+        // so these points always land on a real rendered port.
+        juce::Point<int> p1 =
+            srcComp->getBounds().getPosition() + srcComp->getPortCenter(routing.sourceVisibleJack, /*isInput=*/false);
+        juce::Point<int> p2 =
+            dstComp->getBounds().getPosition() + dstComp->getPortCenter(routing.destVisibleJack, /*isInput=*/true);
+
+        // Brightness / width scaled by signal activity (mirrors attenuverter line ~lines 107-110).
+        float modPeak = routing.modSignalPeak;
+        float lineWidth = 2.5f + modPeak * 2.0f;
+        float brightness = juce::jlimit(0.5f, 1.0f, 0.5f + modPeak * 0.5f);
+
+        // Color by role: ModCV = cyan (poly bus) or gold (direct), Pitch = light blue, Gate = orange
+        juce::Colour wireColour;
+        if (routing.role == PortRole::Pitch) {
+            wireColour = juce::Colour(0xffaad4ff); // light blue for pitch fan
+        } else if (routing.role == PortRole::Gate) {
+            wireColour = juce::Colour(0xffffa500); // orange for gate fan
+        } else {
+            wireColour = (routing.kind == AudioEngine::RoutingKind::PolyBus)
+                             ? juce::Colour(0xff00e5ff)  // cyan for ModCV poly bus
+                             : juce::Colour(0xffffd700); // gold for ModCV direct CV
+        }
+
+        if (routing.isBypassed)
+            wireColour = wireColour.withAlpha(0.3f);
+
+        g.setColour(wireColour.withMultipliedBrightness(brightness));
+        g.drawLine(p1.toFloat().x, p1.toFloat().y, p2.toFloat().x, p2.toFloat().y, lineWidth);
+
+        // Animated dots along the wire.
+        for (int d = 0; d < 3; ++d) {
+            float t = std::fmod(connectionAnimPhase + (float)d / 3.0f, 1.0f);
+            float dotX = p1.toFloat().x + (p2.toFloat().x - p1.toFloat().x) * t;
+            float dotY = p1.toFloat().y + (p2.toFloat().y - p1.toFloat().y) * t;
+            g.setColour(wireColour.withAlpha(0.7f));
+            g.fillEllipse(dotX - 2.5f, dotY - 2.5f, 5.0f, 5.0f);
+        }
+
+        // For poly buses, label the midpoint with "x{voiceCount}" so the bundle is visible.
+        if (routing.kind == AudioEngine::RoutingKind::PolyBus && routing.voiceCount > 1) {
+            auto mid = ((p1 + p2) / 2).toFloat();
+            g.setColour(juce::Colours::white);
+            g.setFont(11.0f);
+            g.drawText("x" + juce::String(routing.voiceCount), (int)mid.x + 5, (int)mid.y - 8, 28, 16,
+                       juce::Justification::left, false);
+        }
+    }
+    // ---- End PolyBus / DirectCV wires ----
 
     // Draw Line being dragged
     if (editor.isDraggingConnection) {
@@ -836,7 +945,9 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
 }
 
 void GraphEditor::timerCallback() {
-    cachedModDisplayInfo = audioEngine.getModulationDisplayInfo();
+    // Compute the routing traversal once; derive display info from the same snapshot.
+    cachedModRoutings = audioEngine.getModulationRoutings();
+    cachedModDisplayInfo = audioEngine.getModulationDisplayInfo(cachedModRoutings);
     content.connectionAnimPhase += 0.02f;
     if (content.connectionAnimPhase >= 1.0f)
         content.connectionAnimPhase -= 1.0f;

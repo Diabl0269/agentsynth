@@ -105,6 +105,50 @@ public:
     int getVisibleOutputPortCount() const override { return 1; }
     ModuleType getModuleType() const override { return ModuleType::ADSR; }
 
+    LogicalPort mapInputChannel(int raw) const override {
+        LogicalPort p;
+        if (polyParam->get()) {
+            if (raw >= 0 && raw <= 7) {
+                p.visibleJackIndex = 0;
+                p.role = PortRole::Gate;
+                p.isPolyGroupHead = (raw == 0);
+                p.polyVoiceSpan = (raw == 0) ? 8 : 1;
+                return p;
+            }
+        } else {
+            if (raw == 0) {
+                p.visibleJackIndex = 0;
+                p.role = PortRole::Gate;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
+        }
+        return ModuleBase::mapInputChannel(raw);
+    }
+
+    LogicalPort mapOutputChannel(int raw) const override {
+        LogicalPort p;
+        if (polyParam->get()) {
+            if (raw >= 0 && raw <= 7) {
+                p.visibleJackIndex = 0;
+                p.role = PortRole::ModCV;
+                p.isPolyGroupHead = (raw == 0);
+                p.polyVoiceSpan = (raw == 0) ? 8 : 1;
+                return p;
+            }
+        } else {
+            if (raw == 0) {
+                p.visibleJackIndex = 0;
+                p.role = PortRole::ModCV;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
+        }
+        return ModuleBase::mapOutputChannel(raw);
+    }
+
 private:
     static constexpr int MAX_VOICES = 8;
     juce::ADSR adsrs[MAX_VOICES];

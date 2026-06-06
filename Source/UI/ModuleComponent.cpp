@@ -1,6 +1,7 @@
 #include "ModuleComponent.h"
 #include "../Modules/ExternalMidiModule.h"
 #include "../Modules/ModuleBase.h"
+#include "../Modules/PolySequencerModule.h"
 #include "../Modules/SequencerModule.h"
 #include "GraphEditor.h"
 
@@ -64,8 +65,9 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     }
 
     setTitle(module->getName());
+    setBufferedToImage(true);
     createControls();
-    startTimerHz(30); // 30 FPS for step visualization
+    startTimerHz(15); // 15 FPS is plenty for activity glow / step indicator; lower CPU than 30
 }
 
 ModuleComponent::~ModuleComponent() { detachFromProcessor(); }
@@ -139,7 +141,71 @@ void ModuleComponent::timerCallback() {
         }
     }
 
-    repaint();
+    // Gate repaint: only invalidate the buffered image when something has
+    // visually changed.  Idle modules (no signal, no modulation) produce no
+    // repaint, so the parent content.repaint() from GraphEditor composites the
+    // cached image cheaply instead of re-running the expensive text layout.
+    bool needsRepaint = false;
+
+    // 1. RMS changed meaningfully (activity glow / LED).
+    //    Threshold is deliberately coarse (0.05): a steady tone produces small
+    //    tick-to-tick RMS jitter from the sliding analysis window, and a tight
+    //    threshold (e.g. 0.002) treated that jitter as "activity changed" and
+    //    repainted every tick — invalidating the buffered image and re-running
+    //    the expensive text layout 30x/sec (the startup/preset-switch freeze).
+    if (std::abs(cachedRMS - lastPaintedRMS) > 0.05f)
+        needsRepaint = true;
+
+    // 2. Active modulation targeting this module (Serum mod rings)
+    if (!needsRepaint) {
+        const auto& modInfo = owner.getCachedModDisplayInfo();
+        for (const auto& info : modInfo) {
+            if (info.destNodeID == nodeId && std::abs(info.modSignalValue) > 0.001f) {
+                needsRepaint = true;
+                break;
+            }
+        }
+    }
+
+    // 3. Sequencer / PolySequencer: repaint only when the active step changes
+    //    so the playhead highlight animates without repainting on every idle tick.
+    if (!needsRepaint) {
+        auto t = getType(module);
+        if (t == ModuleType::Sequencer) {
+            if (auto* seq = dynamic_cast<SequencerModule*>(module)) {
+                int step = seq->currentActiveStep.load();
+                if (step != lastActiveStep) {
+                    lastActiveStep = step;
+                    needsRepaint = true;
+                }
+            } else {
+                // Fallback: sequencer type but no accessor — repaint each tick
+                needsRepaint = true;
+            }
+        } else if (t == ModuleType::PolySequencer) {
+            if (auto* pseq = dynamic_cast<PolySequencerModule*>(module)) {
+                int step = pseq->currentActiveStep.load();
+                if (step != lastActiveStep) {
+                    lastActiveStep = step;
+                    needsRepaint = true;
+                }
+            } else {
+                // Fallback: sequencer type but no accessor — repaint each tick
+                needsRepaint = true;
+            }
+        }
+    }
+
+    // NOTE: condition #4 (visible animated children — scope/freqResponse) is intentionally
+    // omitted.  FrequencyResponseComponent and ScopeComponent manage their own repaints
+    // via their own timers and only invalidate when their data changes.  Forcing a full
+    // parent repaint every tick because a child is visible caused a repaint storm on every
+    // Filter module (freqResponseComponent is always visible).
+
+    if (needsRepaint) {
+        lastPaintedRMS = cachedRMS;
+        repaint();
+    }
 }
 
 void ModuleComponent::createControls() {
@@ -519,11 +585,21 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
                          // (getWidth() - 10, 30)
     }
 
+    // Clamp index to visible jack range so wires never terminate at a phantom y
+    // below the module. In-bounds indices are unchanged (clamped == index).
+    int visible = 0;
+    if (auto* mb = dynamic_cast<ModuleBase*>(module)) {
+        visible = isInput ? mb->getVisibleInputPortCount() : mb->getVisibleOutputPortCount();
+    } else {
+        visible = isInput ? module->getTotalNumInputChannels() : module->getTotalNumOutputChannels();
+    }
+    int clamped = (visible > 0) ? juce::jlimit(0, visible - 1, index) : 0;
+
     if (isInput) {
-        return {10, headerHeight + portOffset + index * yStep + 20}; // Left side, apply offset
+        return {10, headerHeight + portOffset + clamped * yStep + 20}; // Left side, apply offset
     } else {
         // No additional midiOffset for outputs here, as MIDI out is now fixed.
-        return {getWidth() - 10, headerHeight + portOffset + index * yStep + 20}; // Right side, apply offset
+        return {getWidth() - 10, headerHeight + portOffset + clamped * yStep + 20}; // Right side, apply offset
     }
 }
 

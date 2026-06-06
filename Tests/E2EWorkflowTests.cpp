@@ -21,6 +21,7 @@
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/ModuleComponent.h"
 #include "MainComponent.h"
+#include <cmath>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -645,3 +646,61 @@ TEST_F(E2EWorkflowTest, FullWorkflow_PresetModifyUndoRedo) {
 // pumpMessages() call. With 7 presets × 3 operations × multiple pumps, the test
 // exceeds CI timeout. Coverage is provided by LoadAllPresets_NoCrash (all presets)
 // and DropAllModuleTypes_NoCrash (all 17 module types) independently.
+
+// ============================================================================
+// Section 8: Audio Smoke Validation (1 test)
+// ============================================================================
+
+// "App works fine" guard: every factory preset, when loaded into a fresh graph,
+// prepared for playback, and fed a MIDI note-on, must produce finite audio for
+// ~50 blocks (no NaN/Inf, no crash). This stops a future change from silently
+// breaking a preset's audio path.
+TEST_F(E2EWorkflowTest, AllPresetsRenderFiniteAudio) {
+    constexpr double kSampleRate = 44100.0;
+    constexpr int kBlockSize = 512;
+    constexpr int kNumBlocks = 50;
+    constexpr int kNumPresets = 7; // Default..Poly Pad
+
+    for (int presetIdx = 0; presetIdx < kNumPresets; ++presetIdx) {
+        loadPreset(presetIdx);
+
+        auto& g = graph();
+        // Prepare the graph for stereo playback (closed audio device in tests).
+        g.setPlayConfigDetails(0, 2, kSampleRate, kBlockSize);
+        g.prepareToPlay(kSampleRate, kBlockSize);
+
+        const int numChannels = juce::jmax(2, g.getMainBusNumOutputChannels());
+        juce::AudioBuffer<float> buffer(numChannels, kBlockSize);
+
+        // Feed a MIDI note-on on the first block (the graph routes MIDI to its
+        // MIDI-input nodes automatically).
+        juce::MidiBuffer noteOn;
+        noteOn.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 0);
+
+        bool allFinite = true;
+        for (int block = 0; block < kNumBlocks; ++block) {
+            buffer.clear();
+            if (block == 0) {
+                EXPECT_NO_THROW({ g.processBlock(buffer, noteOn); })
+                    << "Preset " << presetIdx << " crashed on first block";
+            } else {
+                juce::MidiBuffer empty;
+                EXPECT_NO_THROW({ g.processBlock(buffer, empty); })
+                    << "Preset " << presetIdx << " crashed on block " << block;
+            }
+
+            for (int ch = 0; ch < buffer.getNumChannels() && allFinite; ++ch) {
+                const float* data = buffer.getReadPointer(ch);
+                for (int s = 0; s < buffer.getNumSamples(); ++s) {
+                    if (!std::isfinite(data[s])) {
+                        allFinite = false;
+                        break;
+                    }
+                }
+            }
+        }
+
+        g.releaseResources();
+        EXPECT_TRUE(allFinite) << "Preset " << presetIdx << " produced non-finite (NaN/Inf) audio";
+    }
+}

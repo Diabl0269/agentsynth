@@ -392,22 +392,12 @@ void AIStateMapper::applyParamsToProcessor(juce::AudioProcessor* processor, cons
                     // almost always valid denormalized values, not normalized.
                     bool isIntParam = (dynamic_cast<juce::AudioParameterInt*>(p) != nullptr);
                     bool rangeIsUnitInterval = (range.start >= 0.0f && range.end <= 1.0f);
-                    bool wasConverted = false;
                     if (!trusted && !isIntParam && !rangeIsUnitInterval && val >= 0.0f && val <= 1.0f) {
-                        float originalVal = val;
                         val = range.convertFrom0to1(val);
-                        wasConverted = true;
-                        juce::Logger::writeToLog("AIStateMapper: param '" + p->paramID + "' value " +
-                                                 juce::String(originalVal) + " detected as normalized, converted to " +
-                                                 juce::String(val) + " (range " + juce::String(range.start) + " to " +
-                                                 juce::String(range.end) + ")");
                     }
 
                     val = range.snapToLegalValue(val);
                     float normalizedValue = range.convertTo0to1(val);
-                    juce::Logger::writeToLog("AIStateMapper: setting '" + p->paramID + "' = " + juce::String(val) +
-                                             " (normalized: " + juce::String(normalizedValue) + ")" +
-                                             (wasConverted ? " [auto-corrected]" : ""));
                     p->setValueNotifyingHost(normalizedValue);
                 }
             }
@@ -600,14 +590,8 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                         bool isModTarget = false;
                         if (!isMidiConnection &&
                             dynamic_cast<AttenuverterModule*>(srcNode->getProcessor()) == nullptr) {
-                            if (auto* modBase = dynamic_cast<ModuleBase*>(dstNode->getProcessor())) {
-                                for (const auto& t : modBase->getModulationTargets()) {
-                                    if (t.channelIndex == dstPort) {
-                                        isModTarget = true;
-                                        break;
-                                    }
-                                }
-                            }
+                            if (auto* modBase = dynamic_cast<ModuleBase*>(dstNode->getProcessor()))
+                                isModTarget = modBase->isAutoPromotableModTarget(dstPort);
                         }
 
                         if (isModTarget) {
@@ -906,9 +890,6 @@ juce::var AIStateMapper::getPatchSchema() {
 
     schema->setProperty("properties", juce::var(properties.get()));
     schema->setProperty("required", juce::Array<juce::var>({"nodes", "connections"}));
-
-    // DEBUG: Log the final schema string to diagnose format issues
-    juce::Logger::writeToLog("Generated AI Schema: " + juce::JSON::toString(juce::var(schema.get())));
 
     return juce::var(schema.get());
 }

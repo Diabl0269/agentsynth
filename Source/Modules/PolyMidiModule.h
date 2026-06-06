@@ -88,6 +88,27 @@ public:
     juce::String getOutputPortLabel(int) const override { return "Poly Out"; }
     int getVisibleInputPortCount() const override { return 0; }
 
+    LogicalPort mapOutputChannel(int raw) const override {
+        LogicalPort p;
+        // Pitch fan: raw 0-7
+        if (raw >= 0 && raw <= 7) {
+            p.visibleJackIndex = 0;
+            p.role = PortRole::Pitch;
+            p.isPolyGroupHead = (raw == 0);
+            p.polyVoiceSpan = (raw == 0) ? 8 : 1;
+            return p;
+        }
+        // Gate fan: raw 8-15
+        if (raw >= 8 && raw <= 15) {
+            p.visibleJackIndex = 0;
+            p.role = PortRole::Gate;
+            p.isPolyGroupHead = (raw == 8);
+            p.polyVoiceSpan = (raw == 8) ? 8 : 1;
+            return p;
+        }
+        return ModuleBase::mapOutputChannel(raw);
+    }
+
 private:
     static constexpr int MAX_VOICES = 8;
 

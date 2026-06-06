@@ -509,15 +509,41 @@ void AIChatComponent::refreshModels() {
 
 #ifndef NDEBUG
 void AIChatComponent::appendDebugLog(const juce::String& msg) {
-    juce::Component::SafePointer<AIChatComponent> safeThis(this);
-    juce::MessageManager::callAsync([safeThis, msg]() {
-        if (safeThis.getComponent() == nullptr)
-            return;
-        auto* self = safeThis.getComponent();
+    {
+        const juce::ScopedLock sl(logLock);
+        pendingLogLines.add(msg);
+    }
+    bool expected = false;
+    if (logFlushScheduled.compare_exchange_strong(expected, true)) {
+        juce::Component::SafePointer<AIChatComponent> safeThis(this);
+        juce::MessageManager::callAsync([safeThis]() {
+            if (auto* self = safeThis.getComponent())
+                self->flushDebugLog();
+        });
+    }
+}
 
-        self->debugConsole.moveCaretToEnd();
-        self->debugConsole.insertTextAtCaret(msg + "\n");
-    });
+void AIChatComponent::flushDebugLog() {
+    logFlushScheduled.store(false);
+
+    juce::StringArray batch;
+    {
+        const juce::ScopedLock sl(logLock);
+        batch.swapWith(pendingLogLines);
+    }
+
+    if (batch.isEmpty())
+        return;
+
+    debugConsole.moveCaretToEnd();
+    debugConsole.insertTextAtCaret(batch.joinIntoString("\n") + "\n");
+
+    const int maxChars = 8000;
+    auto txt = debugConsole.getText();
+    if (txt.length() > maxChars) {
+        debugConsole.setText(txt.substring(txt.length() - maxChars), juce::dontSendNotification);
+        debugConsole.moveCaretToEnd();
+    }
 }
 
 void AIChatComponent::logMessage(const juce::String& message) { appendDebugLog(message); }

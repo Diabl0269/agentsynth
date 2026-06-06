@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../AI/AIIntegrationService.h"
+#include <atomic>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 
@@ -61,6 +62,11 @@ private:
     juce::TextButton toggleDebugButton;
     bool debugConsoleVisible = false;
     void logMessage(const juce::String& message) override;
+    void flushDebugLog();
+
+    juce::CriticalSection logLock;
+    juce::StringArray pendingLogLines;
+    std::atomic<bool> logFlushScheduled{false};
 
 public:
     void appendDebugLog(const juce::String& msg);
