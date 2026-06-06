@@ -88,6 +88,78 @@ public:
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Filter; }
     ModuleType getModuleType() const override { return ModuleType::Filter; }
 
+    LogicalPort mapInputChannel(int raw) const override {
+        LogicalPort p;
+        if (polyParam->get()) {
+            // Poly mode: raw 0-7 = per-voice Audio fan; raw 8,9,10 = shared ModCV
+            if (raw >= 0 && raw <= 7) {
+                p.visibleJackIndex = 0;
+                p.role = PortRole::Audio;
+                p.isPolyGroupHead = (raw == 0);
+                p.polyVoiceSpan = (raw == 0) ? 8 : 1;
+                return p;
+            }
+            if (raw == 8) {
+                p.visibleJackIndex = 1;
+                p.role = PortRole::ModCV;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
+            if (raw == 9) {
+                p.visibleJackIndex = 2;
+                p.role = PortRole::ModCV;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
+            if (raw == 10) {
+                p.visibleJackIndex = 3;
+                p.role = PortRole::ModCV;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
+        } else {
+            // Mono mode: raw 0 = Audio jack0; raw 1,2,3 = ModCV jacks 1,2,3
+            if (raw == 0) {
+                p.visibleJackIndex = 0;
+                p.role = PortRole::Audio;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
+            if (raw == 1) {
+                p.visibleJackIndex = 1;
+                p.role = PortRole::ModCV;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
+            if (raw == 2) {
+                p.visibleJackIndex = 2;
+                p.role = PortRole::ModCV;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
+            if (raw == 3) {
+                p.visibleJackIndex = 3;
+                p.role = PortRole::ModCV;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
+        }
+        return ModuleBase::mapInputChannel(raw);
+    }
+
+    bool isAutoPromotableModTarget(int dstChannel) const override {
+        if (polyParam->get())
+            return false;
+        return ModuleBase::isAutoPromotableModTarget(dstChannel);
+    }
+
     float getCurrentCutoff() const { return modulatedCutoff.load(std::memory_order_relaxed); }
     float getCurrentResonance() const { return *resonanceParam; }
     float getModulatedResonance() const { return modulatedResonance.load(std::memory_order_relaxed); }

@@ -4,6 +4,7 @@
 #include "../Source/Modules/LFOModule.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/VCAModule.h"
+#include "../Source/PresetManager.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -573,4 +574,49 @@ TEST(AIStateMapperTest, Modulation_UnconnectedAttenuverterNotSerialized) {
     auto* modArr = rootObj->getProperty("modulations").getArray();
     ASSERT_NE(modArr, nullptr);
     EXPECT_EQ(modArr->size(), 0); // Unconnected attenuverter should NOT appear
+}
+
+// Regression test: AIStateMapper::applyJSONToGraph must NOT spam the logger
+// (one line per parameter per module) on preset load.
+//
+// Before the fix, AIChatComponent's juce::Logger implementation piped every
+// log line into an O(n^2) TextEditor append, causing multi-second UI freezes
+// on preset load.  A healthy load should produce at most a handful of
+// error/diagnostic lines — never one per parameter.
+TEST(AIStateMapperTest, PresetLoadDoesNotSpamLogger) {
+    struct CountingLogger : juce::Logger {
+        std::atomic<int> count{0};
+        void logMessage(const juce::String&) override { ++count; }
+    };
+
+    CountingLogger cl;
+    juce::Logger::setCurrentLogger(&cl);
+
+    // Load three representative presets (Default=0, Modulated Bass=3, Poly Pad=6)
+    // into fresh graphs so applyJSONToGraph is exercised in full each time.
+    {
+        juce::AudioProcessorGraph g0;
+        gsynth::PresetManager::loadPreset(0, g0);
+    }
+    {
+        juce::AudioProcessorGraph g3;
+        gsynth::PresetManager::loadPreset(3, g3);
+    }
+    {
+        juce::AudioProcessorGraph g6;
+        gsynth::PresetManager::loadPreset(6, g6);
+    }
+
+    // Capture count and reset logger BEFORE assertions so the logger is never
+    // left pointing at a destroyed object even if an EXPECT fires.
+    const int logCount = cl.count.load();
+    juce::Logger::setCurrentLogger(nullptr);
+
+    std::cout << "[PresetLoadDoesNotSpamLogger] logger calls across 3 presets: " << logCount << "\n";
+
+    // A healthy run emits ~0 lines for valid presets.  20 gives ample margin
+    // for any genuine one-off diagnostics without allowing per-parameter spam
+    // (which would be 100+ for a typical multi-module preset).
+    EXPECT_LT(logCount, 20) << "applyJSONToGraph is spamming the logger (" << logCount
+                            << " lines for 3 presets). This causes UI freezes in AIChatComponent.";
 }

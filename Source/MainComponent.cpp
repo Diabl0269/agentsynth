@@ -25,8 +25,9 @@ MainComponent::MainComponent(std::unique_ptr<gsynth::AIProvider> provider)
         aiService.setProvider(std::make_unique<gsynth::OllamaProvider>(savedOllamaHost));
     }
 
-    aiChatComponent.refreshModels();
-
+    // NOTE: Do NOT call aiChatComponent.refreshModels() here. The AIChatComponent
+    // constructor already kicks off model discovery on construction. A second call
+    // would trigger a redundant /api/tags request on startup.
     aiService.addListener(this);
     setSize(1600, 900);
     undoManager.setGraphEditor(&graphEditor);
@@ -82,7 +83,8 @@ MainComponent::MainComponent(std::unique_ptr<gsynth::AIProvider> provider)
             if (result == 1000) {
                 openPresetFromFile();
             } else if (result > 0) {
-                if (gsynth::PresetManager::loadPreset(result - 1, audioEngine.getGraph())) {
+                bool loaded = gsynth::PresetManager::loadPreset(result - 1, audioEngine.getGraph());
+                if (loaded) {
                     graphEditor.updateComponents();
                 }
             }

@@ -120,6 +120,50 @@ public:
     int getVisibleOutputPortCount() const override { return 1; }
     ModuleType getModuleType() const override { return ModuleType::VCA; }
 
+    LogicalPort mapInputChannel(int raw) const override {
+        LogicalPort p;
+        if (polyParam->get()) {
+            // Poly mode: raw 0-7 = per-voice Audio fan; raw 8-15 = per-voice ModCV fan
+            if (raw >= 0 && raw <= 7) {
+                p.visibleJackIndex = 0;
+                p.role = PortRole::Audio;
+                p.isPolyGroupHead = (raw == 0);
+                p.polyVoiceSpan = (raw == 0) ? 8 : 1;
+                return p;
+            }
+            if (raw >= 8 && raw <= 15) {
+                p.visibleJackIndex = 1;
+                p.role = PortRole::ModCV;
+                p.isPolyGroupHead = (raw == 8);
+                p.polyVoiceSpan = (raw == 8) ? 8 : 1;
+                return p;
+            }
+        } else {
+            // Mono mode
+            if (raw == 0) {
+                p.visibleJackIndex = 0;
+                p.role = PortRole::Audio;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
+            if (raw == 1) {
+                p.visibleJackIndex = 1;
+                p.role = PortRole::ModCV;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
+        }
+        return ModuleBase::mapInputChannel(raw);
+    }
+
+    bool isAutoPromotableModTarget(int dstChannel) const override {
+        if (polyParam->get())
+            return false;
+        return ModuleBase::isAutoPromotableModTarget(dstChannel);
+    }
+
 private:
     static constexpr int MAX_VOICES = 8;
     juce::AudioParameterFloat* gainParam = nullptr;

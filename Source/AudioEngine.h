@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Modules/ModuleBase.h"
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -46,8 +47,31 @@ public:
         bool isBypassed;
     };
 
+    enum class RoutingKind { AttenuverterChain, DirectCV, PolyBus };
+
+    struct ModulationRouting {
+        RoutingKind kind = RoutingKind::AttenuverterChain;
+        juce::AudioProcessorGraph::NodeID sourceNodeID;
+        int sourceChannelIndex = 0;
+        int sourceVisibleJack = 0;
+        juce::AudioProcessorGraph::NodeID destNodeID;
+        int destChannelIndex = 0;
+        int destVisibleJack = 0;
+        juce::AudioProcessorGraph::NodeID attenuverterNodeID; // valid only for AttenuverterChain
+        int voiceCount = 1;
+        float amount = 1.0f;
+        bool isBypassed = false;
+        bool hasSource = false;
+        bool hasDest = false;
+        float modSignalValue = 0.0f;
+        float modSignalPeak = 0.0f;
+        PortRole role = PortRole::ModCV;
+    };
+
+    std::vector<ModulationRouting> getModulationRoutings() const;
     std::vector<ModRoutingInfo> getActiveModRoutings() const;
     std::vector<ModulationDisplayInfo> getModulationDisplayInfo() const;
+    std::vector<ModulationDisplayInfo> getModulationDisplayInfo(const std::vector<ModulationRouting>& routings) const;
     void addModRouting(juce::AudioProcessorGraph::NodeID sourceNodeID, int sourceChannelIndex,
                        juce::AudioProcessorGraph::NodeID destNodeID, int destChannelIndex);
     void addEmptyModRouting();

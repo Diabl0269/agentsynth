@@ -94,6 +94,7 @@ private:
 
     GravisynthUndoManager* undoManager = nullptr;
     std::vector<AudioEngine::ModulationDisplayInfo> cachedModDisplayInfo;
+    std::vector<AudioEngine::ModulationRouting> cachedModRoutings;
 
     void updateTransform();
 
@@ -101,6 +102,8 @@ public:
     const std::vector<AudioEngine::ModulationDisplayInfo>& getCachedModDisplayInfo() const {
         return cachedModDisplayInfo;
     }
+
+    const std::vector<AudioEngine::ModulationRouting>& getCachedModRoutings() const { return cachedModRoutings; }
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GraphEditor)
 };

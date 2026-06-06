@@ -1,8 +1,11 @@
 #include "../Source/AI/AIStateMapper.h"
 #include "../Source/GravisynthUndoManager.h"
+#include "../Source/Modules/ADSRModule.h"
+#include "../Source/Modules/AttenuverterModule.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/VCAModule.h"
+#include "../Source/PresetManager.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -467,4 +470,127 @@ TEST_F(UndoRedoTest, RedoWithParameterValueInUnitInterval) {
     float valueAfterRedo = redoDriveParam->getNormalisableRange().convertFrom0to1(redoDriveParam->getValue());
     ASSERT_NEAR(valueAfterRedo, 1.0f, 0.001f)
         << "Parameter value should be 1.0 after redo, not 10.0 (double-converted)";
+}
+
+/**
+ * Test 12: PolyPad_RoutingSurvivesUndoRedo
+ *
+ * Verifies that the "Poly Pad" preset (index 6) connections survive a full
+ * undo/redo cycle modelled by the graphToJSON -> applyJSONToGraph round-trip
+ * (the same operation that GravisynthUndoManager::SnapshotAction performs on
+ * undo and redo).
+ *
+ * The following connections must survive:
+ *   (A) 8 direct poly-bus edges: Amp Env ch0-7 → VCA ch8-15
+ *       (per-voice amplitude envelope modulation)
+ *
+ * The env->osc Level CV wire (Amp Env ch0 → Oscillator ch12) was removed from
+ * the factory preset because that channel is shared across all voices and was
+ * coupling all voices to voice-0's envelope. The capability itself still works
+ * (see IntegrationTests::PolyPad_EnvToOscModulatesOscLevel).
+ *
+ * Additionally, the restored patch must NOT introduce any new AttenuverterModule
+ * nodes — these connections are direct poly-bus connections, not mod-matrix
+ * routings, and the serializer must preserve them as-is without substituting
+ * attenuverter chains.
+ *
+ * Strategy (mirrors GravisynthUndoManager behaviour):
+ *   1. Load Poly Pad (preset 6) into graph g.
+ *   2. Snapshot: J0 = graphToJSON(g).
+ *   3. Simulate "undo-apply-different-state": load preset 0 into g (clobbers Poly Pad).
+ *   4. Simulate "redo-restore-original-state": applyJSONToGraph(J0, g, clear=true, trusted=true).
+ *   5. Count the required connections; assert both groups are fully present.
+ *   6. Assert zero AttenuverterModule nodes were introduced for these paths.
+ */
+TEST_F(UndoRedoTest, PolyPad_RoutingSurvivesUndoRedo) {
+    // Step 1 — Load Poly Pad (preset 6) into graph
+    ASSERT_TRUE(gsynth::PresetManager::loadPreset(6, graph));
+
+    // Sanity: locate Amp Env (ADSR), Oscillator, and VCA by type
+    juce::AudioProcessorGraph::NodeID adsrID, oscID, vcaID;
+    for (auto* node : graph.getNodes()) {
+        auto* proc = node->getProcessor();
+        if (auto* mb = dynamic_cast<ADSRModule*>(proc)) {
+            // Preset 6 has one ADSR named "Amp Env"
+            if (mb->getName().contains("Amp Env") || mb->getName().contains("ADSR"))
+                adsrID = node->nodeID;
+        } else if (dynamic_cast<OscillatorModule*>(proc)) {
+            oscID = node->nodeID;
+        } else if (dynamic_cast<VCAModule*>(proc)) {
+            vcaID = node->nodeID;
+        }
+    }
+    ASSERT_NE(adsrID.uid, 0u) << "Poly Pad should have an Amp Env (ADSR) node";
+    ASSERT_NE(oscID.uid, 0u) << "Poly Pad should have an Oscillator node";
+    ASSERT_NE(vcaID.uid, 0u) << "Poly Pad should have a VCA node";
+
+    // Helper: count specific connections in the current graph
+    auto countConns = [&](juce::AudioProcessorGraph::NodeID srcID, int srcCh, juce::AudioProcessorGraph::NodeID dstID,
+                          int dstCh) -> int {
+        int count = 0;
+        for (const auto& conn : graph.getConnections()) {
+            if (conn.source.nodeID == srcID && conn.source.channelIndex == srcCh && conn.destination.nodeID == dstID &&
+                conn.destination.channelIndex == dstCh)
+                ++count;
+        }
+        return count;
+    };
+
+    // Verify the connections exist in the freshly loaded preset (pre-cycle baseline)
+    int envVcaConnsBaseline = 0;
+    for (int v = 0; v < 8; ++v)
+        envVcaConnsBaseline += countConns(adsrID, v, vcaID, 8 + v);
+
+    ASSERT_EQ(envVcaConnsBaseline, 8) << "Poly Pad baseline: expected 8 ADSR->VCA poly-bus connections";
+
+    // Step 2 — Snapshot the loaded Poly Pad state
+    juce::var J0 = gsynth::AIStateMapper::graphToJSON(graph);
+
+    // Step 3 — Overwrite with a completely different preset (simulates the
+    // modification that would be "undone")
+    ASSERT_TRUE(gsynth::PresetManager::loadPreset(0, graph)); // Default preset — no poly modules
+    EXPECT_EQ(countConns(adsrID, 0, vcaID, 8), 0)
+        << "After loading preset 0, original Poly Pad connections should be gone";
+
+    // Step 4 — Re-apply the Poly Pad snapshot (simulates undo/redo restore)
+    ASSERT_TRUE(gsynth::AIStateMapper::applyJSONToGraph(J0, graph, /*clearExisting=*/true, /*trusted=*/true))
+        << "applyJSONToGraph should succeed for a freshly-captured Poly Pad snapshot";
+
+    // Re-locate nodes by type after round-trip (node IDs may differ after clear+rebuild)
+    adsrID = vcaID = oscID = {};
+    for (auto* node : graph.getNodes()) {
+        auto* proc = node->getProcessor();
+        if (auto* mb = dynamic_cast<ADSRModule*>(proc)) {
+            if (mb->getName().contains("Amp Env") || mb->getName().contains("ADSR"))
+                adsrID = node->nodeID;
+        } else if (dynamic_cast<OscillatorModule*>(proc)) {
+            oscID = node->nodeID;
+        } else if (dynamic_cast<VCAModule*>(proc)) {
+            vcaID = node->nodeID;
+        }
+    }
+    ASSERT_NE(adsrID.uid, 0u) << "Post-roundtrip: Amp Env node should exist";
+    ASSERT_NE(oscID.uid, 0u) << "Post-roundtrip: Oscillator node should exist";
+    ASSERT_NE(vcaID.uid, 0u) << "Post-roundtrip: VCA node should exist";
+
+    // Step 5 — Verify all 8 ADSR->VCA poly-bus connections survived
+    int envVcaConnsAfter = 0;
+    for (int v = 0; v < 8; ++v)
+        envVcaConnsAfter += countConns(adsrID, v, vcaID, 8 + v);
+    EXPECT_EQ(envVcaConnsAfter, 8)
+        << "Post-undo/redo: expected 8 ADSR->VCA per-voice connections (ch0->ch8, ch1->ch9 ... ch7->ch15)";
+
+    // Step 6 — Assert NO AttenuverterModule nodes were introduced for these paths.
+    // Direct poly-bus connections must remain direct — serialization must not
+    // silently convert them to attenuverter-chain routings.
+    int attenuverterCount = 0;
+    for (auto* node : graph.getNodes()) {
+        if (dynamic_cast<AttenuverterModule*>(node->getProcessor()))
+            ++attenuverterCount;
+    }
+    EXPECT_EQ(attenuverterCount, 0) << "Post-undo/redo: Poly Pad should have ZERO AttenuverterModule nodes; "
+                                       "found "
+                                    << attenuverterCount
+                                    << " — direct poly connections were incorrectly "
+                                       "converted to attenuverter chains during serialization round-trip";
 }

@@ -1,17 +1,17 @@
 # Testing Guide
 
-All tests use GoogleTest and run headless (no audio device, no GUI window). ~310 tests across 39 suites.
+All tests use GoogleTest and run headless (no audio device, no GUI window). ~371 tests across ~53 suites.
 
 ```bash
-# Run all tests
-cmake -B build -DENABLE_TESTS=ON
+# Run all tests (ENABLE_TESTS defaults OFF — must be passed explicitly)
+cmake -S . -B build -DENABLE_TESTS=ON
 cmake --build build --target GravisynthTests
 ./build/Tests/GravisynthTests
 
 # Run a specific suite
 ./build/Tests/GravisynthTests --gtest_filter="E2EWorkflow*"
 
-# Check coverage (threshold: 80%)
+# Check coverage (threshold: 85%)
 bash scripts/coverage.sh
 ```
 
@@ -116,4 +116,4 @@ The `AudioRenderingTests` suite compares rendered audio against "golden" referen
 
 ## CI
 
-Tests run automatically on every PR across Ubuntu, macOS, and Windows. Coverage is enforced at 80% on the Ubuntu Debug build. See [CLAUDE.md](../CLAUDE.md) for full CI details.
+Tests run automatically on every PR across Ubuntu, macOS, and Windows. Coverage is enforced at 85% on the Ubuntu Debug build. See [CLAUDE.md](../CLAUDE.md) for full CI details.

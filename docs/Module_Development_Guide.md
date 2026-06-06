@@ -219,4 +219,22 @@ All new modules **must** have unit tests in the `Tests/` directory.
 
 New modules are automatically covered by E2E workflow tests in `Tests/E2EWorkflowTests.cpp`. The `DropAllModuleTypes_NoCrash` test drops every registered module type and verifies it creates a graph node without crashing. If you add a new module type, add its name string to the `moduleTypes` array in that test.
 
+## 7. Poly Module Channel Conventions
+
+If your module supports polyphonic operation, follow the standard channel layout so the logical-port API and GraphEditor can correctly draw collapsed poly-bus wires.
+
+**Rule:** In poly mode, voices occupy channels 0-7 (audio/pitch/gate) and the shared-CV block starts at channel 8. Declare `numOutputs >= highest CV input channel index you read`, to avoid JUCE `AudioProcessorGraph` buffer aliasing when `inputChan >= getTotalNumOutputChannels()`.
+
+For example, a poly oscillator that reads CV on ch8-12 must declare at least 13 output channels even if only channels 0-7 carry audio. Channels 8-12 become silent pass-through outputs that prevent JUCE from aliasing them with another node's output buffer.
+
+Override `mapInputChannel()` and `mapOutputChannel()` to return a `LogicalPort` for each raw channel, describing:
+- `visibleJackIndex` — which visible jack the wire should anchor to in the UI
+- `role` — `PortRole::Audio`, `PortRole::Pitch`, `PortRole::Gate`, `PortRole::ModCV`, etc.
+- `isPolyGroupHead` — `true` only for the lowest channel of a fan (raw == 0 for voice fans, raw == 8 for the first shared-CV channel)
+- `polyVoiceSpan` — `8` for the head of an 8-voice fan; `1` for all others
+
+Override `isAutoPromotableModTarget()` to return `false` when `polyParam->get()` is true, so that poly CV connections are kept as plain `DirectCV` routings rather than being auto-wrapped in attenuverters.
+
+See [docs/modules.md — Poly Channel Layout](modules.md#poly-channel-layout) for the full per-module channel table and [docs/modulation.md](modulation.md) for the routing model reference.
+
 By following this guide, you can contribute robust and high-quality audio modules to Gravisynth.
