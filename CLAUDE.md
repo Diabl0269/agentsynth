@@ -24,6 +24,8 @@ The project follows a modular architecture with:
 - **Port Labels**: Virtual `getInputPortLabel()`/`getOutputPortLabel()` on ModuleBase, overridden per-module for descriptive port names in the UI
 - **GravisynthUndoManager**: Snapshot-based undo/redo system wrapping `juce::UndoManager`, captures full graph state on every change
 - **AI Integration** (`Source/AI/`): AIIntegrationService orchestrates LLM-powered features via OllamaProvider; AIStateMapper translates graph state for AI context
+- **GravisynthLookAndFeel** (`Source/UI/Theme/GravisynthLookAndFeel.h/.cpp`): Central `LookAndFeel_V4` subclass that owns all stock-widget re-skins (ColourId mappings from theme tokens) and exposes public treatment helper draw methods (`drawModulePanel`, `drawConnectionWire`, `drawModulationRing`, `fillThemedBackground`) so module cards, wires, and rings all honor the active theme's treatment style. Holds a copy of the active `Theme` updated via `applyTheme()`. Owned by `GravisynthApplication` and installed as `Desktop::setDefaultLookAndFeel`.
+- **ThemeManager** (`Source/UI/Theme/ThemeManager.h/.cpp`): Theme registry + active selection + JSON user-theme loader + persistence via the shared `ApplicationProperties` (key `"themeId"`). Extends `juce::ChangeBroadcaster` so `MainComponent` (a `ChangeListener`) can trigger the single re-skin+repaint pass on every switch. Built-ins registered first; user `*.gtheme.json` files loaded from the user themes folder at startup and on demand.
 
 ### Audio Modules
 
@@ -119,7 +121,7 @@ Post-merge, `.github/workflows/build-artifacts.yml` runs on push to main (4 jobs
 
 ## Testing Strategy
 
-~371 tests across ~53 suites, all headless (no audio device, no GUI window). Five test layers: audio rendering (DSP verification), integration (signal chains, mod routing), component workflow (UI interactions), state management (presets, undo/redo, serialization), and E2E workflow (full application paths). Code coverage threshold: 85%. See [`docs/testing.md`](docs/testing.md) for the full breakdown, patterns, and how to add tests for new modules.
+~386 tests across ~54 suites, all headless (no audio device, no GUI window). Six test layers: audio rendering (DSP verification), integration (signal chains, mod routing), component workflow (UI interactions), state management (presets, undo/redo, serialization), theme system (token round-trips, ColourId mapping, WCAG contrast), and E2E workflow (full application paths). Code coverage threshold: 85%. See [`docs/testing.md`](docs/testing.md) for the full breakdown, patterns, and how to add tests for new modules.
 
 ## Keyboard Shortcuts
 
@@ -128,7 +130,7 @@ Refer to [docs/shortcuts.md](docs/shortcuts.md) for the full list of configurabl
 
 ## Key Files to Understand
 
-- `CMakeLists.txt`: Main build configuration (version 0.13.2)
+- `CMakeLists.txt`: Main build configuration (version 0.13.2); `GravisynthAssets` binary-data target embeds 17 OFL font files from `assets/fonts/`; linked PUBLIC into `GravisynthCore` with `GRAVISYNTH_HAS_FONT_ASSETS=1` (so app + tests both resolve `BinaryData` typefaces) to activate embedded typefaces in `GravisynthLookAndFeel`
 - `Source/AudioEngine.h/cpp`: Audio processing engine, device management; `getModulationRoutings()` returns read-only `ModulationRouting` structs (`RoutingKind`: AttenuverterChain / DirectCV / PolyBus) derived from the live graph; `getActiveModRoutings()` / `getModulationDisplayInfo()` are adapters over it
 - `Source/GravisynthUndoManager.h/cpp`: Snapshot-based undo/redo with `SnapshotAction`, safe detach/reattach lifecycle
 - `Source/Modules/ModuleBase.h`: Base class with `ModuleType` enum, `ModulationTarget`, `ModulationCategory`; logical-port API (`PortRole`, `LogicalPort`, `mapInputChannel`, `mapOutputChannel`); `isAutoPromotableModTarget` guard for poly-mode connections
@@ -150,9 +152,16 @@ Refer to [docs/shortcuts.md](docs/shortcuts.md) for the full list of configurabl
 - `Source/Modules/FX/FlangerModule.h`: Flanger via `juce::dsp::Chorus` with low-delay tuning
 - `Source/Modules/FX/LimiterModule.h`: Brickwall limiter with input gain drive
 - `Source/UI/AIChatComponent.cpp/.h`: Chat interface for AI-assisted patching. **Logging gotcha:** this component registers itself as the global `juce::Logger` (`setCurrentLogger`) and pipes every `juce::Logger::writeToLog(...)` into a `TextEditor` debug console (Debug builds only). Appends are coalesced + the console is length-bounded, but DO NOT add high-frequency `writeToLog` calls (per-parameter, per-sample, per-frame, per-connection) — they run on the UI thread. Keep logging to errors/rare events. (A per-parameter log on preset load once caused a multi-second UI freeze; guarded by `AIStateMapperTest.PresetLoadDoesNotSpamLogger`.)
-- **UI rendering perf:** `ModuleComponent` uses `setBufferedToImage(true)` and gates its 15Hz `timerCallback` repaint (RMS-change / active-modulation / sequencer-step-change only) so the GraphEditor's 30Hz connection animation composites cached module images instead of re-running JUCE text layout every frame. Don't reintroduce unconditional per-tick `repaint()` on modules or their always-visible children.
+- **UI rendering perf:** `ModuleComponent` uses `setBufferedToImage(true)` and gates its 15Hz `timerCallback` repaint (RMS-change / active-modulation / sequencer-step-change only) so the GraphEditor's 30Hz connection animation composites cached module images instead of re-running JUCE text layout every frame. Don't reintroduce unconditional per-tick `repaint()` on modules or their always-visible children. A theme switch triggers exactly ONE re-skin pass (`GravisynthLookAndFeel::applyTheme` → `sendLookAndFeelChangeMessage` → single `repaint()`) — no timer or continuous repaint is added.
 - `Source/UI/ScopeComponent.h`: Oscilloscope/waveform display component
 - `Source/Modules/FX/DistortionModule.h`: Distortion effect with configurable oversampling (Off/2x/4x), soft-clipping using `tanh`-based curve, Drive and Mix parameters
 - `Tests/E2EWorkflowTests.cpp`: E2E workflow tests — preset loading, module drop/delete/replace, connection drag, mod matrix, undo/redo sequences, and stress tests
 - `Tests/`: ~371 tests across ~53 suites (audio rendering, integration, component workflow, state management, E2E workflow)
 - `docs/modulation.md`: Full reference for the modulation routing model, logical-port API, and poly-bus wire rendering
+- `Source/UI/Theme/Theme.h`: Pure data model — `Colors`, `Metrics`, `Typography`, `Treatment`, `ThemeStyle`, `Theme` structs with Obsidian defaults; no JUCE GUI deps beyond `juce::Colour`/`juce::String`
+- `Source/UI/Theme/ThemeManager.h/.cpp`: Theme registry, active-theme selection, JSON user-theme loading, persistence via shared `ApplicationProperties`
+- `Source/UI/Theme/ThemeLoader.h/.cpp`: JSON ↔ `Theme` (parse + serialize); `parseHexColour`, `parseStyle`, `styleToString` helpers; `getLastError()` for test/log use
+- `Source/UI/Theme/BuiltInThemes.h/.cpp`: The three built-in `Theme` literals (`makeObsidian`, `makeNeon`, `makeWarm`, `builtInThemes`) with exact colour/metric/treatment values
+- `Source/UI/Theme/GravisynthLookAndFeel.h/.cpp`: Central `LookAndFeel_V4` — stock-widget ColourId mappings + treatment draw helpers (`drawModulePanel`, `drawConnectionWire`, `drawModulationRing`, `fillThemedBackground`); typeface resolution with `GRAVISYNTH_HAS_FONT_ASSETS` fallback; 270° knob sweep constants `kRotaryStart`/`kRotaryEnd`. **Font limitation:** all built-in themes share Inter + JetBrains Mono — swapping the embedded typeface *family* at runtime corrupts text globally (JUCE 8 + CoreText mis-indexes already-shaped glyph runs), so themes differ by colour/treatment/glow, not font. The ctor pre-creates all embedded typefaces at startup (a runtime `createSystemTypefaceFor` after rendering is part of the corruption); module-card drop shadows use a cheap layered fill (not `juce::DropShadow`'s gaussian blur) so zoom stays smooth. See `docs/theming.md` for the user-facing note.
+- `Source/UI/AppearanceSettingsTab.h/.cpp`: The Settings "Appearance" tab — theme picker `ListBox`, swatches, "Open Themes Folder" / "Reload Themes" buttons; `ChangeListener` so external theme switches update the selection
+- `docs/theming.md`: User + developer theming guide (token reference, JSON schema, tutorial, treatment params, contrast guidance, Phase-2 deferred note)

@@ -20,6 +20,7 @@
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
 #include "ModuleComponent.h"
+#include "Theme/GravisynthLookAndFeel.h"
 #include <set>
 #include <tuple>
 #include <unordered_map>
@@ -38,14 +39,74 @@ GraphEditor::GraphEditor(AudioEngine& engine, GravisynthUndoManager* undoMgr)
 GraphEditor::~GraphEditor() { stopTimer(); }
 
 GraphEditor::GraphContentComponent::GraphContentComponent(GraphEditor& ed)
-    : editor(ed) {}
+    : editor(ed) {
+    // The canvas fills its whole bounds opaquely (bg1 + grid), so tell JUCE not to repaint
+    // whatever is behind it on every frame — a real win for zoom/pan and the 30Hz wire animation.
+    setOpaque(true);
+}
 
 void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
-    g.fillAll(juce::Colours::darkgrey);
+    // Resolve the themed LookAndFeel once. In headless tests the default JUCE LnF is
+    // installed, so the cast returns null and we fall back to plain fills/lines.
+    auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+
+    if (lf != nullptr)
+        lf->fillThemedBackground(g, getLocalBounds().toFloat(), /*isCanvas*/ true);
+    else
+        g.fillAll(juce::Colours::darkgrey);
+
+    // Theme color tokens (fall back to legacy literals when unthemed).
+    const juce::Colour audioWireColour = lf != nullptr ? lf->getTheme().colors.audioWire : juce::Colours::white;
+    const juce::Colour modWireColour = lf != nullptr ? lf->getTheme().colors.modWire : juce::Colours::yellow;
+    const juce::Colour polyBusWireColour = lf != nullptr ? lf->getTheme().colors.polyBusWire : juce::Colour(0xff00e5ff);
+    const juce::Colour pitchWireColour = lf != nullptr ? lf->getTheme().colors.pitchWire : juce::Colour(0xffaad4ff);
+    const juce::Colour gateWireColour = lf != nullptr ? lf->getTheme().colors.gateWire : juce::Colour(0xffffa500);
+    const juce::Colour surfaceColour = lf != nullptr ? lf->getTheme().colors.surface : juce::Colours::darkgrey;
+    const juce::Colour knobPointerColour = lf != nullptr ? lf->getTheme().colors.knobPointer : juce::Colours::white;
+    const juce::Colour textPrimaryColour = lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
+    const juce::Colour textMutedColour = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::white;
+
+    // Build the cubic-bezier wire path (identical to GravisynthLookAndFeel::drawConnectionWire's
+    // default curve) so the animated dots can ride the EXACT same curve as the drawn wire instead
+    // of cutting straight across it.
+    auto buildWirePath = [](juce::Point<float> p1, juce::Point<float> p2) {
+        juce::Path wp;
+        const float dx = p2.x - p1.x;
+        wp.startNewSubPath(p1);
+        wp.cubicTo(p1.x + dx * 0.5f, p1.y, p2.x - dx * 0.5f, p2.y, p2.x, p2.y);
+        return wp;
+    };
+
+    // Stroke a wire via the LnF helper (themed) or a curved fallback, and RETURN the path so the
+    // caller can place the animated dots along it.
+    auto strokeWire = [&](juce::Point<float> p1, juce::Point<float> p2, juce::Colour colour, bool isModulation,
+                          float activity, float fallbackWidth) -> juce::Path {
+        juce::Path wire = buildWirePath(p1, p2);
+        if (lf != nullptr) {
+            lf->drawConnectionWire(g, p1, p2, wire, colour, isModulation, activity, /*hovered*/ false);
+        } else {
+            float brightness = juce::jlimit(0.5f, 1.0f, 0.5f + activity * 0.5f);
+            g.setColour(colour.withMultipliedBrightness(brightness));
+            g.strokePath(
+                wire, juce::PathStrokeType(fallbackWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+        return wire;
+    };
+
+    // Draw the 3 animated signal-flow dots evenly spaced along a wire path so they follow the curve.
+    auto drawWireDots = [&](const juce::Path& wire, juce::Colour colour) {
+        const float len = wire.getLength();
+        for (int d = 0; d < 3; ++d) {
+            float t = std::fmod(connectionAnimPhase + (float)d / 3.0f, 1.0f);
+            auto pt = wire.getPointAlongPath(t * len);
+            g.setColour(colour.withAlpha(0.7f));
+            g.fillEllipse(pt.x - 2.5f, pt.y - 2.5f, 5.0f, 5.0f);
+        }
+    };
 
     // Draw connections
     auto& graph = editor.audioEngine.getGraph();
-    g.setColour(juce::Colours::yellow);
+    g.setColour(modWireColour);
 
     // Build a set of raw edges that Pass-2 (PolyBus / DirectCV wires) will draw,
     // so Pass-1 does not render them a second time in a conflicting generic style.
@@ -134,10 +195,9 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
                             break;
                         }
                     }
-                    float lineWidth = 2.0f + modPeak * 2.0f;
-                    float brightness = juce::jlimit(0.5f, 1.0f, 0.5f + modPeak * 0.5f);
-                    g.setColour(juce::Colours::yellow.withMultipliedBrightness(brightness));
-                    g.drawLine(p1.toFloat().x, p1.toFloat().y, p2.toFloat().x, p2.toFloat().y, lineWidth);
+                    // Attenuverter chain renders as a modulation wire.
+                    auto wirePath = strokeWire(p1.toFloat(), p2.toFloat(), modWireColour, /*isModulation*/ true,
+                                               modPeak, /*fallbackWidth*/ 2.0f + modPeak * 2.0f);
 
                     float amt = 0.0f;
                     if (auto* p = node2->getProcessor()->getParameters()[1]) {
@@ -147,9 +207,9 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
 
                     auto mid = (p1 + p2) / 2;
                     juce::Rectangle<float> knobArea(mid.toFloat().x - 10, mid.toFloat().y - 10, 20, 20);
-                    g.setColour(juce::Colours::darkgrey);
+                    g.setColour(surfaceColour);
                     g.fillEllipse(knobArea);
-                    g.setColour(juce::Colours::white);
+                    g.setColour(knobPointerColour);
                     g.drawEllipse(knobArea, 1.0f);
 
                     float angle = juce::jmap(amt, -1.0f, 1.0f, -juce::MathConstants<float>::pi * 0.75f,
@@ -158,14 +218,8 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
                     float dy = -std::cos(angle) * 8.0f;
                     g.drawLine(mid.toFloat().x, mid.toFloat().y, mid.toFloat().x + dx, mid.toFloat().y + dy, 2.0f);
 
-                    // Animated dots along modulation connection
-                    for (int d = 0; d < 3; ++d) {
-                        float t = std::fmod(connectionAnimPhase + (float)d / 3.0f, 1.0f);
-                        float dotX = p1.toFloat().x + (p2.toFloat().x - p1.toFloat().x) * t;
-                        float dotY = p1.toFloat().y + (p2.toFloat().y - p1.toFloat().y) * t;
-                        g.setColour(juce::Colours::cyan.withAlpha(0.7f));
-                        g.fillEllipse(dotX - 2.5f, dotY - 2.5f, 5.0f, 5.0f);
-                    }
+                    // Animated dots ride the bezier wire path.
+                    drawWireDots(wirePath, modWireColour);
                 }
             }
             continue;
@@ -201,16 +255,10 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
         }
 
         if (found1 && found2) {
-            g.drawLine(p1.toFloat().x, p1.toFloat().y, p2.toFloat().x, p2.toFloat().y, 2.0f);
-
-            // Animated dots along audio connection
-            for (int d = 0; d < 3; ++d) {
-                float t = std::fmod(connectionAnimPhase + (float)d / 3.0f, 1.0f);
-                float dotX = p1.toFloat().x + (p2.toFloat().x - p1.toFloat().x) * t;
-                float dotY = p1.toFloat().y + (p2.toFloat().y - p1.toFloat().y) * t;
-                g.setColour(juce::Colours::white.withAlpha(0.7f));
-                g.fillEllipse(dotX - 2.5f, dotY - 2.5f, 5.0f, 5.0f);
-            }
+            // Audio signal wire (solid) + dots that follow the curve.
+            auto wirePath = strokeWire(p1.toFloat(), p2.toFloat(), audioWireColour, /*isModulation*/ false,
+                                       /*activity*/ 0.0f, /*fallbackWidth*/ 2.0f);
+            drawWireDots(wirePath, audioWireColour);
         }
     }
 
@@ -253,49 +301,44 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
         // Brightness / width scaled by signal activity (mirrors attenuverter line ~lines 107-110).
         float modPeak = routing.modSignalPeak;
         float lineWidth = 2.5f + modPeak * 2.0f;
-        float brightness = juce::jlimit(0.5f, 1.0f, 0.5f + modPeak * 0.5f);
 
-        // Color by role: ModCV = cyan (poly bus) or gold (direct), Pitch = light blue, Gate = orange
+        // Color by role from theme tokens: ModCV = poly-bus or direct (modWire), Pitch, Gate.
         juce::Colour wireColour;
         if (routing.role == PortRole::Pitch) {
-            wireColour = juce::Colour(0xffaad4ff); // light blue for pitch fan
+            wireColour = pitchWireColour; // pitch fan
         } else if (routing.role == PortRole::Gate) {
-            wireColour = juce::Colour(0xffffa500); // orange for gate fan
+            wireColour = gateWireColour; // gate fan
         } else {
-            wireColour = (routing.kind == AudioEngine::RoutingKind::PolyBus)
-                             ? juce::Colour(0xff00e5ff)  // cyan for ModCV poly bus
-                             : juce::Colour(0xffffd700); // gold for ModCV direct CV
+            wireColour = (routing.kind == AudioEngine::RoutingKind::PolyBus) ? polyBusWireColour // ModCV poly bus
+                                                                             : modWireColour;    // ModCV direct CV
         }
 
         if (routing.isBypassed)
             wireColour = wireColour.withAlpha(0.3f);
 
-        g.setColour(wireColour.withMultipliedBrightness(brightness));
-        g.drawLine(p1.toFloat().x, p1.toFloat().y, p2.toFloat().x, p2.toFloat().y, lineWidth);
-
-        // Animated dots along the wire.
-        for (int d = 0; d < 3; ++d) {
-            float t = std::fmod(connectionAnimPhase + (float)d / 3.0f, 1.0f);
-            float dotX = p1.toFloat().x + (p2.toFloat().x - p1.toFloat().x) * t;
-            float dotY = p1.toFloat().y + (p2.toFloat().y - p1.toFloat().y) * t;
-            g.setColour(wireColour.withAlpha(0.7f));
-            g.fillEllipse(dotX - 2.5f, dotY - 2.5f, 5.0f, 5.0f);
-        }
+        // Mod-bus wires render as modulation wires (DirectCV/PolyBus/Pitch/Gate are all CV).
+        auto wirePath = strokeWire(p1.toFloat(), p2.toFloat(), wireColour, /*isModulation*/ true, modPeak,
+                                   /*fallbackWidth*/ lineWidth);
+        drawWireDots(wirePath, wireColour);
 
         // For poly buses, label the midpoint with "x{voiceCount}" so the bundle is visible.
+        // Drawn as textPrimary on a surface pill.
         if (routing.kind == AudioEngine::RoutingKind::PolyBus && routing.voiceCount > 1) {
             auto mid = ((p1 + p2) / 2).toFloat();
-            g.setColour(juce::Colours::white);
+            juce::String badge = "x" + juce::String(routing.voiceCount);
             g.setFont(11.0f);
-            g.drawText("x" + juce::String(routing.voiceCount), (int)mid.x + 5, (int)mid.y - 8, 28, 16,
-                       juce::Justification::left, false);
+            int textW = (int)g.getCurrentFont().getStringWidthFloat(badge) + 8;
+            juce::Rectangle<float> pill((float)((int)mid.x + 5), mid.y - 8.0f, (float)textW, 16.0f);
+            g.setColour(surfaceColour);
+            g.fillRoundedRectangle(pill, 4.0f);
+            g.setColour(textPrimaryColour);
+            g.drawText(badge, pill, juce::Justification::centred, false);
         }
     }
     // ---- End PolyBus / DirectCV wires ----
 
     // Draw Line being dragged
     if (editor.isDraggingConnection) {
-        g.setColour(juce::Colours::white);
         if (editor.dragSourceModule) {
             juce::Point<int> p;
             if (editor.dragSourceIsMidi) {
@@ -316,12 +359,13 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
             // easier: editor.dragCurrentPos is screen pos.
             auto mouseLocal = getLocalPoint(nullptr, editor.dragCurrentPos);
 
-            g.drawLine(posInContent.toFloat().x, posInContent.toFloat().y, mouseLocal.toFloat().x,
-                       mouseLocal.toFloat().y, 3.0f);
+            // In-progress drag wire uses the audio-wire token via the LnF helper.
+            strokeWire(posInContent.toFloat(), mouseLocal.toFloat(), audioWireColour, /*isModulation*/ false,
+                       /*activity*/ 0.0f, /*fallbackWidth*/ 3.0f);
         }
     }
 
-    g.setColour(juce::Colours::white);
+    g.setColour(textMutedColour);
     g.drawText("Gravisynth (Double click to refresh)", getLocalBounds().removeFromTop(20), juce::Justification::centred,
                true);
 }

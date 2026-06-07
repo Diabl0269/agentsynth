@@ -1,5 +1,6 @@
 #include "ModMatrixComponent.h"
 #include "../Modules/AttenuverterModule.h"
+#include "Theme/GravisynthLookAndFeel.h"
 #include <algorithm>
 #include <map>
 
@@ -31,24 +32,39 @@ void ModMatrixComponent::setFlatSourceMenu(bool shouldBeFlat) {
 }
 
 void ModMatrixComponent::paint(juce::Graphics& g) {
-    g.fillAll(juce::Colour(0xff1a1c1e)); // Solid dark background
+    // Resolve the themed LookAndFeel; in headless tests the default JUCE LnF is installed and the
+    // cast returns null, so we fall back to the legacy literals.
+    auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+
+    const juce::Colour bgColour = lf != nullptr ? lf->getTheme().colors.bg1 : juce::Colour(0xff1a1c1e);
+    const juce::Colour surfaceHiColour =
+        lf != nullptr ? lf->getTheme().colors.surfaceHi : juce::Colours::white.withAlpha(0.1f);
+    const juce::Colour surfaceColour =
+        lf != nullptr ? lf->getTheme().colors.surface : juce::Colours::white.withAlpha(0.05f);
+    const juce::Colour textPrimaryColour = lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
+    const juce::Colour textMutedColour =
+        lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::white.withAlpha(0.6f);
+    const juce::Colour textDisabledColour =
+        lf != nullptr ? lf->getTheme().colors.textDisabled : juce::Colours::white.withAlpha(0.3f);
+
+    g.fillAll(bgColour); // Solid dark background
 
     auto area = getLocalBounds();
     auto titleArea = area.removeFromTop(40);
 
-    g.setColour(juce::Colours::white.withAlpha(0.1f));
+    g.setColour(surfaceHiColour);
     g.fillRect(titleArea);
 
-    g.setColour(juce::Colours::white);
+    g.setColour(textPrimaryColour);
     g.setFont(juce::Font(18.0f, juce::Font::bold));
     g.drawText("MODULATION MATRIX", titleArea.reduced(10, 0), juce::Justification::centredLeft, true);
 
     // Column Headers
     auto headerArea = area.removeFromTop(30);
-    g.setColour(juce::Colours::white.withAlpha(0.05f));
+    g.setColour(surfaceColour);
     g.fillRect(headerArea);
 
-    g.setColour(juce::Colours::white.withAlpha(0.6f));
+    g.setColour(textMutedColour);
     g.setFont(juce::Font(12.0f, juce::Font::bold));
 
     float w = (float)area.getWidth();
@@ -63,7 +79,7 @@ void ModMatrixComponent::paint(juce::Graphics& g) {
                juce::Justification::centred, true);
 
     if (rows.empty()) {
-        g.setColour(juce::Colours::white.withAlpha(0.3f));
+        g.setColour(textDisabledColour);
         g.setFont(juce::Font(14.0f, juce::Font::italic));
         g.drawText("No modulations active.\nClick '+ Add Modulation' to start.", getLocalBounds(),
                    juce::Justification::centred, true);
@@ -186,10 +202,14 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
     amountSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     amountSlider.setRange(-1.0, 1.0);
 
-    // Improve slider visibility
-    amountSlider.setColour(juce::Slider::thumbColourId, juce::Colours::cyan);
-    amountSlider.setColour(juce::Slider::trackColourId, juce::Colours::white.withAlpha(0.2f));
-    amountSlider.setColour(juce::Slider::backgroundColourId, juce::Colours::white.withAlpha(0.1f));
+    // Slider colours from theme tokens when the themed LnF is installed; otherwise leave the
+    // ColourId defaults (the LnF maps them in applyTheme(), so explicit literals are not needed).
+    if (auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&owner.getLookAndFeel())) {
+        const auto& colors = lf->getTheme().colors;
+        amountSlider.setColour(juce::Slider::thumbColourId, colors.knobPointer);
+        amountSlider.setColour(juce::Slider::trackColourId, colors.accent);
+        amountSlider.setColour(juce::Slider::backgroundColourId, colors.surface);
+    }
 
     sourceCombo.addListener(this);
     destCombo.addListener(this);
@@ -204,10 +224,13 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
 
     bypassToggle.setClickingTogglesState(true);
     bypassToggle.setTooltip("Bypass modulation");
-    bypassToggle.setColour(juce::TextButton::buttonColourId, juce::Colours::darkgrey);
-    bypassToggle.setColour(juce::TextButton::buttonOnColourId, juce::Colours::orange);
-    bypassToggle.setColour(juce::TextButton::textColourOffId, juce::Colours::white);
-    bypassToggle.setColour(juce::TextButton::textColourOnId, juce::Colours::black);
+    // Keep only the semantic on-colour from the theme (bypass-active = warning). The off-state,
+    // text and base colours re-skin via the LnF ColourId mapping. When unthemed, leave defaults.
+    if (auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&owner.getLookAndFeel())) {
+        const auto& colors = lf->getTheme().colors;
+        bypassToggle.setColour(juce::TextButton::buttonOnColourId, colors.warning);
+        bypassToggle.setColour(juce::TextButton::textColourOnId, colors.bg0);
+    }
     bypassToggle.setComponentID("modBypass");
     deleteButton.setComponentID("modDelete");
 
@@ -249,7 +272,8 @@ void ModMatrixComponent::ModRow::resized() {
 }
 
 void ModMatrixComponent::ModRow::paint(juce::Graphics& g) {
-    g.setColour(juce::Colours::white.withAlpha(0.6f));
+    auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&owner.getLookAndFeel());
+    g.setColour(lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::white.withAlpha(0.6f));
     g.setFont(12.0f);
     g.drawText(juce::String(rowIndex + 1), 0, 0, 30, getHeight(), juce::Justification::centred);
 }

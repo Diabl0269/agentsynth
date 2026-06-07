@@ -1,6 +1,7 @@
 #include "SettingsWindow.h"
 #include "../AI/OllamaProvider.h"
 #include "../ShortcutManager.h"
+#include "AppearanceSettingsTab.h"
 
 //==============================================================================
 // AISettingsTab - AI configuration interface
@@ -31,7 +32,7 @@ public:
         hostEditor.onFocusLost = [this] { updateSettings(); };
     }
 
-    void paint(juce::Graphics& g) override { g.fillAll(juce::Colours::darkgrey.darker()); }
+    void paint(juce::Graphics& g) override { g.fillAll(findColour(juce::ResizableWindow::backgroundColourId)); }
 
     void resized() override {
         auto bounds = getLocalBounds().reduced(10);
@@ -180,7 +181,7 @@ public:
         };
     }
 
-    void paint(juce::Graphics& g) override { g.fillAll(juce::Colours::darkgrey.darker()); }
+    void paint(juce::Graphics& g) override { g.fillAll(findColour(juce::ResizableWindow::backgroundColourId)); }
 
     void resized() override {
         auto bounds = getLocalBounds().reduced(15);
@@ -277,7 +278,7 @@ private:
 //==============================================================================
 SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::ApplicationProperties& appProperties,
                                gsynth::AIIntegrationService& aiService, gsynth::AIChatComponent& aiChatComponent,
-                               ShortcutManager& shortcutManager)
+                               ShortcutManager& shortcutManager, gsynth::theme::ThemeManager& themeManager)
     : appProperties(appProperties) {
     auto* audioSelector = new juce::AudioDeviceSelectorComponent(deviceManager, 0, 2, // min/max inputs
                                                                  0, 2,                // min/max outputs
@@ -291,6 +292,9 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
 
     auto* generalSettingsTab = new GeneralSettingsTab(shortcutManager);
     tabs.addTab("General", juce::Colours::darkgrey, generalSettingsTab, true);
+
+    auto* appearanceSettingsTab = new AppearanceSettingsTab(themeManager);
+    tabs.addTab("Appearance", juce::Colours::darkgrey, appearanceSettingsTab, true);
 
     addAndMakeVisible(tabs);
 

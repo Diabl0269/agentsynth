@@ -8,17 +8,30 @@
 #include "UI/AIChatComponent.h"
 #include "UI/GraphEditor.h"
 #include "UI/ModuleLibraryComponent.h"
+#include "UI/Theme/GravisynthLookAndFeel.h"
+#include "UI/Theme/ThemeManager.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 
 class MainComponent
     : public juce::Component
     , public juce::DragAndDropContainer
     , public juce::Timer
     , public juce::ApplicationCommandTarget
+    , private juce::ChangeListener
     , private gsynth::AIIntegrationService::Listener {
 public:
-    MainComponent(std::unique_ptr<gsynth::AIProvider> provider = nullptr);
+    // Primary ctor: receives injected ThemeManager and LookAndFeel from Main.cpp.
+    // provider is optional (nullptr → reads saved provider pref from appProperties).
+    MainComponent(gsynth::theme::ThemeManager& tm, gsynth::theme::GravisynthLookAndFeel& lf,
+                  std::unique_ptr<gsynth::AIProvider> provider = nullptr);
+
+    // Delegating ctor for tests and legacy call sites that don't inject theme objects.
+    // Lazily owns private default ThemeManager + GravisynthLookAndFeel instances
+    // (stored in ownedThemeManager / ownedLookAndFeel below).
+    explicit MainComponent(std::unique_ptr<gsynth::AIProvider> provider = nullptr);
+
     ~MainComponent() override;
 
     void timerCallback() override;
@@ -63,6 +76,24 @@ public:
 private:
     // AIIntegrationService::Listener
     void aiPatchApplied() override;
+
+    // ChangeListener (juce::ChangeListener override) — called when ThemeManager broadcasts.
+    // Implements the 3-step re-skin pass: applyTheme → sendLookAndFeelChangeMessage → repaint.
+    void changeListenerCallback(juce::ChangeBroadcaster* source) override;
+
+    // Shared initialisation body called from both constructors after appProperties is set up.
+    void initialiseCommon(std::unique_ptr<gsynth::AIProvider> provider);
+
+    // Owned fallback objects used when the delegating ctor is called (tests/legacy).
+    // Null when the primary ctor is used (refs point at external objects instead).
+    std::unique_ptr<gsynth::theme::ThemeManager> ownedThemeManager;
+    std::unique_ptr<gsynth::theme::GravisynthLookAndFeel> ownedLookAndFeel;
+
+    // Non-owning references to the active ThemeManager and LookAndFeel.
+    // Always valid — set by both constructors (either to external objects or to the
+    // owned fallbacks above).
+    gsynth::theme::ThemeManager* themeManager{nullptr};
+    gsynth::theme::GravisynthLookAndFeel* lookAndFeel{nullptr};
 
     GravisynthUndoManager undoManager;
     AudioEngine audioEngine;

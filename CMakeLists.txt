@@ -72,6 +72,16 @@ add_library(GravisynthCore STATIC
     Source/AI/AIIntegrationService.h
     Source/AI/AIStateMapper.cpp
     Source/AI/AIStateMapper.h
+    # Theme system
+    Source/UI/Theme/Theme.h
+    Source/UI/Theme/ThemeManager.h
+    Source/UI/Theme/ThemeManager.cpp
+    Source/UI/Theme/ThemeLoader.h
+    Source/UI/Theme/ThemeLoader.cpp
+    Source/UI/Theme/BuiltInThemes.h
+    Source/UI/Theme/BuiltInThemes.cpp
+    Source/UI/Theme/GravisynthLookAndFeel.h
+    Source/UI/Theme/GravisynthLookAndFeel.cpp
 )
 
 # Link Core against JUCE
@@ -85,6 +95,7 @@ target_link_libraries(GravisynthCore PUBLIC
     juce::juce_audio_formats
     juce::juce_audio_processors
     juce::juce_audio_utils
+    juce::juce_gui_basics
     juce::juce_gui_extra
     juce::juce_dsp
 )
@@ -123,6 +134,36 @@ juce_add_gui_app(Gravisynth
 
 juce_generate_juce_header(Gravisynth)
 
+# Embed font files as binary data (SIL OFL licensed — see assets/fonts/LICENSES.md).
+# GravisynthLookAndFeel (compiled into GravisynthCore) loads these typefaces from BinaryData,
+# so the asset library + GRAVISYNTH_HAS_FONT_ASSETS define are attached to Core (PUBLIC) below;
+# the app and the test target both link Core and therefore resolve the BinaryData symbols.
+juce_add_binary_data(GravisynthAssets SOURCES
+    assets/fonts/Inter-Regular.ttf
+    assets/fonts/Inter-Medium.ttf
+    assets/fonts/Inter-SemiBold.ttf
+    assets/fonts/Inter-Bold.ttf
+    assets/fonts/JetBrainsMono-Regular.ttf
+    assets/fonts/JetBrainsMono-Medium.ttf
+    assets/fonts/Manrope-Regular.ttf
+    assets/fonts/Manrope-Medium.ttf
+    assets/fonts/Manrope-SemiBold.ttf
+    assets/fonts/Manrope-Bold.ttf
+    assets/fonts/SpaceMono-Regular.ttf
+    assets/fonts/SpaceMono-Bold.ttf
+    assets/fonts/IBMPlexSans-Regular.ttf
+    assets/fonts/IBMPlexSans-Medium.ttf
+    assets/fonts/IBMPlexSans-SemiBold.ttf
+    assets/fonts/IBMPlexMono-Regular.ttf
+    assets/fonts/IBMPlexMono-Medium.ttf
+)
+
+# The themed LookAndFeel lives in GravisynthCore and pulls typefaces from BinaryData;
+# attach the asset lib + feature define to Core (PUBLIC) so the app AND the test target
+# (both link Core) compile the font path and resolve the BinaryData symbols.
+target_link_libraries(GravisynthCore PUBLIC GravisynthAssets)
+target_compile_definitions(GravisynthCore PUBLIC GRAVISYNTH_HAS_FONT_ASSETS=1)
+
 # Add source files
 target_sources(Gravisynth PRIVATE
     Source/Main.cpp
@@ -139,12 +180,15 @@ target_sources(Gravisynth PRIVATE
     Source/UI/ModMatrixComponent.h
     Source/UI/SettingsWindow.cpp
     Source/UI/SettingsWindow.h
+    Source/UI/AppearanceSettingsTab.cpp
+    Source/UI/AppearanceSettingsTab.h
     Source/ShortcutManager.h
 )
 
 # Link against JUCE modules
 target_link_libraries(Gravisynth PRIVATE
     GravisynthCore # Link to our core library
+    GravisynthAssets # Embedded font binary data
     juce::juce_core
     juce::juce_events
     juce::juce_graphics
@@ -159,7 +203,10 @@ target_link_libraries(Gravisynth PRIVATE
     juce::juce_dsp
 )
 
-target_compile_definitions(Gravisynth PRIVATE JUCE_WEB_BROWSER=0)
+target_compile_definitions(Gravisynth PRIVATE
+    JUCE_WEB_BROWSER=0
+    GRAVISYNTH_HAS_FONT_ASSETS=1
+)
 
 if(UNIX AND NOT APPLE)
     target_link_libraries(Gravisynth PRIVATE ${GTK3_LIBRARIES})

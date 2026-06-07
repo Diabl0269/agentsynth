@@ -2,10 +2,14 @@
 #include "AI/OllamaProvider.h"
 #include "UI/SettingsWindow.h"
 
-MainComponent::MainComponent(std::unique_ptr<gsynth::AIProvider> provider)
+// ---- Primary constructor (injected ThemeManager + LookAndFeel from Main.cpp) ----
+MainComponent::MainComponent(gsynth::theme::ThemeManager& tm, gsynth::theme::GravisynthLookAndFeel& lf,
+                             std::unique_ptr<gsynth::AIProvider> provider)
     : graphEditor(audioEngine, &undoManager)
     , aiService(audioEngine.getGraph())
-    , aiChatComponent(aiService, appProperties) {
+    , aiChatComponent(aiService, appProperties)
+    , themeManager(&tm)
+    , lookAndFeel(&lf) {
     // Setup ApplicationProperties
     propertiesOptions.applicationName = "Gravisynth";
     propertiesOptions.folderName = "Gravisynth";
@@ -15,6 +19,47 @@ MainComponent::MainComponent(std::unique_ptr<gsynth::AIProvider> provider)
     appProperties.setStorageParameters(propertiesOptions);
     shortcutManager.loadFromProperties(appProperties);
 
+    // Restore persisted theme and apply it. Must come AFTER appProperties is configured.
+    themeManager->initialise(&appProperties);
+    lookAndFeel->applyTheme(themeManager->getActiveTheme());
+
+    // Subscribe to theme changes so we can re-skin on every switch.
+    themeManager->addChangeListener(this);
+
+    initialiseCommon(std::move(provider));
+}
+
+// ---- Delegating constructor for tests / legacy call sites ----
+MainComponent::MainComponent(std::unique_ptr<gsynth::AIProvider> provider)
+    : graphEditor(audioEngine, &undoManager)
+    , aiService(audioEngine.getGraph())
+    , aiChatComponent(aiService, appProperties) {
+    // Own a default ThemeManager + LookAndFeel so the code behaves identically
+    // to the primary-ctor path (no special-casing in the rest of the class).
+    ownedThemeManager = std::make_unique<gsynth::theme::ThemeManager>();
+    ownedLookAndFeel = std::make_unique<gsynth::theme::GravisynthLookAndFeel>();
+    themeManager = ownedThemeManager.get();
+    lookAndFeel = ownedLookAndFeel.get();
+
+    // Setup ApplicationProperties (same as primary ctor)
+    propertiesOptions.applicationName = "Gravisynth";
+    propertiesOptions.folderName = "Gravisynth";
+    propertiesOptions.filenameSuffix = "settings";
+    propertiesOptions.osxLibrarySubFolder = "Application Support";
+    propertiesOptions.storageFormat = juce::PropertiesFile::storeAsXML;
+    appProperties.setStorageParameters(propertiesOptions);
+    shortcutManager.loadFromProperties(appProperties);
+
+    // Initialise theme with appProperties so the persisted theme is restored.
+    themeManager->initialise(&appProperties);
+    lookAndFeel->applyTheme(themeManager->getActiveTheme());
+    themeManager->addChangeListener(this);
+
+    initialiseCommon(std::move(provider));
+}
+
+// ---- Shared post-construction body ----
+void MainComponent::initialiseCommon(std::unique_ptr<gsynth::AIProvider> provider) {
     // Load AI provider preference
     juce::String savedProviderName = appProperties.getUserSettings()->getValue("aiProvider", "Ollama");
     juce::String savedOllamaHost = appProperties.getUserSettings()->getValue("ollamaHost", "http://localhost:11434");
@@ -137,7 +182,7 @@ MainComponent::MainComponent(std::unique_ptr<gsynth::AIProvider> provider)
     settingsButton.setComponentID("settingsButton");
     settingsButton.onClick = [this]() {
         auto* settingsComp = new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService,
-                                                aiChatComponent, shortcutManager);
+                                                aiChatComponent, shortcutManager, *themeManager);
         settingsComp->setSize(500, 450);
 
         juce::DialogWindow::LaunchOptions options;
@@ -164,10 +209,23 @@ MainComponent::MainComponent(std::unique_ptr<gsynth::AIProvider> provider)
 }
 
 MainComponent::~MainComponent() {
+    // Unsubscribe before the manager (or our owned copy) is torn down.
+    if (themeManager != nullptr)
+        themeManager->removeChangeListener(this);
     stopTimer();
     aiService.removeListener(this);
     graphEditor.detachAllModuleComponents();
     audioEngine.shutdown();
+}
+
+// ---- Theme change callback: re-skin pass ----
+void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* /*source*/) {
+    // Push new theme values into the LookAndFeel (colours / treatment / metrics), then
+    // propagate lookAndFeelChanged() + a single repaint so every widget re-skins.
+    lookAndFeel->applyTheme(themeManager->getActiveTheme());
+    if (auto* top = getTopLevelComponent())
+        top->sendLookAndFeelChange();
+    repaint();
 }
 
 void MainComponent::timerCallback() {

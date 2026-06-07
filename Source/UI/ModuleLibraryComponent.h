@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Theme/GravisynthLookAndFeel.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
 class ModuleLibraryComponent
@@ -26,20 +27,33 @@ public:
     }
 
     void paint(juce::Graphics& g) override {
-        g.fillAll(juce::Colours::darkgrey.darker());
+        // Resolve theme tokens from the active LnF; fall back to plain colors when our LnF
+        // isn't installed (e.g. headless tests).
+        juce::Colour bgColour = juce::Colours::darkgrey.darker();
+        juce::Colour headerColour = juce::Colours::grey;
+        juce::Colour itemColour = juce::Colours::white;
+
+        if (auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel())) {
+            const auto& c = lf->getTheme().colors;
+            bgColour = c.bg0;
+            headerColour = c.textMuted;
+            itemColour = c.textPrimary;
+        }
+
+        g.fillAll(bgColour);
 
         int y = 10;
         for (const auto& entry : entries) {
             if (entry.isHeader) {
                 if (y > 10)
                     y += 5; // extra spacing before headers (except first)
-                g.setColour(juce::Colours::grey);
-                g.setFont(juce::Font(12.0f));
+                g.setColour(headerColour);
+                g.setFont(juce::Font(juce::FontOptions(12.0f)));
                 g.drawText(entry.text.toUpperCase(), 10, y, getWidth() - 20, 20, juce::Justification::centredLeft);
                 y += 25;
             } else {
-                g.setColour(juce::Colours::white);
-                g.setFont(juce::Font(16.0f));
+                g.setColour(itemColour);
+                g.setFont(juce::Font(juce::FontOptions(16.0f)));
                 g.drawText(entry.text, 20, y, getWidth() - 40, 28, juce::Justification::centredLeft);
                 y += 32;
             }

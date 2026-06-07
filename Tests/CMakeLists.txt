@@ -51,12 +51,14 @@ add_executable(GravisynthTests
     StateRoundTripTests.cpp
     AudioEngineModRoutingTests.cpp
     PerformanceTests.cpp
+    ThemeTests.cpp
     ../Source/MainComponent.cpp
     ../Source/UI/GraphEditor.cpp
     ../Source/UI/ModMatrixComponent.cpp
     ../Source/UI/AIChatComponent.cpp
     ../Source/UI/ModuleComponent.cpp
     ../Source/UI/SettingsWindow.cpp
+    ../Source/UI/AppearanceSettingsTab.cpp
 )
 
 target_link_libraries(GravisynthTests PRIVATE
@@ -71,7 +73,10 @@ target_include_directories(GravisynthTests PRIVATE
     ${CMAKE_SOURCE_DIR}/Source
 )
 
-target_compile_definitions(GravisynthTests PRIVATE JUCE_MODAL_LOOPS_PERMITTED=1)
+target_compile_definitions(GravisynthTests PRIVATE
+    JUCE_MODAL_LOOPS_PERMITTED=1
+    GRAVISYNTH_THEMES_DIR="${CMAKE_SOURCE_DIR}/themes"
+)
 
 # Link JUCE specifics if needed
 target_link_libraries(GravisynthTests PRIVATE

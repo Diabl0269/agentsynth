@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "name": "Obsidian Studio",
+  "id": "obsidian",
+  "colors": {
+    "bg0": "#FF0B0D10",
+    "bg1": "#FF13161B",
+    "surface": "#FF1B1F26",
+    "surfaceHi": "#FF232833",
+    "border": "#FF2A2F38",
+    "accent": "#FF00D1FF",
+    "accent2": "#FF00D1FF",
+    "audioWire": "#FFE8EDF2",
+    "modWire": "#FF00D1FF",
+    "pitchWire": "#FFAAD4FF",
+    "gateWire": "#FFFFA500",
+    "polyBusWire": "#FF00E5FF",
+    "textPrimary": "#FFEAEEF3",
+    "textMuted": "#FF8A93A0",
+    "textDisabled": "#FF5C6470",
+    "success": "#FF46C66B",
+    "warning": "#FFE0A33D",
+    "error": "#FFE5484D",
+    "knobBody": "#FF13161B",
+    "knobPointer": "#FFEAEEF3",
+    "meterFill": "#FF00D1FF",
+    "modRingPositive": "#FF00E5FF",
+    "modRingNegative": "#FFFF6E00"
+  },
+  "metrics": {
+    "cornerRadius": 10.0, "windowRadius": 14.0, "pillRadius": 8.0,
+    "padding": 14, "spacingUnit": 6,
+    "knobTrackWidth": 4.0, "knobRingWidth": 3.5, "borderWidth": 1.0,
+    "wireCoreWidth": 2.5, "wireCasingWidth": 5.0
+  },
+  "typography": {
+    "uiFamily": "Inter", "monoFamily": "JetBrains Mono",
+    "h1": 18.0, "h2": 13.0, "label": 10.5, "value": 10.0, "micro": 8.5
+  },
+  "treatment": {
+    "style": "flat",
+    "glow": 0.0, "shadow": 0.65, "blur": 0.0, "texture": 0.0
+  }
+}
