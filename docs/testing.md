@@ -74,6 +74,17 @@ Test persistence, serialization, and state restoration.
 | UndoRedoTest | 11 | Add/remove modules, connections, parameter changes, complex sequences, rapid operations |
 | AIStateMapperTest | 24 | Graph JSON round-trip serialization, parameter validation, modulation serialization, merge mode, schema generation |
 
+### Theme Tests (~15 tests)
+
+Tests for the theme system — `Tests/ThemeTests.cpp`. All headless.
+
+| Suite | Tests | What it covers |
+|-------|-------|----------------|
+| ThemeBuiltInsTest | 2 | Built-in theme registration (obsidian/neon/warm), WCAG AA contrast (≥4.5) for all built-ins |
+| ThemeLoaderTest | 8 | JSON round-trip (exact colour/metric/typography/treatment equality), obsidian.gtheme.json vs makeObsidian(), required-key rejection, bad hex rejection, treatment float clamping, schema version rejection, style string round-trip |
+| ThemeTest (fixture) | 4 | Persistence + restore via ApplicationProperties, broadcast on change / idempotency, unknown id rejection, user theme replace-by-id |
+| ThemeLookAndFeelTest | 2 | All ColourId mappings from spec section 3, draw-helper smoke tests (fillThemedBackground / drawModulePanel / drawConnectionWire / drawModulationRing / drawRotarySlider into headless image) |
+
 ### E2E Workflow Tests (23 tests)
 
 Full application workflow tests in `Tests/E2EWorkflowTests.cpp`. Each test constructs a complete `MainComponent` with a mock AI provider and exercises real UI interaction code paths.

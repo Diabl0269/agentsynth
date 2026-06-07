@@ -1,5 +1,7 @@
 #include "MainComponent.h"
 #include "ShortcutManager.h"
+#include "UI/Theme/GravisynthLookAndFeel.h"
+#include "UI/Theme/ThemeManager.h"
 #include <JuceHeader.h>
 
 class GravisynthApplication : public juce::JUCEApplication {
@@ -12,10 +14,23 @@ public:
 
     void initialise(const juce::String& commandLine) override {
         juce::ignoreUnused(commandLine);
-        mainWindow.reset(new MainWindow(getApplicationName()));
+        // Apply default theme so the LnF is valid before any Component is created.
+        // ThemeManager::initialise() (with appProperties) is called inside MainComponent,
+        // which will restore the persisted theme and call applyTheme again.
+        lookAndFeel.applyTheme(themeManager.getActiveTheme());
+        juce::Desktop::getInstance().setDefaultLookAndFeel(&lookAndFeel);
+        mainWindow.reset(new MainWindow(getApplicationName(), themeManager, lookAndFeel));
     }
 
-    void shutdown() override { mainWindow = nullptr; }
+    // CRITICAL ordering (spec section 7.1, constraint #1):
+    // 1. Destroy all components (mainWindow = nullptr) FIRST.
+    // 2. Then clear the default LnF pointer (setDefaultLookAndFeel(nullptr)).
+    // 3. themeManager / lookAndFeel are data members declared BEFORE mainWindow,
+    //    so they are destroyed AFTER mainWindow — they outlive the clear.
+    void shutdown() override {
+        mainWindow = nullptr;
+        juce::Desktop::getInstance().setDefaultLookAndFeel(nullptr);
+    }
 
     void systemRequestedQuit() override { quit(); }
 
@@ -25,13 +40,13 @@ public:
         : public juce::DocumentWindow
         , public juce::MenuBarModel {
     public:
-        MainWindow(juce::String name)
+        MainWindow(juce::String name, gsynth::theme::ThemeManager& tm, gsynth::theme::GravisynthLookAndFeel& lf)
             : DocumentWindow(name,
                              juce::Desktop::getInstance().getDefaultLookAndFeel().findColour(
                                  juce::ResizableWindow::backgroundColourId),
                              DocumentWindow::allButtons) {
             setUsingNativeTitleBar(true);
-            setContentOwned(new MainComponent(), true);
+            setContentOwned(new MainComponent(tm, lf), true);
 
 #if JUCE_IOS || JUCE_ANDROID
             setFullScreen(true);
@@ -84,6 +99,11 @@ public:
     };
 
 private:
+    // Declaration order matters: themeManager and lookAndFeel are declared BEFORE mainWindow
+    // so they are constructed first and destroyed LAST (after mainWindow). This guarantees
+    // the LnF object outlives every Component — the classic JUCE shutdown-crash guard.
+    gsynth::theme::ThemeManager themeManager;
+    gsynth::theme::GravisynthLookAndFeel lookAndFeel;
     std::unique_ptr<MainWindow> mainWindow;
 };
 

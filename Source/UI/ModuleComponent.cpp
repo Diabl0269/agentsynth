@@ -4,6 +4,7 @@
 #include "../Modules/PolySequencerModule.h"
 #include "../Modules/SequencerModule.h"
 #include "GraphEditor.h"
+#include "Theme/GravisynthLookAndFeel.h"
 
 static ModuleType getType(juce::AudioProcessor* module) {
     if (auto* mb = dynamic_cast<ModuleBase*>(module))
@@ -49,19 +50,22 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     if (getType(module) != ModuleType::Attenuverter) {
         bypassButton = std::make_unique<juce::TextButton>("B");
         bypassButton->setClickingTogglesState(true);
-        bypassButton->setColour(juce::TextButton::buttonColourId, juce::Colours::darkgrey);
-        bypassButton->setColour(juce::TextButton::buttonOnColourId, juce::Colours::orange);
-        bypassButton->setColour(juce::TextButton::textColourOffId, juce::Colours::white);
-        bypassButton->setColour(juce::TextButton::textColourOnId, juce::Colours::black);
         addAndMakeVisible(*bypassButton);
 
         muteButton = std::make_unique<juce::TextButton>("M");
         muteButton->setClickingTogglesState(true);
-        muteButton->setColour(juce::TextButton::buttonColourId, juce::Colours::darkgrey);
-        muteButton->setColour(juce::TextButton::buttonOnColourId, juce::Colours::red);
-        muteButton->setColour(juce::TextButton::textColourOffId, juce::Colours::white);
-        muteButton->setColour(juce::TextButton::textColourOnId, juce::Colours::black);
         addAndMakeVisible(*muteButton);
+
+        // Semantic on-colors read from the active theme: bypass -> accent (the LnF default
+        // mapping for buttonOnColourId), mute -> error. The remaining ColourIds (off bg,
+        // text on/off) re-skin automatically via the LnF's applyTheme() ColourId mapping, so
+        // no per-button literals are set here. Guarded so headless tests (no LnF installed)
+        // simply fall back to the JUCE default ColourIds.
+        if (auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel())) {
+            const auto& colors = lf->getTheme().colors;
+            bypassButton->setColour(juce::TextButton::buttonOnColourId, colors.accent);
+            muteButton->setColour(juce::TextButton::buttonOnColourId, colors.error);
+        }
     }
 
     setTitle(module->getName());
@@ -413,16 +417,27 @@ void ModuleComponent::paint(juce::Graphics& g) {
     auto* mod = dynamic_cast<ModuleBase*>(module);
     bool isBypassed = mod && mod->isBypassed();
 
-    g.fillAll(isBypassed ? juce::Colours::lightgrey.withAlpha(0.4f) : juce::Colours::lightgrey);
+    // Guarded LnF cast: headless tests construct this component WITHOUT installing our LnF.
+    // When the cast is null we fall back to a plain themed-ish fill so those tests don't crash.
+    auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
 
-    // Activity glow indicator
-    if (cachedRMS > 0.01f && !isBypassed) {
-        float glowAlpha = juce::jlimit(0.0f, 0.3f, cachedRMS * 0.5f);
-        g.setColour(juce::Colours::limegreen.withAlpha(glowAlpha));
-        g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(1.0f), 4.0f, 3.0f);
+    if (lf != nullptr) {
+        // Single owner of card treatment: background, drop shadow, body fill, border, and the
+        // header band (filled + title drawn) all come from the active theme. selected=false for
+        // v1 (no per-module selection model yet — see spec section 12).
+        lf->drawModulePanel(g, getLocalBounds().toFloat(), 24, module->getName(), /*selected*/ false, isBypassed);
+    } else {
+        // Fallback path (no themed LnF): plain fill + simple header so tests render without crashing.
+        g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
+        g.setColour(juce::Colours::black);
+        g.drawRect(getLocalBounds(), 2);
+        g.setColour(juce::Colours::darkgrey);
+        g.fillRect(0, 0, getWidth(), 24);
+        g.setColour(juce::Colours::white);
+        g.drawText(module->getName(), 0, 0, getWidth(), 24, juce::Justification::centred, true);
     }
 
-    // Highlight Active Step (Sequencer only)
+    // Highlight Active Step (Sequencer only) — recolored from theme accent when available.
     if (getType(module) == ModuleType::Sequencer) {
         if (auto* seq = dynamic_cast<SequencerModule*>(module)) {
             int activeStep = seq->currentActiveStep.load();
@@ -431,28 +446,29 @@ void ModuleComponent::paint(juce::Graphics& g) {
             int stepWidth = 60;
             int x = startX + activeStep * stepWidth;
 
-            g.setColour(juce::Colours::yellow.withAlpha(0.3f));
+            auto stepColour =
+                (lf != nullptr) ? lf->getTheme().colors.accent.withAlpha(0.3f) : juce::Colours::yellow.withAlpha(0.3f);
+            g.setColour(stepColour);
             g.fillRect(x, 110, stepWidth - 5, 220); // Cover Gate+Pitch+F.Env area
         }
     }
 
-    g.setColour(juce::Colours::black);
-    g.drawRect(getLocalBounds(), 2);
-
-    // Header
-    g.setColour(isBypassed ? juce::Colour(0xff555555) : juce::Colours::darkgrey);
-    g.fillRect(0, 0, getWidth(), 24);
-    g.setColour(juce::Colours::white);
-    g.drawText(module->getName(), 0, 0, getWidth(), 24, juce::Justification::centred, true);
-
-    // Activity LED in header
+    // Activity LED in header — recolored to the theme's success token when available.
     if (cachedRMS > 0.01f && !isBypassed) {
         float ledAlpha = juce::jlimit(0.3f, 1.0f, cachedRMS * 2.0f);
-        g.setColour(juce::Colours::limegreen.withAlpha(ledAlpha));
+        auto ledColour = (lf != nullptr) ? lf->getTheme().colors.success : juce::Colours::limegreen;
+        g.setColour(ledColour.withAlpha(ledAlpha));
         g.fillEllipse(6.0f, 8.0f, 8.0f, 8.0f);
     }
 
     // --- PORTS ---
+    // Theme-derived jack/label colors (guarded: headless tests have no themed LnF).
+    // Audio-signal jacks (MIDI in/out) -> audioWire; mod-capable input/output jacks -> accent;
+    // port labels -> textMuted. Geometry is unchanged.
+    juce::Colour jackAccentColour = (lf != nullptr) ? lf->getTheme().colors.accent : juce::Colours::yellow;
+    juce::Colour audioJackColour = (lf != nullptr) ? lf->getTheme().colors.audioWire : juce::Colours::white;
+    juce::Colour labelColour = (lf != nullptr) ? lf->getTheme().colors.textMuted : juce::Colours::white;
+
     int numIns = module->getTotalNumInputChannels();
     int numOuts = module->getTotalNumOutputChannels();
     if (auto* mb = dynamic_cast<ModuleBase*>(module)) {
@@ -462,23 +478,25 @@ void ModuleComponent::paint(juce::Graphics& g) {
     bool midiOutDrawn = false; // Reintroduced
                                // MIDI Output (Top Right if produces midi)
     if (module->producesMidi()) {
-        g.setColour(juce::Colours::white);
+        g.setColour(audioJackColour);
         auto p = juce::Point<int>(getWidth() - 10, 30); // Top right, below header
         g.fillEllipse(p.x - 5, p.y - 5, 10, 10);
+        g.setColour(labelColour);
         g.drawText("Midi Out", p.x - 65, p.y - 5, 60, 10, juce::Justification::right, false);
     }
     // MIDI Input (Top Left if accepts midi components)
     if (module->acceptsMidi()) {
-        g.setColour(juce::Colours::white);
+        g.setColour(audioJackColour);
         auto p = juce::Point<int>(10, 30); // Top left near header
         g.fillEllipse(p.x - 5, p.y - 5, 10, 10);
+        g.setColour(labelColour);
         g.drawText("Midi In", p.x + 10, p.y - 5, 60, 10, juce::Justification::left, false);
     }
 
     // Inputs
-    g.setColour(juce::Colours::yellow);
     for (int i = 0; i < numIns; ++i) {
         auto p = getPortCenter(i, true);
+        g.setColour(jackAccentColour);
         g.fillEllipse(p.x - 5, p.y - 5, 10, 10);
 
         juce::String label = "In " + juce::String(i);
@@ -487,6 +505,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
         else if (dynamic_cast<juce::AudioProcessorGraph::AudioGraphIOProcessor*>(module))
             label = (i == 0) ? "Left" : (i == 1) ? "Right" : "In " + juce::String(i);
 
+        g.setColour(labelColour);
         g.drawText(label, p.x + 10, p.y - 10, 60, 20, juce::Justification::left, false);
     }
 
@@ -498,6 +517,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
     for (int i = audioOutStartIndex; i < numOuts + audioOutStartIndex;
          ++i) { // Adjust index for display if midi out is present
         auto p = getPortCenter(i, false);
+        g.setColour(jackAccentColour);
         g.fillEllipse(p.x - 5, p.y - 5, 10, 10);
 
         juce::String label = "Out " + juce::String(i);
@@ -505,6 +525,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
             label = mb->getOutputPortLabel(i);
         else if (dynamic_cast<juce::AudioProcessorGraph::AudioGraphIOProcessor*>(module))
             label = (i == 0) ? "Left" : (i == 1) ? "Right" : "Out " + juce::String(i);
+        g.setColour(labelColour);
         g.drawText(label, p.x - 70, p.y - 10, 60, 20, juce::Justification::right, false);
     }
 
@@ -548,20 +569,10 @@ void ModuleComponent::paint(juce::Graphics& g) {
 
                 float modNorm = juce::jlimit(0.0f, 1.0f, baseNorm + info.modSignalValue);
 
-                constexpr float startAngle = -juce::MathConstants<float>::pi * 0.75f;
-                constexpr float endAngle = juce::MathConstants<float>::pi * 0.75f;
-                float baseAngle = juce::jmap(baseNorm, 0.0f, 1.0f, startAngle, endAngle);
-                float modAngle = juce::jmap(modNorm, 0.0f, 1.0f, startAngle, endAngle);
-
-                if (std::abs(modAngle - baseAngle) > 0.01f) {
-                    juce::Path arc;
-                    arc.addCentredArc(cx, cy, radius, radius, 0.0f, std::min(baseAngle, modAngle),
-                                      std::max(baseAngle, modAngle), true);
-                    bool isPositive = info.modSignalValue >= 0.0f;
-                    auto ringColour = isPositive ? juce::Colour(0xff00e5ff) : juce::Colour(0xffff6e00);
-                    g.setColour(ringColour);
-                    g.strokePath(arc, juce::PathStrokeType(3.5f));
-                }
+                // Serum-style mod ring now drawn by the themed LnF (270° sweep + theme tokens).
+                // Guarded: headless tests without our LnF simply skip the ring.
+                if (lf != nullptr)
+                    lf->drawModulationRing(g, {cx, cy}, radius, baseNorm, modNorm, info.modSignalValue >= 0.0f);
                 break;
             }
         }
