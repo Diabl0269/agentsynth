@@ -11,3 +11,4 @@ Shortcuts are configurable in Settings → General tab (click a binding to rebin
 | Cmd+Shift+Z | Redo |
 | Cmd+M | Toggle Mod Matrix |
 | Cmd+A | Toggle AI Panel |
+| Cmd+L | Auto Arrange |

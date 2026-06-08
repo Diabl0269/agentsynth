@@ -3,7 +3,16 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace GravisynthCommands {
-enum CommandIDs { openSettings = 0x100, savePreset, openPreset, undo, redo, toggleModMatrix, toggleAiPanel };
+enum CommandIDs {
+    openSettings = 0x100,
+    savePreset,
+    openPreset,
+    undo,
+    redo,
+    toggleModMatrix,
+    toggleAiPanel,
+    autoArrange
+};
 
 inline juce::CommandID getCommandForAction(const juce::String& actionId) {
     if (actionId == "openSettings")
@@ -20,6 +29,8 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return toggleModMatrix;
     if (actionId == "toggleAiPanel")
         return toggleAiPanel;
+    if (actionId == "autoArrange")
+        return autoArrange;
     return 0;
 }
 } // namespace GravisynthCommands
@@ -91,6 +102,7 @@ public:
             juce::KeyPress('z', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
         bindings["toggleModMatrix"] = juce::KeyPress('m', juce::ModifierKeys::commandModifier, 0);
         bindings["toggleAiPanel"] = juce::KeyPress('a', juce::ModifierKeys::commandModifier, 0);
+        bindings["autoArrange"] = juce::KeyPress('l', juce::ModifierKeys::commandModifier, 0);
     }
 
     static juce::String keyPressToDisplayString(const juce::KeyPress& key) {
@@ -155,6 +167,8 @@ public:
             return "Toggle Mod Matrix";
         if (actionId == "toggleAiPanel")
             return "Toggle AI Panel";
+        if (actionId == "autoArrange")
+            return "Auto Arrange";
         return actionId;
     }
 
@@ -177,8 +191,8 @@ private:
     std::map<juce::String, juce::KeyPress> bindings;
     juce::ApplicationProperties* appProperties = nullptr;
 
-    juce::StringArray actionIds{"openSettings", "savePreset",      "openPreset",   "undo",
-                                "redo",         "toggleModMatrix", "toggleAiPanel"};
+    juce::StringArray actionIds{"openSettings", "savePreset",      "openPreset",    "undo",
+                                "redo",         "toggleModMatrix", "toggleAiPanel", "autoArrange"};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShortcutManager)
 };

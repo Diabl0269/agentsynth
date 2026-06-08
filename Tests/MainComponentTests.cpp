@@ -74,10 +74,10 @@ TEST_F(MainComponentTest, ToggleModMatrixHidesAndShows) {
 TEST_F(MainComponentTest, CommandManagerHasCommands) {
     MainComponent mainComp(std::make_unique<MockProvider>());
     auto& cm = mainComp.getCommandManager();
-    // Verify all 7 commands are registered (5 original + 2 new toggles)
+    // Verify all 8 commands are registered (5 original + 2 toggles + Auto Arrange)
     juce::Array<juce::CommandID> commands;
     mainComp.getAllCommands(commands);
-    EXPECT_EQ(commands.size(), 7);
+    EXPECT_EQ(commands.size(), 8);
 }
 
 TEST_F(MainComponentTest, RedoShortcutViaKeyPressed) {

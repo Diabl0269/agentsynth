@@ -19,11 +19,48 @@
 #include "../Modules/SequencerModule.h"
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
+#include "../PresetManager.h"
+#include "LayoutUtil.h"
 #include "ModuleComponent.h"
 #include "Theme/GravisynthLookAndFeel.h"
 #include <set>
 #include <tuple>
 #include <unordered_map>
+
+// Returns an estimated (w, h) footprint for a module type name.
+// Used when the component does not yet exist (e.g. on drag-drop before layout).
+// Heights match the real component sizes so the library-drag ghost preview is accurate.
+// The final drop placement uses the real component size via finalizeModuleDrag() — the
+// estimate is only used for the live ghost preview.
+static juce::Point<int> estimateModuleSize(const juce::String& typeName) {
+    if (typeName == "Oscillator")
+        return {280, 530};
+    if (typeName == "Filter")
+        return {280, 570};
+    if (typeName == "LFO")
+        return {280, 440};
+    if (typeName == "VCA")
+        return {280, 200};
+    if (typeName == "ADSR" || typeName == "Amp Env" || typeName == "Filter Env")
+        return {280, 180};
+    if (typeName == "Sequencer")
+        return {510, 380};
+    if (typeName == "MidiKeyboard")
+        return {500, 150};
+    if (typeName == "Poly MIDI" || typeName == "PolyMidi")
+        return {280, 100};
+    if (typeName == "Distortion")
+        return {280, 350};
+    if (typeName == "Delay")
+        return {280, 220};
+    if (typeName == "Reverb")
+        return {280, 300};
+    if (typeName == "AudioInput" || typeName == "AudioOutput")
+        return {280, 100};
+    if (typeName == "Attenuverter")
+        return {280, 120};
+    return {280, 360};
+}
 
 GraphEditor::GraphEditor(AudioEngine& engine, GravisynthUndoManager* undoMgr)
     : audioEngine(engine)
@@ -54,6 +91,32 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
         lf->fillThemedBackground(g, getLocalBounds().toFloat(), /*isCanvas*/ true);
     else
         g.fillAll(juce::Colours::darkgrey);
+
+    // ---- Drag-preview grid dots (only while a module is being dragged) ----
+    // Draw subtle dots at kGridSize*5 = 40px spacing over the VISIBLE canvas region only.
+    // This stays cheap: we compute the visible clip in canvas coords and skip everything outside.
+    if (editor.dragPreviewActive) {
+        // The content component's transform maps canvas -> screen. The clip rect of g is
+        // already in canvas coords (paint runs in local/canvas space), so getClipBounds()
+        // gives us the visible region for free.
+        auto clip = g.getClipBounds();
+
+        // Dot colour: textPrimary at ~8% alpha for a gentle, non-distracting grid.
+        const juce::Colour textPrimaryColourForGrid =
+            lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
+        g.setColour(textPrimaryColourForGrid.withAlpha(0.08f));
+
+        constexpr int kMajorGrid = gsynth::LayoutUtil::kGridSize * 5; // 40px
+        int startX = (clip.getX() / kMajorGrid) * kMajorGrid;
+        int startY = (clip.getY() / kMajorGrid) * kMajorGrid;
+
+        for (int gx = startX; gx <= clip.getRight(); gx += kMajorGrid) {
+            for (int gy = startY; gy <= clip.getBottom(); gy += kMajorGrid) {
+                g.fillEllipse((float)gx - 1.2f, (float)gy - 1.2f, 2.4f, 2.4f);
+            }
+        }
+    }
+    // ---- End drag-preview grid dots ----
 
     // Theme color tokens (fall back to legacy literals when unthemed).
     const juce::Colour audioWireColour = lf != nullptr ? lf->getTheme().colors.audioWire : juce::Colours::white;
@@ -372,6 +435,26 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
 
 void GraphEditor::GraphContentComponent::resized() {}
 
+void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
+    // ---- Drag-preview landing ghost (on top of module cards) ----
+    // Draw a translucent rounded rect at the exact snapped+anti-overlapped landing position.
+    if (editor.dragPreviewActive && !editor.dragPreviewGhost.isEmpty()) {
+        auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+        const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+        const float cornerRadius = lf != nullptr ? lf->getTheme().metrics.cornerRadius : 10.0f;
+
+        auto ghostF = editor.dragPreviewGhost.toFloat();
+
+        // Fill: accent colour at ~18% alpha
+        g.setColour(accentColour.withAlpha(0.18f));
+        g.fillRoundedRectangle(ghostF, cornerRadius);
+
+        // Outline: accent colour at ~70% alpha, 1.5px
+        g.setColour(accentColour.withAlpha(0.70f));
+        g.drawRoundedRectangle(ghostF, cornerRadius, 1.5f);
+    }
+}
+
 void GraphEditor::beginConnectionDrag(ModuleComponent* sourceModule, int channelIndex, bool isInput, bool isMidi,
                                       juce::Point<int> screenPos) {
     isDraggingConnection = true;
@@ -542,8 +625,15 @@ void GraphEditor::updateComponents() {
         if (static_cast<int>(x) != -1 && static_cast<int>(y) != -1) {
             existingComp->setTopLeftPosition(static_cast<int>(x), static_cast<int>(y));
         } else {
-            // Determine fallback based on current count to be stable
-            existingComp->setTopLeftPosition(100 + (moduleIndex * 150), 600);
+            // Fallback: no stored position — resolve a non-overlapping slot.
+            // Desired origin strides by 300px to reduce clustering; resolvePlacement
+            // then snaps and spirals clear of any previously placed components.
+            auto desired = juce::Point<int>(gsynth::LayoutUtil::kArrangeOriginX + moduleIndex * 300, 600);
+            auto clear = resolvePlacement(desired, existingComp->getWidth(), existingComp->getHeight(), node->nodeID);
+            existingComp->setTopLeftPosition(clear);
+            // Persist the resolved position so subsequent loads don't need to re-resolve
+            node->properties.set("x", clear.x);
+            node->properties.set("y", clear.y);
         }
 
         moduleIndex++;
@@ -998,7 +1088,53 @@ void GraphEditor::timerCallback() {
     content.repaint();
 }
 
+// ============================================================================
+// Drag-preview API
+// ============================================================================
+
+void GraphEditor::beginDragPreview(int w, int h, juce::AudioProcessorGraph::NodeID selfId) {
+    dragPreviewActive = true;
+    dragPreviewW = w;
+    dragPreviewH = h;
+    dragPreviewSelfId = selfId;
+    dragPreviewGhost = {};
+    content.repaint();
+}
+
+void GraphEditor::updateDragPreview(juce::Point<int> desiredTopLeftCanvas) {
+    if (!dragPreviewActive)
+        return;
+    auto resolved = resolvePlacement(desiredTopLeftCanvas, dragPreviewW, dragPreviewH, dragPreviewSelfId);
+    dragPreviewGhost = juce::Rectangle<int>(resolved.x, resolved.y, dragPreviewW, dragPreviewH);
+    content.repaint();
+}
+
+void GraphEditor::endDragPreview() {
+    dragPreviewActive = false;
+    dragPreviewGhost = {};
+    content.repaint();
+}
+
 bool GraphEditor::isInterestedInDragSource(const SourceDetails& dragSourceDetails) { return true; }
+
+void GraphEditor::itemDragEnter(const SourceDetails& dragSourceDetails) {
+    juce::String name = dragSourceDetails.description.toString();
+    auto estSize = estimateModuleSize(name);
+    beginDragPreview(estSize.x, estSize.y, juce::AudioProcessorGraph::NodeID{});
+    // Compute initial ghost position
+    auto canvasPos = content.getLocalPoint(this, dragSourceDetails.localPosition).roundToInt();
+    updateDragPreview(canvasPos);
+}
+
+void GraphEditor::itemDragMove(const SourceDetails& dragSourceDetails) {
+    auto canvasPos = content.getLocalPoint(this, dragSourceDetails.localPosition).roundToInt();
+    updateDragPreview(canvasPos);
+}
+
+void GraphEditor::itemDragExit(const SourceDetails& dragSourceDetails) {
+    juce::ignoreUnused(dragSourceDetails);
+    endDragPreview();
+}
 
 void GraphEditor::itemDropped(const SourceDetails& dragSourceDetails) {
     juce::String name = dragSourceDetails.description.toString();
@@ -1045,35 +1181,124 @@ void GraphEditor::itemDropped(const SourceDetails& dragSourceDetails) {
 
     if (newProcessor) {
         auto& graph = audioEngine.getGraph();
-        auto dropPos = content.getLocalPoint(this, dragSourceDetails.localPosition);
+        auto dropPos = content.getLocalPoint(this, dragSourceDetails.localPosition).roundToInt();
+        // Use estimate for an initial snapped position; finalizeModuleDrag will re-resolve
+        // using the real component size after updateComponents() creates the component.
+        auto estSize = estimateModuleSize(name);
+        auto initialPlaced = resolvePlacement(dropPos, estSize.x, estSize.y, juce::AudioProcessorGraph::NodeID{});
+
+        auto finalizeNewDrop = [this](juce::AudioProcessorGraph::NodeID newNodeId) {
+            // Locate the newly created ModuleComponent and finalize its position using
+            // the real component size (snapped + anti-overlapped from actual dimensions).
+            ModuleComponent* newComp = nullptr;
+            for (auto* comp : content.getModules()) {
+                if (comp != nullptr && comp->getNodeId() == newNodeId) {
+                    newComp = comp;
+                    break;
+                }
+            }
+            if (newComp != nullptr)
+                finalizeModuleDrag(newComp);
+        };
 
         if (undoManager) {
             // Use shared_ptr to make the lambda copyable (std::function requires it)
             auto proc = std::make_shared<std::unique_ptr<juce::AudioProcessor>>(std::move(newProcessor));
-            undoManager->recordStructuralChange(graph, [this, proc, dropPos] {
+            undoManager->recordStructuralChange(graph, [this, proc, initialPlaced, finalizeNewDrop] {
                 if (*proc) {
                     auto node = audioEngine.getGraph().addNode(std::move(*proc));
                     if (node) {
-                        node->properties.set("x", dropPos.x);
-                        node->properties.set("y", dropPos.y);
+                        node->properties.set("x", initialPlaced.x);
+                        node->properties.set("y", initialPlaced.y);
+                        auto newNodeId = node->nodeID;
+                        updateComponents();
+                        finalizeNewDrop(newNodeId);
                     }
                 }
-                updateComponents();
             });
         } else {
             auto node = graph.addNode(std::move(newProcessor));
             if (node) {
-                node->properties.set("x", dropPos.x);
-                node->properties.set("y", dropPos.y);
+                node->properties.set("x", initialPlaced.x);
+                node->properties.set("y", initialPlaced.y);
+                auto newNodeId = node->nodeID;
                 updateComponents();
+                finalizeNewDrop(newNodeId);
             }
         }
     }
+
+    endDragPreview();
+}
+
+juce::Point<int> GraphEditor::resolvePlacement(juce::Point<int> desired, int w, int h,
+                                               juce::AudioProcessorGraph::NodeID selfId) {
+    std::vector<gsynth::LayoutUtil::Box> boxes;
+    for (auto* comp : content.getModules()) {
+        if (comp == nullptr)
+            continue;
+        boxes.push_back({comp->getNodeId(), comp->getBounds()});
+    }
+    auto snapped = gsynth::LayoutUtil::snap(desired);
+    return gsynth::LayoutUtil::findFreeSlot(snapped, w, h, boxes, selfId);
+}
+
+void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
+    if (module == nullptr)
+        return;
+    auto clear = resolvePlacement(module->getPosition(), module->getWidth(), module->getHeight(), module->getNodeId());
+    module->setTopLeftPosition(clear);
+    // Persist the snapped/cleared position to graph node properties so it survives reload.
+    updateModulePosition(module);
+    content.repaint();
+}
+
+void GraphEditor::autoArrange() {
+    auto& graph = audioEngine.getGraph();
+    if (undoManager)
+        undoManager->captureBeforeState(graph);
+
+    auto sizeOf = [this](gsynth::LayoutUtil::NodeID id) -> juce::Point<int> {
+        for (auto* c : content.getModules()) {
+            if (c != nullptr && c->getNodeId() == id)
+                return {c->getWidth(), c->getHeight()};
+        }
+        return {280, 300};
+    };
+
+    std::vector<std::pair<gsynth::LayoutUtil::NodeID, gsynth::LayoutUtil::NodeID>> extra;
+    for (const auto& r : audioEngine.getModulationRoutings()) {
+        if (r.hasSource && r.hasDest)
+            extra.push_back({r.sourceNodeID, r.destNodeID});
+    }
+
+    auto layout = gsynth::LayoutUtil::computeAutoArrange(graph, sizeOf, extra);
+    for (const auto& a : layout) {
+        if (auto* n = graph.getNodeForId(a.id)) {
+            n->properties.set("x", a.pos.x);
+            n->properties.set("y", a.pos.y);
+        }
+    }
+
+    updateComponents();
+
+    if (undoManager)
+        undoManager->pushSnapshotFromCapture(graph);
 }
 
 void GraphEditor::savePreset(juce::File file) {
     auto json = gsynth::AIStateMapper::graphToJSON(audioEngine.getGraph());
     file.replaceWithText(juce::JSON::toString(json));
+}
+
+bool GraphEditor::loadFactoryPreset(int index) {
+    // Tear down existing module components (which stops their ScopeComponent timers) BEFORE
+    // PresetManager clears the graph and frees the old VisualBuffers — otherwise a scope timer can
+    // fire and read a freed buffer (use-after-free). Mirrors the safe order used by the test harness.
+    detachAllModuleComponents();
+    bool loaded = gsynth::PresetManager::loadPreset(index, audioEngine.getGraph());
+    updateComponents();
+    return loaded;
 }
 
 void GraphEditor::loadPreset(juce::File file) {
@@ -1083,9 +1308,12 @@ void GraphEditor::loadPreset(juce::File file) {
                                                "Could not parse preset file.");
         return;
     }
+    // Detach before applyJSONToGraph clears the graph (see loadFactoryPreset — avoids scope-timer UAF).
+    detachAllModuleComponents();
     if (gsynth::AIStateMapper::applyJSONToGraph(json, audioEngine.getGraph(), true)) {
         updateComponents();
     } else {
+        updateComponents(); // reconcile view to whatever state the graph is in after a failed apply
         juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon, "Load Failed",
                                                "Could not apply preset to graph.");
     }

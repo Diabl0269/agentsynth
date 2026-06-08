@@ -11,6 +11,7 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(GravisynthTests
     TestMain.cpp
+    LayoutUtilTests.cpp
     OscillatorTests.cpp
     FilterTests.cpp
     ADSRTests.cpp

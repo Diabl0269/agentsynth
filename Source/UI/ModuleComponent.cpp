@@ -947,6 +947,8 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             if (undoManager)
                 undoManager->captureBeforeState(owner.getAudioEngine().getGraph());
             dragger.startDraggingComponent(this, e);
+            // Show grid + ghost for this module-body drag.
+            owner.beginDragPreview(getWidth(), getHeight(), getNodeId());
         }
     }
 }
@@ -961,6 +963,8 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
         owner.dragConnection(e.getScreenPosition());
     } else {
         dragger.dragComponent(this, e, nullptr);
+        // Update the landing ghost to follow the live drag position.
+        owner.updateDragPreview(getPosition());
         if (auto* p = getParentComponent())
             p->repaint();
     }
@@ -969,7 +973,16 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
 void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
     if (getPortForPoint(e.getMouseDownPosition())) {
         owner.endConnectionDrag(e.getScreenPosition());
-    } else if (undoManager && getPosition() != dragStartPosition) {
-        undoManager->pushSnapshotFromCapture(owner.getAudioEngine().getGraph());
+    } else {
+        // Clear ghost overlay before finalizing so the overlay is gone at the exact
+        // moment the module lands in its snapped position.
+        owner.endDragPreview();
+        if (getPosition() != dragStartPosition) {
+            // Snap to grid and resolve overlap BEFORE the undo snapshot so the
+            // snapped/cleared final position is what gets captured in the diff.
+            owner.finalizeModuleDrag(this);
+            if (undoManager)
+                undoManager->pushSnapshotFromCapture(owner.getAudioEngine().getGraph());
+        }
     }
 }

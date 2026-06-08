@@ -6,8 +6,12 @@
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/VCAModule.h"
 #include "../Source/PresetManager.h"
+#include "../Source/UI/GraphEditor.h"
+#include "../Source/UI/LayoutUtil.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 
 class UndoRedoTest : public ::testing::Test {
 protected:
@@ -593,4 +597,113 @@ TEST_F(UndoRedoTest, PolyPad_RoutingSurvivesUndoRedo) {
                                     << attenuverterCount
                                     << " — direct poly connections were incorrectly "
                                        "converted to attenuverter chains during serialization round-trip";
+}
+
+/**
+ * Test: AutoArrangeIsSingleUndoStep
+ *
+ * - Load a preset with N modules at known positions.
+ * - Record undo-stack depth before autoArrange.
+ * - Call autoArrange().
+ * - Verify that modules moved (at least one position changed).
+ * - ONE undo() restores ALL original x/y positions.
+ * - ONE redo() reapplies ALL arranged positions.
+ * - Undo stack depth increased by exactly 1 after autoArrange.
+ */
+TEST_F(UndoRedoTest, AutoArrangeIsSingleUndoStep) {
+    // Load a preset with several modules into the graph via PresetManager
+    ASSERT_TRUE(gsynth::PresetManager::loadPreset(0, graph)) << "Failed to load default preset";
+    ASSERT_GE(graph.getNumNodes(), 3) << "Default preset should have at least 3 nodes";
+
+    // Capture original positions
+    std::map<juce::AudioProcessorGraph::NodeID, juce::Point<int>> originalPositions;
+    for (auto* node : graph.getNodes()) {
+        int x = static_cast<int>(node->properties.getWithDefault("x", 0));
+        int y = static_cast<int>(node->properties.getWithDefault("y", 0));
+        originalPositions[node->nodeID] = {x, y};
+    }
+
+    // Clear undo history so we start with a known depth
+    undoManager.clearUndoHistory();
+    ASSERT_FALSE(undoManager.canUndo()) << "Undo stack should be empty before test";
+
+    // Build a GraphEditor with the undo manager so autoArrange() has access to both
+    AudioEngine engine;
+    // Load the same preset into the engine's graph
+    engine.getGraph().clear();
+    ASSERT_TRUE(gsynth::PresetManager::loadPreset(0, engine.getGraph()));
+
+    GraphEditor editor(engine, &undoManager);
+    // Wire the editor to the undo manager exactly as MainComponent does. Without this the undo/redo
+    // SnapshotActions cannot detach module components before clearing the graph, so a MidiKeyboardComponent
+    // outlives its module's MidiKeyboardState and removeListener()s on freed memory (heap-use-after-free).
+    undoManager.setGraphEditor(&editor);
+    editor.setSize(1200, 800);
+    editor.updateComponents();
+
+    // Capture positions from the engine graph before arrange
+    std::map<juce::AudioProcessorGraph::NodeID, juce::Point<int>> beforeArrange;
+    for (auto* node : engine.getGraph().getNodes()) {
+        int x = static_cast<int>(node->properties.getWithDefault("x", 0));
+        int y = static_cast<int>(node->properties.getWithDefault("y", 0));
+        beforeArrange[node->nodeID] = {x, y};
+    }
+
+    // Call autoArrange — this should use captureBeforeState + pushSnapshotFromCapture
+    editor.autoArrange();
+
+    // Capture positions after arrange
+    std::map<juce::AudioProcessorGraph::NodeID, juce::Point<int>> afterArrange;
+    for (auto* node : engine.getGraph().getNodes()) {
+        int x = static_cast<int>(node->properties.getWithDefault("x", 0));
+        int y = static_cast<int>(node->properties.getWithDefault("y", 0));
+        afterArrange[node->nodeID] = {x, y};
+    }
+
+    // At least some module should have moved
+    bool anyMoved = false;
+    for (auto& [id, pos] : afterArrange) {
+        if (beforeArrange.count(id) && beforeArrange[id] != pos) {
+            anyMoved = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(anyMoved) << "autoArrange should have moved at least one module";
+
+    // Undo stack should now have exactly 1 entry
+    EXPECT_TRUE(undoManager.canUndo()) << "Should be able to undo after autoArrange";
+    EXPECT_FALSE(undoManager.canRedo()) << "Should not be able to redo before undoing";
+
+    // ONE undo restores original positions
+    EXPECT_TRUE(undoManager.undo()) << "Undo should succeed";
+
+    // After undo, verify positions match pre-arrange state
+    for (auto* node : engine.getGraph().getNodes()) {
+        if (!beforeArrange.count(node->nodeID))
+            continue;
+        int x = static_cast<int>(node->properties.getWithDefault("x", 0));
+        int y = static_cast<int>(node->properties.getWithDefault("y", 0));
+        EXPECT_EQ(x, beforeArrange[node->nodeID].x)
+            << "After undo, node " << node->nodeID.uid << " x should be restored";
+        EXPECT_EQ(y, beforeArrange[node->nodeID].y)
+            << "After undo, node " << node->nodeID.uid << " y should be restored";
+    }
+
+    // No further undo available (only 1 step was pushed)
+    EXPECT_FALSE(undoManager.canUndo()) << "After undoing the single autoArrange step, stack should be empty";
+
+    // ONE redo reapplies arranged positions
+    EXPECT_TRUE(undoManager.canRedo()) << "Should be able to redo after undoing";
+    EXPECT_TRUE(undoManager.redo()) << "Redo should succeed";
+
+    for (auto* node : engine.getGraph().getNodes()) {
+        if (!afterArrange.count(node->nodeID))
+            continue;
+        int x = static_cast<int>(node->properties.getWithDefault("x", 0));
+        int y = static_cast<int>(node->properties.getWithDefault("y", 0));
+        EXPECT_EQ(x, afterArrange[node->nodeID].x)
+            << "After redo, node " << node->nodeID.uid << " x should match arranged position";
+        EXPECT_EQ(y, afterArrange[node->nodeID].y)
+            << "After redo, node " << node->nodeID.uid << " y should match arranged position";
+    }
 }

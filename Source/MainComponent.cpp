@@ -128,10 +128,9 @@ void MainComponent::initialiseCommon(std::unique_ptr<gsynth::AIProvider> provide
             if (result == 1000) {
                 openPresetFromFile();
             } else if (result > 0) {
-                bool loaded = gsynth::PresetManager::loadPreset(result - 1, audioEngine.getGraph());
-                if (loaded) {
-                    graphEditor.updateComponents();
-                }
+                // loadFactoryPreset detaches existing components (stopping scope timers) before the graph
+                // is cleared — avoids a use-after-free where a ScopeComponent reads a freed VisualBuffer.
+                graphEditor.loadFactoryPreset(result - 1);
             }
         });
     };
@@ -176,6 +175,11 @@ void MainComponent::initialiseCommon(std::unique_ptr<gsynth::AIProvider> provide
         toggleModMatrixButton.setButtonText(graphEditor.isModMatrixVisible() ? "Hide Matrix" : "Show Matrix");
         resized();
     };
+
+    addAndMakeVisible(autoArrangeButton);
+    autoArrangeButton.setButtonText("Auto Arrange");
+    autoArrangeButton.setComponentID("autoArrangeButton");
+    autoArrangeButton.onClick = [this] { graphEditor.autoArrange(); };
 
     addAndMakeVisible(settingsButton);
     settingsButton.setButtonText("Settings");
@@ -233,6 +237,12 @@ void MainComponent::timerCallback() {
     redoButton.setEnabled(undoManager.canRedo());
 }
 
+void MainComponent::aiPatchAboutToApply() {
+    // Runs synchronously before the AI patch clears/rebuilds the graph. Detach module components now so
+    // their ScopeComponent timers stop and no component references a soon-to-be-freed VisualBuffer.
+    graphEditor.detachAllModuleComponents();
+}
+
 void MainComponent::aiPatchApplied() {
     juce::Component::SafePointer<MainComponent> safeThis(this);
     juce::MessageManager::callAsync([safeThis]() {
@@ -263,7 +273,7 @@ void MainComponent::paint(juce::Graphics& g) {
 void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
     commands.addArray({GravisynthCommands::openSettings, GravisynthCommands::savePreset, GravisynthCommands::openPreset,
                        GravisynthCommands::undo, GravisynthCommands::redo, GravisynthCommands::toggleModMatrix,
-                       GravisynthCommands::toggleAiPanel});
+                       GravisynthCommands::toggleAiPanel, GravisynthCommands::autoArrange});
 }
 
 void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationCommandInfo& result) {
@@ -310,6 +320,12 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
+    case GravisynthCommands::autoArrange: {
+        result.setInfo("Auto Arrange", "Auto-arrange modules by signal flow", "View", 0);
+        auto kp = shortcutManager.getBinding("autoArrange");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
     default:
         break;
     }
@@ -342,6 +358,9 @@ bool MainComponent::perform(const InvocationInfo& info) {
     case GravisynthCommands::toggleAiPanel:
         toggleAiPanelButton.triggerClick();
         return true;
+    case GravisynthCommands::autoArrange:
+        graphEditor.autoArrange();
+        return true;
     default:
         return false;
     }
@@ -368,6 +387,7 @@ void MainComponent::resized() {
     settingsButton.setBounds(header.removeFromLeft(100).reduced(2));
     undoButton.setBounds(header.removeFromLeft(80).reduced(2));
     redoButton.setBounds(header.removeFromLeft(80).reduced(2));
+    autoArrangeButton.setBounds(header.removeFromLeft(120).reduced(2));
 
     // Position toggle buttons on the right side of the header
     toggleAiPanelButton.setBounds(header.removeFromRight(100).reduced(2));
