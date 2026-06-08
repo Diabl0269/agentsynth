@@ -634,6 +634,10 @@ TEST_F(UndoRedoTest, AutoArrangeIsSingleUndoStep) {
     ASSERT_TRUE(gsynth::PresetManager::loadPreset(0, engine.getGraph()));
 
     GraphEditor editor(engine, &undoManager);
+    // Wire the editor to the undo manager exactly as MainComponent does. Without this the undo/redo
+    // SnapshotActions cannot detach module components before clearing the graph, so a MidiKeyboardComponent
+    // outlives its module's MidiKeyboardState and removeListener()s on freed memory (heap-use-after-free).
+    undoManager.setGraphEditor(&editor);
     editor.setSize(1200, 800);
     editor.updateComponents();
 
