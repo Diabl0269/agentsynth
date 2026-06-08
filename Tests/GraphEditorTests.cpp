@@ -8,6 +8,7 @@
 #include "../Source/Modules/VCAModule.h"
 #include "../Source/PresetManager.h"
 #include "../Source/UI/GraphEditor.h"
+#include "../Source/UI/LayoutUtil.h"
 #include "../Source/UI/ModuleComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -57,8 +58,11 @@ TEST_F(GraphEditorTest, DropModuleCreatesNode) {
     for (auto* node : engine.getGraph().getNodes()) {
         if (node->getProcessor()->getName() == "Oscillator") {
             foundOsc = true;
-            EXPECT_EQ(static_cast<int>(node->properties.getWithDefault("x", 0)), 100);
-            EXPECT_EQ(static_cast<int>(node->properties.getWithDefault("y", 0)), 100);
+            // Drop position is now snapped to the layout grid (anti-overlap may also offset it).
+            EXPECT_EQ(static_cast<int>(node->properties.getWithDefault("x", -1)) % gsynth::LayoutUtil::kGridSize, 0)
+                << "Dropped module x should snap to grid";
+            EXPECT_EQ(static_cast<int>(node->properties.getWithDefault("y", -1)) % gsynth::LayoutUtil::kGridSize, 0)
+                << "Dropped module y should snap to grid";
             break;
         }
     }
@@ -421,4 +425,201 @@ TEST_F(GraphEditorTest, ReplaceModuleIsUndoable) {
     }
     EXPECT_FALSE(hasFilter);
     EXPECT_TRUE(hasOsc);
+}
+
+// ============================================================================
+// Grid-layout / anti-overlap tests
+// ============================================================================
+
+// DropSnapsPositionToGrid: after itemDropped at a non-grid coordinate, the node's
+// persisted x,y must both be multiples of kGridSize=8.
+TEST_F(GraphEditorTest, DropSnapsPositionToGrid) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    // Non-grid drop point: (103, 97) — neither is a multiple of 8
+    DummyDragSource dummySource;
+    juce::var description("Oscillator");
+    juce::DragAndDropTarget::SourceDetails details(description, &dummySource, juce::Point<int>(103, 97));
+
+    auto nodeBefore = engine.getGraph().getNodes().size();
+    editor.itemDropped(details);
+    ASSERT_EQ(engine.getGraph().getNodes().size(), nodeBefore + 1);
+
+    // Find the newly added oscillator node
+    juce::AudioProcessorGraph::Node* newNode = nullptr;
+    for (auto* node : engine.getGraph().getNodes()) {
+        if (dynamic_cast<OscillatorModule*>(node->getProcessor())) {
+            newNode = node;
+        }
+    }
+    ASSERT_NE(newNode, nullptr) << "Should find the dropped Oscillator node";
+
+    int x = static_cast<int>(newNode->properties.getWithDefault("x", -1));
+    int y = static_cast<int>(newNode->properties.getWithDefault("y", -1));
+
+    EXPECT_GE(x, 0) << "Node x property must be set";
+    EXPECT_GE(y, 0) << "Node y property must be set";
+    EXPECT_EQ(x % gsynth::LayoutUtil::kGridSize, 0)
+        << "Node x=" << x << " must be a multiple of kGridSize=" << gsynth::LayoutUtil::kGridSize;
+    EXPECT_EQ(y % gsynth::LayoutUtil::kGridSize, 0)
+        << "Node y=" << y << " must be a multiple of kGridSize=" << gsynth::LayoutUtil::kGridSize;
+}
+
+// DropOnOccupiedCellOffsetsToClearSlot: dropping two modules at the same position
+// must result in non-overlapping bounding boxes (gap >= kCollisionGap).
+TEST_F(GraphEditorTest, DropOnOccupiedCellOffsetsToClearSlot) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    // Drop first module
+    DummyDragSource dummySource;
+    {
+        juce::var description("Oscillator");
+        juce::DragAndDropTarget::SourceDetails details(description, &dummySource, juce::Point<int>(200, 200));
+        editor.itemDropped(details);
+    }
+
+    // Drop second module at the same position
+    {
+        juce::var description("Filter");
+        juce::DragAndDropTarget::SourceDetails details(description, &dummySource, juce::Point<int>(200, 200));
+        editor.itemDropped(details);
+    }
+
+    // Gather positions and sizes from module components
+    struct ModInfo {
+        juce::Rectangle<int> bounds;
+    };
+    std::vector<ModInfo> mods;
+
+    auto* content = editor.getChildComponent(0);
+    ASSERT_NE(content, nullptr);
+    for (auto* child : content->getChildren()) {
+        if (auto* mc = dynamic_cast<ModuleComponent*>(child)) {
+            mods.push_back({mc->getBoundsInParent()});
+        }
+    }
+
+    ASSERT_GE(static_cast<int>(mods.size()), 2) << "Expected at least 2 module components after two drops";
+
+    // Check every pair: bounding boxes must not intersect when inflated by kCollisionGap/2
+    const int gap = gsynth::LayoutUtil::kCollisionGap;
+    for (size_t i = 0; i < mods.size(); ++i) {
+        for (size_t j = i + 1; j < mods.size(); ++j) {
+            auto ri = mods[i].bounds.expanded(gap / 2);
+            auto rj = mods[j].bounds.expanded(gap / 2);
+            EXPECT_FALSE(ri.intersects(rj))
+                << "Module " << i << " (" << mods[i].bounds.toString() << ") and module " << j << " ("
+                << mods[j].bounds.toString() << ") overlap after anti-overlap resolution";
+        }
+    }
+}
+
+// DragPreviewGhostTracksResolvedPlacement: beginDragPreview / updateDragPreview set a ghost
+// equal to resolvePlacement and the ghost does NOT intersect an existing module.
+// endDragPreview() resets the active flag.
+TEST_F(GraphEditorTest, DragPreviewGhostTracksResolvedPlacement) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    // Place a module at a known canvas position so the ghost has something to avoid.
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    oscNode->properties.set("x", 100);
+    oscNode->properties.set("y", 100);
+    editor.updateComponents();
+
+    // Find and size the module component so its bounds are valid for collision checks.
+    auto* content = editor.getChildComponent(0);
+    ASSERT_NE(content, nullptr);
+    for (auto* child : content->getChildren()) {
+        if (auto* mc = dynamic_cast<ModuleComponent*>(child)) {
+            if (mc->getModule() == oscNode->getProcessor())
+                mc->setSize(280, 300);
+        }
+    }
+
+    // Start a drag preview for a new (library) module: selfId = {} (no existing node)
+    EXPECT_FALSE(editor.isDragPreviewActive());
+    editor.beginDragPreview(280, 300, juce::AudioProcessorGraph::NodeID{});
+    EXPECT_TRUE(editor.isDragPreviewActive());
+
+    // Desired position OVERLAPS the existing oscillator (same coordinates).
+    juce::Point<int> desiredOverlap(100, 100);
+    editor.updateDragPreview(desiredOverlap);
+
+    auto ghost = editor.getDragPreviewGhost();
+    EXPECT_FALSE(ghost.isEmpty()) << "Ghost rect should be non-empty after updateDragPreview";
+
+    // The ghost must equal what resolvePlacement returns for the same inputs.
+    auto expected = editor.resolvePlacement(desiredOverlap, 280, 300, juce::AudioProcessorGraph::NodeID{});
+    EXPECT_EQ(ghost.getTopLeft(), expected) << "Ghost top-left must equal resolvePlacement result; got "
+                                            << ghost.getTopLeft().toString() << " but expected " << expected.toString();
+
+    // The ghost must NOT intersect the existing module's bounds (collision was resolved).
+    juce::Rectangle<int> oscBounds(100, 100, 280, 300);
+    const int gap = gsynth::LayoutUtil::kCollisionGap;
+    EXPECT_FALSE(ghost.expanded(gap / 2).intersects(oscBounds.expanded(gap / 2)))
+        << "Ghost rect (" << ghost.toString() << ") must not overlap existing module (" << oscBounds.toString()
+        << ") after anti-overlap resolution";
+
+    // endDragPreview clears the active flag.
+    editor.endDragPreview();
+    EXPECT_FALSE(editor.isDragPreviewActive());
+    EXPECT_TRUE(editor.getDragPreviewGhost().isEmpty());
+}
+
+// DropUsesRealModuleSizeForAntiOverlap: drop two tall Oscillator modules at the same canvas
+// point. With the old 300px estimate both would land on the same slot because the estimate
+// was too short to detect overlap; with real-size finalize they must not overlap.
+TEST_F(GraphEditorTest, DropUsesRealModuleSizeForAntiOverlap) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 900);
+
+    DummyDragSource dummySource;
+
+    // Drop two Oscillators at the same position. The second must be displaced because the
+    // first occupies that slot (real Oscillator height ~530px far exceeds old 300px estimate).
+    {
+        juce::var description("Oscillator");
+        juce::DragAndDropTarget::SourceDetails details(description, &dummySource, juce::Point<int>(200, 200));
+        editor.itemDropped(details);
+    }
+    {
+        juce::var description("Oscillator");
+        juce::DragAndDropTarget::SourceDetails details(description, &dummySource, juce::Point<int>(200, 200));
+        editor.itemDropped(details);
+    }
+
+    // Collect all ModuleComponent bounds from the content component.
+    auto* content = editor.getChildComponent(0);
+    ASSERT_NE(content, nullptr);
+
+    std::vector<juce::Rectangle<int>> bounds;
+    for (auto* child : content->getChildren()) {
+        if (auto* mc = dynamic_cast<ModuleComponent*>(child)) {
+            auto b = mc->getBoundsInParent();
+            if (b.getWidth() > 0 && b.getHeight() > 0)
+                bounds.push_back(b);
+        }
+    }
+
+    ASSERT_GE(static_cast<int>(bounds.size()), 2) << "Expected at least 2 module components after two drops";
+
+    // All pairs must be non-overlapping (with collision gap).
+    const int gap = gsynth::LayoutUtil::kCollisionGap;
+    for (size_t i = 0; i < bounds.size(); ++i) {
+        for (size_t j = i + 1; j < bounds.size(); ++j) {
+            auto ri = bounds[i].expanded(gap / 2);
+            auto rj = bounds[j].expanded(gap / 2);
+            EXPECT_FALSE(ri.intersects(rj))
+                << "Oscillator " << i << " (" << bounds[i].toString() << ") and Oscillator " << j << " ("
+                << bounds[j].toString() << ") overlap — real-size finalize should have displaced the second";
+        }
+    }
 }

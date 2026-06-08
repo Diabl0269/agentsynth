@@ -58,6 +58,9 @@ void AIIntegrationService::sendMessage(const juce::String& text, AIProvider::Com
 bool AIIntegrationService::applyPatch(const juce::String& jsonString, bool mergeMode) {
     juce::String extractedJson = extractJsonFromResponse(jsonString);
     juce::var json = juce::JSON::parse(extractedJson);
+    // Notify listeners to detach graph-referencing UI BEFORE the graph is rebuilt (avoids a use-after-free
+    // where a ScopeComponent timer reads a freed VisualBuffer once applyJSONToGraph clears old processors).
+    listeners.call([](Listener& l) { l.aiPatchAboutToApply(); });
     if (AIStateMapper::applyJSONToGraph(json, audioGraph, !mergeMode)) {
         listeners.call([](Listener& l) { l.aiPatchApplied(); });
         return true;

@@ -75,6 +75,7 @@ public:
 
 private:
     // AIIntegrationService::Listener
+    void aiPatchAboutToApply() override;
     void aiPatchApplied() override;
 
     // ChangeListener (juce::ChangeListener override) — called when ThemeManager broadcasts.
@@ -107,6 +108,7 @@ private:
     juce::TextButton redoButton;
     juce::TextButton toggleAiPanelButton;
     juce::TextButton toggleModMatrixButton;
+    juce::TextButton autoArrangeButton;
 
     std::unique_ptr<juce::FileChooser> fileChooser;
 

@@ -1,6 +1,6 @@
 # Testing Guide
 
-All tests use GoogleTest and run headless (no audio device, no GUI window). ~371 tests across ~53 suites.
+All tests use GoogleTest and run headless (no audio device, no GUI window). ~400 tests across ~56 suites.
 
 ```bash
 # Run all tests (ENABLE_TESTS defaults OFF — must be passed explicitly)
@@ -54,7 +54,7 @@ Test UI component interactions using in-process construction (no window, no disp
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
 | MainComponentTest | 6 | AI panel visibility toggle, mod matrix toggle, default configuration, command manager registration, redo shortcut |
-| GraphEditorTest | 9 | Module drag-and-drop, port connection via beginConnectionDrag/endConnectionDrag, deletion, mod matrix visibility |
+| GraphEditorTest | 11 | Module drag-and-drop, port connection via beginConnectionDrag/endConnectionDrag, deletion, mod matrix visibility, snap-on-drop (position is grid-multiple of 8), overlap resolution (second drop at same coord produces non-overlapping bounding boxes) |
 | ModuleComponentTest | 3 | Initialization, resizing, parameter attachment to UI sliders |
 | MidiKeyboardModuleTest | 4 | Note on/off, key press handling, velocity |
 | VisualBufferTest | 3 | Scope visualization buffer management, read/write, ringbuffer behavior |
@@ -70,9 +70,18 @@ Test persistence, serialization, and state restoration.
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
-| PresetManagerTest | 9 | Preset listing, load all presets, default preset validation, audio output connectivity |
-| UndoRedoTest | 11 | Add/remove modules, connections, parameter changes, complex sequences, rapid operations |
+| PresetManagerTest | 10 | Preset listing, load all presets, default preset validation, audio output connectivity, all 7 factory presets load with zero pairwise bounding-box overlaps at kCollisionGap=12 |
+| UndoRedoTest | 12 | Add/remove modules, connections, parameter changes, complex sequences, rapid operations, auto-arrange is a single undo step (one Cmd+Z restores all pre-arrange positions) |
 | AIStateMapperTest | 24 | Graph JSON round-trip serialization, parameter validation, modulation serialization, merge mode, schema generation |
+
+### Layout Tests (~5 tests)
+
+Pure/headless tests for the grid-layout and anti-overlap helpers in `Tests/LayoutUtilTests.cpp`.
+No JUCE GUI components required.
+
+| Suite | Tests | What it covers |
+|-------|-------|----------------|
+| LayoutUtilTest | 5 | `snap` round-trips (negative-safe, midpoint), `intersectsAny` gap enforcement + selfId exclusion, `findFreeSlot` returns desired when clear, `findFreeSlot` resolves dense cluster (returned slot overlaps none), `computeAutoArrange` signal-depth layering (x strictly increases per depth, Audio Output in last column, no result-box overlaps) |
 
 ### Theme Tests (~15 tests)
 
@@ -85,7 +94,7 @@ Tests for the theme system — `Tests/ThemeTests.cpp`. All headless.
 | ThemeTest (fixture) | 4 | Persistence + restore via ApplicationProperties, broadcast on change / idempotency, unknown id rejection, user theme replace-by-id |
 | ThemeLookAndFeelTest | 2 | All ColourId mappings from spec section 3, draw-helper smoke tests (fillThemedBackground / drawModulePanel / drawConnectionWire / drawModulationRing / drawRotarySlider into headless image) |
 
-### E2E Workflow Tests (23 tests)
+### E2E Workflow Tests (24 tests)
 
 Full application workflow tests in `Tests/E2EWorkflowTests.cpp`. Each test constructs a complete `MainComponent` with a mock AI provider and exercises real UI interaction code paths.
 
@@ -98,6 +107,7 @@ Full application workflow tests in `Tests/E2EWorkflowTests.cpp`. Each test const
 | Mod Matrix | 4 | Add empty routing, configure source/dest, adjust CV amount, delete routing |
 | Undo/Redo | 4 | Undo add-module, complex sequences, preset-load-then-modify, rapid 5-module sequence |
 | Combined Workflows | 1 | Full preset-modify-connect-undo-redo workflow |
+| Layout / Auto-Arrange | 1 | Load preset, call autoArrange(); all module comps non-overlapping AND connection/node counts unchanged |
 
 #### Key patterns
 

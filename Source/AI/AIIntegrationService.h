@@ -26,6 +26,10 @@ public:
     class Listener {
     public:
         virtual ~Listener() = default;
+        // Called BEFORE the patch is applied to the graph — listeners must tear down any UI that holds
+        // references into the graph's processors (e.g. detach module components so ScopeComponent timers
+        // stop) before the old processors/VisualBuffers are freed. Default no-op for listeners that don't.
+        virtual void aiPatchAboutToApply() {}
         virtual void aiPatchApplied() = 0;
     };
 

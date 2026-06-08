@@ -1,7 +1,13 @@
 #include "../Source/Modules/ADSRModule.h"
 #include "../Source/Modules/AttenuverterModule.h"
+#include "../Source/Modules/FilterModule.h"
+#include "../Source/Modules/LFOModule.h"
+#include "../Source/Modules/MidiKeyboardModule.h"
+#include "../Source/Modules/ModuleBase.h"
 #include "../Source/Modules/OscillatorModule.h"
+#include "../Source/Modules/SequencerModule.h"
 #include "../Source/PresetManager.h"
+#include "../Source/UI/LayoutUtil.h"
 #include <gtest/gtest.h>
 
 TEST(PresetManagerTest, ListPresets) {
@@ -80,6 +86,88 @@ TEST(PresetManagerTest, PresetNamesMatchPresetList) {
     ASSERT_EQ(names.size(), presets.size());
     for (int i = 0; i < names.size(); ++i) {
         EXPECT_EQ(names[i], presets[i].name);
+    }
+}
+
+/**
+ * AllFactoryPresetsLoadWithoutOverlap
+ *
+ * Loads each of the 7 factory presets headlessly, builds bounding boxes from
+ * the node positions using the same estimateModuleSize table that GraphEditor
+ * uses at drop time, and asserts zero pairwise intersections at kCollisionGap=12.
+ *
+ * This test validates the re-baked preset positions from Section 6 of the
+ * grid-layout design (PresetManager.cpp).
+ */
+namespace {
+
+// Mirror the estimateModuleSize table from GraphEditor.cpp (Section 4 of design).
+// Footprints in canvas pixels (w, h).
+juce::Point<int> estimateModuleSize(const juce::String& typeName) {
+    // Match by processor getName() strings
+    if (typeName.containsIgnoreCase("Sequencer") && !typeName.containsIgnoreCase("Poly"))
+        return {510, 380};
+    if (typeName.containsIgnoreCase("MidiKeyboard") || typeName.containsIgnoreCase("Midi Keyboard") ||
+        typeName.containsIgnoreCase("MIDI Keyboard"))
+        return {500, 150};
+    if (typeName.containsIgnoreCase("ADSR") || typeName.containsIgnoreCase("Amp Env") ||
+        typeName.containsIgnoreCase("Filter Env"))
+        return {280, 180};
+    if (typeName.containsIgnoreCase("Attenuverter"))
+        return {280, 120};
+    // Everything else: conservative default
+    return {280, 300};
+}
+
+} // namespace
+
+TEST(PresetManagerTest, AllFactoryPresetsLoadWithoutOverlap) {
+    const int kNumPresets = 7;
+    const int kGap = gsynth::LayoutUtil::kCollisionGap;
+
+    for (int presetIdx = 0; presetIdx < kNumPresets; ++presetIdx) {
+        juce::AudioProcessorGraph graph;
+        ASSERT_TRUE(gsynth::PresetManager::loadPreset(presetIdx, graph)) << "Failed to load preset " << presetIdx;
+
+        // Build bounding boxes for each module node
+        struct Box {
+            juce::AudioProcessorGraph::NodeID id;
+            juce::Rectangle<int> rect;
+            juce::String name;
+        };
+        std::vector<Box> boxes;
+
+        for (auto* node : graph.getNodes()) {
+            auto* proc = node->getProcessor();
+            if (!proc)
+                continue;
+
+            int x = static_cast<int>(node->properties.getWithDefault("x", 0));
+            int y = static_cast<int>(node->properties.getWithDefault("y", 0));
+            auto size = estimateModuleSize(proc->getName());
+            boxes.push_back({node->nodeID, {x, y, size.x, size.y}, proc->getName()});
+        }
+
+        // Check every pair for overlap (using gap-inflated bounding boxes)
+        bool anyOverlap = false;
+        for (size_t i = 0; i < boxes.size(); ++i) {
+            for (size_t j = i + 1; j < boxes.size(); ++j) {
+                // The gap is enforced between outer edges: A.right + gap <= B.left etc.
+                // Use expanded() by kGap/2 on each side — equivalent to checking gap between edges.
+                auto ri = boxes[i].rect.expanded(kGap / 2);
+                auto rj = boxes[j].rect.expanded(kGap / 2);
+                if (ri.intersects(rj)) {
+                    anyOverlap = true;
+                    ADD_FAILURE() << "Preset " << presetIdx << ": modules '" << boxes[i].name << "' at ("
+                                  << boxes[i].rect.getX() << "," << boxes[i].rect.getY() << " "
+                                  << boxes[i].rect.getWidth() << "x" << boxes[i].rect.getHeight() << ") and '"
+                                  << boxes[j].name << "' at (" << boxes[j].rect.getX() << "," << boxes[j].rect.getY()
+                                  << " " << boxes[j].rect.getWidth() << "x" << boxes[j].rect.getHeight()
+                                  << ") overlap (gap=" << kGap << ")";
+                }
+            }
+        }
+        EXPECT_FALSE(anyOverlap) << "Preset " << presetIdx << " has overlapping modules";
     }
 }
 

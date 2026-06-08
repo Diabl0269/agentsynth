@@ -19,10 +19,12 @@
 #include "../Source/Modules/VoiceMixerModule.h"
 #include "../Source/PresetManager.h"
 #include "../Source/UI/GraphEditor.h"
+#include "../Source/UI/LayoutUtil.h"
 #include "../Source/UI/ModuleComponent.h"
 #include "MainComponent.h"
 #include <cmath>
 #include <gtest/gtest.h>
+#include <iostream>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 namespace e2e {
@@ -651,6 +653,63 @@ TEST_F(E2EWorkflowTest, FullWorkflow_PresetModifyUndoRedo) {
 // Section 8: Audio Smoke Validation (1 test)
 // ============================================================================
 
+// ============================================================================
+// Section 8a: Auto-Arrange on Loaded Preset (1 test)
+// ============================================================================
+
+// AutoArrangeOnLoadedPresetClearsOverlapsKeepsGraph:
+// Load a preset, call autoArrange(), then verify:
+//   1. All ModuleComponent bounding boxes are non-overlapping (>= kCollisionGap apart).
+//   2. Node count and connection count are unchanged (autoArrange is position-only).
+TEST_F(E2EWorkflowTest, AutoArrangeOnLoadedPresetClearsOverlapsKeepsGraph) {
+    // Load preset 0 (Default) which has several modules
+    loadPreset(0);
+
+    const int nodesBefore = nodeCount();
+    const int connsBefore = connectionCount();
+    ASSERT_GT(nodesBefore, 0) << "Preset must have nodes";
+
+    // Call autoArrange via the GraphEditor
+    editor().autoArrange();
+    editor().updateComponents(); // ensure ModuleComponents are positioned
+
+    // Verify node and connection counts are unchanged
+    EXPECT_EQ(nodeCount(), nodesBefore) << "autoArrange must not add or remove nodes";
+    EXPECT_EQ(connectionCount(), connsBefore) << "autoArrange must not add or remove connections";
+
+    // Collect ModuleComponent bounding boxes from the content child
+    struct BoundsEntry {
+        juce::Rectangle<int> bounds;
+        juce::String name;
+    };
+    std::vector<BoundsEntry> modBounds;
+
+    auto* content = editor().getChildComponent(0);
+    ASSERT_NE(content, nullptr) << "GraphEditor must have a content child";
+
+    for (auto* child : content->getChildren()) {
+        if (auto* mc = dynamic_cast<ModuleComponent*>(child)) {
+            juce::String name = (mc->getModule() ? mc->getModule()->getName() : juce::String("(unknown)"));
+            modBounds.push_back({mc->getBoundsInParent(), name});
+        }
+    }
+
+    ASSERT_GE(static_cast<int>(modBounds.size()), 2)
+        << "Must have at least 2 ModuleComponents after preset load + updateComponents";
+
+    // Assert no pairwise overlap at kCollisionGap
+    const int gap = gsynth::LayoutUtil::kCollisionGap;
+    for (size_t i = 0; i < modBounds.size(); ++i) {
+        for (size_t j = i + 1; j < modBounds.size(); ++j) {
+            auto ri = modBounds[i].bounds.expanded(gap / 2);
+            auto rj = modBounds[j].bounds.expanded(gap / 2);
+            EXPECT_FALSE(ri.intersects(rj)) << "After autoArrange, module '" << modBounds[i].name << "' ("
+                                            << modBounds[i].bounds.toString() << ") overlaps '" << modBounds[j].name
+                                            << "' (" << modBounds[j].bounds.toString() << ") with gap=" << gap;
+        }
+    }
+}
+
 // "App works fine" guard: every factory preset, when loaded into a fresh graph,
 // prepared for playback, and fed a MIDI note-on, must produce finite audio for
 // ~50 blocks (no NaN/Inf, no crash). This stops a future change from silently
@@ -702,5 +761,40 @@ TEST_F(E2EWorkflowTest, AllPresetsRenderFiniteAudio) {
 
         g.releaseResources();
         EXPECT_TRUE(allFinite) << "Preset " << presetIdx << " produced non-finite (NaN/Inf) audio";
+    }
+}
+
+// As-AUTHORED overlap check using REAL ModuleComponent sizes (not the estimate table).
+// Loads each factory preset, reads getBoundsInParent() of every ModuleComponent, dumps the
+// geometry, and asserts no pairwise overlap at kCollisionGap. This is the true visual check.
+TEST_F(E2EWorkflowTest, AllPresetsLoadWithoutOverlapAsAuthored) {
+    constexpr int kNumPresets = 7;
+    const int gap = gsynth::LayoutUtil::kCollisionGap;
+
+    for (int p = 0; p < kNumPresets; ++p) {
+        loadPreset(p); // already calls updateComponents()
+
+        struct B {
+            juce::Rectangle<int> b;
+            juce::String n;
+        };
+        std::vector<B> v;
+        auto* content = editor().getChildComponent(0);
+        ASSERT_NE(content, nullptr);
+        for (auto* c : content->getChildren())
+            if (auto* mc = dynamic_cast<ModuleComponent*>(c))
+                v.push_back(
+                    {mc->getBoundsInParent(), mc->getModule() ? mc->getModule()->getName() : juce::String("?")});
+
+        for (size_t i = 0; i < v.size(); ++i)
+            for (size_t j = i + 1; j < v.size(); ++j) {
+                auto ri = v[i].b.expanded(gap / 2);
+                auto rj = v[j].b.expanded(gap / 2);
+                if (ri.intersects(rj))
+                    std::cout << "  OVERLAP: " << v[i].n << " " << v[i].b.toString() << "  <>  " << v[j].n << " "
+                              << v[j].b.toString() << "\n";
+                EXPECT_FALSE(ri.intersects(rj)) << "Preset " << p << ": '" << v[i].n << "' " << v[i].b.toString()
+                                                << " overlaps '" << v[j].n << "' " << v[j].b.toString();
+            }
     }
 }

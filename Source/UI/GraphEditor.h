@@ -41,10 +41,30 @@ public:
     // Preset Management
     void savePreset(juce::File file);
     void loadPreset(juce::File file);
+    // Loads a factory preset by index. Detaches existing module components (stopping their scope timers)
+    // BEFORE the graph is cleared, so no ScopeComponent reads a freed VisualBuffer. Returns true if loaded.
+    bool loadFactoryPreset(int index);
+
+    // Layout / anti-overlap
+    juce::Point<int> resolvePlacement(juce::Point<int> desired, int w, int h, juce::AudioProcessorGraph::NodeID selfId);
+    void finalizeModuleDrag(ModuleComponent* module);
+    void autoArrange();
+
+    // Drag-preview (grid + landing ghost shown during a module drag)
+    void beginDragPreview(int w, int h, juce::AudioProcessorGraph::NodeID selfId);
+    void updateDragPreview(juce::Point<int> desiredTopLeftCanvas);
+    void endDragPreview();
+
+    // Test accessors for drag-preview state
+    bool isDragPreviewActive() const { return dragPreviewActive; }
+    juce::Rectangle<int> getDragPreviewGhost() const { return dragPreviewGhost; }
 
     // DragAndDropTarget overrides
     bool isInterestedInDragSource(const SourceDetails& dragSourceDetails) override;
     void itemDropped(const SourceDetails& dragSourceDetails) override;
+    void itemDragEnter(const SourceDetails& dragSourceDetails) override;
+    void itemDragMove(const SourceDetails& dragSourceDetails) override;
+    void itemDragExit(const SourceDetails& dragSourceDetails) override;
 
     // Mouse Overrides
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
@@ -60,6 +80,7 @@ private:
     public:
         GraphContentComponent(GraphEditor& editor);
         void paint(juce::Graphics& g) override;
+        void paintOverChildren(juce::Graphics& g) override;
         void resized() override;
 
         juce::OwnedArray<ModuleComponent>& getModules() { return moduleComponents; }
@@ -88,6 +109,12 @@ private:
     bool dragSourceIsInput = false;
     bool dragSourceIsMidi = false;
     juce::Point<int> dragCurrentPos;
+
+    // Drag-preview state (grid + landing ghost)
+    bool dragPreviewActive = false;
+    int dragPreviewW = 0, dragPreviewH = 0;
+    juce::AudioProcessorGraph::NodeID dragPreviewSelfId{};
+    juce::Rectangle<int> dragPreviewGhost;
 
     juce::AudioProcessorGraph::NodeID draggingAttenuverterNodeId;
     float attenDragStartValue = 0.0f;
