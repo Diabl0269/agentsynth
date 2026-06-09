@@ -33,7 +33,8 @@ public:
         juce::Colour headerColour = juce::Colours::grey;
         juce::Colour itemColour = juce::Colours::white;
 
-        if (auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel())) {
+        auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+        if (lf != nullptr) {
             const auto& c = lf->getTheme().colors;
             bgColour = c.bg0;
             headerColour = c.textMuted;
@@ -43,14 +44,30 @@ public:
         g.fillAll(bgColour);
 
         int y = 10;
+        int headerIconOffset = 0; // index into header sequence for icon lookup
         for (const auto& entry : entries) {
             if (entry.isHeader) {
                 if (y > 10)
                     y += 5; // extra spacing before headers (except first)
                 g.setColour(headerColour);
                 g.setFont(juce::Font(juce::FontOptions(12.0f)));
-                g.drawText(entry.text.toUpperCase(), 10, y, getWidth() - 20, 20, juce::Justification::centredLeft);
+
+                // Draw a 16x16 category icon at x=10 (null-guarded — no-op when LnF absent).
+                gsynth::theme::Icon catIcon = categoryIconForHeader(entry.text);
+                const juce::Drawable* icon = (lf != nullptr) ? lf->peekIcon(catIcon) : nullptr;
+
+                if (icon != nullptr) {
+                    icon->drawWithin(g, juce::Rectangle<float>(10.0f, (float)y + 2.0f, 16.0f, 16.0f),
+                                     juce::RectanglePlacement::centred, 1.0f);
+                    // Icon present: shift header text right to x=30.
+                    g.drawText(entry.text.toUpperCase(), 30, y, getWidth() - 40, 20, juce::Justification::centredLeft);
+                } else {
+                    // No icon (headless or assets absent): text at original x=10.
+                    g.drawText(entry.text.toUpperCase(), 10, y, getWidth() - 20, 20, juce::Justification::centredLeft);
+                }
+
                 y += 25;
+                ++headerIconOffset;
             } else {
                 g.setColour(itemColour);
                 g.setFont(juce::Font(juce::FontOptions(16.0f)));
@@ -75,6 +92,26 @@ public:
     }
 
 private:
+    // Map a category header string to its Icon enum value.
+    static gsynth::theme::Icon categoryIconForHeader(const juce::String& header) {
+        if (header.equalsIgnoreCase("Sources"))
+            return gsynth::theme::Icon::CatSources;
+        if (header.equalsIgnoreCase("Sequencing"))
+            return gsynth::theme::Icon::CatSequencing;
+        if (header.startsWithIgnoreCase("Envelopes"))
+            return gsynth::theme::Icon::CatEnvelopes;
+        if (header.equalsIgnoreCase("Filters"))
+            return gsynth::theme::Icon::CatFilters;
+        if (header.startsWithIgnoreCase("Modulation"))
+            return gsynth::theme::Icon::CatModulationFX;
+        if (header.equalsIgnoreCase("Time FX"))
+            return gsynth::theme::Icon::CatTimeFX;
+        if (header.equalsIgnoreCase("Dynamics"))
+            return gsynth::theme::Icon::CatDynamics;
+        // "Utility" and any unrecognised headers fall back to CatUtility.
+        return gsynth::theme::Icon::CatUtility;
+    }
+
     int getEntryIndexAt(int mouseY) const {
         int y = 10;
         for (int i = 0; i < (int)entries.size(); ++i) {

@@ -81,6 +81,20 @@ All other colour tokens are optional and fall back to the Obsidian defaults list
 | `wireCoreWidth` | `2.5` | Connection wire core stroke width (px) |
 | `wireCasingWidth` | `5.0` | Connection wire dark underlay stroke width (px) |
 
+The following `Metrics` fields are **code-only layout constants** — they control the app's structural chrome dimensions and are **not parsed from user JSON**. A user theme that includes these keys will have them silently ignored. Their values are fixed in the C++ struct defaults.
+
+| Token | Default | Meaning |
+|---|---|---|
+| `toolbarHeight` | `36` | Toolbar strip height (px) — code-only |
+| `statusBarHeight` | `24` | Status bar strip height (px) — code-only |
+| `controlPadding` | `4` | Inset around toolbar buttons (px) — code-only |
+| `minWindowWidth` | `480` | Narrow-mode breakpoint / minimum window width (px) — code-only |
+| `minWindowHeight` | `400` | Minimum window height reference (px) — code-only |
+| `sidebarCollapsedWidth` | `0` | Library panel width when hidden (px) — code-only |
+| `librarySidebarWidth` | `200` | Library panel width when visible (px) — code-only |
+| `aiPanelWidth` | `300` | AI panel width when visible (px) — code-only |
+| `iconSize` | `16` | Icon render size in library / status bar contexts (px) — code-only |
+
 ### Typography (`typography`) — all optional
 
 | Token | Default | Meaning |
@@ -120,7 +134,87 @@ Any other name falls back to the JUCE system sans-serif.
 
 ---
 
-## 3. JSON schema
+## 3. Icon Tinting
+
+Gravisynth uses SVG `Drawable` icons — **not** an icon or glyph font. This avoids the JUCE 8 / CoreText runtime font-family swap corruption described in the typography section above.
+
+### Icon enum
+
+22 icons are defined in `gsynth::theme::Icon` (in `Source/UI/Theme/IconLibrary.h`):
+
+```
+TransportPlay    TransportStop    ActionUndo       ActionRedo
+ActionSave       ActionLoad       ActionSettings   ActionAutoArrange
+ToggleAI         ToggleMatrix     ToggleLibrary
+ModuleBypass     ModuleMute       ModuleDelete
+CatSources       CatSequencing    CatEnvelopes     CatFilters
+CatModulationFX  CatTimeFX        CatDynamics      CatUtility
+```
+
+**`Icon::TransportPlay` is scaffolding** — the SVG asset is present and the enum value exists, but no `DrawableButton` is wired to it in Phase 3. It is tinted to `textMuted` and reserved for a future transport affordance.
+
+**Waveform glyphs (`waveform-sine`, `waveform-saw`, etc.) are deferred to Phase 4.** They are not in the asset set or the `Icon` enum.
+
+### Token → tint map
+
+`GravisynthLookAndFeel::retintIcons()` assigns tint colours from `theme_.colors`:
+
+| Icons | Tint token |
+|---|---|
+| `ModuleBypass` | `textMuted` |
+| `ModuleMute` | `warning` |
+| `ModuleDelete` | `error` |
+| `TransportPlay` | `textMuted` (scaffolding; no consumer this phase) |
+| All toolbar actions + transport stop + toggles | `textPrimary` |
+| Category icons (`CatSources` … `CatUtility`) | `textMuted` |
+
+`retintIcons()` is called from `applyTheme()` — it is part of the single re-skin pass triggered by every theme switch.
+
+### Null-fallback contract
+
+`IconLibrary::getDrawable(id)` returns `nullptr` when the `GRAVISYNTH_HAS_FONT_ASSETS` compile flag is absent (e.g. headless test builds without the asset target). All callers must null-check:
+
+```cpp
+if (auto d = lf->getIcon(Icon::ModuleBypass))
+    bypassButton->setImages(d.get());
+// else: button remains blank — acceptable in headless tests
+```
+
+`GravisynthLookAndFeel::getIcon()` and `peekIcon()` delegate directly to the `IconLibrary` member and also return `nullptr` when the library has no asset for the requested id.
+
+### Parallel-array design
+
+`IconLibrary` keeps two `std::array<std::unique_ptr<juce::Drawable>, kCount>`:
+- `originals_` — loaded once at construction, never mutated (pure-white SVG source)
+- `drawables_` — tinted copies (updated by `setTintColour`)
+
+`setTintColour` always clones from `originals_[]` before tinting, so the 2nd and 3rd theme switch produce the correct colour and do not accumulate tints.
+
+### BinaryData symbol naming
+
+JUCE's binary-data name mangler **strips hyphens** and concatenates the remaining tokens. The mapping for icon filenames is therefore:
+
+| Filename | BinaryData symbol |
+|---|---|
+| `transport-play.svg` | `BinaryData::transportplay_svg` |
+| `action-undo.svg` | `BinaryData::actionundo_svg` |
+| `cat-modulation-fx.svg` | `BinaryData::catmodulationfx_svg` |
+| `action-auto-arrange.svg` | `BinaryData::actionautoarrange_svg` |
+
+Note: the spec text says "a-b.svg → `BinaryData::a_b_svg`" — this is incorrect. Hyphens are stripped, not converted to underscores. The `IconLibrary.cpp` lookup table uses the real symbol names. A CMake guard (`file(GLOB)` + `string(FIND ... "_")`) enforces hyphen-only filenames to prevent accidental underscore collisions.
+
+### How to add a new icon
+
+1. Create `assets/icons/<category>-<name>.svg` — 24×24 viewBox, `fill="#FFFFFF"` or `stroke="#FFFFFF" fill="none"`, no gradients / CSS / `<use>` / `<defs>`.
+2. Add the enum value to `Icon` in `IconLibrary.h` (before `kCount`).
+3. Add the `binaryDataForIcon` entry in `IconLibrary.cpp`'s `kTable` array (same order as enum). Symbol name = strip hyphens + `_svg` suffix.
+4. Add a tint assignment in `GravisynthLookAndFeel::retintIcons()`.
+5. The `static_assert(std::size(kTable) == (size_t)Icon::kCount, ...)` guards the count — it will fail to compile if step 3 is omitted.
+6. Rebuild `GravisynthAssets` to regenerate `BinaryData.h`.
+
+---
+
+## 4. JSON Schema
 
 File extension: `*.gtheme.json`. Encoding: UTF-8.
 
@@ -154,7 +248,7 @@ Lowercase or uppercase hex digits are both accepted.
 
 ---
 
-## 4. Create your own theme
+## 5. Create your own theme
 
 ### Step 1: Find the user themes folder
 
@@ -235,7 +329,7 @@ If the theme does not appear, check the log for a `[Theme] Skipped ...` error. C
 
 ---
 
-## 5. Treatment parameters guide
+## 6. Treatment parameters guide
 
 The `treatment` object controls the surface rendering style of module cards and wires.
 
@@ -276,7 +370,7 @@ how visible the fine vertical hairlines drawn over the card body are. `0` = flat
 
 ---
 
-## 6. Contrast guidance
+## 7. Contrast guidance
 
 For readability, ensure `textPrimary` on `bg0` meets **WCAG 2.x Level AA** (contrast ratio ≥ 4.5).
 The built-in themes all target ≥ 7 (AAA).
@@ -294,7 +388,7 @@ automatically.
 
 ---
 
-## 7. Where files live and how reload works
+## 8. Where files live and how reload works
 
 | Location | Description |
 |---|---|
@@ -322,14 +416,27 @@ and re-rendered once. There is no animation loop or per-tick repaint added.
 
 ---
 
-## 8. Phase 2 (deferred)
+## 9. Status of themed widgets
 
-The following components still use hardcoded colours and are **not yet themed**:
+### Phase 3 completions
 
-- `FrequencyResponseComponent.h` — filter frequency response curve colours
-- `ScopeComponent.h` — oscilloscope scope trace colour
-- `AIChatComponent.cpp` — chat bubble palette + debug console
+The following stock-widget overrides are now fully implemented in `GravisynthLookAndFeel`:
 
-These are self-contained DSP visualisers / chat UI whose colours do not visually clash with the
-global theme re-skin. Migrating them requires adding new tokens to `Colors` and extending the
-above components to read from `lf.getTheme().colors`. This is planned for a follow-up phase.
+- **ComboBox** — `drawComboBox` (pressed/disabled/focused states, drawn chevron arrow), `drawComboBoxTextWhenNothingSelected` (muted placeholder text)
+- **PopupMenu** — `drawPopupMenuItem` (separator hairline, highlight fill, drawn tick checkmark, submenu chevron, disabled dim)
+- **ScrollBar** — `getDefaultScrollbarWidth()` returns 6 px; `drawScrollbar` (slim track + thumb with hover/press states); `drawScrollbarButton` (triangle arrows for Win/Linux parity)
+- **TabbedButtonBar** — `drawTabbedButtonBarBackground` (bg0 fill + hairline at content-facing edge per orientation); `drawTabButton` (active tab: rounded top corners + accent indicator; hover: surface tint; inactive: border hairline)
+- **ListBox** — ColourId mappings (`backgroundColourId`, `textColourId`, `outlineColourId`) added in `applyTheme()`
+- **TabbedButtonBar** — `tabOutlineColourId` added in `applyTheme()`
+
+> **MidiKeyboardComponent limitation:** `juce_audio_utils` is not linked into `GravisynthCore` (it would bloat the headless test binary). As a result, `MidiKeyboardComponent` inherits JUCE default colours and cannot be themed from `GravisynthLookAndFeel`. This is a known and accepted limitation.
+
+### Phase 4 (deferred)
+
+The following items are not yet themed or implemented:
+
+- **Waveform glyphs** (`waveform-sine`, `waveform-saw`, `waveform-square`, `waveform-triangle`) — SVG icon assets and `Icon` enum values are **deferred to Phase 4**. No `drawComboBoxItem` override for the Oscillator waveform combo exists yet.
+- **`Icon::TransportPlay`** — SVG asset and enum value are present (scaffolding), but no `DrawableButton` is wired to it. Reserved for a future transport affordance.
+- **`FrequencyResponseComponent.h`** — filter frequency response curve colours (hardcoded)
+- **`ScopeComponent.h`** — oscilloscope scope trace colour (hardcoded)
+- **`AIChatComponent.cpp`** — chat bubble palette + debug console (hardcoded)

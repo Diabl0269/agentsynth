@@ -43,10 +43,13 @@ static juce::Point<int> estimateModuleSize(const juce::String& typeName) {
         return {280, 200};
     if (typeName == "ADSR" || typeName == "Amp Env" || typeName == "Filter Env")
         return {280, 180};
-    if (typeName == "Sequencer")
-        return {510, 380};
-    if (typeName == "MidiKeyboard")
-        return {500, 150};
+    if (typeName.containsIgnoreCase("Sequencer") && !typeName.containsIgnoreCase("Poly"))
+        return {gsynth::LayoutUtil::kDoubleWidth, 380};
+    if (typeName.containsIgnoreCase("Poly") && typeName.containsIgnoreCase("Sequencer"))
+        return {gsynth::LayoutUtil::kDoubleWidth, 380};
+    if (typeName.containsIgnoreCase("MidiKeyboard") || typeName.containsIgnoreCase("Midi Keyboard") ||
+        typeName.containsIgnoreCase("MIDI Keyboard"))
+        return {gsynth::LayoutUtil::kDoubleWidth, 150};
     if (typeName == "Poly MIDI" || typeName == "PolyMidi")
         return {280, 100};
     if (typeName == "Distortion")
@@ -839,8 +842,15 @@ void GraphEditor::deleteModule(ModuleComponent* module) {
         }
     }
 
+    // Resolve NodeID then delegate to the single removal path.
+    requestDeleteModule(nodeId);
+}
+
+void GraphEditor::requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId) {
     if (nodeId.uid == 0)
         return;
+
+    auto& graph = audioEngine.getGraph();
 
     if (undoManager) {
         undoManager->recordStructuralChange(graph, [this, nodeId, &graph] {
@@ -1263,7 +1273,7 @@ void GraphEditor::autoArrange() {
             if (c != nullptr && c->getNodeId() == id)
                 return {c->getWidth(), c->getHeight()};
         }
-        return {280, 300};
+        return {gsynth::LayoutUtil::kSingleWidth, 300};
     };
 
     std::vector<std::pair<gsynth::LayoutUtil::NodeID, gsynth::LayoutUtil::NodeID>> extra;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ModuleBase.h"
+#include <atomic>
 
 class PolyMidiModule : public ModuleBase {
 public:
@@ -71,18 +72,18 @@ public:
                 vb->pushSample(ch[i] > 20.0f ? ch[i] / 1000.0f : 0.0f); // Scale for viz
             }
         }
-    }
 
-    // API for UI
-    uint8_t getActiveVoiceMask() const {
+        // Update atomic voice mask for lock-free UI reads (§4.3)
         uint8_t mask = 0;
         for (int i = 0; i < MAX_VOICES; ++i) {
-            if (voices[i].active) {
-                mask |= (1 << i);
-            }
+            if (voices[i].active)
+                mask |= static_cast<uint8_t>(1 << i);
         }
-        return mask;
+        voiceMaskAtomic_.store(mask, std::memory_order_relaxed);
     }
+
+    // API for UI — lock-free atomic read
+    uint8_t getActiveVoiceMask() const noexcept { return voiceMaskAtomic_.load(std::memory_order_relaxed); }
     ModuleType getModuleType() const override { return ModuleType::PolyMidi; }
     int getVisibleOutputPortCount() const override { return 1; }
     juce::String getOutputPortLabel(int) const override { return "Poly Out"; }
@@ -111,6 +112,10 @@ public:
 
 private:
     static constexpr int MAX_VOICES = 8;
+
+    // Atomic voice mask written by the audio thread (processBlock), read by UI thread
+    // (getActiveVoiceMask). No lock required — relaxed atomics suffice for a status display.
+    std::atomic<uint8_t> voiceMaskAtomic_{0};
 
     struct Voice {
         int note = -1;

@@ -35,6 +35,9 @@ public:
     void endConnectionDrag(juce::Point<int> screenPos);
     void disconnectPort(ModuleComponent* module, int portIndex, bool isInput, bool isMidi);
     void deleteModule(ModuleComponent* module);
+    // Request deletion by NodeID (called from ModuleComponent's delete button).
+    // Resolves the module component and delegates to the single removal path.
+    void requestDeleteModule(juce::AudioProcessorGraph::NodeID nodeId);
     void replaceModule(ModuleComponent* module, const juce::String& newModuleType);
     void updateModulePosition(ModuleComponent* module);
 

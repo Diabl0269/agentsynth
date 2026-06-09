@@ -1,4 +1,5 @@
 #pragma once
+#include "../Modules/ModuleBase.h"
 #include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <vector>
@@ -16,6 +17,20 @@ inline constexpr int kLayerGapX = 80;      // horizontal gap between adjacent la
 inline constexpr int kIntraLayerGapY = 40; // vertical gap between stacked modules in the same layer
 inline constexpr int kArrangeOriginX = 40; // left margin where layer 0 starts
 inline constexpr int kArrangeOriginY = 40; // top margin where each layer column starts
+// ---- Module width buckets ----
+inline constexpr int kNarrowWidth = 40;  // Attenuverter
+inline constexpr int kSingleWidth = 280; // standard module
+inline constexpr int kDoubleWidth = 560; // Sequencer / PolySequencer / MidiKeyboard (= 2 × kSingleWidth)
+// Note: kColumnStride = kSingleWidth + kLayerGapX = 280 + 80 = 360 (no duplicate constant needed)
+
+enum class ModuleWidthBucket { Narrow, Single, Double };
+
+// Maps a ModuleType to its width bucket.
+ModuleWidthBucket getModuleWidthBucket(ModuleType t);
+
+// Returns the pixel width for a given bucket or module type.
+int moduleWidth(ModuleWidthBucket b);
+int moduleWidth(ModuleType t);
 
 using NodeID = juce::AudioProcessorGraph::NodeID;
 

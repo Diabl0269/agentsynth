@@ -8,6 +8,7 @@
 #include "../Source/UI/Theme/Theme.h"
 #include "../Source/UI/Theme/ThemeLoader.h"
 #include "../Source/UI/Theme/ThemeManager.h"
+#include <array>
 #include <gtest/gtest.h>
 #include <juce_core/juce_core.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -140,9 +141,14 @@ TEST(ThemeLookAndFeelTest, ApplyThemeSetsEveryColourId) {
     EXPECT_EQ(lf.findColour(juce::TooltipWindow::backgroundColourId), c.surfaceHi);
     EXPECT_EQ(lf.findColour(juce::TooltipWindow::textColourId), c.textPrimary);
 
+    EXPECT_EQ(lf.findColour(juce::ListBox::backgroundColourId), c.bg0);
+    EXPECT_EQ(lf.findColour(juce::ListBox::textColourId), c.textPrimary);
+    EXPECT_EQ(lf.findColour(juce::ListBox::outlineColourId), c.border);
+
     EXPECT_EQ(lf.findColour(juce::TabbedComponent::backgroundColourId), c.bg0);
     EXPECT_EQ(lf.findColour(juce::TabbedButtonBar::tabTextColourId), c.textMuted);
     EXPECT_EQ(lf.findColour(juce::TabbedButtonBar::frontTextColourId), c.textPrimary);
+    EXPECT_EQ(lf.findColour(juce::TabbedButtonBar::tabOutlineColourId), c.border);
     // MidiKeyboardComponent ColourIds (juce_audio_utils) are not linked into GravisynthCore;
     // the on-screen keyboard keeps JUCE defaults for now (see GravisynthLookAndFeel::applyTheme).
 }
@@ -560,4 +566,194 @@ TEST(ThemeLookAndFeelTest, DrawHelpersSmoke) {
     slider.setValue(0.5);
     EXPECT_NO_THROW(lf.drawRotarySlider(g, 0, 0, 100, 100, 0.5f, gsynth::theme::GravisynthLookAndFeel::kRotaryStart,
                                         gsynth::theme::GravisynthLookAndFeel::kRotaryEnd, slider));
+}
+
+// ---------------------------------------------------------------------------
+// 16. MetricsCodeOnlyFieldsHaveExpectedDefaults
+// ---------------------------------------------------------------------------
+TEST(ThemeMetricsTest, MetricsCodeOnlyFieldsHaveExpectedDefaults) {
+    gsynth::theme::Theme theme;
+    const auto& m = theme.metrics;
+
+    EXPECT_EQ(m.toolbarHeight, 36);
+    EXPECT_EQ(m.statusBarHeight, 24);
+    EXPECT_EQ(m.controlPadding, 4);
+    EXPECT_EQ(m.minWindowWidth, 480);
+    EXPECT_EQ(m.minWindowHeight, 400);
+    EXPECT_EQ(m.sidebarCollapsedWidth, 0);
+    EXPECT_EQ(m.librarySidebarWidth, 200);
+    EXPECT_EQ(m.aiPanelWidth, 300);
+    EXPECT_EQ(m.iconSize, 16);
+}
+
+// ---------------------------------------------------------------------------
+// 17. MetricsCodeOnlyFieldsNotInJSON
+// ---------------------------------------------------------------------------
+TEST(ThemeLoaderTest, MetricsCodeOnlyFieldsNotInJSON) {
+    auto theme = gsynth::theme::makeObsidian();
+    auto json = gsynth::theme::ThemeLoader::themeToJson(theme);
+    juce::String jsonStr = juce::JSON::toString(json, true);
+
+    // Verify that code-only metrics fields are NOT present in the serialized JSON
+    EXPECT_FALSE(jsonStr.contains("toolbarHeight"));
+    EXPECT_FALSE(jsonStr.contains("statusBarHeight"));
+    EXPECT_FALSE(jsonStr.contains("controlPadding"));
+    EXPECT_FALSE(jsonStr.contains("minWindowWidth"));
+    EXPECT_FALSE(jsonStr.contains("minWindowHeight"));
+    EXPECT_FALSE(jsonStr.contains("sidebarCollapsedWidth"));
+    EXPECT_FALSE(jsonStr.contains("librarySidebarWidth"));
+    EXPECT_FALSE(jsonStr.contains("aiPanelWidth"));
+    EXPECT_FALSE(jsonStr.contains("iconSize"));
+}
+
+// ---------------------------------------------------------------------------
+// 18. RetintIconsCalledByApplyTheme
+// ---------------------------------------------------------------------------
+// applyTheme() must re-tint the icon set as part of its single re-skin pass: after applying
+// each built-in theme, getIcon() returns a usable (non-null when assets present) drawable and
+// nothing throws across repeated switches.
+TEST(ThemeLookAndFeelTest, RetintIconsCalledByApplyTheme) {
+    gsynth::theme::GravisynthLookAndFeel lf;
+
+    const std::array<gsynth::theme::Theme, 3> themes = {gsynth::theme::makeObsidian(), gsynth::theme::makeNeon(),
+                                                        gsynth::theme::makeWarm()};
+    for (const auto& t : themes) {
+        EXPECT_NO_THROW(lf.applyTheme(t));
+#ifdef GRAVISYNTH_HAS_FONT_ASSETS
+        EXPECT_NE(lf.getIcon(gsynth::theme::Icon::ActionUndo), nullptr);
+        EXPECT_NE(lf.peekIcon(gsynth::theme::Icon::ModuleDelete), nullptr);
+        EXPECT_NE(lf.getIcon(gsynth::theme::Icon::CatSources), nullptr);
+#endif
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 19. StyledWidgetSmokeTest — combo / popup / scrollbar / tab draw paths must not throw
+// (Exercises the section-5 themed-widget painters in headless mode across all three themes.)
+// ---------------------------------------------------------------------------
+TEST(StyledWidgetSmokeTest, ComboBoxDrawNoThrow) {
+    const std::array<gsynth::theme::Theme, 3> themes = {gsynth::theme::makeObsidian(), gsynth::theme::makeNeon(),
+                                                        gsynth::theme::makeWarm()};
+    for (const auto& t : themes) {
+        gsynth::theme::GravisynthLookAndFeel lf;
+        lf.applyTheme(t);
+
+        juce::Image img(juce::Image::ARGB, 120, 28, true);
+        juce::Graphics g(img);
+
+        juce::ComboBox box;
+        box.setLookAndFeel(&lf);
+        box.setSize(120, 28);
+
+        // normal
+        EXPECT_NO_THROW(lf.drawComboBox(g, 120, 28, false, 96, 0, 24, 28, box));
+        // pressed
+        EXPECT_NO_THROW(lf.drawComboBox(g, 120, 28, true, 96, 0, 24, 28, box));
+        // disabled
+        box.setEnabled(false);
+        EXPECT_NO_THROW(lf.drawComboBox(g, 120, 28, false, 96, 0, 24, 28, box));
+
+        box.setLookAndFeel(nullptr);
+    }
+}
+
+TEST(StyledWidgetSmokeTest, ComboBoxTextWhenNothingSelected) {
+    gsynth::theme::GravisynthLookAndFeel lf;
+    lf.applyTheme(gsynth::theme::makeObsidian());
+
+    juce::Image img(juce::Image::ARGB, 120, 28, true);
+    juce::Graphics g(img);
+
+    juce::ComboBox box;
+    box.setLookAndFeel(&lf);
+    box.setSize(120, 28);
+    box.setTextWhenNothingSelected("Pick one");
+
+    juce::Label label;
+    label.setBounds(8, 1, 90, 26);
+
+    EXPECT_NO_THROW(lf.drawComboBoxTextWhenNothingSelected(g, box, label));
+    box.setLookAndFeel(nullptr);
+}
+
+TEST(StyledWidgetSmokeTest, PopupMenuDrawNoThrow) {
+    const std::array<gsynth::theme::Theme, 3> themes = {gsynth::theme::makeObsidian(), gsynth::theme::makeNeon(),
+                                                        gsynth::theme::makeWarm()};
+    for (const auto& t : themes) {
+        gsynth::theme::GravisynthLookAndFeel lf;
+        lf.applyTheme(t);
+
+        juce::Image img(juce::Image::ARGB, 200, 30, true);
+        juce::Graphics g(img);
+        const juce::Rectangle<int> area(0, 0, 200, 28);
+
+        // separator
+        EXPECT_NO_THROW(lf.drawPopupMenuItem(g, area, true, false, false, false, false, {}, {}, nullptr, nullptr));
+        // highlighted + active
+        EXPECT_NO_THROW(
+            lf.drawPopupMenuItem(g, area, false, true, true, false, false, "Item", "Cmd+S", nullptr, nullptr));
+        // ticked
+        EXPECT_NO_THROW(lf.drawPopupMenuItem(g, area, false, true, false, true, false, "Ticked", {}, nullptr, nullptr));
+        // disabled (inactive)
+        EXPECT_NO_THROW(
+            lf.drawPopupMenuItem(g, area, false, false, false, false, false, "Disabled", {}, nullptr, nullptr));
+        // has submenu
+        EXPECT_NO_THROW(lf.drawPopupMenuItem(g, area, false, true, false, false, true, "More", {}, nullptr, nullptr));
+    }
+}
+
+TEST(StyledWidgetSmokeTest, ScrollbarWidthAndDrawNoThrow) {
+    gsynth::theme::GravisynthLookAndFeel lf;
+    lf.applyTheme(gsynth::theme::makeObsidian());
+
+    EXPECT_EQ(lf.getDefaultScrollbarWidth(), 6);
+
+    juce::Image img(juce::Image::ARGB, 60, 200, true);
+    juce::Graphics g(img);
+    juce::ScrollBar vbar(true);
+    juce::ScrollBar hbar(false);
+
+    // vertical: over + down
+    EXPECT_NO_THROW(lf.drawScrollbar(g, vbar, 0, 0, 6, 200, true, 20, 40, true, false));
+    EXPECT_NO_THROW(lf.drawScrollbar(g, vbar, 0, 0, 6, 200, true, 20, 40, false, true));
+    // horizontal: over + down
+    EXPECT_NO_THROW(lf.drawScrollbar(g, hbar, 0, 0, 200, 6, false, 20, 40, true, false));
+    EXPECT_NO_THROW(lf.drawScrollbar(g, hbar, 0, 0, 200, 6, false, 20, 40, false, true));
+
+    // scrollbar buttons — both directions
+    EXPECT_NO_THROW(lf.drawScrollbarButton(g, vbar, 12, 12, 0, true, false, false));  // up
+    EXPECT_NO_THROW(lf.drawScrollbarButton(g, vbar, 12, 12, 2, true, true, true));    // down (over+down)
+    EXPECT_NO_THROW(lf.drawScrollbarButton(g, hbar, 12, 12, 1, false, false, false)); // right
+    EXPECT_NO_THROW(lf.drawScrollbarButton(g, hbar, 12, 12, 3, false, false, false)); // left
+}
+
+TEST(StyledWidgetSmokeTest, TabBarDrawNoThrow) {
+    gsynth::theme::GravisynthLookAndFeel lf;
+    lf.applyTheme(gsynth::theme::makeObsidian());
+
+    juce::TabbedButtonBar bar(juce::TabbedButtonBar::TabsAtTop);
+    bar.setLookAndFeel(&lf);
+    bar.addTab("One", lf.getTheme().colors.surface, 0);
+    bar.addTab("Two", lf.getTheme().colors.surface, 1);
+    bar.setSize(300, 30);
+
+    // Background painter across orientations (rebuild the bar per orientation to keep it valid).
+    {
+        juce::Image bg(juce::Image::ARGB, 300, 30, true);
+        juce::Graphics g(bg);
+        EXPECT_NO_THROW(lf.drawTabbedButtonBarBackground(bar, g));
+    }
+
+    // Active (front) tab snapshot must contain non-transparent pixels.
+    bar.setCurrentTabIndex(0);
+    auto snap = bar.createComponentSnapshot(bar.getLocalBounds());
+    ASSERT_TRUE(snap.isValid());
+    bool anyOpaque = false;
+    for (int y = 0; y < snap.getHeight() && !anyOpaque; ++y)
+        for (int x = 0; x < snap.getWidth() && !anyOpaque; ++x)
+            if (snap.getPixelAt(x, y).getAlpha() > 0)
+                anyOpaque = true;
+    EXPECT_TRUE(anyOpaque) << "Active tab snapshot was fully transparent";
+
+    bar.setLookAndFeel(nullptr);
 }

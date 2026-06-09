@@ -9,6 +9,36 @@
 namespace gsynth::LayoutUtil {
 
 //==============================================================================
+// Module width buckets
+//==============================================================================
+
+ModuleWidthBucket getModuleWidthBucket(ModuleType t) {
+    switch (t) {
+    case ModuleType::Sequencer:
+    case ModuleType::PolySequencer:
+    case ModuleType::MidiKeyboard:
+        return ModuleWidthBucket::Double;
+    case ModuleType::Attenuverter:
+        return ModuleWidthBucket::Narrow;
+    default:
+        return ModuleWidthBucket::Single;
+    }
+}
+
+int moduleWidth(ModuleWidthBucket b) {
+    switch (b) {
+    case ModuleWidthBucket::Narrow:
+        return kNarrowWidth;
+    case ModuleWidthBucket::Double:
+        return kDoubleWidth;
+    default:
+        return kSingleWidth;
+    }
+}
+
+int moduleWidth(ModuleType t) { return moduleWidth(getModuleWidthBucket(t)); }
+
+//==============================================================================
 // snap
 //==============================================================================
 int snap(int v) { return (int)(std::lround(v / (double)kGridSize) * kGridSize); }

@@ -1,5 +1,6 @@
 #include "../Source/AI/AIProvider.h"
 #include "MainComponent.h"
+#include "UI/ToolbarComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -19,7 +20,32 @@ private:
     juce::String model = "MockModel";
 };
 
-class MainComponentTest : public ::testing::Test {};
+class MainComponentTest : public ::testing::Test {
+protected:
+    // MainComponent reads/writes the panel-visibility flags from the shared "Gravisynth"
+    // ApplicationProperties (same on-disk file the app uses). To keep persistence tests
+    // hermetic regardless of execution order, reset those keys to their documented defaults
+    // before AND after every test. We open the same PropertiesFile location MainComponent uses.
+    void resetPanelKeys() {
+        juce::PropertiesFile::Options opts;
+        opts.applicationName = "Gravisynth";
+        opts.folderName = "Gravisynth";
+        opts.filenameSuffix = "settings";
+        opts.osxLibrarySubFolder = "Application Support";
+        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+
+        juce::ApplicationProperties props;
+        props.setStorageParameters(opts);
+        if (auto* s = props.getUserSettings()) {
+            s->setValue("librarySidebarVisible", "1"); // default: visible
+            s->setValue("aiPanelVisible", "0");        // default: hidden
+            s->saveIfNeeded();
+        }
+    }
+
+    void SetUp() override { resetPanelKeys(); }
+    void TearDown() override { resetPanelKeys(); }
+};
 
 TEST_F(MainComponentTest, AIPanelIsHiddenByDefault) {
     MainComponent mainComp(std::make_unique<MockProvider>());
@@ -28,11 +54,14 @@ TEST_F(MainComponentTest, AIPanelIsHiddenByDefault) {
 
 TEST_F(MainComponentTest, ToggleAIPanelButtonTextMatchesVisibility) {
     MainComponent mainComp(std::make_unique<MockProvider>());
+    // The button must lay out in wide mode for its stateful text to be present.
+    mainComp.setSize(1600, 900);
 
-    // Find the toggle button
-    juce::TextButton* toggleBtn = nullptr;
+    // Find the toggle button. DrawableButton derives from juce::Button (NOT TextButton), so
+    // the cast must be to the common base class after the Phase-3 migration.
+    juce::Button* toggleBtn = nullptr;
     for (auto* child : mainComp.getChildren()) {
-        if (auto* btn = dynamic_cast<juce::TextButton*>(child)) {
+        if (auto* btn = dynamic_cast<juce::Button*>(child)) {
             if (btn->getComponentID() == "toggleAiPanel")
                 toggleBtn = btn;
         }
@@ -74,10 +103,11 @@ TEST_F(MainComponentTest, ToggleModMatrixHidesAndShows) {
 TEST_F(MainComponentTest, CommandManagerHasCommands) {
     MainComponent mainComp(std::make_unique<MockProvider>());
     auto& cm = mainComp.getCommandManager();
-    // Verify all 8 commands are registered (5 original + 2 toggles + Auto Arrange)
+    juce::ignoreUnused(cm);
+    // Verify all 9 commands are registered (5 original + 2 toggles + Auto Arrange + Toggle Library)
     juce::Array<juce::CommandID> commands;
     mainComp.getAllCommands(commands);
-    EXPECT_EQ(commands.size(), 8);
+    EXPECT_EQ(commands.size(), 9);
 }
 
 TEST_F(MainComponentTest, RedoShortcutViaKeyPressed) {
@@ -110,4 +140,150 @@ TEST_F(MainComponentTest, RedoShortcutViaKeyPressed) {
 
     // At minimum, verify keyPressed doesn't crash
     SUCCEED();
+}
+
+// ===========================================================================
+// Phase-3 chrome: toolbar layout, min window size, collapsible panels, status bar
+// ===========================================================================
+
+// Collect the 9 toolbar DrawableButtons (direct children of MainComponent).
+static std::vector<juce::Button*> collectToolbarButtons(MainComponent& mc) {
+    static const char* ids[] = {"toggleLibrary", "saveButton",        "loadButton",      "settingsButton", "undoButton",
+                                "redoButton",    "autoArrangeButton", "toggleModMatrix", "toggleAiPanel"};
+    std::vector<juce::Button*> out;
+    for (auto* child : mc.getChildren())
+        if (auto* btn = dynamic_cast<juce::Button*>(child))
+            for (const char* id : ids)
+                if (btn->getComponentID() == id)
+                    out.push_back(btn);
+    return out;
+}
+
+TEST_F(MainComponentTest, ToolbarFitsInsideMinimumWindowWidth) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(480, 400);
+
+    auto buttons = collectToolbarButtons(mc);
+    ASSERT_EQ((int)buttons.size(), 9);
+    for (auto* b : buttons) {
+        EXPECT_GT(b->getWidth(), 0);
+        EXPECT_GE(b->getX(), 0);
+        EXPECT_LE(b->getRight(), 480);
+    }
+}
+
+TEST_F(MainComponentTest, ToolbarFitsAtHalfMinimumWidth) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(640, 480);
+    auto buttons = collectToolbarButtons(mc);
+    ASSERT_EQ((int)buttons.size(), 9);
+    for (auto* b : buttons) {
+        EXPECT_GE(b->getX(), 0);
+        EXPECT_LE(b->getRight(), 640);
+    }
+}
+
+TEST_F(MainComponentTest, ToolbarNarrowModeAt480) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(480, 400);
+    EXPECT_TRUE(mc.getToolbar().isNarrowMode());
+}
+
+TEST_F(MainComponentTest, ToolbarWideModeAt1600) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    EXPECT_FALSE(mc.getToolbar().isNarrowMode());
+}
+
+TEST_F(MainComponentTest, StatusBarOccupiesCorrectBounds) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+    auto& sb = mc.getStatusBar();
+    // Status bar height token = 24; sits flush at the bottom.
+    EXPECT_EQ(sb.getHeight(), 24);
+    EXPECT_EQ(sb.getY(), mc.getHeight() - 24);
+}
+
+TEST_F(MainComponentTest, CanvasRemainsNonZeroAtMinimumSize) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(480, 400);
+    auto bounds = mc.getGraphEditor().getBounds();
+    EXPECT_GT(bounds.getWidth(), 0);
+    EXPECT_GT(bounds.getHeight(), 0);
+}
+
+TEST_F(MainComponentTest, LibrarySidebarDefaultVisible) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    EXPECT_TRUE(mc.isLibraryConfiguredVisible());
+}
+
+TEST_F(MainComponentTest, LibrarySidebarTogglePersists) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    EXPECT_TRUE(mc.isLibraryConfiguredVisible());
+
+    mc.simulateToggleLibraryClick();
+    EXPECT_FALSE(mc.isLibraryConfiguredVisible());
+    // Persistence is written + read back within the same session.
+    EXPECT_FALSE(mc.getAppPropertiesForTest().getUserSettings()->getBoolValue("librarySidebarVisible", true));
+
+    mc.simulateToggleLibraryClick();
+    EXPECT_TRUE(mc.isLibraryConfiguredVisible());
+    EXPECT_TRUE(mc.getAppPropertiesForTest().getUserSettings()->getBoolValue("librarySidebarVisible", false));
+}
+
+TEST_F(MainComponentTest, LibrarySidebarCollapsedNarrowsGraphEditor) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    mc.setSize(1600, 900);
+
+    // Shown by default: library occupies the left 200 px, so the graph editor starts at x=200.
+    ASSERT_TRUE(mc.isLibraryConfiguredVisible());
+    EXPECT_EQ(mc.getGraphEditor().getBounds().getX(), 200);
+
+    // Hidden: graph editor reclaims the full left edge (x=0).
+    mc.simulateToggleLibraryClick();
+    ASSERT_FALSE(mc.isLibraryConfiguredVisible());
+    EXPECT_EQ(mc.getGraphEditor().getBounds().getX(), 0);
+}
+
+TEST_F(MainComponentTest, AiPanelTogglePersists) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    EXPECT_FALSE(mc.isAiPanelConfiguredVisible());
+
+    mc.simulateToggleAiPanelClick();
+    EXPECT_TRUE(mc.isAiPanelConfiguredVisible());
+    EXPECT_TRUE(mc.getAppPropertiesForTest().getUserSettings()->getBoolValue("aiPanelVisible", false));
+
+    mc.simulateToggleAiPanelClick();
+    EXPECT_FALSE(mc.isAiPanelConfiguredVisible());
+    EXPECT_FALSE(mc.getAppPropertiesForTest().getUserSettings()->getBoolValue("aiPanelVisible", true));
+}
+
+TEST_F(MainComponentTest, StatusBarTimerGating) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    // Startup runs the timer setup; the tick counter starts at 0.
+    EXPECT_EQ(mc.getStatusBarTickCountForTest(), 0);
+
+    // 1st tick: counter increments to 1, no status-bar update yet.
+    mc.timerCallback();
+    EXPECT_EQ(mc.getStatusBarTickCountForTest(), 1);
+
+    // 2nd tick: counter hits 2 -> status bar updates -> resets to 0.
+    mc.timerCallback();
+    EXPECT_EQ(mc.getStatusBarTickCountForTest(), 0);
+}
+
+TEST_F(MainComponentTest, PatchNameIsDefaultOnStartup) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    EXPECT_EQ(mc.getCurrentPatchName(), "Default");
+}
+
+TEST_F(MainComponentTest, PatchNameUpdatesOnFactoryPresetLoad) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    auto presets = gsynth::PresetManager::getPresetList();
+    ASSERT_GE(presets.size(), 2);
+
+    // simulateLoadFactoryPresetForTest mirrors the loadButton popup call site exactly:
+    // loadFactoryPreset(index) + setCurrentPatchName(presets[index].name).
+    mc.simulateLoadFactoryPresetForTest(1);
+    EXPECT_EQ(mc.getCurrentPatchName(), presets[1].name);
 }

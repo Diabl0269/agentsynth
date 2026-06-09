@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Modules/ModuleBase.h"
+#include <atomic>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -16,6 +17,17 @@ public:
 
     void initialise();
     void shutdown();
+
+    // Voice count / mute API (§4.2)
+    struct VoiceInfo {
+        int activeVoices = 0;
+        int maxVoices = 0;
+    };
+    VoiceInfo getActiveVoiceInfo() const;
+    int getDisplayVoiceCount() const;
+
+    void setMasterMute(bool muted) noexcept;
+    bool isMasterMuted() const noexcept;
 
     void audioDeviceIOCallbackWithContext(const float* const* inputChannelData, int numInputChannels,
                                           float* const* outputChannelData, int numOutputChannels, int numSamples,
@@ -85,6 +97,8 @@ private:
     juce::AudioDeviceManager deviceManager;
     juce::AudioProcessorGraph mainProcessorGraph;
     juce::AudioProcessorPlayer processorPlayer;
+
+    std::atomic<bool> masterMuted_{false};
 
     void createDefaultPatch();
 

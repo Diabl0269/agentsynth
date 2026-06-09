@@ -1,6 +1,6 @@
 # Testing Guide
 
-All tests use GoogleTest and run headless (no audio device, no GUI window). ~400 tests across ~56 suites.
+All tests use GoogleTest and run headless (no audio device, no GUI window). ~460 tests across ~64 suites.
 
 ```bash
 # Run all tests (ENABLE_TESTS defaults OFF — must be passed explicitly)
@@ -47,15 +47,15 @@ Test module interactions within the audio graph and cross-system integrations.
 | OllamaProviderTest | 5 | AI LLM HTTP requests, streaming responses, model management |
 | AIIntegrationServiceTest | 9 | Module suggestions, parameter recommendations, graph state mapping |
 
-### Component Workflow Tests (~32 tests)
+### Component Workflow Tests (~50 tests)
 
 Test UI component interactions using in-process construction (no window, no display).
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
-| MainComponentTest | 6 | AI panel visibility toggle, mod matrix toggle, default configuration, command manager registration, redo shortcut |
+| MainComponentTest | 20 | AI panel visibility toggle, mod matrix toggle, default configuration, command manager registration, redo shortcut; toolbar narrow/wide mode at 480/1600 px, library sidebar toggle + persistence, AI panel persistence, status bar bounds, canvas non-zero at minimum size, timer gating (5 Hz), patch name default + update on preset load, DrawableButton header buttons |
 | GraphEditorTest | 11 | Module drag-and-drop, port connection via beginConnectionDrag/endConnectionDrag, deletion, mod matrix visibility, snap-on-drop (position is grid-multiple of 8), overlap resolution (second drop at same coord produces non-overlapping bounding boxes) |
-| ModuleComponentTest | 3 | Initialization, resizing, parameter attachment to UI sliders |
+| ModuleComponentTest | 5 | Initialization, resizing, parameter attachment to UI sliders; bypass/mute/delete are DrawableButtons with correct header bounds; delete button triggers requestDeleteModule |
 | MidiKeyboardModuleTest | 4 | Note on/off, key press handling, velocity |
 | VisualBufferTest | 3 | Scope visualization buffer management, read/write, ringbuffer behavior |
 | ModuleBaseTest | 4 | Parameter getters, port labels, bypass functionality |
@@ -64,26 +64,50 @@ Test UI component interactions using in-process construction (no window, no disp
 | SettingsWindowTest | 8 | Tab structure, tab persistence, audio device selector, AI settings persistence, resize safety, shortcuts reference |
 | ShortcutManagerTest | 8 | Default bindings, reverse lookup, conflict detection, persistence round-trip, reset to defaults, display strings |
 
-### State Management Tests (~44 tests)
+#### `createComponentSnapshot` smoke-test pattern
+
+Several new tests use `Component::createComponentSnapshot(bounds)` to verify that a component renders without crashing and produces non-empty pixels, without requiring a real display or window. Example: `StatusBarTests::RendersNonEmptyImage` and `ThemeTests::StyledWidgetSmokeTest.*`. The pattern is:
+
+```cpp
+comp.setSize(width, height);
+auto img = comp.createComponentSnapshot({0, 0, width, height});
+EXPECT_GT(img.getWidth(), 0);
+```
+
+#### AppProperties isolation pattern for persistence tests
+
+Tests that read/write `ApplicationProperties` use an isolated temporary directory to avoid contaminating the shared settings file across test runs. The `MainComponent` exposes `getAppPropertiesForTest()` so the test fixture can target a temp dir:
+
+```cpp
+// In test SetUp():
+auto tmpDir = juce::File::createTempFile("").getParentDirectory()
+                  .getChildFile(juce::Uuid().toDashedString());
+tmpDir.createDirectory();
+// Write a value then verify MainComponent reads it back:
+comp.getAppPropertiesForTest().getUserSettings()->setValue("librarySidebarVisible", "0");
+// TearDown(): reset to defaults, then tmpDir.deleteRecursively()
+```
+
+### State Management Tests (~46 tests)
 
 Test persistence, serialization, and state restoration.
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
-| PresetManagerTest | 10 | Preset listing, load all presets, default preset validation, audio output connectivity, all 7 factory presets load with zero pairwise bounding-box overlaps at kCollisionGap=12 |
+| PresetManagerTest | 12 | Preset listing, load all presets, default preset validation, audio output connectivity, all 7 factory presets load with zero pairwise bounding-box overlaps at kCollisionGap=12; `AllPresetsPositionsOnGrid` (every baked x,y %8==0); estimateModuleSize mirror updated: Sequencer/PolySequencer/MidiKeyboard→560 (kDoubleWidth), Attenuverter excluded via `continue` |
 | UndoRedoTest | 12 | Add/remove modules, connections, parameter changes, complex sequences, rapid operations, auto-arrange is a single undo step (one Cmd+Z restores all pre-arrange positions) |
 | AIStateMapperTest | 24 | Graph JSON round-trip serialization, parameter validation, modulation serialization, merge mode, schema generation |
 
-### Layout Tests (~5 tests)
+### Layout Tests (~8 tests)
 
 Pure/headless tests for the grid-layout and anti-overlap helpers in `Tests/LayoutUtilTests.cpp`.
 No JUCE GUI components required.
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
-| LayoutUtilTest | 5 | `snap` round-trips (negative-safe, midpoint), `intersectsAny` gap enforcement + selfId exclusion, `findFreeSlot` returns desired when clear, `findFreeSlot` resolves dense cluster (returned slot overlaps none), `computeAutoArrange` signal-depth layering (x strictly increases per depth, Audio Output in last column, no result-box overlaps) |
+| LayoutUtilTest | 8 | `snap` round-trips (negative-safe, midpoint), `intersectsAny` gap enforcement + selfId exclusion, `findFreeSlot` returns desired when clear, `findFreeSlot` resolves dense cluster (returned slot overlaps none), `computeAutoArrange` signal-depth layering (x strictly increases per depth, Audio Output in last column, no result-box overlaps); **width-bucket mapping** (Sequencer/PolySequencer/MidiKeyboard→Double, Attenuverter→Narrow, all others→Single); **bucket constants on grid** (kNarrowWidth/kSingleWidth/kDoubleWidth all %8==0, kDoubleWidth==2×kSingleWidth); **column stride** (kSingleWidth + kLayerGapX == 360) |
 
-### Theme Tests (~15 tests)
+### Theme Tests (~30 tests)
 
 Tests for the theme system — `Tests/ThemeTests.cpp`. All headless.
 
@@ -93,6 +117,24 @@ Tests for the theme system — `Tests/ThemeTests.cpp`. All headless.
 | ThemeLoaderTest | 8 | JSON round-trip (exact colour/metric/typography/treatment equality), obsidian.gtheme.json vs makeObsidian(), required-key rejection, bad hex rejection, treatment float clamping, schema version rejection, style string round-trip |
 | ThemeTest (fixture) | 4 | Persistence + restore via ApplicationProperties, broadcast on change / idempotency, unknown id rejection, user theme replace-by-id |
 | ThemeLookAndFeelTest | 2 | All ColourId mappings from spec section 3, draw-helper smoke tests (fillThemedBackground / drawModulePanel / drawConnectionWire / drawModulationRing / drawRotarySlider into headless image) |
+| ThemeLookAndFeelTest (extended) | 4 | `ApplyThemeSetsEveryColourId` extended to cover ListBox and TabbedButtonBar ColourIds; `RetintIconsCalledByApplyTheme` (getIcon non-null across 3 built-ins); `MetricsCodeOnlyFieldsHaveExpectedDefaults` (toolbarHeight==36, statusBarHeight==24, etc.); `MetricsCodeOnlyFieldsNotInJSON` (ThemeLoader output does not contain "toolbarHeight") |
+| StyledWidgetSmokeTest | 9 | `drawComboBox` normal/pressed/disabled × 3 themes; `drawComboBoxTextWhenNothingSelected`; `drawPopupMenuItem` separator/highlighted/ticked/disabled/hasSubMenu; `getDefaultScrollbarWidth()==6`; `drawScrollbar` V/H × over/down; `drawScrollbarButton`; `drawTabbedButtonBarBackground` + `drawTabButton` active/inactive/hover with snapshot pixel check |
+
+### Icon Library Tests (~7 tests)
+
+New suite `Tests/IconLibraryTests.cpp` covering `Source/UI/Theme/IconLibrary.h/.cpp`.
+
+| Suite | Tests | What it covers |
+|-------|-------|----------------|
+| IconLibraryTest | 7 | `AllIconEnumValuesHaveEntry` — every Icon < kCount returns non-null getDrawable when assets present; `NullFallbackWhenAssetsAbsent` — no-assets path returns nullptr without crash; `ClonedDrawableIsIndependent` — two getDrawable calls return distinct raw pointers; `TintColourChangeApplied` — setTintColour(icon, c1) then setTintColour(icon, c2) → result contains c2 not c1; `RetintMultipleSwitchesStable` — 100× alternating setTintColour loop, final colour matches last set value; `SvgBinaryDataNamingConvention` — raw BinaryData symbol non-null (guards CMake renames); `TransportPlayIsScaffolding` — Icon::TransportPlay loads without crash; no DrawableButton wired this phase |
+
+### Status Bar Tests (~9 tests)
+
+New suite `Tests/StatusBarTests.cpp` covering `Source/UI/StatusBarComponent.h/.cpp` and AudioEngine additions.
+
+| Suite | Tests | What it covers |
+|-------|-------|----------------|
+| StatusBarTest | 9 | `ConstructsWithoutCrash`; `RendersNonEmptyImage` (createComponentSnapshot 400×24); `FormatCpu` — 0.0%, 75.6%, 100.0%; `FormatVoices` — 0→"0 voices", 1→"1 voice", 8→"8 voices"; `FormatPatch` — ""→"Untitled", named patch passes through; `GatedRepaintDoesNotFireOnUnchangedValues` — update() twice with same values triggers repaint only once; `AudioEngine_GetActiveVoiceInfo_ReturnsZeroWithoutPolyModules`; `AudioEngine_CountsPolyMidiVoices` — maxVoices==8 after adding PolyMidiModule; `MasterMute_ZeroesOutput` — setMasterMute(true) → output buffer all zeros post-processBlock |
 
 ### E2E Workflow Tests (24 tests)
 

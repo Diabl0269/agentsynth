@@ -3,6 +3,7 @@
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/ModuleComponent.h"
 #include <gtest/gtest.h>
+#include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 class ModuleComponentTest : public ::testing::Test {
@@ -50,6 +51,74 @@ TEST_F(ModuleComponentTest, TimerCallbackDoesNotCrash) {
     ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
 
     EXPECT_NO_THROW(moduleComponent.timerCallback());
+}
+
+// §1.5: bypass/mute/delete are DrawableButtons at the correct header bounds.
+TEST_F(ModuleComponentTest, HeaderButtonsAreDrawableButtons) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    OscillatorModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+    moduleComponent.setSize(280, 400);
+
+    juce::DrawableButton* foundBypass = nullptr;
+    juce::DrawableButton* foundMute = nullptr;
+    juce::DrawableButton* foundDelete = nullptr;
+
+    for (auto* child : moduleComponent.getChildren()) {
+        if (auto* db = dynamic_cast<juce::DrawableButton*>(child)) {
+            if (db->getName() == "Bypass")
+                foundBypass = db;
+            else if (db->getName() == "Mute")
+                foundMute = db;
+            else if (db->getName() == "Delete")
+                foundDelete = db;
+        }
+    }
+
+    ASSERT_NE(foundBypass, nullptr) << "bypass button should be a non-null DrawableButton";
+    ASSERT_NE(foundMute, nullptr) << "mute button should be a non-null DrawableButton";
+    ASSERT_NE(foundDelete, nullptr) << "delete button should be a non-null DrawableButton";
+
+    // Verify bounds: delete at getWidth()-26, bypass at getWidth()-50, mute at getWidth()-74.
+    EXPECT_EQ(foundDelete->getX(), 280 - 26);
+    EXPECT_EQ(foundBypass->getX(), 280 - 50);
+    EXPECT_EQ(foundMute->getX(), 280 - 74);
+}
+
+// §1.5: clicking the delete button removes the node from the graph via requestDeleteModule.
+TEST_F(ModuleComponentTest, DeleteButtonTriggersRemoval) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+
+    // Add an OscillatorModule node to the graph directly.
+    auto* osc = new OscillatorModule();
+    auto node = engine.getGraph().addNode(std::unique_ptr<juce::AudioProcessor>(osc));
+    ASSERT_NE(node, nullptr);
+    juce::AudioProcessorGraph::NodeID nodeId = node->nodeID;
+
+    ModuleComponent moduleComponent(osc, nodeId, editor);
+    moduleComponent.setSize(280, 400);
+
+    // Locate the delete button and trigger it.
+    juce::DrawableButton* foundDelete = nullptr;
+    for (auto* child : moduleComponent.getChildren()) {
+        if (auto* db = dynamic_cast<juce::DrawableButton*>(child)) {
+            if (db->getName() == "Delete") {
+                foundDelete = db;
+                break;
+            }
+        }
+    }
+    ASSERT_NE(foundDelete, nullptr);
+
+    // Invoke the delete button's onClick directly (headless: no message pump for triggerClick).
+    ASSERT_TRUE(foundDelete->onClick) << "deleteButton must have an onClick handler";
+    foundDelete->onClick();
+
+    // The node should be gone from the graph.
+    EXPECT_EQ(engine.getGraph().getNodeForId(nodeId), nullptr)
+        << "node should have been removed from the graph after delete button click";
 }
 
 // Inc-4: Verify getPortCenter clamps out-of-range indices to the last visible jack

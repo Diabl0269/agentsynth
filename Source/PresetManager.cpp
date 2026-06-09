@@ -42,15 +42,24 @@ juce::String PresetManager::getPresetJSON(int index) {
     //   VCA:         280 x 200
     //   LFO:         280 x 440
     //   Amp Env / Filter Env / ADSR: 280 x 180
-    //   Attenuverter: 280 x 120  (not a ModuleComponent; excluded from overlap check)
-    //   Sequencer:   510 x 380   ← wide
-    //   MIDI Keyboard: 500 x 150 ← wide
+    //   Attenuverter:  40 x 40   (not a ModuleComponent; excluded from overlap check)
+    //   Sequencer:   560 x 380   ← DOUBLE-wide (kDoubleWidth = 2 × kSingleWidth = 560)
+    //   MIDI Keyboard: 560 x 150 ← DOUBLE-wide
     //   Poly MIDI:   280 x 100
     //   Distortion:  280 x 350
     //   Delay:       280 x 220
     //   Reverb:      280 x 300
     //
-    // Column x-positions (stride 300, gap = 20 between adjacent 280-wide modules):
+    // DOUBLE-width modules (w=560): Sequencer, PolySequencer, MidiKeyboard
+    //   Sequencer at x=10: right edge = 570
+    //   AmpEnv must be at x >= 570 + 12 = 582, grid ceil = 584
+    //   AmpEnv right = 584 + 280 = 864
+    //   FilterEnv must be at x >= 864 + 12 = 876, grid ceil = 880
+    //
+    // Presets 0, 1, 5: AmpEnv rebaked x=560->584; FilterEnv rebaked x=870->880.
+    // Presets 2, 3, 4, 6: no Seq-adjacent envelopes; no rebake needed.
+    //
+    // Column x-positions (stride ~300, gap ≥ 12 between adjacent 280-wide modules):
     //   Col 0 (IO / Seq / MIDI): x = 10
     //   Col 1 (Oscillator):      x = 350
     //   Col 2 (Filter):          x = 650
@@ -80,8 +89,8 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"id": 3, "type": "Oscillator", "position": {"x": 350, "y": 10}, "params": {"waveform": "Sine", "octave": 0}},
     {"id": 4, "type": "Filter", "position": {"x": 650, "y": 10}, "params": {"cutoff": 1000.0, "resonance": 0.1, "drive": 1.0}},
     {"id": 5, "type": "VCA", "position": {"x": 950, "y": 10}, "params": {"gain": 0.8}},
-    {"id": 6, "type": "Amp Env", "position": {"x": 560, "y": 600}, "params": {"attack": 0.1, "decay": 0.1, "sustain": 0.8, "release": 0.5}},
-    {"id": 7, "type": "Filter Env", "position": {"x": 870, "y": 600}, "params": {"attack": 0.1, "decay": 0.1, "sustain": 0.8, "release": 0.5}},
+    {"id": 6, "type": "Amp Env", "position": {"x": 584, "y": 600}, "params": {"attack": 0.1, "decay": 0.1, "sustain": 0.8, "release": 0.5}},
+    {"id": 7, "type": "Filter Env", "position": {"x": 880, "y": 600}, "params": {"attack": 0.1, "decay": 0.1, "sustain": 0.8, "release": 0.5}},
     {"id": 8, "type": "Sequencer", "position": {"x": 10, "y": 560}, "params": {"run": false, "bpm": 120.0}},
     {"id": 10, "type": "Distortion", "position": {"x": 1250, "y": 10}, "params": {"drive": 0.5, "mix": 0.5}},
     {"id": 11, "type": "Delay", "position": {"x": 1250, "y": 380}, "params": {"time": 0.3, "feedback": 0.4, "mix": 0.3}},
@@ -124,8 +133,8 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"id": 3, "type": "Oscillator", "position": {"x": 350, "y": 10}, "params": {"waveform": "Saw", "octave": 0}},
     {"id": 4, "type": "Filter", "position": {"x": 650, "y": 10}, "params": {"cutoff": 800.0, "resonance": 0.3}},
     {"id": 5, "type": "VCA", "position": {"x": 950, "y": 10}, "params": {"gain": 0.8}},
-    {"id": 6, "type": "Amp Env", "position": {"x": 560, "y": 600}, "params": {"attack": 0.01, "decay": 0.2, "sustain": 0.7, "release": 0.3}},
-    {"id": 7, "type": "Filter Env", "position": {"x": 870, "y": 600}, "params": {"attack": 0.01, "decay": 0.3, "sustain": 0.3, "release": 0.2}},
+    {"id": 6, "type": "Amp Env", "position": {"x": 584, "y": 600}, "params": {"attack": 0.01, "decay": 0.2, "sustain": 0.7, "release": 0.3}},
+    {"id": 7, "type": "Filter Env", "position": {"x": 880, "y": 600}, "params": {"attack": 0.01, "decay": 0.3, "sustain": 0.3, "release": 0.2}},
     {"id": 8, "type": "MIDI Keyboard", "position": {"x": 10, "y": 960}},
     {"id": 9, "type": "Attenuverter", "position": {"x": 950, "y": 340}, "params": {"amount": 1.0}},
     {"id": 10, "type": "Attenuverter", "position": {"x": 650, "y": 340}, "params": {"amount": 0.7}},
@@ -250,8 +259,8 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"id": 5, "type": "VCA", "position": {"x": 950, "y": 10}, "params": {"gain": 0.8}},
     {"id": 6, "type": "MIDI Keyboard", "position": {"x": 10, "y": 960}},
     {"id": 7, "type": "Sequencer", "position": {"x": 10, "y": 560}, "params": {"run": false}},
-    {"id": 8, "type": "Amp Env", "position": {"x": 560, "y": 600}, "params": {"attack": 0.01, "decay": 0.4, "sustain": 0.4, "release": 0.5}},
-    {"id": 9, "type": "Filter Env", "position": {"x": 870, "y": 600}, "params": {"attack": 0.01, "decay": 0.2, "sustain": 0.1, "release": 0.3}},
+    {"id": 8, "type": "Amp Env", "position": {"x": 584, "y": 600}, "params": {"attack": 0.01, "decay": 0.4, "sustain": 0.4, "release": 0.5}},
+    {"id": 9, "type": "Filter Env", "position": {"x": 880, "y": 600}, "params": {"attack": 0.01, "decay": 0.2, "sustain": 0.1, "release": 0.3}},
     {"id": 10, "type": "Attenuverter", "position": {"x": 950, "y": 340}, "params": {"amount": 1.0}},
     {"id": 11, "type": "Attenuverter", "position": {"x": 650, "y": 340}, "params": {"amount": 0.6}}
   ],

@@ -101,20 +101,22 @@ TEST(PresetManagerTest, PresetNamesMatchPresetList) {
  */
 namespace {
 
-// Mirror the estimateModuleSize table from GraphEditor.cpp (Section 4 of design).
+// Mirror the estimateModuleSize table from GraphEditor.cpp (§6.3).
+// Keep in sync with GraphEditor.cpp — the AllFactoryPresetsLoadWithoutOverlap test
+// relies on matching sizes here and in PresetManager.cpp.
 // Footprints in canvas pixels (w, h).
 juce::Point<int> estimateModuleSize(const juce::String& typeName) {
     // Match by processor getName() strings
     if (typeName.containsIgnoreCase("Sequencer") && !typeName.containsIgnoreCase("Poly"))
-        return {510, 380};
+        return {560, 380}; // kDoubleWidth
+    if (typeName.containsIgnoreCase("Poly") && typeName.containsIgnoreCase("Sequencer"))
+        return {560, 380}; // kDoubleWidth
     if (typeName.containsIgnoreCase("MidiKeyboard") || typeName.containsIgnoreCase("Midi Keyboard") ||
         typeName.containsIgnoreCase("MIDI Keyboard"))
-        return {500, 150};
+        return {560, 150}; // kDoubleWidth
     if (typeName.containsIgnoreCase("ADSR") || typeName.containsIgnoreCase("Amp Env") ||
         typeName.containsIgnoreCase("Filter Env"))
         return {280, 180};
-    if (typeName.containsIgnoreCase("Attenuverter"))
-        return {280, 120};
     // Everything else: conservative default
     return {280, 300};
 }
@@ -140,6 +142,12 @@ TEST(PresetManagerTest, AllFactoryPresetsLoadWithoutOverlap) {
         for (auto* node : graph.getNodes()) {
             auto* proc = node->getProcessor();
             if (!proc)
+                continue;
+
+            // Attenuverters are not ModuleComponents and have no bounding box in the
+            // canvas layout (they render as a small inline knob). Skip them so they
+            // don't generate false-positive collision failures. (§6.5 Risk #14)
+            if (proc->getName().containsIgnoreCase("Attenuverter"))
                 continue;
 
             int x = static_cast<int>(node->properties.getWithDefault("x", 0));

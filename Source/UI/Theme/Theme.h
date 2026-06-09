@@ -52,6 +52,17 @@ struct Metrics {
     float borderWidth{1.0f};     // hairline border stroke
     float wireCoreWidth{2.5f};   // connection wire core stroke
     float wireCasingWidth{5.0f}; // connection wire casing (dark underlay) stroke
+
+    // --- Chrome layout constants (code-only; not parsed from user JSON) ---
+    int toolbarHeight{36};        // code-only; not parsed from user JSON
+    int statusBarHeight{24};      // code-only; not parsed from user JSON
+    int controlPadding{4};        // code-only; not parsed from user JSON
+    int minWindowWidth{480};      // code-only; not parsed from user JSON
+    int minWindowHeight{400};     // code-only; not parsed from user JSON
+    int sidebarCollapsedWidth{0}; // code-only; not parsed from user JSON
+    int librarySidebarWidth{200}; // code-only; not parsed from user JSON
+    int aiPanelWidth{300};        // code-only; not parsed from user JSON
+    int iconSize{16};             // code-only; not parsed from user JSON
 };
 
 // Font family NAMES (resolved to embedded typefaces by the LnF) + a type scale (pt).

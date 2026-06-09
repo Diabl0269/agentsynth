@@ -8,8 +8,10 @@
 #include "UI/AIChatComponent.h"
 #include "UI/GraphEditor.h"
 #include "UI/ModuleLibraryComponent.h"
+#include "UI/StatusBarComponent.h"
 #include "UI/Theme/GravisynthLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
+#include "UI/ToolbarComponent.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -52,6 +54,7 @@ public:
 
     // Testing Hooks
     bool isAiPanelConfiguredVisible() const { return isAiPanelVisible; }
+    bool isLibraryConfiguredVisible() const { return isLibraryVisible; }
     void simulateToggleAiPanelClick() {
         if (toggleAiPanelButton.onClick)
             toggleAiPanelButton.onClick();
@@ -60,7 +63,13 @@ public:
         if (toggleModMatrixButton.onClick)
             toggleModMatrixButton.onClick();
     }
+    void simulateToggleLibraryClick() {
+        if (toggleLibraryButton.onClick)
+            toggleLibraryButton.onClick();
+    }
     GraphEditor& getGraphEditor() { return graphEditor; }
+    ToolbarComponent& getToolbar() { return toolbar; }
+    StatusBarComponent& getStatusBar() { return statusBar; }
     void simulateUndoClick() {
         if (undoButton.onClick)
             undoButton.onClick();
@@ -71,6 +80,13 @@ public:
     }
     GravisynthUndoManager& getUndoManager() { return undoManager; }
     AudioEngine& getAudioEngine() { return audioEngine; }
+    const juce::String& getCurrentPatchName() const { return currentPatchName_; }
+    // Non-const access to ApplicationProperties for persistence tests (read-back within session).
+    juce::ApplicationProperties& getAppPropertiesForTest() { return appProperties; }
+    int getStatusBarTickCountForTest() const { return statusBarTickCount_; }
+    // Mirrors the loadButton factory-preset call site exactly (load + patch-name update), so
+    // tests can verify the patch-name side effect without driving the async PopupMenu.
+    void simulateLoadFactoryPresetForTest(int index);
     void openPresetFromFile();
 
 private:
@@ -84,6 +100,17 @@ private:
 
     // Shared initialisation body called from both constructors after appProperties is set up.
     void initialiseCommon(std::unique_ptr<gsynth::AIProvider> provider);
+
+    // Push the (themed, re-tinted) icon Drawables onto the 9 toolbar DrawableButtons + the
+    // status-bar master-mute button, and manage icon-only vs icon+text text per narrow mode.
+    // dynamic_casts the LnF and no-ops the icon assignment when null (headless tests).
+    void applyToolbarIcons();
+
+    // Collapse/expand the library sidebar. Persists "librarySidebarVisible" and re-lays out.
+    void setLibraryVisible(bool v);
+
+    // Update the displayed patch name (status bar). Immediate repaint, no timer delay.
+    void setCurrentPatchName(const juce::String& name);
 
     // Owned fallback objects used when the delegating ctor is called (tests/legacy).
     // Null when the primary ctor is used (refs point at external objects instead).
@@ -101,28 +128,45 @@ private:
     GraphEditor graphEditor;
     ModuleLibraryComponent moduleLibrary;
 
-    juce::TextButton saveButton;
-    juce::TextButton loadButton;
-    juce::TextButton settingsButton;
-    juce::TextButton undoButton;
-    juce::TextButton redoButton;
-    juce::TextButton toggleAiPanelButton;
-    juce::TextButton toggleModMatrixButton;
-    juce::TextButton autoArrangeButton;
+    // Toolbar strip (paints the bg + lays out the 9 buttons below via FlexBox). The buttons
+    // remain direct children of MainComponent so existing getChildren() accessors still work.
+    ToolbarComponent toolbar;
+
+    // The 9 toolbar buttons (8 actions + toggleLibrary). DrawableButton so they carry SVG
+    // icons; ButtonParameterAttachment / .onClick wiring works on the juce::Button base.
+    juce::DrawableButton saveButton{"save", juce::DrawableButton::ImageAboveTextLabel};
+    juce::DrawableButton loadButton{"load", juce::DrawableButton::ImageAboveTextLabel};
+    juce::DrawableButton settingsButton{"settings", juce::DrawableButton::ImageAboveTextLabel};
+    juce::DrawableButton undoButton{"undo", juce::DrawableButton::ImageAboveTextLabel};
+    juce::DrawableButton redoButton{"redo", juce::DrawableButton::ImageAboveTextLabel};
+    juce::DrawableButton toggleAiPanelButton{"toggleAi", juce::DrawableButton::ImageAboveTextLabel};
+    juce::DrawableButton toggleModMatrixButton{"toggleMatrix", juce::DrawableButton::ImageAboveTextLabel};
+    juce::DrawableButton autoArrangeButton{"autoArrange", juce::DrawableButton::ImageAboveTextLabel};
+    juce::DrawableButton toggleLibraryButton{"toggleLibrary", juce::DrawableButton::ImageAboveTextLabel};
 
     std::unique_ptr<juce::FileChooser> fileChooser;
 
     gsynth::AIIntegrationService aiService;
     gsynth::AIChatComponent aiChatComponent;
     bool isAiPanelVisible = false;
+    bool isLibraryVisible{true};
+
+    // Cached narrow-mode state — applyToolbarIcons() re-clones icons ONLY on the transition.
+    bool toolbarNarrowMode_{false};
+
+    // Status-bar polling gate: timerCallback() runs at 10 Hz; the status bar updates at 5 Hz
+    // (every 2nd tick).
+    int statusBarTickCount_{0};
+
+    // Declared BEFORE statusBar so it is fully constructed when statusBar's ctor runs.
+    juce::String currentPatchName_{"Default"};
+    StatusBarComponent statusBar;
 
     juce::ApplicationProperties appProperties;
     juce::PropertiesFile::Options propertiesOptions;
 
     ShortcutManager shortcutManager;
     juce::ApplicationCommandManager commandManager;
-
-    float aiPaneWidth = 300.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };
