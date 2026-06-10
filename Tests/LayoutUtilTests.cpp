@@ -279,3 +279,62 @@ TEST(LayoutUtilTest, ComputeAutoArrangeLayersBySignalDepth) {
         }
     }
 }
+
+// ============================================================================
+// WidthBucket_MappingTable
+// ============================================================================
+
+TEST(LayoutUtilTest, WidthBucket_MappingTable) {
+    using namespace gsynth::LayoutUtil;
+
+    // Double-width modules (wide, interactive)
+    EXPECT_EQ(getModuleWidthBucket(ModuleType::Sequencer), ModuleWidthBucket::Double);
+    EXPECT_EQ(getModuleWidthBucket(ModuleType::PolySequencer), ModuleWidthBucket::Double);
+    EXPECT_EQ(getModuleWidthBucket(ModuleType::MidiKeyboard), ModuleWidthBucket::Double);
+
+    // Narrow-width module (attenuverter)
+    EXPECT_EQ(getModuleWidthBucket(ModuleType::Attenuverter), ModuleWidthBucket::Narrow);
+
+    // Single-width standard modules
+    EXPECT_EQ(getModuleWidthBucket(ModuleType::Oscillator), ModuleWidthBucket::Single);
+    EXPECT_EQ(getModuleWidthBucket(ModuleType::Filter), ModuleWidthBucket::Single);
+    EXPECT_EQ(getModuleWidthBucket(ModuleType::VCA), ModuleWidthBucket::Single);
+    EXPECT_EQ(getModuleWidthBucket(ModuleType::ADSR), ModuleWidthBucket::Single);
+    EXPECT_EQ(getModuleWidthBucket(ModuleType::LFO), ModuleWidthBucket::Single);
+    EXPECT_EQ(getModuleWidthBucket(ModuleType::VoiceMixer), ModuleWidthBucket::Single);
+
+    // FX module (representative)
+    EXPECT_EQ(getModuleWidthBucket(ModuleType::Distortion), ModuleWidthBucket::Single);
+}
+
+// ============================================================================
+// WidthBucket_ConstantsOnGrid
+// ============================================================================
+
+TEST(LayoutUtilTest, WidthBucket_ConstantsOnGrid) {
+    using namespace gsynth::LayoutUtil;
+
+    // All width constants are multiples of the grid size
+    EXPECT_EQ(kNarrowWidth % kGridSize, 0);
+    EXPECT_EQ(kSingleWidth % kGridSize, 0);
+    EXPECT_EQ(kDoubleWidth % kGridSize, 0);
+
+    // Double width is exactly 2x single width
+    EXPECT_EQ(kDoubleWidth, 2 * kSingleWidth);
+
+    // moduleWidth(bucket) returns the correct constants
+    EXPECT_EQ(moduleWidth(ModuleWidthBucket::Narrow), kNarrowWidth);
+    EXPECT_EQ(moduleWidth(ModuleWidthBucket::Single), kSingleWidth);
+    EXPECT_EQ(moduleWidth(ModuleWidthBucket::Double), kDoubleWidth);
+}
+
+// ============================================================================
+// WidthBucket_ColumnStride
+// ============================================================================
+
+TEST(LayoutUtilTest, WidthBucket_ColumnStride) {
+    using namespace gsynth::LayoutUtil;
+
+    // Canonical auto-arrange column pitch: kSingleWidth + kLayerGapX = 360px
+    EXPECT_EQ(kSingleWidth + kLayerGapX, 360);
+}

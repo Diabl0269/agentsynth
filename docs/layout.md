@@ -154,7 +154,114 @@ Cmd+Z once restores every module to its pre-arrange position.
 
 ---
 
-## 5. LayoutUtil API Reference
+## 5. Toolbar & Status Bar Layout
+
+The application chrome is carved out of `MainComponent::resized()` — the single canonical layout method. It slices top→bottom:
+
+```
+┌─────────────────────────────────┐  ← toolbar strip  (height: Metrics::toolbarHeight = 36 px)
+│  [Lib] [Save][Load][Cfg][⟲][⟳][⬜]   ···   [Matrix][AI]  │
+├──────────┬──────────────────────┤
+│  Library │                      │  ← library sidebar  (width: Metrics::librarySidebarWidth = 200 px, or 0 when hidden)
+│ (200 px) │    Graph canvas      │
+│          │                      │  ← AI panel clips right (width: Metrics::aiPanelWidth = 300 px, or 0 when hidden)
+├──────────┴──────────────────────┤
+│  [Patch Name]  CPU  Voices  [🔇] │  ← status bar  (height: Metrics::statusBarHeight = 24 px)
+└─────────────────────────────────┘
+```
+
+### Toolbar FlexBox layout (`ToolbarComponent`)
+
+`ToolbarComponent::layoutButtons(bounds)` runs a single `juce::FlexBox` (row, align-center):
+- Left group: Library, Save, Load, Settings, Undo, Redo, AutoArrange
+- Flex spacer (`withFlex(1.0f)`) — fills available gap
+- Right group: ToggleModMatrix, ToggleAiPanel
+
+**Narrow mode** fires when `bounds.getWidth() <= Metrics::minWindowWidth` (480 px). In narrow mode, all button `prefWidth` = 32 (icon-only). In wide mode each button has a labelled preferred width (Library 96, Save 112, Load 116, Settings 96, Undo 72, Redo 72, AutoArrange 120, ToggleModMatrix 104, ToggleAiPanel 92).
+
+### Narrow-mode gate in `MainComponent::resized()`
+
+`applyToolbarIcons()` clones `Drawable` objects from the icon cache to set button images. To avoid a clone storm on every resize, the call is **gated to narrow-mode transitions only**:
+
+```cpp
+bool prevNarrow = toolbarNarrowMode_;
+toolbar.layoutButtons(toolbarBounds);       // updates toolbar.isNarrowMode()
+toolbarNarrowMode_ = toolbar.isNarrowMode();
+if (toolbarNarrowMode_ != prevNarrow)
+    applyToolbarIcons();                    // re-clone only on mode flip
+```
+
+`applyToolbarIcons()` is also called unconditionally once at the end of `initialiseCommon()` and after every theme switch (via `changeListenerCallback`).
+
+### Metrics layout tokens (code-only)
+
+The following `Metrics` struct fields govern chrome layout. They are **not parsed from user JSON** — a user theme may not override them. `ThemeLoader` silently ignores them (unknown-key forward-compatibility). Their values come from the C++ struct defaults only.
+
+| Token | Value | Meaning |
+|---|---|---|
+| `toolbarHeight` | 36 | Toolbar strip height (px) |
+| `statusBarHeight` | 24 | Status bar strip height (px) |
+| `controlPadding` | 4 | Inset around toolbar buttons (px) |
+| `minWindowWidth` | 480 | Narrow-mode breakpoint (= minimum window width) |
+| `minWindowHeight` | 400 | Minimum window height reference |
+| `sidebarCollapsedWidth` | 0 | Library width when hidden (px) |
+| `librarySidebarWidth` | 200 | Library width when visible (px) |
+| `aiPanelWidth` | 300 | AI panel width when visible (px) |
+| `iconSize` | 16 | Icon render size in library/status bar contexts (px) |
+
+### Minimum window size
+
+`Main.cpp` `MainWindow` ctor calls `setResizeLimits(480, 400, 8192, 8192)` — a hard platform floor on the `DocumentWindow` before `centreWithSize(1600, 900)`. This prevents the window from shrinking below the minimum where toolbar buttons could clip to zero width. `Metrics::minWindowWidth`/`minWindowHeight` carry the same values as layout constants for use in `ToolbarComponent`'s narrow threshold and tests.
+
+### Panel collapse and persistence
+
+Library sidebar and AI panel can each be fully hidden (width = 0). State persists across launches via `ApplicationProperties`:
+
+| Key | Default | Component |
+|---|---|---|
+| `librarySidebarVisible` | `"1"` (true) | `moduleLibrary` left panel |
+| `aiPanelVisible` | `"0"` (false) | `aiChatComponent` right panel |
+
+Both keys are read at the top of `initialiseCommon()` before any `setVisible()` or `addAndMakeVisible()` call. Cmd+B toggles the library sidebar (wired via `ShortcutManager`).
+
+---
+
+## 6. Module Width Buckets
+
+Phase 3 standardizes module card widths into three named buckets defined in `LayoutUtil.h`:
+
+| Bucket | Constant | Width | Modules |
+|---|---|---|---|
+| `Narrow` | `kNarrowWidth` | 40 px | AttenuverterModule |
+| `Single` | `kSingleWidth` | 280 px | Oscillator, Filter, VCA, ADSR, LFO, FX modules, VoiceMixer, PolyMidi, all others |
+| `Double` | `kDoubleWidth` | 560 px | Sequencer, PolySequencer, MidiKeyboard |
+
+`kDoubleWidth == 2 × kSingleWidth` — a Double module occupies exactly two standard column slots. Attenuverter modules are excluded from the visible module card grid (they do not appear as `ModuleComponent` cards and are skipped by auto-arrange).
+
+### Column stride derivation
+
+```
+kColumnStride = kSingleWidth + kLayerGapX = 280 + 80 = 360 px
+```
+
+`kColumnStride` is not a named constant; it is the natural result of the auto-arrange algorithm. DOUBLE-width modules advance the column cursor by `kDoubleWidth + kLayerGapX = 640 px`.
+
+### Auto-arrange with DOUBLE modules
+
+`computeAutoArrange` uses the `sizeOf` callback to query each module's pixel width. For a Sequencer node the callback returns `{kDoubleWidth, 380}`, so `layerWidth` for that column becomes 560 and the next column starts at `x += 560 + 80 = 640`. Downstream modules are pushed rightward correctly without overlap.
+
+### Preset position rebake (presets 0, 1, 5)
+
+Factory presets 0, 1, and 5 contain a Sequencer at x=10 (right edge = 570). After switching the Sequencer to `kDoubleWidth = 560`, the AmpEnv and FilterEnv positions were rebaked to avoid overlap:
+
+- **AmpEnv**: x=560 → x=**584** (570 + 12 gap + 2 grid ceil)
+- **FilterEnv**: x=870 → x=**880** (584 + 280 + 12 gap + 4 grid ceil)
+
+Presets 2, 3, 4, 6 have no Sequencer-adjacent envelopes and required no rebake. The `AllFactoryPresetsLoadWithoutOverlap` test and the `estimateModuleSize` mirror in `Tests/PresetManagerTests.cpp` are updated atomically with the preset data change to keep the test green.
+
+---
+
+## 7. LayoutUtil API Reference
 
 `Source/UI/LayoutUtil.h` / `Source/UI/LayoutUtil.cpp` — no JUCE GUI component dependencies;
 testable headlessly.
@@ -173,6 +280,16 @@ inline constexpr int kLayerGapX      = 80;
 inline constexpr int kIntraLayerGapY = 40;
 inline constexpr int kArrangeOriginX = 40;
 inline constexpr int kArrangeOriginY = 40;
+
+// Module width buckets (see section 6)
+inline constexpr int kNarrowWidth  = 40;   // Attenuverter
+inline constexpr int kSingleWidth  = 280;  // standard module
+inline constexpr int kDoubleWidth  = 560;  // Sequencer / PolySequencer / MidiKeyboard
+
+enum class ModuleWidthBucket { Narrow, Single, Double };
+ModuleWidthBucket getModuleWidthBucket(ModuleType t);  // defined in LayoutUtil.cpp; requires ModuleBase.h in caller
+int moduleWidth(ModuleWidthBucket b);
+int moduleWidth(ModuleType t);
 
 } // namespace gsynth::LayoutUtil
 ```
@@ -243,7 +360,7 @@ per arrangeable node (AttenuverterModule nodes are excluded). The caller is resp
 writing `pos.x` / `pos.y` back to `node->properties` and calling `updateComponents()`.
 
 `sizeOf` is a callback that returns the pixel footprint `{width, height}` for a given `NodeID`.
-Typically backed by the live `ModuleComponent` dimensions; falls back to `{280, 300}` for nodes
+Typically backed by the live `ModuleComponent` dimensions; falls back to `{kSingleWidth, 300}` (280×300) for nodes
 without a visible component.
 
 `extraEdges` carries additional directed edges (e.g. from `getModulationRoutings()`) that are
@@ -253,7 +370,7 @@ through are excluded from the arrangeable set.
 
 ---
 
-## 6. Drag Affordance — Grid Dots + Landing Ghost
+## 8. Drag Affordance — Grid Dots + Landing Ghost
 
 During any module drag (moving an existing module or dragging one in from the library sidebar),
 Gravisynth draws two visual cues over the canvas so placement is predictable and beautiful.

@@ -75,6 +75,10 @@ add_library(GravisynthCore STATIC
     # UI utilities
     Source/UI/LayoutUtil.h
     Source/UI/LayoutUtil.cpp
+    Source/UI/StatusBarComponent.h
+    Source/UI/StatusBarComponent.cpp
+    Source/UI/ToolbarComponent.h
+    Source/UI/ToolbarComponent.cpp
     # Theme system
     Source/UI/Theme/Theme.h
     Source/UI/Theme/ThemeManager.h
@@ -83,6 +87,8 @@ add_library(GravisynthCore STATIC
     Source/UI/Theme/ThemeLoader.cpp
     Source/UI/Theme/BuiltInThemes.h
     Source/UI/Theme/BuiltInThemes.cpp
+    Source/UI/Theme/IconLibrary.h
+    Source/UI/Theme/IconLibrary.cpp
     Source/UI/Theme/GravisynthLookAndFeel.h
     Source/UI/Theme/GravisynthLookAndFeel.cpp
 )
@@ -141,6 +147,17 @@ juce_generate_juce_header(Gravisynth)
 # GravisynthLookAndFeel (compiled into GravisynthCore) loads these typefaces from BinaryData,
 # so the asset library + GRAVISYNTH_HAS_FONT_ASSETS define are attached to Core (PUBLIC) below;
 # the app and the test target both link Core and therefore resolve the BinaryData symbols.
+# Guard: icon filenames must use hyphens only (JUCE strips hyphens entirely, so 'a-b.svg' becomes
+# BinaryData::ab_svg; underscores in filenames would collide with the separator).
+file(GLOB ICON_FILES "${CMAKE_SOURCE_DIR}/assets/icons/*.svg")
+foreach(f ${ICON_FILES})
+    get_filename_component(fname "${f}" NAME_WE)
+    string(FIND "${fname}" "_" ul_pos)
+    if(NOT ${ul_pos} EQUAL -1)
+        message(FATAL_ERROR "Icon filename '${fname}' contains underscore — use hyphens only.")
+    endif()
+endforeach()
+
 juce_add_binary_data(GravisynthAssets SOURCES
     assets/fonts/Inter-Regular.ttf
     assets/fonts/Inter-Medium.ttf
@@ -159,6 +176,29 @@ juce_add_binary_data(GravisynthAssets SOURCES
     assets/fonts/IBMPlexSans-SemiBold.ttf
     assets/fonts/IBMPlexMono-Regular.ttf
     assets/fonts/IBMPlexMono-Medium.ttf
+    # Icons (22 SVGs, hyphen-named; BinaryData symbols: e.g. transport_play_svg)
+    assets/icons/transport-play.svg
+    assets/icons/transport-stop.svg
+    assets/icons/action-undo.svg
+    assets/icons/action-redo.svg
+    assets/icons/action-save.svg
+    assets/icons/action-load.svg
+    assets/icons/action-settings.svg
+    assets/icons/action-auto-arrange.svg
+    assets/icons/toggle-ai.svg
+    assets/icons/toggle-matrix.svg
+    assets/icons/toggle-library.svg
+    assets/icons/module-bypass.svg
+    assets/icons/module-mute.svg
+    assets/icons/module-delete.svg
+    assets/icons/cat-sources.svg
+    assets/icons/cat-sequencing.svg
+    assets/icons/cat-envelopes.svg
+    assets/icons/cat-filters.svg
+    assets/icons/cat-modulation-fx.svg
+    assets/icons/cat-time-fx.svg
+    assets/icons/cat-dynamics.svg
+    assets/icons/cat-utility.svg
 )
 
 # The themed LookAndFeel lives in GravisynthCore and pulls typefaces from BinaryData;

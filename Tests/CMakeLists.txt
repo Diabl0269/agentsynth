@@ -53,6 +53,8 @@ add_executable(GravisynthTests
     AudioEngineModRoutingTests.cpp
     PerformanceTests.cpp
     ThemeTests.cpp
+    IconLibraryTests.cpp
+    StatusBarTests.cpp
     ../Source/MainComponent.cpp
     ../Source/UI/GraphEditor.cpp
     ../Source/UI/ModMatrixComponent.cpp

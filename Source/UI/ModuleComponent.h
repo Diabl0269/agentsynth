@@ -77,10 +77,11 @@ private:
     std::unique_ptr<juce::ToggleButton> spectrumToggle;
     std::unique_ptr<juce::MidiKeyboardComponent> keyboardComponent;
 
-    std::unique_ptr<juce::TextButton> bypassButton;
+    std::unique_ptr<juce::DrawableButton> bypassButton;
     std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
-    std::unique_ptr<juce::TextButton> muteButton;
+    std::unique_ptr<juce::DrawableButton> muteButton;
     std::unique_ptr<juce::ButtonParameterAttachment> muteAttachment;
+    std::unique_ptr<juce::DrawableButton> deleteButton;
 
     GravisynthUndoManager* undoManager = nullptr;
     std::map<int, float> gestureStartValues;
@@ -93,6 +94,17 @@ private:
 
     void createControls();
     void updateLayout();
+
+    // Shared step-column layout helper used by Sequencer and PolySequencer.
+    // Positions Gate, Pitch/Root, and F.Env/Chord controls for a single step column.
+    void layoutSequencerStepColumn(int step, int colX, int startY);
+
+    // Apply SVG icons to bypass/mute/delete DrawableButtons from the active LnF.
+    // No-op when the themed LnF is not installed (headless tests).
+    void applyHeaderButtonIcons();
+
+    // Refresh icon images whenever the LookAndFeel is changed (e.g. theme switch).
+    void lookAndFeelChanged() override;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModuleComponent)
 };

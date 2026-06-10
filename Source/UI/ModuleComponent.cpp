@@ -4,6 +4,7 @@
 #include "../Modules/PolySequencerModule.h"
 #include "../Modules/SequencerModule.h"
 #include "GraphEditor.h"
+#include "LayoutUtil.h"
 #include "Theme/GravisynthLookAndFeel.h"
 
 static ModuleType getType(juce::AudioProcessor* module) {
@@ -48,29 +49,24 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     }
 
     if (getType(module) != ModuleType::Attenuverter) {
-        bypassButton = std::make_unique<juce::TextButton>("B");
+        bypassButton = std::make_unique<juce::DrawableButton>("Bypass", juce::DrawableButton::ImageFitted);
         bypassButton->setClickingTogglesState(true);
         addAndMakeVisible(*bypassButton);
 
-        muteButton = std::make_unique<juce::TextButton>("M");
+        muteButton = std::make_unique<juce::DrawableButton>("Mute", juce::DrawableButton::ImageFitted);
         muteButton->setClickingTogglesState(true);
         addAndMakeVisible(*muteButton);
 
-        // Semantic on-colors read from the active theme: bypass -> accent (the LnF default
-        // mapping for buttonOnColourId), mute -> error. The remaining ColourIds (off bg,
-        // text on/off) re-skin automatically via the LnF's applyTheme() ColourId mapping, so
-        // no per-button literals are set here. Guarded so headless tests (no LnF installed)
-        // simply fall back to the JUCE default ColourIds.
-        if (auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel())) {
-            const auto& colors = lf->getTheme().colors;
-            bypassButton->setColour(juce::TextButton::buttonOnColourId, colors.accent);
-            muteButton->setColour(juce::TextButton::buttonOnColourId, colors.error);
-        }
+        deleteButton = std::make_unique<juce::DrawableButton>("Delete", juce::DrawableButton::ImageFitted);
+        deleteButton->setTooltip("Delete module");
+        deleteButton->onClick = [this] { this->owner.requestDeleteModule(this->nodeId); };
+        addAndMakeVisible(*deleteButton);
     }
 
     setTitle(module->getName());
     setBufferedToImage(true);
     createControls();
+    applyHeaderButtonIcons();
     startTimerHz(15); // 15 FPS is plenty for activity glow / step indicator; lower CPU than 30
 }
 
@@ -129,6 +125,29 @@ void ModuleComponent::detachFromProcessor() {
 
     module = nullptr;
 }
+void ModuleComponent::applyHeaderButtonIcons() {
+    // Headless-safe: when our themed LnF is not installed (unit tests), buttons remain blank
+    // (no image set). The DrawableButton still exists and functions correctly without an image.
+    auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+    if (lf == nullptr)
+        return;
+
+    if (bypassButton) {
+        if (auto d = lf->getIcon(gsynth::theme::Icon::ModuleBypass))
+            bypassButton->setImages(d.get());
+    }
+    if (muteButton) {
+        if (auto d = lf->getIcon(gsynth::theme::Icon::ModuleMute))
+            muteButton->setImages(d.get());
+    }
+    if (deleteButton) {
+        if (auto d = lf->getIcon(gsynth::theme::Icon::ModuleDelete))
+            deleteButton->setImages(d.get());
+    }
+}
+
+void ModuleComponent::lookAndFeelChanged() { applyHeaderButtonIcons(); }
+
 void ModuleComponent::timerCallback() {
     if (module == nullptr)
         return;
@@ -345,12 +364,52 @@ void ModuleComponent::createControls() {
     }
 
     // Auto-resize
-    if (getType(module) == ModuleType::Sequencer) {
-        setSize(510, 380); // 8 cols * 60 + margins, 3 rows
+    if (getType(module) == ModuleType::Sequencer || getType(module) == ModuleType::PolySequencer) {
+        setSize(gsynth::LayoutUtil::kDoubleWidth, 380); // 8 cols * 60 + margins, 3 rows
         return;
     }
 
     updateLayout();
+}
+
+void ModuleComponent::layoutSequencerStepColumn(int step, int colX, int startY) {
+    // Gate slider (row 0)
+    juce::String gateId = "Gate " + juce::String(step);
+    for (int i = 0; i < sliders.size(); ++i) {
+        if (sliders[i]->getComponentID().equalsIgnoreCase(gateId)) {
+            sliderLabels[i]->setBounds(colX, startY, 55, 20);
+            sliders[i]->setBounds(colX, startY + 20, 55, 50);
+        }
+    }
+
+    // Pitch / Root slider (row 1) — Sequencer uses "Pitch N", PolySequencer uses "Step N Root"
+    juce::String pitchId = "Pitch " + juce::String(step);
+    juce::String rootId = "Step " + juce::String(step) + " Root";
+    for (int i = 0; i < sliders.size(); ++i) {
+        if (sliders[i]->getComponentID().equalsIgnoreCase(pitchId) ||
+            sliders[i]->getComponentID().equalsIgnoreCase(rootId)) {
+            sliderLabels[i]->setBounds(colX, startY + 80, 55, 20);
+            sliders[i]->setBounds(colX, startY + 100, 55, 50);
+        }
+    }
+
+    // F.Env / Chord combo (row 2) — Sequencer uses "F.Env N" slider; PolySequencer uses "Step N Chord" combo
+    juce::String fEnvId = "F.Env " + juce::String(step);
+    for (int i = 0; i < sliders.size(); ++i) {
+        if (sliders[i]->getComponentID().equalsIgnoreCase(fEnvId)) {
+            sliderLabels[i]->setBounds(colX, startY + 160, 55, 20);
+            sliders[i]->setBounds(colX, startY + 180, 55, 50);
+        }
+    }
+
+    juce::String chordId = "Step " + juce::String(step) + " Chord";
+    for (int i = 0; i < comboBoxes.size(); ++i) {
+        if (comboBoxes[i]->getName().equalsIgnoreCase(chordId)) {
+            if (i < comboLabels.size())
+                comboLabels[i]->setBounds(colX, startY + 160, 55, 20);
+            comboBoxes[i]->setBounds(colX, startY + 180, 55, 24);
+        }
+    }
 }
 
 void ModuleComponent::updateLayout() {
@@ -366,8 +425,8 @@ void ModuleComponent::updateLayout() {
         return;
     }
 
-    if (getType(module) == ModuleType::Sequencer) {
-        setSize(510, 380);
+    if (getType(module) == ModuleType::Sequencer || getType(module) == ModuleType::PolySequencer) {
+        setSize(gsynth::LayoutUtil::kDoubleWidth, 380);
         return;
     }
 
@@ -672,11 +731,16 @@ void ModuleComponent::resized() {
     if (module == nullptr)
         return;
 
+    // Header icon buttons: delete (rightmost) → bypass → mute (leftmost of the three).
+    // Attenuverter path: all three are null → no-op.
+    if (deleteButton)
+        deleteButton->setBounds(getWidth() - 26, 2, 22, 20);
+
     if (bypassButton)
-        bypassButton->setBounds(getWidth() - 26, 2, 22, 20);
+        bypassButton->setBounds(getWidth() - 50, 2, 22, 20);
 
     if (muteButton)
-        muteButton->setBounds(getWidth() - 48, 2, 22, 20);
+        muteButton->setBounds(getWidth() - 74, 2, 22, 20);
 
     if (getType(module) == ModuleType::Sequencer) {
         // --- Sequencer Specific Layout ---
@@ -699,41 +763,49 @@ void ModuleComponent::resized() {
             }
         }
 
-        // Steps Row
-        // Steps Row
-        int startX = 10;
-        int startY = 110;
-        int stepWidth = 60;
+        // Steps Row: 8 columns starting at (10, 110), each 60px wide
+        const int startX = 10;
+        const int startY = 110;
+        const int stepWidth = 60;
 
         for (int step = 1; step <= 8; ++step) {
             int colX = startX + (step - 1) * stepWidth;
+            layoutSequencerStepColumn(step, colX, startY);
+        }
 
-            // Gate
-            juce::String gateId = "Gate " + juce::String(step);
-            for (int i = 0; i < sliders.size(); ++i) {
-                if (sliders[i]->getComponentID().equalsIgnoreCase(gateId)) {
-                    sliderLabels[i]->setBounds(colX, startY, stepWidth - 5, 20);
-                    sliders[i]->setBounds(colX, startY + 20, stepWidth - 5, 50);
-                }
-            }
+        return;
+    }
 
-            // Pitch
-            juce::String pitchId = "Pitch " + juce::String(step);
-            for (int i = 0; i < sliders.size(); ++i) {
-                if (sliders[i]->getComponentID().equalsIgnoreCase(pitchId)) {
-                    sliderLabels[i]->setBounds(colX, startY + 80, stepWidth - 5, 20);
-                    sliders[i]->setBounds(colX, startY + 100, stepWidth - 5, 50);
-                }
-            }
+    if (getType(module) == ModuleType::PolySequencer) {
+        // --- PolySequencer Specific Layout ---
+        // Run toggle + BPM in header row (y=30), then 8 step columns at y=110.
+        // Step N params: "Gate N" (slider), "Step N Root" (slider), "Step N Chord" (combo).
+        int x = 10;
+        int y = 30;
 
-            // Filter Env
-            juce::String fEnvId = "F.Env " + juce::String(step);
-            for (int i = 0; i < sliders.size(); ++i) {
-                if (sliders[i]->getComponentID().equalsIgnoreCase(fEnvId)) {
-                    sliderLabels[i]->setBounds(colX, startY + 160, stepWidth - 5, 20);
-                    sliders[i]->setBounds(colX, startY + 180, stepWidth - 5, 50);
-                }
+        for (auto* toggle : toggles) {
+            if (toggle->getComponentID().equalsIgnoreCase("run")) {
+                toggle->setBounds(x + 30, y, 60, 24);
+                x += 70;
             }
+        }
+
+        for (int i = 0; i < sliders.size(); ++i) {
+            if (sliders[i]->getComponentID().equalsIgnoreCase("bpm")) {
+                sliderLabels[i]->setBounds(x + 20, y, 60, 20);
+                sliders[i]->setBounds(x + 20, y + 20, 60, 50);
+                x += 70;
+            }
+        }
+
+        // Steps Row: 8 columns starting at (10, 110), each 60px wide
+        const int startX = 10;
+        const int startY = 110;
+        const int stepWidth = 60;
+
+        for (int step = 1; step <= 8; ++step) {
+            int colX = startX + (step - 1) * stepWidth;
+            layoutSequencerStepColumn(step, colX, startY);
         }
 
         return;
@@ -759,7 +831,7 @@ void ModuleComponent::resized() {
 
     // --- MIDI Keyboard Layout ---
     if (getType(module) == ModuleType::MidiKeyboard) {
-        setSize(500, 150); // Appropriate size for a keyboard
+        setSize(gsynth::LayoutUtil::kDoubleWidth, 150); // Appropriate size for a keyboard
         if (keyboardComponent) {
             keyboardComponent->setBounds(10, 50, getWidth() - 20, getHeight() - 60);
         }

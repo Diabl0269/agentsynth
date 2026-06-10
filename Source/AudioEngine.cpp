@@ -9,9 +9,11 @@
 #include "Modules/LFOModule.h"
 #include "Modules/MidiKeyboardModule.h"
 #include "Modules/OscillatorModule.h"
+#include "Modules/PolyMidiModule.h"
 #include "Modules/SequencerModule.h"
 #include "Modules/VCAModule.h"
 #include "PresetManager.h"
+#include <bit>
 #include <map>
 #include <set>
 
@@ -395,6 +397,23 @@ void AudioEngine::updateModuleNames() {
     }
 }
 
+AudioEngine::VoiceInfo AudioEngine::getActiveVoiceInfo() const {
+    VoiceInfo info;
+    for (auto* node : mainProcessorGraph.getNodes()) {
+        if (auto* pm = dynamic_cast<PolyMidiModule*>(node->getProcessor())) {
+            info.maxVoices += 8;
+            info.activeVoices += static_cast<int>(std::popcount(static_cast<unsigned>(pm->getActiveVoiceMask())));
+        }
+    }
+    return info;
+}
+
+int AudioEngine::getDisplayVoiceCount() const { return getActiveVoiceInfo().activeVoices; }
+
+void AudioEngine::setMasterMute(bool muted) noexcept { masterMuted_.store(muted, std::memory_order_relaxed); }
+
+bool AudioEngine::isMasterMuted() const noexcept { return masterMuted_.load(std::memory_order_relaxed); }
+
 void AudioEngine::createDefaultPatch() {
     mainProcessorGraph.clear();
     using AudioGraphIOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
@@ -497,6 +516,14 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     // MIDI messages from collector are already in midiMessages.
 
     mainProcessorGraph.processBlock(buffer, midiMessages);
+
+    // Zero-fill AFTER processBlock so sequencers / LFOs / envelopes keep advancing.
+    if (masterMuted_.load(std::memory_order_relaxed)) {
+        for (int i = 0; i < numOutputChannels; ++i) {
+            if (outputChannelData[i])
+                std::fill(outputChannelData[i], outputChannelData[i] + numSamples, 0.0f);
+        }
+    }
 }
 
 void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device) {

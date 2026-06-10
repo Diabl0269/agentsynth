@@ -156,9 +156,14 @@ void GravisynthLookAndFeel::applyTheme(const Theme& newTheme) {
     setColour(juce::TooltipWindow::backgroundColourId, c.surfaceHi);
     setColour(juce::TooltipWindow::textColourId, c.textPrimary);
 
+    setColour(juce::ListBox::backgroundColourId, c.bg0);
+    setColour(juce::ListBox::textColourId, c.textPrimary);
+    setColour(juce::ListBox::outlineColourId, c.border);
+
     setColour(juce::TabbedComponent::backgroundColourId, c.bg0);
     setColour(juce::TabbedButtonBar::tabTextColourId, c.textMuted);
     setColour(juce::TabbedButtonBar::frontTextColourId, c.textPrimary);
+    setColour(juce::TabbedButtonBar::tabOutlineColourId, c.border);
 
     // MidiKeyboardComponent ColourIds live in juce_audio_utils, which GravisynthCore does
     // not link; the on-screen keyboard keeps JUCE defaults for now (themed in a later phase).
@@ -176,6 +181,45 @@ void GravisynthLookAndFeel::applyTheme(const Theme& newTheme) {
     // (wrong character->glyph mapping). Clearing forces every Font to re-resolve cleanly.
     if (familyChanged)
         juce::Typeface::clearTypefaceCache();
+
+    // Re-tint the SVG icon set from the new theme tokens. Part of the SAME re-skin pass — no
+    // extra timer / repaint is scheduled here (the caller issues the single repaint).
+    retintIcons();
+}
+
+void GravisynthLookAndFeel::retintIcons() {
+    const auto& c = theme.colors;
+
+    // Module header glyphs carry semantic intent.
+    iconLibrary_.setTintColour(Icon::ModuleBypass, c.textMuted);
+    iconLibrary_.setTintColour(Icon::ModuleMute, c.warning);
+    iconLibrary_.setTintColour(Icon::ModuleDelete, c.error);
+
+    // Toolbar actions + transport-stop + panel toggles render as primary chrome.
+    iconLibrary_.setTintColour(Icon::TransportStop, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::ActionUndo, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::ActionRedo, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::ActionSave, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::ActionLoad, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::ActionSettings, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::ActionAutoArrange, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::ToggleAI, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::ToggleMatrix, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::ToggleLibrary, c.textPrimary);
+
+    // TransportPlay is scaffolding only (no DrawableButton wired this phase); tint muted so it
+    // reads as inactive if ever surfaced.
+    iconLibrary_.setTintColour(Icon::TransportPlay, c.textMuted);
+
+    // Library category headers are quieter than the action chrome.
+    iconLibrary_.setTintColour(Icon::CatSources, c.textMuted);
+    iconLibrary_.setTintColour(Icon::CatSequencing, c.textMuted);
+    iconLibrary_.setTintColour(Icon::CatEnvelopes, c.textMuted);
+    iconLibrary_.setTintColour(Icon::CatFilters, c.textMuted);
+    iconLibrary_.setTintColour(Icon::CatModulationFX, c.textMuted);
+    iconLibrary_.setTintColour(Icon::CatTimeFX, c.textMuted);
+    iconLibrary_.setTintColour(Icon::CatDynamics, c.textMuted);
+    iconLibrary_.setTintColour(Icon::CatUtility, c.textMuted);
 }
 
 void GravisynthLookAndFeel::refreshTypefaces() {
@@ -364,27 +408,45 @@ void GravisynthLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& 
     g.drawFittedText(button.getButtonText(), button.getLocalBounds().reduced(4, 0), juce::Justification::centred, 1);
 }
 
-void GravisynthLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool /*isButtonDown*/,
-                                         int /*buttonX*/, int /*buttonY*/, int /*buttonW*/, int /*buttonH*/,
-                                         juce::ComboBox& box) {
+void GravisynthLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool isButtonDown, int /*buttonX*/,
+                                         int /*buttonY*/, int /*buttonW*/, int /*buttonH*/, juce::ComboBox& box) {
     const auto& c = theme.colors;
     const auto& m = theme.metrics;
+    const bool enabled = box.isEnabled();
 
     auto bounds = juce::Rectangle<float>(0, 0, (float)width, (float)height).reduced(0.5f);
-    g.setColour(box.findColour(juce::ComboBox::backgroundColourId));
+
+    // Fill keyed by state: pressed → raised surface; disabled → dimmed surface; else surface.
+    juce::Colour fill = c.surface;
+    if (!enabled)
+        fill = c.surface.withAlpha(0.5f);
+    else if (isButtonDown)
+        fill = c.surfaceHi;
+    g.setColour(fill);
     g.fillRoundedRectangle(bounds, m.pillRadius);
-    g.setColour(box.findColour(juce::ComboBox::outlineColourId));
+
+    // Outline: accent when focused, else themed border.
+    g.setColour(box.hasKeyboardFocus(false) ? c.accent : box.findColour(juce::ComboBox::outlineColourId));
     g.drawRoundedRectangle(bounds, m.pillRadius, m.borderWidth);
 
-    // Arrow.
-    juce::Rectangle<float> arrowZone((float)width - 22.0f, 0.0f, 18.0f, (float)height);
-    juce::Path arrow;
-    const auto cx = arrowZone.getCentreX();
-    const auto cy = arrowZone.getCentreY();
-    arrow.addTriangle(cx - 4.0f, cy - 2.0f, cx + 4.0f, cy - 2.0f, cx, cy + 3.0f);
-    g.setColour(box.findColour(juce::ComboBox::arrowColourId));
-    g.fillPath(arrow);
-    juce::ignoreUnused(c);
+    // Chevron: a 2-segment "v" path stroked in the muted arrow colour (dimmed when disabled).
+    const float cx = (float)width - 14.0f;
+    const float cy = (float)height * 0.5f;
+    juce::Path chevron;
+    chevron.startNewSubPath(cx - kComboArrowSize, cy - kComboArrowSize * 0.4f);
+    chevron.lineTo(cx, cy + kComboArrowSize * 0.6f);
+    chevron.lineTo(cx + kComboArrowSize, cy - kComboArrowSize * 0.4f);
+
+    auto arrowCol = box.findColour(juce::ComboBox::arrowColourId);
+    g.setColour(enabled ? arrowCol : arrowCol.withMultipliedAlpha(0.4f));
+    g.strokePath(chevron, juce::PathStrokeType(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
+
+void GravisynthLookAndFeel::drawComboBoxTextWhenNothingSelected(juce::Graphics& g, juce::ComboBox& box,
+                                                                juce::Label& label) {
+    g.setColour(box.findColour(juce::ComboBox::textColourId).withMultipliedAlpha(0.4f));
+    g.setFont(label.getFont());
+    g.drawFittedText(box.getTextWhenNothingSelected(), label.getBounds(), label.getJustificationType(), 1);
 }
 
 void GravisynthLookAndFeel::positionComboBoxText(juce::ComboBox& box, juce::Label& label) {
@@ -403,10 +465,11 @@ void GravisynthLookAndFeel::drawPopupMenuBackground(juce::Graphics& g, int width
 }
 
 void GravisynthLookAndFeel::drawPopupMenuItem(juce::Graphics& g, const juce::Rectangle<int>& area, bool isSeparator,
-                                              bool /*isActive*/, bool isHighlighted, bool isTicked, bool /*hasSubMenu*/,
+                                              bool isActive, bool isHighlighted, bool isTicked, bool hasSubMenu,
                                               const juce::String& text, const juce::String& shortcutKeyText,
                                               const juce::Drawable* /*icon*/, const juce::Colour* textColour) {
     const auto& c = theme.colors;
+    const auto& m = theme.metrics;
 
     if (isSeparator) {
         g.setColour(c.border);
@@ -414,22 +477,48 @@ void GravisynthLookAndFeel::drawPopupMenuItem(juce::Graphics& g, const juce::Rec
         return;
     }
 
-    auto r = area.toFloat().reduced(2.0f, 1.0f);
-    if (isHighlighted) {
-        g.setColour(c.accent.withAlpha(0.25f));
-        g.fillRoundedRectangle(r, 4.0f);
+    // Highlight only a live (active) item under the cursor.
+    if (isHighlighted && isActive) {
+        g.setColour(c.accent.withAlpha(0.22f));
+        g.fillRoundedRectangle(area.toFloat().reduced(2.0f, 1.0f), m.cornerRadius * 0.6f);
     }
 
-    g.setColour(textColour != nullptr ? *textColour : c.textPrimary);
+    // Text colour: explicit override > active primary > disabled dim.
+    const juce::Colour col = textColour != nullptr ? *textColour : (isActive ? c.textPrimary : c.textDisabled);
+    g.setColour(col);
     g.setFont(juce::Font(juce::FontOptions(theme.type.label + 2.5f)));
 
     auto textArea = area.reduced(10, 0);
+
+    // Drawn checkmark (no Unicode glyph — avoids font-dependent rendering).
     if (isTicked) {
-        g.drawText("✓", area.getX() + 4, area.getY(), 18, area.getHeight(), juce::Justification::centred);
+        const auto tickArea =
+            juce::Rectangle<float>((float)area.getX() + 4.0f, (float)area.getY(), 18.0f, (float)area.getHeight());
+        juce::Path tick;
+        tick.startNewSubPath(tickArea.getX() + tickArea.getWidth() * 0.2f, tickArea.getCentreY());
+        tick.lineTo(tickArea.getX() + tickArea.getWidth() * 0.42f,
+                    tickArea.getCentreY() + tickArea.getHeight() * 0.18f);
+        tick.lineTo(tickArea.getX() + tickArea.getWidth() * 0.78f,
+                    tickArea.getCentreY() - tickArea.getHeight() * 0.22f);
+        g.setColour(c.accent);
+        g.strokePath(tick, juce::PathStrokeType(1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        g.setColour(col);
     }
+
     g.drawText(text, textArea, juce::Justification::centredLeft, true);
 
-    if (shortcutKeyText.isNotEmpty()) {
+    // Submenu arrow takes priority over the shortcut readout on the right edge.
+    if (hasSubMenu) {
+        const float ax = (float)area.getRight() - 12.0f;
+        const float ay = (float)area.getCentreY();
+        const float h = 4.0f;
+        juce::Path arrow;
+        arrow.startNewSubPath(ax - 2.0f, ay - h);
+        arrow.lineTo(ax + 2.0f, ay);
+        arrow.lineTo(ax - 2.0f, ay + h);
+        g.setColour(c.textMuted);
+        g.strokePath(arrow, juce::PathStrokeType(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    } else if (shortcutKeyText.isNotEmpty()) {
         g.setColour(c.textMuted);
         g.drawText(shortcutKeyText, textArea, juce::Justification::centredRight, true);
     }
@@ -438,13 +527,23 @@ void GravisynthLookAndFeel::drawPopupMenuItem(juce::Graphics& g, const juce::Rec
 void GravisynthLookAndFeel::drawScrollbar(juce::Graphics& g, juce::ScrollBar& /*scrollbar*/, int x, int y, int width,
                                           int height, bool isScrollbarVertical, int thumbStartPosition, int thumbSize,
                                           bool isMouseOver, bool isMouseDown) {
+    const auto& c = theme.colors;
+
+    // Slim track underlay.
+    auto trackBounds = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(1.0f);
+    g.setColour(c.bg1.withAlpha(0.4f));
+    g.fillRoundedRectangle(trackBounds, (float)juce::jmin(width, height) * 0.5f);
+
+    // Thumb (clamped to a sensible minimum length so it stays grabbable).
+    const int minLen = 20;
+    const int len = juce::jmax(minLen, thumbSize);
     juce::Rectangle<int> thumb;
     if (isScrollbarVertical)
-        thumb = {x + 1, thumbStartPosition, width - 2, thumbSize};
+        thumb = {x + 1, thumbStartPosition, width - 2, len};
     else
-        thumb = {thumbStartPosition, y + 1, thumbSize, height - 2};
+        thumb = {thumbStartPosition, y + 1, len, height - 2};
 
-    auto col = theme.colors.border.brighter(0.3f);
+    auto col = c.border.brighter(0.3f);
     if (isMouseDown)
         col = col.brighter(0.3f);
     else if (isMouseOver)
@@ -453,6 +552,39 @@ void GravisynthLookAndFeel::drawScrollbar(juce::Graphics& g, juce::ScrollBar& /*
     g.setColour(col);
     g.fillRoundedRectangle(thumb.toFloat().reduced(1.0f),
                            (float)juce::jmin(thumb.getWidth(), thumb.getHeight()) * 0.5f);
+}
+
+int GravisynthLookAndFeel::getDefaultScrollbarWidth() { return kScrollbarWidth; }
+
+void GravisynthLookAndFeel::drawScrollbarButton(juce::Graphics& g, juce::ScrollBar& /*scrollbar*/, int width,
+                                                int height, int buttonDirection, bool /*isScrollbarVertical*/,
+                                                bool isMouseOverButton, bool isButtonDown) {
+    // Minimal filled triangle pointing in buttonDirection (0=up,1=right,2=down,3=left).
+    // Rarely shown on macOS overlay scrollbars; needed for Win/Linux parity.
+    const auto& c = theme.colors;
+    auto bounds = juce::Rectangle<float>(0.0f, 0.0f, (float)width, (float)height).reduced(2.0f);
+    const float cx = bounds.getCentreX();
+    const float cy = bounds.getCentreY();
+    const float r = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.4f;
+
+    juce::Path tri;
+    switch (buttonDirection) {
+    case 0:
+        tri.addTriangle(cx, cy - r, cx - r, cy + r, cx + r, cy + r);
+        break; // up
+    case 1:
+        tri.addTriangle(cx + r, cy, cx - r, cy - r, cx - r, cy + r);
+        break; // right
+    case 2:
+        tri.addTriangle(cx, cy + r, cx - r, cy - r, cx + r, cy - r);
+        break; // down
+    default:
+        tri.addTriangle(cx - r, cy, cx + r, cy - r, cx + r, cy + r);
+        break; // left
+    }
+
+    g.setColour((isButtonDown || isMouseOverButton) ? c.textPrimary : c.textMuted);
+    g.fillPath(tri);
 }
 
 void GravisynthLookAndFeel::fillTextEditorBackground(juce::Graphics& g, int width, int height,
@@ -533,25 +665,96 @@ void GravisynthLookAndFeel::drawTooltip(juce::Graphics& g, const juce::String& t
 void GravisynthLookAndFeel::drawTabButton(juce::TabBarButton& button, juce::Graphics& g, bool isMouseOver,
                                           bool /*isMouseDown*/) {
     const auto& c = theme.colors;
+    const auto& m = theme.metrics;
     const bool active = button.getToggleState();
+    const auto orientation = button.getTabbedButtonBar().getOrientation();
 
     auto area = button.getActiveArea().toFloat();
+    const float r = m.cornerRadius * 0.6f;
 
     if (active) {
+        // Filled surface with the two corners facing AWAY from the content rounded.
+        juce::Path bg;
+        switch (orientation) {
+        case juce::TabbedButtonBar::TabsAtBottom:
+            bg.addRoundedRectangle(area.getX(), area.getY(), area.getWidth(), area.getHeight(), r, r, false, false,
+                                   true, true);
+            break;
+        case juce::TabbedButtonBar::TabsAtLeft:
+            bg.addRoundedRectangle(area.getX(), area.getY(), area.getWidth(), area.getHeight(), r, r, true, false, true,
+                                   false);
+            break;
+        case juce::TabbedButtonBar::TabsAtRight:
+            bg.addRoundedRectangle(area.getX(), area.getY(), area.getWidth(), area.getHeight(), r, r, false, true,
+                                   false, true);
+            break;
+        case juce::TabbedButtonBar::TabsAtTop:
+        default:
+            bg.addRoundedRectangle(area.getX(), area.getY(), area.getWidth(), area.getHeight(), r, r, true, true, false,
+                                   false);
+            break;
+        }
         g.setColour(c.surface);
-        g.fillRect(area);
-        // Accent underline for the active tab.
+        g.fillPath(bg);
+
+        // 2px accent indicator on the content-facing inner edge.
         g.setColour(c.accent);
-        g.fillRect(area.removeFromBottom(2.0f));
-    } else if (isMouseOver) {
-        g.setColour(c.surface.withAlpha(0.5f));
-        g.fillRect(area);
+        auto edge = area;
+        switch (orientation) {
+        case juce::TabbedButtonBar::TabsAtBottom:
+            g.fillRect(edge.removeFromTop(2.0f));
+            break;
+        case juce::TabbedButtonBar::TabsAtLeft:
+            g.fillRect(edge.removeFromRight(2.0f));
+            break;
+        case juce::TabbedButtonBar::TabsAtRight:
+            g.fillRect(edge.removeFromLeft(2.0f));
+            break;
+        case juce::TabbedButtonBar::TabsAtTop:
+        default:
+            g.fillRect(edge.removeFromBottom(2.0f));
+            break;
+        }
+    } else {
+        if (isMouseOver) {
+            g.setColour(c.surface.withAlpha(0.35f));
+            g.fillRect(area);
+        }
+        // Right-edge hairline divider between inactive tabs.
+        g.setColour(c.border);
+        g.fillRect(area.removeFromRight(1.0f));
     }
 
     g.setColour(active ? button.findColour(juce::TabbedButtonBar::frontTextColourId)
                        : button.findColour(juce::TabbedButtonBar::tabTextColourId));
     g.setFont(juce::Font(juce::FontOptions(theme.type.label + 2.0f, active ? juce::Font::bold : juce::Font::plain)));
     g.drawFittedText(button.getButtonText(), button.getActiveArea().reduced(6, 0), juce::Justification::centred, 1);
+}
+
+void GravisynthLookAndFeel::drawTabbedButtonBarBackground(juce::TabbedButtonBar& bar, juce::Graphics& g) {
+    const auto& c = theme.colors;
+    auto bounds = bar.getLocalBounds().toFloat();
+
+    g.setColour(c.bg0);
+    g.fillRect(bounds);
+
+    // Hairline along the content-facing edge of the tab-button strip.
+    g.setColour(c.border);
+    switch (bar.getOrientation()) {
+    case juce::TabbedButtonBar::TabsAtBottom:
+        g.fillRect(bounds.getX(), bounds.getY(), bounds.getWidth(), 1.0f);
+        break;
+    case juce::TabbedButtonBar::TabsAtLeft:
+        g.fillRect(bounds.getRight() - 1.0f, bounds.getY(), 1.0f, bounds.getHeight());
+        break;
+    case juce::TabbedButtonBar::TabsAtRight:
+        g.fillRect(bounds.getX(), bounds.getY(), 1.0f, bounds.getHeight());
+        break;
+    case juce::TabbedButtonBar::TabsAtTop:
+    default:
+        g.fillRect(bounds.getX(), bounds.getBottom() - 1.0f, bounds.getWidth(), 1.0f);
+        break;
+    }
 }
 
 //==============================================================================

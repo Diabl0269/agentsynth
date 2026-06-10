@@ -1,5 +1,6 @@
 #pragma once
 
+#include "IconLibrary.h"
 #include "Theme.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -25,6 +26,16 @@ public:
     void applyTheme(const Theme& theme);
     const Theme& getTheme() const noexcept { return theme; }
 
+    // ---------- icon registry ----------
+    // Re-tint every Icon from the active theme tokens. Called at the end of applyTheme()
+    // (so a theme switch stays exactly ONE re-skin pass). Tints from the untinted originals,
+    // so repeated switches are always correct (no accumulating tint).
+    void retintIcons();
+    // getIcon: a fresh clone of the (tinted) icon, or nullptr if assets are absent (headless).
+    std::unique_ptr<juce::Drawable> getIcon(Icon id) const { return iconLibrary_.getDrawable(id); }
+    // peekIcon: non-owning view into the tinted cache. Nullptr if absent.
+    const juce::Drawable* peekIcon(Icon id) const noexcept { return iconLibrary_.peekDrawable(id); }
+
     // ---------- stock widget overrides ----------
     void drawRotarySlider(juce::Graphics&, int x, int y, int width, int height, float sliderPosProportional,
                           float rotaryStartAngle, float rotaryEndAngle, juce::Slider&) override;
@@ -37,6 +48,7 @@ public:
                         bool shouldDrawButtonAsDown) override;
     void drawComboBox(juce::Graphics&, int width, int height, bool isButtonDown, int buttonX, int buttonY, int buttonW,
                       int buttonH, juce::ComboBox&) override;
+    void drawComboBoxTextWhenNothingSelected(juce::Graphics&, juce::ComboBox&, juce::Label&) override;
     void positionComboBoxText(juce::ComboBox&, juce::Label&) override;
     void drawPopupMenuBackground(juce::Graphics&, int width, int height) override;
     void drawPopupMenuItem(juce::Graphics&, const juce::Rectangle<int>& area, bool isSeparator, bool isActive,
@@ -45,6 +57,9 @@ public:
                            const juce::Colour* textColour) override;
     void drawScrollbar(juce::Graphics&, juce::ScrollBar&, int x, int y, int width, int height, bool isScrollbarVertical,
                        int thumbStartPosition, int thumbSize, bool isMouseOver, bool isMouseDown) override;
+    int getDefaultScrollbarWidth() override;
+    void drawScrollbarButton(juce::Graphics&, juce::ScrollBar&, int width, int height, int buttonDirection,
+                             bool isScrollbarVertical, bool isMouseOverButton, bool isButtonDown) override;
     void fillTextEditorBackground(juce::Graphics&, int width, int height, juce::TextEditor&) override;
     void drawTextEditorOutline(juce::Graphics&, int width, int height, juce::TextEditor&) override;
     void drawLabel(juce::Graphics&, juce::Label&) override;
@@ -52,6 +67,7 @@ public:
                           bool shouldDrawButtonAsDown) override;
     void drawTooltip(juce::Graphics&, const juce::String& text, int width, int height) override;
     void drawTabButton(juce::TabBarButton&, juce::Graphics&, bool isMouseOver, bool isMouseDown) override;
+    void drawTabbedButtonBarBackground(juce::TabbedButtonBar&, juce::Graphics&) override;
 
     // Resolve a font's family name to an embedded typeface (cached). Falls back to the JUCE
     // default sans/mono if the family is unavailable (tests / missing BinaryData — section 8.4).
@@ -94,7 +110,15 @@ public:
 private:
     void refreshTypefaces(); // (re)load cached typefaces for theme.type.uiFamily/monoFamily
 
+    // Themed-widget geometry constants (section 5).
+    static constexpr int kScrollbarWidth = 6;      // slim scrollbar (was JUCE default 14)
+    static constexpr int kTabBarDepth = 30;        // tab bar strip height
+    static constexpr float kComboArrowSize = 5.0f; // combo chevron half-width
+
     Theme theme{}; // active theme copy
+
+    // SVG icon registry, re-tinted from theme tokens by retintIcons() inside applyTheme().
+    IconLibrary iconLibrary_;
 
     // The default sans/mono typefaces for the active theme.
     juce::Typeface::Ptr uiTypeface;

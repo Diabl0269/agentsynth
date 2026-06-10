@@ -52,6 +52,9 @@ public:
             setFullScreen(true);
 #else
             setResizable(true, true);
+            // Hard platform floor on the DocumentWindow (the Metrics::minWindowWidth token
+            // drives layout math only; this is the actual minimum the OS will allow).
+            setResizeLimits(480, 400, 8192, 8192);
             centreWithSize(1600, 900);
 #endif
 

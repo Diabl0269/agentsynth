@@ -11,7 +11,8 @@ enum CommandIDs {
     redo,
     toggleModMatrix,
     toggleAiPanel,
-    autoArrange
+    autoArrange,
+    toggleLibrary
 };
 
 inline juce::CommandID getCommandForAction(const juce::String& actionId) {
@@ -31,6 +32,8 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return toggleAiPanel;
     if (actionId == "autoArrange")
         return autoArrange;
+    if (actionId == "toggleLibrary")
+        return toggleLibrary;
     return 0;
 }
 } // namespace GravisynthCommands
@@ -103,6 +106,7 @@ public:
         bindings["toggleModMatrix"] = juce::KeyPress('m', juce::ModifierKeys::commandModifier, 0);
         bindings["toggleAiPanel"] = juce::KeyPress('a', juce::ModifierKeys::commandModifier, 0);
         bindings["autoArrange"] = juce::KeyPress('l', juce::ModifierKeys::commandModifier, 0);
+        bindings["toggleLibrary"] = juce::KeyPress('b', juce::ModifierKeys::commandModifier, 0);
     }
 
     static juce::String keyPressToDisplayString(const juce::KeyPress& key) {
@@ -169,6 +173,8 @@ public:
             return "Toggle AI Panel";
         if (actionId == "autoArrange")
             return "Auto Arrange";
+        if (actionId == "toggleLibrary")
+            return "Toggle Module Library";
         return actionId;
     }
 
@@ -191,8 +197,8 @@ private:
     std::map<juce::String, juce::KeyPress> bindings;
     juce::ApplicationProperties* appProperties = nullptr;
 
-    juce::StringArray actionIds{"openSettings", "savePreset",      "openPreset",    "undo",
-                                "redo",         "toggleModMatrix", "toggleAiPanel", "autoArrange"};
+    juce::StringArray actionIds{"openSettings",    "savePreset",    "openPreset",  "undo",         "redo",
+                                "toggleModMatrix", "toggleAiPanel", "autoArrange", "toggleLibrary"};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShortcutManager)
 };

@@ -1,0 +1,74 @@
+#pragma once
+
+#include <array>
+#include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
+#include <utility>
+
+namespace gsynth::theme {
+
+// The canonical Gravisynth icon set. Exactly 22 SVG glyphs, white-filled and tinted
+// programmatically at theme-apply time. Backed by GravisynthAssets BinaryData (see
+// CMakeLists.txt) when GRAVISYNTH_HAS_FONT_ASSETS is defined; otherwise every entry is a
+// null fallback so headless tests (no asset library) still link and run.
+//
+// IMPORTANT: this is a juce::Drawable (SVG) registry, NOT an icon/glyph font. A runtime
+// font-family swap corrupts text globally on JUCE 8 + CoreText, so chrome glyphs live here
+// as Drawables instead of as a symbol font.
+//
+// Waveform glyphs are intentionally absent — deferred to a later phase (no consumer here).
+enum class Icon : int {
+    TransportPlay = 0, // scaffolding only — no DrawableButton wired this phase
+    TransportStop,     // used for master-mute in StatusBarComponent
+    ActionUndo,
+    ActionRedo,
+    ActionSave,
+    ActionLoad,
+    ActionSettings,
+    ActionAutoArrange,
+    ToggleAI,
+    ToggleMatrix,
+    ToggleLibrary,
+    ModuleBypass,
+    ModuleMute,
+    ModuleDelete,
+    CatSources,
+    CatSequencing,
+    CatEnvelopes,
+    CatFilters,
+    CatModulationFX,
+    CatTimeFX,
+    CatDynamics,
+    CatUtility,
+    kCount
+};
+
+class IconLibrary {
+public:
+    IconLibrary();
+
+    // setTintColour: always starts from the untinted original, so repeated calls across
+    // theme switches produce correct results (does NOT accumulate tint). No-op if the icon
+    // is absent (headless / missing assets).
+    void setTintColour(Icon id, juce::Colour c);
+
+    // getDrawable: returns a fresh clone (caller owns). Returns nullptr if the icon is absent.
+    std::unique_ptr<juce::Drawable> getDrawable(Icon id) const;
+
+    // peekDrawable: non-owning view into the tinted cache. Nullptr if absent.
+    const juce::Drawable* peekDrawable(Icon id) const noexcept;
+
+private:
+    // Two parallel arrays:
+    //   originals_: loaded from BinaryData, never mutated (source for re-tinting)
+    //   drawables_: tinted copies (updated by setTintColour)
+    std::array<std::unique_ptr<juce::Drawable>, (size_t)Icon::kCount> originals_;
+    std::array<std::unique_ptr<juce::Drawable>, (size_t)Icon::kCount> drawables_;
+
+    static std::pair<const void*, int> binaryDataForIcon(Icon id); // #ifdef guarded
+    static std::unique_ptr<juce::Drawable> loadSVG(const void* data, int size);
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(IconLibrary)
+};
+
+} // namespace gsynth::theme
