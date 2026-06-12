@@ -1,4 +1,5 @@
 #include "Modules/PolySequencerModule.h"
+#include <algorithm>
 #include <gtest/gtest.h>
 
 class PolySequencerModuleTest : public ::testing::Test {
@@ -111,4 +112,111 @@ TEST_F(PolySequencerModuleTest, AllChordTypes) {
         // Prepare for next beat trigger
         seq->prepareToPlay(44100.0, 512);
     }
+}
+
+TEST_F(PolySequencerModuleTest, NoteOffOnStop) {
+    auto* runParam = dynamic_cast<juce::AudioParameterBool*>(seq->getParameters()[1]);
+
+    // Use Minor chord so we get 3 notes (root, root+3, root+7)
+    auto* chord0 = dynamic_cast<juce::AudioParameterChoice*>(seq->getParameters()[12]);
+    *chord0 = 2; // Minor
+
+    // Block 1: start running — fires note-ons
+    runParam->setValueNotifyingHost(1.0f);
+    juce::AudioBuffer<float> buf1(2, 512);
+    juce::MidiBuffer midi1;
+    seq->processBlock(buf1, midi1);
+
+    int noteOnCount = 0;
+    std::vector<int> noteOnPitches;
+    for (const auto meta : midi1) {
+        if (meta.getMessage().isNoteOn()) {
+            noteOnCount++;
+            noteOnPitches.push_back(meta.getMessage().getNoteNumber());
+        }
+    }
+    EXPECT_EQ(noteOnCount, 3);
+
+    // Block 2: stop — must emit one note-off per active note
+    runParam->setValueNotifyingHost(0.0f);
+    juce::AudioBuffer<float> buf2(2, 512);
+    juce::MidiBuffer midi2;
+    seq->processBlock(buf2, midi2);
+
+    int noteOffCount = 0;
+    std::vector<int> noteOffPitches;
+    for (const auto meta : midi2) {
+        if (meta.getMessage().isNoteOff()) {
+            noteOffCount++;
+            noteOffPitches.push_back(meta.getMessage().getNoteNumber());
+        }
+    }
+    EXPECT_EQ(noteOffCount, noteOnCount);
+    // Each note-on pitch should have a corresponding note-off
+    for (int pitch : noteOnPitches) {
+        bool found = std::find(noteOffPitches.begin(), noteOffPitches.end(), pitch) != noteOffPitches.end();
+        EXPECT_TRUE(found) << "Missing note-off for pitch " << pitch;
+    }
+
+    // Block 3: still stopped — must produce NO further note-offs
+    juce::AudioBuffer<float> buf3(2, 512);
+    juce::MidiBuffer midi3;
+    seq->processBlock(buf3, midi3);
+
+    int extraNoteOffs = 0;
+    for (const auto meta : midi3)
+        if (meta.getMessage().isNoteOff())
+            extraNoteOffs++;
+    EXPECT_EQ(extraNoteOffs, 0);
+}
+
+TEST_F(PolySequencerModuleTest, StopThenRestart) {
+    auto* runParam = dynamic_cast<juce::AudioParameterBool*>(seq->getParameters()[1]);
+
+    // Start and fire one block
+    runParam->setValueNotifyingHost(1.0f);
+    juce::AudioBuffer<float> buf1(2, 512);
+    juce::MidiBuffer midi1;
+    seq->processBlock(buf1, midi1);
+
+    // Stop — captures note-offs, clears state
+    runParam->setValueNotifyingHost(0.0f);
+    juce::AudioBuffer<float> buf2(2, 512);
+    juce::MidiBuffer midi2;
+    seq->processBlock(buf2, midi2);
+
+    // Restart — prepareToPlay resets beat timer; next block fires fresh note-ons, no spurious note-offs
+    seq->prepareToPlay(44100.0, 512);
+    runParam->setValueNotifyingHost(1.0f);
+
+    juce::AudioBuffer<float> buf3(2, 512);
+    juce::MidiBuffer midi3;
+    seq->processBlock(buf3, midi3);
+
+    bool gotNoteOn = false;
+    int spuriousNoteOffs = 0;
+    for (const auto meta : midi3) {
+        if (meta.getMessage().isNoteOn())
+            gotNoteOn = true;
+        if (meta.getMessage().isNoteOff())
+            spuriousNoteOffs++;
+    }
+    EXPECT_TRUE(gotNoteOn);
+    EXPECT_EQ(spuriousNoteOffs, 0);
+}
+
+TEST_F(PolySequencerModuleTest, StopDuringGap) {
+    // Sequencer never started — no active notes; stopping must produce no note-offs
+    auto* runParam = dynamic_cast<juce::AudioParameterBool*>(seq->getParameters()[1]);
+    runParam->setValueNotifyingHost(0.0f);
+
+    juce::AudioBuffer<float> buf(2, 512);
+    juce::MidiBuffer midi;
+    seq->processBlock(buf, midi);
+
+    int noteOffCount = 0;
+    for (const auto meta : midi)
+        if (meta.getMessage().isNoteOff())
+            noteOffCount++;
+    EXPECT_EQ(noteOffCount, 0);
 }

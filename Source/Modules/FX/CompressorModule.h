@@ -32,7 +32,11 @@ public:
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
-        if (isBypassed() || isMuted()) {
+        if (isBypassed()) {
+            // Pure stereo module — no CV channels to clear; pass dry audio through unchanged
+            return;
+        }
+        if (isMuted()) {
             buffer.clear();
             return;
         }

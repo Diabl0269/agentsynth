@@ -67,6 +67,7 @@ public:
         samplesUntilNextBeat = 0;
         samplesUntilNoteOff = 0;
         lastNote = -1;
+        lastRunState = false;
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -77,9 +78,19 @@ public:
 
         juce::ignoreUnused(buffer);
 
-        if (!*runParam) {
+        const bool running = *runParam;
+        if (!running) {
+            if (lastRunState) {
+                if (lastNote > 0) {
+                    midiMessages.addEvent(juce::MidiMessage::noteOff(1, lastNote), 0);
+                    lastNote = -1;
+                }
+                samplesUntilNoteOff = 0;
+                lastRunState = false;
+            }
             return;
         }
+        lastRunState = true;
 
         auto samplesPerBeat = (60.0 / *bpmParam) * localSampleRate;
         auto numSamples = buffer.getNumSamples();
@@ -159,6 +170,7 @@ private:
     int currentStep = 0;
     int lastNote = -1;
     int samplesUntilNoteOff = 0;
+    bool lastRunState = false;
 
     juce::AudioParameterFloat* bpmParam;
     juce::AudioParameterBool* runParam;

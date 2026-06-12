@@ -287,3 +287,19 @@ TEST_F(MainComponentTest, PatchNameUpdatesOnFactoryPresetLoad) {
     mc.simulateLoadFactoryPresetForTest(1);
     EXPECT_EQ(mc.getCurrentPatchName(), presets[1].name);
 }
+
+// Regression: toolbar buttons must have non-zero bounds immediately after construction,
+// WITHOUT any additional manual resize or sidebar toggle. Pre-fix, setSize() fired
+// resized() -> layoutButtons() before setButtons() was called, leaving all button bounds
+// at {0,0,0,0}. The bug manifested as a blank toolbar on first launch that only appeared
+// after toggling the library sidebar (Cmd+B).
+TEST_F(MainComponentTest, ToolbarButtonsHaveNonZeroBoundsAfterConstruction) {
+    MainComponent mc(std::make_unique<MockProvider>());
+    // No extra setSize() or toggle call — bounds must already be set by the constructor.
+    auto buttons = collectToolbarButtons(mc);
+    ASSERT_EQ((int)buttons.size(), 9) << "Expected 9 toolbar DrawableButtons";
+    for (auto* b : buttons) {
+        EXPECT_GT(b->getWidth(), 0) << "Button '" << b->getComponentID() << "' has zero width after construction";
+        EXPECT_GT(b->getHeight(), 0) << "Button '" << b->getComponentID() << "' has zero height after construction";
+    }
+}

@@ -80,7 +80,6 @@ void MainComponent::initialiseCommon(std::unique_ptr<gsynth::AIProvider> provide
     // constructor already kicks off model discovery on construction. A second call
     // would trigger a redundant /api/tags request on startup.
     aiService.addListener(this);
-    setSize(1600, 900);
     undoManager.setGraphEditor(&graphEditor);
     setWantsKeyboardFocus(true);
     // Register commands for the macOS native menu bar (Edit→Undo shows Cmd+Z).
@@ -215,8 +214,15 @@ void MainComponent::initialiseCommon(std::unique_ptr<gsynth::AIProvider> provide
 
     // Hand the (now-constructed) buttons to the toolbar for FlexBox layout. Order MUST match
     // ToolbarComponent::Slot.
+    // ORDERING CONTRACT: setButtons() MUST be called BEFORE setSize() so that the first
+    // resized() -> layoutButtons() pass finds the registered buttons and positions them.
+    // Calling setSize() before setButtons() leaves all buttons with zero bounds on first launch.
     toolbar.setButtons({&toggleLibraryButton, &saveButton, &loadButton, &settingsButton, &undoButton, &redoButton,
                         &autoArrangeButton, &toggleModMatrixButton, &toggleAiPanelButton});
+
+    // Now that buttons are registered, trigger the first layout pass. resized() calls
+    // toolbar.layoutButtons() which positions the buttons using their registered pointers.
+    setSize(1600, 900);
 
     // Master-mute: toggles AudioEngine's master mute (audio keeps running; output is zero-filled).
     statusBar.getMasterMuteButton().setComponentID("masterMute");
