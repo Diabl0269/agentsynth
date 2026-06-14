@@ -1,4 +1,3 @@
-#include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/FX/ChorusModule.h"
 #include "../Source/Modules/FX/CompressorModule.h"
 #include "../Source/Modules/FX/DelayModule.h"
@@ -6,6 +5,7 @@
 #include "../Source/Modules/FX/LimiterModule.h"
 #include "../Source/Modules/FX/PhaserModule.h"
 #include "../Source/Modules/FX/ReverbModule.h"
+#include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include <gtest/gtest.h>
 #include <juce_audio_basics/juce_audio_basics.h>
