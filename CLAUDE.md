@@ -76,15 +76,16 @@ cmake --build build --target GravisynthTests
 ```
 
 ### Build and Test (Release)
-A pre-push git hook automatically runs clang-format lint check + Release build + tests before every push. Install it with:
+Two git hooks are installed by `scripts/install-hooks.sh` (run it once per clone — hooks are not auto-installed): a **pre-commit** hook (`scripts/pre-commit-lint.sh`) runs a fast clang-format lint on the staged C/C++ files, and a **pre-push** hook (`scripts/pre-push-release-test.sh`) runs clang-format lint + Release build + tests before every push.
 ```bash
 bash scripts/install-hooks.sh
 ```
-The first push configures the `build-release` directory; subsequent pushes do fast incremental rebuilds. This catches UB/segfaults that only manifest with optimizations enabled (Debug mode hides use-after-free by zero-initializing memory).
+The first push configures the `build-release` directory; subsequent pushes do fast incremental rebuilds. This catches UB/segfaults that only manifest with optimizations enabled (Debug mode hides use-after-free by zero-initializing memory). CI lints with **clang-format 18** (ubuntu-24.04) — prefer that major version locally to avoid hook-passes-but-CI-fails drift. Bypass a hook once with `git commit --no-verify` / `git push --no-verify`.
 
 To run manually:
 ```bash
-bash scripts/pre-push-release-test.sh
+bash scripts/pre-commit-lint.sh        # lint staged files
+bash scripts/pre-push-release-test.sh  # lint + Release build + tests
 ```
 
 ### Check Coverage
@@ -94,7 +95,7 @@ bash scripts/coverage.sh
 
 ### Git Hooks
 ```bash
-bash scripts/install-hooks.sh    # Install pre-push hook (runs lint + Release build+test before push)
+bash scripts/install-hooks.sh    # Install pre-commit (clang-format lint) + pre-push (lint + Release build+test) hooks
 ```
 
 ## CI Pipeline
