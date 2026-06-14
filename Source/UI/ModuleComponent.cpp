@@ -355,13 +355,21 @@ void ModuleComponent::createControls() {
                 }
             }
         }
+
+        // Wire repaint into the header-button onClick lambdas.
+        // onClick runs on the message thread, so a direct repaint() is safe.
+        // This ensures the faded/active visual updates immediately regardless of
+        // whether undoManager is non-null (the parameterValueChanged listener path
+        // is only registered when undoManager != nullptr).
+        bypassButton->onClick = [this] { repaint(); };
+        muteButton->onClick = [this] { repaint(); };
     }
 
-    // Register as parameter listener for undo tracking
-    if (undoManager) {
-        for (auto* param : module->getParameters())
-            param->addListener(this);
-    }
+    // Register as parameter listener for undo tracking AND for bypass/mute repaint.
+    // Always register all params so parameterValueChanged fires for bypass/mute changes
+    // even when undoManager is null (e.g. during tests or early construction).
+    for (auto* param : module->getParameters())
+        param->addListener(this);
 
     // Auto-resize
     if (getType(module) == ModuleType::Sequencer || getType(module) == ModuleType::PolySequencer) {
@@ -904,7 +912,30 @@ void ModuleComponent::resized() {
 }
 
 void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) {
-    juce::ignoreUnused(parameterIndex, newValue);
+    juce::ignoreUnused(newValue);
+
+    // When bypass or mute changes, schedule a repaint on the message thread.
+    // parameterValueChanged can be called from the audio thread — NEVER call
+    // repaint() directly here.  SafePointer ensures the lambda is a no-op if
+    // the component has been destroyed before the async call fires.
+    if (module == nullptr)
+        return;
+
+    const auto& params = module->getParameters();
+    if (parameterIndex < 0 || parameterIndex >= params.size())
+        return;
+
+    auto* param = dynamic_cast<juce::AudioProcessorParameterWithID*>(params[parameterIndex]);
+    if (param == nullptr)
+        return;
+
+    if (param->paramID == "bypassed" || param->paramID == "muted") {
+        juce::Component::SafePointer<ModuleComponent> safeThis(this);
+        juce::MessageManager::callAsync([safeThis] {
+            if (safeThis != nullptr)
+                safeThis->repaint();
+        });
+    }
 }
 
 void ModuleComponent::parameterGestureChanged(int parameterIndex, bool gestureIsStarting) {

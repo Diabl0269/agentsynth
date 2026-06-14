@@ -165,3 +165,105 @@ TEST_F(SequencerModuleTest, BPMChangeAffectsTempo) {
     }
     EXPECT_EQ(seq->currentActiveStep, 1);
 }
+
+TEST_F(SequencerModuleTest, NoteOffOnStop) {
+    auto* runParam = dynamic_cast<juce::AudioParameterBool*>(seq->getParameters()[1]);
+
+    // Block 1: start running — fires note-on for step 0
+    runParam->setValueNotifyingHost(1.0f);
+    juce::AudioBuffer<float> buf1(2, 512);
+    juce::MidiBuffer midi1;
+    seq->processBlock(buf1, midi1);
+
+    // Confirm a note-on was produced
+    bool gotNoteOn = false;
+    int noteOnPitch = -1;
+    for (const auto meta : midi1) {
+        if (meta.getMessage().isNoteOn()) {
+            gotNoteOn = true;
+            noteOnPitch = meta.getMessage().getNoteNumber();
+        }
+    }
+    EXPECT_TRUE(gotNoteOn);
+
+    // Block 2: stop — must emit exactly one note-off for the active note
+    runParam->setValueNotifyingHost(0.0f);
+    juce::AudioBuffer<float> buf2(2, 512);
+    juce::MidiBuffer midi2;
+    seq->processBlock(buf2, midi2);
+
+    int noteOffCount = 0;
+    int noteOffPitch = -1;
+    for (const auto meta : midi2) {
+        if (meta.getMessage().isNoteOff()) {
+            noteOffCount++;
+            noteOffPitch = meta.getMessage().getNoteNumber();
+        }
+    }
+    EXPECT_EQ(noteOffCount, 1);
+    EXPECT_EQ(noteOffPitch, noteOnPitch);
+
+    // Block 3: still stopped — must produce NO further note-offs
+    juce::AudioBuffer<float> buf3(2, 512);
+    juce::MidiBuffer midi3;
+    seq->processBlock(buf3, midi3);
+
+    int extraNoteOffs = 0;
+    for (const auto meta : midi3)
+        if (meta.getMessage().isNoteOff())
+            extraNoteOffs++;
+    EXPECT_EQ(extraNoteOffs, 0);
+}
+
+TEST_F(SequencerModuleTest, StopThenRestart) {
+    auto* runParam = dynamic_cast<juce::AudioParameterBool*>(seq->getParameters()[1]);
+
+    // Start and fire one block
+    runParam->setValueNotifyingHost(1.0f);
+    juce::AudioBuffer<float> buf1(2, 512);
+    juce::MidiBuffer midi1;
+    seq->processBlock(buf1, midi1);
+
+    // Stop — captures note-off, clears state
+    runParam->setValueNotifyingHost(0.0f);
+    juce::AudioBuffer<float> buf2(2, 512);
+    juce::MidiBuffer midi2;
+    seq->processBlock(buf2, midi2);
+
+    // Restart — next block should fire a fresh note-on and NO spurious note-off
+    runParam->setValueNotifyingHost(1.0f);
+    // Reset beat timer so a note triggers immediately
+    seq->prepareToPlay(44100.0, 512);
+    runParam->setValueNotifyingHost(1.0f);
+
+    juce::AudioBuffer<float> buf3(2, 512);
+    juce::MidiBuffer midi3;
+    seq->processBlock(buf3, midi3);
+
+    bool gotNoteOn = false;
+    int spuriousNoteOffs = 0;
+    for (const auto meta : midi3) {
+        if (meta.getMessage().isNoteOn())
+            gotNoteOn = true;
+        if (meta.getMessage().isNoteOff())
+            spuriousNoteOffs++;
+    }
+    EXPECT_TRUE(gotNoteOn);
+    EXPECT_EQ(spuriousNoteOffs, 0);
+}
+
+TEST_F(SequencerModuleTest, StopDuringGap) {
+    // Sequencer is never started — no active note; stopping must produce no note-offs
+    auto* runParam = dynamic_cast<juce::AudioParameterBool*>(seq->getParameters()[1]);
+    runParam->setValueNotifyingHost(0.0f);
+
+    juce::AudioBuffer<float> buf(2, 512);
+    juce::MidiBuffer midi;
+    seq->processBlock(buf, midi);
+
+    int noteOffCount = 0;
+    for (const auto meta : midi)
+        if (meta.getMessage().isNoteOff())
+            noteOffCount++;
+    EXPECT_EQ(noteOffCount, 0);
+}

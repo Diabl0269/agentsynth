@@ -1,3 +1,10 @@
+#include "../Source/Modules/FX/ChorusModule.h"
+#include "../Source/Modules/FX/CompressorModule.h"
+#include "../Source/Modules/FX/DelayModule.h"
+#include "../Source/Modules/FX/FlangerModule.h"
+#include "../Source/Modules/FX/LimiterModule.h"
+#include "../Source/Modules/FX/PhaserModule.h"
+#include "../Source/Modules/FX/ReverbModule.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include <gtest/gtest.h>
@@ -177,4 +184,372 @@ TEST_F(ModuleBypassTest, BypassStateSerializedInState) {
 
     // Verify the bypass state was restored
     EXPECT_TRUE(filter2.isBypassed()) << "Filter2 should have bypass state restored from serialized state";
+}
+
+// ---------------------------------------------------------------------------
+// FX Module bypass dry-pass-through tests
+// ---------------------------------------------------------------------------
+// These tests verify that bypassed FX modules leave AUDIO channels intact
+// (dry signal passes through) and only mute silences them.
+// Modules with CV inputs (Chorus/Phaser/Flanger): 4 channels, audio on 0+1, CV on 2+3.
+// Pure stereo modules (Reverb/Delay/Compressor/Limiter): 2 channels, all audio.
+// ---------------------------------------------------------------------------
+
+// --- Chorus ---
+
+TEST(FXBypassTest, ChorusBypassPassesDryAudio) {
+    ChorusModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(4, 512);
+    buffer.clear();
+    for (int i = 0; i < 512; ++i) {
+        buffer.setSample(0, i, 0.7f);
+        buffer.setSample(1, i, 0.7f);
+    }
+
+    module.setBypassed(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    // Audio channels must be untouched
+    for (int i = 0; i < 512; ++i) {
+        EXPECT_FLOAT_EQ(buffer.getSample(0, i), 0.7f) << "Ch0 sample " << i;
+        EXPECT_FLOAT_EQ(buffer.getSample(1, i), 0.7f) << "Ch1 sample " << i;
+    }
+}
+
+TEST(FXBypassTest, ChorusBypassClearsCVChannels) {
+    ChorusModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(4, 512);
+    buffer.clear();
+    for (int i = 0; i < 512; ++i) {
+        buffer.setSample(2, i, 0.5f);
+        buffer.setSample(3, i, 0.5f);
+    }
+
+    module.setBypassed(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    // CV channels must be cleared to prevent leaking downstream
+    for (int i = 0; i < 512; ++i) {
+        EXPECT_FLOAT_EQ(buffer.getSample(2, i), 0.0f) << "CV ch2 sample " << i;
+        EXPECT_FLOAT_EQ(buffer.getSample(3, i), 0.0f) << "CV ch3 sample " << i;
+    }
+}
+
+TEST(FXBypassTest, ChorusMuteSilencesOutput) {
+    ChorusModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(4, 512);
+    buffer.clear();
+    for (int ch = 0; ch < 4; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.7f);
+
+    module.setMuted(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int ch = 0; ch < 4; ++ch)
+        for (int i = 0; i < 512; ++i)
+            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "Ch" << ch << " sample " << i;
+}
+
+// --- Reverb ---
+
+TEST(FXBypassTest, ReverbBypassPassesDryAudio) {
+    ReverbModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear();
+    for (int i = 0; i < 512; ++i) {
+        buffer.setSample(0, i, 0.6f);
+        buffer.setSample(1, i, 0.6f);
+    }
+
+    module.setBypassed(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int i = 0; i < 512; ++i) {
+        EXPECT_FLOAT_EQ(buffer.getSample(0, i), 0.6f) << "Ch0 sample " << i;
+        EXPECT_FLOAT_EQ(buffer.getSample(1, i), 0.6f) << "Ch1 sample " << i;
+    }
+}
+
+TEST(FXBypassTest, ReverbMuteSilencesOutput) {
+    ReverbModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear();
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.6f);
+
+    module.setMuted(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "Ch" << ch << " sample " << i;
+}
+
+// --- Delay ---
+
+TEST(FXBypassTest, DelayBypassPassesDryAudio) {
+    DelayModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear();
+    for (int i = 0; i < 512; ++i) {
+        buffer.setSample(0, i, 0.5f);
+        buffer.setSample(1, i, 0.5f);
+    }
+
+    module.setBypassed(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int i = 0; i < 512; ++i) {
+        EXPECT_FLOAT_EQ(buffer.getSample(0, i), 0.5f) << "Ch0 sample " << i;
+        EXPECT_FLOAT_EQ(buffer.getSample(1, i), 0.5f) << "Ch1 sample " << i;
+    }
+}
+
+TEST(FXBypassTest, DelayMuteSilencesOutput) {
+    DelayModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear();
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.5f);
+
+    module.setMuted(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "Ch" << ch << " sample " << i;
+}
+
+// --- Phaser ---
+
+TEST(FXBypassTest, PhaserBypassPassesDryAudio) {
+    PhaserModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(4, 512);
+    buffer.clear();
+    for (int i = 0; i < 512; ++i) {
+        buffer.setSample(0, i, 0.4f);
+        buffer.setSample(1, i, 0.4f);
+    }
+
+    module.setBypassed(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int i = 0; i < 512; ++i) {
+        EXPECT_FLOAT_EQ(buffer.getSample(0, i), 0.4f) << "Ch0 sample " << i;
+        EXPECT_FLOAT_EQ(buffer.getSample(1, i), 0.4f) << "Ch1 sample " << i;
+    }
+}
+
+TEST(FXBypassTest, PhaserBypassClearsCVChannels) {
+    PhaserModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(4, 512);
+    buffer.clear();
+    for (int i = 0; i < 512; ++i) {
+        buffer.setSample(2, i, 0.3f);
+        buffer.setSample(3, i, 0.3f);
+    }
+
+    module.setBypassed(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int i = 0; i < 512; ++i) {
+        EXPECT_FLOAT_EQ(buffer.getSample(2, i), 0.0f) << "CV ch2 sample " << i;
+        EXPECT_FLOAT_EQ(buffer.getSample(3, i), 0.0f) << "CV ch3 sample " << i;
+    }
+}
+
+TEST(FXBypassTest, PhaserMuteSilencesOutput) {
+    PhaserModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(4, 512);
+    buffer.clear();
+    for (int ch = 0; ch < 4; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.4f);
+
+    module.setMuted(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int ch = 0; ch < 4; ++ch)
+        for (int i = 0; i < 512; ++i)
+            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "Ch" << ch << " sample " << i;
+}
+
+// --- Flanger ---
+
+TEST(FXBypassTest, FlangerBypassPassesDryAudio) {
+    FlangerModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(4, 512);
+    buffer.clear();
+    for (int i = 0; i < 512; ++i) {
+        buffer.setSample(0, i, 0.8f);
+        buffer.setSample(1, i, 0.8f);
+    }
+
+    module.setBypassed(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int i = 0; i < 512; ++i) {
+        EXPECT_FLOAT_EQ(buffer.getSample(0, i), 0.8f) << "Ch0 sample " << i;
+        EXPECT_FLOAT_EQ(buffer.getSample(1, i), 0.8f) << "Ch1 sample " << i;
+    }
+}
+
+TEST(FXBypassTest, FlangerBypassClearsCVChannels) {
+    FlangerModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(4, 512);
+    buffer.clear();
+    for (int i = 0; i < 512; ++i) {
+        buffer.setSample(2, i, 0.5f);
+        buffer.setSample(3, i, 0.5f);
+    }
+
+    module.setBypassed(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int i = 0; i < 512; ++i) {
+        EXPECT_FLOAT_EQ(buffer.getSample(2, i), 0.0f) << "CV ch2 sample " << i;
+        EXPECT_FLOAT_EQ(buffer.getSample(3, i), 0.0f) << "CV ch3 sample " << i;
+    }
+}
+
+TEST(FXBypassTest, FlangerMuteSilencesOutput) {
+    FlangerModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(4, 512);
+    buffer.clear();
+    for (int ch = 0; ch < 4; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.8f);
+
+    module.setMuted(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int ch = 0; ch < 4; ++ch)
+        for (int i = 0; i < 512; ++i)
+            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "Ch" << ch << " sample " << i;
+}
+
+// --- Compressor ---
+
+TEST(FXBypassTest, CompressorBypassPassesDryAudio) {
+    CompressorModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear();
+    for (int i = 0; i < 512; ++i) {
+        buffer.setSample(0, i, 0.3f);
+        buffer.setSample(1, i, 0.3f);
+    }
+
+    module.setBypassed(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int i = 0; i < 512; ++i) {
+        EXPECT_FLOAT_EQ(buffer.getSample(0, i), 0.3f) << "Ch0 sample " << i;
+        EXPECT_FLOAT_EQ(buffer.getSample(1, i), 0.3f) << "Ch1 sample " << i;
+    }
+}
+
+TEST(FXBypassTest, CompressorMuteSilencesOutput) {
+    CompressorModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear();
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.3f);
+
+    module.setMuted(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "Ch" << ch << " sample " << i;
+}
+
+// --- Limiter ---
+
+TEST(FXBypassTest, LimiterBypassPassesDryAudio) {
+    LimiterModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear();
+    for (int i = 0; i < 512; ++i) {
+        buffer.setSample(0, i, 0.9f);
+        buffer.setSample(1, i, 0.9f);
+    }
+
+    module.setBypassed(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int i = 0; i < 512; ++i) {
+        EXPECT_FLOAT_EQ(buffer.getSample(0, i), 0.9f) << "Ch0 sample " << i;
+        EXPECT_FLOAT_EQ(buffer.getSample(1, i), 0.9f) << "Ch1 sample " << i;
+    }
+}
+
+TEST(FXBypassTest, LimiterMuteSilencesOutput) {
+    LimiterModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(2, 512);
+    buffer.clear();
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.9f);
+
+    module.setMuted(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "Ch" << ch << " sample " << i;
 }

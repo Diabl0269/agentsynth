@@ -31,7 +31,13 @@ public:
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
-        if (isBypassed() || isMuted()) {
+        if (isBypassed()) {
+            // Pass dry audio through; clear CV channels so mod signals don't leak downstream
+            for (int ch = 2; ch < buffer.getNumChannels(); ++ch)
+                buffer.clear(ch, 0, buffer.getNumSamples());
+            return;
+        }
+        if (isMuted()) {
             buffer.clear();
             return;
         }

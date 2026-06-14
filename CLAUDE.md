@@ -16,7 +16,7 @@ The project follows a modular architecture with:
 
 ### Key Components
 
-- **ModuleBase**: Abstract base class for all audio modules with `ModuleType` enum, `ModulationTarget` metadata, `VisualBuffer` support, logical-port API (`mapInputChannel`/`mapOutputChannel`, `PortRole`, `LogicalPort`), and `isAutoPromotableModTarget` guard that prevents poly-mode CV inputs from being auto-wrapped in attenuverters
+- **ModuleBase**: Abstract base class for all audio modules with `ModuleType` enum, `ModulationTarget` metadata, `VisualBuffer` support, logical-port API (`mapInputChannel`/`mapOutputChannel`, `PortRole`, `LogicalPort`), and `isAutoPromotableModTarget` guard that prevents poly-mode CV inputs from being auto-wrapped in attenuverters. **Bypass/mute contract** (every `processBlock` MUST honor it, kept uniform across all modules): `isBypassed()` → **dry pass-through** — return early WITHOUT touching audio channels (clear only CV channels ≥2 so mod CV doesn't leak as audio, mirroring Filter/Distortion); `isMuted()` → **silence** — `buffer.clear()` then return. Use two separate branches, never `if (isBypassed() || isMuted()) buffer.clear()` (that mutes on bypass instead of passing the signal through)
 - **AudioEngine**: Manages audio device I/O, the audio processor graph, and modulation matrix routing; exposes `getModulationRoutings()` — a read-only derived view (`RoutingKind`: AttenuverterChain / DirectCV / PolyBus) that is never serialized; `getActiveModRoutings()` and `getModulationDisplayInfo()` are thin adapters over it
 - **GraphEditor**: Visual editor with zoom/pan and drag-to-connect; draws poly-bus wires (collapsed N-voice `DirectCV` connections) with an "xN" badge and anchors all wires to visible jacks via the logical-port API; snaps module positions to the 8 px grid on drag-release and resolves overlaps via spiral search on every drop/drag; exposes `autoArrange()` (Cmd+L / "Auto Arrange" toolbar button) which topologically layers modules by signal-flow depth in one undo step
 - **LayoutUtil** (`Source/UI/LayoutUtil.h/.cpp`): Stateless layout helpers — `snap`, `intersectsAny`, `findFreeSlot` (expanding-square spiral search), `computeAutoArrange` (longest-path topological layering); no JUCE GUI deps, fully headless-testable
@@ -76,15 +76,16 @@ cmake --build build --target GravisynthTests
 ```
 
 ### Build and Test (Release)
-A pre-push git hook automatically runs clang-format lint check + Release build + tests before every push. Install it with:
+Two git hooks are installed by `scripts/install-hooks.sh` (run it once per clone — hooks are not auto-installed): a **pre-commit** hook (`scripts/pre-commit-lint.sh`) runs a fast clang-format lint on the staged C/C++ files, and a **pre-push** hook (`scripts/pre-push-release-test.sh`) runs clang-format lint + Release build + tests before every push.
 ```bash
 bash scripts/install-hooks.sh
 ```
-The first push configures the `build-release` directory; subsequent pushes do fast incremental rebuilds. This catches UB/segfaults that only manifest with optimizations enabled (Debug mode hides use-after-free by zero-initializing memory).
+The first push configures the `build-release` directory; subsequent pushes do fast incremental rebuilds. This catches UB/segfaults that only manifest with optimizations enabled (Debug mode hides use-after-free by zero-initializing memory). CI lints with **clang-format 18** (ubuntu-24.04) — prefer that major version locally to avoid hook-passes-but-CI-fails drift. Bypass a hook once with `git commit --no-verify` / `git push --no-verify`.
 
 To run manually:
 ```bash
-bash scripts/pre-push-release-test.sh
+bash scripts/pre-commit-lint.sh        # lint staged files
+bash scripts/pre-push-release-test.sh  # lint + Release build + tests
 ```
 
 ### Check Coverage
@@ -94,7 +95,7 @@ bash scripts/coverage.sh
 
 ### Git Hooks
 ```bash
-bash scripts/install-hooks.sh    # Install pre-push hook (runs lint + Release build+test before push)
+bash scripts/install-hooks.sh    # Install pre-commit (clang-format lint) + pre-push (lint + Release build+test) hooks
 ```
 
 ## CI Pipeline

@@ -62,6 +62,7 @@ public:
         samplesUntilNextBeat = 0;
         samplesUntilNoteOff = 0;
         activeNotes.clear();
+        lastRunState = false;
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -72,10 +73,18 @@ public:
 
         juce::ignoreUnused(buffer);
 
-        if (!*runParam) {
-            // All notes off if stopped? Maybe safer not to hang.
+        const bool running = *runParam;
+        if (!running) {
+            if (lastRunState) {
+                for (int note : activeNotes)
+                    midiMessages.addEvent(juce::MidiMessage::noteOff(1, note), 0);
+                activeNotes.clear();
+                samplesUntilNoteOff = 0;
+                lastRunState = false;
+            }
             return;
         }
+        lastRunState = true;
 
         auto samplesPerBeat = (60.0 / *bpmParam) * localSampleRate;
         auto numSamples = buffer.getNumSamples();
@@ -180,6 +189,7 @@ private:
     int currentStep = 0;
     int samplesUntilNoteOff = 0;
     std::vector<int> activeNotes;
+    bool lastRunState = false;
 
     juce::AudioParameterFloat* bpmParam;
     juce::AudioParameterBool* runParam;
