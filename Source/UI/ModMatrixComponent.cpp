@@ -97,12 +97,11 @@ void ModMatrixComponent::resized() {
 
     viewport.setBounds(area);
 
-    int rowHeight = 40;
-    int contentWidth = viewport.getWidth(); // Don't subtract for scrollbar yet, JUCE handles it
-    contentContainer.setBounds(0, 0, contentWidth, (int)rows.size() * rowHeight);
+    const int contentWidth = viewport.getWidth(); // Don't subtract for scrollbar yet, JUCE handles it
+    contentContainer.setBounds(0, 0, contentWidth, (int)rows.size() * kRowHeight);
 
     for (int i = 0; i < (int)rows.size(); ++i) {
-        rows[i]->setBounds(0, i * rowHeight, contentWidth, rowHeight);
+        rows[i]->setBounds(0, i * kRowHeight, contentWidth, kRowHeight);
     }
 }
 
@@ -176,6 +175,7 @@ void ModMatrixComponent::updateRowsFromGraph() {
     }
 
     if (componentsChanged) {
+        setHoveredRow(-1);
         resized();
         repaint();
     }
@@ -273,9 +273,37 @@ void ModMatrixComponent::ModRow::resized() {
 
 void ModMatrixComponent::ModRow::paint(juce::Graphics& g) {
     auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&owner.getLookAndFeel());
+
+    // --- Row background: zebra striping + hover highlight ---
+    const bool isHovered = (owner.getHoveredRow() == rowIndex);
+    juce::Colour rowBg;
+    if (isHovered) {
+        // Hover: accent at low alpha over the base surface so it works on both even/odd rows.
+        const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+        rowBg = accentColour.withAlpha(0.10f);
+    } else if (ModMatrixComponent::isZebraRow(rowIndex)) {
+        // Odd rows: slightly raised surface to distinguish from even rows.
+        rowBg =
+            lf != nullptr ? lf->getTheme().colors.surfaceHi.withAlpha(0.45f) : juce::Colours::white.withAlpha(0.04f);
+    } else {
+        // Even rows: transparent (parent bg1 shows through).
+        rowBg = juce::Colours::transparentBlack;
+    }
+    g.setColour(rowBg);
+    g.fillRect(getLocalBounds());
+
+    // --- Row number label ---
     g.setColour(lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::white.withAlpha(0.6f));
     g.setFont(12.0f);
     g.drawText(juce::String(rowIndex + 1), 0, 0, 30, getHeight(), juce::Justification::centred);
+}
+
+void ModMatrixComponent::ModRow::mouseEnter(const juce::MouseEvent& /*e*/) { owner.setHoveredRow(rowIndex); }
+
+void ModMatrixComponent::ModRow::mouseExit(const juce::MouseEvent& /*e*/) {
+    // Only clear if this row still owns the hover (avoids races when moving between rows).
+    if (owner.getHoveredRow() == rowIndex)
+        owner.setHoveredRow(-1);
 }
 
 ModMatrixComponent::ModRow::~ModRow() {
@@ -297,6 +325,14 @@ void ModMatrixComponent::ModRow::detach() {
 void ModMatrixComponent::detachAllRows() {
     for (auto& row : rows)
         row->detach();
+}
+
+void ModMatrixComponent::setHoveredRow(int rowIndex) {
+    if (hoveredRow_ == rowIndex)
+        return;
+    hoveredRow_ = rowIndex;
+    // Repaint only the content area so the hover highlight updates without a full component repaint.
+    contentContainer.repaint();
 }
 
 void ModMatrixComponent::ModRow::parameterValueChanged(int parameterIndex, float newValue) {

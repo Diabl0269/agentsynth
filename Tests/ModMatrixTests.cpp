@@ -5,6 +5,7 @@
 #include "../Source/Modules/LFOModule.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/VCAModule.h"
+#include "../Source/UI/ModMatrixComponent.h"
 #include <gtest/gtest.h>
 
 class ModMatrixTest : public ::testing::Test {
@@ -470,4 +471,101 @@ TEST_F(ModMatrixTest, BypassParameterIsAtIndex0) {
     // Set back to false and verify
     bypassParam->setValueNotifyingHost(0.0f);
     EXPECT_FALSE(bypassParam->get());
+}
+
+// ---------------------------------------------------------------------------
+// ModMatrixComponent UI — zebra, hover, row height
+// ---------------------------------------------------------------------------
+
+TEST_F(ModMatrixTest, RowHeightIs48) {
+    // kRowHeight is a static constexpr — verify it equals 48.
+    EXPECT_EQ(ModMatrixComponent::kRowHeight, 48);
+}
+
+TEST_F(ModMatrixTest, ZebraAlternates) {
+    // Even rows (0, 2, …) are NOT zebra; odd rows (1, 3, …) ARE zebra.
+    EXPECT_FALSE(ModMatrixComponent::isZebraRow(0));
+    EXPECT_TRUE(ModMatrixComponent::isZebraRow(1));
+    EXPECT_FALSE(ModMatrixComponent::isZebraRow(2));
+    EXPECT_TRUE(ModMatrixComponent::isZebraRow(3));
+    EXPECT_FALSE(ModMatrixComponent::isZebraRow(100));
+    EXPECT_TRUE(ModMatrixComponent::isZebraRow(101));
+}
+
+TEST_F(ModMatrixTest, HoverStateUpdates) {
+    ModMatrixComponent matrix(engine);
+
+    // Default: no row hovered.
+    EXPECT_EQ(matrix.getHoveredRow(), -1);
+
+    // Setting a row index stores it.
+    matrix.setHoveredRow(2);
+    EXPECT_EQ(matrix.getHoveredRow(), 2);
+
+    // Setting the same value is a no-op (no crash).
+    matrix.setHoveredRow(2);
+    EXPECT_EQ(matrix.getHoveredRow(), 2);
+
+    // Clearing hover (mouseExit equivalent) resets to -1.
+    matrix.setHoveredRow(-1);
+    EXPECT_EQ(matrix.getHoveredRow(), -1);
+}
+
+TEST_F(ModMatrixTest, ModMatrixComponentPaintSmokeTest) {
+    // Construct a component with a couple of routings and exercise updateRowsFromGraph
+    // to confirm no crash during the layout pass (kRowHeight applied).
+    ModMatrixComponent matrix(engine);
+
+    auto& graph = engine.getGraph();
+    graph.clear();
+
+    auto lfoNode = graph.addNode(std::make_unique<LFOModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    ASSERT_NE(lfoNode, nullptr);
+    ASSERT_NE(filterNode, nullptr);
+
+    engine.addModRouting(lfoNode->nodeID, 0, filterNode->nodeID, 1);
+    engine.addModRouting(lfoNode->nodeID, 0, filterNode->nodeID, 2);
+
+    // setBounds triggers resized() which applies kRowHeight layout.
+    matrix.setBounds(0, 0, 600, 400);
+    matrix.updateRowsFromGraph();
+
+    // Verify hover state is still clean after update.
+    EXPECT_EQ(matrix.getHoveredRow(), -1);
+}
+
+TEST_F(ModMatrixTest, HoverResetsAfterRowRemoval) {
+    // Regression: when a row is erased and remaining rows shift indices, hoveredRow_
+    // must be cleared so the wrong (now-shifted) row is not painted as hovered.
+    ModMatrixComponent matrix(engine);
+
+    auto& graph = engine.getGraph();
+    graph.clear();
+
+    auto lfoNode = graph.addNode(std::make_unique<LFOModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    ASSERT_NE(lfoNode, nullptr);
+    ASSERT_NE(filterNode, nullptr);
+
+    engine.addModRouting(lfoNode->nodeID, 0, filterNode->nodeID, 1);
+    engine.addModRouting(lfoNode->nodeID, 0, filterNode->nodeID, 2);
+
+    matrix.setBounds(0, 0, 600, 400);
+    matrix.updateRowsFromGraph();
+
+    // Hover over row 1 (the second row).
+    matrix.setHoveredRow(1);
+    ASSERT_EQ(matrix.getHoveredRow(), 1);
+
+    // Remove one of the routings so the row count drops from 2 to 1.
+    auto routings = engine.getActiveModRoutings();
+    ASSERT_GE(routings.size(), 1u);
+    engine.removeModRouting(routings[0].attenuverterNodeID);
+
+    // updateRowsFromGraph detects the removed row (componentsChanged = true) and
+    // must reset hoveredRow_ to -1 before the layout pass.
+    matrix.updateRowsFromGraph();
+
+    EXPECT_EQ(matrix.getHoveredRow(), -1);
 }

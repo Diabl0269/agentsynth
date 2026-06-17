@@ -76,6 +76,11 @@ std::pair<const void*, int> IconLibrary::binaryDataForIcon(Icon id) {
         {BinaryData::cattimefx_svg, BinaryData::cattimefx_svgSize},
         {BinaryData::catdynamics_svg, BinaryData::catdynamics_svgSize},
         {BinaryData::catutility_svg, BinaryData::catutility_svgSize},
+        // Waveform glyphs (Phase 4).
+        {BinaryData::waveformsine_svg, BinaryData::waveformsine_svgSize},
+        {BinaryData::waveformsaw_svg, BinaryData::waveformsaw_svgSize},
+        {BinaryData::waveformsquare_svg, BinaryData::waveformsquare_svgSize},
+        {BinaryData::waveformtriangle_svg, BinaryData::waveformtriangle_svgSize},
     };
     static_assert(std::size(kTable) == (size_t)Icon::kCount,
                   "kTable size does not match Icon::kCount — update binaryDataForIcon lookup table");
