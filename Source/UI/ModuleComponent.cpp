@@ -146,7 +146,66 @@ void ModuleComponent::applyHeaderButtonIcons() {
     }
 }
 
-void ModuleComponent::lookAndFeelChanged() { applyHeaderButtonIcons(); }
+void ModuleComponent::refreshWaveformComboIcons() {
+    using gsynth::theme::GravisynthLookAndFeel;
+    using gsynth::theme::Icon;
+
+    auto* lf = dynamic_cast<GravisynthLookAndFeel*>(&getLookAndFeel());
+    // Headless / no themed LnF: nothing to refresh.
+    if (lf == nullptr)
+        return;
+
+    const Icon kIcons[4] = {Icon::WaveformSine, Icon::WaveformSquare, Icon::WaveformSaw, Icon::WaveformTriangle};
+    const juce::StringArray kChoices{"Sine", "Square", "Saw", "Triangle"};
+
+    for (auto* combo : comboBoxes) {
+        // Detect waveform combos by the same 4-element choice set used in createControls().
+        // We probe the root menu: it must have exactly 4 items with the right IDs and text.
+        const juce::PopupMenu* root = combo->getRootMenu();
+        if (root == nullptr)
+            continue;
+
+        // Count items and check texts match the waveform set.
+        bool isWaveform = true;
+        int itemCount = 0;
+        {
+            juce::PopupMenu::MenuItemIterator it(*root, false);
+            while (it.next()) {
+                const auto& item = it.getItem();
+                if (itemCount >= 4 || item.text != kChoices[itemCount]) {
+                    isWaveform = false;
+                    break;
+                }
+                ++itemCount;
+            }
+            if (itemCount != 4)
+                isWaveform = false;
+        }
+        if (!isWaveform)
+            continue;
+
+        // Save the current selection BEFORE rebuilding so we can restore it.
+        const int savedId = combo->getSelectedId();
+
+        // Rebuild the root menu items with freshly tinted icon clones.
+        // getRootMenu() returns a const pointer; clear via the combo's non-const accessor.
+        combo->clear(juce::dontSendNotification);
+        for (int i = 0; i < 4; ++i) {
+            std::unique_ptr<juce::Drawable> icon = lf->getIcon(kIcons[i]); // may be nullptr in headless
+            combo->getRootMenu()->addItem(i + 1, kChoices[i], true, false, std::move(icon));
+        }
+
+        // Restore selection without notifying listeners — the ComboBoxParameterAttachment
+        // is NOT disturbed (it listens on parameterValueChanged, not on the combo's onChange
+        // when dontSendNotification is passed), so no spurious parameter change fires.
+        combo->setSelectedId(savedId, juce::dontSendNotification);
+    }
+}
+
+void ModuleComponent::lookAndFeelChanged() {
+    applyHeaderButtonIcons();
+    refreshWaveformComboIcons();
+}
 
 void ModuleComponent::timerCallback() {
     if (module == nullptr)
@@ -292,7 +351,29 @@ void ModuleComponent::createControls() {
         for (auto* param : params) {
             if (auto* choiceParam = dynamic_cast<juce::AudioParameterChoice*>(param)) {
                 auto* combo = comboBoxes.add(new juce::ComboBox());
-                combo->addItemList(choiceParam->choices, 1);
+
+                // Oscillator waveform selector: the exact choice set {"Sine", "Square", "Saw",
+                // "Triangle"} (in that order) gets per-item waveform glyph icons attached via
+                // PopupMenu::addItem(..., std::unique_ptr<Drawable> iconToUse).
+                // All other choice params keep the plain addItemList path.
+                const juce::StringArray& choices = choiceParam->choices;
+                const bool isOscWaveform = (choices.size() == 4 && choices[0] == "Sine" && choices[1] == "Square" &&
+                                            choices[2] == "Saw" && choices[3] == "Triangle");
+
+                if (isOscWaveform) {
+                    using gsynth::theme::Icon;
+                    const Icon kIcons[4] = {Icon::WaveformSine, Icon::WaveformSquare, Icon::WaveformSaw,
+                                            Icon::WaveformTriangle};
+                    auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+                    for (int i = 0; i < 4; ++i) {
+                        std::unique_ptr<juce::Drawable> icon;
+                        if (lf != nullptr)
+                            icon = lf->getIcon(kIcons[i]); // may be nullptr in headless
+                        combo->getRootMenu()->addItem(i + 1, choices[i], true, false, std::move(icon));
+                    }
+                } else {
+                    combo->addItemList(choiceParam->choices, 1);
+                }
                 addAndMakeVisible(combo);
 
                 auto* attach = comboAttachments.add(new juce::ComboBoxParameterAttachment(*choiceParam, *combo));

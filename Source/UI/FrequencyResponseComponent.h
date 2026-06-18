@@ -26,6 +26,54 @@ public:
     }
     bool getShowSpectrum() const { return showSpectrum; }
 
+    // ---------- pure static helpers (unit-testable without constructing the GUI) ----------
+
+    // Returns the index of the maximum value in mags[0..numBins-1].
+    // Returns -1 if numBins <= 0 or mags is nullptr.
+    static int findPeakBin(const float* mags, int numBins) noexcept {
+        if (mags == nullptr || numBins <= 0)
+            return -1;
+        int peak = 0;
+        for (int i = 1; i < numBins; ++i)
+            if (mags[i] > mags[peak])
+                peak = i;
+        return peak;
+    }
+
+    // Human-readable frequency label.
+    // 100 -> "100Hz", 1000 -> "1kHz", 10000 -> "10kHz".
+    // General rule: values >= 1000 are shown as "<N>kHz" (1 decimal if not integer);
+    // values < 1000 are shown as "<N>Hz" (integer, no decimal).
+    static juce::String formatHzLabel(float hz) {
+        if (hz >= 1000.0f) {
+            float kHz = hz / 1000.0f;
+            // Suppress the decimal when it's a whole number
+            if (std::fmod(kHz, 1.0f) < 0.05f)
+                return juce::String((int)std::round(kHz)) + "kHz";
+            return juce::String(kHz, 1) + "kHz";
+        }
+        return juce::String((int)std::round(hz)) + "Hz";
+    }
+
+    // Frequency (Hz) → x pixel in a log-scaled view of width `width`.
+    // Mirrors freqToX() for use in unit tests (same constants: minFreq=20, maxFreq=20000).
+    static float freqToXStatic(float freq, float width) noexcept {
+        float t = std::log(freq / minFreq) / std::log(maxFreq / minFreq);
+        return t * width;
+    }
+
+    // dB → y pixel in a view of height `height`.
+    // Mirrors dbToY() for use in unit tests (same constants: minDb=-40, maxDb=50).
+    static float dbToYStatic(float db, float height) noexcept {
+        float normalized = (db - maxDb) / (minDb - maxDb);
+        return normalized * height;
+    }
+
+    static constexpr float minFreq = 20.0f;
+    static constexpr float maxFreq = 20000.0f;
+    static constexpr float minDb = -40.0f;
+    static constexpr float maxDb = 50.0f;
+
     void timerCallback() override {
         float cutoff = filterModule.getCurrentCutoff();
         float resonance = filterModule.getCurrentResonance();
@@ -101,9 +149,43 @@ public:
             float x = freqToX(freq, w);
             g.drawVerticalLine((int)x, 0.0f, h);
         }
-        // 0dB horizontal line
-        float zeroDbY = dbToY(0.0f, h);
-        g.drawHorizontalLine((int)zeroDbY, 0.0f, w);
+        // dB horizontal grid lines at -20, 0, +20
+        for (float db : {-20.0f, 0.0f, 20.0f}) {
+            float y = dbToY(db, h);
+            g.drawHorizontalLine((int)y, 0.0f, w);
+        }
+        // Hz axis labels at vertical grid lines (top of each gridline, 3 px offset right)
+        {
+            g.setFont(juce::Font(9.5f));
+            g.setColour(juce::Colour(0xff6a6a7e)); // muted label colour
+            const struct {
+                float freq;
+                const char* label;
+            } hzLabels[] = {{100.0f, "100Hz"}, {1000.0f, "1kHz"}, {10000.0f, "10kHz"}};
+            for (const auto& lbl : hzLabels) {
+                float x = freqToX(lbl.freq, w);
+                // 10kHz is the rightmost label — right-justify it so it stays inside the
+                // component bounds at narrow widths; interior labels remain left-anchored.
+                if (lbl.freq >= 10000.0f)
+                    g.drawText(lbl.label, (int)x - 45, 2, 48, 12, juce::Justification::right, false);
+                else
+                    g.drawText(lbl.label, (int)x + 3, 2, 48, 12, juce::Justification::left, false);
+            }
+        }
+
+        // dB axis labels at horizontal grid lines (left edge, vertically centred on line)
+        {
+            g.setFont(juce::Font(9.0f));
+            g.setColour(juce::Colour(0xff6a6a7e));
+            const struct {
+                float db;
+                const char* label;
+            } dbLabels[] = {{20.0f, "+20"}, {0.0f, "0"}, {-20.0f, "-20"}};
+            for (const auto& lbl : dbLabels) {
+                float y = dbToY(lbl.db, h);
+                g.drawText(lbl.label, 3, (int)y - 6, 28, 12, juce::Justification::left, false);
+            }
+        }
 
         // Build the path from magnitude data
         juce::Path curvePath;
@@ -141,6 +223,34 @@ public:
         // Stroke the curve
         g.setColour(juce::Colour(0xff00b4d8)); // bright cyan
         g.strokePath(curvePath, juce::PathStrokeType(2.0f));
+
+        // Resonance peak marker — filled dot + small callout at the magnitude peak
+        {
+            int peakBin = findPeakBin(magnitudes.data(), (int)magnitudes.size());
+            if (peakBin >= 0) {
+                float peakFreq = indexToFreq(peakBin);
+                float peakX = freqToX(peakFreq, w);
+                float peakY = juce::jlimit(0.0f, h, dbToY(magnitudes[peakBin], h));
+                constexpr float dotRadius = 3.5f;
+                // Filled dot in accent cyan with a dark outline for contrast
+                g.setColour(juce::Colour(0xff1a1a2e));
+                g.fillEllipse(peakX - dotRadius - 1.0f, peakY - dotRadius - 1.0f, (dotRadius + 1.0f) * 2.0f,
+                              (dotRadius + 1.0f) * 2.0f);
+                g.setColour(juce::Colour(0xff00b4d8)); // same accent as curve
+                g.fillEllipse(peakX - dotRadius, peakY - dotRadius, dotRadius * 2.0f, dotRadius * 2.0f);
+                // Small text callout (peak frequency label), placed above the dot.
+                // Skip the label entirely when the component is too narrow for the 44 px rect
+                // (jlimit upper bound would invert if w < 44).
+                if (w >= 44.0f) {
+                    juce::String callout = formatHzLabel(peakFreq);
+                    g.setFont(juce::Font(8.5f));
+                    g.setColour(juce::Colour(0xcc00b4d8)); // slightly translucent
+                    int labelX = juce::jlimit(0, (int)w - 44, (int)peakX - 20);
+                    int labelY = juce::jlimit(0, (int)h - 12, (int)peakY - 14);
+                    g.drawText(callout, labelX, labelY, 44, 10, juce::Justification::centred, false);
+                }
+            }
+        }
 
         // Draw live spectrum (green) — uses its own dB range for visibility
         if (showSpectrum) {
@@ -190,10 +300,6 @@ private:
     FilterModule& filterModule;
     std::vector<float> magnitudes;
     static constexpr int numPoints = 1024;
-    static constexpr float minFreq = 20.0f;
-    static constexpr float maxFreq = 20000.0f;
-    static constexpr float minDb = -40.0f;
-    static constexpr float maxDb = 50.0f;
 
     float lastCutoff = 0.0f;
     float lastResonance = 0.0f;

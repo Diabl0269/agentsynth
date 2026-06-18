@@ -199,6 +199,11 @@ juce_add_binary_data(GravisynthAssets SOURCES
     assets/icons/cat-time-fx.svg
     assets/icons/cat-dynamics.svg
     assets/icons/cat-utility.svg
+    # Waveform glyphs (Phase 4 — 4 SVGs, BinaryData symbols: waveformsine_svg etc.)
+    assets/icons/waveform-sine.svg
+    assets/icons/waveform-saw.svg
+    assets/icons/waveform-square.svg
+    assets/icons/waveform-triangle.svg
 )
 
 # The themed LookAndFeel lives in GravisynthCore and pulls typefaces from BinaryData;

@@ -55,6 +55,8 @@ add_executable(GravisynthTests
     ThemeTests.cpp
     IconLibraryTests.cpp
     StatusBarTests.cpp
+    FrequencyResponseTests.cpp
+    ScopeTests.cpp
     ../Source/MainComponent.cpp
     ../Source/UI/GraphEditor.cpp
     ../Source/UI/ModMatrixComponent.cpp

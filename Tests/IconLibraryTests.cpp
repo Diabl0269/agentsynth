@@ -190,3 +190,79 @@ TEST(IconLibraryTest, TransportPlayIsScaffolding) {
     });
     static_assert((int)Icon::TransportPlay == 0, "TransportPlay must remain the first enum value");
 }
+
+// ---------------------------------------------------------------------------
+// 8. WaveformIconsLoadAndAreNonNull
+// ---------------------------------------------------------------------------
+TEST(IconLibraryTest, WaveformIconsLoadAndAreNonNull) {
+    // All four waveform glyph icons must load successfully when assets are present.
+    IconLibrary lib;
+    const Icon kWaveformIcons[] = {Icon::WaveformSine, Icon::WaveformSaw, Icon::WaveformSquare, Icon::WaveformTriangle};
+    for (const auto id : kWaveformIcons) {
+        auto d = lib.getDrawable(id);
+        if (kAssetsPresent)
+            EXPECT_NE(d, nullptr) << "Waveform icon " << (int)id << " returned null with assets present";
+        // No assets → nullptr is expected and acceptable (null fallback contract).
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 9. WaveformIconTintStability
+// ---------------------------------------------------------------------------
+TEST(IconLibraryTest, WaveformIconTintStability) {
+    // Repeated setTintColour calls on a waveform icon must always produce the target colour
+    // (no tint accumulation from re-tinting an already-tinted drawable).
+    if (!kAssetsPresent)
+        GTEST_SKIP() << "Requires embedded assets";
+
+    IconLibrary lib;
+    const juce::Colour colA = juce::Colours::orange;
+    const juce::Colour colB = juce::Colours::deepskyblue;
+
+    juce::Colour last;
+    for (int i = 0; i < 100; ++i) {
+        last = (i % 2 == 0) ? colA : colB;
+        EXPECT_NO_THROW(lib.setTintColour(Icon::WaveformSine, last));
+    }
+
+    // Final tint (i==99 → odd → deepskyblue) must render correctly.
+    auto img = snapshotIcon(lib, Icon::WaveformSine);
+    ASSERT_TRUE(img.isValid());
+    EXPECT_TRUE(imageContainsColour(img, last)) << "Final tint colour not stable after 100 switches";
+}
+
+// ---------------------------------------------------------------------------
+// 10. WaveformIconBinaryDataSymbols
+// ---------------------------------------------------------------------------
+TEST(IconLibraryTest, WaveformIconBinaryDataSymbols) {
+    // Verify the exact BinaryData symbol names produced by JUCE's mangler for the four waveform
+    // SVG files (hyphens stripped, dot-before-extension becomes '_').
+    // 'waveform-sine.svg' → waveformsine_svg, etc.
+#ifdef GRAVISYNTH_HAS_FONT_ASSETS
+    EXPECT_NE(BinaryData::waveformsine_svg, nullptr);
+    EXPECT_GT(BinaryData::waveformsine_svgSize, 0);
+    EXPECT_NE(BinaryData::waveformsaw_svg, nullptr);
+    EXPECT_GT(BinaryData::waveformsaw_svgSize, 0);
+    EXPECT_NE(BinaryData::waveformsquare_svg, nullptr);
+    EXPECT_GT(BinaryData::waveformsquare_svgSize, 0);
+    EXPECT_NE(BinaryData::waveformtriangle_svg, nullptr);
+    EXPECT_GT(BinaryData::waveformtriangle_svgSize, 0);
+#else
+    GTEST_SKIP() << "BinaryData not linked in this build";
+#endif
+}
+
+// ---------------------------------------------------------------------------
+// 11. WaveformIconEnumCountCoversNewIcons
+// ---------------------------------------------------------------------------
+TEST(IconLibraryTest, WaveformIconEnumCountCoversNewIcons) {
+    // The enum must now contain 26 entries (22 Phase-3 + 4 waveform). The static_assert in
+    // IconLibrary.cpp enforces kTable alignment at compile time; this runtime check catches
+    // any mismatch that slips through without a rebuild.
+    EXPECT_EQ((int)Icon::kCount, 26);
+    // Spot-check ordinal positions of the new waveform icons.
+    EXPECT_EQ((int)Icon::WaveformSine, 22);
+    EXPECT_EQ((int)Icon::WaveformSaw, 23);
+    EXPECT_EQ((int)Icon::WaveformSquare, 24);
+    EXPECT_EQ((int)Icon::WaveformTriangle, 25);
+}

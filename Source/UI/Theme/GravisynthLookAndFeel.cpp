@@ -220,6 +220,13 @@ void GravisynthLookAndFeel::retintIcons() {
     iconLibrary_.setTintColour(Icon::CatTimeFX, c.textMuted);
     iconLibrary_.setTintColour(Icon::CatDynamics, c.textMuted);
     iconLibrary_.setTintColour(Icon::CatUtility, c.textMuted);
+
+    // Waveform glyphs: rendered as inline combo-box item icons. Tinted the same as the combo
+    // text colour so they remain legible across all themes.
+    iconLibrary_.setTintColour(Icon::WaveformSine, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::WaveformSaw, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::WaveformSquare, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::WaveformTriangle, c.textPrimary);
 }
 
 void GravisynthLookAndFeel::refreshTypefaces() {
@@ -440,6 +447,34 @@ void GravisynthLookAndFeel::drawComboBox(juce::Graphics& g, int width, int heigh
     auto arrowCol = box.findColour(juce::ComboBox::arrowColourId);
     g.setColour(enabled ? arrowCol : arrowCol.withMultipliedAlpha(0.4f));
     g.strokePath(chevron, juce::PathStrokeType(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    // Waveform icon: if the selected item carries a Drawable icon, render it inside the closed
+    // combo box to the left of the text label (which positionComboBoxText positions at x=8).
+    // We iterate the root menu to find the item matching the current selection.
+    const int selectedId = box.getSelectedId();
+    if (selectedId > 0) {
+        const juce::PopupMenu* rootMenu = box.getRootMenu();
+        if (rootMenu != nullptr) {
+            juce::PopupMenu::MenuItemIterator it(*rootMenu, false);
+            while (it.next()) {
+                const auto& item = it.getItem();
+                if (item.itemID == selectedId && item.image != nullptr) {
+                    constexpr int kIconSize = 14;
+                    // Place the icon at x=6, vertically centred. positionComboBoxText shifts
+                    // the text label right to x=24 (6 + 14 px icon + 4 px gap) when an icon is present.
+                    const int iconX = 6;
+                    const int iconY = (height - kIconSize) / 2;
+                    auto iconBounds =
+                        juce::Rectangle<float>((float)iconX, (float)iconY, (float)kIconSize, (float)kIconSize);
+                    g.saveState();
+                    g.reduceClipRegion(iconBounds.toNearestInt());
+                    item.image->drawWithin(g, iconBounds, juce::RectanglePlacement::centred, 1.0f);
+                    g.restoreState();
+                    break;
+                }
+            }
+        }
+    }
 }
 
 void GravisynthLookAndFeel::drawComboBoxTextWhenNothingSelected(juce::Graphics& g, juce::ComboBox& box,
@@ -450,7 +485,25 @@ void GravisynthLookAndFeel::drawComboBoxTextWhenNothingSelected(juce::Graphics& 
 }
 
 void GravisynthLookAndFeel::positionComboBoxText(juce::ComboBox& box, juce::Label& label) {
-    label.setBounds(8, 1, box.getWidth() - 30, box.getHeight() - 2);
+    // If the selected item carries a Drawable icon, shift the text label right to leave room
+    // for the ~14 px icon (painted in drawComboBox) plus a 4 px gap.
+    int leftOffset = 8;
+    const int selectedId = box.getSelectedId();
+    if (selectedId > 0) {
+        const juce::PopupMenu* rootMenu = box.getRootMenu();
+        if (rootMenu != nullptr) {
+            juce::PopupMenu::MenuItemIterator it(*rootMenu, false);
+            while (it.next()) {
+                const auto& item = it.getItem();
+                if (item.itemID == selectedId) {
+                    if (item.image != nullptr)
+                        leftOffset = 6 + 14 + 4; // iconX + kIconSize + gap
+                    break;
+                }
+            }
+        }
+    }
+    label.setBounds(leftOffset, 1, box.getWidth() - leftOffset - 22, box.getHeight() - 2);
     label.setFont(juce::Font(juce::FontOptions(theme.type.label + 2.0f)));
 }
 
@@ -467,7 +520,7 @@ void GravisynthLookAndFeel::drawPopupMenuBackground(juce::Graphics& g, int width
 void GravisynthLookAndFeel::drawPopupMenuItem(juce::Graphics& g, const juce::Rectangle<int>& area, bool isSeparator,
                                               bool isActive, bool isHighlighted, bool isTicked, bool hasSubMenu,
                                               const juce::String& text, const juce::String& shortcutKeyText,
-                                              const juce::Drawable* /*icon*/, const juce::Colour* textColour) {
+                                              const juce::Drawable* icon, const juce::Colour* textColour) {
     const auto& c = theme.colors;
     const auto& m = theme.metrics;
 
@@ -491,7 +544,9 @@ void GravisynthLookAndFeel::drawPopupMenuItem(juce::Graphics& g, const juce::Rec
     auto textArea = area.reduced(10, 0);
 
     // Drawn checkmark (no Unicode glyph — avoids font-dependent rendering).
-    if (isTicked) {
+    // Skipped when the item has an icon: the glyph + the closed-combo selection already
+    // communicate the choice, and drawing both causes a visual overlap.
+    if (isTicked && icon == nullptr) {
         const auto tickArea =
             juce::Rectangle<float>((float)area.getX() + 4.0f, (float)area.getY(), 18.0f, (float)area.getHeight());
         juce::Path tick;
@@ -503,6 +558,20 @@ void GravisynthLookAndFeel::drawPopupMenuItem(juce::Graphics& g, const juce::Rec
         g.setColour(c.accent);
         g.strokePath(tick, juce::PathStrokeType(1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         g.setColour(col);
+    }
+
+    // Waveform glyph icon: paint a ~14x14 Drawable to the left of the text.
+    if (icon != nullptr) {
+        constexpr int kIconSize = 14;
+        const int iconX = textArea.getX();
+        const int iconY = area.getY() + (area.getHeight() - kIconSize) / 2;
+        auto iconBounds = juce::Rectangle<float>((float)iconX, (float)iconY, (float)kIconSize, (float)kIconSize);
+        g.saveState();
+        g.reduceClipRegion(iconBounds.toNearestInt());
+        icon->drawWithin(g, iconBounds, juce::RectanglePlacement::centred, 1.0f);
+        g.restoreState();
+        // Shift text right so it doesn't overlap the icon (icon width + 4px gap).
+        textArea = textArea.withTrimmedLeft(kIconSize + 4);
     }
 
     g.drawText(text, textArea, juce::Justification::centredLeft, true);

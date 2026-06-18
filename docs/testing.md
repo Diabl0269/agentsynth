@@ -1,6 +1,6 @@
 # Testing Guide
 
-All tests use GoogleTest and run headless (no audio device, no GUI window). ~460 tests across ~64 suites.
+All tests use GoogleTest and run headless (no audio device, no GUI window). ~519 tests across ~67 suites.
 
 ```bash
 # Run all tests (ENABLE_TESTS defaults OFF — must be passed explicitly)
@@ -43,7 +43,7 @@ Test module interactions within the audio graph and cross-system integrations.
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
 | IntegrationTest | 7 | Signal chain routing (Osc->Filter->VCA), LFO->Filter modulation, preset loading with graph structure validation |
-| ModMatrixTest | 17 | Add/remove mod routings, amount scaling, channel mapping, modulation chains |
+| ModMatrixTest | 22 | Add/remove mod routings, amount scaling, channel mapping, modulation chains; Phase 4 adds: `RowHeightIs48` — `kRowHeight == 48`; `ZebraAlternates` — `isZebraRow` false for even, true for odd indices; `HoverStateUpdates` — `setHoveredRow`/`getHoveredRow` round-trip, default -1, redundant-set no-op, reset to -1; `ModMatrixComponentPaintSmokeTest` — paint with two routings, no crash; `HoverResetsAfterRowRemoval` — hover clears to -1 when a routing is removed (componentsChanged path) |
 | OllamaProviderTest | 5 | AI LLM HTTP requests, streaming responses, model management |
 | AIIntegrationServiceTest | 9 | Module suggestions, parameter recommendations, graph state mapping |
 
@@ -120,13 +120,13 @@ Tests for the theme system — `Tests/ThemeTests.cpp`. All headless.
 | ThemeLookAndFeelTest (extended) | 4 | `ApplyThemeSetsEveryColourId` extended to cover ListBox and TabbedButtonBar ColourIds; `RetintIconsCalledByApplyTheme` (getIcon non-null across 3 built-ins); `MetricsCodeOnlyFieldsHaveExpectedDefaults` (toolbarHeight==36, statusBarHeight==24, etc.); `MetricsCodeOnlyFieldsNotInJSON` (ThemeLoader output does not contain "toolbarHeight") |
 | StyledWidgetSmokeTest | 9 | `drawComboBox` normal/pressed/disabled × 3 themes; `drawComboBoxTextWhenNothingSelected`; `drawPopupMenuItem` separator/highlighted/ticked/disabled/hasSubMenu; `getDefaultScrollbarWidth()==6`; `drawScrollbar` V/H × over/down; `drawScrollbarButton`; `drawTabbedButtonBarBackground` + `drawTabButton` active/inactive/hover with snapshot pixel check |
 
-### Icon Library Tests (~7 tests)
+### Icon Library Tests (~11 tests)
 
-New suite `Tests/IconLibraryTests.cpp` covering `Source/UI/Theme/IconLibrary.h/.cpp`.
+Suite `Tests/IconLibraryTests.cpp` covering `Source/UI/Theme/IconLibrary.h/.cpp`.
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
-| IconLibraryTest | 7 | `AllIconEnumValuesHaveEntry` — every Icon < kCount returns non-null getDrawable when assets present; `NullFallbackWhenAssetsAbsent` — no-assets path returns nullptr without crash; `ClonedDrawableIsIndependent` — two getDrawable calls return distinct raw pointers; `TintColourChangeApplied` — setTintColour(icon, c1) then setTintColour(icon, c2) → result contains c2 not c1; `RetintMultipleSwitchesStable` — 100× alternating setTintColour loop, final colour matches last set value; `SvgBinaryDataNamingConvention` — raw BinaryData symbol non-null (guards CMake renames); `TransportPlayIsScaffolding` — Icon::TransportPlay loads without crash; no DrawableButton wired this phase |
+| IconLibraryTest | 11 | `AllIconEnumValuesHaveEntry` — every Icon < kCount returns non-null getDrawable when assets present; `NullFallbackWhenAssetsAbsent` — no-assets path returns nullptr without crash; `ClonedDrawableIsIndependent` — two getDrawable calls return distinct raw pointers; `TintColourChangeApplied` — setTintColour(icon, c1) then setTintColour(icon, c2) → result contains c2 not c1; `RetintMultipleSwitchesStable` — 100× alternating setTintColour loop, final colour matches last set value; `SvgBinaryDataNamingConvention` — raw BinaryData symbol non-null (guards CMake renames); `TransportPlayIsScaffolding` — Icon::TransportPlay loads without crash; no DrawableButton wired this phase; Phase 4 adds: `WaveformIconsLoad` — all four WaveformSine/Saw/Square/Triangle return non-null; `WaveformIconsTintedToTextPrimary` — tint colour matches textPrimary after retintIcons(); `WaveformIconKTableCount` — static_assert count == 26 enforced at compile time; `WaveformBinaryDataSymbolsPresent` — waveformsine/saw/square/triangle_svg symbols non-null |
 
 ### Status Bar Tests (~9 tests)
 
@@ -135,6 +135,22 @@ New suite `Tests/StatusBarTests.cpp` covering `Source/UI/StatusBarComponent.h/.c
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
 | StatusBarTest | 9 | `ConstructsWithoutCrash`; `RendersNonEmptyImage` (createComponentSnapshot 400×24); `FormatCpu` — 0.0%, 75.6%, 100.0%; `FormatVoices` — 0→"0 voices", 1→"1 voice", 8→"8 voices"; `FormatPatch` — ""→"Untitled", named patch passes through; `GatedRepaintDoesNotFireOnUnchangedValues` — update() twice with same values triggers repaint only once; `AudioEngine_GetActiveVoiceInfo_ReturnsZeroWithoutPolyModules`; `AudioEngine_CountsPolyMidiVoices` — maxVoices==8 after adding PolyMidiModule; `MasterMute_ZeroesOutput` — setMasterMute(true) → output buffer all zeros post-processBlock |
+
+### Frequency Response Tests (~13 tests)
+
+New suite `Tests/FrequencyResponseTests.cpp` covering `Source/UI/FrequencyResponseComponent.h`.
+
+| Suite | Tests | What it covers |
+|-------|-------|----------------|
+| FrequencyResponseTest | 13 | `PeakBinFindsMaximum`/`PeakBinFindsFirstMaxWhenTied`/`PeakBinHandlesEmpty`/`PeakBinSingleElement` — `findPeakBin` returns the max-magnitude bin (first index on ties, -1 for null/zero-length, 0 for single element); `FormatHzLabel_100Hz`/`_1kHz`/`_10kHz`/`_SubKiloHz`/`_FractionalKiloHz` — `formatHzLabel` yields "100Hz"/"1kHz"/"10kHz"/"440Hz"/"1.5…kHz"; `FreqMappingMonotonic`/`FreqMappingEndpoints` — `freqToXStatic` log map is monotonic and pins 20 Hz→x=0, 20 kHz→x=width; `DbMappingMonotonic` — `dbToYStatic` monotonic across +20/0/-20 dB; `PaintSmoke` — paints into a `juce::Image` with no crash, produces opaque pixels |
+
+### Scope Tests (~10 tests)
+
+New suite `Tests/ScopeTests.cpp` covering `Source/UI/ScopeComponent.h`.
+
+| Suite | Tests | What it covers |
+|-------|-------|----------------|
+| ScopeTest | 10 | `NoSignalThreshold_Zero`/`_BoundaryInclusive`/`_JustAbove`/`_FullAmplitude` — `isNoSignal` is true for peak ≤ 0.02f (boundary inclusive), false above; `AmplitudeMapping_TopNearBoundsTop`/`_BottomNearBoundsBottom`/`_ZeroIsVerticalCentre`/`_Symmetry` — `amplitudeToY` maps +1→above centre, -1→below centre, 0→exact vertical centre, symmetric about centre; `PaintSmokeNoSignal`/`PaintSmokeWithSignal` — paint the silent (No-Signal empty-state) and signal states into a `juce::Image` with no crash |
 
 ### E2E Workflow Tests (24 tests)
 

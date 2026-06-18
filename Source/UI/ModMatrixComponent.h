@@ -9,6 +9,12 @@ class ModMatrixComponent
     : public juce::Component
     , public juce::Timer {
 public:
+    /** Row height used by both layout and tests. */
+    static constexpr int kRowHeight = 48;
+
+    /** Returns true for odd rows (zebra striping). */
+    static bool isZebraRow(int rowIndex) noexcept { return rowIndex % 2 == 1; }
+
     ModMatrixComponent(AudioEngine& engine, GravisynthUndoManager* undoMgr = nullptr);
     ~ModMatrixComponent() override;
 
@@ -25,6 +31,10 @@ public:
 
     // Safely detach all rows from their processors before graph rebuild
     void detachAllRows();
+
+    /** Hover row index (-1 = none). Set by ModRow mouse callbacks, or from tests. */
+    void setHoveredRow(int rowIndex);
+    int getHoveredRow() const noexcept { return hoveredRow_; }
 
 private:
     AudioEngine& audioEngine;
@@ -52,6 +62,8 @@ private:
 
         void paint(juce::Graphics& g) override;
         void resized() override;
+        void mouseEnter(const juce::MouseEvent& e) override;
+        void mouseExit(const juce::MouseEvent& e) override;
         void comboBoxChanged(juce::ComboBox* comboBox) override;
 
         ModMatrixComponent& owner;
@@ -84,6 +96,7 @@ public:
 
 private:
     int lastNodeCount = 0;
+    int hoveredRow_ = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModMatrixComponent)
 };

@@ -140,7 +140,7 @@ Gravisynth uses SVG `Drawable` icons — **not** an icon or glyph font. This avo
 
 ### Icon enum
 
-22 icons are defined in `gsynth::theme::Icon` (in `Source/UI/Theme/IconLibrary.h`):
+26 icons are defined in `gsynth::theme::Icon` (in `Source/UI/Theme/IconLibrary.h`):
 
 ```
 TransportPlay    TransportStop    ActionUndo       ActionRedo
@@ -149,11 +149,12 @@ ToggleAI         ToggleMatrix     ToggleLibrary
 ModuleBypass     ModuleMute       ModuleDelete
 CatSources       CatSequencing    CatEnvelopes     CatFilters
 CatModulationFX  CatTimeFX        CatDynamics      CatUtility
+WaveformSine     WaveformSaw      WaveformSquare   WaveformTriangle
 ```
 
-**`Icon::TransportPlay` is scaffolding** — the SVG asset is present and the enum value exists, but no `DrawableButton` is wired to it in Phase 3. It is tinted to `textMuted` and reserved for a future transport affordance.
+**`Icon::TransportPlay` is scaffolding** — the SVG asset is present and the enum value exists, but no `DrawableButton` is wired to it. It is tinted to `textMuted` and reserved for a future transport affordance.
 
-**Waveform glyphs (`waveform-sine`, `waveform-saw`, etc.) are deferred to Phase 4.** They are not in the asset set or the `Icon` enum.
+The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle`, indices 22–25) are rendered in the Oscillator waveform combo via `GravisynthLookAndFeel::drawPopupMenuItem` (14×14 glyph left of the item text) and `drawComboBox` (selected waveform glyph in the closed combo). `positionComboBoxText` shifts the label right when the selected item has an icon.
 
 ### Token → tint map
 
@@ -164,9 +165,10 @@ CatModulationFX  CatTimeFX        CatDynamics      CatUtility
 | `ModuleBypass` | `textMuted` |
 | `ModuleMute` | `warning` |
 | `ModuleDelete` | `error` |
-| `TransportPlay` | `textMuted` (scaffolding; no consumer this phase) |
+| `TransportPlay` | `textMuted` (scaffolding; no DrawableButton consumer) |
 | All toolbar actions + transport stop + toggles | `textPrimary` |
 | Category icons (`CatSources` … `CatUtility`) | `textMuted` |
+| `WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle` | `textPrimary` (consumer: Oscillator waveform combo via `drawPopupMenuItem`/`drawComboBox`) |
 
 `retintIcons()` is called from `applyTheme()` — it is part of the single re-skin pass triggered by every theme switch.
 
@@ -200,6 +202,10 @@ JUCE's binary-data name mangler **strips hyphens** and concatenates the remainin
 | `action-undo.svg` | `BinaryData::actionundo_svg` |
 | `cat-modulation-fx.svg` | `BinaryData::catmodulationfx_svg` |
 | `action-auto-arrange.svg` | `BinaryData::actionautoarrange_svg` |
+| `waveform-sine.svg` | `BinaryData::waveformsine_svg` |
+| `waveform-saw.svg` | `BinaryData::waveformsaw_svg` |
+| `waveform-square.svg` | `BinaryData::waveformsquare_svg` |
+| `waveform-triangle.svg` | `BinaryData::waveformtriangle_svg` |
 
 Note: the spec text says "a-b.svg → `BinaryData::a_b_svg`" — this is incorrect. Hyphens are stripped, not converted to underscores. The `IconLibrary.cpp` lookup table uses the real symbol names. A CMake guard (`file(GLOB)` + `string(FIND ... "_")`) enforces hyphen-only filenames to prevent accidental underscore collisions.
 
@@ -431,12 +437,11 @@ The following stock-widget overrides are now fully implemented in `GravisynthLoo
 
 > **MidiKeyboardComponent limitation:** `juce_audio_utils` is not linked into `GravisynthCore` (it would bloat the headless test binary). As a result, `MidiKeyboardComponent` inherits JUCE default colours and cannot be themed from `GravisynthLookAndFeel`. This is a known and accepted limitation.
 
-### Phase 4 (deferred)
+### Phase 4 completions
 
-The following items are not yet themed or implemented:
+- **Waveform glyphs** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle`) — SVG assets added in `assets/icons/waveform-{sine,saw,square,triangle}.svg`; `Icon` enum values 22–25 registered in `IconLibrary`; tinted to `textPrimary` by `retintIcons()`; consumed by `ModuleComponent` waveform combos (Oscillator). `GravisynthLookAndFeel::drawPopupMenuItem` now paints the 14×14 waveform glyph left of the item text; `drawComboBox` renders the selected waveform glyph in the closed combo; `positionComboBoxText` shifts the label right when the selected item carries a glyph.
 
-- **Waveform glyphs** (`waveform-sine`, `waveform-saw`, `waveform-square`, `waveform-triangle`) — SVG icon assets and `Icon` enum values are **deferred to Phase 4**. No `drawComboBoxItem` override for the Oscillator waveform combo exists yet.
+### Still deferred
+
 - **`Icon::TransportPlay`** — SVG asset and enum value are present (scaffolding), but no `DrawableButton` is wired to it. Reserved for a future transport affordance.
-- **`FrequencyResponseComponent.h`** — filter frequency response curve colours (hardcoded)
-- **`ScopeComponent.h`** — oscilloscope scope trace colour (hardcoded)
 - **`AIChatComponent.cpp`** — chat bubble palette + debug console (hardcoded)

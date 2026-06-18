@@ -7,7 +7,7 @@
 
 namespace gsynth::theme {
 
-// The canonical Gravisynth icon set. Exactly 22 SVG glyphs, white-filled and tinted
+// The canonical Gravisynth icon set. Exactly 26 SVG glyphs, white-filled and tinted
 // programmatically at theme-apply time. Backed by GravisynthAssets BinaryData (see
 // CMakeLists.txt) when GRAVISYNTH_HAS_FONT_ASSETS is defined; otherwise every entry is a
 // null fallback so headless tests (no asset library) still link and run.
@@ -15,8 +15,6 @@ namespace gsynth::theme {
 // IMPORTANT: this is a juce::Drawable (SVG) registry, NOT an icon/glyph font. A runtime
 // font-family swap corrupts text globally on JUCE 8 + CoreText, so chrome glyphs live here
 // as Drawables instead of as a symbol font.
-//
-// Waveform glyphs are intentionally absent — deferred to a later phase (no consumer here).
 enum class Icon : int {
     TransportPlay = 0, // scaffolding only — no DrawableButton wired this phase
     TransportStop,     // used for master-mute in StatusBarComponent
@@ -40,6 +38,11 @@ enum class Icon : int {
     CatTimeFX,
     CatDynamics,
     CatUtility,
+    // Waveform glyphs — rendered in combo-box items for Oscillator waveform selection.
+    WaveformSine,
+    WaveformSaw,
+    WaveformSquare,
+    WaveformTriangle,
     kCount
 };
 

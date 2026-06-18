@@ -103,6 +103,12 @@ private:
     // No-op when the themed LnF is not installed (headless tests).
     void applyHeaderButtonIcons();
 
+    // Rebuild the root-menu items of each waveform ComboBox with fresh icon clones
+    // from the now-retinted IconLibrary, then restore the previous selection without
+    // firing the parameter attachment. Called from lookAndFeelChanged() after a theme
+    // switch so popup glyphs match the new theme tint.
+    void refreshWaveformComboIcons();
+
     // Refresh icon images whenever the LookAndFeel is changed (e.g. theme switch).
     void lookAndFeelChanged() override;
 
