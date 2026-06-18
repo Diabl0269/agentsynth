@@ -53,28 +53,37 @@ jobs:
       run: |
         brew install cmake ninja
 
+    # Windows MSVC environment — required so the Ninja generator can find cl.exe.
+    # We use Ninja on every OS so this workflow's build matches the PR CI
+    # (ci.yml) exactly. The default Visual Studio generator bakes the VS version
+    # into JUCE's cached FetchContent sub-build, which breaks when GitHub bumps
+    # the windows-latest image (e.g. VS 2022 -> VS 2026); Ninja's generator
+    # string is version-agnostic, so the cache survives image upgrades.
+    - name: Setup MSVC
+      if: runner.os == 'Windows'
+      uses: ilammy/msvc-dev-cmd@v1
+
     # Cache FetchContent Dependencies
     - name: Cache FetchContent Dependencies
       uses: actions/cache@v4
       with:
         path: build/_deps
-        key: ${{ runner.os }}-release-deps-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
+        # The "-ninja" tag ties the cache to the generator so the stale
+        # Visual-Studio-generator sub-build cache (pinned to an old VS version)
+        # is never restored after this workflow switched to Ninja.
+        key: ${{ runner.os }}-release-deps-ninja-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
         restore-keys: |
-          ${{ runner.os }}-release-deps-
+          ${{ runner.os }}-release-deps-ninja-
 
-    # Configure CMake
+    # Configure CMake — Ninja on every OS so this matches the PR CI build path
+    # (see the "Setup MSVC" note above for why Ninja and not the VS generator).
     - name: Configure CMake
       shell: bash
-      run: |
-        if [ "$RUNNER_OS" == "Windows" ]; then
-          cmake -B build -DCMAKE_BUILD_TYPE=Release
-        else
-          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-        fi
+      run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 
-    # Build
+    # Build (Ninja is single-config; the build type comes from configure)
     - name: Build
-      run: cmake --build build --config Release
+      run: cmake --build build
 
     # Package Linux
     - name: Package Linux Artifact
@@ -124,7 +133,10 @@ jobs:
   release:
     name: Tag and Release
     needs: [build]
-    if: always() && !contains(needs.build.result, 'failure')
+    # Only tag + release on push to main. workflow_dispatch is therefore a
+    # build-only dry-run, safe to trigger on a branch to validate the matrix
+    # (incl. the Windows build) before merging.
+    if: always() && !contains(needs.build.result, 'failure') && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
