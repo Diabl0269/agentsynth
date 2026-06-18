@@ -1,6 +1,6 @@
 # Testing Guide
 
-All tests use GoogleTest and run headless (no audio device, no GUI window). ~519 tests across ~67 suites.
+All tests use GoogleTest and run headless (no audio device, no GUI window). ~523 tests across ~68 suites.
 
 ```bash
 # Run all tests (ENABLE_TESTS defaults OFF — must be passed explicitly)
@@ -193,6 +193,72 @@ The `AudioRenderingTests` suite compares rendered audio against "golden" referen
   ```
 - **To listen**: Use `scripts/play-reference.sh <filename>` (requires `ffplay` or `aplay`).
 
-## CI
+## Build
 
-Tests run automatically on every PR across Ubuntu, macOS, and Windows. Coverage is enforced at 85% on the Ubuntu Debug build. See [CLAUDE.md](../CLAUDE.md) for full CI details.
+```bash
+cmake -S . -B build
+cmake --build build
+```
+
+`ENABLE_TESTS` defaults `OFF` — pass `-DENABLE_TESTS=ON` to generate the `GravisynthTests` target. `ENABLE_COVERAGE` is a separate opt-in flag used by the Ubuntu CI job and `scripts/coverage.sh`.
+
+## Git Hooks
+
+Install once per clone (hooks are **not** auto-installed):
+
+```bash
+bash scripts/install-hooks.sh
+```
+
+Two hooks are registered:
+
+- **pre-commit** (`scripts/pre-commit-lint.sh`): runs `clang-format --dry-run --Werror` on staged `Source/` and `Tests/` C/C++ files. Fast; mirrors the CI Lint job.
+- **pre-push** (`scripts/pre-push-release-test.sh`): runs clang-format lint on all C/C++ sources, then a Release build + full test suite. The first push configures the `build-release/` directory; subsequent pushes are fast incremental rebuilds. This catches UB and segfaults that Debug mode hides (zero-initialized memory masks use-after-free).
+
+Bypass a single invocation with `--no-verify`:
+
+```bash
+git commit --no-verify
+git push --no-verify
+```
+
+Run manually at any time:
+
+```bash
+bash scripts/pre-commit-lint.sh        # lint staged files
+bash scripts/pre-push-release-test.sh  # lint + Release build + tests
+```
+
+**clang-format version note:** CI installs clang-format as an unpinned `apt` package — currently clang-format 18 via `ubuntu-24.04`, but that will drift as GitHub updates the runner. Match the same major version locally to avoid "hook passes but CI fails" situations. The pre-commit script will warn if `clang-format` is missing from `PATH`.
+
+## CI Pipeline
+
+CI runs via `.github/workflows/ci.yml` on pull requests to `main` only, path-filtered to changes under `Source/**`, `Tests/**`, `CMakeLists.txt`, `Tests/CMakeLists.txt`, `scripts/**`, or either workflow file (`ci.yml` / `build-artifacts.yml`).
+
+There are **five jobs**:
+
+| Job | Runner | Config | Notes |
+|-----|--------|--------|-------|
+| **Lint** | `ubuntu-latest` | — | Installs `clang-format` as an unpinned apt package (currently 18 on ubuntu-24.04); runs `--dry-run --Werror` over `Source/` and `Tests/`. Fast (~30 s) — gives formatting feedback without waiting for a full build. |
+| **Build, Test, and Coverage** | `ubuntu-latest` | Debug + clang + `ENABLE_COVERAGE=ON` | Runs tests, then `bash scripts/coverage.sh --report-only` (skips re-build; only merges profdata and checks the 85% line-coverage threshold). |
+| **Build and Test (ASAN)** | `ubuntu-latest` | `RelWithDebInfo` + `-fsanitize=address` | **Label-gated** — only runs when the PR carries the `run-asan` label. `ASAN_OPTIONS=detect_leaks=0`. |
+| **Build and Test (macOS)** | `macos-latest` | Release | Catches UB/segfaults and cross-platform issues. |
+| **Build and Test (Windows)** | `windows-latest` | Release | Catches UB/segfaults and cross-platform issues. |
+
+### Optimizations
+
+- **ccache**: Compiler cache avoids recompiling unchanged files. `CMAKE_C/CXX_COMPILER_LAUNCHER=ccache`, 500 MB max size, cached at `~/.ccache` (Linux) / `~/Library/Caches/ccache` (macOS) / `C:\Users\runneradmin\AppData\Local\ccache` (Windows), keyed by commit SHA with prefix restore.
+- **FetchContent caching**: `build/_deps` (JUCE 8.0.3 + GoogleTest 1.14.0) cached by `actions/cache`, keyed on `CMakeLists.txt` + `Tests/CMakeLists.txt` hashes.
+- **`JUCE_WEB_BROWSER=0`**: Drops unused WebBrowserComponent and removes WebKit/libsoup deps on Linux.
+- **Separate lint job**: Instant formatting feedback without waiting for a full build.
+- **apt package caching**: `awalsh128/cache-apt-pkgs-action` caches Ubuntu packages across runs.
+- **`coverage.sh --report-only`**: In CI, skips redundant configure/build/test steps and only merges profdata + generates the report.
+
+### What didn't work
+
+- **Unity builds** (`CMAKE_UNITY_BUILD`): Incompatible with JUCE — Obj-C++ `.mm` files cannot be merged into C++ unity translation units.
+- **Precompiled headers**: JUCE module `.cpp` files have guards against being pre-included; on macOS, `.mm` files also require Obj-C++ mode which conflicts with a C++ PCH.
+
+### Post-merge artifact builds
+
+After a merge to `main`, `.github/workflows/build-artifacts.yml` triggers automatically. It builds and packages the app on Ubuntu, macOS, and Windows (no tests — CI already ran them on the PR) using **Ninja on all three platforms** (Windows via the MSVC dev environment), so the build path matches the PR CI exactly; it then bumps the version tag and creates a GitHub release with all three platform artifacts. The tag-and-release step runs **only on `push` to `main`** — a manual `workflow_dispatch` run is a build-only dry-run, useful for validating the matrix (including the Windows build) before merging.

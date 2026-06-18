@@ -48,8 +48,16 @@ All audio modules in Gravisynth inherit from `ModuleBase`, which in turn extends
     void MyNewModule::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
         juce::ignoreUnused(midiMessages); // Use MIDI if relevant
 
-        // Clear output if no input, or if module is bypassed
+        // Bypass: dry pass-through — return early WITHOUT clearing audio channels.
+        // Clear only CV channels (index >= 2) so mod CV does not leak as audio.
         if (isBypassed()) {
+            for (int ch = 2; ch < buffer.getNumChannels(); ++ch)
+                buffer.clear(ch, 0, buffer.getNumSamples());
+            return;
+        }
+
+        // Mute: silence the entire output buffer.
+        if (isMuted()) {
             buffer.clear();
             return;
         }
@@ -88,7 +96,11 @@ All audio modules in Gravisynth inherit from `ModuleBase`, which in turn extends
 *   This is where your core audio processing happens.
 *   `buffer` contains the audio input and should be filled with your module's output.
 *   `midiMessages` can be processed if your module is MIDI-aware (e.g., an instrument or MIDI effect).
-*   **Important**: If your module is bypassed or receives no active input, `buffer.clear()` the output to prevent unwanted noise or signals.
+*   **Important — bypass/mute contract (every `processBlock` MUST honour both branches separately):**
+    *   `isBypassed()` → **dry pass-through**: return early *without* clearing audio channels so the input signal flows through unchanged. Clear only CV channels at index ≥ 2 to prevent mod CV from leaking as audio. Never call `buffer.clear()` on bypass.
+    *   `isMuted()` → **silence**: call `buffer.clear()` then return.
+    *   Never combine the two into a single `if (isBypassed() || isMuted()) buffer.clear()` — that mutes on bypass instead of passing the signal through.
+    *   **Exception — pure source modules** (e.g. `OscillatorModule`, `PolyMidiModule`) have no audio input, so there is no dry signal to pass through. These modules *do* clear their output on bypass.
 
 ## 3. Parameter Management and Modular Routing
 

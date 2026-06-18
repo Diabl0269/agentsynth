@@ -20,6 +20,21 @@ enum class RoutingKind { AttenuverterChain, DirectCV, PolyBus };
 
 ---
 
+## AttenuverterModule Internals
+
+`AttenuverterModule` is the intermediary node inserted by `AudioEngine::addModRouting()`. Key internals:
+
+- **Constructor default Amount = 0.0.** The `amountParam` (`AudioParameterFloat`, range −1.0 to 1.0) is initialised to `0.0f`.
+- **`addModRouting` sets Amount to 1.0.** After inserting the node, `AudioEngine::addModRouting()` finds the amount parameter by index and calls `setValueNotifyingHost(1.0f)`. This means a freshly connected modulation path immediately passes the full signal.
+- **`addEmptyModRouting` leaves Amount at 0.0.** This method adds an `AttenuverterModule` node without wiring it or adjusting its parameter. The amount stays at the constructor default of `0.0`.
+- **UI visualization atomics.** After each `processBlock`, the module writes two `std::atomic<float>` members for the UI to read lock-free:
+  - `lastOutputPeak` — peak absolute value over the processed block (used to drive activity display).
+  - `lastModValue` — the mid-block sample value (`audioData[numSamples / 2]`), providing a near-instantaneous signal reading for modulation rings.
+  Both are exposed via `getLastOutputPeak()` and `getLastModValue()`.
+- **Bypass behavior.** When bypassed, `lastOutputPeak` and `lastModValue` are both set to `0.0f` and all channels are cleared (no pass-through — an attenuverter in bypass silences its output).
+
+---
+
 ## `AudioEngine::getModulationRoutings()`
 
 ```cpp
@@ -75,6 +90,17 @@ virtual LogicalPort mapOutputChannel(int rawChannel) const;
 
 Poly-capable modules override these to describe fans. The default base implementation clamps any out-of-range channel to the last visible jack and marks `isPolyGroupHead` based on whether `rawChannel < getVisible*PortCount()`.
 
+### Port Labels
+
+`ModuleBase` also declares virtual port-label accessors:
+
+```cpp
+virtual juce::String getInputPortLabel(int channelIndex) const;   // default: "In <N>"
+virtual juce::String getOutputPortLabel(int channelIndex) const;  // default: "Out <N>"
+```
+
+Modules override these to supply human-readable jack names shown in the UI (e.g. `AttenuverterModule` returns `"Signal"` / `"Amount"` for its two inputs and `"Out"` for its output). The UI reads these labels to annotate jack tooltips and connection indicators with descriptive names rather than raw channel numbers.
+
 ### How GraphEditor uses the logical-port API
 
 1. For every connection in the graph, GraphEditor calls `mapOutputChannel` on the source and `mapInputChannel` on the destination to get `LogicalPort` values.
@@ -124,3 +150,20 @@ The Amp Env module runs in poly mode (8 outputs, one per voice). The VCA runs in
 The preset also connects ADSR output ch0 (voice 0's envelope) directly to Oscillator input ch12 (the shared Level CV). This is a `DirectCV` routing: a single connection from one raw channel to one raw channel, without an attenuverter, and without a poly fan. `getModulationRoutings()` returns it as `DirectCV` with `voiceCount = 1`. GraphEditor draws it as a normal single wire without a badge. All 8 oscillator voices share the same level modulation (the voice-0 envelope signal).
 
 This combination — PolyBus for per-voice gate control, DirectCV for a shared timbre parameter — is a common pattern when building poly patches.
+
+---
+
+## Modulation Rings on Knobs (ModuleComponent)
+
+`ModuleComponent` renders Serum-style modulation rings on knobs for any active modulation targeting that module. It calls `AudioEngine::getModulationRoutings()` (via the `GraphEditor`'s cached snapshot) to find which knobs have live modulation and paints a ring overlay proportional to the routed signal value. This gives a real-time visual indication of modulation depth directly on the parameter knob.
+
+---
+
+## Visual Signal Flow
+
+`GraphEditor` draws animated signal-flow visualisation on top of all connections:
+
+- **Animated dots on wires.** Three evenly-spaced dots travel along every wire's bezier curve, riding the exact same cubic path as the drawn wire. Audio connection dots use the `audioWire` theme colour token (a light near-white in built-in themes); modulation connection dots use the `modWire` colour token (a bright cyan-blue in the Obsidian and Neon themes). Wire colours are theme-dependent — the dot colour always matches its wire's theme colour.
+- **Pulsing modulation lines.** Modulation wires pulse in brightness based on the live `modSignalPeak` from `ModulationRouting`, giving a visual sense of signal activity.
+- **Activity glow on modules.** `ModuleComponent` drives an activity glow (painted at 15 Hz) that brightens when the module's RMS output changes meaningfully or when it has active incoming modulation.
+- **Data source and cache rate.** `GraphEditor::timerCallback()` fires at **30 Hz** (`startTimerHz(30)`). Each tick it calls `AudioEngine::getModulationRoutings()` and `AudioEngine::getModulationDisplayInfo()` and stores the results in `cachedModRoutings` and `cachedModDisplayInfo`. The paint pass reads these cached values so animated dots and pulsing wires are driven by up-to-date signal state without hitting the audio engine on every paint frame.
