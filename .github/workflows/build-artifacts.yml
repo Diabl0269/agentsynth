@@ -37,7 +37,7 @@ jobs:
             artifact_name: Gravisynth-Windows-x64
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     # Linux Dependencies
     - name: Install Linux Dependencies
@@ -65,7 +65,7 @@ jobs:
 
     # Cache FetchContent Dependencies
     - name: Cache FetchContent Dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: build/_deps
         # The "-ninja" tag ties the cache to the generator so the stale
@@ -124,7 +124,7 @@ jobs:
 
     # Upload Artifact
     - name: Upload Artifact
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: ${{ matrix.artifact_name }}
         path: artifact/
@@ -139,7 +139,7 @@ jobs:
     if: always() && !contains(needs.build.result, 'failure') && github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -153,7 +153,7 @@ jobs:
           fetch_all_tags: true
 
       - name: Download All Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true

@@ -11,13 +11,14 @@ on:
       - 'Tests/CMakeLists.txt'
       - 'scripts/**'
       - '.github/workflows/ci.yml'
+      - '.github/workflows/build-artifacts.yml'
 
 jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Install clang-format
       run: sudo apt-get update && sudo apt-get install -y clang-format
     - name: Check Formatting
@@ -28,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Install Dependencies
       uses: awalsh128/cache-apt-pkgs-action@latest
@@ -37,7 +38,7 @@ jobs:
         version: 1.0
 
     - name: Cache FetchContent Dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: build/_deps
         key: ${{ runner.os }}-deps-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
@@ -45,7 +46,7 @@ jobs:
           ${{ runner.os }}-deps-
 
     - name: Cache ccache
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.ccache
         key: ${{ runner.os }}-ccache-${{ github.sha }}
@@ -88,7 +89,7 @@ jobs:
 
     - name: Upload Coverage Artifact (Optional)
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: coverage-report
         path: |
@@ -101,7 +102,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Install Dependencies
       uses: awalsh128/cache-apt-pkgs-action@latest
@@ -110,7 +111,7 @@ jobs:
         version: 1.0
 
     - name: Cache FetchContent Dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: build/_deps
         key: ${{ runner.os }}-deps-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
@@ -141,13 +142,13 @@ jobs:
     runs-on: macos-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Install Dependencies
       run: brew install cmake ninja ccache
 
     - name: Cache FetchContent Dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: build/_deps
         key: ${{ runner.os }}-deps-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
@@ -155,7 +156,7 @@ jobs:
           ${{ runner.os }}-deps-
 
     - name: Cache ccache
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/Library/Caches/ccache
         key: ${{ runner.os }}-ccache-${{ github.sha }}
@@ -190,10 +191,10 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Cache FetchContent Dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: build/_deps
         key: ${{ runner.os }}-deps-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
@@ -201,7 +202,7 @@ jobs:
           ${{ runner.os }}-deps-
 
     - name: Cache ccache
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: C:\Users\runneradmin\AppData\Local\ccache
         key: ${{ runner.os }}-ccache-${{ github.sha }}
