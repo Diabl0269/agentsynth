@@ -122,6 +122,15 @@ them by name.
 > you intend to ship the theme as a launch default.
 Any other name falls back to the JUCE system sans-serif.
 
+> **Implementation note — typeface pre-creation.** `GravisynthLookAndFeel`'s constructor
+> pre-creates embedded typefaces for all six built-in font families (Inter, JetBrains Mono,
+> Manrope, Space Mono, IBM Plex Sans, IBM Plex Mono) and populates the per-instance
+> `typefaceCache` before any text is rendered. Creating an embedded typeface for the first time
+> via `juce::Typeface::createSystemTypefaceFor` *after* the app has already rendered with another
+> font is what triggers the JUCE 8 + CoreText global text corruption. Pre-loading all typefaces
+> at startup means `getTypefaceForFont` only ever returns cached instances — a live theme switch
+> never triggers a runtime typeface creation, so font switching stays clean.
+
 ### Treatment (`treatment`) — all optional
 
 | Token | Default | Type | Meaning |
@@ -358,8 +367,12 @@ Set to `0` (Obsidian/Warm) for no bloom. Set to `0.85` (Neon) for vivid neon glo
 
 ### `shadow` (float, 0–1)
 
-Drop-shadow strength under module cards. Uses `juce::DropShadow` with a radius of 10px and a
-4px downward offset. `0` = no shadow; `0.65` = Obsidian default.
+Drop-shadow strength under module cards. Implemented as a stack of three translucent,
+downward-offset, expanding rounded rectangles — **not** `juce::DropShadow`. `juce::DropShadow`
+re-rasterizes a per-paint gaussian blur every time a buffered card is re-rendered at a new zoom
+scale, which was the dominant cost behind zoom lag. The layered-fill approximation is visually
+close and a fraction of the cost (plain fills, no blur), so zooming stays smooth.
+`0` = no shadow; `0.6` = Obsidian default.
 
 ### `blur` (float, 0–1)
 
@@ -445,3 +458,50 @@ The following stock-widget overrides are now fully implemented in `GravisynthLoo
 
 - **`Icon::TransportPlay`** — SVG asset and enum value are present (scaffolding), but no `DrawableButton` is wired to it. Reserved for a future transport affordance.
 - **`AIChatComponent.cpp`** — chat bubble palette + debug console (hardcoded)
+
+---
+
+## 10. Developer implementation notes
+
+### `Theme.h` data model
+
+`Theme.h` (`Source/UI/Theme/Theme.h`) has **no JUCE GUI dependencies** beyond `juce::Colour` and
+`juce::String` (pulled in via `juce_graphics`). This makes it fully headless-testable without
+linking the UI modules. The file also defines the `ThemeStyle` enum (`Flat`, `Glass`,
+`Textured`) used by `Treatment::style`.
+
+### `ThemeLoader` public API
+
+`ThemeLoader` (`Source/UI/Theme/ThemeLoader.h`) exposes the following public helpers beyond the
+main `parseTheme` / `themeToJson` pair:
+
+| Method | Description |
+|---|---|
+| `parseHexColour(const juce::String&)` | Parse `"#RGB"` / `"#RRGGBB"` / `"#AARRGGBB"` → `std::optional<juce::Colour>`. Returns `nullopt` on malformed input. |
+| `parseStyle(const juce::String&)` | Map `"flat"` / `"glass"` / `"textured"` (case-insensitive) → `std::optional<ThemeStyle>`. |
+| `styleToString(ThemeStyle)` | Reverse: `ThemeStyle` → canonical lowercase string for serialization. |
+| `getLastError()` | Returns the error reason from the most recent `parseTheme` failure on the calling thread (empty string on success). Used by callers to emit the single "Skipped …" log line. |
+
+### Knob sweep arc constants
+
+`GravisynthLookAndFeel` declares two `static constexpr float` constants that define the 270°
+rotary sweep arc shared by knob drawing (`drawRotarySlider`) and modulation ring drawing
+(`drawModulationRing`):
+
+```cpp
+static constexpr float kRotaryStart = -juce::MathConstants<float>::pi * 0.75f; // ≈ –135°
+static constexpr float kRotaryEnd   =  juce::MathConstants<float>::pi * 0.75f; // ≈ +135°
+```
+
+Both helpers read these constants directly instead of using the `rotaryStartAngle` /
+`rotaryEndAngle` arguments passed by JUCE, ensuring the ring and the knob arc are always
+co-aligned regardless of what the `Slider` component was configured with.
+
+### Toolbar icon gating
+
+`applyToolbarIcons()` clones `Drawable` instances from `GravisynthLookAndFeel` and assigns them
+to each toolbar `DrawableButton` — this is non-trivial Drawable clone work. To avoid repeating
+it on every resize frame, `MainComponent::resized()` gates the call: `applyToolbarIcons()` is
+only called when the toolbar transitions **into** narrow mode (detected by comparing the new
+`isNarrowMode()` result against the previous value). Normal resize events that do not cross the
+480 px threshold skip the Drawable clone work entirely.

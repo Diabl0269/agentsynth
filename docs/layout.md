@@ -170,6 +170,10 @@ The application chrome is carved out of `MainComponent::resized()` — the singl
 └─────────────────────────────────┘
 ```
 
+### ToolbarComponent `paint()`
+
+`paint()` fills the toolbar background with `theme.colors.bg0` via a `dynamic_cast<GravisynthLookAndFeel*>`. When the cast returns null (headless tests or non-themed context), it falls back to the hardcoded colour `0xff0B0D10`.
+
 ### Toolbar FlexBox layout (`ToolbarComponent`)
 
 `ToolbarComponent::layoutButtons(bounds)` runs a single `juce::FlexBox` (row, align-center):
@@ -213,6 +217,55 @@ The following `Metrics` struct fields govern chrome layout. They are **not parse
 
 `Main.cpp` `MainWindow` ctor calls `setResizeLimits(480, 400, 8192, 8192)` — a hard platform floor on the `DocumentWindow` before `centreWithSize(1600, 900)`. This prevents the window from shrinking below the minimum where toolbar buttons could clip to zero width. `Metrics::minWindowWidth`/`minWindowHeight` carry the same values as layout constants for use in `ToolbarComponent`'s narrow threshold and tests.
 
+### StatusBarComponent
+
+The status bar (`Source/UI/StatusBarComponent.h/.cpp`) is a 24 px high strip rendered at the bottom of `MainComponent`.
+
+**Layout:**
+- Patch name: left-aligned (padded 6 px from left edge)
+- CPU %: centre section, drawn in `theme.colors.warning` when above 80 %, otherwise `textMuted`
+- Voice count: right-aligned before the mute button slot
+- `masterMuteButton_` (`DrawableButton`): positioned in `resized()` at `(w-28, 2, 20, h-4)`
+
+**Update contract:**
+`update(float cpuPct, int voices, const juce::String& patch)` is gated — it only calls `repaint()` when any value changes by a visible amount (cpu delta > 0.5 %, voice count changed, or patch name changed). It contains **zero `writeToLog` calls**.
+
+**Polling rate:**
+The status bar polls at 5 Hz, driven by `MainComponent`'s 10 Hz timer via an every-other-tick guard (`statusBarTickCount_`).
+
+**Static format helpers** (headless-testable, no JUCE GUI deps):
+- `formatCpu(float fraction)` — fraction is 0..1; `0.756f → "75.6%"`
+- `formatVoices(int n)` — `0 → "0 voices"`, `1 → "1 voice"`, `8 → "8 voices"`
+- `formatPatch(const juce::String& s)` — empty or whitespace-only → `"Untitled"`
+
+### ModuleLibraryComponent section headers
+
+Each category section-header entry in `ModuleLibraryComponent::paint()` draws a 16×16 category icon at `x=10` using `lf->peekIcon(catIcon)`, then shifts the header text to `x=30`. This is null-guarded: when the `GravisynthLookAndFeel` cast returns null (headless tests or assets absent), no icon is drawn and header text falls back to the original `x=10` position.
+
+### ModMatrixComponent chrome
+
+`Source/UI/ModMatrixComponent.h/.cpp` paints rows with the following visual rules:
+
+- **Row height**: `static constexpr int kRowHeight = 48` (was 40)
+- **Zebra striping**: odd rows (`isZebraRow(rowIndex)` — `rowIndex % 2 == 1`) are tinted with `theme.colors.surfaceHi.withAlpha(0.45f)`; even rows are transparent (parent background shows through)
+- **Hover highlight**: the currently hovered row is tinted with `theme.colors.accent.withAlpha(0.10f)`, overriding the zebra base
+- **Hover tracking**: `ModRow::mouseEnter` calls `owner.setHoveredRow(rowIndex)`; `ModRow::mouseExit` calls `owner.setHoveredRow(-1)` only when that row still owns the hover, avoiding races when the cursor moves between rows. The `hoveredRow_` member defaults to `-1` (no hover)
+- **Static helper**: `static bool isZebraRow(int rowIndex) noexcept` — exposed for unit tests
+
+### ModuleComponent header button layout
+
+The header area of each module card (`Source/UI/ModuleComponent.cpp`) contains three `DrawableButton` instances (not `TextButton`), positioned in `resized()`:
+
+| Button | Bounds | Action |
+|---|---|---|
+| `deleteButton` | `(w-26, 2, 22, 20)` | Calls `owner.requestDeleteModule(nodeId)` |
+| `bypassButton` | `(w-50, 2, 22, 20)` | Toggles bypass state |
+| `muteButton` | `(w-74, 2, 22, 20)` | Toggles mute state |
+
+`requestDeleteModule(NodeID)` is the canonical delete entry point — `deleteButton.onClick` delegates here.
+
+`applyHeaderButtonIcons()` retints all three buttons from the active `GravisynthLookAndFeel`. It is null-guarded: when the LnF cast fails (headless tests), the function returns early and buttons remain imageless but functional. `lookAndFeelChanged()` calls `applyHeaderButtonIcons()` so icons update on theme switch.
+
 ### Panel collapse and persistence
 
 Library sidebar and AI panel can each be fully hidden (width = 0). State persists across launches via `ApplicationProperties`:
@@ -250,6 +303,30 @@ kColumnStride = kSingleWidth + kLayerGapX = 280 + 80 = 360 px
 
 `computeAutoArrange` uses the `sizeOf` callback to query each module's pixel width. For a Sequencer node the callback returns `{kDoubleWidth, 380}`, so `layerWidth` for that column becomes 560 and the next column starts at `x += 560 + 80 = 640`. Downstream modules are pushed rightward correctly without overlap.
 
+### Preset column/row model (authoritative: `Source/PresetManager.cpp` lines 38–81)
+
+Factory preset positions follow a fixed column/row grid. The **column x-positions** are not uniformly strided — they reflect actual module widths plus a ≥12 px collision gap:
+
+| Column | x | Contents |
+|---|---|---|
+| Col 0 | 10 | IO nodes, Sequencer, MIDI Keyboard |
+| Col 1 | 350 | Oscillator |
+| Col 2 | 650 | Filter |
+| Col 3 | 950 | VCA |
+| Col 4 | 1250 | FX chain (Distortion / Delay / Reverb) |
+| Col 5 | 1560 | Audio Output |
+
+The stride between columns is ~300 px and variable — **not** the uniform 360 px value. (`kColumnStride = 360` is the auto-arrange algorithm's column advance for single-width modules, a separate concept.)
+
+**Row y-positions:**
+
+| Row | y | Contents |
+|---|---|---|
+| Signal row | 10 | Osc, Filter, VCA, FX chain |
+| Sequencer row | 560 | Sequencer (bottom edge = 940) |
+| Modulator row | 600 | AmpEnv, FilterEnv, LFO |
+| Keyboard row | 960 | MIDI Keyboard |
+
 ### Preset position rebake (presets 0, 1, 5)
 
 Factory presets 0, 1, and 5 contain a Sequencer at x=10 (right edge = 570). After switching the Sequencer to `kDoubleWidth = 560`, the AmpEnv and FilterEnv positions were rebaked to avoid overlap:
@@ -258,6 +335,10 @@ Factory presets 0, 1, and 5 contain a Sequencer at x=10 (right edge = 570). Afte
 - **FilterEnv**: x=870 → x=**880** (584 + 280 + 12 gap + 4 grid ceil)
 
 Presets 2, 3, 4, 6 have no Sequencer-adjacent envelopes and required no rebake. The `AllFactoryPresetsLoadWithoutOverlap` test and the `estimateModuleSize` mirror in `Tests/PresetManagerTests.cpp` are updated atomically with the preset data change to keep the test green.
+
+### Poly Pad preset routing (case 6)
+
+The Poly Pad factory preset routes **Amp Env → VCA per-voice CV** (PolyBus, VCA ports 8–15) only. There is **no** Amp Env → Osc Level (ch12) DirectCV connection in this preset.
 
 ---
 
@@ -419,3 +500,57 @@ after `updateComponents()` builds it. This means the final position uses the mod
 component size** (not the size estimate) for the anti-overlap collision test, so tall modules
 like Oscillator (530 px) or Filter (570 px) always land correctly even if the ghost preview used
 a slightly different footprint.
+
+---
+
+## 9. Visualizer Components
+
+Two in-module visualizer components provide real-time signal display inside module cards.
+
+### FrequencyResponseComponent (`Source/UI/FrequencyResponseComponent.h`)
+
+Serum-style frequency-response curve with an optional FFT spectrum overlay, used by `FilterModule` cards.
+
+**Phase 4 paint additions:**
+- Hz axis labels at 100 Hz, 1 kHz, 10 kHz — drawn 3 px right of each vertical frequency gridline (10 kHz label is right-justified to stay within bounds at narrow widths)
+- dB axis labels at −20, 0, +20 dB — drawn at the left edge of each horizontal dB gridline
+- Resonance peak marker: filled dot (accent cyan `0xff00b4d8`) with a dark outline ring, plus a small text callout label using `formatHzLabel` at the magnitude peak; callout is skipped when component width < 44 px
+
+**Public static helpers** (headless-testable, no component state needed):
+
+| Helper | Signature | Notes |
+|---|---|---|
+| `findPeakBin` | `static int findPeakBin(const float* mags, int numBins)` | Returns index of maximum value; returns -1 for null/empty |
+| `formatHzLabel` | `static juce::String formatHzLabel(float hz)` | `100 → "100Hz"`, `1000 → "1kHz"`, `10000 → "10kHz"` |
+| `freqToXStatic` | `static float freqToXStatic(float freq, float width)` | Log-scaled freq → x pixel; mirrors private `freqToX` (minFreq=20, maxFreq=20000) |
+| `dbToYStatic` | `static float dbToYStatic(float db, float height)` | dB → y pixel; mirrors private `dbToY` (minDb=−40, maxDb=50) |
+
+### ScopeComponent (`Source/UI/ScopeComponent.h`)
+
+Oscilloscope waveform display used by all modules that have a `VisualBuffer`.
+
+**Phase 4 paint additions:**
+- Horizontal amplitude grid lines at ±0.5 and ±1.0 (drawn in `theme.colors.border` at 0.6 alpha)
+- Centre (0.0) grid line — slightly brighter (`border.brighter(0.3f)`) to serve as the waveform baseline
+- Centred "No Signal" empty-state text (in `textDisabled` colour) when the buffer peak ≤ 0.02 — replaces the waveform path draw entirely; `return` is early so no waveform is drawn on silence
+
+**Public static helpers** (headless-testable):
+
+| Helper | Signature | Notes |
+|---|---|---|
+| `isNoSignal` | `static bool isNoSignal(float peak) noexcept` | Returns `true` when `peak <= 0.02f` |
+| `amplitudeToY` | `static float amplitudeToY(float amp, juce::Rectangle<float> bounds) noexcept` | Maps amplitude [-1,1] → y pixel; amp=+1 → top, amp=-1 → bottom, amp=0 → centre; uses 45% height per side |
+
+**Themed colours**: resolved via `dynamic_cast<GravisynthLookAndFeel*>` — `border` for grid, `textDisabled` for no-signal label, `accent` for the waveform. When the cast fails (headless), hardcoded fallbacks are used (`0xff2A2F38`, `0xff5C6470`, limegreen).
+
+---
+
+## 10. UI Rendering Performance
+
+Guidelines to preserve smooth frame rates:
+
+- **`ModuleComponent` uses `setBufferedToImage(true)`**. Each module card is composited as a cached image. The `GraphEditor` 30 Hz connection animation blits these cached images rather than re-running JUCE text layout and parameter read on every animation frame. **Do not reintroduce unconditional `repaint()` calls in `timerCallback` on module components or their always-visible children.**
+- **Gated 15 Hz repaint**: `ModuleComponent::timerCallback` repaints only when the display needs to change — specifically when RMS level changes, active modulation routing changes, or the sequencer step index changes. The timer runs at 15 Hz (`startTimerHz(15)`).
+- **Single re-skin pass on theme switch**: `GravisynthLookAndFeel::applyTheme()` → `sendLookAndFeelChangeMessage()` → one `repaint()`. No timer is started and no continuous repaint is added during or after a theme switch.
+- **`applyToolbarIcons()` is gated**: cloning `Drawable` objects is expensive. The call is restricted to narrow-mode transitions in `MainComponent::resized()` — not executed on every resize frame. See §5 for the gate logic.
+- **Status bar polls at 5 Hz** and repaints only itself (`repaint()` on `StatusBarComponent` only). There are zero `writeToLog` calls in the status-polling path.

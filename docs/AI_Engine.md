@@ -74,7 +74,48 @@ The AI communicates with Gravisynth using a simplified JSON schema to describe s
 -   **Model Management**: Users can select from various available AI models (e.g., different Ollama models) via the application's UI.
 -   **Extensible Provider System**: The `AIProvider` interface allows for easy integration of new AI backends in the future.
 
-## 5. Future Considerations
+## 5. AIChatComponent and Logging
+
+`AIChatComponent` (`Source/UI/AIChatComponent.cpp`) is the chat UI for AI-assisted patching. It wires user prompts to `AIIntegrationService` and displays the conversation history with optional JSON patch previews.
+
+### Debug Logger Registration (Debug builds only)
+
+In **Debug builds only**, `AIChatComponent` registers itself as the global `juce::Logger` by calling `juce::Logger::setCurrentLogger(this)` inside the `#else` branch of an `#ifdef NDEBUG` guard in the constructor. The debug console (`TextEditor`) and the "Debug" toggle button are also created and wired there. The destructor unregisters under `#ifndef NDEBUG`:
+
+```cpp
+// Constructor
+#ifdef NDEBUG
+    juce::Logger::writeToLog("AIChatComponent initialized (Release)");
+#else
+    // debug console setup + addChildComponent(debugConsole) ...
+    juce::Logger::setCurrentLogger(this);
+#endif
+
+// Destructor
+#ifndef NDEBUG
+    juce::Logger::setCurrentLogger(nullptr);
+#endif
+```
+
+This means `juce::Logger::writeToLog(...)` output is piped into the in-UI `TextEditor` debug console **only in Debug builds**. In Release builds no logger registration occurs.
+
+### Logging Rules
+
+Appends to the debug console are coalesced and the console is length-bounded. However:
+
+> **Do NOT add high-frequency `writeToLog` calls** (per-parameter, per-sample, per-frame, per-connection). They run on the UI thread. A per-parameter log on preset load once caused a multi-second UI freeze; this is guarded by `AIStateMapperTest.PresetLoadDoesNotSpamLogger`. Keep logging to errors and rare events only.
+
+### Panel Visibility Persistence
+
+The AI panel visibility persists via the `ApplicationProperties` key `"aiPanelVisible"` (default `false`). It is read in `MainComponent::initialiseCommon()`:
+
+```cpp
+isAiPanelVisible = appProperties.getUserSettings()->getBoolValue("aiPanelVisible", false);
+```
+
+Changes are written back to the same key when the panel is toggled.
+
+## 6. Future Considerations
 
 -   **Direct Saving of AI Suggested Patches**: Implement functionality for users to directly save AI-generated patches as presets.
 -   **Adding AI Suggested Patches Instead of Overriding**: Provide options to merge or add AI-suggested patch components without completely replacing the existing patch.

@@ -10,6 +10,7 @@ Detailed specifications for Gravisynth's primary synthesis modules.
     - MIDI-to-Frequency tracking with unison and detune support.
     - Integrated visual buffer for real-time waveform display.
 - **Poly mode**: 8 voices driven by pitch CV (Hz). See [Poly Channel Layout](#poly-channel-layout) for channel details.
+- **Poly `processBlock` CV-save order**: In poly mode, both the per-voice pitch CVs (ch0-7) and the shared mod CVs (ch8-12) are copied into pre-allocated `std::array` caches (`pitchCVCache`, `waveformCVCache`, `octaveCVCache`, `coarseCVCache`, `fineCVCache`, `levelCVCache`) **before** the output buffer is cleared. This is necessary because ch0-7 carry both output audio (written after the clear) and input pitch CV, so they must be read first.
 - **Buffer aliasing note**: Declared with 14 output channels so JUCE's `AudioProcessorGraph` correctly copies shared mod-CV input channels (8-13) when they fan out to multiple downstream nodes. Channels 8-13 of the output are silent pass-throughs.
 
 ## Filter Module
@@ -19,6 +20,7 @@ Detailed specifications for Gravisynth's primary synthesis modules.
 - **CV inputs (mono mode)**: Cutoff = ch1, Resonance = ch2, Drive = ch3.
 - **CV inputs (poly mode)**: Cutoff = ch8, Resonance = ch9, Drive = ch10.
 - **Poly mode**: 8 per-voice audio inputs (ch0-7) + 3 shared CV inputs (ch8-10). Shared CV is computed once per block and applied to all active voices.
+- **Atomic modulated params**: `modulatedCutoff`, `modulatedResonance`, and `modulatedDrive` are `std::atomic<float>` members updated every `processBlock` (before voice processing in poly mode; per-sample in mono mode). `FrequencyResponseComponent` reads `getCurrentCutoff()` / `getModulatedResonance()` on the UI thread without locks.
 - **`isAutoPromotableModTarget`**: Returns `false` in poly mode (poly CV connections stay plain `DirectCV`, not auto-wrapped in attenuverters).
 
 ## ADSR (Envelope) Module
@@ -39,6 +41,7 @@ Detailed specifications for Gravisynth's primary synthesis modules.
 - **Allocation**: Least Recently Used (LRU) algorithm.
 - **Outputs**: 16 total channels — ch0-7 = per-voice pitch (Hz), ch8-15 = per-voice gate (0/1).
 - **Visible ports**: 1 output jack ("Poly Out") representing the entire poly bus.
+- **Voice mask atomic**: `voiceMaskAtomic_` (`std::atomic<uint8_t>`) is written at the end of every `processBlock` with `std::memory_order_relaxed` — one bit per voice (bit 0 = voice 0, … bit 7 = voice 7), set when `voices[i].active` is true. `AudioEngine::getDisplayVoiceCount()` reads it lock-free and counts set bits via `std::popcount` (C++20 `<bit>`).
 
 ## Voice Mixer Module
 - **Purpose**: Explicit 8-to-stereo voice summing with level control and soft saturation. An alternative to VCA's internal poly summing for patches that need a separate mix stage.
@@ -53,6 +56,43 @@ Detailed specifications for Gravisynth's primary synthesis modules.
     - **Octave Shift**: Shift the keyboard range by ±2 octaves.
     - **Visual Feedback**: Real-time display of pressed keys.
     - **MIDI Output**: Generates standard MIDI messages for driving oscillators or other MIDI-capable modules.
+
+## LFO Module
+- **Source file**: `Source/Modules/LFOModule.h`
+- **Waveforms**: 5 shapes — Sine, Triangle, Sawtooth, Square, S&H (Sample-and-Hold).
+- **Rate modes**:
+    - **Hz mode**: Free-running, 0.01–20.0 Hz (default 1.0 Hz, skewed range).
+    - **Sync mode**: Tempo-locked to host BPM (falls back to 120 BPM if no PlayHead). Subdivisions: 1/1, 1/2, 1/4 (default), 1/8, 1/16, 1/32.
+- **Parameters**: Shape (choice), Sync (bool mode toggle), Rate Hz (float), Sync Rate (choice), Bipolar (bool, default true), Retrig (bool), Level (0.0–1.0, default 1.0), Glide (0.0–1.0, S&H only).
+- **Bipolar/Unipolar**: When `Bipolar` is true, output range is −1 to +1. When false (unipolar), mapped to 0 to +1.
+- **S&H Glide**: On each phase wrap a new random value is drawn; `Glide > 0` ramps to it over up to 0.5 s using `juce::LinearSmoothedValue`.
+- **Retrig**: A MIDI Note On resets the phase to 0.0 when `Retrig` is enabled.
+- **Output**: Single CV channel (ch0). Pushes to `VisualBuffer` for scope display.
+- **Width**: SINGLE (280 px). See [docs/layout.md](layout.md).
+
+## Sequencer Module
+- **Source file**: `Source/Modules/SequencerModule.h`
+- **Purpose**: 8-step monophonic step sequencer. Generates MIDI messages (Note On/Off + CC) — it does **not** output a raw CV pitch channel.
+- **Parameters**:
+    - `Run` (bool) — starts/stops sequencer; sends Note Off for the active note on stop.
+    - `BPM` (30–300, default 120) — internal tempo.
+    - `Pitch 1–8` (`AudioParameterInt`, 0–127, MIDI note number) — per-step pitch. Displayed as note names (e.g. "F3"). Default sequence: F3 F4 Gb3 Db4 F3 A3 Gb3 C4.
+    - `Gate 1–8` (0.1–1.0, default 0.5) — gate length as fraction of one beat.
+    - `F.Env 1–8` (0.0–1.0, default 0.5) — per-step filter envelope amount, sent as MIDI CC 74.
+- **Timing**: One step per beat at the configured BPM. `currentActiveStep` (`std::atomic<int>`) is written each block for UI step-highlight.
+- **Width**: DOUBLE (560 px). See [docs/layout.md](layout.md).
+
+## Poly Sequencer Module
+- **Source file**: `Source/Modules/PolySequencerModule.h`
+- **Purpose**: 8-step polyphonic chord sequencer. Generates MIDI chord events — it does **not** output per-voice pitch CV channels.
+- **Parameters**:
+    - `Run` (bool) — starts/stops; sends Note Off for all active chord notes on stop.
+    - `BPM` (30–300, default 120) — internal tempo.
+    - `Step 1–8 Root` (`AudioParameterInt`, 0–127) — root note for the step. Defaults: C3 E3 G3 C4 C3 G3 E3 C4.
+    - `Step 1–8 Chord` (choice) — chord voicing: Unison, Major (0/4/7), Minor (0/3/7), Maj7 (0/4/7/11), Min7 (0/3/7/10), 5ths (0/7), Octs (0/12), Random (±12 semitones).
+    - `Gate 1–8` (0.1–1.0, default 0.5) — gate length as fraction of one beat.
+- **Timing**: One step per beat. `currentActiveStep` (`std::atomic<int>`) written each block for UI step-highlight.
+- **Width**: DOUBLE (560 px). See [docs/layout.md](layout.md).
 
 ## Attenuverter Module (Hidden)
 - **Purpose**: Invisible gain/polarity stage automatically inserted on every mono CV connection routed via the mod matrix.
