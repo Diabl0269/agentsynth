@@ -71,6 +71,10 @@ public:
     GraphEditor& getGraphEditor() { return graphEditor; }
     ToolbarComponent& getToolbar() { return toolbar; }
     StatusBarComponent& getStatusBar() { return statusBar; }
+    void simulateNewPatchClick() {
+        if (newButton.onClick)
+            newButton.onClick();
+    }
     void simulateUndoClick() {
         if (undoButton.onClick)
             undoButton.onClick();
@@ -142,8 +146,9 @@ private:
     // remain direct children of MainComponent so existing getChildren() accessors still work.
     ToolbarComponent toolbar;
 
-    // The 9 toolbar buttons (8 actions + toggleLibrary). DrawableButton so they carry SVG
+    // The 10 toolbar buttons (9 actions + toggleLibrary). DrawableButton so they carry SVG
     // icons; ButtonParameterAttachment / .onClick wiring works on the juce::Button base.
+    juce::DrawableButton newButton{"new", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton saveButton{"save", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton loadButton{"load", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton settingsButton{"settings", juce::DrawableButton::ImageAboveTextLabel};

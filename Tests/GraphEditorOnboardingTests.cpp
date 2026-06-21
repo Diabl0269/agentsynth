@@ -8,6 +8,7 @@
 // in TestMain.cpp and applies globally — no per-file setup needed).
 // This file is NOT registered in CMakeLists.txt (per OWNER instructions).
 
+#include "../Source/GravisynthUndoManager.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/LayoutUtil.h"
@@ -196,4 +197,81 @@ TEST(GraphEditorOnboarding, PaintSmokeContentComponentNonEmpty) {
     juce::Image img(juce::Image::ARGB, 800, 600, true);
     juce::Graphics g(img);
     EXPECT_NO_THROW(contentComp->paint(g));
+}
+
+// ============================================================================
+// 4. newPatch() — clear canvas action (headless, no undoManager)
+// ============================================================================
+
+TEST(GraphEditorOnboarding, NewPatchClearsGraph) {
+    // Construct engine + editor without an undoManager (headless path).
+    AudioEngine engine;
+    GraphEditor editor(engine); // undoManager = nullptr
+    editor.setSize(800, 600);
+
+    // Add one module so the canvas is non-empty.
+    auto oscNode = engine.getGraph().addNode(std::make_unique<OscillatorModule>());
+    oscNode->properties.set("x", 100);
+    oscNode->properties.set("y", 100);
+    editor.updateComponents();
+
+    // Confirm non-empty before calling newPatch.
+    const int nodesBefore = (int)engine.getGraph().getNodes().size();
+    EXPECT_GT(nodesBefore, 0) << "Pre-condition: graph must have at least one node before newPatch";
+    EXPECT_FALSE(GraphEditor::isCanvasEmpty(editor.getModuleComponents().size()))
+        << "Pre-condition: canvas must be non-empty before newPatch";
+
+    // Act.
+    EXPECT_NO_THROW(editor.newPatch());
+
+    // After newPatch the graph must have zero nodes.
+    const int nodesAfter = (int)engine.getGraph().getNodes().size();
+    EXPECT_EQ(nodesAfter, 0) << "newPatch must clear all graph nodes";
+
+    // And the GraphEditor's module-component list must be empty (detachAllModuleComponents was called).
+    EXPECT_EQ(editor.getModuleComponents().size(), 0) << "newPatch must detach all module components";
+
+    // isCanvasEmpty must reflect the cleared state.
+    EXPECT_TRUE(GraphEditor::isCanvasEmpty((int)editor.getModuleComponents().size()))
+        << "isCanvasEmpty must return true after newPatch";
+}
+
+TEST(GraphEditorOnboarding, NewPatchOnEmptyCanvasIsNoop) {
+    // Calling newPatch on an already-empty canvas must not crash.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    EXPECT_NO_THROW(editor.newPatch());
+    EXPECT_EQ(engine.getGraph().getNodes().size(), 0u);
+    EXPECT_TRUE(GraphEditor::isCanvasEmpty((int)editor.getModuleComponents().size()));
+}
+
+TEST(GraphEditorOnboarding, NewPatchWithUndoManagerIsUndoable) {
+    // With an undoManager present, newPatch must be undoable (Cmd+Z restores the graph).
+    AudioEngine engine;
+    GravisynthUndoManager undoManager;
+    GraphEditor editor(engine, &undoManager);
+    undoManager.setGraphEditor(&editor);
+    editor.setSize(800, 600);
+
+    // Add a module so there is something to restore on undo.
+    auto oscNode = engine.getGraph().addNode(std::make_unique<OscillatorModule>());
+    oscNode->properties.set("x", 120);
+    oscNode->properties.set("y", 120);
+    editor.updateComponents();
+
+    EXPECT_FALSE(GraphEditor::isCanvasEmpty((int)editor.getModuleComponents().size()));
+
+    // Perform newPatch — must be recorded in the undo stack.
+    editor.newPatch();
+    EXPECT_EQ(engine.getGraph().getNodes().size(), 0u) << "Canvas must be empty after newPatch";
+    EXPECT_TRUE(undoManager.canUndo()) << "newPatch must push an undoable action when undoManager is present";
+
+    // Undo must restore the graph to its prior non-empty state.
+    undoManager.undo();
+    // After undo the graph has nodes again — call updateComponents to reconcile the editor.
+    editor.updateComponents();
+    EXPECT_FALSE(GraphEditor::isCanvasEmpty((int)editor.getModuleComponents().size()))
+        << "Undo of newPatch must restore prior module components";
 }

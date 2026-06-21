@@ -104,6 +104,10 @@ void MainComponent::initialiseCommon(std::unique_ptr<gsynth::AIProvider> provide
     addAndMakeVisible(statusBar);
 
     // Buttons
+    addAndMakeVisible(newButton);
+    newButton.setComponentID("newButton");
+    newButton.onClick = [this] { commandManager.invokeDirectly(GravisynthCommands::newPatch, true); };
+
     addAndMakeVisible(saveButton);
     saveButton.setComponentID("saveButton");
     saveButton.onClick = [this] {
@@ -238,8 +242,8 @@ void MainComponent::initialiseCommon(std::unique_ptr<gsynth::AIProvider> provide
     // ORDERING CONTRACT: setButtons() MUST be called BEFORE setSize() so that the first
     // resized() -> layoutButtons() pass finds the registered buttons and positions them.
     // Calling setSize() before setButtons() leaves all buttons with zero bounds on first launch.
-    toolbar.setButtons({&toggleLibraryButton, &saveButton, &loadButton, &settingsButton, &undoButton, &redoButton,
-                        &autoArrangeButton, &toggleModMatrixButton, &toggleAiPanelButton});
+    toolbar.setButtons({&toggleLibraryButton, &newButton, &saveButton, &loadButton, &settingsButton, &undoButton,
+                        &redoButton, &autoArrangeButton, &toggleModMatrixButton, &toggleAiPanelButton});
 
     // Now that buttons are registered, trigger the first layout pass. resized() calls
     // toolbar.layoutButtons() which positions the buttons using their registered pointers.
@@ -352,9 +356,9 @@ void MainComponent::paint(juce::Graphics& g) {
 
 void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
     commands.addArray({GravisynthCommands::openSettings, GravisynthCommands::savePreset, GravisynthCommands::openPreset,
-                       GravisynthCommands::undo, GravisynthCommands::redo, GravisynthCommands::toggleModMatrix,
-                       GravisynthCommands::toggleAiPanel, GravisynthCommands::autoArrange,
-                       GravisynthCommands::toggleLibrary});
+                       GravisynthCommands::newPatch, GravisynthCommands::undo, GravisynthCommands::redo,
+                       GravisynthCommands::toggleModMatrix, GravisynthCommands::toggleAiPanel,
+                       GravisynthCommands::autoArrange, GravisynthCommands::toggleLibrary});
 }
 
 void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationCommandInfo& result) {
@@ -374,6 +378,12 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
     case GravisynthCommands::openPreset: {
         result.setInfo("Open Preset", "Open a preset file", "General", 0);
         auto kp = shortcutManager.getBinding("openPreset");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case GravisynthCommands::newPatch: {
+        result.setInfo("New Patch", "Clear the canvas and start a new patch", "General", 0);
+        auto kp = shortcutManager.getBinding("newPatch");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
@@ -430,6 +440,11 @@ bool MainComponent::perform(const InvocationInfo& info) {
         return true;
     case GravisynthCommands::openPreset:
         openPresetFromFile();
+        return true;
+    case GravisynthCommands::newPatch:
+        graphEditor.newPatch();
+        setCurrentPatchName("Untitled");
+        statusBar.showMessage("New patch");
         return true;
     case GravisynthCommands::undo:
         if (undoManager.canUndo())
@@ -525,6 +540,7 @@ void MainComponent::applyToolbarIcons() {
     };
 
     setIcon(toggleLibraryButton, Icon::ToggleLibrary);
+    // newButton: no dedicated ActionNew SVG in the current icon set; button uses text label only.
     setIcon(saveButton, Icon::ActionSave);
     setIcon(loadButton, Icon::ActionLoad);
     setIcon(settingsButton, Icon::ActionSettings);
@@ -540,6 +556,7 @@ void MainComponent::applyToolbarIcons() {
             statusBar.getMasterMuteButton().setImages(d.get());
 
     // Text: cleared in narrow mode; stateful for the toggles in wide mode.
+    newButton.setButtonText(iconOnly ? "" : "New");
     saveButton.setButtonText(iconOnly ? "" : "Save");
     loadButton.setButtonText(iconOnly ? "" : "Load Presets");
     settingsButton.setButtonText(iconOnly ? "" : "Settings");
@@ -557,6 +574,7 @@ void MainComponent::applyToolbarIcons() {
             base, ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding(action)));
     };
 
+    newButton.setTooltip(hint("New patch", "newPatch"));
     saveButton.setTooltip(hint("Save preset", "savePreset"));
     loadButton.setTooltip(hint("Load preset", "openPreset"));
     settingsButton.setTooltip(hint("Open settings", "openSettings"));

@@ -5,6 +5,7 @@ Shortcuts are configurable in **Settings → Keyboard Shortcuts** tab (renamed f
 | Shortcut | Action |
 |----------|--------|
 | Cmd+, | Open Settings |
+| Cmd+N | New Patch (clear canvas) |
 | Cmd+S | Save Preset |
 | Cmd+O | Open Preset (file picker) |
 | Cmd+Z | Undo |

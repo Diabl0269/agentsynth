@@ -20,7 +20,19 @@ class ToolbarComponent : public juce::Component {
 public:
     // Logical slot order — matches the left group [Library..AutoArrange] + right group
     // [ToggleModMatrix, ToggleAiPanel]. NumSlots is the array size.
-    enum Slot { Library = 0, Save, Load, Settings, Undo, Redo, AutoArrange, ToggleModMatrix, ToggleAiPanel, NumSlots };
+    enum Slot {
+        Library = 0,
+        New,
+        Save,
+        Load,
+        Settings,
+        Undo,
+        Redo,
+        AutoArrange,
+        ToggleModMatrix,
+        ToggleAiPanel,
+        NumSlots
+    };
 
     // Inject the (non-owning) button pointers. Buttons remain children of MainComponent.
     void setButtons(std::array<juce::DrawableButton*, NumSlots> btns);

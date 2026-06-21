@@ -1445,6 +1445,25 @@ bool GraphEditor::loadFactoryPreset(int index) {
     return loaded;
 }
 
+void GraphEditor::newPatch() {
+    auto& graph = audioEngine.getGraph();
+
+    auto doClear = [this, &graph] {
+        // Detach BEFORE clearing — same ordering as loadFactoryPreset — so no ScopeComponent
+        // timer fires against a freed VisualBuffer after graph.clear().
+        detachAllModuleComponents();
+        graph.clear();
+        updateComponents(); // reconciles the now-empty view; the empty-canvas hint will show
+    };
+
+    if (undoManager) {
+        undoManager->recordStructuralChange(graph, doClear);
+    } else {
+        doClear();
+    }
+    repaint();
+}
+
 void GraphEditor::loadPreset(juce::File file) {
     auto json = juce::JSON::parse(file);
     if (!json.isObject()) {

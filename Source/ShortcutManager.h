@@ -7,6 +7,7 @@ enum CommandIDs {
     openSettings = 0x100,
     savePreset,
     openPreset,
+    newPatch,
     undo,
     redo,
     toggleModMatrix,
@@ -22,6 +23,8 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return savePreset;
     if (actionId == "openPreset")
         return openPreset;
+    if (actionId == "newPatch")
+        return newPatch;
     if (actionId == "undo")
         return undo;
     if (actionId == "redo")
@@ -100,6 +103,7 @@ public:
         bindings["openSettings"] = juce::KeyPress(',', juce::ModifierKeys::commandModifier, 0);
         bindings["savePreset"] = juce::KeyPress('s', juce::ModifierKeys::commandModifier, 0);
         bindings["openPreset"] = juce::KeyPress('o', juce::ModifierKeys::commandModifier, 0);
+        bindings["newPatch"] = juce::KeyPress('n', juce::ModifierKeys::commandModifier, 0);
         bindings["undo"] = juce::KeyPress('z', juce::ModifierKeys::commandModifier, 0);
         bindings["redo"] =
             juce::KeyPress('z', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
@@ -163,6 +167,8 @@ public:
             return "Save Preset";
         if (actionId == "openPreset")
             return "Open Preset";
+        if (actionId == "newPatch")
+            return "New Patch";
         if (actionId == "undo")
             return "Undo";
         if (actionId == "redo")
@@ -197,8 +203,8 @@ private:
     std::map<juce::String, juce::KeyPress> bindings;
     juce::ApplicationProperties* appProperties = nullptr;
 
-    juce::StringArray actionIds{"openSettings",    "savePreset",    "openPreset",  "undo",         "redo",
-                                "toggleModMatrix", "toggleAiPanel", "autoArrange", "toggleLibrary"};
+    juce::StringArray actionIds{"openSettings", "savePreset",      "openPreset",    "newPatch",    "undo",
+                                "redo",         "toggleModMatrix", "toggleAiPanel", "autoArrange", "toggleLibrary"};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShortcutManager)
 };

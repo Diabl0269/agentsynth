@@ -51,6 +51,11 @@ public:
     // BEFORE the graph is cleared, so no ScopeComponent reads a freed VisualBuffer. Returns true if loaded.
     bool loadFactoryPreset(int index);
 
+    // Clears the canvas to the empty state (New Patch). Detaches module components (stopping scope timers)
+    // BEFORE clearing the graph — same safe ordering as loadFactoryPreset. The clear is recorded as an
+    // undoable structural change when undoManager is present (Cmd+Z restores the prior patch).
+    void newPatch();
+
     // Layout / anti-overlap
     juce::Point<int> resolvePlacement(juce::Point<int> desired, int w, int h, juce::AudioProcessorGraph::NodeID selfId);
     void finalizeModuleDrag(ModuleComponent* module);
