@@ -554,3 +554,80 @@ Guidelines to preserve smooth frame rates:
 - **Single re-skin pass on theme switch**: `GravisynthLookAndFeel::applyTheme()` → `sendLookAndFeelChangeMessage()` → one `repaint()`. No timer is started and no continuous repaint is added during or after a theme switch.
 - **`applyToolbarIcons()` is gated**: cloning `Drawable` objects is expensive. The call is restricted to narrow-mode transitions in `MainComponent::resized()` — not executed on every resize frame. See §5 for the gate logic.
 - **Status bar polls at 5 Hz** and repaints only itself (`repaint()` on `StatusBarComponent` only). There are zero `writeToLog` calls in the status-polling path.
+- **All UI animations are time-bounded** (see §11). They run for a finite transition duration and stop when settled. Never add continuous / per-frame animations outside the loading-spinner exception defined in §11.
+
+---
+
+## 11. Animation System (Phase 5)
+
+Phase 5 introduces a shared animation infrastructure in `Source/UI/UIAnimation.h` (namespace `gravisynth::ui`). All motion in the app uses this helper. The `juce_animation` module is linked into both `GravisynthCore` and the `Gravisynth` app target.
+
+### Easing functions
+
+Pure, stateless helpers — no component state required:
+
+| Function | Signature | Curve |
+|---|---|---|
+| `easeOutCubic` | `float easeOutCubic(float t)` | Fast-out deceleration |
+| `easeInOutCubic` | `float easeInOutCubic(float t)` | Smooth in + out |
+| `easeOutBack` | `float easeOutBack(float t)` | Overshoots slightly then settles |
+
+All take `t` in `[0, 1]` and return a mapped `[0, 1]` value (may exceed 1 briefly for `easeOutBack`).
+
+### `AnimationDriver`
+
+VBlank-driven, **time-bounded** tween: animates a progress value from `0` to `1` over a caller-specified duration, then auto-stops. It never ticks beyond `t = 1.0`.
+
+**Usage contract:**
+
+```cpp
+// Members in the owning component:
+juce::VBlankAnimatorUpdater vblankUpdater_{ this };
+gravisynth::ui::AnimationDriver driver_;
+
+// Start a 200 ms transition:
+driver_.start(0.20);   // seconds
+
+// In timerCallback / VBlank callback:
+float t = driver_.getValue();
+auto bounds = AnimationDriver::lerpBounds(startRect, endRect, t);
+setBounds(bounds);
+if (!driver_.isRunning())
+    ; // settled — no more repaints fired
+```
+
+**Key properties:**
+- Callers must hold both a `juce::VBlankAnimatorUpdater` and an `AnimationDriver` as members (VBlank updater keeps the driver alive and ticking).
+- `isRunning()` returns `false` once `t` reaches `1.0` — the driver stops itself and fires no further repaints.
+- `AnimationDriver::lerpBounds(from, to, t)` is a static helper that interpolates a `juce::Rectangle<int>` linearly between two positions.
+
+### `formatShortcutHint`
+
+```cpp
+juce::String formatShortcutHint(const juce::String& base,
+                                const juce::String& shortcutDisplay);
+```
+
+Composes tooltip text with an optional keyboard shortcut hint appended in `[brackets]`. Pass an empty `shortcutDisplay` to omit the hint. Used by feature controls to produce consistent `setTooltip()` strings.
+
+### Phase 5 micro-interactions
+
+| Feature | Animation | Note |
+|---|---|---|
+| **Module drop landing** | Eased tween from drop position → snapped + anti-overlapped final position (`easeOutBack`); `computeDropFinalPosition` is a pure helper | `GraphEditor` |
+| **Mod-matrix show/hide** | Bounds tween, `easeInOutCubic` | `GraphEditor` |
+| **Library sidebar show/hide** | Bounds tween, `easeInOutCubic` | `MainComponent` |
+| **AI panel show/hide** | Bounds tween, `easeInOutCubic` | `MainComponent` |
+| **Empty-canvas first-run hint** | Static drawn text; no animation — drawn only when `isCanvasEmpty(nodeCount)` returns `true` | `GraphEditor` |
+| **ModuleLibraryComponent rows** | Row hover-highlight; grab/dragging-hand cursor on draggable rows; per-module descriptions via `descriptionFor(name)` surfaced as `setTooltip()` | `ModuleLibraryComponent` |
+| **Preset-load feedback** | Status bar text updated during load; no spinner | `MainComponent` → `StatusBarComponent` |
+| **AI request Cancel + spinner** | Cancel button visible while a request is in flight; pulsing "thinking" spinner (time-bounded — stops on completion or cancel, confined to its region) | `AIChatComponent` |
+
+### Time-bounded animation rule
+
+**All animations MUST be time-bounded.** An `AnimationDriver` runs for a finite duration and stops at `t = 1.0`. The single permitted exception is the AI thinking spinner — it pulses only while a network request is in flight and stops immediately on completion or cancel. Its repaint is confined to its own component region.
+
+Never add:
+- Continuous `timerCallback` repaints on `ModuleComponent` or its children outside the existing gated 15 Hz gate.
+- A free-running `AnimationDriver` (no duration, or duration far longer than the visible transition).
+- Per-frame `repaint()` calls in any path that is always active (not gated to an active transition).

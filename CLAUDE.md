@@ -43,7 +43,7 @@ Every implementation plan **must** include:
 
 - **Bypass/mute contract** — in every signal-processing `processBlock`, use **two separate branches**: `isBypassed()` → dry pass-through (return early WITHOUT touching audio channels; clear only CV channels ≥2 so mod CV doesn't leak as audio); `isMuted()` → `buffer.clear()` then return. Never `if (isBypassed() || isMuted()) buffer.clear()` — that mutes on bypass instead of passing the signal through. **Exception:** pure source modules with no audio input (Oscillator, Poly MIDI) clear on bypass — no dry signal to pass. → [`docs/architecture.md`](docs/architecture.md)
 - **No high-frequency logging** — AIChatComponent registers a global `juce::Logger` (Debug builds only) that pipes `writeToLog` into a UI-thread console. Never add per-sample / per-frame / per-parameter / per-connection logs (one caused a multi-second freeze; guarded by `AIStateMapperTest.PresetLoadDoesNotSpamLogger`). → [`docs/AI_Engine.md`](docs/AI_Engine.md)
-- **No unconditional per-tick repaint** — `ModuleComponent` is `setBufferedToImage(true)` with a gated 15 Hz timer; the 30 Hz GraphEditor animation composites cached images. A theme switch is exactly one re-skin pass. → [`docs/layout.md`](docs/layout.md)
+- **No unconditional per-tick repaint** — `ModuleComponent` is `setBufferedToImage(true)` with a gated 15 Hz timer; the 30 Hz GraphEditor animation composites cached images. A theme switch is exactly one re-skin pass. All UI animations use `AnimationDriver` (VBlank-driven, **time-bounded** — stops at `t=1`); never add free-running or continuous repaints. Exception: the AI thinking spinner pulses only while a request is in flight, confined to its region. → [`docs/layout.md §10–11`](docs/layout.md)
 - **Themes don't swap fonts** — all built-ins share Inter + JetBrains Mono; swapping the embedded typeface *family* at runtime corrupts text (JUCE 8 + CoreText). Themes differ by colour/treatment/glow only. → [`docs/theming.md`](docs/theming.md)
 
 ## Docs map
@@ -52,7 +52,7 @@ Every implementation plan **must** include:
 - [`docs/modules.md`](docs/modules.md) — per-module specs + poly channel layouts (Oscillator, Filter, VCA, ADSR, LFO, Sequencer, Poly MIDI, Voice Mixer …)
 - [`docs/fx_modules.md`](docs/fx_modules.md) — FX specs (Distortion, Delay, Reverb, Chorus, Phaser, Compressor, Flanger, Limiter)
 - [`docs/modulation.md`](docs/modulation.md) — routing model, logical-port API, poly-bus wires, attenuverters, visual signal flow
-- [`docs/layout.md`](docs/layout.md) — grid/snap/auto-arrange, toolbar & status-bar chrome, width buckets, visualizer components, UI perf
+- [`docs/layout.md`](docs/layout.md) — grid/snap/auto-arrange, toolbar & status-bar chrome, width buckets, visualizer components, UI perf, animation system (UIAnimation.h, AnimationDriver, micro-interactions)
 - [`docs/theming.md`](docs/theming.md) — theme tokens, SVG icons, JSON user themes, LookAndFeel, font limitation
 - [`docs/testing.md`](docs/testing.md) — test layers, build/test commands, CI pipeline, git hooks, coverage
 - [`docs/Module_Development_Guide.md`](docs/Module_Development_Guide.md) — step-by-step guide to adding a module

@@ -106,6 +106,7 @@ target_link_libraries(GravisynthCore PUBLIC
     juce::juce_audio_utils
     juce::juce_gui_basics
     juce::juce_gui_extra
+    juce::juce_animation
     juce::juce_dsp
 )
 
@@ -230,6 +231,7 @@ target_sources(Gravisynth PRIVATE
     Source/UI/SettingsWindow.h
     Source/UI/AppearanceSettingsTab.cpp
     Source/UI/AppearanceSettingsTab.h
+    Source/UI/ShortcutsSettingsTab.cpp
     Source/ShortcutManager.h
 )
 
@@ -243,6 +245,7 @@ target_link_libraries(Gravisynth PRIVATE
     juce::juce_data_structures
     juce::juce_gui_basics
     juce::juce_gui_extra
+    juce::juce_animation
     juce::juce_audio_basics
     juce::juce_audio_devices
     juce::juce_audio_formats

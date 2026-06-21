@@ -12,6 +12,7 @@
 #include "UI/Theme/GravisynthLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include "UI/ToolbarComponent.h"
+#include "UI/UIAnimation.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -106,8 +107,17 @@ private:
     // dynamic_casts the LnF and no-ops the icon assignment when null (headless tests).
     void applyToolbarIcons();
 
-    // Collapse/expand the library sidebar. Persists "librarySidebarVisible" and re-lays out.
+    // Collapse/expand the library sidebar. Animates to the target layout.
     void setLibraryVisible(bool v);
+
+    // Compute the target bounds for the library and AI panel in the current layout.
+    // Pure geometry — no side effects; used by animation and tests.
+    struct PanelBoundsResult {
+        juce::Rectangle<int> libraryBounds; // empty rect when hidden
+        juce::Rectangle<int> aiPanelBounds; // empty rect when hidden
+        juce::Rectangle<int> graphEditorBounds;
+    };
+    PanelBoundsResult computePanelBounds(bool libVisible, bool aiVisible) const;
 
     // Update the displayed patch name (status bar). Immediate repaint, no timer delay.
     void setCurrentPatchName(const juce::String& name);
@@ -167,6 +177,27 @@ private:
 
     ShortcutManager shortcutManager;
     juce::ApplicationCommandManager commandManager;
+
+    // ---- Panel slide animations (time-bounded, auto-stop) ----
+    // One VBlankAnimatorUpdater shared by both panel animations (driven by MainComponent).
+    juce::VBlankAnimatorUpdater vblankUpdater{this};
+    gravisynth::ui::AnimationDriver libraryAnim;
+    gravisynth::ui::AnimationDriver aiPanelAnim;
+
+    // During animation, track the "from" bounds so lerpBounds() can interpolate.
+    juce::Rectangle<int> libraryAnimFrom;
+    juce::Rectangle<int> aiPanelAnimFrom;
+    juce::Rectangle<int> graphEditorAnimFrom;
+
+    // Start a coordinated bounds animation for library + AI panel + graph editor.
+    // fromResult is the current layout; toResult is the target layout.
+    void animatePanelTransition(const PanelBoundsResult& fromResult, const PanelBoundsResult& toResult,
+                                bool hideLibraryOnComplete, bool hideAiPanelOnComplete);
+
+    // Provides native-style tooltips for any child Component that has a tooltip
+    // string set via setTooltip(). Constructed last so all child components exist.
+    // Do NOT set tooltips on controls here; each feature owner does that.
+    juce::TooltipWindow tooltipWindow{this};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MainComponent)
 };

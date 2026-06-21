@@ -73,6 +73,12 @@ GraphEditor::GraphEditor(AudioEngine& engine, GravisynthUndoManager* undoMgr)
     addAndMakeVisible(content);
     addAndMakeVisible(modMatrix);
     content.setInterceptsMouseClicks(false, true); // Fallback clicks to parent
+
+    // Tooltips on GraphEditor-owned affordances.
+    // The canvas itself hints at pan/zoom. Double-click on an attenuverter knob removes it.
+    setTooltip(gravisynth::ui::formatShortcutHint("Patch canvas - drag modules here to build your patch",
+                                                  "Scroll to zoom | Drag to pan | Double-click mod knob to remove"));
+
     startTimerHz(30);
 }
 
@@ -431,9 +437,35 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
         }
     }
 
-    g.setColour(textMutedColour);
-    g.drawText("Gravisynth (Double click to refresh)", getLocalBounds().removeFromTop(20), juce::Justification::centred,
-               true);
+    // ---- Empty-canvas first-run hint ----
+    // Shown only when there are no modules on the canvas. Vanishes as soon as a module exists.
+    // Uses textMuted token for a subtle, non-distracting appearance. No timer or per-tick repaint added.
+    if (GraphEditor::isCanvasEmpty(static_cast<int>(moduleComponents.size()))) {
+        const juce::Colour hintColour = textMutedColour.withAlpha(0.55f);
+        g.setColour(hintColour);
+
+        // Use the resolved LnF font; fall back to a reasonable default in headless mode.
+        juce::Font hintFont;
+        if (lf != nullptr)
+            hintFont = juce::Font(juce::FontOptions(lf->getTheme().type.h2)).withStyle(juce::Font::plain);
+        else
+            hintFont = juce::Font(13.0f);
+        g.setFont(hintFont);
+
+        const juce::String hintText = "Drag modules here to build your patch";
+        // Draw in the centre of the LOCAL component bounds (the 10000x10000 canvas).
+        // We want the hint visible in the typical viewport, so we offset by the inverse pan to
+        // keep it near the canvas origin area — but the simplest correct approach is to centre
+        // it in the local bounds. Since content is transformed (pan+zoom), paint() is called
+        // in LOCAL (canvas) coordinates, so we use getLocalBounds().
+        auto bounds = getLocalBounds();
+        // Place near visual centre of an 800x600 default viewport (canvas origin is 0,0 with pan).
+        // Use a 400x50 rect centred at (400, 300) so it's clearly visible when canvas is at default pan.
+        const juce::Rectangle<int> hintArea(200, 275, 400, 50);
+        g.drawFittedText(hintText, hintArea, juce::Justification::centred, 1);
+        juce::ignoreUnused(bounds);
+    }
+    // ---- End empty-canvas hint ----
 }
 
 void GraphEditor::GraphContentComponent::resized() {}
@@ -660,16 +692,60 @@ void GraphEditor::paint(juce::Graphics& g) {
 }
 
 void GraphEditor::resized() {
-    if (isMatrixVisible) {
-        modMatrix.setBounds(getWidth() - 600, 0, 600, getHeight());
+    // Only set the mod-matrix bounds when we are not in the middle of an animated show/hide.
+    // If an animation is running, it owns the bounds until it completes; we update the target
+    // but don't interrupt the tween.
+    if (!modMatrixAnim.isRunning()) {
+        if (isMatrixVisible) {
+            modMatrix.setBounds(getWidth() - 600, 0, 600, getHeight());
+        }
+    } else {
+        // Update the stored target so the onComplete callback uses the updated size.
+        modMatrixTargetBounds = isMatrixVisible ? juce::Rectangle<int>(getWidth() - 600, 0, 600, getHeight())
+                                                : juce::Rectangle<int>(getWidth(), 0, 600, getHeight());
     }
     updateTransform();
 }
 
 void GraphEditor::toggleModMatrixVisibility() {
     isMatrixVisible = !isMatrixVisible;
-    modMatrix.setVisible(isMatrixVisible);
-    resized();
+
+    // Always make it visible before the animation so it paints during the tween.
+    // On hide we keep it visible until the animation completes, then hide it.
+    modMatrix.setVisible(true);
+
+    const int panelW = 600;
+    const int editorW = getWidth();
+    const int editorH = getHeight();
+
+    // From-bounds: current position (either fully shown or fully hidden off-screen right).
+    juce::Rectangle<int> fromBounds = modMatrix.getBounds();
+    // If the component has never been laid out, give it a sensible off-screen start.
+    if (fromBounds.isEmpty())
+        fromBounds = {editorW, 0, panelW, editorH};
+
+    // To-bounds: target position.
+    juce::Rectangle<int> toBounds = isMatrixVisible ? juce::Rectangle<int>(editorW - panelW, 0, panelW, editorH)
+                                                    : juce::Rectangle<int>(editorW, 0, panelW, editorH);
+
+    modMatrixTargetBounds = toBounds;
+
+    // Start a 220 ms easeOutCubic tween on modMatrix bounds.
+    const bool hidingAfterAnim = !isMatrixVisible;
+    juce::Component::SafePointer<GraphEditor> safeThis(this);
+    modMatrixAnim.start(
+        vblankUpdater, 220.0, gravisynth::ui::easeOutCubic,
+        [safeThis, fromBounds, toBounds](float t) {
+            if (auto* self = safeThis.getComponent())
+                self->modMatrix.setBounds(gravisynth::ui::AnimationDriver::lerpBounds(fromBounds, toBounds, t));
+        },
+        [safeThis, hidingAfterAnim, toBounds]() {
+            if (auto* self = safeThis.getComponent()) {
+                self->modMatrix.setBounds(toBounds);
+                if (hidingAfterAnim)
+                    self->modMatrix.setVisible(false);
+            }
+        });
 }
 
 void GraphEditor::updateTransform() {
@@ -1197,9 +1273,10 @@ void GraphEditor::itemDropped(const SourceDetails& dragSourceDetails) {
         auto estSize = estimateModuleSize(name);
         auto initialPlaced = resolvePlacement(dropPos, estSize.x, estSize.y, juce::AudioProcessorGraph::NodeID{});
 
-        auto finalizeNewDrop = [this](juce::AudioProcessorGraph::NodeID newNodeId) {
-            // Locate the newly created ModuleComponent and finalize its position using
-            // the real component size (snapped + anti-overlapped from actual dimensions).
+        // finalizeNewDrop: locate the newly created ModuleComponent, compute its
+        // real final position (snapped + anti-overlapped using actual dimensions),
+        // then animate it from the raw drop point to the settled position.
+        auto finalizeNewDrop = [this, initialPlaced](juce::AudioProcessorGraph::NodeID newNodeId) {
             ModuleComponent* newComp = nullptr;
             for (auto* comp : content.getModules()) {
                 if (comp != nullptr && comp->getNodeId() == newNodeId) {
@@ -1207,8 +1284,20 @@ void GraphEditor::itemDropped(const SourceDetails& dragSourceDetails) {
                     break;
                 }
             }
-            if (newComp != nullptr)
-                finalizeModuleDrag(newComp);
+            if (newComp == nullptr)
+                return;
+
+            // Compute final position using the real component size.
+            auto toPos = resolvePlacement(newComp->getPosition(), newComp->getWidth(), newComp->getHeight(),
+                                          newComp->getNodeId());
+
+            // Animate from the estimated initial-placed position to the real final position.
+            // If they are identical, animateDropLanding is a no-op (just settles in place).
+            animateDropLanding(newComp, initialPlaced, toPos);
+
+            // Persist the final position immediately so it survives reload even if the
+            // animation is still in-flight when the user saves.
+            updateModulePosition(newComp);
         };
 
         if (undoManager) {
@@ -1253,6 +1342,14 @@ juce::Point<int> GraphEditor::resolvePlacement(juce::Point<int> desired, int w, 
     return gsynth::LayoutUtil::findFreeSlot(snapped, w, h, boxes, selfId);
 }
 
+// static
+juce::Point<int> GraphEditor::computeDropFinalPosition(juce::Point<int> dropPoint, int w, int h,
+                                                       const std::vector<gsynth::LayoutUtil::Box>& existingBoxes,
+                                                       gsynth::LayoutUtil::NodeID selfId) {
+    auto snapped = gsynth::LayoutUtil::snap(dropPoint);
+    return gsynth::LayoutUtil::findFreeSlot(snapped, w, h, existingBoxes, selfId);
+}
+
 void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
     if (module == nullptr)
         return;
@@ -1261,6 +1358,43 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
     // Persist the snapped/cleared position to graph node properties so it survives reload.
     updateModulePosition(module);
     content.repaint();
+}
+
+void GraphEditor::animateDropLanding(ModuleComponent* module, juce::Point<int> fromPos, juce::Point<int> toPos) {
+    if (module == nullptr)
+        return;
+
+    // If from == to nothing to animate — just ensure the module is at the final position.
+    if (fromPos == toPos)
+        return;
+
+    // Place module at fromPos immediately so the first frame starts correctly.
+    module->setTopLeftPosition(fromPos);
+
+    juce::Component::SafePointer<GraphEditor> safeEditor(this);
+    juce::Component::SafePointer<ModuleComponent> safeModule(module);
+
+    dropLandingAnim.start(
+        vblankUpdater,
+        180.0, // ms — within the 150-220 ms spec
+        gravisynth::ui::easeOutCubic,
+        [safeEditor, safeModule, fromPos, toPos](float t) {
+            if (safeEditor == nullptr || safeModule == nullptr)
+                return;
+            auto pos = gravisynth::ui::AnimationDriver::lerpBounds(juce::Rectangle<int>(fromPos.x, fromPos.y, 0, 0),
+                                                                   juce::Rectangle<int>(toPos.x, toPos.y, 0, 0), t)
+                           .getTopLeft();
+            safeModule->setTopLeftPosition(pos);
+            safeEditor->content.repaint();
+        },
+        [safeEditor, safeModule, toPos]() {
+            // Settle at exact final position and persist to graph properties.
+            if (safeEditor == nullptr || safeModule == nullptr)
+                return;
+            safeModule->setTopLeftPosition(toPos);
+            safeEditor->updateModulePosition(safeModule);
+            safeEditor->content.repaint();
+        });
 }
 
 void GraphEditor::autoArrange() {
