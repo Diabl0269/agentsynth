@@ -212,8 +212,8 @@ bash scripts/install-hooks.sh
 
 Two hooks are registered:
 
-- **pre-commit** (`scripts/pre-commit-lint.sh`): runs `clang-format --dry-run --Werror` on staged `Source/` and `Tests/` C/C++ files. Fast; mirrors the CI Lint job.
-- **pre-push** (`scripts/pre-push-release-test.sh`): runs clang-format lint on all C/C++ sources, then a Release build + full test suite. The first push configures the `build-release/` directory; subsequent pushes are fast incremental rebuilds. This catches UB and segfaults that Debug mode hides (zero-initialized memory masks use-after-free).
+- **pre-commit** (`scripts/pre-commit-lint.sh`): runs `clang-format --dry-run --Werror` on staged `Source/` and `Tests/` C/C++ files. Fast; mirrors the CI Lint job. Also warns if the local `clang-format` version differs from the pin in `.clang-format-version`.
+- **pre-push** (`scripts/pre-push-release-test.sh`): runs clang-format lint on all C/C++ sources, then a Release build + full test suite. The first push configures the `build-release/` directory; subsequent pushes are fast incremental rebuilds. This catches UB and segfaults that Debug mode hides (zero-initialized memory masks use-after-free). Also warns if the local `clang-format` version differs from the pin in `.clang-format-version`.
 
 Bypass a single invocation with `--no-verify`:
 
@@ -229,7 +229,11 @@ bash scripts/pre-commit-lint.sh        # lint staged files
 bash scripts/pre-push-release-test.sh  # lint + Release build + tests
 ```
 
-**clang-format version note:** CI installs clang-format as an unpinned `apt` package — currently clang-format 18 via `ubuntu-24.04`, but that will drift as GitHub updates the runner. Match the same major version locally to avoid "hook passes but CI fails" situations. The pre-commit script will warn if `clang-format` is missing from `PATH`.
+**clang-format version note:** clang-format is pinned via the PyPI `clang-format` wheel to the version recorded in `.clang-format-version`. CI installs that exact version with `pip install "clang-format==$(cat .clang-format-version)"` (after `actions/setup-python`), so CI and the local hooks run the identical binary — eliminating "hook passes locally but CI fails" drift. Install or update locally with the same command:
+
+```bash
+pip install "clang-format==$(cat .clang-format-version)"
+```
 
 ## CI Pipeline
 
@@ -239,7 +243,7 @@ There are **five jobs**:
 
 | Job | Runner | Config | Notes |
 |-----|--------|--------|-------|
-| **Lint** | `ubuntu-latest` | — | Installs `clang-format` as an unpinned apt package (currently 18 on ubuntu-24.04); runs `--dry-run --Werror` over `Source/` and `Tests/`. Fast (~30 s) — gives formatting feedback without waiting for a full build. |
+| **Lint** | `ubuntu-latest` | — | Installs the pinned `clang-format` PyPI wheel (version from `.clang-format-version`) via `pip install "clang-format==$(cat .clang-format-version)"` after `actions/setup-python`; runs `--dry-run --Werror` over `Source/` and `Tests/`. Fast (~30 s) — gives formatting feedback without waiting for a full build. |
 | **Build, Test, and Coverage** | `ubuntu-latest` | Debug + clang + `ENABLE_COVERAGE=ON` | Runs tests, then `bash scripts/coverage.sh --report-only` (skips re-build; only merges profdata and checks the 85% line-coverage threshold). |
 | **Build and Test (ASAN)** | `ubuntu-latest` | `RelWithDebInfo` + `-fsanitize=address` | **Label-gated** — only runs when the PR carries the `run-asan` label. `ASAN_OPTIONS=detect_leaks=0`. |
 | **Build and Test (macOS)** | `macos-latest` | Release | Catches UB/segfaults and cross-platform issues. |
@@ -261,4 +265,4 @@ There are **five jobs**:
 
 ### Post-merge artifact builds
 
-After a merge to `main`, `.github/workflows/build-artifacts.yml` triggers automatically. It builds and packages the app on Ubuntu, macOS, and Windows (no tests — CI already ran them on the PR) using **Ninja on all three platforms** (Windows via the MSVC dev environment), so the build path matches the PR CI exactly; it then bumps the version tag and creates a GitHub release with all three platform artifacts. The tag-and-release step runs **only on `push` to `main`** — a manual `workflow_dispatch` run is a build-only dry-run, useful for validating the matrix (including the Windows build) before merging.
+After a merge to `main`, `.github/workflows/build-artifacts.yml` triggers automatically. It builds and packages the app on Ubuntu, macOS, and Windows (no tests — CI already ran them on the PR) using **Ninja on all three platforms** (Windows via the MSVC dev environment), so the build path matches the PR CI exactly; it then bumps the version tag and creates a GitHub release with all three platform artifacts. The tag-and-release step runs **only on `push` to `main`** — a manual `workflow_dispatch` run is a build-only dry-run, useful for validating the matrix (including the Windows build) before merging. Docs-only / non-code merges are skipped via a `paths-ignore` filter: pushes that touch only `**/*.md`, `docs/**`, `LICENSE`, `.gitignore`, `.clang-format`, `.clang-format-version`, `.claude/**`, or `mockups/**` produce no build, no version bump, and no release; mixed code+docs merges still release as normal.

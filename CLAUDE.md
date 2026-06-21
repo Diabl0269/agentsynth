@@ -26,6 +26,8 @@ bash scripts/coverage.sh
 
 # Git hooks  (run once per clone — NOT auto-installed)
 bash scripts/install-hooks.sh   # pre-commit: clang-format lint;  pre-push: lint + Release build + tests
+# clang-format is pinned (.clang-format-version) — match CI locally:
+pip install "clang-format==$(cat .clang-format-version)"
 ```
 
 See [`docs/testing.md`](docs/testing.md) for the full build/test/CI/hooks reference.

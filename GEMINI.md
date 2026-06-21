@@ -105,7 +105,7 @@ CI runs via `.github/workflows/ci.yml` on PRs only (4 parallel jobs):
 - **Build and Test** (macOS) — Release build, catches UB/segfaults + cross-platform
 - **Build and Test** (Windows) — Release build, catches UB/segfaults + cross-platform
 
-Post-merge, `.github/workflows/build-artifacts.yml` runs on push to main (4 jobs): build+package on Ubuntu/macOS/Windows (no tests — CI already ran them), then tag+release.
+Post-merge, `.github/workflows/build-artifacts.yml` runs on push to main (4 jobs): build+package on Ubuntu/macOS/Windows (no tests — CI already ran them), then tag+release. Docs-only pushes (markdown, `docs/`, LICENSE, .gitignore, `.clang-format(.version)`, `.claude/`, `mockups/`) are skipped via `paths-ignore` — no build, no version bump, no release; mixed code+docs pushes release as normal.
 
 **Optimizations:**
 - **ccache**: Compiler cache avoids recompiling unchanged files. `CMAKE_C/CXX_COMPILER_LAUNCHER=ccache`, cached at `~/.ccache` (Linux) / `~/Library/Caches/ccache` (macOS), 500M max, keyed by commit SHA with prefix restore.
@@ -114,7 +114,7 @@ Post-merge, `.github/workflows/build-artifacts.yml` runs on push to main (4 jobs
 - **coverage.sh --report-only**: In CI, skips redundant configure/build/test and only does profdata merge + report.
 - **Separate lint job**: Instant formatting feedback (~30s) without waiting for full build.
 - **apt package caching**: `awalsh128/cache-apt-pkgs-action` caches Ubuntu packages across runs.
-- **Path filtering**: PRs only trigger CI when `Source/`, `Tests/`, `CMakeLists.txt`, `scripts/`, or the workflow file change. Push to main always runs.
+- **Path filtering**: PRs only trigger CI when `Source/`, `Tests/`, `CMakeLists.txt`, `scripts/`, or the workflow file change. Post-merge builds are skipped for docs-only pushes (see `paths-ignore` in `build-artifacts.yml`).
 
 **What didn't work:** Unity builds (`CMAKE_UNITY_BUILD`) are incompatible with JUCE — Obj-C++ `.mm` files can't be merged into C++ unity translation units.
 
