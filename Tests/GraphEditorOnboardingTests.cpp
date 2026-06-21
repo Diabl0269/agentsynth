@@ -164,7 +164,8 @@ TEST(GraphEditorOnboarding, PaintSmokeNonEmptyCanvas) {
 
 TEST(GraphEditorOnboarding, PaintSmokeContentComponentEmpty) {
     // Directly paint the GraphContentComponent child with zero modules.
-    // Exercises the empty-canvas hint branch in GraphContentComponent::paint().
+    // Exercises the background/wire drawing branch in GraphContentComponent::paint()
+    // (the empty-canvas hint has moved to GraphEditor::paintOverChildren).
     AudioEngine engine;
     GraphEditor editor(engine);
     editor.setSize(800, 600);
@@ -197,6 +198,43 @@ TEST(GraphEditorOnboarding, PaintSmokeContentComponentNonEmpty) {
     juce::Image img(juce::Image::ARGB, 800, 600, true);
     juce::Graphics g(img);
     EXPECT_NO_THROW(contentComp->paint(g));
+}
+
+// ============================================================================
+// 3b. paintOverChildren smoke tests — exercise the viewport-centred hint.
+//     GraphEditor::paintOverChildren is called by JUCE during a full component
+//     paint pass.  We trigger it via a full repaint into an offscreen image so
+//     the hint code runs through the JUCE paint dispatch.
+// ============================================================================
+
+TEST(GraphEditorOnboarding, PaintOverChildrenSmokeEmptyCanvas) {
+    // An empty editor (no modules) must exercise the paintOverChildren hint path
+    // without crashing.  The hint is drawn centred in getLocalBounds().
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    // Trigger a full paint pass (parent + children + paintOverChildren).
+    juce::Image img(juce::Image::ARGB, 800, 600, true);
+    juce::Graphics g(img);
+    EXPECT_NO_THROW(editor.paintEntireComponent(g, false));
+}
+
+TEST(GraphEditorOnboarding, PaintOverChildrenSmokeNonEmptyCanvas) {
+    // A non-empty editor must NOT draw the hint — paintOverChildren returns early.
+    // Must not crash either way.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto oscNode = engine.getGraph().addNode(std::make_unique<OscillatorModule>());
+    oscNode->properties.set("x", 100);
+    oscNode->properties.set("y", 100);
+    editor.updateComponents();
+
+    juce::Image img(juce::Image::ARGB, 800, 600, true);
+    juce::Graphics g(img);
+    EXPECT_NO_THROW(editor.paintEntireComponent(g, false));
 }
 
 // ============================================================================

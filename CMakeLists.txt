@@ -177,11 +177,12 @@ juce_add_binary_data(GravisynthAssets SOURCES
     assets/fonts/IBMPlexSans-SemiBold.ttf
     assets/fonts/IBMPlexMono-Regular.ttf
     assets/fonts/IBMPlexMono-Medium.ttf
-    # Icons (22 SVGs, hyphen-named; BinaryData symbols: e.g. transport_play_svg)
+    # Icons (23 SVGs, hyphen-named; BinaryData symbols: e.g. transport_play_svg)
     assets/icons/transport-play.svg
     assets/icons/transport-stop.svg
     assets/icons/action-undo.svg
     assets/icons/action-redo.svg
+    assets/icons/action-new.svg
     assets/icons/action-save.svg
     assets/icons/action-load.svg
     assets/icons/action-settings.svg

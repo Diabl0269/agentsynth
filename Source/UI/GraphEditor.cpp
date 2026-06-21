@@ -436,36 +436,6 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
                        /*activity*/ 0.0f, /*fallbackWidth*/ 3.0f);
         }
     }
-
-    // ---- Empty-canvas first-run hint ----
-    // Shown only when there are no modules on the canvas. Vanishes as soon as a module exists.
-    // Uses textMuted token for a subtle, non-distracting appearance. No timer or per-tick repaint added.
-    if (GraphEditor::isCanvasEmpty(static_cast<int>(moduleComponents.size()))) {
-        const juce::Colour hintColour = textMutedColour.withAlpha(0.55f);
-        g.setColour(hintColour);
-
-        // Use the resolved LnF font; fall back to a reasonable default in headless mode.
-        juce::Font hintFont;
-        if (lf != nullptr)
-            hintFont = juce::Font(juce::FontOptions(lf->getTheme().type.h2)).withStyle(juce::Font::plain);
-        else
-            hintFont = juce::Font(13.0f);
-        g.setFont(hintFont);
-
-        const juce::String hintText = "Drag modules here to build your patch";
-        // Draw in the centre of the LOCAL component bounds (the 10000x10000 canvas).
-        // We want the hint visible in the typical viewport, so we offset by the inverse pan to
-        // keep it near the canvas origin area — but the simplest correct approach is to centre
-        // it in the local bounds. Since content is transformed (pan+zoom), paint() is called
-        // in LOCAL (canvas) coordinates, so we use getLocalBounds().
-        auto bounds = getLocalBounds();
-        // Place near visual centre of an 800x600 default viewport (canvas origin is 0,0 with pan).
-        // Use a 400x50 rect centred at (400, 300) so it's clearly visible when canvas is at default pan.
-        const juce::Rectangle<int> hintArea(200, 275, 400, 50);
-        g.drawFittedText(hintText, hintArea, juce::Justification::centred, 1);
-        juce::ignoreUnused(bounds);
-    }
-    // ---- End empty-canvas hint ----
 }
 
 void GraphEditor::GraphContentComponent::resized() {}
@@ -689,6 +659,38 @@ void GraphEditor::updateComponents() {
 void GraphEditor::paint(juce::Graphics& g) {
     // GraphEditor itself can draw a background or overlay if needed
     // But content handles it now.
+}
+
+void GraphEditor::paintOverChildren(juce::Graphics& g) {
+    // ---- Empty-canvas first-run hint ----
+    // Drawn here (OUTER, untransformed GraphEditor local coordinates) so it is ALWAYS
+    // centred in the visible viewport regardless of pan/zoom on the inner canvas.
+    // The inner GraphContentComponent runs in a transformed (pan+zoom) space over a
+    // ~10000x10000 virtual canvas — any rect drawn there would land off-screen once the
+    // user pans or zooms. Drawing here, in getLocalBounds(), guarantees centre alignment.
+    //
+    // Gate: only when canvas is empty. Show/hide is driven by the existing updateComponents()
+    // repaint path — no extra timer or per-tick repaint is added.
+    if (!GraphEditor::isCanvasEmpty(static_cast<int>(content.getModules().size())))
+        return;
+
+    auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+
+    // textMuted token at ~60% alpha — tasteful, non-distracting.
+    const juce::Colour textMutedColour = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::white;
+    g.setColour(textMutedColour.withAlpha(0.6f));
+
+    // Use the theme h1 font (~18pt) for comfortable legibility; fall back to 16pt headless.
+    juce::Font hintFont;
+    if (lf != nullptr)
+        hintFont = juce::Font(juce::FontOptions(lf->getTheme().type.h1)).withStyle(juce::Font::plain);
+    else
+        hintFont = juce::Font(16.0f);
+    g.setFont(hintFont);
+
+    // Centre in the GraphEditor's visible local bounds (untransformed viewport coordinates).
+    g.drawFittedText("Drag modules here to build your patch", getLocalBounds(), juce::Justification::centred, 1);
+    // ---- End empty-canvas hint ----
 }
 
 void GraphEditor::resized() {

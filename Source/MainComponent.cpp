@@ -540,7 +540,7 @@ void MainComponent::applyToolbarIcons() {
     };
 
     setIcon(toggleLibraryButton, Icon::ToggleLibrary);
-    // newButton: no dedicated ActionNew SVG in the current icon set; button uses text label only.
+    setIcon(newButton, Icon::ActionNew);
     setIcon(saveButton, Icon::ActionSave);
     setIcon(loadButton, Icon::ActionLoad);
     setIcon(settingsButton, Icon::ActionSettings);

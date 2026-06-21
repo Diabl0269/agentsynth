@@ -7,7 +7,7 @@
 
 namespace gsynth::theme {
 
-// The canonical Gravisynth icon set. Exactly 26 SVG glyphs, white-filled and tinted
+// The canonical Gravisynth icon set. Exactly 27 SVG glyphs, white-filled and tinted
 // programmatically at theme-apply time. Backed by GravisynthAssets BinaryData (see
 // CMakeLists.txt) when GRAVISYNTH_HAS_FONT_ASSETS is defined; otherwise every entry is a
 // null fallback so headless tests (no asset library) still link and run.
@@ -22,6 +22,7 @@ enum class Icon : int {
     ActionRedo,
     ActionSave,
     ActionLoad,
+    ActionNew,
     ActionSettings,
     ActionAutoArrange,
     ToggleAI,
