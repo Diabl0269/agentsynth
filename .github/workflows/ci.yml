@@ -10,6 +10,8 @@ on:
       - 'CMakeLists.txt'
       - 'Tests/CMakeLists.txt'
       - 'scripts/**'
+      - '.clang-format'
+      - '.clang-format-version'
       - '.github/workflows/ci.yml'
       - '.github/workflows/build-artifacts.yml'
 
@@ -19,8 +21,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
-    - name: Install clang-format
-      run: sudo apt-get update && sudo apt-get install -y clang-format
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+    - name: Install pinned clang-format
+      # Pinned via the PyPI clang-format wheel (the real LLVM binary) so CI and
+      # the local git hooks run the EXACT same version — no more "passes locally,
+      # fails in CI" drift from an unpinned apt package. Single source of truth:
+      # .clang-format-version
+      run: pip install "clang-format==$(cat .clang-format-version)"
     - name: Check Formatting
       run: find Source Tests -name "*.h" -o -name "*.cpp" | xargs clang-format --dry-run --Werror
 

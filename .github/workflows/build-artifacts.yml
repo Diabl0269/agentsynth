@@ -6,6 +6,20 @@ on:
   # Automatic trigger on push to main
   push:
     branches: [ "main" ]
+    # Docs-only / non-code merges don't ship a new binary, so skip the whole
+    # build + tag + release workflow (including the automatic version bump) when
+    # a push touches ONLY these paths. A push that also changes code/CMake/
+    # workflows still builds and releases as before. workflow_dispatch is
+    # unaffected (it has no paths filter — manual dry-run still works).
+    paths-ignore:
+      - '**/*.md'              # README, CLAUDE.md, GEMINI.md, docs/*.md, …
+      - 'docs/**'              # non-markdown docs assets
+      - 'LICENSE'
+      - '.gitignore'
+      - '.clang-format'
+      - '.clang-format-version'
+      - '.claude/**'
+      - 'mockups/**'
 
 permissions:
   contents: write
