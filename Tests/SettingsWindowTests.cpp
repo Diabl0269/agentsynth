@@ -75,7 +75,7 @@ TEST_F(SettingsWindowTest, TabNamesAreCorrect) {
                                   themeManager);
     EXPECT_EQ(settingsWindow.getTabName(0), "Audio");
     EXPECT_EQ(settingsWindow.getTabName(1), "AI");
-    EXPECT_EQ(settingsWindow.getTabName(2), "General");
+    EXPECT_EQ(settingsWindow.getTabName(2), "Keyboard Shortcuts");
     EXPECT_EQ(settingsWindow.getTabName(3), "Appearance");
 }
 

@@ -104,6 +104,10 @@ void MainComponent::initialiseCommon(std::unique_ptr<gsynth::AIProvider> provide
     addAndMakeVisible(statusBar);
 
     // Buttons
+    addAndMakeVisible(newButton);
+    newButton.setComponentID("newButton");
+    newButton.onClick = [this] { commandManager.invokeDirectly(GravisynthCommands::newPatch, true); };
+
     addAndMakeVisible(saveButton);
     saveButton.setComponentID("saveButton");
     saveButton.onClick = [this] {
@@ -113,8 +117,10 @@ void MainComponent::initialiseCommon(std::unique_ptr<gsynth::AIProvider> provide
         fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc) {
             auto file = fc.getResult();
             if (file != juce::File{}) {
+                statusBar.showMessage("Saving...");
                 graphEditor.savePreset(file);
                 setCurrentPatchName(file.getFileNameWithoutExtension());
+                statusBar.showMessage("Saved: " + file.getFileNameWithoutExtension());
             }
         });
     };
@@ -140,10 +146,12 @@ void MainComponent::initialiseCommon(std::unique_ptr<gsynth::AIProvider> provide
             if (result == 1000) {
                 openPresetFromFile();
             } else if (result > 0) {
+                statusBar.showMessage("Loading preset...");
                 // loadFactoryPreset detaches existing components (stopping scope timers) before the graph
                 // is cleared — avoids a use-after-free where a ScopeComponent reads a freed VisualBuffer.
                 graphEditor.loadFactoryPreset(result - 1);
                 setCurrentPatchName(presets[result - 1].name);
+                statusBar.showMessage("Loaded: " + presets[result - 1].name);
             }
         });
     };
@@ -171,13 +179,30 @@ void MainComponent::initialiseCommon(std::unique_ptr<gsynth::AIProvider> provide
     addAndMakeVisible(toggleAiPanelButton);
     toggleAiPanelButton.setComponentID("toggleAiPanel");
     toggleAiPanelButton.onClick = [this] {
-        isAiPanelVisible = !isAiPanelVisible;
-        aiChatComponent.setVisible(isAiPanelVisible);
-        // Persist BEFORE resized() so a crash during layout doesn't lose the user's choice.
+        const bool newVisible = !isAiPanelVisible;
+        isAiPanelVisible = newVisible;
+        // Persist BEFORE animation so a crash during layout doesn't lose the user's choice.
         appProperties.getUserSettings()->setValue("aiPanelVisible", isAiPanelVisible ? "1" : "0");
         appProperties.getUserSettings()->saveIfNeeded();
         applyToolbarIcons();
+
+        auto fromResult = computePanelBounds(isLibraryVisible, !newVisible); // previous layout
+        if (newVisible) {
+            // Showing: make visible before animating in.
+            aiChatComponent.setVisible(true);
+            if (fromResult.aiPanelBounds.isEmpty())
+                fromResult.aiPanelBounds =
+                    juce::Rectangle<int>(fromResult.graphEditorBounds.getRight(), fromResult.graphEditorBounds.getY(),
+                                         0, fromResult.graphEditorBounds.getHeight());
+        }
+        // Apply the FINAL layout immediately so headless tests (no VBlank) see correct bounds.
+        // The animation below is cosmetic only — it starts from fromResult and converges to the
+        // same toResult that resized() already applied.
+        auto toResult = computePanelBounds(isLibraryVisible, newVisible);
         resized();
+        if (!newVisible)
+            aiChatComponent.setVisible(false);
+        animatePanelTransition(fromResult, toResult, /*hideLib=*/false, /*hideAi=*/!newVisible);
     };
 
     addAndMakeVisible(toggleModMatrixButton);
@@ -217,8 +242,8 @@ void MainComponent::initialiseCommon(std::unique_ptr<gsynth::AIProvider> provide
     // ORDERING CONTRACT: setButtons() MUST be called BEFORE setSize() so that the first
     // resized() -> layoutButtons() pass finds the registered buttons and positions them.
     // Calling setSize() before setButtons() leaves all buttons with zero bounds on first launch.
-    toolbar.setButtons({&toggleLibraryButton, &saveButton, &loadButton, &settingsButton, &undoButton, &redoButton,
-                        &autoArrangeButton, &toggleModMatrixButton, &toggleAiPanelButton});
+    toolbar.setButtons({&toggleLibraryButton, &newButton, &saveButton, &loadButton, &settingsButton, &undoButton,
+                        &redoButton, &autoArrangeButton, &toggleModMatrixButton, &toggleAiPanelButton});
 
     // Now that buttons are registered, trigger the first layout pass. resized() calls
     // toolbar.layoutButtons() which positions the buttons using their registered pointers.
@@ -314,8 +339,10 @@ void MainComponent::openPresetFromFile() {
     fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc) {
         auto file = fc.getResult();
         if (file != juce::File{}) {
+            statusBar.showMessage("Loading preset...");
             graphEditor.loadPreset(file);
             setCurrentPatchName(file.getFileNameWithoutExtension());
+            statusBar.showMessage("Loaded: " + file.getFileNameWithoutExtension());
         }
     });
 }
@@ -329,9 +356,9 @@ void MainComponent::paint(juce::Graphics& g) {
 
 void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
     commands.addArray({GravisynthCommands::openSettings, GravisynthCommands::savePreset, GravisynthCommands::openPreset,
-                       GravisynthCommands::undo, GravisynthCommands::redo, GravisynthCommands::toggleModMatrix,
-                       GravisynthCommands::toggleAiPanel, GravisynthCommands::autoArrange,
-                       GravisynthCommands::toggleLibrary});
+                       GravisynthCommands::newPatch, GravisynthCommands::undo, GravisynthCommands::redo,
+                       GravisynthCommands::toggleModMatrix, GravisynthCommands::toggleAiPanel,
+                       GravisynthCommands::autoArrange, GravisynthCommands::toggleLibrary});
 }
 
 void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationCommandInfo& result) {
@@ -351,6 +378,12 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
     case GravisynthCommands::openPreset: {
         result.setInfo("Open Preset", "Open a preset file", "General", 0);
         auto kp = shortcutManager.getBinding("openPreset");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case GravisynthCommands::newPatch: {
+        result.setInfo("New Patch", "Clear the canvas and start a new patch", "General", 0);
+        auto kp = shortcutManager.getBinding("newPatch");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
@@ -407,6 +440,11 @@ bool MainComponent::perform(const InvocationInfo& info) {
         return true;
     case GravisynthCommands::openPreset:
         openPresetFromFile();
+        return true;
+    case GravisynthCommands::newPatch:
+        graphEditor.newPatch();
+        setCurrentPatchName("Untitled");
+        statusBar.showMessage("New patch");
         return true;
     case GravisynthCommands::undo:
         if (undoManager.canUndo())
@@ -502,6 +540,7 @@ void MainComponent::applyToolbarIcons() {
     };
 
     setIcon(toggleLibraryButton, Icon::ToggleLibrary);
+    setIcon(newButton, Icon::ActionNew);
     setIcon(saveButton, Icon::ActionSave);
     setIcon(loadButton, Icon::ActionLoad);
     setIcon(settingsButton, Icon::ActionSettings);
@@ -517,6 +556,7 @@ void MainComponent::applyToolbarIcons() {
             statusBar.getMasterMuteButton().setImages(d.get());
 
     // Text: cleared in narrow mode; stateful for the toggles in wide mode.
+    newButton.setButtonText(iconOnly ? "" : "New");
     saveButton.setButtonText(iconOnly ? "" : "Save");
     loadButton.setButtonText(iconOnly ? "" : "Load Presets");
     settingsButton.setButtonText(iconOnly ? "" : "Settings");
@@ -528,23 +568,136 @@ void MainComponent::applyToolbarIcons() {
     toggleAiPanelButton.setButtonText(iconOnly ? "" : (isAiPanelVisible ? "Hide AI" : "Show AI"));
     toggleLibraryButton.setButtonText(iconOnly ? "" : (isLibraryVisible ? "Hide Library" : "Show Library"));
 
-    // Tooltips remain available even in icon-only mode.
-    toggleLibraryButton.setTooltip(isLibraryVisible ? "Hide Library" : "Show Library");
-    toggleAiPanelButton.setTooltip(isAiPanelVisible ? "Hide AI Panel" : "Show AI Panel");
-    toggleModMatrixButton.setTooltip(graphEditor.isModMatrixVisible() ? "Hide Mod Matrix" : "Show Mod Matrix");
+    // Tooltips remain available even in icon-only mode; include shortcut hints where applicable.
+    auto hint = [&](const juce::String& base, const juce::String& action) {
+        return gravisynth::ui::formatShortcutHint(
+            base, ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding(action)));
+    };
+
+    newButton.setTooltip(hint("New patch", "newPatch"));
+    saveButton.setTooltip(hint("Save preset", "savePreset"));
+    loadButton.setTooltip(hint("Load preset", "openPreset"));
+    settingsButton.setTooltip(hint("Open settings", "openSettings"));
+    undoButton.setTooltip(hint("Undo", "undo"));
+    redoButton.setTooltip(hint("Redo", "redo"));
+    autoArrangeButton.setTooltip(hint("Auto-arrange modules", "autoArrange"));
+
+    const juce::String matrixBase = graphEditor.isModMatrixVisible() ? "Hide Mod Matrix" : "Show Mod Matrix";
+    toggleModMatrixButton.setTooltip(hint(matrixBase, "toggleModMatrix"));
+
+    const juce::String aiBase = isAiPanelVisible ? "Hide AI Panel" : "Show AI Panel";
+    toggleAiPanelButton.setTooltip(hint(aiBase, "toggleAiPanel"));
+
+    const juce::String libBase = isLibraryVisible ? "Hide Library" : "Show Library";
+    toggleLibraryButton.setTooltip(hint(libBase, "toggleLibrary"));
 }
 
-// ---- Collapsible library sidebar (persisted) ----
+// ---- Pure panel-bounds geometry helper ----
+MainComponent::PanelBoundsResult MainComponent::computePanelBounds(bool libVisible, bool aiVisible) const {
+    int tbH = 36, sbH = 24;
+    int libW = libVisible ? 200 : 0;
+    int aiW = aiVisible ? 300 : 0;
+    if (auto* lf = dynamic_cast<const gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel())) {
+        const auto& m = lf->getTheme().metrics;
+        tbH = m.toolbarHeight;
+        sbH = m.statusBarHeight;
+        libW = libVisible ? m.librarySidebarWidth : m.sidebarCollapsedWidth;
+        aiW = aiVisible ? m.aiPanelWidth : 0;
+    }
+
+    auto bounds = getLocalBounds();
+    bounds.removeFromTop(tbH);    // toolbar
+    bounds.removeFromBottom(sbH); // status bar
+
+    PanelBoundsResult result;
+    if (aiVisible)
+        result.aiPanelBounds = bounds.removeFromRight(aiW);
+    if (libVisible)
+        result.libraryBounds = bounds.removeFromLeft(libW);
+    result.graphEditorBounds = bounds;
+    return result;
+}
+
+// ---- Animated panel transition ----
+void MainComponent::animatePanelTransition(const PanelBoundsResult& fromResult, const PanelBoundsResult& toResult,
+                                           bool hideLibraryOnComplete, bool hideAiPanelOnComplete) {
+    // Snapshot from-bounds for the lambdas.
+    libraryAnimFrom = fromResult.libraryBounds.isEmpty() ? toResult.libraryBounds : fromResult.libraryBounds;
+    aiPanelAnimFrom = fromResult.aiPanelBounds.isEmpty() ? toResult.aiPanelBounds : fromResult.aiPanelBounds;
+    graphEditorAnimFrom = fromResult.graphEditorBounds;
+
+    const auto libTo = toResult.libraryBounds.isEmpty() ? libraryAnimFrom : toResult.libraryBounds;
+    const auto aiTo = toResult.aiPanelBounds.isEmpty() ? aiPanelAnimFrom : toResult.aiPanelBounds;
+    const auto graphTo = toResult.graphEditorBounds;
+
+    // Stop both animators first — we're doing a single coordinated anim on aiPanelAnim,
+    // with libraryAnim as backup for the library bounds.
+    libraryAnim.stop(vblankUpdater);
+    aiPanelAnim.stop(vblankUpdater);
+
+    // Capture for lambdas.
+    auto libFrom = libraryAnimFrom;
+    auto aipFrom = aiPanelAnimFrom;
+    auto graphFrom = graphEditorAnimFrom;
+
+    // Single animator drives all three panels.
+    aiPanelAnim.start(
+        vblankUpdater,
+        190.0, // ~190 ms — within the 160–220 ms spec
+        gravisynth::ui::easeInOutCubic,
+        [this, libFrom, libTo, aipFrom, aiTo, graphFrom, graphTo](float t) {
+            if (!libFrom.isEmpty() || !libTo.isEmpty())
+                moduleLibrary.setBounds(gravisynth::ui::AnimationDriver::lerpBounds(libFrom, libTo, t));
+            if (!aipFrom.isEmpty() || !aiTo.isEmpty())
+                aiChatComponent.setBounds(gravisynth::ui::AnimationDriver::lerpBounds(aipFrom, aiTo, t));
+            graphEditor.setBounds(gravisynth::ui::AnimationDriver::lerpBounds(graphFrom, graphTo, t));
+        },
+        [this, hideLibraryOnComplete, hideAiPanelOnComplete, libTo, aiTo, graphTo]() {
+            // Snap to exact final bounds and apply visibility.
+            if (!libTo.isEmpty())
+                moduleLibrary.setBounds(libTo);
+            if (!aiTo.isEmpty())
+                aiChatComponent.setBounds(aiTo);
+            graphEditor.setBounds(graphTo);
+            if (hideLibraryOnComplete)
+                moduleLibrary.setVisible(false);
+            if (hideAiPanelOnComplete)
+                aiChatComponent.setVisible(false);
+        });
+}
+
+// ---- Collapsible library sidebar (animated, persisted) ----
 void MainComponent::setLibraryVisible(bool v) {
     isLibraryVisible = v;
-    moduleLibrary.setVisible(v);
-    toggleLibraryButton.setTooltip(v ? "Hide Library" : "Show Library");
     appProperties.getUserSettings()->setValue("librarySidebarVisible", v ? "1" : "0");
     appProperties.getUserSettings()->saveIfNeeded();
-    // Refresh the toggle button's wide-mode label, then re-lay-out.
+    // Refresh the toggle button's wide-mode label and tooltip.
     if (!toolbarNarrowMode_)
         toggleLibraryButton.setButtonText(v ? "Hide Library" : "Show Library");
+    toggleLibraryButton.setTooltip(gravisynth::ui::formatShortcutHint(
+        v ? "Hide Library" : "Show Library",
+        ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding("toggleLibrary"))));
+
+    // Compute from/to layouts.
+    auto fromResult = computePanelBounds(!v, isAiPanelVisible); // previous layout
+    if (v) {
+        // Showing: make visible at the from-position before animating.
+        moduleLibrary.setVisible(true);
+        if (fromResult.libraryBounds.isEmpty())
+            fromResult.libraryBounds =
+                juce::Rectangle<int>(fromResult.graphEditorBounds.getX(), fromResult.graphEditorBounds.getY(), 0,
+                                     fromResult.graphEditorBounds.getHeight());
+    }
+    auto toResult = computePanelBounds(v, isAiPanelVisible);
+
+    // Apply the FINAL layout immediately so headless tests (no VBlank) see correct bounds.
+    // The animation below is cosmetic only — it starts from fromResult and converges to the
+    // same toResult that resized() already applied.
     resized();
+    if (!v)
+        moduleLibrary.setVisible(false);
+
+    animatePanelTransition(fromResult, toResult, /*hideLib=*/!v, /*hideAi=*/false);
 }
 
 // ---- Patch name (status bar) ----

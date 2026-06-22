@@ -60,6 +60,7 @@ std::pair<const void*, int> IconLibrary::binaryDataForIcon(Icon id) {
         {BinaryData::actionredo_svg, BinaryData::actionredo_svgSize},
         {BinaryData::actionsave_svg, BinaryData::actionsave_svgSize},
         {BinaryData::actionload_svg, BinaryData::actionload_svgSize},
+        {BinaryData::actionnew_svg, BinaryData::actionnew_svgSize},
         {BinaryData::actionsettings_svg, BinaryData::actionsettings_svgSize},
         {BinaryData::actionautoarrange_svg, BinaryData::actionautoarrange_svgSize},
         {BinaryData::toggleai_svg, BinaryData::toggleai_svgSize},

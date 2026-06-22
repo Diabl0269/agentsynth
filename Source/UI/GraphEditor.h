@@ -2,6 +2,8 @@
 
 #include "../AudioEngine.h"
 #include "../GravisynthUndoManager.h"
+#include "LayoutUtil.h"
+#include "UIAnimation.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
 class ModuleComponent;
@@ -10,7 +12,8 @@ class ModuleComponent;
 class GraphEditor
     : public juce::Component
     , public juce::Timer
-    , public juce::DragAndDropTarget {
+    , public juce::DragAndDropTarget
+    , public juce::SettableTooltipClient {
 public:
     GraphEditor(AudioEngine& engine, GravisynthUndoManager* undoMgr = nullptr);
     ~GraphEditor() override;
@@ -21,6 +24,10 @@ public:
     void detachAllModuleComponents();
 
     void paint(juce::Graphics& g) override;
+    /** Draws the empty-canvas onboarding hint centred in the visible viewport (untransformed
+     *  GraphEditor local coordinates).  Called after all children have painted, so it draws
+     *  on top of the inner canvas without being affected by the content transform. */
+    void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
 
     void timerCallback() override;
@@ -48,6 +55,11 @@ public:
     // BEFORE the graph is cleared, so no ScopeComponent reads a freed VisualBuffer. Returns true if loaded.
     bool loadFactoryPreset(int index);
 
+    // Clears the canvas to the empty state (New Patch). Detaches module components (stopping scope timers)
+    // BEFORE clearing the graph — same safe ordering as loadFactoryPreset. The clear is recorded as an
+    // undoable structural change when undoManager is present (Cmd+Z restores the prior patch).
+    void newPatch();
+
     // Layout / anti-overlap
     juce::Point<int> resolvePlacement(juce::Point<int> desired, int w, int h, juce::AudioProcessorGraph::NodeID selfId);
     void finalizeModuleDrag(ModuleComponent* module);
@@ -61,6 +73,23 @@ public:
     // Test accessors for drag-preview state
     bool isDragPreviewActive() const { return dragPreviewActive; }
     juce::Rectangle<int> getDragPreviewGhost() const { return dragPreviewGhost; }
+
+    // ---- Onboarding / UI Phase 5 helpers (headless-testable) ----
+
+    /** Returns true when the canvas has no modules (empty state). Pure predicate.
+     *  nodeCount is the number of non-Attenuverter nodes rendered as ModuleComponents. */
+    static bool isCanvasEmpty(int nodeCount) noexcept { return nodeCount <= 0; }
+
+    /** Compute the final snapped + anti-overlapped position for a newly dropped module.
+     *  Equivalent to snap(dropPoint) + findFreeSlot.  Pure helper — does not touch GUI state.
+     *  @param dropPoint   Desired top-left in canvas coordinates (will be snapped internally).
+     *  @param w, h        Module footprint in pixels.
+     *  @param existingBoxes  All already-placed module bounding boxes (selfId excluded from collision).
+     *  @param selfId      NodeID of the module being placed (excluded from self-collision).
+     */
+    static juce::Point<int> computeDropFinalPosition(juce::Point<int> dropPoint, int w, int h,
+                                                     const std::vector<gsynth::LayoutUtil::Box>& existingBoxes,
+                                                     gsynth::LayoutUtil::NodeID selfId);
 
     // DragAndDropTarget overrides
     bool isInterestedInDragSource(const SourceDetails& dragSourceDetails) override;
@@ -126,7 +155,22 @@ private:
     std::vector<AudioEngine::ModulationDisplayInfo> cachedModDisplayInfo;
     std::vector<AudioEngine::ModulationRouting> cachedModRoutings;
 
+    // ---- Animation members (UI Phase 5) ----
+    // Drop-landing tween: animates the newly dropped module from drop point to snapped position.
+    // Both must be class members so they outlive the VBlank frame callbacks.
+    juce::VBlankAnimatorUpdater vblankUpdater{this};
+    gravisynth::ui::AnimationDriver dropLandingAnim;
+
+    // Mod-matrix panel ease: animates the panel bounds on show/hide.
+    gravisynth::ui::AnimationDriver modMatrixAnim;
+
+    // Tracks the target bounds for mod-matrix animation so we can set final position on complete.
+    juce::Rectangle<int> modMatrixTargetBounds;
+
     void updateTransform();
+
+    // Internal: start the drop-landing animation for a newly placed module component.
+    void animateDropLanding(ModuleComponent* module, juce::Point<int> fromPos, juce::Point<int> toPos);
 
 public:
     const std::vector<AudioEngine::ModulationDisplayInfo>& getCachedModDisplayInfo() const {

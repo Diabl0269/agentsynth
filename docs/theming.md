@@ -450,6 +450,10 @@ The following stock-widget overrides are now fully implemented in `GravisynthLoo
 
 > **MidiKeyboardComponent limitation:** `juce_audio_utils` is not linked into `GravisynthCore` (it would bloat the headless test binary). As a result, `MidiKeyboardComponent` inherits JUCE default colours and cannot be themed from `GravisynthLookAndFeel`. This is a known and accepted limitation.
 
+### Phase 5 completions
+
+- **TooltipWindow** — a single `juce::TooltipWindow` is now owned by `MainComponent` (member `tooltipWindow{ this }`). The tooltip `ColourIds` and `drawTooltip` override were already present in `GravisynthLookAndFeel`; this instance causes them to take effect. Feature code calls `setTooltip()` on individual controls; no second `TooltipWindow` should be created elsewhere.
+
 ### Phase 4 completions
 
 - **Waveform glyphs** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle`) — SVG assets added in `assets/icons/waveform-{sine,saw,square,triangle}.svg`; `Icon` enum values 22–25 registered in `IconLibrary`; tinted to `textPrimary` by `retintIcons()`; consumed by `ModuleComponent` waveform combos (Oscillator). `GravisynthLookAndFeel::drawPopupMenuItem` now paints the 14×14 waveform glyph left of the item text; `drawComboBox` renders the selected waveform glyph in the closed combo; `positionComboBoxText` shifts the label right when the selected item carries a glyph.

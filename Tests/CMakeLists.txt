@@ -47,6 +47,7 @@ add_executable(GravisynthTests
     OscillatorCVModulationTests.cpp
     SettingsWindowTests.cpp
     ShortcutManagerTests.cpp
+    ShortcutsSettingsTabTests.cpp
     AudioRenderingTests.cpp
     LogicalPortTests.cpp
     StateRoundTripTests.cpp
@@ -57,6 +58,10 @@ add_executable(GravisynthTests
     StatusBarTests.cpp
     FrequencyResponseTests.cpp
     ScopeTests.cpp
+    UIAnimationTests.cpp
+    GraphEditorOnboardingTests.cpp
+    ModuleLibraryComponentTests.cpp
+    PanelAnimationAndLoadingTests.cpp
     ../Source/MainComponent.cpp
     ../Source/UI/GraphEditor.cpp
     ../Source/UI/ModMatrixComponent.cpp
@@ -64,6 +69,7 @@ add_executable(GravisynthTests
     ../Source/UI/ModuleComponent.cpp
     ../Source/UI/SettingsWindow.cpp
     ../Source/UI/AppearanceSettingsTab.cpp
+    ../Source/UI/ShortcutsSettingsTab.cpp
 )
 
 target_link_libraries(GravisynthTests PRIVATE

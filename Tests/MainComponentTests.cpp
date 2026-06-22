@@ -104,10 +104,10 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
     MainComponent mainComp(std::make_unique<MockProvider>());
     auto& cm = mainComp.getCommandManager();
     juce::ignoreUnused(cm);
-    // Verify all 9 commands are registered (5 original + 2 toggles + Auto Arrange + Toggle Library)
+    // Verify all 10 commands are registered (5 original + New Patch + 2 toggles + Auto Arrange + Toggle Library)
     juce::Array<juce::CommandID> commands;
     mainComp.getAllCommands(commands);
-    EXPECT_EQ(commands.size(), 9);
+    EXPECT_EQ(commands.size(), 10);
 }
 
 TEST_F(MainComponentTest, RedoShortcutViaKeyPressed) {

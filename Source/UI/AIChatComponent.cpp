@@ -203,13 +203,34 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     inputField.onReturnKey = [this]() { sendButtonClicked(); };
     inputField.addListener(this);
     inputField.setTextToShowWhenEmpty("Ask AI to create or modify a patch...", juce::Colours::grey);
+    inputField.setTooltip("Type a message and press Enter or Send");
 
     addAndMakeVisible(sendButton);
     sendButton.setButtonText("Send");
     sendButton.onClick = [this]() { sendButtonClicked(); };
+    sendButton.setTooltip("Send message to AI  (Enter)");
+
+    // Cancel button — hidden until a request is in flight.
+    cancelButton.setButtonText("Cancel");
+    cancelButton.setColour(juce::TextButton::buttonColourId, juce::Colours::darkred);
+    cancelButton.onClick = [this]() {
+        cancelRequest();
+        messages.push_back({"assistant", "Cancelled.", ""});
+        updateChatDisplay();
+        inputField.grabKeyboardFocus();
+    };
+    cancelButton.setTooltip("Cancel the in-flight AI request");
+    cancelButton.setVisible(false);
+    addChildComponent(cancelButton);
+
+    // Spinner dot — 8×8 ellipse, hidden until waiting.
+    spinnerDot.setSize(8, 8);
+    spinnerDot.setVisible(false);
+    addChildComponent(spinnerDot);
 
     addAndMakeVisible(newChatButton);
     newChatButton.setButtonText("New Chat");
+    newChatButton.setTooltip("Start a new conversation (clears history)");
     newChatButton.onClick = [this]() {
         aiService.clearHistory();
         messages.clear();
@@ -217,6 +238,7 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     };
 
     addAndMakeVisible(modelPicker);
+    modelPicker.setTooltip("Select the AI model to use");
     modelPicker.onChange = [this]() {
         juce::String model = modelPicker.getText();
         aiService.setModel(model);
@@ -249,20 +271,34 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
 
 AIChatComponent::~AIChatComponent() {
     stopTimer();
+    // Stop any running pulse animation before members are destroyed.
+    spinnerDot.stopPulse(vblankUpdater);
 #ifndef NDEBUG
     juce::Logger::setCurrentLogger(nullptr);
 #endif
 }
 
 void AIChatComponent::timerCallback() {
-    // If the timer fires, the request has timed out
-    stopTimer();
-    sendButton.setEnabled(true);
-    inputField.setReadOnly(false);
-    isWaitingForResponse = false;
+    // The 120 s timer fired — request has timed out.
+    cancelRequest();
     messages.push_back({"assistant", "Error: Request timed out after 2 minutes.", ""});
     updateChatDisplay();
     inputField.grabKeyboardFocus();
+}
+
+void AIChatComponent::cancelRequest() {
+    // Stop the timeout timer.
+    stopTimer();
+
+    // Stop the pulse animation and hide the spinner.
+    spinnerDot.stopPulse(vblankUpdater);
+    spinnerDot.setVisible(false);
+
+    // Hide the cancel button, restore normal input state.
+    cancelButton.setVisible(false);
+    sendButton.setEnabled(true);
+    inputField.setReadOnly(false);
+    isWaitingForResponse = false;
 }
 
 void AIChatComponent::resized() {
@@ -274,10 +310,22 @@ void AIChatComponent::resized() {
 
     auto bottomArea = b.removeFromBottom(70); // Increased height for both rows
 
-    // Bottom row: Input + Send
+    // Bottom row: Input + Send (+ Cancel when waiting + spinner dot)
     auto inputRow = bottomArea.removeFromBottom(40);
-    sendButton.setBounds(inputRow.removeFromRight(60));
+
+    // Cancel button occupies the same slot as Send — only one is visible at a time.
+    // We size both identically so the layout is stable regardless of visibility.
+    const auto sendCancelBounds = inputRow.removeFromRight(60);
+    sendButton.setBounds(sendCancelBounds);
+    cancelButton.setBounds(sendCancelBounds);
+
     inputRow.removeFromRight(10);
+
+    // Spinner dot: 8×8, vertically centred on the right edge of the input area.
+    const int spinnerSize = 8;
+    spinnerDot.setBounds(inputRow.removeFromRight(spinnerSize).withSizeKeepingCentre(spinnerSize, spinnerSize));
+    inputRow.removeFromRight(4); // gap between spinner and input field
+
     inputField.setBounds(inputRow);
 
     // Middle row (above input): Model Picker
@@ -341,6 +389,11 @@ void AIChatComponent::sendButtonClicked() {
     sendButton.setEnabled(false);
     inputField.setReadOnly(true);
 
+    // Show cancel affordance and start the pulse spinner.
+    cancelButton.setVisible(true);
+    spinnerDot.setVisible(true);
+    spinnerDot.startPulse(vblankUpdater);
+
     // Start timeout timer (120 seconds)
     startTimer(120000);
 
@@ -357,10 +410,7 @@ void AIChatComponent::sendButtonClicked() {
                     return;
                 } // Ignore late responses if a timeout already occurred
 
-                self->stopTimer(); // Cancel timeout
-                self->isWaitingForResponse = false;
-                self->sendButton.setEnabled(true);
-                self->inputField.setReadOnly(false);
+                self->cancelRequest(); // stops timer, spinner, cancel btn, restores input
 
                 if (success) {
                     juce::String json;

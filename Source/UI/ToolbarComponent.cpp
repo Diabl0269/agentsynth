@@ -14,6 +14,7 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
     static constexpr float kNarrowPref = 32.0f;
     const std::array<float, NumSlots> widePref = {
         96.0f,  // Library
+        88.0f,  // New
         112.0f, // Save
         116.0f, // Load
         96.0f,  // Settings

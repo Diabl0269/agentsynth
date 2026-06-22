@@ -106,6 +106,7 @@ target_link_libraries(GravisynthCore PUBLIC
     juce::juce_audio_utils
     juce::juce_gui_basics
     juce::juce_gui_extra
+    juce::juce_animation
     juce::juce_dsp
 )
 
@@ -176,11 +177,12 @@ juce_add_binary_data(GravisynthAssets SOURCES
     assets/fonts/IBMPlexSans-SemiBold.ttf
     assets/fonts/IBMPlexMono-Regular.ttf
     assets/fonts/IBMPlexMono-Medium.ttf
-    # Icons (22 SVGs, hyphen-named; BinaryData symbols: e.g. transport_play_svg)
+    # Icons (23 SVGs, hyphen-named; BinaryData symbols: e.g. transport_play_svg)
     assets/icons/transport-play.svg
     assets/icons/transport-stop.svg
     assets/icons/action-undo.svg
     assets/icons/action-redo.svg
+    assets/icons/action-new.svg
     assets/icons/action-save.svg
     assets/icons/action-load.svg
     assets/icons/action-settings.svg
@@ -230,6 +232,7 @@ target_sources(Gravisynth PRIVATE
     Source/UI/SettingsWindow.h
     Source/UI/AppearanceSettingsTab.cpp
     Source/UI/AppearanceSettingsTab.h
+    Source/UI/ShortcutsSettingsTab.cpp
     Source/ShortcutManager.h
 )
 
@@ -243,6 +246,7 @@ target_link_libraries(Gravisynth PRIVATE
     juce::juce_data_structures
     juce::juce_gui_basics
     juce::juce_gui_extra
+    juce::juce_animation
     juce::juce_audio_basics
     juce::juce_audio_devices
     juce::juce_audio_formats

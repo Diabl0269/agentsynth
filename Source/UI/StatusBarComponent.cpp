@@ -21,6 +21,21 @@ void StatusBarComponent::update(float cpuPct, int voices, const juce::String& pa
 }
 
 // ---------------------------------------------------------------------------
+void StatusBarComponent::showMessage(const juce::String& msg) {
+    transientMessage_ = msg;
+    repaint();
+    // (Re-)start the single-shot auto-clear timer: 2500 ms, fires once.
+    startTimer(2500);
+}
+
+// ---------------------------------------------------------------------------
+void StatusBarComponent::timerCallback() {
+    stopTimer();
+    transientMessage_ = {};
+    repaint();
+}
+
+// ---------------------------------------------------------------------------
 void StatusBarComponent::paint(juce::Graphics& g) {
     using namespace gsynth::theme;
 
@@ -60,21 +75,31 @@ void StatusBarComponent::paint(juce::Graphics& g) {
     const int muteSlotWidth = 28;
     const int rightEdge = getWidth() - muteSlotWidth - padH;
 
-    // Patch name — left-aligned
-    const juce::String patchStr = formatPatch(patchName_);
-    g.setColour(textPrimary);
     g.setFont(juce::Font(11.0f));
-    g.drawText(patchStr, padH, textY, 160, textH, juce::Justification::centredLeft, true);
 
-    // CPU — after patch name, warning colour if > 80 %
-    const juce::String cpuStr = formatCpu(cpuPct_ / 100.0f);
-    g.setColour(cpuPct_ > 80.0f ? warningColour : textMuted);
-    g.drawText(cpuStr, 170, textY, 60, textH, juce::Justification::centredLeft, true);
+    if (transientMessage_.isNotEmpty()) {
+        // Transient message overrides the normal status text — draw it centred across the
+        // full available width (left pad to right edge before the mute button slot).
+        g.setColour(textPrimary);
+        g.drawText(transientMessage_, padH, textY, rightEdge - padH, textH, juce::Justification::centredLeft, true);
+    } else {
+        // Normal status: patch name, CPU, voice count.
 
-    // Voice count — right-aligned before mute button
-    const juce::String voiceStr = formatVoices(voices_);
-    g.setColour(textMuted);
-    g.drawText(voiceStr, rightEdge - 80, textY, 80, textH, juce::Justification::centredRight, true);
+        // Patch name — left-aligned
+        const juce::String patchStr = formatPatch(patchName_);
+        g.setColour(textPrimary);
+        g.drawText(patchStr, padH, textY, 160, textH, juce::Justification::centredLeft, true);
+
+        // CPU — after patch name, warning colour if > 80 %
+        const juce::String cpuStr = formatCpu(cpuPct_ / 100.0f);
+        g.setColour(cpuPct_ > 80.0f ? warningColour : textMuted);
+        g.drawText(cpuStr, 170, textY, 60, textH, juce::Justification::centredLeft, true);
+
+        // Voice count — right-aligned before mute button
+        const juce::String voiceStr = formatVoices(voices_);
+        g.setColour(textMuted);
+        g.drawText(voiceStr, rightEdge - 80, textY, 80, textH, juce::Justification::centredRight, true);
+    }
 }
 
 // ---------------------------------------------------------------------------
