@@ -295,6 +295,23 @@ void ModuleComponent::createControls() {
     if (auto* midiKeyboard = dynamic_cast<MidiKeyboardModule*>(module)) {
         keyboardComponent = std::make_unique<juce::MidiKeyboardComponent>(
             midiKeyboard->getKeyboardState(), juce::MidiKeyboardComponent::horizontalKeyboard);
+
+        // Theme the keyboard component
+        using gsynth::theme::GravisynthLookAndFeel;
+        auto* lf = dynamic_cast<GravisynthLookAndFeel*>(&getLookAndFeel());
+        if (lf != nullptr) {
+            keyboardComponent->setColour(juce::MidiKeyboardComponent::whiteNoteColourId, lf->getTheme().colors.bg1);
+            keyboardComponent->setColour(juce::MidiKeyboardComponent::blackNoteColourId,
+                                         lf->getTheme().colors.surfaceHi);
+            keyboardComponent->setColour(juce::MidiKeyboardComponent::keySeparatorLineColourId,
+                                         lf->getTheme().colors.border);
+            keyboardComponent->setColour(juce::MidiKeyboardComponent::mouseOverKeyOverlayColourId,
+                                         lf->getTheme().colors.accent.withAlpha(0.3f));
+            keyboardComponent->setColour(juce::MidiKeyboardComponent::keyDownOverlayColourId,
+                                         lf->getTheme().colors.accent);
+            keyboardComponent->setColour(juce::MidiKeyboardComponent::textLabelColourId,
+                                         lf->getTheme().colors.textPrimary);
+        }
         keyboardComponent->setWantsKeyboardFocus(true);
         addAndMakeVisible(keyboardComponent.get());
     } else if (auto* extMidi = dynamic_cast<ExternalMidiModule*>(module)) {

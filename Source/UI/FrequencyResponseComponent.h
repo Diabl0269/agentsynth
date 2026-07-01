@@ -2,6 +2,8 @@
 
 #include "../Modules/FilterModule.h"
 #include "../Modules/VisualBuffer.h"
+#include "Theme/GravisynthLookAndFeel.h"
+#include "Theme/Theme.h"
 #include <cmath>
 #include <juce_dsp/juce_dsp.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -140,11 +142,18 @@ public:
         float w = bounds.getWidth();
         float h = bounds.getHeight();
 
+        using gsynth::theme::GravisynthLookAndFeel;
+        auto* lf = dynamic_cast<GravisynthLookAndFeel*>(&getLookAndFeel());
+
+        juce::Colour bgColor = lf ? lf->getTheme().colors.bg1 : juce::Colour(0xff1a1a2e);
+        juce::Colour gridColor = lf ? lf->getTheme().colors.border.withAlpha(0.4f) : juce::Colour(0xff2a2a3e);
+        juce::Colour mutedText = lf ? lf->getTheme().colors.textMuted : juce::Colour(0xff6a6a7e);
+
         // Dark background
-        g.fillAll(juce::Colour(0xff1a1a2e));
+        g.fillAll(bgColor);
 
         // Grid lines at 100Hz, 1kHz, 10kHz
-        g.setColour(juce::Colour(0xff2a2a3e));
+        g.setColour(gridColor);
         for (float freq : {100.0f, 1000.0f, 10000.0f}) {
             float x = freqToX(freq, w);
             g.drawVerticalLine((int)x, 0.0f, h);
@@ -157,7 +166,7 @@ public:
         // Hz axis labels at vertical grid lines (top of each gridline, 3 px offset right)
         {
             g.setFont(juce::Font(9.5f));
-            g.setColour(juce::Colour(0xff6a6a7e)); // muted label colour
+            g.setColour(mutedText); // muted label colour
             const struct {
                 float freq;
                 const char* label;
@@ -176,7 +185,7 @@ public:
         // dB axis labels at horizontal grid lines (left edge, vertically centred on line)
         {
             g.setFont(juce::Font(9.0f));
-            g.setColour(juce::Colour(0xff6a6a7e));
+            g.setColour(mutedText);
             const struct {
                 float db;
                 const char* label;
@@ -214,14 +223,15 @@ public:
         fillPath.closeSubPath();
 
         // Gradient fill under curve
-        juce::ColourGradient gradient(juce::Colour(0x6000b4d8), 0.0f, 0.0f, // semi-transparent cyan at top
-                                      juce::Colour(0x1000b4d8), 0.0f, h,    // nearly transparent at bottom
+        juce::Colour accent = lf ? lf->getTheme().colors.accent : juce::Colour(0xff00b4d8);
+        juce::ColourGradient gradient(accent.withAlpha(0.375f), 0.0f, 0.0f, // 0x60 == 96/255 ≈ 0.375
+                                      accent.withAlpha(0.063f), 0.0f, h,    // 0x10 == 16/255 ≈ 0.063
                                       false);
         g.setGradientFill(gradient);
         g.fillPath(fillPath);
 
         // Stroke the curve
-        g.setColour(juce::Colour(0xff00b4d8)); // bright cyan
+        g.setColour(accent); // bright cyan
         g.strokePath(curvePath, juce::PathStrokeType(2.0f));
 
         // Resonance peak marker — filled dot + small callout at the magnitude peak
@@ -233,10 +243,10 @@ public:
                 float peakY = juce::jlimit(0.0f, h, dbToY(magnitudes[peakBin], h));
                 constexpr float dotRadius = 3.5f;
                 // Filled dot in accent cyan with a dark outline for contrast
-                g.setColour(juce::Colour(0xff1a1a2e));
+                g.setColour(bgColor);
                 g.fillEllipse(peakX - dotRadius - 1.0f, peakY - dotRadius - 1.0f, (dotRadius + 1.0f) * 2.0f,
                               (dotRadius + 1.0f) * 2.0f);
-                g.setColour(juce::Colour(0xff00b4d8)); // same accent as curve
+                g.setColour(accent); // same accent as curve
                 g.fillEllipse(peakX - dotRadius, peakY - dotRadius, dotRadius * 2.0f, dotRadius * 2.0f);
                 // Small text callout (peak frequency label), placed above the dot.
                 // Skip the label entirely when the component is too narrow for the 44 px rect
@@ -244,7 +254,7 @@ public:
                 if (w >= 44.0f) {
                     juce::String callout = formatHzLabel(peakFreq);
                     g.setFont(juce::Font(8.5f));
-                    g.setColour(juce::Colour(0xcc00b4d8)); // slightly translucent
+                    g.setColour(accent.withAlpha(0.8f)); // 0xcc == 204/255 ≈ 0.8
                     int labelX = juce::jlimit(0, (int)w - 44, (int)peakX - 20);
                     int labelY = juce::jlimit(0, (int)h - 12, (int)peakY - 14);
                     g.drawText(callout, labelX, labelY, 44, 10, juce::Justification::centred, false);
@@ -280,19 +290,21 @@ public:
             specFill.lineTo(w, h);
             specFill.closeSubPath();
 
+            juce::Colour accent2 = lf ? lf->getTheme().colors.accent2 : juce::Colour(0xff00D1FF);
+
             // Semi-transparent green fill
-            juce::ColourGradient specGradient(juce::Colour(0x3066cc66), 0.0f, 0.0f, juce::Colour(0x0866cc66), 0.0f, h,
-                                              false);
+            juce::ColourGradient specGradient(accent2.withAlpha(0.188f), 0.0f, 0.0f, accent2.withAlpha(0.031f), 0.0f, h,
+                                              false); // 0x30=48/255≈0.188, 0x08=8/255≈0.031
             g.setGradientFill(specGradient);
             g.fillPath(specFill);
 
-            g.setColour(juce::Colour(0xaa66cc66)); // semi-transparent green
+            g.setColour(accent2.withAlpha(0.67f)); // 0xaa == 170/255 ≈ 0.67
             g.strokePath(specPath, juce::PathStrokeType(1.0f));
         }
 
         // Cutoff frequency marker
         float cutoffX = freqToX(lastCutoff, w);
-        g.setColour(juce::Colour(0x4000b4d8));
+        g.setColour(accent.withAlpha(0.25f)); // 0x40 == 64/255 ≈ 0.25
         g.drawVerticalLine((int)cutoffX, 0.0f, h);
     }
 

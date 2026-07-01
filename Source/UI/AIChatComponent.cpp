@@ -366,7 +366,14 @@ void AIChatComponent::resized() {
     messageList.setSize(width, juce::jmax(viewport.getHeight(), y));
 }
 
-void AIChatComponent::paint(juce::Graphics& g) { g.fillAll(juce::Colours::darkgrey.darker(0.5f)); }
+void AIChatComponent::paint(juce::Graphics& g) {
+    auto lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+    if (lf != nullptr) {
+        g.fillAll(lf->getTheme().colors.bg0);
+    } else {
+        g.fillAll(juce::Colours::darkgrey.darker(0.5f));
+    }
+}
 
 void AIChatComponent::sendButtonClicked() {
     auto text = inputField.getText().trim();
