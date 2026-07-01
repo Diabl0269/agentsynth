@@ -40,7 +40,11 @@ public:
     // ---------------------------------------------------------------------------
 
     void paint(juce::Graphics& g) override {
-        g.fillAll(juce::Colours::black);
+        juce::Colour bgColor = juce::Colours::black;
+        if (auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel())) {
+            bgColor = lf->getTheme().colors.bg1;
+        }
+        g.fillAll(bgColor);
 
         auto bounds = getLocalBounds().toFloat();
         auto midY = bounds.getCentreY();
