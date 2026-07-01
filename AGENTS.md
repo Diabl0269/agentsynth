@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-Guidance for Claude Code (claude.ai/code) in this repository. Keep this file **lean** — it is the orientation layer (commands, conventions, critical traps). Detailed reference lives in `docs/` (map below); when you change behavior, update the relevant doc, not this file.
+Guidance for AGENTS Code (AGENTS.ai/code) in this repository. Keep this file **lean** — it is the orientation layer (commands, conventions, critical traps). Detailed reference lives in `docs/` (map below); when you change behavior, update the relevant doc, not this file.
 
 ## Project
 
@@ -37,7 +37,7 @@ See [`docs/testing.md`](docs/testing.md) for the full build/test/CI/hooks refere
 Every implementation plan **must** include:
 
 1. A **Tests** section — list new test cases, the test file, and what each verifies.
-2. A **Docs Updates** section — list which docs (`docs/testing.md`, `CLAUDE.md`, etc.) need updating.
+2. A **Docs Updates** section — list which docs (`docs/testing.md`, `AGENTS.md`, etc.) need updating.
 
 ## Critical invariants (break these and you ship bugs)
 
