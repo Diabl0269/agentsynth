@@ -44,6 +44,10 @@ Theme makeObsidian() {
     t.metrics.borderWidth = 1.0f;
     t.metrics.wireCoreWidth = 2.5f;
     t.metrics.wireCasingWidth = 5.0f;
+    t.metrics.gridSize = 8;
+    t.metrics.guideAlpha = 0.7f;
+    t.metrics.guideLineWidth = 1.5f;
+    t.metrics.cornerRadiusSmall = 4.0f;
 
     // Typography
     t.type.uiFamily = "Inter";
@@ -106,6 +110,10 @@ Theme makeNeon() {
     t.metrics.borderWidth = 1.0f;
     t.metrics.wireCoreWidth = 3.0f;
     t.metrics.wireCasingWidth = 5.5f;
+    t.metrics.gridSize = 8;
+    t.metrics.guideAlpha = 0.7f;
+    t.metrics.guideLineWidth = 1.5f;
+    t.metrics.cornerRadiusSmall = 4.0f;
 
     // Typography. All built-in themes share Inter + JetBrains Mono: switching the embedded
     // typeface family at runtime corrupts text rendering globally (JUCE 8 + CoreText), so the
@@ -171,6 +179,10 @@ Theme makeWarm() {
     t.metrics.borderWidth = 1.0f;
     t.metrics.wireCoreWidth = 2.5f;
     t.metrics.wireCasingWidth = 5.0f;
+    t.metrics.gridSize = 8;
+    t.metrics.guideAlpha = 0.7f;
+    t.metrics.guideLineWidth = 1.5f;
+    t.metrics.cornerRadiusSmall = 4.0f;
 
     // Typography. NOTE: IBM Plex Sans/Mono (the original Warm pick) garbles when swapped in at
     // runtime — its large multi-script glyph tables get mis-indexed by JUCE 8's shaper after a

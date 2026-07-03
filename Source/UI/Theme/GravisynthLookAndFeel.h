@@ -132,6 +132,14 @@ private:
     juce::HashMap<juce::String, juce::Typeface::Ptr> typefaceCache;
     juce::SpinLock typefaceCacheLock;
 
+    // Hoisted gradients/paths for hot paths (drawModulePanel). Prevents per-paint allocation.
+    // These are rebuilt on every call so they can share state across concurrent calls safely.
+    std::optional<juce::Path> bodyPath;
+    std::optional<juce::Path> headerPath;
+    std::optional<juce::ColourGradient> glassTopHiGradient;
+    std::optional<juce::ColourGradient> texturedGradient;
+    std::optional<juce::ColourGradient> flatGradient;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GravisynthLookAndFeel)
 };
 
