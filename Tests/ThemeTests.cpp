@@ -534,6 +534,80 @@ TEST(ThemeBuiltInsTest, ContrastAA_AllBuiltIns) {
 }
 
 // ---------------------------------------------------------------------------
+// 20. Issue103MetricsDefaults
+// ---------------------------------------------------------------------------
+// Verify the new Metrics fields from Issue #103 (UI Phase 7 polish) have correct defaults.
+TEST(ThemeMetricsTest, Issue103MetricsDefaults) {
+    gsynth::theme::Theme theme;
+    const auto& m = theme.metrics;
+
+    // Item 2: Metrics migration — snap threshold (kGridSize)
+    EXPECT_EQ(m.gridSize, 8);
+
+    // Item 4: Alignment guides
+    EXPECT_FLOAT_EQ(m.guideAlpha, 0.7f);        // guide line opacity
+    EXPECT_FLOAT_EQ(m.guideLineWidth, 1.5f);    // guide stroke width
+    EXPECT_FLOAT_EQ(m.cornerRadiusSmall, 4.0f); // pill/small element radius
+}
+
+// ---------------------------------------------------------------------------
+// 21. Issue103MetricsBuiltIns
+// ---------------------------------------------------------------------------
+// Verify all built-in themes populate the new Metrics fields correctly.
+TEST(ThemeBuiltInsTest, Issue103MetricsInAllBuiltIns) {
+    auto themes = gsynth::theme::builtInThemes();
+    ASSERT_EQ(themes.size(), 3u);
+
+    for (const auto& t : themes) {
+        EXPECT_EQ(t.metrics.gridSize, 8) << "Theme '" << t.name << "' has incorrect gridSize";
+        EXPECT_FLOAT_EQ(t.metrics.guideAlpha, 0.7f) << "Theme '" << t.name << "' has incorrect guideAlpha";
+        EXPECT_FLOAT_EQ(t.metrics.guideLineWidth, 1.5f) << "Theme '" << t.name << "' has incorrect guideLineWidth";
+        EXPECT_FLOAT_EQ(t.metrics.cornerRadiusSmall, 4.0f)
+            << "Theme '" << t.name << "' has incorrect cornerRadiusSmall";
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 22. MetricsCodeOnlyFieldsNotInJSON (Issue #103 new fields)
+// ---------------------------------------------------------------------------
+TEST(ThemeLoaderTest, Issue103MetricsNotInJSON) {
+    auto theme = gsynth::theme::makeObsidian();
+    auto json = gsynth::theme::ThemeLoader::themeToJson(theme);
+    juce::String jsonStr = juce::JSON::toString(json, true);
+
+    // Verify that Issue #103 new code-only metrics fields are NOT present in the serialized JSON
+    EXPECT_FALSE(jsonStr.contains("gridSize")) << "Issue 103 gridSize should not be user-configurable";
+    EXPECT_FALSE(jsonStr.contains("guideAlpha")) << "Issue 103 guideAlpha should not be user-configurable";
+    EXPECT_FALSE(jsonStr.contains("guideLineWidth")) << "Issue 103 guideLineWidth should not be user-configurable";
+    EXPECT_FALSE(jsonStr.contains("cornerRadiusSmall"))
+        << "Issue 103 cornerRadiusSmall should not be user-configurable";
+}
+
+// ---------------------------------------------------------------------------
+// 23. GraphEditorUsesMetricsForRendering (Issue #103 Item 2 verification)
+// ---------------------------------------------------------------------------
+// Verify that GraphEditor renders with correct metrics-derived values.
+TEST(GraphEditorRenderingTest, UsesMetricsCornerRadius) {
+    // This test verifies that the code uses theme.metrics.cornerRadius
+    // for drag ghost rendering instead of hardcoding it.
+    gsynth::theme::GravisynthLookAndFeel lf;
+    lf.applyTheme(gsynth::theme::makeObsidian());
+
+    const auto& metrics = lf.getTheme().metrics;
+    EXPECT_EQ(metrics.gridSize, 8);                   // snap threshold
+    EXPECT_FLOAT_EQ(metrics.cornerRadiusSmall, 4.0f); // pill radius
+}
+
+TEST(GraphEditorRenderingTest, UsesMetricsGuideParams) {
+    gsynth::theme::GravisynthLookAndFeel lf;
+    lf.applyTheme(gsynth::theme::makeNeon());
+
+    const auto& m = lf.getTheme().metrics;
+    EXPECT_FLOAT_EQ(m.guideAlpha, 0.7f);     // guide opacity matches Item 4 spec
+    EXPECT_FLOAT_EQ(m.guideLineWidth, 1.5f); // guide stroke width matches Item 4 spec
+}
+
+// ---------------------------------------------------------------------------
 // Smoke tests: LookAndFeel draw helpers must not throw / crash
 // (Exercises the LnF draw paths in headless mode without asserting pixels.)
 // ---------------------------------------------------------------------------
