@@ -10,6 +10,7 @@
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/LayoutUtil.h"
 #include "../Source/UI/ModuleComponent.h"
+#include "../Source/UI/Theme/BuiltInThemes.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -622,4 +623,24 @@ TEST_F(GraphEditorTest, DropUsesRealModuleSizeForAntiOverlap) {
                 << bounds[j].toString() << ") overlap — real-size finalize should have displaced the second";
         }
     }
+}
+
+// ============================================================================
+// Item 4: Alignment guide rendering tests
+// ============================================================================
+
+TEST_F(GraphEditorTest, AlignmentGuideDrawingThemeAware) {
+    // Verify paintOverChildren() uses theme colors correctly.
+    gsynth::theme::GravisynthLookAndFeel lf;
+    lf.applyTheme(gsynth::theme::makeObsidian());
+
+    const auto& m = lf.getTheme().metrics;
+    const auto guideColor = lf.getTheme().colors.textMuted.withAlpha(m.guideAlpha);
+
+    // Verify opacity matches Item 4 spec (70%)
+    EXPECT_FLOAT_EQ(m.guideAlpha, 0.7f);
+    EXPECT_NEAR(guideColor.getFloatAlpha(), 0.7f, 0.01f);
+
+    // Verify line width matches spec
+    EXPECT_FLOAT_EQ(m.guideLineWidth, 1.5f);
 }

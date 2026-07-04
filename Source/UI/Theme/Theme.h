@@ -53,6 +53,12 @@ struct Metrics {
     float wireCoreWidth{2.5f};   // connection wire core stroke
     float wireCasingWidth{5.0f}; // connection wire casing (dark underlay) stroke
 
+    // --- Visual treatment constants (not parsed from user JSON, code-only defaults) ---
+    int gridSize{8};               // snap quantum (kGridSize in LayoutUtil)
+    float guideAlpha{0.7f};        // alignment guide opacity
+    float guideLineWidth{1.5f};    // alignment guide stroke width
+    float cornerRadiusSmall{4.0f}; // pill / small element radius
+
     // --- Chrome layout constants (code-only; not parsed from user JSON) ---
     int toolbarHeight{36};        // code-only; not parsed from user JSON
     int statusBarHeight{24};      // code-only; not parsed from user JSON

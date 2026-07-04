@@ -97,6 +97,8 @@ GravisynthLookAndFeel::GravisynthLookAndFeel() {
             }
         }
     }
+    // Initialize hoisted gradients/paths for hot paths (drawModulePanel).
+    // std::optional is default-constructed (empty); they will be populated on first use.
     applyTheme(theme);
 }
 
@@ -862,26 +864,27 @@ void GravisynthLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<f
 
     // ---- Body fill per style ----
     {
-        juce::Path bodyPath;
-        bodyPath.addRoundedRectangle(body, radius);
+        // Hoist path to member (avoids stack allocation on every paint)
+        bodyPath.emplace();
+        bodyPath->addRoundedRectangle(body, radius);
         g.saveState();
-        g.reduceClipRegion(bodyPath);
+        g.reduceClipRegion(*bodyPath);
 
         if (tr.style == ThemeStyle::Glass) {
             g.setColour(surfaceCol);
             g.fillRect(body);
             // Top highlight gradient over the top ~40%.
             const float hAlpha = 0.05f * tr.blur + 0.05f;
-            juce::ColourGradient topHi(juce::Colours::white.withAlpha(hAlpha), body.getX(), body.getY(),
+            glassTopHiGradient.emplace(juce::Colours::white.withAlpha(hAlpha), body.getX(), body.getY(),
                                        juce::Colours::transparentWhite, body.getX(),
                                        body.getY() + body.getHeight() * 0.4f, false);
-            g.setGradientFill(topHi);
+            g.setGradientFill(*glassTopHiGradient);
             g.fillRect(body);
         } else if (tr.style == ThemeStyle::Textured) {
-            juce::ColourGradient grad(surfaceHiCol, body.getX(), body.getY(), surfaceCol.darker(0.1f), body.getX(),
-                                      body.getBottom(), false);
-            grad.addColour(0.5, surfaceCol);
-            g.setGradientFill(grad);
+            texturedGradient.emplace(surfaceHiCol, body.getX(), body.getY(), surfaceCol.darker(0.1f), body.getX(),
+                                     body.getBottom(), false);
+            texturedGradient->addColour(0.5, surfaceCol);
+            g.setGradientFill(*texturedGradient);
             g.fillRect(body);
             // Brushed striations: O(width) vertical hairlines.
             if (tr.texture > 0.0f) {
@@ -893,9 +896,9 @@ void GravisynthLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<f
                 }
             }
         } else { // Flat
-            juce::ColourGradient grad(surfaceHiCol, body.getX(), body.getY(), surfaceCol, body.getX(), body.getBottom(),
-                                      false);
-            g.setGradientFill(grad);
+            flatGradient.emplace(surfaceHiCol, body.getX(), body.getY(), surfaceCol, body.getX(), body.getBottom(),
+                                 false);
+            g.setGradientFill(*flatGradient);
             g.fillRect(body);
         }
 
@@ -905,14 +908,15 @@ void GravisynthLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<f
     // ---- Header band ----
     {
         auto header = body.withHeight((float)headerHeight);
-        juce::Path headerPath;
-        headerPath.addRoundedRectangle(header.getX(), header.getY(), header.getWidth(), header.getHeight(), radius,
-                                       radius, true, true, false, false);
+        // Hoist path to member (avoids stack allocation on every paint)
+        headerPath.emplace();
+        headerPath->addRoundedRectangle(header.getX(), header.getY(), header.getWidth(), header.getHeight(), radius,
+                                        radius, true, true, false, false);
         if (tr.style == ThemeStyle::Glass)
             g.setColour(juce::Colours::white.withAlpha(0.05f));
         else
             g.setColour(surfaceHiCol);
-        g.fillPath(headerPath);
+        g.fillPath(*headerPath);
 
         // Bottom hairline.
         g.setColour(c.border);

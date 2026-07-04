@@ -167,6 +167,15 @@ private:
     // Tracks the target bounds for mod-matrix animation so we can set final position on complete.
     juce::Rectangle<int> modMatrixTargetBounds;
 
+    // ---- Alignment guides (UI Phase 7 - Item 4) ----
+    // During drag previews, store guide positions for visual feedback.
+    struct AlignmentGuide {
+        juce::Point<float> start; // line start point (canvas coords)
+        juce::Point<float> end;   // line end point (canvas coords)
+        int type;                 // 0=left,1=right,2=top,3=bottom,4=centerX,5=centerY
+    };
+    std::vector<AlignmentGuide> alignmentGuides;
+
     void updateTransform();
 
     // Internal: start the drop-landing animation for a newly placed module component.

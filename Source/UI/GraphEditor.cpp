@@ -402,7 +402,8 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
             int textW = (int)g.getCurrentFont().getStringWidthFloat(badge) + 8;
             juce::Rectangle<float> pill((float)((int)mid.x + 5), mid.y - 8.0f, (float)textW, 16.0f);
             g.setColour(surfaceColour);
-            g.fillRoundedRectangle(pill, 4.0f);
+            const float smallRadius = lf != nullptr ? lf->getTheme().metrics.cornerRadiusSmall : 4.0f;
+            g.fillRoundedRectangle(pill, smallRadius);
             g.setColour(textPrimaryColour);
             g.drawText(badge, pill, juce::Justification::centred, false);
         }
@@ -446,7 +447,8 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     if (editor.dragPreviewActive && !editor.dragPreviewGhost.isEmpty()) {
         auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
         const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
-        const float cornerRadius = lf != nullptr ? lf->getTheme().metrics.cornerRadius : 10.0f;
+        const auto& m = lf != nullptr ? lf->getTheme().metrics : gsynth::theme::Metrics{};
+        const float cornerRadius = m.cornerRadius;
 
         auto ghostF = editor.dragPreviewGhost.toFloat();
 
@@ -456,7 +458,29 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
 
         // Outline: accent colour at ~70% alpha, 1.5px
         g.setColour(accentColour.withAlpha(0.70f));
-        g.drawRoundedRectangle(ghostF, cornerRadius, 1.5f);
+        const float guideLineWidth = lf != nullptr ? lf->getTheme().metrics.guideLineWidth : 1.5f;
+        g.drawRoundedRectangle(ghostF, cornerRadius, guideLineWidth);
+    }
+
+    // ---- Alignment guides (UI Phase 7 - Item 4) ----
+    // Draw aligned edges when hovering near other modules (Figma-style)
+    if (editor.dragPreviewActive && !editor.alignmentGuides.empty()) {
+        auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+        const juce::Colour guideColour = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::white;
+
+        // Solid lines, ~70% opacity for visibility without distraction
+        const float guideAlpha = lf != nullptr ? lf->getTheme().metrics.guideAlpha : 0.7f;
+        g.setColour(guideColour.withAlpha(guideAlpha));
+        for (const auto& guide : editor.alignmentGuides) {
+            const float dx = guide.end.x - guide.start.x;
+            const float dy = guide.end.y - guide.start.y;
+
+            if (std::abs(dx) > std::abs(dy)) { // Horizontal line
+                g.drawHorizontalLine((int)guide.start.y, guide.start.x, guide.end.x);
+            } else { // Vertical line
+                g.drawVerticalLine((int)guide.start.x, guide.start.y, guide.end.y);
+            }
+        }
     }
 }
 
@@ -1194,6 +1218,144 @@ void GraphEditor::updateDragPreview(juce::Point<int> desiredTopLeftCanvas) {
         return;
     auto resolved = resolvePlacement(desiredTopLeftCanvas, dragPreviewW, dragPreviewH, dragPreviewSelfId);
     dragPreviewGhost = juce::Rectangle<int>(resolved.x, resolved.y, dragPreviewW, dragPreviewH);
+
+    // ---- Alignment guides (UI Phase 7 - Item 4) ----
+    // Scan existing modules and compute alignment guides for closest edges
+    alignmentGuides.clear();
+    if (dragPreviewGhost.isEmpty())
+        return;
+
+    auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+    const auto& m = lf != nullptr ? lf->getTheme().metrics : gsynth::theme::Metrics{};
+    const float snapThreshold = static_cast<float>(m.gridSize); // kGridSize
+
+    // Build list of existing module boxes (excluding self)
+    std::vector<gsynth::LayoutUtil::Box> existingBoxes;
+    for (auto* comp : content.getModules()) {
+        if (comp->getNodeId() == dragPreviewSelfId)
+            continue; // Skip self
+        juce::Rectangle<int> rect = comp->getBounds();
+        existingBoxes.push_back({comp->getNodeId(), rect});
+    }
+
+    if (existingBoxes.empty()) {
+        content.repaint(); // Still need to clear any old guides
+        return;
+    }
+
+    auto ghostRect = dragPreviewGhost.toFloat();
+    float left = ghostRect.getX();
+    float right = ghostRect.getRight();
+    float top = ghostRect.getY();
+    float bottom = ghostRect.getBottom();
+    float centerX = ghostRect.getX() + ghostRect.getWidth() * 0.5f;
+    float centerY = ghostRect.getY() + ghostRect.getHeight() * 0.5f;
+
+    // Track best alignment candidates (edge-to-edge snap within threshold)
+    struct Candidate {
+        int type;   // 0=left,1=right,2=top,3=bottom,4=centerX,5=centerY
+        float dist; // absolute distance to snap target
+        juce::Point<float> start;
+        juce::Point<float> end;
+    };
+    std::vector<Candidate> candidates;
+
+    // Check each existing module for alignments
+    for (const auto& box : existingBoxes) {
+        float l = box.rect.getX();
+        float r = box.rect.getRight();
+        float t = box.rect.getY();
+        float b = box.rect.getBottom();
+        float cx = box.rect.getX() + box.rect.getWidth() * 0.5f;
+        float cy = box.rect.getY() + box.rect.getHeight() * 0.5f;
+
+        // Edge-to-edge alignments (left/right/top/bottom)
+        struct Edge {
+            float alignPos;  // position we're aligning (ghost edge)
+            float targetPos; // target edge position
+            int type;        // guide type enum
+            bool horizontal; // true if horizontal line, false if vertical
+        };
+
+        Edge edges[] = {
+            {left, l, 0, false},  // left-to-left
+            {right, r, 1, false}, // right-to-right
+            {top, t, 2, true},    // top-to-top
+            {bottom, b, 3, true}  // bottom-to-bottom
+        };
+
+        for (const auto& edge : edges) {
+            float dist = std::abs(edge.alignPos - edge.targetPos);
+            if (dist <= snapThreshold) {
+                Candidate c;
+                c.type = edge.type;
+                c.dist = dist;
+                // Line spans the overlapping range
+                if (edge.horizontal) {
+                    float startX = std::min(left, l);
+                    float endX = std::max(right, r);
+                    c.start = {startX, edge.targetPos};
+                    c.end = {endX, edge.targetPos};
+                } else {
+                    float startY = std::min(top, t);
+                    float endY = std::max(bottom, b);
+                    c.start = {edge.targetPos, startY};
+                    c.end = {edge.targetPos, endY};
+                }
+                candidates.push_back(c);
+            }
+        }
+
+        // Center alignment (X and Y)
+        float cxDist = std::abs(centerX - cx);
+        if (cxDist <= snapThreshold) {
+            Candidate c;
+            c.type = 4; // centerX
+            c.dist = cxDist;
+            c.start = {cx, std::min(top, t)};
+            c.end = {cx, std::max(bottom, b)};
+            candidates.push_back(c);
+        }
+
+        float cyDist = std::abs(centerY - cy);
+        if (cyDist <= snapThreshold) {
+            Candidate c;
+            c.type = 5; // centerY
+            c.dist = cyDist;
+            c.start = {std::min(left, l), cy};
+            c.end = {std::max(right, r), cy};
+            candidates.push_back(c);
+        }
+    }
+
+    // Deduplicate: keep only the closest guide for each type (left/right/top/bottom/centerX/centerY)
+    std::vector<Candidate> bestCandidates;
+    float minDist[] = {std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
+                       std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
+                       std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
+    int bestIdx[] = {-1, -1, -1, -1, -1, -1};
+
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        const auto& c = candidates[i];
+        if (c.dist <= snapThreshold) {
+            if (c.dist < minDist[c.type]) {
+                minDist[c.type] = c.dist;
+                bestIdx[c.type] = (int)i;
+            }
+        }
+    }
+
+    for (int i = 0; i < 6; ++i) {
+        if (bestIdx[i] != -1)
+            bestCandidates.push_back(candidates[bestIdx[i]]);
+    }
+
+    // Convert to AlignmentGuide and store
+    alignmentGuides.clear();
+    for (const auto& c : bestCandidates) {
+        alignmentGuides.push_back({c.start, c.end, c.type});
+    }
+
     content.repaint();
 }
 
