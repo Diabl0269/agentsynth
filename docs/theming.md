@@ -95,6 +95,15 @@ The following `Metrics` fields are **code-only layout constants** — they contr
 | `aiPanelWidth` | `300` | AI panel width when visible (px) — code-only |
 | `iconSize` | `16` | Icon render size in library / status bar contexts (px) — code-only |
 
+The following `Metrics` fields are **UI rendering constants** — they control the appearance of UI visual effects and are also **not parsed from user JSON**. A user theme that includes these keys will have them silently ignored.
+
+| Token | Default | Meaning |
+|---|---|---|
+| `gridSize` | `8` | Snap quantum / alignment guide activation radius (px) — code-only |
+| `guideAlpha` | `0.7` | Alignment guide line opacity (0.0–1.0) — code-only |
+| `guideLineWidth` | `1.5` | Alignment guide stroke width (px) — code-only |
+| `cornerRadiusSmall` | `4.0` | Pill / small element corner radius (px) — code-only |
+
 ### Typography (`typography`) — all optional
 
 | Token | Default | Meaning |
