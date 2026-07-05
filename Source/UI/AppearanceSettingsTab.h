@@ -8,11 +8,12 @@
 // offers "Open Themes Folder" (File::revealToUser) and "Reload Themes"
 // (ThemeManager::loadUserThemesFromFolder). Highlights the active row; updates if the manager
 // broadcasts (it is a ChangeListener so external changes reflect here too).
+// Also contains a toggle for alignment guides visibility.
 class AppearanceSettingsTab
     : public juce::Component
     , private juce::ChangeListener {
 public:
-    explicit AppearanceSettingsTab(gsynth::theme::ThemeManager& manager);
+    AppearanceSettingsTab(gsynth::theme::ThemeManager& manager, juce::ApplicationProperties& props);
     ~AppearanceSettingsTab() override;
 
     void resized() override;
@@ -33,11 +34,13 @@ private:
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
 
     gsynth::theme::ThemeManager& themeManager;
+    juce::ApplicationProperties& appProperties;
     juce::ListBox themeList;
     std::unique_ptr<ThemeListModel> listModel;
     juce::TextButton openFolderButton{"Open Themes Folder"};
     juce::TextButton reloadButton{"Reload Themes"};
     juce::Label titleLabel;
+    juce::ToggleButton alignmentGuideToggle{"Show Alignment Guides"};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AppearanceSettingsTab)
 };

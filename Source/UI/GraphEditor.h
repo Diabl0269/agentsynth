@@ -74,6 +74,10 @@ public:
     bool isDragPreviewActive() const { return dragPreviewActive; }
     juce::Rectangle<int> getDragPreviewGhost() const { return dragPreviewGhost; }
 
+    // Alignment guides toggle (UI Phase 7 - Item 4)
+    void setAlignmentGuidesEnabled(bool enabled) { alignmentGuidesEnabled = enabled; }
+    bool getAlignmentGuidesEnabled() const { return alignmentGuidesEnabled; }
+
     // ---- Onboarding / UI Phase 5 helpers (headless-testable) ----
 
     /** Returns true when the canvas has no modules (empty state). Pure predicate.
@@ -175,6 +179,9 @@ private:
         int type;                 // 0=left,1=right,2=top,3=bottom,4=centerX,5=centerY
     };
     std::vector<AlignmentGuide> alignmentGuides;
+
+    // Alignment guides toggle (UI Phase 7 - Item 4)
+    bool alignmentGuidesEnabled = true;
 
     void updateTransform();
 

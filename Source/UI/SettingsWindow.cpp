@@ -96,7 +96,7 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
     auto* shortcutsSettingsTab = new ShortcutsSettingsTab(shortcutManager);
     tabs.addTab("Keyboard Shortcuts", juce::Colours::darkgrey, shortcutsSettingsTab, true);
 
-    auto* appearanceSettingsTab = new AppearanceSettingsTab(themeManager);
+    auto* appearanceSettingsTab = new AppearanceSettingsTab(themeManager, appProperties);
     tabs.addTab("Appearance", juce::Colours::darkgrey, appearanceSettingsTab, true);
 
     addAndMakeVisible(tabs);
