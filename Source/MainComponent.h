@@ -165,6 +165,7 @@ private:
     gsynth::AIChatComponent aiChatComponent;
     bool isAiPanelVisible = false;
     bool isLibraryVisible{true};
+    bool isAlignmentGuidesEnabled{true}; // NEW: default TRUE for backward compatibility
 
     // Cached narrow-mode state — applyToolbarIcons() re-clones icons ONLY on the transition.
     bool toolbarNarrowMode_{false};
@@ -198,6 +199,9 @@ private:
     // fromResult is the current layout; toResult is the target layout.
     void animatePanelTransition(const PanelBoundsResult& fromResult, const PanelBoundsResult& toResult,
                                 bool hideLibraryOnComplete, bool hideAiPanelOnComplete);
+
+    // Alignment guides toggle (UI Phase 7 - Item 4)
+    void setAlignmentGuidesEnabled(bool enabled);
 
     // Provides native-style tooltips for any child Component that has a tooltip
     // string set via setTooltip(). Constructed last so all child components exist.

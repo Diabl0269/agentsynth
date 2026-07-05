@@ -81,7 +81,8 @@ private:
 //==============================================================================
 SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::ApplicationProperties& appProperties,
                                gsynth::AIIntegrationService& aiService, gsynth::AIChatComponent& aiChatComponent,
-                               ShortcutManager& shortcutManager, gsynth::theme::ThemeManager& themeManager)
+                               ShortcutManager& shortcutManager, gsynth::theme::ThemeManager& themeManager,
+                               GraphEditor* graphEditor)
     : appProperties(appProperties) {
     auto* audioSelector = new juce::AudioDeviceSelectorComponent(deviceManager, 0, 2, // min/max inputs
                                                                  0, 2,                // min/max outputs
@@ -96,7 +97,8 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
     auto* shortcutsSettingsTab = new ShortcutsSettingsTab(shortcutManager);
     tabs.addTab("Keyboard Shortcuts", juce::Colours::darkgrey, shortcutsSettingsTab, true);
 
-    auto* appearanceSettingsTab = new AppearanceSettingsTab(themeManager);
+    auto* appearanceSettingsTab = new AppearanceSettingsTab(themeManager, appProperties);
+    appearanceSettingsTab->setGraphEditor(graphEditor); // wire the tab to graph editor
     tabs.addTab("Appearance", juce::Colours::darkgrey, appearanceSettingsTab, true);
 
     addAndMakeVisible(tabs);

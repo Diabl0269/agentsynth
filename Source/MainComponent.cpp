@@ -65,6 +65,8 @@ void MainComponent::initialiseCommon(std::unique_ptr<gsynth::AIProvider> provide
     // initialisers (isLibraryVisible{true}, isAiPanelVisible=false).
     isLibraryVisible = appProperties.getUserSettings()->getBoolValue("librarySidebarVisible", true);
     isAiPanelVisible = appProperties.getUserSettings()->getBoolValue("aiPanelVisible", false);
+    graphEditor.setAlignmentGuidesEnabled(
+        appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true));
 
     // Load AI provider preference
     juce::String savedProviderName = appProperties.getUserSettings()->getValue("aiProvider", "Ollama");
@@ -225,7 +227,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<gsynth::AIProvider> provide
     settingsButton.setComponentID("settingsButton");
     settingsButton.onClick = [this]() {
         auto* settingsComp = new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService,
-                                                aiChatComponent, shortcutManager, *themeManager);
+                                                aiChatComponent, shortcutManager, *themeManager, &graphEditor);
         settingsComp->setSize(500, 450);
 
         juce::DialogWindow::LaunchOptions options;
@@ -698,6 +700,12 @@ void MainComponent::setLibraryVisible(bool v) {
         moduleLibrary.setVisible(false);
 
     animatePanelTransition(fromResult, toResult, /*hideLib=*/!v, /*hideAi=*/false);
+}
+
+// ---- Alignment guides toggle (UI Phase 7 - Item 4) ----
+void MainComponent::setAlignmentGuidesEnabled(bool enabled) {
+    isAlignmentGuidesEnabled = enabled;
+    graphEditor.setAlignmentGuidesEnabled(enabled);
 }
 
 // ---- Patch name (status bar) ----
