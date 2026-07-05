@@ -631,3 +631,53 @@ Never add:
 - Continuous `timerCallback` repaints on `ModuleComponent` or its children outside the existing gated 15 Hz gate.
 - A free-running `AnimationDriver` (no duration, or duration far longer than the visible transition).
 - Per-frame `repaint()` calls in any path that is always active (not gated to an active transition).
+
+---
+
+## 6. Alignment Guides (UI Phase 7 - Item 4)
+
+Gravisynth provides **Figma-style smart alignment guides** while dragging modules in the graph editor. These visual cues help you align new modules with existing ones at edges and centers.
+
+### What they are
+
+- **Edge-to-edge snap lines** — appear when a module edge gets within 8 px of another module's edge (left/right/top/bottom)
+- **Center alignment lines** — appear when dragging module centers align vertically or horizontally
+- **Visual style** — muted-colour lines at ~70% opacity, ~1.5 px stroke width
+
+### How they work
+
+1. When you begin dragging a module, `GraphEditor::updateDragPreview()` scans all existing module rectangles in canvas space.
+2. For each edge of the dragged ghost and each neighbor, it computes:
+   - Edge-to-edge snap (distance < `Metrics.gridSize` = 8 px)
+   - Center alignment (module centerX/centerY matches neighbor's centerX/centerY)
+3. Matching positions are stored as `AlignmentGuide` structs and rendered in `paintOverChildren()` using the current theme's `textMuted` colour.
+4. Guides are **visual-only** — they do not alter snapping behavior (`findFreeSlot()` still uses the soft 8 px grid).
+
+### Configuration
+
+A toggle is available in `Settings → Appearance → Show Alignment Guides`. It persists as `alignmentGuidesEnabled` in `juce::ApplicationProperties`.
+
+| Toggle State | Effect |
+|---|---|
+| **ON** (default) | Guide lines appear during drag when alignment candidates are detected |
+| **OFF** | No guide lines appear; only the module ghost is drawn |
+
+### Implementation details
+
+- **Grid threshold**: `Metrics.gridSize = 8` px — snap detection window radius
+- **Guide opacity**: `Metrics.guideAlpha = 0.7` (70%)
+- **Stroke width**: `Metrics.guideLineWidth = 1.5` px
+- **Deduplication**: Only the closest guide per type (left/right/top/bottom.centerX/centerY) is shown
+
+### Visual examples
+
+**When dragging:**
+
+- Move module left edge near another's right edge → vertical grey line appears
+- Move module top edge near another's bottom edge → horizontal grey line appears  
+- Align centerX with neighbor's centerX → vertical centre line appears
+- Align centerY with neighbor's centerY → horizontal centre line appears
+
+**Theme switching:**
+
+When you change themes, alignment guides update to the new `textMuted` colour automatically.

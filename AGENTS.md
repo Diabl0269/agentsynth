@@ -21,10 +21,6 @@ cmake --build build --target GravisynthTests
 ./build/Tests/GravisynthTests
 ./build/Tests/GravisynthTests --gtest_filter="E2EWorkflow*"   # E2E only
 
-# Issue #103 (UI Phase 7 polish) complete:
-# Items 1, 2, 4 committed in ac5dcd8; test plan at ISSUE-103-PLAN.md
-# All automated tests pass ✅ (592/592), app builds successfully
-
 # Coverage  (threshold 85%)
 bash scripts/coverage.sh
 
@@ -32,6 +28,10 @@ bash scripts/coverage.sh
 bash scripts/install-hooks.sh   # pre-commit: clang-format lint;  pre-push: lint + Release build + tests
 # clang-format is pinned (.clang-format-version) — match CI locally:
 pip install "clang-format==$(cat .clang-format-version)"
+
+# Open a pull request (after committing)
+git push origin feature-branch-name
+gh pr create --fill   # auto-populates from commit msg; or use --title/--body manually
 ```
 
 See [`docs/testing.md`](docs/testing.md) for the full build/test/CI/hooks reference.
@@ -56,9 +56,8 @@ Every implementation plan **must** include:
 - [`docs/modules.md`](docs/modules.md) — per-module specs + poly channel layouts (Oscillator, Filter, VCA, ADSR, LFO, Sequencer, Poly MIDI, Voice Mixer …)
 - [`docs/fx_modules.md`](docs/fx_modules.md) — FX specs (Distortion, Delay, Reverb, Chorus, Phaser, Compressor, Flanger, Limiter)
 - [`docs/modulation.md`](docs/modulation.md) — routing model, logical-port API, poly-bus wires, attenuverters, visual signal flow
-- [`docs/layout.md`](docs/layout.md) — grid/snap/auto-arrange, toolbar & status-bar chrome, width buckets, visualizer components, UI perf, animation system (UIAnimation.h, AnimationDriver, micro-interactions)
-- [`docs/theming.md`](docs/theming.md) — theme tokens, SVG icons, JSON user themes, LookAndFeel, font limitation
-- [`ISSUE-103-PLAN.md`](ISSUE-103-PLAN.md) — UI Phase 7 polish implementation plan (Items 1, 2, 4 complete; test plan in progress)
+- [`docs/layout.md`](docs/layout.md) — grid/snap/auto-arrange, toolbar & status-bar chrome, width buckets, visualizer components, UI perf, animation system (UIAnimation.h, AnimationDriver, micro-interactions), alignment guides
+- [`docs/theming.md`](docs/theming.md) — theme tokens, SVG icons, JSON user themes, LookAndFeel, font limitation, Metrics fields (including code-only rendering constants)
 - [`docs/testing.md`](docs/testing.md) — test layers, build/test commands, CI pipeline, git hooks, coverage
 - [`docs/Module_Development_Guide.md`](docs/Module_Development_Guide.md) — step-by-step guide to adding a module
 - [`docs/AI_Engine.md`](docs/AI_Engine.md) · [`docs/AI_Usage_Guide.md`](docs/AI_Usage_Guide.md) — AI patching subsystem (OllamaProvider, AIStateMapper, chat UI)
