@@ -1,4 +1,6 @@
 #include "AppearanceSettingsTab.h"
+#include "GraphEditor.h"   // For setAlignmentGuidesEnabled callback
+#include "MainComponent.h" // For setAlignmentGuidesEnabled callback
 
 using gsynth::theme::Theme;
 using gsynth::theme::ThemeManager;
@@ -91,8 +93,9 @@ private:
 //==============================================================================
 // AppearanceSettingsTab
 //==============================================================================
-AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager)
-    : themeManager(manager) {
+AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::ApplicationProperties& props)
+    : themeManager(manager)
+    , appProperties(props) {
     listModel = std::make_unique<ThemeListModel>(themeManager, *this);
 
     addAndMakeVisible(titleLabel);
@@ -112,6 +115,17 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager)
         themeManager.loadUserThemesFromFolder();
         themeList.updateContent();
         themeList.repaint();
+    };
+
+    addAndMakeVisible(alignmentGuideToggle);
+    alignmentGuideToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true),
+                                        juce::dontSendNotification);
+    alignmentGuideToggle.onClick = [this] {
+        appProperties.getUserSettings()->setValue("alignmentGuidesEnabled",
+                                                  alignmentGuideToggle.getToggleState() ? "1" : "0");
+        appProperties.getUserSettings()->saveIfNeeded();
+        if (graphEditor)
+            graphEditor->setAlignmentGuidesEnabled(alignmentGuideToggle.getToggleState());
     };
 
     // Reflect the active theme selection in the list.
@@ -138,7 +152,10 @@ void AppearanceSettingsTab::resized() {
     buttonRow.removeFromLeft(8);
     reloadButton.setBounds(buttonRow.removeFromLeft(130));
 
+    // Alignment guide toggle (UI Phase 7 - Item 4)
     bounds.removeFromBottom(8);
+    alignmentGuideToggle.setBounds(bounds.removeFromTop(24));
+
     themeList.setBounds(bounds);
 }
 

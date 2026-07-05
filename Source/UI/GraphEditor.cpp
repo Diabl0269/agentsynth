@@ -464,7 +464,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
 
     // ---- Alignment guides (UI Phase 7 - Item 4) ----
     // Draw aligned edges when hovering near other modules (Figma-style)
-    if (editor.dragPreviewActive && !editor.alignmentGuides.empty()) {
+    if (editor.dragPreviewActive && !editor.alignmentGuides.empty() && editor.alignmentGuidesEnabled) {
         auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
         const juce::Colour guideColour = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::white;
 
@@ -1210,6 +1210,7 @@ void GraphEditor::beginDragPreview(int w, int h, juce::AudioProcessorGraph::Node
     dragPreviewH = h;
     dragPreviewSelfId = selfId;
     dragPreviewGhost = {};
+    alignmentGuides.clear();
     content.repaint();
 }
 

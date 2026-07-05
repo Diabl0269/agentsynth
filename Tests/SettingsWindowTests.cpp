@@ -66,13 +66,13 @@ protected:
 
 TEST_F(SettingsWindowTest, HasFourTabs) {
     SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
-                                  themeManager);
+                                  themeManager, nullptr);
     EXPECT_EQ(settingsWindow.getNumTabs(), 4);
 }
 
 TEST_F(SettingsWindowTest, TabNamesAreCorrect) {
     SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
-                                  themeManager);
+                                  themeManager, nullptr);
     EXPECT_EQ(settingsWindow.getTabName(0), "Audio");
     EXPECT_EQ(settingsWindow.getTabName(1), "AI");
     EXPECT_EQ(settingsWindow.getTabName(2), "Keyboard Shortcuts");
@@ -81,13 +81,13 @@ TEST_F(SettingsWindowTest, TabNamesAreCorrect) {
 
 TEST_F(SettingsWindowTest, DefaultTabIsAudio) {
     SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
-                                  themeManager);
+                                  themeManager, nullptr);
     EXPECT_EQ(settingsWindow.getCurrentTabIndex(), 0);
 }
 
 TEST_F(SettingsWindowTest, AudioTabContainsDeviceSelector) {
     SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
-                                  themeManager);
+                                  themeManager, nullptr);
     auto* tabContent = settingsWindow.getTabs().getTabContentComponent(0);
     ASSERT_NE(tabContent, nullptr);
 
@@ -97,7 +97,7 @@ TEST_F(SettingsWindowTest, AudioTabContainsDeviceSelector) {
 
 TEST_F(SettingsWindowTest, AITabPersistsProviderSetting) {
     SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
-                                  themeManager);
+                                  themeManager, nullptr);
     settingsWindow.setSize(600, 400);
     settingsWindow.resized();
 
@@ -126,13 +126,13 @@ TEST_F(SettingsWindowTest, RemembersLastSelectedTab) {
     appProperties.saveIfNeeded();
 
     SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
-                                  themeManager);
+                                  themeManager, nullptr);
     EXPECT_EQ(settingsWindow.getCurrentTabIndex(), 1);
 }
 
 TEST_F(SettingsWindowTest, ResizingDoesNotCrash) {
     SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
-                                  themeManager);
+                                  themeManager, nullptr);
     settingsWindow.setSize(500, 450);
 
     EXPECT_NO_THROW(settingsWindow.setSize(800, 600));
@@ -141,7 +141,7 @@ TEST_F(SettingsWindowTest, ResizingDoesNotCrash) {
 
 TEST_F(SettingsWindowTest, GeneralTabShowsShortcuts) {
     SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
-                                  themeManager);
+                                  themeManager, nullptr);
     settingsWindow.setSize(500, 450);
 
     auto* generalTab = settingsWindow.getTabs().getTabContentComponent(2);
