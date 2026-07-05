@@ -1,4 +1,6 @@
 #include "AppearanceSettingsTab.h"
+#include "GraphEditor.h"   // For setAlignmentGuidesEnabled callback
+#include "MainComponent.h" // For setAlignmentGuidesEnabled callback
 
 using gsynth::theme::Theme;
 using gsynth::theme::ThemeManager;
@@ -122,6 +124,8 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
         appProperties.getUserSettings()->setValue("alignmentGuidesEnabled",
                                                   alignmentGuideToggle.getToggleState() ? "1" : "0");
         appProperties.getUserSettings()->saveIfNeeded();
+        if (graphEditor)
+            graphEditor->setAlignmentGuidesEnabled(alignmentGuideToggle.getToggleState());
     };
 
     // Reflect the active theme selection in the list.

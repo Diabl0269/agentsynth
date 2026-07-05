@@ -227,7 +227,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<gsynth::AIProvider> provide
     settingsButton.setComponentID("settingsButton");
     settingsButton.onClick = [this]() {
         auto* settingsComp = new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService,
-                                                aiChatComponent, shortcutManager, *themeManager);
+                                                aiChatComponent, shortcutManager, *themeManager, &graphEditor);
         settingsComp->setSize(500, 450);
 
         juce::DialogWindow::LaunchOptions options;

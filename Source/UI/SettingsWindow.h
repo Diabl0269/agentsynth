@@ -2,6 +2,7 @@
 
 #include "../AI/AIIntegrationService.h"
 #include "AIChatComponent.h"
+#include "GraphEditor.h"
 #include "Theme/ThemeManager.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -12,7 +13,8 @@ class SettingsWindow : public juce::Component {
 public:
     SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::ApplicationProperties& appProperties,
                    gsynth::AIIntegrationService& aiService, gsynth::AIChatComponent& aiChatComponent,
-                   ShortcutManager& shortcutManager, gsynth::theme::ThemeManager& themeManager);
+                   ShortcutManager& shortcutManager, gsynth::theme::ThemeManager& themeManager,
+                   GraphEditor* graphEditor);
     ~SettingsWindow() override;
 
     void resized() override;
