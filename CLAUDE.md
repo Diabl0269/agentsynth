@@ -45,6 +45,7 @@ Every implementation plan **must** include:
 - **No high-frequency logging** — AIChatComponent registers a global `juce::Logger` (Debug builds only) that pipes `writeToLog` into a UI-thread console. Never add per-sample / per-frame / per-parameter / per-connection logs (one caused a multi-second freeze; guarded by `AIStateMapperTest.PresetLoadDoesNotSpamLogger`). → [`docs/AI_Engine.md`](docs/AI_Engine.md)
 - **No unconditional per-tick repaint** — `ModuleComponent` is `setBufferedToImage(true)` with a gated 15 Hz timer; the 30 Hz GraphEditor animation composites cached images. A theme switch is exactly one re-skin pass. All UI animations use `AnimationDriver` (VBlank-driven, **time-bounded** — stops at `t=1`); never add free-running or continuous repaints. Exception: the AI thinking spinner pulses only while a request is in flight, confined to its region. → [`docs/layout.md §10–11`](docs/layout.md)
 - **Themes don't swap fonts** — all built-ins share Inter + JetBrains Mono; swapping the embedded typeface *family* at runtime corrupts text (JUCE 8 + CoreText). Themes differ by colour/treatment/glow only. → [`docs/theming.md`](docs/theming.md)
+- **AI model discovery ordering** — `AIChatComponent`'s ctor-time `refreshModels()` is a no-op if its `AIIntegrationService` has no provider yet; any owner (e.g. `MainComponent`) that installs a provider afterward MUST call `refreshModels()` again post-`setProvider()`, or `currentModel` stays empty and every `/api/chat` gets a 400. → [`docs/AI_Engine.md`](docs/AI_Engine.md)
 
 ## Docs map
 

@@ -78,9 +78,13 @@ void MainComponent::initialiseCommon(std::unique_ptr<gsynth::AIProvider> provide
         aiService.setProvider(std::make_unique<gsynth::OllamaProvider>(savedOllamaHost));
     }
 
-    // NOTE: Do NOT call aiChatComponent.refreshModels() here. The AIChatComponent
-    // constructor already kicks off model discovery on construction. A second call
-    // would trigger a redundant /api/tags request on startup.
+    // ORDERING CONTRACT: aiChatComponent is a member, so its constructor (which calls
+    // refreshModels()) already ran BEFORE this body — at that point aiService had no
+    // provider, so discovery short-circuited and no model was ever selected. We must
+    // refresh again HERE, after setProvider(), or currentModel stays empty and every
+    // /api/chat request is rejected by Ollama with HTTP 400 "model is required".
+    // Regression: see #96 / f7cba4a.
+    aiChatComponent.refreshModels();
     aiService.addListener(this);
     undoManager.setGraphEditor(&graphEditor);
     setWantsKeyboardFocus(true);

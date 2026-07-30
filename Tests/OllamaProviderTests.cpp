@@ -274,6 +274,74 @@ TEST_F(OllamaProviderTest, FetchAvailableModelsDoesNotBlockCaller) {
     provider.stopThread(5000);
 }
 
+// REGRESSION LOCK: sendPrompt() must fail fast, without touching the network, when no
+// model has been selected. Previously an empty currentModel silently sent
+// {"model": ""} to Ollama's /api/chat, which the server rejects with HTTP 400
+// "model is required" — surfaced to the user as a misleading "Could not connect"
+// error even though the server was perfectly reachable.
+TEST_F(OllamaProviderTest, SendPromptWithNoModelFailsWithoutHittingNetwork) {
+    bool networkFactoryInvoked = false;
+    auto trackingFactory =
+        [&networkFactoryInvoked](const juce::URL& url,
+                                 const juce::URL::InputStreamOptions& options) -> std::unique_ptr<juce::InputStream> {
+        juce::ignoreUnused(url, options);
+        networkFactoryInvoked = true;
+        juce::String jsonResponse =
+            R"({"model":"mock-model","message":{"role":"assistant","content":"Should not be reached."}})";
+        return std::make_unique<MockInputStream>(jsonResponse, false);
+    };
+
+    gsynth::OllamaProvider provider{"http://mock-host:11434", trackingFactory};
+    provider.setTestMode(true);
+    // Deliberately do NOT call setModel() — currentModel stays empty.
+
+    std::vector<gsynth::AIProvider::Message> conversation = {{"user", "Hello AI"}};
+    MockCompletionCallback callback;
+    provider.sendPrompt(conversation,
+                        [&callback](const juce::String& response, bool success) { callback(response, success); });
+
+    auto result = callback.getResult();
+    provider.stopThread(5000);
+
+    ASSERT_FALSE(std::get<1>(result)); // success == false
+    EXPECT_TRUE(std::get<0>(result).containsIgnoreCase("model"));
+    EXPECT_FALSE(networkFactoryInvoked) << "sendPrompt() must not hit the network when no model is selected";
+}
+
+// REGRESSION LOCK: direct lock on "we never send an empty model to Ollama". Captures the
+// actual POST body sent to /api/chat and verifies the "model" field matches whatever was
+// set via setModel().
+TEST_F(OllamaProviderTest, SendPromptIncludesSelectedModelInRequestBody) {
+    juce::String capturedPostData;
+    auto capturingFactory =
+        [&capturedPostData](const juce::URL& url,
+                            const juce::URL::InputStreamOptions& options) -> std::unique_ptr<juce::InputStream> {
+        juce::ignoreUnused(options);
+        capturedPostData = url.getPostData();
+        juce::String jsonResponse =
+            R"({"model":"mock-model","message":{"role":"assistant","content":"Mocked AI response."}})";
+        return std::make_unique<MockInputStream>(jsonResponse, false);
+    };
+
+    gsynth::OllamaProvider provider{"http://mock-host:11434", capturingFactory};
+    provider.setTestMode(true);
+    provider.setModel("mock-model:latest");
+
+    std::vector<gsynth::AIProvider::Message> conversation = {{"user", "Hello AI"}};
+    MockCompletionCallback callback;
+    provider.sendPrompt(conversation,
+                        [&callback](const juce::String& response, bool success) { callback(response, success); });
+
+    auto result = callback.getResult();
+    provider.stopThread(5000);
+
+    ASSERT_TRUE(std::get<1>(result)); // success == true
+
+    juce::var parsedBody = juce::JSON::parse(capturedPostData);
+    ASSERT_TRUE(parsedBody.isObject());
+    EXPECT_EQ(parsedBody.getProperty("model", juce::var()).toString(), juce::String("mock-model:latest"));
+}
+
 TEST_F(OllamaProviderTest, SendPromptTimeoutFails) {
     // Create a provider that uses the slow stream factory
     gsynth::OllamaProvider mockProviderSlowStream{"http://mock-host:11434", createSlowStream};
