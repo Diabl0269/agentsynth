@@ -44,7 +44,7 @@ Test module interactions within the audio graph and cross-system integrations.
 |-------|-------|----------------|
 | IntegrationTest | 7 | Signal chain routing (Osc->Filter->VCA), LFO->Filter modulation, preset loading with graph structure validation |
 | ModMatrixTest | 22 | Add/remove mod routings, amount scaling, channel mapping, modulation chains; Phase 4 adds: `RowHeightIs48` — `kRowHeight == 48`; `ZebraAlternates` — `isZebraRow` false for even, true for odd indices; `HoverStateUpdates` — `setHoveredRow`/`getHoveredRow` round-trip, default -1, redundant-set no-op, reset to -1; `ModMatrixComponentPaintSmokeTest` — paint with two routings, no crash; `HoverResetsAfterRowRemoval` — hover clears to -1 when a routing is removed (componentsChanged path) |
-| OllamaProviderTest | 5 | AI LLM HTTP requests, streaming responses, model management |
+| OllamaProviderTest | 8 | AI LLM HTTP requests, streaming responses, model management, non-blocking discovery; `SendPromptWithNoModelFailsWithoutHittingNetwork` — fail-fast with no network call when `currentModel` is empty; `SendPromptIncludesSelectedModelInRequestBody` — captures the POST body and asserts `"model"` matches `setModel()` (regression lock for f7cba4a / empty-model 400s) |
 | AIIntegrationServiceTest | 9 | Module suggestions, parameter recommendations, graph state mapping |
 
 ### Component Workflow Tests (~50 tests)
@@ -53,7 +53,8 @@ Test UI component interactions using in-process construction (no window, no disp
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
-| MainComponentTest | 20 | AI panel visibility toggle, mod matrix toggle, default configuration, command manager registration, redo shortcut; toolbar narrow/wide mode at 480/1600 px, library sidebar toggle + persistence, AI panel persistence, status bar bounds, canvas non-zero at minimum size, timer gating (5 Hz), patch name default + update on preset load, DrawableButton header buttons |
+| MainComponentTest | 21 | AI panel visibility toggle, mod matrix toggle, default configuration, command manager registration, redo shortcut; toolbar narrow/wide mode at 480/1600 px, library sidebar toggle + persistence, AI panel persistence, status bar bounds, canvas non-zero at minimum size, timer gating (5 Hz), patch name default + update on preset load, DrawableButton header buttons; `AiProviderGetsModelSelectedOnStartup` — regression lock (f7cba4a) that a model is selected on startup via `aiChatComponent.refreshModels()` called AFTER `setProvider()` |
+| AIChatComponentTest | 3 | Initialization/resizing, send-message updates UI + history via mock provider; `RefreshModelsSelectsModelWhenProviderInstalledAfterConstruction` — reproduces MainComponent's member-init ordering (chat component constructed before a provider is installed), asserting `getCurrentModel()` stays empty until a post-construction `setProvider()` + `refreshModels()` |
 | GraphEditorTest | 11 | Module drag-and-drop, port connection via beginConnectionDrag/endConnectionDrag, deletion, mod matrix visibility, snap-on-drop (position is grid-multiple of 8), overlap resolution (second drop at same coord produces non-overlapping bounding boxes) |
 | ModuleComponentTest | 5 | Initialization, resizing, parameter attachment to UI sliders; bypass/mute/delete are DrawableButtons with correct header bounds; delete button triggers requestDeleteModule |
 | MidiKeyboardModuleTest | 4 | Note on/off, key press handling, velocity |

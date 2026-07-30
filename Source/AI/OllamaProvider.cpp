@@ -124,6 +124,30 @@ void OllamaProvider::run() {
 }
 
 void OllamaProvider::processRequest(const Request& req) {
+    // Delivers (responseText, success) through the same test-mode-aware channel used by
+    // every exit path below, so the fail-fast path and the network paths stay identical.
+    auto deliver = [this, &req](const juce::String& responseText, bool success) {
+        if (isTestMode) {
+            if (req.callback)
+                req.callback(responseText, success);
+        } else {
+            juce::MessageManager::callAsync([req, responseText, success]() {
+                if (req.callback)
+                    req.callback(responseText, success);
+            });
+        }
+    };
+
+    // Fail fast: never hit the network with an empty model. Ollama rejects such requests
+    // with HTTP 400 "model is required", which previously surfaced as a misleading
+    // "Could not connect to Ollama" error even when the server was reachable.
+    if (currentModel.isEmpty()) {
+        deliver("Error: No Ollama model selected. Check that Ollama is running and that a model is available "
+                "(ollama list).",
+                false);
+        return;
+    }
+
     juce::URL url(ollamaHost + "/api/chat");
 
     // Build JSON body
@@ -147,10 +171,12 @@ void OllamaProvider::processRequest(const Request& req) {
 
     juce::String responseText;
     bool success = false;
+    int httpStatus = 0;
 
-    if (auto stream = createStream(
-            url.withPOSTData(jsonString),
-            juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inPostData).withConnectionTimeoutMs(120000))) {
+    if (auto stream = createStream(url.withPOSTData(jsonString),
+                                   juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inPostData)
+                                       .withConnectionTimeoutMs(120000)
+                                       .withStatusCode(&httpStatus))) {
         responseText = stream->readEntireStreamAsString();
         // DBG("AI Chat Response (before JSON parse): [" + responseText + "]"); // Potentially expensive
 
@@ -166,19 +192,14 @@ void OllamaProvider::processRequest(const Request& req) {
                 }
             }
         }
+    } else if (httpStatus != 0) {
+        responseText =
+            "Error: Ollama at " + ollamaHost + " rejected the request (HTTP " + juce::String(httpStatus) + ").";
     } else {
         responseText = "Error: Could not connect to Ollama at " + ollamaHost;
     }
 
-    if (isTestMode) {
-        if (req.callback)
-            req.callback(responseText, success);
-    } else {
-        juce::MessageManager::callAsync([req, responseText, success]() {
-            if (req.callback)
-                req.callback(responseText, success);
-        });
-    }
+    deliver(responseText, success);
 }
 
 } // namespace gsynth

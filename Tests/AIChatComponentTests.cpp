@@ -23,7 +23,10 @@ public:
     juce::String getCurrentModel() const override { return currentModel; }
 
 private:
-    juce::String currentModel = "MockModel1";
+    // Empty by default (not pre-seeded with a model name) so tests that check
+    // getCurrentModel() after refreshModels()/setModel() genuinely prove that a model was
+    // selected, rather than being masked by a non-empty default.
+    juce::String currentModel;
 };
 
 class AIChatComponentTest : public ::testing::Test {
@@ -98,4 +101,36 @@ TEST_F(AIChatComponentTest, SendMessageUpdatesUIAndHistory) {
 
     // The AI response should now also be in the history because MockChatProvider is synchronous
     EXPECT_GT(service.getHistory().size(), initialHistorySize + 1);
+}
+
+// REGRESSION LOCK: reproduces MainComponent's member-init ordering, where AIChatComponent is
+// constructed BEFORE the owning component installs a provider on the service. The ctor's own
+// refreshModels() call therefore finds no provider and short-circuits, leaving currentModel
+// empty. The owner (MainComponent::initialiseCommon) must call refreshModels() again AFTER
+// setProvider(), or currentModel stays empty and every /api/chat request is rejected by
+// Ollama with HTTP 400 "model is required".
+TEST_F(AIChatComponentTest, RefreshModelsSelectsModelWhenProviderInstalledAfterConstruction) {
+    AudioEngine engine;
+    gsynth::AIIntegrationService service(engine.getGraph());
+    // No provider installed yet — mirrors AIChatComponent being constructed before
+    // MainComponent::initialiseCommon() calls aiService.setProvider().
+
+    juce::ApplicationProperties props;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Test";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(options);
+
+    gsynth::AIChatComponent chatComponent(service, props);
+
+    // The ctor's own refreshModels() ran with no provider installed, so no model was ever
+    // selected.
+    EXPECT_TRUE(service.getCurrentModel().isEmpty());
+
+    // Now install the provider (as MainComponent does later in its ctor body) and refresh.
+    service.setProvider(std::make_unique<MockChatProvider>());
+    chatComponent.refreshModels();
+
+    EXPECT_FALSE(service.getCurrentModel().isEmpty());
 }

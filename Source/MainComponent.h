@@ -93,6 +93,7 @@ public:
     // tests can verify the patch-name side effect without driving the async PopupMenu.
     void simulateLoadFactoryPresetForTest(int index);
     void openPresetFromFile();
+    gsynth::AIIntegrationService& getAiServiceForTest() { return aiService; }
 
 private:
     // AIIntegrationService::Listener

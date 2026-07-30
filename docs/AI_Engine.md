@@ -115,6 +115,52 @@ isAiPanelVisible = appProperties.getUserSettings()->getBoolValue("aiPanelVisible
 
 Changes are written back to the same key when the panel is toggled.
 
+### Model Discovery Ordering Contract
+
+`AIChatComponent`'s constructor calls `refreshModels()` at construction time, which calls
+`AIIntegrationService::fetchAvailableModels()`. **If the service has no provider installed
+yet at that point, discovery short-circuits** (`AIIntegrationService::fetchAvailableModels`
+immediately invokes the callback with `({}, false)` when `provider == nullptr`) and no model
+is ever selected — `AIProvider::currentModel` (e.g. `OllamaProvider::currentModel`) stays
+empty for the rest of the session.
+
+This matters because `MainComponent` declares `aiChatComponent` as a member that is
+constructed in the member-initialiser list — i.e. **before** the constructor body runs — while
+`aiService.setProvider(...)` only happens later, inside `MainComponent::initialiseCommon()`.
+So the chat component's own ctor-time `refreshModels()` call is guaranteed to run with no
+provider installed and is therefore a no-op (it issues no `/api/tags` request at all).
+
+**Any owner that constructs `AIChatComponent` before installing a provider on the
+`AIIntegrationService` it was given MUST call `chatComponent.refreshModels()` again AFTER
+`aiService.setProvider(...)`.** `MainComponent::initialiseCommon()` does this immediately
+after its `setProvider(...)` if/else block. Skipping this step means `currentModel` stays
+empty and every subsequent `/api/chat` request is sent with `"model": ""`, which Ollama
+rejects with HTTP 400 `"model is required"`.
+
+Regression: this call was mistakenly deleted in commit `f7cba4a` (issue #96) and replaced
+with a comment incorrectly claiming the ctor-time call already covered discovery. Locked by
+`MainComponentTest.AiProviderGetsModelSelectedOnStartup` and
+`AIChatComponentTest.RefreshModelsSelectsModelWhenProviderInstalledAfterConstruction`.
+
+### OllamaProvider: Fail-Fast on Empty Model + HTTP-Status-Aware Errors
+
+`OllamaProvider::processRequest` (used by `sendPrompt`) now guards against the empty-model
+case directly: if `currentModel.isEmpty()`, it returns
+`"Error: No Ollama model selected. Check that Ollama is running and that a model is available
+(ollama list)."` with `success = false` **without touching the network** — this closes the
+window where the bug above could still silently POST `{"model": ""}`.
+
+When the HTTP request itself fails, `OllamaProvider` now distinguishes a reachable-but-rejecting
+server from an unreachable one using `juce::URL::InputStreamOptions::withStatusCode(&httpStatus)`:
+- Non-zero `httpStatus` (server responded, but `createInputStream` returned `nullptr` because the
+  status wasn't 2xx): `"Error: Ollama at <host> rejected the request (HTTP <status>)."`
+- `httpStatus == 0` (no response at all — connection refused/timeout): the original
+  `"Error: Could not connect to Ollama at <host>"`.
+
+Locked by `OllamaProviderTest.SendPromptWithNoModelFailsWithoutHittingNetwork` and
+`OllamaProviderTest.SendPromptIncludesSelectedModelInRequestBody` in
+`Tests/OllamaProviderTests.cpp`.
+
 ## 6. Future Considerations
 
 -   **Direct Saving of AI Suggested Patches**: Implement functionality for users to directly save AI-generated patches as presets.

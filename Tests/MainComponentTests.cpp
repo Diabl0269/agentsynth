@@ -20,6 +20,28 @@ private:
     juce::String model = "MockModel";
 };
 
+// Mock provider that records fetchAvailableModels() calls and honours setModel()/
+// getCurrentModel() so tests can verify the post-setProvider() model-selection contract.
+class ModelTrackingMockProvider : public gsynth::AIProvider {
+public:
+    juce::String getProviderName() const override { return "ModelTrackingMock"; }
+    void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
+        ++fetchCallCount;
+        callback({"mock-model-a", "mock-model-b"}, true);
+    }
+    void sendPrompt(const std::vector<Message>&, CompletionCallback callback, const juce::var&) override {
+        if (callback)
+            callback("Mock response.", true);
+    }
+    void setModel(const juce::String& name) override { model = name; }
+    juce::String getCurrentModel() const override { return model; }
+
+    int fetchCallCount = 0;
+
+private:
+    juce::String model;
+};
+
 class MainComponentTest : public ::testing::Test {
 protected:
     // MainComponent reads/writes the panel-visibility flags from the shared "Gravisynth"
@@ -286,6 +308,21 @@ TEST_F(MainComponentTest, PatchNameUpdatesOnFactoryPresetLoad) {
     // loadFactoryPreset(index) + setCurrentPatchName(presets[index].name).
     mc.simulateLoadFactoryPresetForTest(1);
     EXPECT_EQ(mc.getCurrentPatchName(), presets[1].name);
+}
+
+// REGRESSION LOCK (f7cba4a): MainComponent must refresh models AFTER setProvider(). The
+// AIChatComponent ctor's own refreshModels() runs before the provider exists, so without
+// the post-setProvider refresh currentModel stays empty and every /api/chat is a 400
+// "model is required".
+TEST_F(MainComponentTest, AiProviderGetsModelSelectedOnStartup) {
+    auto ownedProvider = std::make_unique<ModelTrackingMockProvider>();
+    ModelTrackingMockProvider* rawProvider = ownedProvider.get();
+
+    MainComponent mc(std::move(ownedProvider));
+
+    EXPECT_GE(rawProvider->fetchCallCount, 1);
+    EXPECT_FALSE(mc.getAiServiceForTest().getCurrentModel().isEmpty());
+    EXPECT_EQ(mc.getAiServiceForTest().getCurrentModel(), "mock-model-a");
 }
 
 // Regression: toolbar buttons must have non-zero bounds immediately after construction,
