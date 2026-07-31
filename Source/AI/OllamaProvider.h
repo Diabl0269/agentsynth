@@ -7,7 +7,7 @@
 #include <thread>
 #include <vector>
 
-namespace gsynth {
+namespace synth {
 
 /**
  * @class OllamaProvider
@@ -87,4 +87,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OllamaProvider)
 };
 
-} // namespace gsynth
+} // namespace synth

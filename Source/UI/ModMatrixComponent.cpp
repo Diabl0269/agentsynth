@@ -34,7 +34,7 @@ void ModMatrixComponent::setFlatSourceMenu(bool shouldBeFlat) {
 void ModMatrixComponent::paint(juce::Graphics& g) {
     // Resolve the themed LookAndFeel; in headless tests the default JUCE LnF is installed and the
     // cast returns null, so we fall back to the legacy literals.
-    auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+    auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
 
     const juce::Colour bgColour = lf != nullptr ? lf->getTheme().colors.bg1 : juce::Colour(0xff1a1c1e);
     const juce::Colour surfaceHiColour =
@@ -204,7 +204,7 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
 
     // Slider colours from theme tokens when the themed LnF is installed; otherwise leave the
     // ColourId defaults (the LnF maps them in applyTheme(), so explicit literals are not needed).
-    if (auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&owner.getLookAndFeel())) {
+    if (auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&owner.getLookAndFeel())) {
         const auto& colors = lf->getTheme().colors;
         amountSlider.setColour(juce::Slider::thumbColourId, colors.knobPointer);
         amountSlider.setColour(juce::Slider::trackColourId, colors.accent);
@@ -226,7 +226,7 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
     bypassToggle.setTooltip("Bypass modulation");
     // Keep only the semantic on-colour from the theme (bypass-active = warning). The off-state,
     // text and base colours re-skin via the LnF ColourId mapping. When unthemed, leave defaults.
-    if (auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&owner.getLookAndFeel())) {
+    if (auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&owner.getLookAndFeel())) {
         const auto& colors = lf->getTheme().colors;
         bypassToggle.setColour(juce::TextButton::buttonOnColourId, colors.warning);
         bypassToggle.setColour(juce::TextButton::textColourOnId, colors.bg0);
@@ -272,7 +272,7 @@ void ModMatrixComponent::ModRow::resized() {
 }
 
 void ModMatrixComponent::ModRow::paint(juce::Graphics& g) {
-    auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&owner.getLookAndFeel());
+    auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&owner.getLookAndFeel());
 
     // --- Row background: zebra striping + hover highlight ---
     const bool isHovered = (owner.getHoveredRow() == rowIndex);

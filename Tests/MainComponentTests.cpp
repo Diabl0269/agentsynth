@@ -4,7 +4,7 @@
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
-class MockProvider : public gsynth::AIProvider {
+class MockProvider : public synth::AIProvider {
 public:
     juce::String getProviderName() const override { return "Mock"; }
     void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
@@ -22,7 +22,7 @@ private:
 
 // Mock provider that records fetchAvailableModels() calls and honours setModel()/
 // getCurrentModel() so tests can verify the post-setProvider() model-selection contract.
-class ModelTrackingMockProvider : public gsynth::AIProvider {
+class ModelTrackingMockProvider : public synth::AIProvider {
 public:
     juce::String getProviderName() const override { return "ModelTrackingMock"; }
     void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
@@ -301,7 +301,7 @@ TEST_F(MainComponentTest, PatchNameIsDefaultOnStartup) {
 
 TEST_F(MainComponentTest, PatchNameUpdatesOnFactoryPresetLoad) {
     MainComponent mc(std::make_unique<MockProvider>());
-    auto presets = gsynth::PresetManager::getPresetList();
+    auto presets = synth::PresetManager::getPresetList();
     ASSERT_GE(presets.size(), 2);
 
     // simulateLoadFactoryPresetForTest mirrors the loadButton popup call site exactly:

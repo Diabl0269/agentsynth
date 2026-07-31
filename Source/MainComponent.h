@@ -23,17 +23,17 @@ class MainComponent
     , public juce::Timer
     , public juce::ApplicationCommandTarget
     , private juce::ChangeListener
-    , private gsynth::AIIntegrationService::Listener {
+    , private synth::AIIntegrationService::Listener {
 public:
     // Primary ctor: receives injected ThemeManager and LookAndFeel from Main.cpp.
     // provider is optional (nullptr → reads saved provider pref from appProperties).
-    MainComponent(gsynth::theme::ThemeManager& tm, gsynth::theme::GravisynthLookAndFeel& lf,
-                  std::unique_ptr<gsynth::AIProvider> provider = nullptr);
+    MainComponent(synth::theme::ThemeManager& tm, synth::theme::GravisynthLookAndFeel& lf,
+                  std::unique_ptr<synth::AIProvider> provider = nullptr);
 
     // Delegating ctor for tests and legacy call sites that don't inject theme objects.
     // Lazily owns private default ThemeManager + GravisynthLookAndFeel instances
     // (stored in ownedThemeManager / ownedLookAndFeel below).
-    explicit MainComponent(std::unique_ptr<gsynth::AIProvider> provider = nullptr);
+    explicit MainComponent(std::unique_ptr<synth::AIProvider> provider = nullptr);
 
     ~MainComponent() override;
 
@@ -93,7 +93,7 @@ public:
     // tests can verify the patch-name side effect without driving the async PopupMenu.
     void simulateLoadFactoryPresetForTest(int index);
     void openPresetFromFile();
-    gsynth::AIIntegrationService& getAiServiceForTest() { return aiService; }
+    synth::AIIntegrationService& getAiServiceForTest() { return aiService; }
 
 private:
     // AIIntegrationService::Listener
@@ -105,7 +105,7 @@ private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
     // Shared initialisation body called from both constructors after appProperties is set up.
-    void initialiseCommon(std::unique_ptr<gsynth::AIProvider> provider);
+    void initialiseCommon(std::unique_ptr<synth::AIProvider> provider);
 
     // Push the (themed, re-tinted) icon Drawables onto the 9 toolbar DrawableButtons + the
     // status-bar master-mute button, and manage icon-only vs icon+text text per narrow mode.
@@ -129,14 +129,14 @@ private:
 
     // Owned fallback objects used when the delegating ctor is called (tests/legacy).
     // Null when the primary ctor is used (refs point at external objects instead).
-    std::unique_ptr<gsynth::theme::ThemeManager> ownedThemeManager;
-    std::unique_ptr<gsynth::theme::GravisynthLookAndFeel> ownedLookAndFeel;
+    std::unique_ptr<synth::theme::ThemeManager> ownedThemeManager;
+    std::unique_ptr<synth::theme::GravisynthLookAndFeel> ownedLookAndFeel;
 
     // Non-owning references to the active ThemeManager and LookAndFeel.
     // Always valid — set by both constructors (either to external objects or to the
     // owned fallbacks above).
-    gsynth::theme::ThemeManager* themeManager{nullptr};
-    gsynth::theme::GravisynthLookAndFeel* lookAndFeel{nullptr};
+    synth::theme::ThemeManager* themeManager{nullptr};
+    synth::theme::GravisynthLookAndFeel* lookAndFeel{nullptr};
 
     GravisynthUndoManager undoManager;
     AudioEngine audioEngine;
@@ -162,8 +162,8 @@ private:
 
     std::unique_ptr<juce::FileChooser> fileChooser;
 
-    gsynth::AIIntegrationService aiService;
-    gsynth::AIChatComponent aiChatComponent;
+    synth::AIIntegrationService aiService;
+    synth::AIChatComponent aiChatComponent;
     bool isAiPanelVisible = false;
     bool isLibraryVisible{true};
     bool isAlignmentGuidesEnabled{true}; // NEW: default TRUE for backward compatibility
@@ -188,8 +188,8 @@ private:
     // ---- Panel slide animations (time-bounded, auto-stop) ----
     // One VBlankAnimatorUpdater shared by both panel animations (driven by MainComponent).
     juce::VBlankAnimatorUpdater vblankUpdater{this};
-    gravisynth::ui::AnimationDriver libraryAnim;
-    gravisynth::ui::AnimationDriver aiPanelAnim;
+    synth::ui::AnimationDriver libraryAnim;
+    synth::ui::AnimationDriver aiPanelAnim;
 
     // During animation, track the "from" bounds so lerpBounds() can interpolate.
     juce::Rectangle<int> libraryAnimFrom;

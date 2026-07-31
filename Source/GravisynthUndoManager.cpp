@@ -24,7 +24,7 @@ public:
 
         if (preRestore)
             preRestore();
-        gsynth::AIStateMapper::applyJSONToGraph(afterState, graph, true, true);
+        synth::AIStateMapper::applyJSONToGraph(afterState, graph, true, true);
         if (postRestore)
             postRestore();
         return true;
@@ -33,7 +33,7 @@ public:
     bool undo() override {
         if (preRestore)
             preRestore();
-        gsynth::AIStateMapper::applyJSONToGraph(beforeState, graph, true, true);
+        synth::AIStateMapper::applyJSONToGraph(beforeState, graph, true, true);
         if (postRestore)
             postRestore();
         return true;
@@ -184,13 +184,13 @@ private:
 GravisynthUndoManager::GravisynthUndoManager() {}
 
 void GravisynthUndoManager::recordStructuralChange(juce::AudioProcessorGraph& graph, std::function<void()> mutation) {
-    auto beforeState = gsynth::AIStateMapper::graphToJSON(graph);
+    auto beforeState = synth::AIStateMapper::graphToJSON(graph);
 
     undoManager.beginNewTransaction();
 
     mutation();
 
-    auto afterState = gsynth::AIStateMapper::graphToJSON(graph);
+    auto afterState = synth::AIStateMapper::graphToJSON(graph);
 
     juce::Component::SafePointer<GraphEditor> ge(graphEditor);
     undoManager.perform(new SnapshotAction(
@@ -224,14 +224,14 @@ void GravisynthUndoManager::recordPositionChange(juce::AudioProcessorGraph& grap
 }
 
 void GravisynthUndoManager::captureBeforeState(juce::AudioProcessorGraph& graph) {
-    capturedBeforeState = gsynth::AIStateMapper::graphToJSON(graph);
+    capturedBeforeState = synth::AIStateMapper::graphToJSON(graph);
 }
 
 void GravisynthUndoManager::pushSnapshotFromCapture(juce::AudioProcessorGraph& graph) {
     if (capturedBeforeState.isVoid())
         return;
 
-    auto afterState = gsynth::AIStateMapper::graphToJSON(graph);
+    auto afterState = synth::AIStateMapper::graphToJSON(graph);
 
     if (juce::JSON::toString(capturedBeforeState) != juce::JSON::toString(afterState)) {
         juce::Component::SafePointer<GraphEditor> ge(graphEditor);

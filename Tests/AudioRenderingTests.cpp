@@ -474,12 +474,12 @@ TEST_F(AudioRenderingTest, AllPresetsRenderNonSilent) {
     graph.setPlayConfigDetails(0, 2, kSampleRate, kBlockSize);
     graph.prepareToPlay(kSampleRate, kBlockSize);
 
-    auto presetNames = gsynth::PresetManager::getPresetNames();
+    auto presetNames = synth::PresetManager::getPresetNames();
 
     for (int i = 0; i < presetNames.size(); ++i) {
         SCOPED_TRACE(presetNames[i].toStdString());
 
-        gsynth::PresetManager::loadPreset(i, graph);
+        synth::PresetManager::loadPreset(i, graph);
         graph.prepareToPlay(kSampleRate, kBlockSize);
 
         // Find the MidiKeyboardModule in the preset and inject a note

@@ -4,7 +4,7 @@
 #include <juce_core/juce_core.h>
 #include <vector>
 
-namespace gsynth {
+namespace synth {
 
 /**
  * @class AIProvider
@@ -54,4 +54,4 @@ public:
     virtual void fetchAvailableModels(std::function<void(const juce::StringArray& models, bool success)> callback) = 0;
 };
 
-} // namespace gsynth
+} // namespace synth

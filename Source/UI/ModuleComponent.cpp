@@ -128,27 +128,27 @@ void ModuleComponent::detachFromProcessor() {
 void ModuleComponent::applyHeaderButtonIcons() {
     // Headless-safe: when our themed LnF is not installed (unit tests), buttons remain blank
     // (no image set). The DrawableButton still exists and functions correctly without an image.
-    auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+    auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
     if (lf == nullptr)
         return;
 
     if (bypassButton) {
-        if (auto d = lf->getIcon(gsynth::theme::Icon::ModuleBypass))
+        if (auto d = lf->getIcon(synth::theme::Icon::ModuleBypass))
             bypassButton->setImages(d.get());
     }
     if (muteButton) {
-        if (auto d = lf->getIcon(gsynth::theme::Icon::ModuleMute))
+        if (auto d = lf->getIcon(synth::theme::Icon::ModuleMute))
             muteButton->setImages(d.get());
     }
     if (deleteButton) {
-        if (auto d = lf->getIcon(gsynth::theme::Icon::ModuleDelete))
+        if (auto d = lf->getIcon(synth::theme::Icon::ModuleDelete))
             deleteButton->setImages(d.get());
     }
 }
 
 void ModuleComponent::refreshWaveformComboIcons() {
-    using gsynth::theme::GravisynthLookAndFeel;
-    using gsynth::theme::Icon;
+    using synth::theme::GravisynthLookAndFeel;
+    using synth::theme::Icon;
 
     auto* lf = dynamic_cast<GravisynthLookAndFeel*>(&getLookAndFeel());
     // Headless / no themed LnF: nothing to refresh.
@@ -297,7 +297,7 @@ void ModuleComponent::createControls() {
             midiKeyboard->getKeyboardState(), juce::MidiKeyboardComponent::horizontalKeyboard);
 
         // Theme the keyboard component
-        using gsynth::theme::GravisynthLookAndFeel;
+        using synth::theme::GravisynthLookAndFeel;
         auto* lf = dynamic_cast<GravisynthLookAndFeel*>(&getLookAndFeel());
         if (lf != nullptr) {
             keyboardComponent->setColour(juce::MidiKeyboardComponent::whiteNoteColourId, lf->getTheme().colors.bg1);
@@ -378,10 +378,10 @@ void ModuleComponent::createControls() {
                                             choices[2] == "Saw" && choices[3] == "Triangle");
 
                 if (isOscWaveform) {
-                    using gsynth::theme::Icon;
+                    using synth::theme::Icon;
                     const Icon kIcons[4] = {Icon::WaveformSine, Icon::WaveformSquare, Icon::WaveformSaw,
                                             Icon::WaveformTriangle};
-                    auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+                    auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
                     for (int i = 0; i < 4; ++i) {
                         std::unique_ptr<juce::Drawable> icon;
                         if (lf != nullptr)
@@ -471,7 +471,7 @@ void ModuleComponent::createControls() {
 
     // Auto-resize
     if (getType(module) == ModuleType::Sequencer || getType(module) == ModuleType::PolySequencer) {
-        setSize(gsynth::LayoutUtil::kDoubleWidth, 380); // 8 cols * 60 + margins, 3 rows
+        setSize(synth::LayoutUtil::kDoubleWidth, 380); // 8 cols * 60 + margins, 3 rows
         return;
     }
 
@@ -532,7 +532,7 @@ void ModuleComponent::updateLayout() {
     }
 
     if (getType(module) == ModuleType::Sequencer || getType(module) == ModuleType::PolySequencer) {
-        setSize(gsynth::LayoutUtil::kDoubleWidth, 380);
+        setSize(synth::LayoutUtil::kDoubleWidth, 380);
         return;
     }
 
@@ -584,7 +584,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
 
     // Guarded LnF cast: headless tests construct this component WITHOUT installing our LnF.
     // When the cast is null we fall back to a plain themed-ish fill so those tests don't crash.
-    auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+    auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
 
     if (lf != nullptr) {
         // Single owner of card treatment: background, drop shadow, body fill, border, and the
@@ -937,7 +937,7 @@ void ModuleComponent::resized() {
 
     // --- MIDI Keyboard Layout ---
     if (getType(module) == ModuleType::MidiKeyboard) {
-        setSize(gsynth::LayoutUtil::kDoubleWidth, 150); // Appropriate size for a keyboard
+        setSize(synth::LayoutUtil::kDoubleWidth, 150); // Appropriate size for a keyboard
         if (keyboardComponent) {
             keyboardComponent->setBounds(10, 50, getWidth() - 20, getHeight() - 60);
         }

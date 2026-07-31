@@ -3,7 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
 
-namespace gsynth {
+namespace synth {
 
 struct PresetInfo {
     juce::String name;
@@ -22,4 +22,4 @@ private:
     static juce::String getPresetJSON(int index);
 };
 
-} // namespace gsynth
+} // namespace synth

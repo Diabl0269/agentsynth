@@ -9,8 +9,8 @@
 //==============================================================================
 class AISettingsTab : public juce::Component {
 public:
-    AISettingsTab(juce::ApplicationProperties& props, gsynth::AIIntegrationService& aiServ,
-                  gsynth::AIChatComponent& aiChatComp)
+    AISettingsTab(juce::ApplicationProperties& props, synth::AIIntegrationService& aiServ,
+                  synth::AIChatComponent& aiChatComp)
         : appProperties(props)
         , aiService(aiServ)
         , aiChatComponent(aiChatComp) {
@@ -58,15 +58,15 @@ public:
 
         // Re-initialize AI service with new provider/host
         if (selectedProvider == "Ollama") {
-            aiService.setProvider(std::make_unique<gsynth::OllamaProvider>(newOllamaHost));
+            aiService.setProvider(std::make_unique<synth::OllamaProvider>(newOllamaHost));
         }
         aiChatComponent.refreshModels();
     }
 
 private:
     juce::ApplicationProperties& appProperties;
-    gsynth::AIIntegrationService& aiService;
-    gsynth::AIChatComponent& aiChatComponent;
+    synth::AIIntegrationService& aiService;
+    synth::AIChatComponent& aiChatComponent;
 
     juce::Label providerLabel;
     juce::ComboBox providerCombo;
@@ -80,8 +80,8 @@ private:
 // SettingsWindow - Consolidated tabbed settings interface
 //==============================================================================
 SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::ApplicationProperties& appProperties,
-                               gsynth::AIIntegrationService& aiService, gsynth::AIChatComponent& aiChatComponent,
-                               ShortcutManager& shortcutManager, gsynth::theme::ThemeManager& themeManager,
+                               synth::AIIntegrationService& aiService, synth::AIChatComponent& aiChatComponent,
+                               ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager,
                                GraphEditor* graphEditor)
     : appProperties(appProperties) {
     auto* audioSelector = new juce::AudioDeviceSelectorComponent(deviceManager, 0, 2, // min/max inputs

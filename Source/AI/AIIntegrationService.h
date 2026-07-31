@@ -8,7 +8,7 @@
 #include <memory>
 #include <vector>
 
-namespace gsynth {
+namespace synth {
 
 /**
  * @class AIIntegrationService
@@ -88,4 +88,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AIIntegrationService)
 };
 
-} // namespace gsynth
+} // namespace synth

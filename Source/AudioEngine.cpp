@@ -37,7 +37,7 @@ void AudioEngine::initialise() {
         }
     }
 
-    if (!gsynth::PresetManager::loadDefaultPreset(mainProcessorGraph)) {
+    if (!synth::PresetManager::loadDefaultPreset(mainProcessorGraph)) {
         createDefaultPatch(); // Fallback
     }
 }

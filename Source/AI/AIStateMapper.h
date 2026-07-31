@@ -4,7 +4,7 @@
 #include <juce_core/juce_core.h>
 #include <memory>
 
-namespace gsynth {
+namespace synth {
 
 /**
  * @class AIStateMapper
@@ -49,4 +49,4 @@ private:
                                        bool trusted = false);
 };
 
-} // namespace gsynth
+} // namespace synth

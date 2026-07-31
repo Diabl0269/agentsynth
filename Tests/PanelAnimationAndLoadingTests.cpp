@@ -21,7 +21,7 @@
 // Shared mock provider (same pattern as MainComponentTests.cpp)
 // ============================================================================
 
-class MockProviderPAL : public gsynth::AIProvider {
+class MockProviderPAL : public synth::AIProvider {
 public:
     juce::String getProviderName() const override { return "MockPAL"; }
     void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
@@ -142,11 +142,11 @@ protected:
 
 TEST_F(AICancelTest, CancelButtonHiddenBeforeSend) {
     AudioEngine engine;
-    gsynth::AIIntegrationService service(engine.getGraph());
+    synth::AIIntegrationService service(engine.getGraph());
     service.setProvider(std::make_unique<MockProviderPAL>());
 
     TestPropsOwner propsOwner;
-    gsynth::AIChatComponent chat(service, propsOwner.props);
+    synth::AIChatComponent chat(service, propsOwner.props);
     chat.setSize(400, 600);
 
     EXPECT_FALSE(chat.isCancelVisible());
@@ -155,11 +155,11 @@ TEST_F(AICancelTest, CancelButtonHiddenBeforeSend) {
 
 TEST_F(AICancelTest, CancelButtonVisibleAfterSend) {
     AudioEngine engine;
-    gsynth::AIIntegrationService service(engine.getGraph());
+    synth::AIIntegrationService service(engine.getGraph());
     service.setProvider(std::make_unique<MockProviderPAL>());
 
     TestPropsOwner propsOwner;
-    gsynth::AIChatComponent chat(service, propsOwner.props);
+    synth::AIChatComponent chat(service, propsOwner.props);
     chat.setSize(400, 600);
 
     // Set text and send — MockProviderPAL never calls back, so we stay in waiting state.
@@ -175,11 +175,11 @@ TEST_F(AICancelTest, CancelButtonVisibleAfterSend) {
 
 TEST_F(AICancelTest, CancelResetsWaitingStateAndHidesCancelButton) {
     AudioEngine engine;
-    gsynth::AIIntegrationService service(engine.getGraph());
+    synth::AIIntegrationService service(engine.getGraph());
     service.setProvider(std::make_unique<MockProviderPAL>());
 
     TestPropsOwner propsOwner;
-    gsynth::AIChatComponent chat(service, propsOwner.props);
+    synth::AIChatComponent chat(service, propsOwner.props);
     chat.setSize(400, 600);
 
     // Enter waiting state.
@@ -199,11 +199,11 @@ TEST_F(AICancelTest, CancelResetsWaitingStateAndHidesCancelButton) {
 
 TEST_F(AICancelTest, SendButtonReenabledAfterCancel) {
     AudioEngine engine;
-    gsynth::AIIntegrationService service(engine.getGraph());
+    synth::AIIntegrationService service(engine.getGraph());
     service.setProvider(std::make_unique<MockProviderPAL>());
 
     TestPropsOwner propsOwner;
-    gsynth::AIChatComponent chat(service, propsOwner.props);
+    synth::AIChatComponent chat(service, propsOwner.props);
     chat.setSize(400, 600);
 
     for (auto* child : chat.getChildren()) {
@@ -231,14 +231,14 @@ TEST_F(AICancelTest, SendButtonReenabledAfterCancel) {
 // ============================================================================
 
 TEST(TooltipHint, EmptyShortcutReturnsBaseUnchanged) {
-    EXPECT_EQ(gravisynth::ui::formatShortcutHint("Save", ""), juce::String("Save"));
+    EXPECT_EQ(synth::ui::formatShortcutHint("Save", ""), juce::String("Save"));
 }
 
 TEST(TooltipHint, ShortcutAppended) {
-    EXPECT_EQ(gravisynth::ui::formatShortcutHint("Save", "Cmd+S"), juce::String("Save  (Cmd+S)"));
+    EXPECT_EQ(synth::ui::formatShortcutHint("Save", "Cmd+S"), juce::String("Save  (Cmd+S)"));
 }
 
-TEST(TooltipHint, BothEmptyReturnsEmpty) { EXPECT_EQ(gravisynth::ui::formatShortcutHint("", ""), juce::String("")); }
+TEST(TooltipHint, BothEmptyReturnsEmpty) { EXPECT_EQ(synth::ui::formatShortcutHint("", ""), juce::String("")); }
 
 // ============================================================================
 // 4. Paint smoke tests
@@ -274,11 +274,11 @@ TEST_F(PaintSmokeTest, MainComponentPaintWithAiPanelVisible) {
 
 TEST_F(PaintSmokeTest, AIChatComponentPaintIdleState) {
     AudioEngine engine;
-    gsynth::AIIntegrationService service(engine.getGraph());
+    synth::AIIntegrationService service(engine.getGraph());
     service.setProvider(std::make_unique<MockProviderPAL>());
 
     TestPropsOwner propsOwner;
-    gsynth::AIChatComponent chat(service, propsOwner.props);
+    synth::AIChatComponent chat(service, propsOwner.props);
     chat.setSize(400, 600);
 
     juce::Image img(juce::Image::ARGB, 400, 600, true);
@@ -288,11 +288,11 @@ TEST_F(PaintSmokeTest, AIChatComponentPaintIdleState) {
 
 TEST_F(PaintSmokeTest, AIChatComponentPaintWaitingState) {
     AudioEngine engine;
-    gsynth::AIIntegrationService service(engine.getGraph());
+    synth::AIIntegrationService service(engine.getGraph());
     service.setProvider(std::make_unique<MockProviderPAL>());
 
     TestPropsOwner propsOwner;
-    gsynth::AIChatComponent chat(service, propsOwner.props);
+    synth::AIChatComponent chat(service, propsOwner.props);
     chat.setSize(400, 600);
 
     for (auto* child : chat.getChildren()) {

@@ -4,7 +4,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <vector>
 
-namespace gsynth::LayoutUtil {
+namespace synth::LayoutUtil {
 
 // ---- Constants (canvas pixels) ----
 inline constexpr int kGridSize = 8;         // snap quantum
@@ -64,4 +64,4 @@ std::vector<ArrangeResult> computeAutoArrange(juce::AudioProcessorGraph& graph,
                                               const std::function<juce::Point<int>(NodeID)>& sizeOf,
                                               const std::vector<std::pair<NodeID, NodeID>>& extraEdges);
 
-} // namespace gsynth::LayoutUtil
+} // namespace synth::LayoutUtil

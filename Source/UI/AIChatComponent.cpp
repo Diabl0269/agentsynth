@@ -1,6 +1,6 @@
 #include "AIChatComponent.h"
 
-namespace gsynth {
+namespace synth {
 
 // Helper function to extract JSON blocks
 juce::StringArray extractJSONBlocks(const juce::String& text) {
@@ -367,7 +367,7 @@ void AIChatComponent::resized() {
 }
 
 void AIChatComponent::paint(juce::Graphics& g) {
-    auto lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+    auto lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
     if (lf != nullptr) {
         g.fillAll(lf->getTheme().colors.bg0);
     } else {
@@ -606,4 +606,4 @@ void AIChatComponent::flushDebugLog() {
 void AIChatComponent::logMessage(const juce::String& message) { appendDebugLog(message); }
 #endif
 
-} // namespace gsynth
+} // namespace synth
