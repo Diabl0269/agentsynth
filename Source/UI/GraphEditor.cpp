@@ -44,12 +44,12 @@ static juce::Point<int> estimateModuleSize(const juce::String& typeName) {
     if (typeName == "ADSR" || typeName == "Amp Env" || typeName == "Filter Env")
         return {280, 180};
     if (typeName.containsIgnoreCase("Sequencer") && !typeName.containsIgnoreCase("Poly"))
-        return {gsynth::LayoutUtil::kDoubleWidth, 380};
+        return {synth::LayoutUtil::kDoubleWidth, 380};
     if (typeName.containsIgnoreCase("Poly") && typeName.containsIgnoreCase("Sequencer"))
-        return {gsynth::LayoutUtil::kDoubleWidth, 380};
+        return {synth::LayoutUtil::kDoubleWidth, 380};
     if (typeName.containsIgnoreCase("MidiKeyboard") || typeName.containsIgnoreCase("Midi Keyboard") ||
         typeName.containsIgnoreCase("MIDI Keyboard"))
-        return {gsynth::LayoutUtil::kDoubleWidth, 150};
+        return {synth::LayoutUtil::kDoubleWidth, 150};
     if (typeName == "Poly MIDI" || typeName == "PolyMidi")
         return {280, 100};
     if (typeName == "Distortion")
@@ -76,8 +76,8 @@ GraphEditor::GraphEditor(AudioEngine& engine, GravisynthUndoManager* undoMgr)
 
     // Tooltips on GraphEditor-owned affordances.
     // The canvas itself hints at pan/zoom. Double-click on an attenuverter knob removes it.
-    setTooltip(gravisynth::ui::formatShortcutHint("Patch canvas - drag modules here to build your patch",
-                                                  "Scroll to zoom | Drag to pan | Double-click mod knob to remove"));
+    setTooltip(synth::ui::formatShortcutHint("Patch canvas - drag modules here to build your patch",
+                                             "Scroll to zoom | Drag to pan | Double-click mod knob to remove"));
 
     startTimerHz(30);
 }
@@ -94,7 +94,7 @@ GraphEditor::GraphContentComponent::GraphContentComponent(GraphEditor& ed)
 void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     // Resolve the themed LookAndFeel once. In headless tests the default JUCE LnF is
     // installed, so the cast returns null and we fall back to plain fills/lines.
-    auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+    auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
 
     if (lf != nullptr)
         lf->fillThemedBackground(g, getLocalBounds().toFloat(), /*isCanvas*/ true);
@@ -115,7 +115,7 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
             lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
         g.setColour(textPrimaryColourForGrid.withAlpha(0.08f));
 
-        constexpr int kMajorGrid = gsynth::LayoutUtil::kGridSize * 5; // 40px
+        constexpr int kMajorGrid = synth::LayoutUtil::kGridSize * 5; // 40px
         int startX = (clip.getX() / kMajorGrid) * kMajorGrid;
         int startY = (clip.getY() / kMajorGrid) * kMajorGrid;
 
@@ -445,9 +445,9 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     // ---- Drag-preview landing ghost (on top of module cards) ----
     // Draw a translucent rounded rect at the exact snapped+anti-overlapped landing position.
     if (editor.dragPreviewActive && !editor.dragPreviewGhost.isEmpty()) {
-        auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+        auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
         const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
-        const auto& m = lf != nullptr ? lf->getTheme().metrics : gsynth::theme::Metrics{};
+        const auto& m = lf != nullptr ? lf->getTheme().metrics : synth::theme::Metrics{};
         const float cornerRadius = m.cornerRadius;
 
         auto ghostF = editor.dragPreviewGhost.toFloat();
@@ -465,7 +465,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     // ---- Alignment guides (UI Phase 7 - Item 4) ----
     // Draw aligned edges when hovering near other modules (Figma-style)
     if (editor.dragPreviewActive && !editor.alignmentGuides.empty() && editor.alignmentGuidesEnabled) {
-        auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+        auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
         const juce::Colour guideColour = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::white;
 
         // Solid lines, ~70% opacity for visibility without distraction
@@ -657,7 +657,7 @@ void GraphEditor::updateComponents() {
             // Fallback: no stored position — resolve a non-overlapping slot.
             // Desired origin strides by 300px to reduce clustering; resolvePlacement
             // then snaps and spirals clear of any previously placed components.
-            auto desired = juce::Point<int>(gsynth::LayoutUtil::kArrangeOriginX + moduleIndex * 300, 600);
+            auto desired = juce::Point<int>(synth::LayoutUtil::kArrangeOriginX + moduleIndex * 300, 600);
             auto clear = resolvePlacement(desired, existingComp->getWidth(), existingComp->getHeight(), node->nodeID);
             existingComp->setTopLeftPosition(clear);
             // Persist the resolved position so subsequent loads don't need to re-resolve
@@ -698,7 +698,7 @@ void GraphEditor::paintOverChildren(juce::Graphics& g) {
     if (!GraphEditor::isCanvasEmpty(static_cast<int>(content.getModules().size())))
         return;
 
-    auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+    auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
 
     // textMuted token at ~60% alpha — tasteful, non-distracting.
     const juce::Colour textMutedColour = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::white;
@@ -760,10 +760,10 @@ void GraphEditor::toggleModMatrixVisibility() {
     const bool hidingAfterAnim = !isMatrixVisible;
     juce::Component::SafePointer<GraphEditor> safeThis(this);
     modMatrixAnim.start(
-        vblankUpdater, 220.0, gravisynth::ui::easeOutCubic,
+        vblankUpdater, 220.0, synth::ui::easeOutCubic,
         [safeThis, fromBounds, toBounds](float t) {
             if (auto* self = safeThis.getComponent())
-                self->modMatrix.setBounds(gravisynth::ui::AnimationDriver::lerpBounds(fromBounds, toBounds, t));
+                self->modMatrix.setBounds(synth::ui::AnimationDriver::lerpBounds(fromBounds, toBounds, t));
         },
         [safeThis, hidingAfterAnim, toBounds]() {
             if (auto* self = safeThis.getComponent()) {
@@ -991,7 +991,7 @@ void GraphEditor::replaceModule(ModuleComponent* moduleComp, const juce::String&
             return;
 
         // 1. Create the new module
-        auto newProcessor = gsynth::AIStateMapper::createModule(newModuleTypeCopy);
+        auto newProcessor = synth::AIStateMapper::createModule(newModuleTypeCopy);
         if (!newProcessor)
             return;
 
@@ -1226,12 +1226,12 @@ void GraphEditor::updateDragPreview(juce::Point<int> desiredTopLeftCanvas) {
     if (dragPreviewGhost.isEmpty())
         return;
 
-    auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
-    const auto& m = lf != nullptr ? lf->getTheme().metrics : gsynth::theme::Metrics{};
+    auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+    const auto& m = lf != nullptr ? lf->getTheme().metrics : synth::theme::Metrics{};
     const float snapThreshold = static_cast<float>(m.gridSize); // kGridSize
 
     // Build list of existing module boxes (excluding self)
-    std::vector<gsynth::LayoutUtil::Box> existingBoxes;
+    std::vector<synth::LayoutUtil::Box> existingBoxes;
     for (auto* comp : content.getModules()) {
         if (comp->getNodeId() == dragPreviewSelfId)
             continue; // Skip self
@@ -1497,22 +1497,22 @@ void GraphEditor::itemDropped(const SourceDetails& dragSourceDetails) {
 
 juce::Point<int> GraphEditor::resolvePlacement(juce::Point<int> desired, int w, int h,
                                                juce::AudioProcessorGraph::NodeID selfId) {
-    std::vector<gsynth::LayoutUtil::Box> boxes;
+    std::vector<synth::LayoutUtil::Box> boxes;
     for (auto* comp : content.getModules()) {
         if (comp == nullptr)
             continue;
         boxes.push_back({comp->getNodeId(), comp->getBounds()});
     }
-    auto snapped = gsynth::LayoutUtil::snap(desired);
-    return gsynth::LayoutUtil::findFreeSlot(snapped, w, h, boxes, selfId);
+    auto snapped = synth::LayoutUtil::snap(desired);
+    return synth::LayoutUtil::findFreeSlot(snapped, w, h, boxes, selfId);
 }
 
 // static
 juce::Point<int> GraphEditor::computeDropFinalPosition(juce::Point<int> dropPoint, int w, int h,
-                                                       const std::vector<gsynth::LayoutUtil::Box>& existingBoxes,
-                                                       gsynth::LayoutUtil::NodeID selfId) {
-    auto snapped = gsynth::LayoutUtil::snap(dropPoint);
-    return gsynth::LayoutUtil::findFreeSlot(snapped, w, h, existingBoxes, selfId);
+                                                       const std::vector<synth::LayoutUtil::Box>& existingBoxes,
+                                                       synth::LayoutUtil::NodeID selfId) {
+    auto snapped = synth::LayoutUtil::snap(dropPoint);
+    return synth::LayoutUtil::findFreeSlot(snapped, w, h, existingBoxes, selfId);
 }
 
 void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
@@ -1542,12 +1542,12 @@ void GraphEditor::animateDropLanding(ModuleComponent* module, juce::Point<int> f
     dropLandingAnim.start(
         vblankUpdater,
         180.0, // ms — within the 150-220 ms spec
-        gravisynth::ui::easeOutCubic,
+        synth::ui::easeOutCubic,
         [safeEditor, safeModule, fromPos, toPos](float t) {
             if (safeEditor == nullptr || safeModule == nullptr)
                 return;
-            auto pos = gravisynth::ui::AnimationDriver::lerpBounds(juce::Rectangle<int>(fromPos.x, fromPos.y, 0, 0),
-                                                                   juce::Rectangle<int>(toPos.x, toPos.y, 0, 0), t)
+            auto pos = synth::ui::AnimationDriver::lerpBounds(juce::Rectangle<int>(fromPos.x, fromPos.y, 0, 0),
+                                                              juce::Rectangle<int>(toPos.x, toPos.y, 0, 0), t)
                            .getTopLeft();
             safeModule->setTopLeftPosition(pos);
             safeEditor->content.repaint();
@@ -1567,21 +1567,21 @@ void GraphEditor::autoArrange() {
     if (undoManager)
         undoManager->captureBeforeState(graph);
 
-    auto sizeOf = [this](gsynth::LayoutUtil::NodeID id) -> juce::Point<int> {
+    auto sizeOf = [this](synth::LayoutUtil::NodeID id) -> juce::Point<int> {
         for (auto* c : content.getModules()) {
             if (c != nullptr && c->getNodeId() == id)
                 return {c->getWidth(), c->getHeight()};
         }
-        return {gsynth::LayoutUtil::kSingleWidth, 300};
+        return {synth::LayoutUtil::kSingleWidth, 300};
     };
 
-    std::vector<std::pair<gsynth::LayoutUtil::NodeID, gsynth::LayoutUtil::NodeID>> extra;
+    std::vector<std::pair<synth::LayoutUtil::NodeID, synth::LayoutUtil::NodeID>> extra;
     for (const auto& r : audioEngine.getModulationRoutings()) {
         if (r.hasSource && r.hasDest)
             extra.push_back({r.sourceNodeID, r.destNodeID});
     }
 
-    auto layout = gsynth::LayoutUtil::computeAutoArrange(graph, sizeOf, extra);
+    auto layout = synth::LayoutUtil::computeAutoArrange(graph, sizeOf, extra);
     for (const auto& a : layout) {
         if (auto* n = graph.getNodeForId(a.id)) {
             n->properties.set("x", a.pos.x);
@@ -1596,7 +1596,7 @@ void GraphEditor::autoArrange() {
 }
 
 void GraphEditor::savePreset(juce::File file) {
-    auto json = gsynth::AIStateMapper::graphToJSON(audioEngine.getGraph());
+    auto json = synth::AIStateMapper::graphToJSON(audioEngine.getGraph());
     file.replaceWithText(juce::JSON::toString(json));
 }
 
@@ -1605,7 +1605,7 @@ bool GraphEditor::loadFactoryPreset(int index) {
     // PresetManager clears the graph and frees the old VisualBuffers — otherwise a scope timer can
     // fire and read a freed buffer (use-after-free). Mirrors the safe order used by the test harness.
     detachAllModuleComponents();
-    bool loaded = gsynth::PresetManager::loadPreset(index, audioEngine.getGraph());
+    bool loaded = synth::PresetManager::loadPreset(index, audioEngine.getGraph());
     updateComponents();
     return loaded;
 }
@@ -1638,7 +1638,7 @@ void GraphEditor::loadPreset(juce::File file) {
     }
     // Detach before applyJSONToGraph clears the graph (see loadFactoryPreset — avoids scope-timer UAF).
     detachAllModuleComponents();
-    if (gsynth::AIStateMapper::applyJSONToGraph(json, audioEngine.getGraph(), true)) {
+    if (synth::AIStateMapper::applyJSONToGraph(json, audioEngine.getGraph(), true)) {
         updateComponents();
     } else {
         updateComponents(); // reconcile view to whatever state the graph is in after a failed apply

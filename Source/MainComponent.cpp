@@ -3,8 +3,8 @@
 #include "UI/SettingsWindow.h"
 
 // ---- Primary constructor (injected ThemeManager + LookAndFeel from Main.cpp) ----
-MainComponent::MainComponent(gsynth::theme::ThemeManager& tm, gsynth::theme::GravisynthLookAndFeel& lf,
-                             std::unique_ptr<gsynth::AIProvider> provider)
+MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::GravisynthLookAndFeel& lf,
+                             std::unique_ptr<synth::AIProvider> provider)
     : graphEditor(audioEngine, &undoManager)
     , aiService(audioEngine.getGraph())
     , aiChatComponent(aiService, appProperties)
@@ -30,14 +30,14 @@ MainComponent::MainComponent(gsynth::theme::ThemeManager& tm, gsynth::theme::Gra
 }
 
 // ---- Delegating constructor for tests / legacy call sites ----
-MainComponent::MainComponent(std::unique_ptr<gsynth::AIProvider> provider)
+MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider)
     : graphEditor(audioEngine, &undoManager)
     , aiService(audioEngine.getGraph())
     , aiChatComponent(aiService, appProperties) {
     // Own a default ThemeManager + LookAndFeel so the code behaves identically
     // to the primary-ctor path (no special-casing in the rest of the class).
-    ownedThemeManager = std::make_unique<gsynth::theme::ThemeManager>();
-    ownedLookAndFeel = std::make_unique<gsynth::theme::GravisynthLookAndFeel>();
+    ownedThemeManager = std::make_unique<synth::theme::ThemeManager>();
+    ownedLookAndFeel = std::make_unique<synth::theme::GravisynthLookAndFeel>();
     themeManager = ownedThemeManager.get();
     lookAndFeel = ownedLookAndFeel.get();
 
@@ -59,7 +59,7 @@ MainComponent::MainComponent(std::unique_ptr<gsynth::AIProvider> provider)
 }
 
 // ---- Shared post-construction body ----
-void MainComponent::initialiseCommon(std::unique_ptr<gsynth::AIProvider> provider) {
+void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider) {
     // ORDERING CONTRACT: read the persisted panel-visibility flags FIRST, before any
     // setVisible()/addAndMakeVisible() call that depends on them. These override the member
     // initialisers (isLibraryVisible{true}, isAiPanelVisible=false).
@@ -75,7 +75,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<gsynth::AIProvider> provide
     if (provider) {
         aiService.setProvider(std::move(provider));
     } else if (savedProviderName == "Ollama") {
-        aiService.setProvider(std::make_unique<gsynth::OllamaProvider>(savedOllamaHost));
+        aiService.setProvider(std::make_unique<synth::OllamaProvider>(savedOllamaHost));
     }
 
     // ORDERING CONTRACT: aiChatComponent is a member, so its constructor (which calls
@@ -135,8 +135,8 @@ void MainComponent::initialiseCommon(std::unique_ptr<gsynth::AIProvider> provide
     loadButton.setComponentID("loadButton");
     loadButton.onClick = [this] {
         juce::PopupMenu menu;
-        auto presets = gsynth::PresetManager::getPresetList();
-        auto categories = gsynth::PresetManager::getCategories();
+        auto presets = synth::PresetManager::getPresetList();
+        auto categories = synth::PresetManager::getCategories();
         for (const auto& cat : categories) {
             juce::PopupMenu subMenu;
             for (int i = 0; i < presets.size(); ++i) {
@@ -331,7 +331,7 @@ void MainComponent::aiPatchApplied() {
 }
 
 void MainComponent::simulateLoadFactoryPresetForTest(int index) {
-    auto presets = gsynth::PresetManager::getPresetList();
+    auto presets = synth::PresetManager::getPresetList();
     if (index < 0 || index >= presets.size())
         return;
     graphEditor.loadFactoryPreset(index);
@@ -496,7 +496,7 @@ void MainComponent::resized() {
     int tbH = 36, sbH = 24;
     int libW = isLibraryVisible ? 200 : 0;
     int aiW = isAiPanelVisible ? 300 : 0;
-    if (auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel())) {
+    if (auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel())) {
         const auto& m = lf->getTheme().metrics;
         tbH = m.toolbarHeight;
         sbH = m.statusBarHeight;
@@ -529,9 +529,9 @@ void MainComponent::resized() {
 
 // ---- Toolbar icon + text application ----
 void MainComponent::applyToolbarIcons() {
-    using gsynth::theme::Icon;
+    using synth::theme::Icon;
 
-    auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+    auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
 
     // In narrow mode the buttons are 32 px wide — icon only, no text. In wide mode the
     // toggle buttons carry stateful text; the rest carry a static label.
@@ -576,7 +576,7 @@ void MainComponent::applyToolbarIcons() {
 
     // Tooltips remain available even in icon-only mode; include shortcut hints where applicable.
     auto hint = [&](const juce::String& base, const juce::String& action) {
-        return gravisynth::ui::formatShortcutHint(
+        return synth::ui::formatShortcutHint(
             base, ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding(action)));
     };
 
@@ -603,7 +603,7 @@ MainComponent::PanelBoundsResult MainComponent::computePanelBounds(bool libVisib
     int tbH = 36, sbH = 24;
     int libW = libVisible ? 200 : 0;
     int aiW = aiVisible ? 300 : 0;
-    if (auto* lf = dynamic_cast<const gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel())) {
+    if (auto* lf = dynamic_cast<const synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel())) {
         const auto& m = lf->getTheme().metrics;
         tbH = m.toolbarHeight;
         sbH = m.statusBarHeight;
@@ -650,13 +650,13 @@ void MainComponent::animatePanelTransition(const PanelBoundsResult& fromResult, 
     aiPanelAnim.start(
         vblankUpdater,
         190.0, // ~190 ms — within the 160–220 ms spec
-        gravisynth::ui::easeInOutCubic,
+        synth::ui::easeInOutCubic,
         [this, libFrom, libTo, aipFrom, aiTo, graphFrom, graphTo](float t) {
             if (!libFrom.isEmpty() || !libTo.isEmpty())
-                moduleLibrary.setBounds(gravisynth::ui::AnimationDriver::lerpBounds(libFrom, libTo, t));
+                moduleLibrary.setBounds(synth::ui::AnimationDriver::lerpBounds(libFrom, libTo, t));
             if (!aipFrom.isEmpty() || !aiTo.isEmpty())
-                aiChatComponent.setBounds(gravisynth::ui::AnimationDriver::lerpBounds(aipFrom, aiTo, t));
-            graphEditor.setBounds(gravisynth::ui::AnimationDriver::lerpBounds(graphFrom, graphTo, t));
+                aiChatComponent.setBounds(synth::ui::AnimationDriver::lerpBounds(aipFrom, aiTo, t));
+            graphEditor.setBounds(synth::ui::AnimationDriver::lerpBounds(graphFrom, graphTo, t));
         },
         [this, hideLibraryOnComplete, hideAiPanelOnComplete, libTo, aiTo, graphTo]() {
             // Snap to exact final bounds and apply visibility.
@@ -680,7 +680,7 @@ void MainComponent::setLibraryVisible(bool v) {
     // Refresh the toggle button's wide-mode label and tooltip.
     if (!toolbarNarrowMode_)
         toggleLibraryButton.setButtonText(v ? "Hide Library" : "Show Library");
-    toggleLibraryButton.setTooltip(gravisynth::ui::formatShortcutHint(
+    toggleLibraryButton.setTooltip(synth::ui::formatShortcutHint(
         v ? "Hide Library" : "Show Library",
         ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding("toggleLibrary"))));
 

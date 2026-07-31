@@ -8,7 +8,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 
-namespace gsynth {
+namespace synth {
 
 /**
  * @class AIChatComponent
@@ -72,7 +72,7 @@ private:
         SpinnerDot() = default;
 
         void paint(juce::Graphics& g) override {
-            using gsynth::theme::GravisynthLookAndFeel;
+            using synth::theme::GravisynthLookAndFeel;
             auto* lf = dynamic_cast<GravisynthLookAndFeel*>(&getLookAndFeel());
             juce::Colour accentColor = (lf != nullptr) ? lf->getTheme().colors.accent : juce::Colours::lightblue;
             g.setColour(accentColor.withAlpha(currentAlpha));
@@ -109,7 +109,7 @@ private:
         }
 
     private:
-        gravisynth::ui::AnimationDriver pulseAnim;
+        synth::ui::AnimationDriver pulseAnim;
         juce::VBlankAnimatorUpdater* updaterPtr = nullptr;
         float currentAlpha = 0.3f;
         bool pingPongPhase = false;
@@ -166,4 +166,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AIChatComponent)
 };
 
-} // namespace gsynth
+} // namespace synth

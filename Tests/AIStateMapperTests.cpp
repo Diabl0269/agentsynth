@@ -30,11 +30,11 @@ TEST(AIStateMapperTest, GraphToJSONRoundTrip) {
     createBasicGraph(originalGraph);
 
     // Save to JSON
-    juce::var json = gsynth::AIStateMapper::graphToJSON(originalGraph);
+    juce::var json = synth::AIStateMapper::graphToJSON(originalGraph);
 
     // Create a new graph and load from JSON
     juce::AudioProcessorGraph newGraph;
-    bool success = gsynth::AIStateMapper::applyJSONToGraph(json, newGraph, true);
+    bool success = synth::AIStateMapper::applyJSONToGraph(json, newGraph, true);
 
     ASSERT_TRUE(success);
     ASSERT_EQ(originalGraph.getNumNodes(), newGraph.getNumNodes());
@@ -58,7 +58,7 @@ TEST(AIStateMapperTest, ApplyJSONToGraphClearsExisting) {
     ],"connections":[]})");
 
     // Test 1: Apply patch, clearing existing (graph should be empty initially)
-    bool success_clear = gsynth::AIStateMapper::applyJSONToGraph(json, graph, true);
+    bool success_clear = synth::AIStateMapper::applyJSONToGraph(json, graph, true);
     ASSERT_TRUE(success_clear);
     ASSERT_EQ(graph.getNumNodes(), 2); // Only nodes from JSON should exist
 
@@ -67,7 +67,7 @@ TEST(AIStateMapperTest, ApplyJSONToGraphClearsExisting) {
 
     // Test 2: Apply patch, without clearing existing (should add to existing graph)
     graph.addNode(std::make_unique<OscillatorModule>()); // Add an initial node
-    bool success_no_clear = gsynth::AIStateMapper::applyJSONToGraph(json, graph, false);
+    bool success_no_clear = synth::AIStateMapper::applyJSONToGraph(json, graph, false);
     ASSERT_TRUE(success_no_clear);
     ASSERT_EQ(graph.getNumNodes(), 3); // 1 (Oscillator) + 2 (from JSON) = 3
 }
@@ -77,15 +77,15 @@ TEST(AIStateMapperTest, InvalidJSONReturnsFalse) {
 
     // Not an object
     juce::var invalidJson1 = juce::JSON::parse(R"("not an object")");
-    ASSERT_FALSE(gsynth::AIStateMapper::applyJSONToGraph(invalidJson1, graph));
+    ASSERT_FALSE(synth::AIStateMapper::applyJSONToGraph(invalidJson1, graph));
 
     // Missing "nodes"
     juce::var invalidJson2 = juce::JSON::parse(R"({"connections":[]})");
-    ASSERT_FALSE(gsynth::AIStateMapper::applyJSONToGraph(invalidJson2, graph));
+    ASSERT_FALSE(synth::AIStateMapper::applyJSONToGraph(invalidJson2, graph));
 
     // "nodes" is not an array
     juce::var invalidJson3 = juce::JSON::parse(R"({"nodes":"not an array"})");
-    ASSERT_FALSE(gsynth::AIStateMapper::applyJSONToGraph(invalidJson3, graph));
+    ASSERT_FALSE(synth::AIStateMapper::applyJSONToGraph(invalidJson3, graph));
 }
 
 TEST(AIStateMapperTest, ParameterValidationClamping) {
@@ -94,7 +94,7 @@ TEST(AIStateMapperTest, ParameterValidationClamping) {
         R"({"nodes":[{"id":1,"type":"Oscillator","params":{"waveform":0,"fine":200.0}}],"connections":[]})"); // fine >
                                                                                                               // 100.0
 
-    gsynth::AIStateMapper::applyJSONToGraph(json, graph, true);
+    synth::AIStateMapper::applyJSONToGraph(json, graph, true);
 
     auto oscNode = graph.getNodes().getUnchecked(0);
     ASSERT_NE(oscNode, nullptr);
@@ -130,7 +130,7 @@ TEST(AIStateMapperTest, UnknownModuleTypeLogsErrorAndSkips) {
     };
     LogCatcher logger;
 
-    bool success_unknown_module = gsynth::AIStateMapper::applyJSONToGraph(json, graph, true);
+    bool success_unknown_module = synth::AIStateMapper::applyJSONToGraph(json, graph, true);
     ASSERT_TRUE(success_unknown_module); // Should still return true if valid JSON, just skips the node
     ASSERT_EQ(graph.getNumNodes(), 0);   // Unknown module should not be added
     ASSERT_TRUE(logger.lastMessage.contains("Unknown module type"));
@@ -142,7 +142,7 @@ TEST(AIStateMapperTest, ChoiceParameterStringMapping) {
     juce::var json =
         juce::JSON::parse(R"({"nodes":[{"id":1,"type":"Oscillator","params":{"waveform":"Saw"}}],"connections":[]})");
 
-    gsynth::AIStateMapper::applyJSONToGraph(json, graph, true);
+    synth::AIStateMapper::applyJSONToGraph(json, graph, true);
 
     auto oscNode = graph.getNodes().getUnchecked(0);
     auto* osc = dynamic_cast<juce::AudioProcessor*>(oscNode->getProcessor());
@@ -158,7 +158,7 @@ TEST(AIStateMapperTest, ChoiceParameterCaseInsensitiveMapping) {
     juce::var json =
         juce::JSON::parse(R"({"nodes":[{"id":1,"type":"Oscillator","params":{"waveform":"saw"}}],"connections":[]})");
 
-    gsynth::AIStateMapper::applyJSONToGraph(json, graph, true);
+    synth::AIStateMapper::applyJSONToGraph(json, graph, true);
 
     auto oscNode = graph.getNodes().getUnchecked(0);
     auto* osc = dynamic_cast<juce::AudioProcessor*>(oscNode->getProcessor());
@@ -169,7 +169,7 @@ TEST(AIStateMapperTest, ChoiceParameterCaseInsensitiveMapping) {
 }
 
 TEST(AIStateMapperTest, SchemaGeneration) {
-    juce::String schema = gsynth::AIStateMapper::getModuleSchema();
+    juce::String schema = synth::AIStateMapper::getModuleSchema();
     ASSERT_FALSE(schema.isEmpty());
     ASSERT_TRUE(schema.contains("Oscillator"));
     ASSERT_TRUE(schema.contains("Filter"));
@@ -191,7 +191,7 @@ TEST(AIStateMapperTest, MergeMode_PrePopulatesIdMapForCrossConnections) {
                            juce::String(existingVcaId) + ",\"dstPort\":0}]}";
     juce::var json = juce::JSON::parse(jsonStr);
 
-    bool success = gsynth::AIStateMapper::applyJSONToGraph(json, graph, false);
+    bool success = synth::AIStateMapper::applyJSONToGraph(json, graph, false);
     ASSERT_TRUE(success);
     ASSERT_EQ(graph.getNumNodes(), 2);           // 1 existing + 1 new
     ASSERT_EQ(graph.getConnections().size(), 1); // Cross-connection should exist
@@ -216,7 +216,7 @@ TEST(AIStateMapperTest, MergeMode_RemoveNodes) {
     juce::String jsonStr = "{\"remove\":[" + juce::String(filterNodeId) + "],\"nodes\":[],\"connections\":[]}";
     juce::var json = juce::JSON::parse(jsonStr);
 
-    bool success = gsynth::AIStateMapper::applyJSONToGraph(json, graph, false);
+    bool success = synth::AIStateMapper::applyJSONToGraph(json, graph, false);
     ASSERT_TRUE(success);
     ASSERT_EQ(graph.getNumNodes(), 2);           // Filter removed
     ASSERT_EQ(graph.getConnections().size(), 0); // Connections involving filter removed by JUCE
@@ -234,7 +234,7 @@ TEST(AIStateMapperTest, MergeMode_UpdateExistingNodeParams) {
                            ",\"type\":\"Oscillator\",\"params\":{\"frequency\":880.0}}],\"connections\":[]}";
     juce::var json = juce::JSON::parse(jsonStr);
 
-    bool success = gsynth::AIStateMapper::applyJSONToGraph(json, graph, false);
+    bool success = synth::AIStateMapper::applyJSONToGraph(json, graph, false);
     ASSERT_TRUE(success);
     ASSERT_EQ(graph.getNumNodes(), 1); // No new node created, existing one updated
 
@@ -261,7 +261,7 @@ TEST(AIStateMapperTest, FactorySupportsAllModuleTypes) {
                                        "Poly MIDI",   "Poly Sequencer", "Attenuverter",  "Chorus",     "Phaser",
                                        "Compressor",  "Flanger",        "Limiter"};
     for (const auto& type : expectedTypes) {
-        auto module = gsynth::AIStateMapper::createModule(type);
+        auto module = synth::AIStateMapper::createModule(type);
         EXPECT_NE(module, nullptr) << "Failed to create module: " << type.toStdString();
     }
 }
@@ -270,13 +270,13 @@ TEST(AIStateMapperTest, MidiConnectionsSerialized) {
     juce::AudioProcessorGraph graph;
     auto midiIn = graph.addNode(std::make_unique<juce::AudioProcessorGraph::AudioGraphIOProcessor>(
         juce::AudioProcessorGraph::AudioGraphIOProcessor::midiInputNode));
-    auto oscModule = gsynth::AIStateMapper::createModule("Oscillator");
+    auto oscModule = synth::AIStateMapper::createModule("Oscillator");
     auto oscNode = graph.addNode(std::move(oscModule));
 
     graph.addConnection({{midiIn->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
                          {oscNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
 
-    auto json = gsynth::AIStateMapper::graphToJSON(graph);
+    auto json = synth::AIStateMapper::graphToJSON(graph);
 
     // Verify MIDI ports are serialized as -1
     auto* connections = json.getDynamicObject()->getProperty("connections").getArray();
@@ -302,7 +302,7 @@ TEST(AIStateMapperTest, ParameterValuesAreUnnormalized) {
     }
     auto node = graph.addNode(std::move(osc));
 
-    auto json = gsynth::AIStateMapper::graphToJSON(graph);
+    auto json = synth::AIStateMapper::graphToJSON(graph);
 
     // Check the serialized value is denormalized (50.0, not 0.75)
     auto* nodes = json.getDynamicObject()->getProperty("nodes").getArray();
@@ -328,9 +328,9 @@ TEST(AIStateMapperTest, RoundTripPreservesParameters) {
     originalGraph.addNode(std::move(osc));
 
     // Round trip
-    auto json = gsynth::AIStateMapper::graphToJSON(originalGraph);
+    auto json = synth::AIStateMapper::graphToJSON(originalGraph);
     juce::AudioProcessorGraph newGraph;
-    gsynth::AIStateMapper::applyJSONToGraph(json, newGraph, true);
+    synth::AIStateMapper::applyJSONToGraph(json, newGraph, true);
 
     // Check parameter value survived
     ASSERT_EQ(newGraph.getNumNodes(), 1);
@@ -358,7 +358,7 @@ TEST(AIStateMapperTest, MergeMode_TypeMismatchCreatesNewNode) {
                            ",\"type\":\"Filter\",\"params\":{\"cutoff\":1000.0}}],\"connections\":[]}";
     juce::var json = juce::JSON::parse(jsonStr);
 
-    bool success = gsynth::AIStateMapper::applyJSONToGraph(json, graph, false);
+    bool success = synth::AIStateMapper::applyJSONToGraph(json, graph, false);
     ASSERT_TRUE(success);
     ASSERT_EQ(graph.getNumNodes(), 2); // Original Oscillator + new Filter
 }
@@ -372,7 +372,7 @@ TEST(AIStateMapperTest, ValidateJSON_AllowsRemoveOnly) {
     juce::String jsonStr = "{\"remove\":[" + juce::String(oscId) + "]}";
     juce::var json = juce::JSON::parse(jsonStr);
 
-    bool success = gsynth::AIStateMapper::applyJSONToGraph(json, graph, false);
+    bool success = synth::AIStateMapper::applyJSONToGraph(json, graph, false);
     ASSERT_TRUE(success);
     ASSERT_EQ(graph.getNumNodes(), 0);
 }
@@ -392,7 +392,7 @@ TEST(AIStateMapperTest, Modulation_GraphToJSON_SerializesModulations) {
     graph.addConnection({{lfoNode->nodeID, 0}, {attenNode->nodeID, 0}});
     graph.addConnection({{attenNode->nodeID, 0}, {filterNode->nodeID, 1}});
 
-    auto json = gsynth::AIStateMapper::graphToJSON(graph);
+    auto json = synth::AIStateMapper::graphToJSON(graph);
 
     // Verify modulations array exists and has one entry
     auto* rootObj = json.getDynamicObject();
@@ -424,7 +424,7 @@ TEST(AIStateMapperTest, Modulation_ApplyJSON_CreatesModulationChain) {
         ]
     })");
 
-    bool success = gsynth::AIStateMapper::applyJSONToGraph(json, graph, true);
+    bool success = synth::AIStateMapper::applyJSONToGraph(json, graph, true);
     ASSERT_TRUE(success);
 
     // Should have 3 nodes: LFO, Filter, and auto-created Attenuverter
@@ -473,7 +473,7 @@ TEST(AIStateMapperTest, Modulation_RemoveModulations) {
             {"source": 1, "dest": 2, "destPort": 1, "amount": 0.8}
         ]
     })");
-    ASSERT_TRUE(gsynth::AIStateMapper::applyJSONToGraph(setupJson, graph, true));
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(setupJson, graph, true));
     ASSERT_EQ(graph.getNumNodes(), 3); // LFO + Filter + Attenuverter
 
     // Now remove the modulation in merge mode
@@ -490,7 +490,7 @@ TEST(AIStateMapperTest, Modulation_RemoveModulations) {
                               ", \"dest\": " + juce::String((int)filterId.uid) +
                               ", \"destPort\": 1}], \"nodes\": [], \"connections\": []}";
 
-    ASSERT_TRUE(gsynth::AIStateMapper::applyJSONToGraph(juce::JSON::parse(removeJson), graph, false));
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(juce::JSON::parse(removeJson), graph, false));
 
     // Attenuverter should be removed, only LFO and Filter remain
     ASSERT_EQ(graph.getNumNodes(), 2);
@@ -519,13 +519,13 @@ TEST(AIStateMapperTest, Modulation_MergeMode_AddModulation) {
                            juce::String(lfoId) + ", \"dest\": " + juce::String(filterId) +
                            ", \"destPort\": 1, \"amount\": 0.6}]}";
 
-    bool success = gsynth::AIStateMapper::applyJSONToGraph(juce::JSON::parse(jsonStr), graph, false);
+    bool success = synth::AIStateMapper::applyJSONToGraph(juce::JSON::parse(jsonStr), graph, false);
     ASSERT_TRUE(success);
     ASSERT_EQ(graph.getNumNodes(), 3); // LFO + Filter + new Attenuverter
 }
 
 TEST(AIStateMapperTest, Modulation_SchemaIncludesModulationTargets) {
-    juce::String schema = gsynth::AIStateMapper::getModuleSchema();
+    juce::String schema = synth::AIStateMapper::getModuleSchema();
     ASSERT_TRUE(schema.contains("Modulation Targets"));
     ASSERT_TRUE(schema.contains("Cutoff"));
     ASSERT_TRUE(schema.contains("Resonance"));
@@ -547,7 +547,7 @@ TEST(AIStateMapperTest, Modulation_DefaultAmount) {
         ]
     })");
 
-    ASSERT_TRUE(gsynth::AIStateMapper::applyJSONToGraph(json, graph, true));
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, graph, true));
 
     // Find attenuverter and check amount is 1.0
     for (auto* node : graph.getNodes()) {
@@ -567,7 +567,7 @@ TEST(AIStateMapperTest, Modulation_UnconnectedAttenuverterNotSerialized) {
     // Add a standalone attenuverter with no connections
     graph.addNode(std::make_unique<AttenuverterModule>());
 
-    auto json = gsynth::AIStateMapper::graphToJSON(graph);
+    auto json = synth::AIStateMapper::graphToJSON(graph);
 
     auto* rootObj = json.getDynamicObject();
     ASSERT_TRUE(rootObj->hasProperty("modulations"));
@@ -596,15 +596,15 @@ TEST(AIStateMapperTest, PresetLoadDoesNotSpamLogger) {
     // into fresh graphs so applyJSONToGraph is exercised in full each time.
     {
         juce::AudioProcessorGraph g0;
-        gsynth::PresetManager::loadPreset(0, g0);
+        synth::PresetManager::loadPreset(0, g0);
     }
     {
         juce::AudioProcessorGraph g3;
-        gsynth::PresetManager::loadPreset(3, g3);
+        synth::PresetManager::loadPreset(3, g3);
     }
     {
         juce::AudioProcessorGraph g6;
-        gsynth::PresetManager::loadPreset(6, g6);
+        synth::PresetManager::loadPreset(6, g6);
     }
 
     // Capture count and reset logger BEFORE assertions so the logger is never

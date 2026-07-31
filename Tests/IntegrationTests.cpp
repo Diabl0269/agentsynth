@@ -90,7 +90,7 @@ TEST_F(IntegrationTest, MultipleModulationsOnSameTarget) {
 
 TEST_F(IntegrationTest, PresetLoadRestoresModRoutings) {
     auto& graph = engine.getGraph();
-    ASSERT_TRUE(gsynth::PresetManager::loadDefaultPreset(graph));
+    ASSERT_TRUE(synth::PresetManager::loadDefaultPreset(graph));
 
     // The default preset has Attenuverter nodes for mod routing
     bool hasAttenuverter = false;
@@ -111,7 +111,7 @@ TEST_F(IntegrationTest, SaveLoadRoundTripPreservesState) {
     auto& graph = engine.getGraph();
 
     // Load a preset
-    ASSERT_TRUE(gsynth::PresetManager::loadPreset(1, graph)); // Simple Lead
+    ASSERT_TRUE(synth::PresetManager::loadPreset(1, graph)); // Simple Lead
 
     int originalNodeCount = graph.getNumNodes();
     int originalConnectionCount = (int)graph.getConnections().size();
@@ -119,10 +119,10 @@ TEST_F(IntegrationTest, SaveLoadRoundTripPreservesState) {
     ASSERT_GT(originalConnectionCount, 0);
 
     // Serialize to JSON
-    auto json = gsynth::AIStateMapper::graphToJSON(graph);
+    auto json = synth::AIStateMapper::graphToJSON(graph);
 
     // Round-trip: reload into the same prepared graph (fresh graphs lack IO channel config)
-    ASSERT_TRUE(gsynth::AIStateMapper::applyJSONToGraph(json, graph, true));
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, graph, true));
 
     // Verify node and connection counts match
     EXPECT_EQ(graph.getNumNodes(), originalNodeCount);
@@ -137,11 +137,11 @@ TEST_F(IntegrationTest, SaveLoadRoundTripPreservesState) {
 
 TEST_F(IntegrationTest, AllPresetsLoadAndHaveSignalPath) {
     auto& graph = engine.getGraph();
-    auto presetNames = gsynth::PresetManager::getPresetNames();
+    auto presetNames = synth::PresetManager::getPresetNames();
 
     for (int i = 0; i < presetNames.size(); ++i) {
         graph.clear();
-        ASSERT_TRUE(gsynth::PresetManager::loadPreset(i, graph))
+        ASSERT_TRUE(synth::PresetManager::loadPreset(i, graph))
             << "Failed to load preset: " << presetNames[i].toStdString();
 
         // Every preset should have an audio output

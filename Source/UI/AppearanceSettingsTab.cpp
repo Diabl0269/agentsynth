@@ -2,8 +2,8 @@
 #include "GraphEditor.h"   // For setAlignmentGuidesEnabled callback
 #include "MainComponent.h" // For setAlignmentGuidesEnabled callback
 
-using gsynth::theme::Theme;
-using gsynth::theme::ThemeManager;
+using synth::theme::Theme;
+using synth::theme::ThemeManager;
 
 namespace {
 // Active theme's row index in the registration-order list, or -1.

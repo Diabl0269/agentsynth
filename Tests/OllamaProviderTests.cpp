@@ -106,7 +106,7 @@ protected:
     // allowing us to test error handling for network requests.
     // In a real scenario, you'd mock the network or use a controllable test server.
     // For now, we expect connection failures.
-    // gsynth::OllamaProvider provider{"http://invalid-ollama-host:11434"}; // Replaced by mocked provider
+    // synth::OllamaProvider provider{"http://invalid-ollama-host:11434"}; // Replaced by mocked provider
     juce::String validOllamaHost = "http://127.0.0.1:11434"; // Assuming local Ollama instance runs here
 
     // A factory that always returns a stream simulating an an error (returns nullptr)
@@ -142,9 +142,9 @@ protected:
         return std::make_unique<SlowInputStream>(4000);
     }
 
-    gsynth::OllamaProvider mockProviderFailingStreams{"http://mock-host:11434", createFailingStream};
-    gsynth::OllamaProvider mockProviderSuccessfulModels{"http://mock-host:11434", createSuccessfulModelsStream};
-    gsynth::OllamaProvider mockProviderSuccessfulChat{"http://mock-host:11434", createSuccessfulChatStream};
+    synth::OllamaProvider mockProviderFailingStreams{"http://mock-host:11434", createFailingStream};
+    synth::OllamaProvider mockProviderSuccessfulModels{"http://mock-host:11434", createSuccessfulModelsStream};
+    synth::OllamaProvider mockProviderSuccessfulChat{"http://mock-host:11434", createSuccessfulChatStream};
 
     OllamaProviderTest() {
         mockProviderFailingStreams.setTestMode(true);
@@ -196,7 +196,7 @@ TEST_F(OllamaProviderTest, FetchAvailableModelsSuccessWithMock) {
 TEST_F(OllamaProviderTest, SendPromptSuccessWithMock) {
     mockProviderSuccessfulChat.setModel("mock-model:latest");
 
-    std::vector<gsynth::AIProvider::Message> conversation = {{"user", "Hello AI"}};
+    std::vector<synth::AIProvider::Message> conversation = {{"user", "Hello AI"}};
     MockCompletionCallback callback;
     mockProviderSuccessfulChat.sendPrompt(
         conversation, [&callback](const juce::String& response, bool success) { callback(response, success); });
@@ -252,7 +252,7 @@ TEST_F(OllamaProviderTest, FetchAvailableModelsDoesNotBlockCaller) {
         return std::make_unique<BlockingDiscoveryStream>();
     };
 
-    gsynth::OllamaProvider provider{"http://mock-host:11434", blockingFactory};
+    synth::OllamaProvider provider{"http://mock-host:11434", blockingFactory};
     provider.setTestMode(true);
 
     using clock = std::chrono::steady_clock;
@@ -291,11 +291,11 @@ TEST_F(OllamaProviderTest, SendPromptWithNoModelFailsWithoutHittingNetwork) {
         return std::make_unique<MockInputStream>(jsonResponse, false);
     };
 
-    gsynth::OllamaProvider provider{"http://mock-host:11434", trackingFactory};
+    synth::OllamaProvider provider{"http://mock-host:11434", trackingFactory};
     provider.setTestMode(true);
     // Deliberately do NOT call setModel() — currentModel stays empty.
 
-    std::vector<gsynth::AIProvider::Message> conversation = {{"user", "Hello AI"}};
+    std::vector<synth::AIProvider::Message> conversation = {{"user", "Hello AI"}};
     MockCompletionCallback callback;
     provider.sendPrompt(conversation,
                         [&callback](const juce::String& response, bool success) { callback(response, success); });
@@ -323,11 +323,11 @@ TEST_F(OllamaProviderTest, SendPromptIncludesSelectedModelInRequestBody) {
         return std::make_unique<MockInputStream>(jsonResponse, false);
     };
 
-    gsynth::OllamaProvider provider{"http://mock-host:11434", capturingFactory};
+    synth::OllamaProvider provider{"http://mock-host:11434", capturingFactory};
     provider.setTestMode(true);
     provider.setModel("mock-model:latest");
 
-    std::vector<gsynth::AIProvider::Message> conversation = {{"user", "Hello AI"}};
+    std::vector<synth::AIProvider::Message> conversation = {{"user", "Hello AI"}};
     MockCompletionCallback callback;
     provider.sendPrompt(conversation,
                         [&callback](const juce::String& response, bool success) { callback(response, success); });
@@ -344,11 +344,11 @@ TEST_F(OllamaProviderTest, SendPromptIncludesSelectedModelInRequestBody) {
 
 TEST_F(OllamaProviderTest, SendPromptTimeoutFails) {
     // Create a provider that uses the slow stream factory
-    gsynth::OllamaProvider mockProviderSlowStream{"http://mock-host:11434", createSlowStream};
+    synth::OllamaProvider mockProviderSlowStream{"http://mock-host:11434", createSlowStream};
     mockProviderSlowStream.setTestMode(true);
     mockProviderSlowStream.setModel("mock-model:latest");
 
-    std::vector<gsynth::AIProvider::Message> conversation = {{"user", "Simulate timeout"}};
+    std::vector<synth::AIProvider::Message> conversation = {{"user", "Simulate timeout"}};
     MockCompletionCallback callback;
     mockProviderSlowStream.sendPrompt(
         conversation, [&callback](const juce::String& response, bool success) { callback(response, success); });

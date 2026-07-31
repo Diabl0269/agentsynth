@@ -9,7 +9,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 // Mock AI provider for testing
-class MockSettingsProvider : public gsynth::AIProvider {
+class MockSettingsProvider : public synth::AIProvider {
 public:
     juce::String getProviderName() const override { return "MockSettingsProvider"; }
 
@@ -17,7 +17,7 @@ public:
         callback({"MockModel1", "MockModel2"}, true);
     }
 
-    void sendPrompt(const std::vector<gsynth::AIProvider::Message>&, CompletionCallback callback,
+    void sendPrompt(const std::vector<synth::AIProvider::Message>&, CompletionCallback callback,
                     const juce::var& = juce::var()) override {
         callback("Mock response", true);
     }
@@ -41,11 +41,11 @@ protected:
 
         // Initialize AI service with mock provider
         engine = std::make_unique<AudioEngine>();
-        aiService = std::make_unique<gsynth::AIIntegrationService>(engine->getGraph());
+        aiService = std::make_unique<synth::AIIntegrationService>(engine->getGraph());
         aiService->setProvider(std::make_unique<MockSettingsProvider>());
 
         // Initialize AI chat component
-        aiChatComponent = std::make_unique<gsynth::AIChatComponent>(*aiService, appProperties);
+        aiChatComponent = std::make_unique<synth::AIChatComponent>(*aiService, appProperties);
     }
 
     void TearDown() override {
@@ -56,12 +56,12 @@ protected:
     }
 
     std::unique_ptr<AudioEngine> engine;
-    std::unique_ptr<gsynth::AIIntegrationService> aiService;
-    std::unique_ptr<gsynth::AIChatComponent> aiChatComponent;
+    std::unique_ptr<synth::AIIntegrationService> aiService;
+    std::unique_ptr<synth::AIChatComponent> aiChatComponent;
     juce::ApplicationProperties appProperties;
     juce::AudioDeviceManager deviceManager;
     ShortcutManager shortcutManager;
-    gsynth::theme::ThemeManager themeManager;
+    synth::theme::ThemeManager themeManager;
 };
 
 TEST_F(SettingsWindowTest, HasFourTabs) {

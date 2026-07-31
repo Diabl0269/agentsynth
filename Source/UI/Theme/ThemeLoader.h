@@ -4,7 +4,7 @@
 #include <juce_core/juce_core.h>
 #include <optional>
 
-namespace gsynth::theme {
+namespace synth::theme {
 
 // JSON <-> Theme. Pure functions, no I/O (callers read/write files). All parsing is
 // tolerant of missing OPTIONAL keys (defaults from Theme.h apply) and STRICT on the few
@@ -50,4 +50,4 @@ private:
     ThemeLoader() = delete;
 };
 
-} // namespace gsynth::theme
+} // namespace synth::theme

@@ -47,7 +47,7 @@ TEST_F(AudioEngineModRoutingTests, GetModulationRoutings_AttenuverterChainSurfac
 TEST_F(AudioEngineModRoutingTests, PolyEnvToVCA_CollapsesToOneRouting) {
     auto& graph = engine.getGraph();
     graph.clear();
-    bool loaded = gsynth::PresetManager::loadPreset(6, graph);
+    bool loaded = synth::PresetManager::loadPreset(6, graph);
     ASSERT_TRUE(loaded) << "Preset 6 (Poly Pad) failed to load";
 
     auto routings = engine.getModulationRoutings();
@@ -119,7 +119,7 @@ TEST_F(AudioEngineModRoutingTests, NoDoubleCountAttenuverterPlusDirect) {
 TEST_F(AudioEngineModRoutingTests, PolyPitchAndGateFansCollapseToBuses) {
     auto& graph = engine.getGraph();
     graph.clear();
-    bool loaded = gsynth::PresetManager::loadPreset(6, graph);
+    bool loaded = synth::PresetManager::loadPreset(6, graph);
     ASSERT_TRUE(loaded) << "Preset 6 (Poly Pad) failed to load";
 
     auto routings = engine.getModulationRoutings();
@@ -175,7 +175,7 @@ TEST_F(AudioEngineModRoutingTests, PolyPitchAndGateFansCollapseToBuses) {
 TEST_F(AudioEngineModRoutingTests, PitchGateRoutingsDoNotProduceRingDisplayInfo) {
     auto& graph = engine.getGraph();
     graph.clear();
-    bool loaded = gsynth::PresetManager::loadPreset(6, graph);
+    bool loaded = synth::PresetManager::loadPreset(6, graph);
     ASSERT_TRUE(loaded) << "Preset 6 (Poly Pad) failed to load";
 
     // Find relevant nodes by type
@@ -233,7 +233,7 @@ TEST_F(AudioEngineModRoutingTests, PitchGateRoutingsDoNotProduceRingDisplayInfo)
 TEST_F(AudioEngineModRoutingTests, DirectCVRoutingProducesDisplayInfo) {
     auto& graph = engine.getGraph();
     graph.clear();
-    bool loaded = gsynth::PresetManager::loadPreset(6, graph);
+    bool loaded = synth::PresetManager::loadPreset(6, graph);
     ASSERT_TRUE(loaded) << "Preset 6 (Poly Pad) failed to load";
 
     auto displayInfos = engine.getModulationDisplayInfo();

@@ -87,7 +87,7 @@ public:
         juce::Colour itemColour = juce::Colours::white;
         juce::Colour accentColour = juce::Colours::lightblue;
 
-        auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+        auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
         if (lf != nullptr) {
             const auto& c = lf->getTheme().colors;
             bgColour = c.bg0;
@@ -108,7 +108,7 @@ public:
                 g.setFont(juce::Font(juce::FontOptions(12.0f)));
 
                 // Draw a 16x16 category icon at x=10 (null-guarded — no-op when LnF absent).
-                gsynth::theme::Icon catIcon = categoryIconForHeader(entry.text);
+                synth::theme::Icon catIcon = categoryIconForHeader(entry.text);
                 const juce::Drawable* icon = (lf != nullptr) ? lf->peekIcon(catIcon) : nullptr;
 
                 if (icon != nullptr) {
@@ -203,23 +203,23 @@ public:
 
 private:
     // Map a category header string to its Icon enum value.
-    static gsynth::theme::Icon categoryIconForHeader(const juce::String& header) {
+    static synth::theme::Icon categoryIconForHeader(const juce::String& header) {
         if (header.equalsIgnoreCase("Sources"))
-            return gsynth::theme::Icon::CatSources;
+            return synth::theme::Icon::CatSources;
         if (header.equalsIgnoreCase("Sequencing"))
-            return gsynth::theme::Icon::CatSequencing;
+            return synth::theme::Icon::CatSequencing;
         if (header.startsWithIgnoreCase("Envelopes"))
-            return gsynth::theme::Icon::CatEnvelopes;
+            return synth::theme::Icon::CatEnvelopes;
         if (header.equalsIgnoreCase("Filters"))
-            return gsynth::theme::Icon::CatFilters;
+            return synth::theme::Icon::CatFilters;
         if (header.startsWithIgnoreCase("Modulation"))
-            return gsynth::theme::Icon::CatModulationFX;
+            return synth::theme::Icon::CatModulationFX;
         if (header.equalsIgnoreCase("Time FX"))
-            return gsynth::theme::Icon::CatTimeFX;
+            return synth::theme::Icon::CatTimeFX;
         if (header.equalsIgnoreCase("Dynamics"))
-            return gsynth::theme::Icon::CatDynamics;
+            return synth::theme::Icon::CatDynamics;
         // "Utility" and any unrecognised headers fall back to CatUtility.
-        return gsynth::theme::Icon::CatUtility;
+        return synth::theme::Icon::CatUtility;
     }
 
     /** Returns the entry index whose row contains mouseY, or -1 if none. */

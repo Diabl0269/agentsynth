@@ -6,7 +6,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 // A simple mock provider so we don't actually hit the network in UI tests
-class MockChatProvider : public gsynth::AIProvider {
+class MockChatProvider : public synth::AIProvider {
 public:
     juce::String getProviderName() const override { return "MockChatProvider"; }
 
@@ -14,7 +14,7 @@ public:
         callback({"MockModel1", "MockModel2"}, true);
     }
 
-    void sendPrompt(const std::vector<gsynth::AIProvider::Message>& conversation, CompletionCallback callback,
+    void sendPrompt(const std::vector<synth::AIProvider::Message>& conversation, CompletionCallback callback,
                     const juce::var& responseSchema = juce::var()) override {
         callback("Mock response text.", true);
     }
@@ -35,7 +35,7 @@ protected:
 
 TEST_F(AIChatComponentTest, InitializationAndResizing) {
     AudioEngine engine;
-    gsynth::AIIntegrationService service(engine.getGraph());
+    synth::AIIntegrationService service(engine.getGraph());
     service.setProvider(std::make_unique<MockChatProvider>());
 
     juce::ApplicationProperties props;
@@ -45,7 +45,7 @@ TEST_F(AIChatComponentTest, InitializationAndResizing) {
     options.storageFormat = juce::PropertiesFile::storeAsXML;
     props.setStorageParameters(options);
 
-    gsynth::AIChatComponent chatComponent(service, props);
+    synth::AIChatComponent chatComponent(service, props);
     chatComponent.setSize(400, 600);
 
     EXPECT_NO_THROW(chatComponent.resized());
@@ -53,7 +53,7 @@ TEST_F(AIChatComponentTest, InitializationAndResizing) {
 
 TEST_F(AIChatComponentTest, SendMessageUpdatesUIAndHistory) {
     AudioEngine engine;
-    gsynth::AIIntegrationService service(engine.getGraph());
+    synth::AIIntegrationService service(engine.getGraph());
     service.setProvider(std::make_unique<MockChatProvider>());
 
     juce::ApplicationProperties props;
@@ -63,7 +63,7 @@ TEST_F(AIChatComponentTest, SendMessageUpdatesUIAndHistory) {
     options.storageFormat = juce::PropertiesFile::storeAsXML;
     props.setStorageParameters(options);
 
-    gsynth::AIChatComponent chatComponent(service, props);
+    synth::AIChatComponent chatComponent(service, props);
     chatComponent.setSize(400, 600);
 
     juce::TextEditor* inputField = nullptr;
@@ -111,7 +111,7 @@ TEST_F(AIChatComponentTest, SendMessageUpdatesUIAndHistory) {
 // Ollama with HTTP 400 "model is required".
 TEST_F(AIChatComponentTest, RefreshModelsSelectsModelWhenProviderInstalledAfterConstruction) {
     AudioEngine engine;
-    gsynth::AIIntegrationService service(engine.getGraph());
+    synth::AIIntegrationService service(engine.getGraph());
     // No provider installed yet — mirrors AIChatComponent being constructed before
     // MainComponent::initialiseCommon() calls aiService.setProvider().
 
@@ -122,7 +122,7 @@ TEST_F(AIChatComponentTest, RefreshModelsSelectsModelWhenProviderInstalledAfterC
     options.storageFormat = juce::PropertiesFile::storeAsXML;
     props.setStorageParameters(options);
 
-    gsynth::AIChatComponent chatComponent(service, props);
+    synth::AIChatComponent chatComponent(service, props);
 
     // The ctor's own refreshModels() ran with no provider installed, so no model was ever
     // selected.

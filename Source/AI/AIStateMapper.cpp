@@ -26,7 +26,7 @@
 #include <set>
 #include <unordered_map> // For the factory map
 
-namespace gsynth {
+namespace synth {
 
 typedef juce::AudioProcessorGraph::AudioGraphIOProcessor AudioGraphIOProcessor;
 
@@ -894,4 +894,4 @@ juce::var AIStateMapper::getPatchSchema() {
     return juce::var(schema.get());
 }
 
-} // namespace gsynth
+} // namespace synth

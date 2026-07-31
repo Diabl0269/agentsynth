@@ -12,8 +12,8 @@ class ShortcutManager;
 class SettingsWindow : public juce::Component {
 public:
     SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::ApplicationProperties& appProperties,
-                   gsynth::AIIntegrationService& aiService, gsynth::AIChatComponent& aiChatComponent,
-                   ShortcutManager& shortcutManager, gsynth::theme::ThemeManager& themeManager,
+                   synth::AIIntegrationService& aiService, synth::AIChatComponent& aiChatComponent,
+                   ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager,
                    GraphEditor* graphEditor);
     ~SettingsWindow() override;
 

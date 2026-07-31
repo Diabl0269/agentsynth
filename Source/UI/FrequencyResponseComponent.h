@@ -142,7 +142,7 @@ public:
         float w = bounds.getWidth();
         float h = bounds.getHeight();
 
-        using gsynth::theme::GravisynthLookAndFeel;
+        using synth::theme::GravisynthLookAndFeel;
         auto* lf = dynamic_cast<GravisynthLookAndFeel*>(&getLookAndFeel());
 
         juce::Colour bgColor = lf ? lf->getTheme().colors.bg1 : juce::Colour(0xff1a1a2e);

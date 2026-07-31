@@ -92,8 +92,8 @@ public:
      *  @param selfId      NodeID of the module being placed (excluded from self-collision).
      */
     static juce::Point<int> computeDropFinalPosition(juce::Point<int> dropPoint, int w, int h,
-                                                     const std::vector<gsynth::LayoutUtil::Box>& existingBoxes,
-                                                     gsynth::LayoutUtil::NodeID selfId);
+                                                     const std::vector<synth::LayoutUtil::Box>& existingBoxes,
+                                                     synth::LayoutUtil::NodeID selfId);
 
     // DragAndDropTarget overrides
     bool isInterestedInDragSource(const SourceDetails& dragSourceDetails) override;
@@ -163,10 +163,10 @@ private:
     // Drop-landing tween: animates the newly dropped module from drop point to snapped position.
     // Both must be class members so they outlive the VBlank frame callbacks.
     juce::VBlankAnimatorUpdater vblankUpdater{this};
-    gravisynth::ui::AnimationDriver dropLandingAnim;
+    synth::ui::AnimationDriver dropLandingAnim;
 
     // Mod-matrix panel ease: animates the panel bounds on show/hide.
-    gravisynth::ui::AnimationDriver modMatrixAnim;
+    synth::ui::AnimationDriver modMatrixAnim;
 
     // Tracks the target bounds for mod-matrix animation so we can set final position on complete.
     juce::Rectangle<int> modMatrixTargetBounds;

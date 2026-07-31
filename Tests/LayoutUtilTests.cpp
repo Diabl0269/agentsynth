@@ -14,7 +14,7 @@
 // ============================================================================
 
 TEST(LayoutUtilTest, SnapRoundsToNearestGridMultiple) {
-    using namespace gsynth::LayoutUtil;
+    using namespace synth::LayoutUtil;
 
     // Exact multiples stay put
     EXPECT_EQ(snap(0), 0);
@@ -48,7 +48,7 @@ TEST(LayoutUtilTest, SnapRoundsToNearestGridMultiple) {
 // ============================================================================
 
 TEST(LayoutUtilTest, IntersectsAnyRespectsGap) {
-    using namespace gsynth::LayoutUtil;
+    using namespace synth::LayoutUtil;
 
     // Two modules: A at (0,0,100,100), B at (110,0,100,100) — distance = 10px
     juce::AudioProcessorGraph::NodeID idA{1}, idB{2}, idC{3};
@@ -81,7 +81,7 @@ TEST(LayoutUtilTest, IntersectsAnyRespectsGap) {
 // ============================================================================
 
 TEST(LayoutUtilTest, FindFreeSlotReturnsDesiredWhenClear) {
-    using namespace gsynth::LayoutUtil;
+    using namespace synth::LayoutUtil;
 
     juce::AudioProcessorGraph::NodeID selfId{42};
     std::vector<Box> emptyOthers;
@@ -107,7 +107,7 @@ TEST(LayoutUtilTest, FindFreeSlotReturnsDesiredWhenClear) {
 // ============================================================================
 
 TEST(LayoutUtilTest, FindFreeSlotResolvesDenseCluster) {
-    using namespace gsynth::LayoutUtil;
+    using namespace synth::LayoutUtil;
 
     // Pack a 3x3 cluster of 280x300 modules starting at (0,0)
     // with kCollisionGap=12, each module occupies (280+12)x(300+12) = 292x312 effective
@@ -149,7 +149,7 @@ TEST(LayoutUtilTest, FindFreeSlotResolvesDenseCluster) {
 // to 24px — otherwise a module ~20px from its neighbour is wrongly flagged as overlapping, so the drag
 // ghost bumps it to another column and it "can't fit" in its own slot.
 TEST(LayoutUtilTest, CollisionGapIsEnforcedOnce) {
-    using namespace gsynth::LayoutUtil;
+    using namespace synth::LayoutUtil;
     juce::AudioProcessorGraph::NodeID self{1}, neighbour{2};
 
     juce::Rectangle<int> filter{648, 8, 280, 568}; // right edge 928 (on-grid sample)
@@ -176,7 +176,7 @@ TEST(LayoutUtilTest, CollisionGapIsEnforcedOnce) {
 // ============================================================================
 
 TEST(LayoutUtilTest, ComputeAutoArrangeLayersBySignalDepth) {
-    using namespace gsynth::LayoutUtil;
+    using namespace synth::LayoutUtil;
 
     // Build a real AudioProcessorGraph:
     //   AudioInput -> Oscillator -> Filter -> VCA -> AudioOutput
@@ -285,7 +285,7 @@ TEST(LayoutUtilTest, ComputeAutoArrangeLayersBySignalDepth) {
 // ============================================================================
 
 TEST(LayoutUtilTest, WidthBucket_MappingTable) {
-    using namespace gsynth::LayoutUtil;
+    using namespace synth::LayoutUtil;
 
     // Double-width modules (wide, interactive)
     EXPECT_EQ(getModuleWidthBucket(ModuleType::Sequencer), ModuleWidthBucket::Double);
@@ -312,7 +312,7 @@ TEST(LayoutUtilTest, WidthBucket_MappingTable) {
 // ============================================================================
 
 TEST(LayoutUtilTest, WidthBucket_ConstantsOnGrid) {
-    using namespace gsynth::LayoutUtil;
+    using namespace synth::LayoutUtil;
 
     // All width constants are multiples of the grid size
     EXPECT_EQ(kNarrowWidth % kGridSize, 0);
@@ -333,7 +333,7 @@ TEST(LayoutUtilTest, WidthBucket_ConstantsOnGrid) {
 // ============================================================================
 
 TEST(LayoutUtilTest, WidthBucket_ColumnStride) {
-    using namespace gsynth::LayoutUtil;
+    using namespace synth::LayoutUtil;
 
     // Canonical auto-arrange column pitch: kSingleWidth + kLayerGapX = 360px
     EXPECT_EQ(kSingleWidth + kLayerGapX, 360);

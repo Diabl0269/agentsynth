@@ -1,6 +1,6 @@
 #include "ThemeLoader.h"
 
-namespace gsynth::theme {
+namespace synth::theme {
 
 // ---------------------------------------------------------------------------
 // Thread-local error string
@@ -524,4 +524,4 @@ juce::var ThemeLoader::themeToJson(const Theme& theme) {
     return juce::var(root);
 }
 
-} // namespace gsynth::theme
+} // namespace synth::theme

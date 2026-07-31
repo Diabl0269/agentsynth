@@ -191,14 +191,14 @@ All new modules **must** have unit tests in the `Tests/` directory.
     #include "../Source/Modules/MyNewModule.h" // Correct include path
 
     TEST(MyNewModuleTest, InitialState) {
-        gsynth::MyNewModule module;
+        synth::MyNewModule module;
         // Assert initial parameter values or state
         ASSERT_EQ(module.getName(), "MyNewModule");
         // ... more assertions
     }
 
     TEST(MyNewModuleTest, ProcessesAudioCorrectly) {
-        gsynth::MyNewModule module;
+        synth::MyNewModule module;
         module.prepareToPlay(44100.0, 512); // Simulate prepareToPlay
 
         juce::AudioBuffer<float> buffer(2, 512);

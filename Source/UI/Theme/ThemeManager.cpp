@@ -2,7 +2,7 @@
 #include "BuiltInThemes.h"
 #include "ThemeLoader.h"
 
-namespace gsynth::theme {
+namespace synth::theme {
 
 ThemeManager::ThemeManager() {
     // Populate built-ins immediately so getActiveTheme() is always valid (even before
@@ -172,4 +172,4 @@ int ThemeManager::indexOfId(const juce::String& id) const noexcept {
     return -1;
 }
 
-} // namespace gsynth::theme
+} // namespace synth::theme

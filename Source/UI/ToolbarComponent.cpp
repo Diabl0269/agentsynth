@@ -57,7 +57,7 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
 
 // ---------------------------------------------------------------------------
 void ToolbarComponent::paint(juce::Graphics& g) {
-    using namespace gsynth::theme;
+    using namespace synth::theme;
 
     if (auto* lnf = dynamic_cast<GravisynthLookAndFeel*>(&getLookAndFeel()))
         g.fillAll(lnf->getTheme().colors.bg0);
