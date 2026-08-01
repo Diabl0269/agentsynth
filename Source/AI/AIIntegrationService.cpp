@@ -86,10 +86,19 @@ void AIIntegrationService::trimHistory() {
 bool AIIntegrationService::applyPatch(const juce::String& jsonString, bool mergeMode) {
     juce::String extractedJson = extractJsonFromResponse(jsonString);
     juce::var json = juce::JSON::parse(extractedJson);
+    bool clearExisting = !mergeMode;
+
+    // Validate BEFORE touching any listener — juce::JSON::parse returns a void var for unparseable input,
+    // which validatePatch rejects (NotAnObject) along with any other structurally invalid patch. A failure
+    // here means the graph is never mutated, so listeners must not be told a patch is about to apply.
+    if (!AIStateMapper::validatePatch(json, audioGraph, clearExisting, /*trusted=*/false).ok) {
+        return false;
+    }
+
     // Notify listeners to detach graph-referencing UI BEFORE the graph is rebuilt (avoids a use-after-free
     // where a ScopeComponent timer reads a freed VisualBuffer once applyJSONToGraph clears old processors).
     listeners.call([](Listener& l) { l.aiPatchAboutToApply(); });
-    if (AIStateMapper::applyJSONToGraph(json, audioGraph, !mergeMode)) {
+    if (AIStateMapper::applyJSONToGraph(json, audioGraph, clearExisting)) {
         listeners.call([](Listener& l) { l.aiPatchApplied(); });
         return true;
     }

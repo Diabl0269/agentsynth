@@ -34,6 +34,27 @@ public:
     std::vector<Message> lastConversation;
 };
 
+class CountingListener : public AIIntegrationService::Listener {
+public:
+    int aboutToApplyCount = 0;
+    int appliedCount = 0;
+    int aboutToApplyOrder = -1;
+    int appliedOrder = -1;
+    int* sharedCallCounter = nullptr;
+
+    void aiPatchAboutToApply() override {
+        ++aboutToApplyCount;
+        if (sharedCallCounter)
+            aboutToApplyOrder = (*sharedCallCounter)++;
+    }
+
+    void aiPatchApplied() override {
+        ++appliedCount;
+        if (sharedCallCounter)
+            appliedOrder = (*sharedCallCounter)++;
+    }
+};
+
 class AIIntegrationServiceTest : public ::testing::Test {
 protected:
     void SetUp() override {
@@ -187,6 +208,52 @@ TEST_F(AIIntegrationServiceTest, SystemPromptSurvivesTrimming) {
 
     ASSERT_FALSE(service->getHistory().empty());
     EXPECT_EQ(service->getHistory()[0].role, "system");
+}
+
+TEST_F(AIIntegrationServiceTest, InvalidJsonFiresNoListenerCallbacks) {
+    int callCounter = 0;
+    CountingListener listener;
+    listener.sharedCallCounter = &callCounter;
+    service->addListener(&listener);
+
+    bool success = service->applyPatch("not json at all");
+
+    EXPECT_FALSE(success);
+    EXPECT_EQ(listener.aboutToApplyCount, 0);
+    EXPECT_EQ(listener.appliedCount, 0);
+
+    service->removeListener(&listener);
+}
+
+TEST_F(AIIntegrationServiceTest, StructurallyInvalidPatchFiresNoListenerCallbacks) {
+    int callCounter = 0;
+    CountingListener listener;
+    listener.sharedCallCounter = &callCounter;
+    service->addListener(&listener);
+
+    bool success = service->applyPatch("{\"nodes\": \"not-an-array\"}");
+
+    EXPECT_FALSE(success);
+    EXPECT_EQ(listener.aboutToApplyCount, 0);
+    EXPECT_EQ(listener.appliedCount, 0);
+
+    service->removeListener(&listener);
+}
+
+TEST_F(AIIntegrationServiceTest, ValidPatchFiresBothCallbacksInOrder) {
+    int callCounter = 0;
+    CountingListener listener;
+    listener.sharedCallCounter = &callCounter;
+    service->addListener(&listener);
+
+    bool success = service->applyPatch("{\"nodes\":[], \"connections\":[]}");
+
+    EXPECT_TRUE(success);
+    EXPECT_EQ(listener.aboutToApplyCount, 1);
+    EXPECT_EQ(listener.appliedCount, 1);
+    EXPECT_LT(listener.aboutToApplyOrder, listener.appliedOrder);
+
+    service->removeListener(&listener);
 }
 
 } // namespace synth
