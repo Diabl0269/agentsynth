@@ -39,6 +39,12 @@ public:
     void setProvider(std::unique_ptr<AIProvider> newProvider);
 
     /**
+     * @brief Maximum number of retained user/assistant turn pairs, beyond the system prompt.
+     *        Oldest pairs are trimmed first once this cap is exceeded.
+     */
+    static constexpr int kMaxHistoryTurns = 8;
+
+    /**
      * @brief Sends a user message and gets a response.
      */
     void sendMessage(const juce::String& text, AIProvider::CompletionCallback callback,
@@ -83,6 +89,17 @@ private:
      * @brief Helper to extract JSON from a response that might contain conversational text.
      */
     juce::String extractJsonFromResponse(const juce::String& response);
+
+    /**
+     * @brief Builds the patch-augmented request content for a user message, without mutating chatHistory.
+     */
+    juce::String buildPatchAugmentedContent(const juce::String& text);
+
+    /**
+     * @brief Trims chatHistory to the system prompt plus the most recent kMaxHistoryTurns pairs,
+     *        removing oldest whole user+assistant pairs so history never starts on an assistant turn.
+     */
+    void trimHistory();
 
     JUCE_DECLARE_WEAK_REFERENCEABLE(AIIntegrationService)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AIIntegrationService)

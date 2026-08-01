@@ -1,5 +1,6 @@
 #include "AIIntegrationService.h"
 #include "../Branding.h"
+#include <algorithm>
 
 namespace synth {
 
@@ -14,28 +15,21 @@ void AIIntegrationService::setProvider(std::unique_ptr<AIProvider> newProvider) 
 
 void AIIntegrationService::sendMessage(const juce::String& text, AIProvider::CompletionCallback callback,
                                        bool useStructuredOutput) {
-    // Inject current graph state only for patch-related requests
-    juce::String messageContent = text;
-    if (useStructuredOutput) {
-        juce::var graphJson = AIStateMapper::graphToJSON(audioGraph);
-        if (auto* obj = graphJson.getDynamicObject()) {
-            if (auto* nodeArr = obj->getProperty("nodes").getArray()) {
-                if (!nodeArr->isEmpty()) {
-                    messageContent = "Current patch state:\n```json\n" + juce::JSON::toString(graphJson) +
-                                     "\n```\n\nUser request: " + text;
-                }
-            }
-        }
-    }
-
-    chatHistory.push_back({"user", messageContent});
+    // The stored history always keeps the user's original text. Patch context is ephemeral:
+    // it is spliced into the outgoing request only, never retained in chatHistory.
+    chatHistory.push_back({"user", text});
+    trimHistory();
 
     if (provider) {
+        std::vector<AIProvider::Message> request = chatHistory;
+        if (useStructuredOutput && !request.empty())
+            request.back().content = buildPatchAugmentedContent(text);
+
         auto weakThis = juce::WeakReference<AIIntegrationService>(this);
         auto schema = useStructuredOutput ? AIStateMapper::getPatchSchema() : juce::var();
 
         provider->sendPrompt(
-            chatHistory,
+            request,
             [weakThis, callback](const juce::String& response, bool success) {
                 if (weakThis.get() == nullptr)
                     return; // Service was destroyed
@@ -43,6 +37,7 @@ void AIIntegrationService::sendMessage(const juce::String& text, AIProvider::Com
                 auto* self = weakThis.get();
                 if (success) {
                     self->chatHistory.push_back({"assistant", response});
+                    self->trimHistory();
                 }
                 if (callback) {
                     callback(response, success);
@@ -54,6 +49,38 @@ void AIIntegrationService::sendMessage(const juce::String& text, AIProvider::Com
             callback("Error: No AI provider selected.", false);
         }
     }
+}
+
+juce::String AIIntegrationService::buildPatchAugmentedContent(const juce::String& text) {
+    juce::var graphJson = AIStateMapper::graphToJSON(audioGraph);
+    if (auto* obj = graphJson.getDynamicObject()) {
+        if (auto* nodeArr = obj->getProperty("nodes").getArray()) {
+            if (!nodeArr->isEmpty()) {
+                return "Current patch state:\n```json\n" + juce::JSON::toString(graphJson) +
+                       "\n```\n\nUser request: " + text;
+            }
+        }
+    }
+    return text;
+}
+
+void AIIntegrationService::trimHistory() {
+    if (chatHistory.empty())
+        return;
+
+    size_t start = (chatHistory.front().role == "system") ? 1 : 0;
+    size_t conversationSize = chatHistory.size() - start;
+    size_t maxConversation = static_cast<size_t>(kMaxHistoryTurns) * 2;
+
+    if (conversationSize <= maxConversation)
+        return;
+
+    size_t excess = conversationSize - maxConversation;
+    size_t pairsToRemove = (excess + 1) / 2; // round up to whole pairs
+    size_t messagesToRemove = std::min(pairsToRemove * 2, conversationSize);
+
+    chatHistory.erase(chatHistory.begin() + static_cast<long>(start),
+                      chatHistory.begin() + static_cast<long>(start + messagesToRemove));
 }
 
 bool AIIntegrationService::applyPatch(const juce::String& jsonString, bool mergeMode) {
