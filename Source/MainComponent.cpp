@@ -1,5 +1,5 @@
 #include "MainComponent.h"
-#include "AI/OllamaProvider.h"
+#include "AI/AIProviderRegistry.h"
 #include "Branding.h"
 #include "UI/SettingsWindow.h"
 
@@ -27,11 +27,11 @@ MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLo
     // Subscribe to theme changes so we can re-skin on every switch.
     themeManager->addChangeListener(this);
 
-    initialiseCommon(std::move(provider));
+    initialiseCommon(std::move(provider), synth::AIProviderRegistry::createDefault());
 }
 
 // ---- Delegating constructor for tests / legacy call sites ----
-MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider)
+MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry)
     : graphEditor(audioEngine, &undoManager)
     , aiService(audioEngine.getGraph())
     , aiChatComponent(aiService, appProperties) {
@@ -56,11 +56,11 @@ MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider)
     lookAndFeel->applyTheme(themeManager->getActiveTheme());
     themeManager->addChangeListener(this);
 
-    initialiseCommon(std::move(provider));
+    initialiseCommon(std::move(provider), std::move(registry));
 }
 
 // ---- Shared post-construction body ----
-void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider) {
+void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry) {
     // ORDERING CONTRACT: read the persisted panel-visibility flags FIRST, before any
     // setVisible()/addAndMakeVisible() call that depends on them. These override the member
     // initialisers (isLibraryVisible{true}, isAiPanelVisible=false).
@@ -69,14 +69,16 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     graphEditor.setAlignmentGuidesEnabled(
         appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true));
 
-    // Load AI provider preference
-    juce::String savedProviderName = appProperties.getUserSettings()->getValue("aiProvider", "Ollama");
+    // Load AI provider preference. "ollama" is the persisted id (see AIProviderRegistry),
+    // not a display name — registry.create() falls back to the first registered provider
+    // if the saved id is unknown (e.g. stale pre-registry value, or empty).
+    juce::String savedProviderId = appProperties.getUserSettings()->getValue("aiProvider", "ollama");
     juce::String savedOllamaHost = appProperties.getUserSettings()->getValue("ollamaHost", "http://localhost:11434");
 
     if (provider) {
         aiService.setProvider(std::move(provider));
-    } else if (savedProviderName == "Ollama") {
-        aiService.setProvider(std::make_unique<synth::OllamaProvider>(savedOllamaHost));
+    } else {
+        aiService.setProvider(registry.create(savedProviderId, {savedOllamaHost, {}}));
     }
 
     // ORDERING CONTRACT: aiChatComponent is a member, so its constructor (which calls

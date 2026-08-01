@@ -133,7 +133,7 @@ provider installed and is therefore a no-op (it issues no `/api/tags` request at
 **Any owner that constructs `AIChatComponent` before installing a provider on the
 `AIIntegrationService` it was given MUST call `chatComponent.refreshModels()` again AFTER
 `aiService.setProvider(...)`.** `MainComponent::initialiseCommon()` does this immediately
-after its `setProvider(...)` if/else block. Skipping this step means `currentModel` stays
+after constructing the provider (either the one injected by a caller/test, or the one built via `synth::AIProviderRegistry` from the persisted provider id — see `Source/AI/AIProviderRegistry.h`). Skipping this step means `currentModel` stays
 empty and every subsequent `/api/chat` request is sent with `"model": ""`, which Ollama
 rejects with HTTP 400 `"model is required"`.
 
@@ -141,6 +141,17 @@ Regression: this call was mistakenly deleted in commit `f7cba4a` (issue #96) and
 with a comment incorrectly claiming the ctor-time call already covered discovery. Locked by
 `MainComponentTest.AiProviderGetsModelSelectedOnStartup` and
 `AIChatComponentTest.RefreshModelsSelectsModelWhenProviderInstalledAfterConstruction`.
+
+### AI Provider Registry
+
+Providers are registered once, in `synth::AIProviderRegistry::createDefault()`
+(`Source/AI/AIProviderRegistry.cpp`) — adding a new hosted provider is a single
+`registerProvider(...)` call there, not edits scattered across `MainComponent` and
+`SettingsWindow`. Each `ProviderDescriptor` carries a stable `id` (persisted to the
+`"aiProvider"` setting) separately from its `displayName` (shown in the UI), so renaming
+the UI label never breaks a user's saved selection. `AIProviderRegistry::create()` falls
+back to the first registered provider when given an unknown or empty id — this covers
+both a stale pre-registry saved value and any future case of a provider being removed.
 
 ### OllamaProvider: Fail-Fast on Empty Model + HTTP-Status-Aware Errors
 

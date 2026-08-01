@@ -83,6 +83,8 @@ add_library(GravisynthCore STATIC
     Source/AI/AIIntegrationService.h
     Source/AI/AIStateMapper.cpp
     Source/AI/AIStateMapper.h
+    Source/AI/AIProviderRegistry.h
+    Source/AI/AIProviderRegistry.cpp
     # UI utilities
     Source/UI/LayoutUtil.h
     Source/UI/LayoutUtil.cpp

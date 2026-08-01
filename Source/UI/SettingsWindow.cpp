@@ -1,5 +1,5 @@
 #include "SettingsWindow.h"
-#include "../AI/OllamaProvider.h"
+#include "../AI/AIProviderRegistry.h"
 #include "../ShortcutManager.h"
 #include "AppearanceSettingsTab.h"
 #include "ShortcutsSettingsTab.h"
@@ -13,24 +13,31 @@ public:
                   synth::AIChatComponent& aiChatComp)
         : appProperties(props)
         , aiService(aiServ)
-        , aiChatComponent(aiChatComp) {
+        , aiChatComponent(aiChatComp)
+        , providerRegistry(synth::AIProviderRegistry::createDefault()) {
         addAndMakeVisible(providerLabel);
         providerLabel.setText("AI Provider:", juce::dontSendNotification);
 
         addAndMakeVisible(providerCombo);
-        providerCombo.addItem("Ollama", 1);
-        providerCombo.setSelectedId(appProperties.getUserSettings()->getValue("aiProvider", "Ollama") == "Ollama" ? 1
-                                                                                                                  : 0,
-                                    juce::dontSendNotification);
+        juce::String savedProviderId = appProperties.getUserSettings()->getValue("aiProvider", "ollama");
+        int selectedItemId = 1;
+        const auto& allProviders = providerRegistry.listAll();
+        for (size_t i = 0; i < allProviders.size(); ++i) {
+            int itemId = (int)i + 1;
+            providerCombo.addItem(allProviders[i].displayName, itemId);
+            if (allProviders[i].id == savedProviderId)
+                selectedItemId = itemId;
+        }
+        providerCombo.setSelectedId(selectedItemId, juce::dontSendNotification);
         providerCombo.onChange = [this] { updateSettings(); };
 
         addAndMakeVisible(hostLabel);
-        hostLabel.setText("Ollama Host:", juce::dontSendNotification);
-
         addAndMakeVisible(hostEditor);
         hostEditor.setText(appProperties.getUserSettings()->getValue("ollamaHost", "http://localhost:11434"));
         hostEditor.onReturnKey = [this] { updateSettings(); };
         hostEditor.onFocusLost = [this] { updateSettings(); };
+
+        updateHostFieldForSelectedProvider();
     }
 
     void paint(juce::Graphics& g) override { g.fillAll(findColour(juce::ResizableWindow::backgroundColourId)); }
@@ -49,24 +56,42 @@ public:
     }
 
     void updateSettings() {
-        juce::String selectedProvider = providerCombo.getText();
+        const auto* descriptor = selectedDescriptor();
+        juce::String providerId = descriptor != nullptr ? descriptor->id : juce::String("ollama");
         juce::String newOllamaHost = hostEditor.getText();
 
-        appProperties.getUserSettings()->setValue("aiProvider", selectedProvider);
+        appProperties.getUserSettings()->setValue("aiProvider", providerId);
         appProperties.getUserSettings()->setValue("ollamaHost", newOllamaHost);
         appProperties.saveIfNeeded();
 
-        // Re-initialize AI service with new provider/host
-        if (selectedProvider == "Ollama") {
-            aiService.setProvider(std::make_unique<synth::OllamaProvider>(newOllamaHost));
-        }
+        updateHostFieldForSelectedProvider();
+
+        aiService.setProvider(providerRegistry.create(providerId, {newOllamaHost, {}}));
         aiChatComponent.refreshModels();
     }
 
 private:
+    const synth::ProviderDescriptor* selectedDescriptor() const {
+        int selectedIndex = providerCombo.getSelectedItemIndex();
+        const auto& all = providerRegistry.listAll();
+        if (selectedIndex >= 0 && (size_t)selectedIndex < all.size())
+            return &all[(size_t)selectedIndex];
+        return nullptr;
+    }
+
+    void updateHostFieldForSelectedProvider() {
+        const auto* descriptor = selectedDescriptor();
+        bool showHost = descriptor == nullptr || descriptor->needsHost;
+        hostLabel.setVisible(showHost);
+        hostEditor.setVisible(showHost);
+        hostLabel.setText(descriptor != nullptr ? (descriptor->displayName + " Host:") : juce::String("Host:"),
+                          juce::dontSendNotification);
+    }
+
     juce::ApplicationProperties& appProperties;
     synth::AIIntegrationService& aiService;
     synth::AIChatComponent& aiChatComponent;
+    synth::AIProviderRegistry providerRegistry;
 
     juce::Label providerLabel;
     juce::ComboBox providerCombo;
