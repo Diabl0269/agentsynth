@@ -1,4 +1,5 @@
 #include "AIIntegrationService.h"
+#include "../Branding.h"
 
 namespace synth {
 
@@ -110,9 +111,12 @@ void AIIntegrationService::initSystemPrompt() {
     juce::String schema = AIStateMapper::getModuleSchema();
 
     juce::String systemMsg =
-        "You are Gravisynth AI, an expert sound designer for the Gravisynth modular synthesizer. "
-        "Your goal is to help users create and modify patches. "
-        "Gravisynth uses a nodes-and-connections model. "
+        "You are " + juce::String(synth::branding::kProductName) + " AI, an expert sound designer for the " +
+        juce::String(synth::branding::kProductName) +
+        " modular synthesizer. "
+        "Your goal is to help users create and modify patches. " +
+        juce::String(synth::branding::kProductName) +
+        " uses a nodes-and-connections model. "
         "\n\n" +
         schema +
         "\n"

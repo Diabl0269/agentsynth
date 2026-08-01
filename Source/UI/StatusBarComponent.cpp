@@ -1,5 +1,5 @@
 #include "StatusBarComponent.h"
-#include "Theme/GravisynthLookAndFeel.h"
+#include "Theme/AppLookAndFeel.h"
 
 // ---------------------------------------------------------------------------
 StatusBarComponent::StatusBarComponent() { addAndMakeVisible(masterMuteButton_); }
@@ -39,7 +39,7 @@ void StatusBarComponent::timerCallback() {
 void StatusBarComponent::paint(juce::Graphics& g) {
     using namespace synth::theme;
 
-    auto* lnf = dynamic_cast<GravisynthLookAndFeel*>(&getLookAndFeel());
+    auto* lnf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
 
     // --- Resolve colours: themed if LnF present, otherwise JUCE fallback ---
     juce::Colour bg0, border, textPrimary, textMuted, warningColour;

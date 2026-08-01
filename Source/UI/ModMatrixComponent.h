@@ -1,7 +1,7 @@
 #pragma once
 
+#include "../AppUndoManager.h"
 #include "../AudioEngine.h"
-#include "../GravisynthUndoManager.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 
@@ -15,7 +15,7 @@ public:
     /** Returns true for odd rows (zebra striping). */
     static bool isZebraRow(int rowIndex) noexcept { return rowIndex % 2 == 1; }
 
-    ModMatrixComponent(AudioEngine& engine, GravisynthUndoManager* undoMgr = nullptr);
+    ModMatrixComponent(AudioEngine& engine, AppUndoManager* undoMgr = nullptr);
     ~ModMatrixComponent() override;
 
     void paint(juce::Graphics& g) override;
@@ -38,7 +38,7 @@ public:
 
 private:
     AudioEngine& audioEngine;
-    GravisynthUndoManager* undoManager = nullptr;
+    AppUndoManager* undoManager = nullptr;
     bool isSourceMenuFlat = false;
 
     juce::TextButton addButton{"Add Modulation"};

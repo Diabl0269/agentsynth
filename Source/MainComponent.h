@@ -1,15 +1,15 @@
 #pragma once
 
 #include "AI/AIIntegrationService.h"
+#include "AppUndoManager.h"
 #include "AudioEngine.h"
-#include "GravisynthUndoManager.h"
 #include "PresetManager.h"
 #include "ShortcutManager.h"
 #include "UI/AIChatComponent.h"
 #include "UI/GraphEditor.h"
 #include "UI/ModuleLibraryComponent.h"
 #include "UI/StatusBarComponent.h"
-#include "UI/Theme/GravisynthLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include "UI/ToolbarComponent.h"
 #include "UI/UIAnimation.h"
@@ -27,11 +27,11 @@ class MainComponent
 public:
     // Primary ctor: receives injected ThemeManager and LookAndFeel from Main.cpp.
     // provider is optional (nullptr → reads saved provider pref from appProperties).
-    MainComponent(synth::theme::ThemeManager& tm, synth::theme::GravisynthLookAndFeel& lf,
+    MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLookAndFeel& lf,
                   std::unique_ptr<synth::AIProvider> provider = nullptr);
 
     // Delegating ctor for tests and legacy call sites that don't inject theme objects.
-    // Lazily owns private default ThemeManager + GravisynthLookAndFeel instances
+    // Lazily owns private default ThemeManager + AppLookAndFeel instances
     // (stored in ownedThemeManager / ownedLookAndFeel below).
     explicit MainComponent(std::unique_ptr<synth::AIProvider> provider = nullptr);
 
@@ -83,7 +83,7 @@ public:
         if (redoButton.onClick)
             redoButton.onClick();
     }
-    GravisynthUndoManager& getUndoManager() { return undoManager; }
+    AppUndoManager& getUndoManager() { return undoManager; }
     AudioEngine& getAudioEngine() { return audioEngine; }
     const juce::String& getCurrentPatchName() const { return currentPatchName_; }
     // Non-const access to ApplicationProperties for persistence tests (read-back within session).
@@ -130,15 +130,15 @@ private:
     // Owned fallback objects used when the delegating ctor is called (tests/legacy).
     // Null when the primary ctor is used (refs point at external objects instead).
     std::unique_ptr<synth::theme::ThemeManager> ownedThemeManager;
-    std::unique_ptr<synth::theme::GravisynthLookAndFeel> ownedLookAndFeel;
+    std::unique_ptr<synth::theme::AppLookAndFeel> ownedLookAndFeel;
 
     // Non-owning references to the active ThemeManager and LookAndFeel.
     // Always valid — set by both constructors (either to external objects or to the
     // owned fallbacks above).
     synth::theme::ThemeManager* themeManager{nullptr};
-    synth::theme::GravisynthLookAndFeel* lookAndFeel{nullptr};
+    synth::theme::AppLookAndFeel* lookAndFeel{nullptr};
 
-    GravisynthUndoManager undoManager;
+    AppUndoManager undoManager;
     AudioEngine audioEngine;
     GraphEditor graphEditor;
     ModuleLibraryComponent moduleLibrary;

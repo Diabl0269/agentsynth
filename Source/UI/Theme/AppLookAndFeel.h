@@ -15,10 +15,10 @@ namespace synth::theme {
 //       setting JUCE ColourIds from theme tokens in applyTheme() (section 3).
 //   (2) Provide PUBLIC helper draw methods that the bespoke painters (ModuleComponent,
 //       GraphEditor) call so cards / wires / rings honor the active treatment from ONE place.
-class GravisynthLookAndFeel : public juce::LookAndFeel_V4 {
+class AppLookAndFeel : public juce::LookAndFeel_V4 {
 public:
-    GravisynthLookAndFeel();
-    ~GravisynthLookAndFeel() override;
+    AppLookAndFeel();
+    ~AppLookAndFeel() override;
 
     // Store the theme, re-map every ColourId (section 3), refresh cached typefaces if the
     // family changed, and set the default sans/serif font. Does NOT repaint — the caller
@@ -140,7 +140,7 @@ private:
     std::optional<juce::ColourGradient> texturedGradient;
     std::optional<juce::ColourGradient> flatGradient;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GravisynthLookAndFeel)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AppLookAndFeel)
 };
 
 } // namespace synth::theme

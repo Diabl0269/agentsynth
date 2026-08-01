@@ -26,6 +26,14 @@ FetchContent_MakeAvailable(juce)
 option(ENABLE_COVERAGE "Enable code coverage testing" OFF)
 option(ENABLE_TESTS "Enable building test suite" OFF)
 
+# Product identity — the single place to override branding at configure time
+# (e.g. `cmake -S . -B build -DSYNTH_PRODUCT_NAME=MySynth`). Mirrored in C++ at
+# Source/Branding.h, which JUCE's PRODUCT_NAME/COMPANY_NAME/BUNDLE_ID args can't read
+# directly since they're consumed at configure time, not compile time.
+set(SYNTH_PRODUCT_NAME "Gravisynth" CACHE STRING "Display name: window title, About box, installer")
+set(SYNTH_COMPANY_NAME "yourcompany" CACHE STRING "JUCE COMPANY_NAME / macOS bundle vendor")
+set(SYNTH_BUNDLE_ID "com.gravisynth.app" CACHE STRING "macOS/iOS CFBundleIdentifier")
+
 if(ENABLE_COVERAGE)
     if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
         add_compile_options(-fprofile-instr-generate -fcoverage-mapping)
@@ -40,8 +48,9 @@ endif()
 add_library(GravisynthCore STATIC
     Source/AudioEngine.cpp
     Source/AudioEngine.h
-    Source/GravisynthUndoManager.cpp
-    Source/GravisynthUndoManager.h
+    Source/AppUndoManager.cpp
+    Source/AppUndoManager.h
+    Source/Branding.h
     Source/PresetManager.cpp
     Source/PresetManager.h
     # Modules
@@ -89,8 +98,8 @@ add_library(GravisynthCore STATIC
     Source/UI/Theme/BuiltInThemes.cpp
     Source/UI/Theme/IconLibrary.h
     Source/UI/Theme/IconLibrary.cpp
-    Source/UI/Theme/GravisynthLookAndFeel.h
-    Source/UI/Theme/GravisynthLookAndFeel.cpp
+    Source/UI/Theme/AppLookAndFeel.h
+    Source/UI/Theme/AppLookAndFeel.cpp
 )
 
 # Link Core against JUCE
@@ -135,9 +144,10 @@ endif()
 
 # Create the application target
 juce_add_gui_app(Gravisynth
-    PRODUCT_NAME "Gravisynth"
+    PRODUCT_NAME "${SYNTH_PRODUCT_NAME}"
     VERSION "0.13.2"
-    BUNDLE_ID "com.gravisynth.app"
+    COMPANY_NAME "${SYNTH_COMPANY_NAME}"
+    BUNDLE_ID "${SYNTH_BUNDLE_ID}"
     BLUETOOTH_PERMISSION_ENABLED TRUE
     BLUETOOTH_PERMISSION_TEXT "We need Bluetooth access to connect to your external MIDI devices."
 )
@@ -145,7 +155,7 @@ juce_add_gui_app(Gravisynth
 juce_generate_juce_header(Gravisynth)
 
 # Embed font files as binary data (SIL OFL licensed — see assets/fonts/LICENSES.md).
-# GravisynthLookAndFeel (compiled into GravisynthCore) loads these typefaces from BinaryData,
+# AppLookAndFeel (compiled into GravisynthCore) loads these typefaces from BinaryData,
 # so the asset library + GRAVISYNTH_HAS_FONT_ASSETS define are attached to Core (PUBLIC) below;
 # the app and the test target both link Core and therefore resolve the BinaryData symbols.
 # Guard: icon filenames must use hyphens only (JUCE strips hyphens entirely, so 'a-b.svg' becomes

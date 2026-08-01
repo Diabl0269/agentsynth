@@ -5,7 +5,7 @@
 #include "../Modules/SequencerModule.h"
 #include "GraphEditor.h"
 #include "LayoutUtil.h"
-#include "Theme/GravisynthLookAndFeel.h"
+#include "Theme/AppLookAndFeel.h"
 
 static ModuleType getType(juce::AudioProcessor* module) {
     if (auto* mb = dynamic_cast<ModuleBase*>(module))
@@ -14,7 +14,7 @@ static ModuleType getType(juce::AudioProcessor* module) {
 }
 
 ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGraph::NodeID nId, GraphEditor& owner,
-                                 GravisynthUndoManager* undoMgr)
+                                 AppUndoManager* undoMgr)
     : module(m)
     , nodeId(nId)
     , owner(owner)
@@ -128,7 +128,7 @@ void ModuleComponent::detachFromProcessor() {
 void ModuleComponent::applyHeaderButtonIcons() {
     // Headless-safe: when our themed LnF is not installed (unit tests), buttons remain blank
     // (no image set). The DrawableButton still exists and functions correctly without an image.
-    auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     if (lf == nullptr)
         return;
 
@@ -147,10 +147,10 @@ void ModuleComponent::applyHeaderButtonIcons() {
 }
 
 void ModuleComponent::refreshWaveformComboIcons() {
-    using synth::theme::GravisynthLookAndFeel;
+    using synth::theme::AppLookAndFeel;
     using synth::theme::Icon;
 
-    auto* lf = dynamic_cast<GravisynthLookAndFeel*>(&getLookAndFeel());
+    auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
     // Headless / no themed LnF: nothing to refresh.
     if (lf == nullptr)
         return;
@@ -297,8 +297,8 @@ void ModuleComponent::createControls() {
             midiKeyboard->getKeyboardState(), juce::MidiKeyboardComponent::horizontalKeyboard);
 
         // Theme the keyboard component
-        using synth::theme::GravisynthLookAndFeel;
-        auto* lf = dynamic_cast<GravisynthLookAndFeel*>(&getLookAndFeel());
+        using synth::theme::AppLookAndFeel;
+        auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
         if (lf != nullptr) {
             keyboardComponent->setColour(juce::MidiKeyboardComponent::whiteNoteColourId, lf->getTheme().colors.bg1);
             keyboardComponent->setColour(juce::MidiKeyboardComponent::blackNoteColourId,
@@ -381,7 +381,7 @@ void ModuleComponent::createControls() {
                     using synth::theme::Icon;
                     const Icon kIcons[4] = {Icon::WaveformSine, Icon::WaveformSquare, Icon::WaveformSaw,
                                             Icon::WaveformTriangle};
-                    auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+                    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
                     for (int i = 0; i < 4; ++i) {
                         std::unique_ptr<juce::Drawable> icon;
                         if (lf != nullptr)
@@ -584,7 +584,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
 
     // Guarded LnF cast: headless tests construct this component WITHOUT installing our LnF.
     // When the cast is null we fall back to a plain themed-ish fill so those tests don't crash.
-    auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
 
     if (lf != nullptr) {
         // Single owner of card treatment: background, drop shadow, body fill, border, and the

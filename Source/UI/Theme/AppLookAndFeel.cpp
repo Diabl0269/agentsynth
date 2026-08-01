@@ -1,4 +1,4 @@
-#include "GravisynthLookAndFeel.h"
+#include "AppLookAndFeel.h"
 
 #ifdef GRAVISYNTH_HAS_FONT_ASSETS
 #include "BinaryData.h"
@@ -80,7 +80,7 @@ juce::Image makeGridTile(juce::Colour dot) {
 } // namespace
 
 //==============================================================================
-GravisynthLookAndFeel::GravisynthLookAndFeel() {
+AppLookAndFeel::AppLookAndFeel() {
     // Pre-create EVERY built-in family's typefaces now, at construction (the process is fresh
     // and no text has been rendered yet). Creating an embedded typeface for the first time at
     // RUNTIME — after the app has already rendered with another font — globally corrupts text
@@ -102,10 +102,10 @@ GravisynthLookAndFeel::GravisynthLookAndFeel() {
     applyTheme(theme);
 }
 
-GravisynthLookAndFeel::~GravisynthLookAndFeel() = default;
+AppLookAndFeel::~AppLookAndFeel() = default;
 
 //==============================================================================
-void GravisynthLookAndFeel::applyTheme(const Theme& newTheme) {
+void AppLookAndFeel::applyTheme(const Theme& newTheme) {
     const bool familyChanged =
         (theme.type.uiFamily != newTheme.type.uiFamily) || (theme.type.monoFamily != newTheme.type.monoFamily);
 
@@ -189,7 +189,7 @@ void GravisynthLookAndFeel::applyTheme(const Theme& newTheme) {
     retintIcons();
 }
 
-void GravisynthLookAndFeel::retintIcons() {
+void AppLookAndFeel::retintIcons() {
     const auto& c = theme.colors;
 
     // Module header glyphs carry semantic intent.
@@ -231,12 +231,12 @@ void GravisynthLookAndFeel::retintIcons() {
     iconLibrary_.setTintColour(Icon::WaveformTriangle, c.textPrimary);
 }
 
-void GravisynthLookAndFeel::refreshTypefaces() {
+void AppLookAndFeel::refreshTypefaces() {
     uiTypeface = loadEmbeddedTypeface(theme.type.uiFamily, false, false);
     monoTypeface = loadEmbeddedTypeface(theme.type.monoFamily, false, false);
 }
 
-juce::Typeface::Ptr GravisynthLookAndFeel::getTypefaceForFont(const juce::Font& font) {
+juce::Typeface::Ptr AppLookAndFeel::getTypefaceForFont(const juce::Font& font) {
     const bool bold = font.isBold();
     const bool medium = false; // JUCE Font has no "medium" flag; bold/regular only.
 
@@ -269,9 +269,9 @@ juce::Typeface::Ptr GravisynthLookAndFeel::getTypefaceForFont(const juce::Font& 
 //==============================================================================
 // Stock widget overrides
 //==============================================================================
-void GravisynthLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
-                                             float sliderPosProportional, float /*rotaryStartAngle*/,
-                                             float /*rotaryEndAngle*/, juce::Slider& slider) {
+void AppLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
+                                      float sliderPosProportional, float /*rotaryStartAngle*/, float /*rotaryEndAngle*/,
+                                      juce::Slider& slider) {
     const auto& c = theme.colors;
     const auto& m = theme.metrics;
     const auto& tr = theme.treatment;
@@ -345,9 +345,9 @@ void GravisynthLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, in
     juce::ignoreUnused(slider);
 }
 
-void GravisynthLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
-                                             float /*minSliderPos*/, float /*maxSliderPos*/,
-                                             juce::Slider::SliderStyle style, juce::Slider& slider) {
+void AppLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, int width, int height, float sliderPos,
+                                      float /*minSliderPos*/, float /*maxSliderPos*/, juce::Slider::SliderStyle style,
+                                      juce::Slider& slider) {
     const auto& c = theme.colors;
     const bool vertical = (style == juce::Slider::LinearVertical || style == juce::Slider::LinearBarVertical);
 
@@ -382,9 +382,8 @@ void GravisynthLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, in
     juce::ignoreUnused(slider);
 }
 
-void GravisynthLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& button,
-                                                 const juce::Colour& backgroundColour,
-                                                 bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) {
+void AppLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button& button, const juce::Colour& backgroundColour,
+                                          bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) {
     const auto& c = theme.colors;
     const auto& m = theme.metrics;
 
@@ -403,12 +402,12 @@ void GravisynthLookAndFeel::drawButtonBackground(juce::Graphics& g, juce::Button
     g.drawRoundedRectangle(bounds, m.pillRadius, m.borderWidth);
 }
 
-juce::Font GravisynthLookAndFeel::getTextButtonFont(juce::TextButton&, int buttonHeight) {
+juce::Font AppLookAndFeel::getTextButtonFont(juce::TextButton&, int buttonHeight) {
     return juce::Font(juce::FontOptions((float)juce::jmin(15, buttonHeight - 6)));
 }
 
-void GravisynthLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& button,
-                                           bool /*shouldDrawButtonAsHighlighted*/, bool /*shouldDrawButtonAsDown*/) {
+void AppLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& button, bool /*shouldDrawButtonAsHighlighted*/,
+                                    bool /*shouldDrawButtonAsDown*/) {
     g.setFont(getTextButtonFont(button, button.getHeight()));
     const auto colourId =
         button.getToggleState() ? juce::TextButton::textColourOnId : juce::TextButton::textColourOffId;
@@ -417,8 +416,8 @@ void GravisynthLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& 
     g.drawFittedText(button.getButtonText(), button.getLocalBounds().reduced(4, 0), juce::Justification::centred, 1);
 }
 
-void GravisynthLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool isButtonDown, int /*buttonX*/,
-                                         int /*buttonY*/, int /*buttonW*/, int /*buttonH*/, juce::ComboBox& box) {
+void AppLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool isButtonDown, int /*buttonX*/,
+                                  int /*buttonY*/, int /*buttonW*/, int /*buttonH*/, juce::ComboBox& box) {
     const auto& c = theme.colors;
     const auto& m = theme.metrics;
     const bool enabled = box.isEnabled();
@@ -479,14 +478,13 @@ void GravisynthLookAndFeel::drawComboBox(juce::Graphics& g, int width, int heigh
     }
 }
 
-void GravisynthLookAndFeel::drawComboBoxTextWhenNothingSelected(juce::Graphics& g, juce::ComboBox& box,
-                                                                juce::Label& label) {
+void AppLookAndFeel::drawComboBoxTextWhenNothingSelected(juce::Graphics& g, juce::ComboBox& box, juce::Label& label) {
     g.setColour(box.findColour(juce::ComboBox::textColourId).withMultipliedAlpha(0.4f));
     g.setFont(label.getFont());
     g.drawFittedText(box.getTextWhenNothingSelected(), label.getBounds(), label.getJustificationType(), 1);
 }
 
-void GravisynthLookAndFeel::positionComboBoxText(juce::ComboBox& box, juce::Label& label) {
+void AppLookAndFeel::positionComboBoxText(juce::ComboBox& box, juce::Label& label) {
     // If the selected item carries a Drawable icon, shift the text label right to leave room
     // for the ~14 px icon (painted in drawComboBox) plus a 4 px gap.
     int leftOffset = 8;
@@ -509,7 +507,7 @@ void GravisynthLookAndFeel::positionComboBoxText(juce::ComboBox& box, juce::Labe
     label.setFont(juce::Font(juce::FontOptions(theme.type.label + 2.0f)));
 }
 
-void GravisynthLookAndFeel::drawPopupMenuBackground(juce::Graphics& g, int width, int height) {
+void AppLookAndFeel::drawPopupMenuBackground(juce::Graphics& g, int width, int height) {
     const auto& c = theme.colors;
     const auto& m = theme.metrics;
     auto bounds = juce::Rectangle<float>(0, 0, (float)width, (float)height);
@@ -519,10 +517,10 @@ void GravisynthLookAndFeel::drawPopupMenuBackground(juce::Graphics& g, int width
     g.drawRoundedRectangle(bounds.reduced(0.5f), m.cornerRadius * 0.6f, m.borderWidth);
 }
 
-void GravisynthLookAndFeel::drawPopupMenuItem(juce::Graphics& g, const juce::Rectangle<int>& area, bool isSeparator,
-                                              bool isActive, bool isHighlighted, bool isTicked, bool hasSubMenu,
-                                              const juce::String& text, const juce::String& shortcutKeyText,
-                                              const juce::Drawable* icon, const juce::Colour* textColour) {
+void AppLookAndFeel::drawPopupMenuItem(juce::Graphics& g, const juce::Rectangle<int>& area, bool isSeparator,
+                                       bool isActive, bool isHighlighted, bool isTicked, bool hasSubMenu,
+                                       const juce::String& text, const juce::String& shortcutKeyText,
+                                       const juce::Drawable* icon, const juce::Colour* textColour) {
     const auto& c = theme.colors;
     const auto& m = theme.metrics;
 
@@ -595,9 +593,9 @@ void GravisynthLookAndFeel::drawPopupMenuItem(juce::Graphics& g, const juce::Rec
     }
 }
 
-void GravisynthLookAndFeel::drawScrollbar(juce::Graphics& g, juce::ScrollBar& /*scrollbar*/, int x, int y, int width,
-                                          int height, bool isScrollbarVertical, int thumbStartPosition, int thumbSize,
-                                          bool isMouseOver, bool isMouseDown) {
+void AppLookAndFeel::drawScrollbar(juce::Graphics& g, juce::ScrollBar& /*scrollbar*/, int x, int y, int width,
+                                   int height, bool isScrollbarVertical, int thumbStartPosition, int thumbSize,
+                                   bool isMouseOver, bool isMouseDown) {
     const auto& c = theme.colors;
 
     // Slim track underlay.
@@ -625,11 +623,11 @@ void GravisynthLookAndFeel::drawScrollbar(juce::Graphics& g, juce::ScrollBar& /*
                            (float)juce::jmin(thumb.getWidth(), thumb.getHeight()) * 0.5f);
 }
 
-int GravisynthLookAndFeel::getDefaultScrollbarWidth() { return kScrollbarWidth; }
+int AppLookAndFeel::getDefaultScrollbarWidth() { return kScrollbarWidth; }
 
-void GravisynthLookAndFeel::drawScrollbarButton(juce::Graphics& g, juce::ScrollBar& /*scrollbar*/, int width,
-                                                int height, int buttonDirection, bool /*isScrollbarVertical*/,
-                                                bool isMouseOverButton, bool isButtonDown) {
+void AppLookAndFeel::drawScrollbarButton(juce::Graphics& g, juce::ScrollBar& /*scrollbar*/, int width, int height,
+                                         int buttonDirection, bool /*isScrollbarVertical*/, bool isMouseOverButton,
+                                         bool isButtonDown) {
     // Minimal filled triangle pointing in buttonDirection (0=up,1=right,2=down,3=left).
     // Rarely shown on macOS overlay scrollbars; needed for Win/Linux parity.
     const auto& c = theme.colors;
@@ -658,13 +656,12 @@ void GravisynthLookAndFeel::drawScrollbarButton(juce::Graphics& g, juce::ScrollB
     g.fillPath(tri);
 }
 
-void GravisynthLookAndFeel::fillTextEditorBackground(juce::Graphics& g, int width, int height,
-                                                     juce::TextEditor& editor) {
+void AppLookAndFeel::fillTextEditorBackground(juce::Graphics& g, int width, int height, juce::TextEditor& editor) {
     g.setColour(editor.findColour(juce::TextEditor::backgroundColourId));
     g.fillRoundedRectangle(0.0f, 0.0f, (float)width, (float)height, theme.metrics.pillRadius);
 }
 
-void GravisynthLookAndFeel::drawTextEditorOutline(juce::Graphics& g, int width, int height, juce::TextEditor& editor) {
+void AppLookAndFeel::drawTextEditorOutline(juce::Graphics& g, int width, int height, juce::TextEditor& editor) {
     if (editor.isEnabled()) {
         const bool focused = editor.hasKeyboardFocus(true);
         g.setColour(focused ? theme.colors.accent : editor.findColour(juce::TextEditor::outlineColourId));
@@ -673,7 +670,7 @@ void GravisynthLookAndFeel::drawTextEditorOutline(juce::Graphics& g, int width, 
     }
 }
 
-void GravisynthLookAndFeel::drawLabel(juce::Graphics& g, juce::Label& label) {
+void AppLookAndFeel::drawLabel(juce::Graphics& g, juce::Label& label) {
     g.fillAll(label.findColour(juce::Label::backgroundColourId));
 
     if (!label.isBeingEdited()) {
@@ -688,8 +685,8 @@ void GravisynthLookAndFeel::drawLabel(juce::Graphics& g, juce::Label& label) {
     }
 }
 
-void GravisynthLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& button,
-                                             bool shouldDrawButtonAsHighlighted, bool /*shouldDrawButtonAsDown*/) {
+void AppLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& button, bool shouldDrawButtonAsHighlighted,
+                                      bool /*shouldDrawButtonAsDown*/) {
     const auto& c = theme.colors;
 
     const float boxSize = juce::jmin(18.0f, (float)button.getHeight() - 2.0f);
@@ -720,7 +717,7 @@ void GravisynthLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButt
     }
 }
 
-void GravisynthLookAndFeel::drawTooltip(juce::Graphics& g, const juce::String& text, int width, int height) {
+void AppLookAndFeel::drawTooltip(juce::Graphics& g, const juce::String& text, int width, int height) {
     const auto& c = theme.colors;
     auto bounds = juce::Rectangle<float>(0, 0, (float)width, (float)height);
     g.setColour(c.surfaceHi);
@@ -733,8 +730,8 @@ void GravisynthLookAndFeel::drawTooltip(juce::Graphics& g, const juce::String& t
     g.drawFittedText(text, juce::Rectangle<int>(0, 0, width, height).reduced(6, 2), juce::Justification::centred, 3);
 }
 
-void GravisynthLookAndFeel::drawTabButton(juce::TabBarButton& button, juce::Graphics& g, bool isMouseOver,
-                                          bool /*isMouseDown*/) {
+void AppLookAndFeel::drawTabButton(juce::TabBarButton& button, juce::Graphics& g, bool isMouseOver,
+                                   bool /*isMouseDown*/) {
     const auto& c = theme.colors;
     const auto& m = theme.metrics;
     const bool active = button.getToggleState();
@@ -802,7 +799,7 @@ void GravisynthLookAndFeel::drawTabButton(juce::TabBarButton& button, juce::Grap
     g.drawFittedText(button.getButtonText(), button.getActiveArea().reduced(6, 0), juce::Justification::centred, 1);
 }
 
-void GravisynthLookAndFeel::drawTabbedButtonBarBackground(juce::TabbedButtonBar& bar, juce::Graphics& g) {
+void AppLookAndFeel::drawTabbedButtonBarBackground(juce::TabbedButtonBar& bar, juce::Graphics& g) {
     const auto& c = theme.colors;
     auto bounds = bar.getLocalBounds().toFloat();
 
@@ -831,8 +828,8 @@ void GravisynthLookAndFeel::drawTabbedButtonBarBackground(juce::TabbedButtonBar&
 //==============================================================================
 // Public treatment helpers
 //==============================================================================
-void GravisynthLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<float> bounds, int headerHeight,
-                                            const juce::String& title, bool selected, bool bypassed) {
+void AppLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<float> bounds, int headerHeight,
+                                     const juce::String& title, bool selected, bool bypassed) {
     const auto& c = theme.colors;
     const auto& m = theme.metrics;
     const auto& tr = theme.treatment;
@@ -954,9 +951,9 @@ void GravisynthLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<f
     }
 }
 
-void GravisynthLookAndFeel::drawConnectionWire(juce::Graphics& g, juce::Point<float> p1, juce::Point<float> p2,
-                                               const juce::Path& path, juce::Colour colour, bool isModulation,
-                                               float activity, bool hovered) {
+void AppLookAndFeel::drawConnectionWire(juce::Graphics& g, juce::Point<float> p1, juce::Point<float> p2,
+                                        const juce::Path& path, juce::Colour colour, bool isModulation, float activity,
+                                        bool hovered) {
     const auto& m = theme.metrics;
     const auto& tr = theme.treatment;
 
@@ -1001,8 +998,8 @@ void GravisynthLookAndFeel::drawConnectionWire(juce::Graphics& g, juce::Point<fl
     }
 }
 
-void GravisynthLookAndFeel::drawModulationRing(juce::Graphics& g, juce::Point<float> centre, float radius,
-                                               float baseNorm, float modNorm, bool positive) {
+void AppLookAndFeel::drawModulationRing(juce::Graphics& g, juce::Point<float> centre, float radius, float baseNorm,
+                                        float modNorm, bool positive) {
     if (radius <= 0.0f)
         return;
 
@@ -1021,7 +1018,7 @@ void GravisynthLookAndFeel::drawModulationRing(juce::Graphics& g, juce::Point<fl
                  juce::PathStrokeType(m.knobRingWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 
-void GravisynthLookAndFeel::fillThemedBackground(juce::Graphics& g, juce::Rectangle<float> bounds, bool isCanvas) {
+void AppLookAndFeel::fillThemedBackground(juce::Graphics& g, juce::Rectangle<float> bounds, bool isCanvas) {
     const auto& c = theme.colors;
 
     if (!isCanvas) {

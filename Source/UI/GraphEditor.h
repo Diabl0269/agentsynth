@@ -1,7 +1,7 @@
 #pragma once
 
+#include "../AppUndoManager.h"
 #include "../AudioEngine.h"
-#include "../GravisynthUndoManager.h"
 #include "LayoutUtil.h"
 #include "UIAnimation.h"
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -15,7 +15,7 @@ class GraphEditor
     , public juce::DragAndDropTarget
     , public juce::SettableTooltipClient {
 public:
-    GraphEditor(AudioEngine& engine, GravisynthUndoManager* undoMgr = nullptr);
+    GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr = nullptr);
     ~GraphEditor() override;
 
     AudioEngine& getAudioEngine() { return audioEngine; }
@@ -155,7 +155,7 @@ private:
     juce::AudioProcessorGraph::NodeID draggingAttenuverterNodeId;
     float attenDragStartValue = 0.0f;
 
-    GravisynthUndoManager* undoManager = nullptr;
+    AppUndoManager* undoManager = nullptr;
     std::vector<AudioEngine::ModulationDisplayInfo> cachedModDisplayInfo;
     std::vector<AudioEngine::ModulationRouting> cachedModRoutings;
 

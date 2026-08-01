@@ -1,5 +1,5 @@
 #include "ToolbarComponent.h"
-#include "Theme/GravisynthLookAndFeel.h"
+#include "Theme/AppLookAndFeel.h"
 
 // ---------------------------------------------------------------------------
 void ToolbarComponent::setButtons(std::array<juce::DrawableButton*, NumSlots> btns) { buttons_ = btns; }
@@ -59,7 +59,7 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
 void ToolbarComponent::paint(juce::Graphics& g) {
     using namespace synth::theme;
 
-    if (auto* lnf = dynamic_cast<GravisynthLookAndFeel*>(&getLookAndFeel()))
+    if (auto* lnf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel()))
         g.fillAll(lnf->getTheme().colors.bg0);
     else
         g.fillAll(juce::Colour(0xff0B0D10));

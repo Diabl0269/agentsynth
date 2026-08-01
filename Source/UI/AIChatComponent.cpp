@@ -367,7 +367,7 @@ void AIChatComponent::resized() {
 }
 
 void AIChatComponent::paint(juce::Graphics& g) {
-    auto lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+    auto lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     if (lf != nullptr) {
         g.fillAll(lf->getTheme().colors.bg0);
     } else {

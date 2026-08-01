@@ -1,4 +1,4 @@
-#include "../Source/GravisynthUndoManager.h"
+#include "../Source/AppUndoManager.h"
 #include "../Source/Modules/ADSRModule.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/LFOModule.h"
@@ -374,7 +374,7 @@ TEST_F(GraphEditorTest, PolyBusWireResolvesToVisibleJacks) {
 
 TEST_F(GraphEditorTest, ReplaceModuleIsUndoable) {
     AudioEngine engine;
-    GravisynthUndoManager undoMgr;
+    AppUndoManager undoMgr;
     GraphEditor editor(engine, &undoMgr);
     editor.setSize(800, 600);
 
@@ -631,7 +631,7 @@ TEST_F(GraphEditorTest, DropUsesRealModuleSizeForAntiOverlap) {
 
 TEST_F(GraphEditorTest, AlignmentGuideDrawingThemeAware) {
     // Verify paintOverChildren() uses theme colors correctly.
-    synth::theme::GravisynthLookAndFeel lf;
+    synth::theme::AppLookAndFeel lf;
     lf.applyTheme(synth::theme::makeObsidian());
 
     const auto& m = lf.getTheme().metrics;

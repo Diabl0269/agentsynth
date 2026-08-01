@@ -1,7 +1,7 @@
 #pragma once
 
 // ============================================================================
-// UIAnimation.h — Shared animation utilities for Gravisynth UI Phase 5
+// UIAnimation.h — Shared animation utilities for the app UI Phase 5
 //
 // Namespace: synth::ui
 //

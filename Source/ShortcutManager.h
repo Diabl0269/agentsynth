@@ -2,7 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-namespace GravisynthCommands {
+namespace AppCommands {
 enum CommandIDs {
     openSettings = 0x100,
     savePreset,
@@ -39,7 +39,7 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return toggleLibrary;
     return 0;
 }
-} // namespace GravisynthCommands
+} // namespace AppCommands
 
 class ShortcutManager {
 public:

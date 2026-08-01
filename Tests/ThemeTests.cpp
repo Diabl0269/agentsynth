@@ -1,10 +1,10 @@
 // ThemeTests.cpp
 // Headless unit tests for the Gravisynth theme system.
-// Covers ThemeManager, ThemeLoader, BuiltInThemes, GravisynthLookAndFeel::applyTheme,
+// Covers ThemeManager, ThemeLoader, BuiltInThemes, AppLookAndFeel::applyTheme,
 // and the WCAG contrast requirement.  All 15 cases from spec section 9.
 
+#include "../Source/UI/Theme/AppLookAndFeel.h"
 #include "../Source/UI/Theme/BuiltInThemes.h"
-#include "../Source/UI/Theme/GravisynthLookAndFeel.h"
 #include "../Source/UI/Theme/Theme.h"
 #include "../Source/UI/Theme/ThemeLoader.h"
 #include "../Source/UI/Theme/ThemeManager.h"
@@ -90,7 +90,7 @@ TEST_F(ThemeTest, ManagerStartsOnDefault) {
 // 3. ApplyThemeSetsEveryColourId
 // ---------------------------------------------------------------------------
 TEST(ThemeLookAndFeelTest, ApplyThemeSetsEveryColourId) {
-    synth::theme::GravisynthLookAndFeel lf;
+    synth::theme::AppLookAndFeel lf;
     auto neon = synth::theme::makeNeon();
     lf.applyTheme(neon);
     const auto& c = neon.colors;
@@ -150,7 +150,7 @@ TEST(ThemeLookAndFeelTest, ApplyThemeSetsEveryColourId) {
     EXPECT_EQ(lf.findColour(juce::TabbedButtonBar::frontTextColourId), c.textPrimary);
     EXPECT_EQ(lf.findColour(juce::TabbedButtonBar::tabOutlineColourId), c.border);
     // MidiKeyboardComponent ColourIds (juce_audio_utils) are not linked into GravisynthCore;
-    // the on-screen keyboard keeps JUCE defaults for now (see GravisynthLookAndFeel::applyTheme).
+    // the on-screen keyboard keeps JUCE defaults for now (see AppLookAndFeel::applyTheme).
 }
 
 // ---------------------------------------------------------------------------
@@ -590,7 +590,7 @@ TEST(ThemeLoaderTest, Issue103MetricsNotInJSON) {
 TEST(GraphEditorRenderingTest, UsesMetricsCornerRadius) {
     // This test verifies that the code uses theme.metrics.cornerRadius
     // for drag ghost rendering instead of hardcoding it.
-    synth::theme::GravisynthLookAndFeel lf;
+    synth::theme::AppLookAndFeel lf;
     lf.applyTheme(synth::theme::makeObsidian());
 
     const auto& metrics = lf.getTheme().metrics;
@@ -599,7 +599,7 @@ TEST(GraphEditorRenderingTest, UsesMetricsCornerRadius) {
 }
 
 TEST(GraphEditorRenderingTest, UsesMetricsGuideParams) {
-    synth::theme::GravisynthLookAndFeel lf;
+    synth::theme::AppLookAndFeel lf;
     lf.applyTheme(synth::theme::makeNeon());
 
     const auto& m = lf.getTheme().metrics;
@@ -612,7 +612,7 @@ TEST(GraphEditorRenderingTest, UsesMetricsGuideParams) {
 // (Exercises the LnF draw paths in headless mode without asserting pixels.)
 // ---------------------------------------------------------------------------
 TEST(ThemeLookAndFeelTest, DrawHelpersSmoke) {
-    synth::theme::GravisynthLookAndFeel lf;
+    synth::theme::AppLookAndFeel lf;
     lf.applyTheme(synth::theme::makeObsidian());
 
     // Create a tiny in-memory image to draw into.
@@ -638,8 +638,8 @@ TEST(ThemeLookAndFeelTest, DrawHelpersSmoke) {
     juce::Slider slider(juce::Slider::RotaryVerticalDrag, juce::Slider::NoTextBox);
     slider.setRange(0.0, 1.0);
     slider.setValue(0.5);
-    EXPECT_NO_THROW(lf.drawRotarySlider(g, 0, 0, 100, 100, 0.5f, synth::theme::GravisynthLookAndFeel::kRotaryStart,
-                                        synth::theme::GravisynthLookAndFeel::kRotaryEnd, slider));
+    EXPECT_NO_THROW(lf.drawRotarySlider(g, 0, 0, 100, 100, 0.5f, synth::theme::AppLookAndFeel::kRotaryStart,
+                                        synth::theme::AppLookAndFeel::kRotaryEnd, slider));
 }
 
 // ---------------------------------------------------------------------------
@@ -687,7 +687,7 @@ TEST(ThemeLoaderTest, MetricsCodeOnlyFieldsNotInJSON) {
 // each built-in theme, getIcon() returns a usable (non-null when assets present) drawable and
 // nothing throws across repeated switches.
 TEST(ThemeLookAndFeelTest, RetintIconsCalledByApplyTheme) {
-    synth::theme::GravisynthLookAndFeel lf;
+    synth::theme::AppLookAndFeel lf;
 
     const std::array<synth::theme::Theme, 3> themes = {synth::theme::makeObsidian(), synth::theme::makeNeon(),
                                                        synth::theme::makeWarm()};
@@ -709,7 +709,7 @@ TEST(StyledWidgetSmokeTest, ComboBoxDrawNoThrow) {
     const std::array<synth::theme::Theme, 3> themes = {synth::theme::makeObsidian(), synth::theme::makeNeon(),
                                                        synth::theme::makeWarm()};
     for (const auto& t : themes) {
-        synth::theme::GravisynthLookAndFeel lf;
+        synth::theme::AppLookAndFeel lf;
         lf.applyTheme(t);
 
         juce::Image img(juce::Image::ARGB, 120, 28, true);
@@ -732,7 +732,7 @@ TEST(StyledWidgetSmokeTest, ComboBoxDrawNoThrow) {
 }
 
 TEST(StyledWidgetSmokeTest, ComboBoxTextWhenNothingSelected) {
-    synth::theme::GravisynthLookAndFeel lf;
+    synth::theme::AppLookAndFeel lf;
     lf.applyTheme(synth::theme::makeObsidian());
 
     juce::Image img(juce::Image::ARGB, 120, 28, true);
@@ -754,7 +754,7 @@ TEST(StyledWidgetSmokeTest, PopupMenuDrawNoThrow) {
     const std::array<synth::theme::Theme, 3> themes = {synth::theme::makeObsidian(), synth::theme::makeNeon(),
                                                        synth::theme::makeWarm()};
     for (const auto& t : themes) {
-        synth::theme::GravisynthLookAndFeel lf;
+        synth::theme::AppLookAndFeel lf;
         lf.applyTheme(t);
 
         juce::Image img(juce::Image::ARGB, 200, 30, true);
@@ -777,7 +777,7 @@ TEST(StyledWidgetSmokeTest, PopupMenuDrawNoThrow) {
 }
 
 TEST(StyledWidgetSmokeTest, ScrollbarWidthAndDrawNoThrow) {
-    synth::theme::GravisynthLookAndFeel lf;
+    synth::theme::AppLookAndFeel lf;
     lf.applyTheme(synth::theme::makeObsidian());
 
     EXPECT_EQ(lf.getDefaultScrollbarWidth(), 6);
@@ -802,7 +802,7 @@ TEST(StyledWidgetSmokeTest, ScrollbarWidthAndDrawNoThrow) {
 }
 
 TEST(StyledWidgetSmokeTest, TabBarDrawNoThrow) {
-    synth::theme::GravisynthLookAndFeel lf;
+    synth::theme::AppLookAndFeel lf;
     lf.applyTheme(synth::theme::makeObsidian());
 
     juce::TabbedButtonBar bar(juce::TabbedButtonBar::TabsAtTop);

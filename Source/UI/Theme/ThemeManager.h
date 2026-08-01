@@ -43,7 +43,8 @@ public:
     // Sets isUserTheme=true. Does not change the active selection. Does not broadcast.
     void addUserTheme(Theme theme);
 
-    // Cross-platform: <userApplicationDataDirectory>/Gravisynth/Themes . Creates it if absent.
+    // Cross-platform: <userApplicationDataDirectory>/<synth::branding::kSettingsFolderName>/Themes .
+    // Creates it if absent.
     static juce::File getUserThemesFolder();
 
     // Scan the user themes folder for "*.gtheme.json", parse each, addUserTheme() the valid

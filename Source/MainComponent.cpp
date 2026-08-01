@@ -1,9 +1,10 @@
 #include "MainComponent.h"
 #include "AI/OllamaProvider.h"
+#include "Branding.h"
 #include "UI/SettingsWindow.h"
 
 // ---- Primary constructor (injected ThemeManager + LookAndFeel from Main.cpp) ----
-MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::GravisynthLookAndFeel& lf,
+MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLookAndFeel& lf,
                              std::unique_ptr<synth::AIProvider> provider)
     : graphEditor(audioEngine, &undoManager)
     , aiService(audioEngine.getGraph())
@@ -11,8 +12,8 @@ MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::Gravi
     , themeManager(&tm)
     , lookAndFeel(&lf) {
     // Setup ApplicationProperties
-    propertiesOptions.applicationName = "Gravisynth";
-    propertiesOptions.folderName = "Gravisynth";
+    propertiesOptions.applicationName = synth::branding::kProductName;
+    propertiesOptions.folderName = synth::branding::kSettingsFolderName;
     propertiesOptions.filenameSuffix = "settings";
     propertiesOptions.osxLibrarySubFolder = "Application Support";
     propertiesOptions.storageFormat = juce::PropertiesFile::storeAsXML;
@@ -37,13 +38,13 @@ MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider)
     // Own a default ThemeManager + LookAndFeel so the code behaves identically
     // to the primary-ctor path (no special-casing in the rest of the class).
     ownedThemeManager = std::make_unique<synth::theme::ThemeManager>();
-    ownedLookAndFeel = std::make_unique<synth::theme::GravisynthLookAndFeel>();
+    ownedLookAndFeel = std::make_unique<synth::theme::AppLookAndFeel>();
     themeManager = ownedThemeManager.get();
     lookAndFeel = ownedLookAndFeel.get();
 
     // Setup ApplicationProperties (same as primary ctor)
-    propertiesOptions.applicationName = "Gravisynth";
-    propertiesOptions.folderName = "Gravisynth";
+    propertiesOptions.applicationName = synth::branding::kProductName;
+    propertiesOptions.folderName = synth::branding::kSettingsFolderName;
     propertiesOptions.filenameSuffix = "settings";
     propertiesOptions.osxLibrarySubFolder = "Application Support";
     propertiesOptions.storageFormat = juce::PropertiesFile::storeAsXML;
@@ -112,7 +113,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // Buttons
     addAndMakeVisible(newButton);
     newButton.setComponentID("newButton");
-    newButton.onClick = [this] { commandManager.invokeDirectly(GravisynthCommands::newPatch, true); };
+    newButton.onClick = [this] { commandManager.invokeDirectly(AppCommands::newPatch, true); };
 
     addAndMakeVisible(saveButton);
     saveButton.setComponentID("saveButton");
@@ -361,69 +362,68 @@ void MainComponent::paint(juce::Graphics& g) {
 }
 
 void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
-    commands.addArray({GravisynthCommands::openSettings, GravisynthCommands::savePreset, GravisynthCommands::openPreset,
-                       GravisynthCommands::newPatch, GravisynthCommands::undo, GravisynthCommands::redo,
-                       GravisynthCommands::toggleModMatrix, GravisynthCommands::toggleAiPanel,
-                       GravisynthCommands::autoArrange, GravisynthCommands::toggleLibrary});
+    commands.addArray({AppCommands::openSettings, AppCommands::savePreset, AppCommands::openPreset,
+                       AppCommands::newPatch, AppCommands::undo, AppCommands::redo, AppCommands::toggleModMatrix,
+                       AppCommands::toggleAiPanel, AppCommands::autoArrange, AppCommands::toggleLibrary});
 }
 
 void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationCommandInfo& result) {
     switch (commandID) {
-    case GravisynthCommands::openSettings: {
+    case AppCommands::openSettings: {
         result.setInfo("Open Settings", "Open the settings window", "General", 0);
         auto kp = shortcutManager.getBinding("openSettings");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
-    case GravisynthCommands::savePreset: {
+    case AppCommands::savePreset: {
         result.setInfo("Save Preset", "Save the current preset", "General", 0);
         auto kp = shortcutManager.getBinding("savePreset");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
-    case GravisynthCommands::openPreset: {
+    case AppCommands::openPreset: {
         result.setInfo("Open Preset", "Open a preset file", "General", 0);
         auto kp = shortcutManager.getBinding("openPreset");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
-    case GravisynthCommands::newPatch: {
+    case AppCommands::newPatch: {
         result.setInfo("New Patch", "Clear the canvas and start a new patch", "General", 0);
         auto kp = shortcutManager.getBinding("newPatch");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
-    case GravisynthCommands::undo: {
+    case AppCommands::undo: {
         result.setInfo("Undo", "Undo the last action", "Edit", 0);
         auto kp = shortcutManager.getBinding("undo");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
-    case GravisynthCommands::redo: {
+    case AppCommands::redo: {
         result.setInfo("Redo", "Redo the last undone action", "Edit", 0);
         auto kp = shortcutManager.getBinding("redo");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
-    case GravisynthCommands::toggleModMatrix: {
+    case AppCommands::toggleModMatrix: {
         result.setInfo("Toggle Mod Matrix", "Toggle the modulation matrix panel", "View", 0);
         auto kp = shortcutManager.getBinding("toggleModMatrix");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
-    case GravisynthCommands::toggleAiPanel: {
+    case AppCommands::toggleAiPanel: {
         result.setInfo("Toggle AI Panel", "Toggle the AI chat panel", "View", 0);
         auto kp = shortcutManager.getBinding("toggleAiPanel");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
-    case GravisynthCommands::autoArrange: {
+    case AppCommands::autoArrange: {
         result.setInfo("Auto Arrange", "Auto-arrange modules by signal flow", "View", 0);
         auto kp = shortcutManager.getBinding("autoArrange");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
-    case GravisynthCommands::toggleLibrary: {
+    case AppCommands::toggleLibrary: {
         result.setInfo("Toggle Module Library", "Toggle the module library sidebar", "View", 0);
         auto kp = shortcutManager.getBinding("toggleLibrary");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
@@ -436,40 +436,40 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
 
 bool MainComponent::perform(const InvocationInfo& info) {
     switch (info.commandID) {
-    case GravisynthCommands::openSettings:
+    case AppCommands::openSettings:
         if (settingsButton.onClick)
             settingsButton.onClick();
         return true;
-    case GravisynthCommands::savePreset:
+    case AppCommands::savePreset:
         if (saveButton.onClick)
             saveButton.onClick();
         return true;
-    case GravisynthCommands::openPreset:
+    case AppCommands::openPreset:
         openPresetFromFile();
         return true;
-    case GravisynthCommands::newPatch:
+    case AppCommands::newPatch:
         graphEditor.newPatch();
         setCurrentPatchName("Untitled");
         statusBar.showMessage("New patch");
         return true;
-    case GravisynthCommands::undo:
+    case AppCommands::undo:
         if (undoManager.canUndo())
             undoManager.undo();
         return true;
-    case GravisynthCommands::redo:
+    case AppCommands::redo:
         if (undoManager.canRedo())
             undoManager.redo();
         return true;
-    case GravisynthCommands::toggleModMatrix:
+    case AppCommands::toggleModMatrix:
         toggleModMatrixButton.triggerClick();
         return true;
-    case GravisynthCommands::toggleAiPanel:
+    case AppCommands::toggleAiPanel:
         toggleAiPanelButton.triggerClick();
         return true;
-    case GravisynthCommands::autoArrange:
+    case AppCommands::autoArrange:
         graphEditor.autoArrange();
         return true;
-    case GravisynthCommands::toggleLibrary:
+    case AppCommands::toggleLibrary:
         setLibraryVisible(!isLibraryVisible);
         return true;
     default:
@@ -483,7 +483,7 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
     auto action = shortcutManager.getActionForKeyPress(key);
     if (action.isEmpty())
         return false;
-    auto cmdId = GravisynthCommands::getCommandForAction(action);
+    auto cmdId = AppCommands::getCommandForAction(action);
     if (cmdId == 0)
         return false;
     return commandManager.invokeDirectly(cmdId, true);
@@ -496,7 +496,7 @@ void MainComponent::resized() {
     int tbH = 36, sbH = 24;
     int libW = isLibraryVisible ? 200 : 0;
     int aiW = isAiPanelVisible ? 300 : 0;
-    if (auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel())) {
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
         const auto& m = lf->getTheme().metrics;
         tbH = m.toolbarHeight;
         sbH = m.statusBarHeight;
@@ -531,7 +531,7 @@ void MainComponent::resized() {
 void MainComponent::applyToolbarIcons() {
     using synth::theme::Icon;
 
-    auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
 
     // In narrow mode the buttons are 32 px wide — icon only, no text. In wide mode the
     // toggle buttons carry stateful text; the rest carry a static label.
@@ -603,7 +603,7 @@ MainComponent::PanelBoundsResult MainComponent::computePanelBounds(bool libVisib
     int tbH = 36, sbH = 24;
     int libW = libVisible ? 200 : 0;
     int aiW = aiVisible ? 300 : 0;
-    if (auto* lf = dynamic_cast<const synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel())) {
+    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
         const auto& m = lf->getTheme().metrics;
         tbH = m.toolbarHeight;
         sbH = m.statusBarHeight;
