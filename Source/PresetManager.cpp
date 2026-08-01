@@ -27,7 +27,9 @@ bool PresetManager::loadPreset(int index, juce::AudioProcessorGraph& graph) {
         return false;
 
     auto json = juce::JSON::parse(jsonStr);
-    return AIStateMapper::applyJSONToGraph(json, graph, true);
+    // Bundled/built-in presets are authored by us, not by an AI provider — trust them like any
+    // other local, first-party content.
+    return AIStateMapper::applyJSONToGraph(json, graph, true, /*trusted=*/true);
 }
 
 bool PresetManager::loadDefaultPreset(juce::AudioProcessorGraph& graph) { return loadPreset(0, graph); }
