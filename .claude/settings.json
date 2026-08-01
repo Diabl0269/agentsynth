@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./build/Tests/GravisynthTests*)",
+      "Bash(curl -s -m 5 http://localhost:11434/*)",
+      "Bash(clang-format --dry-run *)"
+    ]
+  }
+}
