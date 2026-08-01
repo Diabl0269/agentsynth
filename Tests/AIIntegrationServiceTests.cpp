@@ -8,7 +8,8 @@ class MockAIProvider : public AIProvider {
 public:
     void sendPrompt(const std::vector<Message>& conversation, CompletionCallback callback,
                     const juce::var& responseSchema) override {
-        juce::ignoreUnused(conversation, responseSchema);
+        juce::ignoreUnused(responseSchema);
+        lastConversation = conversation;
         if (shouldFail) {
             callback("Error", false);
         } else {
@@ -30,6 +31,7 @@ public:
     juce::String mockResponse = "{\"nodes\": [], \"connections\": []}";
     bool shouldFail = false;
     juce::String currentModel;
+    std::vector<Message> lastConversation;
 };
 
 class AIIntegrationServiceTest : public ::testing::Test {
@@ -130,6 +132,61 @@ TEST_F(AIIntegrationServiceTest, ApplyPatch_DefaultReplace_ClearsGraph) {
     bool success = service->applyPatch(fullJson);
     ASSERT_TRUE(success);
     ASSERT_EQ(graph->getNumNodes(), 1); // Only the Filter from JSON, Oscillator cleared
+}
+
+TEST_F(AIIntegrationServiceTest, HistoryDoesNotRetainPatchContext) {
+    graph->addNode(std::make_unique<OscillatorModule>());
+
+    auto provider = std::make_unique<MockAIProvider>();
+    service->setProvider(std::move(provider));
+
+    bool called = false;
+    service->sendMessage("Add a filter", [&](const juce::String&, bool) { called = true; }, true);
+
+    EXPECT_TRUE(called);
+    auto history = service->getHistory();
+    ASSERT_GE(history.size(), 2u);
+    EXPECT_EQ(history[1].role, "user");
+    EXPECT_EQ(history[1].content, "Add a filter");
+    EXPECT_FALSE(history[1].content.contains("Current patch state"));
+}
+
+TEST_F(AIIntegrationServiceTest, OutgoingRequestStillIncludesPatchContext) {
+    graph->addNode(std::make_unique<OscillatorModule>());
+
+    auto provider = std::make_unique<MockAIProvider>();
+    auto* rawProvider = provider.get();
+    service->setProvider(std::move(provider));
+
+    service->sendMessage("Add a filter", nullptr, true);
+
+    ASSERT_FALSE(rawProvider->lastConversation.empty());
+    EXPECT_TRUE(rawProvider->lastConversation.back().content.contains("Current patch state"));
+    EXPECT_TRUE(rawProvider->lastConversation.back().content.contains("Add a filter"));
+}
+
+TEST_F(AIIntegrationServiceTest, HistoryIsTrimmedToCap) {
+    auto provider = std::make_unique<MockAIProvider>();
+    service->setProvider(std::move(provider));
+
+    const int turnsToSend = AIIntegrationService::kMaxHistoryTurns + 5;
+    for (int i = 0; i < turnsToSend; ++i)
+        service->sendMessage("msg " + juce::String(i), nullptr);
+
+    auto history = service->getHistory();
+    EXPECT_LE(history.size(), 1u + static_cast<size_t>(AIIntegrationService::kMaxHistoryTurns) * 2u);
+}
+
+TEST_F(AIIntegrationServiceTest, SystemPromptSurvivesTrimming) {
+    auto provider = std::make_unique<MockAIProvider>();
+    service->setProvider(std::move(provider));
+
+    const int turnsToSend = AIIntegrationService::kMaxHistoryTurns + 5;
+    for (int i = 0; i < turnsToSend; ++i)
+        service->sendMessage("msg " + juce::String(i), nullptr);
+
+    ASSERT_FALSE(service->getHistory().empty());
+    EXPECT_EQ(service->getHistory()[0].role, "system");
 }
 
 } // namespace synth
