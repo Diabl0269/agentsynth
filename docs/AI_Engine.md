@@ -161,6 +161,39 @@ Locked by `OllamaProviderTest.SendPromptWithNoModelFailsWithoutHittingNetwork` a
 `OllamaProviderTest.SendPromptIncludesSelectedModelInRequestBody` in
 `Tests/OllamaProviderTests.cpp`.
 
+### OllamaProvider: Worker-Thread Contract — Never Silence
+
+**Every request accepted by `sendPrompt()` eventually gets its callback invoked**, with the
+model's answer or with an error string. Nothing is ever dropped quietly, because a dropped
+request leaves the chat UI waiting forever with no error to show.
+
+Three rules make that hold:
+
+1. **The worker parks; it does not exit on drain.** `run()` loops until `threadShouldExit()`,
+   waiting on the thread's own `juce::WaitableEvent` (`Thread::wait()` / `notify()`) when the
+   queue is empty. It previously `break`ed out as soon as the queue emptied — and because
+   `juce::Thread` only clears its handle *after* `run()` has returned, `isThreadRunning()`
+   still said `true` in that window, so `sendPrompt()`'s `if (!isThreadRunning()) startThread()`
+   skipped the restart and the request sat in the queue with nothing to pick it up.
+2. **Queue ownership is explicit, not inferred from `isThreadRunning()`.** A `workerState`
+   (`idle` / `starting` / `running`) guarded by `queueLock` decides whether a worker will drain
+   the queue. It is released in the *same* locked section that empties the queue, so a
+   concurrent `sendPrompt()` either hands its request to the retiring worker (which fails it
+   with a callback) or sees `idle` and starts a fresh one. `sendPrompt()` also self-heals a
+   `running` state whose thread has vanished — `stopThread(0)` force-kills the worker, since
+   juce never waits when given a zero timeout, so `run()` never gets to hand the queue back.
+3. **Shutdown fails the queue instead of discarding it.** `~OllamaProvider()` sets
+   `isShuttingDown` (late `sendPrompt()` calls then fail immediately rather than resurrecting a
+   thread on a dying object), then `stopThread(2000)`. Requests still queued are failed with
+   `"Error: Request cancelled - the Ollama provider is shutting down."` **inline**, not via
+   `MessageManager::callAsync` — the message loop cannot be trusted to run a deferred callback
+   before the provider is gone. So every shutdown callback has already fired by the time the
+   destructor returns; none can fire after it.
+
+Locked by `OllamaProviderTest.QueuedRequestDuringThreadShutdownStillCompletes`,
+`OllamaProviderTest.PendingRequestsAreFailedOnDestruction` and
+`OllamaProviderTest.RequestAfterWorkerIsKilledStillCompletes`.
+
 ## 6. Future Considerations
 
 -   **Direct Saving of AI Suggested Patches**: Implement functionality for users to directly save AI-generated patches as presets.
