@@ -21,7 +21,9 @@
 #include "../Modules/SequencerModule.h"
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
+#include <cmath>
 #include <functional> // For std::function
+#include <limits>
 #include <map>
 #include <set>
 #include <unordered_map> // For the factory map
@@ -61,41 +63,287 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Voice Mixer", []() { return std::make_unique<VoiceMixerModule>(); }},
     {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }}};
 
-bool AIStateMapper::validatePatchJSON(const juce::var& json) {
-    if (!json.isObject()) {
-        juce::Logger::writeToLog("validatePatchJSON: Root is not an object.");
-        return false;
+namespace {
+
+// Accepts only whole numbers representable as a uint32 (matches juce::AudioProcessorGraph::NodeID's
+// underlying type). Rejects negatives, fractional values, and non-numeric JSON values outright —
+// there is no legitimate node id that isn't one of these.
+bool extractUnsignedInt(const juce::var& v, juce::uint32& out) {
+    if (v.isInt() || v.isInt64()) {
+        auto i = static_cast<juce::int64>(v);
+        if (i < 0 || i > static_cast<juce::int64>(std::numeric_limits<juce::uint32>::max()))
+            return false;
+        out = static_cast<juce::uint32>(i);
+        return true;
     }
+    if (v.isDouble()) {
+        double d = static_cast<double>(v);
+        if (!std::isfinite(d) || d < 0.0 || d > static_cast<double>(std::numeric_limits<juce::uint32>::max()) ||
+            d != std::floor(d))
+            return false;
+        out = static_cast<juce::uint32>(d);
+        return true;
+    }
+    return false;
+}
+
+// -1 is the MIDI sentinel used by graphToJSON/applyJSONToGraph (mapped to
+// juce::AudioProcessorGraph::midiChannelIndex on apply); anything else must be a plausible raw
+// channel index.
+bool isValidPatchPort(int port) {
+    if (port == -1)
+        return true;
+    return port >= 0 && port <= AIStateMapper::kMaxPortIndex;
+}
+
+} // namespace
+
+PatchValidationResult AIStateMapper::validateNodeParams(juce::AudioProcessor* processor,
+                                                        const juce::DynamicObject* paramsObj) {
+    for (auto* param : processor->getParameters()) {
+        auto* p = dynamic_cast<juce::RangedAudioParameter*>(param);
+        if (!p || !paramsObj->hasProperty(p->paramID))
+            continue;
+
+        juce::var jsonValue = paramsObj->getProperty(p->paramID);
+        bool isNumeric = jsonValue.isDouble() || jsonValue.isInt() || jsonValue.isInt64();
+
+        if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(p)) {
+            if (jsonValue.isString()) {
+                if (findChoiceIndex(choice, jsonValue.toString()) < 0) {
+                    return {false, PatchValidationError::InvalidChoiceValue,
+                            "Unrecognized choice \"" + jsonValue.toString() + "\" for parameter \"" + p->paramID +
+                                "\"."};
+                }
+            } else if (isNumeric) {
+                if (!std::isfinite(static_cast<double>(jsonValue))) {
+                    return {false, PatchValidationError::InvalidParameterValue,
+                            "Non-finite value for parameter \"" + p->paramID + "\"."};
+                }
+            } else {
+                return {false, PatchValidationError::InvalidParameterValue,
+                        "Invalid value for choice parameter \"" + p->paramID + "\"."};
+            }
+        } else if (dynamic_cast<juce::AudioParameterBool*>(p) != nullptr) {
+            // Any JSON value is coercible to bool; nothing to reject.
+        } else {
+            if (!isNumeric && !jsonValue.isBool()) {
+                return {false, PatchValidationError::InvalidParameterValue,
+                        "Invalid value for parameter \"" + p->paramID + "\"."};
+            }
+            if (isNumeric && !std::isfinite(static_cast<double>(jsonValue))) {
+                return {false, PatchValidationError::InvalidParameterValue,
+                        "Non-finite value for parameter \"" + p->paramID + "\"."};
+            }
+        }
+    }
+    return {};
+}
+
+PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const juce::AudioProcessorGraph& graph,
+                                                   bool clearExisting, bool trusted) {
+    if (!json.isObject())
+        return {false, PatchValidationError::NotAnObject, "Root is not an object."};
     auto* rootObj = json.getDynamicObject();
-    if (!rootObj) {
-        juce::Logger::writeToLog("validatePatchJSON: Root dynamic object is null.");
-        return false;
-    }
+    if (!rootObj)
+        return {false, PatchValidationError::NotAnObject, "Root dynamic object is null."};
 
-    // Check for "nodes" array
+    const juce::Array<juce::var>* nodesList = nullptr;
     if (rootObj->hasProperty("nodes")) {
-        auto* nodesList = rootObj->getProperty("nodes").getArray();
-        if (nodesList == nullptr) {
-            juce::Logger::writeToLog("validatePatchJSON: 'nodes' property is not an array.");
-            return false;
-        }
-        // Further validation of each node could go here (e.g., checking for id and type)
+        nodesList = rootObj->getProperty("nodes").getArray();
+        if (nodesList == nullptr)
+            return {false, PatchValidationError::NodesNotArray, "'nodes' property is not an array."};
     } else if (!rootObj->hasProperty("remove")) {
-        juce::Logger::writeToLog("validatePatchJSON: 'nodes' and 'remove' properties are both missing.");
-        return false;
+        return {false, PatchValidationError::MissingNodesOrRemove, "'nodes' and 'remove' properties are both missing."};
     }
 
-    // Check for "connections" array (optional, a patch can exist without connections)
+    const juce::Array<juce::var>* connList = nullptr;
     if (rootObj->hasProperty("connections")) {
-        auto* connList = rootObj->getProperty("connections").getArray();
-        if (connList == nullptr) {
-            juce::Logger::writeToLog("validatePatchJSON: 'connections' property is not an array.");
-            return false;
-        }
-        // Further validation of each connection could go here
+        connList = rootObj->getProperty("connections").getArray();
+        if (connList == nullptr)
+            return {false, PatchValidationError::ConnectionsNotArray, "'connections' property is not an array."};
     }
 
-    return true;
+    const juce::Array<juce::var>* modList = nullptr;
+    if (rootObj->hasProperty("modulations")) {
+        modList = rootObj->getProperty("modulations").getArray();
+        if (modList == nullptr)
+            return {false, PatchValidationError::ModulationsNotArray, "'modulations' property is not an array."};
+    }
+
+    const juce::Array<juce::var>* removeList = nullptr;
+    if (rootObj->hasProperty("remove")) {
+        removeList = rootObj->getProperty("remove").getArray();
+        if (removeList == nullptr)
+            return {false, PatchValidationError::RemoveNotArray, "'remove' property is not an array."};
+    }
+
+    const juce::Array<juce::var>* removeModList = nullptr;
+    if (rootObj->hasProperty("removeModulations")) {
+        removeModList = rootObj->getProperty("removeModulations").getArray();
+        if (removeModList == nullptr)
+            return {false, PatchValidationError::RemoveModulationsNotArray,
+                    "'removeModulations' property is not an array."};
+    }
+
+    // Trusted callers (locally-authored JSON: the user's own saved presets, undo/redo replay)
+    // keep the legacy, purely-structural validation above and skip the strict checks below.
+    if (trusted)
+        return {};
+
+    if (nodesList && nodesList->size() > kMaxNodes)
+        return {false, PatchValidationError::TooManyNodes,
+                "Patch has " + juce::String(nodesList->size()) + " nodes, exceeding the limit of " +
+                    juce::String(kMaxNodes) + "."};
+    if (connList && connList->size() > kMaxConnections)
+        return {false, PatchValidationError::TooManyConnections,
+                "Patch has " + juce::String(connList->size()) + " connections, exceeding the limit of " +
+                    juce::String(kMaxConnections) + "."};
+    if (modList && modList->size() > kMaxModulations)
+        return {false, PatchValidationError::TooManyModulations,
+                "Patch has " + juce::String(modList->size()) + " modulations, exceeding the limit of " +
+                    juce::String(kMaxModulations) + "."};
+    if (removeList && removeList->size() > kMaxRemovals)
+        return {false, PatchValidationError::TooManyRemovals,
+                "Patch has " + juce::String(removeList->size()) + " removals, exceeding the limit of " +
+                    juce::String(kMaxRemovals) + "."};
+    if (removeModList && removeModList->size() > kMaxRemoveModulations)
+        return {false, PatchValidationError::TooManyRemoveModulations,
+                "Patch has " + juce::String(removeModList->size()) + " modulation removals, exceeding the limit of " +
+                    juce::String(kMaxRemoveModulations) + "."};
+
+    // Ids this patch may legally reference: nodes it creates, plus (in merge mode) nodes that
+    // already exist in the live graph. Populated fully before any connection/modulation is
+    // checked, and nothing here mutates the graph — that only happens after validation passes.
+    std::set<juce::uint32> knownIds;
+    if (!clearExisting) {
+        for (auto* node : graph.getNodes())
+            knownIds.insert(node->nodeID.uid);
+    }
+
+    std::set<juce::uint32> patchNodeIds;
+    if (nodesList) {
+        for (const auto& nVar : *nodesList) {
+            auto* nObj = nVar.getDynamicObject();
+            if (!nObj)
+                return {false, PatchValidationError::NodeEntryInvalid, "Node entry is not an object."};
+
+            if (!nObj->hasProperty("id"))
+                return {false, PatchValidationError::NodeIdInvalid, "Node is missing 'id'."};
+            juce::uint32 nodeId = 0;
+            if (!extractUnsignedInt(nObj->getProperty("id"), nodeId))
+                return {false, PatchValidationError::NodeIdInvalid,
+                        "Node 'id' must be an integer within uint32 range."};
+
+            if (!nObj->hasProperty("type"))
+                return {false, PatchValidationError::NodeTypeInvalid, "Node is missing 'type'."};
+            juce::var typeVar = nObj->getProperty("type");
+            if (!typeVar.isString())
+                return {false, PatchValidationError::NodeTypeInvalid, "Node 'type' must be a string."};
+            juce::String type = typeVar.toString();
+            if (type.isEmpty() || type.length() > kMaxTypeNameLength)
+                return {false, PatchValidationError::NodeTypeInvalid,
+                        "Node 'type' must be 1-" + juce::String(kMaxTypeNameLength) + " characters."};
+
+            if (patchNodeIds.count(nodeId) > 0)
+                return {false, PatchValidationError::DuplicateNodeId,
+                        "Duplicate node id " + juce::String(nodeId) + " within patch."};
+            patchNodeIds.insert(nodeId);
+
+            // Resolve the type via the real factory up front, rather than discovering an
+            // unknown type mid-apply after other nodes may already have been created.
+            auto probe = createModule(type);
+            if (!probe)
+                return {false, PatchValidationError::UnknownNodeType, "Unknown module type: \"" + type + "\"."};
+
+            if (nObj->hasProperty("params")) {
+                if (auto* pObj = nObj->getProperty("params").getDynamicObject()) {
+                    auto paramResult = validateNodeParams(probe.get(), pObj);
+                    if (!paramResult.ok)
+                        return paramResult;
+                }
+            }
+        }
+    }
+    knownIds.insert(patchNodeIds.begin(), patchNodeIds.end());
+
+    if (connList) {
+        for (const auto& cVar : *connList) {
+            auto* cObj = cVar.getDynamicObject();
+            if (!cObj)
+                return {false, PatchValidationError::ConnectionEntryInvalid, "Connection entry is not an object."};
+
+            juce::uint32 src = 0, dst = 0;
+            if (!extractUnsignedInt(cObj->getProperty("src"), src) || knownIds.count(src) == 0)
+                return {false, PatchValidationError::ConnectionUnknownNode,
+                        "Connection references unknown source node id."};
+            if (!extractUnsignedInt(cObj->getProperty("dst"), dst) || knownIds.count(dst) == 0)
+                return {false, PatchValidationError::ConnectionUnknownNode,
+                        "Connection references unknown destination node id."};
+            if (src == dst)
+                return {false, PatchValidationError::ConnectionSelfCycle,
+                        "Connection would create a self-cycle (src == dst == " + juce::String(src) + ")."};
+
+            int srcPort = static_cast<int>(cObj->getProperty("srcPort"));
+            int dstPort = static_cast<int>(cObj->getProperty("dstPort"));
+            if (!isValidPatchPort(srcPort) || !isValidPatchPort(dstPort))
+                return {false, PatchValidationError::ConnectionInvalidPort, "Connection port index out of range."};
+        }
+    }
+
+    if (modList) {
+        for (const auto& mVar : *modList) {
+            auto* mObj = mVar.getDynamicObject();
+            if (!mObj)
+                return {false, PatchValidationError::ModulationEntryInvalid, "Modulation entry is not an object."};
+
+            juce::uint32 source = 0, dest = 0;
+            if (!extractUnsignedInt(mObj->getProperty("source"), source) || knownIds.count(source) == 0)
+                return {false, PatchValidationError::ModulationUnknownNode,
+                        "Modulation references unknown source node id."};
+            if (!extractUnsignedInt(mObj->getProperty("dest"), dest) || knownIds.count(dest) == 0)
+                return {false, PatchValidationError::ModulationUnknownNode,
+                        "Modulation references unknown destination node id."};
+            if (source == dest)
+                return {false, PatchValidationError::ModulationSelfCycle,
+                        "Modulation would create a self-cycle (source == dest == " + juce::String(source) + ")."};
+
+            // Modulation ports are always real audio/CV channels, never MIDI — reject the -1
+            // sentinel here even though it's legal for plain connections.
+            int destPort = static_cast<int>(mObj->getProperty("destPort"));
+            if (destPort < 0 || !isValidPatchPort(destPort))
+                return {false, PatchValidationError::ModulationInvalidPort, "Modulation destPort out of range."};
+
+            if (mObj->hasProperty("sourcePort")) {
+                int sourcePort = static_cast<int>(mObj->getProperty("sourcePort"));
+                if (sourcePort < 0 || !isValidPatchPort(sourcePort))
+                    return {false, PatchValidationError::ModulationInvalidPort, "Modulation sourcePort out of range."};
+            }
+        }
+    }
+
+    if (removeList) {
+        for (const auto& idVar : *removeList) {
+            juce::uint32 tmp = 0;
+            if (!extractUnsignedInt(idVar, tmp))
+                return {false, PatchValidationError::RemoveEntryInvalid,
+                        "Entries in 'remove' must be integers within uint32 range."};
+        }
+    }
+
+    if (removeModList) {
+        for (const auto& rVar : *removeModList) {
+            auto* rObj = rVar.getDynamicObject();
+            juce::uint32 tmp = 0;
+            if (!rObj || !rObj->hasProperty("source") || !extractUnsignedInt(rObj->getProperty("source"), tmp) ||
+                !rObj->hasProperty("dest") || !extractUnsignedInt(rObj->getProperty("dest"), tmp) ||
+                !rObj->hasProperty("destPort"))
+                return {false, PatchValidationError::RemoveModulationEntryInvalid,
+                        "Invalid 'removeModulations' entry."};
+        }
+    }
+
+    return {};
 }
 
 std::unique_ptr<juce::AudioProcessor> AIStateMapper::createModule(const juce::String& type) {
@@ -376,8 +624,9 @@ void AIStateMapper::applyParamsToProcessor(juce::AudioProcessor* processor, cons
                             p->setValueNotifyingHost(p->getNormalisableRange().convertTo0to1((float)index));
                         }
                     } else {
-                        float val = (float)jsonValue;
-                        p->setValueNotifyingHost(p->getNormalisableRange().convertTo0to1(val));
+                        auto choiceRange = p->getNormalisableRange();
+                        float val = choiceRange.snapToLegalValue((float)jsonValue);
+                        p->setValueNotifyingHost(choiceRange.convertTo0to1(val));
                     }
                 } else if (auto* b = dynamic_cast<juce::AudioParameterBool*>(p)) {
                     b->setValueNotifyingHost((bool)jsonValue ? 1.0f : 0.0f);
@@ -417,9 +666,11 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
         return false;
     }
 
-    // Validate JSON structure before making any changes
-    if (!validatePatchJSON(json)) {
-        juce::Logger::writeToLog("applyJSONToGraph: JSON patch validation failed.");
+    // Validate the entire patch before making any changes — a rejected patch must never be
+    // partially applied.
+    auto validation = validatePatch(json, graph, clearExisting, trusted);
+    if (!validation.ok) {
+        juce::Logger::writeToLog("applyJSONToGraph: JSON patch validation failed: " + validation.message);
         return false;
     }
 

@@ -1638,7 +1638,8 @@ void GraphEditor::loadPreset(juce::File file) {
     }
     // Detach before applyJSONToGraph clears the graph (see loadFactoryPreset — avoids scope-timer UAF).
     detachAllModuleComponents();
-    if (synth::AIStateMapper::applyJSONToGraph(json, audioEngine.getGraph(), true)) {
+    // The user picked this file from their own filesystem — trusted, unlike an AI-authored patch.
+    if (synth::AIStateMapper::applyJSONToGraph(json, audioEngine.getGraph(), true, /*trusted=*/true)) {
         updateComponents();
     } else {
         updateComponents(); // reconcile view to whatever state the graph is in after a failed apply
