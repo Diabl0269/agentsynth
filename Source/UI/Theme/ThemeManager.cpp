@@ -1,4 +1,5 @@
 #include "ThemeManager.h"
+#include "../../Branding.h"
 #include "BuiltInThemes.h"
 #include "ThemeLoader.h"
 
@@ -83,7 +84,7 @@ void ThemeManager::addUserTheme(Theme theme) {
 // static
 juce::File ThemeManager::getUserThemesFolder() {
     juce::File folder = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                            .getChildFile("Gravisynth")
+                            .getChildFile(synth::branding::kSettingsFolderName)
                             .getChildFile("Themes");
 
     if (!folder.exists())

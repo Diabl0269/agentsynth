@@ -1,7 +1,7 @@
 #pragma once
 
+#include "../AppUndoManager.h"
 #include "../AudioEngine.h"
-#include "../GravisynthUndoManager.h"
 #include "../Modules/FilterModule.h"
 #include "../Modules/MidiKeyboardModule.h"
 #include "FrequencyResponseComponent.h"
@@ -19,7 +19,7 @@ class ModuleComponent
     , public juce::AudioProcessorParameter::Listener {
 public:
     ModuleComponent(juce::AudioProcessor* module, juce::AudioProcessorGraph::NodeID nodeId, GraphEditor& owner,
-                    GravisynthUndoManager* undoMgr = nullptr);
+                    AppUndoManager* undoMgr = nullptr);
 
     void parameterValueChanged(int parameterIndex, float newValue) override;
     void parameterGestureChanged(int parameterIndex, bool gestureIsStarting) override;
@@ -83,7 +83,7 @@ private:
     std::unique_ptr<juce::ButtonParameterAttachment> muteAttachment;
     std::unique_ptr<juce::DrawableButton> deleteButton;
 
-    GravisynthUndoManager* undoManager = nullptr;
+    AppUndoManager* undoManager = nullptr;
     std::map<int, float> gestureStartValues;
     juce::Point<int> dragStartPosition;
 

@@ -1,5 +1,5 @@
 #include "../Source/AI/AIStateMapper.h"
-#include "../Source/GravisynthUndoManager.h"
+#include "../Source/AppUndoManager.h"
 #include "../Source/Modules/ADSRModule.h"
 #include "../Source/Modules/AttenuverterModule.h"
 #include "../Source/Modules/FilterModule.h"
@@ -16,7 +16,7 @@
 class UndoRedoTest : public ::testing::Test {
 protected:
     juce::AudioProcessorGraph graph;
-    GravisynthUndoManager undoManager;
+    AppUndoManager undoManager;
 
     void SetUp() override { graph.clear(); }
 };
@@ -481,7 +481,7 @@ TEST_F(UndoRedoTest, RedoWithParameterValueInUnitInterval) {
  *
  * Verifies that the "Poly Pad" preset (index 6) connections survive a full
  * undo/redo cycle modelled by the graphToJSON -> applyJSONToGraph round-trip
- * (the same operation that GravisynthUndoManager::SnapshotAction performs on
+ * (the same operation that AppUndoManager::SnapshotAction performs on
  * undo and redo).
  *
  * The following connections must survive:
@@ -498,7 +498,7 @@ TEST_F(UndoRedoTest, RedoWithParameterValueInUnitInterval) {
  * routings, and the serializer must preserve them as-is without substituting
  * attenuverter chains.
  *
- * Strategy (mirrors GravisynthUndoManager behaviour):
+ * Strategy (mirrors AppUndoManager behaviour):
  *   1. Load Poly Pad (preset 6) into graph g.
  *   2. Snapshot: J0 = graphToJSON(g).
  *   3. Simulate "undo-apply-different-state": load preset 0 into g (clobbers Poly Pad).

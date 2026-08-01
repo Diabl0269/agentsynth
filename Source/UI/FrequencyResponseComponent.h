@@ -2,7 +2,7 @@
 
 #include "../Modules/FilterModule.h"
 #include "../Modules/VisualBuffer.h"
-#include "Theme/GravisynthLookAndFeel.h"
+#include "Theme/AppLookAndFeel.h"
 #include "Theme/Theme.h"
 #include <cmath>
 #include <juce_dsp/juce_dsp.h>
@@ -142,8 +142,8 @@ public:
         float w = bounds.getWidth();
         float h = bounds.getHeight();
 
-        using synth::theme::GravisynthLookAndFeel;
-        auto* lf = dynamic_cast<GravisynthLookAndFeel*>(&getLookAndFeel());
+        using synth::theme::AppLookAndFeel;
+        auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
 
         juce::Colour bgColor = lf ? lf->getTheme().colors.bg1 : juce::Colour(0xff1a1a2e);
         juce::Colour gridColor = lf ? lf->getTheme().colors.border.withAlpha(0.4f) : juce::Colour(0xff2a2a3e);

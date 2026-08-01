@@ -1,12 +1,12 @@
 #include "MainComponent.h"
 #include "ShortcutManager.h"
-#include "UI/Theme/GravisynthLookAndFeel.h"
+#include "UI/Theme/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include <JuceHeader.h>
 
-class GravisynthApplication : public juce::JUCEApplication {
+class AppApplication : public juce::JUCEApplication {
 public:
-    GravisynthApplication() {}
+    AppApplication() {}
 
     const juce::String getApplicationName() override { return ProjectInfo::projectName; }
     const juce::String getApplicationVersion() override { return ProjectInfo::versionString; }
@@ -40,7 +40,7 @@ public:
         : public juce::DocumentWindow
         , public juce::MenuBarModel {
     public:
-        MainWindow(juce::String name, synth::theme::ThemeManager& tm, synth::theme::GravisynthLookAndFeel& lf)
+        MainWindow(juce::String name, synth::theme::ThemeManager& tm, synth::theme::AppLookAndFeel& lf)
             : DocumentWindow(name,
                              juce::Desktop::getInstance().getDefaultLookAndFeel().findColour(
                                  juce::ResizableWindow::backgroundColourId),
@@ -83,13 +83,13 @@ public:
             if (auto* mc = dynamic_cast<MainComponent*>(getContentComponent())) {
                 auto& cm = mc->getCommandManager();
                 if (menuIndex == 0) {
-                    menu.addCommandItem(&cm, GravisynthCommands::savePreset);
-                    menu.addCommandItem(&cm, GravisynthCommands::openPreset);
+                    menu.addCommandItem(&cm, AppCommands::savePreset);
+                    menu.addCommandItem(&cm, AppCommands::openPreset);
                     menu.addSeparator();
-                    menu.addCommandItem(&cm, GravisynthCommands::openSettings);
+                    menu.addCommandItem(&cm, AppCommands::openSettings);
                 } else if (menuIndex == 1) {
-                    menu.addCommandItem(&cm, GravisynthCommands::undo);
-                    menu.addCommandItem(&cm, GravisynthCommands::redo);
+                    menu.addCommandItem(&cm, AppCommands::undo);
+                    menu.addCommandItem(&cm, AppCommands::redo);
                 }
             }
             return menu;
@@ -106,9 +106,9 @@ private:
     // so they are constructed first and destroyed LAST (after mainWindow). This guarantees
     // the LnF object outlives every Component — the classic JUCE shutdown-crash guard.
     synth::theme::ThemeManager themeManager;
-    synth::theme::GravisynthLookAndFeel lookAndFeel;
+    synth::theme::AppLookAndFeel lookAndFeel;
     std::unique_ptr<MainWindow> mainWindow;
 };
 
 //==============================================================================
-START_JUCE_APPLICATION(GravisynthApplication)
+START_JUCE_APPLICATION(AppApplication)

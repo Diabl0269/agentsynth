@@ -8,7 +8,7 @@
 // in TestMain.cpp and applies globally — no per-file setup needed).
 // This file is NOT registered in CMakeLists.txt (per OWNER instructions).
 
-#include "../Source/GravisynthUndoManager.h"
+#include "../Source/AppUndoManager.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/LayoutUtil.h"
@@ -288,7 +288,7 @@ TEST(GraphEditorOnboarding, NewPatchOnEmptyCanvasIsNoop) {
 TEST(GraphEditorOnboarding, NewPatchWithUndoManagerIsUndoable) {
     // With an undoManager present, newPatch must be undoable (Cmd+Z restores the graph).
     AudioEngine engine;
-    GravisynthUndoManager undoManager;
+    AppUndoManager undoManager;
     GraphEditor editor(engine, &undoManager);
     undoManager.setGraphEditor(&editor);
     editor.setSize(800, 600);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Theme/GravisynthLookAndFeel.h"
+#include "Theme/AppLookAndFeel.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
 class ModuleLibraryComponent
@@ -87,7 +87,7 @@ public:
         juce::Colour itemColour = juce::Colours::white;
         juce::Colour accentColour = juce::Colours::lightblue;
 
-        auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
         if (lf != nullptr) {
             const auto& c = lf->getTheme().colors;
             bgColour = c.bg0;

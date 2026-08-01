@@ -22,7 +22,7 @@
 #include "../PresetManager.h"
 #include "LayoutUtil.h"
 #include "ModuleComponent.h"
-#include "Theme/GravisynthLookAndFeel.h"
+#include "Theme/AppLookAndFeel.h"
 #include <set>
 #include <tuple>
 #include <unordered_map>
@@ -65,7 +65,7 @@ static juce::Point<int> estimateModuleSize(const juce::String& typeName) {
     return {280, 360};
 }
 
-GraphEditor::GraphEditor(AudioEngine& engine, GravisynthUndoManager* undoMgr)
+GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     : audioEngine(engine)
     , content(*this)
     , modMatrix(engine, undoMgr)
@@ -94,7 +94,7 @@ GraphEditor::GraphContentComponent::GraphContentComponent(GraphEditor& ed)
 void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     // Resolve the themed LookAndFeel once. In headless tests the default JUCE LnF is
     // installed, so the cast returns null and we fall back to plain fills/lines.
-    auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
 
     if (lf != nullptr)
         lf->fillThemedBackground(g, getLocalBounds().toFloat(), /*isCanvas*/ true);
@@ -138,7 +138,7 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     const juce::Colour textPrimaryColour = lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
     const juce::Colour textMutedColour = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::white;
 
-    // Build the cubic-bezier wire path (identical to GravisynthLookAndFeel::drawConnectionWire's
+    // Build the cubic-bezier wire path (identical to AppLookAndFeel::drawConnectionWire's
     // default curve) so the animated dots can ride the EXACT same curve as the drawn wire instead
     // of cutting straight across it.
     auto buildWirePath = [](juce::Point<float> p1, juce::Point<float> p2) {
@@ -445,7 +445,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     // ---- Drag-preview landing ghost (on top of module cards) ----
     // Draw a translucent rounded rect at the exact snapped+anti-overlapped landing position.
     if (editor.dragPreviewActive && !editor.dragPreviewGhost.isEmpty()) {
-        auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
         const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
         const auto& m = lf != nullptr ? lf->getTheme().metrics : synth::theme::Metrics{};
         const float cornerRadius = m.cornerRadius;
@@ -465,7 +465,7 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     // ---- Alignment guides (UI Phase 7 - Item 4) ----
     // Draw aligned edges when hovering near other modules (Figma-style)
     if (editor.dragPreviewActive && !editor.alignmentGuides.empty() && editor.alignmentGuidesEnabled) {
-        auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
         const juce::Colour guideColour = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::white;
 
         // Solid lines, ~70% opacity for visibility without distraction
@@ -698,7 +698,7 @@ void GraphEditor::paintOverChildren(juce::Graphics& g) {
     if (!GraphEditor::isCanvasEmpty(static_cast<int>(content.getModules().size())))
         return;
 
-    auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
 
     // textMuted token at ~60% alpha — tasteful, non-distracting.
     const juce::Colour textMutedColour = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::white;
@@ -1226,7 +1226,7 @@ void GraphEditor::updateDragPreview(juce::Point<int> desiredTopLeftCanvas) {
     if (dragPreviewGhost.isEmpty())
         return;
 
-    auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel());
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
     const auto& m = lf != nullptr ? lf->getTheme().metrics : synth::theme::Metrics{};
     const float snapThreshold = static_cast<float>(m.gridSize); // kGridSize
 

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../AI/AIIntegrationService.h"
-#include "Theme/GravisynthLookAndFeel.h"
+#include "Theme/AppLookAndFeel.h"
 #include "UIAnimation.h"
 #include <atomic>
 #include <juce_animation/juce_animation.h>
@@ -72,8 +72,8 @@ private:
         SpinnerDot() = default;
 
         void paint(juce::Graphics& g) override {
-            using synth::theme::GravisynthLookAndFeel;
-            auto* lf = dynamic_cast<GravisynthLookAndFeel*>(&getLookAndFeel());
+            using synth::theme::AppLookAndFeel;
+            auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
             juce::Colour accentColor = (lf != nullptr) ? lf->getTheme().colors.accent : juce::Colours::lightblue;
             g.setColour(accentColor.withAlpha(currentAlpha));
             g.fillEllipse(getLocalBounds().toFloat().reduced(1.0f));

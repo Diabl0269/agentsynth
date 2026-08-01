@@ -5,15 +5,15 @@
 #include <juce_data_structures/juce_data_structures.h>
 
 /**
- * @class GravisynthUndoManager
+ * @class AppUndoManager
  * @brief Thin wrapper around juce::UndoManager with convenience methods for
  *        structural changes, parameter edits, and module repositioning.
  */
 class GraphEditor; // Forward declaration
 
-class GravisynthUndoManager {
+class AppUndoManager {
 public:
-    GravisynthUndoManager();
+    AppUndoManager();
 
     void setGraphEditor(GraphEditor* ge) { graphEditor = ge; }
 
@@ -81,5 +81,5 @@ private:
     juce::UndoManager undoManager{30000000, 50}; // 30MB limit, 50 min transactions
     juce::var capturedBeforeState;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GravisynthUndoManager)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AppUndoManager)
 };

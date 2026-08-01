@@ -5,7 +5,7 @@
 // StatusBarComponent  §4.1
 // Bottom chrome strip: patch name, CPU %, voice count, master-mute button.
 //
-// Headless-safe: all paint paths dynamic_cast<GravisynthLookAndFeel*> and fall back to plain
+// Headless-safe: all paint paths dynamic_cast<AppLookAndFeel*> and fall back to plain
 // JUCE colours when the cast returns null (test runner has no themed LnF installed).
 //
 // update() is gated — it only calls repaint() when the displayed values actually change
