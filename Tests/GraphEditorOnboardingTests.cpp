@@ -36,41 +36,41 @@ TEST(GraphEditorOnboarding, IsCanvasEmptyReturnsFalseForMany) { EXPECT_FALSE(Gra
 
 TEST(GraphEditorOnboarding, ComputeDropFinalPositionSnapsToGrid) {
     // Drop at a non-grid coordinate with no existing modules.
-    const std::vector<gsynth::LayoutUtil::Box> empty;
-    gsynth::LayoutUtil::NodeID nullId{};
+    const std::vector<synth::LayoutUtil::Box> empty;
+    synth::LayoutUtil::NodeID nullId{};
 
     auto result = GraphEditor::computeDropFinalPosition({103, 97}, // neither multiple of kGridSize=8
                                                         280, 300, empty, nullId);
 
-    EXPECT_EQ(result.x % gsynth::LayoutUtil::kGridSize, 0)
-        << "x=" << result.x << " must be a multiple of kGridSize=" << gsynth::LayoutUtil::kGridSize;
-    EXPECT_EQ(result.y % gsynth::LayoutUtil::kGridSize, 0)
-        << "y=" << result.y << " must be a multiple of kGridSize=" << gsynth::LayoutUtil::kGridSize;
+    EXPECT_EQ(result.x % synth::LayoutUtil::kGridSize, 0)
+        << "x=" << result.x << " must be a multiple of kGridSize=" << synth::LayoutUtil::kGridSize;
+    EXPECT_EQ(result.y % synth::LayoutUtil::kGridSize, 0)
+        << "y=" << result.y << " must be a multiple of kGridSize=" << synth::LayoutUtil::kGridSize;
 }
 
 TEST(GraphEditorOnboarding, ComputeDropFinalPositionEmptyBoxesReturnSnapped) {
     // With no existing modules the result should equal snap(dropPoint).
-    const std::vector<gsynth::LayoutUtil::Box> empty;
-    gsynth::LayoutUtil::NodeID nullId{};
+    const std::vector<synth::LayoutUtil::Box> empty;
+    synth::LayoutUtil::NodeID nullId{};
 
     const juce::Point<int> drop{200, 200};
     auto result = GraphEditor::computeDropFinalPosition(drop, 280, 300, empty, nullId);
-    auto expected = gsynth::LayoutUtil::snap(drop);
+    auto expected = synth::LayoutUtil::snap(drop);
     EXPECT_EQ(result, expected);
 }
 
 TEST(GraphEditorOnboarding, ComputeDropFinalPositionAvoidsExistingBox) {
     // Existing module occupies the snapped drop position.
-    gsynth::LayoutUtil::NodeID existingId{1};
-    gsynth::LayoutUtil::NodeID newId{}; // new module (no NodeID yet)
+    synth::LayoutUtil::NodeID existingId{1};
+    synth::LayoutUtil::NodeID newId{}; // new module (no NodeID yet)
 
     juce::Rectangle<int> existingRect{200, 200, 280, 300};
-    std::vector<gsynth::LayoutUtil::Box> boxes = {{existingId, existingRect}};
+    std::vector<synth::LayoutUtil::Box> boxes = {{existingId, existingRect}};
 
     auto result = GraphEditor::computeDropFinalPosition({200, 200}, 280, 300, boxes, newId);
 
     // Must not overlap the existing box (with collision gap).
-    const int gap = gsynth::LayoutUtil::kCollisionGap;
+    const int gap = synth::LayoutUtil::kCollisionGap;
     auto resultRect = juce::Rectangle<int>(result.x, result.y, 280, 300);
     EXPECT_FALSE(resultRect.expanded(gap / 2).intersects(existingRect.expanded(gap / 2)))
         << "Result (" << resultRect.toString() << ") overlaps existing box (" << existingRect.toString()
@@ -79,30 +79,30 @@ TEST(GraphEditorOnboarding, ComputeDropFinalPositionAvoidsExistingBox) {
 
 TEST(GraphEditorOnboarding, ComputeDropFinalPositionResultIsOnGrid) {
     // Even after collision resolution the result stays on-grid.
-    gsynth::LayoutUtil::NodeID existingId{1};
-    gsynth::LayoutUtil::NodeID newId{};
+    synth::LayoutUtil::NodeID existingId{1};
+    synth::LayoutUtil::NodeID newId{};
 
     juce::Rectangle<int> existingRect{200, 200, 280, 300};
-    std::vector<gsynth::LayoutUtil::Box> boxes = {{existingId, existingRect}};
+    std::vector<synth::LayoutUtil::Box> boxes = {{existingId, existingRect}};
 
     auto result = GraphEditor::computeDropFinalPosition({203, 197}, 280, 300, boxes, newId);
 
-    EXPECT_EQ(result.x % gsynth::LayoutUtil::kGridSize, 0) << "Post-collision x=" << result.x << " must stay on grid";
-    EXPECT_EQ(result.y % gsynth::LayoutUtil::kGridSize, 0) << "Post-collision y=" << result.y << " must stay on grid";
+    EXPECT_EQ(result.x % synth::LayoutUtil::kGridSize, 0) << "Post-collision x=" << result.x << " must stay on grid";
+    EXPECT_EQ(result.y % synth::LayoutUtil::kGridSize, 0) << "Post-collision y=" << result.y << " must stay on grid";
 }
 
 TEST(GraphEditorOnboarding, ComputeDropFinalPositionIdempotent) {
     // Calling the function a second time with the result of the first call (adding the
     // first result as a placed box) must return the same position (the slot is clear).
-    gsynth::LayoutUtil::NodeID idA{1};
-    gsynth::LayoutUtil::NodeID idNew{};
+    synth::LayoutUtil::NodeID idA{1};
+    synth::LayoutUtil::NodeID idNew{};
 
-    std::vector<gsynth::LayoutUtil::Box> emptyBoxes;
+    std::vector<synth::LayoutUtil::Box> emptyBoxes;
     auto firstResult = GraphEditor::computeDropFinalPosition({100, 100}, 280, 300, emptyBoxes, idNew);
 
     // Re-run: this time the module is already placed at firstResult (idNew box).
     // Use idNew as selfId so it is excluded from self-collision.
-    std::vector<gsynth::LayoutUtil::Box> withSelf = {
+    std::vector<synth::LayoutUtil::Box> withSelf = {
         {idNew, juce::Rectangle<int>(firstResult.x, firstResult.y, 280, 300)}};
     auto secondResult = GraphEditor::computeDropFinalPosition(firstResult, 280, 300, withSelf, idNew);
 
@@ -115,10 +115,10 @@ TEST(GraphEditorOnboarding, ComputeDropFinalPositionSelfIdExcludedFromCollision)
     // The module being placed must be excluded from its own collision check.
     // If selfId's box is in existingBoxes at the exact drop position, the result
     // should still land at that position (it does not collide with itself).
-    gsynth::LayoutUtil::NodeID selfId{42};
-    juce::Point<int> snappedDrop = gsynth::LayoutUtil::snap({200, 200});
+    synth::LayoutUtil::NodeID selfId{42};
+    juce::Point<int> snappedDrop = synth::LayoutUtil::snap({200, 200});
     juce::Rectangle<int> selfBox{snappedDrop.x, snappedDrop.y, 280, 300};
-    std::vector<gsynth::LayoutUtil::Box> boxes = {{selfId, selfBox}};
+    std::vector<synth::LayoutUtil::Box> boxes = {{selfId, selfBox}};
 
     auto result = GraphEditor::computeDropFinalPosition(snappedDrop, 280, 300, boxes, selfId);
 

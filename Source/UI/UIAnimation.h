@@ -3,7 +3,7 @@
 // ============================================================================
 // UIAnimation.h — Shared animation utilities for Gravisynth UI Phase 5
 //
-// Namespace: gravisynth::ui
+// Namespace: synth::ui
 //
 // Three sections:
 //   1. Pure easing math   — <cmath> only, headless-testable, no JUCE/GUI deps.
@@ -18,7 +18,7 @@
 #include <juce_animation/juce_animation.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
-namespace gravisynth::ui {
+namespace synth::ui {
 
 // ============================================================================
 // Section 1 — Pure easing functions
@@ -70,12 +70,12 @@ inline float easeOutBack(float t) noexcept {
 // Minimal caller member declarations:
 //
 //     juce::VBlankAnimatorUpdater vblankUpdater { this };   // 'this' = a juce::Component
-//     gravisynth::ui::AnimationDriver someAnim;
+//     synth::ui::AnimationDriver someAnim;
 //
 // Usage:
 //
 //     someAnim.start(vblankUpdater, 300.0,
-//                    gravisynth::ui::easeOutCubic,
+//                    synth::ui::easeOutCubic,
 //                    [this](float t) { setAlpha(t); },
 //                    [this]()        { /* done */ });
 //
@@ -190,4 +190,4 @@ inline juce::String formatShortcutHint(const juce::String& base, const juce::Str
     return base + "  (" + shortcutDisplay + ")";
 }
 
-} // namespace gravisynth::ui
+} // namespace synth::ui

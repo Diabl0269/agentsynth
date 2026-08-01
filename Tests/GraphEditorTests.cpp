@@ -60,9 +60,9 @@ TEST_F(GraphEditorTest, DropModuleCreatesNode) {
         if (node->getProcessor()->getName() == "Oscillator") {
             foundOsc = true;
             // Drop position is now snapped to the layout grid (anti-overlap may also offset it).
-            EXPECT_EQ(static_cast<int>(node->properties.getWithDefault("x", -1)) % gsynth::LayoutUtil::kGridSize, 0)
+            EXPECT_EQ(static_cast<int>(node->properties.getWithDefault("x", -1)) % synth::LayoutUtil::kGridSize, 0)
                 << "Dropped module x should snap to grid";
-            EXPECT_EQ(static_cast<int>(node->properties.getWithDefault("y", -1)) % gsynth::LayoutUtil::kGridSize, 0)
+            EXPECT_EQ(static_cast<int>(node->properties.getWithDefault("y", -1)) % synth::LayoutUtil::kGridSize, 0)
                 << "Dropped module y should snap to grid";
             break;
         }
@@ -321,7 +321,7 @@ TEST_F(GraphEditorTest, PolyBusWireResolvesToVisibleJacks) {
     engine.initialise();
     engine.getGraph().clear();
 
-    bool loaded = gsynth::PresetManager::loadPreset(6, engine.getGraph());
+    bool loaded = synth::PresetManager::loadPreset(6, engine.getGraph());
     ASSERT_TRUE(loaded) << "Poly Pad preset (index 6) must load successfully";
 
     auto routings = engine.getModulationRoutings();
@@ -462,10 +462,10 @@ TEST_F(GraphEditorTest, DropSnapsPositionToGrid) {
 
     EXPECT_GE(x, 0) << "Node x property must be set";
     EXPECT_GE(y, 0) << "Node y property must be set";
-    EXPECT_EQ(x % gsynth::LayoutUtil::kGridSize, 0)
-        << "Node x=" << x << " must be a multiple of kGridSize=" << gsynth::LayoutUtil::kGridSize;
-    EXPECT_EQ(y % gsynth::LayoutUtil::kGridSize, 0)
-        << "Node y=" << y << " must be a multiple of kGridSize=" << gsynth::LayoutUtil::kGridSize;
+    EXPECT_EQ(x % synth::LayoutUtil::kGridSize, 0)
+        << "Node x=" << x << " must be a multiple of kGridSize=" << synth::LayoutUtil::kGridSize;
+    EXPECT_EQ(y % synth::LayoutUtil::kGridSize, 0)
+        << "Node y=" << y << " must be a multiple of kGridSize=" << synth::LayoutUtil::kGridSize;
 }
 
 // DropOnOccupiedCellOffsetsToClearSlot: dropping two modules at the same position
@@ -507,7 +507,7 @@ TEST_F(GraphEditorTest, DropOnOccupiedCellOffsetsToClearSlot) {
     ASSERT_GE(static_cast<int>(mods.size()), 2) << "Expected at least 2 module components after two drops";
 
     // Check every pair: bounding boxes must not intersect when inflated by kCollisionGap/2
-    const int gap = gsynth::LayoutUtil::kCollisionGap;
+    const int gap = synth::LayoutUtil::kCollisionGap;
     for (size_t i = 0; i < mods.size(); ++i) {
         for (size_t j = i + 1; j < mods.size(); ++j) {
             auto ri = mods[i].bounds.expanded(gap / 2);
@@ -563,7 +563,7 @@ TEST_F(GraphEditorTest, DragPreviewGhostTracksResolvedPlacement) {
 
     // The ghost must NOT intersect the existing module's bounds (collision was resolved).
     juce::Rectangle<int> oscBounds(100, 100, 280, 300);
-    const int gap = gsynth::LayoutUtil::kCollisionGap;
+    const int gap = synth::LayoutUtil::kCollisionGap;
     EXPECT_FALSE(ghost.expanded(gap / 2).intersects(oscBounds.expanded(gap / 2)))
         << "Ghost rect (" << ghost.toString() << ") must not overlap existing module (" << oscBounds.toString()
         << ") after anti-overlap resolution";
@@ -613,7 +613,7 @@ TEST_F(GraphEditorTest, DropUsesRealModuleSizeForAntiOverlap) {
     ASSERT_GE(static_cast<int>(bounds.size()), 2) << "Expected at least 2 module components after two drops";
 
     // All pairs must be non-overlapping (with collision gap).
-    const int gap = gsynth::LayoutUtil::kCollisionGap;
+    const int gap = synth::LayoutUtil::kCollisionGap;
     for (size_t i = 0; i < bounds.size(); ++i) {
         for (size_t j = i + 1; j < bounds.size(); ++j) {
             auto ri = bounds[i].expanded(gap / 2);
@@ -631,8 +631,8 @@ TEST_F(GraphEditorTest, DropUsesRealModuleSizeForAntiOverlap) {
 
 TEST_F(GraphEditorTest, AlignmentGuideDrawingThemeAware) {
     // Verify paintOverChildren() uses theme colors correctly.
-    gsynth::theme::GravisynthLookAndFeel lf;
-    lf.applyTheme(gsynth::theme::makeObsidian());
+    synth::theme::GravisynthLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
 
     const auto& m = lf.getTheme().metrics;
     const auto guideColor = lf.getTheme().colors.textMuted.withAlpha(m.guideAlpha);

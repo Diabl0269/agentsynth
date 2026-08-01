@@ -29,7 +29,7 @@
 
 namespace e2e {
 
-class MockProvider : public gsynth::AIProvider {
+class MockProvider : public synth::AIProvider {
 public:
     juce::String getProviderName() const override { return "Mock"; }
     void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
@@ -137,7 +137,7 @@ protected:
 
     void loadPreset(int index) {
         editor().detachAllModuleComponents();
-        gsynth::PresetManager::loadPreset(index, graph());
+        synth::PresetManager::loadPreset(index, graph());
         editor().updateComponents();
     }
 
@@ -189,7 +189,7 @@ TEST_F(E2EWorkflowTest, LoadPreset_UpdatesGraph) {
 }
 
 TEST_F(E2EWorkflowTest, LoadAllPresets_NoCrash) {
-    auto presetNames = gsynth::PresetManager::getPresetNames();
+    auto presetNames = synth::PresetManager::getPresetNames();
     auto presetCount = presetNames.size();
 
     for (int i = 0; i < presetCount; ++i) {
@@ -698,7 +698,7 @@ TEST_F(E2EWorkflowTest, AutoArrangeOnLoadedPresetClearsOverlapsKeepsGraph) {
         << "Must have at least 2 ModuleComponents after preset load + updateComponents";
 
     // Assert no pairwise overlap at kCollisionGap
-    const int gap = gsynth::LayoutUtil::kCollisionGap;
+    const int gap = synth::LayoutUtil::kCollisionGap;
     for (size_t i = 0; i < modBounds.size(); ++i) {
         for (size_t j = i + 1; j < modBounds.size(); ++j) {
             auto ri = modBounds[i].bounds.expanded(gap / 2);
@@ -769,7 +769,7 @@ TEST_F(E2EWorkflowTest, AllPresetsRenderFiniteAudio) {
 // geometry, and asserts no pairwise overlap at kCollisionGap. This is the true visual check.
 TEST_F(E2EWorkflowTest, AllPresetsLoadWithoutOverlapAsAuthored) {
     constexpr int kNumPresets = 7;
-    const int gap = gsynth::LayoutUtil::kCollisionGap;
+    const int gap = synth::LayoutUtil::kCollisionGap;
 
     for (int p = 0; p < kNumPresets; ++p) {
         loadPreset(p); // already calls updateComponents()

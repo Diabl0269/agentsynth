@@ -4,7 +4,7 @@
 #include <juce_data_structures/juce_data_structures.h>
 #include <vector>
 
-namespace gsynth::theme {
+namespace synth::theme {
 
 // Registry of available themes (built-in + user), the active selection, persistence,
 // and change notification. Persistence reuses an EXISTING juce::ApplicationProperties
@@ -67,4 +67,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ThemeManager)
 };
 
-} // namespace gsynth::theme
+} // namespace synth::theme

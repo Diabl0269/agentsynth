@@ -17,8 +17,8 @@ static int countAttenuverterNodes(juce::AudioProcessorGraph& graph) {
 TEST(StateRoundTripTests, PolyPadJSONRoundTripIsLossless) {
     // Step 1: Load Poly Pad (index 6) into g1, capture its JSON
     juce::AudioProcessorGraph g1;
-    ASSERT_TRUE(gsynth::PresetManager::loadPreset(6, g1)) << "Failed to load Poly Pad preset (index 6)";
-    juce::var J1 = gsynth::AIStateMapper::graphToJSON(g1);
+    ASSERT_TRUE(synth::PresetManager::loadPreset(6, g1)) << "Failed to load Poly Pad preset (index 6)";
+    juce::var J1 = synth::AIStateMapper::graphToJSON(g1);
 
     int g1_nodes = g1.getNumNodes();
     int g1_connections = (int)g1.getConnections().size();
@@ -27,18 +27,18 @@ TEST(StateRoundTripTests, PolyPadJSONRoundTripIsLossless) {
 
     // Step 2: Apply J1 to fresh g2, capture its JSON
     juce::AudioProcessorGraph g2;
-    ASSERT_TRUE(gsynth::AIStateMapper::applyJSONToGraph(J1, g2, /*clearExisting=*/true))
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(J1, g2, /*clearExisting=*/true))
         << "applyJSONToGraph J1->g2 failed";
-    juce::var J2 = gsynth::AIStateMapper::graphToJSON(g2);
+    juce::var J2 = synth::AIStateMapper::graphToJSON(g2);
 
     int g2_nodes = g2.getNumNodes();
     int g2_connections = (int)g2.getConnections().size();
 
     // Step 3: Apply J2 to fresh g3, capture its JSON
     juce::AudioProcessorGraph g3;
-    ASSERT_TRUE(gsynth::AIStateMapper::applyJSONToGraph(J2, g3, /*clearExisting=*/true))
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(J2, g3, /*clearExisting=*/true))
         << "applyJSONToGraph J2->g3 failed";
-    juce::var J3 = gsynth::AIStateMapper::graphToJSON(g3);
+    juce::var J3 = synth::AIStateMapper::graphToJSON(g3);
 
     int g3_nodes = g3.getNumNodes();
     int g3_connections = (int)g3.getConnections().size();

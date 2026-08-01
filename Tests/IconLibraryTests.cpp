@@ -1,5 +1,5 @@
 // IconLibraryTests.cpp
-// Headless unit tests for the Gravisynth SVG icon registry (gsynth::theme::IconLibrary).
+// Headless unit tests for the Gravisynth SVG icon registry (synth::theme::IconLibrary).
 // Covers: enum coverage, headless null-fallback, clone independence, tint correctness across
 // repeated theme switches, and the BinaryData symbol-naming convention guard.
 
@@ -11,8 +11,8 @@
 #include "BinaryData.h"
 #endif
 
-using gsynth::theme::Icon;
-using gsynth::theme::IconLibrary;
+using synth::theme::Icon;
+using synth::theme::IconLibrary;
 
 namespace {
 

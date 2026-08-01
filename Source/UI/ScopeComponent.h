@@ -41,7 +41,7 @@ public:
 
     void paint(juce::Graphics& g) override {
         juce::Colour bgColor = juce::Colours::black;
-        if (auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel())) {
+        if (auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel())) {
             bgColor = lf->getTheme().colors.bg1;
         }
         g.fillAll(bgColor);
@@ -61,7 +61,7 @@ public:
         juce::Colour mutedColour = juce::Colour(0xff5C6470); // textDisabled token default
         juce::Colour waveColour = juce::Colours::limegreen;
 
-        if (auto* lf = dynamic_cast<gsynth::theme::GravisynthLookAndFeel*>(&getLookAndFeel())) {
+        if (auto* lf = dynamic_cast<synth::theme::GravisynthLookAndFeel*>(&getLookAndFeel())) {
             const auto& colors = lf->getTheme().colors;
             gridColour = colors.border.withAlpha(0.6f);
             mutedColour = colors.textDisabled;

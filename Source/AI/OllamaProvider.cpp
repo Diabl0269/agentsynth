@@ -1,6 +1,6 @@
 #include "OllamaProvider.h"
 
-namespace gsynth {
+namespace synth {
 
 // Default constructor implementation
 OllamaProvider::OllamaProvider(const juce::String& host)
@@ -202,4 +202,4 @@ void OllamaProvider::processRequest(const Request& req) {
     deliver(responseText, success);
 }
 
-} // namespace gsynth
+} // namespace synth

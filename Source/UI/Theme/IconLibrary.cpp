@@ -4,7 +4,7 @@
 #include "BinaryData.h"
 #endif
 
-namespace gsynth::theme {
+namespace synth::theme {
 
 //==============================================================================
 IconLibrary::IconLibrary() {
@@ -104,4 +104,4 @@ std::unique_ptr<juce::Drawable> IconLibrary::loadSVG(const void* data, int size)
     return juce::Drawable::createFromSVG(*xml);
 }
 
-} // namespace gsynth::theme
+} // namespace synth::theme

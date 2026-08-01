@@ -4,7 +4,7 @@
 #include "BinaryData.h"
 #endif
 
-namespace gsynth::theme {
+namespace synth::theme {
 
 namespace {
 // Map a family name + weight to an embedded typeface. Only meaningful when the app is
@@ -1051,4 +1051,4 @@ void GravisynthLookAndFeel::fillThemedBackground(juce::Graphics& g, juce::Rectan
     }
 }
 
-} // namespace gsynth::theme
+} // namespace synth::theme

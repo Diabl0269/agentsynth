@@ -1,6 +1,6 @@
 #include "BuiltInThemes.h"
 
-namespace gsynth::theme {
+namespace synth::theme {
 
 Theme makeObsidian() {
     Theme t;
@@ -210,4 +210,4 @@ Theme makeWarm() {
 
 std::vector<Theme> builtInThemes() { return {makeObsidian(), makeNeon(), makeWarm()}; }
 
-} // namespace gsynth::theme
+} // namespace synth::theme

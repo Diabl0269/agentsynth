@@ -14,7 +14,7 @@ class AppearanceSettingsTab
     : public juce::Component
     , private juce::ChangeListener {
 public:
-    AppearanceSettingsTab(gsynth::theme::ThemeManager& manager, juce::ApplicationProperties& props);
+    AppearanceSettingsTab(synth::theme::ThemeManager& manager, juce::ApplicationProperties& props);
     ~AppearanceSettingsTab() override;
 
     void resized() override;
@@ -36,7 +36,7 @@ private:
                           // .cpp is added it MUST be added to BOTH CMakeLists (app + tests).
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
 
-    gsynth::theme::ThemeManager& themeManager;
+    synth::theme::ThemeManager& themeManager;
     juce::ApplicationProperties& appProperties;
     GraphEditor* graphEditor{nullptr}; // weak, owned by MainComponent
     juce::ListBox themeList;

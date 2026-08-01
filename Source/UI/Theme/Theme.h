@@ -2,7 +2,7 @@
 
 #include <juce_graphics/juce_graphics.h>
 
-namespace gsynth::theme {
+namespace synth::theme {
 
 // Surface treatment family. JSON string mapping in section 4.
 enum class ThemeStyle {
@@ -102,4 +102,4 @@ struct Theme {
     Treatment treatment{};
 };
 
-} // namespace gsynth::theme
+} // namespace synth::theme

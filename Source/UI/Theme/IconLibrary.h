@@ -5,7 +5,7 @@
 #include <memory>
 #include <utility>
 
-namespace gsynth::theme {
+namespace synth::theme {
 
 // The canonical Gravisynth icon set. Exactly 27 SVG glyphs, white-filled and tinted
 // programmatically at theme-apply time. Backed by GravisynthAssets BinaryData (see
@@ -75,4 +75,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(IconLibrary)
 };
 
-} // namespace gsynth::theme
+} // namespace synth::theme

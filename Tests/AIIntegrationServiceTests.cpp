@@ -2,7 +2,7 @@
 #include "Modules/OscillatorModule.h"
 #include <gtest/gtest.h>
 
-namespace gsynth {
+namespace synth {
 
 class MockAIProvider : public AIProvider {
 public:
@@ -132,4 +132,4 @@ TEST_F(AIIntegrationServiceTest, ApplyPatch_DefaultReplace_ClearsGraph) {
     ASSERT_EQ(graph->getNumNodes(), 1); // Only the Filter from JSON, Oscillator cleared
 }
 
-} // namespace gsynth
+} // namespace synth

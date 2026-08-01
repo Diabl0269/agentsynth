@@ -40,7 +40,7 @@ public:
         : public juce::DocumentWindow
         , public juce::MenuBarModel {
     public:
-        MainWindow(juce::String name, gsynth::theme::ThemeManager& tm, gsynth::theme::GravisynthLookAndFeel& lf)
+        MainWindow(juce::String name, synth::theme::ThemeManager& tm, synth::theme::GravisynthLookAndFeel& lf)
             : DocumentWindow(name,
                              juce::Desktop::getInstance().getDefaultLookAndFeel().findColour(
                                  juce::ResizableWindow::backgroundColourId),
@@ -105,8 +105,8 @@ private:
     // Declaration order matters: themeManager and lookAndFeel are declared BEFORE mainWindow
     // so they are constructed first and destroyed LAST (after mainWindow). This guarantees
     // the LnF object outlives every Component — the classic JUCE shutdown-crash guard.
-    gsynth::theme::ThemeManager themeManager;
-    gsynth::theme::GravisynthLookAndFeel lookAndFeel;
+    synth::theme::ThemeManager themeManager;
+    synth::theme::GravisynthLookAndFeel lookAndFeel;
     std::unique_ptr<MainWindow> mainWindow;
 };
 

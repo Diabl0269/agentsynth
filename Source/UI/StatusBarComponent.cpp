@@ -37,7 +37,7 @@ void StatusBarComponent::timerCallback() {
 
 // ---------------------------------------------------------------------------
 void StatusBarComponent::paint(juce::Graphics& g) {
-    using namespace gsynth::theme;
+    using namespace synth::theme;
 
     auto* lnf = dynamic_cast<GravisynthLookAndFeel*>(&getLookAndFeel());
 

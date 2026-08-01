@@ -63,7 +63,7 @@ protected:
 // 1. BuiltInsRegisterAndAreNonEmpty
 // ---------------------------------------------------------------------------
 TEST(ThemeBuiltInsTest, BuiltInsRegisterAndAreNonEmpty) {
-    auto themes = gsynth::theme::builtInThemes();
+    auto themes = synth::theme::builtInThemes();
     ASSERT_EQ(themes.size(), 3u);
 
     for (const auto& t : themes) {
@@ -80,7 +80,7 @@ TEST(ThemeBuiltInsTest, BuiltInsRegisterAndAreNonEmpty) {
 // 2. ManagerStartsOnDefault
 // ---------------------------------------------------------------------------
 TEST_F(ThemeTest, ManagerStartsOnDefault) {
-    gsynth::theme::ThemeManager mgr;
+    synth::theme::ThemeManager mgr;
     // No initialise() called — default built-in should be active.
     EXPECT_EQ(mgr.getActiveThemeId(), "obsidian");
     EXPECT_GE(mgr.getThemes().size(), 3u);
@@ -90,8 +90,8 @@ TEST_F(ThemeTest, ManagerStartsOnDefault) {
 // 3. ApplyThemeSetsEveryColourId
 // ---------------------------------------------------------------------------
 TEST(ThemeLookAndFeelTest, ApplyThemeSetsEveryColourId) {
-    gsynth::theme::GravisynthLookAndFeel lf;
-    auto neon = gsynth::theme::makeNeon();
+    synth::theme::GravisynthLookAndFeel lf;
+    auto neon = synth::theme::makeNeon();
     lf.applyTheme(neon);
     const auto& c = neon.colors;
 
@@ -157,9 +157,9 @@ TEST(ThemeLookAndFeelTest, ApplyThemeSetsEveryColourId) {
 // 4. JsonRoundTrip
 // ---------------------------------------------------------------------------
 TEST(ThemeLoaderTest, JsonRoundTrip) {
-    auto original = gsynth::theme::makeObsidian();
-    auto json = gsynth::theme::ThemeLoader::themeToJson(original);
-    auto parsed = gsynth::theme::ThemeLoader::parseTheme(json);
+    auto original = synth::theme::makeObsidian();
+    auto json = synth::theme::ThemeLoader::themeToJson(original);
+    auto parsed = synth::theme::ThemeLoader::parseTheme(json);
     ASSERT_TRUE(parsed.has_value());
 
     const auto& p = *parsed;
@@ -239,11 +239,11 @@ TEST(ThemeLoaderTest, ObsidianFileMatchesBuiltIn) {
     auto jsonVar = juce::JSON::parse(jsonText);
     ASSERT_TRUE(jsonVar.isObject()) << "obsidian.gtheme.json is not valid JSON object";
 
-    auto parsed = gsynth::theme::ThemeLoader::parseTheme(jsonVar, "obsidian");
+    auto parsed = synth::theme::ThemeLoader::parseTheme(jsonVar, "obsidian");
     ASSERT_TRUE(parsed.has_value()) << "Failed to parse obsidian.gtheme.json: "
-                                    << gsynth::theme::ThemeLoader::getLastError();
+                                    << synth::theme::ThemeLoader::getLastError();
 
-    auto builtin = gsynth::theme::makeObsidian();
+    auto builtin = synth::theme::makeObsidian();
     const auto& p = *parsed;
     const auto& o = builtin;
 
@@ -275,7 +275,7 @@ TEST(ThemeLoaderTest, RejectsMissingRequiredKey) {
         colors.getDynamicObject()->setProperty("modWire", "#FF00D1FF");
         obj->setProperty("colors", colors);
         juce::var json(obj);
-        EXPECT_FALSE(gsynth::theme::ThemeLoader::parseTheme(json).has_value())
+        EXPECT_FALSE(synth::theme::ThemeLoader::parseTheme(json).has_value())
             << "Expected nullopt when 'name' is missing";
     }
 
@@ -292,7 +292,7 @@ TEST(ThemeLoaderTest, RejectsMissingRequiredKey) {
         colors.getDynamicObject()->setProperty("modWire", "#FF00D1FF");
         obj->setProperty("colors", colors);
         juce::var json(obj);
-        EXPECT_FALSE(gsynth::theme::ThemeLoader::parseTheme(json).has_value())
+        EXPECT_FALSE(synth::theme::ThemeLoader::parseTheme(json).has_value())
             << "Expected nullopt when required color 'accent' is missing";
     }
 }
@@ -302,17 +302,17 @@ TEST(ThemeLoaderTest, RejectsMissingRequiredKey) {
 // ---------------------------------------------------------------------------
 TEST(ThemeLoaderTest, RejectsBadHex) {
     // "#ZZZ" is not a valid colour
-    EXPECT_FALSE(gsynth::theme::ThemeLoader::parseHexColour("#ZZZ").has_value());
+    EXPECT_FALSE(synth::theme::ThemeLoader::parseHexColour("#ZZZ").has_value());
     // "nope" is not a valid colour string
-    EXPECT_FALSE(gsynth::theme::ThemeLoader::parseHexColour("nope").has_value());
+    EXPECT_FALSE(synth::theme::ThemeLoader::parseHexColour("nope").has_value());
 
     // "#0AF" (3-digit RGB) should succeed → opaque 0xFF00AAFF
-    auto c3 = gsynth::theme::ThemeLoader::parseHexColour("#0AF");
+    auto c3 = synth::theme::ThemeLoader::parseHexColour("#0AF");
     ASSERT_TRUE(c3.has_value());
     EXPECT_EQ(c3->getAlpha(), 0xFF);
 
     // "#FF00D1FF" (8-digit AARRGGBB) should succeed → 0xFF00D1FF
-    auto c8 = gsynth::theme::ThemeLoader::parseHexColour("#FF00D1FF");
+    auto c8 = synth::theme::ThemeLoader::parseHexColour("#FF00D1FF");
     ASSERT_TRUE(c8.has_value());
     EXPECT_EQ(c8->getARGB(), (juce::uint32)0xFF00D1FF);
 
@@ -329,7 +329,7 @@ TEST(ThemeLoaderTest, RejectsBadHex) {
         colors.getDynamicObject()->setProperty("modWire", "#FF00D1FF");
         obj->setProperty("colors", colors);
         juce::var json(obj);
-        EXPECT_FALSE(gsynth::theme::ThemeLoader::parseTheme(json).has_value())
+        EXPECT_FALSE(synth::theme::ThemeLoader::parseTheme(json).has_value())
             << "Expected nullopt for bad hex value in required color";
     }
 }
@@ -359,16 +359,16 @@ TEST(ThemeLoaderTest, ClampsTreatmentFloats) {
     };
 
     // glow = 5.0 should clamp to 1.0; -2.0 should clamp to 0.0
-    auto over = gsynth::theme::ThemeLoader::parseTheme(makeJson(5.0, 0.5, 0.0, 0.0));
+    auto over = synth::theme::ThemeLoader::parseTheme(makeJson(5.0, 0.5, 0.0, 0.0));
     ASSERT_TRUE(over.has_value());
     EXPECT_FLOAT_EQ(over->treatment.glow, 1.0f);
 
-    auto under = gsynth::theme::ThemeLoader::parseTheme(makeJson(-2.0, 0.5, 0.0, 0.0));
+    auto under = synth::theme::ThemeLoader::parseTheme(makeJson(-2.0, 0.5, 0.0, 0.0));
     ASSERT_TRUE(under.has_value());
     EXPECT_FLOAT_EQ(under->treatment.glow, 0.0f);
 
     // texture = -2 should clamp to 0
-    auto underTexture = gsynth::theme::ThemeLoader::parseTheme(makeJson(0.0, 0.5, 0.0, -2.0));
+    auto underTexture = synth::theme::ThemeLoader::parseTheme(makeJson(0.0, 0.5, 0.0, -2.0));
     ASSERT_TRUE(underTexture.has_value());
     EXPECT_FLOAT_EQ(underTexture->treatment.texture, 0.0f);
 }
@@ -389,7 +389,7 @@ TEST(ThemeLoaderTest, RejectsNewerSchema) {
     colors.getDynamicObject()->setProperty("modWire", "#FF00D1FF");
     obj->setProperty("colors", colors);
     juce::var json(obj);
-    EXPECT_FALSE(gsynth::theme::ThemeLoader::parseTheme(json).has_value())
+    EXPECT_FALSE(synth::theme::ThemeLoader::parseTheme(json).has_value())
         << "Expected nullopt for schemaVersion > kSchemaVersion";
 }
 
@@ -398,25 +398,25 @@ TEST(ThemeLoaderTest, RejectsNewerSchema) {
 // ---------------------------------------------------------------------------
 TEST(ThemeLoaderTest, StyleStringRoundTrip) {
     // Case-insensitive parse
-    auto glass = gsynth::theme::ThemeLoader::parseStyle("GLASS");
+    auto glass = synth::theme::ThemeLoader::parseStyle("GLASS");
     ASSERT_TRUE(glass.has_value());
-    EXPECT_EQ(*glass, gsynth::theme::ThemeStyle::Glass);
+    EXPECT_EQ(*glass, synth::theme::ThemeStyle::Glass);
 
-    auto flat = gsynth::theme::ThemeLoader::parseStyle("flat");
+    auto flat = synth::theme::ThemeLoader::parseStyle("flat");
     ASSERT_TRUE(flat.has_value());
-    EXPECT_EQ(*flat, gsynth::theme::ThemeStyle::Flat);
+    EXPECT_EQ(*flat, synth::theme::ThemeStyle::Flat);
 
-    auto textured = gsynth::theme::ThemeLoader::parseStyle("Textured");
+    auto textured = synth::theme::ThemeLoader::parseStyle("Textured");
     ASSERT_TRUE(textured.has_value());
-    EXPECT_EQ(*textured, gsynth::theme::ThemeStyle::Textured);
+    EXPECT_EQ(*textured, synth::theme::ThemeStyle::Textured);
 
     // Unknown string
-    EXPECT_FALSE(gsynth::theme::ThemeLoader::parseStyle("bogus").has_value());
+    EXPECT_FALSE(synth::theme::ThemeLoader::parseStyle("bogus").has_value());
 
     // Serialize
-    EXPECT_EQ(gsynth::theme::ThemeLoader::styleToString(gsynth::theme::ThemeStyle::Textured), "textured");
-    EXPECT_EQ(gsynth::theme::ThemeLoader::styleToString(gsynth::theme::ThemeStyle::Glass), "glass");
-    EXPECT_EQ(gsynth::theme::ThemeLoader::styleToString(gsynth::theme::ThemeStyle::Flat), "flat");
+    EXPECT_EQ(synth::theme::ThemeLoader::styleToString(synth::theme::ThemeStyle::Textured), "textured");
+    EXPECT_EQ(synth::theme::ThemeLoader::styleToString(synth::theme::ThemeStyle::Glass), "glass");
+    EXPECT_EQ(synth::theme::ThemeLoader::styleToString(synth::theme::ThemeStyle::Flat), "flat");
 }
 
 // ---------------------------------------------------------------------------
@@ -424,7 +424,7 @@ TEST(ThemeLoaderTest, StyleStringRoundTrip) {
 // ---------------------------------------------------------------------------
 TEST_F(ThemeTest, SetActiveThemePersistsAndRestores) {
     {
-        gsynth::theme::ThemeManager mgr;
+        synth::theme::ThemeManager mgr;
         mgr.initialise(&appProperties);
         EXPECT_TRUE(mgr.setActiveTheme("neon"));
         // Should be persisted immediately
@@ -432,7 +432,7 @@ TEST_F(ThemeTest, SetActiveThemePersistsAndRestores) {
     }
     // Second manager reads the stored value
     {
-        gsynth::theme::ThemeManager mgr2;
+        synth::theme::ThemeManager mgr2;
         mgr2.initialise(&appProperties);
         EXPECT_EQ(mgr2.getActiveThemeId(), "neon");
     }
@@ -448,7 +448,7 @@ TEST_F(ThemeTest, SetActiveThemeBroadcasts) {
         void changeListenerCallback(juce::ChangeBroadcaster*) override { ++count; }
     };
 
-    gsynth::theme::ThemeManager mgr;
+    synth::theme::ThemeManager mgr;
     mgr.initialise(nullptr); // no props — that's fine
 
     CountingListener listener;
@@ -474,7 +474,7 @@ TEST_F(ThemeTest, UnknownThemeIdIgnored) {
         void changeListenerCallback(juce::ChangeBroadcaster*) override { ++count; }
     };
 
-    gsynth::theme::ThemeManager mgr;
+    synth::theme::ThemeManager mgr;
     mgr.initialise(nullptr);
     auto originalId = mgr.getActiveThemeId();
 
@@ -492,19 +492,19 @@ TEST_F(ThemeTest, UnknownThemeIdIgnored) {
 // 14. AddUserThemeReplacesById
 // ---------------------------------------------------------------------------
 TEST_F(ThemeTest, AddUserThemeReplacesById) {
-    gsynth::theme::ThemeManager mgr;
+    synth::theme::ThemeManager mgr;
     mgr.initialise(nullptr);
 
     size_t before = mgr.getThemes().size();
 
-    gsynth::theme::Theme t;
+    synth::theme::Theme t;
     t.id = "my-custom-theme";
     t.name = "My Custom Theme";
     mgr.addUserTheme(t);
     EXPECT_EQ(mgr.getThemes().size(), before + 1u);
 
     // Adding again with the same id should REPLACE, not grow
-    gsynth::theme::Theme t2;
+    synth::theme::Theme t2;
     t2.id = "my-custom-theme";
     t2.name = "My Custom Theme v2";
     mgr.addUserTheme(t2);
@@ -525,7 +525,7 @@ TEST_F(ThemeTest, AddUserThemeReplacesById) {
 // 15. ContrastAA_AllBuiltIns
 // ---------------------------------------------------------------------------
 TEST(ThemeBuiltInsTest, ContrastAA_AllBuiltIns) {
-    auto themes = gsynth::theme::builtInThemes();
+    auto themes = synth::theme::builtInThemes();
     for (const auto& t : themes) {
         double ratio = wcagContrast(t.colors.textPrimary, t.colors.bg0);
         EXPECT_GE(ratio, 4.5) << "Theme '" << t.name << "': textPrimary on bg0 contrast ratio " << ratio
@@ -538,7 +538,7 @@ TEST(ThemeBuiltInsTest, ContrastAA_AllBuiltIns) {
 // ---------------------------------------------------------------------------
 // Verify the new Metrics fields from Issue #103 (UI Phase 7 polish) have correct defaults.
 TEST(ThemeMetricsTest, Issue103MetricsDefaults) {
-    gsynth::theme::Theme theme;
+    synth::theme::Theme theme;
     const auto& m = theme.metrics;
 
     // Item 2: Metrics migration — snap threshold (kGridSize)
@@ -555,7 +555,7 @@ TEST(ThemeMetricsTest, Issue103MetricsDefaults) {
 // ---------------------------------------------------------------------------
 // Verify all built-in themes populate the new Metrics fields correctly.
 TEST(ThemeBuiltInsTest, Issue103MetricsInAllBuiltIns) {
-    auto themes = gsynth::theme::builtInThemes();
+    auto themes = synth::theme::builtInThemes();
     ASSERT_EQ(themes.size(), 3u);
 
     for (const auto& t : themes) {
@@ -571,8 +571,8 @@ TEST(ThemeBuiltInsTest, Issue103MetricsInAllBuiltIns) {
 // 22. MetricsCodeOnlyFieldsNotInJSON (Issue #103 new fields)
 // ---------------------------------------------------------------------------
 TEST(ThemeLoaderTest, Issue103MetricsNotInJSON) {
-    auto theme = gsynth::theme::makeObsidian();
-    auto json = gsynth::theme::ThemeLoader::themeToJson(theme);
+    auto theme = synth::theme::makeObsidian();
+    auto json = synth::theme::ThemeLoader::themeToJson(theme);
     juce::String jsonStr = juce::JSON::toString(json, true);
 
     // Verify that Issue #103 new code-only metrics fields are NOT present in the serialized JSON
@@ -590,8 +590,8 @@ TEST(ThemeLoaderTest, Issue103MetricsNotInJSON) {
 TEST(GraphEditorRenderingTest, UsesMetricsCornerRadius) {
     // This test verifies that the code uses theme.metrics.cornerRadius
     // for drag ghost rendering instead of hardcoding it.
-    gsynth::theme::GravisynthLookAndFeel lf;
-    lf.applyTheme(gsynth::theme::makeObsidian());
+    synth::theme::GravisynthLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
 
     const auto& metrics = lf.getTheme().metrics;
     EXPECT_EQ(metrics.gridSize, 8);                   // snap threshold
@@ -599,8 +599,8 @@ TEST(GraphEditorRenderingTest, UsesMetricsCornerRadius) {
 }
 
 TEST(GraphEditorRenderingTest, UsesMetricsGuideParams) {
-    gsynth::theme::GravisynthLookAndFeel lf;
-    lf.applyTheme(gsynth::theme::makeNeon());
+    synth::theme::GravisynthLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeNeon());
 
     const auto& m = lf.getTheme().metrics;
     EXPECT_FLOAT_EQ(m.guideAlpha, 0.7f);     // guide opacity matches Item 4 spec
@@ -612,8 +612,8 @@ TEST(GraphEditorRenderingTest, UsesMetricsGuideParams) {
 // (Exercises the LnF draw paths in headless mode without asserting pixels.)
 // ---------------------------------------------------------------------------
 TEST(ThemeLookAndFeelTest, DrawHelpersSmoke) {
-    gsynth::theme::GravisynthLookAndFeel lf;
-    lf.applyTheme(gsynth::theme::makeObsidian());
+    synth::theme::GravisynthLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
 
     // Create a tiny in-memory image to draw into.
     juce::Image img(juce::Image::ARGB, 100, 100, true);
@@ -638,15 +638,15 @@ TEST(ThemeLookAndFeelTest, DrawHelpersSmoke) {
     juce::Slider slider(juce::Slider::RotaryVerticalDrag, juce::Slider::NoTextBox);
     slider.setRange(0.0, 1.0);
     slider.setValue(0.5);
-    EXPECT_NO_THROW(lf.drawRotarySlider(g, 0, 0, 100, 100, 0.5f, gsynth::theme::GravisynthLookAndFeel::kRotaryStart,
-                                        gsynth::theme::GravisynthLookAndFeel::kRotaryEnd, slider));
+    EXPECT_NO_THROW(lf.drawRotarySlider(g, 0, 0, 100, 100, 0.5f, synth::theme::GravisynthLookAndFeel::kRotaryStart,
+                                        synth::theme::GravisynthLookAndFeel::kRotaryEnd, slider));
 }
 
 // ---------------------------------------------------------------------------
 // 16. MetricsCodeOnlyFieldsHaveExpectedDefaults
 // ---------------------------------------------------------------------------
 TEST(ThemeMetricsTest, MetricsCodeOnlyFieldsHaveExpectedDefaults) {
-    gsynth::theme::Theme theme;
+    synth::theme::Theme theme;
     const auto& m = theme.metrics;
 
     EXPECT_EQ(m.toolbarHeight, 36);
@@ -664,8 +664,8 @@ TEST(ThemeMetricsTest, MetricsCodeOnlyFieldsHaveExpectedDefaults) {
 // 17. MetricsCodeOnlyFieldsNotInJSON
 // ---------------------------------------------------------------------------
 TEST(ThemeLoaderTest, MetricsCodeOnlyFieldsNotInJSON) {
-    auto theme = gsynth::theme::makeObsidian();
-    auto json = gsynth::theme::ThemeLoader::themeToJson(theme);
+    auto theme = synth::theme::makeObsidian();
+    auto json = synth::theme::ThemeLoader::themeToJson(theme);
     juce::String jsonStr = juce::JSON::toString(json, true);
 
     // Verify that code-only metrics fields are NOT present in the serialized JSON
@@ -687,16 +687,16 @@ TEST(ThemeLoaderTest, MetricsCodeOnlyFieldsNotInJSON) {
 // each built-in theme, getIcon() returns a usable (non-null when assets present) drawable and
 // nothing throws across repeated switches.
 TEST(ThemeLookAndFeelTest, RetintIconsCalledByApplyTheme) {
-    gsynth::theme::GravisynthLookAndFeel lf;
+    synth::theme::GravisynthLookAndFeel lf;
 
-    const std::array<gsynth::theme::Theme, 3> themes = {gsynth::theme::makeObsidian(), gsynth::theme::makeNeon(),
-                                                        gsynth::theme::makeWarm()};
+    const std::array<synth::theme::Theme, 3> themes = {synth::theme::makeObsidian(), synth::theme::makeNeon(),
+                                                       synth::theme::makeWarm()};
     for (const auto& t : themes) {
         EXPECT_NO_THROW(lf.applyTheme(t));
 #ifdef GRAVISYNTH_HAS_FONT_ASSETS
-        EXPECT_NE(lf.getIcon(gsynth::theme::Icon::ActionUndo), nullptr);
-        EXPECT_NE(lf.peekIcon(gsynth::theme::Icon::ModuleDelete), nullptr);
-        EXPECT_NE(lf.getIcon(gsynth::theme::Icon::CatSources), nullptr);
+        EXPECT_NE(lf.getIcon(synth::theme::Icon::ActionUndo), nullptr);
+        EXPECT_NE(lf.peekIcon(synth::theme::Icon::ModuleDelete), nullptr);
+        EXPECT_NE(lf.getIcon(synth::theme::Icon::CatSources), nullptr);
 #endif
     }
 }
@@ -706,10 +706,10 @@ TEST(ThemeLookAndFeelTest, RetintIconsCalledByApplyTheme) {
 // (Exercises the section-5 themed-widget painters in headless mode across all three themes.)
 // ---------------------------------------------------------------------------
 TEST(StyledWidgetSmokeTest, ComboBoxDrawNoThrow) {
-    const std::array<gsynth::theme::Theme, 3> themes = {gsynth::theme::makeObsidian(), gsynth::theme::makeNeon(),
-                                                        gsynth::theme::makeWarm()};
+    const std::array<synth::theme::Theme, 3> themes = {synth::theme::makeObsidian(), synth::theme::makeNeon(),
+                                                       synth::theme::makeWarm()};
     for (const auto& t : themes) {
-        gsynth::theme::GravisynthLookAndFeel lf;
+        synth::theme::GravisynthLookAndFeel lf;
         lf.applyTheme(t);
 
         juce::Image img(juce::Image::ARGB, 120, 28, true);
@@ -732,8 +732,8 @@ TEST(StyledWidgetSmokeTest, ComboBoxDrawNoThrow) {
 }
 
 TEST(StyledWidgetSmokeTest, ComboBoxTextWhenNothingSelected) {
-    gsynth::theme::GravisynthLookAndFeel lf;
-    lf.applyTheme(gsynth::theme::makeObsidian());
+    synth::theme::GravisynthLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
 
     juce::Image img(juce::Image::ARGB, 120, 28, true);
     juce::Graphics g(img);
@@ -751,10 +751,10 @@ TEST(StyledWidgetSmokeTest, ComboBoxTextWhenNothingSelected) {
 }
 
 TEST(StyledWidgetSmokeTest, PopupMenuDrawNoThrow) {
-    const std::array<gsynth::theme::Theme, 3> themes = {gsynth::theme::makeObsidian(), gsynth::theme::makeNeon(),
-                                                        gsynth::theme::makeWarm()};
+    const std::array<synth::theme::Theme, 3> themes = {synth::theme::makeObsidian(), synth::theme::makeNeon(),
+                                                       synth::theme::makeWarm()};
     for (const auto& t : themes) {
-        gsynth::theme::GravisynthLookAndFeel lf;
+        synth::theme::GravisynthLookAndFeel lf;
         lf.applyTheme(t);
 
         juce::Image img(juce::Image::ARGB, 200, 30, true);
@@ -777,8 +777,8 @@ TEST(StyledWidgetSmokeTest, PopupMenuDrawNoThrow) {
 }
 
 TEST(StyledWidgetSmokeTest, ScrollbarWidthAndDrawNoThrow) {
-    gsynth::theme::GravisynthLookAndFeel lf;
-    lf.applyTheme(gsynth::theme::makeObsidian());
+    synth::theme::GravisynthLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
 
     EXPECT_EQ(lf.getDefaultScrollbarWidth(), 6);
 
@@ -802,8 +802,8 @@ TEST(StyledWidgetSmokeTest, ScrollbarWidthAndDrawNoThrow) {
 }
 
 TEST(StyledWidgetSmokeTest, TabBarDrawNoThrow) {
-    gsynth::theme::GravisynthLookAndFeel lf;
-    lf.applyTheme(gsynth::theme::makeObsidian());
+    synth::theme::GravisynthLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
 
     juce::TabbedButtonBar bar(juce::TabbedButtonBar::TabsAtTop);
     bar.setLookAndFeel(&lf);

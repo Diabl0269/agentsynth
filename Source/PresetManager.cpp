@@ -1,7 +1,7 @@
 #include "PresetManager.h"
 #include "AI/AIStateMapper.h"
 
-namespace gsynth {
+namespace synth {
 
 juce::StringArray PresetManager::getPresetNames() {
     return {"Default", "Simple Lead", "Ambient Pad", "Modulated Bass", "Step Sequence", "Electric Keys", "Poly Pad"};
@@ -352,4 +352,4 @@ juce::String PresetManager::getPresetJSON(int index) {
     }
 }
 
-} // namespace gsynth
+} // namespace synth

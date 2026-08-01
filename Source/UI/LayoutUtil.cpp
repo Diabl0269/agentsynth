@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-namespace gsynth::LayoutUtil {
+namespace synth::LayoutUtil {
 
 //==============================================================================
 // Module width buckets
@@ -348,4 +348,4 @@ std::vector<ArrangeResult> computeAutoArrange(juce::AudioProcessorGraph& graph,
     return results;
 }
 
-} // namespace gsynth::LayoutUtil
+} // namespace synth::LayoutUtil

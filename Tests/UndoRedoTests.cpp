@@ -508,7 +508,7 @@ TEST_F(UndoRedoTest, RedoWithParameterValueInUnitInterval) {
  */
 TEST_F(UndoRedoTest, PolyPad_RoutingSurvivesUndoRedo) {
     // Step 1 — Load Poly Pad (preset 6) into graph
-    ASSERT_TRUE(gsynth::PresetManager::loadPreset(6, graph));
+    ASSERT_TRUE(synth::PresetManager::loadPreset(6, graph));
 
     // Sanity: locate Amp Env (ADSR), Oscillator, and VCA by type
     juce::AudioProcessorGraph::NodeID adsrID, oscID, vcaID;
@@ -548,16 +548,16 @@ TEST_F(UndoRedoTest, PolyPad_RoutingSurvivesUndoRedo) {
     ASSERT_EQ(envVcaConnsBaseline, 8) << "Poly Pad baseline: expected 8 ADSR->VCA poly-bus connections";
 
     // Step 2 — Snapshot the loaded Poly Pad state
-    juce::var J0 = gsynth::AIStateMapper::graphToJSON(graph);
+    juce::var J0 = synth::AIStateMapper::graphToJSON(graph);
 
     // Step 3 — Overwrite with a completely different preset (simulates the
     // modification that would be "undone")
-    ASSERT_TRUE(gsynth::PresetManager::loadPreset(0, graph)); // Default preset — no poly modules
+    ASSERT_TRUE(synth::PresetManager::loadPreset(0, graph)); // Default preset — no poly modules
     EXPECT_EQ(countConns(adsrID, 0, vcaID, 8), 0)
         << "After loading preset 0, original Poly Pad connections should be gone";
 
     // Step 4 — Re-apply the Poly Pad snapshot (simulates undo/redo restore)
-    ASSERT_TRUE(gsynth::AIStateMapper::applyJSONToGraph(J0, graph, /*clearExisting=*/true, /*trusted=*/true))
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(J0, graph, /*clearExisting=*/true, /*trusted=*/true))
         << "applyJSONToGraph should succeed for a freshly-captured Poly Pad snapshot";
 
     // Re-locate nodes by type after round-trip (node IDs may differ after clear+rebuild)
@@ -612,7 +612,7 @@ TEST_F(UndoRedoTest, PolyPad_RoutingSurvivesUndoRedo) {
  */
 TEST_F(UndoRedoTest, AutoArrangeIsSingleUndoStep) {
     // Load a preset with several modules into the graph via PresetManager
-    ASSERT_TRUE(gsynth::PresetManager::loadPreset(0, graph)) << "Failed to load default preset";
+    ASSERT_TRUE(synth::PresetManager::loadPreset(0, graph)) << "Failed to load default preset";
     ASSERT_GE(graph.getNumNodes(), 3) << "Default preset should have at least 3 nodes";
 
     // Capture original positions
@@ -631,7 +631,7 @@ TEST_F(UndoRedoTest, AutoArrangeIsSingleUndoStep) {
     AudioEngine engine;
     // Load the same preset into the engine's graph
     engine.getGraph().clear();
-    ASSERT_TRUE(gsynth::PresetManager::loadPreset(0, engine.getGraph()));
+    ASSERT_TRUE(synth::PresetManager::loadPreset(0, engine.getGraph()));
 
     GraphEditor editor(engine, &undoManager);
     // Wire the editor to the undo manager exactly as MainComponent does. Without this the undo/redo

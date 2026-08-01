@@ -1,6 +1,6 @@
 #include "AIIntegrationService.h"
 
-namespace gsynth {
+namespace synth {
 
 AIIntegrationService::AIIntegrationService(juce::AudioProcessorGraph& graph)
     : audioGraph(graph) {
@@ -241,4 +241,4 @@ void AIIntegrationService::fetchAvailableModels(
     else if (callback)
         callback({}, false);
 }
-} // namespace gsynth
+} // namespace synth

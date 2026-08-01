@@ -11,7 +11,7 @@
 #include <gtest/gtest.h>
 
 TEST(PresetManagerTest, ListPresets) {
-    auto names = gsynth::PresetManager::getPresetNames();
+    auto names = synth::PresetManager::getPresetNames();
     ASSERT_EQ(names.size(), 7);
     EXPECT_EQ(names[0], "Default");
     EXPECT_EQ(names[1], "Simple Lead");
@@ -19,28 +19,28 @@ TEST(PresetManagerTest, ListPresets) {
 
 TEST(PresetManagerTest, LoadAllPresets) {
     juce::AudioProcessorGraph graph;
-    for (int i = 0; i < gsynth::PresetManager::getPresetNames().size(); ++i) {
+    for (int i = 0; i < synth::PresetManager::getPresetNames().size(); ++i) {
         graph.clear();
-        EXPECT_TRUE(gsynth::PresetManager::loadPreset(i, graph)) << "Failed to load preset " << i;
+        EXPECT_TRUE(synth::PresetManager::loadPreset(i, graph)) << "Failed to load preset " << i;
         EXPECT_GT(graph.getNumNodes(), 0) << "Preset " << i << " loaded with no nodes";
     }
 }
 
 TEST(PresetManagerTest, LoadDefaultPreset) {
     juce::AudioProcessorGraph graph;
-    EXPECT_TRUE(gsynth::PresetManager::loadDefaultPreset(graph));
+    EXPECT_TRUE(synth::PresetManager::loadDefaultPreset(graph));
     EXPECT_GT(graph.getNumNodes(), 0);
 }
 
 TEST(PresetManagerTest, InvalidPresetIndexReturnsFailure) {
     juce::AudioProcessorGraph graph;
-    EXPECT_FALSE(gsynth::PresetManager::loadPreset(-1, graph));
-    EXPECT_FALSE(gsynth::PresetManager::loadPreset(100, graph));
+    EXPECT_FALSE(synth::PresetManager::loadPreset(-1, graph));
+    EXPECT_FALSE(synth::PresetManager::loadPreset(100, graph));
 }
 
 TEST(PresetManagerTest, PresetCategoriesAreValid) {
-    auto presets = gsynth::PresetManager::getPresetList();
-    auto categories = gsynth::PresetManager::getCategories();
+    auto presets = synth::PresetManager::getPresetList();
+    auto categories = synth::PresetManager::getCategories();
     ASSERT_GT(presets.size(), 0);
     ASSERT_GT(categories.size(), 0);
     for (const auto& preset : presets) {
@@ -52,16 +52,16 @@ TEST(PresetManagerTest, PresetCategoriesAreValid) {
 
 TEST(PresetManagerTest, DefaultPresetHasExpectedNodes) {
     juce::AudioProcessorGraph graph;
-    gsynth::PresetManager::loadDefaultPreset(graph);
+    synth::PresetManager::loadDefaultPreset(graph);
     // Default preset should have at minimum: Audio I/O + Oscillator + Filter + VCA
     EXPECT_GE(graph.getNumNodes(), 5);
 }
 
 TEST(PresetManagerTest, AllPresetsHaveAudioOutput) {
     juce::AudioProcessorGraph graph;
-    for (int i = 0; i < gsynth::PresetManager::getPresetNames().size(); ++i) {
+    for (int i = 0; i < synth::PresetManager::getPresetNames().size(); ++i) {
         graph.clear();
-        gsynth::PresetManager::loadPreset(i, graph);
+        synth::PresetManager::loadPreset(i, graph);
         bool hasOutput = false;
         for (auto* node : graph.getNodes()) {
             if (node->getProcessor()->getName() == "Audio Output")
@@ -73,16 +73,16 @@ TEST(PresetManagerTest, AllPresetsHaveAudioOutput) {
 
 TEST(PresetManagerTest, AllPresetsHaveConnections) {
     juce::AudioProcessorGraph graph;
-    for (int i = 0; i < gsynth::PresetManager::getPresetNames().size(); ++i) {
+    for (int i = 0; i < synth::PresetManager::getPresetNames().size(); ++i) {
         graph.clear();
-        gsynth::PresetManager::loadPreset(i, graph);
+        synth::PresetManager::loadPreset(i, graph);
         EXPECT_GT(graph.getConnections().size(), 0) << "Preset " << i << " has no connections";
     }
 }
 
 TEST(PresetManagerTest, PresetNamesMatchPresetList) {
-    auto names = gsynth::PresetManager::getPresetNames();
-    auto presets = gsynth::PresetManager::getPresetList();
+    auto names = synth::PresetManager::getPresetNames();
+    auto presets = synth::PresetManager::getPresetList();
     ASSERT_EQ(names.size(), presets.size());
     for (int i = 0; i < names.size(); ++i) {
         EXPECT_EQ(names[i], presets[i].name);
@@ -125,11 +125,11 @@ juce::Point<int> estimateModuleSize(const juce::String& typeName) {
 
 TEST(PresetManagerTest, AllFactoryPresetsLoadWithoutOverlap) {
     const int kNumPresets = 7;
-    const int kGap = gsynth::LayoutUtil::kCollisionGap;
+    const int kGap = synth::LayoutUtil::kCollisionGap;
 
     for (int presetIdx = 0; presetIdx < kNumPresets; ++presetIdx) {
         juce::AudioProcessorGraph graph;
-        ASSERT_TRUE(gsynth::PresetManager::loadPreset(presetIdx, graph)) << "Failed to load preset " << presetIdx;
+        ASSERT_TRUE(synth::PresetManager::loadPreset(presetIdx, graph)) << "Failed to load preset " << presetIdx;
 
         // Build bounding boxes for each module node
         struct Box {
@@ -181,7 +181,7 @@ TEST(PresetManagerTest, AllFactoryPresetsLoadWithoutOverlap) {
 
 TEST(PresetManagerTest, PolyPad_NoEnvToOscLevelConnection) {
     juce::AudioProcessorGraph graph;
-    ASSERT_TRUE(gsynth::PresetManager::loadPreset(6, graph)) << "Failed to load Poly Pad preset (index 6)";
+    ASSERT_TRUE(synth::PresetManager::loadPreset(6, graph)) << "Failed to load Poly Pad preset (index 6)";
 
     // Find the ADSR node named "Amp Env" and the Oscillator node
     juce::AudioProcessorGraph::Node* adsrNode = nullptr;

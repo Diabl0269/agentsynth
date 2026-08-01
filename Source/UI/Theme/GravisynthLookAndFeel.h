@@ -4,7 +4,7 @@
 #include "Theme.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
-namespace gsynth::theme {
+namespace synth::theme {
 
 // Single source of all theming-aware drawing. Holds a COPY of the active Theme (cheap,
 // ~few hundred bytes) updated via applyTheme() on every theme change. Owned by Main.cpp /
@@ -143,4 +143,4 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(GravisynthLookAndFeel)
 };
 
-} // namespace gsynth::theme
+} // namespace synth::theme

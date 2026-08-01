@@ -38,7 +38,7 @@ TEST(PerformanceTest, PresetLoadIsFast) {
         graph.setPlayConfigDetails(0, 2, 44100.0, 512);
 
         auto start = clock_type::now();
-        bool loaded = gsynth::PresetManager::loadPreset(i, graph);
+        bool loaded = synth::PresetManager::loadPreset(i, graph);
         double elapsedMs = msSince(start);
 
         EXPECT_TRUE(loaded) << "Preset " << i << " failed to load";
@@ -54,7 +54,7 @@ TEST(PerformanceTest, ModulationRoutingsIsFast) {
     AudioEngine engine;
     engine.initialise();
     engine.getGraph().clear();
-    bool loaded = gsynth::PresetManager::loadPreset(kPolyPadPreset, engine.getGraph());
+    bool loaded = synth::PresetManager::loadPreset(kPolyPadPreset, engine.getGraph());
     ASSERT_TRUE(loaded) << "Poly Pad preset (index 6) failed to load";
 
     constexpr int kIters = 100;
@@ -107,7 +107,7 @@ TEST(PerformanceTest, GraphEditorUpdateComponentsIsFast) {
     // Load Poly Pad and time the first updateComponents (initial render).
     editor.detachAllModuleComponents();
     engine.getGraph().clear();
-    ASSERT_TRUE(gsynth::PresetManager::loadPreset(kPolyPadPreset, engine.getGraph()))
+    ASSERT_TRUE(synth::PresetManager::loadPreset(kPolyPadPreset, engine.getGraph()))
         << "Poly Pad preset (index 6) failed to load";
 
     auto start1 = clock_type::now();
@@ -120,7 +120,7 @@ TEST(PerformanceTest, GraphEditorUpdateComponentsIsFast) {
     // this simulates a preset switch in the running app.
     editor.detachAllModuleComponents();
     engine.getGraph().clear();
-    ASSERT_TRUE(gsynth::PresetManager::loadPreset(0, engine.getGraph())) << "Preset 0 failed to load";
+    ASSERT_TRUE(synth::PresetManager::loadPreset(0, engine.getGraph())) << "Preset 0 failed to load";
 
     auto start2 = clock_type::now();
     editor.updateComponents();
