@@ -517,33 +517,12 @@ TEST_F(OllamaProviderTest, QueuedRequestDuringThreadShutdownStillCompletes) {
     }
 }
 
-// REGRESSION LOCK: a worker that dies without releasing the queue must not wedge the
-// provider. juce::Thread force-kills the worker when stopThread() is given a zero
-// timeout (it never waits), so run() never gets to hand the queue back. Requests sent
-// afterwards must still be picked up rather than piling up behind a dead owner.
-TEST_F(OllamaProviderTest, RequestAfterWorkerIsKilledStillCompletes) {
-    auto workerEntered = std::make_shared<CallbackLatch>();
-    auto afterKill = std::make_shared<CallbackLatch>();
-
-    // The worker parks inside the first stream read, holding no provider lock, so the
-    // kill lands at a known-safe point instead of an arbitrary one.
-    const std::vector<synth::AIProvider::Message> conversation = {{"user", "Hello AI"}};
-
-    synth::OllamaProvider provider{"http://mock-host:11434", makeOneShotGatedFactory(workerEntered)};
-    provider.setTestMode(true);
-    provider.setModel("mock-model:latest");
-
-    provider.sendPrompt(conversation, [](const juce::String&, bool) {});
-    ASSERT_TRUE(workerEntered->waitFor(kCallbackTimeout)) << "the worker never started the first request";
-
-    provider.stopThread(0); // force-kills the worker mid-request; it never retires
-
-    provider.sendPrompt(conversation, [afterKill](const juce::String&, bool) { afterKill->fire(); });
-    EXPECT_TRUE(afterKill->waitFor(kCallbackTimeout))
-        << "a request sent after the worker was killed never got a callback";
-
-    provider.stopThread(5000);
-}
+// NOTE: sendPrompt()'s "owner vanished" recovery (a worker that ended without handing
+// the queue back) has no test here on purpose. The only ways to reach that state are a
+// force-kill via stopThread(0) or a throwing run(), and forcing the first aborts the
+// process under glibc: pthread_cancel's forced unwind hits the `catch (...)` in juce's
+// threadEntryPoint, which never rethrows ("FATAL: exception not rethrown"). See the
+// comment on that branch in OllamaProvider::sendPrompt().
 
 // REGRESSION LOCK: requests still sitting in the queue when the provider is destroyed
 // must be failed with a callback, not dropped — and that callback must fire *before*

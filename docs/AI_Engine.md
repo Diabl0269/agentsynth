@@ -182,6 +182,9 @@ Three rules make that hold:
    with a callback) or sees `idle` and starts a fresh one. `sendPrompt()` also self-heals a
    `running` state whose thread has vanished — `stopThread(0)` force-kills the worker, since
    juce never waits when given a zero timeout, so `run()` never gets to hand the queue back.
+   That recovery branch is deliberately untested: forcing it requires `pthread_cancel`, whose
+   forced unwind aborts under glibc when it reaches the `catch (...)` in juce's
+   `threadEntryPoint` (`FATAL: exception not rethrown`). **Do not call `stopThread(0)`.**
 3. **Shutdown fails the queue instead of discarding it.** `~OllamaProvider()` sets
    `isShuttingDown` (late `sendPrompt()` calls then fail immediately rather than resurrecting a
    thread on a dying object), then `stopThread(2000)`. Requests still queued are failed with
@@ -190,9 +193,8 @@ Three rules make that hold:
    before the provider is gone. So every shutdown callback has already fired by the time the
    destructor returns; none can fire after it.
 
-Locked by `OllamaProviderTest.QueuedRequestDuringThreadShutdownStillCompletes`,
-`OllamaProviderTest.PendingRequestsAreFailedOnDestruction` and
-`OllamaProviderTest.RequestAfterWorkerIsKilledStillCompletes`.
+Locked by `OllamaProviderTest.QueuedRequestDuringThreadShutdownStillCompletes` and
+`OllamaProviderTest.PendingRequestsAreFailedOnDestruction`.
 
 ## 6. Future Considerations
 

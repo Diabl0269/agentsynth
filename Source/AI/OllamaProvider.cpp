@@ -71,6 +71,12 @@ void OllamaProvider::sendPrompt(const std::vector<Message>& conversation, Comple
             // way. Nobody is left to drain the queue, so take it over instead of waiting
             // forever. There is no false positive here: a worker that returns normally
             // sets `idle` before juce clears its handle.
+            //
+            // Deliberately untested: reproducing it needs a force-killed thread, and
+            // pthread_cancel's forced unwind aborts under glibc when it reaches the
+            // `catch (...)` in juce's threadEntryPoint. Kept anyway because without it
+            // this path would be a regression - the old code recovered here (a killed
+            // thread clears the handle, so its isThreadRunning() check restarted).
             const bool ownerVanished = (workerState == WorkerState::running && !isThreadRunning());
             mustStartWorker = (workerState == WorkerState::idle) || ownerVanished;
 
