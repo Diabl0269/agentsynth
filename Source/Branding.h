@@ -19,15 +19,22 @@ constexpr const char* kBundleIdentifier = "com.gravisynth.app";
 
 // juce::PropertiesFile::Options::folderName — the on-disk ApplicationProperties folder,
 // also the parent of the user Themes folder (ThemeManager::getUserThemesFolder()).
-// WARNING: do NOT change this value. It is the folder name existing users' settings,
-// presets, and themes already live under; changing it orphans that data. A follow-up task
-// adds a migration shim — only after that lands is it safe to change.
+// Changing this value is now safe: SettingsMigration::migrateUserData() runs at startup
+// (before ApplicationProperties is initialised, see Main.cpp) and copies data forward from
+// the first matching entry in kLegacyFolderNames below. When renaming, prepend the OLD value
+// of kSettingsFolderName to kLegacyFolderNames before changing this one.
 constexpr const char* kSettingsFolderName = "Gravisynth";
 
 // Folder name reserved for user-saved presets. Not yet referenced on disk (preset
 // save/load currently goes through ad hoc juce::FileChooser dialogs with no fixed
 // directory); seeded here so a future on-disk preset store has a name to use.
 constexpr const char* kPresetFolderName = "Gravisynth";
+
+// Previous kSettingsFolderName values, ordered newest-first. SettingsMigration walks this
+// list at startup and copies forward the first entry that exists and has data, so a rename
+// doesn't orphan existing users' settings/presets/themes. Seeded with the current name;
+// a future rename should prepend the old value here (leaving older entries in place).
+constexpr const char* kLegacyFolderNames[] = {kSettingsFolderName};
 
 // Product website, for the About box / support links. Not yet referenced anywhere.
 constexpr const char* kWebsiteUrl = "https://gravisynth.app";

@@ -53,6 +53,8 @@ add_library(GravisynthCore STATIC
     Source/Branding.h
     Source/PresetManager.cpp
     Source/PresetManager.h
+    Source/SettingsMigration.cpp
+    Source/SettingsMigration.h
     # Modules
     Source/Modules/ModuleBase.h
     Source/Modules/OscillatorModule.h

@@ -1,4 +1,6 @@
+#include "Branding.h"
 #include "MainComponent.h"
+#include "SettingsMigration.h"
 #include "ShortcutManager.h"
 #include "UI/Theme/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
@@ -14,6 +16,9 @@ public:
 
     void initialise(const juce::String& commandLine) override {
         juce::ignoreUnused(commandLine);
+
+        migrateLegacyUserData();
+
         // Apply default theme so the LnF is valid before any Component is created.
         // ThemeManager::initialise() (with appProperties) is called inside MainComponent,
         // which will restore the persisted theme and call applyTheme again.
@@ -35,6 +40,33 @@ public:
     void systemRequestedQuit() override { quit(); }
 
     void anotherInstanceStarted(const juce::String& commandLine) override { juce::ignoreUnused(commandLine); }
+
+private:
+    // Must run before anything creates a juce::ApplicationProperties for kSettingsFolderName
+    // (MainComponent's constructor does this) — otherwise JUCE creates an empty current-name
+    // folder first, and migrateUserData's "already exists" guard skips the real migration.
+    static void migrateLegacyUserData() {
+        juce::PropertiesFile::Options options;
+        options.applicationName = synth::branding::kProductName;
+        options.folderName = synth::branding::kSettingsFolderName;
+        options.filenameSuffix = "settings";
+        options.osxLibrarySubFolder = "Application Support";
+        options.storageFormat = juce::PropertiesFile::storeAsXML;
+
+        // getDefaultFile() resolves the platform-specific settings file inside the
+        // folderName directory; its grandparent is the directory that contains every
+        // differently-named settings folder (past and present).
+        const auto parentDir = options.getDefaultFile().getParentDirectory().getParentDirectory();
+
+        juce::StringArray legacyNames;
+        for (const auto* name : synth::branding::kLegacyFolderNames)
+            legacyNames.add(name);
+
+        const auto result = synth::migrateUserData(parentDir, synth::branding::kSettingsFolderName, legacyNames);
+        if (result.migrated)
+            juce::Logger::writeToLog("Migrated user settings from legacy folder \"" + result.fromName + "\" (" +
+                                     juce::String(result.filesCopied) + " files)");
+    }
 
     class MainWindow
         : public juce::DocumentWindow
