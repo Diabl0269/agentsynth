@@ -350,7 +350,7 @@ testable headlessly.
 ### Constants
 
 ```cpp
-namespace gsynth::LayoutUtil {
+namespace synth::LayoutUtil {
 
 inline constexpr int kGridSize       = 8;    // snap quantum
 inline constexpr int kCollisionGap   = 12;   // minimum clear gap between bounding boxes (px)
@@ -372,7 +372,7 @@ ModuleWidthBucket getModuleWidthBucket(ModuleType t);  // defined in LayoutUtil.
 int moduleWidth(ModuleWidthBucket b);
 int moduleWidth(ModuleType t);
 
-} // namespace gsynth::LayoutUtil
+} // namespace synth::LayoutUtil
 ```
 
 ### `snap`
@@ -560,7 +560,7 @@ Guidelines to preserve smooth frame rates:
 
 ## 11. Animation System (Phase 5)
 
-Phase 5 introduces a shared animation infrastructure in `Source/UI/UIAnimation.h` (namespace `gravisynth::ui`). All motion in the app uses this helper. The `juce_animation` module is linked into both `GravisynthCore` and the `Gravisynth` app target.
+Phase 5 introduces a shared animation infrastructure in `Source/UI/UIAnimation.h` (namespace `synth::ui`). All motion in the app uses this helper. The `juce_animation` module is linked into both `GravisynthCore` and the `Gravisynth` app target.
 
 ### Easing functions
 
@@ -583,7 +583,7 @@ VBlank-driven, **time-bounded** tween: animates a progress value from `0` to `1`
 ```cpp
 // Members in the owning component:
 juce::VBlankAnimatorUpdater vblankUpdater_{ this };
-gravisynth::ui::AnimationDriver driver_;
+synth::ui::AnimationDriver driver_;
 
 // Start a 200 ms transition:
 driver_.start(0.20);   // seconds

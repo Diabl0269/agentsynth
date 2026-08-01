@@ -14,7 +14,7 @@ All audio modules in Gravisynth inherit from `ModuleBase`, which in turn extends
     #pragma once
     #include "ModuleBase.h"
 
-    namespace gsynth {
+    namespace synth {
     class MyNewModule : public ModuleBase {
     public:
         MyNewModule();
@@ -25,7 +25,7 @@ All audio modules in Gravisynth inherit from `ModuleBase`, which in turn extends
         // Declare any internal state or DSP objects here
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MyNewModule)
     };
-    } // namespace gsynth
+    } // namespace synth
     ```
 
 2.  **Create Source File (`Source/Modules/MyNewModule.cpp`):**
@@ -33,7 +33,7 @@ All audio modules in Gravisynth inherit from `ModuleBase`, which in turn extends
     ```cpp
     #include "MyNewModule.h"
 
-    namespace gsynth {
+    namespace synth {
     MyNewModule::MyNewModule()
         : ModuleBase("MyNewModule", /* numInputs */ 1, /* numOutputs */ 1) // Adjust I/O counts
     {
@@ -71,7 +71,7 @@ All audio modules in Gravisynth inherit from `ModuleBase`, which in turn extends
             }
         }
     }
-    } // namespace gsynth
+    } // namespace synth
     ```
 
 3.  **Add to `GravisynthCore` in `CMakeLists.txt`:**
@@ -191,14 +191,14 @@ All new modules **must** have unit tests in the `Tests/` directory.
     #include "../Source/Modules/MyNewModule.h" // Correct include path
 
     TEST(MyNewModuleTest, InitialState) {
-        gsynth::MyNewModule module;
+        synth::MyNewModule module;
         // Assert initial parameter values or state
         ASSERT_EQ(module.getName(), "MyNewModule");
         // ... more assertions
     }
 
     TEST(MyNewModuleTest, ProcessesAudioCorrectly) {
-        gsynth::MyNewModule module;
+        synth::MyNewModule module;
         module.prepareToPlay(44100.0, 512); // Simulate prepareToPlay
 
         juce::AudioBuffer<float> buffer(2, 512);

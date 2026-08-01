@@ -158,7 +158,7 @@ Gravisynth uses SVG `Drawable` icons — **not** an icon or glyph font. This avo
 
 ### Icon enum
 
-26 icons are defined in `gsynth::theme::Icon` (in `Source/UI/Theme/IconLibrary.h`):
+26 icons are defined in `synth::theme::Icon` (in `Source/UI/Theme/IconLibrary.h`):
 
 ```
 TransportPlay    TransportStop    ActionUndo       ActionRedo
