@@ -14,10 +14,18 @@ public:
         callback({"MockModel1", "MockModel2"}, true);
     }
 
-    void sendPrompt(const std::vector<synth::AIProvider::Message>& conversation, CompletionCallback callback,
-                    const juce::var& responseSchema = juce::var()) override {
-        callback("Mock response text.", true);
+    RequestId sendPrompt(const std::vector<synth::AIProvider::Message>& conversation, CompletionCallback callback,
+                         const juce::var& responseSchema = juce::var(),
+                         std::function<void(const juce::String&)> onDelta = {}) override {
+        juce::ignoreUnused(conversation, responseSchema, onDelta);
+        AIResponse response;
+        response.success = true;
+        response.content = "Mock response text.";
+        callback(response);
+        return {};
     }
+
+    void cancel(RequestId) override {}
 
     void setModel(const juce::String& name) override { currentModel = name; }
     juce::String getCurrentModel() const override { return currentModel; }

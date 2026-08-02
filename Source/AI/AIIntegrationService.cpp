@@ -32,23 +32,27 @@ void AIIntegrationService::sendMessage(const juce::String& text, AIProvider::Com
 
         provider->sendPrompt(
             request,
-            [weakThis, callback](const juce::String& response, bool success) {
+            [weakThis, callback](const AIProvider::AIResponse& response) {
                 if (weakThis.get() == nullptr)
                     return; // Service was destroyed
 
                 auto* self = weakThis.get();
-                if (success) {
-                    self->chatHistory.push_back({"assistant", response});
+                if (response.success) {
+                    self->chatHistory.push_back({"assistant", response.content});
                     self->trimHistory();
                 }
                 if (callback) {
-                    callback(response, success);
+                    callback(response);
                 }
             },
             schema);
     } else {
         if (callback) {
-            callback("Error: No AI provider selected.", false);
+            AIProvider::AIResponse response;
+            response.success = false;
+            response.error.kind = AIProvider::AIErrorKind::Schema; // no provider configured — client precondition
+            response.error.message = "Error: No AI provider selected.";
+            callback(response);
         }
     }
 }

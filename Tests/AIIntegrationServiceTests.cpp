@@ -6,16 +6,26 @@ namespace synth {
 
 class MockAIProvider : public AIProvider {
 public:
-    void sendPrompt(const std::vector<Message>& conversation, CompletionCallback callback,
-                    const juce::var& responseSchema) override {
-        juce::ignoreUnused(responseSchema);
+    RequestId sendPrompt(const std::vector<Message>& conversation, CompletionCallback callback,
+                         const juce::var& responseSchema,
+                         std::function<void(const juce::String&)> onDelta = {}) override {
+        juce::ignoreUnused(responseSchema, onDelta);
         lastConversation = conversation;
+        AIResponse response;
         if (shouldFail) {
-            callback("Error", false);
+            response.success = false;
+            response.error.kind = AIErrorKind::Server;
+            response.error.message = "Error";
         } else {
-            callback(mockResponse, true);
+            response.success = true;
+            response.content = mockResponse;
         }
+        if (callback)
+            callback(response);
+        return {};
     }
+
+    void cancel(RequestId) override {}
 
     void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
         if (shouldFail)
@@ -79,7 +89,7 @@ TEST_F(AIIntegrationServiceTest, SendMessageAddsToHistory) {
     rawProvider->mockResponse = "AI Response";
 
     bool called = false;
-    service->sendMessage("User msg", [&](const juce::String&, bool) { called = true; });
+    service->sendMessage("User msg", [&](const AIProvider::AIResponse&) { called = true; });
 
     EXPECT_TRUE(called);
     // History should have: system, user, assistant
@@ -162,7 +172,7 @@ TEST_F(AIIntegrationServiceTest, HistoryDoesNotRetainPatchContext) {
     service->setProvider(std::move(provider));
 
     bool called = false;
-    service->sendMessage("Add a filter", [&](const juce::String&, bool) { called = true; }, true);
+    service->sendMessage("Add a filter", [&](const AIProvider::AIResponse&) { called = true; }, true);
 
     EXPECT_TRUE(called);
     auto history = service->getHistory();

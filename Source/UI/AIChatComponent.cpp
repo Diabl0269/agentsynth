@@ -406,9 +406,9 @@ void AIChatComponent::sendButtonClicked() {
 
     aiService.sendMessage(
         text,
-        [this, useStructuredOutput](const juce::String& response, bool success) {
+        [this, useStructuredOutput](const AIProvider::AIResponse& aiResponse) {
             juce::Component::SafePointer<AIChatComponent> safeThis(this);
-            juce::MessageManager::callAsync([safeThis, response, success, useStructuredOutput]() {
+            juce::MessageManager::callAsync([safeThis, aiResponse, useStructuredOutput]() {
                 if (safeThis.getComponent() == nullptr)
                     return;
                 auto* self = safeThis.getComponent();
@@ -419,7 +419,8 @@ void AIChatComponent::sendButtonClicked() {
 
                 self->cancelRequest(); // stops timer, spinner, cancel btn, restores input
 
-                if (success) {
+                if (aiResponse.success) {
+                    const juce::String& response = aiResponse.content;
                     juce::String json;
                     juce::String cleanText = response;
 
@@ -447,7 +448,7 @@ void AIChatComponent::sendButtonClicked() {
 
                     self->messages.push_back({"assistant", cleanText.trim(), json});
                 } else {
-                    self->messages.push_back({"assistant", "Error: " + response, ""});
+                    self->messages.push_back({"assistant", "Error: " + aiResponse.error.message, ""});
                 }
 
                 self->updateChatDisplay();

@@ -35,9 +35,15 @@ public:
     void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
         callback({"MockModel"}, true);
     }
-    void sendPrompt(const std::vector<Message>&, CompletionCallback callback, const juce::var&) override {
-        callback("Mock response.", true);
+    RequestId sendPrompt(const std::vector<Message>&, CompletionCallback callback, const juce::var&,
+                         std::function<void(const juce::String&)> = {}) override {
+        AIResponse response;
+        response.success = true;
+        response.content = "Mock response.";
+        callback(response);
+        return {};
     }
+    void cancel(RequestId) override {}
     void setModel(const juce::String& name) override { model = name; }
     juce::String getCurrentModel() const override { return model; }
 
