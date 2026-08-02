@@ -147,6 +147,65 @@ TEST_F(AIUndoTest, AiMergeIsUndoable) {
     EXPECT_TRUE(captureShape(graph) == before) << "undo of a merge must restore the pre-merge graph";
 }
 
+TEST_F(AIUndoTest, NodeIdsSurviveUndo) {
+    // Undo restores the graph by clearing and rebuilding it from a JSON snapshot. If that renumbers
+    // NodeIDs, anything holding an id across the undo (most importantly a merge-mode patch card, which
+    // addresses existing nodes by uid) silently stops resolving.
+    installBaselinePatch();
+
+    std::multiset<int> uidsBefore;
+    for (auto* n : graph.getNodes())
+        uidsBefore.insert((int)n->nodeID.uid);
+
+    ASSERT_TRUE(service->applyPatch(kReplacePatch));
+    ASSERT_TRUE(undoManager.undo());
+
+    std::multiset<int> uidsAfter;
+    for (auto* n : graph.getNodes())
+        uidsAfter.insert((int)n->nodeID.uid);
+
+    EXPECT_EQ(uidsBefore, uidsAfter) << "undo must restore node identity, not just node shape";
+}
+
+TEST_F(AIUndoTest, MergePatchCanBeReappliedAfterUndo) {
+    // Reported by hand-testing: Merge an AI addition, press Cmd+Z, then click Merge again on the same
+    // patch card -> nothing happens. The card's JSON references the pre-undo uid of an existing node.
+    installBaselinePatch();
+
+    const int filterUid = uidOfNodeNamed("Filter");
+    ASSERT_NE(filterUid, -1);
+
+    const juce::String mergePatch = juce::String(R"({"mode":"merge","nodes":[{"id":9001,"type":"VCA"}],)") +
+                                    R"("connections":[{"src":)" + juce::String(filterUid) +
+                                    R"(,"srcPort":0,"dst":9001,"dstPort":0}]})";
+
+    ASSERT_TRUE(service->applyPatch(mergePatch, /*mergeMode=*/true));
+    ASSERT_EQ(graph.getNumNodes(), 3);
+
+    ASSERT_TRUE(undoManager.undo());
+    ASSERT_EQ(graph.getNumNodes(), 2);
+
+    // Clicking Merge a second time on the very same card must still work.
+    EXPECT_TRUE(service->applyPatch(mergePatch, /*mergeMode=*/true))
+        << "re-applying a merge patch after undo must not silently fail";
+    EXPECT_EQ(graph.getNumNodes(), 3);
+}
+
+TEST_F(AIUndoTest, ReplacePatchCanBeAppliedAfterUndo) {
+    // A full-replacement patch carries self-contained ids, so it must apply after an undo regardless
+    // of how the restore renumbered the graph.
+    installBaselinePatch();
+
+    ASSERT_TRUE(service->applyPatch(kReplacePatch));
+    ASSERT_TRUE(undoManager.undo());
+
+    EXPECT_TRUE(service->applyPatch(
+        R"({"nodes":[{"id":20,"type":"Oscillator"},{"id":21,"type":"Filter"},{"id":22,"type":"VCA"}],
+            "connections":[{"src":20,"srcPort":0,"dst":21,"dstPort":0},{"src":21,"srcPort":0,"dst":22,"dstPort":0}]})"))
+        << "a fresh replace patch must apply after an undo";
+    EXPECT_EQ(graph.getNumNodes(), 3);
+}
+
 TEST_F(AIUndoTest, ListenersFireOnUndo) {
     installBaselinePatch();
 

@@ -68,6 +68,14 @@ public:
     bool applyPatch(const juce::String& jsonString, bool mergeMode = false);
 
     /**
+     * @brief Why the most recent applyPatch() returned false, in human-readable form.
+     *
+     * Empty when the last apply succeeded. Callers MUST surface this — a rejected patch that is
+     * swallowed silently looks to the user like a dead Apply/Merge button.
+     */
+    const juce::String& getLastPatchError() const { return lastPatchError; }
+
+    /**
      * @brief Returns the current graph state as a JSON string for context.
      */
     juce::String getPatchContext();
@@ -94,6 +102,7 @@ private:
     std::vector<AIProvider::Message> chatHistory;
     juce::AudioProcessorGraph& audioGraph;
     AppUndoManager* undoManager = nullptr;
+    juce::String lastPatchError;
     juce::ListenerList<Listener> listeners;
 
     void initSystemPrompt();

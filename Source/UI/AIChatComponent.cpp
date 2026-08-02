@@ -505,8 +505,24 @@ void AIChatComponent::updateChatDisplay() {
                 juce::Logger::writeToLog("--- Applying patch (merge=" + juce::String(isMerge ? "true" : "false") +
                                          ") ---");
                 juce::Logger::writeToLog("JSON: " + json);
-                aiService.applyPatch(json, isMerge);
-                juce::Logger::writeToLog("--- Patch applied ---");
+                if (aiService.applyPatch(json, isMerge)) {
+                    juce::Logger::writeToLog("--- Patch applied ---");
+                    return;
+                }
+                // Never swallow a rejection: an Apply/Merge that does nothing and says nothing is
+                // indistinguishable from a broken button. Surface the reason in the conversation.
+                auto reason = aiService.getLastPatchError();
+                if (reason.isEmpty())
+                    reason = "The patch could not be applied.";
+                juce::Logger::writeToLog("--- Patch REJECTED: " + reason + " ---");
+                messages.push_back({"assistant", "Could not apply this patch: " + reason, ""});
+                // Refresh asynchronously: updateChatDisplay() calls messageList.deleteAllChildren(),
+                // which would destroy the MessageBubble whose callback we are currently inside.
+                juce::Component::SafePointer<AIChatComponent> safeThis(this);
+                juce::MessageManager::callAsync([safeThis] {
+                    if (auto* self = safeThis.getComponent())
+                        self->updateChatDisplay();
+                });
             },
             isMerge);
         messageList.addAndMakeVisible(bubble);

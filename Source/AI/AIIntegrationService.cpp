@@ -94,7 +94,15 @@ bool AIIntegrationService::applyPatch(const juce::String& jsonString, bool merge
     // unparseable input, which validatePatch rejects (NotAnObject) along with any other structurally invalid
     // patch. A failure here means the graph is never mutated, so listeners must not be told a patch is about
     // to apply, and no no-op entry may be left on the undo stack.
-    if (!AIStateMapper::validatePatch(json, audioGraph, clearExisting, /*trusted=*/false).ok) {
+    lastPatchError.clear();
+
+    if (const auto validation = AIStateMapper::validatePatch(json, audioGraph, clearExisting, /*trusted=*/false);
+        !validation.ok) {
+        // One log per rejected patch — user-click frequency, so it does not violate the no-high-frequency
+        // logging rule. In Debug builds this reaches AIChatComponent's console panel.
+        lastPatchError = validation.message.isNotEmpty() ? validation.message : "Patch failed validation.";
+        juce::Logger::writeToLog("applyPatch rejected (" + juce::String(mergeMode ? "merge" : "replace") +
+                                 "): " + lastPatchError);
         return false;
     }
 
@@ -119,6 +127,8 @@ bool AIIntegrationService::applyPatch(const juce::String& jsonString, bool merge
             notifyApplied();
             return true;
         }
+        lastPatchError = "Patch could not be applied to the graph.";
+        juce::Logger::writeToLog("applyPatch failed during applyJSONToGraph: " + lastPatchError);
         return false;
     };
 
