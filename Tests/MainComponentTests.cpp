@@ -1,4 +1,5 @@
 #include "../Source/AI/AIProvider.h"
+#include "../Source/AI/AIProviderRegistry.h"
 #include "MainComponent.h"
 #include "UI/ToolbarComponent.h"
 #include <gtest/gtest.h>
@@ -321,6 +322,23 @@ TEST_F(MainComponentTest, AiProviderGetsModelSelectedOnStartup) {
     MainComponent mc(std::move(ownedProvider));
 
     EXPECT_GE(rawProvider->fetchCallCount, 1);
+    EXPECT_FALSE(mc.getAiServiceForTest().getCurrentModel().isEmpty());
+    EXPECT_EQ(mc.getAiServiceForTest().getCurrentModel(), "mock-model-a");
+}
+
+// Confirms MainComponent's no-injected-provider path goes through AIProviderRegistry
+// (not a hardcoded OllamaProvider construction) and that the post-setProvider()
+// refreshModels() contract (see AiProviderGetsModelSelectedOnStartup above) still holds
+// when the provider comes from the registry.
+TEST_F(MainComponentTest, StartupUsesRegistryAndStillSelectsAModel) {
+    synth::AIProviderRegistry registry;
+    registry.registerProvider({"ollama", "Ollama (local)", true, false,
+                               [](const synth::ProviderConfig&) -> std::unique_ptr<synth::AIProvider> {
+                                   return std::make_unique<ModelTrackingMockProvider>();
+                               }});
+
+    MainComponent mc(nullptr, registry);
+
     EXPECT_FALSE(mc.getAiServiceForTest().getCurrentModel().isEmpty());
     EXPECT_EQ(mc.getAiServiceForTest().getCurrentModel(), "mock-model-a");
 }

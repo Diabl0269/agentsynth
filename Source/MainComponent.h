@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AI/AIIntegrationService.h"
+#include "AI/AIProviderRegistry.h"
 #include "AppUndoManager.h"
 #include "AudioEngine.h"
 #include "PresetManager.h"
@@ -33,7 +34,8 @@ public:
     // Delegating ctor for tests and legacy call sites that don't inject theme objects.
     // Lazily owns private default ThemeManager + AppLookAndFeel instances
     // (stored in ownedThemeManager / ownedLookAndFeel below).
-    explicit MainComponent(std::unique_ptr<synth::AIProvider> provider = nullptr);
+    explicit MainComponent(std::unique_ptr<synth::AIProvider> provider = nullptr,
+                           synth::AIProviderRegistry registry = synth::AIProviderRegistry::createDefault());
 
     ~MainComponent() override;
 
@@ -105,7 +107,7 @@ private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
     // Shared initialisation body called from both constructors after appProperties is set up.
-    void initialiseCommon(std::unique_ptr<synth::AIProvider> provider);
+    void initialiseCommon(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry);
 
     // Push the (themed, re-tinted) icon Drawables onto the 9 toolbar DrawableButtons + the
     // status-bar master-mute button, and manage icon-only vs icon+text text per narrow mode.
