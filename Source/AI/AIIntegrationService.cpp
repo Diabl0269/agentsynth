@@ -1,11 +1,13 @@
 #include "AIIntegrationService.h"
+#include "../AppUndoManager.h"
 #include "../Branding.h"
 #include <algorithm>
 
 namespace synth {
 
-AIIntegrationService::AIIntegrationService(juce::AudioProcessorGraph& graph)
-    : audioGraph(graph) {
+AIIntegrationService::AIIntegrationService(juce::AudioProcessorGraph& graph, AppUndoManager* undoManager)
+    : audioGraph(graph)
+    , undoManager(undoManager) {
     initSystemPrompt();
 }
 
@@ -88,21 +90,56 @@ bool AIIntegrationService::applyPatch(const juce::String& jsonString, bool merge
     juce::var json = juce::JSON::parse(extractedJson);
     bool clearExisting = !mergeMode;
 
-    // Validate BEFORE touching any listener — juce::JSON::parse returns a void var for unparseable input,
-    // which validatePatch rejects (NotAnObject) along with any other structurally invalid patch. A failure
-    // here means the graph is never mutated, so listeners must not be told a patch is about to apply.
-    if (!AIStateMapper::validatePatch(json, audioGraph, clearExisting, /*trusted=*/false).ok) {
+    // Validate BEFORE touching any listener or the undo stack — juce::JSON::parse returns a void var for
+    // unparseable input, which validatePatch rejects (NotAnObject) along with any other structurally invalid
+    // patch. A failure here means the graph is never mutated, so listeners must not be told a patch is about
+    // to apply, and no no-op entry may be left on the undo stack.
+    lastPatchError.clear();
+
+    if (const auto validation = AIStateMapper::validatePatch(json, audioGraph, clearExisting, /*trusted=*/false);
+        !validation.ok) {
+        // One log per rejected patch — user-click frequency, so it does not violate the no-high-frequency
+        // logging rule. In Debug builds this reaches AIChatComponent's console panel.
+        lastPatchError = validation.message.isNotEmpty() ? validation.message : "Patch failed validation.";
+        juce::Logger::writeToLog("applyPatch rejected (" + juce::String(mergeMode ? "merge" : "replace") +
+                                 "): " + lastPatchError);
         return false;
     }
 
     // Notify listeners to detach graph-referencing UI BEFORE the graph is rebuilt (avoids a use-after-free
     // where a ScopeComponent timer reads a freed VisualBuffer once applyJSONToGraph clears old processors).
-    listeners.call([](Listener& l) { l.aiPatchAboutToApply(); });
-    if (AIStateMapper::applyJSONToGraph(json, audioGraph, clearExisting)) {
-        listeners.call([](Listener& l) { l.aiPatchApplied(); });
-        return true;
+    // Undo and redo rebuild the graph exactly the same way, so the pair must fire around those too — they
+    // are handed to the undoable action as its pre/post restore hooks. Skipping them on undo would leave the
+    // graph editor holding stale ModuleComponents that reference freed VisualBuffers.
+    juce::WeakReference<AIIntegrationService> weakThis(this);
+    auto notifyAboutToApply = [weakThis] {
+        if (auto* self = weakThis.get())
+            self->listeners.call([](Listener& l) { l.aiPatchAboutToApply(); });
+    };
+    auto notifyApplied = [weakThis] {
+        if (auto* self = weakThis.get())
+            self->listeners.call([](Listener& l) { l.aiPatchApplied(); });
+    };
+
+    auto applyNow = [this, json, clearExisting, notifyAboutToApply, notifyApplied] {
+        notifyAboutToApply();
+        if (AIStateMapper::applyJSONToGraph(json, audioGraph, clearExisting)) {
+            notifyApplied();
+            return true;
+        }
+        lastPatchError = "Patch could not be applied to the graph.";
+        juce::Logger::writeToLog("applyPatch failed during applyJSONToGraph: " + lastPatchError);
+        return false;
+    };
+
+    // With an undo manager installed the apply is wrapped in a snapshot transaction so Cmd+Z restores the
+    // user's previous patch; without one (e.g. tests that construct the service standalone) it applies directly.
+    if (undoManager != nullptr) {
+        return undoManager->recordAIPatch(audioGraph, mergeMode ? "AI merge" : "AI patch", applyNow, notifyAboutToApply,
+                                          notifyApplied);
     }
-    return false;
+
+    return applyNow();
 }
 
 juce::String AIIntegrationService::extractJsonFromResponse(const juce::String& response) {

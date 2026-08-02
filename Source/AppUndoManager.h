@@ -63,6 +63,27 @@ public:
     void recordPositionChange(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId, int oldX,
                               int oldY, int newX, int newY, std::function<void()> postRestore);
 
+    /**
+     * @brief Records an AI-applied patch (Apply / Merge on a patch card) as an undoable snapshot.
+     *
+     * Same snapshot strategy as recordStructuralChange, but the caller supplies its own
+     * preRestore/postRestore hooks so the AI listener notifications (aiPatchAboutToApply /
+     * aiPatchApplied) fire on undo and redo as well as on the initial apply — otherwise the
+     * graph editor keeps stale ModuleComponents pointing at freed VisualBuffers.
+     *
+     * If the mutation reports failure nothing is pushed, so an invalid patch leaves no
+     * no-op entry on the undo stack.
+     *
+     * @param graph Reference to the audio processor graph
+     * @param actionName Human-readable transaction name (e.g. "AI patch" / "AI merge")
+     * @param mutation Lambda that applies the patch; returns false if it did not apply
+     * @param preRestore Lambda called before the graph is rebuilt on undo/redo
+     * @param postRestore Lambda called after the graph is rebuilt on undo/redo
+     * @return true if the mutation succeeded and an undo entry was pushed
+     */
+    bool recordAIPatch(juce::AudioProcessorGraph& graph, const juce::String& actionName, std::function<bool()> mutation,
+                       std::function<void()> preRestore, std::function<void()> postRestore);
+
     // Snapshot-based parameter/position change recording.
     // Call captureBeforeState at gesture start, then pushSnapshotFromCapture at gesture end.
     void captureBeforeState(juce::AudioProcessorGraph& graph);

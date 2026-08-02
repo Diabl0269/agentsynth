@@ -61,6 +61,10 @@ MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider, synth:
 
 // ---- Shared post-construction body ----
 void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry) {
+    // Route AI patch applies through the app undo manager so Apply/Merge on a patch card is Cmd+Z-able.
+    // Safe in both ctors: undoManager is declared before aiService, so it is already constructed here.
+    aiService.setUndoManager(&undoManager);
+
     // ORDERING CONTRACT: read the persisted panel-visibility flags FIRST, before any
     // setVisible()/addAndMakeVisible() call that depends on them. These override the member
     // initialisers (isLibraryVisible{true}, isAiPanelVisible=false).

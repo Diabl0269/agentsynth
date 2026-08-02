@@ -793,7 +793,17 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                             }
                         }
 
-                        auto node = graph.addNode(std::move(processor));
+                        // Preserve node identity when restoring OUR OWN snapshot (undo/redo, preset load).
+                        // graphToJSON writes the live uid as "id", so replaying it with the same NodeID
+                        // keeps ids stable across an undo — without this the graph is renumbered and
+                        // anything holding an id across the restore (most visibly a merge-mode patch card,
+                        // which addresses existing nodes by uid) silently stops resolving.
+                        // Only on the trusted path: untrusted AI JSON must never dictate node ids.
+                        std::optional<juce::AudioProcessorGraph::NodeID> preservedId;
+                        if (trusted && clearExisting && oldId > 0)
+                            preservedId = juce::AudioProcessorGraph::NodeID((juce::uint32)oldId);
+
+                        auto node = graph.addNode(std::move(processor), preservedId);
                         if (node) {
                             idMap[oldId] = node->nodeID;
                             newlyCreatedNodes.insert(node->nodeID);
