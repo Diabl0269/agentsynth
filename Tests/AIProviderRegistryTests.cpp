@@ -13,10 +13,14 @@ public:
     void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
         callback({}, true);
     }
-    void sendPrompt(const std::vector<synth::AIProvider::Message>&, CompletionCallback callback,
-                    const juce::var& = juce::var()) override {
-        callback("", true);
+    RequestId sendPrompt(const std::vector<synth::AIProvider::Message>&, CompletionCallback callback,
+                         const juce::var& = juce::var(), std::function<void(const juce::String&)> = {}) override {
+        AIResponse response;
+        response.success = true;
+        callback(response);
+        return {};
     }
+    void cancel(RequestId) override {}
     void setModel(const juce::String&) override {}
     juce::String getCurrentModel() const override { return {}; }
 

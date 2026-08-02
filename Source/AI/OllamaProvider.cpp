@@ -16,6 +16,8 @@ constexpr int kWorkerHandoverTimeoutMs = 2000;
 const char* const kShuttingDownMessage = "Error: Request cancelled - the Ollama provider is shutting down.";
 } // namespace
 
+using AIErrorKind = OllamaProvider::AIErrorKind;
+
 // Default constructor implementation
 OllamaProvider::OllamaProvider(const juce::String& host)
     : Thread("OllamaProviderThread")
@@ -38,7 +40,7 @@ OllamaProvider::~OllamaProvider() {
 
     // Belt and braces: covers the case where no worker ever ran (so nothing retired)
     // and anything that slipped into the queue during teardown.
-    failAllPending(kShuttingDownMessage);
+    failAllPending(AIErrorKind::Cancelled, kShuttingDownMessage);
 
     // Join the discovery worker so it cannot touch our members after we are
     // destroyed (it captures `this`). With the short 4s connection timeout
@@ -50,15 +52,21 @@ OllamaProvider::~OllamaProvider() {
         discoveryThread.join();
 }
 
-void OllamaProvider::sendPrompt(const std::vector<Message>& conversation, CompletionCallback callback,
-                                const juce::var& responseSchema) {
-    const Request request{conversation, std::move(callback), responseSchema};
+OllamaProvider::RequestId OllamaProvider::sendPrompt(const std::vector<Message>& conversation,
+                                                     CompletionCallback callback, const juce::var& responseSchema,
+                                                     std::function<void(const juce::String&)> onDelta) {
+    // Streaming is not implemented for OllamaProvider: onDelta is accepted for interface
+    // compatibility but intentionally never invoked.
+    juce::ignoreUnused(onDelta);
 
+    Request request{RequestId{}, conversation, std::move(callback), responseSchema};
     bool rejected = false;
     bool mustStartWorker = false;
 
     {
         const juce::ScopedLock sl(queueLock);
+
+        request.id.value = nextRequestId++;
 
         if (isShuttingDown) {
             rejected = true;
@@ -87,21 +95,33 @@ void OllamaProvider::sendPrompt(const std::vector<Message>& conversation, Comple
         }
     }
 
+    const RequestId requestId = request.id;
+
     if (rejected) {
-        deliverResult(request, kShuttingDownMessage, false, /*forceSynchronous=*/true);
-        return;
+        deliverError(request, AIErrorKind::Cancelled, kShuttingDownMessage, /*retryAfterSeconds=*/0,
+                     /*forceSynchronous=*/true);
+        return requestId;
     }
 
     if (mustStartWorker && !ensureWorkerRunning()) {
         // No worker could take the queue. Failing loudly beats the UI waiting forever.
-        failAllPending("Error: Could not start the Ollama request worker thread.");
-        return;
+        failAllPending(AIErrorKind::Server, "Error: Could not start the Ollama request worker thread.");
+        return requestId;
     }
 
     // Wake a worker parked in run()'s wait(). Harmless if it is busy or just started:
     // the event is auto-reset and every loop iteration re-checks the queue under lock,
     // so a stale signal only costs one extra iteration and a wakeup is never lost.
     notify();
+
+    return requestId;
+}
+
+void OllamaProvider::cancel(RequestId requestId) {
+    // Not implemented: OllamaProvider cannot cancel an in-flight or queued request yet.
+    // Declared per the AIProvider interface so future providers can implement real
+    // cancellation without an interface change.
+    juce::ignoreUnused(requestId);
 }
 
 bool OllamaProvider::ensureWorkerRunning() {
@@ -126,7 +146,7 @@ bool OllamaProvider::ensureWorkerRunning() {
     return startThread();
 }
 
-void OllamaProvider::failAllPending(const juce::String& message) {
+void OllamaProvider::failAllPending(AIErrorKind kind, const juce::String& message) {
     std::vector<Request> stranded;
     bool deliverSynchronously = false;
 
@@ -143,23 +163,51 @@ void OllamaProvider::failAllPending(const juce::String& message) {
     }
 
     for (const auto& req : stranded)
-        deliverResult(req, message, false, deliverSynchronously);
+        deliverError(req, kind, message, /*retryAfterSeconds=*/0, deliverSynchronously);
 }
 
-void OllamaProvider::deliverResult(const Request& req, const juce::String& responseText, bool success,
-                                   bool forceSynchronous) {
+void OllamaProvider::deliverResult(const Request& req, const juce::String& responseText, bool forceSynchronous) {
     if (!req.callback)
         return;
 
+    AIResponse response;
+    response.success = true;
+    response.content = responseText;
+    response.requestId = juce::String(req.id.value);
+
     if (isTestMode || forceSynchronous) {
-        req.callback(responseText, success);
+        req.callback(response);
         return;
     }
 
     // Copy just the callback (not the whole conversation) and never `this`, so a
     // message already in flight cannot touch a destroyed provider.
     auto callback = req.callback;
-    juce::MessageManager::callAsync([callback, responseText, success]() { callback(responseText, success); });
+    juce::MessageManager::callAsync([callback, response]() { callback(response); });
+}
+
+void OllamaProvider::deliverError(const Request& req, AIErrorKind kind, const juce::String& message,
+                                  int retryAfterSeconds, bool forceSynchronous) {
+    if (!req.callback)
+        return;
+
+    AIResponse response;
+    response.success = false;
+    response.requestId = juce::String(req.id.value);
+    response.error.kind = kind;
+    response.error.message = message;
+    response.error.retryAfterSeconds = retryAfterSeconds;
+    response.error.requestId = response.requestId;
+
+    if (isTestMode || forceSynchronous) {
+        req.callback(response);
+        return;
+    }
+
+    // Copy just the callback (not the whole conversation) and never `this`, so a
+    // message already in flight cannot touch a destroyed provider.
+    auto callback = req.callback;
+    juce::MessageManager::callAsync([callback, response]() { callback(response); });
 }
 
 void OllamaProvider::setModel(const juce::String& name) { currentModel = name; }
@@ -295,23 +343,27 @@ void OllamaProvider::run() {
 
     // Retire: hand the queue back and fail anything still in it, atomically, so no
     // request can slip in behind us unnoticed.
-    failAllPending(kShuttingDownMessage);
+    failAllPending(AIErrorKind::Cancelled, kShuttingDownMessage);
 }
 
 void OllamaProvider::processRequest(const Request& req) {
-    // Delivers (responseText, success) through the same test-mode-aware channel used by
-    // every exit path below, so the fail-fast path and the network paths stay identical.
-    auto deliver = [this, &req](const juce::String& responseText, bool success) {
-        deliverResult(req, responseText, success, /*forceSynchronous=*/false);
+    // Delivers a success/error through the same test-mode-aware channel used by every
+    // exit path below, so the fail-fast path and the network paths stay identical.
+    auto deliverSuccess = [this, &req](const juce::String& responseText) {
+        deliverResult(req, responseText, /*forceSynchronous=*/false);
+    };
+    auto deliverErr = [this, &req](AIErrorKind kind, const juce::String& message, int retryAfterSeconds = 0) {
+        deliverError(req, kind, message, retryAfterSeconds, /*forceSynchronous=*/false);
     };
 
     // Fail fast: never hit the network with an empty model. Ollama rejects such requests
     // with HTTP 400 "model is required", which previously surfaced as a misleading
-    // "Could not connect to Ollama" error even when the server was reachable.
+    // "Could not connect to Ollama" error even when the server was reachable. This is a
+    // client-side precondition, so it maps to Schema rather than Network.
     if (currentModel.isEmpty()) {
-        deliver("Error: No Ollama model selected. Check that Ollama is running and that a model is available "
-                "(ollama list).",
-                false);
+        deliverErr(AIErrorKind::Schema,
+                   "Error: No Ollama model selected. Check that Ollama is running and that a model is available "
+                   "(ollama list).");
         return;
     }
 
@@ -336,37 +388,66 @@ void OllamaProvider::processRequest(const Request& req) {
 
     juce::String jsonString = juce::JSON::toString(juce::var(body.get()));
 
-    juce::String responseText;
-    bool success = false;
     int httpStatus = 0;
+    juce::StringPairArray responseHeaders;
 
-    if (auto stream = createStream(url.withPOSTData(jsonString),
-                                   juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inPostData)
-                                       .withConnectionTimeoutMs(120000)
-                                       .withStatusCode(&httpStatus))) {
-        responseText = stream->readEntireStreamAsString();
-        // DBG("AI Chat Response (before JSON parse): [" + responseText + "]"); // Potentially expensive
+    auto stream = createStream(url.withPOSTData(jsonString),
+                               juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inPostData)
+                                   .withConnectionTimeoutMs(120000)
+                                   .withStatusCode(&httpStatus)
+                                   .withResponseHeaders(&responseHeaders));
 
-        juce::var jsonResponse = juce::JSON::parse(responseText);
-        if (jsonResponse.isObject()) {
-            if (auto* obj = jsonResponse.getDynamicObject()) {
-                if (obj->hasProperty("message")) {
-                    auto msgObj = obj->getProperty("message");
-                    if (msgObj.getDynamicObject()) {
-                        responseText = msgObj.getDynamicObject()->getProperty("content").toString();
-                        success = true;
-                    }
+    // httpStatus is populated by the pointer above as soon as HTTP response headers are
+    // received, independent of whether createStream() went on to hand back a stream — so
+    // an explicit error status always takes priority over inspecting (or the absence of)
+    // a body.
+    if (httpStatus == 401 || httpStatus == 403) {
+        deliverErr(AIErrorKind::Auth, "Error: Ollama at " + ollamaHost +
+                                          " rejected the request as unauthorized (HTTP " + juce::String(httpStatus) +
+                                          ").");
+        return;
+    }
+
+    if (httpStatus == 429) {
+        int retryAfterSeconds = responseHeaders.getValue("Retry-After", "").getIntValue();
+        deliverErr(AIErrorKind::RateLimit, "Error: Ollama at " + ollamaHost + " rate-limited the request (HTTP 429).",
+                   retryAfterSeconds);
+        return;
+    }
+
+    if (httpStatus == 402) {
+        deliverErr(AIErrorKind::Quota, "Error: Ollama at " + ollamaHost + " reported insufficient quota (HTTP 402).");
+        return;
+    }
+
+    if (httpStatus != 0 && (httpStatus < 200 || httpStatus >= 300)) {
+        deliverErr(AIErrorKind::Server,
+                   "Error: Ollama at " + ollamaHost + " rejected the request (HTTP " + juce::String(httpStatus) + ").");
+        return;
+    }
+
+    if (stream == nullptr) {
+        deliverErr(AIErrorKind::Network, "Error: Could not connect to Ollama at " + ollamaHost);
+        return;
+    }
+
+    juce::String responseText = stream->readEntireStreamAsString();
+    // DBG("AI Chat Response (before JSON parse): [" + responseText + "]"); // Potentially expensive
+
+    juce::var jsonResponse = juce::JSON::parse(responseText);
+    if (jsonResponse.isObject()) {
+        if (auto* obj = jsonResponse.getDynamicObject()) {
+            if (obj->hasProperty("message")) {
+                auto msgObj = obj->getProperty("message");
+                if (msgObj.getDynamicObject()) {
+                    deliverSuccess(msgObj.getDynamicObject()->getProperty("content").toString());
+                    return;
                 }
             }
         }
-    } else if (httpStatus != 0) {
-        responseText =
-            "Error: Ollama at " + ollamaHost + " rejected the request (HTTP " + juce::String(httpStatus) + ").";
-    } else {
-        responseText = "Error: Could not connect to Ollama at " + ollamaHost;
     }
 
-    deliver(responseText, success);
+    deliverErr(AIErrorKind::Schema, "Error: Ollama at " + ollamaHost + " returned an unparseable response.");
 }
 
 } // namespace synth

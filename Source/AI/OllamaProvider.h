@@ -33,11 +33,18 @@ public:
     /** Queues a chat request for the worker thread.
 
         Contract: every accepted request eventually gets its callback invoked — either
-        with the model's answer, or with an error string. It is never silently dropped,
+        with the model's answer, or with a typed error. It is never silently dropped,
         including when it lands while the worker is shutting down or already gone.
+
+        Streaming is not implemented here: onDelta is accepted for interface compatibility
+        but never invoked.
     */
-    void sendPrompt(const std::vector<Message>& conversation, CompletionCallback callback,
-                    const juce::var& responseSchema = juce::var()) override;
+    RequestId sendPrompt(const std::vector<Message>& conversation, CompletionCallback callback,
+                         const juce::var& responseSchema = juce::var(),
+                         std::function<void(const juce::String& delta)> onDelta = {}) override;
+
+    /** Cancellation is not implemented for OllamaProvider yet; this is a declared no-op. */
+    void cancel(RequestId requestId) override;
 
     juce::String getProviderName() const override { return "Ollama"; }
 
@@ -61,10 +68,15 @@ private:
     std::atomic<bool> discoveryInFlight{false};
 
     struct Request {
+        RequestId id;
         std::vector<Message> conversation;
         AIProvider::CompletionCallback callback;
         juce::var responseSchema;
     };
+
+    // Monotonically increasing; only ever accessed from sendPrompt() callers, so a plain
+    // counter guarded by queueLock (taken for every sendPrompt() anyway) is sufficient.
+    uint64_t nextRequestId = 1; // guarded by queueLock
 
     juce::CriticalSection queueLock;
     std::vector<Request> pendingRequests;
@@ -95,14 +107,20 @@ private:
         worker could be started, in which case the caller MUST fail the queue. */
     bool ensureWorkerRunning();
 
-    /** Releases queue ownership (workerState = idle) and fails everything left in it,
-        both in one locked section so nothing can slip in unnoticed behind it. */
-    void failAllPending(const juce::String& message);
+    /** Releases queue ownership (workerState = idle) and fails everything left in it with
+        the given typed error, both in one locked section so nothing can slip in unnoticed
+        behind it. */
+    void failAllPending(AIErrorKind kind, const juce::String& message);
 
-    /** Single delivery channel for every result and error. `forceSynchronous` bypasses
+    /** Single delivery channel for every successful result. `forceSynchronous` bypasses
         MessageManager::callAsync for shutdown paths, where the message loop cannot be
         relied on to run the callback before this object is gone. */
-    void deliverResult(const Request& req, const juce::String& responseText, bool success, bool forceSynchronous);
+    void deliverResult(const Request& req, const juce::String& responseText, bool forceSynchronous);
+
+    /** Single delivery channel for every error. Same `forceSynchronous` contract as
+        deliverResult(). */
+    void deliverError(const Request& req, AIErrorKind kind, const juce::String& message, int retryAfterSeconds,
+                      bool forceSynchronous);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OllamaProvider)
 };
