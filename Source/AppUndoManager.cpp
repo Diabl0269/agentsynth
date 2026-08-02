@@ -221,6 +221,26 @@ void AppUndoManager::recordPositionChange(juce::AudioProcessorGraph& graph, juce
     undoManager.perform(new PositionChangeAction(graph, nodeId, oldX, oldY, newX, newY, postRestore));
 }
 
+bool AppUndoManager::recordAIPatch(juce::AudioProcessorGraph& graph, const juce::String& actionName,
+                                   std::function<bool()> mutation, std::function<void()> preRestore,
+                                   std::function<void()> postRestore) {
+    if (!mutation)
+        return false;
+
+    auto beforeState = synth::AIStateMapper::graphToJSON(graph);
+
+    // The mutation performs the apply itself (including its own listener notifications). If the patch is
+    // rejected the graph is untouched — return without pushing so the undo stack keeps no no-op entry.
+    if (!mutation())
+        return false;
+
+    auto afterState = synth::AIStateMapper::graphToJSON(graph);
+
+    undoManager.beginNewTransaction(actionName);
+    undoManager.perform(new SnapshotAction(beforeState, afterState, graph, preRestore, postRestore));
+    return true;
+}
+
 void AppUndoManager::captureBeforeState(juce::AudioProcessorGraph& graph) {
     capturedBeforeState = synth::AIStateMapper::graphToJSON(graph);
 }

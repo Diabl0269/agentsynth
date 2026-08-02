@@ -73,6 +73,39 @@ The AI communicates with Gravisynth using a simplified JSON schema to describe s
 -   **Context-Aware Responses**: By providing the AI with the current synthesizer state, it can generate more relevant and informed suggestions.
 -   **Model Management**: Users can select from various available AI models (e.g., different Ollama models) via the application's UI.
 -   **Extensible Provider System**: The `AIProvider` interface allows for easy integration of new AI backends in the future.
+-   **Undoable Patches**: Apply/Merge on a patch card is recorded on the app undo stack, so `Cmd+Z` restores the user's previous patch (see below).
+
+### AI Patch Undo/Redo Contract
+
+`AIIntegrationService::applyPatch()` routes through `AppUndoManager::recordAIPatch()` whenever an
+undo manager has been injected (`MainComponent::initialiseCommon()` calls
+`aiService.setUndoManager(&undoManager)`). The service holds a **non-owning, nullable** pointer —
+constructing an `AIIntegrationService` without one keeps the old direct-apply behaviour, which is
+what the standalone service tests do.
+
+The recorded action is the existing snapshot-based `SnapshotAction`, not a fine-grained diff:
+`graphToJSON(graph)` is captured before the patch and after it, undo restores the before-snapshot
+and redo re-applies the after-snapshot. Merge mode needs no special handling — the after-snapshot
+is the whole merged graph. Transactions are named `"AI patch"` / `"AI merge"`.
+
+Two invariants:
+
+1.  **Listener notifications must fire on undo and redo, not just the initial apply.**
+    `aiPatchAboutToApply` / `aiPatchApplied` are passed to the action as its `preRestore` /
+    `postRestore` hooks. Undo and redo rebuild the graph exactly the way the original apply did,
+    so skipping them would leave `GraphEditor` holding stale `ModuleComponent`s pointing at
+    `VisualBuffer`s that `applyJSONToGraph` has already freed — a use-after-free, not just a
+    stale render. Guarded by `AIUndoTest.ListenersFireOnUndo`.
+2.  **A rejected patch pushes nothing.** `applyPatch()` runs `validatePatch()` before touching any
+    listener or the undo stack, and `recordAIPatch()` returns without pushing if the mutation
+    reports failure, so an invalid patch leaves no no-op entry for `Cmd+Z` to consume. Guarded by
+    `AIUndoTest.FailedPatchPushesNothing`.
+
+Because the notifications are dispatched from the undoable action, they are wrapped in a
+`juce::WeakReference<AIIntegrationService>` — the action can outlive nothing in practice, but the
+weak ref keeps the ordering safe if the service is ever destroyed before the undo manager.
+
+Tests live in `Tests/AIUndoTests.cpp`.
 
 ## 5. AIChatComponent and Logging
 

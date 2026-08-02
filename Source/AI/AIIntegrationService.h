@@ -8,6 +8,8 @@
 #include <memory>
 #include <vector>
 
+class AppUndoManager; // Forward declaration — the service only holds a non-owning pointer.
+
 namespace synth {
 
 /**
@@ -16,8 +18,18 @@ namespace synth {
  */
 class AIIntegrationService {
 public:
-    AIIntegrationService(juce::AudioProcessorGraph& graph);
+    /**
+     * @param graph The graph AI patches are applied to.
+     * @param undoManager Optional — when supplied, applyPatch() becomes undoable. Defaults to null so
+     *                    callers that don't own an undo manager (e.g. tests) keep working unchanged.
+     */
+    AIIntegrationService(juce::AudioProcessorGraph& graph, AppUndoManager* undoManager = nullptr);
     ~AIIntegrationService();
+
+    /**
+     * @brief Installs (or clears) the undo manager used to make applyPatch() undoable.
+     */
+    void setUndoManager(AppUndoManager* um) { undoManager = um; }
 
     /**
      * @class Listener
@@ -81,6 +93,7 @@ private:
     std::unique_ptr<AIProvider> provider;
     std::vector<AIProvider::Message> chatHistory;
     juce::AudioProcessorGraph& audioGraph;
+    AppUndoManager* undoManager = nullptr;
     juce::ListenerList<Listener> listeners;
 
     void initSystemPrompt();

@@ -32,6 +32,7 @@ add_executable(GravisynthTests
     PolyMidiModuleTests.cpp
     PolySequencerModuleTests.cpp
     AIIntegrationServiceTests.cpp
+    AIUndoTests.cpp
     ModMatrixTests.cpp
     FXModuleTests.cpp
     VoiceMixerModuleTests.cpp
