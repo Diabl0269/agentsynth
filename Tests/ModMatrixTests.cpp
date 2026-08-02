@@ -535,6 +535,46 @@ TEST_F(ModMatrixTest, ModMatrixComponentPaintSmokeTest) {
     EXPECT_EQ(matrix.getHoveredRow(), -1);
 }
 
+TEST_F(ModMatrixTest, RowErasedAfterRoutingRemovedDoesNotTouchFreedProcessor) {
+    // Regression (heap-use-after-free): removeModRouting() removes the attenuverter node, then the
+    // next updateRowsFromGraph() erases the corresponding ModRow. ~ModRow resets its
+    // Slider/ButtonParameterAttachments, and juce::ParameterAttachment's destructor unconditionally
+    // calls parameter.removeListener() on the reference it captured at construction — so the
+    // attenuverter's processor must still be alive at that point. ModRow retains the node
+    // (Node::Ptr) to guarantee that.
+    //
+    // Without the fix this reads freed memory. That is invisible to a normal build, so this test
+    // passes either way here — it exists as the trigger for the ASAN job, which aborts on it.
+    ModMatrixComponent matrix(engine);
+
+    auto& graph = engine.getGraph();
+    graph.clear();
+
+    auto lfoNode = graph.addNode(std::make_unique<LFOModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    ASSERT_NE(lfoNode, nullptr);
+    ASSERT_NE(filterNode, nullptr);
+
+    engine.addModRouting(lfoNode->nodeID, 0, filterNode->nodeID, 1);
+    engine.addModRouting(lfoNode->nodeID, 0, filterNode->nodeID, 2);
+
+    matrix.setBounds(0, 0, 600, 400);
+    matrix.updateRowsFromGraph();
+
+    // Drop both routings, freeing each attenuverter node from the graph...
+    auto routings = engine.getActiveModRoutings();
+    ASSERT_EQ(routings.size(), 2u);
+    for (const auto& r : routings)
+        engine.removeModRouting(r.attenuverterNodeID);
+
+    // ...then let the matrix erase the now-orphaned rows. This is the destruction path that
+    // previously touched a freed AudioProcessorParameter.
+    EXPECT_NO_THROW(matrix.updateRowsFromGraph());
+
+    EXPECT_TRUE(engine.getActiveModRoutings().empty());
+    EXPECT_EQ(matrix.getHoveredRow(), -1);
+}
+
 TEST_F(ModMatrixTest, HoverResetsAfterRowRemoval) {
     // Regression: when a row is erased and remaining rows shift indices, hoveredRow_
     // must be cleared so the wrong (now-shifted) row is not painted as hovered.
