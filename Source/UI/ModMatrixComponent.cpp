@@ -236,6 +236,10 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
 
     // Attach to attenuverter params
     if (auto* node = owner.audioEngine.getGraph().getNodeForId(attenuverterId)) {
+        // Retain the node so the processor (and therefore the parameters the attachments below
+        // reference) cannot be freed out from under us while this row is still alive.
+        attenuverterNode = node;
+
         const auto& params = node->getProcessor()->getParameters();
         if (params.size() > 0) {
             if (auto* bParam = dynamic_cast<juce::AudioParameterBool*>(params[0])) {
