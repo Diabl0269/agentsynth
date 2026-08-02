@@ -69,6 +69,15 @@ private:
         ModMatrixComponent& owner;
         juce::AudioProcessorGraph::NodeID attenuverterId;
 
+        // Keeps the attenuverter's processor alive for at least as long as this row holds parameter
+        // attachments into it. juce::ParameterAttachment's destructor unconditionally calls
+        // parameter.removeListener() on the reference it captured at construction, so the processor
+        // MUST outlive amountAttachment/bypassAttachment — including when the node has already been
+        // removed from the graph (removeModRouting) before updateRowsFromGraph() erases this row.
+        // Graph nodes are reference counted; removeNode() drops the node from the processing list
+        // immediately, and holding this Ptr only defers destruction of the object itself.
+        juce::AudioProcessorGraph::Node::Ptr attenuverterNode;
+
         juce::ComboBox sourceCombo;
         juce::ComboBox destCombo;
         juce::Slider amountSlider;
