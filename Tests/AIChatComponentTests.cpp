@@ -37,6 +37,41 @@ private:
     juce::String currentModel;
 };
 
+// Like MockChatProvider, but fetchAvailableModels() does not resolve until the test calls
+// resolvePending() — mirrors the real OllamaProvider, whose discovery hop is asynchronous.
+// This lets a test observe modelPicker's state mid-refresh, before the fetch that would
+// otherwise immediately clear() and repopulate it.
+class DeferredChatProvider : public synth::AIProvider {
+public:
+    juce::String getProviderName() const override { return "DeferredChatProvider"; }
+
+    void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
+        pendingCallback = callback;
+    }
+
+    void resolvePending(const juce::StringArray& models, bool success) {
+        auto callback = pendingCallback;
+        pendingCallback = nullptr;
+        if (callback)
+            callback(models, success);
+    }
+
+    RequestId sendPrompt(const std::vector<synth::AIProvider::Message>&, CompletionCallback callback,
+                         const juce::var& = juce::var(), std::function<void(const juce::String&)> = {}) override {
+        callback(AIResponse{});
+        return {};
+    }
+
+    void cancel(RequestId) override {}
+
+    void setModel(const juce::String& name) override { currentModel = name; }
+    juce::String getCurrentModel() const override { return currentModel; }
+
+private:
+    std::function<void(const juce::StringArray&, bool)> pendingCallback;
+    juce::String currentModel;
+};
+
 class AIChatComponentTest : public ::testing::Test {
 protected:
 };
@@ -141,4 +176,54 @@ TEST_F(AIChatComponentTest, RefreshModelsSelectsModelWhenProviderInstalledAfterC
     chatComponent.refreshModels();
 
     EXPECT_FALSE(service.getCurrentModel().isEmpty());
+}
+
+// REGRESSION LOCK: refreshModels() is called repeatedly over the component's lifetime — once
+// at construction, again whenever SettingsWindow triggers a re-fetch (e.g. after the user
+// changes host/provider). The real OllamaProvider resolves fetchAvailableModels()
+// asynchronously, so there is a window, between the call and its resolution, where a second
+// refresh's "Loading models..." placeholder (item ID 1) coexists with whatever a prior
+// successful fetch already put in the picker (real models, also starting at ID 1). Without
+// clearing first, that second addItem(..., 1) collides with the existing ID — ComboBox::addItem()
+// jasserts on duplicate IDs, and the picker is left holding both the stale and fresh entries
+// for the duration of the fetch. DeferredChatProvider holds its callback so the test can
+// inspect the picker in exactly that window.
+TEST_F(AIChatComponentTest, RefreshModelsClearsStaleItemsBeforeSecondFetchResolves) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    auto ownedProvider = std::make_unique<DeferredChatProvider>();
+    auto* provider = ownedProvider.get();
+    service.setProvider(std::move(ownedProvider));
+
+    juce::ApplicationProperties props;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Test";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(options);
+
+    synth::AIChatComponent chatComponent(service, props);
+
+    juce::ComboBox* modelPicker = nullptr;
+    for (auto* child : chatComponent.getChildren()) {
+        if (auto* combo = dynamic_cast<juce::ComboBox*>(child)) {
+            modelPicker = combo;
+            break;
+        }
+    }
+    ASSERT_NE(modelPicker, nullptr);
+
+    // Resolve the ctor's own refresh with two real models.
+    provider->resolvePending({"MockModel1", "MockModel2"}, true);
+    ASSERT_EQ(modelPicker->getNumItems(), 2);
+
+    // Trigger a second refresh (mirrors SettingsWindow re-fetching after a host/provider
+    // change) and inspect the picker BEFORE this one resolves. With the ComboBox correctly
+    // cleared up front, only the "Loading models..." placeholder should be present.
+    chatComponent.refreshModels();
+    EXPECT_EQ(modelPicker->getNumItems(), 1);
+    EXPECT_EQ(modelPicker->getItemText(0), "Loading models...");
+
+    provider->resolvePending({"MockModel1", "MockModel2", "MockModel3"}, true);
+    EXPECT_EQ(modelPicker->getNumItems(), 3);
 }
