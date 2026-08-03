@@ -4,10 +4,28 @@
 #include <atomic>
 #include <juce_core/juce_core.h>
 #include <juce_events/juce_events.h>
+#include <map>
+#include <memory>
 #include <thread>
 #include <vector>
 
 namespace synth {
+
+/**
+ * @class CancellableStream
+ * @brief Opt-in mix-in letting cancel() abort a stream that is parked in a blocking read.
+ *
+ * Real requests do not need this — they are juce::WebInputStreams, which OllamaProvider aborts
+ * natively. It exists for injected test factories, so a test double can be unblocked by exactly
+ * the mechanism a real socket is, instead of the test having to model cancellation some other way.
+ */
+struct CancellableStream {
+    virtual ~CancellableStream() = default;
+
+    /** Must unblock a concurrent read() promptly. Called from a thread other than the one
+        inside read(), and may be called more than once. */
+    virtual void cancelRead() = 0;
+};
 
 /**
  * @class OllamaProvider
@@ -17,8 +35,23 @@ class OllamaProvider
     : public AIProvider
     , protected juce::Thread {
 public:
-    using InputStreamFactory =
-        std::function<std::unique_ptr<juce::InputStream>(const juce::URL&, const juce::URL::InputStreamOptions&)>;
+    /** Hands a stream to the cancellation machinery the moment it exists.
+
+        A factory MUST call this with the stream before doing anything blocking with it, and MUST
+        call it with nullptr before destroying a stream it is not going to return. Ownership does
+        not transfer; the provider only borrows the pointer, under a lock, for as long as the
+        factory says it is alive.
+
+        This exists because of where an Ollama request actually blocks. The request asks for a
+        non-streaming response, so the server sends nothing — not even headers — until the whole
+        generation is finished, which means connect() is where the entire request is spent.
+        juce::URL::createInputStream() connects internally and only then hands back the stream, so
+        a factory built on it cannot publish in time and cancel() would have nothing to abort for
+        the full generation. Publishing first is what makes cancellation real rather than cosmetic. */
+    using StreamPublisher = std::function<void(juce::InputStream*)>;
+
+    using InputStreamFactory = std::function<std::unique_ptr<juce::InputStream>(
+        const juce::URL&, const juce::URL::InputStreamOptions&, const StreamPublisher&)>;
 
     OllamaProvider(const juce::String& host = "http://localhost:11434");
 
@@ -43,7 +76,11 @@ public:
                          const juce::var& responseSchema = juce::var(),
                          std::function<void(const juce::String& delta)> onDelta = {}) override;
 
-    /** Cancellation is not implemented for OllamaProvider yet; this is a declared no-op. */
+    /** Abandons a queued or in-flight request.
+
+        The callback still fires exactly once, with AIErrorKind::Cancelled; the request cannot go
+        on blocking the ones queued behind it; and an unknown, completed or already-cancelled id
+        is a safe no-op. See cancel()'s implementation for how promptly each stream type unblocks. */
     void cancel(RequestId requestId) override;
 
     juce::String getProviderName() const override { return "Ollama"; }
@@ -67,11 +104,35 @@ private:
     // worker launches, cleared by the worker when it finishes.
     std::atomic<bool> discoveryInFlight{false};
 
+    /** Per-request cancellation state, shared between the queue entry, the registry and the
+        worker so cancel() can reach a request wherever it currently is. */
+    struct RequestState {
+        explicit RequestState(RequestId requestId)
+            : id(requestId) {}
+
+        const RequestId id;
+
+        // Set by cancel(). Checked by the worker before it opens a connection and again after the
+        // read returns, so a request cancelled at any point is abandoned.
+        std::atomic<bool> cancelled{false};
+
+        // Exactly-once gate on the callback. cancel(), the worker and the shutdown path can all
+        // race to finish the same request; whoever flips this first owns delivery.
+        std::atomic<bool> delivered{false};
+
+        // Non-owning, valid only while the factory or the worker says the stream is alive, so
+        // cancel() can abort it. Guarded by streamLock, which is what stops cancel() touching a
+        // destroyed stream.
+        juce::CriticalSection streamLock;
+        juce::InputStream* activeStream = nullptr;
+    };
+
     struct Request {
         RequestId id;
         std::vector<Message> conversation;
         AIProvider::CompletionCallback callback;
         juce::var responseSchema;
+        std::shared_ptr<RequestState> state; // null only for a default-constructed Request
     };
 
     // Monotonically increasing; only ever accessed from sendPrompt() callers, so a plain
@@ -80,6 +141,11 @@ private:
 
     juce::CriticalSection queueLock;
     std::vector<Request> pendingRequests;
+
+    // Every request that has been accepted and not yet delivered, so cancel() can find one the
+    // worker has already popped off pendingRequests. Guarded by queueLock; entries are removed by
+    // the delivery path, which is what makes cancel() of a completed id a no-op.
+    std::map<uint64_t, std::shared_ptr<RequestState>> inFlight;
 
     // Who owns the queue. This - NOT isThreadRunning() - is what says "a worker will
     // drain this queue". juce::Thread only clears its handle after run() has already
@@ -121,6 +187,15 @@ private:
         deliverResult(). */
     void deliverError(const Request& req, AIErrorKind kind, const juce::String& message, int retryAfterSeconds,
                       bool forceSynchronous);
+
+    /** Claims the sole right to deliver `req`, and deregisters it. Returns false if someone else
+        got there first, in which case the caller must not invoke the callback. This is what makes
+        "exactly one callback per request" hold when a cancel races a completion. */
+    bool claimDelivery(const Request& req);
+
+    /** Aborts the read the given request is parked in, if any. Safe when the request has no
+        active stream (already finished, or not started yet). */
+    void abortActiveStream(RequestState& state);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OllamaProvider)
 };

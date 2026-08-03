@@ -59,8 +59,16 @@ public:
     /**
      * @brief Sends a user message and gets a response.
      */
-    void sendMessage(const juce::String& text, AIProvider::CompletionCallback callback,
-                     bool useStructuredOutput = false);
+    AIProvider::RequestId sendMessage(const juce::String& text, AIProvider::CompletionCallback callback,
+                                      bool useStructuredOutput = false);
+
+    /**
+     * @brief Abandons an in-flight request obtained from sendMessage().
+     *
+     * The caller's callback still fires exactly once, with AIErrorKind::Cancelled, and no
+     * assistant turn is added to the history. A stale or unknown handle is a safe no-op.
+     */
+    void cancelRequest(AIProvider::RequestId requestId);
 
     /**
      * @brief Applies a JSON patch to the graph.

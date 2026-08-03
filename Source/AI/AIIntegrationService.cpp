@@ -15,38 +15,15 @@ AIIntegrationService::~AIIntegrationService() {}
 
 void AIIntegrationService::setProvider(std::unique_ptr<AIProvider> newProvider) { provider = std::move(newProvider); }
 
-void AIIntegrationService::sendMessage(const juce::String& text, AIProvider::CompletionCallback callback,
-                                       bool useStructuredOutput) {
+AIProvider::RequestId AIIntegrationService::sendMessage(const juce::String& text,
+                                                        AIProvider::CompletionCallback callback,
+                                                        bool useStructuredOutput) {
     // The stored history always keeps the user's original text. Patch context is ephemeral:
     // it is spliced into the outgoing request only, never retained in chatHistory.
     chatHistory.push_back({"user", text});
     trimHistory();
 
-    if (provider) {
-        std::vector<AIProvider::Message> request = chatHistory;
-        if (useStructuredOutput && !request.empty())
-            request.back().content = buildPatchAugmentedContent(text);
-
-        auto weakThis = juce::WeakReference<AIIntegrationService>(this);
-        auto schema = useStructuredOutput ? AIStateMapper::getPatchSchema() : juce::var();
-
-        provider->sendPrompt(
-            request,
-            [weakThis, callback](const AIProvider::AIResponse& response) {
-                if (weakThis.get() == nullptr)
-                    return; // Service was destroyed
-
-                auto* self = weakThis.get();
-                if (response.success) {
-                    self->chatHistory.push_back({"assistant", response.content});
-                    self->trimHistory();
-                }
-                if (callback) {
-                    callback(response);
-                }
-            },
-            schema);
-    } else {
+    if (!provider) {
         if (callback) {
             AIProvider::AIResponse response;
             response.success = false;
@@ -54,7 +31,43 @@ void AIIntegrationService::sendMessage(const juce::String& text, AIProvider::Com
             response.error.message = "Error: No AI provider selected.";
             callback(response);
         }
+        return {};
     }
+
+    std::vector<AIProvider::Message> request = chatHistory;
+    if (useStructuredOutput && !request.empty())
+        request.back().content = buildPatchAugmentedContent(text);
+
+    auto weakThis = juce::WeakReference<AIIntegrationService>(this);
+    auto schema = useStructuredOutput ? AIStateMapper::getPatchSchema() : juce::var();
+
+    return provider->sendPrompt(
+        request,
+        [weakThis, callback](const AIProvider::AIResponse& response) {
+            if (weakThis.get() == nullptr)
+                return; // Service was destroyed
+
+            auto* self = weakThis.get();
+
+            // A cancelled request produced no assistant turn. Recording one would put words in the
+            // model's mouth that the user never saw and — because chatHistory is replayed as
+            // context — feed that invention back on every later message. The user's own turn
+            // stays: they did say it, and it is still on screen.
+            if (response.error.kind != AIProvider::AIErrorKind::Cancelled && response.success) {
+                self->chatHistory.push_back({"assistant", response.content});
+                self->trimHistory();
+            }
+
+            if (callback) {
+                callback(response);
+            }
+        },
+        schema);
+}
+
+void AIIntegrationService::cancelRequest(AIProvider::RequestId requestId) {
+    if (provider)
+        provider->cancel(requestId);
 }
 
 juce::String AIIntegrationService::buildPatchAugmentedContent(const juce::String& text) {

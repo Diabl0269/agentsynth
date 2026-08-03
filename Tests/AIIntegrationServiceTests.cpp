@@ -44,6 +44,62 @@ public:
     std::vector<Message> lastConversation;
 };
 
+// Holds the request instead of answering it, so a test can decide how it ends. cancel() resolves
+// it the way a real provider does: one callback, kind Cancelled.
+class CancellableMockAIProvider : public AIProvider {
+public:
+    RequestId sendPrompt(const std::vector<Message>&, CompletionCallback callback, const juce::var&,
+                         std::function<void(const juce::String&)> = {}) override {
+        pending = std::move(callback);
+        return RequestId{++lastRequestId};
+    }
+
+    void cancel(RequestId requestId) override {
+        cancelledIds.push_back(requestId.value);
+        if (!pending)
+            return;
+
+        auto callback = std::move(pending);
+        pending = nullptr;
+
+        AIResponse response;
+        response.success = false;
+        response.error.kind = AIErrorKind::Cancelled;
+        response.error.message = "Request cancelled.";
+        callback(response);
+    }
+
+    /** Resolves the held request normally, for the "a real answer still lands in history" half of
+        the comparison. */
+    void completeWith(const juce::String& content) {
+        if (!pending)
+            return;
+
+        auto callback = std::move(pending);
+        pending = nullptr;
+
+        AIResponse response;
+        response.success = true;
+        response.content = content;
+        callback(response);
+    }
+
+    void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
+        callback({"model1"}, true);
+    }
+
+    void setModel(const juce::String& name) override { currentModel = name; }
+    juce::String getCurrentModel() const override { return currentModel; }
+    juce::String getProviderName() const override { return "CancellableMockProvider"; }
+
+    std::vector<uint64_t> cancelledIds;
+    uint64_t lastRequestId = 0;
+
+private:
+    CompletionCallback pending;
+    juce::String currentModel;
+};
+
 class CountingListener : public AIIntegrationService::Listener {
 public:
     int aboutToApplyCount = 0;
@@ -264,6 +320,86 @@ TEST_F(AIIntegrationServiceTest, ValidPatchFiresBothCallbacksInOrder) {
     EXPECT_LT(listener.aboutToApplyOrder, listener.appliedOrder);
 
     service->removeListener(&listener);
+}
+
+// A cancelled request produced no assistant turn, so none may be recorded. Appending one would
+// both put words in the model's mouth in the transcript and -- because chatHistory is replayed as
+// context -- feed that invention back on every later message.
+TEST_F(AIIntegrationServiceTest, CancelledRequestDoesNotAppendToHistory) {
+    auto provider = std::make_unique<CancellableMockAIProvider>();
+    auto* rawProvider = provider.get();
+    service->setProvider(std::move(provider));
+
+    AIProvider::AIErrorKind reportedKind = AIProvider::AIErrorKind::None;
+    int callCount = 0;
+    const auto id = service->sendMessage("Make me a huge patch", [&](const AIProvider::AIResponse& response) {
+        ++callCount;
+        reportedKind = response.error.kind;
+    });
+
+    // The user's own turn is recorded on send, before any answer exists.
+    ASSERT_EQ(service->getHistory().size(), 2u);
+
+    service->cancelRequest(id);
+
+    EXPECT_EQ(callCount, 1) << "the caller must still be told exactly once that its request ended";
+    EXPECT_EQ(reportedKind, AIProvider::AIErrorKind::Cancelled);
+    ASSERT_EQ(rawProvider->cancelledIds.size(), 1u) << "the service did not forward the cancel to the provider";
+    EXPECT_EQ(rawProvider->cancelledIds[0], id.value);
+
+    // Still just system + user: the user did say their part and it stays, but nothing was added on
+    // the assistant's behalf.
+    ASSERT_EQ(service->getHistory().size(), 2u) << "a cancelled request added an assistant turn to the history";
+    EXPECT_EQ(service->getHistory()[0].role, "system");
+    EXPECT_EQ(service->getHistory()[1].role, "user");
+}
+
+// The counterpart to the above: the "don't append" rule must be specific to cancellation and must
+// not have quietly broken the normal path.
+TEST_F(AIIntegrationServiceTest, CompletedRequestStillAppendsToHistory) {
+    auto provider = std::make_unique<CancellableMockAIProvider>();
+    auto* rawProvider = provider.get();
+    service->setProvider(std::move(provider));
+
+    service->sendMessage("Hello", nullptr);
+    rawProvider->completeWith("Hi there");
+
+    ASSERT_EQ(service->getHistory().size(), 3u);
+    EXPECT_EQ(service->getHistory()[2].role, "assistant");
+    EXPECT_EQ(service->getHistory()[2].content, "Hi there");
+}
+
+// A stale handle is the normal case in the UI (a response and a Cancel click cross), so cancelling
+// something already finished must be inert rather than merely survivable.
+TEST_F(AIIntegrationServiceTest, CancelAfterCompletionIsInert) {
+    auto provider = std::make_unique<CancellableMockAIProvider>();
+    auto* rawProvider = provider.get();
+    service->setProvider(std::move(provider));
+
+    int callCount = 0;
+    const auto id = service->sendMessage("Hello", [&](const AIProvider::AIResponse&) { ++callCount; });
+    rawProvider->completeWith("Hi there");
+    ASSERT_EQ(callCount, 1);
+
+    service->cancelRequest(id);
+
+    EXPECT_EQ(callCount, 1) << "cancelling a completed request fired a second callback";
+    EXPECT_EQ(service->getHistory().size(), 3u) << "cancelling a completed request disturbed the history";
+}
+
+// Without a provider there is nothing to cancel; sendMessage() reports the failure inline and must
+// hand back the reserved handle rather than something a later cancel could act on.
+TEST_F(AIIntegrationServiceTest, SendMessageWithoutProviderReturnsInvalidRequestId) {
+    bool called = false;
+    const auto id = service->sendMessage("Hello", [&](const AIProvider::AIResponse& response) {
+        called = true;
+        EXPECT_FALSE(response.success);
+    });
+
+    EXPECT_TRUE(called);
+    EXPECT_EQ(id.value, 0u);
+
+    service->cancelRequest(id); // must not crash
 }
 
 } // namespace synth

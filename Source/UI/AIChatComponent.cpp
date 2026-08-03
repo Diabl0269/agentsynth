@@ -201,6 +201,12 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     addAndMakeVisible(inputField);
     inputField.setReturnKeyStartsNewLine(false);
     inputField.onReturnKey = [this]() { sendButtonClicked(); };
+    // Belt and braces for Escape: keyPressed() catches the bubbled press, but a TextEditor with an
+    // onEscapeKey handler consumes it before it can bubble, so the two must agree.
+    inputField.onEscapeKey = [this]() {
+        if (isWaitingForResponse)
+            handleUserCancel();
+    };
     inputField.addListener(this);
     inputField.setTextToShowWhenEmpty("Ask AI to create or modify a patch...", juce::Colours::grey);
     inputField.setTooltip("Type a message and press Enter or Send");
@@ -213,12 +219,7 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     // Cancel button — hidden until a request is in flight.
     cancelButton.setButtonText("Cancel");
     cancelButton.setColour(juce::TextButton::buttonColourId, juce::Colours::darkred);
-    cancelButton.onClick = [this]() {
-        cancelRequest();
-        messages.push_back({"assistant", "Cancelled.", ""});
-        updateChatDisplay();
-        inputField.grabKeyboardFocus();
-    };
+    cancelButton.onClick = [this]() { handleUserCancel(); };
     cancelButton.setTooltip("Cancel the in-flight AI request");
     cancelButton.setVisible(false);
     addChildComponent(cancelButton);
@@ -286,7 +287,35 @@ void AIChatComponent::timerCallback() {
     inputField.grabKeyboardFocus();
 }
 
+bool AIChatComponent::keyPressed(const juce::KeyPress& key) {
+    // Escape only means "cancel" while something is actually in flight; otherwise let it through
+    // so it keeps whatever meaning the enclosing window gives it (closing a panel).
+    if (key == juce::KeyPress::escapeKey && isWaitingForResponse) {
+        handleUserCancel();
+        return true;
+    }
+
+    return juce::Component::keyPressed(key);
+}
+
+void AIChatComponent::handleUserCancel() {
+    cancelRequest();
+    messages.push_back({"assistant", "Cancelled.", ""});
+    updateChatDisplay();
+    inputField.grabKeyboardFocus();
+}
+
 void AIChatComponent::cancelRequest() {
+    // Actually abandon the request rather than just hiding the UI for it. Until this call existed
+    // the HTTP request ran to completion — billed on a metered backend, and (because
+    // OllamaProvider drains its queue serially) blocking the next message the user sent. Cleared
+    // first so a provider that completes the cancellation synchronously and re-enters here cannot
+    // cancel the same id twice.
+    const auto cancelling = activeRequestId;
+    activeRequestId = {};
+    if (cancelling.value != 0)
+        aiService.cancelRequest(cancelling);
+
     // Stop the timeout timer.
     stopTimer();
 
@@ -404,7 +433,7 @@ void AIChatComponent::sendButtonClicked() {
     // Start timeout timer (120 seconds)
     startTimer(120000);
 
-    aiService.sendMessage(
+    const auto requestId = aiService.sendMessage(
         text,
         [this, useStructuredOutput](const AIProvider::AIResponse& aiResponse) {
             juce::Component::SafePointer<AIChatComponent> safeThis(this);
@@ -417,7 +446,16 @@ void AIChatComponent::sendButtonClicked() {
                     return;
                 } // Ignore late responses if a timeout already occurred
 
+                // The request is finished, so there is nothing left to cancel. Clearing the handle
+                // before teardown keeps cancelRequest() from asking the provider to cancel a
+                // completed id.
+                self->activeRequestId = {};
                 self->cancelRequest(); // stops timer, spinner, cancel btn, restores input
+
+                // The user already got their "Cancelled." bubble from handleUserCancel(); the
+                // provider is just confirming. An error bubble here would contradict it.
+                if (aiResponse.error.kind == AIProvider::AIErrorKind::Cancelled)
+                    return;
 
                 if (aiResponse.success) {
                     const juce::String& response = aiResponse.content;
@@ -456,6 +494,12 @@ void AIChatComponent::sendButtonClicked() {
             });
         },
         useStructuredOutput);
+
+    // Only record the handle if we are still waiting. A provider that answers synchronously (test
+    // doubles, or the "no provider selected" path) has already run the teardown above by now, and
+    // storing the handle here would leave a stale id for the next cancel.
+    if (isWaitingForResponse)
+        activeRequestId = requestId;
 }
 
 void AIChatComponent::updateChatDisplay() {
