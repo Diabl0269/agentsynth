@@ -25,6 +25,7 @@ FetchContent_MakeAvailable(juce)
 # Coverage Option
 option(ENABLE_COVERAGE "Enable code coverage testing" OFF)
 option(ENABLE_TESTS "Enable building test suite" OFF)
+option(ENABLE_AI_HARNESS "Build the AI patch validity measurement harness (needs a live Ollama)" OFF)
 
 # Product identity — the single place to override branding at configure time
 # (e.g. `cmake -S . -B build -DSYNTH_PRODUCT_NAME=MySynth`). Mirrored in C++ at
@@ -288,5 +289,11 @@ endif()
 
 if(ENABLE_TESTS)
     add_subdirectory(Tests)
+endif()
+
+# Measurement harness for AI patch validity. Needs a live Ollama, so it is never part of
+# the default build or CI — see Tools/AIPatchHarness/README.md.
+if(ENABLE_AI_HARNESS)
+    add_subdirectory(Tools/AIPatchHarness)
 endif()
 

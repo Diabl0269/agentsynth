@@ -76,12 +76,75 @@ public:
     bool applyPatch(const juce::String& jsonString, bool mergeMode = false);
 
     /**
+     * @brief How many correction round-trips applyPatchWithRetry() may make after the first
+     *        rejected patch. Total attempts are kMaxPatchRetries + 1.
+     *
+     * Deliberately small. Each retry is a full model round-trip the user is waiting on, and a
+     * model that has failed twice on the same stated reason is not usually one more nudge away
+     * from success — surfacing the error beats spinning.
+     */
+    static constexpr int kMaxPatchRetries = 2;
+
+    /**
+     * @brief Reported before each correction round-trip, so the UI can show that a retry is
+     *        happening and why, instead of appearing to hang.
+     */
+    struct PatchRetryInfo {
+        int failedAttempt = 0; // 1-based index of the attempt that was just rejected
+        int totalAttempts = 0; // kMaxPatchRetries + 1
+        juce::String error;    // validation message being sent back to the model
+    };
+
+    using PatchApplyCallback = std::function<void(bool success, const juce::String& error)>;
+    using PatchRetryCallback = std::function<void(const PatchRetryInfo&)>;
+
+    /**
+     * @brief Applies a patch; on a validation failure, asks the model to correct it and retries.
+     *
+     * The specific validation message is fed back to the model ("that patch was rejected
+     * because X"), which is the whole point — a bare "try again" tends to reproduce the same
+     * mistake. Retries are bounded by kMaxPatchRetries and each one is announced through
+     * `onRetry`; when they run out, `onComplete` reports the last error rather than looping.
+     *
+     * `onComplete` is invoked exactly once. With no provider installed, or when the very first
+     * attempt succeeds, it is invoked synchronously.
+     */
+    void applyPatchWithRetry(const juce::String& jsonString, bool mergeMode, PatchApplyCallback onComplete,
+                             PatchRetryCallback onRetry = {});
+
+    /**
      * @brief Why the most recent applyPatch() returned false, in human-readable form.
      *
      * Empty when the last apply succeeded. Callers MUST surface this — a rejected patch that is
      * swallowed silently looks to the user like a dead Apply/Merge button.
      */
     const juce::String& getLastPatchError() const { return lastPatchError; }
+
+    /**
+     * @brief The typed reason the most recent applyPatch() returned false.
+     *
+     * PatchValidationError::None when the last apply succeeded, or when it failed inside
+     * applyJSONToGraph rather than validation. Callers that need to react by category
+     * (retry, repair, give up) should switch on this rather than parse getLastPatchError().
+     */
+    PatchValidationError getLastPatchErrorCode() const { return lastPatchErrorCode; }
+
+    /**
+     * @brief Whether the most recent applyPatch() reinterpreted a mode-less patch as a merge.
+     *
+     * See applyPatch(): the repair only ever turns a rejected *replace* into a *merge* (never the
+     * destructive direction), only when the model stated no "mode", and only when validation
+     * accepts the patch that way.
+     */
+    bool didLastPatchRepairMode() const { return lastPatchModeRepaired; }
+
+    /**
+     * @brief Extracts the JSON payload from a model response that may wrap it in prose or fences.
+     *
+     * Public and static so the offline measurement harness can reproduce exactly the extraction
+     * applyPatch() performs, rather than approximating it.
+     */
+    static juce::String extractJsonFromResponse(const juce::String& response);
 
     /**
      * @brief Returns the current graph state as a JSON string for context.
@@ -111,14 +174,11 @@ private:
     juce::AudioProcessorGraph& audioGraph;
     AppUndoManager* undoManager = nullptr;
     juce::String lastPatchError;
+    PatchValidationError lastPatchErrorCode = PatchValidationError::None;
+    bool lastPatchModeRepaired = false;
     juce::ListenerList<Listener> listeners;
 
     void initSystemPrompt();
-
-    /**
-     * @brief Helper to extract JSON from a response that might contain conversational text.
-     */
-    juce::String extractJsonFromResponse(const juce::String& response);
 
     /**
      * @brief Builds the patch-augmented request content for a user message, without mutating chatHistory.
@@ -130,6 +190,24 @@ private:
      *        removing oldest whole user+assistant pairs so history never starts on an assistant turn.
      */
     void trimHistory();
+
+    /**
+     * @brief One correction round-trip of applyPatchWithRetry(), recursing until the patch
+     *        applies or `failedAttempt` reaches kMaxPatchRetries + 1.
+     */
+    void requestPatchCorrection(int failedAttempt, bool mergeMode, PatchApplyCallback onComplete,
+                                PatchRetryCallback onRetry);
+
+    /**
+     * @brief The message sent back to the model naming the specific validation failure.
+     */
+    static juce::String buildCorrectionPrompt(const juce::String& error);
+
+    /**
+     * @brief Whether the patch states a non-empty "mode", i.e. the model expressed an intent
+     *        that the mode repair in applyPatch() must not override.
+     */
+    static bool hasExplicitMode(const juce::var& json);
 
     JUCE_DECLARE_WEAK_REFERENCEABLE(AIIntegrationService)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AIIntegrationService)

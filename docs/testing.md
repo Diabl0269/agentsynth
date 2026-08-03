@@ -175,6 +175,38 @@ Full application workflow tests in `Tests/E2EWorkflowTests.cpp`. Each test const
 - **Module lookup**: `findNewModule(name, initialNodeIDs)` finds only modules added after a snapshot, avoiding false matches with default patch modules.
 - **Preset loading**: Must call `editor().detachAllModuleComponents()` before `PresetManager::loadPreset()` to avoid use-after-free.
 
+### AI Patch Validation Tests (~19 tests)
+
+`Tests/AIPatchValidationTests.cpp` is table-driven: one deliberately malformed patch per
+`PatchValidationError` value, each asserting the **exact** enumerator rather than merely "was
+rejected". `EveryErrorValueIsCovered` walks the enum and fails if a newly added value has no case,
+so the table cannot silently fall behind the enum.
+
+The same file pins the `getPatchSchema()` contract — the module-type enum matches the factory,
+choice parameters are enumerated, `additionalProperties` stays open for numeric parameters, and no
+reference data is offered as an output field.
+
+`Tests/AIPatchRetryTests.cpp` covers `applyPatchWithRetry` with a scripted provider double that
+answers synchronously (so no message loop is needed): that the validation message reaches the
+model, that retries stop at `kMaxPatchRetries`, and that the mode repair fires only for a
+rejected, mode-less patch and never in the destructive merge-to-replace direction.
+
+## Measurement Harness (not a test)
+
+`Tools/AIPatchHarness` measures how often real model output passes `validatePatch`, replaying a
+fixed prompt set through the production path and tallying rejections by error value. It needs a
+live Ollama, so it is opt-in and never built by CI:
+
+```bash
+cmake -S . -B build -DENABLE_AI_HARNESS=ON
+cmake --build build --target AIPatchHarness
+./build/Tools/AIPatchHarness/AIPatchHarness_artefacts/AIPatchHarness --model <tag> --runs 2
+```
+
+See `Tools/AIPatchHarness/README.md` — in particular that `format` enforcement is backend-dependent
+and that `OllamaProvider` times out at 120 s, which shows up as a provider error rather than a
+rejection.
+
 ## Adding Tests for New Modules
 
 When adding a new audio module:

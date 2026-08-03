@@ -102,6 +102,14 @@ void AIIntegrationService::trimHistory() {
                       chatHistory.begin() + static_cast<long>(start + messagesToRemove));
 }
 
+bool AIIntegrationService::hasExplicitMode(const juce::var& json) {
+    auto* obj = json.getDynamicObject();
+    if (obj == nullptr || !obj->hasProperty("mode"))
+        return false;
+    // An empty or non-string "mode" is no statement of intent, so it must not block the repair.
+    return obj->getProperty("mode").toString().isNotEmpty();
+}
+
 bool AIIntegrationService::applyPatch(const juce::String& jsonString, bool mergeMode) {
     juce::String extractedJson = extractJsonFromResponse(jsonString);
     juce::var json = juce::JSON::parse(extractedJson);
@@ -112,9 +120,37 @@ bool AIIntegrationService::applyPatch(const juce::String& jsonString, bool merge
     // patch. A failure here means the graph is never mutated, so listeners must not be told a patch is about
     // to apply, and no no-op entry may be left on the undo stack.
     lastPatchError.clear();
+    lastPatchErrorCode = PatchValidationError::None;
 
-    if (const auto validation = AIStateMapper::validatePatch(json, audioGraph, clearExisting, /*trusted=*/false);
-        !validation.ok) {
+    lastPatchModeRepaired = false;
+
+    auto validation = AIStateMapper::validatePatch(json, audioGraph, clearExisting, /*trusted=*/false);
+
+    // Narrow, non-destructive repair: the patch is a merge delta that we were about to apply as a
+    // replace. This happens when the model omits "mode" and the caller's guess (in the UI, a
+    // keyword heuristic over the user's wording) goes the other way; the patch then references
+    // ids that exist only in the live graph and is rejected as *UnknownNode.
+    //
+    // Deliberately one-directional. Re-reading a rejected patch as a *merge* can only preserve
+    // nodes the user already had; the reverse — quietly turning a merge into a replace — would
+    // wipe their patch, so it is never attempted. Nothing about the patch's content is altered:
+    // validation itself is the arbiter, and this only runs when the model expressed no mode.
+    if (!validation.ok && clearExisting && !hasExplicitMode(json)) {
+        const auto asMerge = AIStateMapper::validatePatch(json, audioGraph, /*clearExisting=*/false,
+                                                          /*trusted=*/false);
+        if (asMerge.ok) {
+            juce::Logger::writeToLog("applyPatch: reinterpreting mode-less patch as a merge (as a replace it was "
+                                     "rejected: " +
+                                     validation.message + ")");
+            clearExisting = false;
+            mergeMode = true;
+            lastPatchModeRepaired = true;
+            validation = asMerge;
+        }
+    }
+
+    if (!validation.ok) {
+        lastPatchErrorCode = validation.error;
         // One log per rejected patch — user-click frequency, so it does not violate the no-high-frequency
         // logging rule. In Debug builds this reaches AIChatComponent's console panel.
         lastPatchError = validation.message.isNotEmpty() ? validation.message : "Patch failed validation.";
@@ -157,6 +193,82 @@ bool AIIntegrationService::applyPatch(const juce::String& jsonString, bool merge
     }
 
     return applyNow();
+}
+
+void AIIntegrationService::applyPatchWithRetry(const juce::String& jsonString, bool mergeMode,
+                                               PatchApplyCallback onComplete, PatchRetryCallback onRetry) {
+    // Attempt 1 is the patch the caller already has in hand; retries are what follow.
+    if (applyPatch(jsonString, mergeMode)) {
+        if (onComplete)
+            onComplete(true, {});
+        return;
+    }
+
+    // Nothing to ask for a correction — report the rejection as-is rather than pretending to retry.
+    if (provider == nullptr) {
+        if (onComplete)
+            onComplete(false, lastPatchError);
+        return;
+    }
+
+    requestPatchCorrection(1, mergeMode, std::move(onComplete), std::move(onRetry));
+}
+
+void AIIntegrationService::requestPatchCorrection(int failedAttempt, bool mergeMode, PatchApplyCallback onComplete,
+                                                  PatchRetryCallback onRetry) {
+    const int totalAttempts = kMaxPatchRetries + 1;
+    const juce::String error = lastPatchError;
+
+    // The bound. Without it a model that keeps producing the same invalid patch would keep us
+    // round-tripping forever while the user waits on a spinner.
+    if (failedAttempt >= totalAttempts) {
+        juce::Logger::writeToLog("applyPatch gave up after " + juce::String(failedAttempt) +
+                                 " attempts, last error: " + error);
+        if (onComplete)
+            onComplete(false, error);
+        return;
+    }
+
+    if (onRetry)
+        onRetry({failedAttempt, totalAttempts, error});
+
+    // One log per retry. Retries happen at user-click frequency, not per token or per validation
+    // pass inside a loop, so this stays within the no-high-frequency-logging rule.
+    juce::Logger::writeToLog("applyPatch retrying (attempt " + juce::String(failedAttempt + 1) + " of " +
+                             juce::String(totalAttempts) + ") after: " + error);
+
+    juce::WeakReference<AIIntegrationService> weakThis(this);
+    sendMessage(
+        buildCorrectionPrompt(error),
+        [weakThis, failedAttempt, mergeMode, onComplete, onRetry](const AIProvider::AIResponse& response) {
+            auto* self = weakThis.get();
+            if (self == nullptr)
+                return; // service destroyed mid-retry; nothing left to apply to
+
+            if (!response.success) {
+                if (onComplete)
+                    onComplete(false, response.error.message);
+                return;
+            }
+
+            if (self->applyPatch(response.content, mergeMode)) {
+                if (onComplete)
+                    onComplete(true, {});
+                return;
+            }
+
+            self->requestPatchCorrection(failedAttempt + 1, mergeMode, onComplete, onRetry);
+        },
+        /*useStructuredOutput=*/true);
+}
+
+juce::String AIIntegrationService::buildCorrectionPrompt(const juce::String& error) {
+    // Naming the specific failure is the point of the retry. A bare "that didn't work, try again"
+    // tends to reproduce the same mistake, because nothing told the model which part was wrong.
+    return "The patch you just returned was rejected by the synthesizer and was NOT applied.\n\nReason: " + error +
+           "\n\nReturn a corrected patch as raw JSON that fixes exactly this problem. Keep everything else about "
+           "the patch the same. Use only module types and parameter choice strings that appear in the schema, and "
+           "reference only node ids that exist in the current patch or that this patch itself creates.";
 }
 
 juce::String AIIntegrationService::extractJsonFromResponse(const juce::String& response) {
@@ -211,9 +323,8 @@ void AIIntegrationService::initSystemPrompt() {
         schema +
         "\n"
         "### AVAILABLE PARAMETER CHOICES (USE THESE!):\n"
-        "For any parameter that is a 'Choice', you MUST select from the specific options provided in the "
-        "`parameterChoices` object "
-        "within the schema. You MUST use the exact string value from the provided list. "
+        "For any parameter listed as a 'Choice' in the module tables above, you MUST use one of the exact option "
+        "strings shown there for that parameter. "
         "For example, for an LFO 'shape' parameter, if the schema says `\"LFO\": { \"shape\": [\"Sine\", \"S&H\"] }, "
         "you MUST NOT guess other shapes or use numbers. For 'rateSync', use the exact string, e.g., \"1/4\", NOT the "
         "number 0.25.\n"

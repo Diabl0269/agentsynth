@@ -52,6 +52,15 @@ struct PatchValidationResult {
 };
 
 /**
+ * @brief Stable, human-readable name for a PatchValidationError value.
+ *
+ * Used for tallying rejection reasons (see Tools/AIPatchHarness) and for labelling the
+ * retry feedback sent back to the model. The strings match the enumerator names so a log
+ * line or a harness histogram can be read straight against this header.
+ */
+juce::String patchValidationErrorName(PatchValidationError error);
+
+/**
  * @class AIStateMapper
  * @brief Handles conversion between AI-friendly JSON and juce::AudioProcessorGraph.
  */
