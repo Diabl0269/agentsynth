@@ -96,7 +96,96 @@ bool isValidPatchPort(int port) {
     return port >= 0 && port <= AIStateMapper::kMaxPortIndex;
 }
 
+// Renders whatever the model put in an id field, so the rejection names the offending value even
+// when it was not a usable integer at all.
+juce::String describeId(const juce::var& value) {
+    if (value.isVoid())
+        return "(missing)";
+    const juce::String text = value.toString();
+    return text.isEmpty() ? "(empty)" : text;
+}
+
+// The ids the patch may legally reference. A rejection that only says "unknown node id" leaves a
+// model nothing to aim at on the retry — naming the usable ids is what makes the correction
+// actionable, and it is the difference between a retry that converges and one that repeats itself.
+juce::String describeKnownIds(const std::set<juce::uint32>& knownIds) {
+    if (knownIds.empty())
+        return "This patch defines no node ids, so connections and modulations cannot reference any; "
+               "every id used must appear as an \"id\" in the \"nodes\" array.";
+
+    juce::StringArray ids;
+    for (auto id : knownIds)
+        ids.add(juce::String(id));
+    return "Valid node ids here are: " + ids.joinIntoString(", ") + ".";
+}
+
 } // namespace
+
+juce::String patchValidationErrorName(PatchValidationError error) {
+    switch (error) {
+    case PatchValidationError::None:
+        return "None";
+    case PatchValidationError::NotAnObject:
+        return "NotAnObject";
+    case PatchValidationError::MissingNodesOrRemove:
+        return "MissingNodesOrRemove";
+    case PatchValidationError::NodesNotArray:
+        return "NodesNotArray";
+    case PatchValidationError::ConnectionsNotArray:
+        return "ConnectionsNotArray";
+    case PatchValidationError::ModulationsNotArray:
+        return "ModulationsNotArray";
+    case PatchValidationError::RemoveNotArray:
+        return "RemoveNotArray";
+    case PatchValidationError::RemoveModulationsNotArray:
+        return "RemoveModulationsNotArray";
+    case PatchValidationError::TooManyNodes:
+        return "TooManyNodes";
+    case PatchValidationError::TooManyConnections:
+        return "TooManyConnections";
+    case PatchValidationError::TooManyModulations:
+        return "TooManyModulations";
+    case PatchValidationError::TooManyRemovals:
+        return "TooManyRemovals";
+    case PatchValidationError::TooManyRemoveModulations:
+        return "TooManyRemoveModulations";
+    case PatchValidationError::NodeEntryInvalid:
+        return "NodeEntryInvalid";
+    case PatchValidationError::NodeIdInvalid:
+        return "NodeIdInvalid";
+    case PatchValidationError::NodeTypeInvalid:
+        return "NodeTypeInvalid";
+    case PatchValidationError::UnknownNodeType:
+        return "UnknownNodeType";
+    case PatchValidationError::DuplicateNodeId:
+        return "DuplicateNodeId";
+    case PatchValidationError::InvalidParameterValue:
+        return "InvalidParameterValue";
+    case PatchValidationError::InvalidChoiceValue:
+        return "InvalidChoiceValue";
+    case PatchValidationError::ConnectionEntryInvalid:
+        return "ConnectionEntryInvalid";
+    case PatchValidationError::ConnectionUnknownNode:
+        return "ConnectionUnknownNode";
+    case PatchValidationError::ConnectionInvalidPort:
+        return "ConnectionInvalidPort";
+    case PatchValidationError::ConnectionSelfCycle:
+        return "ConnectionSelfCycle";
+    case PatchValidationError::ModulationEntryInvalid:
+        return "ModulationEntryInvalid";
+    case PatchValidationError::ModulationUnknownNode:
+        return "ModulationUnknownNode";
+    case PatchValidationError::ModulationInvalidPort:
+        return "ModulationInvalidPort";
+    case PatchValidationError::ModulationSelfCycle:
+        return "ModulationSelfCycle";
+    case PatchValidationError::RemoveEntryInvalid:
+        return "RemoveEntryInvalid";
+    case PatchValidationError::RemoveModulationEntryInvalid:
+        return "RemoveModulationEntryInvalid";
+    }
+    return "Unknown";
+}
 
 PatchValidationResult AIStateMapper::validateNodeParams(juce::AudioProcessor* processor,
                                                         const juce::DynamicObject* paramsObj) {
@@ -276,10 +365,12 @@ PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const 
             juce::uint32 src = 0, dst = 0;
             if (!extractUnsignedInt(cObj->getProperty("src"), src) || knownIds.count(src) == 0)
                 return {false, PatchValidationError::ConnectionUnknownNode,
-                        "Connection references unknown source node id."};
+                        "Connection references unknown source node id " + describeId(cObj->getProperty("src")) + ". " +
+                            describeKnownIds(knownIds)};
             if (!extractUnsignedInt(cObj->getProperty("dst"), dst) || knownIds.count(dst) == 0)
                 return {false, PatchValidationError::ConnectionUnknownNode,
-                        "Connection references unknown destination node id."};
+                        "Connection references unknown destination node id " + describeId(cObj->getProperty("dst")) +
+                            ". " + describeKnownIds(knownIds)};
             if (src == dst)
                 return {false, PatchValidationError::ConnectionSelfCycle,
                         "Connection would create a self-cycle (src == dst == " + juce::String(src) + ")."};
@@ -300,10 +391,12 @@ PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const 
             juce::uint32 source = 0, dest = 0;
             if (!extractUnsignedInt(mObj->getProperty("source"), source) || knownIds.count(source) == 0)
                 return {false, PatchValidationError::ModulationUnknownNode,
-                        "Modulation references unknown source node id."};
+                        "Modulation references unknown source node id " + describeId(mObj->getProperty("source")) +
+                            ". " + describeKnownIds(knownIds)};
             if (!extractUnsignedInt(mObj->getProperty("dest"), dest) || knownIds.count(dest) == 0)
                 return {false, PatchValidationError::ModulationUnknownNode,
-                        "Modulation references unknown destination node id."};
+                        "Modulation references unknown destination node id " + describeId(mObj->getProperty("dest")) +
+                            ". " + describeKnownIds(knownIds)};
             if (source == dest)
                 return {false, PatchValidationError::ModulationSelfCycle,
                         "Modulation would create a self-cycle (source == dest == " + juce::String(source) + ")."};
@@ -1028,6 +1121,82 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
     return true;
 }
 
+namespace {
+
+// Modules the AI must never author directly. Attenuverters are an implementation detail of the
+// `modulations` array — applyJSONToGraph creates them itself — so exposing them would invite the
+// model to hand-build modulation chains that the mod matrix then can't read back.
+bool isInternalOnlyModule(const juce::String& typeName) { return typeName == "Attenuverter" || typeName == "Mod Slot"; }
+
+// The module types the model may emit, taken from the factory itself rather than a hand-kept
+// list. The previous literal had silently drifted: "Voice Mixer" existed in the factory but was
+// absent from the schema, so a constrained decoder could never produce one.
+juce::Array<juce::var> authorableModuleTypes() {
+    juce::StringArray names;
+    for (const auto& entry : moduleFactory)
+        if (!isInternalOnlyModule(entry.first))
+            names.add(entry.first);
+
+    names.sort(false); // moduleFactory is unordered; keep the schema byte-stable between runs
+
+    juce::Array<juce::var> types;
+    for (const auto& name : names)
+        types.add(name);
+    return types;
+}
+
+// Choice parameters, keyed by parameter id, gathered across every authorable module.
+//
+// This is what closes the gap that dominates rejections on smaller models: `params` used to be
+// an unconstrained {"type":"object"}, so nothing stopped a model writing "waveform":"White
+// Noise". Emitting the real enum makes the decoder itself unable to produce an illegal choice.
+//
+// Ids are shared across modules only when they mean the same thing; if two modules ever declare
+// the same id with *different* option lists, constraining it globally would forbid values that
+// are legal for one of them, so such an id is deliberately left unconstrained (and
+// SchemaChoiceParamIdsAreUnambiguous fails, to make the collision a decision rather than a
+// silent loss of enforcement).
+juce::var choiceParamProperties() {
+    std::map<juce::String, juce::StringArray> byParamId;
+    std::set<juce::String> ambiguous;
+
+    for (const auto& entry : moduleFactory) {
+        if (isInternalOnlyModule(entry.first))
+            continue;
+        auto processor = entry.second();
+        if (!processor)
+            continue;
+
+        for (auto* param : processor->getParameters()) {
+            if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param)) {
+                auto existing = byParamId.find(choice->paramID);
+                if (existing == byParamId.end())
+                    byParamId[choice->paramID] = choice->choices;
+                else if (existing->second != choice->choices)
+                    ambiguous.insert(choice->paramID);
+            }
+        }
+    }
+
+    juce::DynamicObject::Ptr properties = new juce::DynamicObject();
+    for (const auto& [paramId, choices] : byParamId) {
+        if (ambiguous.count(paramId) > 0)
+            continue;
+
+        juce::Array<juce::var> options;
+        for (const auto& option : choices)
+            options.add(option);
+
+        juce::DynamicObject::Ptr definition = new juce::DynamicObject();
+        definition->setProperty("type", "string");
+        definition->setProperty("enum", juce::var(options));
+        properties->setProperty(paramId, juce::var(definition.get()));
+    }
+    return juce::var(properties.get());
+}
+
+} // namespace
+
 juce::var AIStateMapper::getPatchSchema() {
     juce::DynamicObject::Ptr schema = new juce::DynamicObject();
     schema->setProperty("type", "object");
@@ -1042,14 +1211,19 @@ juce::var AIStateMapper::getPatchSchema() {
     juce::DynamicObject::Ptr nodeProperties = new juce::DynamicObject();
 
     nodeProperties->setProperty("id", juce::JSON::parse("{\"type\": \"integer\"}"));
-    nodeProperties->setProperty(
-        "type",
-        juce::JSON::parse("{\"type\": \"string\", \"enum\": [\"Audio Input\", \"Audio Output\", \"Midi "
-                          "Input\", \"Oscillator\", \"Filter\", \"VCA\", \"ADSR\", \"Sequencer\", \"LFO\", "
-                          "\"Distortion\", \"Delay\", \"Reverb\", \"MIDI Keyboard\", \"Amp Env\", \"Filter Env\", "
-                          "\"Poly MIDI\", \"Poly Sequencer\", \"Chorus\", \"Phaser\", "
-                          "\"Compressor\", \"Flanger\", \"Limiter\", \"External MIDI\"]}"));
-    nodeProperties->setProperty("params", juce::JSON::parse("{\"type\": \"object\"}"));
+
+    juce::DynamicObject::Ptr typeDef = new juce::DynamicObject();
+    typeDef->setProperty("type", "string");
+    typeDef->setProperty("enum", juce::var(authorableModuleTypes()));
+    nodeProperties->setProperty("type", juce::var(typeDef.get()));
+
+    // `additionalProperties` stays open on purpose: only choice parameters can be enumerated,
+    // and numeric ones (cutoff, rateHz, …) must still be expressible.
+    juce::DynamicObject::Ptr paramsDef = new juce::DynamicObject();
+    paramsDef->setProperty("type", "object");
+    paramsDef->setProperty("properties", choiceParamProperties());
+    paramsDef->setProperty("additionalProperties", true);
+    nodeProperties->setProperty("params", juce::var(paramsDef.get()));
 
     nodeItems->setProperty("properties", juce::var(nodeProperties.get()));
     nodeItems->setProperty("required", juce::Array<juce::var>({"id", "type"}));
@@ -1113,42 +1287,11 @@ juce::var AIStateMapper::getPatchSchema() {
     removeModulations->setProperty("items", juce::var(rmModItems.get()));
     properties->setProperty("removeModulations", juce::var(removeModulations.get()));
 
-    // 7. Parameter Choices (for AI reference)
-    juce::DynamicObject::Ptr paramChoices = new juce::DynamicObject();
-    paramChoices->setProperty("type", "object");
-    juce::DynamicObject::Ptr paramChoicesProps = new juce::DynamicObject();
-
-    for (const auto& entry : moduleFactory) {
-        auto processor = entry.second();
-        if (!processor)
-            continue;
-
-        juce::DynamicObject::Ptr modParams = new juce::DynamicObject();
-        modParams->setProperty("type", "object");
-        juce::DynamicObject::Ptr modParamsProps = new juce::DynamicObject();
-
-        for (auto* param : processor->getParameters()) {
-            if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param)) {
-                juce::DynamicObject::Ptr choiceDef = new juce::DynamicObject();
-                choiceDef->setProperty("type", "string");
-
-                // Create a JSON array string for the enum
-                juce::Array<juce::var> choicesArray;
-                for (const auto& c : choice->choices)
-                    choicesArray.add(c);
-                choiceDef->setProperty("enum", juce::var(choicesArray));
-
-                modParamsProps->setProperty(choice->paramID, juce::var(choiceDef.get()));
-            }
-        }
-        if (modParamsProps->getProperties().size() > 0) {
-            modParams->setProperty("properties", juce::var(modParamsProps.get()));
-            paramChoicesProps->setProperty(entry.first, juce::var(modParams.get()));
-        }
-    }
-    paramChoices->setProperty("properties", juce::var(paramChoicesProps.get()));
-    properties->setProperty("parameterChoices", juce::var(paramChoices.get()));
-
+    // Note: there is deliberately no "parameterChoices" property here. It used to be carried in
+    // this schema "for AI reference", but this schema is the *output* contract handed to the
+    // provider as `format` — every property in it is something the model is invited to emit, not
+    // documentation it can read. The choice lists now do their real work as enums inside
+    // node.params (above), and remain human-readable in the system prompt via getModuleSchema().
     schema->setProperty("properties", juce::var(properties.get()));
     schema->setProperty("required", juce::Array<juce::var>({"nodes", "connections"}));
 

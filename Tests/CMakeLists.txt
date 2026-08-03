@@ -23,6 +23,8 @@ add_executable(GravisynthTests
     LFOModuleTests.cpp
     SequencerModuleTests.cpp
     AIStateMapperTests.cpp
+    AIPatchValidationTests.cpp
+    AIPatchRetryTests.cpp
     AIProviderRegistryTests.cpp
     OllamaProviderTests.cpp
     MainComponentTests.cpp

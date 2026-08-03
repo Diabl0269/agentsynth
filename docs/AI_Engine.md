@@ -107,6 +107,82 @@ weak ref keeps the ordering safe if the service is ever destroyed before the und
 
 Tests live in `Tests/AIUndoTests.cpp`.
 
+## 5a. Patch Validity: Constrained Decoding, Retry, and Repair
+
+Untrusted model output reaches the graph through one gate — `AIStateMapper::validatePatch(...,
+trusted=false)` — which returns a typed `PatchValidationError` plus a message. That gate is a
+security boundary and is never relaxed to raise the pass rate; everything below works on the
+*generation* side instead.
+
+### Measuring first
+
+`Tools/AIPatchHarness` replays a fixed set of realistic prompts through the exact production path
+and tallies rejections by `PatchValidationError`. It needs a live Ollama, so it is opt-in
+(`-DENABLE_AI_HARNESS=ON`) and excluded from CI. See its README for flags and caveats.
+
+Two facts that measurement established, and that any future change here should be re-checked
+against:
+
+- **`format` enforcement is backend-dependent.** Ollama compiles the JSON schema to a GBNF grammar
+  for llama.cpp models, so anything the schema *encodes* becomes impossible to emit. MLX-backed
+  models (e.g. `gemma4:e4b-mlx`) ignore `format` entirely and fall back to prompt compliance.
+  Schema work therefore helps some backends and not others; retries cover the rest.
+- **Validation reports only the first error.** Fixing one class of failure does not simply shrink
+  the histogram — it *unmasks* whatever was next in the same patch. An error count that rises after
+  a fix is expected, not a regression.
+
+### The four layers, most upstream first
+
+1.  **Constrained decoding (`getPatchSchema()`).** The strongest guarantee, because the backend
+    can enforce it. Two things matter here:
+    - The `node.type` enum is generated from `moduleFactory`, not hand-written. The old literal had
+      drifted — `Voice Mixer` was creatable but missing from the schema, so a constrained decoder
+      could never produce one. Guarded by `SchemaModuleTypesMatchTheFactory`.
+    - `node.params` enumerates every **choice** parameter's real options, so a model physically
+      cannot emit `"waveform": "White Noise"`. `additionalProperties` stays `true` so numeric
+      parameters remain expressible — a grammar restricted to the listed keys would make `cutoff`
+      unreachable, a worse bug than the one being fixed. Guarded by
+      `SchemaConstrainsChoiceParametersToTheirOptions` and `SchemaStillAllowsNonChoiceParameters`.
+
+    The schema is an **output** contract: every property in it is something the model is invited to
+    emit. Reference data does not belong there, which is why the old `parameterChoices` block was
+    removed — the choice lists do real work as enums in `params`, and stay human-readable in the
+    system prompt via `getModuleSchema()`.
+
+2.  **Validate-and-retry (`applyPatchWithRetry`).** Cross-references — "connection names an id that
+    does not exist" — cannot be expressed in a JSON schema at all, so they are handled after the
+    fact. On rejection the *specific* validation message is fed back ("that patch was rejected
+    because X; return a corrected patch"). Retries are bounded by `kMaxPatchRetries` (2, i.e. 3
+    attempts total), each is announced through the `onRetry` callback so the chat shows what is
+    happening, and exhaustion surfaces the error rather than looping.
+
+    Rejection messages name the offending id **and list the valid ones**. This is not cosmetic: a
+    bare "unknown node id" gives the model nothing to aim at and the retry tends to repeat itself.
+
+3.  **Repair — one rule only.** A patch that states no `"mode"` and is rejected as a *replace* is
+    re-validated as a *merge*, and applied that way if it passes. This costs no round-trip and
+    alters nothing about the patch's content; it only resolves which mode the caller guessed, and
+    validation is the arbiter. It is deliberately **one-directional**: reading a patch as a merge
+    can only preserve nodes the user already had, whereas quietly turning a merge into a replace
+    would wipe their patch. Never fires when the model stated a mode. Guarded by the
+    `AIPatchRetryTest.Repair*` tests.
+
+    No other repair is applied. Dropping a connection that names a stale id would silently give the
+    user less than they asked for, which is exactly the silent-partial-apply failure the strict
+    gate exists to prevent.
+
+4.  **Prompt.** Weakest guarantee, so it carries the least. It documents the module/parameter
+    tables and the merge-vs-replace rules; the enforceable parts live in the schema.
+
+### Logging
+
+One line per rejection and one per retry. Retries happen at user-click frequency, so this stays
+within the no-high-frequency-logging rule — never log per candidate token or per validation pass.
+
+Tests: `Tests/AIPatchValidationTests.cpp` (table-driven, one malformed patch per
+`PatchValidationError`, plus the schema contract) and `Tests/AIPatchRetryTests.cpp` (retry bound,
+error feedback, repair scope).
+
 ## 5. AIChatComponent and Logging
 
 `AIChatComponent` (`Source/UI/AIChatComponent.cpp`) is the chat UI for AI-assisted patching. It wires user prompts to `AIIntegrationService` and displays the conversation history with optional JSON patch previews.

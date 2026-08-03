@@ -550,24 +550,55 @@ void AIChatComponent::updateChatDisplay() {
                 juce::Logger::writeToLog("--- Applying patch (merge=" + juce::String(isMerge ? "true" : "false") +
                                          ") ---");
                 juce::Logger::writeToLog("JSON: " + json);
-                if (aiService.applyPatch(json, isMerge)) {
-                    juce::Logger::writeToLog("--- Patch applied ---");
-                    return;
-                }
-                // Never swallow a rejection: an Apply/Merge that does nothing and says nothing is
-                // indistinguishable from a broken button. Surface the reason in the conversation.
-                auto reason = aiService.getLastPatchError();
-                if (reason.isEmpty())
-                    reason = "The patch could not be applied.";
-                juce::Logger::writeToLog("--- Patch REJECTED: " + reason + " ---");
-                messages.push_back({"assistant", "Could not apply this patch: " + reason, ""});
-                // Refresh asynchronously: updateChatDisplay() calls messageList.deleteAllChildren(),
-                // which would destroy the MessageBubble whose callback we are currently inside.
+
+                // Redraws the conversation without destroying the MessageBubble whose callback we
+                // may still be inside — updateChatDisplay() calls messageList.deleteAllChildren().
                 juce::Component::SafePointer<AIChatComponent> safeThis(this);
-                juce::MessageManager::callAsync([safeThis] {
-                    if (auto* self = safeThis.getComponent())
-                        self->updateChatDisplay();
-                });
+                auto refreshLater = [safeThis] {
+                    juce::MessageManager::callAsync([safeThis] {
+                        if (auto* self = safeThis.getComponent())
+                            self->updateChatDisplay();
+                    });
+                };
+
+                aiService.applyPatchWithRetry(
+                    json, isMerge,
+                    [safeThis, refreshLater](bool success, const juce::String& error) {
+                        auto* self = safeThis.getComponent();
+                        if (self == nullptr)
+                            return;
+
+                        if (success) {
+                            juce::Logger::writeToLog("--- Patch applied ---");
+                            return;
+                        }
+
+                        // Never swallow a rejection: an Apply/Merge that does nothing and says
+                        // nothing is indistinguishable from a broken button.
+                        auto reason = error.isNotEmpty() ? error : self->aiService.getLastPatchError();
+                        if (reason.isEmpty())
+                            reason = "The patch could not be applied.";
+                        juce::Logger::writeToLog("--- Patch REJECTED: " + reason + " ---");
+                        self->messages.push_back({"assistant",
+                                                  "Could not apply this patch after " +
+                                                      juce::String(AIIntegrationService::kMaxPatchRetries + 1) +
+                                                      " attempts: " + reason,
+                                                  ""});
+                        refreshLater();
+                    },
+                    // Retries are bounded and per user click, so announcing each one keeps the wait
+                    // legible instead of looking like a hang.
+                    [safeThis, refreshLater](const AIIntegrationService::PatchRetryInfo& info) {
+                        auto* self = safeThis.getComponent();
+                        if (self == nullptr)
+                            return;
+                        self->messages.push_back({"assistant",
+                                                  "That patch was rejected (" + info.error + ") — asking for a fix (" +
+                                                      juce::String(info.failedAttempt + 1) + "/" +
+                                                      juce::String(info.totalAttempts) + ")…",
+                                                  ""});
+                        refreshLater();
+                    });
             },
             isMerge);
         messageList.addAndMakeVisible(bubble);
