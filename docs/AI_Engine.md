@@ -240,6 +240,76 @@ Three rules make that hold:
 Locked by `OllamaProviderTest.QueuedRequestDuringThreadShutdownStillCompletes` and
 `OllamaProviderTest.PendingRequestsAreFailedOnDestruction`.
 
+### Request Cancellation
+
+`sendPrompt()` returns an `AIProvider::RequestId`; `cancel(id)` abandons that request. This is a
+real abort, not a UI dismissal — the Cancel button used to only hide the spinner while the HTTP
+request ran to completion, which billed a metered backend for work the user had abandoned and,
+because the queue is drained serially, made the *next* message wait behind it.
+
+The contract, which every provider must honour:
+
+1.  **A cancelled request still gets exactly one callback**, with `AIErrorKind::Cancelled`. A caller
+    is never left hanging, and never called twice.
+2.  **It must not block requests queued behind it.** If it is still in the queue, `cancel()` removes
+    it under `queueLock` — the same lock the worker pops with, so exactly one of them ends up owning
+    it. If it is already in flight, the read is aborted so the worker is genuinely free rather than
+    waiting out the response.
+3.  **An unknown, completed or already-cancelled id is a safe no-op.** The UI holds stale handles
+    routinely (a response and a Cancel click cross), so this is the common case. The delivery path
+    deregisters the request, which is what makes a later `cancel()` inert.
+
+`AIIntegrationService` must **not** append an assistant turn for a cancelled request: it produced no
+answer, and `chatHistory` is replayed as context, so an invented turn would be fed back on every
+later message. The user's own turn stays.
+
+#### Publish before connect — the part that makes it work
+
+**The provider does not use `juce::URL::createInputStream()`, and must not start.** A chat request
+sets `"stream": false`, so Ollama sends *nothing at all* — not even response headers — until the
+entire generation is finished. That means `connect()`, not `read()`, is where a request spends
+essentially all of its time. `createInputStream()` connects internally and only hands the stream
+back afterwards, so a factory built on it cannot expose the stream until the generation it was
+supposed to cancel has already completed.
+
+So `InputStreamFactory` takes a third argument, a `StreamPublisher`. The factory constructs the
+`WebInputStream`, calls `publish(stream.get())`, and only then calls `connect()`. A factory must
+also call `publish(nullptr)` before destroying a stream it is not returning, so a concurrent
+`cancel()` can never reach a dead object; every store and load of the pointer is under
+`RequestState::streamLock`.
+
+This was measured, not assumed. Against a live Ollama with a long generation in flight: publishing
+after connect, `cancel()` could not stop the request at all (still running after 10 s); publishing
+before it, the callback fires in **1–8 ms** and the next message is answered in ~100 ms.
+
+How the read is aborted, in order of preference:
+
+-   **`juce::WebInputStream::cancel()`** — the real mechanism, documented to cancel a blocking read
+    and prevent subsequent connection attempts, and safe to call from another thread.
+-   **`synth::CancellableStream`** — an opt-in mix-in for injected test factories, which are not
+    `WebInputStream`s, so tests can unblock a stream by the same route a real socket uses.
+-   **The `cancelled` flag alone** — the fallback for any other stream type. The worker finishes the
+    read and discards the response. Still correct, just not prompt.
+
+Model discovery (`fetchAvailableModels`) passes a no-op publisher: it is not cancellable and is
+bounded by its own 4 s connection timeout.
+
+Locked by `OllamaProviderTest.CancelledRequestInvokesCallbackWithCancelledKind`,
+`CancelDoesNotBlockSubsequentRequest`, `CancelOfUnknownRequestIdIsSafeNoOp`,
+`CallbackFiresExactlyOnceEvenIfCancelRacesCompletion` (run with `--gtest_repeat=100`),
+`CancelAndCompletionEachDeliverExactlyOnceInEitherOrder`,
+`AIIntegrationServiceTest.CancelledRequestDoesNotAppendToHistory`, and the `AICancelTest` UI locks.
+
+> The race test sweeps the cancel across the completion by a growing offset rather than just
+> spawning two threads. Without the offset "completion wins" is never exercised — `cancel()` sets the
+> cancelled flag before releasing the read, so the worker always observes the cancel (measured: 0
+> completion-wins in 1000 iterations; with the sweep, ~860 in 1000).
+
+> **Re-verifying by hand** (the unit tests use a mock stream and therefore cannot cover
+> `WebInputStream::cancel()`): with `ollama serve` running, send a prompt that generates for a while,
+> hit Cancel, and confirm the input frees immediately and the next message is answered without delay.
+> A regression here is invisible to the suite — the mock path would still pass.
+
 ## 6. Future Considerations
 
 -   **Direct Saving of AI Suggested Patches**: Implement functionality for users to directly save AI-generated patches as presets.

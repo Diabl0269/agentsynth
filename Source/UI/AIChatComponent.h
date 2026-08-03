@@ -35,17 +35,20 @@ public:
     void resized() override;
     void paint(juce::Graphics& g) override;
 
+    // Escape cancels an in-flight request. Reached by bubbling: while waiting, the read-only
+    // inputField holds focus and does not consume Escape, so the press walks up to us.
+    bool keyPressed(const juce::KeyPress& key) override;
+
     void refreshModels();
     void sendButtonClicked();
     void triggerSend() { sendButtonClicked(); }
 
     // Testing hook: directly invokes the cancel action synchronously (mirrors triggerSend).
     // Use in headless tests instead of cancelButton->triggerClick(), which posts async.
-    void simulateCancelClick() {
-        cancelRequest();
-        messages.push_back({"assistant", "Cancelled.", ""});
-        updateChatDisplay();
-    }
+    void simulateCancelClick() { handleUserCancel(); }
+
+    // Testing hook: the Escape-key path, without needing real keyboard focus.
+    void simulateEscapeKey() { keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)); }
 
     // Testing hook: returns true if the cancel button is currently visible.
     bool isCancelVisible() const { return cancelButton.isVisible(); }
@@ -59,6 +62,10 @@ private:
     // Stops the in-flight request and resets all waiting state.
     // Called both by the cancel button and by the timeout path.
     void cancelRequest();
+
+    // The user-initiated cancel: cancelRequest() plus the "Cancelled." bubble and focus restore.
+    // Shared by the Cancel button and the Escape key so the two cannot drift.
+    void handleUserCancel();
 
     class MessageBubble;
     class PatchCard;
@@ -121,6 +128,11 @@ private:
     AIIntegrationService& aiService;
     juce::ApplicationProperties& appProperties;
     bool isWaitingForResponse = false;
+
+    // Handle for the request currently in flight, so cancelRequest() can tell the provider to
+    // actually abandon it. Default (value 0) whenever nothing is outstanding — cleared by the
+    // response handler before teardown so a completed request is never "cancelled".
+    AIProvider::RequestId activeRequestId{};
 
     juce::Viewport viewport;
     juce::Component messageList;

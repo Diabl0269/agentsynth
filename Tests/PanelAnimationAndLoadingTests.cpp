@@ -29,16 +29,52 @@ public:
     }
     RequestId sendPrompt(const std::vector<Message>&, CompletionCallback callback, const juce::var&,
                          std::function<void(const juce::String&)> = {}) override {
-        // Intentionally never completes so we can test the cancel path.
-        juce::ignoreUnused(callback);
-        return {};
+        // Intentionally never completes on its own, so a test can decide how the request ends.
+        pendingCallback = std::move(callback);
+        return RequestId{++lastRequestId};
     }
-    void cancel(RequestId) override {}
+
+    // Records what the UI asked us to cancel, so tests can prove the Cancel button and the Escape
+    // key reach the provider instead of only tidying up the UI.
+    void cancel(RequestId requestId) override {
+        cancelledIds.push_back(requestId.value);
+        if (!pendingCallback)
+            return;
+
+        auto callback = std::move(pendingCallback);
+        pendingCallback = nullptr;
+
+        AIResponse response;
+        response.success = false;
+        response.error.kind = AIErrorKind::Cancelled;
+        response.error.message = "Request cancelled.";
+        callback(response);
+    }
+
+    /** Resolves the held request normally, so a test can check what happens after a real response
+        rather than only after a cancel. */
+    void completePending(const juce::String& content) {
+        if (!pendingCallback)
+            return;
+
+        auto callback = std::move(pendingCallback);
+        pendingCallback = nullptr;
+
+        AIResponse response;
+        response.success = true;
+        response.content = content;
+        callback(response);
+    }
+
     void setModel(const juce::String& name) override { model = name; }
     juce::String getCurrentModel() const override { return model; }
 
+    std::vector<uint64_t> cancelledIds;
+    uint64_t lastRequestId = 0;
+
 private:
     juce::String model = "MockModel";
+    CompletionCallback pendingCallback;
 };
 
 // Fixture helper: owns an ApplicationProperties configured for tests.
@@ -308,4 +344,104 @@ TEST_F(PaintSmokeTest, AIChatComponentPaintWaitingState) {
     juce::Image img(juce::Image::ARGB, 400, 600, true);
     juce::Graphics g(img);
     EXPECT_NO_THROW(chat.paint(g));
+}
+
+namespace {
+// Puts the chat component into the waiting state with a request outstanding.
+void enterWaitingState(synth::AIChatComponent& chat) {
+    for (auto* child : chat.getChildren()) {
+        if (auto* editor = dynamic_cast<juce::TextEditor*>(child))
+            editor->setText("hello");
+    }
+    chat.triggerSend();
+}
+} // namespace
+
+// The whole point of the change: Cancel must reach the provider. Before this, cancelRequest() only
+// tidied the UI while the HTTP request ran on -- billed, and blocking the next message.
+TEST_F(AICancelTest, CancelButtonTellsProviderToCancelTheRequest) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    auto provider = std::make_unique<MockProviderPAL>();
+    auto* rawProvider = provider.get();
+    service.setProvider(std::move(provider));
+
+    TestPropsOwner propsOwner;
+    synth::AIChatComponent chat(service, propsOwner.props);
+    chat.setSize(400, 600);
+
+    enterWaitingState(chat);
+    ASSERT_TRUE(chat.isWaiting());
+
+    chat.simulateCancelClick();
+
+    ASSERT_EQ(rawProvider->cancelledIds.size(), 1u) << "Cancel did not reach the provider -- it is still cosmetic";
+    EXPECT_EQ(rawProvider->cancelledIds[0], rawProvider->lastRequestId) << "Cancel targeted the wrong request handle";
+    EXPECT_FALSE(chat.isWaiting());
+}
+
+// Escape must do what the Cancel button does. There was no keyPressed override at all before, so
+// this is new behaviour rather than a regression lock.
+TEST_F(AICancelTest, EscapeKeyCancelsInFlightRequest) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    auto provider = std::make_unique<MockProviderPAL>();
+    auto* rawProvider = provider.get();
+    service.setProvider(std::move(provider));
+
+    TestPropsOwner propsOwner;
+    synth::AIChatComponent chat(service, propsOwner.props);
+    chat.setSize(400, 600);
+
+    enterWaitingState(chat);
+    ASSERT_TRUE(chat.isWaiting());
+
+    chat.simulateEscapeKey();
+
+    EXPECT_EQ(rawProvider->cancelledIds.size(), 1u) << "Escape did not cancel the in-flight request";
+    EXPECT_FALSE(chat.isWaiting());
+    EXPECT_FALSE(chat.isCancelVisible());
+}
+
+// Escape when nothing is in flight must stay out of the way, so it keeps whatever meaning the
+// enclosing window gives it (closing a panel, dismissing a dialog).
+TEST_F(AICancelTest, EscapeKeyIsIgnoredWhenIdle) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    auto provider = std::make_unique<MockProviderPAL>();
+    auto* rawProvider = provider.get();
+    service.setProvider(std::move(provider));
+
+    TestPropsOwner propsOwner;
+    synth::AIChatComponent chat(service, propsOwner.props);
+    chat.setSize(400, 600);
+
+    ASSERT_FALSE(chat.isWaiting());
+    chat.simulateEscapeKey();
+
+    EXPECT_TRUE(rawProvider->cancelledIds.empty()) << "Escape cancelled something while idle";
+}
+
+// A completed request must not be cancelled afterwards: the handle is stale and, on a real
+// provider, could name a request the user has since sent.
+TEST_F(AICancelTest, CancelAfterResponseDoesNotCancelAnything) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    auto provider = std::make_unique<MockProviderPAL>();
+    auto* rawProvider = provider.get();
+    service.setProvider(std::move(provider));
+
+    TestPropsOwner propsOwner;
+    synth::AIChatComponent chat(service, propsOwner.props);
+    chat.setSize(400, 600);
+
+    enterWaitingState(chat);
+    ASSERT_TRUE(chat.isWaiting());
+
+    // The response handler posts through the message queue, so let it run.
+    rawProvider->completePending("All done.");
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+
+    ASSERT_FALSE(chat.isWaiting()) << "the component never left the waiting state";
+    EXPECT_TRUE(rawProvider->cancelledIds.empty()) << "a completed request was cancelled after the fact";
 }

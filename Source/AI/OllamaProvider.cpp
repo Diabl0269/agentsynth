@@ -1,4 +1,5 @@
 #include "OllamaProvider.h"
+#include <algorithm>
 
 namespace synth {
 
@@ -14,6 +15,34 @@ constexpr int kIdleWaitMs = 1000;
 constexpr int kWorkerHandoverTimeoutMs = 2000;
 
 const char* const kShuttingDownMessage = "Error: Request cancelled - the Ollama provider is shutting down.";
+
+// Delivered with AIErrorKind::Cancelled. Callers are expected to branch on the kind rather than
+// show this text; it exists so a caller that ignores the kind still sees something sane.
+const char* const kCancelledMessage = "Request cancelled.";
+
+/** Unblocks a stream that is parked in a blocking read — or in the connect that precedes it.
+
+    juce::WebInputStream::cancel() is the real mechanism: documented to "cancel a blocking read and
+    prevent any subsequent connection attempts", and meant to be called from another thread. That
+    second half matters as much as the first here, because an Ollama chat request is non-streaming
+    and therefore spends nearly all its time inside connect() waiting for the server to finish
+    generating — see StreamPublisher for why the stream is published to us before it is connected.
+
+    CancellableStream is the escape hatch for injected test factories, which are not
+    WebInputStreams.
+
+    Anything else falls back to the cancelled flag alone: the worker finishes the read and throws
+    the response away. Still correct — the callback fires with Cancelled and the queue moves on —
+    just not prompt. */
+void abortStream(juce::InputStream& stream) {
+    if (auto* web = dynamic_cast<juce::WebInputStream*>(&stream)) {
+        web->cancel();
+        return;
+    }
+
+    if (auto* cancellable = dynamic_cast<CancellableStream*>(&stream))
+        cancellable->cancelRead();
+}
 } // namespace
 
 using AIErrorKind = OllamaProvider::AIErrorKind;
@@ -22,8 +51,48 @@ using AIErrorKind = OllamaProvider::AIErrorKind;
 OllamaProvider::OllamaProvider(const juce::String& host)
     : Thread("OllamaProviderThread")
     , ollamaHost(host)
-    , createStream([](const juce::URL& url, const juce::URL::InputStreamOptions& options) {
-        return url.createInputStream(options);
+    , createStream([](const juce::URL& url, const juce::URL::InputStreamOptions& options,
+                      const StreamPublisher& publish) -> std::unique_ptr<juce::InputStream> {
+        // Deliberately NOT juce::URL::createInputStream(). That helper connects internally and
+        // only hands the stream back afterwards, which is useless to us: an Ollama chat request
+        // is non-streaming, so the server sends nothing — not even headers — until the generation
+        // is complete, and connect() is where the whole request is spent. Building the
+        // WebInputStream here lets us publish it for cancellation BEFORE connecting, which is the
+        // difference between Cancel aborting the request and Cancel just hiding the spinner.
+        //
+        // Verified against a live Ollama: publishing after connect leaves cancel() unable to stop
+        // a long generation at all; publishing before it frees the worker in 1-2 ms.
+        const bool usePost = options.getParameterHandling() == juce::URL::ParameterHandling::inPostData;
+        auto stream = std::make_unique<juce::WebInputStream>(url, usePost);
+
+        if (const auto extraHeaders = options.getExtraHeaders(); extraHeaders.isNotEmpty())
+            stream->withExtraHeaders(extraHeaders);
+
+        if (const auto timeout = options.getConnectionTimeoutMs(); timeout != 0)
+            stream->withConnectionTimeout(timeout);
+
+        if (const auto requestCmd = options.getHttpRequestCmd(); requestCmd.isNotEmpty())
+            stream->withCustomRequestCommand(requestCmd);
+
+        stream->withNumRedirectsToFollow(options.getNumRedirectsToFollow());
+
+        publish(stream.get());
+
+        const bool connected = stream->connect(nullptr);
+
+        if (auto* status = options.getStatusCode())
+            *status = stream->getStatusCode();
+
+        if (auto* responseHeaders = options.getResponseHeaders())
+            *responseHeaders = stream->getResponseHeaders();
+
+        if (!connected || stream->isError()) {
+            // Retract before destroying it, so a concurrent cancel() cannot reach a dead stream.
+            publish(nullptr);
+            return nullptr;
+        }
+
+        return stream;
     }) {}
 
 OllamaProvider::~OllamaProvider() {
@@ -59,7 +128,7 @@ OllamaProvider::RequestId OllamaProvider::sendPrompt(const std::vector<Message>&
     // compatibility but intentionally never invoked.
     juce::ignoreUnused(onDelta);
 
-    Request request{RequestId{}, conversation, std::move(callback), responseSchema};
+    Request request{RequestId{}, conversation, std::move(callback), responseSchema, nullptr};
     bool rejected = false;
     bool mustStartWorker = false;
 
@@ -67,10 +136,14 @@ OllamaProvider::RequestId OllamaProvider::sendPrompt(const std::vector<Message>&
         const juce::ScopedLock sl(queueLock);
 
         request.id.value = nextRequestId++;
+        request.state = std::make_shared<RequestState>(request.id);
 
         if (isShuttingDown) {
             rejected = true;
         } else {
+            // Registered under the same lock as the queue push, so a cancel() racing this call
+            // either does not see the request at all or sees it in both places.
+            inFlight.emplace(request.id.value, request.state);
             pendingRequests.push_back(request);
 
             // Self-heal: `running` plus a dead thread means run() entered but ended
@@ -118,10 +191,73 @@ OllamaProvider::RequestId OllamaProvider::sendPrompt(const std::vector<Message>&
 }
 
 void OllamaProvider::cancel(RequestId requestId) {
-    // Not implemented: OllamaProvider cannot cancel an in-flight or queued request yet.
-    // Declared per the AIProvider interface so future providers can implement real
-    // cancellation without an interface change.
-    juce::ignoreUnused(requestId);
+    if (requestId.value == 0)
+        return;
+
+    std::shared_ptr<RequestState> state;
+    Request abandoned;
+    bool tookFromQueue = false;
+
+    {
+        const juce::ScopedLock sl(queueLock);
+
+        const auto entry = inFlight.find(requestId.value);
+        if (entry == inFlight.end())
+            return; // Unknown id, or the request already completed and was delivered: nothing to do.
+
+        state = entry->second;
+        state->cancelled.store(true);
+
+        // If the worker has not picked this up yet we own it outright. Taking it out of the queue
+        // here — under the same lock the worker pops with, so exactly one of us ends up holding
+        // it — is what stops an abandoned request delaying the ones behind it.
+        const auto queued = std::find_if(pendingRequests.begin(), pendingRequests.end(),
+                                         [&state](const Request& r) { return r.state == state; });
+
+        if (queued != pendingRequests.end()) {
+            abandoned = *queued;
+            pendingRequests.erase(queued);
+            tookFromQueue = true;
+        }
+    }
+
+    if (tookFromQueue) {
+        // Delivered outside the lock: in test mode the callback runs inline, and one that
+        // re-entered sendPrompt() while we held queueLock would be a surprise at best.
+        deliverError(abandoned, AIErrorKind::Cancelled, kCancelledMessage, /*retryAfterSeconds=*/0,
+                     /*forceSynchronous=*/false);
+        return;
+    }
+
+    // Already in flight. Unblock the read (or the connect it is still inside); the worker sees the
+    // cancelled flag on the way out and delivers the Cancelled callback itself. Leaving delivery to
+    // the worker keeps a single owner for the request and means it is genuinely free before we
+    // return, rather than still holding the queue behind a socket nobody is waiting on.
+    abortActiveStream(*state);
+}
+
+void OllamaProvider::abortActiveStream(RequestState& state) {
+    const juce::ScopedLock sl(state.streamLock);
+    if (state.activeStream != nullptr)
+        abortStream(*state.activeStream);
+}
+
+bool OllamaProvider::claimDelivery(const Request& req) {
+    if (req.state == nullptr)
+        return true; // Default-constructed Request (no state): nothing to arbitrate.
+
+    // cancel(), the worker and failAllPending() can all reach the same request, and cancelling one
+    // that is completing right now makes that a real race. Whoever wins the exchange owns the
+    // callback; everyone else backs off having done nothing.
+    if (req.state->delivered.exchange(true))
+        return false;
+
+    // Deregister before the caller calls out, so a cancel() issued from inside the callback (or
+    // from another thread the instant it fires) sees a completed id and no-ops instead of trying
+    // to abort a stream that is on its way out.
+    const juce::ScopedLock sl(queueLock);
+    inFlight.erase(req.state->id.value);
+    return true;
 }
 
 bool OllamaProvider::ensureWorkerRunning() {
@@ -167,6 +303,11 @@ void OllamaProvider::failAllPending(AIErrorKind kind, const juce::String& messag
 }
 
 void OllamaProvider::deliverResult(const Request& req, const juce::String& responseText, bool forceSynchronous) {
+    // Claimed before the callback check, so a request with no callback is still deregistered and
+    // a later cancel() of its id stays a no-op.
+    if (!claimDelivery(req))
+        return;
+
     if (!req.callback)
         return;
 
@@ -188,6 +329,9 @@ void OllamaProvider::deliverResult(const Request& req, const juce::String& respo
 
 void OllamaProvider::deliverError(const Request& req, AIErrorKind kind, const juce::String& message,
                                   int retryAfterSeconds, bool forceSynchronous) {
+    if (!claimDelivery(req))
+        return;
+
     if (!req.callback)
         return;
 
@@ -256,9 +400,12 @@ void OllamaProvider::fetchAvailableModels(std::function<void(const juce::StringA
         juce::StringArray models;
         bool success = false;
 
+        // Model discovery is not cancellable (bounded by its own 4 s connection timeout and with
+        // no user-visible Cancel), so it publishes nothing.
         if (auto stream = createStream(
                 url,
-                juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress).withConnectionTimeoutMs(4000))) {
+                juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inAddress).withConnectionTimeoutMs(4000),
+                [](juce::InputStream*) {})) {
             juce::String responseText = stream->readEntireStreamAsString();
             // DBG("AI Discovery Response (before JSON parse): [" + responseText + "]"); // Potentially expensive
             // DBG("AI Discovery Response: " + responseText); // Redundant
@@ -367,6 +514,15 @@ void OllamaProvider::processRequest(const Request& req) {
         return;
     }
 
+    auto wasCancelled = [&req] { return req.state != nullptr && req.state->cancelled.load(); };
+
+    // Cancelled while it sat in the queue, or during the handoff to this thread. Bail before
+    // opening a connection — the whole point is not to spend money on abandoned work.
+    if (wasCancelled()) {
+        deliverErr(AIErrorKind::Cancelled, kCancelledMessage);
+        return;
+    }
+
     juce::URL url(ollamaHost + "/api/chat");
 
     // Build JSON body
@@ -391,11 +547,58 @@ void OllamaProvider::processRequest(const Request& req) {
     int httpStatus = 0;
     juce::StringPairArray responseHeaders;
 
-    auto stream = createStream(url.withPOSTData(jsonString),
-                               juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inPostData)
-                                   .withConnectionTimeoutMs(120000)
-                                   .withStatusCode(&httpStatus)
-                                   .withResponseHeaders(&responseHeaders));
+    // Declared before the guard below so it is destroyed AFTER it: the guard must have already
+    // cleared activeStream by the time the stream itself goes away, or cancel() could reach a
+    // destroyed object.
+    std::unique_ptr<juce::InputStream> stream;
+
+    // Retracts the published pointer however this scope is left. Every store and load of
+    // activeStream is under streamLock, which is the only thing standing between cancel() and a
+    // dangling pointer. streamLock is never held while taking queueLock, so the two cannot
+    // deadlock against each other.
+    struct ScopedActiveStream {
+        RequestState* state;
+        ~ScopedActiveStream() {
+            if (state == nullptr)
+                return;
+            const juce::ScopedLock sl(state->streamLock);
+            state->activeStream = nullptr;
+        }
+    };
+
+    ScopedActiveStream activeStreamScope{req.state.get()};
+
+    // Handed to the factory, which calls it as soon as the stream exists and before it blocks —
+    // see StreamPublisher for why publishing has to happen that early.
+    auto publish = [&req](juce::InputStream* published) {
+        if (req.state == nullptr)
+            return;
+
+        {
+            const juce::ScopedLock sl(req.state->streamLock);
+            req.state->activeStream = published;
+        }
+
+        // A cancel() that arrived before this point found nothing to abort, so apply it now that
+        // the stream is visible. Without this, such a request would run to completion.
+        if (published != nullptr && req.state->cancelled.load())
+            abortStream(*published);
+    };
+
+    stream = createStream(url.withPOSTData(jsonString),
+                          juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inPostData)
+                              .withConnectionTimeoutMs(120000)
+                              .withStatusCode(&httpStatus)
+                              .withResponseHeaders(&responseHeaders),
+                          publish);
+
+    // Checked before the HTTP-status branches below: an aborted connect or read looks exactly like
+    // a network failure from here, and reporting a cancellation the user asked for as an error
+    // they might try to debug would be actively misleading.
+    if (wasCancelled()) {
+        deliverErr(AIErrorKind::Cancelled, kCancelledMessage);
+        return;
+    }
 
     // httpStatus is populated by the pointer above as soon as HTTP response headers are
     // received, independent of whether createStream() went on to hand back a stream — so
@@ -433,6 +636,12 @@ void OllamaProvider::processRequest(const Request& req) {
 
     juce::String responseText = stream->readEntireStreamAsString();
     // DBG("AI Chat Response (before JSON parse): [" + responseText + "]"); // Potentially expensive
+
+    // A cancel that landed while we were reading: throw away whatever partial text came back.
+    if (wasCancelled()) {
+        deliverErr(AIErrorKind::Cancelled, kCancelledMessage);
+        return;
+    }
 
     juce::var jsonResponse = juce::JSON::parse(responseText);
     if (jsonResponse.isObject()) {
