@@ -50,9 +50,14 @@ jobs:
       uses: actions/cache@v5
       with:
         path: build/_deps
-        key: ${{ runner.os }}-deps-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
+        # The "2" bump invalidates caches saved before the repo was renamed
+        # gravisynth -> agentsynth: their FetchContent subbuild dirs have the
+        # old .../work/gravisynth/gravisynth absolute path baked in, which
+        # conflicts with the new .../work/agentsynth/agentsynth checkout path
+        # and trips CMake's directory-mismatch guard.
+        key: ${{ runner.os }}-deps2-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
         restore-keys: |
-          ${{ runner.os }}-deps-
+          ${{ runner.os }}-deps2-
 
     - name: Cache ccache
       uses: actions/cache@v5
@@ -123,9 +128,14 @@ jobs:
       uses: actions/cache@v5
       with:
         path: build/_deps
-        key: ${{ runner.os }}-deps-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
+        # The "2" bump invalidates caches saved before the repo was renamed
+        # gravisynth -> agentsynth: their FetchContent subbuild dirs have the
+        # old .../work/gravisynth/gravisynth absolute path baked in, which
+        # conflicts with the new .../work/agentsynth/agentsynth checkout path
+        # and trips CMake's directory-mismatch guard.
+        key: ${{ runner.os }}-deps2-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
         restore-keys: |
-          ${{ runner.os }}-deps-
+          ${{ runner.os }}-deps2-
 
     - name: Configure CMake
       run: |
@@ -160,9 +170,14 @@ jobs:
       uses: actions/cache@v5
       with:
         path: build/_deps
-        key: ${{ runner.os }}-deps-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
+        # The "2" bump invalidates caches saved before the repo was renamed
+        # gravisynth -> agentsynth: their FetchContent subbuild dirs have the
+        # old .../work/gravisynth/gravisynth absolute path baked in, which
+        # conflicts with the new .../work/agentsynth/agentsynth checkout path
+        # and trips CMake's directory-mismatch guard.
+        key: ${{ runner.os }}-deps2-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
         restore-keys: |
-          ${{ runner.os }}-deps-
+          ${{ runner.os }}-deps2-
 
     - name: Cache ccache
       uses: actions/cache@v5
@@ -206,9 +221,14 @@ jobs:
       uses: actions/cache@v5
       with:
         path: build/_deps
-        key: ${{ runner.os }}-deps-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
+        # The "2" bump invalidates caches saved before the repo was renamed
+        # gravisynth -> agentsynth: their FetchContent subbuild dirs have the
+        # old .../work/gravisynth/gravisynth absolute path baked in, which
+        # conflicts with the new .../work/agentsynth/agentsynth checkout path
+        # and trips CMake's directory-mismatch guard.
+        key: ${{ runner.os }}-deps2-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
         restore-keys: |
-          ${{ runner.os }}-deps-
+          ${{ runner.os }}-deps2-
 
     - name: Cache ccache
       uses: actions/cache@v5

@@ -84,10 +84,15 @@ jobs:
         path: build/_deps
         # The "-ninja" tag ties the cache to the generator so the stale
         # Visual-Studio-generator sub-build cache (pinned to an old VS version)
-        # is never restored after this workflow switched to Ninja.
-        key: ${{ runner.os }}-release-deps-ninja-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
+        # is never restored after this workflow switched to Ninja. The "2" bump
+        # invalidates caches saved before the repo was renamed gravisynth ->
+        # agentsynth: their FetchContent subbuild dirs have the old
+        # .../work/gravisynth/gravisynth absolute path baked in, which conflicts
+        # with the new .../work/agentsynth/agentsynth checkout path and trips
+        # CMake's directory-mismatch guard.
+        key: ${{ runner.os }}-release-deps-ninja2-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
         restore-keys: |
-          ${{ runner.os }}-release-deps-ninja-
+          ${{ runner.os }}-release-deps-ninja2-
 
     # Configure CMake — Ninja on every OS so this matches the PR CI build path
     # (see the "Setup MSVC" note above for why Ninja and not the VS generator).
