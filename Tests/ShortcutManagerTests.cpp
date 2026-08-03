@@ -42,8 +42,8 @@ TEST_F(ShortcutManagerTest, SetBinding_Updates) {
 TEST_F(ShortcutManagerTest, SaveAndLoad_RoundTrips) {
     juce::ApplicationProperties props;
     juce::PropertiesFile::Options opts;
-    opts.applicationName = "GravisynthShortcutTest";
-    opts.folderName = "GravisynthShortcutTest";
+    opts.applicationName = "ShortcutTest";
+    opts.folderName = "ShortcutTest";
     opts.filenameSuffix = "settings";
     opts.osxLibrarySubFolder = "Application Support";
     opts.storageFormat = juce::PropertiesFile::storeAsXML;

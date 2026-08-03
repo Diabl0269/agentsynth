@@ -1,6 +1,6 @@
 # Theming Guide
 
-Gravisynth ships with three built-in themes and a JSON-based theming system that lets you create
+Agent Synth ships with three built-in themes and a JSON-based theming system that lets you create
 and share your own visual styles.
 
 ---
@@ -131,7 +131,7 @@ them by name.
 > you intend to ship the theme as a launch default.
 Any other name falls back to the JUCE system sans-serif.
 
-> **Implementation note — typeface pre-creation.** `GravisynthLookAndFeel`'s constructor
+> **Implementation note — typeface pre-creation.** `AppLookAndFeel`'s constructor
 > pre-creates embedded typefaces for all six built-in font families (Inter, JetBrains Mono,
 > Manrope, Space Mono, IBM Plex Sans, IBM Plex Mono) and populates the per-instance
 > `typefaceCache` before any text is rendered. Creating an embedded typeface for the first time
@@ -154,7 +154,7 @@ Any other name falls back to the JUCE system sans-serif.
 
 ## 3. Icon Tinting
 
-Gravisynth uses SVG `Drawable` icons — **not** an icon or glyph font. This avoids the JUCE 8 / CoreText runtime font-family swap corruption described in the typography section above.
+Agent Synth uses SVG `Drawable` icons — **not** an icon or glyph font. This avoids the JUCE 8 / CoreText runtime font-family swap corruption described in the typography section above.
 
 ### Icon enum
 
@@ -172,11 +172,11 @@ WaveformSine     WaveformSaw      WaveformSquare   WaveformTriangle
 
 **`Icon::TransportPlay` is scaffolding** — the SVG asset is present and the enum value exists, but no `DrawableButton` is wired to it. It is tinted to `textMuted` and reserved for a future transport affordance.
 
-The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle`, indices 22–25) are rendered in the Oscillator waveform combo via `GravisynthLookAndFeel::drawPopupMenuItem` (14×14 glyph left of the item text) and `drawComboBox` (selected waveform glyph in the closed combo). `positionComboBoxText` shifts the label right when the selected item has an icon.
+The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle`, indices 22–25) are rendered in the Oscillator waveform combo via `AppLookAndFeel::drawPopupMenuItem` (14×14 glyph left of the item text) and `drawComboBox` (selected waveform glyph in the closed combo). `positionComboBoxText` shifts the label right when the selected item has an icon.
 
 ### Token → tint map
 
-`GravisynthLookAndFeel::retintIcons()` assigns tint colours from `theme_.colors`:
+`AppLookAndFeel::retintIcons()` assigns tint colours from `theme_.colors`:
 
 | Icons | Tint token |
 |---|---|
@@ -192,7 +192,7 @@ The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `W
 
 ### Null-fallback contract
 
-`IconLibrary::getDrawable(id)` returns `nullptr` when the `GRAVISYNTH_HAS_FONT_ASSETS` compile flag is absent (e.g. headless test builds without the asset target). All callers must null-check:
+`IconLibrary::getDrawable(id)` returns `nullptr` when the `HAS_FONT_ASSETS` compile flag is absent (e.g. headless test builds without the asset target). All callers must null-check:
 
 ```cpp
 if (auto d = lf->getIcon(Icon::ModuleBypass))
@@ -200,7 +200,7 @@ if (auto d = lf->getIcon(Icon::ModuleBypass))
 // else: button remains blank — acceptable in headless tests
 ```
 
-`GravisynthLookAndFeel::getIcon()` and `peekIcon()` delegate directly to the `IconLibrary` member and also return `nullptr` when the library has no asset for the requested id.
+`AppLookAndFeel::getIcon()` and `peekIcon()` delegate directly to the `IconLibrary` member and also return `nullptr` when the library has no asset for the requested id.
 
 ### Parallel-array design
 
@@ -232,9 +232,9 @@ Note: the spec text says "a-b.svg → `BinaryData::a_b_svg`" — this is incorre
 1. Create `assets/icons/<category>-<name>.svg` — 24×24 viewBox, `fill="#FFFFFF"` or `stroke="#FFFFFF" fill="none"`, no gradients / CSS / `<use>` / `<defs>`.
 2. Add the enum value to `Icon` in `IconLibrary.h` (before `kCount`).
 3. Add the `binaryDataForIcon` entry in `IconLibrary.cpp`'s `kTable` array (same order as enum). Symbol name = strip hyphens + `_svg` suffix.
-4. Add a tint assignment in `GravisynthLookAndFeel::retintIcons()`.
+4. Add a tint assignment in `AppLookAndFeel::retintIcons()`.
 5. The `static_assert(std::size(kTable) == (size_t)Icon::kCount, ...)` guards the count — it will fail to compile if step 3 is omitted.
-6. Rebuild `GravisynthAssets` to regenerate `BinaryData.h`.
+6. Rebuild `Assets` to regenerate `BinaryData.h`.
 
 ---
 
@@ -278,9 +278,9 @@ Lowercase or uppercase hex digits are both accepted.
 
 | Platform | Path |
 |---|---|
-| macOS | `~/Library/Application Support/Gravisynth/Themes` |
-| Windows | `%APPDATA%\Gravisynth\Themes` |
-| Linux | `~/.config/Gravisynth/Themes` |
+| macOS | `~/Library/Application Support/Agent Synth/Themes` |
+| Windows | `%APPDATA%\Agent Synth\Themes` |
+| Linux | `~/.config/Agent Synth/Themes` |
 
 You can also click **Open Themes Folder** in `Settings → Appearance` and the folder opens in your
 file manager (it is created automatically if it does not exist).
@@ -343,7 +343,7 @@ Open the file in any text editor. At minimum change `"name"` and (optionally) `"
 
 ### Step 4: Reload and select
 
-In Gravisynth: `Settings → Appearance → Reload Themes`. Your theme appears in the list.
+In Agent Synth: `Settings → Appearance → Reload Themes`. Your theme appears in the list.
 Click it to apply instantly.
 
 If the theme does not appear, check the log for a `[Theme] Skipped ...` error. Common issues:
@@ -448,7 +448,7 @@ and re-rendered once. There is no animation loop or per-tick repaint added.
 
 ### Phase 3 completions
 
-The following stock-widget overrides are now fully implemented in `GravisynthLookAndFeel`:
+The following stock-widget overrides are now fully implemented in `AppLookAndFeel`:
 
 - **ComboBox** — `drawComboBox` (pressed/disabled/focused states, drawn chevron arrow), `drawComboBoxTextWhenNothingSelected` (muted placeholder text)
 - **PopupMenu** — `drawPopupMenuItem` (separator hairline, highlight fill, drawn tick checkmark, submenu chevron, disabled dim)
@@ -457,15 +457,15 @@ The following stock-widget overrides are now fully implemented in `GravisynthLoo
 - **ListBox** — ColourId mappings (`backgroundColourId`, `textColourId`, `outlineColourId`) added in `applyTheme()`
 - **TabbedButtonBar** — `tabOutlineColourId` added in `applyTheme()`
 
-> **MidiKeyboardComponent limitation:** `juce_audio_utils` is not linked into `GravisynthCore` (it would bloat the headless test binary). As a result, `MidiKeyboardComponent` inherits JUCE default colours and cannot be themed from `GravisynthLookAndFeel`. This is a known and accepted limitation.
+> **MidiKeyboardComponent limitation:** `juce_audio_utils` is not linked into `Core` (it would bloat the headless test binary). As a result, `MidiKeyboardComponent` inherits JUCE default colours and cannot be themed from `AppLookAndFeel`. This is a known and accepted limitation.
 
 ### Phase 5 completions
 
-- **TooltipWindow** — a single `juce::TooltipWindow` is now owned by `MainComponent` (member `tooltipWindow{ this }`). The tooltip `ColourIds` and `drawTooltip` override were already present in `GravisynthLookAndFeel`; this instance causes them to take effect. Feature code calls `setTooltip()` on individual controls; no second `TooltipWindow` should be created elsewhere.
+- **TooltipWindow** — a single `juce::TooltipWindow` is now owned by `MainComponent` (member `tooltipWindow{ this }`). The tooltip `ColourIds` and `drawTooltip` override were already present in `AppLookAndFeel`; this instance causes them to take effect. Feature code calls `setTooltip()` on individual controls; no second `TooltipWindow` should be created elsewhere.
 
 ### Phase 4 completions
 
-- **Waveform glyphs** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle`) — SVG assets added in `assets/icons/waveform-{sine,saw,square,triangle}.svg`; `Icon` enum values 22–25 registered in `IconLibrary`; tinted to `textPrimary` by `retintIcons()`; consumed by `ModuleComponent` waveform combos (Oscillator). `GravisynthLookAndFeel::drawPopupMenuItem` now paints the 14×14 waveform glyph left of the item text; `drawComboBox` renders the selected waveform glyph in the closed combo; `positionComboBoxText` shifts the label right when the selected item carries a glyph.
+- **Waveform glyphs** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle`) — SVG assets added in `assets/icons/waveform-{sine,saw,square,triangle}.svg`; `Icon` enum values 22–25 registered in `IconLibrary`; tinted to `textPrimary` by `retintIcons()`; consumed by `ModuleComponent` waveform combos (Oscillator). `AppLookAndFeel::drawPopupMenuItem` now paints the 14×14 waveform glyph left of the item text; `drawComboBox` renders the selected waveform glyph in the closed combo; `positionComboBoxText` shifts the label right when the selected item carries a glyph.
 
 ### Still deferred
 
@@ -497,7 +497,7 @@ main `parseTheme` / `themeToJson` pair:
 
 ### Knob sweep arc constants
 
-`GravisynthLookAndFeel` declares two `static constexpr float` constants that define the 270°
+`AppLookAndFeel` declares two `static constexpr float` constants that define the 270°
 rotary sweep arc shared by knob drawing (`drawRotarySlider`) and modulation ring drawing
 (`drawModulationRing`):
 
@@ -512,7 +512,7 @@ co-aligned regardless of what the `Slider` component was configured with.
 
 ### Toolbar icon gating
 
-`applyToolbarIcons()` clones `Drawable` instances from `GravisynthLookAndFeel` and assigns them
+`applyToolbarIcons()` clones `Drawable` instances from `AppLookAndFeel` and assigns them
 to each toolbar `DrawableButton` — this is non-trivial Drawable clone work. To avoid repeating
 it on every resize frame, `MainComponent::resized()` gates the call: `applyToolbarIcons()` is
 only called when the toolbar transitions **into** narrow mode (detected by comparing the new

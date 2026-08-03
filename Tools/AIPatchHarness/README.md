@@ -4,7 +4,7 @@ Measures how often AI-generated patches actually pass `AIStateMapper::validatePa
 `PatchValidationError` values dominate when they don't.
 
 It is a measurement instrument, not a test. It needs a live Ollama instance, so it is excluded
-from `GravisynthTests` and from CI, and must be opted into at configure time.
+from `Tests` and from CI, and must be opted into at configure time.
 
 ## Running
 

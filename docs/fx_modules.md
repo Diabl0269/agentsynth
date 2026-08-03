@@ -1,6 +1,6 @@
 # FX Modules Reference
 
-Technical documentation for the Gravisynth effects suite.
+Technical documentation for the Agent Synth effects suite.
 
 ## Distortion Module
 - **Algorithm**: Three waveshaper types selectable via the Type parameter:

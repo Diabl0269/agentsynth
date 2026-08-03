@@ -1,5 +1,5 @@
 // ThemeTests.cpp
-// Headless unit tests for the Gravisynth theme system.
+// Headless unit tests for the Agent Synth theme system.
 // Covers ThemeManager, ThemeLoader, BuiltInThemes, AppLookAndFeel::applyTheme,
 // and the WCAG contrast requirement.  All 15 cases from spec section 9.
 
@@ -43,7 +43,7 @@ class ThemeTest : public ::testing::Test {
 protected:
     void SetUp() override {
         juce::PropertiesFile::Options options;
-        options.applicationName = "GravisynthThemeTest";
+        options.applicationName = "ThemeTest";
         options.filenameSuffix = "test";
         options.storageFormat = juce::PropertiesFile::storeAsXML;
         appProperties.setStorageParameters(options);
@@ -149,7 +149,7 @@ TEST(ThemeLookAndFeelTest, ApplyThemeSetsEveryColourId) {
     EXPECT_EQ(lf.findColour(juce::TabbedButtonBar::tabTextColourId), c.textMuted);
     EXPECT_EQ(lf.findColour(juce::TabbedButtonBar::frontTextColourId), c.textPrimary);
     EXPECT_EQ(lf.findColour(juce::TabbedButtonBar::tabOutlineColourId), c.border);
-    // MidiKeyboardComponent ColourIds (juce_audio_utils) are not linked into GravisynthCore;
+    // MidiKeyboardComponent ColourIds (juce_audio_utils) are not linked into Core;
     // the on-screen keyboard keeps JUCE defaults for now (see AppLookAndFeel::applyTheme).
 }
 
@@ -223,8 +223,8 @@ TEST(ThemeLoaderTest, JsonRoundTrip) {
 // 5. ObsidianFileMatchesBuiltIn
 // ---------------------------------------------------------------------------
 TEST(ThemeLoaderTest, ObsidianFileMatchesBuiltIn) {
-#ifdef GRAVISYNTH_THEMES_DIR
-    juce::File themesDir(GRAVISYNTH_THEMES_DIR);
+#ifdef THEMES_DIR
+    juce::File themesDir(THEMES_DIR);
 #else
     // Fallback: resolve relative to this source file (for local IDE builds).
     juce::File thisFile(__FILE__);
@@ -693,7 +693,7 @@ TEST(ThemeLookAndFeelTest, RetintIconsCalledByApplyTheme) {
                                                        synth::theme::makeWarm()};
     for (const auto& t : themes) {
         EXPECT_NO_THROW(lf.applyTheme(t));
-#ifdef GRAVISYNTH_HAS_FONT_ASSETS
+#ifdef HAS_FONT_ASSETS
         EXPECT_NE(lf.getIcon(synth::theme::Icon::ActionUndo), nullptr);
         EXPECT_NE(lf.peekIcon(synth::theme::Icon::ModuleDelete), nullptr);
         EXPECT_NE(lf.getIcon(synth::theme::Icon::CatSources), nullptr);

@@ -1,6 +1,6 @@
 #include "IconLibrary.h"
 
-#ifdef GRAVISYNTH_HAS_FONT_ASSETS
+#ifdef HAS_FONT_ASSETS
 #include "BinaryData.h"
 #endif
 
@@ -45,7 +45,7 @@ const juce::Drawable* IconLibrary::peekDrawable(Icon id) const noexcept {
 
 //==============================================================================
 std::pair<const void*, int> IconLibrary::binaryDataForIcon(Icon id) {
-#ifdef GRAVISYNTH_HAS_FONT_ASSETS
+#ifdef HAS_FONT_ASSETS
     // Exhaustive lookup table — if Icon::kCount changes, this array must be updated.
     // The static_assert below guards the count.
     //

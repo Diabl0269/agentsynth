@@ -8,7 +8,7 @@ class SettingsMigrationTest : public ::testing::Test {
 protected:
     void SetUp() override {
         parentDir = juce::File::getSpecialLocation(juce::File::tempDirectory)
-                        .getChildFile("GravisynthSettingsMigrationTest")
+                        .getChildFile("SettingsMigrationTest")
                         .getNonexistentChildFile("run", "", false);
         parentDir.createDirectory();
     }

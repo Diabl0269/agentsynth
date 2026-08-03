@@ -6,8 +6,8 @@ Guidance for AGENTS Code (AGENTS.ai/code) in this repository. Keep this file **l
 
 Modular synthesizer (JUCE, C++20) with a node-based graph editor for sound design — connect audio/CV modules in a visual patching environment. Two CMake targets:
 
-- **GravisynthCore** — the library: all audio-processing modules + core logic. Headless-testable (no audio device, no GUI).
-- **Gravisynth** — the JUCE GUI application built on top of the core (GraphEditor, ModuleComponent, chrome).
+- **Core** — the library: all audio-processing modules + core logic. Headless-testable (no audio device, no GUI).
+- **AgentSynth** — the JUCE GUI application built on top of the core (GraphEditor, ModuleComponent, chrome).
 
 ## Commands
 
@@ -17,9 +17,9 @@ cmake -S . -B build && cmake --build build
 
 # Test  (ENABLE_TESTS defaults OFF — must opt in)
 cmake -S . -B build -DENABLE_TESTS=ON
-cmake --build build --target GravisynthTests
-./build/Tests/GravisynthTests
-./build/Tests/GravisynthTests --gtest_filter="E2EWorkflow*"   # E2E only
+cmake --build build --target Tests
+./build/Tests/Tests
+./build/Tests/Tests --gtest_filter="E2EWorkflow*"   # E2E only
 
 # Coverage  (threshold 85%)
 bash scripts/coverage.sh

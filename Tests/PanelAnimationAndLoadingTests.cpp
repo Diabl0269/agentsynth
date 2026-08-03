@@ -82,7 +82,7 @@ struct TestPropsOwner {
     juce::ApplicationProperties props;
     TestPropsOwner() {
         juce::PropertiesFile::Options opts;
-        opts.applicationName = "GravisynthPALTest";
+        opts.applicationName = "PALTest";
         opts.filenameSuffix = "test";
         opts.storageFormat = juce::PropertiesFile::storeAsXML;
         props.setStorageParameters(opts);
@@ -92,8 +92,8 @@ struct TestPropsOwner {
 // Helper to reset panel-visibility keys so tests are hermetic.
 static void resetPanelKeys() {
     juce::PropertiesFile::Options opts;
-    opts.applicationName = "Gravisynth";
-    opts.folderName = "Gravisynth";
+    opts.applicationName = "Agent Synth";
+    opts.folderName = "Agent Synth";
     opts.filenameSuffix = "settings";
     opts.osxLibrarySubFolder = "Application Support";
     opts.storageFormat = juce::PropertiesFile::storeAsXML;

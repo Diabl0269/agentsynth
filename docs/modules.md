@@ -1,6 +1,6 @@
 # Core Modules Reference
 
-Detailed specifications for Gravisynth's primary synthesis modules.
+Detailed specifications for Agent Synth's primary synthesis modules.
 
 ## Oscillator Module
 - **Waveforms**: Sine, Square, Saw, Triangle.
@@ -149,7 +149,7 @@ In poly mode, voices occupy channels 0-7 (audio/pitch/gate) and the shared-CV bl
 
 ## Modulation System
 
-Gravisynth uses a **hidden Attenuverter architecture** for modulation depth control, inspired by Serum's mod matrix. The engine derives a first-class `ModulationRouting` model from the graph at runtime. See [docs/modulation.md](modulation.md) for the full reference.
+Agent Synth uses a **hidden Attenuverter architecture** for modulation depth control, inspired by Serum's mod matrix. The engine derives a first-class `ModulationRouting` model from the graph at runtime. See [docs/modulation.md](modulation.md) for the full reference.
 
 ### Smart Cables
 - Every mono CV cable (AttenuverterChain routing) renders a circular knob at the midpoint of the bezier curve.

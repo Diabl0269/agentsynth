@@ -1,4 +1,4 @@
-# Gravisynth clang-format style. The clang-format VERSION is pinned in
+# Agent Synth clang-format style. The clang-format VERSION is pinned in
 # .clang-format-version (CI and the git hooks install that exact PyPI wheel:
 #   pip install "clang-format==$(cat .clang-format-version)").
 BasedOnStyle: LLVM
