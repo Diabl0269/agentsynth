@@ -57,8 +57,8 @@ Agent Synth uses CMake for its build system.
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/Diabl0269/gravisynth.git
-    cd gravisynth
+    git clone https://github.com/Diabl0269/agentsynth.git
+    cd agentsynth
     ```
 
 2.  **Configure CMake:**
