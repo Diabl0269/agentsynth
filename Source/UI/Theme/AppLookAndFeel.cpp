@@ -1,6 +1,6 @@
 #include "AppLookAndFeel.h"
 
-#ifdef GRAVISYNTH_HAS_FONT_ASSETS
+#ifdef HAS_FONT_ASSETS
 #include "BinaryData.h"
 #endif
 
@@ -8,10 +8,10 @@ namespace synth::theme {
 
 namespace {
 // Map a family name + weight to an embedded typeface. Only meaningful when the app is
-// built with GRAVISYNTH_HAS_FONT_ASSETS; otherwise returns nullptr so the caller falls
+// built with HAS_FONT_ASSETS; otherwise returns nullptr so the caller falls
 // back to the JUCE default (tests / Core).
 juce::Typeface::Ptr loadEmbeddedTypeface(const juce::String& family, bool bold, bool medium) {
-#ifdef GRAVISYNTH_HAS_FONT_ASSETS
+#ifdef HAS_FONT_ASSETS
     const void* data = nullptr;
     int dataSize = 0;
 
@@ -167,7 +167,7 @@ void AppLookAndFeel::applyTheme(const Theme& newTheme) {
     setColour(juce::TabbedButtonBar::frontTextColourId, c.textPrimary);
     setColour(juce::TabbedButtonBar::tabOutlineColourId, c.border);
 
-    // MidiKeyboardComponent ColourIds live in juce_audio_utils, which GravisynthCore does
+    // MidiKeyboardComponent ColourIds live in juce_audio_utils, which Core does
     // not link; the on-screen keyboard keeps JUCE defaults for now (themed in a later phase).
 
     // ---- typefaces + default font ----

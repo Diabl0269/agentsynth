@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(Gravisynth VERSION 0.13.2)
+project(AgentSynth VERSION 0.13.2)
 
 # Enable ccache if available
 find_program(CCACHE_PROGRAM ccache)
@@ -31,9 +31,9 @@ option(ENABLE_AI_HARNESS "Build the AI patch validity measurement harness (needs
 # (e.g. `cmake -S . -B build -DSYNTH_PRODUCT_NAME=MySynth`). Mirrored in C++ at
 # Source/Branding.h, which JUCE's PRODUCT_NAME/COMPANY_NAME/BUNDLE_ID args can't read
 # directly since they're consumed at configure time, not compile time.
-set(SYNTH_PRODUCT_NAME "Gravisynth" CACHE STRING "Display name: window title, About box, installer")
+set(SYNTH_PRODUCT_NAME "Agent Synth" CACHE STRING "Display name: window title, About box, installer")
 set(SYNTH_COMPANY_NAME "yourcompany" CACHE STRING "JUCE COMPANY_NAME / macOS bundle vendor")
-set(SYNTH_BUNDLE_ID "com.gravisynth.app" CACHE STRING "macOS/iOS CFBundleIdentifier")
+set(SYNTH_BUNDLE_ID "com.agentsynth.app" CACHE STRING "macOS/iOS CFBundleIdentifier")
 
 if(ENABLE_COVERAGE)
     if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
@@ -46,7 +46,7 @@ if(ENABLE_COVERAGE)
 endif()
 
 # Create the core library
-add_library(GravisynthCore STATIC
+add_library(Core STATIC
     Source/AudioEngine.cpp
     Source/AudioEngine.h
     Source/AppUndoManager.cpp
@@ -108,7 +108,7 @@ add_library(GravisynthCore STATIC
 )
 
 # Link Core against JUCE
-target_link_libraries(GravisynthCore PUBLIC
+target_link_libraries(Core PUBLIC
     juce::juce_core
     juce::juce_events
     juce::juce_graphics
@@ -124,7 +124,7 @@ target_link_libraries(GravisynthCore PUBLIC
     juce::juce_dsp
 )
 
-target_compile_definitions(GravisynthCore PUBLIC JUCE_WEB_BROWSER=0)
+target_compile_definitions(Core PUBLIC JUCE_WEB_BROWSER=0)
 
 if(UNIX AND NOT APPLE)
     find_package(PkgConfig REQUIRED)
@@ -133,22 +133,22 @@ if(UNIX AND NOT APPLE)
     find_package(CURL REQUIRED)
 
     # Link to Core so JUCE modules compiled within it find the headers
-    target_link_libraries(GravisynthCore PUBLIC ${GTK3_LIBRARIES} CURL::libcurl)
-    target_include_directories(GravisynthCore PUBLIC ${GTK3_INCLUDE_DIRS})
+    target_link_libraries(Core PUBLIC ${GTK3_LIBRARIES} CURL::libcurl)
+    target_include_directories(Core PUBLIC ${GTK3_INCLUDE_DIRS})
 endif()
 
-target_include_directories(GravisynthCore PUBLIC
+target_include_directories(Core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/Source
 )
 
 if(MSVC)
-    target_compile_options(GravisynthCore PRIVATE /W4)
+    target_compile_options(Core PRIVATE /W4)
 else()
-    target_compile_options(GravisynthCore PRIVATE -Wall -Wextra)
+    target_compile_options(Core PRIVATE -Wall -Wextra)
 endif()
 
 # Create the application target
-juce_add_gui_app(Gravisynth
+juce_add_gui_app(AgentSynth
     PRODUCT_NAME "${SYNTH_PRODUCT_NAME}"
     VERSION "0.13.2"
     COMPANY_NAME "${SYNTH_COMPANY_NAME}"
@@ -157,11 +157,11 @@ juce_add_gui_app(Gravisynth
     BLUETOOTH_PERMISSION_TEXT "We need Bluetooth access to connect to your external MIDI devices."
 )
 
-juce_generate_juce_header(Gravisynth)
+juce_generate_juce_header(AgentSynth)
 
 # Embed font files as binary data (SIL OFL licensed — see assets/fonts/LICENSES.md).
-# AppLookAndFeel (compiled into GravisynthCore) loads these typefaces from BinaryData,
-# so the asset library + GRAVISYNTH_HAS_FONT_ASSETS define are attached to Core (PUBLIC) below;
+# AppLookAndFeel (compiled into Core) loads these typefaces from BinaryData,
+# so the asset library + HAS_FONT_ASSETS define are attached to Core (PUBLIC) below;
 # the app and the test target both link Core and therefore resolve the BinaryData symbols.
 # Guard: icon filenames must use hyphens only (JUCE strips hyphens entirely, so 'a-b.svg' becomes
 # BinaryData::ab_svg; underscores in filenames would collide with the separator).
@@ -174,7 +174,7 @@ foreach(f ${ICON_FILES})
     endif()
 endforeach()
 
-juce_add_binary_data(GravisynthAssets SOURCES
+juce_add_binary_data(Assets SOURCES
     assets/fonts/Inter-Regular.ttf
     assets/fonts/Inter-Medium.ttf
     assets/fonts/Inter-SemiBold.ttf
@@ -223,14 +223,14 @@ juce_add_binary_data(GravisynthAssets SOURCES
     assets/icons/waveform-triangle.svg
 )
 
-# The themed LookAndFeel lives in GravisynthCore and pulls typefaces from BinaryData;
+# The themed LookAndFeel lives in Core and pulls typefaces from BinaryData;
 # attach the asset lib + feature define to Core (PUBLIC) so the app AND the test target
 # (both link Core) compile the font path and resolve the BinaryData symbols.
-target_link_libraries(GravisynthCore PUBLIC GravisynthAssets)
-target_compile_definitions(GravisynthCore PUBLIC GRAVISYNTH_HAS_FONT_ASSETS=1)
+target_link_libraries(Core PUBLIC Assets)
+target_compile_definitions(Core PUBLIC HAS_FONT_ASSETS=1)
 
 # Add source files
-target_sources(Gravisynth PRIVATE
+target_sources(AgentSynth PRIVATE
     Source/Main.cpp
     Source/MainComponent.cpp
     Source/MainComponent.h
@@ -252,9 +252,9 @@ target_sources(Gravisynth PRIVATE
 )
 
 # Link against JUCE modules
-target_link_libraries(Gravisynth PRIVATE
-    GravisynthCore # Link to our core library
-    GravisynthAssets # Embedded font binary data
+target_link_libraries(AgentSynth PRIVATE
+    Core # Link to our core library
+    Assets # Embedded font binary data
     juce::juce_core
     juce::juce_events
     juce::juce_graphics
@@ -270,21 +270,21 @@ target_link_libraries(Gravisynth PRIVATE
     juce::juce_dsp
 )
 
-target_compile_definitions(Gravisynth PRIVATE
+target_compile_definitions(AgentSynth PRIVATE
     JUCE_WEB_BROWSER=0
-    GRAVISYNTH_HAS_FONT_ASSETS=1
+    HAS_FONT_ASSETS=1
 )
 
 if(UNIX AND NOT APPLE)
-    target_link_libraries(Gravisynth PRIVATE ${GTK3_LIBRARIES})
-    target_include_directories(Gravisynth PRIVATE ${GTK3_INCLUDE_DIRS})
+    target_link_libraries(AgentSynth PRIVATE ${GTK3_LIBRARIES})
+    target_include_directories(AgentSynth PRIVATE ${GTK3_INCLUDE_DIRS})
 endif()
 
 # Enable strict warnings to catch issues early
 if(MSVC)
-    target_compile_options(Gravisynth PRIVATE /W4)
+    target_compile_options(AgentSynth PRIVATE /W4)
 else()
-    target_compile_options(Gravisynth PRIVATE -Wall -Wextra)
+    target_compile_options(AgentSynth PRIVATE -Wall -Wextra)
 endif()
 
 if(ENABLE_TESTS)

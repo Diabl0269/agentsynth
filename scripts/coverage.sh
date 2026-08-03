@@ -13,11 +13,11 @@ if [ "$REPORT_ONLY" = false ]; then
   cmake -B build -DCMAKE_BUILD_TYPE=Debug -DENABLE_COVERAGE=ON
 
   # Build the tests
-  cmake --build build --target GravisynthTests
+  cmake --build build --target Tests
 
   # Run the tests
   export LLVM_PROFILE_FILE="default.profraw"
-  ./build/Tests/GravisynthTests
+  ./build/Tests/Tests
 fi
 
 # Generate coverage report
@@ -37,7 +37,7 @@ $PROFDATA merge -sparse default.profraw -o default.profdata
 echo "Generating coverage report..."
 # Capture the report output
 REPORT=$($COV report \
-    ./build/Tests/GravisynthTests \
+    ./build/Tests/Tests \
     -instr-profile=default.profdata \
     -ignore-filename-regex="JuceLibraryCode|build/_deps|Tests|Source/UI|Source/Main\.cpp|Source/MainComponent")
 

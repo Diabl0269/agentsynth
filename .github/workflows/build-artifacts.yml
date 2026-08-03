@@ -36,19 +36,19 @@ jobs:
           - os: ubuntu-latest
             platform: Linux
             arch: x64
-            artifact_name: Gravisynth-Linux-x64
+            artifact_name: AgentSynth-Linux-x64
 
           # macOS arm64 (Apple Silicon)
           - os: macos-latest
             platform: macOS
             arch: arm64
-            artifact_name: Gravisynth-macOS-arm64
+            artifact_name: AgentSynth-macOS-arm64
 
           # Windows x64
           - os: windows-latest
             platform: Windows
             arch: x64
-            artifact_name: Gravisynth-Windows-x64
+            artifact_name: AgentSynth-Windows-x64
 
     steps:
     - uses: actions/checkout@v6
@@ -84,10 +84,15 @@ jobs:
         path: build/_deps
         # The "-ninja" tag ties the cache to the generator so the stale
         # Visual-Studio-generator sub-build cache (pinned to an old VS version)
-        # is never restored after this workflow switched to Ninja.
-        key: ${{ runner.os }}-release-deps-ninja-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
+        # is never restored after this workflow switched to Ninja. The "2" bump
+        # invalidates caches saved before the repo was renamed gravisynth ->
+        # agentsynth: their FetchContent subbuild dirs have the old
+        # .../work/gravisynth/gravisynth absolute path baked in, which conflicts
+        # with the new .../work/agentsynth/agentsynth checkout path and trips
+        # CMake's directory-mismatch guard.
+        key: ${{ runner.os }}-release-deps-ninja2-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
         restore-keys: |
-          ${{ runner.os }}-release-deps-ninja-
+          ${{ runner.os }}-release-deps-ninja2-
 
     # Configure CMake — Ninja on every OS so this matches the PR CI build path
     # (see the "Setup MSVC" note above for why Ninja and not the VS generator).
@@ -104,20 +109,20 @@ jobs:
       if: runner.os == 'Linux'
       run: |
         mkdir -p artifact
-        find build -name Gravisynth -type f -perm /111 -exec cp {} artifact/ \; || true
-        if [ ! -f artifact/Gravisynth ]; then
-            find build -name Gravisynth -type f -exec cp {} artifact/ \;
+        find build -name "Agent Synth" -type f -perm /111 -exec cp {} artifact/ \; || true
+        if [ ! -f "artifact/Agent Synth" ]; then
+            find build -name "Agent Synth" -type f -exec cp {} artifact/ \;
         fi
-        chmod +x artifact/Gravisynth
+        chmod +x "artifact/Agent Synth"
 
     # Package macOS
     - name: Package macOS Artifact
       if: runner.os == 'macOS'
       run: |
         mkdir -p artifact
-        APP_PATH=$(find build -name Gravisynth.app -type d -maxdepth 3 | head -n 1)
+        APP_PATH=$(find build -name "Agent Synth.app" -type d -maxdepth 3 | head -n 1)
         if [ -z "$APP_PATH" ]; then
-          echo "Gravisynth.app not found!"
+          echo "Agent Synth.app not found!"
           exit 1
         fi
         echo "Found app at: $APP_PATH"
@@ -134,7 +139,7 @@ jobs:
       shell: pwsh
       run: |
         New-Item -ItemType Directory -Force -Path artifact
-        Get-ChildItem -Path build -Recurse -Filter Gravisynth.exe | Copy-Item -Destination artifact\
+        Get-ChildItem -Path build -Recurse -Filter "Agent Synth.exe" | Copy-Item -Destination artifact\
 
     # Upload Artifact
     - name: Upload Artifact

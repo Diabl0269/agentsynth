@@ -24,14 +24,14 @@ echo "Pre-push: Running Release build + tests..."
 if [ ! -f "$BUILD_DIR/CMakeCache.txt" ]; then
     echo "Pre-push: Configuring Release build (first run)..."
     # ENABLE_TESTS defaults OFF, so it must be set explicitly or the
-    # GravisynthTests target is never generated ("No rule to make target").
+    # Tests target is never generated ("No rule to make target").
     cmake -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release -DENABLE_TESTS=ON
 fi
 
 # Incremental build
-cmake --build "$BUILD_DIR" --target GravisynthTests -- -j$(sysctl -n hw.ncpu 2>/dev/null || nproc)
+cmake --build "$BUILD_DIR" --target Tests -- -j$(sysctl -n hw.ncpu 2>/dev/null || nproc)
 
 # Run tests
-"$BUILD_DIR/Tests/GravisynthTests"
+"$BUILD_DIR/Tests/Tests"
 
 echo "Pre-push: All tests passed in Release mode."

@@ -1,9 +1,9 @@
-# Gravisynth AI Engine Documentation
+# Agent Synth AI Engine Documentation
 
-This document provides a comprehensive overview of the AI Engine integrated into Gravisynth, detailing its architecture, components, communication patterns, and key functionalities.
+This document provides a comprehensive overview of the AI Engine integrated into Agent Synth, detailing its architecture, components, communication patterns, and key functionalities.
 
 ## 1. Overview
-The Gravisynth AI Engine serves as an intelligent sound design assistant, enabling users to generate and modify synthesizer patches using natural language commands. Its primary goal is to bridge the gap between intuitive textual instructions and the complex, modular architecture of the Gravisynth synthesizer. This allows for a more accessible and creative sound design workflow.
+The Agent Synth AI Engine serves as an intelligent sound design assistant, enabling users to generate and modify synthesizer patches using natural language commands. Its primary goal is to bridge the gap between intuitive textual instructions and the complex, modular architecture of the Agent Synth synthesizer. This allows for a more accessible and creative sound design workflow.
 
 ## 2. Architecture
 
@@ -11,7 +11,7 @@ The AI Engine's architecture is designed for modularity and extensibility, prima
 
 ### Core Components:
 
--   **`AIProvider`**: An abstract interface defining the contract for any AI backend integration. This allows Gravisynth to support various large language models (LLMs) or AI services (e.g., Ollama, OpenAI) by implementing this interface. It specifies methods for sending prompts, retrieving responses, and managing available models.
+-   **`AIProvider`**: An abstract interface defining the contract for any AI backend integration. This allows Agent Synth to support various large language models (LLMs) or AI services (e.g., Ollama, OpenAI) by implementing this interface. It specifies methods for sending prompts, retrieving responses, and managing available models.
 
 -   **`OllamaProvider`**: A concrete implementation of the `AIProvider` interface specifically designed to interact with local Ollama instances. It handles the HTTP communication with the Ollama API, including fetching available models and managing chat completions.
 
@@ -23,7 +23,7 @@ The AI Engine's architecture is designed for modularity and extensibility, prima
     *   Managing the selection and fetching of available AI models.
     *   Notifying listeners of AI-driven changes to the synthesizer state.
 
--   **`AIStateMapper`**: A utility component responsible for translating between the AI-friendly JSON representation of a synthesizer patch and Gravisynth's internal `juce::AudioProcessorGraph` structure. It handles both `graphToJSON` (for providing context to the AI) and `applyJSONToGraph` (for applying AI suggestions).
+-   **`AIStateMapper`**: A utility component responsible for translating between the AI-friendly JSON representation of a synthesizer patch and Agent Synth's internal `juce::AudioProcessorGraph` structure. It handles both `graphToJSON` (for providing context to the AI) and `applyJSONToGraph` (for applying AI suggestions).
 
 ### Interaction Flow:
 
@@ -37,7 +37,7 @@ The AI Engine's architecture is designed for modularity and extensibility, prima
 
 ## 3. Communication Pattern
 
-The AI communicates with Gravisynth using a simplified JSON schema to describe synthesizer patches. This schema defines nodes (representing modules) and connections between them.
+The AI communicates with Agent Synth using a simplified JSON schema to describe synthesizer patches. This schema defines nodes (representing modules) and connections between them.
 
 ### Example JSON Patch Format:
 

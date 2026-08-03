@@ -8,7 +8,7 @@ computes a topological signal-flow layout, and the full `LayoutUtil` API referen
 
 ## 1. Soft-Grid Model
 
-Gravisynth uses a **soft grid** — the same approach taken by Max/MSP, Bitwig Grid, and Blender's
+Agent Synth uses a **soft grid** — the same approach taken by Max/MSP, Bitwig Grid, and Blender's
 node editor. Modules are free-form (you can place them anywhere on the 10000×10000 canvas), but
 two layout rules are always enforced:
 
@@ -172,7 +172,7 @@ The application chrome is carved out of `MainComponent::resized()` — the singl
 
 ### ToolbarComponent `paint()`
 
-`paint()` fills the toolbar background with `theme.colors.bg0` via a `dynamic_cast<GravisynthLookAndFeel*>`. When the cast returns null (headless tests or non-themed context), it falls back to the hardcoded colour `0xff0B0D10`.
+`paint()` fills the toolbar background with `theme.colors.bg0` via a `dynamic_cast<AppLookAndFeel*>`. When the cast returns null (headless tests or non-themed context), it falls back to the hardcoded colour `0xff0B0D10`.
 
 ### Toolbar FlexBox layout (`ToolbarComponent`)
 
@@ -240,7 +240,7 @@ The status bar polls at 5 Hz, driven by `MainComponent`'s 10 Hz timer via an eve
 
 ### ModuleLibraryComponent section headers
 
-Each category section-header entry in `ModuleLibraryComponent::paint()` draws a 16×16 category icon at `x=10` using `lf->peekIcon(catIcon)`, then shifts the header text to `x=30`. This is null-guarded: when the `GravisynthLookAndFeel` cast returns null (headless tests or assets absent), no icon is drawn and header text falls back to the original `x=10` position.
+Each category section-header entry in `ModuleLibraryComponent::paint()` draws a 16×16 category icon at `x=10` using `lf->peekIcon(catIcon)`, then shifts the header text to `x=30`. This is null-guarded: when the `AppLookAndFeel` cast returns null (headless tests or assets absent), no icon is drawn and header text falls back to the original `x=10` position.
 
 ### ModMatrixComponent chrome
 
@@ -264,7 +264,7 @@ The header area of each module card (`Source/UI/ModuleComponent.cpp`) contains t
 
 `requestDeleteModule(NodeID)` is the canonical delete entry point — `deleteButton.onClick` delegates here.
 
-`applyHeaderButtonIcons()` retints all three buttons from the active `GravisynthLookAndFeel`. It is null-guarded: when the LnF cast fails (headless tests), the function returns early and buttons remain imageless but functional. `lookAndFeelChanged()` calls `applyHeaderButtonIcons()` so icons update on theme switch.
+`applyHeaderButtonIcons()` retints all three buttons from the active `AppLookAndFeel`. It is null-guarded: when the LnF cast fails (headless tests), the function returns early and buttons remain imageless but functional. `lookAndFeelChanged()` calls `applyHeaderButtonIcons()` so icons update on theme switch.
 
 ### Panel collapse and persistence
 
@@ -454,7 +454,7 @@ through are excluded from the arrangeable set.
 ## 8. Drag Affordance — Grid Dots + Landing Ghost
 
 During any module drag (moving an existing module or dragging one in from the library sidebar),
-Gravisynth draws two visual cues over the canvas so placement is predictable and beautiful.
+Agent Synth draws two visual cues over the canvas so placement is predictable and beautiful.
 
 ### Grid dots
 
@@ -541,7 +541,7 @@ Oscilloscope waveform display used by all modules that have a `VisualBuffer`.
 | `isNoSignal` | `static bool isNoSignal(float peak) noexcept` | Returns `true` when `peak <= 0.02f` |
 | `amplitudeToY` | `static float amplitudeToY(float amp, juce::Rectangle<float> bounds) noexcept` | Maps amplitude [-1,1] → y pixel; amp=+1 → top, amp=-1 → bottom, amp=0 → centre; uses 45% height per side |
 
-**Themed colours**: resolved via `dynamic_cast<GravisynthLookAndFeel*>` — `border` for grid, `textDisabled` for no-signal label, `accent` for the waveform. When the cast fails (headless), hardcoded fallbacks are used (`0xff2A2F38`, `0xff5C6470`, limegreen).
+**Themed colours**: resolved via `dynamic_cast<AppLookAndFeel*>` — `border` for grid, `textDisabled` for no-signal label, `accent` for the waveform. When the cast fails (headless), hardcoded fallbacks are used (`0xff2A2F38`, `0xff5C6470`, limegreen).
 
 ---
 
@@ -551,7 +551,7 @@ Guidelines to preserve smooth frame rates:
 
 - **`ModuleComponent` uses `setBufferedToImage(true)`**. Each module card is composited as a cached image. The `GraphEditor` 30 Hz connection animation blits these cached images rather than re-running JUCE text layout and parameter read on every animation frame. **Do not reintroduce unconditional `repaint()` calls in `timerCallback` on module components or their always-visible children.**
 - **Gated 15 Hz repaint**: `ModuleComponent::timerCallback` repaints only when the display needs to change — specifically when RMS level changes, active modulation routing changes, or the sequencer step index changes. The timer runs at 15 Hz (`startTimerHz(15)`).
-- **Single re-skin pass on theme switch**: `GravisynthLookAndFeel::applyTheme()` → `sendLookAndFeelChangeMessage()` → one `repaint()`. No timer is started and no continuous repaint is added during or after a theme switch.
+- **Single re-skin pass on theme switch**: `AppLookAndFeel::applyTheme()` → `sendLookAndFeelChangeMessage()` → one `repaint()`. No timer is started and no continuous repaint is added during or after a theme switch.
 - **`applyToolbarIcons()` is gated**: cloning `Drawable` objects is expensive. The call is restricted to narrow-mode transitions in `MainComponent::resized()` — not executed on every resize frame. See §5 for the gate logic.
 - **Status bar polls at 5 Hz** and repaints only itself (`repaint()` on `StatusBarComponent` only). There are zero `writeToLog` calls in the status-polling path.
 - **All UI animations are time-bounded** (see §11). They run for a finite transition duration and stop when settled. Never add continuous / per-frame animations outside the loading-spinner exception defined in §11.
@@ -560,7 +560,7 @@ Guidelines to preserve smooth frame rates:
 
 ## 11. Animation System (Phase 5)
 
-Phase 5 introduces a shared animation infrastructure in `Source/UI/UIAnimation.h` (namespace `synth::ui`). All motion in the app uses this helper. The `juce_animation` module is linked into both `GravisynthCore` and the `Gravisynth` app target.
+Phase 5 introduces a shared animation infrastructure in `Source/UI/UIAnimation.h` (namespace `synth::ui`). All motion in the app uses this helper. The `juce_animation` module is linked into both `Core` and the `AgentSynth` app target.
 
 ### Easing functions
 
@@ -636,7 +636,7 @@ Never add:
 
 ## 6. Alignment Guides (UI Phase 7 - Item 4)
 
-Gravisynth provides **Figma-style smart alignment guides** while dragging modules in the graph editor. These visual cues help you align new modules with existing ones at edges and centers.
+Agent Synth provides **Figma-style smart alignment guides** while dragging modules in the graph editor. These visual cues help you align new modules with existing ones at edges and centers.
 
 ### What they are
 

@@ -1,4 +1,4 @@
-name: Gravisynth CI
+name: Agent Synth CI
 
 on:
   pull_request:
@@ -50,9 +50,14 @@ jobs:
       uses: actions/cache@v5
       with:
         path: build/_deps
-        key: ${{ runner.os }}-deps-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
+        # The "2" bump invalidates caches saved before the repo was renamed
+        # gravisynth -> agentsynth: their FetchContent subbuild dirs have the
+        # old .../work/gravisynth/gravisynth absolute path baked in, which
+        # conflicts with the new .../work/agentsynth/agentsynth checkout path
+        # and trips CMake's directory-mismatch guard.
+        key: ${{ runner.os }}-deps2-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
         restore-keys: |
-          ${{ runner.os }}-deps-
+          ${{ runner.os }}-deps2-
 
     - name: Cache ccache
       uses: actions/cache@v5
@@ -91,7 +96,7 @@ jobs:
         export LLVM_PROFILE_FILE="default.profraw"
         # Run without xvfb — tests are headless and xvfb's X11 event loop
         # adds ~44s overhead per pumpMessages() call on slow CI runners
-        ./build/Tests/GravisynthTests
+        ./build/Tests/Tests
 
     - name: Check Coverage
       run: xvfb-run bash scripts/coverage.sh --report-only
@@ -123,9 +128,14 @@ jobs:
       uses: actions/cache@v5
       with:
         path: build/_deps
-        key: ${{ runner.os }}-deps-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
+        # The "2" bump invalidates caches saved before the repo was renamed
+        # gravisynth -> agentsynth: their FetchContent subbuild dirs have the
+        # old .../work/gravisynth/gravisynth absolute path baked in, which
+        # conflicts with the new .../work/agentsynth/agentsynth checkout path
+        # and trips CMake's directory-mismatch guard.
+        key: ${{ runner.os }}-deps2-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
         restore-keys: |
-          ${{ runner.os }}-deps-
+          ${{ runner.os }}-deps2-
 
     - name: Configure CMake
       run: |
@@ -139,10 +149,10 @@ jobs:
           -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address"
 
     - name: Build
-      run: cmake --build build --target GravisynthTests
+      run: cmake --build build --target Tests
 
     - name: Run Tests
-      run: xvfb-run ./build/Tests/GravisynthTests
+      run: xvfb-run ./build/Tests/Tests
       env:
         ASAN_OPTIONS: detect_leaks=0
 
@@ -160,9 +170,14 @@ jobs:
       uses: actions/cache@v5
       with:
         path: build/_deps
-        key: ${{ runner.os }}-deps-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
+        # The "2" bump invalidates caches saved before the repo was renamed
+        # gravisynth -> agentsynth: their FetchContent subbuild dirs have the
+        # old .../work/gravisynth/gravisynth absolute path baked in, which
+        # conflicts with the new .../work/agentsynth/agentsynth checkout path
+        # and trips CMake's directory-mismatch guard.
+        key: ${{ runner.os }}-deps2-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
         restore-keys: |
-          ${{ runner.os }}-deps-
+          ${{ runner.os }}-deps2-
 
     - name: Cache ccache
       uses: actions/cache@v5
@@ -193,7 +208,7 @@ jobs:
 
     - name: Run Tests
       working-directory: ./build/Tests
-      run: ./GravisynthTests
+      run: ./Tests
 
   build-and-test-windows:
     name: Build and Test (Windows)
@@ -206,9 +221,14 @@ jobs:
       uses: actions/cache@v5
       with:
         path: build/_deps
-        key: ${{ runner.os }}-deps-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
+        # The "2" bump invalidates caches saved before the repo was renamed
+        # gravisynth -> agentsynth: their FetchContent subbuild dirs have the
+        # old .../work/gravisynth/gravisynth absolute path baked in, which
+        # conflicts with the new .../work/agentsynth/agentsynth checkout path
+        # and trips CMake's directory-mismatch guard.
+        key: ${{ runner.os }}-deps2-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
         restore-keys: |
-          ${{ runner.os }}-deps-
+          ${{ runner.os }}-deps2-
 
     - name: Cache ccache
       uses: actions/cache@v5
@@ -253,4 +273,4 @@ jobs:
     - name: Run Tests
       shell: bash
       run: |
-        find build -name "GravisynthTests.exe" -exec {} \;
+        find build -name "Tests.exe" -exec {} \;

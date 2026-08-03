@@ -1,10 +1,10 @@
 # Initial Concept
 
-Gravisynth is a modular synthesizer application built with JUCE and C++20, featuring a node-based graph editor for sound design. It provides a visual patching environment for creating complex sounds through the connection of audio modules.
+Agent Synth is a modular synthesizer application built with JUCE and C++20, featuring a node-based graph editor for sound design. It provides a visual patching environment for creating complex sounds through the connection of audio modules.
 
 ## Project Vision
 
-Gravisynth aims to be a powerful yet accessible tool for sound designers and musicians, bridging the gap between traditional modular synthesis workflows and modern software performance. It prioritizes a high-quality DSP foundation (anti-aliased oscillators, resonant filters, etc.) while leveraging a node-based architecture for flexible routing.
+Agent Synth aims to be a powerful yet accessible tool for sound designers and musicians, bridging the gap between traditional modular synthesis workflows and modern software performance. It prioritizes a high-quality DSP foundation (anti-aliased oscillators, resonant filters, etc.) while leveraging a node-based architecture for flexible routing.
 
 ## Target Users
 
@@ -25,4 +25,4 @@ Gravisynth aims to be a powerful yet accessible tool for sound designers and mus
 - Maintain a clean, open-source core engine for synthesizer development.
 - Provide a responsive and intuitive GUI experience for complex patch building.
 - Ensure high-performance, artifact-free audio processing suitable for professional use.
-- Foster a robust community of developers and sound designers around the open-source Gravisynth core.
+- Foster a robust community of developers and sound designers around the open-source Agent Synth core.

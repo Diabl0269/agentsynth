@@ -54,14 +54,14 @@ private:
 
 class MainComponentTest : public ::testing::Test {
 protected:
-    // MainComponent reads/writes the panel-visibility flags from the shared "Gravisynth"
+    // MainComponent reads/writes the panel-visibility flags from the shared "Agent Synth"
     // ApplicationProperties (same on-disk file the app uses). To keep persistence tests
     // hermetic regardless of execution order, reset those keys to their documented defaults
     // before AND after every test. We open the same PropertiesFile location MainComponent uses.
     void resetPanelKeys() {
         juce::PropertiesFile::Options opts;
-        opts.applicationName = "Gravisynth";
-        opts.folderName = "Gravisynth";
+        opts.applicationName = "Agent Synth";
+        opts.folderName = "Agent Synth";
         opts.filenameSuffix = "settings";
         opts.osxLibrarySubFolder = "Application Support";
         opts.storageFormat = juce::PropertiesFile::storeAsXML;

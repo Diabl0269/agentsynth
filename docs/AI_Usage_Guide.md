@@ -1,10 +1,10 @@
-# Gravisynth AI Sound Designer: Usage Guide
+# Agent Synth AI Sound Designer: Usage Guide
 
-This guide provides practical instructions and tips for effectively using the AI Sound Designer in Gravisynth to create and modify synthesizer patches with natural language.
+This guide provides practical instructions and tips for effectively using the AI Sound Designer in Agent Synth to create and modify synthesizer patches with natural language.
 
 ## 1. Getting Started with the AI Sound Designer
 
-1.  **Open the AI Chat Panel**: In the Gravisynth application, locate and open the AI chat panel. This is typically accessible via a dedicated button or menu option.
+1.  **Open the AI Chat Panel**: In the Agent Synth application, locate and open the AI chat panel. This is typically accessible via a dedicated button or menu option.
 2.  **Select an AI Model**: Use the model picker dropdown to choose an available AI model (e.g., `qwen3-coder-next:latest`). Ensure your Ollama server (or other AI backend) is running and accessible if using local models.
 3.  **Start Chatting**: Type your requests or descriptions in the input field and press "Send" or Enter.
 
@@ -35,7 +35,7 @@ The AI responds best to clear, concise, and specific prompts. Think about the ch
 
 *   **Be Specific**: Vague prompts lead to vague results.
 *   **Iterate**: If the first attempt isn't perfect, refine your request. You can say things like "Make it brighter," or "Reduce the sustain on the last sound."
-*   **Use Gravisynth Terminology**: While natural language is understood, using module names (e.g., Oscillator, Filter, ADSR) and parameter names (e.g., Cutoff, Frequency) from Gravisynth can yield more precise results.
+*   **Use Agent Synth Terminology**: While natural language is understood, using module names (e.g., Oscillator, Filter, ADSR) and parameter names (e.g., Cutoff, Frequency) from Agent Synth can yield more precise results.
 *   **Review JSON**: If the AI provides a JSON patch, expanding and reviewing it can help you understand how the AI interpreted your request.
 
 ## 3. Example Prompts
@@ -53,7 +53,7 @@ Here are some examples of effective prompts you can use:
 ## 4. Troubleshooting
 
 *   **"Error: No AI provider selected."**: Ensure you have selected an AI model from the dropdown. If no models appear, check if your Ollama server is running and accessible at `http://localhost:11434`.
-*   **"Error fetching models"**: Your Gravisynth application might not be able to connect to the Ollama server. Verify the server is running and there are no firewall issues. Check the application logs for "AI Discovery Error" messages.
+*   **"Error fetching models"**: Your Agent Synth application might not be able to connect to the Ollama server. Verify the server is running and there are no firewall issues. Check the application logs for "AI Discovery Error" messages.
 *   **AI provides text, but no patch is applied**: The AI's response might not contain a valid JSON patch in the expected ````json` block format, or the JSON might be malformed. Try rephrasing your prompt to explicitly ask for a JSON patch (e.g., "Provide the patch as a JSON block").
 *   **Unexpected Patch Behavior**: The AI might generate a patch that doesn't sound as expected. Review the generated JSON (by expanding the patch card) to understand the AI's interpretation and refine your prompt accordingly.
 

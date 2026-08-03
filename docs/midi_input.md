@@ -1,6 +1,6 @@
 # MIDI Input Support
 
-Gravisynth now supports external MIDI input devices, allowing you to connect hardware controllers for more expressive playability, including polyphonic support.
+Agent Synth now supports external MIDI input devices, allowing you to connect hardware controllers for more expressive playability, including polyphonic support.
 
 ## Usage
 1. Open the application.

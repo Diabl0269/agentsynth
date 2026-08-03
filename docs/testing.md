@@ -5,11 +5,11 @@ All tests use GoogleTest and run headless (no audio device, no GUI window). ~523
 ```bash
 # Run all tests (ENABLE_TESTS defaults OFF — must be passed explicitly)
 cmake -S . -B build -DENABLE_TESTS=ON
-cmake --build build --target GravisynthTests
-./build/Tests/GravisynthTests
+cmake --build build --target Tests
+./build/Tests/Tests
 
 # Run a specific suite
-./build/Tests/GravisynthTests --gtest_filter="E2EWorkflow*"
+./build/Tests/Tests --gtest_filter="E2EWorkflow*"
 
 # Check coverage (threshold: 85%)
 bash scripts/coverage.sh
@@ -219,7 +219,7 @@ When adding a new audio module:
 
 The `AudioRenderingTests` suite compares rendered audio against "golden" reference files stored in `Tests/reference/`.
 
-- **To run**: `./build/Tests/GravisynthTests --gtest_filter="AudioRenderingTest.Snapshot*"`
+- **To run**: `./build/Tests/Tests --gtest_filter="AudioRenderingTest.Snapshot*"`
 - **To update references**: If you intentionally change DSP logic (e.g., a better filter algorithm) and want to update the baseline:
   ```bash
   bash scripts/update-reference.sh
@@ -233,7 +233,7 @@ cmake -S . -B build
 cmake --build build
 ```
 
-`ENABLE_TESTS` defaults `OFF` — pass `-DENABLE_TESTS=ON` to generate the `GravisynthTests` target. `ENABLE_COVERAGE` is a separate opt-in flag used by the Ubuntu CI job and `scripts/coverage.sh`.
+`ENABLE_TESTS` defaults `OFF` — pass `-DENABLE_TESTS=ON` to generate the `Tests` target. `ENABLE_COVERAGE` is a separate opt-in flag used by the Ubuntu CI job and `scripts/coverage.sh`.
 
 ## Git Hooks
 

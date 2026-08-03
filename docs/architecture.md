@@ -1,6 +1,6 @@
 # Architecture Overview
 
-Gravisynth is built on a modular graph architecture using JUCE's `AudioProcessorGraph` (implicitly managed by `AudioEngine`).
+Agent Synth is built on a modular graph architecture using JUCE's `AudioProcessorGraph` (implicitly managed by `AudioEngine`).
 
 ---
 
@@ -10,10 +10,10 @@ The build produces two CMake targets:
 
 | Target | Kind | Contents |
 |---|---|---|
-| `GravisynthCore` | Static library | All audio modules, `AudioEngine`, `PresetManager`, `GravisynthUndoManager`, theme system, `LayoutUtil`. Headless-testable — no audio device or GUI window required. |
-| `Gravisynth` | JUCE GUI app | Links `GravisynthCore`. Houses all UI components: `GraphEditor`, `ModuleComponent`, `ToolbarComponent`, `StatusBarComponent`, etc. |
+| `Core` | Static library | All audio modules, `AudioEngine`, `PresetManager`, `AppUndoManager`, theme system, `LayoutUtil`. Headless-testable — no audio device or GUI window required. |
+| `AgentSynth` | JUCE GUI app | Links `Core`. Houses all UI components: `GraphEditor`, `ModuleComponent`, `ToolbarComponent`, `StatusBarComponent`, etc. |
 
-`GravisynthAssets` is a separate binary-data target that embeds font files and SVG icons; it is linked into `GravisynthCore` so both the app and test targets resolve `BinaryData` symbols.
+`Assets` is a separate binary-data target that embeds font files and SVG icons; it is linked into `Core` so both the app and test targets resolve `BinaryData` symbols.
 
 ---
 
@@ -108,7 +108,7 @@ if (isMuted()) {
 
 `Source/UI/GraphEditor.h/.cpp`
 
-The visual patching interface. Lives in the `Gravisynth` app target.
+The visual patching interface. Lives in the `AgentSynth` app target.
 
 - **Zoom/pan** — `zoomLevel` + `panOffset`; `mouseWheelMove` / `mouseDrag` on the canvas.
 - **Wire drawing** — poly-bus wires (collapsed N-voice `DirectCV` connections) rendered with an "xN" badge; wire endpoints anchored to visible jacks via `ModuleBase`'s logical-port API.
@@ -142,13 +142,13 @@ Auto-generates parameter UI from `ModuleBase` metadata using type-safe `ModuleTy
 
 Intermediary inserted between a modulation source and its destination to scale CV signals. Exposes `lastOutputPeak` / `lastModValue` atomics for UI metering. Constructor default `Amount = 0.0`; set to `1.0` by `addModRouting`, left at `0.0` by `addEmptyModRouting`. See [`docs/modulation.md`](modulation.md) for the full modulation routing model.
 
-### GravisynthUndoManager
+### AppUndoManager
 
-`Source/GravisynthUndoManager.h/.cpp`
+`Source/AppUndoManager.h/.cpp`
 
 Snapshot-based undo/redo wrapping `juce::UndoManager`. Structural graph changes (add/remove module, connect/disconnect) are captured as JSON before/after snapshots via `SnapshotAction`. Parameter and position changes have dedicated action types. Safe detach/reattach lifecycle — `setGraphEditor(nullptr)` before graph teardown.
 
-### GravisynthLookAndFeel + ThemeManager
+### AppLookAndFeel + ThemeManager
 
 Central `LookAndFeel_V4` subclass and theme registry. Owns all stock-widget re-skins, treatment draw helpers, and the SVG `IconLibrary`. See [`docs/theming.md`](theming.md) for the full token reference, JSON schema, and how-to-add guide.
 

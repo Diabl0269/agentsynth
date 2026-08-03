@@ -8,8 +8,8 @@
 namespace synth::theme {
 
 // The canonical icon set. Exactly 27 SVG glyphs, white-filled and tinted
-// programmatically at theme-apply time. Backed by GravisynthAssets BinaryData (see
-// CMakeLists.txt) when GRAVISYNTH_HAS_FONT_ASSETS is defined; otherwise every entry is a
+// programmatically at theme-apply time. Backed by Assets BinaryData (see
+// CMakeLists.txt) when HAS_FONT_ASSETS is defined; otherwise every entry is a
 // null fallback so headless tests (no asset library) still link and run.
 //
 // IMPORTANT: this is a juce::Drawable (SVG) registry, NOT an icon/glyph font. A runtime

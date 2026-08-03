@@ -1,5 +1,5 @@
 // IconLibraryTests.cpp
-// Headless unit tests for the Gravisynth SVG icon registry (synth::theme::IconLibrary).
+// Headless unit tests for the Agent Synth SVG icon registry (synth::theme::IconLibrary).
 // Covers: enum coverage, headless null-fallback, clone independence, tint correctness across
 // repeated theme switches, and the BinaryData symbol-naming convention guard.
 
@@ -7,7 +7,7 @@
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
-#ifdef GRAVISYNTH_HAS_FONT_ASSETS
+#ifdef HAS_FONT_ASSETS
 #include "BinaryData.h"
 #endif
 
@@ -16,11 +16,11 @@ using synth::theme::IconLibrary;
 
 namespace {
 
-// True when GravisynthAssets BinaryData is linked (the icons actually load). The headless
-// test target links GravisynthCore, which compiles IconLibrary with GRAVISYNTH_HAS_FONT_ASSETS,
+// True when Assets BinaryData is linked (the icons actually load). The headless
+// test target links Core, which compiles IconLibrary with HAS_FONT_ASSETS,
 // so this is normally true; the #else branch keeps the null-path test meaningful regardless.
 constexpr bool kAssetsPresent =
-#ifdef GRAVISYNTH_HAS_FONT_ASSETS
+#ifdef HAS_FONT_ASSETS
     true;
 #else
     false;
@@ -74,7 +74,7 @@ TEST(IconLibraryTest, AllIconEnumValuesHaveEntry) {
 // 2. NullFallbackWhenAssetsAbsent
 // ---------------------------------------------------------------------------
 TEST(IconLibraryTest, NullFallbackWhenAssetsAbsent) {
-#ifndef GRAVISYNTH_HAS_FONT_ASSETS
+#ifndef HAS_FONT_ASSETS
     IconLibrary lib;
     for (int i = 0; i < (int)Icon::kCount; ++i)
         EXPECT_EQ(lib.getDrawable(static_cast<Icon>(i)), nullptr);
@@ -162,7 +162,7 @@ TEST(IconLibraryTest, RetintMultipleSwitchesStable) {
 // 6. SvgBinaryDataNamingConvention
 // ---------------------------------------------------------------------------
 TEST(IconLibraryTest, SvgBinaryDataNamingConvention) {
-#ifdef GRAVISYNTH_HAS_FONT_ASSETS
+#ifdef HAS_FONT_ASSETS
     // JUCE's binary-data name mangler STRIPS hyphens (it does not convert them to underscores),
     // so 'action-undo.svg' becomes BinaryData::actionundo_svg. Guarding the exact symbol catches
     // any future CMake rename that would silently break the IconLibrary lookup table.
@@ -238,7 +238,7 @@ TEST(IconLibraryTest, WaveformIconBinaryDataSymbols) {
     // Verify the exact BinaryData symbol names produced by JUCE's mangler for the four waveform
     // SVG files (hyphens stripped, dot-before-extension becomes '_').
     // 'waveform-sine.svg' → waveformsine_svg, etc.
-#ifdef GRAVISYNTH_HAS_FONT_ASSETS
+#ifdef HAS_FONT_ASSETS
     EXPECT_NE(BinaryData::waveformsine_svg, nullptr);
     EXPECT_GT(BinaryData::waveformsine_svgSize, 0);
     EXPECT_NE(BinaryData::waveformsaw_svg, nullptr);

@@ -2,8 +2,8 @@
 // Unit tests for ShortcutsSettingsTab: row count, description text, binding display
 // strings, paint smoke, and programmatic rebind via startListeningForTest.
 //
-// NOTE: ShortcutsSettingsTab.cpp must be added to BOTH the app target (Gravisynth)
-// and the test target (GravisynthTests) in the root CMakeLists.txt and
+// NOTE: ShortcutsSettingsTab.cpp must be added to BOTH the app target (AgentSynth)
+// and the test target (Tests) in the root CMakeLists.txt and
 // Tests/CMakeLists.txt respectively before these tests will link.
 
 #include "../Source/ShortcutManager.h"

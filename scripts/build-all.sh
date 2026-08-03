@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script to build Gravisynth
+# Script to build Agent Synth
 set -e
 echo "Building project..."
 cmake -S . -B build

@@ -40,7 +40,7 @@ protected:
     void SetUp() override {
         // Set up ApplicationProperties with temporary storage for testing
         juce::PropertiesFile::Options options;
-        options.applicationName = "GravisynthSettingsTest";
+        options.applicationName = "SettingsTest";
         options.filenameSuffix = "test";
         options.storageFormat = juce::PropertiesFile::storeAsXML;
         appProperties.setStorageParameters(options);

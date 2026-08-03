@@ -9,7 +9,7 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-add_executable(GravisynthTests
+add_executable(Tests
     TestMain.cpp
     LayoutUtilTests.cpp
     OscillatorTests.cpp
@@ -77,25 +77,25 @@ add_executable(GravisynthTests
     ../Source/UI/ShortcutsSettingsTab.cpp
 )
 
-target_link_libraries(GravisynthTests PRIVATE
+target_link_libraries(Tests PRIVATE
     GTest::gtest
-    GravisynthCore
+    Core
 )
 
-# Sources are now in GravisynthCore, so we don't need to add them here manually
+# Sources are now in Core, so we don't need to add them here manually
 # except for the test files themselves.
 
-target_include_directories(GravisynthTests PRIVATE
+target_include_directories(Tests PRIVATE
     ${CMAKE_SOURCE_DIR}/Source
 )
 
-target_compile_definitions(GravisynthTests PRIVATE
+target_compile_definitions(Tests PRIVATE
     JUCE_MODAL_LOOPS_PERMITTED=1
-    GRAVISYNTH_THEMES_DIR="${CMAKE_SOURCE_DIR}/themes"
+    THEMES_DIR="${CMAKE_SOURCE_DIR}/themes"
 )
 
 # Link JUCE specifics if needed
-target_link_libraries(GravisynthTests PRIVATE
+target_link_libraries(Tests PRIVATE
     juce::juce_core
     juce::juce_events
     juce::juce_audio_basics
@@ -103,4 +103,4 @@ target_link_libraries(GravisynthTests PRIVATE
 )
 
 include(GoogleTest)
-gtest_discover_tests(GravisynthTests)
+gtest_discover_tests(Tests)
