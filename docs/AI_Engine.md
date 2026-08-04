@@ -44,8 +44,8 @@ The AI communicates with Agent Synth using a simplified JSON schema to describe 
 ```json
 {
   "nodes": [
-    { "id": 1, "type": "Oscillator", "params": { "Frequency": 0.2, "Waveform": "Saw" } },
-    { "id": 2, "type": "Filter", "params": { "Cutoff": 0.5, "Resonance": 0.7 } },
+    { "id": 1, "type": "Oscillator", "params": { "waveform": "Saw", "octave": -1 } },
+    { "id": 2, "type": "Filter", "params": { "cutoff": 800.0, "resonance": 0.4 } },
     { "id": 3, "type": "Audio Output" }
   ],
   "connections": [
@@ -54,6 +54,11 @@ The AI communicates with Agent Synth using a simplified JSON schema to describe 
   ]
 }
 ```
+
+Parameter IDs are the exact lowercase `paramID` strings from `getModuleSchema()` (`waveform`, not
+`Waveform`), and values are raw and unnormalized within each parameter's declared range — `cutoff` is
+Hz (20–20000), not a 0–1 fraction. Oscillator has no `frequency` parameter: pitch comes from the
+incoming MIDI note (or A4/440Hz if none is connected) offset by `octave`/`coarse`/`fine`.
 
 -   **`nodes`**: An array of synthesizer modules.
     -   `id`: A unique integer identifier for the module.
@@ -189,6 +194,79 @@ within the no-high-frequency-logging rule — never log per candidate token or p
 Tests: `Tests/AIPatchValidationTests.cpp` (table-driven, one malformed patch per
 `PatchValidationError`, plus the schema contract) and `Tests/AIPatchRetryTests.cpp` (retry bound,
 error feedback, repair scope).
+
+## 5b. Few-Shot Patch Examples
+
+The first `AIEvalHarness` sweep (P2-8: 6 local models, 40 prompts each, single run) found nothing
+shippable — best was `gemma4:e4b-mlx` at 71.1% overall pass, everything else in the high 50s/low 60s.
+The failures were not syntactic (`validatePatch` already forces well-formed JSON) but structural: a
+model produces a patch with no `Audio Output` node, or with nodes that are never actually wired to
+one. The prompt's module/parameter tables and syntax snippets tell a model the *rules*; they never show
+it a complete, working patch end to end.
+
+`initSystemPrompt()` (`Source/AI/AIIntegrationService.cpp`, ~line 430) now embeds 5 hand-authored
+`(prompt → complete, correctly-connected patch)` worked examples, covering the categories the task
+called for:
+
+- **From scratch, bass** — Oscillator → Filter → VCA → Audio Output, with a Filter Env and an Amp Env
+  each driving a real modulation target (`Cutoff` destPort 1, `CV` destPort 1).
+- **From scratch, lead** — the same shape plus an LFO into the Oscillator's `Fine` input (destPort 4) —
+  a functional CV target, unlike the Oscillator's `Pitch` target (destPort 0), which mono oscillators
+  silently ignore. The prompt calls this trap out explicitly.
+- **FX chain** — a source patch chained through Distortion → Chorus → Reverb, in line, into Audio
+  Output. Also flags that Delay's and Reverb's advertised CV modulation targets are vestigial (the
+  audio engine never reads that CV) — don't route `modulations` into them.
+- **Merge mode, adding a node** — stacking a second, detuned Oscillator into an existing filter, only
+  emitting the new node and the one new connection per the delta convention.
+- **Merge mode, removing a node** — removing a Distortion node and rewiring around the gap, the exact
+  failure category (a node removed but the chain left dangling) the task was written to fix.
+
+**Non-overlap with `AIEvalHarness`.** Reusing one of the harness's 40 eval prompts as a few-shot example
+would be train/test contamination and invalidate the P2-8 measurement. Each example's prompt text was
+checked by hand against `Tools/AIEvalHarness/Main.cpp`'s `scenarios()` for verbatim or near-paraphrase
+overlap, and `AIIntegrationServiceTest.WorkedExamplePromptsDoNotOverlapEvalScenarios`
+(`Tests/AIIntegrationServiceTests.cpp`) enforces it in CI against a manually-synced copy of the 40
+prompts — a guard against future drift, not a substitute for the manual check when new examples are
+added.
+
+**Proof.** `AIIntegrationServiceTest.WorkedExamplePatchesAreStructurallyValid` catches a hand-authoring
+mistake (a dangling node, an out-of-range parameter) at CI time by running every example through
+`AIStateMapper::applyJSONToGraph` and `synth::evaluatePatch`. That is necessary but not sufficient — it
+proves the examples themselves are valid, not that they help a model. The actual evidence is a
+before/after `Tools/AIEvalHarness` pass-rate delta, measured on the same machine immediately before and
+after this change (`--runs 3` except `gemma4:12b-it-qat` at `--runs 1`, per its ~180s/request cost):
+
+| Model | Before (overall pass) | After (overall pass) | Δ |
+| :--- | :--- | :--- | :--- |
+| `gemma4:e4b-mlx` | 60.0% (72/120 applied) | **100.0%** (120/120 applied) | **+40.0pp** |
+| `artifish/llama3.2-uncensored` | 57.7% (64/111 applied) | 64.0% (71/111 applied) | +6.3pp |
+| `llama3.2:1b` | 63.5% (54/85 applied) | 61.5% (48/78 applied) | -2.0pp |
+| `gemma4:12b-it-qat` | 100% (34/34 applied, n=34 — 6 of 40 requests hit a connection error and were excluded) | 97.5% (39/40 applied, n=40 — clean run) | ~flat |
+
+`gemma4:e4b-mlx` — the strongest model in the original P2-8 sweep and, per §5a, one whose MLX backend
+ignores `format` entirely and falls back to prompt compliance — goes from "good but not shippable" to a
+clean 100%. That is exactly the model this technique should help most: schema/grammar enforcement can't
+reach it, so prompt content is the only lever available, and it was the missing lever. It is now a
+credible cheaper/local default candidate.
+
+`artifish/llama3.2-uncensored` improves modestly; its "has Audio Output" rate alone jumped from 64.0% to
+91.9%, so the examples clearly taught it to include an output node — "source reaches Audio Output"
+(actual connectivity) is now its bottleneck instead.
+
+`llama3.2:1b` is flat-to-slightly-down on pass rate (within sampling noise at this size), but its raw
+apply-failure count rose (35 of 120 never applied before, vs. 34 never-applied + 8 provider errors = 42
+of 120 after). The larger prompt appears to cost this 1B model more in basic JSON-production reliability
+than it gains in structural quality — a real, model-size-dependent downside, not a rounding error.
+
+`gemma4:12b-it-qat` (the app's shipped default) is essentially unchanged and already near-ceiling in
+both runs; the "after" number is the more trustworthy of the two since it didn't lose any requests to
+connection errors.
+
+**Prompt-token growth.** The system prompt's literal text grew from ~5.8K to ~11.6K characters (~1.4K to
+~2.9K tokens at a rough 4-chars/token estimate) — it roughly doubled. On a hosted API that is a real
+per-request cost, not a rounding error; it is justified here by `gemma4:e4b-mlx`'s +40pp jump but is a
+genuine net negative for `llama3.2:1b`, which should factor into any future decision to widen this
+example set further or to gate it per-model.
 
 ## 5. AIChatComponent and Logging
 
