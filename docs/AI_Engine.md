@@ -251,6 +251,15 @@ with a comment incorrectly claiming the ctor-time call already covered discovery
 `MainComponentTest.AiProviderGetsModelSelectedOnStartup` and
 `AIChatComponentTest.RefreshModelsSelectsModelWhenProviderInstalledAfterConstruction`.
 
+Because `refreshModels()` runs more than once by design (ctor, post-`setProvider()`, and
+again whenever `SettingsWindow` triggers a re-fetch after a host/provider change), it must
+`modelPicker.clear()` before re-adding the `"Loading models..."` placeholder at item ID 1.
+Skipping the clear lets that `addItem(..., 1)` collide with an ID already in the box (a
+model from a prior successful fetch, or the placeholder itself) — `juce::ComboBox::addItem()`
+jasserts on duplicate IDs, and the picker is left showing stale and fresh entries together
+for the duration of the new fetch. Locked by
+`AIChatComponentTest.RefreshModelsClearsStaleItemsBeforeSecondFetchResolves`.
+
 ### AI Provider Registry
 
 Providers are registered once, in `synth::AIProviderRegistry::createDefault()`

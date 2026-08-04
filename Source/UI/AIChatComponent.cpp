@@ -618,6 +618,13 @@ void AIChatComponent::updateChatDisplay() {
 void AIChatComponent::scrollToBottom() { viewport.setViewPosition(0, messageList.getHeight()); }
 
 void AIChatComponent::refreshModels() {
+    // refreshModels() is called repeatedly over the component's lifetime (once at
+    // construction with no provider yet, again after MainComponent installs one, and
+    // again whenever Settings triggers a re-fetch) — never just once. Without this
+    // clear(), the second call's addItem(..., 1) collides with whatever already holds
+    // ID 1 (a previously listed model, or the "Error fetching models" placeholder from
+    // a synchronous no-provider callback) and trips ComboBox's duplicate-ID jassert.
+    modelPicker.clear(juce::dontSendNotification);
     modelPicker.addItem("Loading models...", 1);
     modelPicker.setSelectedId(1, juce::dontSendNotification);
     modelPicker.setEnabled(false);
