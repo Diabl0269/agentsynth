@@ -73,5 +73,11 @@ before switching the default model to it.
 ## Caveats
 
 Same as `Tools/AIPatchHarness`: not every backend enforces the JSON schema as a grammar (MLX
-models fall back to prompt compliance), `OllamaProvider` gives up after 120s per request, and
-results are model- and machine-dependent — quote the model tag alongside any number.
+models fall back to prompt compliance), `OllamaProvider` gives up after 240s per request (see
+`kChatRequestTimeoutMs` in `OllamaProvider.cpp` — Ollama's chat endpoint is non-streaming, so this
+doubles as the model's real time-to-finish budget, not just a connect timeout), and results are
+model- and machine-dependent — quote the model tag alongside any number. A model that times out
+scores as `NOT-APPLIED`, indistinguishable from Ollama being unreachable — the first six-model
+sweep run against this harness caught exactly this with `gemma4:12b-it-qat` (~180s/request
+average, close enough to the old 120s bound that most of its attempts failed on timing, not
+quality).
