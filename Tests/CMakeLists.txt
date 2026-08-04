@@ -25,6 +25,7 @@ add_executable(Tests
     AIStateMapperTests.cpp
     AIPatchValidationTests.cpp
     AIPatchRetryTests.cpp
+    PatchEvalTests.cpp
     AIProviderRegistryTests.cpp
     OllamaProviderTests.cpp
     MainComponentTests.cpp

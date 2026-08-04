@@ -120,6 +120,13 @@ security boundary and is never relaxed to raise the pass rate; everything below 
 and tallies rejections by `PatchValidationError`. It needs a live Ollama, so it is opt-in
 (`-DENABLE_AI_HARNESS=ON`) and excluded from CI. See its README for flags and caveats.
 
+`Tools/AIEvalHarness` answers a different question: of the patches that *do* pass validation and
+apply, are they usable — an output wired to a source, not just schema-legal JSON? It scores 40
+golden prompts against `Source/AI/PatchEval.h`'s structural checks (unit-tested in
+`Tests/PatchEvalTests.cpp`, model-independently) and is what makes switching to a cheaper or local
+model a measured decision instead of a guess. Same opt-in flag, same exclusion from CI — see its
+README.
+
 Two facts that measurement established, and that any future change here should be re-checked
 against:
 

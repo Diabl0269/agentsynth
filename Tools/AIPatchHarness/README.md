@@ -6,12 +6,16 @@ Measures how often AI-generated patches actually pass `AIStateMapper::validatePa
 It is a measurement instrument, not a test. It needs a live Ollama instance, so it is excluded
 from `Tests` and from CI, and must be opted into at configure time.
 
+This answers a syntactic question — did the JSON pass validation. For whether patches that *do*
+apply are actually usable (has an output, connects to a source, params in range), see
+`Tools/AIEvalHarness` instead.
+
 ## Running
 
 ```bash
 cmake -S . -B build -DENABLE_AI_HARNESS=ON
 cmake --build build --target AIPatchHarness
-./build/Tools/AIPatchHarness/AIPatchHarness_artefacts/AIPatchHarness \
+./build/Tools/AIPatchHarness/AIPatchHarness \
     --model artifish/llama3.2-uncensored:latest --runs 2 --json out.json
 ```
 
