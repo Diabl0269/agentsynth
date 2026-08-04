@@ -204,8 +204,8 @@ cmake --build build --target AIPatchHarness
 ```
 
 See `Tools/AIPatchHarness/README.md` — in particular that `format` enforcement is backend-dependent
-and that `OllamaProvider` times out at 120 s, which shows up as a provider error rather than a
-rejection.
+and that `OllamaProvider` times out at 240 s (`kChatRequestTimeoutMs`), which shows up as a
+provider error rather than a rejection.
 
 `Tools/AIEvalHarness` scores a different thing: of the patches that pass validation and apply, are
 they actually usable — has an output, that output is reachable from a real sound source, every

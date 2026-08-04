@@ -14,6 +14,17 @@ constexpr int kIdleWaitMs = 1000;
 // practice this costs JUCE's ~2 ms teardown poll.
 constexpr int kWorkerHandoverTimeoutMs = 2000;
 
+// Ollama's chat endpoint is non-streaming: it sends nothing back at all, not even headers,
+// until generation is completely finished (see the StreamPublisher comment below). That makes
+// this the effective ceiling on how long a model has to produce a full response, not just a
+// connect timeout — a model slower than this is indistinguishable from Ollama being down. Was
+// 120s; raised after Tools/AIEvalHarness measured gemma4:12b-it-qat averaging ~180s/request on
+// real hardware, meaning most of its requests were failing on this timeout alone, not on
+// quality. The UI has a real cancel button (AIChatComponent's thinking spinner + Escape), so a
+// longer bound doesn't trap a user who doesn't want to wait — it just stops auto-failing a model
+// that's still working.
+constexpr int kChatRequestTimeoutMs = 240000;
+
 const char* const kShuttingDownMessage = "Error: Request cancelled - the Ollama provider is shutting down.";
 
 // Delivered with AIErrorKind::Cancelled. Callers are expected to branch on the kind rather than
@@ -587,7 +598,7 @@ void OllamaProvider::processRequest(const Request& req) {
 
     stream = createStream(url.withPOSTData(jsonString),
                           juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inPostData)
-                              .withConnectionTimeoutMs(120000)
+                              .withConnectionTimeoutMs(kChatRequestTimeoutMs)
                               .withStatusCode(&httpStatus)
                               .withResponseHeaders(&responseHeaders),
                           publish);

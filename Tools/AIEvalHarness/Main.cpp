@@ -178,7 +178,10 @@ Outcome runScenario(const Scenario& scenario, const juce::String& host, const ju
         },
         /*useStructuredOutput=*/true);
 
-    if (!done.wait(180000)) {
+    // Must exceed OllamaProvider's own kChatRequestTimeoutMs (currently 240s) with margin, or this
+    // outer wait fires first and reports a vague "timed out" instead of OllamaProvider's real
+    // provider-error message.
+    if (!done.wait(270000)) {
         outcome.applyError = "timed out waiting for model";
         return outcome;
     }

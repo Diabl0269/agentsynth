@@ -62,7 +62,9 @@ flatter the result.
   llama.cpp models, but MLX-backed models (e.g. `gemma4:e4b-mlx`) ignore it and fall back to
   prompt compliance — they will happily emit fenced Markdown. Schema-side fixes therefore show up
   on llama.cpp models and not on MLX ones; retries cover both.
-- **`OllamaProvider` gives up after 120 s.** A model slower than that per request (on this machine,
-  `gemma4:12b-it-qat` averaged ~180 s) reports as a provider error rather than a rejection. Pick a
+- **`OllamaProvider` gives up after 240 s** (`kChatRequestTimeoutMs` in `OllamaProvider.cpp`; was
+  120 s until this was measured with `gemma4:12b-it-qat` averaging ~180 s per request on real
+  hardware — most of its requests were failing on the timeout alone, not on quality). A model
+  slower than the current bound still reports as a provider error rather than a rejection. Pick a
   model that answers within the timeout, or the run measures the timeout instead of the model.
 - Results are model- and machine-dependent. Quote the model tag alongside any number.
