@@ -32,6 +32,7 @@ coverage/
 *.log
 *.zip
 *.txt
+!CMakeLists.txt
 .claudignore
 .gemini/
 .claude/settings.local.json

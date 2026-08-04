@@ -200,12 +200,26 @@ live Ollama, so it is opt-in and never built by CI:
 ```bash
 cmake -S . -B build -DENABLE_AI_HARNESS=ON
 cmake --build build --target AIPatchHarness
-./build/Tools/AIPatchHarness/AIPatchHarness_artefacts/AIPatchHarness --model <tag> --runs 2
+./build/Tools/AIPatchHarness/AIPatchHarness --model <tag> --runs 2
 ```
 
 See `Tools/AIPatchHarness/README.md` — in particular that `format` enforcement is backend-dependent
 and that `OllamaProvider` times out at 120 s, which shows up as a provider error rather than a
 rejection.
+
+`Tools/AIEvalHarness` scores a different thing: of the patches that pass validation and apply, are
+they actually usable — has an output, that output is reachable from a real sound source, every
+parameter in range? It replays 40 golden prompts and runs `Source/AI/PatchEval.h`'s checks against
+the resulting graph. Same opt-in flag:
+
+```bash
+cmake -S . -B build -DENABLE_AI_HARNESS=ON
+cmake --build build --target AIEvalHarness
+./build/Tools/AIEvalHarness/AIEvalHarness --model <tag> --runs 2
+```
+
+The structural checks themselves (`evaluatePatch()`) have no model dependency and are covered by
+`Tests/PatchEvalTests.cpp` in the regular suite — only the golden-prompt replay needs Ollama.
 
 ## Adding Tests for New Modules
 
