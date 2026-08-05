@@ -21,6 +21,7 @@
 #include "../Modules/SequencerModule.h"
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
+#include "../Modules/NoiseModule.h"
 #include <cmath>
 #include <functional> // For std::function
 #include <limits>
@@ -61,6 +62,7 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Flanger", []() { return std::make_unique<FlangerModule>(); }},
     {"Limiter", []() { return std::make_unique<LimiterModule>(); }},
     {"Voice Mixer", []() { return std::make_unique<VoiceMixerModule>(); }},
+    {"Noise", []() { return std::make_unique<NoiseModule>(); }},
     {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }}};
 
 namespace {
@@ -504,6 +506,8 @@ static juce::String getFactoryTypeName(juce::AudioProcessor* processor) {
             return "Limiter";
         case ModuleType::VoiceMixer:
             return "Voice Mixer";
+        case ModuleType::Noise:
+            return "Noise";
         case ModuleType::ExternalMidi:
             return "External MIDI";
         }

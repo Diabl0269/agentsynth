@@ -17,8 +17,10 @@
 #include "../Modules/OscillatorModule.h"
 #include "../Modules/PolyMidiModule.h"
 #include "../Modules/SequencerModule.h"
+#include "../Modules/PolySequencerModule.h"
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
+#include "../Modules/NoiseModule.h"
 #include "../PresetManager.h"
 #include "LayoutUtil.h"
 #include "ModuleComponent.h"
@@ -62,6 +64,8 @@ static juce::Point<int> estimateModuleSize(const juce::String& typeName) {
         return {280, 100};
     if (typeName == "Attenuverter")
         return {280, 120};
+    if (typeName == "Noise")
+        return {280, 220};
     return {280, 360};
 }
 
@@ -1427,8 +1431,12 @@ void GraphEditor::itemDropped(const SourceDetails& dragSourceDetails) {
         newProcessor = std::make_unique<PolyMidiModule>();
     else if (name == "External MIDI")
         newProcessor = std::make_unique<ExternalMidiModule>();
+    else if (name == "Poly Sequencer")
+        newProcessor = std::make_unique<PolySequencerModule>();
     else if (name == "Voice Mixer")
         newProcessor = std::make_unique<VoiceMixerModule>();
+    else if (name == "Noise")
+        newProcessor = std::make_unique<NoiseModule>();
 
     if (newProcessor) {
         auto& graph = audioEngine.getGraph();

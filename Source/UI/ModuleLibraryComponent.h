@@ -15,7 +15,7 @@ public:
 
     ModuleLibraryComponent() {
         entries = {
-            {"Sources", true},    {"Oscillator", false},    {"LFO", false},
+            {"Sources", true},    {"Oscillator", false},    {"Noise", false}, {"LFO", false},
             {"Sequencing", true}, {"Sequencer", false},     {"MidiKeyboard", false},
             {"Poly MIDI", false}, {"External MIDI", false}, {"Envelopes & Control", true},
             {"ADSR", false},      {"VCA", false},           {"Filters", true},
@@ -37,6 +37,8 @@ public:
     static juce::String descriptionFor(const juce::String& moduleName) {
         if (moduleName.equalsIgnoreCase("Oscillator"))
             return "Generates audio waveforms (sine, saw, square, triangle).";
+        if (moduleName.equalsIgnoreCase("Noise"))
+            return "Generates noise (white, pink, brown).";
         if (moduleName.equalsIgnoreCase("LFO"))
             return "Low-frequency oscillator for slow cyclic modulation.";
         if (moduleName.equalsIgnoreCase("Sequencer"))
