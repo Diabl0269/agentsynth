@@ -15,13 +15,13 @@
 #include "../Modules/LFOModule.h"
 #include "../Modules/MidiKeyboardModule.h"
 #include "../Modules/ModuleBase.h"
+#include "../Modules/NoiseModule.h"
 #include "../Modules/OscillatorModule.h"
 #include "../Modules/PolyMidiModule.h"
 #include "../Modules/PolySequencerModule.h"
 #include "../Modules/SequencerModule.h"
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
-#include "../Modules/NoiseModule.h"
 #include <cmath>
 #include <functional> // For std::function
 #include <limits>

@@ -15,15 +15,20 @@ public:
 
     ModuleLibraryComponent() {
         entries = {
-            {"Sources", true},    {"Oscillator", false},    {"Noise", false}, {"LFO", false},
-            {"Sequencing", true}, {"Sequencer", false},     {"MidiKeyboard", false},
-            {"Poly MIDI", false}, {"External MIDI", false}, {"Envelopes & Control", true},
-            {"ADSR", false},      {"VCA", false},           {"Filters", true},
-            {"Filter", false},    {"Modulation FX", true},  {"Chorus", false},
-            {"Phaser", false},    {"Flanger", false},       {"Distortion", false},
-            {"Time FX", true},    {"Delay", false},         {"Reverb", false},
-            {"Dynamics", true},   {"Compressor", false},    {"Limiter", false},
-            {"Utility", true},    {"Voice Mixer", false},
+            {"Sources", true},        {"Oscillator", false},
+            {"Noise", false},         {"LFO", false},
+            {"Sequencing", true},     {"Sequencer", false},
+            {"MidiKeyboard", false},  {"Poly MIDI", false},
+            {"External MIDI", false}, {"Envelopes & Control", true},
+            {"ADSR", false},          {"VCA", false},
+            {"Filters", true},        {"Filter", false},
+            {"Modulation FX", true},  {"Chorus", false},
+            {"Phaser", false},        {"Flanger", false},
+            {"Distortion", false},    {"Time FX", true},
+            {"Delay", false},         {"Reverb", false},
+            {"Dynamics", true},       {"Compressor", false},
+            {"Limiter", false},       {"Utility", true},
+            {"Voice Mixer", false},
         };
         setMouseCursor(juce::MouseCursor::NormalCursor);
     }
