@@ -480,6 +480,100 @@ Locked by `OllamaProviderTest.CancelledRequestInvokesCallbackWithCancelledKind`,
 > hit Cancel, and confirm the input frees immediately and the next message is answered without delay.
 > A regression here is invisible to the suite — the mock path would still pass.
 
+### RemoteProvider: synth-platform Inference Service (libcurl, hidden pending Phase 4)
+
+`Source/AI/RemoteProvider.{h,cpp}` is the first non-Ollama `AIProvider`: it talks to a local
+instance of the `synth-platform` inference service over libcurl instead of `juce::WebInputStream`.
+It reuses `OllamaProvider`'s worker-thread/queue/cancellation architecture almost exactly
+(`queueLock`-guarded `pendingRequests`, `inFlight` map, `idle`/`starting`/`running` worker state,
+`claimDelivery()`/`deliverResult()`/`deliverError()` with the same exactly-once and
+`forceSynchronous`-during-shutdown contract) — see "OllamaProvider: Worker-Thread Contract" above
+for the rules this inherits unchanged.
+
+**Wire contract:**
+
+- `POST {host}/v1/capability/patch.generate`
+- Request: `{"productName": string, "userPrompt": string}` — `currentPatch` and `promptVersion`
+  are always omitted (not sent as `null`).
+- Success: HTTP 200, `{"data": <Patch JSON object>}`. `data` is re-serialized with
+  `juce::JSON::toString()` and delivered as `AIResponse::content` — the same raw-JSON-text shape
+  `AIIntegrationService::applyPatch()` already expects from any provider.
+- Error: non-2xx, `{"error": {"code": string, "message": string}}`.
+
+**Why `userPrompt` can carry the client's already-wrapped text unmodified.**
+`AIIntegrationService::buildPatchAugmentedContent()` renders the current graph into the *last*
+conversation message as `"Current patch state:\n\`\`\`json\n<JSON>\n\`\`\`\n\nUser request:
+<text>"` whenever the graph is non-empty, and leaves it as plain text otherwise. The service's own
+`buildUserMessage()` (`synth-platform/packages/capabilities/src/patch-generate/capability.ts`)
+performs the *exact same* wrapping server-side, from a separate `currentPatch` + `userPrompt`
+pair, and only wraps when `currentPatch` is present. Sending the client's already-wrapped text as
+`userPrompt` alone, with `currentPatch` omitted, therefore produces byte-identical model input to
+the "proper" structured split — without RemoteProvider ever having to parse the wrapper back
+apart. **Do not "fix" this into a parser** that splits `userPrompt` into `currentPatch` +
+`userPrompt` — it would just reimplement, and risk diverging from, wrapping the service already
+does.
+
+**Conversational mode is out of scope.** The service exposes only `patch.generate`; there is no
+plain-chat capability. `AIIntegrationService::sendMessage()` calls `sendPrompt()` with a void
+`responseSchema` for ordinary chat turns, so `RemoteProvider::sendPrompt()` fails fast — no
+network call — with `AIErrorKind::Schema` when `responseSchema.isVoid()`, mirroring
+`OllamaProvider`'s "no model selected" fail-fast precedent. It also fails fast the same way for an
+empty `conversation` or a blank/whitespace-only last message (mirrors the service's own
+`userPrompt: z.string().min(1)`).
+
+**Error-kind mapping** (checked in this order — `cancelled` is checked before any of the below,
+same as `OllamaProvider` checks `wasCancelled()` right after the network call returns):
+
+| Condition                                    | `AIErrorKind`                    |
+|-----------------------------------------------|-----------------------------------|
+| transport failure that wasn't a cancellation  | `Network`                        |
+| `timedOut`                                    | `Timeout`                        |
+| `cancelled`                                   | `Cancelled`                      |
+| HTTP 401 / 403                                | `Auth`                            |
+| HTTP 429 (reads `Retry-After`)                | `RateLimit`                      |
+| HTTP 402                                      | `Quota`                           |
+| HTTP 400 / 404                                | `Schema` (client/request-shape problem, not worth retrying as-is) |
+| HTTP 500 / 502 / any other unexpected non-2xx | `Server`                          |
+| 2xx with no parseable `data`                  | `Schema`                          |
+
+Whenever the response body parses as JSON with a string `error.message`, it is appended to the
+delivered error message (mirrors the "name the specific failure" ethos on
+`AIIntegrationService::buildCorrectionPrompt`); otherwise the message just names the HTTP status.
+
+**Cancellation, simplified vs `OllamaProvider`.** libcurl doesn't need the
+`StreamPublisher`/`activeStream`/`streamLock` machinery `OllamaProvider` uses to abort a
+`WebInputStream` mid-connect: `CURLOPT_XFERINFOFUNCTION` is invoked periodically by libcurl
+*during* the transfer, on the same thread running `curl_easy_perform()`, and returning non-zero
+aborts it with `CURLE_ABORTED_BY_CALLBACK`. `RequestState` therefore only needs `cancelled` and
+`delivered` atomics. `cancel()` on a still-queued request pulls it out of `pendingRequests` and
+delivers `Cancelled` immediately (identical to `OllamaProvider::cancel()`'s queued branch);
+`cancel()` on an in-flight request just sets the flag — the worker's own progress callback notices
+it inside `curl_easy_perform()` and unwinds on its own. A `CURL*` handle is never touched from any
+thread other than the one running `curl_easy_perform()` for it.
+
+**HTTP transport seam.** `RemoteProvider::HttpPerformer` (`RemoteProvider.h`) parallels
+`OllamaProvider::InputStreamFactory`: a constructor taking just a host installs the real
+libcurl-backed performer, and a second constructor injects a fake one for tests (no real sockets —
+see `Tests/RemoteProviderTests.cpp`).
+
+**Windows is not supported yet.** `RemoteProvider.cpp`'s libcurl implementation is compiled only
+under `#ifndef _WIN32`; the `#else` branch is a stub returning `transportFailed=true` with a clear
+message, touching no curl API. The `windows-latest` CI job has no libcurl setup step, and the P2-5
+spike already flagged Windows/WinINet as an unverified follow-up risk rather than a P2-7 blocker.
+Root `CMakeLists.txt` requires `CURL` (`find_package(CURL REQUIRED)`) under `if(NOT WIN32)` —
+covering both Linux and macOS (whose SDK ships a `curl.tbd` stub, so no Homebrew dependency is
+needed there) — and deliberately does not require it on `WIN32`.
+
+**Ships hidden.** `ProviderDescriptor::hidden` (`Source/AI/AIProviderRegistry.h`) is a runtime
+flag, not a build-time one: `RemoteProvider` is fully registered and constructible via
+`AIProviderRegistry::createDefault()` (id `"remote"`, registered after `"ollama"` so the
+unknown-id fallback to `descriptors.front()` is unaffected), but `AISettingsTab`
+(`Source/UI/SettingsWindow.cpp`) filters out any `hidden` descriptor before populating the
+provider combo box, via a `visibleProviders` member used consistently by both the population loop
+and `selectedDescriptor()` (indexing the combo's selected item against the *unfiltered* list would
+desync the moment a hidden entry sits between two visible ones). Phase 4 is expected to flip
+`"remote"`'s `hidden` to `false`.
+
 ## 6. Future Considerations
 
 -   **Direct Saving of AI Suggested Patches**: Implement functionality for users to directly save AI-generated patches as presets.

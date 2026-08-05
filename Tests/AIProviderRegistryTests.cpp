@@ -93,3 +93,19 @@ TEST(AIProviderRegistryTest, PersistedIdIsIndependentOfDisplayName) {
     auto provider = newRegistry.create("ollama", {});
     ASSERT_NE(provider, nullptr);
 }
+
+TEST(AIProviderRegistryTest, CreateDefaultRegistersOllamaFirstAndRemoteHidden) {
+    auto registry = synth::AIProviderRegistry::createDefault();
+
+    const auto& all = registry.listAll();
+    ASSERT_EQ(all.size(), 2u);
+
+    // "ollama" must stay first: AIProviderRegistry::create() falls back to descriptors.front()
+    // for an unknown/empty id, and that fallback must be unaffected by adding "remote".
+    EXPECT_EQ(all[0].id, "ollama");
+    EXPECT_FALSE(all[0].hidden);
+
+    const auto* remote = registry.find("remote");
+    ASSERT_NE(remote, nullptr);
+    EXPECT_TRUE(remote->hidden);
+}

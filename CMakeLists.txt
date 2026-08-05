@@ -79,8 +79,10 @@ add_library(Core STATIC
     # AI
     Source/AI/AIProvider.h
     Source/AI/OllamaProvider.h
+    Source/AI/RemoteProvider.h
     Source/AI/AIIntegrationService.cpp
     Source/AI/OllamaProvider.cpp
+    Source/AI/RemoteProvider.cpp
     Source/AI/AIIntegrationService.h
     Source/AI/AIStateMapper.cpp
     Source/AI/AIStateMapper.h
@@ -132,11 +134,19 @@ if(UNIX AND NOT APPLE)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
 
-    find_package(CURL REQUIRED)
-
     # Link to Core so JUCE modules compiled within it find the headers
-    target_link_libraries(Core PUBLIC ${GTK3_LIBRARIES} CURL::libcurl)
+    target_link_libraries(Core PUBLIC ${GTK3_LIBRARIES})
     target_include_directories(Core PUBLIC ${GTK3_INCLUDE_DIRS})
+endif()
+
+# RemoteProvider (Source/AI/RemoteProvider.cpp) needs libcurl. Required on macOS and Linux (the
+# macOS SDK ships a curl.tbd stub, so find_package(CURL) succeeds there with no Homebrew
+# dependency) but deliberately NOT on WIN32 — the windows-latest CI job
+# (.github/workflows/ci.yml) has no libcurl setup step, and RemoteProvider's Windows branch is a
+# stub that never calls into curl.
+if(NOT WIN32)
+    find_package(CURL REQUIRED)
+    target_link_libraries(Core PUBLIC CURL::libcurl)
 endif()
 
 target_include_directories(Core PUBLIC
