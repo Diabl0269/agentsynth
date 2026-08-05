@@ -176,12 +176,7 @@ Outcome runScenario(const Scenario& scenario, ProviderKind providerKind, const j
     Outcome outcome;
 
     juce::AudioProcessorGraph graph;
-    // "Audio Output" mirrors the graph's own bus channel count (AudioGraphIOProcessor); without
-    // configuring it the way AudioEngine does before device audio starts, it reports zero
-    // channels and every connection into it silently no-ops, making every scenario look
-    // unconnected regardless of what the model actually produced.
-    graph.setPlayConfigDetails(0, 2, 44100.0, 512);
-    graph.prepareToPlay(44100.0, 512);
+    synth::prepareGraphForPatchEval(graph);
 
     if (scenario.seedPatch != nullptr) {
         juce::var seed = juce::JSON::parse(juce::String(scenario.seedPatch));

@@ -5,6 +5,12 @@
 
 namespace synth {
 
+// Smallest patch that clears the structural gate applyPatch() now runs (an Audio Output reachable
+// from an Oscillator) — used by tests whose actual subject is something else (JSON extraction,
+// callback ordering, replace-clears-graph) but that still need `applyPatch()` to succeed.
+constexpr const char* kMinimalValidPatch = R"({"nodes":[{"id":1,"type":"Oscillator"},{"id":2,"type":"Audio Output"}],)"
+                                           R"("connections":[{"src":1,"srcPort":0,"dst":2,"dstPort":0}]})";
+
 class MockAIProvider : public AIProvider {
 public:
     RequestId sendPrompt(const std::vector<Message>& conversation, CompletionCallback callback,
@@ -172,17 +178,15 @@ TEST_F(AIIntegrationServiceTest, ExtractJsonFromResponse) {
     // we test it indirectly via applyPatch which is public.
 
     // Test extraction from backticks
-    juce::String withBackticks = "Here is the patch: ```json\n{\"nodes\":[]}\n``` and some more text.";
+    juce::String withBackticks =
+        "Here is the patch: ```json\n" + juce::String(kMinimalValidPatch) + "\n``` and some more text.";
     // applyPatch calls extractJsonFromResponse internally
     // We expect it to try and parse the JSON. If it fails, it returns false.
-    // If it succeeds (empty nodes), it returns true.
+    // If it succeeds, it returns true.
     EXPECT_TRUE(service->applyPatch(withBackticks));
 }
 
-TEST_F(AIIntegrationServiceTest, ExtractJsonRaw) {
-    juce::String raw = "{\"nodes\":[], \"connections\":[]}";
-    EXPECT_TRUE(service->applyPatch(raw));
-}
+TEST_F(AIIntegrationServiceTest, ExtractJsonRaw) { EXPECT_TRUE(service->applyPatch(kMinimalValidPatch)); }
 
 TEST_F(AIIntegrationServiceTest, GetPatchContext) {
     juce::String context = service->getPatchContext();
@@ -210,16 +214,90 @@ TEST_F(AIIntegrationServiceTest, ApplyPatch_MergeMode_PreservesExisting) {
     ASSERT_EQ(graph->getNumNodes(), 2); // Original Oscillator + new Filter
 }
 
+// --- Structural gate: applyPatch() now rejects a schema-valid patch that doesn't produce a
+// usable signal path (Source/AI/PatchEval.h), the same bar Tools/AIEvalHarness measures models
+// against. See the "Structural gate" comment in AIIntegrationService::applyPatch() for the
+// regression-vs-absolute distinction between replace and merge mode. ---
+
+TEST_F(AIIntegrationServiceTest, ReplaceModeWithNoAudioOutputIsRejectedStructurally) {
+    bool success = service->applyPatch(R"({"nodes":[],"connections":[]})");
+
+    EXPECT_FALSE(success);
+    EXPECT_EQ(service->getLastPatchError(), "no Audio Output node in the patch");
+    EXPECT_EQ(graph->getNumNodes(), 0) << "a structurally rejected patch must not touch the live graph";
+}
+
+TEST_F(AIIntegrationServiceTest, ReplaceModeNotReachingOutputIsRejectedStructurally) {
+    // Audio Output exists but nothing feeds it — no Oscillator anywhere in the patch.
+    bool success = service->applyPatch(R"({"nodes":[{"id":1,"type":"Audio Output"}],"connections":[]})");
+
+    EXPECT_FALSE(success);
+    EXPECT_EQ(service->getLastPatchError(), "Audio Output is not reachable from any Oscillator");
+}
+
+TEST_F(AIIntegrationServiceTest, StructuralRejectionFiresNoListenerCallbacks) {
+    int callCounter = 0;
+    CountingListener listener;
+    listener.sharedCallCounter = &callCounter;
+    service->addListener(&listener);
+
+    bool success = service->applyPatch(R"({"nodes":[],"connections":[]})");
+
+    EXPECT_FALSE(success);
+    EXPECT_EQ(listener.aboutToApplyCount, 0);
+    EXPECT_EQ(listener.appliedCount, 0);
+
+    service->removeListener(&listener);
+}
+
+TEST_F(AIIntegrationServiceTest, MergeRegressionGate_PreExistingGapIsNotBlamedOnTheDelta) {
+    // The live graph already has no Oscillator (just a bare Audio Output) — a merge delta that
+    // doesn't fix that, but doesn't make it worse either, must not be rejected for a gap it never
+    // caused (e.g. the user's own half-built canvas).
+    graph->addNode(std::make_unique<juce::AudioProcessorGraph::AudioGraphIOProcessor>(
+        juce::AudioProcessorGraph::AudioGraphIOProcessor::audioOutputNode));
+    ASSERT_EQ(graph->getNumNodes(), 1);
+
+    juce::String delta = "{\"nodes\":[{\"id\":100,\"type\":\"Filter\",\"params\":{}}],\"connections\":[]}";
+    bool success = service->applyPatch(delta, /*mergeMode=*/true);
+
+    EXPECT_TRUE(success) << service->getLastPatchError();
+    EXPECT_EQ(graph->getNumNodes(), 2);
+}
+
+TEST_F(AIIntegrationServiceTest, MergeRegressionGate_RejectsADeltaThatBreaksAWorkingChain) {
+    // Live graph: a complete Oscillator(1) -> Audio Output(2) chain. Ids are preserved by the
+    // trusted+clearExisting apply path (mirrors undo/redo's own snapshot replay — see the
+    // "Preserve node identity" comment in AIStateMapper::applyJSONToGraph), so "remove":[1] below
+    // reliably targets the Oscillator.
+    //
+    // prepareGraphForPatchEval() matters here beyond evaluation: without it the "Audio Output"
+    // node reports zero channels and the seed connection below silently no-ops, so the "before"
+    // state would already read as unreachable regardless of this test's fixture. A real live
+    // graph is always configured this way by AudioEngine before AIIntegrationService ever runs.
+    prepareGraphForPatchEval(*graph);
+    juce::var seed = juce::JSON::parse(juce::String(kMinimalValidPatch));
+    ASSERT_TRUE(AIStateMapper::applyJSONToGraph(seed, *graph, /*clearExisting=*/true, /*trusted=*/true));
+    ASSERT_EQ(graph->getNumNodes(), 2);
+
+    // "Remove the Oscillator" without reconnecting anything: the chain regresses.
+    bool success = service->applyPatch(R"({"mode":"merge","remove":[1],"nodes":[],"connections":[]})",
+                                       /*mergeMode=*/true);
+
+    EXPECT_FALSE(success);
+    EXPECT_EQ(service->getLastPatchError(), "Audio Output is not reachable from any Oscillator");
+    EXPECT_EQ(graph->getNumNodes(), 2) << "a structurally rejected merge must not touch the live graph";
+}
+
 TEST_F(AIIntegrationServiceTest, ApplyPatch_DefaultReplace_ClearsGraph) {
     // Add an existing node to the graph
     graph->addNode(std::make_unique<OscillatorModule>());
     ASSERT_EQ(graph->getNumNodes(), 1);
 
     // Apply a full patch without merge mode (default)
-    juce::String fullJson = "{\"nodes\":[{\"id\":100,\"type\":\"Filter\",\"params\":{}}],\"connections\":[]}";
-    bool success = service->applyPatch(fullJson);
+    bool success = service->applyPatch(kMinimalValidPatch);
     ASSERT_TRUE(success);
-    ASSERT_EQ(graph->getNumNodes(), 1); // Only the Filter from JSON, Oscillator cleared
+    ASSERT_EQ(graph->getNumNodes(), 2); // Only kMinimalValidPatch's 2 nodes; the old Oscillator is gone
 }
 
 TEST_F(AIIntegrationServiceTest, HistoryDoesNotRetainPatchContext) {
@@ -313,7 +391,7 @@ TEST_F(AIIntegrationServiceTest, ValidPatchFiresBothCallbacksInOrder) {
     listener.sharedCallCounter = &callCounter;
     service->addListener(&listener);
 
-    bool success = service->applyPatch("{\"nodes\":[], \"connections\":[]}");
+    bool success = service->applyPatch(kMinimalValidPatch);
 
     EXPECT_TRUE(success);
     EXPECT_EQ(listener.aboutToApplyCount, 1);
@@ -513,17 +591,9 @@ constexpr const char* kWorkedExample5Delta =
     R"({"mode": "merge", "remove": [502], "nodes": [], )"
     R"("connections": [{"src": 501, "srcPort": 0, "dst": 503, "dstPort": 0}]})";
 
-// Mirrors AIEvalHarness's own graph setup (Tools/AIEvalHarness/Main.cpp): without configuring the
-// "Audio Output" node's bus channel count the way AudioEngine does, it reports zero channels and every
-// connection into it silently no-ops, making every patch look unconnected regardless of content.
-void prepareGraphForEval(juce::AudioProcessorGraph& graph) {
-    graph.setPlayConfigDetails(0, 2, 44100.0, 512);
-    graph.prepareToPlay(44100.0, 512);
-}
-
 PatchEvalResult applyAndEvaluate(const char* json) {
     juce::AudioProcessorGraph graph;
-    prepareGraphForEval(graph);
+    prepareGraphForPatchEval(graph);
     juce::var parsed = juce::JSON::parse(juce::String(json));
     EXPECT_TRUE(AIStateMapper::applyJSONToGraph(parsed, graph, /*clearExisting=*/true, /*trusted=*/true));
     return evaluatePatch(graph);
@@ -531,7 +601,7 @@ PatchEvalResult applyAndEvaluate(const char* json) {
 
 PatchEvalResult applyMergeAndEvaluate(const char* seedJson, const char* deltaJson) {
     juce::AudioProcessorGraph graph;
-    prepareGraphForEval(graph);
+    prepareGraphForPatchEval(graph);
     juce::var seed = juce::JSON::parse(juce::String(seedJson));
     EXPECT_TRUE(AIStateMapper::applyJSONToGraph(seed, graph, /*clearExisting=*/true, /*trusted=*/true));
     juce::var delta = juce::JSON::parse(juce::String(deltaJson));
