@@ -23,6 +23,14 @@ struct ProviderDescriptor {
     bool needsHost = false;
     bool needsAuth = false;
     std::function<std::unique_ptr<AIProvider>(const ProviderConfig&)> create;
+
+    // Appended LAST: existing call sites and tests use positional aggregate initialization
+    // (e.g. {"ollama", "Ollama (local)", true, false, [](...){...}}), so inserting a field
+    // earlier than `create` would silently break every one of them. Hidden from the Settings
+    // UI (AISettingsTab's provider combo) while still fully registered and constructible — a
+    // runtime feature flag, not a build-time one, for a provider that ships wired up before its
+    // UI entry point is turned on.
+    bool hidden = false;
 };
 
 /** Registry of available AI providers, keyed by stable id.

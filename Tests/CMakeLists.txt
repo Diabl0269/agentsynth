@@ -28,6 +28,7 @@ add_executable(Tests
     PatchEvalTests.cpp
     AIProviderRegistryTests.cpp
     OllamaProviderTests.cpp
+    RemoteProviderTests.cpp
     MainComponentTests.cpp
     GraphEditorTests.cpp
     ModuleComponentTests.cpp

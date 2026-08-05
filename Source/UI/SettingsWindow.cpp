@@ -19,13 +19,22 @@ public:
         providerLabel.setText("AI Provider:", juce::dontSendNotification);
 
         addAndMakeVisible(providerCombo);
+
+        // Built once and reused by selectedDescriptor() below: populating the combo from a
+        // filtered view but then indexing selectedDescriptor() into the UNFILTERED
+        // providerRegistry.listAll() would desync the moment a hidden provider sits between two
+        // visible ones (combo index N would no longer be listAll()[N]). visibleProviders is the
+        // single source of truth for both.
+        for (const auto& descriptor : providerRegistry.listAll())
+            if (!descriptor.hidden)
+                visibleProviders.push_back(&descriptor);
+
         juce::String savedProviderId = appProperties.getUserSettings()->getValue("aiProvider", "ollama");
         int selectedItemId = 1;
-        const auto& allProviders = providerRegistry.listAll();
-        for (size_t i = 0; i < allProviders.size(); ++i) {
+        for (size_t i = 0; i < visibleProviders.size(); ++i) {
             int itemId = (int)i + 1;
-            providerCombo.addItem(allProviders[i].displayName, itemId);
-            if (allProviders[i].id == savedProviderId)
+            providerCombo.addItem(visibleProviders[i]->displayName, itemId);
+            if (visibleProviders[i]->id == savedProviderId)
                 selectedItemId = itemId;
         }
         providerCombo.setSelectedId(selectedItemId, juce::dontSendNotification);
@@ -73,9 +82,8 @@ public:
 private:
     const synth::ProviderDescriptor* selectedDescriptor() const {
         int selectedIndex = providerCombo.getSelectedItemIndex();
-        const auto& all = providerRegistry.listAll();
-        if (selectedIndex >= 0 && (size_t)selectedIndex < all.size())
-            return &all[(size_t)selectedIndex];
+        if (selectedIndex >= 0 && (size_t)selectedIndex < visibleProviders.size())
+            return visibleProviders[(size_t)selectedIndex];
         return nullptr;
     }
 
@@ -92,6 +100,11 @@ private:
     synth::AIIntegrationService& aiService;
     synth::AIChatComponent& aiChatComponent;
     synth::AIProviderRegistry providerRegistry;
+    // Non-owning pointers into providerRegistry's storage — valid for the AISettingsTab's
+    // lifetime because providerRegistry is a fellow member and outlives this vector. See the
+    // constructor for why this must be the ONLY thing the combo population and
+    // selectedDescriptor() index into.
+    std::vector<const synth::ProviderDescriptor*> visibleProviders;
 
     juce::Label providerLabel;
     juce::ComboBox providerCombo;
