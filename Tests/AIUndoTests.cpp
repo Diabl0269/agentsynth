@@ -62,9 +62,14 @@ public:
     }
 };
 
-// A full-replacement patch: two nodes with a distinct shape from the baseline below.
-constexpr const char* kReplacePatch = R"({"nodes":[{"id":10,"type":"Oscillator"},{"id":11,"type":"VCA"}],
-     "connections":[{"src":10,"srcPort":0,"dst":11,"dstPort":0}]})";
+// A full-replacement patch: three nodes with a distinct shape from the baseline below. Ends in an
+// Audio Output reachable from the Oscillator — AIIntegrationService::applyPatch()'s structural
+// gate rejects a replace-mode patch that doesn't, and installBaselinePatch() below deliberately
+// has no Audio Output, so a bare Oscillator+VCA replace would otherwise pass the gate only by
+// accident of the baseline it's replacing, not on its own merits.
+constexpr const char* kReplacePatch =
+    R"({"nodes":[{"id":10,"type":"Oscillator"},{"id":11,"type":"VCA"},{"id":12,"type":"Audio Output"}],
+     "connections":[{"src":10,"srcPort":0,"dst":11,"dstPort":0},{"src":11,"srcPort":0,"dst":12,"dstPort":0}]})";
 
 class AIUndoTest : public ::testing::Test {
 protected:
@@ -104,7 +109,7 @@ TEST_F(AIUndoTest, AiPatchIsUndoable) {
     const auto before = captureShape(graph);
 
     ASSERT_TRUE(service->applyPatch(kReplacePatch));
-    ASSERT_EQ(graph.getNumNodes(), 2);
+    ASSERT_EQ(graph.getNumNodes(), 3);
     EXPECT_FALSE(captureShape(graph) == before) << "patch should have changed the graph";
 
     ASSERT_TRUE(undoManager.undo());
@@ -200,10 +205,12 @@ TEST_F(AIUndoTest, ReplacePatchCanBeAppliedAfterUndo) {
     ASSERT_TRUE(undoManager.undo());
 
     EXPECT_TRUE(service->applyPatch(
-        R"({"nodes":[{"id":20,"type":"Oscillator"},{"id":21,"type":"Filter"},{"id":22,"type":"VCA"}],
-            "connections":[{"src":20,"srcPort":0,"dst":21,"dstPort":0},{"src":21,"srcPort":0,"dst":22,"dstPort":0}]})"))
+        R"({"nodes":[{"id":20,"type":"Oscillator"},{"id":21,"type":"Filter"},{"id":22,"type":"VCA"},
+                     {"id":23,"type":"Audio Output"}],
+            "connections":[{"src":20,"srcPort":0,"dst":21,"dstPort":0},{"src":21,"srcPort":0,"dst":22,"dstPort":0},
+                           {"src":22,"srcPort":0,"dst":23,"dstPort":0}]})"))
         << "a fresh replace patch must apply after an undo";
-    EXPECT_EQ(graph.getNumNodes(), 3);
+    EXPECT_EQ(graph.getNumNodes(), 4);
 }
 
 TEST_F(AIUndoTest, ListenersFireOnUndo) {
@@ -334,10 +341,10 @@ TEST(AIUndoWiringTest, EditorRebuildsAndRepaintsAcrossUndoAndRedo) {
         EXPECT_NO_THROW(mc.paint(g));
     };
 
-    // Apply: two modules (Oscillator + VCA).
+    // Apply: three modules (Oscillator + VCA + Audio Output).
     ASSERT_TRUE(svc.applyPatch(kReplacePatch));
     pumpAndPaint();
-    EXPECT_EQ(editor.getModuleComponents().size(), 2) << "editor should show the patched modules";
+    EXPECT_EQ(editor.getModuleComponents().size(), 3) << "editor should show the patched modules";
 
     // Undo: the editor must drop the patched components and rebuild the pre-patch ones.
     ASSERT_TRUE(appUndo.undo());
@@ -348,7 +355,7 @@ TEST(AIUndoWiringTest, EditorRebuildsAndRepaintsAcrossUndoAndRedo) {
     // Redo: back to the patched state, still rendering.
     ASSERT_TRUE(appUndo.redo());
     pumpAndPaint();
-    EXPECT_EQ(editor.getModuleComponents().size(), 2) << "redo must restore the patched modules";
+    EXPECT_EQ(editor.getModuleComponents().size(), 3) << "redo must restore the patched modules";
 }
 
 } // namespace

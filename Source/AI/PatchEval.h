@@ -26,4 +26,16 @@ struct PatchEvalResult {
  */
 PatchEvalResult evaluatePatch(const juce::AudioProcessorGraph& graph);
 
+/**
+ * @brief Configures a graph the way AudioEngine does before device audio starts, so evaluatePatch()
+ *        reports real bus connectivity instead of every "Audio Output" node reporting zero channels.
+ *
+ * Without this, an unconfigured graph's AudioGraphIOProcessor("Audio Output") reports zero
+ * channels and every connection into it silently no-ops, making every patch look unconnected
+ * regardless of content. Callers that build a scratch graph purely to run evaluatePatch() on it
+ * (Tools/AIEvalHarness, Tests/AIIntegrationServiceTests, and the live structural retry gate in
+ * AIIntegrationService) must call this before applying any patch JSON to that graph.
+ */
+void prepareGraphForPatchEval(juce::AudioProcessorGraph& graph);
+
 } // namespace synth
