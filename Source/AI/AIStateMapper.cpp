@@ -461,6 +461,9 @@ std::unique_ptr<juce::AudioProcessor> AIStateMapper::createModule(const juce::St
     if (baseName.containsIgnoreCase("Env") || baseName.containsIgnoreCase("ADSR"))
         return std::make_unique<ADSRModule>(baseName);
 
+    if (baseName == "MidiKeyboard")
+        return std::make_unique<MidiKeyboardModule>();
+
     juce::Logger::writeToLog("AIStateMapper: Unknown module type: " + type);
     return nullptr;
 }
@@ -1054,8 +1057,8 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
         if (audioOutputNode != nullptr) {
             // Types that produce audio and should auto-connect to output
             static const std::set<juce::String> audioNodeTypes = {
-                "Oscillator", "Filter", "VCA",    "Distortion", "Delay",   "Reverb", "Amp Env",
-                "Filter Env", "Chorus", "Phaser", "Compressor", "Flanger", "Limiter"};
+                "Oscillator", "Noise",      "Filter", "VCA",    "Distortion", "Delay",   "Reverb",
+                "Amp Env",    "Filter Env", "Chorus", "Phaser", "Compressor", "Flanger", "Limiter"};
 
             for (auto newNodeId : newlyCreatedNodes) {
                 auto* node = graph.getNodeForId(newNodeId);

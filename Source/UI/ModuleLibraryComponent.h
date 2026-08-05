@@ -15,19 +15,33 @@ public:
 
     ModuleLibraryComponent() {
         entries = {
-            {"Sources", true},        {"Oscillator", false},
-            {"Noise", false},         {"LFO", false},
-            {"Sequencing", true},     {"Sequencer", false},
-            {"MidiKeyboard", false},  {"Poly MIDI", false},
-            {"External MIDI", false}, {"Envelopes & Control", true},
-            {"ADSR", false},          {"VCA", false},
-            {"Filters", true},        {"Filter", false},
-            {"Modulation FX", true},  {"Chorus", false},
-            {"Phaser", false},        {"Flanger", false},
-            {"Distortion", false},    {"Time FX", true},
-            {"Delay", false},         {"Reverb", false},
-            {"Dynamics", true},       {"Compressor", false},
-            {"Limiter", false},       {"Utility", true},
+            {"Sources", true},
+            {"Oscillator", false},
+            {"Noise", false},
+            {"LFO", false},
+            {"Sequencing", true},
+            {"Sequencer", false},
+            {"Poly Sequencer", false},
+            {"MidiKeyboard", false},
+            {"Poly MIDI", false},
+            {"External MIDI", false},
+            {"Envelopes & Control", true},
+            {"ADSR", false},
+            {"VCA", false},
+            {"Filters", true},
+            {"Filter", false},
+            {"Modulation FX", true},
+            {"Chorus", false},
+            {"Phaser", false},
+            {"Flanger", false},
+            {"Distortion", false},
+            {"Time FX", true},
+            {"Delay", false},
+            {"Reverb", false},
+            {"Dynamics", true},
+            {"Compressor", false},
+            {"Limiter", false},
+            {"Utility", true},
             {"Voice Mixer", false},
         };
         setMouseCursor(juce::MouseCursor::NormalCursor);
@@ -48,6 +62,8 @@ public:
             return "Low-frequency oscillator for slow cyclic modulation.";
         if (moduleName.equalsIgnoreCase("Sequencer"))
             return "Step sequencer that outputs pitch and gate CV signals.";
+        if (moduleName.equalsIgnoreCase("Poly Sequencer"))
+            return "Polyphonic step sequencer for multi-voice melodies.";
         if (moduleName.equalsIgnoreCase("MidiKeyboard"))
             return "On-screen MIDI keyboard for note input.";
         if (moduleName.equalsIgnoreCase("Poly MIDI"))

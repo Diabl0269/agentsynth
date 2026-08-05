@@ -65,7 +65,7 @@ static juce::Point<int> estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Attenuverter")
         return {280, 120};
     if (typeName == "Noise")
-        return {280, 220};
+        return {280, 250};
     return {280, 360};
 }
 
@@ -1393,50 +1393,7 @@ void GraphEditor::itemDragExit(const SourceDetails& dragSourceDetails) {
 
 void GraphEditor::itemDropped(const SourceDetails& dragSourceDetails) {
     juce::String name = dragSourceDetails.description.toString();
-    std::unique_ptr<juce::AudioProcessor> newProcessor;
-
-    if (name == "Oscillator")
-        newProcessor = std::make_unique<OscillatorModule>();
-    else if (name == "Filter")
-        newProcessor = std::make_unique<FilterModule>();
-    else if (name == "ADSR")
-        newProcessor = std::make_unique<ADSRModule>();
-    else if (name == "VCA")
-        newProcessor = std::make_unique<VCAModule>();
-    else if (name == "Sequencer")
-        newProcessor = std::make_unique<SequencerModule>();
-    else if (name == "LFO")
-        newProcessor = std::make_unique<LFOModule>();
-    else if (name == "Distortion")
-        newProcessor = std::make_unique<DistortionModule>();
-    else if (name == "Delay")
-        newProcessor = std::make_unique<DelayModule>();
-    else if (name == "Reverb")
-        newProcessor = std::make_unique<ReverbModule>();
-    else if (name == "MidiKeyboard")
-        newProcessor = std::make_unique<MidiKeyboardModule>();
-    else if (name == "Attenuverter")
-        newProcessor = std::make_unique<AttenuverterModule>();
-    else if (name == "Chorus")
-        newProcessor = std::make_unique<ChorusModule>();
-    else if (name == "Phaser")
-        newProcessor = std::make_unique<PhaserModule>();
-    else if (name == "Compressor")
-        newProcessor = std::make_unique<CompressorModule>();
-    else if (name == "Flanger")
-        newProcessor = std::make_unique<FlangerModule>();
-    else if (name == "Limiter")
-        newProcessor = std::make_unique<LimiterModule>();
-    else if (name == "Poly MIDI")
-        newProcessor = std::make_unique<PolyMidiModule>();
-    else if (name == "External MIDI")
-        newProcessor = std::make_unique<ExternalMidiModule>();
-    else if (name == "Poly Sequencer")
-        newProcessor = std::make_unique<PolySequencerModule>();
-    else if (name == "Voice Mixer")
-        newProcessor = std::make_unique<VoiceMixerModule>();
-    else if (name == "Noise")
-        newProcessor = std::make_unique<NoiseModule>();
+    auto newProcessor = synth::AIStateMapper::createModule(name);
 
     if (newProcessor) {
         auto& graph = audioEngine.getGraph();

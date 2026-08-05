@@ -1,4 +1,3 @@
-#include "../Source/AudioEngine.h"
 #include "../Source/Modules/NoiseModule.h"
 #include <cmath>
 #include <gtest/gtest.h>
@@ -61,77 +60,139 @@ TEST_F(NoiseModuleTest, NoiseTypeParameterMapping) {
     EXPECT_EQ(noiseTypeParam->getIndex(), 2); // choice 2 is Brown
 }
 
-TEST_F(NoiseModuleTest, ProcessBlockProducesOutput) {
-    juce::AudioBuffer<float> buffer(2, 512);
-    buffer.clear();
+TEST_F(NoiseModuleTest, ZeroChannelsDoesNotCrash) {
+    juce::AudioBuffer<float> emptyBuffer(0, 512);
     juce::MidiBuffer midiMessages;
+    EXPECT_NO_THROW(module->processBlock(emptyBuffer, midiMessages));
+}
 
-    // Ensure level is up
-    module->getParameters()[3]->setValueNotifyingHost(1.0f); // Level max
+TEST_F(NoiseModuleTest, ProcessBlockProducesOutputWhitePinkBrown) {
+    juce::MidiBuffer midiMessages;
+    auto* noiseTypeParam = dynamic_cast<juce::AudioParameterChoice*>(module->getParameters()[1]);
 
-    module->processBlock(buffer, midiMessages);
+    for (int typeIndex = 0; typeIndex < 3; ++typeIndex) {
+        noiseTypeParam->setValueNotifyingHost(typeIndex / 2.0f);
+        juce::AudioBuffer<float> buffer(2, 512);
+        buffer.clear();
+        module->processBlock(buffer, midiMessages);
 
-    // Output should not be entirely silent
-    bool hasAudio = false;
-    for (int i = 0; i < buffer.getNumSamples(); ++i) {
-        if (std::abs(buffer.getSample(0, i)) > 0.0001f || std::abs(buffer.getSample(1, i)) > 0.0001f) {
-            hasAudio = true;
+        bool hasAudio = false;
+        for (int i = 0; i < buffer.getNumSamples(); ++i) {
+            if (std::abs(buffer.getSample(0, i)) > 0.0001f) {
+                hasAudio = true;
+                break;
+            }
+        }
+        EXPECT_TRUE(hasAudio) << "Type index " << typeIndex << " produced silence";
+    }
+}
+
+TEST_F(NoiseModuleTest, ColorFiltersLowPassAndHighPass) {
+    juce::MidiBuffer midiMessages;
+    auto* colorParam = dynamic_cast<juce::AudioParameterFloat*>(module->getParameters()[2]);
+
+    // Low pass (color = -1.0)
+    colorParam->setValueNotifyingHost(0.0f);
+    juce::AudioBuffer<float> lpBuffer(2, 512);
+    lpBuffer.clear();
+    module->processBlock(lpBuffer, midiMessages);
+
+    bool hasLPAudio = false;
+    for (int i = 0; i < lpBuffer.getNumSamples(); ++i) {
+        if (std::abs(lpBuffer.getSample(0, i)) > 0.0001f) {
+            hasLPAudio = true;
             break;
         }
     }
+    EXPECT_TRUE(hasLPAudio);
 
-    EXPECT_TRUE(hasAudio);
-}
+    // High pass (color = +1.0)
+    colorParam->setValueNotifyingHost(1.0f);
+    juce::AudioBuffer<float> hpBuffer(2, 512);
+    hpBuffer.clear();
+    module->processBlock(hpBuffer, midiMessages);
 
-TEST_F(NoiseModuleTest, MutedOutputIsSilent) {
-    juce::AudioBuffer<float> buffer(2, 512);
-    // Add some garbage to ensure it gets cleared
-    for (int ch = 0; ch < 2; ++ch) {
-        for (int i = 0; i < 512; ++i) {
-            buffer.setSample(ch, i, 0.5f);
+    bool hasHPAudio = false;
+    for (int i = 0; i < hpBuffer.getNumSamples(); ++i) {
+        if (std::abs(hpBuffer.getSample(0, i)) > 0.0001f) {
+            hasHPAudio = true;
+            break;
         }
     }
+    EXPECT_TRUE(hasHPAudio);
+}
+
+TEST_F(NoiseModuleTest, PolyModeProducesMultiChannelOutput) {
+    auto* polyParam = dynamic_cast<juce::AudioParameterBool*>(module->getParameters()[4]);
+    polyParam->setValueNotifyingHost(1.0f); // Enable poly
+
+    juce::AudioBuffer<float> buffer(8, 512);
+    buffer.clear();
     juce::MidiBuffer midiMessages;
 
-    module->setMuted(true);
     module->processBlock(buffer, midiMessages);
 
-    bool isSilent = true;
-    for (int ch = 0; ch < 2; ++ch) {
+    for (int ch = 0; ch < 8; ++ch) {
+        bool voiceHasAudio = false;
         for (int i = 0; i < buffer.getNumSamples(); ++i) {
-            if (buffer.getSample(ch, i) != 0.0f) {
-                isSilent = false;
+            if (std::abs(buffer.getSample(ch, i)) > 0.0001f) {
+                voiceHasAudio = true;
                 break;
             }
         }
+        EXPECT_TRUE(voiceHasAudio) << "Voice channel " << ch << " was silent in Poly mode";
     }
-
-    EXPECT_TRUE(isSilent);
 }
 
-TEST_F(NoiseModuleTest, BypassedOutputIsSilent) {
-    // Noise module is a source, so bypass should mute it
-    juce::AudioBuffer<float> buffer(2, 512);
-    // Add some garbage to ensure it gets cleared
-    for (int ch = 0; ch < 2; ++ch) {
-        for (int i = 0; i < 512; ++i) {
-            buffer.setSample(ch, i, 0.5f);
-        }
-    }
+TEST_F(NoiseModuleTest, CVModulationMonoAndPoly) {
     juce::MidiBuffer midiMessages;
 
-    module->setBypassed(true);
+    // Mono CV on channel 8
+    juce::AudioBuffer<float> monoBuffer(10, 512);
+    monoBuffer.clear();
+    for (int i = 0; i < 512; ++i)
+        monoBuffer.setSample(8, i, 0.5f); // Color CV = +0.5
+
+    module->processBlock(monoBuffer, midiMessages);
+    EXPECT_TRUE(std::abs(monoBuffer.getSample(0, 0)) > 0.0001f);
+
+    // Poly CV on channel 8
+    auto* polyParam = dynamic_cast<juce::AudioParameterBool*>(module->getParameters()[4]);
+    polyParam->setValueNotifyingHost(1.0f);
+
+    juce::AudioBuffer<float> polyBuffer(10, 512);
+    polyBuffer.clear();
+    for (int i = 0; i < 512; ++i)
+        polyBuffer.setSample(8, i, -0.5f); // Color CV = -0.5
+
+    module->processBlock(polyBuffer, midiMessages);
+    EXPECT_TRUE(std::abs(polyBuffer.getSample(0, 0)) > 0.0001f);
+}
+
+class NoiseModuleMuteBypassTest
+    : public NoiseModuleTest
+    , public ::testing::WithParamInterface<bool> {};
+
+TEST_P(NoiseModuleMuteBypassTest, OutputIsSilentWhenMutedOrBypassed) {
+    juce::AudioBuffer<float> buffer(2, 512);
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.5f);
+
+    juce::MidiBuffer midiMessages;
+    bool isMuteTest = GetParam();
+    if (isMuteTest)
+        module->setMuted(true);
+    else
+        module->setBypassed(true);
+
     module->processBlock(buffer, midiMessages);
 
-    bool isSilent = true;
     for (int ch = 0; ch < 2; ++ch) {
         for (int i = 0; i < buffer.getNumSamples(); ++i) {
-            if (buffer.getSample(ch, i) != 0.0f) {
-                isSilent = false;
-                break;
-            }
+            EXPECT_EQ(buffer.getSample(ch, i), 0.0f);
         }
     }
-
-    EXPECT_TRUE(isSilent);
 }
+
+INSTANTIATE_TEST_SUITE_P(MuteAndBypass, NoiseModuleMuteBypassTest, ::testing::Values(true, false));
