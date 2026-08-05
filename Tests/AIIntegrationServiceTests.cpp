@@ -232,7 +232,7 @@ TEST_F(AIIntegrationServiceTest, ReplaceModeNotReachingOutputIsRejectedStructura
     bool success = service->applyPatch(R"({"nodes":[{"id":1,"type":"Audio Output"}],"connections":[]})");
 
     EXPECT_FALSE(success);
-    EXPECT_EQ(service->getLastPatchError(), "Audio Output is not reachable from any Oscillator");
+    EXPECT_EQ(service->getLastPatchError(), "Audio Output is not reachable from any Oscillator or Noise module");
 }
 
 TEST_F(AIIntegrationServiceTest, StructuralRejectionFiresNoListenerCallbacks) {
@@ -285,7 +285,7 @@ TEST_F(AIIntegrationServiceTest, MergeRegressionGate_RejectsADeltaThatBreaksAWor
                                        /*mergeMode=*/true);
 
     EXPECT_FALSE(success);
-    EXPECT_EQ(service->getLastPatchError(), "Audio Output is not reachable from any Oscillator");
+    EXPECT_EQ(service->getLastPatchError(), "Audio Output is not reachable from any Oscillator or Noise module");
     EXPECT_EQ(graph->getNumNodes(), 2) << "a structurally rejected merge must not touch the live graph";
 }
 
