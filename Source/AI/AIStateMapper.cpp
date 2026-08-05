@@ -11,6 +11,8 @@
 #include "../Modules/FX/LimiterModule.h"
 #include "../Modules/FX/PhaserModule.h"
 #include "../Modules/FX/ReverbModule.h"
+#include "../Modules/FX/BitcrusherModule.h"
+#include "../Modules/NoiseModule.h"
 #include "../Modules/FilterModule.h"
 #include "../Modules/LFOModule.h"
 #include "../Modules/MidiKeyboardModule.h"
@@ -62,6 +64,7 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Flanger", []() { return std::make_unique<FlangerModule>(); }},
     {"Limiter", []() { return std::make_unique<LimiterModule>(); }},
     {"Voice Mixer", []() { return std::make_unique<VoiceMixerModule>(); }},
+    {"Bitcrusher", []() { return std::make_unique<BitcrusherModule>(); }},
     {"Noise", []() { return std::make_unique<NoiseModule>(); }},
     {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }}};
 
@@ -509,10 +512,14 @@ static juce::String getFactoryTypeName(juce::AudioProcessor* processor) {
             return "Limiter";
         case ModuleType::VoiceMixer:
             return "Voice Mixer";
+        case ModuleType::Bitcrusher:
+            return "Bitcrusher";
         case ModuleType::Noise:
             return "Noise";
         case ModuleType::ExternalMidi:
             return "External MIDI";
+        default:
+            return "Unknown";
         }
     }
     return processor->getName();
@@ -1058,7 +1065,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
             // Types that produce audio and should auto-connect to output
             static const std::set<juce::String> audioNodeTypes = {
                 "Oscillator", "Noise",      "Filter", "VCA",    "Distortion", "Delay",   "Reverb",
-                "Amp Env",    "Filter Env", "Chorus", "Phaser", "Compressor", "Flanger", "Limiter"};
+                "Amp Env",    "Filter Env", "Chorus", "Phaser", "Compressor", "Flanger", "Limiter", "Bitcrusher"};
 
             for (auto newNodeId : newlyCreatedNodes) {
                 auto* node = graph.getNodeForId(newNodeId);
@@ -1066,10 +1073,6 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                     continue;
 
                 juce::String typeName = node->getProcessor()->getName();
-                if (audioNodeTypes.find(typeName) == audioNodeTypes.end())
-                    continue;
-
-                // Check if this node already has outgoing audio connections
                 bool hasOutgoing = false;
                 for (const auto& conn : graph.getConnections()) {
                     if (conn.source.nodeID == newNodeId && !conn.source.isMIDI()) {
