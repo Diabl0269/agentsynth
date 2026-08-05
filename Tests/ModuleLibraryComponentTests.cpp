@@ -13,9 +13,10 @@
 // ============================================================================
 
 TEST(ModuleLibraryDescriptionFor, KnownModulesReturnNonEmpty) {
-    const char* known[] = {"Oscillator", "LFO",   "Sequencer", "MidiKeyboard", "Poly MIDI", "External MIDI",
-                           "ADSR",       "VCA",   "Filter",    "Chorus",       "Phaser",    "Flanger",
-                           "Distortion", "Delay", "Reverb",    "Compressor",   "Limiter",   "Voice Mixer"};
+    const char* known[] = {"Oscillator",   "Noise",     "LFO",           "Sequencer", "Poly Sequencer",
+                           "MidiKeyboard", "Poly MIDI", "External MIDI", "ADSR",      "VCA",
+                           "Filter",       "Chorus",    "Phaser",        "Flanger",   "Distortion",
+                           "Delay",        "Reverb",    "Compressor",    "Limiter",   "Voice Mixer"};
     for (const char* name : known) {
         juce::String desc = ModuleLibraryComponent::descriptionFor(name);
         EXPECT_FALSE(desc.isEmpty()) << "descriptionFor(\"" << name << "\") must not be empty";
@@ -23,9 +24,10 @@ TEST(ModuleLibraryDescriptionFor, KnownModulesReturnNonEmpty) {
 }
 
 TEST(ModuleLibraryDescriptionFor, KnownModulesReturnDistinctStrings) {
-    const char* known[] = {"Oscillator", "LFO",   "Sequencer", "MidiKeyboard", "Poly MIDI", "External MIDI",
-                           "ADSR",       "VCA",   "Filter",    "Chorus",       "Phaser",    "Flanger",
-                           "Distortion", "Delay", "Reverb",    "Compressor",   "Limiter",   "Voice Mixer"};
+    const char* known[] = {"Oscillator",   "Noise",     "LFO",           "Sequencer", "Poly Sequencer",
+                           "MidiKeyboard", "Poly MIDI", "External MIDI", "ADSR",      "VCA",
+                           "Filter",       "Chorus",    "Phaser",        "Flanger",   "Distortion",
+                           "Delay",        "Reverb",    "Compressor",    "Limiter",   "Voice Mixer"};
     std::vector<juce::String> descs;
     for (const char* name : known)
         descs.push_back(ModuleLibraryComponent::descriptionFor(name));

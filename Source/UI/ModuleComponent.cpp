@@ -1105,7 +1105,8 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                     std::vector<ModEntry> modules;
                 };
                 std::vector<Category> categories = {
-                    {"Sources", {{"Oscillator", ModuleType::Oscillator}, {"LFO", ModuleType::LFO}}},
+                    {"Sources",
+                     {{"Oscillator", ModuleType::Oscillator}, {"Noise", ModuleType::Noise}, {"LFO", ModuleType::LFO}}},
                     {"Sequencing",
                      {{"Sequencer", ModuleType::Sequencer},
                       {"Poly Sequencer", ModuleType::PolySequencer},

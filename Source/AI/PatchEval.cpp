@@ -67,13 +67,16 @@ PatchEvalResult evaluatePatch(const juce::AudioProcessorGraph& graph) {
     if (result.hasAudioOutput) {
         for (auto id : reachableBackward(graph, output->nodeID)) {
             const auto* node = graph.getNodeForId(id);
-            if (node != nullptr && node->getProcessor() != nullptr && node->getProcessor()->getName() == "Oscillator") {
-                result.sourceReachesOutput = true;
-                break;
+            if (node != nullptr && node->getProcessor() != nullptr) {
+                juce::String name = node->getProcessor()->getName();
+                if (name == "Oscillator" || name == "Noise") {
+                    result.sourceReachesOutput = true;
+                    break;
+                }
             }
         }
         if (!result.sourceReachesOutput)
-            reasons.add("Audio Output is not reachable from any Oscillator");
+            reasons.add("Audio Output is not reachable from any Oscillator or Noise module");
     }
 
     for (auto* node : graph.getNodes()) {

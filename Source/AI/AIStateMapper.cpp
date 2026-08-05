@@ -15,6 +15,7 @@
 #include "../Modules/LFOModule.h"
 #include "../Modules/MidiKeyboardModule.h"
 #include "../Modules/ModuleBase.h"
+#include "../Modules/NoiseModule.h"
 #include "../Modules/OscillatorModule.h"
 #include "../Modules/PolyMidiModule.h"
 #include "../Modules/PolySequencerModule.h"
@@ -61,6 +62,7 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Flanger", []() { return std::make_unique<FlangerModule>(); }},
     {"Limiter", []() { return std::make_unique<LimiterModule>(); }},
     {"Voice Mixer", []() { return std::make_unique<VoiceMixerModule>(); }},
+    {"Noise", []() { return std::make_unique<NoiseModule>(); }},
     {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }}};
 
 namespace {
@@ -459,6 +461,9 @@ std::unique_ptr<juce::AudioProcessor> AIStateMapper::createModule(const juce::St
     if (baseName.containsIgnoreCase("Env") || baseName.containsIgnoreCase("ADSR"))
         return std::make_unique<ADSRModule>(baseName);
 
+    if (baseName == "MidiKeyboard")
+        return std::make_unique<MidiKeyboardModule>();
+
     juce::Logger::writeToLog("AIStateMapper: Unknown module type: " + type);
     return nullptr;
 }
@@ -504,6 +509,8 @@ static juce::String getFactoryTypeName(juce::AudioProcessor* processor) {
             return "Limiter";
         case ModuleType::VoiceMixer:
             return "Voice Mixer";
+        case ModuleType::Noise:
+            return "Noise";
         case ModuleType::ExternalMidi:
             return "External MIDI";
         }
@@ -1050,8 +1057,8 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
         if (audioOutputNode != nullptr) {
             // Types that produce audio and should auto-connect to output
             static const std::set<juce::String> audioNodeTypes = {
-                "Oscillator", "Filter", "VCA",    "Distortion", "Delay",   "Reverb", "Amp Env",
-                "Filter Env", "Chorus", "Phaser", "Compressor", "Flanger", "Limiter"};
+                "Oscillator", "Noise",      "Filter", "VCA",    "Distortion", "Delay",   "Reverb",
+                "Amp Env",    "Filter Env", "Chorus", "Phaser", "Compressor", "Flanger", "Limiter"};
 
             for (auto newNodeId : newlyCreatedNodes) {
                 auto* node = graph.getNodeForId(newNodeId);
