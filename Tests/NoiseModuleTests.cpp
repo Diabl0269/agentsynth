@@ -1,7 +1,7 @@
-#include <gtest/gtest.h>
-#include "../Source/Modules/NoiseModule.h"
 #include "../Source/AudioEngine.h"
+#include "../Source/Modules/NoiseModule.h"
 #include <cmath>
+#include <gtest/gtest.h>
 
 class NoiseModuleTest : public ::testing::Test {
 protected:
@@ -24,22 +24,22 @@ TEST_F(NoiseModuleTest, InitialParameterValues) {
     auto* color = module->getParameters()[2];
     auto* level = module->getParameters()[3];
 
-    EXPECT_EQ(noiseType->getValue(), 0.0f); // White noise
-    EXPECT_EQ(color->getValue(), 0.5f); // Color = 0 (Center)
+    EXPECT_EQ(noiseType->getValue(), 0.0f);   // White noise
+    EXPECT_EQ(color->getValue(), 0.5f);       // Color = 0 (Center)
     EXPECT_FLOAT_EQ(level->getValue(), 1.0f); // Level = 1.0
 }
 
 TEST_F(NoiseModuleTest, ColorParameterMapping) {
     auto* colorParam = dynamic_cast<juce::AudioParameterFloat*>(module->getParameters()[2]);
-    
+
     // Test center
     colorParam->setValueNotifyingHost(0.5f);
     EXPECT_NEAR(colorParam->get(), 0.0f, 1e-5f);
-    
+
     // Test min
     colorParam->setValueNotifyingHost(0.0f);
     EXPECT_FLOAT_EQ(colorParam->get(), -1.0f);
-    
+
     // Test max
     colorParam->setValueNotifyingHost(1.0f);
     EXPECT_FLOAT_EQ(colorParam->get(), 1.0f);
@@ -47,15 +47,15 @@ TEST_F(NoiseModuleTest, ColorParameterMapping) {
 
 TEST_F(NoiseModuleTest, NoiseTypeParameterMapping) {
     auto* noiseTypeParam = dynamic_cast<juce::AudioParameterChoice*>(module->getParameters()[1]);
-    
+
     // Test White
     noiseTypeParam->setValueNotifyingHost(0.0f);
     EXPECT_EQ(noiseTypeParam->getIndex(), 0); // choice 0 is White
-    
+
     // Test Pink
     noiseTypeParam->setValueNotifyingHost(0.5f);
     EXPECT_EQ(noiseTypeParam->getIndex(), 1); // choice 1 is Pink
-    
+
     // Test Brown
     noiseTypeParam->setValueNotifyingHost(1.0f);
     EXPECT_EQ(noiseTypeParam->getIndex(), 2); // choice 2 is Brown
@@ -79,7 +79,7 @@ TEST_F(NoiseModuleTest, ProcessBlockProducesOutput) {
             break;
         }
     }
-    
+
     EXPECT_TRUE(hasAudio);
 }
 
@@ -105,7 +105,7 @@ TEST_F(NoiseModuleTest, MutedOutputIsSilent) {
             }
         }
     }
-    
+
     EXPECT_TRUE(isSilent);
 }
 
@@ -132,6 +132,6 @@ TEST_F(NoiseModuleTest, BypassedOutputIsSilent) {
             }
         }
     }
-    
+
     EXPECT_TRUE(isSilent);
 }

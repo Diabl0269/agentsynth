@@ -6,7 +6,9 @@
 class NoiseModule : public ModuleBase {
 public:
     NoiseModule()
-        : ModuleBase("Noise", 10, 10) // up to 8 voices out, plus 2 shared CV inputs (Color, Level) -> total 10 out channels for safety
+        : ModuleBase(
+              "Noise", 10,
+              10) // up to 8 voices out, plus 2 shared CV inputs (Color, Level) -> total 10 out channels for safety
     {
         addParameter(typeParam = new juce::AudioParameterChoice("noiseType", "Type", {"White", "Pink", "Brown"}, 0));
         addParameter(colorParam = new juce::AudioParameterFloat("color", "Color", -1.0f, 1.0f, 0.0f));
@@ -58,7 +60,9 @@ public:
 
     int getVisibleInputPortCount() const override { return 2; }
     int getVisibleOutputPortCount() const override { return 1; }
-    ModulationCategory getModulationCategory() const override { return ModulationCategory::Oscillator; } // Noise acts like a source
+    ModulationCategory getModulationCategory() const override {
+        return ModulationCategory::Oscillator;
+    } // Noise acts like a source
     ModuleType getModuleType() const override { return ModuleType::Noise; }
 
     LogicalPort mapInputChannel(int raw) const override {
@@ -133,37 +137,39 @@ private:
                 b5 = -0.7616f * b5 - white * 0.0168980f;
                 out = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362f;
                 b6 = white * 0.115926f;
-                out *= 0.22f; // Increased gain compensation for Pink noise to better match White noise perceived loudness
+                out *=
+                    0.22f; // Increased gain compensation for Pink noise to better match White noise perceived loudness
             } else if (type == 2) { // Brown
                 brown = (brown + (0.02f * white)) / 1.02f;
-                out = brown * 9.5f; // Increased gain compensation for Brown noise to better match White/Pink noise perceived loudness
+                out = brown * 9.5f; // Increased gain compensation for Brown noise to better match White/Pink noise
+                                    // perceived loudness
             }
-        // Simple 1-pole filter for Color (-1 to 1)
-        // Center (0) is flat. <0 is Low Pass, >0 is High Pass.
-        if (color > 0.01f) {
-            // High pass
-            float c = color * color; // non-linear for better feel
-            float alpha = 0.99f - c * 0.69f; // alpha goes from 0.99 (cutoff 0) to 0.3 (high cutoff)
-            lastOutput = alpha * lastOutput + (1.0f - alpha) * out;
-            // Normalizer to keep peak gain at 1.0
-            float norm = (1.0f + alpha) / (2.0f * alpha);
-            out = (out - lastOutput) * norm;
-            // Slight extra make-up for lost bandwidth
-            out *= (1.0f + c * 1.5f);
-        } else if (color < -0.01f) {
-            // Low pass
-            float c = -color;
-            c = c * c; // non-linear
-            float alpha = c * 0.98f; // alpha goes from 0.0 (flat) to 0.98 (low cutoff)
-            lastOutput = alpha * lastOutput + (1.0f - alpha) * out;
-            out = lastOutput;
-            // Make-up gain for lost bandwidth
-            out *= (1.0f + c * 2.5f);
-        } else {
-            // Near center: smoothly decay lastOutput to 0 to avoid clicks when crossing 0
-            lastOutput *= 0.99f;
-        }
-        return out;
+            // Simple 1-pole filter for Color (-1 to 1)
+            // Center (0) is flat. <0 is Low Pass, >0 is High Pass.
+            if (color > 0.01f) {
+                // High pass
+                float c = color * color;         // non-linear for better feel
+                float alpha = 0.99f - c * 0.69f; // alpha goes from 0.99 (cutoff 0) to 0.3 (high cutoff)
+                lastOutput = alpha * lastOutput + (1.0f - alpha) * out;
+                // Normalizer to keep peak gain at 1.0
+                float norm = (1.0f + alpha) / (2.0f * alpha);
+                out = (out - lastOutput) * norm;
+                // Slight extra make-up for lost bandwidth
+                out *= (1.0f + c * 1.5f);
+            } else if (color < -0.01f) {
+                // Low pass
+                float c = -color;
+                c = c * c;               // non-linear
+                float alpha = c * 0.98f; // alpha goes from 0.0 (flat) to 0.98 (low cutoff)
+                lastOutput = alpha * lastOutput + (1.0f - alpha) * out;
+                out = lastOutput;
+                // Make-up gain for lost bandwidth
+                out *= (1.0f + c * 2.5f);
+            } else {
+                // Near center: smoothly decay lastOutput to 0 to avoid clicks when crossing 0
+                lastOutput *= 0.99f;
+            }
+            return out;
         }
     };
 
@@ -182,7 +188,8 @@ private:
         juce::FloatVectorOperations::clear(cvLevelSaved, numSamples);
 
         auto isChannelActive = [&](int ch) {
-            if (ch >= numCh) return false;
+            if (ch >= numCh)
+                return false;
             auto* data = buffer.getReadPointer(ch);
             float rms = 0.0f;
             for (int i = 0; i < std::min(numSamples, 64); ++i)
@@ -210,9 +217,11 @@ private:
         for (int i = 0; i < numSamples; ++i) {
             float white = (random.nextFloat() * 2.0f) - 1.0f;
             float color = baseColor;
-            if (cvColorCh) color = juce::jlimit(-1.0f, 1.0f, color + cvColorCh[i]);
+            if (cvColorCh)
+                color = juce::jlimit(-1.0f, 1.0f, color + cvColorCh[i]);
             float level = baseLevel;
-            if (cvLevelCh) level = juce::jlimit(0.0f, 1.0f, level + cvLevelCh[i]);
+            if (cvLevelCh)
+                level = juce::jlimit(0.0f, 1.0f, level + cvLevelCh[i]);
 
             float out = voices[0].generate(type, color, white);
             ch0[i] = juce::jlimit(-1.0f, 1.0f, out * level);
@@ -235,7 +244,8 @@ private:
         juce::FloatVectorOperations::clear(cvLevelSaved, numSamples);
 
         auto isChannelActive = [&](int ch) {
-            if (ch >= numChannels) return false;
+            if (ch >= numChannels)
+                return false;
             auto* data = buffer.getReadPointer(ch);
             float rms = 0.0f;
             for (int i = 0; i < std::min(numSamples, 64); ++i)
@@ -264,9 +274,11 @@ private:
             for (int s = 0; s < numSamples; ++s) {
                 float white = (random.nextFloat() * 2.0f) - 1.0f;
                 float color = baseColor;
-                if (hasColorCV) color = juce::jlimit(-1.0f, 1.0f, color + cvColorSaved[s]);
+                if (hasColorCV)
+                    color = juce::jlimit(-1.0f, 1.0f, color + cvColorSaved[s]);
                 float level = baseLevel;
-                if (hasLevelCV) level = juce::jlimit(0.0f, 1.0f, level + cvLevelSaved[s]);
+                if (hasLevelCV)
+                    level = juce::jlimit(0.0f, 1.0f, level + cvLevelSaved[s]);
 
                 float out = voices[v].generate(type, color, white);
                 output[s] = juce::jlimit(-1.0f, 1.0f, out * level);
