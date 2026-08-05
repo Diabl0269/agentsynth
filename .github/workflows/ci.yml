@@ -7,6 +7,7 @@ on:
     paths:
       - 'Source/**'
       - 'Tests/**'
+      - 'Tools/**'
       - 'CMakeLists.txt'
       - 'Tests/CMakeLists.txt'
       - 'scripts/**'
@@ -32,7 +33,7 @@ jobs:
       # .clang-format-version
       run: pip install "clang-format==$(cat .clang-format-version)"
     - name: Check Formatting
-      run: find Source Tests -name "*.h" -o -name "*.cpp" | xargs clang-format --dry-run --Werror
+      run: find Source Tests Tools -name "*.h" -o -name "*.cpp" | xargs clang-format --dry-run --Werror
 
   build-and-test:
     name: Build, Test, and Coverage
@@ -81,6 +82,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Debug \
           -DENABLE_COVERAGE=ON \
           -DENABLE_TESTS=ON \
+          -DENABLE_AI_HARNESS=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
@@ -197,6 +199,7 @@ jobs:
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DENABLE_TESTS=ON \
+          -DENABLE_AI_HARNESS=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
@@ -256,6 +259,7 @@ jobs:
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DENABLE_TESTS=ON \
+          -DENABLE_AI_HARNESS=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
       env:
