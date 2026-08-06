@@ -44,6 +44,8 @@ enum class ModuleType {
     Flanger,
     Limiter,
     VoiceMixer,
+    Bitcrusher,
+    PitchShifter,
     Noise,
     Sampler
 };

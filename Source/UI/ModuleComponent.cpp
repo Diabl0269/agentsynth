@@ -1306,7 +1306,9 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                      {{"Chorus", ModuleType::Chorus},
                       {"Phaser", ModuleType::Phaser},
                       {"Flanger", ModuleType::Flanger},
-                      {"Distortion", ModuleType::Distortion}}},
+                      {"Distortion", ModuleType::Distortion},
+                      {"Bitcrusher", ModuleType::Bitcrusher},
+                      {"Pitch Shifter", ModuleType::PitchShifter}}},
                     {"Time FX", {{"Delay", ModuleType::Delay}, {"Reverb", ModuleType::Reverb}}},
                     {"Dynamics", {{"Compressor", ModuleType::Compressor}, {"Limiter", ModuleType::Limiter}}},
                 };

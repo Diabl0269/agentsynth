@@ -4,6 +4,7 @@
 #include "../Source/Modules/VCAModule.h"
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/ModuleComponent.h"
+#include "../Source/UI/ModuleLibraryComponent.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -113,16 +114,17 @@ TEST_F(ModuleComponentTest, BodyContentClearsEveryPortLabel) {
 // The drag ghost shown while dragging out of the library must match the component the drop actually
 // creates, otherwise the ghost lies about where the module will land.
 TEST_F(ModuleComponentTest, EstimatedModuleSizesMatchTheRealComponents) {
-    // Exactly the strings ModuleLibraryComponent puts in the drag payload.
-    const char* libraryTypes[] = {
-        "Oscillator", "Noise",         "Sampler", "LFO",    "Sequencer",  "Poly Sequencer", "MidiKeyboard",
-        "Poly MIDI",  "External MIDI", "ADSR",    "VCA",    "Filter",     "Chorus",         "Phaser",
-        "Flanger",    "Distortion",    "Delay",   "Reverb", "Compressor", "Limiter",        "Voice Mixer"};
+    // Driven off the library itself rather than a parallel hand-kept list, so a module added to the
+    // library is covered automatically. (Bitcrusher and Pitch Shifter reached main without estimates
+    // precisely because a hardcoded list here would not have noticed them.)
+    ModuleLibraryComponent library;
+    const juce::StringArray libraryTypes = library.getDraggableModuleNames();
+    ASSERT_GT(libraryTypes.size(), 15) << "expected the full library list";
 
     AudioEngine engine;
     GraphEditor editor(engine);
 
-    for (const char* type : libraryTypes) {
+    for (const auto& type : libraryTypes) {
         auto processor = synth::AIStateMapper::createModule(type);
         ASSERT_NE(processor, nullptr) << type << " is offered by the library but has no factory entry";
 

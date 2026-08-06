@@ -39,6 +39,8 @@ public:
             {"Phaser", false},
             {"Flanger", false},
             {"Distortion", false},
+            {"Bitcrusher", false},
+            {"Pitch Shifter", false},
             {"Time FX", true},
             {"Delay", false},
             {"Reverb", false},
@@ -91,6 +93,10 @@ public:
             return "Short delay feedback comb-filter with a sweeping metallic sound.";
         if (moduleName.equalsIgnoreCase("Distortion"))
             return "Waveshaping distortion from soft saturation to hard clipping.";
+        if (moduleName.equalsIgnoreCase("Bitcrusher"))
+            return "For Lo-Fi, sample-rate reduction, and retro digital grit.";
+        if (moduleName.equalsIgnoreCase("Pitch Shifter"))
+            return "Transposes by semitones or shifts every partial by a fixed number of Hz.";
         if (moduleName.equalsIgnoreCase("Delay"))
             return "Tempo-syncable stereo echo / delay line.";
         if (moduleName.equalsIgnoreCase("Reverb"))
@@ -224,6 +230,17 @@ public:
     // -------------------------------------------------------------------------
     // Test / inspection helpers
     // -------------------------------------------------------------------------
+
+    /** Every draggable (non-header) entry, in display order — exactly the strings this component puts
+     *  in the drag payload. Tests use this so a module added here is automatically covered instead of
+     *  needing a parallel hand-kept list. */
+    juce::StringArray getDraggableModuleNames() const {
+        juce::StringArray names;
+        for (const auto& entry : entries)
+            if (!entry.isHeader)
+                names.add(entry.text);
+        return names;
+    }
 
     /** Returns the currently hovered entry index, or -1 when nothing is hovered. */
     int getHoveredIndex() const noexcept { return hoveredIndex; }

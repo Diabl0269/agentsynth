@@ -49,3 +49,21 @@ Technical documentation for the Agent Synth effects suite.
 - **Input Gain**: Pre-limiter drive parameter. Range: -20 to +20 dB, default 0 dB. Applied per-sample with 5 ms smoothing before the limiter stage.
 - **CV Modulation**: None — no CV input channels.
 - **Parameters**: Threshold (-20–0 dB, default -1 dB), Release (1–500 ms), Input Gain (-20–+20 dB).
+
+## Bitcrusher Module
+- **Implementation**: Downsampling and bit-depth quantization effect with dither.
+- **Quantization**: Rounds input signal to `2^depth` discrete levels with `std::round` (clamped to ±1.0) to eliminate DC quantization bias.
+- **Sample Rate Reduction**: Holds sample values for `rate` sample clocks (scaled relative to 44.1 kHz for device independence).
+- **CV Modulation**: Rate (ch2), Depth (ch3), Mix (ch4). CV presence is detected via non-zero sample checking.
+- **Parameters**: Rate (1–50), Depth (1–24 bits), Mix (0–1), Dither (0–1).
+
+## Pitch Shifter Module
+Two engines behind one Mode switch, because they answer the same question with opposite characters: Pitch mode multiplies frequencies (harmonic), Frequency mode adds to them (inharmonic).
+
+- **Pitch mode**: Two-tap crossfaded delay line. The read heads sweep across one window half a window apart; the phase advances at `(1 - ratio) / windowSamples` per sample, which is the condition for the read position to advance at `ratio`. Taps are summed with an equal-power window (`sin`/`|cos|` of the phase) so each tap's wrap-around lands exactly where its own gain is zero. Reads use cubic Hermite interpolation — linear interpolation audibly dulls a transposed signal.
+  - **Unity dead zone**: when `|ratio - 1| < 1e-4` (about 0.0017 semitones) the two taps would sit at fixed, different delays and comb-filter the input, so the module emits the signal untransposed instead. This makes the default (Pitch 0, Mix 1) bit-transparent.
+  - **Window**: trades artifacts against latency. Short windows chop the signal at a higher rate (audible as AM sidebands at `|1 - ratio| / window` Hz); long windows smear transients. 50 ms default.
+- **Frequency mode**: Single-sideband modulation. A Hilbert transform pair (two cascaded 4-section 2nd-order allpass chains, `H(z) = (a² - z⁻²)/(1 - a²z⁻²)`, using Olli Niemitalo's wideband 90° coefficients) feeds a quadrature oscillator: `out = I·cos(ωt) + Q·sin(ωt)`. Measured rejection of the unwanted sideband is ~55 dB. A negative Shift runs the oscillator backwards — no separate code path. Harmonics stop being integer multiples of the fundamental, which is what produces the "alien voice" / metallic timbre.
+- **Feedback**: routes the shifted output back into the input, so each pass is shifted again — cascading octaves in Pitch mode, barber-pole / Shepard-tone illusions in Frequency mode. Soft-clipped with `tanh` so the loop stays bounded at the 0.95 maximum.
+- **CV Modulation**: Pitch (ch2, ±24 semitones), Shift (ch3, ±1000 Hz), Mix (ch4, ±1), Feedback (ch5, ±0.95). CV is added per-sample to the smoothed parameter value and clamped; Window and Fine have no CV input.
+- **Parameters**: Mode (Pitch/Frequency), Pitch (-24–+24 semitones), Fine (-100–+100 cents), Shift (-1000–+1000 Hz), Window (10–100 ms), Feedback (0–0.95), Mix (0–1, default 1).

@@ -74,6 +74,10 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         return {280, 657};
     if (typeName == "Chorus" || typeName == "Phaser" || typeName == "Flanger")
         return {280, 309};
+    if (typeName == "Bitcrusher")
+        return {280, 355};
+    if (typeName == "Pitch Shifter")
+        return {280, 423};
     if (typeName == "Compressor")
         return {280, 269};
     if (typeName == "Limiter")
