@@ -48,7 +48,11 @@ juce::String PresetManager::getPresetJSON(int index) {
     //   Sequencer:   560 x 380   ← DOUBLE-wide (kDoubleWidth = 2 × kSingleWidth = 560)
     //   MIDI Keyboard: 560 x 150 ← DOUBLE-wide
     //   Poly MIDI:   280 x 100
-    //   Distortion:  280 x 350
+    //   Distortion:  280 x 430   ← grew from 350 when the Level knob was added (issue #122):
+    //                              3 sliders instead of 2 crosses a knob-row boundary
+    //                              (rows = (n+1)/2, 80 px per row). Every other module that
+    //                              gained a Level knob had an odd slider count, so the new
+    //                              knob filled an existing half-empty row — no height change.
     //   Delay:       280 x 220
     //   Reverb:      280 x 300
     //
@@ -77,8 +81,9 @@ juce::String PresetManager::getPresetJSON(int index) {
     //   Keyboard row:    y = 960  — gap from Seq bottom (940+6=946) → 960-6=954 > 946 ✓
     //
     // FX chain stacking (col 4, x = 1250), starting y = 10:
-    //   Distortion (h=350): y=10, bottom=360; Delay (h=220): y=380, bottom=600;
-    //   Reverb (h=300):     y=620, bottom=920
+    //   Distortion (h=430): y=10,  bottom=440
+    //   Delay      (h=220): y=456, bottom=676  (≥ 440+12=452, rounded up to the 8 px grid)
+    //   Reverb     (h=300): y=696, bottom=996  (≥ 676+12=688 ✓)
     //
     // All pairs verified pairwise with kCollisionGap = 12; zero overlaps per preset.
 
@@ -95,7 +100,7 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"id": 7, "type": "Filter Env", "position": {"x": 880, "y": 600}, "params": {"attack": 0.1, "decay": 0.1, "sustain": 0.8, "release": 0.5}},
     {"id": 8, "type": "Sequencer", "position": {"x": 10, "y": 560}, "params": {"run": false, "bpm": 120.0}},
     {"id": 10, "type": "Distortion", "position": {"x": 1250, "y": 10}, "params": {"drive": 0.5, "mix": 0.5}},
-    {"id": 11, "type": "Delay", "position": {"x": 1250, "y": 380}, "params": {"time": 0.3, "feedback": 0.4, "mix": 0.3}},
+    {"id": 11, "type": "Delay", "position": {"x": 1250, "y": 456}, "params": {"time": 0.3, "feedback": 0.4, "mix": 0.3}},
     {"id": 12, "type": "Reverb", "position": {"x": 1250, "y": 696}, "params": {"roomSize": 0.5, "damping": 0.5, "wet": 0.33, "dry": 0.4, "width": 1.0}},
     {"id": 13, "type": "Attenuverter", "position": {"x": 950, "y": 340}, "params": {"amount": 1.0}},
     {"id": 14, "type": "Attenuverter", "position": {"x": 650, "y": 340}, "params": {"amount": 1.0}},

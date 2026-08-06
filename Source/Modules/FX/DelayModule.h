@@ -9,6 +9,7 @@ public:
         addParameter(timeParam = new juce::AudioParameterFloat("time", "Time (ms)", 1.0f, 1000.0f, 250.0f));
         addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", 0.0f, 0.95f, 0.5f));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 0.3f));
+        addOutputLevelParameter();
         addMuteParameter();
     }
 
@@ -26,6 +27,7 @@ public:
         smoothedTime.setCurrentAndTargetValue(*timeParam);
         smoothedFeedback.setCurrentAndTargetValue(*feedbackParam);
         smoothedMix.setCurrentAndTargetValue(*mixParam);
+        prepareOutputLevel(sampleRate);
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -73,6 +75,10 @@ public:
         }
 
         writePos = localWritePos;
+
+        // Output stage, deliberately outside the feedback path above — the delay line
+        // stores the pre-level signal, so lowering Level does not starve the repeats.
+        applyOutputLevel(buffer, 2);
     }
 
     juce::String getInputPortLabel(int i) const override { return i == 0 ? "Left" : "Right"; }

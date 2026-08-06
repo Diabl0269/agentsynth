@@ -101,6 +101,8 @@ All audio modules in Agent Synth inherit from `ModuleBase`, which in turn extend
     *   `isMuted()` → **silence**: call `buffer.clear()` then return.
     *   Never combine the two into a single `if (isBypassed() || isMuted()) buffer.clear()` — that mutes on bypass instead of passing the signal through.
     *   **Exception — pure source modules** (e.g. `OscillatorModule`, `PolyMidiModule`) have no audio input, so there is no dry signal to pass through. These modules *do* clear their output on bypass.
+*   **Output level (audio-output modules only):** if your module outputs audio and does not already have its own level/gain parameter, opt into the shared stage — `addOutputLevelParameter()` as the **last** `addParameter()` call in the ctor, `prepareOutputLevel(sampleRate)` in `prepareToPlay`, and `applyOutputLevel(buffer, numAudioChannels)` as the last statement of the normal `processBlock` path (after both early returns, never inside them). Skip it entirely if your module outputs pitch/gate CV or MIDI — scaling those breaks tuning and gate thresholds. Rules and rationale: [`fx_modules.md § Output Level`](fx_modules.md#output-level-shared-stage).
+*   **Look parameters up by ID, not index.** Use `findParameterByID(processor, "paramID")`; `getParameters()[n]` silently repoints whenever a parameter is added ahead of it.
 
 ## 3. Parameter Management and Modular Routing
 

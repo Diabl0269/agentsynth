@@ -17,6 +17,7 @@ public:
         addParameter(oversamplingParam = new juce::AudioParameterChoice("oversampling", "Oversampling",
                                                                         juce::StringArray{"Off", "2x", "4x"},
                                                                         1)); // default 2x preserves backward compat
+        addOutputLevelParameter();
         addMuteParameter();
         oversamplingParam->addListener(this);
         enableVisualBuffer(true);
@@ -61,6 +62,8 @@ public:
             oversamplers[1]->reset();
 
         setLatencySamples(juce::roundToInt(getLatencyInSamples()));
+
+        prepareOutputLevel(sampleRate);
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -200,6 +203,9 @@ public:
                 wetPtrs[ch][i] = dry + (wet - dry) * mix;
             }
         }
+
+        // Applied before the scope push so the visualiser shows the actual module output.
+        applyOutputLevel(buffer, 2);
 
         // Push to scope
         if (auto* vb = getVisualBuffer()) {

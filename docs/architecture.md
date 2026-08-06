@@ -104,6 +104,14 @@ if (isMuted()) {
 
 **Exception:** pure source modules with no audio input (e.g. `OscillatorModule`, `PolyMidiModule`) clear their output on bypass because there is no dry signal to pass through.
 
+#### Output Level Stage
+
+`ModuleBase` offers an opt-in output-level parameter for modules whose output is audio — `addOutputLevelParameter()` in the ctor, `prepareOutputLevel(sampleRate)` in `prepareToPlay`, `applyOutputLevel(buffer, numAudioChannels)` at the end of the **normal** `processBlock` path. It is a no-op on modules that never opt in.
+
+Two constraints follow from the contract above: `applyOutputLevel` must sit **after** both early returns (a bypassed module passes dry audio through at full level; a muted one is already cleared), and `numAudioChannels` must exclude CV channels. Full rules, including why this is opt-in rather than universal and why it must be the last parameter added, live in [`fx_modules.md § Output Level`](fx_modules.md#output-level-shared-stage).
+
+Related: look parameters up with `findParameterByID(processor, "paramID")` rather than `getParameters()[n]`. Parameter order is not part of a module's contract, and positional lookups silently repoint when a parameter is added.
+
 ### 3. GraphEditor
 
 `Source/UI/GraphEditor.h/.cpp`
