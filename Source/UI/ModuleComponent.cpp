@@ -2,10 +2,14 @@
 #include "../Modules/ExternalMidiModule.h"
 #include "../Modules/ModuleBase.h"
 #include "../Modules/PolySequencerModule.h"
+#include "../Modules/SamplerModule.h"
 #include "../Modules/SequencerModule.h"
 #include "GraphEditor.h"
 #include "LayoutUtil.h"
 #include "Theme/AppLookAndFeel.h"
+
+// Vertical space the Sampler's waveform + load row occupies: waveform 80 + 8 gap + row 24 + 8 gap.
+static constexpr int kSamplerChromeHeight = 120;
 
 static ModuleType getType(juce::AudioProcessor* module) {
     if (auto* mb = dynamic_cast<ModuleBase*>(module))
@@ -63,6 +67,8 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         addAndMakeVisible(*deleteButton);
     }
 
+    createSamplerControls();
+
     setTitle(module->getName());
     setBufferedToImage(true);
     createControls();
@@ -80,6 +86,12 @@ void ModuleComponent::detachFromProcessor() {
     scopeComponent.reset();
     scopeToggle.reset();
     keyboardComponent.reset();
+    // Same reason: the waveform view times against the SamplerModule, so it must go before the
+    // processor pointer is dropped.
+    sampleWaveform.reset();
+    loadSampleButton.reset();
+    sampleNameLabel.reset();
+    sampleChooser.reset();
 
     if (auto* parent = getParentComponent())
         parent->removeChildComponent(this);
@@ -478,6 +490,72 @@ void ModuleComponent::createControls() {
     updateLayout();
 }
 
+void ModuleComponent::createSamplerControls() {
+    auto* sampler = dynamic_cast<SamplerModule*>(module);
+    if (sampler == nullptr)
+        return;
+
+    sampleWaveform = std::make_unique<SampleWaveformComponent>(*sampler);
+    addAndMakeVisible(*sampleWaveform);
+
+    loadSampleButton = std::make_unique<juce::TextButton>("Load Sample...");
+    loadSampleButton->setTooltip("Load an audio file (WAV, AIFF, FLAC, Ogg) into this Sampler");
+    loadSampleButton->onClick = [this] {
+        auto* mod = dynamic_cast<SamplerModule*>(module);
+        if (mod == nullptr)
+            return;
+
+        sampleChooser = std::make_unique<juce::FileChooser>(
+            "Load Sample", juce::File::getSpecialLocation(juce::File::userMusicDirectory),
+            SamplerModule::getSupportedFormatWildcard());
+        auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
+
+        // The chooser outlives this call; SafePointer keeps the callback a no-op if the module
+        // component is destroyed (graph rebuild, undo) while the dialog is open.
+        juce::Component::SafePointer<ModuleComponent> safeThis(this);
+        sampleChooser->launchAsync(flags, [safeThis](const juce::FileChooser& fc) {
+            if (safeThis == nullptr)
+                return;
+            auto file = fc.getResult();
+            if (file == juce::File{})
+                return;
+
+            auto* target = dynamic_cast<SamplerModule*>(safeThis->getModule());
+            if (target == nullptr)
+                return;
+
+            if (target->loadSampleFile(file))
+                safeThis->refreshSampleLabel();
+            else
+                safeThis->refreshSampleLabel("Could not read " + file.getFileName());
+        });
+    };
+    addAndMakeVisible(*loadSampleButton);
+
+    sampleNameLabel = std::make_unique<juce::Label>("Sample", juce::String());
+    sampleNameLabel->setJustificationType(juce::Justification::centredLeft);
+    sampleNameLabel->setMinimumHorizontalScale(0.7f);
+    addAndMakeVisible(*sampleNameLabel);
+
+    refreshSampleLabel();
+}
+
+void ModuleComponent::refreshSampleLabel(const juce::String& fallbackMessage) {
+    if (sampleNameLabel == nullptr)
+        return;
+
+    auto* sampler = dynamic_cast<SamplerModule*>(module);
+    juce::String name = (sampler != nullptr) ? sampler->getSampleName() : juce::String();
+
+    if (fallbackMessage.isNotEmpty())
+        sampleNameLabel->setText(fallbackMessage, juce::dontSendNotification);
+    else
+        sampleNameLabel->setText(name.isEmpty() ? juce::String("(no sample)") : name, juce::dontSendNotification);
+
+    sampleNameLabel->setTooltip(name);
+    repaint();
+}
+
 void ModuleComponent::layoutSequencerStepColumn(int step, int colX, int startY) {
     // Gate slider (row 0)
     juce::String gateId = "Gate " + juce::String(step);
@@ -550,6 +628,10 @@ void ModuleComponent::updateLayout() {
         contentHeight = std::max(contentHeight, 30 + numInputs * 20 + 10);
     contentHeight += comboBoxes.size() * 50;
     contentHeight += toggles.size() * 30;
+
+    // Sampler chrome: waveform (80) + gap (8) + load row (24) + gap (8). Mirrors resized().
+    if (sampleWaveform)
+        contentHeight += kSamplerChromeHeight;
 
     if (scopeToggle)
         contentHeight += 30;
@@ -959,6 +1041,17 @@ void ModuleComponent::resized() {
     int margin = 70; // Wider margin for labels
     int contentWidth = getWidth() - (margin * 2);
 
+    // --- Sampler chrome (waveform on top, then the load button + file name row) ---
+    if (sampleWaveform) {
+        sampleWaveform->setBounds(10, y, getWidth() - 20, 80);
+        y += 88;
+
+        const int buttonWidth = juce::jmax(90, contentWidth / 2 - 4);
+        loadSampleButton->setBounds(margin, y, buttonWidth, 24);
+        sampleNameLabel->setBounds(margin + buttonWidth + 8, y, contentWidth - buttonWidth - 8, 24);
+        y += 32;
+    }
+
     for (int i = 0; i < comboBoxes.size(); ++i) {
         comboLabels[i]->setBounds(margin, y, contentWidth, 20);
         y += 20;
@@ -1106,7 +1199,10 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                 };
                 std::vector<Category> categories = {
                     {"Sources",
-                     {{"Oscillator", ModuleType::Oscillator}, {"Noise", ModuleType::Noise}, {"LFO", ModuleType::LFO}}},
+                     {{"Oscillator", ModuleType::Oscillator},
+                      {"Noise", ModuleType::Noise},
+                      {"Sampler", ModuleType::Sampler},
+                      {"LFO", ModuleType::LFO}}},
                     {"Sequencing",
                      {{"Sequencer", ModuleType::Sequencer},
                       {"Poly Sequencer", ModuleType::PolySequencer},

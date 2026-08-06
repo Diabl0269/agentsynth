@@ -65,18 +65,26 @@ PatchEvalResult evaluatePatch(const juce::AudioProcessorGraph& graph) {
         reasons.add("no Audio Output node in the patch");
 
     if (result.hasAudioOutput) {
+        // Topological check only: a Sampler counts as a source because a patch wired through one is
+        // structurally sound, even though it stays silent until the user loads a file — which is a
+        // runtime fact no graph inspection can see.
+        static const std::set<juce::String> sourceTypes = {"Oscillator", "Noise", "Sampler"};
+
         for (auto id : reachableBackward(graph, output->nodeID)) {
             const auto* node = graph.getNodeForId(id);
             if (node != nullptr && node->getProcessor() != nullptr) {
-                juce::String name = node->getProcessor()->getName();
-                if (name == "Oscillator" || name == "Noise") {
+                if (sourceTypes.count(node->getProcessor()->getName()) > 0) {
                     result.sourceReachesOutput = true;
                     break;
                 }
             }
         }
-        if (!result.sourceReachesOutput)
-            reasons.add("Audio Output is not reachable from any Oscillator or Noise module");
+        if (!result.sourceReachesOutput) {
+            juce::StringArray names;
+            for (const auto& name : sourceTypes)
+                names.add(name);
+            reasons.add("Audio Output is not reachable from any sound source (" + names.joinIntoString(", ") + ")");
+        }
     }
 
     for (auto* node : graph.getNodes()) {

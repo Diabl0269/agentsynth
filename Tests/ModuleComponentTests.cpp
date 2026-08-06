@@ -1,4 +1,5 @@
 #include "../Source/Modules/OscillatorModule.h"
+#include "../Source/Modules/SamplerModule.h"
 #include "../Source/Modules/VCAModule.h"
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/ModuleComponent.h"
@@ -42,6 +43,51 @@ TEST_F(ModuleComponentTest, ParameterAttachmentLinksUI) {
     foundSlider->setValue(newValue, juce::sendNotificationSync);
 
     EXPECT_GE(foundSlider->getValue(), minVal);
+}
+
+// Sampler chrome: the module gets a waveform view, a "Load Sample..." button and a file-name label
+// on top of the usual auto-UI. The height is asserted exactly because GraphEditor's
+// estimateModuleSize("Sampler") hard-codes it for the library drag ghost — if the auto-UI grows a
+// row, this test fails and both numbers get updated together.
+TEST_F(ModuleComponentTest, SamplerHasLoadButtonWaveformAndKnownHeight) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    SamplerModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    juce::TextButton* loadButton = nullptr;
+    bool foundWaveform = false;
+    bool foundNameLabel = false;
+    for (auto* child : moduleComponent.getChildren()) {
+        if (auto* button = dynamic_cast<juce::TextButton*>(child);
+            button != nullptr && button->getButtonText().startsWith("Load Sample"))
+            loadButton = button;
+        if (dynamic_cast<SampleWaveformComponent*>(child) != nullptr)
+            foundWaveform = true;
+        if (auto* label = dynamic_cast<juce::Label*>(child); label != nullptr && label->getText() == "(no sample)")
+            foundNameLabel = true;
+    }
+
+    ASSERT_NE(loadButton, nullptr) << "the Sampler needs a way to pick a file";
+    EXPECT_TRUE(foundWaveform);
+    EXPECT_TRUE(foundNameLabel) << "an empty Sampler should say so rather than showing a blank label";
+
+    EXPECT_EQ(moduleComponent.getWidth(), 280);
+    EXPECT_EQ(moduleComponent.getHeight(), 750)
+        << "keep estimateModuleSize(\"Sampler\") in GraphEditor.cpp in sync with this";
+
+    // The waveform view sits above the controls and spans the card width minus the port gutters.
+    EXPECT_NO_THROW(moduleComponent.timerCallback());
+}
+
+TEST_F(ModuleComponentTest, NonSamplerModulesGetNoSamplerChrome) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    OscillatorModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    for (auto* child : moduleComponent.getChildren())
+        EXPECT_EQ(dynamic_cast<SampleWaveformComponent*>(child), nullptr);
 }
 
 TEST_F(ModuleComponentTest, TimerCallbackDoesNotCrash) {

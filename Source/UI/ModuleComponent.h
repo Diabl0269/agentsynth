@@ -5,6 +5,7 @@
 #include "../Modules/FilterModule.h"
 #include "../Modules/MidiKeyboardModule.h"
 #include "FrequencyResponseComponent.h"
+#include "SampleWaveformComponent.h"
 #include "ScopeComponent.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
@@ -77,6 +78,12 @@ private:
     std::unique_ptr<juce::ToggleButton> spectrumToggle;
     std::unique_ptr<juce::MidiKeyboardComponent> keyboardComponent;
 
+    // Sampler-only chrome: waveform overview, "Load Sample…" button and the loaded file name.
+    std::unique_ptr<SampleWaveformComponent> sampleWaveform;
+    std::unique_ptr<juce::TextButton> loadSampleButton;
+    std::unique_ptr<juce::Label> sampleNameLabel;
+    std::unique_ptr<juce::FileChooser> sampleChooser;
+
     std::unique_ptr<juce::DrawableButton> bypassButton;
     std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
     std::unique_ptr<juce::DrawableButton> muteButton;
@@ -94,6 +101,12 @@ private:
 
     void createControls();
     void updateLayout();
+
+    // Builds the Sampler's waveform view / load button / file-name label. No-op for other modules.
+    void createSamplerControls();
+
+    // Repoints the file-name label at whatever the module currently holds.
+    void refreshSampleLabel(const juce::String& fallbackMessage = {});
 
     // Shared step-column layout helper used by Sequencer and PolySequencer.
     // Positions Gate, Pitch/Root, and F.Env/Chord controls for a single step column.
