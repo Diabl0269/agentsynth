@@ -14,10 +14,14 @@ public:
     };
 
     ModuleLibraryComponent() {
+        // One entry per line: this list is the library's visible order, and letting it pack into a
+        // grid turns inserting a module into a whole-block reflow instead of a one-line diff.
+        // clang-format off
         entries = {
             {"Sources", true},
             {"Oscillator", false},
             {"Noise", false},
+            {"Sampler", false},
             {"LFO", false},
             {"Sequencing", true},
             {"Sequencer", false},
@@ -46,6 +50,7 @@ public:
             {"Utility", true},
             {"Voice Mixer", false},
         };
+        // clang-format on
         setMouseCursor(juce::MouseCursor::NormalCursor);
     }
 
@@ -60,6 +65,8 @@ public:
             return "Generates audio waveforms (sine, saw, square, triangle).";
         if (moduleName.equalsIgnoreCase("Noise"))
             return "Generates noise (white, pink, brown).";
+        if (moduleName.equalsIgnoreCase("Sampler"))
+            return "Plays an audio file back as a sample or scatters it into grains.";
         if (moduleName.equalsIgnoreCase("LFO"))
             return "Low-frequency oscillator for slow cyclic modulation.";
         if (moduleName.equalsIgnoreCase("Sequencer"))
@@ -223,6 +230,17 @@ public:
     // -------------------------------------------------------------------------
     // Test / inspection helpers
     // -------------------------------------------------------------------------
+
+    /** Every draggable (non-header) entry, in display order — exactly the strings this component puts
+     *  in the drag payload. Tests use this so a module added here is automatically covered instead of
+     *  needing a parallel hand-kept list. */
+    juce::StringArray getDraggableModuleNames() const {
+        juce::StringArray names;
+        for (const auto& entry : entries)
+            if (!entry.isHeader)
+                names.add(entry.text);
+        return names;
+    }
 
     /** Returns the currently hovered entry index, or -1 when nothing is hovered. */
     int getHoveredIndex() const noexcept { return hoveredIndex; }

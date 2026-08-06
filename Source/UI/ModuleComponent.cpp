@@ -2,10 +2,25 @@
 #include "../Modules/ExternalMidiModule.h"
 #include "../Modules/ModuleBase.h"
 #include "../Modules/PolySequencerModule.h"
+#include "../Modules/SamplerModule.h"
 #include "../Modules/SequencerModule.h"
 #include "GraphEditor.h"
 #include "LayoutUtil.h"
 #include "Theme/AppLookAndFeel.h"
+
+// ---- Default body-layout metrics (see layoutDefaultContent) ----------------------------------
+// Three knobs per row instead of two: the body sits below every jack, so it can use nearly the
+// full card width, and the extra column removes a whole row of height from most modules.
+static constexpr int kKnobColumns = 3;
+static constexpr int kContentMargin = 12;       // left/right gutter for body content
+static constexpr int kNarrowContentWidth = 200; // combos/toggles/load row stay this narrow, centred
+static constexpr int kLabelHeight = 18;
+static constexpr int kRowHeight = 24;  // combo box / toggle / button
+static constexpr int kKnobHeight = 58; // rotary + its text box
+static constexpr int kWaveformHeight = 72;
+static constexpr int kBottomPadding = 12;
+// A port label box spans its jack centre ± 10; clear it by a bit more before placing any content.
+static constexpr int kPortLabelClearance = 15;
 
 static ModuleType getType(juce::AudioProcessor* module) {
     if (auto* mb = dynamic_cast<ModuleBase*>(module))
@@ -63,6 +78,8 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         addAndMakeVisible(*deleteButton);
     }
 
+    createSamplerControls();
+
     setTitle(module->getName());
     setBufferedToImage(true);
     createControls();
@@ -80,6 +97,12 @@ void ModuleComponent::detachFromProcessor() {
     scopeComponent.reset();
     scopeToggle.reset();
     keyboardComponent.reset();
+    // Same reason: the waveform view times against the SamplerModule, so it must go before the
+    // processor pointer is dropped.
+    sampleWaveform.reset();
+    loadSampleButton.reset();
+    sampleNameLabel.reset();
+    sampleChooser.reset();
 
     if (auto* parent = getParentComponent())
         parent->removeChildComponent(this);
@@ -478,6 +501,131 @@ void ModuleComponent::createControls() {
     updateLayout();
 }
 
+void ModuleComponent::createSamplerControls() {
+    auto* sampler = dynamic_cast<SamplerModule*>(module);
+    if (sampler == nullptr)
+        return;
+
+    sampleWaveform = std::make_unique<SampleWaveformComponent>(*sampler);
+    addAndMakeVisible(*sampleWaveform);
+
+    loadSampleButton = std::make_unique<juce::TextButton>("Load Sample...");
+    loadSampleButton->setTooltip("Load an audio file (WAV, AIFF, FLAC, Ogg) into this Sampler");
+    loadSampleButton->onClick = [this] {
+        auto* mod = dynamic_cast<SamplerModule*>(module);
+        if (mod == nullptr)
+            return;
+
+        sampleChooser = std::make_unique<juce::FileChooser>(
+            "Load Sample", juce::File::getSpecialLocation(juce::File::userMusicDirectory),
+            SamplerModule::getSupportedFormatWildcard());
+        auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
+
+        // The chooser outlives this call; SafePointer keeps the callback a no-op if the module
+        // component is destroyed (graph rebuild, undo) while the dialog is open.
+        juce::Component::SafePointer<ModuleComponent> safeThis(this);
+        sampleChooser->launchAsync(flags, [safeThis](const juce::FileChooser& fc) {
+            if (safeThis == nullptr)
+                return;
+            auto file = fc.getResult();
+            if (file == juce::File{})
+                return;
+
+            auto* target = dynamic_cast<SamplerModule*>(safeThis->getModule());
+            if (target == nullptr)
+                return;
+
+            if (target->loadSampleFile(file))
+                safeThis->refreshSampleLabel();
+            else
+                safeThis->refreshSampleLabel("Could not read " + file.getFileName());
+        });
+    };
+    addAndMakeVisible(*loadSampleButton);
+
+    sampleNameLabel = std::make_unique<juce::Label>("Sample", juce::String());
+    sampleNameLabel->setJustificationType(juce::Justification::centredLeft);
+    sampleNameLabel->setMinimumHorizontalScale(0.7f);
+    addAndMakeVisible(*sampleNameLabel);
+
+    refreshSampleLabel();
+}
+
+// =============================================================================
+// Audio-file drag and drop
+// =============================================================================
+
+bool ModuleComponent::isInterestedInFileDrag(const juce::StringArray& files) {
+    // Only a Sampler accepts a file drop. Returning false for everything else matters: JUCE walks
+    // up the hierarchy for an interested target, so a wav dropped on an Oscillator falls through to
+    // GraphEditor, which spawns a new Sampler for it instead of doing nothing.
+    if (dynamic_cast<SamplerModule*>(module) == nullptr)
+        return false;
+
+    for (const auto& path : files)
+        if (SamplerModule::isSupportedAudioFile(juce::File(path)))
+            return true;
+    return false;
+}
+
+void ModuleComponent::fileDragEnter(const juce::StringArray& files, int, int) {
+    juce::ignoreUnused(files);
+    if (!fileDragHighlight) {
+        fileDragHighlight = true;
+        repaint();
+    }
+}
+
+void ModuleComponent::fileDragExit(const juce::StringArray& files) {
+    juce::ignoreUnused(files);
+    if (fileDragHighlight) {
+        fileDragHighlight = false;
+        repaint();
+    }
+}
+
+void ModuleComponent::filesDropped(const juce::StringArray& files, int, int) {
+    fileDragHighlight = false;
+
+    auto* sampler = dynamic_cast<SamplerModule*>(module);
+    if (sampler == nullptr) {
+        repaint();
+        return;
+    }
+
+    // Only the first playable file is used — a Sampler holds one sample. Dropping several onto the
+    // canvas (rather than onto a module) creates one Sampler each; that path lives in GraphEditor.
+    for (const auto& path : files) {
+        const juce::File file(path);
+        if (!SamplerModule::isSupportedAudioFile(file))
+            continue;
+
+        if (sampler->loadSampleFile(file))
+            refreshSampleLabel();
+        else
+            refreshSampleLabel("Could not read " + file.getFileName());
+        return;
+    }
+
+    repaint();
+}
+
+void ModuleComponent::refreshSampleLabel(const juce::String& fallbackMessage) {
+    if (sampleNameLabel == nullptr)
+        return;
+
+    auto* sampler = dynamic_cast<SamplerModule*>(module);
+    juce::String name = (sampler != nullptr) ? sampler->getSampleName() : juce::String();
+
+    if (fallbackMessage.isNotEmpty())
+        sampleNameLabel->setText(fallbackMessage, juce::dontSendNotification);
+    else
+        sampleNameLabel->setText(name.isEmpty() ? juce::String("(no sample)") : name, juce::dontSendNotification);
+
+    sampleNameLabel->setTooltip(name);
+    repaint();
+}
+
 void ModuleComponent::layoutSequencerStepColumn(int step, int colX, int startY) {
     // Gate slider (row 0)
     juce::String gateId = "Gate " + juce::String(step);
@@ -541,34 +689,122 @@ void ModuleComponent::updateLayout() {
         return;
     }
 
-    int contentHeight = 40; // Header
-    // Account for port label space on modules with many inputs
-    int numInputs = module->getTotalNumInputChannels();
-    if (auto* mb = dynamic_cast<ModuleBase*>(module))
-        numInputs = mb->getVisibleInputPortCount();
-    if (numInputs > 2)
-        contentHeight = std::max(contentHeight, 30 + numInputs * 20 + 10);
-    contentHeight += comboBoxes.size() * 50;
-    contentHeight += toggles.size() * 30;
+    // Width must be final before measuring: the slider grid wraps on it.
+    if (getWidth() != synth::LayoutUtil::kSingleWidth)
+        setSize(synth::LayoutUtil::kSingleWidth, juce::jmax(getHeight(), 100));
 
-    if (scopeToggle)
-        contentHeight += 30;
-
-    int numSliders = sliders.size();
-    int rows = (numSliders + 1) / 2;
-    contentHeight += rows * 80;
-
-    if (scopeComponent && scopeComponent->isVisible())
-        contentHeight += 110;
-
-    if (freqResponseComponent)
-        contentHeight += 130;
-
-    if (spectrumToggle)
-        contentHeight += 30;
-
-    setSize(280, std::max(100, contentHeight + 20));
+    const int bodyHeight = layoutDefaultContent(/*apply*/ false);
+    setSize(synth::LayoutUtil::kSingleWidth, std::max(100, bodyHeight));
     resized();
+}
+
+int ModuleComponent::getContentTopY() {
+    int y = 30; // below the title bar
+    if (module->acceptsMidi())
+        y += 30; // the "Midi In"/"Midi Out" row
+
+    int numIns = module->getTotalNumInputChannels();
+    int numOuts = module->getTotalNumOutputChannels();
+    if (auto* mb = dynamic_cast<ModuleBase*>(module)) {
+        numIns = mb->getVisibleInputPortCount();
+        numOuts = mb->getVisibleOutputPortCount();
+    }
+
+    // Ask for the real jack positions instead of recomputing them: a port label box spans
+    // centre ± 10, so clear the lowest jack by a little more than that.
+    if (numIns > 0)
+        y = std::max(y, getPortCenter(numIns - 1, true).y + kPortLabelClearance);
+    if (numOuts > 0)
+        y = std::max(y, getPortCenter(numOuts - 1, false).y + kPortLabelClearance);
+
+    return y;
+}
+
+int ModuleComponent::layoutDefaultContent(bool apply) {
+    const int width = getWidth();
+
+    // Everything here sits BELOW the last jack (getContentTopY), so the narrow gutters that used to
+    // keep content clear of the port labels are unnecessary — the body gets nearly the full card
+    // width, which is what makes three knobs per row fit.
+    const int contentX = kContentMargin;
+    const int contentW = std::max(60, width - kContentMargin * 2);
+
+    // Single-column widgets (combos, toggles, the load row) look stretched at full width, so they
+    // stay centred in a narrower band.
+    const int narrowW = std::min(contentW, kNarrowContentWidth);
+    const int narrowX = contentX + (contentW - narrowW) / 2;
+
+    int y = getContentTopY();
+
+    // --- Sampler chrome: waveform overview, then the load button + file-name row ---
+    if (sampleWaveform) {
+        if (apply)
+            sampleWaveform->setBounds(contentX, y, contentW, kWaveformHeight);
+        y += kWaveformHeight + 8;
+
+        if (apply) {
+            const int buttonWidth = juce::jmax(96, narrowW / 2);
+            loadSampleButton->setBounds(narrowX, y, buttonWidth, kRowHeight);
+            sampleNameLabel->setBounds(narrowX + buttonWidth + 6, y, narrowW - buttonWidth - 6, kRowHeight);
+        }
+        y += kRowHeight + 8;
+    }
+
+    for (int i = 0; i < comboBoxes.size(); ++i) {
+        if (apply) {
+            comboLabels[i]->setBounds(narrowX, y, narrowW, kLabelHeight);
+            comboBoxes[i]->setBounds(narrowX, y + kLabelHeight, narrowW, kRowHeight);
+        }
+        y += kLabelHeight + kRowHeight + 6;
+    }
+
+    for (int i = 0; i < toggles.size(); ++i) {
+        if (apply)
+            toggles[i]->setBounds(narrowX, y, narrowW, kRowHeight);
+        y += kRowHeight + 2;
+    }
+
+    // --- Knob grid: kKnobColumns across, wrapping ---
+    const int knobWidth = contentW / kKnobColumns;
+    for (int i = 0; i < sliders.size(); ++i) {
+        const int row = i / kKnobColumns;
+        const int col = i % kKnobColumns;
+        const int x = contentX + col * knobWidth;
+        const int rowY = y + row * (kLabelHeight + kKnobHeight);
+
+        if (apply) {
+            sliderLabels[i]->setBounds(x, rowY, knobWidth, kLabelHeight);
+            sliders[i]->setBounds(x, rowY + kLabelHeight, knobWidth, kKnobHeight);
+        }
+    }
+    const int knobRows = (sliders.size() + kKnobColumns - 1) / kKnobColumns;
+    y += knobRows * (kLabelHeight + kKnobHeight);
+
+    if (freqResponseComponent) {
+        if (apply)
+            freqResponseComponent->setBounds(contentX, y, contentW, 120);
+        y += 128;
+    }
+
+    if (spectrumToggle) {
+        if (apply)
+            spectrumToggle->setBounds(narrowX, y, narrowW, kRowHeight);
+        y += kRowHeight + 2;
+    }
+
+    if (scopeToggle) {
+        if (apply)
+            scopeToggle->setBounds(narrowX, y, narrowW, kRowHeight);
+        y += kRowHeight + 2;
+    }
+
+    if (scopeComponent && scopeComponent->isVisible()) {
+        if (apply)
+            scopeComponent->setBounds(contentX, y, contentW, 100);
+        y += 100;
+    }
+
+    return y + kBottomPadding;
 }
 
 void ModuleComponent::paint(juce::Graphics& g) {
@@ -600,6 +836,15 @@ void ModuleComponent::paint(juce::Graphics& g) {
         g.fillRect(0, 0, getWidth(), 24);
         g.setColour(juce::Colours::white);
         g.drawText(module->getName(), 0, 0, getWidth(), 24, juce::Justification::centred, true);
+    }
+
+    // Drop-target highlight while an audio file hovers over a Sampler.
+    if (fileDragHighlight) {
+        auto dropColour = (lf != nullptr) ? lf->getTheme().colors.accent : juce::Colours::yellow;
+        g.setColour(dropColour.withAlpha(0.12f));
+        g.fillRoundedRectangle(getLocalBounds().toFloat(), 24.0f);
+        g.setColour(dropColour);
+        g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(1.0f), 24.0f, 2.0f);
     }
 
     // Highlight Active Step (Sequencer only) — recolored from theme accent when available.
@@ -945,68 +1190,7 @@ void ModuleComponent::resized() {
     }
 
     // --- Default Layout ---
-    int y = 30;
-    // Increase top y if MIDI IN is present to avoid overlap
-    if (module->acceptsMidi())
-        y += 30;
-    // Push content below input port labels
-    int numInputs2 = module->getTotalNumInputChannels();
-    if (auto* mb2 = dynamic_cast<ModuleBase*>(module))
-        numInputs2 = mb2->getVisibleInputPortCount();
-    if (numInputs2 > 2)
-        y = std::max(y, 30 + numInputs2 * 20 + 10);
-
-    int margin = 70; // Wider margin for labels
-    int contentWidth = getWidth() - (margin * 2);
-
-    for (int i = 0; i < comboBoxes.size(); ++i) {
-        comboLabels[i]->setBounds(margin, y, contentWidth, 20);
-        y += 20;
-        comboBoxes[i]->setBounds(margin, y, contentWidth, 24);
-        y += 30;
-    }
-
-    for (int i = 0; i < toggles.size(); ++i) {
-        toggles[i]->setBounds(margin, y, contentWidth, 24);
-        y += 30;
-    }
-
-    int sliderWidth = contentWidth / 2;
-    int sliderHeight = 60;
-
-    for (int i = 0; i < sliders.size(); ++i) {
-        int row = i / 2;
-        int col = i % 2;
-
-        int x = margin + col * sliderWidth;
-        int localY = y + row * (sliderHeight + 20);
-
-        sliderLabels[i]->setBounds(x, localY, sliderWidth, 20);
-        sliders[i]->setBounds(x, localY + 20, sliderWidth, sliderHeight);
-    }
-
-    // Update y to the end of sliders for scope toggle/scope
-    int finalSlidersRow = (sliders.size() + 1) / 2;
-    y += finalSlidersRow * (sliderHeight + 20);
-
-    if (freqResponseComponent) {
-        freqResponseComponent->setBounds(10, y, getWidth() - 20, 120);
-        y += 130;
-    }
-
-    if (spectrumToggle) {
-        spectrumToggle->setBounds(margin, y, contentWidth, 24);
-        y += 30;
-    }
-
-    if (scopeToggle) {
-        scopeToggle->setBounds(margin, y, contentWidth, 24);
-        y += 30;
-    }
-
-    if (scopeComponent && scopeComponent->isVisible()) {
-        scopeComponent->setBounds(10, y, getWidth() - 20, 100);
-    }
+    layoutDefaultContent(/*apply*/ true);
 }
 
 void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) {
@@ -1106,7 +1290,10 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                 };
                 std::vector<Category> categories = {
                     {"Sources",
-                     {{"Oscillator", ModuleType::Oscillator}, {"Noise", ModuleType::Noise}, {"LFO", ModuleType::LFO}}},
+                     {{"Oscillator", ModuleType::Oscillator},
+                      {"Noise", ModuleType::Noise},
+                      {"Sampler", ModuleType::Sampler},
+                      {"LFO", ModuleType::LFO}}},
                     {"Sequencing",
                      {{"Sequencer", ModuleType::Sequencer},
                       {"Poly Sequencer", ModuleType::PolySequencer},

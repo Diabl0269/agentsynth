@@ -65,18 +65,32 @@ PatchEvalResult evaluatePatch(const juce::AudioProcessorGraph& graph) {
         reasons.add("no Audio Output node in the patch");
 
     if (result.hasAudioOutput) {
+        // "Source" here means something that makes sound on its own. Sampler is deliberately NOT one:
+        // it is silent until a file is loaded, and nothing in a model-authored patch can load one, so
+        // counting it would let AIIntegrationService's structural gate green-light a patch that can
+        // only ever play silence. It is reported separately below so the rejection says what to do
+        // instead of claiming the patch has no source at all.
+        bool samplerReachesOutput = false;
+
         for (auto id : reachableBackward(graph, output->nodeID)) {
             const auto* node = graph.getNodeForId(id);
-            if (node != nullptr && node->getProcessor() != nullptr) {
-                juce::String name = node->getProcessor()->getName();
-                if (name == "Oscillator" || name == "Noise") {
-                    result.sourceReachesOutput = true;
-                    break;
-                }
+            if (node == nullptr || node->getProcessor() == nullptr)
+                continue;
+
+            const juce::String name = node->getProcessor()->getName();
+            if (name == "Oscillator" || name == "Noise") {
+                result.sourceReachesOutput = true;
+                break;
             }
+            if (name == "Sampler")
+                samplerReachesOutput = true;
         }
+
         if (!result.sourceReachesOutput)
-            reasons.add("Audio Output is not reachable from any Oscillator or Noise module");
+            reasons.add(samplerReachesOutput
+                            ? "Audio Output is only reachable through a Sampler, which stays silent until a "
+                              "file is loaded — add an Oscillator or Noise module so the patch makes sound"
+                            : "Audio Output is not reachable from any Oscillator or Noise module");
     }
 
     for (auto* node : graph.getNodes()) {

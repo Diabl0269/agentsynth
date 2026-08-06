@@ -291,6 +291,41 @@ Phase 3 standardizes module card widths into three named buckets defined in `Lay
 
 `kDoubleWidth == 2 × kSingleWidth` — a Double module occupies exactly two standard column slots. Attenuverter modules are excluded from the visible module card grid (they do not appear as `ModuleComponent` cards and are skipped by auto-arrange).
 
+### Module body layout (`ModuleComponent::layoutDefaultContent`)
+
+Every module that does not have a bespoke layout (Sequencer, PolySequencer, MidiKeyboard, ADSR,
+Attenuverter) is laid out by one function, `layoutDefaultContent(bool apply)`. It runs twice per
+size change — once with `apply = false` to measure the height, once with `apply = true` from
+`resized()` to position the children — so the measured height and the real positions cannot drift
+apart. They previously *did* drift: two hand-maintained copies of the geometry disagreed, and body
+content was drawn on top of the lowest port labels.
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `kKnobColumns` | 3 | knobs per row |
+| `kContentMargin` | 12 | left/right gutter for body content |
+| `kNarrowContentWidth` | 200 | combos / toggles / the Sampler load row, centred |
+| `kLabelHeight` | 18 | label above a knob or combo |
+| `kRowHeight` | 24 | combo box, toggle, button |
+| `kKnobHeight` | 58 | rotary + its text box |
+| `kWaveformHeight` | 72 | Sampler waveform overview |
+| `kPortLabelClearance` | 15 | gap below the lowest jack before body content starts |
+
+**Body content always starts below every jack.** `getContentTopY()` derives that y from
+`getPortCenter()` — the same function that anchors wires — rather than recomputing the port
+geometry, so content can never land on a port label again. Because the body is below the ports, it
+does not need the narrow gutters that used to keep it clear of the port labels, which is what makes
+three knobs per row fit inside the 280 px card.
+
+Three columns instead of two removes a knob row from most modules. Measured heights before → after:
+Oscillator 530 → 449, Filter 570 → 487, LFO 440 → 353, Sampler 750 → 657. A few short modules got
+*taller* (VCA 200 → 245, Noise 250 → 293, Poly MIDI 100 → 123) — those are the overlap fix, not
+padding: their content used to start at y=60 while the first jack sits at y=70.
+
+`GraphEditor::estimateModuleSize()` mirrors these heights for the library drag ghost.
+`ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents` constructs every library-offered
+type and fails if the table drifts, so the ghost cannot lie about where a module will land.
+
 ### Column stride derivation
 
 ```

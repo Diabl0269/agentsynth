@@ -75,6 +75,16 @@ TEST_F(ModuleBypassTest, BypassedEffectPassesAudioThrough) {
     EXPECT_EQ(numChannels, 11);
 
     juce::AudioBuffer<float> buffer(numChannels, blockSize);
+    // juce::AudioBuffer's constructor does NOT zero its memory, and FilterModule reads channels 1-3
+    // as cutoff/resonance/drive CV — so without this clear() the filter is fed whatever was on the
+    // heap. Verified failure path: a NaN in the resonance or drive channel reaches
+    // LadderFilter::setResonance/setDrive (JUCE asserts in juce_LookupTable.h /
+    // juce_MathsFunctions.h) and the output comes back NaN. Every NaN comparison is false, so the
+    // `diff > maxDifference` scan below leaves maxDifference at *exactly* 0 and the "filter did not
+    // process the signal" assertion fails. (A NaN in the cutoff channel alone is harmless — jlimit
+    // returns it, both branch comparisons are false, and the base cutoff is used.) This is how the
+    // test failed on the Linux coverage job.
+    buffer.clear();
     juce::MidiBuffer midiBuffer;
 
     // Fill channel 0 with 0.5f values to verify passthrough
@@ -89,6 +99,7 @@ TEST_F(ModuleBypassTest, BypassedEffectPassesAudioThrough) {
 
     // Get the filtered output
     juce::AudioBuffer<float> filteredBuffer(numChannels, blockSize);
+    filteredBuffer.clear();
     juce::FloatVectorOperations::copy(filteredBuffer.getWritePointer(0), buffer.getReadPointer(0), blockSize);
 
     // Verify that the filter actually changed the signal (test is meaningful)
@@ -104,6 +115,7 @@ TEST_F(ModuleBypassTest, BypassedEffectPassesAudioThrough) {
 
     // Now create a fresh buffer with the same test values
     juce::AudioBuffer<float> bypassBuffer(numChannels, blockSize);
+    bypassBuffer.clear(); // same reason as above
     for (int i = 0; i < blockSize; ++i) {
         bypassBuffer.setSample(0, i, testValue);
     }

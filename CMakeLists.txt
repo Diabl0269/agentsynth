@@ -64,6 +64,7 @@ add_library(Core STATIC
     Source/Modules/VCAModule.h
     Source/Modules/VoiceMixerModule.h
     Source/Modules/NoiseModule.h
+    Source/Modules/SamplerModule.h
     Source/Modules/SequencerModule.h
     Source/Modules/MidiKeyboardModule.h
     Source/Modules/LFOModule.h
@@ -257,6 +258,7 @@ target_sources(AgentSynth PRIVATE
     Source/UI/ModuleComponent.cpp
     Source/UI/ModuleComponent.h
     Source/UI/FrequencyResponseComponent.h
+    Source/UI/SampleWaveformComponent.h
     Source/UI/ModMatrixComponent.cpp
     Source/UI/ModMatrixComponent.h
     Source/UI/SettingsWindow.cpp

@@ -21,6 +21,7 @@
 #include "../Modules/OscillatorModule.h"
 #include "../Modules/PolyMidiModule.h"
 #include "../Modules/PolySequencerModule.h"
+#include "../Modules/SamplerModule.h"
 #include "../Modules/SequencerModule.h"
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
@@ -67,6 +68,7 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Bitcrusher", []() { return std::make_unique<BitcrusherModule>(); }},
     {"Pitch Shifter", []() { return std::make_unique<PitchShifterModule>(); }},
     {"Noise", []() { return std::make_unique<NoiseModule>(); }},
+    {"Sampler", []() { return std::make_unique<SamplerModule>(); }},
     {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }}};
 
 namespace {
@@ -519,6 +521,8 @@ static juce::String getFactoryTypeName(juce::AudioProcessor* processor) {
             return "Pitch Shifter";
         case ModuleType::Noise:
             return "Noise";
+        case ModuleType::Sampler:
+            return "Sampler";
         case ModuleType::ExternalMidi:
             return "External MIDI";
         }
@@ -555,6 +559,14 @@ juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
                 }
             }
             n->setProperty("params", juce::var(params.get()));
+
+            // Non-parameter module state (e.g. the Sampler's loaded file). Emitted only when the
+            // module has some, so every other node's JSON is byte-identical to before.
+            if (auto* mb = dynamic_cast<ModuleBase*>(processor)) {
+                juce::var extraState = mb->getExtraState();
+                if (!extraState.isVoid())
+                    n->setProperty("state", extraState);
+            }
 
             // Position
             juce::DynamicObject::Ptr pos = new juce::DynamicObject();
@@ -762,6 +774,17 @@ void AIStateMapper::applyParamsToProcessor(juce::AudioProcessor* processor, cons
     }
 }
 
+void AIStateMapper::applyExtraStateToProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* nodeObj,
+                                               bool trusted) {
+    // Untrusted (model-authored) JSON never reaches setExtraState: a module may read this as a
+    // filename (SamplerModule does), so honouring it for remote output would let a patch suggestion
+    // name an arbitrary file for the app to open. Our own snapshots and presets are trusted.
+    if (!trusted || !nodeObj->hasProperty("state"))
+        return;
+    if (auto* mb = dynamic_cast<ModuleBase*>(processor))
+        mb->setExtraState(nodeObj->getProperty("state"));
+}
+
 bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessorGraph& graph, bool clearExisting,
                                      bool trusted) {
     if (!json.isObject()) {
@@ -880,6 +903,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                                         applyParamsToProcessor(existingNode->getProcessor(), pObj, trusted);
                                     }
                                 }
+                                applyExtraStateToProcessor(existingNode->getProcessor(), nObj, trusted);
                                 // Update position if provided
                                 if (nObj->hasProperty("position")) {
                                     if (auto* posObj = nObj->getProperty("position").getDynamicObject()) {
@@ -900,6 +924,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                                 applyParamsToProcessor(processor.get(), pObj, trusted);
                             }
                         }
+                        applyExtraStateToProcessor(processor.get(), nObj, trusted);
 
                         // Preserve node identity when restoring OUR OWN snapshot (undo/redo, preset load).
                         // graphToJSON writes the live uid as "id", so replaying it with the same NodeID
@@ -1065,8 +1090,9 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
         if (audioOutputNode != nullptr) {
             // Types that produce audio and should auto-connect to output
             static const std::set<juce::String> audioNodeTypes = {
-                "Oscillator", "Noise",  "Filter", "VCA",        "Distortion", "Delay",   "Reverb",     "Amp Env",
-                "Filter Env", "Chorus", "Phaser", "Compressor", "Flanger",    "Limiter", "Bitcrusher", "Pitch Shifter"};
+                "Oscillator", "Noise",   "Sampler", "Filter",     "VCA",          "Distortion",
+                "Delay",      "Reverb",  "Amp Env", "Filter Env", "Chorus",       "Phaser",
+                "Compressor", "Flanger", "Limiter", "Bitcrusher", "Pitch Shifter"};
 
             for (auto newNodeId : newlyCreatedNodes) {
                 auto* node = graph.getNodeForId(newNodeId);
@@ -1093,8 +1119,10 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
 
         // Auto-connect MIDI: find existing MIDI sources and connect to new MIDI-accepting nodes
         // Types that accept MIDI input
-        static const std::set<juce::String> midiAcceptingTypes = {"Oscillator", "Sequencer", "Poly Sequencer",
-                                                                  "Poly MIDI"};
+        // Sampler is here because a note-on retriggers it and transposes it against rootNote — the
+        // same reason Oscillator is.
+        static const std::set<juce::String> midiAcceptingTypes = {"Oscillator", "Sampler", "Sequencer",
+                                                                  "Poly Sequencer", "Poly MIDI"};
 
         // Find all existing MIDI source nodes (nodes that have outgoing MIDI connections)
         std::set<juce::AudioProcessorGraph::NodeID> midiSources;

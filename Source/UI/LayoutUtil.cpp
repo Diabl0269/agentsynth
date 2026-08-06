@@ -133,6 +133,7 @@ int roleRank(ModuleType t) {
     case ModuleType::PolyMidi:
     case ModuleType::ExternalMidi:
     case ModuleType::Noise:
+    case ModuleType::Sampler:
         return 0;
     case ModuleType::Filter:
     case ModuleType::VCA:
