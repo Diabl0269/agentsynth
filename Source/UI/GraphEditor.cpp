@@ -66,6 +66,8 @@ static juce::Point<int> estimateModuleSize(const juce::String& typeName) {
         return {280, 120};
     if (typeName == "Noise")
         return {280, 250};
+    if (typeName == "Parametric EQ")
+        return {280, 860}; // 6 port labels + 11 knobs (6 rows) + 130px curve + 2 toggles
     return {280, 360};
 }
 

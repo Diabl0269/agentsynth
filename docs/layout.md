@@ -505,7 +505,11 @@ a slightly different footprint.
 
 ## 9. Visualizer Components
 
-Two in-module visualizer components provide real-time signal display inside module cards.
+Three in-module visualizer components provide real-time signal display inside module cards.
+
+### FrequencyGrid (`Source/UI/FrequencyGrid.h`)
+
+Not a component — the pure log-frequency / dB coordinate maths shared by the two frequency-domain views (`FrequencyResponseComponent` for Filter, `EQCurveComponent` for Parametric EQ). Both plot over the same 20 Hz – 20 kHz log axis, so `freqToX` / `xToFreq` / `indexToFreq` / `formatHzLabel` / `findPeakBin` live here once. The dB axis is *not* fixed — `dbToY` / `yToDb` take `minDb` and `maxDb` per call, because the filter view needs an asymmetric −40…+50 dB window (resonance peaks overshoot a long way) while the EQ view uses a symmetric ±30 dB one. Each component still paints its own grid: they differ in dB step, label set, and whether the 0 dB line is emphasised.
 
 ### FrequencyResponseComponent (`Source/UI/FrequencyResponseComponent.h`)
 
@@ -524,6 +528,18 @@ Serum-style frequency-response curve with an optional FFT spectrum overlay, used
 | `formatHzLabel` | `static juce::String formatHzLabel(float hz)` | `100 → "100Hz"`, `1000 → "1kHz"`, `10000 → "10kHz"` |
 | `freqToXStatic` | `static float freqToXStatic(float freq, float width)` | Log-scaled freq → x pixel; mirrors private `freqToX` (minFreq=20, maxFreq=20000) |
 | `dbToYStatic` | `static float dbToYStatic(float db, float height)` | dB → y pixel; mirrors private `dbToY` (minDb=−40, maxDb=50) |
+
+All four now forward to `synth::ui::FrequencyGrid`; they stay as the component's public API so existing callers and tests are unaffected.
+
+### EQCurveComponent (`Source/UI/EQCurveComponent.h`)
+
+Visual response curve for `ParametricEQModule` cards. Laid out at `(10, y, width − 20, 130)` under the knob rows, with a "Show Spectrum" toggle beneath it (same pattern as the Filter card).
+
+- **dB window**: symmetric ±30 dB, so 0 dB sits at the exact vertical centre and boosts read as the mirror of cuts. dB gridlines at ±12 and ±24; the 0 dB line is drawn brighter as the reference the curve is read against.
+- **Curve source**: `ParametricEQModule::responseDb()` — the analytic prototypes the module's biquad coefficients are derived from, so the drawing and the DSP cannot drift apart (locked by `ParametricEQAudio.MeasuredResponseTracksTheAnalyticCurve`). Sampled at 512 log-spaced points; the gradient fill hangs off the 0 dB line rather than the bottom edge, so a cut fills downward and a boost upward.
+- **Band handles**: one dot per band at (centre freq, band gain), with a dark ring for contrast. Filled when the band is doing work (|gain| > 0.25 dB), hollow when flat, so the eye goes to the active bands. Active bands also get a `formatHzLabel` callout, placed above the dot for a boost and below for a cut; skipped entirely when the component is narrower than the 44 px callout box.
+- **Spectrum overlay**: optional 1024-point FFT of the module's `VisualBuffer`, drawn *behind* the curve over its own −80…0 dB window, smoothed with an exponential moving average.
+- **Repaint discipline**: 30 Hz timer that only repaints when a band setting or the output trim actually changed — or every tick while the spectrum overlay is on, which needs a fresh FFT by definition. See §10–11; never make this unconditional.
 
 ### ScopeComponent (`Source/UI/ScopeComponent.h`)
 

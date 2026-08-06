@@ -48,6 +48,16 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         addAndMakeVisible(spectrumToggle.get());
     }
 
+    if (auto* eqMod = dynamic_cast<ParametricEQModule*>(module)) {
+        eqCurveComponent = std::make_unique<EQCurveComponent>(*eqMod);
+        addAndMakeVisible(eqCurveComponent.get());
+
+        spectrumToggle = std::make_unique<juce::ToggleButton>("Show Spectrum");
+        spectrumToggle->setToggleState(false, juce::dontSendNotification);
+        spectrumToggle->onClick = [this] { eqCurveComponent->setShowSpectrum(spectrumToggle->getToggleState()); };
+        addAndMakeVisible(spectrumToggle.get());
+    }
+
     if (getType(module) != ModuleType::Attenuverter) {
         bypassButton = std::make_unique<juce::DrawableButton>("Bypass", juce::DrawableButton::ImageFitted);
         bypassButton->setClickingTogglesState(true);
@@ -79,6 +89,11 @@ void ModuleComponent::detachFromProcessor() {
     // Destroy scope component first — it has its own timer reading from the module's VisualBuffer
     scopeComponent.reset();
     scopeToggle.reset();
+    // Same for the frequency-domain views: their 30 Hz timers poll the module for parameter
+    // values and FFT samples, so they must go before the module pointer is dropped.
+    eqCurveComponent.reset();
+    freqResponseComponent.reset();
+    spectrumToggle.reset();
     keyboardComponent.reset();
 
     if (auto* parent = getParentComponent())
@@ -278,11 +293,11 @@ void ModuleComponent::timerCallback() {
         }
     }
 
-    // NOTE: condition #4 (visible animated children — scope/freqResponse) is intentionally
-    // omitted.  FrequencyResponseComponent and ScopeComponent manage their own repaints
-    // via their own timers and only invalidate when their data changes.  Forcing a full
-    // parent repaint every tick because a child is visible caused a repaint storm on every
-    // Filter module (freqResponseComponent is always visible).
+    // NOTE: condition #4 (visible animated children — scope/freqResponse/eqCurve) is
+    // intentionally omitted.  FrequencyResponseComponent, EQCurveComponent and ScopeComponent
+    // manage their own repaints via their own timers and only invalidate when their data
+    // changes.  Forcing a full parent repaint every tick because a child is visible caused a
+    // repaint storm on every Filter module (freqResponseComponent is always visible).
 
     if (needsRepaint) {
         lastPaintedRMS = cachedRMS;
@@ -563,6 +578,9 @@ void ModuleComponent::updateLayout() {
 
     if (freqResponseComponent)
         contentHeight += 130;
+
+    if (eqCurveComponent)
+        contentHeight += 140;
 
     if (spectrumToggle)
         contentHeight += 30;
@@ -994,6 +1012,11 @@ void ModuleComponent::resized() {
         y += 130;
     }
 
+    if (eqCurveComponent) {
+        eqCurveComponent->setBounds(10, y, getWidth() - 20, 130);
+        y += 140;
+    }
+
     if (spectrumToggle) {
         spectrumToggle->setBounds(margin, y, contentWidth, 24);
         y += 30;
@@ -1114,7 +1137,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                       {"Poly MIDI", ModuleType::PolyMidi},
                       {"External MIDI", ModuleType::ExternalMidi}}},
                     {"Envelopes & Control", {{"ADSR", ModuleType::ADSR}, {"VCA", ModuleType::VCA}}},
-                    {"Filters", {{"Filter", ModuleType::Filter}}},
+                    {"Filters", {{"Filter", ModuleType::Filter}, {"Parametric EQ", ModuleType::ParametricEQ}}},
                     {"Modulation FX",
                      {{"Chorus", ModuleType::Chorus},
                       {"Phaser", ModuleType::Phaser},

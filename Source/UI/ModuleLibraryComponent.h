@@ -30,6 +30,7 @@ public:
             {"VCA", false},
             {"Filters", true},
             {"Filter", false},
+            {"Parametric EQ", false},
             {"Modulation FX", true},
             {"Chorus", false},
             {"Phaser", false},
@@ -76,6 +77,8 @@ public:
             return "Voltage-controlled amplifier — controls signal amplitude via CV.";
         if (moduleName.equalsIgnoreCase("Filter"))
             return "Multi-mode resonant filter (low-pass, high-pass, band-pass).";
+        if (moduleName.equalsIgnoreCase("Parametric EQ"))
+            return "Four-band EQ with a visual response curve for surgical tone shaping.";
         if (moduleName.equalsIgnoreCase("Chorus"))
             return "Adds lush width by layering slightly detuned copies of the signal.";
         if (moduleName.equalsIgnoreCase("Phaser"))

@@ -43,6 +43,7 @@ enum class ModuleType {
     Compressor,
     Flanger,
     Limiter,
+    ParametricEQ,
     VoiceMixer,
     Noise
 };

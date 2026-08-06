@@ -135,6 +135,7 @@ int roleRank(ModuleType t) {
     case ModuleType::Noise:
         return 0;
     case ModuleType::Filter:
+    case ModuleType::ParametricEQ:
     case ModuleType::VCA:
     case ModuleType::VoiceMixer:
         return 1;

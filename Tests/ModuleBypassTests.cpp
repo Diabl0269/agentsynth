@@ -3,6 +3,7 @@
 #include "../Source/Modules/FX/DelayModule.h"
 #include "../Source/Modules/FX/FlangerModule.h"
 #include "../Source/Modules/FX/LimiterModule.h"
+#include "../Source/Modules/FX/ParametricEQModule.h"
 #include "../Source/Modules/FX/PhaserModule.h"
 #include "../Source/Modules/FX/ReverbModule.h"
 #include "../Source/Modules/FilterModule.h"
@@ -192,6 +193,7 @@ TEST_F(ModuleBypassTest, BypassStateSerializedInState) {
 // These tests verify that bypassed FX modules leave AUDIO channels intact
 // (dry signal passes through) and only mute silences them.
 // Modules with CV inputs (Chorus/Phaser/Flanger): 4 channels, audio on 0+1, CV on 2+3.
+// Parametric EQ: 6 channels, audio on 0+1, CV on 2-5.
 // Pure stereo modules (Reverb/Delay/Compressor/Limiter): 2 channels, all audio.
 // ---------------------------------------------------------------------------
 
@@ -550,6 +552,66 @@ TEST(FXBypassTest, LimiterMuteSilencesOutput) {
     module.processBlock(buffer, midi);
 
     for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "Ch" << ch << " sample " << i;
+}
+
+// --- Parametric EQ --- (6 channels: audio on 0+1, CV on 2-5)
+
+TEST(FXBypassTest, ParametricEQBypassPassesDryAudio) {
+    ParametricEQModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(6, 512);
+    buffer.clear();
+    for (int i = 0; i < 512; ++i) {
+        buffer.setSample(0, i, 0.7f);
+        buffer.setSample(1, i, 0.7f);
+    }
+
+    module.setBypassed(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int i = 0; i < 512; ++i) {
+        EXPECT_FLOAT_EQ(buffer.getSample(0, i), 0.7f) << "Ch0 sample " << i;
+        EXPECT_FLOAT_EQ(buffer.getSample(1, i), 0.7f) << "Ch1 sample " << i;
+    }
+}
+
+TEST(FXBypassTest, ParametricEQBypassClearsCVChannels) {
+    ParametricEQModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(6, 512);
+    buffer.clear();
+    for (int ch = 2; ch < 6; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.5f);
+
+    module.setBypassed(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int ch = 2; ch < 6; ++ch)
+        for (int i = 0; i < 512; ++i)
+            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "CV ch" << ch << " sample " << i;
+}
+
+TEST(FXBypassTest, ParametricEQMuteSilencesOutput) {
+    ParametricEQModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(6, 512);
+    for (int ch = 0; ch < 6; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.7f);
+
+    module.setMuted(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int ch = 0; ch < 6; ++ch)
         for (int i = 0; i < 512; ++i)
             EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "Ch" << ch << " sample " << i;
 }

@@ -77,6 +77,7 @@ add_library(Core STATIC
     Source/Modules/FX/CompressorModule.h
     Source/Modules/FX/FlangerModule.h
     Source/Modules/FX/LimiterModule.h
+    Source/Modules/FX/ParametricEQModule.h
     # AI
     Source/AI/AIProvider.h
     Source/AI/OllamaProvider.h
@@ -254,6 +255,8 @@ target_sources(AgentSynth PRIVATE
     Source/UI/ModuleComponent.cpp
     Source/UI/ModuleComponent.h
     Source/UI/FrequencyResponseComponent.h
+    Source/UI/FrequencyGrid.h
+    Source/UI/EQCurveComponent.h
     Source/UI/ModMatrixComponent.cpp
     Source/UI/ModMatrixComponent.h
     Source/UI/SettingsWindow.cpp
