@@ -195,13 +195,30 @@ private:
      * @brief One correction round-trip of applyPatchWithRetry(), recursing until the patch
      *        applies or `failedAttempt` reaches kMaxPatchRetries + 1.
      */
-    void requestPatchCorrection(int failedAttempt, bool mergeMode, PatchApplyCallback onComplete,
-                                PatchRetryCallback onRetry);
+    void requestPatchCorrection(int failedAttempt, bool mergeMode, const juce::String& originalRequest,
+                                PatchApplyCallback onComplete, PatchRetryCallback onRetry);
 
     /**
      * @brief The message sent back to the model naming the specific validation failure.
+     *
+     * Restates `originalRequest` explicitly rather than relying on conversation history to carry
+     * it: RemoteProvider (Source/AI/RemoteProvider.h) sends only the last message, so a correction
+     * turn with no restated intent reaches the model as a bare "fix this JSON" with no idea what
+     * the patch was even supposed to be — confirmed live: the model invents an unrelated patch
+     * referencing node ids that don't exist anywhere. OllamaProvider already sends full history, so
+     * this is redundant-but-harmless there.
      */
-    static juce::String buildCorrectionPrompt(const juce::String& error);
+    static juce::String buildCorrectionPrompt(const juce::String& originalRequest, const juce::String& error);
+
+    /**
+     * @brief The most recent user-authored chat turn, so a correction round-trip can restate what
+     *        the patch being corrected was actually for. Captured once at the start of
+     *        applyPatchWithRetry() — before any correction turns are appended to chatHistory — and
+     *        threaded through requestPatchCorrection()'s recursion rather than re-derived on each
+     *        retry, so a second retry doesn't mistake the first retry's own correction text for the
+     *        original request.
+     */
+    juce::String mostRecentUserRequest() const;
 
     /**
      * @brief Whether the patch states a non-empty "mode", i.e. the model expressed an intent

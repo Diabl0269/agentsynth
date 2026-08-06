@@ -587,6 +587,12 @@ and `selectedDescriptor()` (indexing the combo's selected item against the *unfi
 desync the moment a hidden entry sits between two visible ones). Phase 4 is expected to flip
 `"remote"`'s `hidden` to `false`.
 
+**Eval harness parity.** `Tools/AIEvalHarness` (see its README) can replay its golden prompt set
+through `RemoteProvider` instead of `OllamaProvider` via `--provider remote`, so a model can be
+scored through the exact stack a user hits — client -> service -> Ollama/Groq — instead of an
+approximation of it. The service picks its own model server-side; the harness's `--model` is a
+report label only in this mode.
+
 ## 6. Future Considerations
 
 -   **Direct Saving of AI Suggested Patches**: Implement functionality for users to directly save AI-generated patches as presets.
