@@ -19,8 +19,6 @@ ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm)
 
         auto bindButton = std::make_unique<juce::TextButton>();
         bindButton->setButtonText(ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding(actionId)));
-        bindButton->setColour(juce::TextButton::buttonColourId, juce::Colours::darkgrey);
-        bindButton->setColour(juce::TextButton::textColourOffId, juce::Colours::white);
         bindButton->setTooltip("Click, then press a key to rebind");
         int index = static_cast<int>(bindButtons.size());
         bindButton->onClick = [this, index] { startListening(index); };
@@ -51,8 +49,6 @@ ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm)
 
     addAndMakeVisible(exportButton);
     exportButton.setButtonText("Export...");
-    exportButton.setColour(juce::TextButton::buttonColourId, juce::Colours::darkgrey);
-    exportButton.setColour(juce::TextButton::textColourOffId, juce::Colours::white);
     exportButton.setTooltip("Export current shortcuts to a JSON file");
     exportButton.onClick = [this] {
         fileChooser = std::make_unique<juce::FileChooser>(
@@ -75,8 +71,6 @@ ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm)
 
     addAndMakeVisible(importButton);
     importButton.setButtonText("Import...");
-    importButton.setColour(juce::TextButton::buttonColourId, juce::Colours::darkgrey);
-    importButton.setColour(juce::TextButton::textColourOffId, juce::Colours::white);
     importButton.setTooltip("Import shortcuts from a JSON file");
     importButton.onClick = [this] {
         fileChooser = std::make_unique<juce::FileChooser>(
@@ -187,6 +181,6 @@ void ShortcutsSettingsTab::refreshBindingLabels() {
     for (size_t i = 0; i < bindButtons.size(); ++i) {
         auto actionId = actionIds[static_cast<int>(i)];
         bindButtons[i]->setButtonText(ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding(actionId)));
-        bindButtons[i]->setColour(juce::TextButton::buttonColourId, juce::Colours::darkgrey);
+        bindButtons[i]->removeColour(juce::TextButton::buttonColourId);
     }
 }
