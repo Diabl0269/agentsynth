@@ -114,16 +114,37 @@ public:
         const float midY = bounds.getCentreY();
         const float halfHeight = bounds.getHeight() * 0.45f;
 
-        g.setColour(waveColour);
+        // One filled closed path (top edge left-to-right, bottom edge back again) rather than a
+        // 1px drawVerticalLine per column. The canvas renders this component under GraphEditor's
+        // zoom transform, so per-column lines do not tile at any zoom != 1 — they leave visible
+        // gaps and moire striping. A single filled path scales cleanly.
+        juce::Path waveform;
+        const float columnWidth = bounds.getWidth() / (float)peaks.size();
+
         for (size_t col = 0; col < peaks.size(); ++col) {
+            const float x = bounds.getX() + (float)col * columnWidth;
             const float top = midY - juce::jlimit(-1.0f, 1.0f, peaks[col].getEnd()) * halfHeight;
-            const float bottom = midY - juce::jlimit(-1.0f, 1.0f, peaks[col].getStart()) * halfHeight;
-            g.drawVerticalLine((int)col, juce::jmin(top, bottom), juce::jmax(top, bottom) + 1.0f);
+            if (col == 0)
+                waveform.startNewSubPath(x, top);
+            else
+                waveform.lineTo(x, top);
         }
+        for (size_t col = peaks.size(); col-- > 0;) {
+            const float x = bounds.getX() + (float)col * columnWidth;
+            const float bottom = midY - juce::jlimit(-1.0f, 1.0f, peaks[col].getStart()) * halfHeight;
+            waveform.lineTo(x, bottom);
+        }
+        waveform.closeSubPath();
+
+        g.setColour(waveColour);
+        g.fillPath(waveform);
+        // A near-silent sample collapses the path to a hairline; stroke the centre so it still reads
+        // as "loaded but quiet" rather than as an empty box.
+        g.drawHorizontalLine(juce::roundToInt(midY), bounds.getX(), bounds.getRight());
 
         if (sampler.isPlaying()) {
             g.setColour(playheadColour.withAlpha(0.8f));
-            g.drawVerticalLine(currentPlayheadX(), bounds.getY(), bounds.getBottom());
+            g.fillRect((float)currentPlayheadX(), bounds.getY(), 1.0f, bounds.getHeight());
         }
     }
 

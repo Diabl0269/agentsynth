@@ -626,6 +626,19 @@ TEST(SampleWaveformPaint, ZeroWidthComponentIsSafe) {
     EXPECT_NO_THROW(view.timerCallback());
 }
 
+TEST(SamplerFormats, IsSupportedAudioFileAcceptsAudioAndRejectsEverythingElse) {
+    // Extension check only — the file need not exist, since drag-hover must stay cheap.
+    juce::File base = juce::File::getSpecialLocation(juce::File::tempDirectory);
+    EXPECT_TRUE(SamplerModule::isSupportedAudioFile(base.getChildFile("kick.wav")));
+    EXPECT_TRUE(SamplerModule::isSupportedAudioFile(base.getChildFile("KICK.WAV"))) << "must be case-insensitive";
+    EXPECT_TRUE(SamplerModule::isSupportedAudioFile(base.getChildFile("loop.aiff")));
+
+    EXPECT_FALSE(SamplerModule::isSupportedAudioFile(base.getChildFile("patch.json")));
+    EXPECT_FALSE(SamplerModule::isSupportedAudioFile(base.getChildFile("notes.txt")));
+    EXPECT_FALSE(SamplerModule::isSupportedAudioFile(base.getChildFile("no-extension")));
+    EXPECT_FALSE(SamplerModule::isSupportedAudioFile(base));
+}
+
 TEST(SamplerFormats, WildcardCoversWav) {
     auto wildcard = SamplerModule::getSupportedFormatWildcard();
     EXPECT_FALSE(wildcard.isEmpty());

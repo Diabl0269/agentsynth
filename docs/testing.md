@@ -1,6 +1,6 @@
 # Testing Guide
 
-All tests use GoogleTest and run headless (no audio device, no GUI window). ~779 tests across ~98 suites.
+All tests use GoogleTest and run headless (no audio device, no GUI window). ~788 tests across ~98 suites.
 
 ```bash
 # Run all tests (ENABLE_TESTS defaults OFF — must be passed explicitly)
@@ -35,7 +35,7 @@ Headless DSP tests that render audio through individual modules and verify outpu
 | SamplerModuleTest | 31 | Registration + port/parameter surface; WAV load (success, missing file, unreadable file, failed load keeps the previous sample, clear); Sample mode playback verified sample-exact against a ramp file at unity rate, at `pitch = +12` (2×), via MIDI note transpose, and with `start = 0.5`; monotonic anti-click fade-in; one-shot falls silent at the last frame vs loop keeps going; Granular mode produces bounded finite audio and stays silent with no sample loaded, including at max density × max grain size; gate precedence (free-run with nothing patched, trigger-CV latch silences a low gate, retrigger, a gate rising mid-block is not mistaken for an unpatched jack); bypass/mute clear; CV channels do not leak to the output; level CV sums with the parameter; zero-channel buffer is safe; `getExtraState`/`setExtraState` round trip, restored through `graphToJSON` → `applyJSONToGraph` on the trusted path and **dropped** on the untrusted path |
 | SampleWaveformPeaks | 4 | `SampleWaveformComponent::computePeaks` — empty inputs, columns span the buffer and track min/max extremes, channels averaged (opposite phase cancels), more columns than frames |
 | SampleWaveformPaint | 2 | Paints the empty state ("No sample loaded") and a loaded sample with a live playhead into a `juce::Image`; repeat `timerCallback()` with nothing changed is a no-op; zero-width component is safe |
-| SamplerFormats | 1 | `getSupportedFormatWildcard()` is non-empty and includes `*.wav` |
+| SamplerFormats | 2 | `getSupportedFormatWildcard()` is non-empty and includes `*.wav`; `isSupportedAudioFile` accepts wav/WAV/aiff and rejects .json/.txt/extensionless/directories (extension-only check, so drag-hover stays cheap) |
 | AntiClickTest | 4 | ADSR minimum release, smooth parameter transitions |
 | EdgeCaseTests | 21 | Zero-length buffers, extreme parameters, single-sample buffers, rapid parameter changes, large buffers |
 | AudioRenderingTests | 26 | Snapshot-based tests comparing bit-perfect output against reference files; covers full chains (Osc->Filter->VCA), modulation accuracy, and External MIDI input |
@@ -51,7 +51,7 @@ Test module interactions within the audio graph and cross-system integrations.
 | OllamaProviderTest | 10 | AI LLM HTTP requests, streaming responses, model management, non-blocking discovery; `SendPromptWithNoModelFailsWithoutHittingNetwork` — fail-fast with no network call when `currentModel` is empty; `SendPromptIncludesSelectedModelInRequestBody` — captures the POST body and asserts `"model"` matches `setModel()` (regression lock for f7cba4a / empty-model 400s); `QueuedRequestDuringThreadShutdownStillCompletes` — a request enqueued as the worker winds down still gets a callback (request-loss race); `PendingRequestsAreFailedOnDestruction` — requests still queued at destruction are failed *before* `~OllamaProvider()` returns. Both use bounded `condition_variable` waits and fail on timeout rather than sleeping. **Never call `stopThread(0)` in a test** — it force-kills via `pthread_cancel`, which aborts under glibc |
 | AIIntegrationServiceTest | 9 | Module suggestions, parameter recommendations, graph state mapping |
 
-### Component Workflow Tests (~52 tests)
+### Component Workflow Tests (~61 tests)
 
 Test UI component interactions using in-process construction (no window, no display).
 
@@ -59,8 +59,8 @@ Test UI component interactions using in-process construction (no window, no disp
 |-------|-------|----------------|
 | MainComponentTest | 21 | AI panel visibility toggle, mod matrix toggle, default configuration, command manager registration, redo shortcut; toolbar narrow/wide mode at 480/1600 px, library sidebar toggle + persistence, AI panel persistence, status bar bounds, canvas non-zero at minimum size, timer gating (5 Hz), patch name default + update on preset load, DrawableButton header buttons; `AiProviderGetsModelSelectedOnStartup` — regression lock (f7cba4a) that a model is selected on startup via `aiChatComponent.refreshModels()` called AFTER `setProvider()` |
 | AIChatComponentTest | 3 | Initialization/resizing, send-message updates UI + history via mock provider; `RefreshModelsSelectsModelWhenProviderInstalledAfterConstruction` — reproduces MainComponent's member-init ordering (chat component constructed before a provider is installed), asserting `getCurrentModel()` stays empty until a post-construction `setProvider()` + `refreshModels()` |
-| GraphEditorTest | 11 | Module drag-and-drop, port connection via beginConnectionDrag/endConnectionDrag, deletion, mod matrix visibility, snap-on-drop (position is grid-multiple of 8), overlap resolution (second drop at same coord produces non-overlapping bounding boxes) |
-| ModuleComponentTest | 7 | Initialization, resizing, parameter attachment to UI sliders; bypass/mute/delete are DrawableButtons with correct header bounds; delete button triggers requestDeleteModule; `SamplerHasLoadButtonWaveformAndKnownHeight` — the Sampler gets a `SampleWaveformComponent`, a "Load Sample..." button and a "(no sample)" label, and its 280×750 size is asserted exactly so `estimateModuleSize("Sampler")` (the library drag ghost) cannot drift; `NonSamplerModulesGetNoSamplerChrome` |
+| GraphEditorTest | 13 | Module drag-and-drop, port connection via beginConnectionDrag/endConnectionDrag, deletion, mod matrix visibility, snap-on-drop (position is grid-multiple of 8), overlap resolution (second drop at same coord produces non-overlapping bounding boxes); `AudioFileDroppedOnCanvasCreatesAPreloadedSampler` — a real wav dropped on empty canvas yields a Sampler already holding it; `NonAudioFileDragIsRejectedByTheCanvas` |
+| ModuleComponentTest | 14 | Initialization, resizing, parameter attachment to UI sliders; bypass/mute/delete are DrawableButtons with correct header bounds; delete button triggers requestDeleteModule; `SamplerHasLoadButtonWaveformAndKnownHeight` — the Sampler gets a `SampleWaveformComponent`, a "Load Sample..." button and a "(no sample)" label, at 280×657; `BodyContentClearsEveryPortLabel` — every visible body child starts below the lowest jack (regression guard for the overlap the old duplicated layout formula caused); `EstimatedModuleSizesMatchTheRealComponents` — builds every library-offered type and fails if `GraphEditor::estimateModuleSize` drifts from the real card, so the drag ghost cannot lie; `KnobsAreLaidOutThreePerRow`; `NonSamplerModulesGetNoSamplerChrome`; audio-file drop — `SamplerAcceptsAudioFileDropAndLoadsIt` (highlight on enter, cleared on drop, sample actually loaded), `SamplerIgnoresNonAudioFileDrag`, `NonSamplerModuleRefusesFileDragSoItFallsThroughToTheCanvas` |
 | MidiKeyboardModuleTest | 4 | Note on/off, key press handling, velocity |
 | VisualBufferTest | 3 | Scope visualization buffer management, read/write, ringbuffer behavior |
 | ModuleBaseTest | 4 | Parameter getters, port labels, bypass functionality |

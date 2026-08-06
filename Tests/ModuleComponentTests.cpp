@@ -1,3 +1,4 @@
+#include "../Source/AI/AIStateMapper.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/SamplerModule.h"
 #include "../Source/Modules/VCAModule.h"
@@ -73,11 +74,89 @@ TEST_F(ModuleComponentTest, SamplerHasLoadButtonWaveformAndKnownHeight) {
     EXPECT_TRUE(foundNameLabel) << "an empty Sampler should say so rather than showing a blank label";
 
     EXPECT_EQ(moduleComponent.getWidth(), 280);
-    EXPECT_EQ(moduleComponent.getHeight(), 750)
+    EXPECT_EQ(moduleComponent.getHeight(), 657)
         << "keep estimateModuleSize(\"Sampler\") in GraphEditor.cpp in sync with this";
 
-    // The waveform view sits above the controls and spans the card width minus the port gutters.
     EXPECT_NO_THROW(moduleComponent.timerCallback());
+}
+
+// The waveform view and every other body widget must sit BELOW the lowest port label. This is the
+// regression guard for the reported overlap: the old layout started content at 30 + numInputs*20 + 10
+// while getPortCenter() puts the first jack at y=70, so a 7-input module drew its body straight over
+// the last jack.
+TEST_F(ModuleComponentTest, BodyContentClearsEveryPortLabel) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    SamplerModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    // Lowest visible jack on either side, plus the half-height of its label box.
+    const int lastInputY = moduleComponent.getPortCenter(processor.getVisibleInputPortCount() - 1, true).y;
+    const int lastOutputY = moduleComponent.getPortCenter(processor.getVisibleOutputPortCount() - 1, false).y;
+    const int portsBottom = std::max(lastInputY, lastOutputY) + 10;
+
+    int checked = 0;
+    for (auto* child : moduleComponent.getChildren()) {
+        // Header buttons live in the title bar by design; everything else is body content.
+        if (dynamic_cast<juce::DrawableButton*>(child) != nullptr)
+            continue;
+        if (!child->isVisible() || child->getBounds().isEmpty())
+            continue;
+
+        EXPECT_GE(child->getY(), portsBottom)
+            << "child at y=" << child->getY() << " overlaps a port label (ports end at " << portsBottom << ")";
+        ++checked;
+    }
+    EXPECT_GT(checked, 0) << "expected some body content to check";
+}
+
+// The drag ghost shown while dragging out of the library must match the component the drop actually
+// creates, otherwise the ghost lies about where the module will land.
+TEST_F(ModuleComponentTest, EstimatedModuleSizesMatchTheRealComponents) {
+    // Exactly the strings ModuleLibraryComponent puts in the drag payload.
+    const char* libraryTypes[] = {
+        "Oscillator", "Noise",         "Sampler", "LFO",    "Sequencer",  "Poly Sequencer", "MidiKeyboard",
+        "Poly MIDI",  "External MIDI", "ADSR",    "VCA",    "Filter",     "Chorus",         "Phaser",
+        "Flanger",    "Distortion",    "Delay",   "Reverb", "Compressor", "Limiter",        "Voice Mixer"};
+
+    AudioEngine engine;
+    GraphEditor editor(engine);
+
+    for (const char* type : libraryTypes) {
+        auto processor = synth::AIStateMapper::createModule(type);
+        ASSERT_NE(processor, nullptr) << type << " is offered by the library but has no factory entry";
+
+        ModuleComponent comp(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+        const auto estimate = GraphEditor::estimateModuleSize(type);
+
+        EXPECT_EQ(estimate.x, comp.getWidth()) << "estimateModuleSize(\"" << type << "\") width";
+        EXPECT_EQ(estimate.y, comp.getHeight()) << "estimateModuleSize(\"" << type << "\") height";
+    }
+}
+
+// Three knobs per row (the body sits below the ports, so it can use nearly the full card width).
+TEST_F(ModuleComponentTest, KnobsAreLaidOutThreePerRow) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    SamplerModule processor; // 7 float/int params -> 3 rows of 3, 3, 1
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    std::vector<juce::Slider*> knobs;
+    for (auto* child : moduleComponent.getChildren())
+        if (auto* slider = dynamic_cast<juce::Slider*>(child))
+            knobs.push_back(slider);
+
+    ASSERT_EQ(knobs.size(), 7u);
+
+    // Children are added in parameter order, so the first three share a row.
+    EXPECT_EQ(knobs[0]->getY(), knobs[1]->getY());
+    EXPECT_EQ(knobs[1]->getY(), knobs[2]->getY());
+    EXPECT_LT(knobs[0]->getX(), knobs[1]->getX());
+    EXPECT_LT(knobs[1]->getX(), knobs[2]->getX());
+
+    // The fourth wraps to a new row, back at the first column.
+    EXPECT_GT(knobs[3]->getY(), knobs[2]->getY());
+    EXPECT_EQ(knobs[3]->getX(), knobs[0]->getX());
 }
 
 TEST_F(ModuleComponentTest, NonSamplerModulesGetNoSamplerChrome) {
@@ -88,6 +167,69 @@ TEST_F(ModuleComponentTest, NonSamplerModulesGetNoSamplerChrome) {
 
     for (auto* child : moduleComponent.getChildren())
         EXPECT_EQ(dynamic_cast<SampleWaveformComponent*>(child), nullptr);
+}
+
+// --- Audio-file drag and drop -----------------------------------------------------------------
+
+TEST_F(ModuleComponentTest, SamplerAcceptsAudioFileDropAndLoadsIt) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    SamplerModule processor;
+    processor.prepareToPlay(44100.0, 512);
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    // A real, readable wav so the drop exercises the actual load path.
+    auto file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("drop-test-146.wav");
+    file.deleteFile();
+    {
+        juce::AudioBuffer<float> audio(1, 1024);
+        audio.clear();
+        for (int i = 0; i < 1024; ++i)
+            audio.setSample(0, i, 0.25f);
+
+        juce::WavAudioFormat wavFormat;
+        std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
+        ASSERT_NE(stream, nullptr);
+        std::unique_ptr<juce::AudioFormatWriter> writer(wavFormat.createWriterFor(stream.get(), 44100.0, 1, 32, {}, 0));
+        ASSERT_NE(writer, nullptr);
+        stream.release();
+        writer->writeFromAudioSampleBuffer(audio, 0, 1024);
+    }
+
+    juce::StringArray dropped{file.getFullPathName()};
+    EXPECT_TRUE(moduleComponent.isInterestedInFileDrag(dropped));
+
+    moduleComponent.fileDragEnter(dropped, 10, 10);
+    EXPECT_TRUE(moduleComponent.isFileDragHighlighted());
+
+    moduleComponent.filesDropped(dropped, 10, 10);
+    EXPECT_FALSE(moduleComponent.isFileDragHighlighted()) << "the highlight must clear on drop";
+    EXPECT_EQ(processor.getSampleFilePath(), file.getFullPathName());
+    ASSERT_NE(processor.getSample(), nullptr);
+
+    file.deleteFile();
+}
+
+TEST_F(ModuleComponentTest, SamplerIgnoresNonAudioFileDrag) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    SamplerModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    juce::StringArray notAudio{"/tmp/patch.json", "/tmp/readme.md"};
+    EXPECT_FALSE(moduleComponent.isInterestedInFileDrag(notAudio));
+}
+
+TEST_F(ModuleComponentTest, NonSamplerModuleRefusesFileDragSoItFallsThroughToTheCanvas) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    OscillatorModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    // Returning false is what lets JUCE keep walking up to GraphEditor, which creates a new Sampler.
+    juce::StringArray dropped{"/tmp/kick.wav"};
+    EXPECT_FALSE(moduleComponent.isInterestedInFileDrag(dropped));
+    EXPECT_FALSE(moduleComponent.isFileDragHighlighted());
 }
 
 TEST_F(ModuleComponentTest, TimerCallbackDoesNotCrash) {

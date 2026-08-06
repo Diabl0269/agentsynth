@@ -105,6 +105,19 @@ public:
         return formatManager.getWildcardForAllFormats();
     }
 
+    /** True when some registered format claims this file's extension. Used by the drag-and-drop
+     *  targets to decide whether a dropped file is ours *before* opening it — a cheap extension
+     *  check, deliberately not a read, so hovering a folder full of files stays free. */
+    static bool isSupportedAudioFile(const juce::File& file) {
+        const juce::String extension = file.getFileExtension();
+        if (extension.isEmpty())
+            return false;
+
+        juce::AudioFormatManager formatManager;
+        formatManager.registerBasicFormats();
+        return formatManager.findFormatForFileExtension(extension) != nullptr;
+    }
+
     /** Reads `file` into memory and publishes it to the audio thread.
      *  Returns false (leaving any previously loaded sample in place) when the file is missing or
      *  no registered format can read it. */

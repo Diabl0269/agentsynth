@@ -26,7 +26,12 @@ Detailed specifications for Agent Synth's primary synthesis modules.
 Loads an audio file from disk and plays it back one of two ways.
 
 - **Modes** (`playMode`): `Sample` — one-shot / looping playback; `Granular` — a cloud of short windowed grains read from around the `start` position.
-- **Formats**: whatever JUCE's basic readers handle (WAV, AIFF, FLAC, Ogg Vorbis). The file chooser wildcard comes from `SamplerModule::getSupportedFormatWildcard()`.
+- **Formats**: whatever JUCE's basic readers handle (WAV, AIFF, FLAC, Ogg Vorbis). The file chooser wildcard comes from `SamplerModule::getSupportedFormatWildcard()`; drag-and-drop gates on `SamplerModule::isSupportedAudioFile()` (an extension check, so hovering a folder of files stays cheap).
+- **Loading a sample** — three ways:
+  1. The **Load Sample…** button (a `juce::FileChooser`).
+  2. **Drop an audio file onto the module** — replaces its sample. `ModuleComponent` implements `juce::FileDragAndDropTarget` and returns `false` from `isInterestedInFileDrag` for every non-Sampler module, so a file dropped on, say, an Oscillator falls through to the canvas instead of being silently swallowed.
+  3. **Drop an audio file onto empty canvas** — `GraphEditor` creates a Sampler already holding it (dropping several files cascades one Sampler each). The file is loaded into the processor *before* it joins the graph, because `recordStructuralChange` snapshots the graph afterwards and that snapshot is what undo/redo replays.
+- **Waveform overview**: peaks are cached per (sample, width) and drawn as a single filled path, not one `drawVerticalLine` per column — the canvas renders module cards under GraphEditor's zoom transform, and per-column 1 px lines do not tile at any zoom ≠ 1 (visible gaps and moiré striping). The 15 Hz timer repaints only when the sample changes or the playhead crosses a whole pixel.
 - **Parameters**: `playMode` (choice), `pitch` (±24 semitones), `rootNote` (0-127, default 60), `loop` (bool, default on), `start` (0-1), `grainSize` (5-500 ms), `density` (1-100 grains/sec), `spray` (0-1), `level` (0-1, default 0.8).
 - **Channel layout** (mono module — no poly mode): in ch0 = Trigger/Gate, ch1 = Pitch CV, ch2 = Position CV, ch3 = Grain Size CV, ch4 = Density CV, ch5 = Spray CV, ch6 = Level CV. Out ch0/ch1 = Audio L/R; ch2-6 are silent pass-throughs.
 - **Buffer aliasing note**: 7 outputs are declared even though only ch0-1 carry audio, so JUCE copies the CV input channels instead of letting the post-cache clear scribble on a buffer another node still needs — the same constraint as the Oscillator's 14-channel declaration.
