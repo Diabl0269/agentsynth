@@ -681,3 +681,74 @@ A toggle is available in `Settings → Appearance → Show Alignment Guides`. It
 **Theme switching:**
 
 When you change themes, alignment guides update to the new `textMuted` colour automatically.
+
+---
+
+## 12. Cable Interaction
+
+### Cables are not graph edges
+
+A **cable** is one wire as the user sees it, which is not the same thing as a
+`juce::AudioProcessorGraph::Connection`:
+
+| Drawn as | Backed by |
+|---|---|
+| Audio / MIDI wire | one graph edge |
+| Attenuverter chain | two edges plus a hidden `AttenuverterModule` node |
+| Poly bus | `voiceCount` parallel edges |
+
+Anything that identifies, hit-tests, colours or removes a cable therefore keys on the logical
+view, not on the raw edge. `GraphEditor::CableId` is that identity
+(`srcUid`/`srcPort`/`dstUid`/`dstPort` plus `attenUid`, non-zero only for an attenuverter chain).
+
+### One enumeration for paint and mouse
+
+`GraphEditor::buildVisibleCables()` returns every drawn cable, in paint order, as
+`VisibleCable` records carrying geometry, signal kind, source category, activity and bypass
+state. **Both** `GraphContentComponent::paint()` and hit-testing consume that one list.
+
+This is load-bearing: computing the drawn curve and the clickable curve separately means they
+drift apart the first time either is tweaked, and clicks silently miss the wire. For the same
+reason the bezier lives in exactly one place, `GraphEditor::buildCablePath()`, which must stay
+identical to `AppLookAndFeel::drawConnectionWire`'s default curve.
+
+### Hit-testing
+
+`GraphEditor::getCableAt(canvasPos, tolerance)` returns the topmost cable within `tolerance`
+canvas px (default `kCableHitTolerance` = 7 px, wider than the wire so thin cables stay
+grabbable). Distance is the perpendicular distance to the bezier, via `juce::Path::getNearestPoint`
+— note that method *returns* the distance **along** the path and writes the nearest point out by
+reference, so the perpendicular distance is `pos.getDistanceFrom(nearestPoint)`.
+
+Ties go to the later cable, matching paint order (mod wires draw over audio wires).
+
+### Hover
+
+`mouseMove` resolves the cable under the cursor and stores only its `CableId`. The canvas
+repaints **only when the hovered cable changes** — never on every mouse move. Hovered cables are
+drawn brighter and one pixel wider by `AppLookAndFeel::drawConnectionWire`'s existing `hovered`
+parameter, and the cursor becomes a pointing hand.
+
+This does not violate the no-continuous-repaint invariant: `GraphEditor` already runs a 30 Hz
+timer that calls `content.repaint()` for the wire-flow animation, so a hover change only marks
+the next frame dirty rather than adding a new repaint source.
+
+Only the `CableId` is retained between frames — geometry is rebuilt each paint anyway, and
+holding a stale `VisibleCable` across a graph edit would dangle conceptually (ports move, nodes
+disappear).
+
+### Right-click menu
+
+Right-clicking a cable opens a menu with **Disconnect Cable**. Before this, the only way to
+remove a connection was to right-click one of its *ports*, which is not where users aim.
+
+`GraphEditor::disconnectCable()` removes every graph edge behind the cable as **one** undoable
+action — the whole attenuverter chain via `AudioEngine::removeModRouting()`, or all `voiceCount`
+parallel edges of a poly bus. One visible wire, one undo step.
+
+### Colouring
+
+See [`docs/theming.md` §11](theming.md#11-cable-colours) for cable colour modes, the
+`cableCategory` palette and the user override layer. `GraphEditor` renders whatever mode and
+overrides it is handed via `setCableColourMode()` / `setCableColourOverrides()`; it never reads
+`ApplicationProperties` itself.
