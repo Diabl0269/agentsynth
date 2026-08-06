@@ -681,3 +681,178 @@ A toggle is available in `Settings → Appearance → Show Alignment Guides`. It
 **Theme switching:**
 
 When you change themes, alignment guides update to the new `textMuted` colour automatically.
+
+---
+
+## 12. Multi-Select, Group Drag & Snippets (issue #156)
+
+### 12.1 Why the gesture is modifier-gated
+
+Drag on empty canvas already meant **pan**, and that predates selection. Rebinding it to
+marquee-select (the Figma/Blender/VCV convention) would have retrained every existing pan habit, so
+the marquee is gated behind **Shift** instead and pan is untouched.
+
+| Gesture | Result |
+|---|---|
+| Drag on empty canvas | Pan — unchanged |
+| **Shift** + drag on empty canvas | Marquee-select, *replacing* the selection |
+| **Cmd/Ctrl + Shift** + drag | Marquee-select, *adding* to the selection |
+| Click a module body | Select just that module |
+| **Shift**/**Cmd** + click a module | Toggle that module's membership (does **not** start a drag) |
+| Drag any selected module | Move the entire selection together |
+| Click empty canvas (no drag) | Clear the selection |
+| Right-click a module | Select it if it wasn't, then open the menu |
+
+Two details that are easy to get wrong:
+
+- **Deselect-on-click is deferred to mouse-up.** `GraphEditor::mouseDown` only *arms*
+  `pendingEmptyCanvasClick`; the first `mouseDrag` clears it. If the clear happened on mouse-down,
+  every pan would wipe the selection.
+- **A modifier-click never arms the dragger.** `ModuleComponent::bodyDragActive` gates
+  `mouseDrag`/`mouseUp`, because `juce::ComponentDragger::dragComponent` must not run when
+  `startDraggingComponent` was never called.
+
+### 12.2 SelectionModel — `Source/UI/SelectionModel.h`
+
+Header-only, no Component or graph dependency, so the selection rules are testable headlessly
+(`Tests/SelectionModelTests.cpp`).
+
+- `SelectionModel` wraps a `std::set<NodeID>`: `add` / `remove` / `toggle` / `setSelection` /
+  `contains` / `retainOnly`. `NodeID{0}` (the graph's invalid-node sentinel) is rejected outright.
+- `getSelected()` returns **ascending uid order**, never click order — snippet extraction walks that
+  order, and a snippet's node list must not depend on how the user happened to click.
+- `retainOnly(alive)` is the staleness guard. `GraphEditor::pruneSelection()` calls it from
+  `updateComponents()`, which every node-removing path (delete, undo/redo, preset load) already
+  funnels through, so a selection can never name a freed node.
+- `hitTestMarquee` uses **intersection, not containment** — clipping a module's edge selects it.
+  Requiring full enclosure makes a 560 px `kDoubleWidth` Sequencer practically unselectable when
+  zoomed out. A degenerate (zero-area) band selects nothing, so Shift-click on empty canvas
+  deselects rather than grabbing whatever is under the cursor.
+
+The marquee band is stored and painted in **canvas coordinates** (in
+`GraphContentComponent::paintOverChildren`), so it stays locked to the modules it is selecting while
+zoomed or panned.
+
+### 12.3 Selection repaints stay bounded
+
+`ModuleComponent` is `setBufferedToImage(true)`, so repainting every card on every marquee frame
+would re-rasterize the whole canvas — exactly what §10 forbids.
+`GraphEditor::applySelectionChange()` diffs the old and new selection and repaints **only the cards
+whose state flipped**. During a marquee drag that is zero repaints until the band actually crosses a
+module boundary.
+
+The selected treatment itself is not new drawing code: `AppLookAndFeel::drawModulePanel()` always had
+a `selected` parameter (accent border + themed glow) that was hard-coded to `false` pending a
+selection model. `ModuleComponent::paint` now passes `owner.isNodeSelected(nodeId)`.
+
+### 12.4 Group drag resolves as one rigid body
+
+Followers are placed from **their own recorded origin plus the initiator's delta**
+(`selectionDragStartPositions`), never by accumulating per-frame deltas — incremental application
+drifts at non-1.0 zoom and shears the group apart.
+
+`finalizeSelectionDrag()` then treats the selection as a single rigid body:
+
+1. Union every member's bounds into one group box.
+2. `LayoutUtil::snap()` its top-left.
+3. `LayoutUtil::findFreeSlot()` for the whole box against **unselected modules only** — members are
+   moving together and must not be obstacles to one another.
+4. Apply that one offset to every member, and `updateModulePosition()` each so positions reach the
+   node properties and survive a save/reload.
+
+Calling the single-module `finalizeModuleDrag()` per member instead would spiral them away from each
+other and destroy the arrangement the user just made.
+
+`cancelSelectionDrag()` exists for the zero-delta case (a click that never moved). Preset positions
+are not necessarily grid-aligned, so running the finalize path on a drag that did not happen would
+visibly nudge the group.
+
+### 12.5 Snippets — `Source/SnippetManager.{h,cpp}`
+
+A snippet is the **same JSON dialect as a preset** (`AIStateMapper::graphToJSON`) narrowed to a subset
+of nodes. Stored one file per snippet as
+`<userAppData>/<settingsFolder>/Snippets/<name>.agsnip`, mirroring
+`ThemeManager::getUserThemesFolder()`.
+
+Three rules define what a snippet contains:
+
+| Rule | Reason |
+|---|---|
+| Only connections with **both** endpoints selected | A snippet must mean the same thing in every patch it lands in; it cannot assume the destination has the node on the other end. Wires to Audio Output are dropped — re-patch the output after dropping. |
+| **No Attenuverter nodes**; modulation is stored in the `modulations` array | Same representation the AI patch format uses. `applyJSONToGraph` rebuilds the attenuverter chain on insert. |
+| Positions normalised so the selection's top-left is `(0,0)` | `prepareForInsert()` re-offsets by the drop point, so internal layout is preserved wherever it lands. |
+
+Graph I/O nodes (Audio In/Out, MIDI In) are never captured — they are singletons that already exist in
+the target patch.
+
+Extraction **filters `graphToJSON` output** rather than re-deriving the per-node JSON shape, so the
+params encoding, MIDI port sentinel and attenuverter→modulations folding keep exactly one owner.
+
+#### Id renumbering is mandatory
+
+`prepareForInsert()` renumbers snippet ids to a fresh range starting at `nextFreeIdBase(graph)` (max
+existing uid + 1). This is not cosmetic: `applyJSONToGraph` in **merge mode** treats an incoming node
+id that already exists as *"update that node"*, so a colliding id would silently retune an existing
+module of the same type instead of adding a copy.
+
+#### Validate strictly, apply faithfully
+
+`insertSnippet()` deliberately splits the two:
+
+```cpp
+validatePatch(prepared, graph, /*clearExisting=*/false, /*trusted=*/false);   // strict — reject whole
+applyJSONToGraph(prepared, graph, /*clearExisting=*/false, /*trusted=*/true); // faithful — no rescale
+```
+
+- **Strict validation** because a snippet is a file on disk and can be hand-edited, truncated or
+  copied in from elsewhere. A malformed snippet is rejected whole, never applied halfway. This *adds*
+  a validation gate the trusted path would otherwise skip — it does not relax `validatePatch` (see the
+  invariant in `CLAUDE.md`).
+- **Trusted apply** because the untrusted apply path carries an AI-output heuristic: when a
+  parameter's range extends beyond `[0,1]` but the incoming value sits inside it, the value is treated
+  as normalised and rescaled. Snippet values come from `graphToJSON` already denormalised, so that
+  heuristic would corrupt legitimate small values — an LFO `rateHz` of 0.5 Hz (range 0.01–20) would
+  land at roughly 5 Hz. Guarded by
+  `SnippetInsert.PreservesParameterValuesThatLookNormalised`.
+
+#### Wiring
+
+`GraphEditor` owns no file dialogs and `ModuleLibraryComponent` owns no filesystem access;
+`MainComponent` brokers between them via `GraphEditor::onSaveSnippetRequested` /
+`GraphEditor::snippetProvider` and `ModuleLibraryComponent::onSnippetDeleteRequested`.
+
+Snippet drags reuse the **existing** DragAndDrop channel between sidebar and canvas. The payload is
+prefixed (`snippet:<name>`, `SnippetManager::kPayloadPrefix`) so `itemDropped` can tell a group drop
+from a plain module drop. `itemDragEnter` sizes the landing ghost from the snippet's own bounding box
+rather than the single-module estimate table.
+
+Insert is one undoable change (`recordStructuralChange`), and the newly landed group is left
+selected — it is what the user will want to move next.
+
+---
+
+## 13. Collapsible Library Sections
+
+With a Snippets section added on top of eight module categories, the sidebar overflows its height.
+Every section header is now a disclosure toggle, plus a **COLLAPSE ALL / EXPAND ALL** strip in the top
+24 px (`kTopStripHeight`).
+
+- **One layout pass.** `buildRows()` returns `{entryIndex, y, height}` for the currently visible rows
+  and is used by *both* `paint()` and `getEntryIndexAt()`. These previously duplicated the y-advance
+  arithmetic in two places — a standing invitation for paint and hit-testing to disagree. Guarded by
+  `ModuleLibraryStructure.HitTestingAgreesWithTheRowLayout`.
+- **Rows carry a `RowKind`** (`Header` / `Module` / `Snippet` / `EmptyHint`) and their owning
+  `section`, so collapsing is just "skip rows whose section is collapsed". Headers stay visible.
+- **The Snippets section stays visible when empty**, showing a "No snippets yet" hint, so the feature
+  is discoverable before the first snippet exists.
+- **Chevrons are `juce::Path` triangles, not glyphs** — `▾`/`▸` coverage is not guaranteed across the
+  embedded typefaces (see the font limitation in [`theming.md`](theming.md)).
+- **Collapse state persists** as newline-joined section names under `libraryCollapsedSections` in
+  `juce::ApplicationProperties`. `setCollapsedSections()` skips blank entries, because an unset
+  preference arrives from `StringArray::fromLines("")` as a single empty string, and
+  `onCollapseStateChanged` deliberately does *not* fire from it — that is the restore path, and
+  re-notifying would write back what was just read.
+
+**Known limitation:** the sidebar still has no `juce::Viewport`, so with every section expanded the
+content can exceed the panel height and the overflow is clipped rather than scrollable. Collapsing is
+the mitigation for now; adding a viewport is a separate change.

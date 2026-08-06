@@ -87,6 +87,11 @@ private:
     std::map<int, float> gestureStartValues;
     juce::Point<int> dragStartPosition;
 
+    // True only between a body mouseDown that armed the ComponentDragger and its mouseUp. A
+    // Shift/Cmd-click toggles selection WITHOUT arming the dragger, and this flag stops the
+    // subsequent mouseDrag from moving a component the dragger was never started on.
+    bool bodyDragActive = false;
+
     float cachedRMS = 0.0f;
     float lastPaintedRMS = -1.0f;
     std::vector<float> rmsReadBuffer;
