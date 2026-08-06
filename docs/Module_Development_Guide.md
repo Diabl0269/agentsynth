@@ -100,7 +100,7 @@ All audio modules in Agent Synth inherit from `ModuleBase`, which in turn extend
     *   `isBypassed()` → **dry pass-through**: return early *without* clearing audio channels so the input signal flows through unchanged. Clear only CV channels at index ≥ 2 to prevent mod CV from leaking as audio. Never call `buffer.clear()` on bypass.
     *   `isMuted()` → **silence**: call `buffer.clear()` then return.
     *   Never combine the two into a single `if (isBypassed() || isMuted()) buffer.clear()` — that mutes on bypass instead of passing the signal through.
-    *   **Exception — pure source modules** (e.g. `OscillatorModule`, `PolyMidiModule`) have no audio input, so there is no dry signal to pass through. These modules *do* clear their output on bypass.
+    *   **Exception — modules with no dry audio path** *do* clear their output on bypass, using two separate branches. This covers **pure sources** with no audio input (e.g. `OscillatorModule`, `PolyMidiModule`) and **audio-in / CV-out taps** with no audio output (e.g. `EnvelopeFollowerModule`), where a dry pass-through would send audio-rate samples into a CV destination.
 
 ## 3. Parameter Management and Modular Routing
 
