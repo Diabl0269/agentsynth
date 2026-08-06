@@ -70,8 +70,9 @@ Maps raw audio-buffer channel indices to the visible jack slots shown in the UI.
 | `mapInputChannel(int rawChannel)` | Virtual — returns `LogicalPort` for a raw input channel |
 | `mapOutputChannel(int rawChannel)` | Virtual — returns `LogicalPort` for a raw output channel |
 | `getVisibleInputPortCount()` / `getVisibleOutputPortCount()` | How many jacks the UI renders |
+| `JackTarget` / `getJackTargets(jack, isInput)` | Inverse of `mapInput/OutputChannel` — every poly-group head anchored to a visible jack; drives connection creation in `GraphEditor` |
 
-`GraphEditor` uses this API to anchor wire endpoints to the correct visible jack regardless of how many raw channels are fanned out underneath.
+`GraphEditor` uses this API to anchor wire endpoints to the correct visible jack regardless of how many raw channels are fanned out underneath, and to resolve which raw channels a dragged cable or poly toggle should wire (`GraphEditor::resolvePolyLink`, `rewireForPolyChange`). See [docs/modulation.md](modulation.md#creating-poly-connections).
 
 #### isAutoPromotableModTarget
 
@@ -112,7 +113,8 @@ The visual patching interface. Lives in the `AgentSynth` app target.
 
 - **Zoom/pan** — `zoomLevel` + `panOffset`; `mouseWheelMove` / `mouseDrag` on the canvas.
 - **Wire drawing** — poly-bus wires (collapsed N-voice `DirectCV` connections) rendered with an "xN" badge; wire endpoints anchored to visible jacks via `ModuleBase`'s logical-port API.
-- **Drag-to-connect** — `beginConnectionDrag` / `dragConnection` / `endConnectionDrag`; maps UI gestures to `AudioProcessorGraph` connections.
+- **Drag-to-connect** — `beginConnectionDrag` / `dragConnection` / `endConnectionDrag`; resolves the dragged jacks through the logical-port API (`resolvePolyLink`) and creates one connection per voice when both ends front an equally-wide poly fan, so a single drag between two poly jacks wires the whole fan at once. `disconnectPort` removes every raw channel a jack owns, including all voices of a fan.
+- **Poly toggle rewire** — `rewireForPolyChange` re-anchors a module's existing cables to its new channel layout when its `poly` parameter changes (mono <-> fan), driven by `ModuleComponent`'s `"poly"` parameter listener.
 - **Module drag** — `finalizeModuleDrag` snaps the released module to the 8 px grid and resolves overlaps via spiral search. A live drag-preview system (`beginDragPreview` / `updateDragPreview` / `endDragPreview`) shows a themed grid-dot overlay plus a snapped landing ghost during drags.
 - **Library drops** — `resolvePlacement` + `finalizeModuleDrag` run on the real component after `updateComponents()` so the final position anti-overlaps using true pixel dimensions.
 - **Auto-arrange** — `autoArrange()` (triggered by Cmd+L or the toolbar button) topologically layers modules by signal-flow depth in a single undo step. See `docs/layout.md` for the full layout model.

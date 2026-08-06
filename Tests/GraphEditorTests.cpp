@@ -1,9 +1,11 @@
 #include "../Source/AppUndoManager.h"
 #include "../Source/Modules/ADSRModule.h"
+#include "../Source/Modules/AttenuverterModule.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/LFOModule.h"
 #include "../Source/Modules/ModuleBase.h"
 #include "../Source/Modules/OscillatorModule.h"
+#include "../Source/Modules/PolyMidiModule.h"
 #include "../Source/Modules/SequencerModule.h"
 #include "../Source/Modules/VCAModule.h"
 #include "../Source/PresetManager.h"
@@ -18,6 +20,18 @@
 class DummyDragSource : public juce::Component {};
 
 class GraphEditorTest : public ::testing::Test {};
+
+// Helper to find and set a bool parameter by ID (mirrors LogicalPortTests.cpp's setPolyParam).
+static void setPolyParam(juce::AudioProcessor& proc, bool value) {
+    for (auto* param : proc.getParameters()) {
+        if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
+            if (p->paramID == "poly") {
+                p->setValueNotifyingHost(value ? 1.0f : 0.0f);
+                return;
+            }
+        }
+    }
+}
 
 TEST_F(GraphEditorTest, InitializationAndResizing) {
     AudioEngine engine;
@@ -643,4 +657,452 @@ TEST_F(GraphEditorTest, AlignmentGuideDrawingThemeAware) {
 
     // Verify line width matches spec
     EXPECT_FLOAT_EQ(m.guideLineWidth, 1.5f);
+}
+
+// ============================================================================
+// Issue #163: poly connections auto-fan-out
+// ============================================================================
+
+// ---- Pure resolvePolyLink tests (no graph needed) ----
+
+TEST_F(GraphEditorTest, ResolvePolyLinkFansEnvelopeToPolyVCA) {
+    ADSRModule adsr;
+    VCAModule vca;
+    setPolyParam(adsr, true);
+    setPolyParam(vca, true);
+
+    auto link = GraphEditor::resolvePolyLink(&adsr, 0, &vca, 1);
+    EXPECT_EQ(link.sourceRawChannel, 0);
+    EXPECT_EQ(link.destRawChannel, 8);
+    EXPECT_EQ(link.voiceCount, 8);
+}
+
+TEST_F(GraphEditorTest, ResolvePolyLinkPicksFanMatchingRole) {
+    PolyMidiModule polyMidi;
+    OscillatorModule osc;
+    ADSRModule adsr;
+    setPolyParam(osc, true);
+    setPolyParam(adsr, true);
+
+    // PolyMidi's "Poly Out" jack fronts both a Pitch fan (raw 0) and a Gate fan (raw 8).
+    // Into the Oscillator's Pitch input, the Pitch fan must win.
+    auto linkToOsc = GraphEditor::resolvePolyLink(&polyMidi, 0, &osc, 0);
+    EXPECT_EQ(linkToOsc.sourceRawChannel, 0);
+    EXPECT_EQ(linkToOsc.destRawChannel, 0);
+    EXPECT_EQ(linkToOsc.voiceCount, 8);
+
+    // Into the ADSR's Gate input (same source visible jack), the Gate fan must win instead.
+    auto linkToAdsr = GraphEditor::resolvePolyLink(&polyMidi, 0, &adsr, 0);
+    EXPECT_EQ(linkToAdsr.sourceRawChannel, 8);
+    EXPECT_EQ(linkToAdsr.destRawChannel, 0);
+    EXPECT_EQ(linkToAdsr.voiceCount, 8);
+}
+
+TEST_F(GraphEditorTest, ResolvePolyLinkStaysMonoWhenOneEndIsMono) {
+    ADSRModule polyAdsr;
+    setPolyParam(polyAdsr, true);
+    VCAModule monoVca; // poly defaults to false
+
+    auto link1 = GraphEditor::resolvePolyLink(&polyAdsr, 0, &monoVca, 1);
+    EXPECT_EQ(link1.sourceRawChannel, 0);
+    EXPECT_EQ(link1.destRawChannel, 1);
+    EXPECT_EQ(link1.voiceCount, 1);
+
+    ADSRModule monoAdsr; // poly defaults to false
+    VCAModule polyVca;
+    setPolyParam(polyVca, true);
+
+    auto link2 = GraphEditor::resolvePolyLink(&monoAdsr, 0, &polyVca, 1);
+    EXPECT_EQ(link2.sourceRawChannel, 0);
+    EXPECT_EQ(link2.destRawChannel, 8);
+    EXPECT_EQ(link2.voiceCount, 1);
+}
+
+// ---- Integration tests (full graph + drag/toggle interactions) ----
+
+TEST_F(GraphEditorTest, DragBetweenPolyModulesFansOutAllVoices) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto adsrNode = engine.getGraph().addNode(std::make_unique<ADSRModule>());
+    auto vcaNode = engine.getGraph().addNode(std::make_unique<VCAModule>());
+    setPolyParam(*adsrNode->getProcessor(), true);
+    setPolyParam(*vcaNode->getProcessor(), true);
+
+    editor.updateComponents();
+
+    ModuleComponent* adsrComp = nullptr;
+    ModuleComponent* vcaComp = nullptr;
+
+    auto* content = editor.getChildComponent(0);
+    if (content) {
+        for (auto* contentChild : content->getChildren()) {
+            if (auto* mod = dynamic_cast<ModuleComponent*>(contentChild)) {
+                if (mod->getModule() == adsrNode->getProcessor())
+                    adsrComp = mod;
+                if (mod->getModule() == vcaNode->getProcessor())
+                    vcaComp = mod;
+            }
+        }
+    }
+
+    ASSERT_NE(adsrComp, nullptr);
+    ASSERT_NE(vcaComp, nullptr);
+
+    adsrComp->setBounds(0, 0, 100, 100);
+    vcaComp->setBounds(200, 0, 100, 100);
+
+    editor.beginConnectionDrag(adsrComp, 0, false, false, juce::Point<int>(0, 0));
+    editor.dragConnection(juce::Point<int>(50, 0));
+
+    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(1, true);
+    editor.endConnectionDrag(vcaTargetPoint);
+
+    auto& graph = engine.getGraph();
+
+    for (int i = 0; i < 8; ++i) {
+        bool found = false;
+        for (auto& conn : graph.getConnections()) {
+            if (conn.source.nodeID == adsrNode->nodeID && conn.source.channelIndex == i &&
+                conn.destination.nodeID == vcaNode->nodeID && conn.destination.channelIndex == 8 + i) {
+                found = true;
+                break;
+            }
+        }
+        EXPECT_TRUE(found) << "Missing fan connection for voice " << i;
+    }
+
+    int connectionCount = 0;
+    for (auto& conn : graph.getConnections())
+        if (conn.source.nodeID == adsrNode->nodeID && conn.destination.nodeID == vcaNode->nodeID)
+            ++connectionCount;
+    EXPECT_EQ(connectionCount, 8);
+
+    bool foundAttenuverter = false;
+    for (auto* node : graph.getNodes())
+        if (dynamic_cast<AttenuverterModule*>(node->getProcessor()) != nullptr)
+            foundAttenuverter = true;
+    EXPECT_FALSE(foundAttenuverter);
+}
+
+TEST_F(GraphEditorTest, DragBetweenMonoModulesIsUnchanged) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto adsrNode = engine.getGraph().addNode(std::make_unique<ADSRModule>());
+    auto vcaNode = engine.getGraph().addNode(std::make_unique<VCAModule>());
+
+    editor.updateComponents();
+
+    ModuleComponent* adsrComp = nullptr;
+    ModuleComponent* vcaComp = nullptr;
+
+    auto* content = editor.getChildComponent(0);
+    if (content) {
+        for (auto* contentChild : content->getChildren()) {
+            if (auto* mod = dynamic_cast<ModuleComponent*>(contentChild)) {
+                if (mod->getModule() == adsrNode->getProcessor())
+                    adsrComp = mod;
+                if (mod->getModule() == vcaNode->getProcessor())
+                    vcaComp = mod;
+            }
+        }
+    }
+
+    ASSERT_NE(adsrComp, nullptr);
+    ASSERT_NE(vcaComp, nullptr);
+
+    adsrComp->setBounds(0, 0, 100, 100);
+    vcaComp->setBounds(200, 0, 100, 100);
+
+    editor.beginConnectionDrag(adsrComp, 0, false, false, juce::Point<int>(0, 0));
+    editor.dragConnection(juce::Point<int>(50, 0));
+
+    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(1, true);
+    editor.endConnectionDrag(vcaTargetPoint);
+
+    auto& graph = engine.getGraph();
+
+    // Legacy behaviour: a mono mod-CV wire is mediated by an attenuverter, not a direct connection.
+    bool foundAttenuverter = false;
+    for (auto* node : graph.getNodes())
+        if (dynamic_cast<AttenuverterModule*>(node->getProcessor()) != nullptr)
+            foundAttenuverter = true;
+    EXPECT_TRUE(foundAttenuverter);
+
+    bool directConnectionFound = false;
+    for (auto& conn : graph.getConnections())
+        if (conn.source.nodeID == adsrNode->nodeID && conn.destination.nodeID == vcaNode->nodeID)
+            directConnectionFound = true;
+    EXPECT_FALSE(directConnectionFound);
+}
+
+TEST_F(GraphEditorTest, DisconnectPolyPortRemovesEntireFan) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto adsrNode = engine.getGraph().addNode(std::make_unique<ADSRModule>());
+    auto vcaNode = engine.getGraph().addNode(std::make_unique<VCAModule>());
+    setPolyParam(*adsrNode->getProcessor(), true);
+    setPolyParam(*vcaNode->getProcessor(), true);
+
+    editor.updateComponents();
+
+    ModuleComponent* adsrComp = nullptr;
+    ModuleComponent* vcaComp = nullptr;
+
+    auto* content = editor.getChildComponent(0);
+    if (content) {
+        for (auto* contentChild : content->getChildren()) {
+            if (auto* mod = dynamic_cast<ModuleComponent*>(contentChild)) {
+                if (mod->getModule() == adsrNode->getProcessor())
+                    adsrComp = mod;
+                if (mod->getModule() == vcaNode->getProcessor())
+                    vcaComp = mod;
+            }
+        }
+    }
+
+    ASSERT_NE(adsrComp, nullptr);
+    ASSERT_NE(vcaComp, nullptr);
+
+    adsrComp->setBounds(0, 0, 100, 100);
+    vcaComp->setBounds(200, 0, 100, 100);
+
+    editor.beginConnectionDrag(adsrComp, 0, false, false, juce::Point<int>(0, 0));
+    editor.dragConnection(juce::Point<int>(50, 0));
+
+    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(1, true);
+    editor.endConnectionDrag(vcaTargetPoint);
+
+    auto& graph = engine.getGraph();
+
+    int preCount = 0;
+    for (auto& conn : graph.getConnections())
+        if (conn.source.nodeID == adsrNode->nodeID && conn.destination.nodeID == vcaNode->nodeID)
+            ++preCount;
+    ASSERT_EQ(preCount, 8) << "Setup must produce the 8-voice fan before disconnecting";
+
+    editor.disconnectPort(vcaComp, 1, true, false);
+
+    int postCount = 0;
+    for (auto& conn : graph.getConnections())
+        if (conn.source.nodeID == adsrNode->nodeID && conn.destination.nodeID == vcaNode->nodeID)
+            ++postCount;
+    EXPECT_EQ(postCount, 0);
+}
+
+TEST_F(GraphEditorTest, TogglingPolyOnFansOutExistingConnection) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto oscNode = engine.getGraph().addNode(std::make_unique<OscillatorModule>());
+    auto filterNode = engine.getGraph().addNode(std::make_unique<FilterModule>());
+
+    editor.updateComponents();
+
+    ModuleComponent* oscComp = nullptr;
+    ModuleComponent* filterComp = nullptr;
+
+    auto* content = editor.getChildComponent(0);
+    if (content) {
+        for (auto* contentChild : content->getChildren()) {
+            if (auto* mod = dynamic_cast<ModuleComponent*>(contentChild)) {
+                if (mod->getModule() == oscNode->getProcessor())
+                    oscComp = mod;
+                if (mod->getModule() == filterNode->getProcessor())
+                    filterComp = mod;
+            }
+        }
+    }
+
+    ASSERT_NE(oscComp, nullptr);
+    ASSERT_NE(filterComp, nullptr);
+
+    oscComp->setBounds(0, 0, 100, 100);
+    filterComp->setBounds(200, 0, 100, 100);
+
+    editor.beginConnectionDrag(oscComp, 0, false, false, juce::Point<int>(0, 0));
+    editor.dragConnection(juce::Point<int>(50, 0));
+
+    auto filterTargetPoint = filterComp->getBounds().getPosition() + filterComp->getPortCenter(0, true);
+    editor.endConnectionDrag(filterTargetPoint);
+
+    auto& graph = engine.getGraph();
+
+    int monoCount = 0;
+    for (auto& conn : graph.getConnections())
+        if (conn.source.nodeID == oscNode->nodeID && conn.source.channelIndex == 0 &&
+            conn.destination.nodeID == filterNode->nodeID && conn.destination.channelIndex == 0)
+            ++monoCount;
+    ASSERT_EQ(monoCount, 1) << "Setup must produce a single mono connection before toggling poly";
+
+    // Toggling poly on both ends must re-anchor the mono wire onto the 8-voice fan.
+    setPolyParam(*oscNode->getProcessor(), true);
+    setPolyParam(*filterNode->getProcessor(), true);
+
+    for (int i = 0; i < 8; ++i) {
+        bool found = false;
+        for (auto& conn : graph.getConnections()) {
+            if (conn.source.nodeID == oscNode->nodeID && conn.source.channelIndex == i &&
+                conn.destination.nodeID == filterNode->nodeID && conn.destination.channelIndex == i) {
+                found = true;
+                break;
+            }
+        }
+        EXPECT_TRUE(found) << "Missing fan connection for voice " << i;
+    }
+
+    int fanCount = 0;
+    for (auto& conn : graph.getConnections())
+        if (conn.source.nodeID == oscNode->nodeID && conn.destination.nodeID == filterNode->nodeID)
+            ++fanCount;
+    EXPECT_EQ(fanCount, 8);
+}
+
+TEST_F(GraphEditorTest, TogglingPolyOffCollapsesFanToSingleConnection) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto oscNode = engine.getGraph().addNode(std::make_unique<OscillatorModule>());
+    auto filterNode = engine.getGraph().addNode(std::make_unique<FilterModule>());
+
+    editor.updateComponents();
+
+    ModuleComponent* oscComp = nullptr;
+    ModuleComponent* filterComp = nullptr;
+
+    auto* content = editor.getChildComponent(0);
+    if (content) {
+        for (auto* contentChild : content->getChildren()) {
+            if (auto* mod = dynamic_cast<ModuleComponent*>(contentChild)) {
+                if (mod->getModule() == oscNode->getProcessor())
+                    oscComp = mod;
+                if (mod->getModule() == filterNode->getProcessor())
+                    filterComp = mod;
+            }
+        }
+    }
+
+    ASSERT_NE(oscComp, nullptr);
+    ASSERT_NE(filterComp, nullptr);
+
+    oscComp->setBounds(0, 0, 100, 100);
+    filterComp->setBounds(200, 0, 100, 100);
+
+    editor.beginConnectionDrag(oscComp, 0, false, false, juce::Point<int>(0, 0));
+    editor.dragConnection(juce::Point<int>(50, 0));
+
+    auto filterTargetPoint = filterComp->getBounds().getPosition() + filterComp->getPortCenter(0, true);
+    editor.endConnectionDrag(filterTargetPoint);
+
+    auto& graph = engine.getGraph();
+
+    // Toggle poly ON for both to build the 8-voice fan.
+    setPolyParam(*oscNode->getProcessor(), true);
+    setPolyParam(*filterNode->getProcessor(), true);
+
+    int fanCount = 0;
+    for (auto& conn : graph.getConnections())
+        if (conn.source.nodeID == oscNode->nodeID && conn.destination.nodeID == filterNode->nodeID)
+            ++fanCount;
+    ASSERT_EQ(fanCount, 8) << "Setup must produce the 8-voice fan before toggling poly off";
+
+    // Toggle poly OFF for both — the fan must collapse back to a single mono wire.
+    setPolyParam(*oscNode->getProcessor(), false);
+    setPolyParam(*filterNode->getProcessor(), false);
+
+    int monoCount = 0;
+    for (auto& conn : graph.getConnections())
+        if (conn.source.nodeID == oscNode->nodeID && conn.destination.nodeID == filterNode->nodeID)
+            ++monoCount;
+    EXPECT_EQ(monoCount, 1);
+
+    bool foundMonoConn = false;
+    for (auto& conn : graph.getConnections())
+        if (conn.source.nodeID == oscNode->nodeID && conn.source.channelIndex == 0 &&
+            conn.destination.nodeID == filterNode->nodeID && conn.destination.channelIndex == 0)
+            foundMonoConn = true;
+    EXPECT_TRUE(foundMonoConn);
+}
+
+TEST_F(GraphEditorTest, TogglingPolyMovesModCvWireOntoPolyChannels) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto adsrNode = engine.getGraph().addNode(std::make_unique<ADSRModule>());
+    auto vcaNode = engine.getGraph().addNode(std::make_unique<VCAModule>());
+
+    editor.updateComponents();
+
+    ModuleComponent* adsrComp = nullptr;
+    ModuleComponent* vcaComp = nullptr;
+
+    auto* content = editor.getChildComponent(0);
+    if (content) {
+        for (auto* contentChild : content->getChildren()) {
+            if (auto* mod = dynamic_cast<ModuleComponent*>(contentChild)) {
+                if (mod->getModule() == adsrNode->getProcessor())
+                    adsrComp = mod;
+                if (mod->getModule() == vcaNode->getProcessor())
+                    vcaComp = mod;
+            }
+        }
+    }
+
+    ASSERT_NE(adsrComp, nullptr);
+    ASSERT_NE(vcaComp, nullptr);
+
+    adsrComp->setBounds(0, 0, 100, 100);
+    vcaComp->setBounds(200, 0, 100, 100);
+
+    // Mono ADSR out jack0 -> mono VCA in jack1 (CV) creates an attenuverter chain.
+    editor.beginConnectionDrag(adsrComp, 0, false, false, juce::Point<int>(0, 0));
+    editor.dragConnection(juce::Point<int>(50, 0));
+
+    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(1, true);
+    editor.endConnectionDrag(vcaTargetPoint);
+
+    auto& graph = engine.getGraph();
+
+    bool foundAttenuverterBefore = false;
+    for (auto* node : graph.getNodes())
+        if (dynamic_cast<AttenuverterModule*>(node->getProcessor()) != nullptr)
+            foundAttenuverterBefore = true;
+    ASSERT_TRUE(foundAttenuverterBefore) << "Setup must create an attenuverter chain before toggling poly";
+
+    // Toggling poly on both ends must collapse the attenuverter chain into a direct 8-voice fan
+    // landing on raw channels 8-15 (VCA's poly CV bus), not the stale raw channel 1.
+    setPolyParam(*adsrNode->getProcessor(), true);
+    setPolyParam(*vcaNode->getProcessor(), true);
+
+    bool foundAttenuverterAfter = false;
+    for (auto* node : graph.getNodes())
+        if (dynamic_cast<AttenuverterModule*>(node->getProcessor()) != nullptr)
+            foundAttenuverterAfter = true;
+    EXPECT_FALSE(foundAttenuverterAfter);
+
+    for (int i = 0; i < 8; ++i) {
+        bool found = false;
+        for (auto& conn : graph.getConnections()) {
+            if (conn.source.nodeID == adsrNode->nodeID && conn.source.channelIndex == i &&
+                conn.destination.nodeID == vcaNode->nodeID && conn.destination.channelIndex == 8 + i) {
+                found = true;
+                break;
+            }
+        }
+        EXPECT_TRUE(found) << "Missing direct fan connection for voice " << i;
+    }
+
+    int directCount = 0;
+    for (auto& conn : graph.getConnections())
+        if (conn.source.nodeID == adsrNode->nodeID && conn.destination.nodeID == vcaNode->nodeID)
+            ++directCount;
+    EXPECT_EQ(directCount, 8);
 }

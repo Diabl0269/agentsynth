@@ -150,6 +150,36 @@ public:
         return p;
     }
 
+    /** One poly-group head reachable from a visible jack: the raw channel a wire anchored to that
+     *  jack should start at, what the channel carries, and how many consecutive raw channels the
+     *  fan spans (1 = mono). */
+    struct JackTarget {
+        int rawHeadChannel = 0;
+        PortRole role = PortRole::Other;
+        int voiceSpan = 1;
+    };
+
+    /** Inverse of mapInput/OutputChannel: every poly-group head that anchors to visibleJackIndex.
+     *  Normally one entry.  Poly MIDI's single "Poly Out" jack fronts two fans (Pitch at raw 0 and
+     *  Gate at raw 8), so it returns both and the caller disambiguates by role.
+     *  Never returns empty — an unmapped jack falls back to the raw==jack identity the editor
+     *  assumed before the logical-port API existed, so unmapped modules keep their old wiring. */
+    std::vector<JackTarget> getJackTargets(int visibleJackIndex, bool isInput) const {
+        std::vector<JackTarget> targets;
+        const int numRaw = isInput ? getTotalNumInputChannels() : getTotalNumOutputChannels();
+
+        for (int raw = 0; raw < numRaw; ++raw) {
+            const LogicalPort p = isInput ? mapInputChannel(raw) : mapOutputChannel(raw);
+            if (p.isPolyGroupHead && p.visibleJackIndex == visibleJackIndex)
+                targets.push_back({raw, p.role, std::max(1, p.polyVoiceSpan)});
+        }
+
+        if (targets.empty())
+            targets.push_back({visibleJackIndex, PortRole::Other, 1});
+
+        return targets;
+    }
+
     // Decouples display-advertising from JSON auto-promotion (used by AIStateMapper in a LATER increment; defined now).
     // Default: a channel is auto-promotable iff it is one of this module's getModulationTargets() channelIndex values.
     virtual bool isAutoPromotableModTarget(int dstChannel) const {

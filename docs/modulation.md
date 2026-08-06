@@ -16,7 +16,7 @@ enum class RoutingKind { AttenuverterChain, DirectCV, PolyBus };
 |------|-----------|---------------|
 | `AttenuverterChain` | A mono source signal passes through an `AttenuverterModule` node before reaching the destination's CV input. This is the standard user-adjustable modulation path. | Created by `AudioEngine::addModRouting()`. The engine automatically inserts an `AttenuverterModule` between source and destination. Amount is set to 1.0 at creation. |
 | `DirectCV` | A source output connects directly into a destination's CV/ModCV input channel, with no intermediary attenuverter. | Any non-attenuverter connection into a mod-CV jack (e.g. env output 0 -> oscillator Level ch12). |
-| `PolyBus` | N per-voice `DirectCV` connections (one per voice) that share the same source module and destination visible jack. The engine collapses them into one logical bus. | Arises when the source's `mapOutputChannel()` and destination's `mapInputChannel()` both describe a poly fan (e.g. ADSR outputs 0-7 -> VCA inputs 8-15 in the Poly Pad). |
+| `PolyBus` | N per-voice `DirectCV` connections (one per voice) that share the same source module and destination visible jack. The engine collapses them into one logical bus. | Arises when the source's `mapOutputChannel()` and destination's `mapInputChannel()` both describe a poly fan (e.g. ADSR outputs 0-7 -> VCA inputs 8-15 in the Poly Pad). Also created directly: dragging a cable between two equally-wide poly jacks, or toggling a module's `poly` parameter, creates/rebuilds all N raw connections at once — see [Creating Poly Connections](#creating-poly-connections) below. |
 
 ---
 
@@ -90,6 +90,22 @@ virtual LogicalPort mapOutputChannel(int rawChannel) const;
 
 Poly-capable modules override these to describe fans. The default base implementation clamps any out-of-range channel to the last visible jack and marks `isPolyGroupHead` based on whether `rawChannel < getVisible*PortCount()`.
 
+### `JackTarget` / `getJackTargets`
+
+The inverse of `mapInput/OutputChannel` — given a visible jack, returns every poly-group head anchored to it:
+
+```cpp
+struct JackTarget {
+    int rawHeadChannel;  // raw channel a wire anchored to this jack should start at
+    PortRole role;
+    int voiceSpan;       // 1 = mono; N = head of an N-voice fan
+};
+
+std::vector<JackTarget> getJackTargets(int visibleJackIndex, bool isInput) const;
+```
+
+Normally returns one entry. Poly MIDI's single "Poly Out" jack fronts two fans — Pitch at raw channel 0 and Gate at raw channel 8 — so it returns both, and the caller (`GraphEditor::resolvePolyLink`) disambiguates by role. Never returns empty: an unmapped jack falls back to the raw==jack identity, so modules without a logical-port override keep the pre-logical-port wiring behaviour.
+
 ### Port Labels
 
 `ModuleBase` also declares virtual port-label accessors:
@@ -108,6 +124,16 @@ Modules override these to supply human-readable jack names shown in the UI (e.g.
 3. If the engine classifies the routing as `PolyBus`, GraphEditor draws only one wire and overlays an "xN" voice-count badge on it (e.g. "x8").
 4. Mono `DirectCV` wires are drawn without a badge.
 5. `AttenuverterChain` wires render a draggable midpoint knob for depth control.
+
+### Creating Poly Connections
+
+`getJackTargets` and `GraphEditor::resolvePolyLink` drive connection *creation*, not just display:
+
+1. `resolvePolyLink(source, sourceVisibleJack, dest, destVisibleJack)` calls `getJackTargets` on both ends and pairs one `JackTarget` from each into a `PolyLink { sourceRawChannel, destRawChannel, voiceCount }`. Pairings are scored: matching `PortRole` is the strongest signal (this is what lets Poly MIDI's single "Poly Out" jack send Pitch to an Oscillator and Gate to an Amp Env from the same jack); a `ModCV`/`Other` end is a wildcard, since mod inputs accept anything; equal fan widths break remaining ties.
+2. `voiceCount = min(sourceSpan, destSpan)` — a fan only forms when both ends are equally wide. A poly-to-mono cable degrades to one head-to-head wire.
+3. `GraphEditor::endConnectionDrag` resolves the visible jacks the user dropped a cable between through `resolvePolyLink` and adds `voiceCount` connections, `{sourceRawChannel + v} -> {destRawChannel + v}` for each voice. A fan is always wired direct — an `AttenuverterModule` is only inserted for a single mono mod wire (`voiceCount == 1`), because the engine collapses the N raw edges of a fan into one `PolyBus` for display.
+4. `GraphEditor::disconnectPort` removes every raw channel a visible jack owns (via `getJackTargets`), so "Disconnect" on a poly jack does not leave some voices still wired.
+5. Toggling a module's `poly` parameter calls `GraphEditor::rewireForPolyChange`, which re-anchors every cable touching that module: mono cables fan out to N voices when both ends go poly, fans collapse back to one wire when poly is switched off, and an attenuverter-mediated mod wire is recreated (carrying its amount across) or replaced by a direct fan as appropriate. MIDI connections are never moved. `ModuleComponent` snapshots the module's raw->`LogicalPort` maps just before the toggle, because by the time the parameter listener fires the live mapping already reflects the new layout — only the snapshot can say which visible jack an existing raw connection used to be anchored to.
 
 ---
 

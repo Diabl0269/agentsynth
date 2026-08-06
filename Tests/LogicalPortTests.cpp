@@ -1,6 +1,7 @@
 #include "../Source/Modules/ADSRModule.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/ModuleBase.h"
+#include "../Source/Modules/NoiseModule.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/PolyMidiModule.h"
 #include "../Source/Modules/VCAModule.h"
@@ -121,4 +122,123 @@ TEST(LogicalPortTests, PolyModulesDescribeTheirFans) {
     OscillatorModule monoOsc;
     // polyParam defaults to false
     EXPECT_TRUE(monoOsc.isAutoPromotableModTarget(0));
+}
+
+// getJackTargets is the inverse of mapInput/OutputChannel: it resolves a *visible* jack index
+// back to the raw channel(s) a wire anchored there should wire. This is the crux of issue #163 —
+// the editor used to wire raw channel == visible jack index, which is wrong once a module goes
+// poly (a poly VCA's CV jack is visible jack 1, but raw channel 8).
+TEST(LogicalPortTests, JackTargetsResolveVisibleJacksToRawHeads) {
+    VCAModule vca;
+    setPolyParam(vca, true);
+
+    // Poly VCA: visible jack 0 (Audio) fronts raw head 0, an 8-voice fan.
+    auto audioTargets = vca.getJackTargets(0, true);
+    ASSERT_EQ(audioTargets.size(), 1u);
+    EXPECT_EQ(audioTargets[0].rawHeadChannel, 0);
+    EXPECT_EQ(audioTargets[0].role, PortRole::Audio);
+    EXPECT_EQ(audioTargets[0].voiceSpan, 8);
+
+    // Poly VCA: visible jack 1 (CV) fronts raw head 8, NOT raw channel 1.
+    auto cvTargets = vca.getJackTargets(1, true);
+    ASSERT_EQ(cvTargets.size(), 1u);
+    EXPECT_EQ(cvTargets[0].rawHeadChannel, 8);
+    EXPECT_EQ(cvTargets[0].role, PortRole::ModCV);
+    EXPECT_EQ(cvTargets[0].voiceSpan, 8);
+
+    // Mono VCA: visible jack 1 (CV) fronts raw channel 1, a mono (span-1) wire.
+    VCAModule monoVca;
+    auto monoCvTargets = monoVca.getJackTargets(1, true);
+    ASSERT_EQ(monoCvTargets.size(), 1u);
+    EXPECT_EQ(monoCvTargets[0].rawHeadChannel, 1);
+    EXPECT_EQ(monoCvTargets[0].role, PortRole::ModCV);
+    EXPECT_EQ(monoCvTargets[0].voiceSpan, 1);
+}
+
+// Poly MIDI's single "Poly Out" jack fronts two independent fans (Pitch at raw 0, Gate at raw 8);
+// getJackTargets must surface both so the caller can disambiguate by role.
+TEST(LogicalPortTests, PolyMidiOutJackFrontsBothPitchAndGateFans) {
+    PolyMidiModule polyMidi;
+
+    auto targets = polyMidi.getJackTargets(0, false);
+    ASSERT_EQ(targets.size(), 2u);
+
+    bool foundPitch = false;
+    bool foundGate = false;
+    for (const auto& t : targets) {
+        if (t.role == PortRole::Pitch) {
+            foundPitch = true;
+            EXPECT_EQ(t.rawHeadChannel, 0);
+            EXPECT_EQ(t.voiceSpan, 8);
+        } else if (t.role == PortRole::Gate) {
+            foundGate = true;
+            EXPECT_EQ(t.rawHeadChannel, 8);
+            EXPECT_EQ(t.voiceSpan, 8);
+        }
+    }
+    EXPECT_TRUE(foundPitch);
+    EXPECT_TRUE(foundGate);
+}
+
+// Oscillator, Filter and Noise all declare their per-voice audio output fan the same way: raw 0 is
+// the poly-group head of an 8-voice fan on the single visible Audio jack; raw 1 is not a head; and
+// in mono mode the span collapses back to 1.
+TEST(LogicalPortTests, PolyAudioOutputsDeclareTheirVoiceFan) {
+    // ---- Oscillator ----
+    OscillatorModule osc;
+    setPolyParam(osc, true);
+
+    auto oscOut0 = osc.mapOutputChannel(0);
+    EXPECT_EQ(oscOut0.visibleJackIndex, 0);
+    EXPECT_EQ(oscOut0.role, PortRole::Audio);
+    EXPECT_TRUE(oscOut0.isPolyGroupHead);
+    EXPECT_EQ(oscOut0.polyVoiceSpan, 8);
+
+    auto oscOut1 = osc.mapOutputChannel(1);
+    EXPECT_FALSE(oscOut1.isPolyGroupHead);
+
+    OscillatorModule monoOsc;
+    EXPECT_EQ(monoOsc.mapOutputChannel(0).polyVoiceSpan, 1);
+
+    // ---- Filter ----
+    FilterModule filter;
+    setPolyParam(filter, true);
+
+    auto filterOut0 = filter.mapOutputChannel(0);
+    EXPECT_EQ(filterOut0.visibleJackIndex, 0);
+    EXPECT_EQ(filterOut0.role, PortRole::Audio);
+    EXPECT_TRUE(filterOut0.isPolyGroupHead);
+    EXPECT_EQ(filterOut0.polyVoiceSpan, 8);
+
+    auto filterOut1 = filter.mapOutputChannel(1);
+    EXPECT_FALSE(filterOut1.isPolyGroupHead);
+
+    FilterModule monoFilter;
+    EXPECT_EQ(monoFilter.mapOutputChannel(0).polyVoiceSpan, 1);
+
+    // ---- Noise ----
+    NoiseModule noise;
+    setPolyParam(noise, true);
+
+    auto noiseOut0 = noise.mapOutputChannel(0);
+    EXPECT_EQ(noiseOut0.visibleJackIndex, 0);
+    EXPECT_EQ(noiseOut0.role, PortRole::Audio);
+    EXPECT_TRUE(noiseOut0.isPolyGroupHead);
+    EXPECT_EQ(noiseOut0.polyVoiceSpan, 8);
+
+    auto noiseOut1 = noise.mapOutputChannel(1);
+    EXPECT_FALSE(noiseOut1.isPolyGroupHead);
+
+    NoiseModule monoNoise;
+    EXPECT_EQ(monoNoise.mapOutputChannel(0).polyVoiceSpan, 1);
+}
+
+// Regression guard: unlike Oscillator/Filter/Noise, VCA deliberately does NOT override
+// mapOutputChannel. Its poly output is 8 voices summed to a stereo pair on raw ch0/1, not a fan —
+// so its output must never be reported as a poly-voice-spanning fan.
+TEST(LogicalPortTests, VCAPolyOutputIsSummedNotFanned) {
+    VCAModule vca;
+    setPolyParam(vca, true);
+
+    EXPECT_EQ(vca.mapOutputChannel(0).polyVoiceSpan, 1);
 }

@@ -344,15 +344,18 @@ AudioEngine::getModulationDisplayInfo(const std::vector<ModulationRouting>& allR
     return result;
 }
 
-void AudioEngine::addModRouting(juce::AudioProcessorGraph::NodeID sourceNodeID, int sourceChannelIndex,
-                                juce::AudioProcessorGraph::NodeID destNodeID, int destChannelIndex) {
+juce::AudioProcessorGraph::NodeID AudioEngine::addModRouting(juce::AudioProcessorGraph::NodeID sourceNodeID,
+                                                             int sourceChannelIndex,
+                                                             juce::AudioProcessorGraph::NodeID destNodeID,
+                                                             int destChannelIndex) {
     auto attenuverterNode = mainProcessorGraph.addNode(std::make_unique<AttenuverterModule>());
     if (attenuverterNode == nullptr)
-        return;
+        return {};
     if (auto* param = dynamic_cast<juce::AudioParameterFloat*>(attenuverterNode->getProcessor()->getParameters()[1]))
         param->setValueNotifyingHost(param->convertTo0to1(1.0f));
     mainProcessorGraph.addConnection({{sourceNodeID, sourceChannelIndex}, {attenuverterNode->nodeID, 0}});
     mainProcessorGraph.addConnection({{attenuverterNode->nodeID, 0}, {destNodeID, destChannelIndex}});
+    return attenuverterNode->nodeID;
 }
 
 void AudioEngine::addEmptyModRouting() { mainProcessorGraph.addNode(std::make_unique<AttenuverterModule>()); }

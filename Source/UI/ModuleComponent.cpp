@@ -469,6 +469,8 @@ void ModuleComponent::createControls() {
     for (auto* param : module->getParameters())
         param->addListener(this);
 
+    captureLogicalPortMaps();
+
     // Auto-resize
     if (getType(module) == ModuleType::Sequencer || getType(module) == ModuleType::PolySequencer) {
         setSize(synth::LayoutUtil::kDoubleWidth, 380); // 8 cols * 60 + margins, 3 rows
@@ -1033,7 +1035,54 @@ void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) 
             if (safeThis != nullptr)
                 safeThis->repaint();
         });
+        return;
     }
+
+    if (param->paramID == "poly") {
+        // The module's channel layout just changed underneath its existing cables — re-anchor them
+        // so a poly pair fans out to all voices and a mono pair collapses back to one.
+        // Graph mutation is message-thread-only. The toggle-button path is already on that thread,
+        // and running inline there keeps the rewire inside the parameter gesture's undo snapshot.
+        if (juce::MessageManager::existsAndIsCurrentThread()) {
+            applyPolyStateChange();
+        } else {
+            juce::Component::SafePointer<ModuleComponent> safeThis(this);
+            juce::MessageManager::callAsync([safeThis] {
+                if (safeThis == nullptr || safeThis->module == nullptr)
+                    return;
+                // Deferred, so the gesture's snapshot has already closed — take our own transaction.
+                if (auto* undo = safeThis->undoManager)
+                    undo->recordStructuralChange(safeThis->owner.getAudioEngine().getGraph(),
+                                                 [safeThis] { safeThis->applyPolyStateChange(); });
+                else
+                    safeThis->applyPolyStateChange();
+            });
+        }
+    }
+}
+
+void ModuleComponent::captureLogicalPortMaps() {
+    cachedInputPortMap.clear();
+    cachedOutputPortMap.clear();
+
+    auto* modBase = dynamic_cast<ModuleBase*>(module);
+    if (modBase == nullptr)
+        return;
+
+    for (int raw = 0; raw < modBase->getTotalNumInputChannels(); ++raw)
+        cachedInputPortMap.push_back(modBase->mapInputChannel(raw));
+    for (int raw = 0; raw < modBase->getTotalNumOutputChannels(); ++raw)
+        cachedOutputPortMap.push_back(modBase->mapOutputChannel(raw));
+}
+
+void ModuleComponent::applyPolyStateChange() {
+    if (module == nullptr)
+        return;
+
+    const auto previousInputMap = cachedInputPortMap;
+    const auto previousOutputMap = cachedOutputPortMap;
+    captureLogicalPortMaps(); // adopt the new layout before the graph is touched
+    owner.rewireForPolyChange(this, previousInputMap, previousOutputMap);
 }
 
 void ModuleComponent::parameterGestureChanged(int parameterIndex, bool gestureIsStarting) {

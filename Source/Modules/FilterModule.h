@@ -154,6 +154,27 @@ public:
         return ModuleBase::mapInputChannel(raw);
     }
 
+    LogicalPort mapOutputChannel(int raw) const override {
+        LogicalPort p;
+        if (polyParam->get()) {
+            // Poly mode: raw 0-7 = per-voice filtered audio fan on the single visible Audio jack
+            if (raw >= 0 && raw <= 7) {
+                p.visibleJackIndex = 0;
+                p.role = PortRole::Audio;
+                p.isPolyGroupHead = (raw == 0);
+                p.polyVoiceSpan = (raw == 0) ? 8 : 1;
+                return p;
+            }
+        } else if (raw == 0) {
+            p.visibleJackIndex = 0;
+            p.role = PortRole::Audio;
+            p.isPolyGroupHead = true;
+            p.polyVoiceSpan = 1;
+            return p;
+        }
+        return ModuleBase::mapOutputChannel(raw);
+    }
+
     bool isAutoPromotableModTarget(int dstChannel) const override {
         if (polyParam->get())
             return false;
