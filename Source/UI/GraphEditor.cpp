@@ -22,9 +22,11 @@
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
 #include "../PresetManager.h"
+#include "../SnippetManager.h"
 #include "LayoutUtil.h"
 #include "ModuleComponent.h"
 #include "Theme/AppLookAndFeel.h"
+#include <algorithm>
 #include <set>
 #include <tuple>
 #include <unordered_map>
@@ -81,7 +83,11 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     // Tooltips on GraphEditor-owned affordances.
     // The canvas itself hints at pan/zoom. Double-click on an attenuverter knob removes it.
     setTooltip(synth::ui::formatShortcutHint("Patch canvas - drag modules here to build your patch",
-                                             "Scroll to zoom | Drag to pan | Double-click mod knob to remove"));
+                                             "Scroll to zoom | Drag to pan | Shift+drag to select | Double-click mod "
+                                             "knob to remove"));
+
+    // Needed for the canvas-scoped Delete/Escape keys (see keyPressed).
+    setWantsKeyboardFocus(true);
 
     startTimerHz(30);
 }
@@ -486,6 +492,21 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
             }
         }
     }
+
+    // ---- Marquee selection band (issue #156) ----
+    // Drawn here, in canvas space, so it stays locked to the modules it is selecting while the
+    // view is zoomed. Paint-only — the selection itself is computed in updateMarquee().
+    if (editor.marqueeActive && !editor.marqueeRect.isEmpty()) {
+        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+        const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+        const float lineWidth = lf != nullptr ? lf->getTheme().metrics.guideLineWidth : 1.5f;
+
+        auto bandF = editor.marqueeRect.toFloat();
+        g.setColour(accentColour.withAlpha(0.12f));
+        g.fillRect(bandF);
+        g.setColour(accentColour.withAlpha(0.80f));
+        g.drawRect(bandF, lineWidth);
+    }
 }
 
 void GraphEditor::beginConnectionDrag(ModuleComponent* sourceModule, int channelIndex, bool isInput, bool isMidi,
@@ -609,6 +630,10 @@ void GraphEditor::detachAllModuleComponents() {
 void GraphEditor::updateComponents() {
     auto& graph = audioEngine.getGraph();
     auto& modules = content.getModules();
+
+    // Any reconcile can follow a node removal (delete, undo/redo, preset load). Drop selected ids
+    // whose nodes are gone BEFORE anything reads the selection again.
+    pruneSelection();
 
     // 1. Remove components for nodes that no longer exist
     for (int i = modules.size(); --i >= 0;) {
@@ -814,8 +839,13 @@ void GraphEditor::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWhe
 }
 
 void GraphEditor::mouseDown(const juce::MouseEvent& e) {
+    // Any press on the canvas takes focus, so the canvas-scoped Delete/Escape keys land here
+    // rather than on whichever panel happened to be focused last.
+    grabKeyboardFocus();
+
     if (e.mods.isLeftButtonDown()) {
         lastMousePos = e.getPosition();
+        pendingEmptyCanvasClick = false;
 
         auto localPos = content.getLocalPoint(this, e.getPosition());
         auto attenId = getAttenuverterNodeAt(localPos.toFloat());
@@ -823,14 +853,31 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
             draggingAttenuverterNodeId = attenId;
             if (undoManager)
                 undoManager->captureBeforeState(audioEngine.getGraph());
+            return;
+        }
+
+        draggingAttenuverterNodeId = juce::AudioProcessorGraph::NodeID();
+
+        // Shift starts a marquee; anything else keeps the historical drag-to-pan behaviour.
+        // Cmd/Ctrl alongside Shift makes the marquee additive.
+        if (e.mods.isShiftDown()) {
+            beginMarquee(localPos.roundToInt(), e.mods.isCommandDown() || e.mods.isCtrlDown());
         } else {
-            draggingAttenuverterNodeId = juce::AudioProcessorGraph::NodeID();
+            // Deferred: only a press that never becomes a drag counts as "click empty canvas to
+            // deselect", so panning does not wipe the selection.
+            pendingEmptyCanvasClick = true;
         }
     }
 }
 
 void GraphEditor::mouseDrag(const juce::MouseEvent& e) {
+    if (marqueeActive) {
+        updateMarquee(content.getLocalPoint(this, e.getPosition()).roundToInt());
+        return;
+    }
+
     if (e.mods.isLeftButtonDown() && !isDraggingConnection) {
+        pendingEmptyCanvasClick = false;
         if (draggingAttenuverterNodeId.uid != 0) {
             auto& graph = audioEngine.getGraph();
             auto* node = graph.getNodeForId(draggingAttenuverterNodeId);
@@ -855,10 +902,330 @@ void GraphEditor::mouseDrag(const juce::MouseEvent& e) {
 }
 
 void GraphEditor::mouseUp(const juce::MouseEvent& e) {
+    if (marqueeActive) {
+        endMarquee();
+        return;
+    }
+
     if (draggingAttenuverterNodeId.uid != 0 && undoManager) {
         undoManager->pushSnapshotFromCapture(audioEngine.getGraph());
     }
     draggingAttenuverterNodeId = juce::AudioProcessorGraph::NodeID();
+
+    // A press on empty canvas that never turned into a pan is a plain click: deselect.
+    if (pendingEmptyCanvasClick) {
+        pendingEmptyCanvasClick = false;
+        if (e.mods.isPopupMenu())
+            return; // right-click keeps the selection so the context menu can act on it
+        clearSelection();
+    }
+}
+
+// ---------------------------------------------------------------------------------------
+// Selection (issue #156)
+// ---------------------------------------------------------------------------------------
+
+std::vector<synth::LayoutUtil::Box> GraphEditor::collectModuleBoxes(bool selectedOnly, bool excludeSelected) const {
+    std::vector<synth::LayoutUtil::Box> boxes;
+    for (auto* comp : const_cast<GraphContentComponent&>(content).getModules()) {
+        if (comp == nullptr || comp->getModule() == nullptr)
+            continue;
+        const bool isSel = selection.contains(comp->getNodeId());
+        if (selectedOnly && !isSel)
+            continue;
+        if (excludeSelected && isSel)
+            continue;
+        boxes.push_back({comp->getNodeId(), comp->getBounds()});
+    }
+    return boxes;
+}
+
+void GraphEditor::applySelectionChange(const std::vector<juce::AudioProcessorGraph::NodeID>& newSelection) {
+    std::set<juce::AudioProcessorGraph::NodeID> before;
+    for (auto id : selection.getSelected())
+        before.insert(id);
+
+    selection.setSelection(newSelection);
+
+    std::set<juce::AudioProcessorGraph::NodeID> after;
+    for (auto id : selection.getSelected())
+        after.insert(id);
+
+    if (before == after)
+        return;
+
+    // Repaint ONLY the cards that changed state. ModuleComponent is setBufferedToImage(true), so a
+    // blanket repaint of every card would re-rasterize the whole canvas on each marquee frame.
+    for (auto* comp : content.getModules()) {
+        if (comp == nullptr)
+            continue;
+        const auto id = comp->getNodeId();
+        if ((before.count(id) > 0) != (after.count(id) > 0))
+            comp->repaint();
+    }
+}
+
+void GraphEditor::selectModule(juce::AudioProcessorGraph::NodeID nodeId, bool additive) {
+    if (nodeId.uid == 0)
+        return;
+
+    auto next = selection.getSelected();
+    if (additive) {
+        if (selection.contains(nodeId))
+            next.erase(std::remove(next.begin(), next.end(), nodeId), next.end());
+        else
+            next.push_back(nodeId);
+    } else {
+        next = {nodeId};
+    }
+    applySelectionChange(next);
+}
+
+void GraphEditor::setSelectedNodes(const std::vector<juce::AudioProcessorGraph::NodeID>& ids) {
+    applySelectionChange(ids);
+}
+
+void GraphEditor::clearSelection() { applySelectionChange({}); }
+
+void GraphEditor::selectAllModules() {
+    std::vector<juce::AudioProcessorGraph::NodeID> all;
+    for (auto* comp : content.getModules()) {
+        if (comp != nullptr && comp->getModule() != nullptr)
+            all.push_back(comp->getNodeId());
+    }
+    applySelectionChange(all);
+}
+
+void GraphEditor::pruneSelection() {
+    if (selection.isEmpty())
+        return;
+
+    std::vector<juce::AudioProcessorGraph::NodeID> alive;
+    for (auto* node : audioEngine.getGraph().getNodes())
+        alive.push_back(node->nodeID);
+
+    if (selection.retainOnly(alive))
+        content.repaint();
+}
+
+void GraphEditor::deleteSelection() {
+    auto ids = selection.getSelected();
+    if (ids.empty())
+        return;
+
+    auto& graph = audioEngine.getGraph();
+
+    // One transaction for the whole group: Cmd+Z must bring back every module at once, not peel
+    // them back one at a time.
+    auto doDelete = [this, ids, &graph] {
+        modMatrix.clearRows();
+        for (auto id : ids)
+            graph.removeNode(id);
+        selection.clear();
+        updateComponents();
+    };
+
+    if (undoManager)
+        undoManager->recordStructuralChange(graph, doDelete);
+    else
+        doDelete();
+
+    repaint();
+}
+
+// ---- Marquee ----
+
+void GraphEditor::beginMarquee(juce::Point<int> canvasAnchor, bool additive) {
+    marqueeActive = true;
+    marqueeAdditive = additive;
+    marqueeAnchor = canvasAnchor;
+    marqueeRect = juce::Rectangle<int>(canvasAnchor, canvasAnchor);
+    marqueeBaseSelection = additive ? selection.getSelected() : std::vector<juce::AudioProcessorGraph::NodeID>{};
+
+    // A non-additive marquee starts from nothing, so dragging over no module deselects.
+    if (!additive)
+        applySelectionChange({});
+}
+
+void GraphEditor::updateMarquee(juce::Point<int> canvasCurrent) {
+    if (!marqueeActive)
+        return;
+
+    marqueeRect = synth::ui::marqueeRectFrom(marqueeAnchor, canvasCurrent);
+    auto hits = synth::ui::hitTestMarquee(marqueeRect, collectModuleBoxes(false, false));
+    applySelectionChange(marqueeAdditive ? synth::ui::unionSelection(marqueeBaseSelection, hits) : hits);
+
+    content.repaint();
+}
+
+void GraphEditor::endMarquee() {
+    if (!marqueeActive)
+        return;
+    marqueeActive = false;
+    marqueeAdditive = false;
+    marqueeRect = {};
+    marqueeBaseSelection.clear();
+    content.repaint();
+}
+
+// ---- Group drag ----
+
+void GraphEditor::beginSelectionDrag() {
+    selectionDragStartPositions.clear();
+    for (auto* comp : content.getModules()) {
+        if (comp != nullptr && selection.contains(comp->getNodeId()))
+            selectionDragStartPositions.emplace_back(comp->getNodeId(), comp->getPosition());
+    }
+    selectionDragActive = selectionDragStartPositions.size() > 1;
+}
+
+void GraphEditor::dragSelectionBy(juce::Point<int> delta, ModuleComponent* initiator) {
+    if (!selectionDragActive)
+        return;
+
+    // Place each follower from ITS OWN recorded origin. Applying per-frame deltas incrementally
+    // would accumulate rounding error at non-1.0 zoom and shear the group apart.
+    for (auto& [nodeId, startPos] : selectionDragStartPositions) {
+        for (auto* comp : content.getModules()) {
+            if (comp == nullptr || comp == initiator || comp->getNodeId() != nodeId)
+                continue;
+            comp->setTopLeftPosition(startPos + delta);
+            break;
+        }
+    }
+}
+
+void GraphEditor::finalizeSelectionDrag() {
+    if (!selectionDragActive) {
+        selectionDragStartPositions.clear();
+        return;
+    }
+
+    // Resolve the group as a single rigid body: snap and de-overlap its bounding box, then apply
+    // that one offset to every member. Running finalizeModuleDrag() per module would let members
+    // spiral away from each other and destroy the layout the user arranged.
+    std::vector<ModuleComponent*> members;
+    juce::Rectangle<int> groupBounds;
+    for (auto& [nodeId, startPos] : selectionDragStartPositions) {
+        juce::ignoreUnused(startPos);
+        for (auto* comp : content.getModules()) {
+            if (comp == nullptr || comp->getNodeId() != nodeId)
+                continue;
+            members.push_back(comp);
+            groupBounds = groupBounds.isEmpty() ? comp->getBounds() : groupBounds.getUnion(comp->getBounds());
+            break;
+        }
+    }
+
+    if (!members.empty() && !groupBounds.isEmpty()) {
+        auto snapped = synth::LayoutUtil::snap(groupBounds.getTopLeft());
+        // Collide against unselected modules only — members are moving together and must not be
+        // treated as obstacles by one another.
+        auto obstacles = collectModuleBoxes(/*selectedOnly=*/false, /*excludeSelected=*/true);
+        auto clear = synth::LayoutUtil::findFreeSlot(snapped, groupBounds.getWidth(), groupBounds.getHeight(),
+                                                     obstacles, juce::AudioProcessorGraph::NodeID{});
+        auto offset = clear - groupBounds.getTopLeft();
+
+        for (auto* comp : members) {
+            comp->setTopLeftPosition(comp->getPosition() + offset);
+            updateModulePosition(comp);
+        }
+    }
+
+    selectionDragActive = false;
+    selectionDragStartPositions.clear();
+    content.repaint();
+}
+
+void GraphEditor::cancelSelectionDrag() {
+    selectionDragActive = false;
+    selectionDragStartPositions.clear();
+}
+
+// ---- Snippets ----
+
+juce::Point<int> GraphEditor::estimateSnippetSize(const juce::String& payload) const {
+    // Fallback footprint when the snippet can't be resolved or carries no placeable nodes.
+    const juce::Point<int> fallback{synth::LayoutUtil::kSingleWidth, 200};
+
+    if (!snippetProvider)
+        return fallback;
+
+    auto snippet = snippetProvider(synth::SnippetManager::nameFromPayload(payload));
+    auto* obj = snippet.getDynamicObject();
+    if (obj == nullptr || !obj->hasProperty("nodes"))
+        return fallback;
+    auto* nodes = obj->getProperty("nodes").getArray();
+    if (nodes == nullptr || nodes->isEmpty())
+        return fallback;
+
+    // Snippet positions are already origin-relative, so the union of every node's estimated box
+    // from (0,0) is the group footprint.
+    juce::Rectangle<int> bounds;
+    for (const auto& nVar : *nodes) {
+        auto* nObj = nVar.getDynamicObject();
+        if (nObj == nullptr)
+            continue;
+
+        juce::Point<int> pos;
+        if (auto* posObj = nObj->getProperty("position").getDynamicObject()) {
+            pos = {(int)posObj->getProperty("x"), (int)posObj->getProperty("y")};
+        }
+        auto size = estimateModuleSize(nObj->getProperty("type").toString());
+        juce::Rectangle<int> box(pos.x, pos.y, size.x, size.y);
+        bounds = bounds.isEmpty() ? box : bounds.getUnion(box);
+    }
+
+    return bounds.isEmpty() ? fallback : juce::Point<int>(bounds.getWidth(), bounds.getHeight());
+}
+
+juce::var GraphEditor::extractSelectionSnippet(const juce::String& name) {
+    return synth::SnippetManager::extractSnippet(audioEngine.getGraph(), selection.getSelected(), name);
+}
+
+bool GraphEditor::insertSnippetAt(const juce::var& snippet, juce::Point<int> canvasPos) {
+    auto& graph = audioEngine.getGraph();
+
+    // Snap the drop point so an inserted group lands on the same grid as everything else. The
+    // snippet's own internal offsets are preserved relative to it.
+    auto dropPos = synth::LayoutUtil::snap(canvasPos);
+
+    std::vector<juce::AudioProcessorGraph::NodeID> added;
+    auto doInsert = [this, &graph, &snippet, dropPos, &added] {
+        added = synth::SnippetManager::insertSnippet(snippet, graph, dropPos);
+        updateComponents();
+    };
+
+    if (undoManager)
+        undoManager->recordStructuralChange(graph, doInsert);
+    else
+        doInsert();
+
+    if (added.empty())
+        return false;
+
+    // Leave the freshly inserted group selected: it is what the user will want to move next.
+    applySelectionChange(added);
+    repaint();
+    return true;
+}
+
+bool GraphEditor::keyPressed(const juce::KeyPress& key) {
+    if (key == juce::KeyPress::escapeKey) {
+        if (selection.isEmpty())
+            return false;
+        clearSelection();
+        return true;
+    }
+
+    if (key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey) {
+        if (selection.isEmpty())
+            return false;
+        deleteSelection();
+        return true;
+    }
+
+    return false;
 }
 
 void GraphEditor::mouseDoubleClick(const juce::MouseEvent& e) {
@@ -1374,7 +1741,16 @@ bool GraphEditor::isInterestedInDragSource(const SourceDetails& dragSourceDetail
 
 void GraphEditor::itemDragEnter(const SourceDetails& dragSourceDetails) {
     juce::String name = dragSourceDetails.description.toString();
-    auto estSize = estimateModuleSize(name);
+
+    // A snippet covers a whole group, so size the ghost from the snippet's own bounding box
+    // instead of the single-module estimate table.
+    juce::Point<int> estSize;
+    if (synth::SnippetManager::isSnippetPayload(name)) {
+        estSize = estimateSnippetSize(name);
+    } else {
+        estSize = estimateModuleSize(name);
+    }
+
     beginDragPreview(estSize.x, estSize.y, juce::AudioProcessorGraph::NodeID{});
     // Compute initial ghost position
     auto canvasPos = content.getLocalPoint(this, dragSourceDetails.localPosition).roundToInt();
@@ -1393,6 +1769,19 @@ void GraphEditor::itemDragExit(const SourceDetails& dragSourceDetails) {
 
 void GraphEditor::itemDropped(const SourceDetails& dragSourceDetails) {
     juce::String name = dragSourceDetails.description.toString();
+
+    // Snippet drop: resolve the payload to its JSON via the owner and insert the whole group.
+    if (synth::SnippetManager::isSnippetPayload(name)) {
+        endDragPreview();
+        if (!snippetProvider)
+            return;
+        auto snippet = snippetProvider(synth::SnippetManager::nameFromPayload(name));
+        if (!snippet.isObject())
+            return;
+        insertSnippetAt(snippet, content.getLocalPoint(this, dragSourceDetails.localPosition).roundToInt());
+        return;
+    }
+
     auto newProcessor = synth::AIStateMapper::createModule(name);
 
     if (newProcessor) {

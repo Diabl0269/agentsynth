@@ -1,6 +1,7 @@
 # Testing Guide
 
-All tests use GoogleTest and run headless (no audio device, no GUI window). ~523 tests across ~68 suites.
+All tests use GoogleTest and run headless (no audio device, no GUI window). 855 tests across 117 suites
+(`./build/Tests/Tests` reports the authoritative count; the per-section totals below are approximate).
 
 ```bash
 # Run all tests (ENABLE_TESTS defaults OFF — must be passed explicitly)
@@ -47,7 +48,7 @@ Test module interactions within the audio graph and cross-system integrations.
 | OllamaProviderTest | 10 | AI LLM HTTP requests, streaming responses, model management, non-blocking discovery; `SendPromptWithNoModelFailsWithoutHittingNetwork` — fail-fast with no network call when `currentModel` is empty; `SendPromptIncludesSelectedModelInRequestBody` — captures the POST body and asserts `"model"` matches `setModel()` (regression lock for f7cba4a / empty-model 400s); `QueuedRequestDuringThreadShutdownStillCompletes` — a request enqueued as the worker winds down still gets a callback (request-loss race); `PendingRequestsAreFailedOnDestruction` — requests still queued at destruction are failed *before* `~OllamaProvider()` returns. Both use bounded `condition_variable` waits and fail on timeout rather than sleeping. **Never call `stopThread(0)` in a test** — it force-kills via `pthread_cancel`, which aborts under glibc |
 | AIIntegrationServiceTest | 9 | Module suggestions, parameter recommendations, graph state mapping |
 
-### Component Workflow Tests (~50 tests)
+### Component Workflow Tests (~132 tests)
 
 Test UI component interactions using in-process construction (no window, no display).
 
@@ -57,6 +58,9 @@ Test UI component interactions using in-process construction (no window, no disp
 | AIChatComponentTest | 3 | Initialization/resizing, send-message updates UI + history via mock provider; `RefreshModelsSelectsModelWhenProviderInstalledAfterConstruction` — reproduces MainComponent's member-init ordering (chat component constructed before a provider is installed), asserting `getCurrentModel()` stays empty until a post-construction `setProvider()` + `refreshModels()` |
 | GraphEditorTest | 11 | Module drag-and-drop, port connection via beginConnectionDrag/endConnectionDrag, deletion, mod matrix visibility, snap-on-drop (position is grid-multiple of 8), overlap resolution (second drop at same coord produces non-overlapping bounding boxes) |
 | ModuleComponentTest | 5 | Initialization, resizing, parameter attachment to UI sliders; bypass/mute/delete are DrawableButtons with correct header bounds; delete button triggers requestDeleteModule |
+| SelectionModelTests | 22 | Multi-select primitives (issue #156, `Source/UI/SelectionModel.h` — pure, no GUI). `SelectionModel` add/remove/toggle/setSelection/clear; `NodeID{0}` rejected as the graph's invalid sentinel; `getSelected()` ordered by uid regardless of insertion order (snippet node order must not depend on click order); `retainOnly` staleness pruning. `marqueeRectFrom` normalises a drag in all four directions. `hitTestMarquee` uses intersection not containment (a clipped edge selects), degenerate band selects nothing, invalid box ids skipped. `unionSelection` for the additive marquee |
+| MultiSelectTests | 31 | GraphEditor-level multi-select (issue #156). Selection API (replace vs additive toggle, select-all, clear, prune after a node is removed behind the editor's back). Marquee: touches-to-select, replace vs add semantics, shrinking the band deselects, band over empty canvas deselects, update-without-begin is a no-op. Group drag: followers move by the initiator's delta, `finalizeSelectionDrag` preserves relative layout and snaps the *group* box to the grid, single selection does not engage group drag, `cancelSelectionDrag` leaves off-grid positions untouched, follower positions reach node properties. `deleteSelection` is ONE undo step for the whole group. Snippet drop through `itemDropped` with a `snippet:` payload; plain module drops still work; canvas Delete/Backspace/Escape keys return `false` when nothing is selected so they fall through |
+| ModuleLibraryCollapseTests | 29 | Collapsible sidebar sections + Snippets section (issue #156). `HitTestingAgreesWithTheRowLayout` — every row's centre maps back to its own entry (paint and hit-testing share `buildRows()`); rows never overlap; collapse hides a section's rows but keeps its header and shrinks `getTotalContentHeight()`; header click and top-strip click toggle; `toggleAllSections` folds from a partial state rather than unfolding; `onCollapseStateChanged` fires only for user-driven changes, never for the `setCollapsedSections` restore path; blank persisted state expands everything; Snippets section shows an empty hint with no snippets, becomes draggable rows when populated, and sits ahead of the module catalogue |
 | MidiKeyboardModuleTest | 4 | Note on/off, key press handling, velocity |
 | VisualBufferTest | 3 | Scope visualization buffer management, read/write, ringbuffer behavior |
 | ModuleBaseTest | 4 | Parameter getters, port labels, bypass functionality |
@@ -89,7 +93,7 @@ comp.getAppPropertiesForTest().getUserSettings()->setValue("librarySidebarVisibl
 // TearDown(): reset to defaults, then tmpDir.deleteRecursively()
 ```
 
-### State Management Tests (~46 tests)
+### State Management Tests (~82 tests)
 
 Test persistence, serialization, and state restoration.
 
@@ -98,6 +102,7 @@ Test persistence, serialization, and state restoration.
 | PresetManagerTest | 12 | Preset listing, load all presets, default preset validation, audio output connectivity, all 7 factory presets load with zero pairwise bounding-box overlaps at kCollisionGap=12; `AllPresetsPositionsOnGrid` (every baked x,y %8==0); estimateModuleSize mirror updated: Sequencer/PolySequencer/MidiKeyboard→560 (kDoubleWidth), Attenuverter excluded via `continue` |
 | UndoRedoTest | 12 | Add/remove modules, connections, parameter changes, complex sequences, rapid operations, auto-arrange is a single undo step (one Cmd+Z restores all pre-arrange positions) |
 | AIStateMapperTest | 24 | Graph JSON round-trip serialization, parameter validation, modulation serialization, merge mode, schema generation |
+| SnippetManagerTests | 36 | Module snippets / grouping (issue #156, `Source/SnippetManager.{h,cpp}` — headless). **Extraction:** only selected modules; graph I/O nodes excluded even when selected; only connections with *both* endpoints inside the selection; positions normalised to the selection's top-left with relative layout preserved; modulation stored as a `modulations` entry with the Attenuverter never becoming a snippet node; modulation leaving the selection dropped; stale/absent ids ignored. **Ids:** `nextFreeIdBase` above every existing uid; `prepareForInsert` renumbers + offsets, never mutates its input (the library inserts one loaded snippet repeatedly), clamps away from `NodeID{0}`. **Insert:** merges without disturbing a pre-existing module of the same type (the merge-collision regression), places the group at the drop point, `PreservesParameterValuesThatLookNormalised` (a 0.5 Hz LFO rate on a 0.01–20 range survives — the strict-validate / trusted-apply split), rebuilds modulation chains, two inserts give two independent copies, malformed JSON rejected without partially applying, dangling connections dropped. **Persistence:** save/load/list/delete round-trip, insert from disk, name rewritten to the sanitised form, empty snippet and unusable name refused, corrupt files skipped by `listSnippets`, path separators stripped so a name cannot escape the directory, length capped |
 
 ### Layout Tests (~8 tests)
 

@@ -586,15 +586,18 @@ void ModuleComponent::paint(juce::Graphics& g) {
     // When the cast is null we fall back to a plain themed-ish fill so those tests don't crash.
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
 
+    // Multi-select state (issue #156). The theme already owns the full selected treatment
+    // (accent border + glow); this just supplies the flag it was always waiting for.
+    const bool isSelected = owner.isNodeSelected(nodeId);
+
     if (lf != nullptr) {
         // Single owner of card treatment: background, drop shadow, body fill, border, and the
-        // header band (filled + title drawn) all come from the active theme. selected=false for
-        // v1 (no per-module selection model yet — see spec section 12).
-        lf->drawModulePanel(g, getLocalBounds().toFloat(), 24, module->getName(), /*selected*/ false, isBypassed);
+        // header band (filled + title drawn) all come from the active theme.
+        lf->drawModulePanel(g, getLocalBounds().toFloat(), 24, module->getName(), isSelected, isBypassed);
     } else {
         // Fallback path (no themed LnF): plain fill + simple header so tests render without crashing.
         g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
-        g.setColour(juce::Colours::black);
+        g.setColour(isSelected ? juce::Colours::aqua : juce::Colours::black);
         g.drawRect(getLocalBounds(), 2);
         g.setColour(juce::Colours::darkgrey);
         g.fillRect(0, 0, getWidth(), 24);
@@ -1078,7 +1081,25 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             return; // cannot drag
 
         if (e.mods.isPopupMenu()) {
+            // Right-clicking outside the current selection retargets it to this module, so the
+            // menu always acts on something the user can see is selected.
+            if (!owner.isNodeSelected(nodeId))
+                owner.selectModule(nodeId, false);
+
             juce::PopupMenu m;
+
+            // Selection actions (issue #156). Offered whenever this module is selected — a
+            // single-module snippet is legal, it is just a group of one.
+            const int selectionCount = owner.getSelectionCount();
+            m.addItem(selectionCount > 1 ? "Save Selection as Snippet..." : "Save as Snippet...", [this] {
+                if (owner.onSaveSnippetRequested)
+                    owner.onSaveSnippetRequested();
+            });
+            if (selectionCount > 1) {
+                m.addItem("Delete " + juce::String(selectionCount) + " Selected Modules",
+                          [this] { owner.deleteSelection(); });
+            }
+            m.addSeparator();
 
             // Bypass toggle (only for actual modules)
             if (auto* mod = dynamic_cast<ModuleBase*>(module)) {
@@ -1145,10 +1166,27 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             m.addItem("Delete Module", [this] { owner.deleteModule(this); });
             m.showMenuAsync(juce::PopupMenu::Options());
         } else {
+            // ---- Selection semantics (issue #156) ----
+            // Shift/Cmd-click toggles membership and does NOT begin a drag: a modifier-click is an
+            // edit to the selection, not a move.
+            const bool additive = e.mods.isShiftDown() || e.mods.isCommandDown() || e.mods.isCtrlDown();
+            if (additive) {
+                owner.selectModule(nodeId, true);
+                return;
+            }
+
+            // A plain click on an already-selected module keeps the whole group intact so it can be
+            // dragged; clicking anything else collapses the selection onto it.
+            if (!owner.isNodeSelected(nodeId))
+                owner.selectModule(nodeId, false);
+
             dragStartPosition = getPosition();
+            bodyDragActive = true;
             if (undoManager)
                 undoManager->captureBeforeState(owner.getAudioEngine().getGraph());
             dragger.startDraggingComponent(this, e);
+            // Record every selected module's origin so they can all follow this one.
+            owner.beginSelectionDrag();
             // Show grid + ghost for this module-body drag.
             owner.beginDragPreview(getWidth(), getHeight(), getNodeId());
         }
@@ -1164,7 +1202,12 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
     if (getPortForPoint(e.getMouseDownPosition())) {
         owner.dragConnection(e.getScreenPosition());
     } else {
+        if (!bodyDragActive)
+            return; // modifier-click toggled selection; the dragger was never armed
+
         dragger.dragComponent(this, e, nullptr);
+        // Carry every other selected module by the same delta from its own recorded origin.
+        owner.dragSelectionBy(getPosition() - dragStartPosition, this);
         // Update the landing ghost to follow the live drag position.
         owner.updateDragPreview(getPosition());
         if (auto* p = getParentComponent())
@@ -1176,15 +1219,29 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
     if (getPortForPoint(e.getMouseDownPosition())) {
         owner.endConnectionDrag(e.getScreenPosition());
     } else {
+        if (!bodyDragActive)
+            return;
+        bodyDragActive = false;
+
         // Clear ghost overlay before finalizing so the overlay is gone at the exact
         // moment the module lands in its snapped position.
         owner.endDragPreview();
         if (getPosition() != dragStartPosition) {
             // Snap to grid and resolve overlap BEFORE the undo snapshot so the
             // snapped/cleared final position is what gets captured in the diff.
-            owner.finalizeModuleDrag(this);
+            //
+            // A group drag resolves as one rigid body (finalizeSelectionDrag); resolving each
+            // member independently would spiral them apart and destroy the arrangement.
+            if (owner.isSelectionDragActive())
+                owner.finalizeSelectionDrag();
+            else
+                owner.finalizeModuleDrag(this);
+
             if (undoManager)
                 undoManager->pushSnapshotFromCapture(owner.getAudioEngine().getGraph());
+        } else {
+            // Click without movement: drop the recorded origins without re-resolving positions.
+            owner.cancelSelectionDrag();
         }
     }
 }

@@ -92,13 +92,30 @@ static void simulateMouseExit(ModuleLibraryComponent& comp) {
     comp.mouseExit(evt);
 }
 
+// Vertical centre of the first draggable row. Resolved from the component's own layout rather
+// than hard-coded: the sidebar gained a Snippets section and a collapse-all strip (issue #156),
+// and every row y shifted. Asking the component keeps these tests about hover behaviour instead
+// of about a magic offset that moves whenever a section is added.
+static int firstDraggableRowY(const ModuleLibraryComponent& comp) {
+    const int index = comp.getFirstDraggableEntryIndex();
+    return index >= 0 ? comp.getRowCentreY(index) : -1;
+}
+
 TEST(ModuleLibraryHoverIndex, HoverOnHeaderRowIsMinusOne) {
     ModuleLibraryComponent comp;
     comp.setSize(200, 600);
 
-    // The very first header starts at y=10 (height 25, so rows 10..34).
-    simulateMouseMoveAt(comp, 12);
-    // Headers never get a hover index.
+    // Find a real header row and hover its centre — headers never get a hover index.
+    int headerY = -1;
+    for (int i = 0; i < comp.getEntryCount(); ++i) {
+        if (comp.getEntry(i).kind == ModuleLibraryComponent::RowKind::Header) {
+            headerY = comp.getRowCentreY(i);
+            break;
+        }
+    }
+    ASSERT_GT(headerY, 0);
+
+    simulateMouseMoveAt(comp, headerY);
     EXPECT_EQ(comp.getHoveredIndex(), -1) << "Hovering over a header row must not set a positive hover index";
 }
 
@@ -106,13 +123,14 @@ TEST(ModuleLibraryHoverIndex, HoverOnFirstItemRow) {
     ModuleLibraryComponent comp;
     comp.setSize(200, 600);
 
-    // First item ("Oscillator") starts at y=35 (after header h=25 from y=10).
-    // Row height = 32, so it occupies y=35..66.
-    simulateMouseMoveAt(comp, 40);
+    const int y = firstDraggableRowY(comp);
+    ASSERT_GT(y, 0);
+
+    simulateMouseMoveAt(comp, y);
     int idx = comp.getHoveredIndex();
-    EXPECT_GE(idx, 0) << "Hovering inside first item row must set a non-negative index";
+    EXPECT_GE(idx, 0) << "Hovering inside the first draggable row must set a non-negative index";
     EXPECT_LT(idx, comp.getEntryCount()) << "Hovered index must be within valid range";
-    // The entry at that index must not be a header.
+    EXPECT_NE(comp.getEntry(idx).kind, ModuleLibraryComponent::RowKind::Header);
 }
 
 TEST(ModuleLibraryHoverIndex, MouseExitClearsHoverIndex) {
@@ -120,7 +138,9 @@ TEST(ModuleLibraryHoverIndex, MouseExitClearsHoverIndex) {
     comp.setSize(200, 600);
 
     // First hover over a valid item row.
-    simulateMouseMoveAt(comp, 40);
+    const int y = firstDraggableRowY(comp);
+    ASSERT_GT(y, 0);
+    simulateMouseMoveAt(comp, y);
     ASSERT_GE(comp.getHoveredIndex(), 0);
 
     // Then exit.
@@ -172,8 +192,8 @@ TEST(ModuleLibraryPaintSmoke, PaintWithHoveredIndexNoCrash) {
     ModuleLibraryComponent comp;
     comp.setSize(200, 600);
 
-    // Simulate hovering over the first item row (y=40).
-    simulateMouseMoveAt(comp, 40);
+    // Simulate hovering over the first draggable row.
+    simulateMouseMoveAt(comp, firstDraggableRowY(comp));
     ASSERT_GE(comp.getHoveredIndex(), 0);
 
     juce::Image img(juce::Image::ARGB, 200, 600, true);
@@ -186,7 +206,7 @@ TEST(ModuleLibraryPaintSmoke, PaintAfterMouseExitNoCrash) {
     ModuleLibraryComponent comp;
     comp.setSize(200, 600);
 
-    simulateMouseMoveAt(comp, 40);
+    simulateMouseMoveAt(comp, firstDraggableRowY(comp));
     simulateMouseExit(comp);
     ASSERT_EQ(comp.getHoveredIndex(), -1);
 

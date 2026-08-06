@@ -69,6 +69,10 @@ add_executable(Tests
     UIAnimationTests.cpp
     GraphEditorOnboardingTests.cpp
     ModuleLibraryComponentTests.cpp
+    ModuleLibraryCollapseTests.cpp
+    SelectionModelTests.cpp
+    SnippetManagerTests.cpp
+    MultiSelectTests.cpp
     PanelAnimationAndLoadingTests.cpp
     ../Source/MainComponent.cpp
     ../Source/UI/GraphEditor.cpp
