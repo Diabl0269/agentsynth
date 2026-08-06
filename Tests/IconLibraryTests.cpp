@@ -260,7 +260,8 @@ TEST(IconLibraryTest, WaveformIconEnumCountCoversNewIcons) {
     // static_assert in IconLibrary.cpp enforces kTable alignment at compile time; this runtime
     // check catches any mismatch that slips through without a rebuild.
     EXPECT_EQ((int)Icon::kCount, 28);
-    // Spot-check ordinal positions of the new waveform icons (shifted +2 by ActionNew at index 6 and ThemeToggle at index 11).
+    // Spot-check ordinal positions of the new waveform icons (shifted +2 by ActionNew at index 6 and ThemeToggle at
+    // index 11).
     EXPECT_EQ((int)Icon::WaveformSine, 24);
     EXPECT_EQ((int)Icon::WaveformSaw, 25);
     EXPECT_EQ((int)Icon::WaveformSquare, 26);

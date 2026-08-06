@@ -54,11 +54,7 @@ public:
     // falls back to the default built-in and broadcasts.
     int loadUserThemesFromFolder();
 
-    enum class ThemeMode {
-        Dark,
-        Light,
-        System
-    };
+    enum class ThemeMode { Dark, Light, System };
 
     // Default theme accessors & mutators for Dark/Light defaults
     juce::String getDefaultDarkThemeId() const;

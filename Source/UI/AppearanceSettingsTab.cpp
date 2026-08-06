@@ -108,7 +108,9 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     modeCombo.addItem("Light", 2);
     modeCombo.addItem("System", 3);
     auto currentMode = themeManager.getThemeMode();
-    modeCombo.setSelectedId(currentMode == ThemeManager::ThemeMode::Dark ? 1 : (currentMode == ThemeManager::ThemeMode::Light ? 2 : 3), juce::dontSendNotification);
+    modeCombo.setSelectedId(
+        currentMode == ThemeManager::ThemeMode::Dark ? 1 : (currentMode == ThemeManager::ThemeMode::Light ? 2 : 3),
+        juce::dontSendNotification);
     modeCombo.onChange = [this] {
         int id = modeCombo.getSelectedId();
         if (id == 1)
@@ -262,7 +264,9 @@ void AppearanceSettingsTab::selectThemeRow(int row) {
 void AppearanceSettingsTab::changeListenerCallback(juce::ChangeBroadcaster*) {
     // External theme change (or our own setActiveTheme): re-sync selection + redraw.
     auto currentMode = themeManager.getThemeMode();
-    modeCombo.setSelectedId(currentMode == ThemeManager::ThemeMode::Dark ? 1 : (currentMode == ThemeManager::ThemeMode::Light ? 2 : 3), juce::dontSendNotification);
+    modeCombo.setSelectedId(
+        currentMode == ThemeManager::ThemeMode::Dark ? 1 : (currentMode == ThemeManager::ThemeMode::Light ? 2 : 3),
+        juce::dontSendNotification);
 
     juce::String currentDarkId = themeManager.getDefaultDarkThemeId();
     const auto& ths = themeManager.getThemes();
