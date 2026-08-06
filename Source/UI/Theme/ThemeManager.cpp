@@ -110,13 +110,22 @@ void ThemeManager::setThemeMode(ThemeMode newMode) {
         }
     }
 
-    if (mode == ThemeMode::Dark) {
-        setActiveTheme(getDefaultDarkThemeId());
-    } else if (mode == ThemeMode::Light) {
-        setActiveTheme(getDefaultLightThemeId());
+    juce::String targetId = getDefaultDarkThemeId();
+    if (mode == ThemeMode::Light) {
+        targetId = getDefaultLightThemeId();
     } else if (mode == ThemeMode::System) {
         auto sysIsDark = juce::Desktop::getInstance().isDarkModeActive();
-        setActiveTheme(sysIsDark ? getDefaultDarkThemeId() : getDefaultLightThemeId());
+        targetId = sysIsDark ? getDefaultDarkThemeId() : getDefaultLightThemeId();
+    }
+
+    int idx = indexOfId(targetId);
+    if (idx >= 0) {
+        activeIndex = idx;
+        if (properties != nullptr) {
+            if (auto* settings = properties->getUserSettings())
+                settings->setValue("themeId", targetId);
+        }
+        sendSynchronousChangeMessage();
     }
 }
 
