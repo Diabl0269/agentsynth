@@ -78,6 +78,7 @@ add_library(Core STATIC
     Source/Modules/FX/FlangerModule.h
     Source/Modules/FX/LimiterModule.h
     Source/Modules/FX/BitcrusherModule.h
+    Source/Modules/FX/PitchShifterModule.h
     Source/Modules/NoiseModule.h
     # AI
     Source/AI/AIProvider.h

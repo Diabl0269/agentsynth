@@ -40,6 +40,7 @@ add_executable(Tests
     AIUndoTests.cpp
     ModMatrixTests.cpp
     FXModuleTests.cpp
+    PitchShifterModuleTests.cpp
     VoiceMixerModuleTests.cpp
     BitcrusherModuleTests.cpp
     NoiseModuleTests.cpp

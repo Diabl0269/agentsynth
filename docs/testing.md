@@ -31,7 +31,8 @@ Headless DSP tests that render audio through individual modules and verify outpu
 | LFOModuleTest | 11 | LFO waveform output, rate modulation, sync behavior |
 | VCAModuleTest | 5 | Gain application, envelope following, silence detection |
 | AttenuverterModuleTest | 4 | CV signal attenuation, bipolar control, CV modulation |
-| FX module tests | 52 | Delay (passthrough, feedback), Distortion (clipping, drive), Reverb (room size), Chorus, Phaser, Compressor, Flanger, Limiter, Bitcrusher (downsampling, quantization, CV) |
+| FX module tests | 53 | Delay (passthrough, feedback), Distortion (clipping, drive), Reverb (room size), Chorus, Phaser, Compressor, Flanger, Limiter, Bitcrusher (downsampling, quantization, CV) |
+| PitchShifterModuleTest | 22 | Pitch mode transposition ratios (spectral peak), Frequency mode SSB offset + sideband suppression, CV routing, feedback stability, state round-trip |
 | AntiClickTest | 4 | ADSR minimum release, smooth parameter transitions |
 | EdgeCaseTests | 21 | Zero-length buffers, extreme parameters, single-sample buffers, rapid parameter changes, large buffers |
 | AudioRenderingTests | 26 | Snapshot-based tests comparing bit-perfect output against reference files; covers full chains (Osc->Filter->VCA), modulation accuracy, and External MIDI input |
@@ -61,6 +62,7 @@ Test UI component interactions using in-process construction (no window, no disp
 | VisualBufferTest | 3 | Scope visualization buffer management, read/write, ringbuffer behavior |
 | ModuleBaseTest | 4 | Parameter getters, port labels, bypass functionality |
 | ModuleBypassTest | 5 | Default state, toggle, signal passing when bypassed |
+| FXBypassTest | 23 | Per-FX bypass dry pass-through, CV-channel clearing, mute silencing |
 | VisualSignalFlowTests | 8 | AttenuverterModule peak/mod value tracking, VisualBuffer RMS computation, AudioEngine::getModulationDisplayInfo() population |
 | SettingsWindowTest | 8 | Tab structure, tab persistence, audio device selector, AI settings persistence, resize safety, shortcuts reference |
 | ShortcutManagerTest | 8 | Default bindings, reverse lookup, conflict detection, persistence round-trip, reset to defaults, display strings |

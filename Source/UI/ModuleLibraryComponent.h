@@ -36,6 +36,7 @@ public:
             {"Flanger", false},
             {"Distortion", false},
             {"Bitcrusher", false},
+            {"Pitch Shifter", false},
             {"Time FX", true},
             {"Delay", false},
             {"Reverb", false},
@@ -87,6 +88,8 @@ public:
             return "Waveshaping distortion from soft saturation to hard clipping.";
         if (moduleName.equalsIgnoreCase("Bitcrusher"))
             return "For Lo-Fi, sample-rate reduction, and retro digital grit.";
+        if (moduleName.equalsIgnoreCase("Pitch Shifter"))
+            return "Transposes by semitones or shifts every partial by a fixed number of Hz.";
         if (moduleName.equalsIgnoreCase("Delay"))
             return "Tempo-syncable stereo echo / delay line.";
         if (moduleName.equalsIgnoreCase("Reverb"))

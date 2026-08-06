@@ -45,6 +45,7 @@ enum class ModuleType {
     Limiter,
     VoiceMixer,
     Bitcrusher,
+    PitchShifter,
     Noise
 };
 
