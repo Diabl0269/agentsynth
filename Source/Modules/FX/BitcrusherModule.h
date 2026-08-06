@@ -41,7 +41,8 @@ public:
         int numSamples = buffer.getNumSamples();
         int numChannels = buffer.getNumChannels();
 
-        if (numSamples == 0 || numChannels == 0) return;
+        if (numSamples == 0 || numChannels == 0)
+            return;
 
         if (isMuted()) {
             buffer.clear();
@@ -70,17 +71,20 @@ public:
 
         if (cvRate) {
             float rms = 0.0f;
-            for (int i = 0; i < numSamples; ++i) rms += cvRate[i] * cvRate[i];
+            for (int i = 0; i < numSamples; ++i)
+                rms += cvRate[i] * cvRate[i];
             cvRateActive = (rms / numSamples) > 1e-3f;
         }
         if (cvDepth) {
             float rms = 0.0f;
-            for (int i = 0; i < numSamples; ++i) rms += cvDepth[i] * cvDepth[i];
+            for (int i = 0; i < numSamples; ++i)
+                rms += cvDepth[i] * cvDepth[i];
             cvDepthActive = (rms / numSamples) > 1e-3f;
         }
         if (cvMix) {
             float rms = 0.0f;
-            for (int i = 0; i < numSamples; ++i) rms += cvMix[i] * cvMix[i];
+            for (int i = 0; i < numSamples; ++i)
+                rms += cvMix[i] * cvMix[i];
             cvMixActive = (rms / numSamples) > 1e-3f;
         }
 
@@ -110,15 +114,15 @@ public:
             phase += 1.0f;
             if (phase >= currentRate) {
                 phase -= currentRate;
-                
+
                 for (int ch = 0; ch < 2; ++ch) {
                     float input = dryBuffer.getSample(ch, i);
-                    
+
                     if (currentDither > 0.0f) {
                         float noise = random.nextFloat() * 2.0f - 1.0f;
                         input += noise * currentDither * 0.1f;
                     }
-                    
+
                     float quantized = std::floor(input * steps) / steps;
                     lastSample[ch] = quantized;
                 }
@@ -144,8 +148,8 @@ public:
     }
     juce::String getOutputPortLabel(int i) const override { return i == 0 ? "Left" : "Right"; }
 
-    std::vector<ModulationTarget> getModulationTargets() const override { 
-        return {{"Rate", 2}, {"Depth", 3}, {"Mix", 4}}; 
+    std::vector<ModulationTarget> getModulationTargets() const override {
+        return {{"Rate", 2}, {"Depth", 3}, {"Mix", 4}};
     }
 
     ModulationCategory getModulationCategory() const override { return ModulationCategory::FX; }
@@ -157,12 +161,12 @@ private:
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedDepth;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedMix;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedDither;
-    
+
     juce::AudioParameterFloat* rateParam = nullptr;
     juce::AudioParameterFloat* depthParam = nullptr;
     juce::AudioParameterFloat* mixParam = nullptr;
     juce::AudioParameterFloat* ditherParam = nullptr;
-    
+
     float phase = 0.0f;
     float lastSample[2] = {0.0f, 0.0f};
     juce::Random random;

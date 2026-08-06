@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
 #include "../Source/Modules/FX/BitcrusherModule.h"
+#include <gtest/gtest.h>
 
 TEST(BitcrusherModuleTests, BasicProcessing) {
     BitcrusherModule module;

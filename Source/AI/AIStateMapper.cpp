@@ -4,6 +4,7 @@
 #include "../Modules/ExternalMidiModule.h"
 #include "../Modules/FX/ChorusModule.h"
 
+#include "../Modules/FX/BitcrusherModule.h"
 #include "../Modules/FX/CompressorModule.h"
 #include "../Modules/FX/DelayModule.h"
 #include "../Modules/FX/DistortionModule.h"
@@ -11,7 +12,6 @@
 #include "../Modules/FX/LimiterModule.h"
 #include "../Modules/FX/PhaserModule.h"
 #include "../Modules/FX/ReverbModule.h"
-#include "../Modules/FX/BitcrusherModule.h"
 #include "../Modules/FilterModule.h"
 #include "../Modules/LFOModule.h"
 #include "../Modules/MidiKeyboardModule.h"
@@ -1063,8 +1063,8 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
         if (audioOutputNode != nullptr) {
             // Types that produce audio and should auto-connect to output
             static const std::set<juce::String> audioNodeTypes = {
-                "Oscillator", "Noise",      "Filter", "VCA",    "Distortion", "Delay",   "Reverb",
-                "Amp Env",    "Filter Env", "Chorus", "Phaser", "Compressor", "Flanger", "Limiter", "Bitcrusher"};
+                "Oscillator", "Noise",  "Filter", "VCA",        "Distortion", "Delay",   "Reverb",    "Amp Env",
+                "Filter Env", "Chorus", "Phaser", "Compressor", "Flanger",    "Limiter", "Bitcrusher"};
 
             for (auto newNodeId : newlyCreatedNodes) {
                 auto* node = graph.getNodeForId(newNodeId);
