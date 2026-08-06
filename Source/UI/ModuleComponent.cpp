@@ -79,6 +79,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     }
 
     createSamplerControls();
+    createWavetableControls();
 
     setTitle(module->getName());
     setBufferedToImage(true);
@@ -103,6 +104,12 @@ void ModuleComponent::detachFromProcessor() {
     loadSampleButton.reset();
     sampleNameLabel.reset();
     sampleChooser.reset();
+
+    // Same reason: the wavetable display holds a module reference and its own timer, and the
+    // load button's onClick lambda reaches back into this component.
+    wavetableDisplay.reset();
+    loadWavetableButton.reset();
+    wavetableChooser.reset();
 
     if (auto* parent = getParentComponent())
         parent->removeChildComponent(this);
@@ -626,6 +633,64 @@ void ModuleComponent::refreshSampleLabel(const juce::String& fallbackMessage) {
     repaint();
 }
 
+void ModuleComponent::createWavetableControls() {
+    auto* wtMod = dynamic_cast<WavetableOscillatorModule*>(module);
+    if (wtMod == nullptr)
+        return;
+
+    wavetableDisplay = std::make_unique<WavetableDisplayComponent>(*wtMod);
+    addAndMakeVisible(*wavetableDisplay);
+
+    loadWavetableButton = std::make_unique<juce::TextButton>("Load Wavetable...");
+    loadWavetableButton->setTooltip("Load an audio file as a wavetable (2048-sample frames, Serum style)");
+    loadWavetableButton->onClick = [this] { openWavetableChooser(); };
+    addAndMakeVisible(*loadWavetableButton);
+}
+
+void ModuleComponent::openWavetableChooser() {
+    wavetableChooser =
+        std::make_unique<juce::FileChooser>("Load Wavetable", juce::File(), "*.wav;*.aiff;*.aif;*.flac;*.ogg");
+
+    const auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
+
+    // SafePointer: the dialog is async, so this component (and its module) may be gone by
+    // the time the user picks a file.
+    juce::Component::SafePointer<ModuleComponent> safeThis(this);
+    wavetableChooser->launchAsync(flags, [safeThis](const juce::FileChooser& chooser) {
+        auto* self = safeThis.getComponent();
+        if (self == nullptr)
+            return;
+
+        const juce::File file = chooser.getResult();
+        if (file == juce::File())
+            return;
+
+        auto* wtMod = dynamic_cast<WavetableOscillatorModule*>(self->getModule());
+        if (wtMod == nullptr)
+            return;
+
+        if (!wtMod->loadWavetableFile(file)) {
+            juce::NativeMessageBox::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Load Wavetable",
+                                                        "Could not read \"" + file.getFileName() +
+                                                            "\" as a wavetable.");
+            return;
+        }
+
+        // Switch the Table choice to "Loaded File" so the new table is what sounds.
+        for (auto* param : wtMod->getParameters()) {
+            if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param)) {
+                if (choice->paramID == "table" && choice->choices.size() > 1) {
+                    const float normalised =
+                        (float)WavetableOscillatorModule::kLoadedTableChoice / (float)(choice->choices.size() - 1);
+                    choice->setValueNotifyingHost(normalised);
+                }
+            }
+        }
+
+        self->repaint();
+    });
+}
+
 void ModuleComponent::layoutSequencerStepColumn(int step, int colX, int startY) {
     // Gate slider (row 0)
     juce::String gateId = "Gate " + juce::String(step);
@@ -747,6 +812,17 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
             loadSampleButton->setBounds(narrowX, y, buttonWidth, kRowHeight);
             sampleNameLabel->setBounds(narrowX + buttonWidth + 6, y, narrowW - buttonWidth - 6, kRowHeight);
         }
+        y += kRowHeight + 8;
+    }
+
+    // --- Wavetable chrome: the scanned frame view, then the load button ---
+    if (wavetableDisplay != nullptr && loadWavetableButton != nullptr) {
+        if (apply)
+            wavetableDisplay->setBounds(contentX, y, contentW, kWaveformHeight);
+        y += kWaveformHeight + 8;
+
+        if (apply)
+            loadWavetableButton->setBounds(narrowX, y, narrowW, kRowHeight);
         y += kRowHeight + 8;
     }
 
@@ -1291,6 +1367,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                 std::vector<Category> categories = {
                     {"Sources",
                      {{"Oscillator", ModuleType::Oscillator},
+                      {"Wavetable", ModuleType::Wavetable},
                       {"Noise", ModuleType::Noise},
                       {"Sampler", ModuleType::Sampler},
                       {"LFO", ModuleType::LFO}}},

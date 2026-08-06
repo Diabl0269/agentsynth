@@ -134,6 +134,7 @@ int roleRank(ModuleType t) {
     case ModuleType::ExternalMidi:
     case ModuleType::Noise:
     case ModuleType::Sampler:
+    case ModuleType::Wavetable:
         return 0;
     case ModuleType::Filter:
     case ModuleType::VCA:

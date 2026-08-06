@@ -22,6 +22,7 @@
 #include "../Modules/SequencerModule.h"
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
+#include "../Modules/WavetableOscillatorModule.h"
 #include "../PresetManager.h"
 #include "LayoutUtil.h"
 #include "ModuleComponent.h"
@@ -72,6 +73,8 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         return {280, 293};
     if (typeName == "Sampler")
         return {280, 657};
+    if (typeName == "Wavetable")
+        return {280, 637};
     if (typeName == "Chorus" || typeName == "Phaser" || typeName == "Flanger")
         return {280, 309};
     if (typeName == "Bitcrusher")

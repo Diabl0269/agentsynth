@@ -20,6 +20,7 @@ public:
         entries = {
             {"Sources", true},
             {"Oscillator", false},
+            {"Wavetable", false},
             {"Noise", false},
             {"Sampler", false},
             {"LFO", false},
@@ -63,6 +64,8 @@ public:
     static juce::String descriptionFor(const juce::String& moduleName) {
         if (moduleName.equalsIgnoreCase("Oscillator"))
             return "Generates audio waveforms (sine, saw, square, triangle).";
+        if (moduleName.equalsIgnoreCase("Wavetable"))
+            return "Scans through 3D wavetables — six built-ins or load your own file.";
         if (moduleName.equalsIgnoreCase("Noise"))
             return "Generates noise (white, pink, brown).";
         if (moduleName.equalsIgnoreCase("Sampler"))

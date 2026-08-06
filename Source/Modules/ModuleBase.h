@@ -47,7 +47,8 @@ enum class ModuleType {
     Bitcrusher,
     PitchShifter,
     Noise,
-    Sampler
+    Sampler,
+    Wavetable
 };
 
 class ModuleBase : public juce::AudioProcessor {

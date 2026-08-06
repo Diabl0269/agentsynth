@@ -16,6 +16,8 @@ add_executable(Tests
     FilterTests.cpp
     NoiseModuleTests.cpp
     SamplerModuleTests.cpp
+    WavetableOscillatorModuleTests.cpp
+    WavetableDisplayTests.cpp
     ADSRTests.cpp
     ModuleBaseTests.cpp
     VisualBufferTests.cpp
