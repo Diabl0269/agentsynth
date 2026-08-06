@@ -69,9 +69,12 @@ TEST(BitcrusherModuleTest, DownsamplingAndHold) {
     auto params = module.getParameters();
     for (auto* p : params) {
         if (auto* fp = dynamic_cast<juce::AudioParameterFloat*>(p)) {
-            if (fp->paramID == "rate") fp->setValueNotifyingHost(3.0f / 49.0f); // rate = 4
-            else if (fp->paramID == "depth") fp->setValueNotifyingHost(1.0f); // 24
-            else if (fp->paramID == "mix") fp->setValueNotifyingHost(1.0f); // 1.0
+            if (fp->paramID == "rate")
+                fp->setValueNotifyingHost(3.0f / 49.0f); // rate = 4
+            else if (fp->paramID == "depth")
+                fp->setValueNotifyingHost(1.0f); // 24
+            else if (fp->paramID == "mix")
+                fp->setValueNotifyingHost(1.0f); // 1.0
         }
     }
 
