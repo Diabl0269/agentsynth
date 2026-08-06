@@ -12,7 +12,6 @@
 #include "../Modules/FX/PhaserModule.h"
 #include "../Modules/FX/ReverbModule.h"
 #include "../Modules/FX/BitcrusherModule.h"
-#include "../Modules/NoiseModule.h"
 #include "../Modules/FilterModule.h"
 #include "../Modules/LFOModule.h"
 #include "../Modules/MidiKeyboardModule.h"
@@ -1073,6 +1072,9 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                     continue;
 
                 juce::String typeName = node->getProcessor()->getName();
+                if (audioNodeTypes.find(typeName) == audioNodeTypes.end())
+                    continue;
+
                 bool hasOutgoing = false;
                 for (const auto& conn : graph.getConnections()) {
                     if (conn.source.nodeID == newNodeId && !conn.source.isMIDI()) {
