@@ -559,6 +559,9 @@ void AppLookAndFeel::drawPopupMenuItem(juce::Graphics& g, const juce::Rectangle<
         g.setColour(c.accent);
         g.strokePath(tick, juce::PathStrokeType(1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         g.setColour(col);
+
+        // Shift text right so it does not overlap the checkmark tick
+        textArea = textArea.withTrimmedLeft(16);
     }
 
     // Waveform glyph icon: paint a ~14x14 Drawable to the left of the text.

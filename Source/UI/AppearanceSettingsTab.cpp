@@ -56,12 +56,12 @@ public:
 
         // Name (+ "user" tag) on top.
         auto nameRow = content.removeFromTop(content.getHeight() / 2);
-        g.setColour(juce::Colours::white);
+        g.setColour(themeManager.getActiveTheme().colors.textPrimary);
         g.setFont(juce::Font(juce::FontOptions(14.0f, isActive ? juce::Font::bold : juce::Font::plain)));
         g.drawText(theme.name, nameRow, juce::Justification::centredLeft, true);
 
         if (theme.isUserTheme) {
-            g.setColour(juce::Colours::lightgrey);
+            g.setColour(themeManager.getActiveTheme().colors.textMuted);
             g.setFont(juce::Font(juce::FontOptions(10.0f)));
             g.drawText("user", nameRow, juce::Justification::centredRight, true);
         }
@@ -129,8 +129,7 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     addAndMakeVisible(defaultDarkCombo);
     const auto& themes = themeManager.getThemes();
     for (int i = 0; i < (int)themes.size(); ++i) {
-        if (themes[(size_t)i].isDark)
-            defaultDarkCombo.addItem(themes[(size_t)i].name, i + 1);
+        defaultDarkCombo.addItem(themes[(size_t)i].name, i + 1);
     }
     juce::String currentDarkId = themeManager.getDefaultDarkThemeId();
     for (int i = 0; i < (int)themes.size(); ++i) {
@@ -155,8 +154,7 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
 
     addAndMakeVisible(defaultLightCombo);
     for (int i = 0; i < (int)themes.size(); ++i) {
-        if (!themes[(size_t)i].isDark)
-            defaultLightCombo.addItem(themes[(size_t)i].name, i + 1);
+        defaultLightCombo.addItem(themes[(size_t)i].name, i + 1);
     }
     juce::String currentLightId = themeManager.getDefaultLightThemeId();
     for (int i = 0; i < (int)themes.size(); ++i) {

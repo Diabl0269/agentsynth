@@ -7,7 +7,6 @@ ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm)
     addAndMakeVisible(titleLabel);
     titleLabel.setText("Keyboard Shortcuts", juce::dontSendNotification);
     titleLabel.setFont(juce::FontOptions(18.0f, juce::Font::bold));
-    titleLabel.setColour(juce::Label::textColourId, juce::Colours::white);
 
     for (auto& actionId : shortcutManager.getActionIds()) {
         actionIds.add(actionId);
@@ -15,7 +14,6 @@ ShortcutsSettingsTab::ShortcutsSettingsTab(ShortcutManager& sm)
         auto descLabel = std::make_unique<juce::Label>();
         descLabel->setText(ShortcutManager::getActionDescription(actionId), juce::dontSendNotification);
         descLabel->setFont(juce::FontOptions(14.0f));
-        descLabel->setColour(juce::Label::textColourId, juce::Colours::white);
         addAndMakeVisible(*descLabel);
         descLabels.push_back(std::move(descLabel));
 
