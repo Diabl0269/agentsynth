@@ -698,24 +698,58 @@ TEST_F(GraphEditorTest, ResolvePolyLinkPicksFanMatchingRole) {
     EXPECT_EQ(linkToAdsr.voiceCount, 8);
 }
 
-TEST_F(GraphEditorTest, ResolvePolyLinkStaysMonoWhenOneEndIsMono) {
+TEST_F(GraphEditorTest, ResolvePolyLinkStaysMonoWhenDestIsMono) {
     ADSRModule polyAdsr;
     setPolyParam(polyAdsr, true);
     VCAModule monoVca; // poly defaults to false
 
-    auto link1 = GraphEditor::resolvePolyLink(&polyAdsr, 0, &monoVca, 1);
-    EXPECT_EQ(link1.sourceRawChannel, 0);
-    EXPECT_EQ(link1.destRawChannel, 1);
-    EXPECT_EQ(link1.voiceCount, 1);
+    // A poly source into a mono jack must not sum eight envelopes onto one CV channel.
+    auto link = GraphEditor::resolvePolyLink(&polyAdsr, 0, &monoVca, 1);
+    EXPECT_EQ(link.sourceRawChannel, 0);
+    EXPECT_EQ(link.destRawChannel, 1);
+    EXPECT_EQ(link.voiceCount, 1);
+    EXPECT_EQ(link.sourceStride, 1);
+}
 
-    ADSRModule monoAdsr; // poly defaults to false
+TEST_F(GraphEditorTest, ResolvePolyLinkBroadcastsMonoSourceAcrossModCvFan) {
+    // One mono modulator on a per-voice mod-CV fan drives every voice: all eight wires leave the
+    // same source channel (sourceStride == 0) and land on VCA raw channels 8-15.
+    LFOModule lfo;
     VCAModule polyVca;
     setPolyParam(polyVca, true);
 
-    auto link2 = GraphEditor::resolvePolyLink(&monoAdsr, 0, &polyVca, 1);
-    EXPECT_EQ(link2.sourceRawChannel, 0);
-    EXPECT_EQ(link2.destRawChannel, 8);
-    EXPECT_EQ(link2.voiceCount, 1);
+    auto link = GraphEditor::resolvePolyLink(&lfo, 0, &polyVca, 1);
+    EXPECT_EQ(link.sourceRawChannel, 0);
+    EXPECT_EQ(link.destRawChannel, 8);
+    EXPECT_EQ(link.voiceCount, 8);
+    EXPECT_EQ(link.sourceStride, 0);
+}
+
+TEST_F(GraphEditorTest, ResolvePolyLinkDoesNotBroadcastAudioOrPitchFans) {
+    // Broadcasting is limited to ModCV. Audio would build a paraphonic voice stack, and Pitch/Gate
+    // would make all eight voices sound the same note — both stay single head-to-head wires.
+    OscillatorModule monoOsc; // poly defaults to false
+    FilterModule polyFilter;
+    setPolyParam(polyFilter, true);
+
+    auto audioLink = GraphEditor::resolvePolyLink(&monoOsc, 0, &polyFilter, 0);
+    EXPECT_EQ(audioLink.voiceCount, 1);
+    EXPECT_EQ(audioLink.sourceStride, 1);
+
+    LFOModule lfo;
+    OscillatorModule polyOsc;
+    setPolyParam(polyOsc, true);
+
+    auto pitchLink = GraphEditor::resolvePolyLink(&lfo, 0, &polyOsc, 0);
+    EXPECT_EQ(pitchLink.voiceCount, 1);
+    EXPECT_EQ(pitchLink.sourceStride, 1);
+
+    ADSRModule polyAdsr;
+    setPolyParam(polyAdsr, true);
+
+    auto gateLink = GraphEditor::resolvePolyLink(&lfo, 0, &polyAdsr, 0);
+    EXPECT_EQ(gateLink.voiceCount, 1);
+    EXPECT_EQ(gateLink.sourceStride, 1);
 }
 
 // ---- Integration tests (full graph + drag/toggle interactions) ----
@@ -893,6 +927,145 @@ TEST_F(GraphEditorTest, DisconnectPolyPortRemovesEntireFan) {
         if (conn.source.nodeID == adsrNode->nodeID && conn.destination.nodeID == vcaNode->nodeID)
             ++postCount;
     EXPECT_EQ(postCount, 0);
+}
+
+TEST_F(GraphEditorTest, DragMonoLfoOntoPolyVcaBroadcastsToEveryVoice) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto lfoNode = engine.getGraph().addNode(std::make_unique<LFOModule>());
+    auto vcaNode = engine.getGraph().addNode(std::make_unique<VCAModule>());
+    setPolyParam(*vcaNode->getProcessor(), true);
+
+    editor.updateComponents();
+
+    ModuleComponent* lfoComp = nullptr;
+    ModuleComponent* vcaComp = nullptr;
+
+    auto* content = editor.getChildComponent(0);
+    if (content) {
+        for (auto* contentChild : content->getChildren()) {
+            if (auto* mod = dynamic_cast<ModuleComponent*>(contentChild)) {
+                if (mod->getModule() == lfoNode->getProcessor())
+                    lfoComp = mod;
+                if (mod->getModule() == vcaNode->getProcessor())
+                    vcaComp = mod;
+            }
+        }
+    }
+
+    ASSERT_NE(lfoComp, nullptr);
+    ASSERT_NE(vcaComp, nullptr);
+
+    lfoComp->setBounds(0, 0, 100, 100);
+    vcaComp->setBounds(200, 0, 100, 100);
+
+    editor.beginConnectionDrag(lfoComp, 0, false, false, juce::Point<int>(0, 0));
+    editor.dragConnection(juce::Point<int>(50, 0));
+
+    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(1, true);
+    editor.endConnectionDrag(vcaTargetPoint);
+
+    auto& graph = engine.getGraph();
+
+    // Every voice's gain CV is fed from the SAME LFO output channel — that is the broadcast.
+    for (int i = 0; i < 8; ++i) {
+        bool found = false;
+        for (auto& conn : graph.getConnections()) {
+            if (conn.source.nodeID == lfoNode->nodeID && conn.source.channelIndex == 0 &&
+                conn.destination.nodeID == vcaNode->nodeID && conn.destination.channelIndex == 8 + i) {
+                found = true;
+                break;
+            }
+        }
+        EXPECT_TRUE(found) << "Missing broadcast connection for voice " << i;
+    }
+
+    int connectionCount = 0;
+    for (auto& conn : graph.getConnections())
+        if (conn.source.nodeID == lfoNode->nodeID && conn.destination.nodeID == vcaNode->nodeID)
+            ++connectionCount;
+    EXPECT_EQ(connectionCount, 8);
+
+    // The broadcast must read back as ONE PolyBus wire with an x8 badge, not eight stacked wires.
+    int polyBusCount = 0;
+    for (const auto& r : engine.getModulationRoutings()) {
+        if (r.kind == AudioEngine::RoutingKind::PolyBus && r.sourceNodeID == lfoNode->nodeID &&
+            r.destNodeID == vcaNode->nodeID) {
+            ++polyBusCount;
+            EXPECT_EQ(r.voiceCount, 8);
+            EXPECT_EQ(r.destChannelIndex, 8);
+            EXPECT_EQ(r.role, PortRole::ModCV);
+        }
+    }
+    EXPECT_EQ(polyBusCount, 1);
+
+    int directCvCount = 0;
+    for (const auto& r : engine.getModulationRoutings())
+        if (r.kind == AudioEngine::RoutingKind::DirectCV && r.sourceNodeID == lfoNode->nodeID)
+            ++directCvCount;
+    EXPECT_EQ(directCvCount, 0) << "Broadcast edges should be consumed by the PolyBus collapse";
+}
+
+TEST_F(GraphEditorTest, TogglingPolyOnBroadcastsExistingMonoModWire) {
+    // A mono LFO -> mono VCA CV wire (an attenuverter chain) must spread across all eight voices
+    // when the VCA is switched to poly, rather than staying on voice 0.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto lfoNode = engine.getGraph().addNode(std::make_unique<LFOModule>());
+    auto vcaNode = engine.getGraph().addNode(std::make_unique<VCAModule>());
+
+    editor.updateComponents();
+
+    ModuleComponent* lfoComp = nullptr;
+    ModuleComponent* vcaComp = nullptr;
+
+    auto* content = editor.getChildComponent(0);
+    if (content) {
+        for (auto* contentChild : content->getChildren()) {
+            if (auto* mod = dynamic_cast<ModuleComponent*>(contentChild)) {
+                if (mod->getModule() == lfoNode->getProcessor())
+                    lfoComp = mod;
+                if (mod->getModule() == vcaNode->getProcessor())
+                    vcaComp = mod;
+            }
+        }
+    }
+
+    ASSERT_NE(lfoComp, nullptr);
+    ASSERT_NE(vcaComp, nullptr);
+
+    lfoComp->setBounds(0, 0, 100, 100);
+    vcaComp->setBounds(200, 0, 100, 100);
+
+    editor.beginConnectionDrag(lfoComp, 0, false, false, juce::Point<int>(0, 0));
+    editor.dragConnection(juce::Point<int>(50, 0));
+    editor.endConnectionDrag(vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(1, true));
+
+    auto& graph = engine.getGraph();
+
+    setPolyParam(*vcaNode->getProcessor(), true);
+
+    for (int i = 0; i < 8; ++i) {
+        bool found = false;
+        for (auto& conn : graph.getConnections()) {
+            if (conn.source.nodeID == lfoNode->nodeID && conn.source.channelIndex == 0 &&
+                conn.destination.nodeID == vcaNode->nodeID && conn.destination.channelIndex == 8 + i) {
+                found = true;
+                break;
+            }
+        }
+        EXPECT_TRUE(found) << "Missing broadcast connection for voice " << i << " after poly toggle";
+    }
+
+    bool foundAttenuverter = false;
+    for (auto* node : graph.getNodes())
+        if (dynamic_cast<AttenuverterModule*>(node->getProcessor()) != nullptr)
+            foundAttenuverter = true;
+    EXPECT_FALSE(foundAttenuverter) << "A poly fan is wired direct, so the attenuverter must be gone";
 }
 
 TEST_F(GraphEditorTest, TogglingPolyOnFansOutExistingConnection) {

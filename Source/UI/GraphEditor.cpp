@@ -523,10 +523,25 @@ GraphEditor::PolyLink GraphEditor::resolvePolyLink(const ModuleBase* source, int
     for (const auto& s : sourceTargets) {
         for (const auto& d : destTargets) {
             const int score = scoreJackPair(s, d);
-            if (score > bestScore) {
-                bestScore = score;
-                link = {s.rawHeadChannel, d.rawHeadChannel, std::min(s.voiceSpan, d.voiceSpan)};
+            if (score <= bestScore)
+                continue;
+            bestScore = score;
+
+            int voiceCount = std::min(s.voiceSpan, d.voiceSpan);
+            int sourceStride = 1;
+
+            // One mono modulator patched onto a per-voice mod-CV fan drives every voice, the way a
+            // single LFO shakes all the voices of a hardware poly synth. Deliberately limited to
+            // ModCV: broadcasting Pitch or Gate would make all eight voices sound the same note at
+            // the same time, and broadcasting audio would be a paraphonic instrument (eight voices
+            // filtering an identical signal through a shared cutoff — bit-identical results for 8x
+            // the DSP), which should be an explicit patch rather than a side effect of one drag.
+            if (s.voiceSpan == 1 && d.voiceSpan > 1 && d.role == PortRole::ModCV) {
+                voiceCount = d.voiceSpan;
+                sourceStride = 0;
             }
+
+            link = {s.rawHeadChannel, d.rawHeadChannel, voiceCount, sourceStride};
         }
     }
 
@@ -621,7 +636,8 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
                         audioEngine.addModRouting(srcId, link.sourceRawChannel, dstId, link.destRawChannel);
                     } else {
                         for (int v = 0; v < link.voiceCount; ++v)
-                            graph.addConnection({{srcId, link.sourceRawChannel + v}, {dstId, link.destRawChannel + v}});
+                            graph.addConnection({{srcId, link.sourceRawChannel + v * link.sourceStride},
+                                                 {dstId, link.destRawChannel + v}});
                     }
                 };
 
@@ -1418,7 +1434,8 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
             }
         } else {
             for (int v = 0; v < link.voiceCount; ++v)
-                graph.addConnection({{sourceId, link.sourceRawChannel + v}, {destId, link.destRawChannel + v}});
+                graph.addConnection(
+                    {{sourceId, link.sourceRawChannel + v * link.sourceStride}, {destId, link.destRawChannel + v}});
         }
     }
 

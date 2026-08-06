@@ -173,6 +173,7 @@ Agent Synth uses a **hidden Attenuverter architecture** for modulation depth con
 - These `PolyBus` wires have no midpoint knob because there is no attenuverter in the path.
 - Dragging a cable between two equally-wide poly jacks creates all N per-voice connections directly — no need to hand-author each voice in preset JSON.
 - Toggling a module's `poly` parameter re-anchors its existing cables to the new channel layout: mono cables fan out when both ends go poly, and fans collapse back to one wire when poly is switched off.
+- A mono modulator (e.g. an LFO) dropped on a per-voice **mod-CV** fan such as the poly VCA's CV jack is broadcast to every voice — one source channel, N wires. This applies to `ModCV` only: `Pitch`/`Gate` fans and audio fans still take a single head-to-head wire, since duplicating those would stack N identical voices.
 
 ### Mod Matrix Panel
 - Sits on the right edge of the Graph Editor (toggleable).

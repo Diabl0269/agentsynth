@@ -43,18 +43,24 @@ public:
     void disconnectPort(ModuleComponent* module, int portIndex, bool isInput, bool isMidi);
 
     /** Raw-channel wiring for a single cable: the channel each end starts at, and how many
-     *  consecutive per-voice channels the cable covers (1 = an ordinary mono wire). */
+     *  consecutive per-voice channels the cable covers (1 = an ordinary mono wire).
+     *  Voice v connects sourceRawChannel + v * sourceStride -> destRawChannel + v. */
     struct PolyLink {
         int sourceRawChannel = 0;
         int destRawChannel = 0;
         int voiceCount = 1;
+        // 1 for a voice-to-voice fan; 0 when a single mono source is broadcast to every voice of
+        // the destination fan, so all N wires leave the same source channel.
+        int sourceStride = 1;
     };
 
     /** Works out which raw-channel fan a cable dropped between two *visible* jacks should wire.
      *  Port hit-testing yields visible jack indices, which are not raw channel numbers once a
      *  module goes poly (a poly VCA's CV jack is jack 1 but raw channel 8).  When both ends front
      *  equally wide fans the cable covers all N voices; otherwise it degrades to one head-to-head
-     *  wire.  Where a jack fronts more than one fan (Poly MIDI's "Poly Out" carries both Pitch and
+     *  wire.  The one exception is a mono source landing on a per-voice *mod-CV* fan: that is
+     *  broadcast to every voice (one LFO shakes all eight), which is what sourceStride == 0 means.
+     *  Where a jack fronts more than one fan (Poly MIDI's "Poly Out" carries both Pitch and
      *  Gate) the pairing whose roles agree wins.  A null end (the graph's audio I/O nodes, which have
      *  no logical ports) is treated as a plain mono jack whose index is its raw channel.
      *  Pure — no graph access, headless-testable. */
