@@ -102,7 +102,12 @@ if (isMuted()) {
 
 **Never** collapse to `if (isBypassed() || isMuted()) buffer.clear()` — that silences on bypass instead of passing the dry signal through.
 
-**Exception:** pure source modules with no audio input (e.g. `OscillatorModule`, `PolyMidiModule`) clear their output on bypass because there is no dry signal to pass through.
+**Exception:** modules with no dry audio path clear their output on bypass, because there is nothing to pass through. Two shapes qualify:
+
+- **Pure sources** — no audio *input* (e.g. `OscillatorModule`, `PolyMidiModule`).
+- **Audio-in / CV-out taps** — no audio *output* (e.g. `EnvelopeFollowerModule`, whose ch0 output is Env CV). Passing the dry signal through would push audio-rate samples into a CV destination, which is worse than emitting no modulation.
+
+Both still use two separate branches, never a fused `if (isBypassed() || isMuted())`, so the intent stays explicit.
 
 ### 3. GraphEditor
 

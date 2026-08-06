@@ -16,6 +16,7 @@ add_executable(Tests
     FilterTests.cpp
     NoiseModuleTests.cpp
     ADSRTests.cpp
+    EnvelopeFollowerModuleTests.cpp
     ModuleBaseTests.cpp
     VisualBufferTests.cpp
     AntiClickTests.cpp

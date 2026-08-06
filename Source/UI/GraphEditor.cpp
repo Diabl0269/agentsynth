@@ -66,6 +66,8 @@ static juce::Point<int> estimateModuleSize(const juce::String& typeName) {
         return {280, 120};
     if (typeName == "Noise")
         return {280, 250};
+    if (typeName == "Envelope Follower")
+        return {280, 250};
     return {280, 360};
 }
 

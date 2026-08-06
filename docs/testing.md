@@ -1,6 +1,6 @@
 # Testing Guide
 
-All tests use GoogleTest and run headless (no audio device, no GUI window). ~523 tests across ~68 suites.
+All tests use GoogleTest and run headless (no audio device, no GUI window). 765 tests across 95 suites.
 
 ```bash
 # Run all tests (ENABLE_TESTS defaults OFF — must be passed explicitly)
@@ -19,7 +19,7 @@ By default, builds skip tests to save time. Use the `-DENABLE_TESTS=ON` flag to 
 
 ## Test Layers
 
-### Audio Rendering Tests (~122 tests)
+### Audio Rendering Tests (~150 tests)
 
 Headless DSP tests that render audio through individual modules and verify output characteristics — RMS levels, silence detection, frequency response, waveform accuracy.
 
@@ -28,6 +28,7 @@ Headless DSP tests that render audio through individual modules and verify outpu
 | OscillatorTest | 11 | Waveform generation (sine, saw, square, triangle), MIDI response, tuning, frequency accuracy |
 | FilterTest | 10 | Low-pass/high-pass filtering, cutoff/resonance parameters, frequency response across 7 filter types |
 | ADSRTest | 10 | Attack/sustain/release shapes, retriggering, poly mode, parameter changes during playback |
+| EnvelopeFollowerModuleTest | 28 | Peak/RMS detection accuracy (unit sine → 1/√2 in RMS), attack/release time-constant ordering, unipolar clamped output, Attack/Release/Sensitivity CV modulation, CV channels cleared on output, bypass/mute emitting no CV, port roles (Audio in / ModCV out), state round-trip, zero-channel/zero-sample/zero-sample-rate robustness |
 | LFOModuleTest | 11 | LFO waveform output, rate modulation, sync behavior |
 | VCAModuleTest | 5 | Gain application, envelope following, silence detection |
 | AttenuverterModuleTest | 4 | CV signal attenuation, bipolar control, CV modulation |
