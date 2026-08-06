@@ -104,6 +104,30 @@ Detailed specifications for Agent Synth's primary synthesis modules.
 - **Timing**: One step per beat. `currentActiveStep` (`std::atomic<int>`) written each block for UI step-highlight.
 - **Width**: DOUBLE (560 px). See [docs/layout.md](layout.md).
 
+## Macro Control Module ("Macros")
+- **Purpose**: A bank of assignable CV knobs. Patch one macro jack to several destinations and a single knob movement sweeps all of them at once — filter cutoff, distortion drive and oscillator wave together.
+- **Inputs**: none.
+- **Outputs**: ch0–15 carry macros M1–M16. Only the first `Knobs` channels are audible; the rest are cleared every block and their jacks are hidden.
+- **Parameters**:
+    - `Knobs` (`macroCount`, int 1–16, default 8) — how many macros the bank exposes. See *Resizing* below.
+    - `Bipolar` (`macroBipolar`, bool, default off) — maps the knobs to −1…+1 instead of 0…1, so a centred knob means "no change".
+    - `M1`…`M16` (`macro1`…`macro16`, float 0.0–1.0, default 0.0) — the knobs themselves.
+- **Processing**: each active channel is filled with its knob value, smoothed over 20 ms so a macro sweep never clicks. Bypass and mute both silence every channel (pure source module — there is no dry signal to pass through).
+- **Routing**: no N-to-M matrix of its own. Depth and polarity per destination come from the Attenuverter the graph inserts on every CV cable, so the same macro can push one target up while pulling another down.
+
+### Why 16 channels but a variable knob count
+
+JUCE fixes an `AudioProcessor`'s bus layout at construction, and rebuilding it would drop every graph connection the node already has. The bank therefore always declares 16 output channels and 16 knob parameters; `Knobs` only changes how many are *exposed* (`getVisibleOutputPortCount()`) and how many are driven. Hidden knobs keep their values, so shrinking and re-growing the bank is lossless.
+
+### Resizing
+
+Changing `Knobs` resizes the module in place, anchored at its top-left, at `LayoutUtil::kMacroRowH` (44 px) per macro:
+
+- The bank never moves — it is the module under the user's cursor. Instead `GraphEditor::handleModuleResized` pushes any neighbour that the new footprint would cover straight down and re-settles it on the grid (`LayoutUtil::resolveOverlapsAfterResize`). Shrinking moves nothing back.
+- **Shrinking disconnects the macros that disappear.** A jack that is no longer drawn cannot be unplugged, and the module already silences its channel, so any cable or mod routing on a hidden macro is removed rather than left as a dead entry in the mod matrix. The whole change — count, layout and disconnects — is one undo step.
+
+---
+
 ## Attenuverter Module (Hidden)
 - **Purpose**: Invisible gain/polarity stage automatically inserted on every mono CV connection routed via the mod matrix.
 - **Parameters**: `Amount` — ranges from -1.0 (full inversion) to +1.0 (full depth), **constructor default 0.0**.

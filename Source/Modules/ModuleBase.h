@@ -44,7 +44,8 @@ enum class ModuleType {
     Flanger,
     Limiter,
     VoiceMixer,
-    Noise
+    Noise,
+    MacroControl
 };
 
 class ModuleBase : public juce::AudioProcessor {

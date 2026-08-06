@@ -95,6 +95,15 @@ private:
     void createControls();
     void updateLayout();
 
+    // Macro bank only. Re-lays the component for the new "Knobs" count and asks the GraphEditor
+    // to settle the consequences (drop routings on jacks that just disappeared, nudge neighbours
+    // clear of the new footprint). Message thread only.
+    void applyMacroCountChange();
+
+    // Positions the Knobs/Bipolar header controls and one knob row per visible macro; hides the
+    // rows above `count` without destroying their sliders or parameters.
+    void layoutMacroBank(int count);
+
     // Shared step-column layout helper used by Sequencer and PolySequencer.
     // Positions Gate, Pitch/Root, and F.Env/Chord controls for a single step column.
     void layoutSequencerStepColumn(int step, int colX, int startY);

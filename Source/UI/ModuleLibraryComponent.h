@@ -42,6 +42,7 @@ public:
             {"Compressor", false},
             {"Limiter", false},
             {"Utility", true},
+            {"Macros", false},
             {"Voice Mixer", false},
         };
         setMouseCursor(juce::MouseCursor::NormalCursor);
@@ -92,6 +93,8 @@ public:
             return "Dynamic range compressor with threshold, ratio, attack and release.";
         if (moduleName.equalsIgnoreCase("Limiter"))
             return "Brickwall limiter that prevents the signal from exceeding 0 dBFS.";
+        if (moduleName.equalsIgnoreCase("Macros"))
+            return "Bank of assignable macro knobs — one knob drives many parameters at once.";
         if (moduleName.equalsIgnoreCase("Voice Mixer"))
             return "Sums multiple polyphonic voices down to a stereo mix.";
         // Generic fallback for any unrecognised module name.

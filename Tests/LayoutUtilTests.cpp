@@ -338,3 +338,97 @@ TEST(LayoutUtilTest, WidthBucket_ColumnStride) {
     // Canonical auto-arrange column pitch: kSingleWidth + kLayerGapX = 360px
     EXPECT_EQ(kSingleWidth + kLayerGapX, 360);
 }
+
+// ============================================================================
+// MacroBankGeometry
+// ============================================================================
+
+TEST(LayoutUtilTest, MacroBank_HeightGrowsOneRowPerMacro) {
+    using namespace synth::LayoutUtil;
+
+    EXPECT_EQ(macroBankHeight(4), kMacroHeaderH + 4 * kMacroRowH + kMacroBottomPad);
+    EXPECT_EQ(macroBankHeight(8) - macroBankHeight(4), 4 * kMacroRowH);
+    EXPECT_EQ(macroBankHeight(16) - macroBankHeight(8), 8 * kMacroRowH);
+    EXPECT_GT(macroBankHeight(1), kMacroHeaderH);
+}
+
+TEST(LayoutUtilTest, MacroBank_RowCentresAreEvenlySpacedAndInsideTheBank) {
+    using namespace synth::LayoutUtil;
+
+    EXPECT_EQ(macroRowCentreY(1) - macroRowCentreY(0), kMacroRowH);
+    EXPECT_GT(macroRowCentreY(0), kMacroHeaderH);
+
+    // Every visible row's jack must sit inside the component it belongs to.
+    for (int count = 1; count <= 16; ++count)
+        EXPECT_LT(macroRowCentreY(count - 1), macroBankHeight(count)) << "count " << count;
+}
+
+// ============================================================================
+// resolveOverlapsAfterResize
+// ============================================================================
+
+namespace {
+synth::LayoutUtil::Box makeBox(juce::uint32 uid, int x, int y, int w, int h) {
+    return {synth::LayoutUtil::NodeID{uid}, {x, y, w, h}};
+}
+} // namespace
+
+TEST(LayoutUtilTest, ResolveOverlapsAfterResize_NoOverlapMovesNothing) {
+    using namespace synth::LayoutUtil;
+
+    std::vector<Box> boxes = {makeBox(1, 0, 0, 280, 300), makeBox(2, 0, 400, 280, 200)};
+    EXPECT_TRUE(resolveOverlapsAfterResize(NodeID{1}, boxes).empty());
+}
+
+TEST(LayoutUtilTest, ResolveOverlapsAfterResize_PushesTheNeighbourBelowClear) {
+    using namespace synth::LayoutUtil;
+
+    // Node 1 has just grown from 300px to 700px tall and now swallows node 2.
+    std::vector<Box> boxes = {makeBox(1, 0, 0, 280, 700), makeBox(2, 0, 400, 280, 200)};
+
+    auto moved = resolveOverlapsAfterResize(NodeID{1}, boxes);
+    ASSERT_EQ(moved.size(), 1u);
+    EXPECT_EQ(moved[0].id, NodeID{2});
+    EXPECT_GE(moved[0].pos.y, 700 + kCollisionGap);
+    EXPECT_EQ(moved[0].pos.y % kGridSize, 0);
+}
+
+TEST(LayoutUtilTest, ResolveOverlapsAfterResize_NeverMovesTheResizedModule) {
+    using namespace synth::LayoutUtil;
+
+    std::vector<Box> boxes = {makeBox(1, 100, 100, 280, 700), makeBox(2, 100, 400, 280, 200)};
+
+    for (const auto& m : resolveOverlapsAfterResize(NodeID{1}, boxes))
+        EXPECT_NE(m.id, NodeID{1});
+}
+
+TEST(LayoutUtilTest, ResolveOverlapsAfterResize_CascadesThroughAStack) {
+    using namespace synth::LayoutUtil;
+
+    // Three modules stacked tightly below the one that grows: displacing the first must not
+    // simply park it on top of the next one.
+    std::vector<Box> boxes = {makeBox(1, 0, 0, 280, 700), makeBox(2, 0, 400, 280, 100), makeBox(3, 0, 520, 280, 100),
+                              makeBox(4, 0, 640, 280, 100)};
+
+    auto moved = resolveOverlapsAfterResize(NodeID{1}, boxes);
+    ASSERT_FALSE(moved.empty());
+
+    // Apply the moves and verify the whole canvas is overlap-free afterwards.
+    std::vector<Box> settled = boxes;
+    for (const auto& m : moved)
+        for (auto& b : settled)
+            if (b.id == m.id)
+                b.rect.setPosition(m.pos);
+
+    for (const auto& b : settled)
+        EXPECT_FALSE(intersectsAny(b.rect, settled, b.id)) << "box " << b.id.uid << " still overlaps";
+}
+
+TEST(LayoutUtilTest, ResolveOverlapsAfterResize_ShrinkingLeavesEveryoneWhereTheyAre) {
+    using namespace synth::LayoutUtil;
+
+    // A bank that shrank from 700px to 300px: nothing is in the way any more, so nothing moves
+    // back up — the canvas simply gains empty space.
+    std::vector<Box> boxes = {makeBox(1, 0, 0, 280, 300), makeBox(2, 0, 800, 280, 200)};
+    EXPECT_TRUE(resolveOverlapsAfterResize(NodeID{1}, boxes).empty());
+}

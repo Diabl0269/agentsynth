@@ -62,6 +62,10 @@ public:
 
     // Layout / anti-overlap
     juce::Point<int> resolvePlacement(juce::Point<int> desired, int w, int h, juce::AudioProcessorGraph::NodeID selfId);
+    // A module changed footprint in place (the Macro bank, when its "Knobs" count changes).
+    // Drops any routing left on an output jack that is no longer visible, then pushes overlapping
+    // neighbours clear. The resized module itself never moves.
+    void handleModuleResized(ModuleComponent* moduleComp);
     void finalizeModuleDrag(ModuleComponent* module);
     void autoArrange();
 
