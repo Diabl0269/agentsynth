@@ -11,6 +11,7 @@
 #include "../Modules/FX/FlangerModule.h"
 #include "../Modules/FX/LimiterModule.h"
 #include "../Modules/FX/PhaserModule.h"
+#include "../Modules/FX/PitchShifterModule.h"
 #include "../Modules/FX/ReverbModule.h"
 #include "../Modules/FilterModule.h"
 #include "../Modules/LFOModule.h"
@@ -64,6 +65,7 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Limiter", []() { return std::make_unique<LimiterModule>(); }},
     {"Voice Mixer", []() { return std::make_unique<VoiceMixerModule>(); }},
     {"Bitcrusher", []() { return std::make_unique<BitcrusherModule>(); }},
+    {"Pitch Shifter", []() { return std::make_unique<PitchShifterModule>(); }},
     {"Noise", []() { return std::make_unique<NoiseModule>(); }},
     {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }}};
 
@@ -513,6 +515,8 @@ static juce::String getFactoryTypeName(juce::AudioProcessor* processor) {
             return "Voice Mixer";
         case ModuleType::Bitcrusher:
             return "Bitcrusher";
+        case ModuleType::PitchShifter:
+            return "Pitch Shifter";
         case ModuleType::Noise:
             return "Noise";
         case ModuleType::ExternalMidi:
@@ -1061,8 +1065,8 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
         if (audioOutputNode != nullptr) {
             // Types that produce audio and should auto-connect to output
             static const std::set<juce::String> audioNodeTypes = {
-                "Oscillator", "Noise",  "Filter", "VCA",        "Distortion", "Delay",   "Reverb",    "Amp Env",
-                "Filter Env", "Chorus", "Phaser", "Compressor", "Flanger",    "Limiter", "Bitcrusher"};
+                "Oscillator", "Noise",  "Filter", "VCA",        "Distortion", "Delay",   "Reverb",     "Amp Env",
+                "Filter Env", "Chorus", "Phaser", "Compressor", "Flanger",    "Limiter", "Bitcrusher", "Pitch Shifter"};
 
             for (auto newNodeId : newlyCreatedNodes) {
                 auto* node = graph.getNodeForId(newNodeId);

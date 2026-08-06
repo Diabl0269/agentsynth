@@ -37,7 +37,7 @@ The project follows a modular architecture with:
 - LFO: Low Frequency Oscillator for modulation
 - Sequencer: Step sequencer with per-step pitch control
 - MIDI Keyboard: Interactive on-screen keyboard for MIDI input
-- FX Modules: Delay, Distortion, Reverb, Chorus, Phaser, Compressor, Flanger, Limiter
+- FX Modules: Delay, Distortion, Reverb, Chorus, Phaser, Compressor, Flanger, Limiter, Pitch Shifter
 - Preset System: Factory presets with categorized organization
 - Poly MIDI: Polyphonic MIDI input handling (ch0-7=pitch Hz, ch8-15=gate); `voiceMaskAtomic_` (`std::atomic<uint8_t>`) written end-of-processBlock — read by `AudioEngine::getDisplayVoiceCount()` via `std::popcount` without locks
 - Poly Sequencer: Polyphonic step sequencer
@@ -156,6 +156,7 @@ Refer to [docs/shortcuts.md](docs/shortcuts.md) for the full list of configurabl
 - `Source/Modules/FX/CompressorModule.h`: Compressor with manual makeup gain
 - `Source/Modules/FX/FlangerModule.h`: Flanger via `juce::dsp::Chorus` with low-delay tuning
 - `Source/Modules/FX/LimiterModule.h`: Brickwall limiter with input gain drive
+- `Source/Modules/FX/PitchShifterModule.h`: Dual-mode pitch (delay-line transposition) / frequency (Hilbert SSB) shifter
 - `Source/UI/AIChatComponent.cpp/.h`: Chat interface for AI-assisted patching. **Logging gotcha:** this component registers itself as the global `juce::Logger` (`setCurrentLogger`) and pipes every `juce::Logger::writeToLog(...)` into a `TextEditor` debug console (Debug builds only). Appends are coalesced + the console is length-bounded, but DO NOT add high-frequency `writeToLog` calls (per-parameter, per-sample, per-frame, per-connection) — they run on the UI thread. Keep logging to errors/rare events. (A per-parameter log on preset load once caused a multi-second UI freeze; guarded by `AIStateMapperTest.PresetLoadDoesNotSpamLogger`.) Visibility persists via `ApplicationProperties` key `"aiPanelVisible"` (default false); read at top of `MainComponent::initialiseCommon()`
 - **UI rendering perf:** `ModuleComponent` uses `setBufferedToImage(true)` and gates its 15Hz `timerCallback` repaint (RMS-change / active-modulation / sequencer-step-change only) so the GraphEditor's 30Hz connection animation composites cached module images instead of re-running JUCE text layout every frame. Don't reintroduce unconditional per-tick `repaint()` on modules or their always-visible children. A theme switch triggers exactly ONE re-skin pass (`AppLookAndFeel::applyTheme` → `sendLookAndFeelChangeMessage` → single `repaint()`) — no timer or continuous repaint is added. `applyToolbarIcons()` (Drawable clone work) is gated to narrow-mode transitions in `MainComponent::resized()` — not called on every resize frame. Status bar polls at 5 Hz (every 2nd 10 Hz timer tick) and repaints only itself; ZERO `writeToLog` calls in any status-polling path.
 - `Source/UI/ScopeComponent.h`: Oscilloscope/waveform display component
