@@ -1,7 +1,6 @@
 #pragma once
 
 #include "../ModuleBase.h"
-#include <juce_dsp/juce_dsp.h>
 
 class BitcrusherModule : public ModuleBase {
 public:
@@ -17,14 +16,14 @@ public:
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
-        juce::ignoreUnused(sampleRate, samplesPerBlock);
+        currentSampleRate = (sampleRate > 0.0) ? sampleRate : 44100.0;
 
         dryBuffer.setSize(2, samplesPerBlock);
 
-        smoothedRate.reset(sampleRate, 0.005);
-        smoothedDepth.reset(sampleRate, 0.005);
-        smoothedMix.reset(sampleRate, 0.005);
-        smoothedDither.reset(sampleRate, 0.005);
+        smoothedRate.reset(currentSampleRate, 0.005);
+        smoothedDepth.reset(currentSampleRate, 0.005);
+        smoothedMix.reset(currentSampleRate, 0.005);
+        smoothedDither.reset(currentSampleRate, 0.005);
 
         smoothedRate.setCurrentAndTargetValue(*rateParam);
         smoothedDepth.setCurrentAndTargetValue(*depthParam);
@@ -65,28 +64,9 @@ public:
         const float* cvDepth = (numChannels > 3) ? buffer.getReadPointer(3) : nullptr;
         const float* cvMix = (numChannels > 4) ? buffer.getReadPointer(4) : nullptr;
 
-        bool cvRateActive = false;
-        bool cvDepthActive = false;
-        bool cvMixActive = false;
-
-        if (cvRate) {
-            float rms = 0.0f;
-            for (int i = 0; i < numSamples; ++i)
-                rms += cvRate[i] * cvRate[i];
-            cvRateActive = (rms / numSamples) > 1e-3f;
-        }
-        if (cvDepth) {
-            float rms = 0.0f;
-            for (int i = 0; i < numSamples; ++i)
-                rms += cvDepth[i] * cvDepth[i];
-            cvDepthActive = (rms / numSamples) > 1e-3f;
-        }
-        if (cvMix) {
-            float rms = 0.0f;
-            for (int i = 0; i < numSamples; ++i)
-                rms += cvMix[i] * cvMix[i];
-            cvMixActive = (rms / numSamples) > 1e-3f;
-        }
+        bool cvRateActive = isChannelActive(cvRate, numSamples);
+        bool cvDepthActive = isChannelActive(cvDepth, numSamples);
+        bool cvMixActive = isChannelActive(cvMix, numSamples);
 
         smoothedRate.setTargetValue(*rateParam);
         smoothedDepth.setTargetValue(*depthParam);
@@ -99,12 +79,14 @@ public:
         float* outL = buffer.getWritePointer(0);
         float* outR = buffer.getWritePointer(1);
 
+        float rateScale = static_cast<float>(currentSampleRate / 44100.0);
+
         for (int i = 0; i < numSamples; ++i) {
             float rateMod = cvRateActive ? cvRate[i] * 25.0f : 0.0f;
             float depthMod = cvDepthActive ? cvDepth[i] * 12.0f : 0.0f;
             float mixMod = cvMixActive ? cvMix[i] : 0.0f;
 
-            float currentRate = juce::jlimit(1.0f, 50.0f, smoothedRate.getNextValue() + rateMod);
+            float currentRate = juce::jlimit(1.0f, 50.0f, smoothedRate.getNextValue() + rateMod) * rateScale;
             float currentDepth = juce::jlimit(1.0f, 24.0f, smoothedDepth.getNextValue() + depthMod);
             float currentMix = juce::jlimit(0.0f, 1.0f, smoothedMix.getNextValue() + mixMod);
             float currentDither = smoothedDither.getNextValue();
@@ -113,7 +95,9 @@ public:
 
             phase += 1.0f;
             if (phase >= currentRate) {
-                phase -= currentRate;
+                while (phase >= currentRate) {
+                    phase -= currentRate;
+                }
 
                 for (int ch = 0; ch < 2; ++ch) {
                     float input = dryBuffer.getSample(ch, i);
@@ -123,7 +107,7 @@ public:
                         input += noise * currentDither * 0.1f;
                     }
 
-                    float quantized = std::floor(input * steps) / steps;
+                    float quantized = juce::jlimit(-1.0f, 1.0f, std::round(input * steps) / steps);
                     lastSample[ch] = quantized;
                 }
             }
@@ -156,6 +140,17 @@ public:
     ModuleType getModuleType() const override { return ModuleType::Bitcrusher; }
 
 private:
+    static bool isChannelActive(const float* channel, int numSamples) {
+        if (!channel)
+            return false;
+        for (int i = 0; i < numSamples; ++i) {
+            if (channel[i] != 0.0f)
+                return true;
+        }
+        return false;
+    }
+
+    double currentSampleRate = 44100.0;
     juce::AudioBuffer<float> dryBuffer;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedRate;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedDepth;

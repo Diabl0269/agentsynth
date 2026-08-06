@@ -146,6 +146,7 @@ int roleRank(ModuleType t) {
     case ModuleType::Compressor:
     case ModuleType::Flanger:
     case ModuleType::Limiter:
+    case ModuleType::Bitcrusher:
         return 2;
     case ModuleType::ADSR:
     case ModuleType::LFO:

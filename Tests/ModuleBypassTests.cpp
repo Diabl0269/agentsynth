@@ -1,3 +1,4 @@
+#include "../Source/Modules/FX/BitcrusherModule.h"
 #include "../Source/Modules/FX/ChorusModule.h"
 #include "../Source/Modules/FX/CompressorModule.h"
 #include "../Source/Modules/FX/DelayModule.h"
@@ -550,6 +551,73 @@ TEST(FXBypassTest, LimiterMuteSilencesOutput) {
     module.processBlock(buffer, midi);
 
     for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "Ch" << ch << " sample " << i;
+}
+
+// --- Bitcrusher ---
+
+TEST(FXBypassTest, BitcrusherBypassPassesDryAudio) {
+    BitcrusherModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(5, 512);
+    buffer.clear();
+    for (int i = 0; i < 512; ++i) {
+        buffer.setSample(0, i, 0.7f);
+        buffer.setSample(1, i, -0.4f);
+    }
+
+    module.setBypassed(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int i = 0; i < 512; ++i) {
+        EXPECT_FLOAT_EQ(buffer.getSample(0, i), 0.7f) << "Ch0 sample " << i;
+        EXPECT_FLOAT_EQ(buffer.getSample(1, i), -0.4f) << "Ch1 sample " << i;
+    }
+}
+
+TEST(FXBypassTest, BitcrusherBypassClearsCVChannels) {
+    BitcrusherModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(5, 512);
+    buffer.clear();
+    for (int i = 0; i < 512; ++i) {
+        buffer.setSample(0, i, 0.5f);
+        buffer.setSample(1, i, 0.5f);
+        buffer.setSample(2, i, 0.8f);
+        buffer.setSample(3, i, 0.8f);
+        buffer.setSample(4, i, 0.8f);
+    }
+
+    module.setBypassed(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int ch = 2; ch < 5; ++ch) {
+        for (int i = 0; i < 512; ++i) {
+            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "CV ch" << ch << " sample " << i;
+        }
+    }
+}
+
+TEST(FXBypassTest, BitcrusherMuteSilencesOutput) {
+    BitcrusherModule module;
+    module.prepareToPlay(44100.0, 512);
+
+    juce::AudioBuffer<float> buffer(5, 512);
+    buffer.clear();
+    for (int ch = 0; ch < 5; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.9f);
+
+    module.setMuted(true);
+    juce::MidiBuffer midi;
+    module.processBlock(buffer, midi);
+
+    for (int ch = 0; ch < 5; ++ch)
         for (int i = 0; i < 512; ++i)
             EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "Ch" << ch << " sample " << i;
 }

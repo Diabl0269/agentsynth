@@ -517,8 +517,6 @@ static juce::String getFactoryTypeName(juce::AudioProcessor* processor) {
             return "Noise";
         case ModuleType::ExternalMidi:
             return "External MIDI";
-        default:
-            return "Unknown";
         }
     }
     return processor->getName();
