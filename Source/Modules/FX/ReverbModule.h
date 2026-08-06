@@ -12,12 +12,14 @@ public:
         addParameter(wetParam = new juce::AudioParameterFloat("wet", "Wet", 0.0f, 1.0f, 0.33f));
         addParameter(dryParam = new juce::AudioParameterFloat("dry", "Dry", 0.0f, 1.0f, 0.4f));
         addParameter(widthParam = new juce::AudioParameterFloat("width", "Width", 0.0f, 1.0f, 1.0f));
+        addOutputLevelParameter();
         addMuteParameter();
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
         juce::ignoreUnused(samplesPerBlock);
         reverb.setSampleRate(sampleRate);
+        prepareOutputLevel(sampleRate);
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -47,6 +49,10 @@ public:
         } else {
             reverb.processMono(buffer.getWritePointer(0), buffer.getNumSamples());
         }
+
+        // Scales wet+dry together — Wet/Dry set the balance, Level sets how loud the
+        // whole thing lands downstream.
+        applyOutputLevel(buffer, 2);
     }
 
     juce::String getInputPortLabel(int i) const override { return i == 0 ? "Left" : "Right"; }

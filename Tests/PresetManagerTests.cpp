@@ -117,6 +117,17 @@ juce::Point<int> estimateModuleSize(const juce::String& typeName) {
     if (typeName.containsIgnoreCase("ADSR") || typeName.containsIgnoreCase("Amp Env") ||
         typeName.containsIgnoreCase("Filter Env"))
         return {280, 180};
+    // FX heights mirrored explicitly from GraphEditor.cpp rather than left to the fallback.
+    // Distortion is 430 (not 350) since the Level knob pushed it to 3 knob rows — issue #122.
+    // Delay really is shorter than the 300 fallback, and leaving it to the fallback reports a
+    // phantom Delay/Reverb overlap in preset 0. The authoritative check is
+    // E2EWorkflowTest.AllPresetsLoadWithoutOverlapAsAuthored, which uses real component bounds.
+    if (typeName.containsIgnoreCase("Distortion"))
+        return {280, 430};
+    if (typeName.containsIgnoreCase("Delay"))
+        return {280, 220};
+    if (typeName.containsIgnoreCase("Reverb"))
+        return {280, 300};
     // Everything else: conservative default
     return {280, 300};
 }

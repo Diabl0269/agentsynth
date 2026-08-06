@@ -621,14 +621,12 @@ juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
                 modEntry->setProperty("dest", (int)destNodeID.uid);
                 modEntry->setProperty("destPort", destChannel);
 
-                // Get amount parameter (param[1], after bypassedParam at [0])
-                if (auto* param = dynamic_cast<juce::RangedAudioParameter*>(attenverter->getParameters()[1])) {
+                if (auto* param = findParameterByID(attenverter, "amount")) {
                     float amount = param->getNormalisableRange().convertFrom0to1(param->getValue());
                     modEntry->setProperty("amount", amount);
                 }
 
-                // Get bypass parameter (param[2], after bypassedParam at [0])
-                if (auto* param = dynamic_cast<juce::AudioParameterBool*>(attenverter->getParameters()[2])) {
+                if (auto* param = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(attenverter, "bypassed"))) {
                     modEntry->setProperty("bypass", param->get());
                 }
 
@@ -964,7 +962,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                             auto attenNode = graph.addNode(std::make_unique<AttenuverterModule>());
                             if (attenNode) {
                                 if (auto* param = dynamic_cast<juce::AudioParameterFloat*>(
-                                        attenNode->getProcessor()->getParameters()[1]))
+                                        findParameterByID(attenNode->getProcessor(), "amount")))
                                     param->setValueNotifyingHost(param->getNormalisableRange().convertTo0to1(1.0f));
                                 graph.addConnection({{idMap[srcOld], srcPort}, {attenNode->nodeID, 0}});
                                 graph.addConnection({{attenNode->nodeID, 0}, {idMap[dstOld], dstPort}});
@@ -1023,16 +1021,14 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                         // Create attenuverter node
                         auto attenNode = graph.addNode(std::make_unique<AttenuverterModule>());
                         if (attenNode) {
-                            // Set amount parameter (param[1], after bypassedParam at [0])
                             if (auto* param = dynamic_cast<juce::AudioParameterFloat*>(
-                                    attenNode->getProcessor()->getParameters()[1])) {
+                                    findParameterByID(attenNode->getProcessor(), "amount"))) {
                                 param->setValueNotifyingHost(param->getNormalisableRange().convertTo0to1(amount));
                             }
 
-                            // Set bypass parameter if true (param[2], after bypassedParam at [0])
                             if (bypass) {
                                 if (auto* bp = dynamic_cast<juce::AudioParameterBool*>(
-                                        attenNode->getProcessor()->getParameters()[2])) {
+                                        findParameterByID(attenNode->getProcessor(), "bypassed"))) {
                                     bp->setValueNotifyingHost(1.0f);
                                 }
                             }

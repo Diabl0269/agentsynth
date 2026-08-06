@@ -99,6 +99,15 @@ Test persistence, serialization, and state restoration.
 | UndoRedoTest | 12 | Add/remove modules, connections, parameter changes, complex sequences, rapid operations, auto-arrange is a single undo step (one Cmd+Z restores all pre-arrange positions) |
 | AIStateMapperTest | 24 | Graph JSON round-trip serialization, parameter validation, modulation serialization, merge mode, schema generation |
 
+### Output Level Tests (18 tests)
+
+`Tests/OutputLevelTests.cpp` — the shared opt-in output-level stage (`ModuleBase::addOutputLevelParameter` / `prepareOutputLevel` / `applyOutputLevel`) and the modules that adopt it. Headless.
+
+| Suite | Tests | What it covers |
+|-------|-------|----------------|
+| OutputLevelHelper | 9 | Unity default is bit-exact pass-through; only the declared leading audio channels are scaled (CV channels untouched); level 0 silences; a 1.0→0.0 step ramps over 10 ms (max per-sample step < 0.01, reaches zero within the block) instead of clicking; **bypass passes dry audio at level 0**; mute clears at unity; a legacy state blob with no `outputLevel` property loads at unity (old presets sound identical); level survives a state round-trip. Uses an in-test `ModuleBase` subclass so the helper is exercised free of any module's DSP |
+| OutputLevelModules | 9 | Across all 7 adopting modules (Delay, Reverb, Chorus, Phaser, Flanger, Distortion, Filter): parameter present and defaulting to unity; **parameter added last in the list** (positional `getParameters()[n]` sites depend on it); level 0.5 halves the output sample-for-sample; level 0 silences; bypass still passes dry audio at level 0; mute clears at unity. Plus: Delay's level stays outside the feedback path (repeats survive a spell at level 0); Filter scales all 8 voices in poly mode; **`AttenuverterKeepsAmountAtParameterIndexOne`** pins the positional-parameter landmine shut |
+
 ### Layout Tests (~8 tests)
 
 Pure/headless tests for the grid-layout and anti-overlap helpers in `Tests/LayoutUtilTests.cpp`.

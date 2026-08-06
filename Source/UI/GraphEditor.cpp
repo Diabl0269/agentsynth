@@ -55,7 +55,7 @@ static juce::Point<int> estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Poly MIDI" || typeName == "PolyMidi")
         return {280, 100};
     if (typeName == "Distortion")
-        return {280, 350};
+        return {280, 430}; // 3 knob rows since the Level knob was added (issue #122)
     if (typeName == "Delay")
         return {280, 220};
     if (typeName == "Reverb")
@@ -276,7 +276,7 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
                                                modPeak, /*fallbackWidth*/ 2.0f + modPeak * 2.0f);
 
                     float amt = 0.0f;
-                    if (auto* p = node2->getProcessor()->getParameters()[1]) {
+                    if (auto* p = findParameterByID(node2->getProcessor(), "amount")) {
                         amt = p->getValue();
                         amt = amt * 2.0f - 1.0f; // 0 to 1 back to -1.0 to 1.0
                     }
@@ -835,7 +835,8 @@ void GraphEditor::mouseDrag(const juce::MouseEvent& e) {
             auto& graph = audioEngine.getGraph();
             auto* node = graph.getNodeForId(draggingAttenuverterNodeId);
             if (node) {
-                if (auto* p = dynamic_cast<juce::AudioParameterFloat*>(node->getProcessor()->getParameters()[1])) {
+                if (auto* p =
+                        dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(node->getProcessor(), "amount"))) {
                     float delta = (e.getPosition().y - lastMousePos.y) * -0.01f;
                     float currentVal = p->get(); // -1 to 1
                     currentVal = juce::jlimit(-1.0f, 1.0f, currentVal + delta);
