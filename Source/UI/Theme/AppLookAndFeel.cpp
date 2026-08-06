@@ -208,6 +208,7 @@ void AppLookAndFeel::retintIcons() {
     iconLibrary_.setTintColour(Icon::ToggleAI, c.textPrimary);
     iconLibrary_.setTintColour(Icon::ToggleMatrix, c.textPrimary);
     iconLibrary_.setTintColour(Icon::ToggleLibrary, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::ThemeToggle, c.textPrimary);
 
     // TransportPlay is scaffolding only (no DrawableButton wired this phase); tint muted so it
     // reads as inactive if ever surfaced.

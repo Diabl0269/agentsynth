@@ -28,6 +28,7 @@ enum class Icon : int {
     ToggleAI,
     ToggleMatrix,
     ToggleLibrary,
+    ThemeToggle,
     ModuleBypass,
     ModuleMute,
     ModuleDelete,

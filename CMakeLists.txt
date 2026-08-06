@@ -220,6 +220,7 @@ juce_add_binary_data(Assets SOURCES
     assets/icons/toggle-ai.svg
     assets/icons/toggle-matrix.svg
     assets/icons/toggle-library.svg
+    assets/icons/theme-toggle.svg
     assets/icons/module-bypass.svg
     assets/icons/module-mute.svg
     assets/icons/module-delete.svg

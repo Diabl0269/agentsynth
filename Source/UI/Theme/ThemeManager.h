@@ -54,8 +54,28 @@ public:
     // falls back to the default built-in and broadcasts.
     int loadUserThemesFromFolder();
 
+    enum class ThemeMode {
+        Dark,
+        Light,
+        System
+    };
+
+    // Default theme accessors & mutators for Dark/Light defaults
+    juce::String getDefaultDarkThemeId() const;
+    bool setDefaultDarkThemeId(const juce::String& id);
+
+    juce::String getDefaultLightThemeId() const;
+    bool setDefaultLightThemeId(const juce::String& id);
+
+    ThemeMode getThemeMode() const noexcept { return mode; }
+    void setThemeMode(ThemeMode newMode);
+
+    // Toggle between dark and light mode (switches active theme to default dark or default light theme)
+    void toggleLightDarkMode();
+
     // The id of the default/fallback built-in (Obsidian). Used when persisted id is missing.
     static juce::String getDefaultThemeId() noexcept { return "obsidian"; }
+    static juce::String getDefaultLightThemeFallbackId() noexcept { return "daylight"; }
 
 private:
     void registerBuiltInThemes();                         // clears + adds the 3 built-ins
@@ -63,6 +83,9 @@ private:
 
     std::vector<Theme> themes;
     int activeIndex{0};
+    juce::String defaultDarkId{"obsidian"};
+    juce::String defaultLightId{"daylight"};
+    ThemeMode mode{ThemeMode::Dark};
     juce::ApplicationProperties* properties{nullptr}; // non-owning; may be null in tests
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ThemeManager)
