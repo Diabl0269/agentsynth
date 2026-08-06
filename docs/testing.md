@@ -1,6 +1,6 @@
 # Testing Guide
 
-All tests use GoogleTest and run headless (no audio device, no GUI window). ~771 tests across ~98 suites.
+All tests use GoogleTest and run headless (no audio device, no GUI window). ~779 tests across ~98 suites.
 
 ```bash
 # Run all tests (ENABLE_TESTS defaults OFF — must be passed explicitly)
@@ -224,6 +224,13 @@ cmake --build build --target AIEvalHarness
 
 The structural checks themselves (`evaluatePatch()`) have no model dependency and are covered by
 `Tests/PatchEvalTests.cpp` in the regular suite — only the golden-prompt replay needs Ollama.
+
+Note that `evaluatePatch` is not only a scoring function: `AIIntegrationService::applyPatch` gates on
+`sourceReachesOutput` and surfaces `detail` to the user via `getLastPatchError()`, so those strings are
+a contract two `AIIntegrationServiceTest` cases assert verbatim. `SamplerAloneDoesNotCountAsAReachableSource`
+/ `SamplerAlongsideAnOscillatorStillPasses` cover the one module that is a sound source in the library
+but deliberately not one here (a Sampler is silent until a file is loaded, and a model-authored patch
+cannot load one).
 
 ## Adding Tests for New Modules
 
