@@ -22,7 +22,9 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
 
     if (auto* modBase = dynamic_cast<ModuleBase*>(module)) {
         if (auto* vb = modBase->getVisualBuffer()) {
-            if (getType(module) != ModuleType::ExternalMidi) {
+            // Parametric EQ keeps its VisualBuffer for the spectrum analyser's FFT, but a scope
+            // on top of that analyser is redundant clutter, so it gets no scope UI.
+            if (getType(module) != ModuleType::ExternalMidi && getType(module) != ModuleType::ParametricEQ) {
                 scopeComponent = std::make_unique<ScopeComponent>(*vb);
                 addAndMakeVisible(scopeComponent.get());
 
@@ -50,12 +52,21 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
 
     if (auto* eqMod = dynamic_cast<ParametricEQModule*>(module)) {
         eqCurveComponent = std::make_unique<EQCurveComponent>(*eqMod);
+        wireEqGestureCallbacks(*eqCurveComponent);
         addAndMakeVisible(eqCurveComponent.get());
 
+        // The spectrum is this curve's backdrop, so it starts on (the analyser gates itself on
+        // actual signal, so an idle patch still costs no repaints).
         spectrumToggle = std::make_unique<juce::ToggleButton>("Show Spectrum");
-        spectrumToggle->setToggleState(false, juce::dontSendNotification);
+        spectrumToggle->setToggleState(eqCurveComponent->getShowSpectrum(), juce::dontSendNotification);
         spectrumToggle->onClick = [this] { eqCurveComponent->setShowSpectrum(spectrumToggle->getToggleState()); };
         addAndMakeVisible(spectrumToggle.get());
+
+        eqPopOutButton = std::make_unique<juce::TextButton>("Open EQ Window");
+        eqPopOutButton->setComponentID("eqPopOut");
+        eqPopOutButton->setTooltip("Edit this EQ in a larger resizable window");
+        eqPopOutButton->onClick = [this] { openEqWindow(); };
+        addAndMakeVisible(eqPopOutButton.get());
     }
 
     if (getType(module) != ModuleType::Attenuverter) {
@@ -89,11 +100,17 @@ void ModuleComponent::detachFromProcessor() {
     // Destroy scope component first — it has its own timer reading from the module's VisualBuffer
     scopeComponent.reset();
     scopeToggle.reset();
+    // The pop-out EQ editor holds the module by reference and runs its own timer, so it must be
+    // torn down before the processor goes away. The dialog is self-owning; deleting it closes it.
+    if (eqWindow != nullptr)
+        delete eqWindow.getComponent();
+
     // Same for the frequency-domain views: their 30 Hz timers poll the module for parameter
     // values and FFT samples, so they must go before the module pointer is dropped.
     eqCurveComponent.reset();
     freqResponseComponent.reset();
     spectrumToggle.reset();
+    eqPopOutButton.reset();
     keyboardComponent.reset();
 
     if (auto* parent = getParentComponent())
@@ -493,6 +510,161 @@ void ModuleComponent::createControls() {
     updateLayout();
 }
 
+//==============================================================================
+// Parametric EQ card
+//==============================================================================
+// Geometry shared by layoutParametricEQ() and parametricEQHeight(). Keeping them in one place is
+// what stops the computed card height from drifting out of step with the actual layout.
+namespace eqCard {
+constexpr int kMargin = 12;
+constexpr int kCurveHeight = 175;
+constexpr int kButtonRow = 28;
+constexpr int kToggleRow = 26;
+constexpr int kKnobRow = 80;
+constexpr int kKnobLabelHeight = 14;
+constexpr int kTextBoxWidth = 76; // wide enough for "20.0 kHz" / "-24.0 dB" without truncating
+constexpr int kTextBoxHeight = 18;
+constexpr int kNumKnobRows = 3; // Freq / Gain / Q
+constexpr int kNumVisibleInputs = 6;
+constexpr int kScopeHeight = 100;
+// Content has to clear the input port labels, which run down the left edge one row per jack.
+// getPortCenter puts input i at y = 30 (header) + 20 (MIDI-out offset) + i*20 + 20, and each
+// label is drawn 10px above its jack with height 20 — so the last one ends 10px below its centre.
+constexpr int kPortFirstY = 70;
+constexpr int kPortStep = 20;
+constexpr int kContentTop = kPortFirstY + (kNumVisibleInputs - 1) * kPortStep + 16;
+
+constexpr const char* kKnobSuffix[kNumKnobRows] = {"Freq", "Gain", "Q"};
+} // namespace eqCard
+
+juce::ToggleButton* ModuleComponent::findToggleByName(const juce::String& name) const {
+    for (auto* toggle : toggles)
+        if (toggle->getComponentID().equalsIgnoreCase(name))
+            return toggle;
+    return nullptr;
+}
+
+void ModuleComponent::layoutNamedKnob(const juce::String& name, int x, int y, int w, int h) {
+    for (int i = 0; i < sliders.size(); ++i) {
+        if (!sliders[i]->getComponentID().equalsIgnoreCase(name))
+            continue;
+        sliderLabels[i]->setBounds(x, y, w, eqCard::kKnobLabelHeight);
+        // The generic auto-UI uses a 50px text box, which truncates "20.0 kHz" to "20.0...".
+        sliders[i]->setTextBoxStyle(juce::Slider::TextBoxBelow, false, eqCard::kTextBoxWidth, eqCard::kTextBoxHeight);
+        sliders[i]->setBounds(x, y + eqCard::kKnobLabelHeight, w, h - eqCard::kKnobLabelHeight);
+        return;
+    }
+}
+
+int ModuleComponent::parametricEQHeight() const {
+    using namespace eqCard;
+    int h = kContentTop;
+    h += kCurveHeight + 8;
+    h += kButtonRow + 6; // Show Spectrum + Open EQ Window
+    h += kToggleRow + 2; // per-band on/off row
+    h += kNumKnobRows * kKnobRow + 4;
+    h += kKnobRow; // Output trim
+    if (scopeToggle)
+        h += kButtonRow + 4;
+    if (scopeComponent && scopeComponent->isVisible())
+        h += kScopeHeight + 8;
+    return h + 16; // bottom margin
+}
+
+void ModuleComponent::layoutParametricEQ() {
+    using namespace eqCard;
+
+    const int contentW = getWidth() - kMargin * 2;
+    if (contentW <= 0)
+        return;
+
+    int y = kContentTop;
+
+    if (eqCurveComponent) {
+        eqCurveComponent->setBounds(kMargin, y, contentW, kCurveHeight);
+        y += kCurveHeight + 8;
+    }
+
+    if (spectrumToggle)
+        spectrumToggle->setBounds(kMargin, y, 140, kButtonRow);
+    if (eqPopOutButton)
+        eqPopOutButton->setBounds(kMargin + 150, y, 150, kButtonRow);
+    y += kButtonRow + 6;
+
+    // One column per band. The on/off toggle's text is the band's type ("1 Low Shelf"), so the
+    // column header and its enable control are the same widget.
+    const int colW = contentW / ParametricEQModule::kNumBands;
+    for (int b = 0; b < ParametricEQModule::kNumBands; ++b) {
+        if (auto* toggle = findToggleByName(ParametricEQModule::rowLabelFor(b)))
+            toggle->setBounds(kMargin + b * colW, y, colW - 4, kToggleRow);
+    }
+    y += kToggleRow + 2;
+
+    for (int row = 0; row < kNumKnobRows; ++row) {
+        for (int b = 0; b < ParametricEQModule::kNumBands; ++b) {
+            const juce::String name = "B" + juce::String(b + 1) + " " + kKnobSuffix[row];
+            layoutNamedKnob(name, kMargin + b * colW, y + row * kKnobRow, colW - 4, kKnobRow);
+        }
+    }
+    y += kNumKnobRows * kKnobRow + 4;
+
+    layoutNamedKnob("Output", kMargin, y, colW - 4, kKnobRow);
+    y += kKnobRow;
+
+    if (scopeToggle) {
+        scopeToggle->setBounds(kMargin, y, contentW, kButtonRow);
+        y += kButtonRow + 4;
+    }
+    if (scopeComponent && scopeComponent->isVisible())
+        scopeComponent->setBounds(kMargin, y, contentW, kScopeHeight);
+}
+
+void ModuleComponent::wireEqGestureCallbacks(EQCurveComponent& curve) {
+    juce::Component::SafePointer<ModuleComponent> safeThis(this);
+    auto capture = [safeThis](bool isStart) {
+        if (safeThis == nullptr || safeThis->undoManager == nullptr || safeThis->module == nullptr)
+            return;
+        auto& graph = safeThis->owner.getAudioEngine().getGraph();
+        if (isStart)
+            safeThis->undoManager->captureBeforeState(graph);
+        else
+            safeThis->undoManager->pushSnapshotFromCapture(graph);
+    };
+    curve.onGestureStart = [capture] { capture(true); };
+    curve.onGestureEnd = [capture] { capture(false); };
+}
+
+void ModuleComponent::openEqWindow() {
+    if (eqWindow != nullptr) {
+        eqWindow->toFront(true);
+        return;
+    }
+
+    auto* eqMod = dynamic_cast<ParametricEQModule*>(module);
+    if (eqMod == nullptr)
+        return;
+
+    auto content = std::make_unique<EQWindow>(*eqMod);
+    juce::Component::SafePointer<ModuleComponent> safeThis(this);
+    content->setGestureCallbacks(
+        [safeThis] {
+            if (safeThis != nullptr && safeThis->undoManager != nullptr && safeThis->module != nullptr)
+                safeThis->undoManager->captureBeforeState(safeThis->owner.getAudioEngine().getGraph());
+        },
+        [safeThis] {
+            if (safeThis != nullptr && safeThis->undoManager != nullptr && safeThis->module != nullptr)
+                safeThis->undoManager->pushSnapshotFromCapture(safeThis->owner.getAudioEngine().getGraph());
+        });
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned(content.release());
+    options.dialogTitle = module->getName();
+    options.componentToCentreAround = getTopLevelComponent();
+    options.useNativeTitleBar = true;
+    options.resizable = true;
+    eqWindow = options.launchAsync();
+}
+
 void ModuleComponent::layoutSequencerStepColumn(int step, int colX, int startY) {
     // Gate slider (row 0)
     juce::String gateId = "Gate " + juce::String(step);
@@ -556,6 +728,12 @@ void ModuleComponent::updateLayout() {
         return;
     }
 
+    if (getType(module) == ModuleType::ParametricEQ) {
+        setSize(synth::LayoutUtil::kDoubleWidth, parametricEQHeight());
+        resized();
+        return;
+    }
+
     int contentHeight = 40; // Header
     // Account for port label space on modules with many inputs
     int numInputs = module->getTotalNumInputChannels();
@@ -578,9 +756,6 @@ void ModuleComponent::updateLayout() {
 
     if (freqResponseComponent)
         contentHeight += 130;
-
-    if (eqCurveComponent)
-        contentHeight += 140;
 
     if (spectrumToggle)
         contentHeight += 30;
@@ -866,6 +1041,11 @@ void ModuleComponent::resized() {
     if (muteButton)
         muteButton->setBounds(getWidth() - 74, 2, 22, 20);
 
+    if (getType(module) == ModuleType::ParametricEQ) {
+        layoutParametricEQ();
+        return;
+    }
+
     if (getType(module) == ModuleType::Sequencer) {
         // --- Sequencer Specific Layout ---
         int x = 10;
@@ -1010,11 +1190,6 @@ void ModuleComponent::resized() {
     if (freqResponseComponent) {
         freqResponseComponent->setBounds(10, y, getWidth() - 20, 120);
         y += 130;
-    }
-
-    if (eqCurveComponent) {
-        eqCurveComponent->setBounds(10, y, getWidth() - 20, 130);
-        y += 140;
     }
 
     if (spectrumToggle) {

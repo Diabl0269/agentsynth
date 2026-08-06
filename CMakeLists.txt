@@ -259,6 +259,7 @@ target_sources(AgentSynth PRIVATE
     Source/UI/FrequencyResponseComponent.h
     Source/UI/FrequencyGrid.h
     Source/UI/EQCurveComponent.h
+    Source/UI/EQWindow.h
     Source/UI/ModMatrixComponent.cpp
     Source/UI/ModMatrixComponent.h
     Source/UI/SettingsWindow.cpp

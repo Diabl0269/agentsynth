@@ -7,19 +7,30 @@
 #include "Theme/Theme.h"
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <juce_dsp/juce_dsp.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
-/** Visual response curve for ParametricEQModule.
+/** Interactive response curve for ParametricEQModule, in the traditional DAW idiom.
  *
- *  Shares its log-frequency / dB mapping with FrequencyResponseComponent via
- *  synth::ui::FrequencyGrid, and gets the curve itself from the module's own analytic
- *  prototypes (ParametricEQModule::responseDb), so what is drawn is the response the biquads
- *  actually realise rather than a separate approximation.
+ *  Gestures (all four bands start disabled, so the curve starts empty):
+ *    - double-click empty space  → add a point, enabling the slot that best fits that frequency
+ *    - double-click a point      → remove it (disables that band)
+ *    - drag a point              → set its frequency (x) and gain (y)
+ *    - scroll over a point       → widen / narrow it (Q)
  *
- *  Repaint discipline (see CLAUDE.md "No unconditional per-tick repaint"): the 30 Hz timer only
- *  repaints when a band setting has changed, or continuously while the spectrum overlay is on
- *  (which needs a fresh FFT each frame by definition).
+ *  The mouse handlers are deliberately thin wrappers over addPointAt / removeBand / dragBandTo /
+ *  nudgeBandQ, which are public so the interaction can be unit-tested without synthesising
+ *  juce::MouseEvents.
+ *
+ *  Curve maths comes from the module's own analytic prototypes (ParametricEQModule::responseDb),
+ *  so what is drawn is the response the biquads actually realise rather than a separate
+ *  approximation. Axis maths is shared with FrequencyResponseComponent via synth::ui::FrequencyGrid.
+ *
+ *  Repaint discipline (see CLAUDE.md "No unconditional per-tick repaint"): the 30 Hz timer
+ *  repaints when a band setting changed, when the hover/selection changed, or while the spectrum
+ *  overlay has actual signal to draw. A silent patch settles to zero repaints even with the
+ *  spectrum switched on.
  */
 class EQCurveComponent
     : public juce::Component
@@ -28,19 +39,28 @@ public:
     /** Symmetric dB window — an EQ cuts as much as it boosts, so 0 dB sits dead centre. */
     static constexpr float minDb = -30.0f;
     static constexpr float maxDb = 30.0f;
+    /** Click/hover radius around a band handle, in pixels. */
+    static constexpr float kHitRadius = 11.0f;
 
     explicit EQCurveComponent(ParametricEQModule& eq)
         : eqModule(eq) {
         magnitudes.resize(numPoints, 0.0f);
         fftData.resize(fftSize * 2, 0.0f);
-        spectrumMagnitudes.resize(numPoints, -80.0f);
+        spectrumMagnitudes.resize(numPoints, kSpecMinDb);
         lastBands = eqModule.getBandSnapshots();
         lastOutputGainDb = eqModule.getOutputGainDb();
         recomputeMagnitudes();
+        setWantsKeyboardFocus(false);
         startTimerHz(30);
     }
 
     ~EQCurveComponent() override { stopTimer(); }
+
+    /** Called around every parameter-changing gesture so the host can bracket it in one undo
+     *  step. Both are optional; when unset the gestures still work, just without undo entries.
+     */
+    std::function<void()> onGestureStart;
+    std::function<void()> onGestureEnd;
 
     void setShowSpectrum(bool show) {
         showSpectrum = show;
@@ -48,7 +68,10 @@ public:
     }
     bool getShowSpectrum() const { return showSpectrum; }
 
-    // ---------- pure static helpers (unit-testable without constructing the GUI) ----------
+    int getSelectedBand() const { return selectedBand; }
+    int getHoveredBand() const { return hoveredBand; }
+
+    // ---------- coordinate mapping ----------
 
     /** Frequency (Hz) → x pixel. Thin alias over FrequencyGrid for tests and callers. */
     static float freqToXStatic(float freq, float width) noexcept {
@@ -59,6 +82,160 @@ public:
     static float dbToYStatic(float db, float height) noexcept {
         return synth::ui::FrequencyGrid::dbToY(db, height, minDb, maxDb);
     }
+
+    float freqAtX(float x) const noexcept {
+        return synth::ui::FrequencyGrid::xToFreq(x, static_cast<float>(getWidth()));
+    }
+    float gainAtY(float y) const noexcept {
+        return juce::jlimit(-ParametricEQModule::kMaxGainDb, ParametricEQModule::kMaxGainDb,
+                            synth::ui::FrequencyGrid::yToDb(y, static_cast<float>(getHeight()), minDb, maxDb));
+    }
+    juce::Point<float> bandPosition(const ParametricEQModule::BandSnapshot& band) const noexcept {
+        return {freqToXStatic(band.freqHz, static_cast<float>(getWidth())),
+                dbToYStatic(band.gainDb, static_cast<float>(getHeight()))};
+    }
+
+    // ---------- interaction primitives (public so tests can drive them directly) ----------
+
+    /** Nearest ENABLED band whose handle is within kHitRadius of `p`, or -1 if none is. */
+    int hitTestBand(juce::Point<float> p) const {
+        int best = -1;
+        float bestDistanceSq = kHitRadius * kHitRadius;
+        for (int b = 0; b < ParametricEQModule::kNumBands; ++b) {
+            if (!lastBands[(size_t)b].enabled)
+                continue;
+            const float distanceSq = bandPosition(lastBands[(size_t)b]).getDistanceSquaredFrom(p);
+            if (distanceSq <= bestDistanceSq) {
+                best = b;
+                bestDistanceSq = distanceSq;
+            }
+        }
+        return best;
+    }
+
+    /** Enables the slot that best fits the clicked frequency and parks it at the clicked point.
+     *  Returns the band index, or -1 when all four slots are already in use.
+     */
+    int addPointAt(juce::Point<float> p) {
+        const float freq = freqAtX(p.x);
+        const int band = eqModule.findBandForNewPoint(freq);
+        if (band < 0)
+            return -1;
+
+        beginGesture();
+        eqModule.setBandFreq(band, freq);
+        eqModule.setBandGain(band, gainAtY(p.y));
+        eqModule.setBandQ(band, ParametricEQModule::kDefaultQ);
+        eqModule.setBandEnabled(band, true);
+        endGesture();
+
+        selectedBand = band;
+        refreshFromModule();
+        return band;
+    }
+
+    /** Removes a point — the band keeps its settings, it just stops contributing. */
+    void removeBand(int band) {
+        if (band < 0 || band >= ParametricEQModule::kNumBands || !eqModule.isBandEnabled(band))
+            return;
+        beginGesture();
+        eqModule.setBandEnabled(band, false);
+        endGesture();
+        if (selectedBand == band)
+            selectedBand = -1;
+        refreshFromModule();
+    }
+
+    /** Moves a band's handle to `p` — x sets frequency, y sets gain. */
+    void dragBandTo(int band, juce::Point<float> p) {
+        if (band < 0 || band >= ParametricEQModule::kNumBands)
+            return;
+        eqModule.setBandFreq(band, freqAtX(p.x));
+        eqModule.setBandGain(band, gainAtY(p.y));
+        refreshFromModule();
+    }
+
+    /** Multiplicatively widens (negative) or narrows (positive) a band's Q. */
+    void nudgeBandQ(int band, float amount) {
+        if (band < 0 || band >= ParametricEQModule::kNumBands)
+            return;
+        const float current = lastBands[(size_t)band].q;
+        const float updated = current * std::pow(2.0f, amount);
+        beginGesture();
+        eqModule.setBandQ(band, updated);
+        endGesture();
+        refreshFromModule();
+    }
+
+    // ---------- mouse handling ----------
+
+    void mouseMove(const juce::MouseEvent& e) override {
+        const int band = hitTestBand(e.position);
+        if (band != hoveredBand) {
+            hoveredBand = band;
+            setMouseCursor(band >= 0 ? juce::MouseCursor::UpDownLeftRightResizeCursor
+                                     : juce::MouseCursor::NormalCursor);
+            repaint();
+        }
+    }
+
+    void mouseExit(const juce::MouseEvent&) override {
+        if (hoveredBand != -1) {
+            hoveredBand = -1;
+            setMouseCursor(juce::MouseCursor::NormalCursor);
+            repaint();
+        }
+    }
+
+    void mouseDown(const juce::MouseEvent& e) override {
+        // Note we do NOT open an undo gesture here — a plain click that never turns into a drag
+        // would otherwise push an empty undo step. beginGesture happens on the first mouseDrag.
+        dragBand = hitTestBand(e.position);
+        if (dragBand >= 0) {
+            selectedBand = dragBand;
+            repaint();
+        }
+    }
+
+    void mouseDrag(const juce::MouseEvent& e) override {
+        if (dragBand < 0)
+            return;
+        if (!gestureActive) {
+            beginGesture();
+            gestureActive = true;
+        }
+        dragBandTo(dragBand, e.position);
+    }
+
+    void mouseUp(const juce::MouseEvent&) override {
+        if (gestureActive) {
+            endGesture();
+            gestureActive = false;
+        }
+        dragBand = -1;
+    }
+
+    void mouseDoubleClick(const juce::MouseEvent& e) override {
+        const int band = hitTestBand(e.position);
+        if (band >= 0)
+            removeBand(band);
+        else
+            addPointAt(e.position);
+    }
+
+    void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override {
+        int band = hitTestBand(e.position);
+        if (band < 0)
+            band = selectedBand;
+        if (band < 0 || !eqModule.isBandEnabled(band)) {
+            // Nothing under the cursor — let a parent scroll view have the gesture.
+            Component::mouseWheelMove(e, wheel);
+            return;
+        }
+        nudgeBandQ(band, wheel.deltaY * kQScrollSensitivity);
+    }
+
+    // ---------- painting ----------
 
     void timerCallback() override {
         const auto bands = eqModule.getBandSnapshots();
@@ -72,17 +249,20 @@ public:
         }
 
         if (showSpectrum && eqModule.getVisualBuffer() != nullptr) {
-            updateSpectrum();
-            repaint();
+            const bool hasSignal = updateSpectrum();
+            // Repaint while there is signal, plus one final frame once it goes quiet so the
+            // display settles instead of freezing mid-decay. A silent patch costs nothing.
+            if (hasSignal || spectrumWasActive)
+                repaint();
+            spectrumWasActive = hasSignal;
         }
     }
 
     void paint(juce::Graphics& g) override {
         using synth::ui::FrequencyGrid;
 
-        auto bounds = getLocalBounds().toFloat();
-        const float w = bounds.getWidth();
-        const float h = bounds.getHeight();
+        const float w = static_cast<float>(getWidth());
+        const float h = static_cast<float>(getHeight());
         if (w <= 0.0f || h <= 0.0f)
             return;
 
@@ -95,9 +275,13 @@ public:
 
         g.fillAll(bgColor);
 
+        // ---- Live spectrum, drawn first so it reads as a backdrop behind the curve ----
+        if (showSpectrum)
+            paintSpectrum(g, w, h, accent2);
+
         // ---- Grid: log-frequency verticals, dB horizontals ----
         g.setColour(gridColor);
-        for (float freq : {100.0f, 1000.0f, 10000.0f})
+        for (float freq : {50.0f, 100.0f, 500.0f, 1000.0f, 5000.0f, 10000.0f})
             g.drawVerticalLine((int)FrequencyGrid::freqToX(freq, w), 0.0f, h);
         for (float db : {-24.0f, -12.0f, 12.0f, 24.0f})
             g.drawHorizontalLine((int)dbToYStatic(db, h), 0.0f, w);
@@ -107,8 +291,7 @@ public:
         g.setColour(mutedText.withAlpha(0.55f));
         g.drawHorizontalLine((int)zeroY, 0.0f, w);
 
-        // Hz axis labels (top of each vertical gridline; the rightmost is right-justified so it
-        // stays inside the component at narrow widths).
+        // Axis labels. Only the decade marks get a label, so a narrow card stays readable.
         g.setFont(juce::Font(9.5f));
         g.setColour(mutedText);
         const struct {
@@ -123,7 +306,6 @@ public:
                 g.drawText(lbl.label, (int)x + 3, 2, 48, 12, juce::Justification::left, false);
         }
 
-        // dB axis labels
         g.setFont(juce::Font(9.0f));
         const struct {
             float db;
@@ -131,10 +313,6 @@ public:
         } dbLabels[] = {{24.0f, "+24"}, {12.0f, "+12"}, {0.0f, "0"}, {-12.0f, "-12"}, {-24.0f, "-24"}};
         for (const auto& lbl : dbLabels)
             g.drawText(lbl.label, 3, (int)dbToYStatic(lbl.db, h) - 6, 28, 12, juce::Justification::left, false);
-
-        // ---- Live spectrum underlay (drawn first so the curve stays legible on top) ----
-        if (showSpectrum)
-            paintSpectrum(g, w, h, accent2);
 
         // ---- Response curve, with the fill hanging off the 0 dB line ----
         juce::Path curvePath;
@@ -162,34 +340,50 @@ public:
         g.setColour(accent);
         g.strokePath(curvePath, juce::PathStrokeType(2.0f));
 
-        // ---- Band handles: one dot per band at (centre freq, band gain) ----
-        constexpr float dotRadius = 4.0f;
+        // ---- Band handles: one numbered dot per ENABLED band ----
         for (int b = 0; b < ParametricEQModule::kNumBands; ++b) {
             const auto& band = lastBands[(size_t)b];
-            const float bx = FrequencyGrid::freqToX(band.freqHz, w);
-            const float by = juce::jlimit(0.0f, h, dbToYStatic(band.gainDb, h));
+            if (!band.enabled)
+                continue;
 
-            // Dark ring first so the dot reads against both the curve and the fill.
-            g.setColour(bgColor);
-            g.fillEllipse(bx - dotRadius - 1.0f, by - dotRadius - 1.0f, (dotRadius + 1.0f) * 2.0f,
-                          (dotRadius + 1.0f) * 2.0f);
-            // Flat bands are drawn hollow so the eye goes straight to the ones doing work.
-            const bool active = std::abs(band.gainDb) > 0.25f;
-            g.setColour(active ? accent : accent.withAlpha(0.45f));
-            if (active)
-                g.fillEllipse(bx - dotRadius, by - dotRadius, dotRadius * 2.0f, dotRadius * 2.0f);
-            else
-                g.drawEllipse(bx - dotRadius, by - dotRadius, dotRadius * 2.0f, dotRadius * 2.0f, 1.2f);
+            const auto centre = bandPosition(band);
+            const float bx = juce::jlimit(0.0f, w, centre.x);
+            const float by = juce::jlimit(0.0f, h, centre.y);
+            const bool active = (b == hoveredBand || b == selectedBand);
+            const float radius = active ? kHandleRadius + 1.5f : kHandleRadius;
 
-            if (active && w >= 44.0f) {
-                g.setFont(juce::Font(8.5f));
-                g.setColour(accent.withAlpha(0.8f));
-                const int labelX = juce::jlimit(0, (int)w - 44, (int)bx - 22);
-                // Keep the callout on the far side of the dot from the curve's excursion.
-                const int labelY = juce::jlimit(0, (int)h - 12, (int)by + (band.gainDb >= 0.0f ? -15 : 5));
-                g.drawText(FrequencyGrid::formatHzLabel(band.freqHz), labelX, labelY, 44, 10,
-                           juce::Justification::centred, false);
+            // Halo on the hovered/selected handle, so the scroll-changes-Q target is obvious.
+            if (active) {
+                g.setColour(accent.withAlpha(0.25f));
+                g.fillEllipse(bx - radius - 4.0f, by - radius - 4.0f, (radius + 4.0f) * 2.0f, (radius + 4.0f) * 2.0f);
             }
+            g.setColour(bgColor);
+            g.fillEllipse(bx - radius, by - radius, radius * 2.0f, radius * 2.0f);
+            g.setColour(accent);
+            g.drawEllipse(bx - radius, by - radius, radius * 2.0f, radius * 2.0f, 2.0f);
+
+            g.setFont(juce::Font(9.0f));
+            g.drawText(juce::String(b + 1), (int)(bx - radius), (int)(by - radius), (int)(radius * 2.0f),
+                       (int)(radius * 2.0f), juce::Justification::centred, false);
+        }
+
+        // ---- Empty state: tell the user how to make a point ----
+        if (eqModule.getEnabledBandCount() == 0 && w >= 150.0f) {
+            g.setColour(mutedText.withAlpha(0.75f));
+            g.setFont(juce::Font(11.0f));
+            g.drawText("Double-click to add an EQ point", 0, (int)(h * 0.5f) + 8, (int)w, 16,
+                       juce::Justification::centred, false);
+        }
+
+        // ---- Readout for the handle being pointed at / dragged ----
+        const int readoutBand = (dragBand >= 0) ? dragBand : hoveredBand;
+        if (readoutBand >= 0 && lastBands[(size_t)readoutBand].enabled && w >= 150.0f) {
+            const auto& band = lastBands[(size_t)readoutBand];
+            const juce::String text = FrequencyGrid::formatHzLabel(band.freqHz) + "  " + juce::String(band.gainDb, 1) +
+                                      "dB  Q" + juce::String(band.q, 2);
+            g.setColour(accent.withAlpha(0.9f));
+            g.setFont(juce::Font(10.0f));
+            g.drawText(text, 0, (int)h - 15, (int)w - 6, 13, juce::Justification::right, false);
         }
     }
 
@@ -197,11 +391,38 @@ private:
     static constexpr int numPoints = 512;
     static constexpr int fftOrder = 10; // 1024-point FFT
     static constexpr int fftSize = 1 << fftOrder;
+    static constexpr float kHandleRadius = 7.0f;
+    /** One wheel notch (deltaY == 1) doubles/halves Q at 1.0; scaled down for finer control. */
+    static constexpr float kQScrollSensitivity = 1.5f;
+    static constexpr float kSpecMinDb = -80.0f;
+    static constexpr float kSpecMaxDb = 0.0f;
+    /** Peak below this counts as silence, so an idle patch stops repainting the spectrum. */
+    static constexpr float kSilenceThreshold = 1.0e-5f;
+
+    void beginGesture() {
+        if (onGestureStart)
+            onGestureStart();
+    }
+    void endGesture() {
+        if (onGestureEnd)
+            onGestureEnd();
+    }
+
+    /** Pulls fresh band values from the module and redraws immediately, so a drag tracks the
+     *  pointer rather than waiting up to 33 ms for the next timer tick.
+     */
+    void refreshFromModule() {
+        lastBands = eqModule.getBandSnapshots();
+        lastOutputGainDb = eqModule.getOutputGainDb();
+        recomputeMagnitudes();
+        repaint();
+    }
 
     static bool bandsDiffer(const std::array<ParametricEQModule::BandSnapshot, ParametricEQModule::kNumBands>& a,
                             const std::array<ParametricEQModule::BandSnapshot, ParametricEQModule::kNumBands>& b) {
         for (size_t i = 0; i < a.size(); ++i)
-            if (a[i].freqHz != b[i].freqHz || a[i].gainDb != b[i].gainDb || a[i].q != b[i].q)
+            if (a[i].enabled != b[i].enabled || a[i].freqHz != b[i].freqHz || a[i].gainDb != b[i].gainDb ||
+                a[i].q != b[i].q)
                 return true;
         return false;
     }
@@ -214,13 +435,22 @@ private:
         }
     }
 
-    void updateSpectrum() {
+    /** Runs the FFT into spectrumMagnitudes. Returns false when the input is silent, so the
+     *  caller can skip the repaint entirely.
+     */
+    bool updateSpectrum() {
         auto* vb = eqModule.getVisualBuffer();
         if (vb == nullptr)
-            return;
+            return false;
 
         std::vector<float> samples(vb->getSize(), 0.0f);
         vb->copyTo(samples);
+
+        float peak = 0.0f;
+        for (float s : samples)
+            peak = std::max(peak, std::abs(s));
+        if (peak < kSilenceThreshold)
+            return false;
 
         std::fill(fftData.begin(), fftData.end(), 0.0f);
         const int copySize = std::min((int)samples.size(), fftSize);
@@ -252,6 +482,7 @@ private:
             // Exponential moving average so the display settles instead of flickering.
             spectrumMagnitudes[(size_t)i] += 0.3f * (target - spectrumMagnitudes[(size_t)i]);
         }
+        return true;
     }
 
     void paintSpectrum(juce::Graphics& g, float w, float h, juce::Colour colour) {
@@ -276,16 +507,12 @@ private:
         specFill.lineTo(w, h);
         specFill.closeSubPath();
 
-        juce::ColourGradient specGradient(colour.withAlpha(0.188f), 0.0f, 0.0f, colour.withAlpha(0.031f), 0.0f, h,
-                                          false);
+        juce::ColourGradient specGradient(colour.withAlpha(0.22f), 0.0f, 0.0f, colour.withAlpha(0.04f), 0.0f, h, false);
         g.setGradientFill(specGradient);
         g.fillPath(specFill);
-        g.setColour(colour.withAlpha(0.55f));
+        g.setColour(colour.withAlpha(0.45f));
         g.strokePath(specPath, juce::PathStrokeType(1.0f));
     }
-
-    static constexpr float kSpecMinDb = -80.0f;
-    static constexpr float kSpecMaxDb = 0.0f;
 
     ParametricEQModule& eqModule;
 
@@ -293,7 +520,15 @@ private:
     std::array<ParametricEQModule::BandSnapshot, ParametricEQModule::kNumBands> lastBands{};
     float lastOutputGainDb = 0.0f;
 
-    bool showSpectrum = false;
+    int selectedBand = -1;
+    int hoveredBand = -1;
+    int dragBand = -1;
+    bool gestureActive = false;
+
+    // The spectrum is the curve's backdrop by design, so it defaults on; the silence gate in
+    // updateSpectrum() keeps that free when nothing is playing.
+    bool showSpectrum = true;
+    bool spectrumWasActive = false;
     juce::dsp::FFT fft{fftOrder};
     juce::dsp::WindowingFunction<float> window{fftSize, juce::dsp::WindowingFunction<float>::hann};
     std::vector<float> fftData;

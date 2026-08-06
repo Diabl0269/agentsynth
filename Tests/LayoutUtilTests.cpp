@@ -291,6 +291,8 @@ TEST(LayoutUtilTest, WidthBucket_MappingTable) {
     EXPECT_EQ(getModuleWidthBucket(ModuleType::Sequencer), ModuleWidthBucket::Double);
     EXPECT_EQ(getModuleWidthBucket(ModuleType::PolySequencer), ModuleWidthBucket::Double);
     EXPECT_EQ(getModuleWidthBucket(ModuleType::MidiKeyboard), ModuleWidthBucket::Double);
+    // Parametric EQ needs the width for its response curve plus a 4-column band grid.
+    EXPECT_EQ(getModuleWidthBucket(ModuleType::ParametricEQ), ModuleWidthBucket::Double);
 
     // Narrow-width module (attenuverter)
     EXPECT_EQ(getModuleWidthBucket(ModuleType::Attenuverter), ModuleWidthBucket::Narrow);

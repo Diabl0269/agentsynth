@@ -505,7 +505,7 @@ a slightly different footprint.
 
 ## 9. Visualizer Components
 
-Three in-module visualizer components provide real-time signal display inside module cards.
+Four in-module visualizer components provide real-time signal display inside module cards; one of them (`EQCurveComponent`) is also an editor.
 
 ### FrequencyGrid (`Source/UI/FrequencyGrid.h`)
 
@@ -533,13 +533,33 @@ All four now forward to `synth::ui::FrequencyGrid`; they stay as the component's
 
 ### EQCurveComponent (`Source/UI/EQCurveComponent.h`)
 
-Visual response curve for `ParametricEQModule` cards. Laid out at `(10, y, width − 20, 130)` under the knob rows, with a "Show Spectrum" toggle beneath it (same pattern as the Filter card).
+Interactive response curve for `ParametricEQModule`, in the traditional DAW idiom. Used twice over the same module: inline on the card (175 px tall) and inside the pop-out `EQWindow`. Both views stay in sync automatically — each one's timer picks the other's edits up on its next tick.
 
-- **dB window**: symmetric ±30 dB, so 0 dB sits at the exact vertical centre and boosts read as the mirror of cuts. dB gridlines at ±12 and ±24; the 0 dB line is drawn brighter as the reference the curve is read against.
+**Gestures.** All four bands start disabled, so the curve starts empty with a "Double-click to add an EQ point" hint.
+
+| Gesture | Effect |
+|---|---|
+| Double-click empty space | Adds a point, enabling the slot that best fits that frequency (`findBandForNewPoint`) |
+| Double-click a point | Removes it (disables that band; its settings are kept) |
+| Drag a point | Sets frequency (x) and gain (y) |
+| Scroll over a point | Widens / narrows it (Q), multiplicatively |
+| Hover | Halos the handle and shows a `freq / gain / Q` readout bottom-right |
+
+The mouse handlers are deliberately thin wrappers over public `addPointAt` / `removeBand` / `dragBandTo` / `nudgeBandQ` / `hitTestBand`, so the interaction is unit-tested without synthesising `juce::MouseEvent`s (`EQCurveInteraction.*`).
+
+**Undo.** `onGestureStart` / `onGestureEnd` bracket every parameter-changing gesture; `ModuleComponent::wireEqGestureCallbacks` binds them to `AppUndoManager::captureBeforeState` / `pushSnapshotFromCapture`, so one drag is one undo step. Deliberately *not* opened on `mouseDown` — a click that never becomes a drag would otherwise push an empty undo entry. `dragBandTo` itself does no bracketing since it is called repeatedly during a drag. Both are wired through a `Component::SafePointer`, so a pop-out window that outlives its card becomes a no-op rather than a dangling call.
+
+- **dB window**: symmetric ±30 dB, so 0 dB sits at the exact vertical centre and boosts read as the mirror of cuts. dB gridlines at ±12 and ±24; the 0 dB line is drawn brighter as the reference the curve is read against. `gainAtY` clamps to the parameter's ±24 dB, since the view is deliberately wider than the range.
 - **Curve source**: `ParametricEQModule::responseDb()` — the analytic prototypes the module's biquad coefficients are derived from, so the drawing and the DSP cannot drift apart (locked by `ParametricEQAudio.MeasuredResponseTracksTheAnalyticCurve`). Sampled at 512 log-spaced points; the gradient fill hangs off the 0 dB line rather than the bottom edge, so a cut fills downward and a boost upward.
-- **Band handles**: one dot per band at (centre freq, band gain), with a dark ring for contrast. Filled when the band is doing work (|gain| > 0.25 dB), hollow when flat, so the eye goes to the active bands. Active bands also get a `formatHzLabel` callout, placed above the dot for a boost and below for a cut; skipped entirely when the component is narrower than the 44 px callout box.
-- **Spectrum overlay**: optional 1024-point FFT of the module's `VisualBuffer`, drawn *behind* the curve over its own −80…0 dB window, smoothed with an exponential moving average.
-- **Repaint discipline**: 30 Hz timer that only repaints when a band setting or the output trim actually changed — or every tick while the spectrum overlay is on, which needs a fresh FFT by definition. See §10–11; never make this unconditional.
+- **Band handles**: one numbered ring per *enabled* band at (centre freq, band gain) — the parameter pair, so vertical drag maps 1:1 to gain. As in Cubase/Pro-Q, a shelf's handle sits at its corner frequency at the full shelf gain, which is above the curve there (a shelf reaches its full gain only well past the corner).
+- **Spectrum overlay**: 1024-point FFT of the module's `VisualBuffer`, drawn *behind* the curve over its own −80…0 dB window, smoothed with an exponential moving average. **On by default** here (unlike the Filter card) because the curve is meant to be read against it.
+- **Repaint discipline**: 30 Hz timer that repaints when a band setting or the output trim changed, when hover/selection changed, or while the spectrum has actual signal. The analyser gates on peak < 1e-5 and repaints one final frame on the transition to silence, so a default-on spectrum still settles to **zero repaints on an idle patch** — that gate is what keeps this compliant with §10–11. Never make it unconditional.
+
+### EQWindow (`Source/UI/EQWindow.h`)
+
+Pop-out editor for a Parametric EQ, opened from the card's "Open EQ Window" button. Content-only `juce::Component` (same pattern as `SettingsWindow`); the caller wraps it in a `juce::DialogWindow` via `LaunchOptions::launchAsync()`. Hosts a second `EQCurveComponent` over the same module at 720×420 (resizable), plus a spectrum toggle and a gesture hint.
+
+`ModuleComponent` holds the dialog as a `Component::SafePointer` and **deletes it in `detachFromProcessor()`** — the window references the module, so leaving it open across a graph rebuild would dangle. Re-clicking the button brings the existing window to front rather than opening a second one.
 
 ### ScopeComponent (`Source/UI/ScopeComponent.h`)
 
