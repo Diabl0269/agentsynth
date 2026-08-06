@@ -50,6 +50,13 @@ Technical documentation for the Agent Synth effects suite.
 - **CV Modulation**: None — no CV input channels.
 - **Parameters**: Threshold (-20–0 dB, default -1 dB), Release (1–500 ms), Input Gain (-20–+20 dB).
 
+## Bitcrusher Module
+- **Implementation**: Downsampling and bit-depth quantization effect with dither.
+- **Quantization**: Rounds input signal to `2^depth` discrete levels with `std::round` (clamped to ±1.0) to eliminate DC quantization bias.
+- **Sample Rate Reduction**: Holds sample values for `rate` sample clocks (scaled relative to 44.1 kHz for device independence).
+- **CV Modulation**: Rate (ch2), Depth (ch3), Mix (ch4). CV presence is detected via non-zero sample checking.
+- **Parameters**: Rate (1–50), Depth (1–24 bits), Mix (0–1), Dither (0–1).
+
 ## Parametric EQ Module
 - **Bands**: Four, in a fixed console-strip layout — `0` Low Shelf, `1` Peak (bell), `2` Peak (bell), `3` High Shelf. Both shelves are hard-wired to Q = 1/√2 (the RBJ "S = 1" case, maximally flat, no shelf overshoot); only the bells expose Q.
 - **Implementation**: RBJ cookbook biquads via `juce::dsp::IIR::Filter<float>`, one filter per channel per band (2 × 4). Coefficients are computed in-house by `ParametricEQModule::writeBiquad()` rather than `IIR::Coefficients::makePeakFilter()` et al., because the module also needs the matching *analog prototype* magnitude for the visualiser — see below.

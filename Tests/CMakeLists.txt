@@ -42,6 +42,8 @@ add_executable(Tests
     FXModuleTests.cpp
     ParametricEQModuleTests.cpp
     VoiceMixerModuleTests.cpp
+    BitcrusherModuleTests.cpp
+    NoiseModuleTests.cpp
     EdgeCaseTests.cpp
     IntegrationTests.cpp
     UndoRedoTests.cpp

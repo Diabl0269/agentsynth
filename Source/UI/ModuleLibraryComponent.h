@@ -36,6 +36,7 @@ public:
             {"Phaser", false},
             {"Flanger", false},
             {"Distortion", false},
+            {"Bitcrusher", false},
             {"Time FX", true},
             {"Delay", false},
             {"Reverb", false},
@@ -87,6 +88,8 @@ public:
             return "Short delay feedback comb-filter with a sweeping metallic sound.";
         if (moduleName.equalsIgnoreCase("Distortion"))
             return "Waveshaping distortion from soft saturation to hard clipping.";
+        if (moduleName.equalsIgnoreCase("Bitcrusher"))
+            return "For Lo-Fi, sample-rate reduction, and retro digital grit.";
         if (moduleName.equalsIgnoreCase("Delay"))
             return "Tempo-syncable stereo echo / delay line.";
         if (moduleName.equalsIgnoreCase("Reverb"))

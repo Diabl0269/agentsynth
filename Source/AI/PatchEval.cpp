@@ -95,4 +95,9 @@ PatchEvalResult evaluatePatch(const juce::AudioProcessorGraph& graph) {
     return result;
 }
 
+void prepareGraphForPatchEval(juce::AudioProcessorGraph& graph) {
+    graph.setPlayConfigDetails(0, 2, 44100.0, 512);
+    graph.prepareToPlay(44100.0, 512);
+}
+
 } // namespace synth

@@ -4,6 +4,7 @@
 #include "../Modules/ExternalMidiModule.h"
 #include "../Modules/FX/ChorusModule.h"
 
+#include "../Modules/FX/BitcrusherModule.h"
 #include "../Modules/FX/CompressorModule.h"
 #include "../Modules/FX/DelayModule.h"
 #include "../Modules/FX/DistortionModule.h"
@@ -64,6 +65,7 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Limiter", []() { return std::make_unique<LimiterModule>(); }},
     {"Parametric EQ", []() { return std::make_unique<ParametricEQModule>(); }},
     {"Voice Mixer", []() { return std::make_unique<VoiceMixerModule>(); }},
+    {"Bitcrusher", []() { return std::make_unique<BitcrusherModule>(); }},
     {"Noise", []() { return std::make_unique<NoiseModule>(); }},
     {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }}};
 
@@ -513,6 +515,8 @@ static juce::String getFactoryTypeName(juce::AudioProcessor* processor) {
             return "Parametric EQ";
         case ModuleType::VoiceMixer:
             return "Voice Mixer";
+        case ModuleType::Bitcrusher:
+            return "Bitcrusher";
         case ModuleType::Noise:
             return "Noise";
         case ModuleType::ExternalMidi:
@@ -1061,8 +1065,8 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
         if (audioOutputNode != nullptr) {
             // Types that produce audio and should auto-connect to output
             static const std::set<juce::String> audioNodeTypes = {
-                "Oscillator", "Noise",  "Filter", "VCA",        "Distortion", "Delay",   "Reverb",       "Amp Env",
-                "Filter Env", "Chorus", "Phaser", "Compressor", "Flanger",    "Limiter", "Parametric EQ"};
+                "Oscillator", "Noise",  "Filter", "VCA",        "Distortion", "Delay",   "Reverb",     "Amp Env",
+                "Filter Env", "Chorus", "Phaser", "Compressor", "Flanger",    "Limiter", "Bitcrusher", "Parametric EQ"};
 
             for (auto newNodeId : newlyCreatedNodes) {
                 auto* node = graph.getNodeForId(newNodeId);
@@ -1073,7 +1077,6 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                 if (audioNodeTypes.find(typeName) == audioNodeTypes.end())
                     continue;
 
-                // Check if this node already has outgoing audio connections
                 bool hasOutgoing = false;
                 for (const auto& conn : graph.getConnections()) {
                     if (conn.source.nodeID == newNodeId && !conn.source.isMIDI()) {
