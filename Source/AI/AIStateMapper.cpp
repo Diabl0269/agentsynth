@@ -13,6 +13,7 @@
 #include "../Modules/FX/ReverbModule.h"
 #include "../Modules/FilterModule.h"
 #include "../Modules/LFOModule.h"
+#include "../Modules/MathModule.h"
 #include "../Modules/MidiKeyboardModule.h"
 #include "../Modules/ModuleBase.h"
 #include "../Modules/NoiseModule.h"
@@ -63,6 +64,7 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Limiter", []() { return std::make_unique<LimiterModule>(); }},
     {"Voice Mixer", []() { return std::make_unique<VoiceMixerModule>(); }},
     {"Noise", []() { return std::make_unique<NoiseModule>(); }},
+    {"Math", []() { return std::make_unique<MathModule>(); }},
     {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }}};
 
 namespace {
@@ -511,6 +513,8 @@ static juce::String getFactoryTypeName(juce::AudioProcessor* processor) {
             return "Voice Mixer";
         case ModuleType::Noise:
             return "Noise";
+        case ModuleType::Math:
+            return "Math";
         case ModuleType::ExternalMidi:
             return "External MIDI";
         }

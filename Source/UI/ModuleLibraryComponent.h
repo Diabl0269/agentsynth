@@ -43,6 +43,7 @@ public:
             {"Limiter", false},
             {"Utility", true},
             {"Voice Mixer", false},
+            {"Math", false},
         };
         setMouseCursor(juce::MouseCursor::NormalCursor);
     }
@@ -94,6 +95,8 @@ public:
             return "Brickwall limiter that prevents the signal from exceeding 0 dBFS.";
         if (moduleName.equalsIgnoreCase("Voice Mixer"))
             return "Sums multiple polyphonic voices down to a stereo mix.";
+        if (moduleName.equalsIgnoreCase("Math"))
+            return "Dual-input math/logic utility - Sum, Difference, Min, Max and Product of A and B.";
         // Generic fallback for any unrecognised module name.
         return "Audio processing module.";
     }

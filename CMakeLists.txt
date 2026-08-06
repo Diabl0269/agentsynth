@@ -64,6 +64,7 @@ add_library(Core STATIC
     Source/Modules/VCAModule.h
     Source/Modules/VoiceMixerModule.h
     Source/Modules/NoiseModule.h
+    Source/Modules/MathModule.h
     Source/Modules/SequencerModule.h
     Source/Modules/MidiKeyboardModule.h
     Source/Modules/LFOModule.h

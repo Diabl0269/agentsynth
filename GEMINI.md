@@ -42,6 +42,7 @@ The project follows a modular architecture with:
 - Poly MIDI: Polyphonic MIDI input handling (ch0-7=pitch Hz, ch8-15=gate); `voiceMaskAtomic_` (`std::atomic<uint8_t>`) written end-of-processBlock — read by `AudioEngine::getDisplayVoiceCount()` via `std::popcount` without locks
 - Poly Sequencer: Polyphonic step sequencer
 - Voice Mixer: 8-to-stereo mixer with tanh soft saturation and Level control; alternative to VCA's internal poly summing
+- Math: Dual-input CV/audio math and logic utility (Make Noise Maths / Mutable Kinks-inspired); simultaneously outputs Sum, Diff, Min, Max, Mult of inputs A/B with an Off/Hard/Soft Clip stage; Min/Max double as AND/OR logic, unpatched B turns Min/Max into a half-wave rectifier, Mult is clean (non-oversampled) ring modulation
 
 ## Build System
 
