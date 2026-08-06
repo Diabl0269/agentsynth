@@ -18,6 +18,7 @@
 #include "../Modules/OscillatorModule.h"
 #include "../Modules/PolyMidiModule.h"
 #include "../Modules/PolySequencerModule.h"
+#include "../Modules/SampleHoldModule.h"
 #include "../Modules/SequencerModule.h"
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
@@ -66,6 +67,8 @@ static juce::Point<int> estimateModuleSize(const juce::String& typeName) {
         return {280, 120};
     if (typeName == "Noise")
         return {280, 250};
+    if (typeName == "Sample & Hold")
+        return {280, 400};
     return {280, 360};
 }
 

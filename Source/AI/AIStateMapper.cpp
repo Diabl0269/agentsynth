@@ -19,6 +19,7 @@
 #include "../Modules/OscillatorModule.h"
 #include "../Modules/PolyMidiModule.h"
 #include "../Modules/PolySequencerModule.h"
+#include "../Modules/SampleHoldModule.h"
 #include "../Modules/SequencerModule.h"
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
@@ -63,6 +64,7 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Limiter", []() { return std::make_unique<LimiterModule>(); }},
     {"Voice Mixer", []() { return std::make_unique<VoiceMixerModule>(); }},
     {"Noise", []() { return std::make_unique<NoiseModule>(); }},
+    {"Sample & Hold", []() { return std::make_unique<SampleHoldModule>(); }},
     {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }}};
 
 namespace {
@@ -511,6 +513,8 @@ static juce::String getFactoryTypeName(juce::AudioProcessor* processor) {
             return "Voice Mixer";
         case ModuleType::Noise:
             return "Noise";
+        case ModuleType::SampleHold:
+            return "Sample & Hold";
         case ModuleType::ExternalMidi:
             return "External MIDI";
         }

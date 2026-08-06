@@ -1122,6 +1122,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                       {"Distortion", ModuleType::Distortion}}},
                     {"Time FX", {{"Delay", ModuleType::Delay}, {"Reverb", ModuleType::Reverb}}},
                     {"Dynamics", {{"Compressor", ModuleType::Compressor}, {"Limiter", ModuleType::Limiter}}},
+                    {"Utility", {{"Sample & Hold", ModuleType::SampleHold}}},
                 };
 
                 for (auto& cat : categories) {

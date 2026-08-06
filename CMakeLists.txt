@@ -67,6 +67,7 @@ add_library(Core STATIC
     Source/Modules/SequencerModule.h
     Source/Modules/MidiKeyboardModule.h
     Source/Modules/LFOModule.h
+    Source/Modules/SampleHoldModule.h
     Source/Modules/AttenuverterModule.h
     Source/Modules/VisualBuffer.h
     Source/Modules/FX/DelayModule.h

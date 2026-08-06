@@ -22,6 +22,7 @@ add_executable(Tests
     MidiKeyboardModuleTests.cpp
     VCAModuleTests.cpp
     LFOModuleTests.cpp
+    SampleHoldModuleTests.cpp
     SequencerModuleTests.cpp
     AIStateMapperTests.cpp
     AIPatchValidationTests.cpp

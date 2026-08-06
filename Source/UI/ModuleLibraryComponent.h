@@ -42,6 +42,7 @@ public:
             {"Compressor", false},
             {"Limiter", false},
             {"Utility", true},
+            {"Sample & Hold", false},
             {"Voice Mixer", false},
         };
         setMouseCursor(juce::MouseCursor::NormalCursor);
@@ -92,6 +93,8 @@ public:
             return "Dynamic range compressor with threshold, ratio, attack and release.";
         if (moduleName.equalsIgnoreCase("Limiter"))
             return "Brickwall limiter that prevents the signal from exceeding 0 dBFS.";
+        if (moduleName.equalsIgnoreCase("Sample & Hold"))
+            return "Latches a source value on each clock edge for stepped random CV.";
         if (moduleName.equalsIgnoreCase("Voice Mixer"))
             return "Sums multiple polyphonic voices down to a stereo mix.";
         // Generic fallback for any unrecognised module name.

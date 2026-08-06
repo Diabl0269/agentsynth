@@ -104,6 +104,23 @@ Detailed specifications for Agent Synth's primary synthesis modules.
 - **Timing**: One step per beat. `currentActiveStep` (`std::atomic<int>`) written each block for UI step-highlight.
 - **Width**: DOUBLE (560 px). See [docs/layout.md](layout.md).
 
+## Sample & Hold Module
+- **Source file**: `Source/Modules/SampleHoldModule.h`
+- **Purpose**: Latches the value of a source signal on every clock edge and holds it until the next one — the stepped CV behind generative sequences and "R2D2" style bleeps.
+- **Parameters**:
+    - `Source` (choice: Input / **Random**) — sample the Signal input, or an internal white-noise generator.
+    - `Mode` (choice: **Sample** / Track, param id `holdMode`) — Sample latches one value per rising edge; Track follows the source while the gate is high and freezes when it falls. The id is `holdMode` rather than `mode` because `AIStateMapper::getPatchSchema` constrains choice parameters globally by id and `LFOModule` already owns a boolean `mode`.
+    - `Clock` (choice: **Internal** / External) — free-running internal oscillator, or the Trigger input.
+    - `Rate` (0.1–50 Hz, default 8, skewed) — internal clock speed. Ignored when `Clock` is External.
+    - `Slew` (0.0–1.0, default 0.0) — one-pole lag toward each new value, up to 0.5 s. 0 snaps instantly.
+    - `Level` (0.0–1.0, default 1.0) — output scaling.
+    - `Offset` (-1.0–1.0, default 0.0) — output offset; use +0.5 with Level 0.5 for a unipolar 0–1 CV.
+- **Output**: bipolar CV on ch0, clamped to [-1, 1].
+- **Why `Source`/`Clock` are explicit choices**: the module deliberately does *not* infer "is anything patched in?" from channel activity. A gate signal sits at 0 most of the time and a slow LFO crosses zero, so activity detection misfires. Defaults (Internal clock + Random source) make the module produce stepped random CV the moment it is dropped on the canvas, with nothing patched.
+- **Trigger detection**: rising edge across a 0.5 threshold, with gate state carried across block boundaries — a gate that stays high spanning two blocks is one edge, not two.
+- **CV inputs**: `Rate` maps raw CV exponentially over ±4 octaves (per the Module Development Guide convention); `Slew`, `Level` and `Offset` are additive over their native ranges. Only these four jacks are auto-promotable mod targets — Signal and Trigger connections stay direct rather than being wrapped in an attenuverter.
+- **Width**: SINGLE (280 px).
+
 ## Attenuverter Module (Hidden)
 - **Purpose**: Invisible gain/polarity stage automatically inserted on every mono CV connection routed via the mod matrix.
 - **Parameters**: `Amount` — ranges from -1.0 (full inversion) to +1.0 (full depth), **constructor default 0.0**.
@@ -154,6 +171,13 @@ In poly mode, voices occupy channels 0-7 (audio/pitch/gate) and the shared-CV bl
 | **VCA (poly)** | ch0-1 | Out | Stereo sum (L/R) |
 | **ADSR (poly)** | ch0-7 | In | Per-voice gate CV |
 | **ADSR (poly)** | ch0-7 | Out | Per-voice envelope (0–1) |
+| **Sample & Hold** | ch0 | In/Out | Signal in / held CV out (shared channel; read before overwrite) |
+| **Sample & Hold** | ch1 | In | Trigger / gate |
+| **Sample & Hold** | ch2 | In | Rate CV |
+| **Sample & Hold** | ch3 | In | Slew CV |
+| **Sample & Hold** | ch4 | In | Level CV |
+| **Sample & Hold** | ch5 | In | Offset CV |
+| **Sample & Hold** | ch1-5 | Out | Silent (cleared each block so CV does not leak downstream) |
 
 ---
 

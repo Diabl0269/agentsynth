@@ -31,6 +31,7 @@ Headless DSP tests that render audio through individual modules and verify outpu
 | LFOModuleTest | 11 | LFO waveform output, rate modulation, sync behavior |
 | VCAModuleTest | 5 | Gain application, envelope following, silence detection |
 | AttenuverterModuleTest | 4 | CV signal attenuation, bipolar control, CV modulation |
+| SampleHoldModuleTest | 30 | Port topology & modulation targets, Sample-mode rising-edge latch + hold across blocks, Track-mode follow/freeze, internal free-running clock and Rate CV, random source range, Level/Offset/Slew shaping + their CV inputs, trigger/CV channel hygiene, bypass dry pass-through & mute silence, zero-length/zero-channel/single-sample buffers, zero sample rate, state round-trip |
 | FX module tests | 46 | Delay (passthrough, feedback), Distortion (clipping, drive), Reverb (room size), Chorus, Phaser, Compressor, Flanger, Limiter |
 | AntiClickTest | 4 | ADSR minimum release, smooth parameter transitions |
 | EdgeCaseTests | 21 | Zero-length buffers, extreme parameters, single-sample buffers, rapid parameter changes, large buffers |
