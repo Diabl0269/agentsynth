@@ -133,6 +133,9 @@ void AppLookAndFeel::applyTheme(const Theme& newTheme) {
     setColour(juce::TextButton::textColourOffId, c.textPrimary);
     setColour(juce::TextButton::textColourOnId, c.bg0);
 
+    setColour(juce::DrawableButton::textColourId, c.textPrimary);
+    setColour(juce::DrawableButton::textColourOnId, c.textPrimary);
+
     setColour(juce::ToggleButton::textColourId, c.textPrimary);
     setColour(juce::ToggleButton::tickColourId, c.accent);
     setColour(juce::ToggleButton::tickDisabledColourId, c.border);
@@ -208,6 +211,7 @@ void AppLookAndFeel::retintIcons() {
     iconLibrary_.setTintColour(Icon::ToggleAI, c.textPrimary);
     iconLibrary_.setTintColour(Icon::ToggleMatrix, c.textPrimary);
     iconLibrary_.setTintColour(Icon::ToggleLibrary, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::ThemeToggle, c.textPrimary);
 
     // TransportPlay is scaffolding only (no DrawableButton wired this phase); tint muted so it
     // reads as inactive if ever surfaced.
@@ -416,6 +420,25 @@ void AppLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& button,
     g.drawFittedText(button.getButtonText(), button.getLocalBounds().reduced(4, 0), juce::Justification::centred, 1);
 }
 
+void AppLookAndFeel::drawDrawableButton(juce::Graphics& g, juce::DrawableButton& button,
+                                        bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) {
+    if (button.getStyle() == juce::DrawableButton::ImageAboveTextLabel) {
+        auto bounds = button.getLocalBounds();
+        auto text = button.getButtonText();
+
+        if (text.isNotEmpty()) {
+            const auto textHeight = 14;
+            auto textBounds = bounds.removeFromBottom(textHeight);
+
+            g.setFont(juce::Font(juce::FontOptions(11.0f)));
+            g.setColour(button.findColour(juce::DrawableButton::textColourId, true)
+                            .withMultipliedAlpha(button.isEnabled() ? 1.0f : 0.5f));
+            g.drawFittedText(text, textBounds, juce::Justification::centred, 1);
+        }
+    }
+    LookAndFeel_V4::drawDrawableButton(g, button, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
+}
+
 void AppLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool isButtonDown, int /*buttonX*/,
                                   int /*buttonY*/, int /*buttonW*/, int /*buttonH*/, juce::ComboBox& box) {
     const auto& c = theme.colors;
@@ -558,6 +581,9 @@ void AppLookAndFeel::drawPopupMenuItem(juce::Graphics& g, const juce::Rectangle<
         g.setColour(c.accent);
         g.strokePath(tick, juce::PathStrokeType(1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         g.setColour(col);
+
+        // Shift text right so it does not overlap the checkmark tick
+        textArea = textArea.withTrimmedLeft(16);
     }
 
     // Waveform glyph icon: paint a ~14x14 Drawable to the left of the text.

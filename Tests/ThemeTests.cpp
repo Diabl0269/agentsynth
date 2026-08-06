@@ -64,7 +64,7 @@ protected:
 // ---------------------------------------------------------------------------
 TEST(ThemeBuiltInsTest, BuiltInsRegisterAndAreNonEmpty) {
     auto themes = synth::theme::builtInThemes();
-    ASSERT_EQ(themes.size(), 3u);
+    ASSERT_EQ(themes.size(), 4u);
 
     for (const auto& t : themes) {
         EXPECT_FALSE(t.name.isEmpty());
@@ -74,6 +74,7 @@ TEST(ThemeBuiltInsTest, BuiltInsRegisterAndAreNonEmpty) {
     EXPECT_EQ(themes[0].id, "obsidian");
     EXPECT_EQ(themes[1].id, "neon");
     EXPECT_EQ(themes[2].id, "warm");
+    EXPECT_EQ(themes[3].id, "daylight");
 }
 
 // ---------------------------------------------------------------------------
@@ -556,7 +557,7 @@ TEST(ThemeMetricsTest, Issue103MetricsDefaults) {
 // Verify all built-in themes populate the new Metrics fields correctly.
 TEST(ThemeBuiltInsTest, Issue103MetricsInAllBuiltIns) {
     auto themes = synth::theme::builtInThemes();
-    ASSERT_EQ(themes.size(), 3u);
+    ASSERT_EQ(themes.size(), 4u);
 
     for (const auto& t : themes) {
         EXPECT_EQ(t.metrics.gridSize, 8) << "Theme '" << t.name << "' has incorrect gridSize";
@@ -830,4 +831,39 @@ TEST(StyledWidgetSmokeTest, TabBarDrawNoThrow) {
     EXPECT_TRUE(anyOpaque) << "Active tab snapshot was fully transparent";
 
     bar.setLookAndFeel(nullptr);
+}
+
+// ---------------------------------------------------------------------------
+// 24. DefaultThemesAndModeToggle
+// ---------------------------------------------------------------------------
+TEST_F(ThemeTest, DefaultThemesAndModeToggle) {
+    synth::theme::ThemeManager mgr;
+    mgr.initialise(&appProperties);
+
+    // Verify defaults
+    EXPECT_EQ(mgr.getDefaultDarkThemeId(), "obsidian");
+    EXPECT_EQ(mgr.getDefaultLightThemeId(), "daylight");
+    EXPECT_EQ(mgr.getThemeMode(), synth::theme::ThemeManager::ThemeMode::Dark);
+
+    // Toggle mode
+    mgr.toggleLightDarkMode();
+    EXPECT_EQ(mgr.getActiveThemeId(), "daylight");
+    EXPECT_FALSE(mgr.getActiveTheme().isDark);
+
+    mgr.toggleLightDarkMode();
+    EXPECT_EQ(mgr.getActiveThemeId(), "obsidian");
+    EXPECT_TRUE(mgr.getActiveTheme().isDark);
+
+    // Change default dark/light theme
+    EXPECT_TRUE(mgr.setDefaultDarkThemeId("warm"));
+    EXPECT_TRUE(mgr.setDefaultLightThemeId("daylight"));
+    EXPECT_EQ(mgr.getDefaultDarkThemeId(), "warm");
+
+    // Setting mode to Light
+    mgr.setThemeMode(synth::theme::ThemeManager::ThemeMode::Light);
+    EXPECT_EQ(mgr.getActiveThemeId(), "daylight");
+
+    // Setting mode to Dark
+    mgr.setThemeMode(synth::theme::ThemeManager::ThemeMode::Dark);
+    EXPECT_EQ(mgr.getActiveThemeId(), "warm");
 }

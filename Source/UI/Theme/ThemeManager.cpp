@@ -2,6 +2,7 @@
 #include "../../Branding.h"
 #include "BuiltInThemes.h"
 #include "ThemeLoader.h"
+#include <juce_gui_basics/juce_gui_basics.h>
 
 namespace synth::theme {
 
@@ -21,11 +22,27 @@ void ThemeManager::initialise(juce::ApplicationProperties* props) {
     // Load user JSON themes from the well-known folder.
     loadUserThemesFromFolder();
 
-    // Restore the persisted selection, falling back to the default built-in.
+    // Restore persisted settings.
     juce::String restoredId = getDefaultThemeId();
     if (properties != nullptr) {
         auto* settings = properties->getUserSettings();
         if (settings != nullptr) {
+            juce::String savedDark = settings->getValue("defaultDarkThemeId");
+            if (savedDark.isNotEmpty() && indexOfId(savedDark) >= 0)
+                defaultDarkId = savedDark;
+
+            juce::String savedLight = settings->getValue("defaultLightThemeId");
+            if (savedLight.isNotEmpty() && indexOfId(savedLight) >= 0)
+                defaultLightId = savedLight;
+
+            juce::String savedMode = settings->getValue("themeMode");
+            if (savedMode == "Light")
+                mode = ThemeMode::Light;
+            else if (savedMode == "System")
+                mode = ThemeMode::System;
+            else
+                mode = ThemeMode::Dark;
+
             juce::String saved = settings->getValue("themeId");
             if (saved.isNotEmpty())
                 restoredId = saved;
@@ -40,6 +57,91 @@ void ThemeManager::initialise(juce::ApplicationProperties* props) {
         idx = 0; // defensive: should never happen since built-ins always exist
 
     activeIndex = idx;
+}
+
+juce::String ThemeManager::getDefaultDarkThemeId() const {
+    if (indexOfId(defaultDarkId) >= 0)
+        return defaultDarkId;
+    return getDefaultThemeId();
+}
+
+bool ThemeManager::setDefaultDarkThemeId(const juce::String& id) {
+    int idx = indexOfId(id);
+    if (idx < 0)
+        return false;
+
+    defaultDarkId = id;
+    if (properties != nullptr) {
+        if (auto* settings = properties->getUserSettings())
+            settings->setValue("defaultDarkThemeId", id);
+    }
+    return true;
+}
+
+juce::String ThemeManager::getDefaultLightThemeId() const {
+    if (indexOfId(defaultLightId) >= 0)
+        return defaultLightId;
+    return getDefaultLightThemeFallbackId();
+}
+
+bool ThemeManager::setDefaultLightThemeId(const juce::String& id) {
+    int idx = indexOfId(id);
+    if (idx < 0)
+        return false;
+
+    defaultLightId = id;
+    if (properties != nullptr) {
+        if (auto* settings = properties->getUserSettings())
+            settings->setValue("defaultLightThemeId", id);
+    }
+    return true;
+}
+
+void ThemeManager::setThemeMode(ThemeMode newMode) {
+    mode = newMode;
+    if (properties != nullptr) {
+        if (auto* settings = properties->getUserSettings()) {
+            juce::String modeStr = "Dark";
+            if (mode == ThemeMode::Light)
+                modeStr = "Light";
+            else if (mode == ThemeMode::System)
+                modeStr = "System";
+            settings->setValue("themeMode", modeStr);
+        }
+    }
+
+    juce::String targetId = getDefaultDarkThemeId();
+    if (mode == ThemeMode::Light) {
+        targetId = getDefaultLightThemeId();
+    } else if (mode == ThemeMode::System) {
+        auto sysIsDark = juce::Desktop::getInstance().isDarkModeActive();
+        targetId = sysIsDark ? getDefaultDarkThemeId() : getDefaultLightThemeId();
+    }
+
+    int idx = indexOfId(targetId);
+    if (idx >= 0) {
+        activeIndex = idx;
+        if (properties != nullptr) {
+            if (auto* settings = properties->getUserSettings())
+                settings->setValue("themeId", targetId);
+        }
+        sendSynchronousChangeMessage();
+    }
+}
+
+void ThemeManager::toggleLightDarkMode() {
+    const bool currentIsDark = getActiveTheme().isDark;
+    if (currentIsDark) {
+        mode = ThemeMode::Light;
+        setActiveTheme(getDefaultLightThemeId());
+    } else {
+        mode = ThemeMode::Dark;
+        setActiveTheme(getDefaultDarkThemeId());
+    }
+    if (properties != nullptr) {
+        if (auto* settings = properties->getUserSettings())
+            settings->setValue("themeMode", mode == ThemeMode::Light ? "Light" : "Dark");
+    }
 }
 
 bool ThemeManager::setActiveTheme(const juce::String& id) {
@@ -66,7 +168,7 @@ bool ThemeManager::setActiveTheme(const juce::String& id) {
 
 void ThemeManager::addUserTheme(Theme theme) {
     // Resolve id collision with a built-in.
-    static const juce::StringArray builtInIds{"obsidian", "neon", "warm"};
+    static const juce::StringArray builtInIds{"obsidian", "neon", "warm", "daylight"};
     if (builtInIds.contains(theme.id, true /* ignore case */))
         theme.id = theme.id + "-user";
 

@@ -127,17 +127,17 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
                                                                  true, true,          // midi
                                                                  false, false         // bit depths
     );
-    tabs.addTab("Audio", juce::Colours::darkgrey, audioSelector, true);
+    tabs.addTab("Audio", juce::Colours::transparentBlack, audioSelector, true);
 
     auto* aiSettingsTab = new AISettingsTab(appProperties, aiService, aiChatComponent);
-    tabs.addTab("AI", juce::Colours::darkgrey, aiSettingsTab, true);
+    tabs.addTab("AI", juce::Colours::transparentBlack, aiSettingsTab, true);
 
     auto* shortcutsSettingsTab = new ShortcutsSettingsTab(shortcutManager);
-    tabs.addTab("Keyboard Shortcuts", juce::Colours::darkgrey, shortcutsSettingsTab, true);
+    tabs.addTab("Keyboard Shortcuts", juce::Colours::transparentBlack, shortcutsSettingsTab, true);
 
     auto* appearanceSettingsTab = new AppearanceSettingsTab(themeManager, appProperties);
     appearanceSettingsTab->setGraphEditor(graphEditor); // wire the tab to graph editor
-    tabs.addTab("Appearance", juce::Colours::darkgrey, appearanceSettingsTab, true);
+    tabs.addTab("Appearance", juce::Colours::transparentBlack, appearanceSettingsTab, true);
 
     addAndMakeVisible(tabs);
 

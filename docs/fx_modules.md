@@ -49,3 +49,11 @@ Technical documentation for the Agent Synth effects suite.
 - **Input Gain**: Pre-limiter drive parameter. Range: -20 to +20 dB, default 0 dB. Applied per-sample with 5 ms smoothing before the limiter stage.
 - **CV Modulation**: None — no CV input channels.
 - **Parameters**: Threshold (-20–0 dB, default -1 dB), Release (1–500 ms), Input Gain (-20–+20 dB).
+
+## Bitcrusher Module
+- **Implementation**: Downsampling and bit-depth quantization effect with dither.
+- **Quantization**: Rounds input signal to `2^depth` discrete levels with `std::round` (clamped to ±1.0) to eliminate DC quantization bias.
+- **Sample Rate Reduction**: Holds sample values for `rate` sample clocks (scaled relative to 44.1 kHz for device independence).
+- **CV Modulation**: Rate (ch2), Depth (ch3), Mix (ch4). CV presence is detected via non-zero sample checking.
+- **Parameters**: Rate (1–50), Depth (1–24 bits), Mix (0–1), Dither (0–1).
+

@@ -22,7 +22,8 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
         72.0f,  // Redo
         120.0f, // AutoArrange
         104.0f, // ToggleModMatrix
-        92.0f   // ToggleAiPanel
+        92.0f,  // ToggleAiPanel
+        110.0f  // ToggleTheme
     };
 
     auto prefFor = [&](int slot) { return narrowMode_ ? kNarrowPref : widePref[(size_t)slot]; };
@@ -43,8 +44,8 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
     // Flexible spacer pushes the right group to the far edge.
     fb.items.add(juce::FlexItem().withFlex(1.0f));
 
-    // Right group: ToggleModMatrix, ToggleAiPanel.
-    for (int slot = ToggleModMatrix; slot <= ToggleAiPanel; ++slot)
+    // Right group: ToggleModMatrix, ToggleAiPanel, ToggleTheme.
+    for (int slot = ToggleModMatrix; slot <= ToggleTheme; ++slot)
         if (buttons_[(size_t)slot] != nullptr)
             fb.items.add(juce::FlexItem(*buttons_[(size_t)slot])
                              .withMinWidth(0.0f)
