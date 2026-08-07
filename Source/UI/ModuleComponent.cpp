@@ -542,12 +542,8 @@ void ModuleComponent::updateLayout() {
     }
 
     int contentHeight = 40; // Header
-    // Account for port label space on modules with many inputs
-    int numInputs = module->getTotalNumInputChannels();
-    if (auto* mb = dynamic_cast<ModuleBase*>(module))
-        numInputs = mb->getVisibleInputPortCount();
-    if (numInputs > 2)
-        contentHeight = std::max(contentHeight, 30 + numInputs * 20 + 10);
+    // Account for port label space on modules with many jacks (inputs OR outputs).
+    contentHeight = std::max(contentHeight, portColumnBottom());
     contentHeight += comboBoxes.size() * 50;
     contentHeight += toggles.size() * 30;
 
@@ -742,6 +738,40 @@ void ModuleComponent::paint(juce::Graphics& g) {
             }
         }
     }
+}
+
+int ModuleComponent::portColumnBottom() {
+    if (module == nullptr || getType(module) == ModuleType::Attenuverter)
+        return 0;
+
+    int visibleIn = module->getTotalNumInputChannels();
+    int visibleOut = module->getTotalNumOutputChannels();
+    if (auto* mb = dynamic_cast<ModuleBase*>(module)) {
+        visibleIn = mb->getVisibleInputPortCount();
+        visibleOut = mb->getVisibleOutputPortCount();
+    }
+
+    int bottom = 0;
+
+    // Input side: reproduced verbatim from the original inline calculation. It under-reserves
+    // by ~30px versus where the jacks are actually drawn, but correcting it grows seven
+    // existing modules and invalidates the authored positions in every built-in preset, so it
+    // is deliberately left alone here. Only Voice Mixer (8 in, few controls) visibly overflows
+    // — see the DISABLED_ regression test in ModuleComponentTests.cpp.
+    if (visibleIn > 2)
+        bottom = std::max(bottom, 30 + visibleIn * 20 + 10);
+
+    // Output side: never reserved at all before, which is why Math (2 in / 5 out) laid out
+    // shorter than its own port column — the 5th jack fell outside the module and the scope
+    // overlapped the ones above it. Derive from getPortCenter() rather than re-deriving the
+    // spacing so this cannot drift from where the jacks are drawn (it also picks up the MIDI
+    // port offset). Query the output side specifically: getPortCenter() clamps the index to
+    // that side's visible jack count, so asking the input side would silently under-reserve.
+    // +20 clears the jack radius and its vertically-centred label, which spans centre +/-10.
+    if (visibleOut > 2)
+        bottom = std::max(bottom, getPortCenter(visibleOut - 1, /*isInput*/ false).y + 20);
+
+    return bottom;
 }
 
 juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
@@ -949,12 +979,8 @@ void ModuleComponent::resized() {
     // Increase top y if MIDI IN is present to avoid overlap
     if (module->acceptsMidi())
         y += 30;
-    // Push content below input port labels
-    int numInputs2 = module->getTotalNumInputChannels();
-    if (auto* mb2 = dynamic_cast<ModuleBase*>(module))
-        numInputs2 = mb2->getVisibleInputPortCount();
-    if (numInputs2 > 2)
-        y = std::max(y, 30 + numInputs2 * 20 + 10);
+    // Push content below the port column (inputs OR outputs, whichever is taller)
+    y = std::max(y, portColumnBottom());
 
     int margin = 70; // Wider margin for labels
     int contentWidth = getWidth() - (margin * 2);

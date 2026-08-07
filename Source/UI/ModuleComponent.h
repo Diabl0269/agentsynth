@@ -95,6 +95,11 @@ private:
     void createControls();
     void updateLayout();
 
+    // Lowest y the port column reaches, or 0 when there are too few jacks to matter.
+    // Counts BOTH sides: a module may have more outputs than inputs (e.g. Math, 2 in / 5 out),
+    // and content must clear the taller side.
+    int portColumnBottom();
+
     // Shared step-column layout helper used by Sequencer and PolySequencer.
     // Positions Gate, Pitch/Root, and F.Env/Chord controls for a single step column.
     void layoutSequencerStepColumn(int step, int colX, int startY);
