@@ -54,6 +54,53 @@ TEST(PatchEvalTest, FullyConnectedChainPasses) {
     EXPECT_TRUE(result.passed()) << result.detail.toStdString();
 }
 
+// A Sampler is a sound source in the module library, but it is silent until a user loads a file and
+// nothing in a model-authored patch can do that. Counting it here would let AIIntegrationService's
+// structural gate accept a patch that can only ever play silence, so it must NOT satisfy
+// sourceReachesOutput — and the reason has to say why rather than claiming there is no source.
+TEST(PatchEvalTest, SamplerAloneDoesNotCountAsAReachableSource) {
+    juce::AudioProcessorGraph graph;
+    buildGraph(R"({
+        "nodes": [
+            {"id": 1, "type": "Sampler"},
+            {"id": 2, "type": "Audio Output"}
+        ],
+        "connections": [
+            {"src": 1, "srcPort": 0, "dst": 2, "dstPort": 0}
+        ]
+    })",
+               graph);
+
+    const auto result = evaluatePatch(graph);
+    EXPECT_TRUE(result.hasAudioOutput);
+    EXPECT_FALSE(result.sourceReachesOutput);
+    EXPECT_FALSE(result.passed());
+    EXPECT_TRUE(result.detail.contains("Sampler")) << "the rejection must name the Sampler: " << result.detail;
+    EXPECT_TRUE(result.detail.contains("silent until a file is loaded"))
+        << "the rejection must be actionable: " << result.detail;
+}
+
+TEST(PatchEvalTest, SamplerAlongsideAnOscillatorStillPasses) {
+    // The Sampler is not disqualifying — it just cannot be the only thing feeding the output.
+    juce::AudioProcessorGraph graph;
+    buildGraph(R"({
+        "nodes": [
+            {"id": 1, "type": "Sampler"},
+            {"id": 2, "type": "Oscillator"},
+            {"id": 3, "type": "Audio Output"}
+        ],
+        "connections": [
+            {"src": 1, "srcPort": 0, "dst": 3, "dstPort": 0},
+            {"src": 2, "srcPort": 0, "dst": 3, "dstPort": 0}
+        ]
+    })",
+               graph);
+
+    const auto result = evaluatePatch(graph);
+    EXPECT_TRUE(result.sourceReachesOutput);
+    EXPECT_TRUE(result.passed()) << result.detail.toStdString();
+}
+
 TEST(PatchEvalTest, MissingAudioOutputFails) {
     juce::AudioProcessorGraph graph;
     buildGraph(R"({

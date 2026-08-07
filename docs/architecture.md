@@ -45,8 +45,9 @@ Every concrete module implements `virtual ModuleType getModuleType() const = 0`.
 ```
 Oscillator, Filter, VCA, ADSR, LFO, Sequencer, PolySequencer,
 MidiKeyboard, PolyMidi, ExternalMidi, Attenuverter,
-Delay, Distortion, Reverb, Chorus, Phaser, Compressor, Flanger, Limiter, VoiceMixer,
-Noise, Math
+Delay, Distortion, Reverb, Chorus, Phaser, Compressor, Flanger, Limiter,
+ParametricEQ, VoiceMixer, Bitcrusher, PitchShifter, Noise, Math, Sampler, Wavetable,
+MacroControl, SampleHold
 ```
 
 `ModuleType` is consumed by `LayoutUtil::getModuleWidthBucket` to classify modules into width buckets (Narrow / Single / Double) and by `ModuleComponent` for type-safe UI layout switching.
@@ -79,6 +80,16 @@ Maps raw audio-buffer channel indices to the visible jack slots shown in the UI.
 `virtual bool isAutoPromotableModTarget(int dstChannel) const`
 
 Guards poly-mode CV inputs from being auto-wrapped in an `AttenuverterModule` by the AI/routing layer. Default: returns `true` iff `dstChannel` is in `getModulationTargets()`. Modules override this to exclude poly-voice pitch/gate channels which should not receive an attenuverter.
+
+#### Extra (non-parameter) State
+
+`virtual juce::var getExtraState() const` / `virtual void setExtraState(const juce::var&)`
+
+For state that has to survive a graph rebuild but is not expressible as a `juce::AudioProcessorParameter` — today only `SamplerModule`'s loaded file path. `AIStateMapper::graphToJSON` writes whatever `getExtraState()` returns as the node's `"state"` property, and `applyJSONToGraph` feeds it back through `setExtraState()`. Return a **void** `var` when there is nothing to persist, so modules that do not use the hook add no JSON.
+
+This matters because undo/redo and preset load both go through `graphToJSON` → `applyJSONToGraph`, which rebuilds processors from scratch: anything not in that JSON is silently lost on the next undo.
+
+`setExtraState` is only ever called on the **trusted** path (our own snapshots and presets). A module may legitimately read this as a filename, so honouring it for untrusted model output would turn a patch suggestion into an arbitrary file read.
 
 #### Port Labels
 

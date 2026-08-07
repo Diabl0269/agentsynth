@@ -16,6 +16,10 @@ add_executable(Tests
     FilterTests.cpp
     NoiseModuleTests.cpp
     MathModuleTests.cpp
+    MacroControlModuleTests.cpp
+    SamplerModuleTests.cpp
+    WavetableOscillatorModuleTests.cpp
+    WavetableDisplayTests.cpp
     ADSRTests.cpp
     ModuleBaseTests.cpp
     VisualBufferTests.cpp
@@ -23,6 +27,7 @@ add_executable(Tests
     MidiKeyboardModuleTests.cpp
     VCAModuleTests.cpp
     LFOModuleTests.cpp
+    SampleHoldModuleTests.cpp
     SequencerModuleTests.cpp
     AIStateMapperTests.cpp
     AIPatchValidationTests.cpp
@@ -41,7 +46,11 @@ add_executable(Tests
     AIUndoTests.cpp
     ModMatrixTests.cpp
     FXModuleTests.cpp
+    PitchShifterModuleTests.cpp
+    ParametricEQModuleTests.cpp
     VoiceMixerModuleTests.cpp
+    BitcrusherModuleTests.cpp
+    NoiseModuleTests.cpp
     EdgeCaseTests.cpp
     IntegrationTests.cpp
     UndoRedoTests.cpp
@@ -66,6 +75,7 @@ add_executable(Tests
     IconLibraryTests.cpp
     StatusBarTests.cpp
     FrequencyResponseTests.cpp
+    EQCurveTests.cpp
     ScopeTests.cpp
     UIAnimationTests.cpp
     GraphEditorOnboardingTests.cpp

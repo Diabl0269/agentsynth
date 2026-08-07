@@ -259,11 +259,13 @@ TEST(AIStateMapperTest, MergeMode_UpdateExistingNodeParams) {
 
 TEST(AIStateMapperTest, FactorySupportsAllModuleTypes) {
     // Verify all expected module types can be created
-    juce::StringArray expectedTypes = {"Audio Input", "Audio Output",   "Midi Input",    "Oscillator", "Filter",
-                                       "VCA",         "ADSR",           "Sequencer",     "LFO",        "Distortion",
-                                       "Delay",       "Reverb",         "MIDI Keyboard", "Amp Env",    "Filter Env",
-                                       "Poly MIDI",   "Poly Sequencer", "Attenuverter",  "Chorus",     "Phaser",
-                                       "Compressor",  "Flanger",        "Limiter",       "Math"};
+    juce::StringArray expectedTypes = {
+        "Audio Input",   "Audio Output",   "Midi Input",    "Oscillator", "Filter",
+        "VCA",           "ADSR",           "Sequencer",     "LFO",        "Distortion",
+        "Delay",         "Reverb",         "MIDI Keyboard", "Amp Env",    "Filter Env",
+        "Poly MIDI",     "Poly Sequencer", "Attenuverter",  "Chorus",     "Phaser",
+        "Compressor",    "Flanger",        "Limiter",       "Bitcrusher", "Pitch Shifter",
+        "Parametric EQ", "Macros",         "Sample & Hold", "Math"};
     for (const auto& type : expectedTypes) {
         auto module = synth::AIStateMapper::createModule(type);
         EXPECT_NE(module, nullptr) << "Failed to create module: " << type.toStdString();

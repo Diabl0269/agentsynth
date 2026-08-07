@@ -134,6 +134,10 @@ private:
     static void applyParamsToProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* paramsObj,
                                        bool trusted = false);
 
+    // Feeds a node's "state" property back into ModuleBase::setExtraState — trusted callers only.
+    static void applyExtraStateToProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* nodeObj,
+                                           bool trusted);
+
     // Validates JSON-provided parameter values for one node against its actual processor
     // instance. Only used on the strict/untrusted validation path.
     static PatchValidationResult validateNodeParams(juce::AudioProcessor* processor,

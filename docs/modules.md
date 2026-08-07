@@ -13,6 +13,46 @@ Detailed specifications for Agent Synth's primary synthesis modules.
 - **Poly `processBlock` CV-save order**: In poly mode, both the per-voice pitch CVs (ch0-7) and the shared mod CVs (ch8-12) are copied into pre-allocated `std::array` caches (`pitchCVCache`, `waveformCVCache`, `octaveCVCache`, `coarseCVCache`, `fineCVCache`, `levelCVCache`) **before** the output buffer is cleared. This is necessary because ch0-7 carry both output audio (written after the clear) and input pitch CV, so they must be read first.
 - **Buffer aliasing note**: Declared with 14 output channels so JUCE's `AudioProcessorGraph` correctly copies shared mod-CV input channels (8-13) when they fan out to multiple downstream nodes. Channels 8-13 of the output are silent pass-throughs.
 
+## Wavetable Module
+Serum / Vital-style wavetable oscillator (`Source/Modules/WavetableOscillatorModule.h`). Type-name string: `"Wavetable"`.
+
+- **Tables**: six built-ins — `Basic Shapes` (sine → triangle → saw → square), `Harmonic Sweep`, `Pulse` (duty-cycle morph), `Formant`, `Bell`, `Digital` — plus `Loaded File` for a table read from disk. Each built-in has 32 frames.
+- **Position (the "3D" scan)**: `Position` (0–1) scans continuously through the frame stack. Reads are **bilinear** — linear within the frame (phase) and linear between the two adjacent frames — so morphing is click-free.
+- **Parameters**: Table (choice), Position (0–1), Octave (−4…+4), Coarse (−12…+12), Fine (±100 cents), Level (0–1), Poly (bool), Unison (1–8), Detune (0–100 cents).
+- **CV inputs (mono mode)**: ch0 = Pitch (inert — see below), ch1 = Position, ch2 = Octave, ch3 = Coarse, ch4 = Fine, ch5 = Level. Six visible jacks.
+- **Poly mode**: 8 voices driven by pitch CV in Hz on ch0-7, shared mod CV on ch8-12. See [Poly Channel Layout](#poly-channel-layout).
+- **Octave / Coarse / Fine apply in poly mode too** — they transpose the incoming pitch CV. (This differs from `OscillatorModule`, where the tuning parameters only affect the MIDI fallback voice.)
+- **Mono pitch CV is inert**, exactly as in `OscillatorModule`: mono jack 0 shares raw channel 0 with the audio output, so pitch comes from MIDI. The jack is kept so the mono and poly jack layouts match.
+
+### Anti-aliasing: mip pyramid
+Every frame is stored as an **11-level mip pyramid** instead of being filtered at render time.
+
+- Mip `m` is band-limited to `mipHarmonicLimit(m)` harmonics: 1023, 511, 255, 127, 63, 31, 16, 8, 4, 2, 1.
+- Mip `m` is stored at `mipLength(m)` samples — `max(64, 2048 >> m)` — so the shortest mips stay long enough for linear interpolation to be well conditioned.
+- `selectMip(dt)` picks the finest mip whose highest harmonic still clears Nyquist for that note. The mip is chosen from the **highest-frequency end of the block's frequency ramp**, so a rising glide cannot alias mid-block.
+- Storage is ~17 KB per frame. Built-in tables (~557 KB each) are built once per process and **shared by every module instance**; only file-loaded tables are per-instance.
+- Verified by `WavetableOscillatorModuleTest.HighNotesDoNotAlias` (square wave at MIDI 108 — asserts the band below the fundamental stays >26 dB down) and `WavetableMipGeometry.LimitsDecreaseMonotonicallyToTheFundamental`.
+
+### Table synthesis
+Tables are synthesised from harmonic spectra via inverse FFT (`TableBuilder`), one FFT per distinct mip length. The builder **self-calibrates** its inverse-transform gain at construction (a unit fundamental must come out as a unit-amplitude sine), so table amplitudes do not depend on the platform FFT engine's normalisation convention, and every mip of a frame shares one consistent gain. Each finished table is peak-normalised to 1.0 across mip 0, preserving relative frame levels.
+
+### Loading a wavetable file
+- `loadWavetableFile(const juce::File&)` — message thread only. Accepts anything `juce::AudioFormatManager::registerBasicFormats()` can read (WAV, AIFF, FLAC, Ogg); stereo files are summed to mono.
+- Files whose length is a whole number of 2048-sample frames are split on that boundary (the Serum convention). Shorter files are treated as one cycle and resampled to 2048.
+- At most `kMaxFrames` (64) frames are kept, chosen **evenly spaced** across the file so a 256-frame table still spans its whole morph range.
+- DC (bin 0) is discarded during analysis, so a loaded table cannot introduce a DC offset.
+- The call does **not** touch any parameter. The UI's "Load Wavetable..." button selects the `Loaded File` choice itself after a successful load.
+- Returns `false` and leaves the current table untouched on any failure; the `Loaded File` choice falls back to `Basic Shapes` when nothing is loaded, so a broken preset never goes silent.
+- **State**: the source path is published through `getExtraState()`/`setExtraState()` as a `wavetableFile` property. This is the mechanism presets and undo/redo actually use — `AIStateMapper::graphToJSON` persists parameters plus `getExtraState()` and never calls `getStateInformation`, so a path stored only in the binary `ModuleState` blob would be silently dropped on every preset load. `setExtraState` is reached **only on the trusted path**: untrusted model-authored JSON must never name a file for the app to open (same guard as the Sampler).
+- `getStateInformation`/`setStateInformation` also carry the path, for the plain `juce::AudioProcessor` contract; `setStateInformation` reloads the file first so the restored `table` choice stays authoritative, and silently skips a file that no longer exists.
+
+### Thread-safe table handoff
+Built-in tables are immutable and shared, so they need no synchronisation. A file-loaded table is built on the message thread and handed over through a **pending / retired slot pair** guarded by a `juce::SpinLock`:
+
+- `publishLoadedTable()` (message thread) reclaims whatever the audio thread retired, then stores the new table in `pendingTable`. The lock is held for three pointer moves; the actual frees happen after it is released.
+- `adoptPendingTable()` (audio thread, once per block) try-locks; on success it moves `pendingTable` into `audioLoadedTable` and the displaced table into `retiredTable`. Pointer moves only — **the audio thread never allocates and never frees a table**. A failed try-lock simply keeps the current table and retries next block.
+- Because every publish reclaims one retired slot before filling the pending slot, the retired slot is always empty when the audio thread needs it.
+
 ## Noise Module
 - **Noise Types**: White, Pink, Brown.
 - **Features**: 
@@ -22,6 +62,27 @@ Detailed specifications for Agent Synth's primary synthesis modules.
     - Mono and Poly mode support (8 voices).
 - **CV Channels**: Channel 8 = Color CV, Channel 9 = Level CV.
 
+## Sampler Module
+Loads an audio file from disk and plays it back one of two ways.
+
+- **Modes** (`playMode`): `Sample` — one-shot / looping playback; `Granular` — a cloud of short windowed grains read from around the `start` position.
+- **Formats**: whatever JUCE's basic readers handle (WAV, AIFF, FLAC, Ogg Vorbis). The file chooser wildcard comes from `SamplerModule::getSupportedFormatWildcard()`; drag-and-drop gates on `SamplerModule::isSupportedAudioFile()` (an extension check, so hovering a folder of files stays cheap).
+- **Loading a sample** — three ways:
+  1. The **Load Sample…** button (a `juce::FileChooser`).
+  2. **Drop an audio file onto the module** — replaces its sample. `ModuleComponent` implements `juce::FileDragAndDropTarget` and returns `false` from `isInterestedInFileDrag` for every non-Sampler module, so a file dropped on, say, an Oscillator falls through to the canvas instead of being silently swallowed.
+  3. **Drop an audio file onto empty canvas** — `GraphEditor` creates a Sampler already holding it (dropping several files cascades one Sampler each). The file is loaded into the processor *before* it joins the graph, because `recordStructuralChange` snapshots the graph afterwards and that snapshot is what undo/redo replays.
+- **Waveform overview**: peaks are cached per (sample, width) and drawn as a single filled path, not one `drawVerticalLine` per column — the canvas renders module cards under GraphEditor's zoom transform, and per-column 1 px lines do not tile at any zoom ≠ 1 (visible gaps and moiré striping). The 15 Hz timer repaints only when the sample changes or the playhead crosses a whole pixel.
+- **Parameters**: `playMode` (choice), `pitch` (±24 semitones), `rootNote` (0-127, default 60), `loop` (bool, default on), `start` (0-1), `grainSize` (5-500 ms), `density` (1-100 grains/sec), `spray` (0-1), `level` (0-1, default 0.8).
+- **Channel layout** (mono module — no poly mode): in ch0 = Trigger/Gate, ch1 = Pitch CV, ch2 = Position CV, ch3 = Grain Size CV, ch4 = Density CV, ch5 = Spray CV, ch6 = Level CV. Out ch0/ch1 = Audio L/R; ch2-6 are silent pass-throughs.
+- **Buffer aliasing note**: 7 outputs are declared even though only ch0-1 carry audio, so JUCE copies the CV input channels instead of letting the post-cache clear scribble on a buffer another node still needs — the same constraint as the Oscillator's 14-channel declaration.
+- **Gate precedence**: trigger CV > MIDI note > free-run. "A trigger cable is connected" is *latched* on the first non-zero sample rather than re-derived per block: a legitimately-low gate is an all-zero channel, indistinguishable from an unpatched jack, so re-deriving it would let a closed gate silently fall back to free-running. With nothing patched and no MIDI, a loaded sample plays immediately — dropping the module in and picking a file makes sound with no wiring.
+- **Pitch**: `2^((pitch + pitchCV×24 + (midiNote − rootNote)) / 12)`, times the file-rate/device-rate ratio so a 48 kHz file plays at the right speed on a 44.1 kHz device. Reads are 4-point Catmull-Rom interpolated.
+- **Granular engine**: 24-grain pool, Hann-windowed, spawned every `sampleRate / density` samples while the gate is open; grain start positions wrap rather than clamp so `spray` keeps scattering near either end. Output is scaled by `1/sqrt(density × grainSize)` so loudness stays roughly constant as the cloud thickens, then hard-limited to [-1, 1]. When the pool is exhausted new grains are dropped.
+- **Anti-click**: a 64-sample linear ramp on trigger and release; a one-shot ramps out at the last frame rather than cutting.
+- **Bypass**: clears its output — the documented pure-source exception to the bypass/mute contract (every input is CV/gate, so there is no dry signal to pass through).
+- **Sample lifetime**: `loadSampleFile()` (message thread) publishes a reference-counted `SampleData` under a `SpinLock`; `processBlock` takes the *try*-lock, so the audio thread never blocks — a block that races a load renders silence. Replaced samples stay alive in a message-thread-owned array so no destructor ever runs on the audio thread. Files longer than `kMaxSampleSeconds` (120 s) are truncated, with one log line.
+- **Persistence**: the loaded path is *not* a parameter, so it round-trips through `ModuleBase::getExtraState()` / `setExtraState()`, which `AIStateMapper` serialises as the node's `"state"` object. Restored **only on the trusted path** (our own undo/redo snapshots and presets) — untrusted model output must never be able to name a file for the app to open. See [`AI_Engine.md`](AI_Engine.md).
+- **Not a `PatchEval` sound source**: `evaluatePatch` deliberately does *not* count a Sampler towards `sourceReachesOutput`, because it is silent until a file is loaded and nothing in a model-authored patch can load one — counting it would let `AIIntegrationService`'s structural gate accept a patch that can only ever play silence. A patch whose output is fed *only* by a Sampler is rejected with a reason that names the Sampler and says to add an Oscillator or Noise module. This gate only applies to AI-authored patches; dragging a Sampler in by hand is unaffected.
 
 ## Filter Module
 - **Types**: 7 filter types — `LPF24`, `LPF12`, `HPF24`, `HPF12`, `BPF24`, `BPF12`, `Notch`.
@@ -133,6 +194,49 @@ Detailed specifications for Agent Synth's primary synthesis modules.
 - **Timing**: One step per beat. `currentActiveStep` (`std::atomic<int>`) written each block for UI step-highlight.
 - **Width**: DOUBLE (560 px). See [docs/layout.md](layout.md).
 
+## Sample & Hold Module
+- **Source file**: `Source/Modules/SampleHoldModule.h`
+- **Purpose**: Latches the value of a source signal on every clock edge and holds it until the next one — the stepped CV behind generative sequences and "R2D2" style bleeps.
+- **Parameters**:
+    - `Source` (choice: Input / **Random**) — sample the Signal input, or an internal white-noise generator.
+    - `Mode` (choice: **Sample** / Track, param id `holdMode`) — Sample latches one value per rising edge; Track follows the source while the gate is high and freezes when it falls. The id is `holdMode` rather than `mode` because `AIStateMapper::getPatchSchema` constrains choice parameters globally by id and `LFOModule` already owns a boolean `mode`.
+    - `Clock` (choice: **Internal** / External) — free-running internal oscillator, or the Trigger input.
+    - `Threshold` (-1.0–1.0, default 0.5, param id `trigThreshold`) — level the Trigger input must exceed to fire. The id is `trigThreshold` rather than `threshold` because Compressor and Limiter both own a `threshold` float meaning dB.
+    - `Rate` (0.1–50 Hz, default 8, skewed) — internal clock speed. Ignored when `Clock` is External.
+    - `Slew` (0.0–1.0, default 0.0) — one-pole lag toward each new value, up to 0.5 s. 0 snaps instantly.
+    - `Level` (0.0–1.0, default 1.0) — output scaling.
+    - `Offset` (-1.0–1.0, default 0.0) — output offset; use +0.5 with Level 0.5 for a unipolar 0–1 CV.
+- **Output**: bipolar CV on ch0, clamped to [-1, 1].
+- **Why `Source`/`Clock` are explicit choices**: the module deliberately does *not* infer "is anything patched in?" from channel activity. A gate signal sits at 0 most of the time and a slow LFO crosses zero, so activity detection misfires. Defaults (Internal clock + Random source) make the module produce stepped random CV the moment it is dropped on the canvas, with nothing patched.
+- **Trigger detection**: a Schmitt trigger. It arms when the Trigger input rises above `Threshold` and only re-arms once the signal falls a fixed `kTriggerHysteresis` (0.05) *below* it. Gate state is carried across block boundaries — a gate that stays high spanning two blocks is one edge, not two. The hysteresis is deliberately not user-exposed (see the Module Development Guide on not crowding modules with knobs); without it, any signal loitering near the threshold — a slow sine, anything with dither on it — would retrigger every sample.
+- **Trigger meter**: `Source/UI/TriggerMeterComponent.h` draws the live Trigger level as a bipolar bar with a marker at the effective threshold, so the threshold can be set by eye against the real signal. The module publishes `getTriggerLevel()` / `getEffectiveThreshold()` / `isTriggerHigh()` / `getTriggerCount()` as atomics for it. The meter is tracked **whichever clock is selected**, so the threshold can be dialled in before switching to External.
+- **CV inputs**: `Rate` maps raw CV exponentially over ±4 octaves (per the Module Development Guide convention); `Slew`, `Level` and `Offset` are additive over their native ranges. Only these four jacks are auto-promotable mod targets — Signal and Trigger connections stay direct rather than being wrapped in an attenuverter.
+- **Width**: SINGLE (280 px).
+
+## Macro Control Module ("Macros")
+- **Purpose**: A bank of assignable CV knobs. Patch one macro jack to several destinations and a single knob movement sweeps all of them at once — filter cutoff, distortion drive and oscillator wave together.
+- **Inputs**: none.
+- **Outputs**: ch0–15 carry macros M1–M16. Only the first `Knobs` channels are audible; the rest are cleared every block and their jacks are hidden.
+- **Parameters**:
+    - `Knobs` (`macroCount`, int 1–16, default 8) — how many macros the bank exposes. See *Resizing* below.
+    - `Bipolar` (`macroBipolar`, bool, default off) — maps the knobs to −1…+1 instead of 0…1, so a centred knob means "no change".
+    - `M1`…`M16` (`macro1`…`macro16`, float 0.0–1.0, default 0.0) — the knobs themselves.
+- **Processing**: each active channel is filled with its knob value, smoothed over 20 ms so a macro sweep never clicks. Bypass and mute both silence every channel (pure source module — there is no dry signal to pass through).
+- **Routing**: no N-to-M matrix of its own. Depth and polarity per destination come from the Attenuverter the graph inserts on every CV cable, so the same macro can push one target up while pulling another down.
+
+### Why 16 channels but a variable knob count
+
+JUCE fixes an `AudioProcessor`'s bus layout at construction, and rebuilding it would drop every graph connection the node already has. The bank therefore always declares 16 output channels and 16 knob parameters; `Knobs` only changes how many are *exposed* (`getVisibleOutputPortCount()`) and how many are driven. Hidden knobs keep their values, so shrinking and re-growing the bank is lossless.
+
+### Resizing
+
+Changing `Knobs` resizes the module in place, anchored at its top-left, at `LayoutUtil::kMacroRowH` (44 px) per macro:
+
+- The bank never moves — it is the module under the user's cursor. Instead `GraphEditor::handleModuleResized` pushes any neighbour that the new footprint would cover straight down and re-settles it on the grid (`LayoutUtil::resolveOverlapsAfterResize`). Shrinking moves nothing back.
+- **Shrinking disconnects the macros that disappear.** A jack that is no longer drawn cannot be unplugged, and the module already silences its channel, so any cable or mod routing on a hidden macro is removed rather than left as a dead entry in the mod matrix. The whole change — count, layout and disconnects — is one undo step.
+
+---
+
 ## Attenuverter Module (Hidden)
 - **Purpose**: Invisible gain/polarity stage automatically inserted on every mono CV connection routed via the mod matrix.
 - **Parameters**: `Amount` — ranges from -1.0 (full inversion) to +1.0 (full depth), **constructor default 0.0**.
@@ -169,6 +273,20 @@ In poly mode, voices occupy channels 0-7 (audio/pitch/gate) and the shared-CV bl
 | **Oscillator (mono)** | ch3 | In | Coarse CV |
 | **Oscillator (mono)** | ch4 | In | Fine CV |
 | **Oscillator (mono)** | ch5 | In | Level CV |
+| **Wavetable (poly)** | ch0-7 | In | Per-voice pitch CV (Hz) |
+| **Wavetable (poly)** | ch8 | In | Shared Position CV |
+| **Wavetable (poly)** | ch9 | In | Shared Octave CV |
+| **Wavetable (poly)** | ch10 | In | Shared Coarse CV |
+| **Wavetable (poly)** | ch11 | In | Shared Fine CV |
+| **Wavetable (poly)** | ch12 | In | Shared Level CV |
+| **Wavetable (poly)** | ch0-7 | Out | Per-voice audio |
+| **Wavetable (poly)** | ch8-12 | Out | Silent pass-throughs (prevent buffer aliasing) |
+| **Wavetable (mono)** | ch0 | In/Out | Pitch CV in (inert) / Audio out (shared channel) |
+| **Wavetable (mono)** | ch1 | In | Position CV |
+| **Wavetable (mono)** | ch2 | In | Octave CV |
+| **Wavetable (mono)** | ch3 | In | Coarse CV |
+| **Wavetable (mono)** | ch4 | In | Fine CV |
+| **Wavetable (mono)** | ch5 | In | Level CV |
 | **Filter (poly)** | ch0-7 | In | Per-voice audio |
 | **Filter (poly)** | ch8 | In | Shared Cutoff CV |
 | **Filter (poly)** | ch9 | In | Shared Resonance CV |
@@ -183,6 +301,14 @@ In poly mode, voices occupy channels 0-7 (audio/pitch/gate) and the shared-CV bl
 | **VCA (poly)** | ch0-1 | Out | Stereo sum (L/R) |
 | **ADSR (poly)** | ch0-7 | In | Per-voice gate CV |
 | **ADSR (poly)** | ch0-7 | Out | Per-voice envelope (0–1) |
+| **Sample & Hold** | ch0 | In/Out | Signal in / held CV out (shared channel; read before overwrite) |
+| **Sample & Hold** | ch1 | In | Trigger / gate |
+| **Sample & Hold** | ch2 | In | Rate CV |
+| **Sample & Hold** | ch3 | In | Slew CV |
+| **Sample & Hold** | ch4 | In | Level CV |
+| **Sample & Hold** | ch5 | In | Offset CV |
+| **Sample & Hold** | ch6 | In | Threshold CV |
+| **Sample & Hold** | ch1-6 | Out | Silent (cleared each block so CV does not leak downstream) |
 
 ---
 
