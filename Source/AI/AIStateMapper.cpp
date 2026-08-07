@@ -25,6 +25,7 @@
 #include "../Modules/SequencerModule.h"
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
+#include "../Modules/WavetableOscillatorModule.h"
 #include <cmath>
 #include <functional> // For std::function
 #include <limits>
@@ -69,6 +70,7 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Pitch Shifter", []() { return std::make_unique<PitchShifterModule>(); }},
     {"Noise", []() { return std::make_unique<NoiseModule>(); }},
     {"Sampler", []() { return std::make_unique<SamplerModule>(); }},
+    {"Wavetable", []() { return std::make_unique<WavetableOscillatorModule>(); }},
     {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }}};
 
 namespace {
@@ -523,6 +525,8 @@ static juce::String getFactoryTypeName(juce::AudioProcessor* processor) {
             return "Noise";
         case ModuleType::Sampler:
             return "Sampler";
+        case ModuleType::Wavetable:
+            return "Wavetable";
         case ModuleType::ExternalMidi:
             return "External MIDI";
         }
@@ -1090,9 +1094,9 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
         if (audioOutputNode != nullptr) {
             // Types that produce audio and should auto-connect to output
             static const std::set<juce::String> audioNodeTypes = {
-                "Oscillator", "Noise",   "Sampler", "Filter",     "VCA",          "Distortion",
-                "Delay",      "Reverb",  "Amp Env", "Filter Env", "Chorus",       "Phaser",
-                "Compressor", "Flanger", "Limiter", "Bitcrusher", "Pitch Shifter"};
+                "Oscillator", "Noise",      "Sampler", "Wavetable", "Filter",     "VCA",
+                "Distortion", "Delay",      "Reverb",  "Amp Env",   "Filter Env", "Chorus",
+                "Phaser",     "Compressor", "Flanger", "Limiter",   "Bitcrusher", "Pitch Shifter"};
 
             for (auto newNodeId : newlyCreatedNodes) {
                 auto* node = graph.getNodeForId(newNodeId);

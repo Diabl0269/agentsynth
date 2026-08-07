@@ -7,6 +7,7 @@
 #include "FrequencyResponseComponent.h"
 #include "SampleWaveformComponent.h"
 #include "ScopeComponent.h"
+#include "WavetableDisplayComponent.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -89,6 +90,9 @@ private:
     std::unique_ptr<FrequencyResponseComponent> freqResponseComponent;
     std::unique_ptr<juce::ToggleButton> spectrumToggle;
     std::unique_ptr<juce::MidiKeyboardComponent> keyboardComponent;
+    std::unique_ptr<WavetableDisplayComponent> wavetableDisplay;
+    std::unique_ptr<juce::TextButton> loadWavetableButton;
+    std::unique_ptr<juce::FileChooser> wavetableChooser;
 
     // Sampler-only chrome: waveform overview, "Load Sample…" button and the loaded file name.
     std::unique_ptr<SampleWaveformComponent> sampleWaveform;
@@ -130,6 +134,13 @@ private:
 
     // Repoints the file-name label at whatever the module currently holds.
     void refreshSampleLabel(const juce::String& fallbackMessage = {});
+
+    // Builds the Wavetable module's frame display and load button. No-op for other modules.
+    void createWavetableControls();
+
+    // Opens an async file chooser and, on success, loads the chosen file into the
+    // Wavetable module and switches its Table parameter to "Loaded File".
+    void openWavetableChooser();
 
     // Shared step-column layout helper used by Sequencer and PolySequencer.
     // Positions Gate, Pitch/Root, and F.Env/Chord controls for a single step column.

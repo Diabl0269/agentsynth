@@ -2,7 +2,9 @@
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/SamplerModule.h"
 #include "../Source/Modules/VCAModule.h"
+#include "../Source/Modules/WavetableOscillatorModule.h"
 #include "../Source/UI/GraphEditor.h"
+#include "../Source/UI/LayoutUtil.h"
 #include "../Source/UI/ModuleComponent.h"
 #include "../Source/UI/ModuleLibraryComponent.h"
 #include <gtest/gtest.h>
@@ -347,4 +349,68 @@ TEST_F(ModuleComponentTest, GetPortCenter_ClampsOutOfRangeToLastVisibleJack) {
 
     EXPECT_EQ(p_out_5.y, p_out_0.y)
         << "getPortCenter(5,false).y should clamp to getPortCenter(0,false).y (only visible output jack)";
+}
+
+// ---------------------------------------------------------------------------
+// Wavetable module card: bespoke display + "Load Wavetable..." button
+// ---------------------------------------------------------------------------
+
+TEST_F(ModuleComponentTest, WavetableCardBuildsDisplayAndLoadButton) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    WavetableOscillatorModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    WavetableDisplayComponent* display = nullptr;
+    juce::TextButton* loadButton = nullptr;
+    int comboCount = 0, sliderCount = 0, toggleCount = 0;
+
+    for (auto* child : moduleComponent.getChildren()) {
+        if (auto* d = dynamic_cast<WavetableDisplayComponent*>(child))
+            display = d;
+        else if (auto* b = dynamic_cast<juce::TextButton*>(child)) {
+            if (b->getButtonText() == "Load Wavetable...")
+                loadButton = b;
+        } else if (dynamic_cast<juce::ComboBox*>(child) != nullptr)
+            ++comboCount;
+        else if (dynamic_cast<juce::Slider*>(child) != nullptr)
+            ++sliderCount;
+        else if (dynamic_cast<juce::ToggleButton*>(child) != nullptr)
+            ++toggleCount;
+    }
+
+    ASSERT_NE(display, nullptr) << "Wavetable cards must own a WavetableDisplayComponent";
+    ASSERT_NE(loadButton, nullptr) << "Wavetable cards must own a \"Load Wavetable...\" button";
+
+    // Table choice -> 1 combo; Position/Octave/Coarse/Fine/Level/Unison/Detune -> 7 sliders;
+    // Poly -> 1 toggle, plus the always-present "Show Scope" toggle.
+    EXPECT_EQ(comboCount, 1);
+    EXPECT_EQ(sliderCount, 7);
+    EXPECT_EQ(toggleCount, 2);
+
+    // Both bespoke children must be laid out inside the card.
+    EXPECT_FALSE(display->getBounds().isEmpty());
+    EXPECT_FALSE(loadButton->getBounds().isEmpty());
+    EXPECT_TRUE(moduleComponent.getLocalBounds().contains(display->getBounds()));
+    EXPECT_TRUE(moduleComponent.getLocalBounds().contains(loadButton->getBounds()));
+
+    // Height is deliberately not asserted here: EstimatedModuleSizesMatchTheRealComponents
+    // already pins the real card against GraphEditor::estimateModuleSize for every offered
+    // type, so duplicating the number would just be a second thing to update by hand.
+    EXPECT_EQ(moduleComponent.getWidth(), synth::LayoutUtil::kSingleWidth);
+    EXPECT_GT(moduleComponent.getHeight(), 100);
+}
+
+TEST_F(ModuleComponentTest, WavetableCardPaintsAndTicksWithoutCrashing) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    WavetableOscillatorModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    EXPECT_NO_THROW(moduleComponent.timerCallback());
+
+    juce::Image img(juce::Image::ARGB, moduleComponent.getWidth(), moduleComponent.getHeight(), true);
+    juce::Graphics g(img);
+    EXPECT_NO_THROW(moduleComponent.paint(g));
+    EXPECT_TRUE(img.isValid());
 }

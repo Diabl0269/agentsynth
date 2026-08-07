@@ -540,7 +540,7 @@ a slightly different footprint.
 
 ## 9. Visualizer Components
 
-Two in-module visualizer components provide real-time signal display inside module cards.
+Three in-module visualizer components provide real-time signal display inside module cards.
 
 ### FrequencyResponseComponent (`Source/UI/FrequencyResponseComponent.h`)
 
@@ -577,6 +577,22 @@ Oscilloscope waveform display used by all modules that have a `VisualBuffer`.
 | `amplitudeToY` | `static float amplitudeToY(float amp, juce::Rectangle<float> bounds) noexcept` | Maps amplitude [-1,1] → y pixel; amp=+1 → top, amp=-1 → bottom, amp=0 → centre; uses 45% height per side |
 
 **Themed colours**: resolved via `dynamic_cast<AppLookAndFeel*>` — `border` for grid, `textDisabled` for no-signal label, `accent` for the waveform. When the cast fails (headless), hardcoded fallbacks are used (`0xff2A2F38`, `0xff5C6470`, limegreen).
+
+### WavetableDisplayComponent (`Source/UI/WavetableDisplayComponent.h`)
+
+Wavetable frame view used by the `Wavetable` module card. Draws the frame currently under the scan position as a solid trace, with `kGhostFrames` (3) receding low-alpha traces sampled slightly further along the stack so the scan direction and the table's depth read as three-dimensional. Captioned with the table name and `frame/total`.
+
+**Repaints are gated** — the 15 Hz timer compares a change signature (quantised scan position, table name, frame count) and calls `repaint()` only when it differs. This is required by §10: the display is always visible inside a `setBufferedToImage(true)` module card, so an unconditional per-tick repaint would invalidate that cache 15 times a second.
+
+Alongside it, `ModuleComponent` adds a **"Load Wavetable..."** `TextButton` for `Wavetable` modules. It opens an async `juce::FileChooser`, and on success calls `loadWavetableFile()` and switches the module's `table` choice to `Loaded File`. The completion lambda holds a `Component::SafePointer` and re-derives the module via `dynamic_cast`, since the card can be destroyed while the dialog is open.
+
+**Public static helper** (headless-testable):
+
+| Helper | Signature | Notes |
+|---|---|---|
+| `quantisePosition` | `static int quantisePosition(float position, int steps = 200)` | Clamps to [0,1] and quantises the scan position into `steps` buckets — the repaint gate's change signature |
+
+**Themed colours**: resolved via `dynamic_cast<AppLookAndFeel*>` — `bg1` for the panel, `border` for the frame and zero line, `accent` for the traces, `textMuted` for the caption. Falls back to hardcoded colours when the cast fails (headless).
 
 ---
 

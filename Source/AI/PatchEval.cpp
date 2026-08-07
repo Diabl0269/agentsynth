@@ -78,7 +78,7 @@ PatchEvalResult evaluatePatch(const juce::AudioProcessorGraph& graph) {
                 continue;
 
             const juce::String name = node->getProcessor()->getName();
-            if (name == "Oscillator" || name == "Noise") {
+            if (name == "Oscillator" || name == "Noise" || name == "Wavetable") {
                 result.sourceReachesOutput = true;
                 break;
             }
@@ -89,8 +89,8 @@ PatchEvalResult evaluatePatch(const juce::AudioProcessorGraph& graph) {
         if (!result.sourceReachesOutput)
             reasons.add(samplerReachesOutput
                             ? "Audio Output is only reachable through a Sampler, which stays silent until a "
-                              "file is loaded — add an Oscillator or Noise module so the patch makes sound"
-                            : "Audio Output is not reachable from any Oscillator or Noise module");
+                              "file is loaded — add an Oscillator, Wavetable or Noise module so the patch makes sound"
+                            : "Audio Output is not reachable from any Oscillator, Wavetable or Noise module");
     }
 
     for (auto* node : graph.getNodes()) {

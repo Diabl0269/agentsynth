@@ -13,6 +13,46 @@ Detailed specifications for Agent Synth's primary synthesis modules.
 - **Poly `processBlock` CV-save order**: In poly mode, both the per-voice pitch CVs (ch0-7) and the shared mod CVs (ch8-12) are copied into pre-allocated `std::array` caches (`pitchCVCache`, `waveformCVCache`, `octaveCVCache`, `coarseCVCache`, `fineCVCache`, `levelCVCache`) **before** the output buffer is cleared. This is necessary because ch0-7 carry both output audio (written after the clear) and input pitch CV, so they must be read first.
 - **Buffer aliasing note**: Declared with 14 output channels so JUCE's `AudioProcessorGraph` correctly copies shared mod-CV input channels (8-13) when they fan out to multiple downstream nodes. Channels 8-13 of the output are silent pass-throughs.
 
+## Wavetable Module
+Serum / Vital-style wavetable oscillator (`Source/Modules/WavetableOscillatorModule.h`). Type-name string: `"Wavetable"`.
+
+- **Tables**: six built-ins — `Basic Shapes` (sine → triangle → saw → square), `Harmonic Sweep`, `Pulse` (duty-cycle morph), `Formant`, `Bell`, `Digital` — plus `Loaded File` for a table read from disk. Each built-in has 32 frames.
+- **Position (the "3D" scan)**: `Position` (0–1) scans continuously through the frame stack. Reads are **bilinear** — linear within the frame (phase) and linear between the two adjacent frames — so morphing is click-free.
+- **Parameters**: Table (choice), Position (0–1), Octave (−4…+4), Coarse (−12…+12), Fine (±100 cents), Level (0–1), Poly (bool), Unison (1–8), Detune (0–100 cents).
+- **CV inputs (mono mode)**: ch0 = Pitch (inert — see below), ch1 = Position, ch2 = Octave, ch3 = Coarse, ch4 = Fine, ch5 = Level. Six visible jacks.
+- **Poly mode**: 8 voices driven by pitch CV in Hz on ch0-7, shared mod CV on ch8-12. See [Poly Channel Layout](#poly-channel-layout).
+- **Octave / Coarse / Fine apply in poly mode too** — they transpose the incoming pitch CV. (This differs from `OscillatorModule`, where the tuning parameters only affect the MIDI fallback voice.)
+- **Mono pitch CV is inert**, exactly as in `OscillatorModule`: mono jack 0 shares raw channel 0 with the audio output, so pitch comes from MIDI. The jack is kept so the mono and poly jack layouts match.
+
+### Anti-aliasing: mip pyramid
+Every frame is stored as an **11-level mip pyramid** instead of being filtered at render time.
+
+- Mip `m` is band-limited to `mipHarmonicLimit(m)` harmonics: 1023, 511, 255, 127, 63, 31, 16, 8, 4, 2, 1.
+- Mip `m` is stored at `mipLength(m)` samples — `max(64, 2048 >> m)` — so the shortest mips stay long enough for linear interpolation to be well conditioned.
+- `selectMip(dt)` picks the finest mip whose highest harmonic still clears Nyquist for that note. The mip is chosen from the **highest-frequency end of the block's frequency ramp**, so a rising glide cannot alias mid-block.
+- Storage is ~17 KB per frame. Built-in tables (~557 KB each) are built once per process and **shared by every module instance**; only file-loaded tables are per-instance.
+- Verified by `WavetableOscillatorModuleTest.HighNotesDoNotAlias` (square wave at MIDI 108 — asserts the band below the fundamental stays >26 dB down) and `WavetableMipGeometry.LimitsDecreaseMonotonicallyToTheFundamental`.
+
+### Table synthesis
+Tables are synthesised from harmonic spectra via inverse FFT (`TableBuilder`), one FFT per distinct mip length. The builder **self-calibrates** its inverse-transform gain at construction (a unit fundamental must come out as a unit-amplitude sine), so table amplitudes do not depend on the platform FFT engine's normalisation convention, and every mip of a frame shares one consistent gain. Each finished table is peak-normalised to 1.0 across mip 0, preserving relative frame levels.
+
+### Loading a wavetable file
+- `loadWavetableFile(const juce::File&)` — message thread only. Accepts anything `juce::AudioFormatManager::registerBasicFormats()` can read (WAV, AIFF, FLAC, Ogg); stereo files are summed to mono.
+- Files whose length is a whole number of 2048-sample frames are split on that boundary (the Serum convention). Shorter files are treated as one cycle and resampled to 2048.
+- At most `kMaxFrames` (64) frames are kept, chosen **evenly spaced** across the file so a 256-frame table still spans its whole morph range.
+- DC (bin 0) is discarded during analysis, so a loaded table cannot introduce a DC offset.
+- The call does **not** touch any parameter. The UI's "Load Wavetable..." button selects the `Loaded File` choice itself after a successful load.
+- Returns `false` and leaves the current table untouched on any failure; the `Loaded File` choice falls back to `Basic Shapes` when nothing is loaded, so a broken preset never goes silent.
+- **State**: the source path is published through `getExtraState()`/`setExtraState()` as a `wavetableFile` property. This is the mechanism presets and undo/redo actually use — `AIStateMapper::graphToJSON` persists parameters plus `getExtraState()` and never calls `getStateInformation`, so a path stored only in the binary `ModuleState` blob would be silently dropped on every preset load. `setExtraState` is reached **only on the trusted path**: untrusted model-authored JSON must never name a file for the app to open (same guard as the Sampler).
+- `getStateInformation`/`setStateInformation` also carry the path, for the plain `juce::AudioProcessor` contract; `setStateInformation` reloads the file first so the restored `table` choice stays authoritative, and silently skips a file that no longer exists.
+
+### Thread-safe table handoff
+Built-in tables are immutable and shared, so they need no synchronisation. A file-loaded table is built on the message thread and handed over through a **pending / retired slot pair** guarded by a `juce::SpinLock`:
+
+- `publishLoadedTable()` (message thread) reclaims whatever the audio thread retired, then stores the new table in `pendingTable`. The lock is held for three pointer moves; the actual frees happen after it is released.
+- `adoptPendingTable()` (audio thread, once per block) try-locks; on success it moves `pendingTable` into `audioLoadedTable` and the displaced table into `retiredTable`. Pointer moves only — **the audio thread never allocates and never frees a table**. A failed try-lock simply keeps the current table and retries next block.
+- Because every publish reclaims one retired slot before filling the pending slot, the retired slot is always empty when the audio thread needs it.
+
 ## Noise Module
 - **Noise Types**: White, Pink, Brown.
 - **Features**: 
@@ -161,6 +201,20 @@ In poly mode, voices occupy channels 0-7 (audio/pitch/gate) and the shared-CV bl
 | **Oscillator (mono)** | ch3 | In | Coarse CV |
 | **Oscillator (mono)** | ch4 | In | Fine CV |
 | **Oscillator (mono)** | ch5 | In | Level CV |
+| **Wavetable (poly)** | ch0-7 | In | Per-voice pitch CV (Hz) |
+| **Wavetable (poly)** | ch8 | In | Shared Position CV |
+| **Wavetable (poly)** | ch9 | In | Shared Octave CV |
+| **Wavetable (poly)** | ch10 | In | Shared Coarse CV |
+| **Wavetable (poly)** | ch11 | In | Shared Fine CV |
+| **Wavetable (poly)** | ch12 | In | Shared Level CV |
+| **Wavetable (poly)** | ch0-7 | Out | Per-voice audio |
+| **Wavetable (poly)** | ch8-12 | Out | Silent pass-throughs (prevent buffer aliasing) |
+| **Wavetable (mono)** | ch0 | In/Out | Pitch CV in (inert) / Audio out (shared channel) |
+| **Wavetable (mono)** | ch1 | In | Position CV |
+| **Wavetable (mono)** | ch2 | In | Octave CV |
+| **Wavetable (mono)** | ch3 | In | Coarse CV |
+| **Wavetable (mono)** | ch4 | In | Fine CV |
+| **Wavetable (mono)** | ch5 | In | Level CV |
 | **Filter (poly)** | ch0-7 | In | Per-voice audio |
 | **Filter (poly)** | ch8 | In | Shared Cutoff CV |
 | **Filter (poly)** | ch9 | In | Shared Resonance CV |
