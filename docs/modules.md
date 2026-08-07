@@ -165,6 +165,25 @@ Loads an audio file from disk and plays it back one of two ways.
 - **Timing**: One step per beat. `currentActiveStep` (`std::atomic<int>`) written each block for UI step-highlight.
 - **Width**: DOUBLE (560 px). See [docs/layout.md](layout.md).
 
+## Sample & Hold Module
+- **Source file**: `Source/Modules/SampleHoldModule.h`
+- **Purpose**: Latches the value of a source signal on every clock edge and holds it until the next one — the stepped CV behind generative sequences and "R2D2" style bleeps.
+- **Parameters**:
+    - `Source` (choice: Input / **Random**) — sample the Signal input, or an internal white-noise generator.
+    - `Mode` (choice: **Sample** / Track, param id `holdMode`) — Sample latches one value per rising edge; Track follows the source while the gate is high and freezes when it falls. The id is `holdMode` rather than `mode` because `AIStateMapper::getPatchSchema` constrains choice parameters globally by id and `LFOModule` already owns a boolean `mode`.
+    - `Clock` (choice: **Internal** / External) — free-running internal oscillator, or the Trigger input.
+    - `Threshold` (-1.0–1.0, default 0.5, param id `trigThreshold`) — level the Trigger input must exceed to fire. The id is `trigThreshold` rather than `threshold` because Compressor and Limiter both own a `threshold` float meaning dB.
+    - `Rate` (0.1–50 Hz, default 8, skewed) — internal clock speed. Ignored when `Clock` is External.
+    - `Slew` (0.0–1.0, default 0.0) — one-pole lag toward each new value, up to 0.5 s. 0 snaps instantly.
+    - `Level` (0.0–1.0, default 1.0) — output scaling.
+    - `Offset` (-1.0–1.0, default 0.0) — output offset; use +0.5 with Level 0.5 for a unipolar 0–1 CV.
+- **Output**: bipolar CV on ch0, clamped to [-1, 1].
+- **Why `Source`/`Clock` are explicit choices**: the module deliberately does *not* infer "is anything patched in?" from channel activity. A gate signal sits at 0 most of the time and a slow LFO crosses zero, so activity detection misfires. Defaults (Internal clock + Random source) make the module produce stepped random CV the moment it is dropped on the canvas, with nothing patched.
+- **Trigger detection**: a Schmitt trigger. It arms when the Trigger input rises above `Threshold` and only re-arms once the signal falls a fixed `kTriggerHysteresis` (0.05) *below* it. Gate state is carried across block boundaries — a gate that stays high spanning two blocks is one edge, not two. The hysteresis is deliberately not user-exposed (see the Module Development Guide on not crowding modules with knobs); without it, any signal loitering near the threshold — a slow sine, anything with dither on it — would retrigger every sample.
+- **Trigger meter**: `Source/UI/TriggerMeterComponent.h` draws the live Trigger level as a bipolar bar with a marker at the effective threshold, so the threshold can be set by eye against the real signal. The module publishes `getTriggerLevel()` / `getEffectiveThreshold()` / `isTriggerHigh()` / `getTriggerCount()` as atomics for it. The meter is tracked **whichever clock is selected**, so the threshold can be dialled in before switching to External.
+- **CV inputs**: `Rate` maps raw CV exponentially over ±4 octaves (per the Module Development Guide convention); `Slew`, `Level` and `Offset` are additive over their native ranges. Only these four jacks are auto-promotable mod targets — Signal and Trigger connections stay direct rather than being wrapped in an attenuverter.
+- **Width**: SINGLE (280 px).
+
 ## Macro Control Module ("Macros")
 - **Purpose**: A bank of assignable CV knobs. Patch one macro jack to several destinations and a single knob movement sweeps all of them at once — filter cutoff, distortion drive and oscillator wave together.
 - **Inputs**: none.
@@ -253,6 +272,14 @@ In poly mode, voices occupy channels 0-7 (audio/pitch/gate) and the shared-CV bl
 | **VCA (poly)** | ch0-1 | Out | Stereo sum (L/R) |
 | **ADSR (poly)** | ch0-7 | In | Per-voice gate CV |
 | **ADSR (poly)** | ch0-7 | Out | Per-voice envelope (0–1) |
+| **Sample & Hold** | ch0 | In/Out | Signal in / held CV out (shared channel; read before overwrite) |
+| **Sample & Hold** | ch1 | In | Trigger / gate |
+| **Sample & Hold** | ch2 | In | Rate CV |
+| **Sample & Hold** | ch3 | In | Slew CV |
+| **Sample & Hold** | ch4 | In | Level CV |
+| **Sample & Hold** | ch5 | In | Offset CV |
+| **Sample & Hold** | ch6 | In | Threshold CV |
+| **Sample & Hold** | ch1-6 | Out | Silent (cleared each block so CV does not leak downstream) |
 
 ---
 

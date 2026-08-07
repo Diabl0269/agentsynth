@@ -19,6 +19,7 @@ static constexpr int kLabelHeight = 18;
 static constexpr int kRowHeight = 24;  // combo box / toggle / button
 static constexpr int kKnobHeight = 58; // rotary + its text box
 static constexpr int kWaveformHeight = 72;
+static constexpr int kTriggerMeterHeight = 18;
 static constexpr int kBottomPadding = 12;
 // A port label box spans its jack centre ± 10; clear it by a bit more before placing any content.
 static constexpr int kPortLabelClearance = 15;
@@ -54,6 +55,11 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
                 addAndMakeVisible(scopeToggle.get());
             }
         }
+    }
+
+    if (auto* shMod = dynamic_cast<SampleHoldModule*>(module)) {
+        triggerMeter = std::make_unique<TriggerMeterComponent>(*shMod);
+        addAndMakeVisible(triggerMeter.get());
     }
 
     if (auto* filterMod = dynamic_cast<FilterModule*>(module)) {
@@ -131,6 +137,9 @@ void ModuleComponent::detachFromProcessor() {
     spectrumToggle.reset();
     eqPopOutButton.reset();
     keyboardComponent.reset();
+    // Same reasoning: the trigger meter times itself and holds a reference to the module.
+    triggerMeter.reset();
+
     // Same reason: the waveform view times against the SamplerModule, so it must go before the
     // processor pointer is dropped.
     sampleWaveform.reset();
@@ -1066,6 +1075,14 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
         y += kRowHeight + 2;
     }
 
+    // --- Trigger meter (Sample & Hold): sits directly above the knob grid, whose first knob is
+    // Threshold, so the marker and the control that moves it stay adjacent.
+    if (triggerMeter) {
+        if (apply)
+            triggerMeter->setBounds(contentX, y, contentW, kTriggerMeterHeight);
+        y += kTriggerMeterHeight + 6;
+    }
+
     // --- Knob grid: kKnobColumns across, wrapping ---
     const int knobWidth = contentW / kKnobColumns;
     for (int i = 0; i < sliders.size(); ++i) {
@@ -1693,6 +1710,7 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                       {"Pitch Shifter", ModuleType::PitchShifter}}},
                     {"Time FX", {{"Delay", ModuleType::Delay}, {"Reverb", ModuleType::Reverb}}},
                     {"Dynamics", {{"Compressor", ModuleType::Compressor}, {"Limiter", ModuleType::Limiter}}},
+                    {"Utility", {{"Sample & Hold", ModuleType::SampleHold}}},
                 };
 
                 for (auto& cat : categories) {

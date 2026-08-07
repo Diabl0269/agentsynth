@@ -23,6 +23,7 @@
 #include "../Modules/OscillatorModule.h"
 #include "../Modules/PolyMidiModule.h"
 #include "../Modules/PolySequencerModule.h"
+#include "../Modules/SampleHoldModule.h"
 #include "../Modules/SamplerModule.h"
 #include "../Modules/SequencerModule.h"
 #include "../Modules/VCAModule.h"
@@ -73,6 +74,7 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Pitch Shifter", []() { return std::make_unique<PitchShifterModule>(); }},
     {"Noise", []() { return std::make_unique<NoiseModule>(); }},
     {"Macros", []() { return std::make_unique<MacroControlModule>(); }},
+    {"Sample & Hold", []() { return std::make_unique<SampleHoldModule>(); }},
     {"Sampler", []() { return std::make_unique<SamplerModule>(); }},
     {"Wavetable", []() { return std::make_unique<WavetableOscillatorModule>(); }},
     {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }}};
@@ -535,6 +537,8 @@ static juce::String getFactoryTypeName(juce::AudioProcessor* processor) {
             return "Sampler";
         case ModuleType::Wavetable:
             return "Wavetable";
+        case ModuleType::SampleHold:
+            return "Sample & Hold";
         case ModuleType::ExternalMidi:
             return "External MIDI";
         }

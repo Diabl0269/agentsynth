@@ -69,6 +69,7 @@ add_library(Core STATIC
     Source/Modules/SequencerModule.h
     Source/Modules/MidiKeyboardModule.h
     Source/Modules/LFOModule.h
+    Source/Modules/SampleHoldModule.h
     Source/Modules/AttenuverterModule.h
     Source/Modules/MacroControlModule.h
     Source/Modules/VisualBuffer.h
@@ -266,6 +267,7 @@ target_sources(AgentSynth PRIVATE
     Source/UI/EQWindow.h
     Source/UI/SampleWaveformComponent.h
     Source/UI/WavetableDisplayComponent.h
+    Source/UI/TriggerMeterComponent.h
     Source/UI/ModMatrixComponent.cpp
     Source/UI/ModMatrixComponent.h
     Source/UI/SettingsWindow.cpp

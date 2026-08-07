@@ -19,6 +19,7 @@
 #include "../Modules/OscillatorModule.h"
 #include "../Modules/PolyMidiModule.h"
 #include "../Modules/PolySequencerModule.h"
+#include "../Modules/SampleHoldModule.h"
 #include "../Modules/SamplerModule.h"
 #include "../Modules/SequencerModule.h"
 #include "../Modules/VCAModule.h"
@@ -72,6 +73,8 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         return {synth::LayoutUtil::kNarrowWidth, synth::LayoutUtil::kNarrowWidth};
     if (typeName == "Noise")
         return {280, 293};
+    if (typeName == "Sample & Hold")
+        return {280, 563};
     if (typeName == "Macros")
         // Height tracks the bank's "Knobs" count at runtime; the drop estimate uses the default.
         return {synth::LayoutUtil::kSingleWidth,

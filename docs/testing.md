@@ -1,6 +1,6 @@
 # Testing Guide
 
-All tests use GoogleTest and run headless (no audio device, no GUI window). ~829 tests across ~101 suites.
+All tests use GoogleTest and run headless (no audio device, no GUI window). ~1051 tests across ~120 suites.
 
 ```bash
 # Run all tests (ENABLE_TESTS defaults OFF — must be passed explicitly)
@@ -31,6 +31,7 @@ Headless DSP tests that render audio through individual modules and verify outpu
 | LFOModuleTest | 11 | LFO waveform output, rate modulation, sync behavior |
 | VCAModuleTest | 5 | Gain application, envelope following, silence detection |
 | AttenuverterModuleTest | 4 | CV signal attenuation, bipolar control, CV modulation |
+| SampleHoldModuleTest | 48 | Port topology & modulation targets, Sample-mode rising-edge latch + hold across blocks, Track-mode follow/freeze, internal free-running clock and Rate CV, random source range, Level/Offset/Slew shaping + their CV inputs, **Schmitt-trigger threshold** (low-amplitude and negative-threshold gates, hysteresis rejects dither and in-gap dips, full release re-arms, Threshold CV), **trigger meter telemetry** (signed block peak, live on internal clock, armed state, capture count, reset on bypass/mute), `TriggerMeterComponent` static helpers (`valueToX` clamping, `needsRepaint` idle-gate) + paint smoke test, trigger/CV channel hygiene, bypass dry pass-through & mute silence, zero-length/zero-channel/single-sample buffers, zero sample rate, state round-trip |
 | MacroControlModuleTest | 14 | Port model (16 channels, 8 visible by default, no MIDI, ModCV role), per-macro CV output, channels above the `Knobs` count silent, hidden knobs keep their values when the bank is re-grown, bipolar mapping, 20 ms smoothing, bypass/mute silence, zero-channel buffer; factory creation, `macroCount`+knob JSON round-trip, one macro fanned out to two destinations |
 | FX module tests | 53 | Delay (passthrough, feedback), Distortion (clipping, drive), Reverb (room size), Chorus, Phaser, Compressor, Flanger, Limiter, Bitcrusher (downsampling, quantization, CV) |
 | PitchShifterModuleTest | 22 | Pitch mode transposition ratios (spectral peak), Frequency mode SSB offset + sideband suppression, CV routing, feedback stability, state round-trip |

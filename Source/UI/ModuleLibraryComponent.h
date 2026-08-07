@@ -51,6 +51,7 @@ public:
             {"Limiter", false},
             {"Utility", true},
             {"Macros", false},
+            {"Sample & Hold", false},
             {"Voice Mixer", false},
         };
         // clang-format on
@@ -114,6 +115,8 @@ public:
             return "Brickwall limiter that prevents the signal from exceeding 0 dBFS.";
         if (moduleName.equalsIgnoreCase("Macros"))
             return "Bank of assignable macro knobs — one knob drives many parameters at once.";
+        if (moduleName.equalsIgnoreCase("Sample & Hold"))
+            return "Latches a source value on each clock edge for stepped random CV.";
         if (moduleName.equalsIgnoreCase("Voice Mixer"))
             return "Sums multiple polyphonic voices down to a stereo mix.";
         // Generic fallback for any unrecognised module name.
