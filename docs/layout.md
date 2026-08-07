@@ -505,7 +505,7 @@ a slightly different footprint.
 
 ## 9. Visualizer Components
 
-Two in-module visualizer components provide real-time signal display inside module cards.
+Three in-module visualizer components provide real-time signal display inside module cards.
 
 ### FrequencyResponseComponent (`Source/UI/FrequencyResponseComponent.h`)
 
@@ -542,6 +542,31 @@ Oscilloscope waveform display used by all modules that have a `VisualBuffer`.
 | `amplitudeToY` | `static float amplitudeToY(float amp, juce::Rectangle<float> bounds) noexcept` | Maps amplitude [-1,1] → y pixel; amp=+1 → top, amp=-1 → bottom, amp=0 → centre; uses 45% height per side |
 
 **Themed colours**: resolved via `dynamic_cast<AppLookAndFeel*>` — `border` for grid, `textDisabled` for no-signal label, `accent` for the waveform. When the cast fails (headless), hardcoded fallbacks are used (`0xff2A2F38`, `0xff5C6470`, limegreen).
+
+### TriggerMeterComponent (`Source/UI/TriggerMeterComponent.h`)
+
+Live Trigger-jack level readout used by `SampleHoldModule` cards, so the module's `Threshold` can be
+set by eye against the actual incoming signal instead of guessed.
+
+Draws a bipolar bar (-1 left, 0 centre, +1 right) that fills from the centre toward the signal's
+sign, a marker line at the **effective** threshold (knob + Threshold CV), and a pip that flashes for
+`getFlashFrames()` ticks on each capture. The bar switches to the `gateWire` colour while the Schmitt
+trigger is armed. Reads four atomics off the module: `getTriggerLevel()`, `getEffectiveThreshold()`,
+`isTriggerHigh()`, `getTriggerCount()`.
+
+**Why it is a separate component, not something `ModuleComponent::paint` draws:** `ModuleComponent`
+is `setBufferedToImage(true)`, so painting a live meter inside its `paint()` would invalidate that
+cached image and re-run the module's text layout on every meter tick — exactly the repaint storm
+§10 prohibits. Instead this owns a 20 Hz timer and repaints *itself* only when a displayed value
+moves past a visible amount (see `needsRepaint`), leaving the parent's cached image untouched.
+
+**Public static helpers** (headless-testable):
+
+| Helper | Signature | Notes |
+|---|---|---|
+| `valueToX` | `static float valueToX(float value, float x, float width) noexcept` | Maps bipolar [-1,1] → x offset within a width; clamps out-of-range input |
+| `needsRepaint` | `static bool needsRepaint(...) noexcept` | Mirrors the `timerCallback` repaint gate; lets the "no repaint while idle" rule be tested without a message loop |
+| `getFlashFrames` | `static constexpr int getFlashFrames() noexcept` | Ticks the fired-flash stays lit |
 
 ---
 

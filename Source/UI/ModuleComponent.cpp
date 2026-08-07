@@ -38,6 +38,11 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         }
     }
 
+    if (auto* shMod = dynamic_cast<SampleHoldModule*>(module)) {
+        triggerMeter = std::make_unique<TriggerMeterComponent>(*shMod);
+        addAndMakeVisible(triggerMeter.get());
+    }
+
     if (auto* filterMod = dynamic_cast<FilterModule*>(module)) {
         freqResponseComponent = std::make_unique<FrequencyResponseComponent>(*filterMod);
         addAndMakeVisible(freqResponseComponent.get());
@@ -80,6 +85,8 @@ void ModuleComponent::detachFromProcessor() {
     scopeComponent.reset();
     scopeToggle.reset();
     keyboardComponent.reset();
+    // Same reasoning: the trigger meter times itself and holds a reference to the module.
+    triggerMeter.reset();
 
     if (auto* parent = getParentComponent())
         parent->removeChildComponent(this);
@@ -554,6 +561,9 @@ void ModuleComponent::updateLayout() {
     if (scopeToggle)
         contentHeight += 30;
 
+    if (triggerMeter)
+        contentHeight += 24;
+
     int numSliders = sliders.size();
     int rows = (numSliders + 1) / 2;
     contentHeight += rows * 80;
@@ -969,6 +979,13 @@ void ModuleComponent::resized() {
     for (int i = 0; i < toggles.size(); ++i) {
         toggles[i]->setBounds(margin, y, contentWidth, 24);
         y += 30;
+    }
+
+    // Sits directly above the slider grid, whose first knob is Threshold — so the marker and the
+    // control that moves it are adjacent.
+    if (triggerMeter) {
+        triggerMeter->setBounds(margin, y, contentWidth, 18);
+        y += 24;
     }
 
     int sliderWidth = contentWidth / 2;

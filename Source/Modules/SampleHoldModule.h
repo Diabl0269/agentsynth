@@ -18,20 +18,29 @@
  *  `Mode` selects classic sample & hold (latch one value per rising edge) or track & hold
  *  (follow the source while the gate is high, freeze when it falls).
  *
+ *  The external clock is a Schmitt trigger: it arms above `Threshold` and only re-arms once
+ *  the signal falls `kTriggerHysteresis` below it. Without that gap a signal loitering near the
+ *  threshold — a slow sine, anything with a little noise on it — would retrigger continuously.
+ *
  *  Channel layout (mono):
  *    In  ch0 Signal | ch1 Trigger | ch2 Rate CV | ch3 Slew CV | ch4 Level CV | ch5 Offset CV
- *    Out ch0 CV     | ch1-5 silent pass-throughs (prevent AudioProcessorGraph buffer aliasing)
+ *        ch6 Threshold CV
+ *    Out ch0 CV     | ch1-6 silent pass-throughs (prevent AudioProcessorGraph buffer aliasing)
  */
 class SampleHoldModule : public ModuleBase {
 public:
     SampleHoldModule()
-        : ModuleBase("Sample & Hold", 6, 6) {
+        : ModuleBase("Sample & Hold", 7, 7) {
         addParameter(sourceParam = new juce::AudioParameterChoice("source", "Source", {"Input", "Random"}, 1));
         // `holdMode`, not `mode`: LFOModule already declares a boolean `mode`, and the AI patch
         // schema constrains choice parameters globally by id. Reusing `mode` would publish an
         // enum of ["Sample", "Track"] that forbids the LFO's own legal boolean value.
         addParameter(modeParam = new juce::AudioParameterChoice("holdMode", "Mode", {"Sample", "Track"}, 0));
         addParameter(clockParam = new juce::AudioParameterChoice("clock", "Clock", {"Internal", "External"}, 0));
+        // `trigThreshold`, not `threshold`: Compressor and Limiter both own a `threshold` float
+        // meaning "dB". Sharing an id across modules that mean different things by it is what the
+        // AI patch schema's per-id grouping assumes away, so keep the meaning unambiguous.
+        addParameter(thresholdParam = new juce::AudioParameterFloat("trigThreshold", "Threshold", -1.0f, 1.0f, 0.5f));
         addParameter(
             rateParam = new juce::AudioParameterFloat(
                 "rate", "Rate (Hz)", juce::NormalisableRange<float>(kMinRateHz, kMaxRateHz, 0.01f, 0.5f), 8.0f));
@@ -53,6 +62,10 @@ public:
         cachedSlew = -1.0f; // force slew coefficient recompute on the next block
         slewCoeff = 0.0f;
         lastValue.store(0.0f, std::memory_order_relaxed);
+        triggerLevel.store(0.0f, std::memory_order_relaxed);
+        effectiveThreshold.store(thresholdParam->get(), std::memory_order_relaxed);
+        triggerHigh.store(false, std::memory_order_relaxed);
+        triggerCount.store(0, std::memory_order_relaxed);
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -67,13 +80,13 @@ public:
             // Dry pass-through on ch0; clear trigger + CV channels so they don't leak downstream.
             for (int ch = 1; ch < numChannels; ++ch)
                 buffer.clear(ch, 0, numSamples);
-            lastValue.store(0.0f, std::memory_order_relaxed);
+            resetMeters();
             return;
         }
 
         if (isMuted()) {
             buffer.clear();
-            lastValue.store(0.0f, std::memory_order_relaxed);
+            resetMeters();
             return;
         }
 
@@ -85,12 +98,20 @@ public:
         const float baseSlew = slewParam->get();
         const float baseLevel = levelParam->get();
         const float baseOffset = offsetParam->get();
+        const float baseThreshold = thresholdParam->get();
 
         const float* triggerIn = numChannels > 1 ? buffer.getReadPointer(1) : nullptr;
         const float* rateCV = numChannels > 2 ? buffer.getReadPointer(2) : nullptr;
         const float* slewCV = numChannels > 3 ? buffer.getReadPointer(3) : nullptr;
         const float* levelCV = numChannels > 4 ? buffer.getReadPointer(4) : nullptr;
         const float* offsetCV = numChannels > 5 ? buffer.getReadPointer(5) : nullptr;
+        const float* thresholdCV = numChannels > 6 ? buffer.getReadPointer(6) : nullptr;
+
+        // Metering state for the trigger jack. Tracked whichever clock is selected, so the level
+        // readout is live while you dial Threshold in *before* switching to the external clock.
+        float meterPeak = 0.0f; // signed sample of greatest magnitude seen this block
+        float lastThreshold = baseThreshold;
+        int firedThisBlock = 0;
 
         // ch0 carries the Signal input on the way in and the CV output on the way out.
         // Each iteration reads out[s] before overwriting it, so the aliasing is safe.
@@ -101,6 +122,29 @@ public:
 
             bool captureNow = false; // Sample mode: latch a new value on this sample
             bool tracking = false;   // Track mode: follow the source on this sample
+
+            // Schmitt trigger on the external clock jack. Evaluated even when the internal clock
+            // is driving, so the meter stays live and `Threshold` can be set up in advance.
+            if (triggerIn != nullptr) {
+                const float trig = triggerIn[s];
+                if (std::abs(trig) > std::abs(meterPeak))
+                    meterPeak = trig;
+
+                float threshold = baseThreshold;
+                if (thresholdCV != nullptr)
+                    threshold = juce::jlimit(-1.0f, 1.0f, threshold + thresholdCV[s]);
+                lastThreshold = threshold;
+
+                if (!previousTriggerHigh && trig > threshold) {
+                    previousTriggerHigh = true;
+                    if (!useInternalClock) {
+                        captureNow = true;
+                        ++firedThisBlock;
+                    }
+                } else if (previousTriggerHigh && trig < threshold - kTriggerHysteresis) {
+                    previousTriggerHigh = false;
+                }
+            }
 
             if (useInternalClock) {
                 float rate = baseRate;
@@ -115,13 +159,11 @@ public:
                 if (phase >= 1.0f) {
                     phase -= std::floor(phase);
                     captureNow = true;
+                    ++firedThisBlock;
                 }
                 tracking = phase < 0.5f; // 50% duty internal gate
-            } else if (triggerIn != nullptr) {
-                const bool high = triggerIn[s] > kTriggerThreshold;
-                captureNow = high && !previousTriggerHigh;
-                previousTriggerHigh = high;
-                tracking = high;
+            } else {
+                tracking = previousTriggerHigh;
             }
 
             if (trackMode ? tracking : captureNow)
@@ -156,6 +198,11 @@ public:
             buffer.clear(ch, 0, numSamples);
 
         lastValue.store(out[numSamples - 1], std::memory_order_relaxed);
+        triggerLevel.store(meterPeak, std::memory_order_relaxed);
+        effectiveThreshold.store(lastThreshold, std::memory_order_relaxed);
+        triggerHigh.store(previousTriggerHigh, std::memory_order_relaxed);
+        if (firedThisBlock > 0)
+            triggerCount.fetch_add(firedThisBlock, std::memory_order_relaxed);
 
         if (auto* vb = getVisualBuffer()) {
             for (int s = 0; s < numSamples; ++s)
@@ -164,12 +211,12 @@ public:
     }
 
     std::vector<ModulationTarget> getModulationTargets() const override {
-        return {{"Rate", 2}, {"Slew", 3}, {"Level", 4}, {"Offset", 5}};
+        return {{"Rate", 2}, {"Slew", 3}, {"Level", 4}, {"Offset", 5}, {"Threshold", 6}};
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String labels[] = {"Signal", "Trigger", "Rate", "Slew", "Level", "Offset"};
-        return (i >= 0 && i < 6) ? labels[i] : ModuleBase::getInputPortLabel(i);
+        const juce::String labels[] = {"Signal", "Trigger", "Rate", "Slew", "Level", "Offset", "Threshold"};
+        return (i >= 0 && i < 7) ? labels[i] : ModuleBase::getInputPortLabel(i);
     }
 
     juce::String getOutputPortLabel(int) const override { return "CV"; }
@@ -179,7 +226,7 @@ public:
     ModuleType getModuleType() const override { return ModuleType::SampleHold; }
 
     LogicalPort mapInputChannel(int raw) const override {
-        if (raw >= 0 && raw < 6) {
+        if (raw >= 0 && raw < 7) {
             LogicalPort p;
             p.visibleJackIndex = raw;
             p.role = (raw == 0) ? PortRole::Audio : (raw == 1 ? PortRole::Gate : PortRole::ModCV);
@@ -205,11 +252,31 @@ public:
     /** Last CV value emitted on ch0 — for UI visualisation and tests. */
     float getLastValue() const { return lastValue.load(std::memory_order_relaxed); }
 
+    // --- Trigger meter accessors (audio thread writes, UI thread reads) ---
+
+    /** Signed trigger-jack sample of greatest magnitude in the last block. */
+    float getTriggerLevel() const { return triggerLevel.load(std::memory_order_relaxed); }
+
+    /** Threshold actually in force last block, i.e. the knob plus any Threshold CV. */
+    float getEffectiveThreshold() const { return effectiveThreshold.load(std::memory_order_relaxed); }
+
+    /** True while the Schmitt trigger is armed (input above threshold, not yet released). */
+    bool isTriggerHigh() const { return triggerHigh.load(std::memory_order_relaxed); }
+
+    /** Monotonic count of captures. The UI flashes when this changes. */
+    int getTriggerCount() const { return triggerCount.load(std::memory_order_relaxed); }
+
+    /** Hysteresis gap below the threshold before the trigger can re-arm. */
+    static constexpr float getTriggerHysteresis() { return kTriggerHysteresis; }
+
 private:
     static constexpr float kMinRateHz = 0.1f;
     static constexpr float kMaxRateHz = 50.0f;
-    static constexpr float kTriggerThreshold = 0.5f;
     static constexpr float kMaxSlewSeconds = 0.5f;
+    // Wide enough to reject dither and slow-sine loitering around the threshold, narrow enough
+    // that a threshold set near the top of a signal's range still re-arms. Not user-exposed —
+    // the Module Development Guide is explicit about not crowding modules with extra knobs.
+    static constexpr float kTriggerHysteresis = 0.05f;
 
     juce::AudioParameterChoice* sourceParam = nullptr;
     juce::AudioParameterChoice* modeParam = nullptr;
@@ -218,6 +285,14 @@ private:
     juce::AudioParameterFloat* slewParam = nullptr;
     juce::AudioParameterFloat* levelParam = nullptr;
     juce::AudioParameterFloat* offsetParam = nullptr;
+    juce::AudioParameterFloat* thresholdParam = nullptr;
+
+    /** Zeroes the meter atomics when the module is not producing output. */
+    void resetMeters() {
+        lastValue.store(0.0f, std::memory_order_relaxed);
+        triggerLevel.store(0.0f, std::memory_order_relaxed);
+        triggerHigh.store(false, std::memory_order_relaxed);
+    }
 
     double currentSampleRate = 44100.0;
     float phase = 1.0f;
@@ -228,6 +303,10 @@ private:
     float slewCoeff = 0.0f;
     juce::Random random;
     std::atomic<float> lastValue{0.0f};
+    std::atomic<float> triggerLevel{0.0f};
+    std::atomic<float> effectiveThreshold{0.5f};
+    std::atomic<bool> triggerHigh{false};
+    std::atomic<int> triggerCount{0};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SampleHoldModule)
 };

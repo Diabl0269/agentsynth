@@ -6,6 +6,7 @@
 #include "../Modules/MidiKeyboardModule.h"
 #include "FrequencyResponseComponent.h"
 #include "ScopeComponent.h"
+#include "TriggerMeterComponent.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -76,6 +77,7 @@ private:
     std::unique_ptr<FrequencyResponseComponent> freqResponseComponent;
     std::unique_ptr<juce::ToggleButton> spectrumToggle;
     std::unique_ptr<juce::MidiKeyboardComponent> keyboardComponent;
+    std::unique_ptr<TriggerMeterComponent> triggerMeter;
 
     std::unique_ptr<juce::DrawableButton> bypassButton;
     std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;

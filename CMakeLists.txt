@@ -255,6 +255,7 @@ target_sources(AgentSynth PRIVATE
     Source/UI/ModuleComponent.cpp
     Source/UI/ModuleComponent.h
     Source/UI/FrequencyResponseComponent.h
+    Source/UI/TriggerMeterComponent.h
     Source/UI/ModMatrixComponent.cpp
     Source/UI/ModMatrixComponent.h
     Source/UI/SettingsWindow.cpp

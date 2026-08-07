@@ -68,7 +68,7 @@ static juce::Point<int> estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Noise")
         return {280, 250};
     if (typeName == "Sample & Hold")
-        return {280, 400};
+        return {280, 640};
     return {280, 360};
 }
 

@@ -10,7 +10,9 @@
 //   • Edge cases: zero-length buffer, no trigger channel, prepare/reset
 
 #include "Modules/SampleHoldModule.h"
+#include "UI/TriggerMeterComponent.h"
 #include <gtest/gtest.h>
+#include <juce_gui_basics/juce_gui_basics.h>
 #include <set>
 
 namespace {
@@ -22,7 +24,7 @@ constexpr int kBlockSize = 512;
 constexpr int kOneSecond = 44100;
 
 // Index of each input channel, mirroring the documented layout.
-enum Ch { Signal = 0, Trigger = 1, RateCV = 2, SlewCV = 3, LevelCV = 4, OffsetCV = 5 };
+enum Ch { Signal = 0, Trigger = 1, RateCV = 2, SlewCV = 3, LevelCV = 4, OffsetCV = 5, ThresholdCV = 6 };
 
 /** Sets a parameter by its paramID to a normalised 0..1 value. */
 void setParam(SampleHoldModule& m, const juce::String& id, float normalised) {
@@ -95,11 +97,11 @@ TEST_F(SampleHoldModuleTest, NameAndTypeAreCorrect) {
 }
 
 TEST_F(SampleHoldModuleTest, ChannelCountsMatchDocumentedLayout) {
-    EXPECT_EQ(module->getTotalNumInputChannels(), 6);
-    // Outputs must cover the highest CV input channel read (ch5) so the
+    EXPECT_EQ(module->getTotalNumInputChannels(), 7);
+    // Outputs must cover the highest CV input channel read (ch6) so the
     // AudioProcessorGraph cannot alias those buffers with another node's output.
-    EXPECT_EQ(module->getTotalNumOutputChannels(), 6);
-    EXPECT_EQ(module->getVisibleInputPortCount(), 6);
+    EXPECT_EQ(module->getTotalNumOutputChannels(), 7);
+    EXPECT_EQ(module->getVisibleInputPortCount(), 7);
     EXPECT_EQ(module->getVisibleOutputPortCount(), 1);
 }
 
@@ -110,16 +112,17 @@ TEST_F(SampleHoldModuleTest, PortLabelsAreDescriptive) {
     EXPECT_EQ(module->getInputPortLabel(3), "Slew");
     EXPECT_EQ(module->getInputPortLabel(4), "Level");
     EXPECT_EQ(module->getInputPortLabel(5), "Offset");
+    EXPECT_EQ(module->getInputPortLabel(6), "Threshold");
     EXPECT_EQ(module->getOutputPortLabel(0), "CV");
 }
 
 TEST_F(SampleHoldModuleTest, ModulationTargetsCoverContinuousParams) {
     auto targets = module->getModulationTargets();
-    ASSERT_EQ(targets.size(), 4u);
+    ASSERT_EQ(targets.size(), 5u);
     EXPECT_EQ(targets[0].name, "Rate");
     EXPECT_EQ(targets[0].channelIndex, Ch::RateCV);
-    EXPECT_EQ(targets[3].name, "Offset");
-    EXPECT_EQ(targets[3].channelIndex, Ch::OffsetCV);
+    EXPECT_EQ(targets[4].name, "Threshold");
+    EXPECT_EQ(targets[4].channelIndex, Ch::ThresholdCV);
 }
 
 TEST_F(SampleHoldModuleTest, SignalAndTriggerAreNotAutoPromotableModTargets) {
@@ -128,6 +131,7 @@ TEST_F(SampleHoldModuleTest, SignalAndTriggerAreNotAutoPromotableModTargets) {
     EXPECT_FALSE(module->isAutoPromotableModTarget(Ch::Trigger));
     EXPECT_TRUE(module->isAutoPromotableModTarget(Ch::RateCV));
     EXPECT_TRUE(module->isAutoPromotableModTarget(Ch::OffsetCV));
+    EXPECT_TRUE(module->isAutoPromotableModTarget(Ch::ThresholdCV));
 }
 
 TEST_F(SampleHoldModuleTest, LogicalPortRolesAreCorrect) {
@@ -135,6 +139,8 @@ TEST_F(SampleHoldModuleTest, LogicalPortRolesAreCorrect) {
     EXPECT_EQ(module->mapInputChannel(1).role, PortRole::Gate);
     EXPECT_EQ(module->mapInputChannel(2).role, PortRole::ModCV);
     EXPECT_EQ(module->mapInputChannel(5).visibleJackIndex, 5);
+    EXPECT_EQ(module->mapInputChannel(6).role, PortRole::ModCV);
+    EXPECT_EQ(module->mapInputChannel(6).visibleJackIndex, 6);
     EXPECT_EQ(module->mapOutputChannel(0).role, PortRole::ModCV);
 }
 
@@ -230,6 +236,198 @@ TEST_F(SampleHoldModuleTest, GateStateCarriesAcrossBlocks) {
 
     // The gate falls at sample 100 and never rises again in this block, so the value stands.
     EXPECT_NEAR(b2.getSample(0, 200), 0.5f, 1e-5f);
+}
+
+// ---------------------------------------------------------------------------
+// Trigger threshold + hysteresis
+// ---------------------------------------------------------------------------
+
+// The threshold param is -1..+1, so a normalised value of n means (n * 2 - 1).
+void setThreshold(SampleHoldModule& m, float actual) { setParam(m, "trigThreshold", (actual + 1.0f) * 0.5f); }
+
+TEST_F(SampleHoldModuleTest, DefaultThresholdIsHalf) { EXPECT_NEAR(module->getEffectiveThreshold(), 0.5f, 1e-5f); }
+
+TEST_F(SampleHoldModuleTest, LowAmplitudeGateFiresOnceThresholdIsLowered) {
+    useExternalClock(*module);
+    useInputSource(*module);
+
+    // A gate that only reaches 0.3 — an attenuated LFO, a low-sustain envelope. Under the old
+    // hard-coded 0.5 threshold this silently never fired.
+    auto b = makeBuffer();
+    fill(b, Ch::Signal, 0.75f);
+    for (int i = 100; i < 200; ++i)
+        b.setSample(Ch::Trigger, i, 0.3f);
+
+    process(b);
+    EXPECT_FLOAT_EQ(b.getSample(0, 300), 0.0f) << "0.3 gate must not cross the default 0.5 threshold";
+
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    setThreshold(*module, 0.2f);
+
+    auto b2 = makeBuffer();
+    fill(b2, Ch::Signal, 0.75f);
+    for (int i = 100; i < 200; ++i)
+        b2.setSample(Ch::Trigger, i, 0.3f);
+
+    process(b2);
+    EXPECT_NEAR(b2.getSample(0, 300), 0.75f, 1e-5f) << "Lowering the threshold below the gate must let it fire";
+}
+
+TEST_F(SampleHoldModuleTest, NegativeThresholdFiresOnBipolarSignal) {
+    useExternalClock(*module);
+    useInputSource(*module);
+    setThreshold(*module, -0.5f);
+
+    auto b = makeBuffer();
+    fill(b, Ch::Signal, 0.4f);
+    // Trigger rises from -1.0 to -0.2, crossing -0.5 but never reaching 0.
+    for (int i = 0; i < kBlockSize; ++i)
+        b.setSample(Ch::Trigger, i, i < 100 ? -1.0f : -0.2f);
+
+    process(b);
+    EXPECT_NEAR(b.getSample(0, 300), 0.4f, 1e-5f);
+}
+
+TEST_F(SampleHoldModuleTest, HysteresisPreventsChatterAroundThreshold) {
+    useExternalClock(*module);
+    useInputSource(*module);
+    setThreshold(*module, 0.0f);
+
+    auto b = makeBuffer();
+    fill(b, Ch::Signal, 0.5f);
+    // A signal dithering minutely around the threshold — the classic retrigger-storm case.
+    // Every odd sample is above 0.0 and every even sample below, but the excursion is far
+    // smaller than the hysteresis gap, so exactly one capture should occur.
+    for (int i = 0; i < kBlockSize; ++i)
+        b.setSample(Ch::Trigger, i, (i % 2 == 0) ? -0.001f : 0.001f);
+
+    process(b);
+
+    EXPECT_EQ(module->getTriggerCount(), 1) << "Dither around the threshold must not retrigger every sample";
+}
+
+TEST_F(SampleHoldModuleTest, SignalMustFallBelowHysteresisGapToReArm) {
+    useExternalClock(*module);
+    useInputSource(*module);
+    setThreshold(*module, 0.5f);
+
+    const float gap = SampleHoldModule::getTriggerHysteresis();
+
+    auto b = makeBuffer();
+    fill(b, Ch::Signal, 0.5f);
+    // Rise above threshold, dip to just inside the hysteresis gap, rise again.
+    // The dip is not a release, so the second rise is not a new edge.
+    for (int i = 0; i < kBlockSize; ++i) {
+        float v = 0.9f;
+        if (i >= 100 && i < 200)
+            v = 0.5f - (gap * 0.5f); // below threshold but inside the gap
+        b.setSample(Ch::Trigger, i, v);
+    }
+
+    process(b);
+    EXPECT_EQ(module->getTriggerCount(), 1) << "A dip inside the hysteresis gap must not re-arm the trigger";
+}
+
+TEST_F(SampleHoldModuleTest, FullReleaseReArmsTheTrigger) {
+    useExternalClock(*module);
+    useInputSource(*module);
+    setThreshold(*module, 0.5f);
+
+    auto b = makeBuffer();
+    fill(b, Ch::Signal, 0.5f);
+    for (int i = 0; i < kBlockSize; ++i) {
+        float v = 0.9f;
+        if (i >= 100 && i < 200)
+            v = 0.0f; // a genuine release, well below threshold - hysteresis
+        b.setSample(Ch::Trigger, i, v);
+    }
+
+    process(b);
+    EXPECT_EQ(module->getTriggerCount(), 2) << "A full release then rise is a second edge";
+}
+
+TEST_F(SampleHoldModuleTest, ThresholdCVShiftsTheTriggerPoint) {
+    useExternalClock(*module);
+    useInputSource(*module);
+
+    // Gate reaches only 0.3, below the 0.5 default — but negative Threshold CV pulls the
+    // threshold down far enough for it to fire.
+    auto b = makeBuffer();
+    fill(b, Ch::Signal, 0.6f);
+    fill(b, Ch::ThresholdCV, -0.4f); // effective threshold 0.1
+    for (int i = 100; i < 200; ++i)
+        b.setSample(Ch::Trigger, i, 0.3f);
+
+    process(b);
+
+    EXPECT_NEAR(b.getSample(0, 300), 0.6f, 1e-5f);
+    EXPECT_NEAR(module->getEffectiveThreshold(), 0.1f, 1e-5f);
+}
+
+// ---------------------------------------------------------------------------
+// Trigger meter telemetry
+// ---------------------------------------------------------------------------
+
+TEST_F(SampleHoldModuleTest, TriggerLevelReportsSignedPeakOfBlock) {
+    useExternalClock(*module);
+
+    auto b = makeBuffer();
+    for (int i = 0; i < kBlockSize; ++i)
+        b.setSample(Ch::Trigger, i, i == 42 ? -0.8f : 0.2f);
+
+    process(b);
+
+    EXPECT_NEAR(module->getTriggerLevel(), -0.8f, 1e-5f) << "Meter should report the largest-magnitude sample, signed";
+}
+
+TEST_F(SampleHoldModuleTest, TriggerLevelIsLiveOnInternalClockToo) {
+    // Clock defaults to Internal. The meter must still track the jack so the threshold can be
+    // dialled in before switching over.
+    auto b = makeBuffer();
+    fill(b, Ch::Trigger, 0.7f);
+
+    process(b);
+
+    EXPECT_NEAR(module->getTriggerLevel(), 0.7f, 1e-5f);
+}
+
+TEST_F(SampleHoldModuleTest, TriggerHighReflectsSchmittState) {
+    useExternalClock(*module);
+
+    auto b = makeBuffer();
+    fill(b, Ch::Trigger, 0.9f);
+    process(b);
+    EXPECT_TRUE(module->isTriggerHigh());
+
+    auto b2 = makeBuffer(); // trigger returns to 0
+    process(b2);
+    EXPECT_FALSE(module->isTriggerHigh());
+}
+
+TEST_F(SampleHoldModuleTest, TriggerCountAdvancesOnInternalClockSteps) {
+    setParam(*module, "rate", 1.0f); // 50 Hz
+
+    juce::AudioBuffer<float> b(module->getTotalNumInputChannels(), kOneSecond);
+    b.clear();
+    process(b);
+
+    EXPECT_GT(module->getTriggerCount(), 20) << "Internal clock steps should advance the capture count";
+}
+
+TEST_F(SampleHoldModuleTest, MetersResetOnBypassAndMute) {
+    useExternalClock(*module);
+
+    auto b = makeBuffer();
+    fill(b, Ch::Trigger, 0.9f);
+    process(b);
+    ASSERT_TRUE(module->isTriggerHigh());
+
+    module->setBypassed(true);
+    auto b2 = makeBuffer();
+    fill(b2, Ch::Trigger, 0.9f);
+    process(b2);
+    EXPECT_FLOAT_EQ(module->getTriggerLevel(), 0.0f);
+    EXPECT_FALSE(module->isTriggerHigh());
 }
 
 // ---------------------------------------------------------------------------
@@ -578,6 +776,64 @@ TEST_F(SampleHoldModuleTest, HandlesZeroSampleRateWithoutDividingByZero) {
 
     for (int i = 0; i < kBlockSize; ++i)
         EXPECT_TRUE(std::isfinite(b.getSample(0, i)));
+}
+
+// ---------------------------------------------------------------------------
+// TriggerMeterComponent — static helpers and paint smoke test
+// ---------------------------------------------------------------------------
+
+TEST(TriggerMeterTest, ValueToXMapsBipolarRangeAcrossWidth) {
+    EXPECT_FLOAT_EQ(TriggerMeterComponent::valueToX(-1.0f, 0.0f, 100.0f), 0.0f);
+    EXPECT_FLOAT_EQ(TriggerMeterComponent::valueToX(0.0f, 0.0f, 100.0f), 50.0f);
+    EXPECT_FLOAT_EQ(TriggerMeterComponent::valueToX(1.0f, 0.0f, 100.0f), 100.0f);
+    // Honours the x origin.
+    EXPECT_FLOAT_EQ(TriggerMeterComponent::valueToX(0.0f, 20.0f, 100.0f), 70.0f);
+}
+
+TEST(TriggerMeterTest, ValueToXClampsOutOfRangeInput) {
+    EXPECT_FLOAT_EQ(TriggerMeterComponent::valueToX(-5.0f, 0.0f, 100.0f), 0.0f);
+    EXPECT_FLOAT_EQ(TriggerMeterComponent::valueToX(5.0f, 0.0f, 100.0f), 100.0f);
+}
+
+TEST(TriggerMeterTest, NeedsRepaintIsFalseWhenNothingChanged) {
+    EXPECT_FALSE(TriggerMeterComponent::needsRepaint(0.5f, 0.5f, 0.5f, 0.5f, false, false, 3, 3, 0))
+        << "An idle meter must not repaint — that would invalidate the parent's cached image";
+}
+
+TEST(TriggerMeterTest, NeedsRepaintIgnoresSubVisualLevelJitter) {
+    // A steady signal jitters slightly block to block; that must not cause a repaint.
+    EXPECT_FALSE(TriggerMeterComponent::needsRepaint(0.500f, 0.502f, 0.5f, 0.5f, false, false, 1, 1, 0));
+}
+
+TEST(TriggerMeterTest, NeedsRepaintOnMeaningfulChanges) {
+    // Level moved visibly.
+    EXPECT_TRUE(TriggerMeterComponent::needsRepaint(0.1f, 0.9f, 0.5f, 0.5f, false, false, 1, 1, 0));
+    // Threshold moved.
+    EXPECT_TRUE(TriggerMeterComponent::needsRepaint(0.5f, 0.5f, 0.2f, 0.8f, false, false, 1, 1, 0));
+    // Armed state flipped.
+    EXPECT_TRUE(TriggerMeterComponent::needsRepaint(0.5f, 0.5f, 0.5f, 0.5f, false, true, 1, 1, 0));
+    // A capture happened.
+    EXPECT_TRUE(TriggerMeterComponent::needsRepaint(0.5f, 0.5f, 0.5f, 0.5f, false, false, 1, 2, 0));
+    // Flash still decaying.
+    EXPECT_TRUE(TriggerMeterComponent::needsRepaint(0.5f, 0.5f, 0.5f, 0.5f, false, false, 1, 1, 2));
+}
+
+TEST(TriggerMeterTest, PaintDoesNotCrashAndDrawsSomething) {
+    SampleHoldModule m;
+    m.prepareToPlay(kSampleRate, kBlockSize);
+    TriggerMeterComponent meter(m);
+    meter.setSize(260, 18);
+
+    juce::Image img(juce::Image::ARGB, 260, 18, true);
+    juce::Graphics g(img);
+    EXPECT_NO_THROW(meter.paint(g));
+
+    bool hasPixel = false;
+    for (int y = 0; y < img.getHeight() && !hasPixel; ++y)
+        for (int x = 0; x < img.getWidth() && !hasPixel; ++x)
+            if (img.getPixelAt(x, y).getAlpha() > 0)
+                hasPixel = true;
+    EXPECT_TRUE(hasPixel) << "paint() should produce visible pixels";
 }
 
 TEST_F(SampleHoldModuleTest, StateSerializationRoundTrips) {
