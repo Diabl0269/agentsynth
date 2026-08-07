@@ -326,6 +326,27 @@ padding: their content used to start at y=60 while the first jack sits at y=70.
 `ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents` constructs every library-offered
 type and fails if the table drifts, so the ghost cannot lie about where a module will land.
 
+### Modules that resize at runtime
+
+Widths are static, but one module's **height** is not: the Macro bank (`MacroControlModule`) grows
+and shrinks with its `Knobs` parameter. Its geometry lives in `LayoutUtil.h` so the component
+layout, the output-jack hit test and `estimateModuleSize` all read the same numbers:
+
+```cpp
+kMacroHeaderH  = 94   // title bar + Knobs / Bipolar row
+kMacroRowH     = 44   // one macro knob and its output jack
+kMacroBottomPad = 12
+
+macroBankHeight(count) == kMacroHeaderH + count * kMacroRowH + kMacroBottomPad
+macroRowCentreY(index) == kMacroHeaderH + index * kMacroRowH + kMacroRowH / 2
+```
+
+Growth is **anchored at the top-left and pushes neighbours, never itself**. Moving the module the
+user is currently interacting with would teleport it out from under the cursor, so
+`GraphEditor::handleModuleResized` instead feeds every module box to
+`LayoutUtil::resolveOverlapsAfterResize` and applies the displacements it returns. Shrinking
+returns an empty result set — nothing is pulled back up, the canvas just gains space.
+
 ### Column stride derivation
 
 ```
@@ -459,6 +480,29 @@ in `others` (excluding `selfId`). Starts at `snap(desired)`, then walks an expan
 spiral at step `kSpiralStep` for up to `kSpiralMaxRings` rings. Returns `snap(desired)` (clamped
 to canvas) if no clear slot is found within the search radius — never returns an out-of-bounds
 position.
+
+### `resolveOverlapsAfterResize`
+
+```cpp
+inline constexpr int kResolveMaxRounds = 4;
+
+std::vector<ArrangeResult>
+resolveOverlapsAfterResize(NodeID resizedId,
+                           const std::vector<Box>& boxes,
+                           int gap = kCollisionGap);
+```
+
+Called after a module changes footprint in place. `boxes` is every module box **including** the
+resized one, already carrying its new rect. Returns a new top-left for each *other* box that had
+to move; boxes that stayed put are not returned, so an empty result means the new footprint fitted
+as-is.
+
+The resized module is never returned and never moves. Displaced boxes are pushed straight down
+past the lowest thing they collided with, then run through `findFreeSlot`, so results are on-grid
+and gap-respecting. The sweep is deterministic (top-to-bottom, then left-to-right, then id) and
+the cascade is capped at `kResolveMaxRounds` passes.
+
+---
 
 ### `computeAutoArrange`
 

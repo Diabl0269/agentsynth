@@ -16,6 +16,7 @@
 #include "../Modules/FX/ReverbModule.h"
 #include "../Modules/FilterModule.h"
 #include "../Modules/LFOModule.h"
+#include "../Modules/MacroControlModule.h"
 #include "../Modules/MidiKeyboardModule.h"
 #include "../Modules/ModuleBase.h"
 #include "../Modules/NoiseModule.h"
@@ -71,6 +72,7 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Bitcrusher", []() { return std::make_unique<BitcrusherModule>(); }},
     {"Pitch Shifter", []() { return std::make_unique<PitchShifterModule>(); }},
     {"Noise", []() { return std::make_unique<NoiseModule>(); }},
+    {"Macros", []() { return std::make_unique<MacroControlModule>(); }},
     {"Sampler", []() { return std::make_unique<SamplerModule>(); }},
     {"Wavetable", []() { return std::make_unique<WavetableOscillatorModule>(); }},
     {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }}};
@@ -527,6 +529,8 @@ static juce::String getFactoryTypeName(juce::AudioProcessor* processor) {
             return "Pitch Shifter";
         case ModuleType::Noise:
             return "Noise";
+        case ModuleType::MacroControl:
+            return "Macros";
         case ModuleType::Sampler:
             return "Sampler";
         case ModuleType::Wavetable:

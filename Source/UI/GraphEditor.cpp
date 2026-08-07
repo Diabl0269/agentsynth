@@ -13,6 +13,7 @@
 #include "../Modules/FX/ReverbModule.h"
 #include "../Modules/FilterModule.h"
 #include "../Modules/LFOModule.h"
+#include "../Modules/MacroControlModule.h"
 #include "../Modules/MidiKeyboardModule.h"
 #include "../Modules/NoiseModule.h"
 #include "../Modules/OscillatorModule.h"
@@ -71,6 +72,10 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         return {synth::LayoutUtil::kNarrowWidth, synth::LayoutUtil::kNarrowWidth};
     if (typeName == "Noise")
         return {280, 293};
+    if (typeName == "Macros")
+        // Height tracks the bank's "Knobs" count at runtime; the drop estimate uses the default.
+        return {synth::LayoutUtil::kSingleWidth,
+                synth::LayoutUtil::macroBankHeight(MacroControlModule::kDefaultMacros)};
     if (typeName == "Sampler")
         return {280, 657};
     if (typeName == "Wavetable")
@@ -1527,6 +1532,62 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
             }
         }
     }
+}
+
+void GraphEditor::handleModuleResized(ModuleComponent* moduleComp) {
+    if (moduleComp == nullptr || moduleComp->getModule() == nullptr)
+        return;
+
+    auto& graph = audioEngine.getGraph();
+    const auto nodeId = moduleComp->getNodeId();
+    if (graph.getNodeForId(nodeId) == nullptr)
+        return;
+
+    // 1. Jacks that just disappeared take their cables with them. Leaving them connected would
+    //    mean a routing that still shows in the mod matrix, still costs a node, and no longer
+    //    carries anything (the module silences hidden channels) — with no jack to unplug it from.
+    //    No undo transaction is opened here: the parameter gesture that changed the count already
+    //    snapshots the whole graph before and after, so this is part of that single undo step.
+    if (auto* mb = dynamic_cast<ModuleBase*>(moduleComp->getModule())) {
+        const int visible = mb->getVisibleOutputPortCount();
+        std::vector<juce::AudioProcessorGraph::Connection> toRemove;
+
+        for (const auto& c : graph.getConnections()) {
+            if (c.source.nodeID != nodeId || c.source.isMIDI() || c.source.channelIndex < visible)
+                continue;
+
+            if (auto* dstNode = graph.getNodeForId(c.destination.nodeID)) {
+                if (dynamic_cast<AttenuverterModule*>(dstNode->getProcessor()) != nullptr) {
+                    audioEngine.removeModRouting(dstNode->nodeID); // drops both legs of the cable
+                    continue;
+                }
+            }
+            toRemove.push_back(c);
+        }
+
+        for (const auto& c : toRemove)
+            graph.removeConnection(c);
+    }
+
+    // 2. Nudge neighbours clear of the new footprint. The resized module stays put.
+    std::vector<synth::LayoutUtil::Box> boxes;
+    for (auto* comp : content.getModules())
+        if (comp != nullptr)
+            boxes.push_back({comp->getNodeId(), comp->getBounds()});
+
+    for (const auto& moved : synth::LayoutUtil::resolveOverlapsAfterResize(nodeId, boxes)) {
+        for (auto* comp : content.getModules()) {
+            if (comp == nullptr || comp->getNodeId() != moved.id)
+                continue;
+            comp->setTopLeftPosition(moved.pos);
+            if (auto* node = graph.getNodeForId(moved.id)) {
+                node->properties.set("x", moved.pos.x);
+                node->properties.set("y", moved.pos.y);
+            }
+        }
+    }
+
+    content.repaint();
 }
 
 juce::Point<int> GraphEditor::resolvePlacement(juce::Point<int> desired, int w, int h,

@@ -235,7 +235,7 @@ TEST_F(E2EWorkflowTest, DropAllModuleTypes_NoCrash) {
                                            "ADSR",        "VCA",        "Sequencer",     "Poly Sequencer", "LFO",
                                            "Distortion",  "Delay",      "Reverb",        "MidiKeyboard",   "Chorus",
                                            "Phaser",      "Compressor", "Flanger",       "Limiter",        "Poly MIDI",
-                                           "Voice Mixer", "Bitcrusher", "Pitch Shifter", "Parametric EQ"};
+                                           "Voice Mixer", "Bitcrusher", "Pitch Shifter", "Parametric EQ",  "Macros"};
 
     for (const auto& type : moduleTypes) {
         auto nodeBefore = nodeCount();

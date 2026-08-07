@@ -1,5 +1,6 @@
 #include "ModuleComponent.h"
 #include "../Modules/ExternalMidiModule.h"
+#include "../Modules/MacroControlModule.h"
 #include "../Modules/ModuleBase.h"
 #include "../Modules/PolySequencerModule.h"
 #include "../Modules/SamplerModule.h"
@@ -953,6 +954,15 @@ void ModuleComponent::updateLayout() {
         return;
     }
 
+    if (auto* macro = dynamic_cast<MacroControlModule*>(module)) {
+        // The bank is the only module whose footprint tracks a parameter: the "Knobs" count
+        // decides how many macro rows (knob + output jack) are shown. It grows downward from an
+        // unchanged top-left, so the module the user is turning never jumps under the cursor.
+        setSize(synth::LayoutUtil::kSingleWidth, synth::LayoutUtil::macroBankHeight(macro->getMacroCount()));
+        resized();
+        return;
+    }
+
     if (getType(module) == ModuleType::Sequencer || getType(module) == ModuleType::PolySequencer) {
         setSize(synth::LayoutUtil::kDoubleWidth, 380);
         return;
@@ -1289,6 +1299,15 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
         return {getWidth() / 2, getHeight() / 2};
     }
 
+    // Macro bank: jacks sit on their macro's row so knob N and jack N line up horizontally.
+    if (auto* macro = dynamic_cast<MacroControlModule*>(module)) {
+        if (!isInput) {
+            const int visible = macro->getVisibleOutputPortCount();
+            const int clamped = (visible > 0) ? juce::jlimit(0, visible - 1, index) : 0;
+            return {getWidth() - 10, synth::LayoutUtil::macroRowCentreY(clamped)};
+        }
+    }
+
     int yStep = 20;
     int headerHeight = 30;
 
@@ -1384,6 +1403,11 @@ void ModuleComponent::resized() {
 
     if (muteButton)
         muteButton->setBounds(getWidth() - 74, 2, 22, 20);
+
+    if (auto* macro = dynamic_cast<MacroControlModule*>(module)) {
+        layoutMacroBank(macro->getMacroCount());
+        return;
+    }
 
     if (getType(module) == ModuleType::ParametricEQ) {
         layoutParametricEQ();
@@ -1514,6 +1538,66 @@ void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) 
             if (safeThis != nullptr)
                 safeThis->repaint();
         });
+    } else if (param->paramID == "macroCount") {
+        // Resizing touches the component tree and the graph, so it must happen on the message
+        // thread even though this callback can arrive from the audio thread.
+        juce::Component::SafePointer<ModuleComponent> safeThis(this);
+        juce::MessageManager::callAsync([safeThis] {
+            if (safeThis != nullptr)
+                safeThis->applyMacroCountChange();
+        });
+    }
+}
+
+void ModuleComponent::applyMacroCountChange() {
+    if (module == nullptr || dynamic_cast<MacroControlModule*>(module) == nullptr)
+        return;
+
+    updateLayout();
+    owner.handleModuleResized(this);
+    repaint();
+}
+
+void ModuleComponent::layoutMacroBank(int count) {
+    using namespace synth::LayoutUtil;
+
+    const int margin = 20;
+
+    // Header row: the Knobs count on the left, the Bipolar toggle beside it.
+    for (int i = 0; i < sliders.size(); ++i) {
+        if (!sliders[i]->getComponentID().equalsIgnoreCase("Knobs"))
+            continue;
+        sliderLabels[i]->setBounds(margin, 30, 80, 18);
+        sliders[i]->setBounds(margin, 48, 80, 40);
+        sliders[i]->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 44, 16);
+    }
+
+    for (auto* toggle : toggles) {
+        if (toggle->getComponentID().equalsIgnoreCase("Bipolar"))
+            toggle->setBounds(margin + 96, 56, 100, 24);
+    }
+
+    // One row per macro: knob on the left, value beside it, output jack (drawn in paint()) on
+    // the right edge at the same y. Rows beyond the count are hidden, not destroyed — their
+    // parameters still exist and keep their values if the bank is grown again.
+    for (int i = 0; i < MacroControlModule::kMaxMacros; ++i) {
+        const juce::String id = MacroControlModule::macroName(i);
+        const bool visible = i < count;
+
+        for (int s = 0; s < sliders.size(); ++s) {
+            if (!sliders[s]->getComponentID().equalsIgnoreCase(id))
+                continue;
+
+            sliders[s]->setVisible(visible);
+            if (s < sliderLabels.size())
+                sliderLabels[s]->setVisible(false); // the jack label already names the row
+
+            if (visible) {
+                sliders[s]->setTextBoxStyle(juce::Slider::TextBoxRight, false, 44, 18);
+                const int centreY = macroRowCentreY(i);
+                sliders[s]->setBounds(margin, centreY - (kMacroRowH - 8) / 2, 140, kMacroRowH - 8);
+            }
+        }
     }
 }
 

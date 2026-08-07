@@ -70,6 +70,7 @@ add_library(Core STATIC
     Source/Modules/MidiKeyboardModule.h
     Source/Modules/LFOModule.h
     Source/Modules/AttenuverterModule.h
+    Source/Modules/MacroControlModule.h
     Source/Modules/VisualBuffer.h
     Source/Modules/FX/DelayModule.h
     Source/Modules/FX/DistortionModule.h

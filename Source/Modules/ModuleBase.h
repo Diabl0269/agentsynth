@@ -49,7 +49,8 @@ enum class ModuleType {
     PitchShifter,
     Noise,
     Sampler,
-    Wavetable
+    Wavetable,
+    MacroControl
 };
 
 class ModuleBase : public juce::AudioProcessor {

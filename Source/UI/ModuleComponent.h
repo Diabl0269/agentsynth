@@ -126,6 +126,15 @@ private:
     void createControls();
     void updateLayout();
 
+    // Macro bank only. Re-lays the component for the new "Knobs" count and asks the GraphEditor
+    // to settle the consequences (drop routings on jacks that just disappeared, nudge neighbours
+    // clear of the new footprint). Message thread only.
+    void applyMacroCountChange();
+
+    // Positions the Knobs/Bipolar header controls and one knob row per visible macro; hides the
+    // rows above `count` without destroying their sliders or parameters.
+    void layoutMacroBank(int count);
+
     // First y below the header, the MIDI row and every visible jack. Derived from getPortCenter()
     // rather than re-deriving the geometry, so content can never land on top of a port label —
     // which is exactly what happened when two separate copies of the formula drifted apart.
