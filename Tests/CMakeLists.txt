@@ -44,6 +44,7 @@ add_executable(Tests
     ModMatrixTests.cpp
     FXModuleTests.cpp
     PitchShifterModuleTests.cpp
+    ParametricEQModuleTests.cpp
     VoiceMixerModuleTests.cpp
     BitcrusherModuleTests.cpp
     NoiseModuleTests.cpp
@@ -71,6 +72,7 @@ add_executable(Tests
     IconLibraryTests.cpp
     StatusBarTests.cpp
     FrequencyResponseTests.cpp
+    EQCurveTests.cpp
     ScopeTests.cpp
     UIAnimationTests.cpp
     GraphEditorOnboardingTests.cpp

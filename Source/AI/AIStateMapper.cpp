@@ -10,6 +10,7 @@
 #include "../Modules/FX/DistortionModule.h"
 #include "../Modules/FX/FlangerModule.h"
 #include "../Modules/FX/LimiterModule.h"
+#include "../Modules/FX/ParametricEQModule.h"
 #include "../Modules/FX/PhaserModule.h"
 #include "../Modules/FX/PitchShifterModule.h"
 #include "../Modules/FX/ReverbModule.h"
@@ -65,6 +66,7 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Compressor", []() { return std::make_unique<CompressorModule>(); }},
     {"Flanger", []() { return std::make_unique<FlangerModule>(); }},
     {"Limiter", []() { return std::make_unique<LimiterModule>(); }},
+    {"Parametric EQ", []() { return std::make_unique<ParametricEQModule>(); }},
     {"Voice Mixer", []() { return std::make_unique<VoiceMixerModule>(); }},
     {"Bitcrusher", []() { return std::make_unique<BitcrusherModule>(); }},
     {"Pitch Shifter", []() { return std::make_unique<PitchShifterModule>(); }},
@@ -515,6 +517,8 @@ static juce::String getFactoryTypeName(juce::AudioProcessor* processor) {
             return "Flanger";
         case ModuleType::Limiter:
             return "Limiter";
+        case ModuleType::ParametricEQ:
+            return "Parametric EQ";
         case ModuleType::VoiceMixer:
             return "Voice Mixer";
         case ModuleType::Bitcrusher:
@@ -1094,9 +1098,9 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
         if (audioOutputNode != nullptr) {
             // Types that produce audio and should auto-connect to output
             static const std::set<juce::String> audioNodeTypes = {
-                "Oscillator", "Noise",      "Sampler", "Wavetable", "Filter",     "VCA",
-                "Distortion", "Delay",      "Reverb",  "Amp Env",   "Filter Env", "Chorus",
-                "Phaser",     "Compressor", "Flanger", "Limiter",   "Bitcrusher", "Pitch Shifter"};
+                "Oscillator", "Noise",   "Sampler",    "Wavetable",     "Filter",       "VCA",    "Distortion",
+                "Delay",      "Reverb",  "Amp Env",    "Filter Env",    "Chorus",       "Phaser", "Compressor",
+                "Flanger",    "Limiter", "Bitcrusher", "Pitch Shifter", "Parametric EQ"};
 
             for (auto newNodeId : newlyCreatedNodes) {
                 auto* node = graph.getNodeForId(newNodeId);

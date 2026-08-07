@@ -81,6 +81,10 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         return {280, 355};
     if (typeName == "Pitch Shifter")
         return {280, 423};
+    if (typeName == "Parametric EQ")
+        // Double-width card: a 150px response curve set between the port-label gutters, then a
+        // 4-column band grid (on/off + Freq/Gain/Q). Mirrors parametricEQHeight().
+        return {synth::LayoutUtil::kDoubleWidth, 592};
     if (typeName == "Compressor")
         return {280, 269};
     if (typeName == "Limiter")

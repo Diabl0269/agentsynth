@@ -17,6 +17,9 @@ ModuleWidthBucket getModuleWidthBucket(ModuleType t) {
     case ModuleType::Sequencer:
     case ModuleType::PolySequencer:
     case ModuleType::MidiKeyboard:
+    // Parametric EQ needs the extra width for a readable response curve plus four band rows of
+    // On / Freq / Gain / Q laid out side by side.
+    case ModuleType::ParametricEQ:
         return ModuleWidthBucket::Double;
     case ModuleType::Attenuverter:
         return ModuleWidthBucket::Narrow;
@@ -137,6 +140,7 @@ int roleRank(ModuleType t) {
     case ModuleType::Wavetable:
         return 0;
     case ModuleType::Filter:
+    case ModuleType::ParametricEQ:
     case ModuleType::VCA:
     case ModuleType::VoiceMixer:
         return 1;

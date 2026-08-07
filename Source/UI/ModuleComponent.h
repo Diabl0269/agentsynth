@@ -4,6 +4,8 @@
 #include "../AudioEngine.h"
 #include "../Modules/FilterModule.h"
 #include "../Modules/MidiKeyboardModule.h"
+#include "EQCurveComponent.h"
+#include "EQWindow.h"
 #include "FrequencyResponseComponent.h"
 #include "SampleWaveformComponent.h"
 #include "ScopeComponent.h"
@@ -88,7 +90,12 @@ private:
     std::unique_ptr<ScopeComponent> scopeComponent;
     std::unique_ptr<juce::ToggleButton> scopeToggle;
     std::unique_ptr<FrequencyResponseComponent> freqResponseComponent;
+    std::unique_ptr<EQCurveComponent> eqCurveComponent;
     std::unique_ptr<juce::ToggleButton> spectrumToggle;
+    // Pop-out EQ editor. The dialog self-deletes when closed, so we only hold a SafePointer and
+    // must close it in detachFromProcessor() — it references the module by reference.
+    std::unique_ptr<juce::TextButton> eqPopOutButton;
+    juce::Component::SafePointer<juce::DialogWindow> eqWindow;
     std::unique_ptr<juce::MidiKeyboardComponent> keyboardComponent;
     std::unique_ptr<WavetableDisplayComponent> wavetableDisplay;
     std::unique_ptr<juce::TextButton> loadWavetableButton;
@@ -145,6 +152,21 @@ private:
     // Shared step-column layout helper used by Sequencer and PolySequencer.
     // Positions Gate, Pitch/Root, and F.Env/Chord controls for a single step column.
     void layoutSequencerStepColumn(int step, int colX, int startY);
+
+    // --- Parametric EQ card ---
+    // One column per band (on/off toggle above Freq / Gain / Q), so the knobs read as a grid
+    // instead of the generic two-up flow. Height is computed by parametricEQHeight() from the
+    // same constants the layout uses, so the two cannot drift apart.
+    void layoutParametricEQ();
+    int parametricEQHeight() const;
+    void openEqWindow();
+    // Brackets a curve's edits in one undo step. Uses a SafePointer, so a pop-out window that
+    // outlives this component becomes a no-op rather than a dangling call.
+    void wireEqGestureCallbacks(EQCurveComponent& curve);
+    // Auto-UI controls are looked up by their parameter display name (set as the componentID in
+    // createControls), which keeps the layout independent of parameter ordering.
+    juce::ToggleButton* findToggleByName(const juce::String& name) const;
+    void layoutNamedKnob(const juce::String& name, int x, int y, int w, int h);
 
     // Apply SVG icons to bypass/mute/delete DrawableButtons from the active LnF.
     // No-op when the themed LnF is not installed (headless tests).

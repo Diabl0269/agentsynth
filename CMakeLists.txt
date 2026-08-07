@@ -81,6 +81,7 @@ add_library(Core STATIC
     Source/Modules/FX/LimiterModule.h
     Source/Modules/FX/BitcrusherModule.h
     Source/Modules/FX/PitchShifterModule.h
+    Source/Modules/FX/ParametricEQModule.h
     Source/Modules/NoiseModule.h
     # AI
     Source/AI/AIProvider.h
@@ -259,6 +260,9 @@ target_sources(AgentSynth PRIVATE
     Source/UI/ModuleComponent.cpp
     Source/UI/ModuleComponent.h
     Source/UI/FrequencyResponseComponent.h
+    Source/UI/FrequencyGrid.h
+    Source/UI/EQCurveComponent.h
+    Source/UI/EQWindow.h
     Source/UI/SampleWaveformComponent.h
     Source/UI/WavetableDisplayComponent.h
     Source/UI/ModMatrixComponent.cpp
