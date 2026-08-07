@@ -65,6 +65,19 @@ incoming MIDI note (or A4/440Hz if none is connected) offset by `octave`/`coarse
     -   `type`: The string name of the module (e.g., "Oscillator", "Filter", "ADSR").
     -   `params`: An optional object containing key-value pairs for module parameters (e.g., "Frequency", "Cutoff").
 
+    -   `state`: An optional object of **non-parameter** module state, round-tripped through
+        `ModuleBase::getExtraState()` / `setExtraState()`. Written by `graphToJSON` for any module
+        that has some (today only `Sampler`, which stores `{"sampleFile": "<absolute path>"}`).
+
+        **Trusted-path only.** `applyJSONToGraph` ignores `state` unless `trusted == true` — i.e. it
+        is honoured for our own undo/redo snapshots and presets, and dropped for anything a provider
+        produced. A module is free to read this as a filename, so accepting it from model output
+        would turn a patch suggestion into an arbitrary file read. `Sampler` nodes remain fully
+        authorable by the model; the node is simply created with no sample loaded.
+
+        Nothing in `getPatchSchema()` advertises `state`, so a constrained decoder is never invited
+        to emit one.
+
 -   **`connections`**: An array detailing the signal flow between modules.
     -   `src`: The `id` of the source module.
     -   `srcPort`: The output port index of the source module.
