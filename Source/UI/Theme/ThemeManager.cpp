@@ -11,6 +11,17 @@ ThemeManager::ThemeManager() {
     // initialise() is called — e.g. when the app installs the LnF before MainComponent
     // configures appProperties).
     registerBuiltInThemes();
+    juce::Desktop::getInstance().addDarkModeSettingListener(this);
+}
+
+ThemeManager::~ThemeManager() { juce::Desktop::getInstance().removeDarkModeSettingListener(this); }
+
+void ThemeManager::darkModeSettingChanged() {
+    if (mode == ThemeMode::System) {
+        auto isDarkMode = juce::Desktop::getInstance().isDarkModeActive();
+        juce::String targetId = isDarkMode ? getDefaultDarkThemeId() : getDefaultLightThemeId();
+        setActiveTheme(targetId);
+    }
 }
 
 void ThemeManager::initialise(juce::ApplicationProperties* props) {
@@ -47,6 +58,11 @@ void ThemeManager::initialise(juce::ApplicationProperties* props) {
             if (saved.isNotEmpty())
                 restoredId = saved;
         }
+    }
+
+    if (mode == ThemeMode::System) {
+        auto sysIsDark = juce::Desktop::getInstance().isDarkModeActive();
+        restoredId = sysIsDark ? getDefaultDarkThemeId() : getDefaultLightThemeId();
     }
 
     // Silently set the index without broadcasting — we are still in the initialisation path.

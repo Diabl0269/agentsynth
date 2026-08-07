@@ -2,6 +2,7 @@
 
 #include "Theme.h"
 #include <juce_data_structures/juce_data_structures.h>
+#include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
 
 namespace synth::theme {
@@ -13,10 +14,14 @@ namespace synth::theme {
 //
 // Lifetime: owned by the JUCEApplication subclass (Main.cpp) OR MainWindow; it must
 // outlive every Component that reads it. See section 7.
-class ThemeManager : public juce::ChangeBroadcaster {
+class ThemeManager
+    : public juce::ChangeBroadcaster
+    , public juce::DarkModeSettingListener {
 public:
     ThemeManager();
-    ~ThemeManager() override = default;
+    ~ThemeManager() override;
+
+    void darkModeSettingChanged() override;
 
     // Startup sequence in one call: register built-ins, load user JSON themes from the
     // user folder, then restore the persisted active id (falling back to the default
