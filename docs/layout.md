@@ -533,7 +533,9 @@ All four now forward to `synth::ui::FrequencyGrid`; they stay as the component's
 
 ### EQCurveComponent (`Source/UI/EQCurveComponent.h`)
 
-Interactive response curve for `ParametricEQModule`, in the traditional DAW idiom. Used twice over the same module: inline on the card (175 px tall) and inside the pop-out `EQWindow`. Both views stay in sync automatically — each one's timer picks the other's edits up on its next tick.
+Interactive response curve for `ParametricEQModule`, in the traditional DAW idiom. Used twice over the same module: inline on the card and inside the pop-out `EQWindow`. Both views stay in sync automatically — each one's timer picks the other's edits up on its next tick.
+
+On the card the curve is 150 px tall and laid out *beside* the port labels (`x` from 88 to `width − 88`, starting at `y = 60`) rather than below them. The labels only occupy a narrow gutter down each edge, so on a six-input module this reclaims ~125 px of otherwise dead space at the top of the card.
 
 **Gestures.** All four bands start disabled, so the curve starts empty with a "Double-click to add an EQ point" hint.
 

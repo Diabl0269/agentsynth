@@ -67,9 +67,9 @@ static juce::Point<int> estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Noise")
         return {280, 250};
     if (typeName == "Parametric EQ")
-        // Double-width card: 175px response curve, a 4-column band grid (on/off + Freq/Gain/Q)
-        // and the Output trim. Mirrors ModuleComponent::parametricEQHeight().
-        return {synth::LayoutUtil::kDoubleWidth, 771};
+        // Double-width card: a 150px response curve set between the port-label gutters, then a
+        // 4-column band grid (on/off + Freq/Gain/Q). Mirrors parametricEQHeight().
+        return {synth::LayoutUtil::kDoubleWidth, 592};
     return {280, 360};
 }
 

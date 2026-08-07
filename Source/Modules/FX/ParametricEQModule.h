@@ -488,20 +488,22 @@ private:
     }
 
     // Readout formatting. Without these the skewed ranges surface values like "2999.9" and
-    // "0.7071", which are both ugly and too long for the knob's text box.
+    // "0.7071". Kept compact deliberately: these share the standard 50px knob text box with every
+    // other module, so "3.0k" fits where "3.00 kHz" would be truncated. The knob's own label
+    // ("B2 Freq" / "B2 Gain") already carries the unit.
     static juce::AudioParameterFloatAttributes hzAttributes() {
         return juce::AudioParameterFloatAttributes().withStringFromValueFunction([](float v, int) {
-            if (v >= 1000.0f) {
-                const float kHz = v / 1000.0f;
-                return juce::String(kHz, kHz < 10.0f ? 2 : 1) + " kHz";
-            }
-            return juce::String(juce::roundToInt(v)) + " Hz";
+            if (v >= 10000.0f)
+                return juce::String(juce::roundToInt(v / 1000.0f)) + "k";
+            if (v >= 1000.0f)
+                return juce::String(v / 1000.0f, 1) + "k";
+            return juce::String(juce::roundToInt(v));
         });
     }
 
     static juce::AudioParameterFloatAttributes dbAttributes() {
         return juce::AudioParameterFloatAttributes().withStringFromValueFunction(
-            [](float v, int) { return juce::String(v, 1) + " dB"; });
+            [](float v, int) { return juce::String(v, 1); });
     }
 
     static juce::AudioParameterFloatAttributes plainAttributes(int decimals) {

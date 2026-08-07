@@ -517,22 +517,37 @@ void ModuleComponent::createControls() {
 // what stops the computed card height from drifting out of step with the actual layout.
 namespace eqCard {
 constexpr int kMargin = 12;
-constexpr int kCurveHeight = 175;
+constexpr int kCurveHeight = 150;
 constexpr int kButtonRow = 28;
 constexpr int kToggleRow = 26;
-constexpr int kKnobRow = 80;
-constexpr int kKnobLabelHeight = 14;
-constexpr int kTextBoxWidth = 76; // wide enough for "20.0 kHz" / "-24.0 dB" without truncating
-constexpr int kTextBoxHeight = 18;
 constexpr int kNumKnobRows = 3; // Freq / Gain / Q
 constexpr int kNumVisibleInputs = 6;
 constexpr int kScopeHeight = 100;
-// Content has to clear the input port labels, which run down the left edge one row per jack.
+
+// Knob geometry is deliberately identical to the generic auto-UI layout, so an EQ knob is the
+// same size as an Oscillator or Filter knob. The columns are wider than a knob, so each one is
+// centred in its column rather than stretched to fill it.
+constexpr int kKnobLabelHeight = 20;
+constexpr int kSliderWidth = 70;
+constexpr int kSliderHeight = 60;
+constexpr int kTextBoxWidth = 50;
+constexpr int kTextBoxHeight = 20;
+constexpr int kKnobRow = kKnobLabelHeight + kSliderHeight;
+
 // getPortCenter puts input i at y = 30 (header) + 20 (MIDI-out offset) + i*20 + 20, and each
 // label is drawn 10px above its jack with height 20 — so the last one ends 10px below its centre.
 constexpr int kPortFirstY = 70;
 constexpr int kPortStep = 20;
-constexpr int kContentTop = kPortFirstY + (kNumVisibleInputs - 1) * kPortStep + 16;
+constexpr int kPortLabelBottom = kPortFirstY + (kNumVisibleInputs - 1) * kPortStep + 16;
+
+// The port labels only occupy a narrow gutter down each edge (inputs are drawn at x+10 with
+// width 60 from a jack at x=10; outputs mirror that), so the curve sits BESIDE them starting
+// just under the header rather than below the whole stack. On a six-input module that reclaims
+// ~125px of otherwise dead space at the top of the card.
+constexpr int kCurveTop = 60;
+constexpr int kPortGutter = 88;
+constexpr int kCurveBottom = kCurveTop + kCurveHeight;
+constexpr int kContentTop = (kCurveBottom > kPortLabelBottom ? kCurveBottom : kPortLabelBottom) + 8;
 
 constexpr const char* kKnobSuffix[kNumKnobRows] = {"Freq", "Gain", "Q"};
 } // namespace eqCard
@@ -545,25 +560,27 @@ juce::ToggleButton* ModuleComponent::findToggleByName(const juce::String& name) 
 }
 
 void ModuleComponent::layoutNamedKnob(const juce::String& name, int x, int y, int w, int h) {
+    juce::ignoreUnused(h);
     for (int i = 0; i < sliders.size(); ++i) {
         if (!sliders[i]->getComponentID().equalsIgnoreCase(name))
             continue;
+        // Fixed knob box centred in the (wider) column, so EQ knobs render at exactly the same
+        // size as every other module's rather than stretching to the column width.
+        const int knobX = x + (w - eqCard::kSliderWidth) / 2;
         sliderLabels[i]->setBounds(x, y, w, eqCard::kKnobLabelHeight);
-        // The generic auto-UI uses a 50px text box, which truncates "20.0 kHz" to "20.0...".
         sliders[i]->setTextBoxStyle(juce::Slider::TextBoxBelow, false, eqCard::kTextBoxWidth, eqCard::kTextBoxHeight);
-        sliders[i]->setBounds(x, y + eqCard::kKnobLabelHeight, w, h - eqCard::kKnobLabelHeight);
+        sliders[i]->setBounds(knobX, y + eqCard::kKnobLabelHeight, eqCard::kSliderWidth, eqCard::kSliderHeight);
         return;
     }
 }
 
 int ModuleComponent::parametricEQHeight() const {
     using namespace eqCard;
+    // kContentTop already accounts for the curve, which is laid out beside the port labels.
     int h = kContentTop;
-    h += kCurveHeight + 8;
-    h += kButtonRow + 6; // Show Spectrum + Open EQ Window
+    h += kKnobRow + 6;   // Show Spectrum + Open EQ Window, with the Output trim sharing the row
     h += kToggleRow + 2; // per-band on/off row
     h += kNumKnobRows * kKnobRow + 4;
-    h += kKnobRow; // Output trim
     if (scopeToggle)
         h += kButtonRow + 4;
     if (scopeComponent && scopeComponent->isVisible())
@@ -578,18 +595,26 @@ void ModuleComponent::layoutParametricEQ() {
     if (contentW <= 0)
         return;
 
-    int y = kContentTop;
-
+    // The curve occupies the space between the input and output port-label gutters, level with
+    // the jacks rather than below them.
     if (eqCurveComponent) {
-        eqCurveComponent->setBounds(kMargin, y, contentW, kCurveHeight);
-        y += kCurveHeight + 8;
+        const int curveW = getWidth() - kPortGutter * 2;
+        if (curveW > 0)
+            eqCurveComponent->setBounds(kPortGutter, kCurveTop, curveW, kCurveHeight);
     }
 
+    int y = kContentTop;
+
+    // Buttons on the left, Output trim on the right of the same row — a full-width row for one
+    // lone knob would leave three empty columns and make the card taller for nothing. The
+    // buttons are nudged down so they sit against the knob's centre rather than its label.
+    const int buttonY = y + (kKnobRow - kButtonRow) / 2;
     if (spectrumToggle)
-        spectrumToggle->setBounds(kMargin, y, 140, kButtonRow);
+        spectrumToggle->setBounds(kMargin, buttonY, 140, kButtonRow);
     if (eqPopOutButton)
-        eqPopOutButton->setBounds(kMargin + 150, y, 150, kButtonRow);
-    y += kButtonRow + 6;
+        eqPopOutButton->setBounds(kMargin + 150, buttonY, 150, kButtonRow);
+    layoutNamedKnob("Output", getWidth() - kMargin - kSliderWidth, y, kSliderWidth, kKnobRow);
+    y += kKnobRow + 6;
 
     // One column per band. The on/off toggle's text is the band's type ("1 Low Shelf"), so the
     // column header and its enable control are the same widget.
@@ -607,9 +632,6 @@ void ModuleComponent::layoutParametricEQ() {
         }
     }
     y += kNumKnobRows * kKnobRow + 4;
-
-    layoutNamedKnob("Output", kMargin, y, colW - 4, kKnobRow);
-    y += kKnobRow;
 
     if (scopeToggle) {
         scopeToggle->setBounds(kMargin, y, contentW, kButtonRow);
