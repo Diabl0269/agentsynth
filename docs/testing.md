@@ -1,6 +1,6 @@
 # Testing Guide
 
-All tests use GoogleTest and run headless (no audio device, no GUI window). ~523 tests across ~68 suites.
+All tests use GoogleTest and run headless (no audio device, no GUI window). ~829 tests across ~101 suites.
 
 ```bash
 # Run all tests (ENABLE_TESTS defaults OFF — must be passed explicitly)
@@ -19,7 +19,7 @@ By default, builds skip tests to save time. Use the `-DENABLE_TESTS=ON` flag to 
 
 ## Test Layers
 
-### Audio Rendering Tests (~122 tests)
+### Audio Rendering Tests (~189 tests)
 
 Headless DSP tests that render audio through individual modules and verify output characteristics — RMS levels, silence detection, frequency response, waveform accuracy.
 
@@ -31,7 +31,12 @@ Headless DSP tests that render audio through individual modules and verify outpu
 | LFOModuleTest | 11 | LFO waveform output, rate modulation, sync behavior |
 | VCAModuleTest | 5 | Gain application, envelope following, silence detection |
 | AttenuverterModuleTest | 4 | CV signal attenuation, bipolar control, CV modulation |
-| FX module tests | 52 | Delay (passthrough, feedback), Distortion (clipping, drive), Reverb (room size), Chorus, Phaser, Compressor, Flanger, Limiter, Bitcrusher (downsampling, quantization, CV) |
+| FX module tests | 53 | Delay (passthrough, feedback), Distortion (clipping, drive), Reverb (room size), Chorus, Phaser, Compressor, Flanger, Limiter, Bitcrusher (downsampling, quantization, CV) |
+| PitchShifterModuleTest | 22 | Pitch mode transposition ratios (spectral peak), Frequency mode SSB offset + sideband suppression, CV routing, feedback stability, state round-trip |
+| SamplerModuleTest | 31 | Registration + port/parameter surface; WAV load (success, missing file, unreadable file, failed load keeps the previous sample, clear); Sample mode playback verified sample-exact against a ramp file at unity rate, at `pitch = +12` (2×), via MIDI note transpose, and with `start = 0.5`; monotonic anti-click fade-in; one-shot falls silent at the last frame vs loop keeps going; Granular mode produces bounded finite audio and stays silent with no sample loaded, including at max density × max grain size; gate precedence (free-run with nothing patched, trigger-CV latch silences a low gate, retrigger, a gate rising mid-block is not mistaken for an unpatched jack); bypass/mute clear; CV channels do not leak to the output; level CV sums with the parameter; zero-channel buffer is safe; `getExtraState`/`setExtraState` round trip, restored through `graphToJSON` → `applyJSONToGraph` on the trusted path and **dropped** on the untrusted path |
+| SampleWaveformPeaks | 4 | `SampleWaveformComponent::computePeaks` — empty inputs, columns span the buffer and track min/max extremes, channels averaged (opposite phase cancels), more columns than frames |
+| SampleWaveformPaint | 2 | Paints the empty state ("No sample loaded") and a loaded sample with a live playhead into a `juce::Image`; repeat `timerCallback()` with nothing changed is a no-op; zero-width component is safe |
+| SamplerFormats | 2 | `getSupportedFormatWildcard()` is non-empty and includes `*.wav`; `isSupportedAudioFile` accepts wav/WAV/aiff and rejects .json/.txt/extensionless/directories (extension-only check, so drag-hover stays cheap) |
 | Parametric EQ tests | 64 | `Tests/ParametricEQModuleTests.cpp`. `ParametricEQModuleTest` — identity, 6-in/2-out channel layout, port labels, mod targets, logical-port roles, slot types and row labels, **all four bands start disabled**, enable round-trip and count, a disabled band with a big gain still contributing nothing, setters clamping to range, bypass dry pass-through / CV clearing / mute. `ParametricEQPointPlacement` — `findBandForNewPoint` picks the nearest free slot on a log axis, skips slots in use, returns -1 when full, and resolves out-of-range frequencies. `ParametricEQResponse` — `bandMagnitudeDb` anchor points (bell hits its gain at centre and 0 dB two decades out; cut is the exact mirror of boost; higher Q narrows the bell; a shelf sits at half its gain at the corner; zero-gain bands are flat everywhere; degenerate inputs return unity, not NaN) and `responseDb` skipping disabled bands plus adding the output trim. `ParametricEQCoefficients` — the RBJ digital biquad agrees with the analog prototype it came from within 0.6 dB, zero gain yields a literal pass-through biquad (`b == a`), and centres past Nyquist / a zero sample rate stay finite. `ParametricEQAudio` — real-audio level measurements (all-off is a straight wire; a configured-but-disabled band does not touch audio; enabling applies and disabling restores unity; ±12 dB bells move their band by ±12 dB; a narrow boost leaves distant tones alone; shelves only touch their own end; output gain scales everything; stereo channels come out identical) plus `MeasuredResponseTracksTheAnalyticCurve`, which locks the drawn curve to the measured DSP within 1 dB. `ParametricEQCV` — freq CV is exponential over the full range, gain CV maps onto ±24 dB and clamps, near-silent CV is gated to exactly the unmodulated value while CV above the gate gets through, and the shelves are provably *not* CV-modulated. `ParametricEQEdgeCases` — zero-length/zero-channel/mono buffers, processing without `prepareToPlay`, re-preparing at a new sample rate, band response independent of sample rate, state round-trip preserving enable flags, and every band exposing the full parameter set |
 | AntiClickTest | 4 | ADSR minimum release, smooth parameter transitions |
 | EdgeCaseTests | 21 | Zero-length buffers, extreme parameters, single-sample buffers, rapid parameter changes, large buffers |
@@ -48,7 +53,7 @@ Test module interactions within the audio graph and cross-system integrations.
 | OllamaProviderTest | 10 | AI LLM HTTP requests, streaming responses, model management, non-blocking discovery; `SendPromptWithNoModelFailsWithoutHittingNetwork` — fail-fast with no network call when `currentModel` is empty; `SendPromptIncludesSelectedModelInRequestBody` — captures the POST body and asserts `"model"` matches `setModel()` (regression lock for f7cba4a / empty-model 400s); `QueuedRequestDuringThreadShutdownStillCompletes` — a request enqueued as the worker winds down still gets a callback (request-loss race); `PendingRequestsAreFailedOnDestruction` — requests still queued at destruction are failed *before* `~OllamaProvider()` returns. Both use bounded `condition_variable` waits and fail on timeout rather than sleeping. **Never call `stopThread(0)` in a test** — it force-kills via `pthread_cancel`, which aborts under glibc |
 | AIIntegrationServiceTest | 9 | Module suggestions, parameter recommendations, graph state mapping |
 
-### Component Workflow Tests (~50 tests)
+### Component Workflow Tests (~61 tests)
 
 Test UI component interactions using in-process construction (no window, no display).
 
@@ -56,12 +61,13 @@ Test UI component interactions using in-process construction (no window, no disp
 |-------|-------|----------------|
 | MainComponentTest | 21 | AI panel visibility toggle, mod matrix toggle, default configuration, command manager registration, redo shortcut; toolbar narrow/wide mode at 480/1600 px, library sidebar toggle + persistence, AI panel persistence, status bar bounds, canvas non-zero at minimum size, timer gating (5 Hz), patch name default + update on preset load, DrawableButton header buttons; `AiProviderGetsModelSelectedOnStartup` — regression lock (f7cba4a) that a model is selected on startup via `aiChatComponent.refreshModels()` called AFTER `setProvider()` |
 | AIChatComponentTest | 3 | Initialization/resizing, send-message updates UI + history via mock provider; `RefreshModelsSelectsModelWhenProviderInstalledAfterConstruction` — reproduces MainComponent's member-init ordering (chat component constructed before a provider is installed), asserting `getCurrentModel()` stays empty until a post-construction `setProvider()` + `refreshModels()` |
-| GraphEditorTest | 11 | Module drag-and-drop, port connection via beginConnectionDrag/endConnectionDrag, deletion, mod matrix visibility, snap-on-drop (position is grid-multiple of 8), overlap resolution (second drop at same coord produces non-overlapping bounding boxes) |
-| ModuleComponentTest | 5 | Initialization, resizing, parameter attachment to UI sliders; bypass/mute/delete are DrawableButtons with correct header bounds; delete button triggers requestDeleteModule |
+| GraphEditorTest | 13 | Module drag-and-drop, port connection via beginConnectionDrag/endConnectionDrag, deletion, mod matrix visibility, snap-on-drop (position is grid-multiple of 8), overlap resolution (second drop at same coord produces non-overlapping bounding boxes); `AudioFileDroppedOnCanvasCreatesAPreloadedSampler` — a real wav dropped on empty canvas yields a Sampler already holding it; `NonAudioFileDragIsRejectedByTheCanvas` |
+| ModuleComponentTest | 16 | Initialization, resizing, parameter attachment to UI sliders; bypass/mute/delete are DrawableButtons with correct header bounds; delete button triggers requestDeleteModule; `SamplerHasLoadButtonWaveformAndKnownHeight` — the Sampler gets a `SampleWaveformComponent`, a "Load Sample..." button and a "(no sample)" label, at 280×657; `BodyContentClearsEveryPortLabel` — every visible body child starts below the lowest jack (regression guard for the overlap the old duplicated layout formula caused); `EstimatedModuleSizesMatchTheRealComponents` — builds every library-offered type and fails if `GraphEditor::estimateModuleSize` drifts from the real card, so the drag ghost cannot lie; `KnobsAreLaidOutThreePerRow`; `NonSamplerModulesGetNoSamplerChrome`; audio-file drop — `SamplerAcceptsAudioFileDropAndLoadsIt` (highlight on enter, cleared on drop, sample actually loaded), `SamplerIgnoresNonAudioFileDrag`, `NonSamplerModuleRefusesFileDragSoItFallsThroughToTheCanvas`; `WavetableCardBuildsDisplayAndLoadButton` — a Wavetable card owns a `WavetableDisplayComponent` and a "Load Wavetable..." button, both laid out inside the card, with 1 combo / 7 sliders / 2 toggles; `WavetableCardPaintsAndTicksWithoutCrashing` |
 | MidiKeyboardModuleTest | 4 | Note on/off, key press handling, velocity |
 | VisualBufferTest | 3 | Scope visualization buffer management, read/write, ringbuffer behavior |
 | ModuleBaseTest | 4 | Parameter getters, port labels, bypass functionality |
 | ModuleBypassTest | 5 | Default state, toggle, signal passing when bypassed |
+| FXBypassTest | 23 | Per-FX bypass dry pass-through, CV-channel clearing, mute silencing |
 | VisualSignalFlowTests | 8 | AttenuverterModule peak/mod value tracking, VisualBuffer RMS computation, AudioEngine::getModulationDisplayInfo() population |
 | SettingsWindowTest | 8 | Tab structure, tab persistence, audio device selector, AI settings persistence, resize safety, shortcuts reference |
 | ShortcutManagerTest | 8 | Default bindings, reverse lookup, conflict detection, persistence round-trip, reset to defaults, display strings |
@@ -158,6 +164,24 @@ New suite `Tests/ScopeTests.cpp` covering `Source/UI/ScopeComponent.h`.
 |-------|-------|----------------|
 | ScopeTest | 10 | `NoSignalThreshold_Zero`/`_BoundaryInclusive`/`_JustAbove`/`_FullAmplitude` — `isNoSignal` is true for peak ≤ 0.02f (boundary inclusive), false above; `AmplitudeMapping_TopNearBoundsTop`/`_BottomNearBoundsBottom`/`_ZeroIsVerticalCentre`/`_Symmetry` — `amplitudeToY` maps +1→above centre, -1→below centre, 0→exact vertical centre, symmetric about centre; `PaintSmokeNoSignal`/`PaintSmokeWithSignal` — paint the silent (No-Signal empty-state) and signal states into a `juce::Image` with no crash |
 
+### Wavetable Oscillator Tests (30 tests)
+
+New suite `Tests/WavetableOscillatorModuleTests.cpp` covering `Source/Modules/WavetableOscillatorModule.h`.
+
+| Suite | Tests | What it covers |
+|-------|-------|----------------|
+| WavetableOscillatorModuleTest | 27 | `FactoryInitialisation` — type/name/11 params/13 channels/6 visible in-jacks; `DeclaresEnoughOutputsForEveryCVInput` — guards the buffer-aliasing invariant (highest poly CV channel < `getTotalNumOutputChannels()`); `PortLabelsAndModulationTargets`, `LogicalPortMappingMonoAndPoly` — jack labels, mono ch0-5 mapping, poly pitch fan (`isPolyGroupHead`/`polyVoiceSpan == 8`), shared CV ch8-12, `isAutoPromotableModTarget` false in poly; `ZeroChannelsDoesNotCrash`; `ProducesAudioOnChannelZero` — audio on ch0, silence on ch1-12; `DefaultTablePositionZeroIsASine` — >95% of energy at the fundamental; `ScanningPositionChangesTheSpectrum` — position 1.0 adds ≥10× third-harmonic energy; `EveryBuiltInTableProducesAudio` — all 6 built-ins sound and report 32 frames; `LoadedFileChoiceFallsBackWhenNothingIsLoaded`; `OutputStaysBounded` — 8-voice unison + detune stays under ±2.0; `LowSampleRateWithExtremeTuningStaysFinite` — 8 kHz sample rate with octave +4 / coarse +12 (>1 cycle per sample) stays finite and in range, guarding the phase wrap; **`HighNotesDoNotAlias`** — square at MIDI 108, worst magnitude in 200 Hz–3.5 kHz is <5% of the fundamental (the mip-selection guard); `PositionCVScansTheTableInMonoMode`, `LevelCVAttenuatesInMonoMode`; `PolyModeRendersOneVoicePerPitchCVChannel` — 3 pitch CVs sound, voices 3-7 silent, CV ch8-12 do not leak; `PolyModePositionCVScansAllVoices`; `OctaveParameterTransposesInPolyMode` — 440 Hz CV + octave 1 sounds at 880 Hz; `LoadWavetableFileSplitsFrames`, `LoadedFramesKeepTheirDistinctHarmonics` — frame 0 is the fundamental, last frame the 4th harmonic; `LoadWavetableFileRejectsMissingAndInvalidFiles` — returns false, keeps playing the built-in; `LoadWavetableFileCapsFrameCount` — a >64-frame file decimates to `kMaxFrames`; `ReloadingWhileRenderingStaysStable` — 6 alternating loads interleaved with `processBlock` (exercises the pending/retired handoff); `StateRoundTripRestoresParametersAndWavetable`, `StateRoundTripSurvivesAMissingWavetableFile`; **`TrustedGraphJSONRestoresTheWavetable`** — round-trips through `graphToJSON`/`applyJSONToGraph`, the path presets and undo actually use (a wavetable path living only in `getStateInformation` is dropped there); `UntrustedPatchCannotNameAWavetableFileToOpen` — model-authored JSON must not reach `setExtraState` |
+| WavetableMipGeometry | 1 | `LimitsDecreaseMonotonicallyToTheFundamental` — mip 0 holds 1023 harmonics, the coarsest holds 1, limits strictly decrease, and every mip's limit is within its own Nyquist with length ≥ 64 |
+| MuteAndBypass/WavetableMuteBypassTest | 2 | `OutputIsSilentWhenMutedOrBypassed` — parametrized over mute and bypass; a pure source module clears on both (the documented `OscillatorModule` exception) |
+
+### Wavetable Display Tests (8 tests)
+
+New suite `Tests/WavetableDisplayTests.cpp` covering `Source/UI/WavetableDisplayComponent.h`.
+
+| Suite | Tests | What it covers |
+|-------|-------|----------------|
+| WavetableDisplayTest | 8 | `QuantisePositionEndpointsAndClamping`/`QuantisePositionIsMonotonicAndCollapsesTinyChanges` — `quantisePosition` pins 0→0 and 1→`steps`, clamps out-of-range input, is monotonic, and maps sub-bucket jitter to the same bucket (this is the repaint gate); `RepeatedTimerTicksOnAnUnchangedModuleAreIdempotent` — five ticks leave the trace bit-identical, a real position change is still picked up; `DisplayWaveformTracksScanPosition` — position 0 and 1 traces differ by >0.2 and both stay bounded; `DisplayWaveformHandlesTinyPointCounts` — 0 and 1 requested points still yield ≥2 samples; `PaintSmokeBuiltInTable`/`PaintSmokeAtEveryScanPosition`/`PaintSmokeAtDegenerateSizes` — paints into a `juce::Image` with no crash at 11 scan positions and at 0×0/1×1/4×80 bounds |
+
 ### E2E Workflow Tests (24 tests)
 
 Full application workflow tests in `Tests/E2EWorkflowTests.cpp`. Each test constructs a complete `MainComponent` with a mock AI provider and exercises real UI interaction code paths.
@@ -225,6 +249,13 @@ cmake --build build --target AIEvalHarness
 
 The structural checks themselves (`evaluatePatch()`) have no model dependency and are covered by
 `Tests/PatchEvalTests.cpp` in the regular suite — only the golden-prompt replay needs Ollama.
+
+Note that `evaluatePatch` is not only a scoring function: `AIIntegrationService::applyPatch` gates on
+`sourceReachesOutput` and surfaces `detail` to the user via `getLastPatchError()`, so those strings are
+a contract two `AIIntegrationServiceTest` cases assert verbatim. `SamplerAloneDoesNotCountAsAReachableSource`
+/ `SamplerAlongsideAnOscillatorStillPasses` cover the one module that is a sound source in the library
+but deliberately not one here (a Sampler is silent until a file is loaded, and a model-authored patch
+cannot load one).
 
 ## Adding Tests for New Modules
 

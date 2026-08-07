@@ -4,6 +4,7 @@
 #include "../Source/Modules/LFOModule.h"
 #include "../Source/Modules/ModuleBase.h"
 #include "../Source/Modules/OscillatorModule.h"
+#include "../Source/Modules/SamplerModule.h"
 #include "../Source/Modules/SequencerModule.h"
 #include "../Source/Modules/VCAModule.h"
 #include "../Source/PresetManager.h"
@@ -68,6 +69,63 @@ TEST_F(GraphEditorTest, DropModuleCreatesNode) {
         }
     }
     EXPECT_TRUE(foundOsc);
+}
+
+// --- Audio-file drop on the canvas ------------------------------------------------------------
+// Dropping a sample on empty canvas should build a Sampler already holding it, so the user never has
+// to open the file chooser.
+
+TEST_F(GraphEditorTest, AudioFileDroppedOnCanvasCreatesAPreloadedSampler) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("canvas-drop-146.wav");
+    file.deleteFile();
+    {
+        juce::AudioBuffer<float> audio(1, 512);
+        audio.clear();
+        for (int i = 0; i < 512; ++i)
+            audio.setSample(0, i, 0.3f);
+
+        juce::WavAudioFormat wavFormat;
+        std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
+        ASSERT_NE(stream, nullptr);
+        std::unique_ptr<juce::AudioFormatWriter> writer(wavFormat.createWriterFor(stream.get(), 44100.0, 1, 32, {}, 0));
+        ASSERT_NE(writer, nullptr);
+        stream.release();
+        writer->writeFromAudioSampleBuffer(audio, 0, 512);
+    }
+
+    juce::StringArray files{file.getFullPathName()};
+    EXPECT_TRUE(editor.isInterestedInFileDrag(files));
+
+    const auto before = engine.getGraph().getNodes().size();
+    editor.filesDropped(files, 200, 200);
+    ASSERT_EQ(engine.getGraph().getNodes().size(), before + 1);
+
+    SamplerModule* created = nullptr;
+    for (auto* node : engine.getGraph().getNodes())
+        if (auto* sampler = dynamic_cast<SamplerModule*>(node->getProcessor()))
+            created = sampler;
+
+    ASSERT_NE(created, nullptr) << "the drop should create a Sampler";
+    EXPECT_EQ(created->getSampleFilePath(), file.getFullPathName()) << "and it should already hold the file";
+
+    file.deleteFile();
+}
+
+TEST_F(GraphEditorTest, NonAudioFileDragIsRejectedByTheCanvas) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    juce::StringArray files{"/tmp/preset.json", "/tmp/notes.txt"};
+    EXPECT_FALSE(editor.isInterestedInFileDrag(files));
+
+    const auto before = engine.getGraph().getNodes().size();
+    editor.filesDropped(files, 200, 200);
+    EXPECT_EQ(engine.getGraph().getNodes().size(), before) << "a non-audio drop must not create nodes";
 }
 
 TEST_F(GraphEditorTest, DragConnectionCreatesLink) {

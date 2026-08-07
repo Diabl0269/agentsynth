@@ -15,6 +15,9 @@ add_executable(Tests
     OscillatorTests.cpp
     FilterTests.cpp
     NoiseModuleTests.cpp
+    SamplerModuleTests.cpp
+    WavetableOscillatorModuleTests.cpp
+    WavetableDisplayTests.cpp
     ADSRTests.cpp
     ModuleBaseTests.cpp
     VisualBufferTests.cpp
@@ -40,6 +43,7 @@ add_executable(Tests
     AIUndoTests.cpp
     ModMatrixTests.cpp
     FXModuleTests.cpp
+    PitchShifterModuleTests.cpp
     ParametricEQModuleTests.cpp
     VoiceMixerModuleTests.cpp
     BitcrusherModuleTests.cpp

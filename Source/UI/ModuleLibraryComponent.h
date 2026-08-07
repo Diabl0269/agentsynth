@@ -14,10 +14,15 @@ public:
     };
 
     ModuleLibraryComponent() {
+        // One entry per line: this list is the library's visible order, and letting it pack into a
+        // grid turns inserting a module into a whole-block reflow instead of a one-line diff.
+        // clang-format off
         entries = {
             {"Sources", true},
             {"Oscillator", false},
+            {"Wavetable", false},
             {"Noise", false},
+            {"Sampler", false},
             {"LFO", false},
             {"Sequencing", true},
             {"Sequencer", false},
@@ -37,6 +42,7 @@ public:
             {"Flanger", false},
             {"Distortion", false},
             {"Bitcrusher", false},
+            {"Pitch Shifter", false},
             {"Time FX", true},
             {"Delay", false},
             {"Reverb", false},
@@ -46,6 +52,7 @@ public:
             {"Utility", true},
             {"Voice Mixer", false},
         };
+        // clang-format on
         setMouseCursor(juce::MouseCursor::NormalCursor);
     }
 
@@ -58,8 +65,12 @@ public:
     static juce::String descriptionFor(const juce::String& moduleName) {
         if (moduleName.equalsIgnoreCase("Oscillator"))
             return "Generates audio waveforms (sine, saw, square, triangle).";
+        if (moduleName.equalsIgnoreCase("Wavetable"))
+            return "Scans through 3D wavetables — six built-ins or load your own file.";
         if (moduleName.equalsIgnoreCase("Noise"))
             return "Generates noise (white, pink, brown).";
+        if (moduleName.equalsIgnoreCase("Sampler"))
+            return "Plays an audio file back as a sample or scatters it into grains.";
         if (moduleName.equalsIgnoreCase("LFO"))
             return "Low-frequency oscillator for slow cyclic modulation.";
         if (moduleName.equalsIgnoreCase("Sequencer"))
@@ -90,6 +101,8 @@ public:
             return "Waveshaping distortion from soft saturation to hard clipping.";
         if (moduleName.equalsIgnoreCase("Bitcrusher"))
             return "For Lo-Fi, sample-rate reduction, and retro digital grit.";
+        if (moduleName.equalsIgnoreCase("Pitch Shifter"))
+            return "Transposes by semitones or shifts every partial by a fixed number of Hz.";
         if (moduleName.equalsIgnoreCase("Delay"))
             return "Tempo-syncable stereo echo / delay line.";
         if (moduleName.equalsIgnoreCase("Reverb"))
@@ -223,6 +236,17 @@ public:
     // -------------------------------------------------------------------------
     // Test / inspection helpers
     // -------------------------------------------------------------------------
+
+    /** Every draggable (non-header) entry, in display order — exactly the strings this component puts
+     *  in the drag payload. Tests use this so a module added here is automatically covered instead of
+     *  needing a parallel hand-kept list. */
+    juce::StringArray getDraggableModuleNames() const {
+        juce::StringArray names;
+        for (const auto& entry : entries)
+            if (!entry.isHeader)
+                names.add(entry.text);
+        return names;
+    }
 
     /** Returns the currently hovered entry index, or -1 when nothing is hovered. */
     int getHoveredIndex() const noexcept { return hoveredIndex; }

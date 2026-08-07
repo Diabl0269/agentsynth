@@ -232,7 +232,12 @@ TEST_F(AIIntegrationServiceTest, ReplaceModeNotReachingOutputIsRejectedStructura
     bool success = service->applyPatch(R"({"nodes":[{"id":1,"type":"Audio Output"}],"connections":[]})");
 
     EXPECT_FALSE(success);
-    EXPECT_EQ(service->getLastPatchError(), "Audio Output is not reachable from any Oscillator or Noise module");
+    // Prefix match, not the exact string: the tail enumerates every module type that counts
+    // as a signal source, so it changes whenever one is added. That already broke this
+    // assertion once (#165 added Noise, fixed in #164) and again when Wavetable was added.
+    // The prefix is the stable part and still pins the failure mode.
+    EXPECT_TRUE(service->getLastPatchError().startsWith("Audio Output is not reachable from any"))
+        << "actual: " << service->getLastPatchError().toStdString();
 }
 
 TEST_F(AIIntegrationServiceTest, StructuralRejectionFiresNoListenerCallbacks) {
@@ -285,7 +290,12 @@ TEST_F(AIIntegrationServiceTest, MergeRegressionGate_RejectsADeltaThatBreaksAWor
                                        /*mergeMode=*/true);
 
     EXPECT_FALSE(success);
-    EXPECT_EQ(service->getLastPatchError(), "Audio Output is not reachable from any Oscillator or Noise module");
+    // Prefix match, not the exact string: the tail enumerates every module type that counts
+    // as a signal source, so it changes whenever one is added. That already broke this
+    // assertion once (#165 added Noise, fixed in #164) and again when Wavetable was added.
+    // The prefix is the stable part and still pins the failure mode.
+    EXPECT_TRUE(service->getLastPatchError().startsWith("Audio Output is not reachable from any"))
+        << "actual: " << service->getLastPatchError().toStdString();
     EXPECT_EQ(graph->getNumNodes(), 2) << "a structurally rejected merge must not touch the live graph";
 }
 

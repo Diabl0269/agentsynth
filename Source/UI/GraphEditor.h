@@ -13,6 +13,7 @@ class GraphEditor
     : public juce::Component
     , public juce::Timer
     , public juce::DragAndDropTarget
+    , public juce::FileDragAndDropTarget
     , public juce::SettableTooltipClient {
 public:
     GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr = nullptr);
@@ -95,12 +96,28 @@ public:
                                                      const std::vector<synth::LayoutUtil::Box>& existingBoxes,
                                                      synth::LayoutUtil::NodeID selfId);
 
+    /** Estimated (w, h) footprint for a module type name, used for the library drag ghost before a
+     *  real component exists. Public so a test can hold it to the real component sizes — see
+     *  ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents. */
+    static juce::Point<int> estimateModuleSize(const juce::String& typeName);
+
     // DragAndDropTarget overrides
     bool isInterestedInDragSource(const SourceDetails& dragSourceDetails) override;
     void itemDropped(const SourceDetails& dragSourceDetails) override;
     void itemDragEnter(const SourceDetails& dragSourceDetails) override;
     void itemDragMove(const SourceDetails& dragSourceDetails) override;
     void itemDragExit(const SourceDetails& dragSourceDetails) override;
+
+    // FileDragAndDropTarget overrides — an audio file dropped on empty canvas becomes a Sampler
+    // preloaded with it. A drop over an existing Sampler is claimed by that ModuleComponent first.
+    bool isInterestedInFileDrag(const juce::StringArray& files) override;
+    void filesDropped(const juce::StringArray& files, int x, int y) override;
+
+    /** Creates `name` at a canvas position, snapped and anti-overlapped, with undo recorded.
+     *  `configure` runs on the processor BEFORE it joins the graph, so any non-parameter state it
+     *  sets is captured by the undo snapshot. */
+    void addModuleAtCanvasPosition(const juce::String& name, juce::Point<int> dropPos,
+                                   const std::function<void(juce::AudioProcessor&)>& configure);
 
     // Mouse Overrides
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;

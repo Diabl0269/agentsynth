@@ -291,6 +291,41 @@ Phase 3 standardizes module card widths into three named buckets defined in `Lay
 
 `kDoubleWidth == 2 × kSingleWidth` — a Double module occupies exactly two standard column slots. Attenuverter modules are excluded from the visible module card grid (they do not appear as `ModuleComponent` cards and are skipped by auto-arrange).
 
+### Module body layout (`ModuleComponent::layoutDefaultContent`)
+
+Every module that does not have a bespoke layout (Sequencer, PolySequencer, MidiKeyboard, ADSR,
+Attenuverter) is laid out by one function, `layoutDefaultContent(bool apply)`. It runs twice per
+size change — once with `apply = false` to measure the height, once with `apply = true` from
+`resized()` to position the children — so the measured height and the real positions cannot drift
+apart. They previously *did* drift: two hand-maintained copies of the geometry disagreed, and body
+content was drawn on top of the lowest port labels.
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `kKnobColumns` | 3 | knobs per row |
+| `kContentMargin` | 12 | left/right gutter for body content |
+| `kNarrowContentWidth` | 200 | combos / toggles / the Sampler load row, centred |
+| `kLabelHeight` | 18 | label above a knob or combo |
+| `kRowHeight` | 24 | combo box, toggle, button |
+| `kKnobHeight` | 58 | rotary + its text box |
+| `kWaveformHeight` | 72 | Sampler waveform overview |
+| `kPortLabelClearance` | 15 | gap below the lowest jack before body content starts |
+
+**Body content always starts below every jack.** `getContentTopY()` derives that y from
+`getPortCenter()` — the same function that anchors wires — rather than recomputing the port
+geometry, so content can never land on a port label again. Because the body is below the ports, it
+does not need the narrow gutters that used to keep it clear of the port labels, which is what makes
+three knobs per row fit inside the 280 px card.
+
+Three columns instead of two removes a knob row from most modules. Measured heights before → after:
+Oscillator 530 → 449, Filter 570 → 487, LFO 440 → 353, Sampler 750 → 657. A few short modules got
+*taller* (VCA 200 → 245, Noise 250 → 293, Poly MIDI 100 → 123) — those are the overlap fix, not
+padding: their content used to start at y=60 while the first jack sits at y=70.
+
+`GraphEditor::estimateModuleSize()` mirrors these heights for the library drag ghost.
+`ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents` constructs every library-offered
+type and fails if the table drifts, so the ghost cannot lie about where a module will land.
+
 ### Column stride derivation
 
 ```
@@ -505,7 +540,7 @@ a slightly different footprint.
 
 ## 9. Visualizer Components
 
-Four in-module visualizer components provide real-time signal display inside module cards; one of them (`EQCurveComponent`) is also an editor.
+Several in-module visualizer components provide real-time signal display inside module cards; one of them (`EQCurveComponent`) is also an editor.
 
 ### FrequencyGrid (`Source/UI/FrequencyGrid.h`)
 
@@ -580,6 +615,22 @@ Oscilloscope waveform display used by all modules that have a `VisualBuffer`.
 | `amplitudeToY` | `static float amplitudeToY(float amp, juce::Rectangle<float> bounds) noexcept` | Maps amplitude [-1,1] → y pixel; amp=+1 → top, amp=-1 → bottom, amp=0 → centre; uses 45% height per side |
 
 **Themed colours**: resolved via `dynamic_cast<AppLookAndFeel*>` — `border` for grid, `textDisabled` for no-signal label, `accent` for the waveform. When the cast fails (headless), hardcoded fallbacks are used (`0xff2A2F38`, `0xff5C6470`, limegreen).
+
+### WavetableDisplayComponent (`Source/UI/WavetableDisplayComponent.h`)
+
+Wavetable frame view used by the `Wavetable` module card. Draws the frame currently under the scan position as a solid trace, with `kGhostFrames` (3) receding low-alpha traces sampled slightly further along the stack so the scan direction and the table's depth read as three-dimensional. Captioned with the table name and `frame/total`.
+
+**Repaints are gated** — the 15 Hz timer compares a change signature (quantised scan position, table name, frame count) and calls `repaint()` only when it differs. This is required by §10: the display is always visible inside a `setBufferedToImage(true)` module card, so an unconditional per-tick repaint would invalidate that cache 15 times a second.
+
+Alongside it, `ModuleComponent` adds a **"Load Wavetable..."** `TextButton` for `Wavetable` modules. It opens an async `juce::FileChooser`, and on success calls `loadWavetableFile()` and switches the module's `table` choice to `Loaded File`. The completion lambda holds a `Component::SafePointer` and re-derives the module via `dynamic_cast`, since the card can be destroyed while the dialog is open.
+
+**Public static helper** (headless-testable):
+
+| Helper | Signature | Notes |
+|---|---|---|
+| `quantisePosition` | `static int quantisePosition(float position, int steps = 200)` | Clamps to [0,1] and quantises the scan position into `steps` buckets — the repaint gate's change signature |
+
+**Themed colours**: resolved via `dynamic_cast<AppLookAndFeel*>` — `bg1` for the panel, `border` for the frame and zero line, `accent` for the traces, `textMuted` for the caption. Falls back to hardcoded colours when the cast fails (headless).
 
 ---
 
