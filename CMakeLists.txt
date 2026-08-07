@@ -64,11 +64,14 @@ add_library(Core STATIC
     Source/Modules/VCAModule.h
     Source/Modules/VoiceMixerModule.h
     Source/Modules/NoiseModule.h
+    Source/Modules/SamplerModule.h
+    Source/Modules/WavetableOscillatorModule.h
     Source/Modules/SequencerModule.h
     Source/Modules/MidiKeyboardModule.h
     Source/Modules/LFOModule.h
     Source/Modules/SampleHoldModule.h
     Source/Modules/AttenuverterModule.h
+    Source/Modules/MacroControlModule.h
     Source/Modules/VisualBuffer.h
     Source/Modules/FX/DelayModule.h
     Source/Modules/FX/DistortionModule.h
@@ -78,6 +81,10 @@ add_library(Core STATIC
     Source/Modules/FX/CompressorModule.h
     Source/Modules/FX/FlangerModule.h
     Source/Modules/FX/LimiterModule.h
+    Source/Modules/FX/BitcrusherModule.h
+    Source/Modules/FX/PitchShifterModule.h
+    Source/Modules/FX/ParametricEQModule.h
+    Source/Modules/NoiseModule.h
     # AI
     Source/AI/AIProvider.h
     Source/AI/OllamaProvider.h
@@ -255,6 +262,11 @@ target_sources(AgentSynth PRIVATE
     Source/UI/ModuleComponent.cpp
     Source/UI/ModuleComponent.h
     Source/UI/FrequencyResponseComponent.h
+    Source/UI/FrequencyGrid.h
+    Source/UI/EQCurveComponent.h
+    Source/UI/EQWindow.h
+    Source/UI/SampleWaveformComponent.h
+    Source/UI/WavetableDisplayComponent.h
     Source/UI/TriggerMeterComponent.h
     Source/UI/ModMatrixComponent.cpp
     Source/UI/ModMatrixComponent.h

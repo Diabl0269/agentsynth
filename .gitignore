@@ -39,5 +39,6 @@ coverage/
 worktrees/
 build-asan/
 build-app/
+build-harness/
 build-release/
 build-test/

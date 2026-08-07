@@ -20,16 +20,27 @@
     Because it needs a live model it is excluded from the test target and from CI; build it
     explicitly with -DENABLE_AI_HARNESS=ON.
 
-        ./build/Tools/AIEvalHarness/AIEvalHarness [--model M] [--runs N] [--host URL] [--json OUT]
+        ./build/Tools/AIEvalHarness/AIEvalHarness [--provider ollama|remote] [--model M]
+                                                   [--runs N] [--host URL] [--json OUT]
+
+    --provider ollama (default) talks to Ollama's own /api/chat directly, same as before.
+    --provider remote talks to a local synth-platform inference service instead
+    (RemoteProvider, Source/AI/RemoteProvider.h) — the service picks its own model server-side
+    per its own INFERENCE_PROVIDER/INFERENCE_MODEL_ID config, so --model is a label for the
+    report only in this mode, not something sent over the wire. This is what lets a model be
+    scored through the exact stack a user hits (client -> service -> Ollama/Groq) instead of an
+    approximation of it.
 
     Exit code is 0 whenever the run completed, whatever the pass rate — the scorecard is the
     output, not a pass/fail verdict.
 */
 
 #include "AI/AIIntegrationService.h"
+#include "AI/AIProvider.h"
 #include "AI/AIStateMapper.h"
 #include "AI/OllamaProvider.h"
 #include "AI/PatchEval.h"
+#include "AI/RemoteProvider.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
@@ -128,6 +139,27 @@ juce::String argValue(const juce::StringArray& args, const juce::String& flag, c
     return fallback;
 }
 
+enum class ProviderKind { ollama, remote };
+
+// Builds the exact AIProvider a live Apply/Merge click would use, so this harness measures the
+// stack a user actually hits rather than an approximation of it. Both branches setTestMode(true)
+// on the concrete type (not virtual on AIProvider) before it's upcast, so the callback below
+// fires synchronously with no message loop running here.
+std::unique_ptr<synth::AIProvider> makeProvider(ProviderKind kind, const juce::String& host,
+                                                const juce::String& model) {
+    if (kind == ProviderKind::remote) {
+        auto provider = std::make_unique<synth::RemoteProvider>(host);
+        provider->setTestMode(true);
+        provider->setModel(model);
+        return provider;
+    }
+
+    auto provider = std::make_unique<synth::OllamaProvider>(host);
+    provider->setTestMode(true);
+    provider->setModel(model);
+    return provider;
+}
+
 // Result of replaying one scenario once.
 struct Outcome {
     bool responded = false;         // the provider returned a successful completion at all
@@ -139,16 +171,12 @@ struct Outcome {
     synth::PatchEvalResult eval;
 };
 
-Outcome runScenario(const Scenario& scenario, const juce::String& host, const juce::String& model) {
+Outcome runScenario(const Scenario& scenario, ProviderKind providerKind, const juce::String& host,
+                    const juce::String& model) {
     Outcome outcome;
 
     juce::AudioProcessorGraph graph;
-    // "Audio Output" mirrors the graph's own bus channel count (AudioGraphIOProcessor); without
-    // configuring it the way AudioEngine does before device audio starts, it reports zero
-    // channels and every connection into it silently no-ops, making every scenario look
-    // unconnected regardless of what the model actually produced.
-    graph.setPlayConfigDetails(0, 2, 44100.0, 512);
-    graph.prepareToPlay(44100.0, 512);
+    synth::prepareGraphForPatchEval(graph);
 
     if (scenario.seedPatch != nullptr) {
         juce::var seed = juce::JSON::parse(juce::String(scenario.seedPatch));
@@ -160,10 +188,7 @@ Outcome runScenario(const Scenario& scenario, const juce::String& host, const ju
     }
 
     synth::AIIntegrationService service(graph);
-    auto provider = std::make_unique<synth::OllamaProvider>(host);
-    provider->setTestMode(true); // deliver callbacks synchronously; no message loop here
-    provider->setModel(model);
-    service.setProvider(std::move(provider));
+    service.setProvider(makeProvider(providerKind, host, model));
 
     juce::WaitableEvent done;
     juce::String responseText;
@@ -178,9 +203,9 @@ Outcome runScenario(const Scenario& scenario, const juce::String& host, const ju
         },
         /*useStructuredOutput=*/true);
 
-    // Must exceed OllamaProvider's own kChatRequestTimeoutMs (currently 240s) with margin, or this
-    // outer wait fires first and reports a vague "timed out" instead of OllamaProvider's real
-    // provider-error message.
+    // Must exceed both OllamaProvider's kChatRequestTimeoutMs and RemoteProvider's
+    // kRequestTimeoutMs (currently 240s each) with margin, or this outer wait fires first and
+    // reports a vague "timed out" instead of the provider's own error message.
     if (!done.wait(270000)) {
         outcome.applyError = "timed out waiting for model";
         return outcome;
@@ -220,13 +245,23 @@ int main(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         args.add(juce::String(argv[i]));
 
-    const juce::String host = argValue(args, "--host", "http://localhost:11434");
+    const juce::String providerFlag = argValue(args, "--provider", "ollama");
+    if (providerFlag != "ollama" && providerFlag != "remote") {
+        std::fprintf(stderr, "unknown --provider \"%s\" (expected \"ollama\" or \"remote\")\n",
+                     providerFlag.toRawUTF8());
+        return 1;
+    }
+    const ProviderKind providerKind = providerFlag == "remote" ? ProviderKind::remote : ProviderKind::ollama;
+
+    const juce::String defaultHost =
+        providerKind == ProviderKind::remote ? "http://localhost:8787" : "http://localhost:11434";
+    const juce::String host = argValue(args, "--host", defaultHost);
     const juce::String model = argValue(args, "--model", "gemma4:12b-it-qat");
     const int runs = juce::jmax(1, argValue(args, "--runs", "1").getIntValue());
     const juce::String jsonOut = argValue(args, "--json", "");
 
-    std::printf("AIEvalHarness  host=%s  model=%s  runs=%d  scenarios=%d\n", host.toRawUTF8(), model.toRawUTF8(), runs,
-                (int)scenarios().size());
+    std::printf("AIEvalHarness  provider=%s  host=%s  model=%s  runs=%d  scenarios=%d\n", providerFlag.toRawUTF8(),
+                host.toRawUTF8(), model.toRawUTF8(), runs, (int)scenarios().size());
     std::printf("%-20s %-6s %s\n", "scenario", "run", "outcome");
     std::printf("--------------------------------------------------------------------\n");
 
@@ -236,7 +271,7 @@ int main(int argc, char* argv[]) {
 
     for (int run = 1; run <= runs; ++run) {
         for (const auto& scenario : scenarios()) {
-            const auto outcome = runScenario(scenario, host, model);
+            const auto outcome = runScenario(scenario, providerKind, host, model);
             ++total;
 
             juce::String label;
@@ -304,6 +339,7 @@ int main(int argc, char* argv[]) {
 
     if (jsonOut.isNotEmpty()) {
         juce::DynamicObject::Ptr root = new juce::DynamicObject();
+        root->setProperty("provider", providerFlag);
         root->setProperty("model", model);
         root->setProperty("runs", runs);
         root->setProperty("applied", applied);

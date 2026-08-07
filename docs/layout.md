@@ -291,6 +291,62 @@ Phase 3 standardizes module card widths into three named buckets defined in `Lay
 
 `kDoubleWidth == 2 × kSingleWidth` — a Double module occupies exactly two standard column slots. Attenuverter modules are excluded from the visible module card grid (they do not appear as `ModuleComponent` cards and are skipped by auto-arrange).
 
+### Module body layout (`ModuleComponent::layoutDefaultContent`)
+
+Every module that does not have a bespoke layout (Sequencer, PolySequencer, MidiKeyboard, ADSR,
+Attenuverter) is laid out by one function, `layoutDefaultContent(bool apply)`. It runs twice per
+size change — once with `apply = false` to measure the height, once with `apply = true` from
+`resized()` to position the children — so the measured height and the real positions cannot drift
+apart. They previously *did* drift: two hand-maintained copies of the geometry disagreed, and body
+content was drawn on top of the lowest port labels.
+
+| Constant | Value | Meaning |
+|---|---|---|
+| `kKnobColumns` | 3 | knobs per row |
+| `kContentMargin` | 12 | left/right gutter for body content |
+| `kNarrowContentWidth` | 200 | combos / toggles / the Sampler load row, centred |
+| `kLabelHeight` | 18 | label above a knob or combo |
+| `kRowHeight` | 24 | combo box, toggle, button |
+| `kKnobHeight` | 58 | rotary + its text box |
+| `kWaveformHeight` | 72 | Sampler waveform overview |
+| `kPortLabelClearance` | 15 | gap below the lowest jack before body content starts |
+
+**Body content always starts below every jack.** `getContentTopY()` derives that y from
+`getPortCenter()` — the same function that anchors wires — rather than recomputing the port
+geometry, so content can never land on a port label again. Because the body is below the ports, it
+does not need the narrow gutters that used to keep it clear of the port labels, which is what makes
+three knobs per row fit inside the 280 px card.
+
+Three columns instead of two removes a knob row from most modules. Measured heights before → after:
+Oscillator 530 → 449, Filter 570 → 487, LFO 440 → 353, Sampler 750 → 657. A few short modules got
+*taller* (VCA 200 → 245, Noise 250 → 293, Poly MIDI 100 → 123) — those are the overlap fix, not
+padding: their content used to start at y=60 while the first jack sits at y=70.
+
+`GraphEditor::estimateModuleSize()` mirrors these heights for the library drag ghost.
+`ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents` constructs every library-offered
+type and fails if the table drifts, so the ghost cannot lie about where a module will land.
+
+### Modules that resize at runtime
+
+Widths are static, but one module's **height** is not: the Macro bank (`MacroControlModule`) grows
+and shrinks with its `Knobs` parameter. Its geometry lives in `LayoutUtil.h` so the component
+layout, the output-jack hit test and `estimateModuleSize` all read the same numbers:
+
+```cpp
+kMacroHeaderH  = 94   // title bar + Knobs / Bipolar row
+kMacroRowH     = 44   // one macro knob and its output jack
+kMacroBottomPad = 12
+
+macroBankHeight(count) == kMacroHeaderH + count * kMacroRowH + kMacroBottomPad
+macroRowCentreY(index) == kMacroHeaderH + index * kMacroRowH + kMacroRowH / 2
+```
+
+Growth is **anchored at the top-left and pushes neighbours, never itself**. Moving the module the
+user is currently interacting with would teleport it out from under the cursor, so
+`GraphEditor::handleModuleResized` instead feeds every module box to
+`LayoutUtil::resolveOverlapsAfterResize` and applies the displacements it returns. Shrinking
+returns an empty result set — nothing is pulled back up, the canvas just gains space.
+
 ### Column stride derivation
 
 ```
@@ -425,6 +481,29 @@ spiral at step `kSpiralStep` for up to `kSpiralMaxRings` rings. Returns `snap(de
 to canvas) if no clear slot is found within the search radius — never returns an out-of-bounds
 position.
 
+### `resolveOverlapsAfterResize`
+
+```cpp
+inline constexpr int kResolveMaxRounds = 4;
+
+std::vector<ArrangeResult>
+resolveOverlapsAfterResize(NodeID resizedId,
+                           const std::vector<Box>& boxes,
+                           int gap = kCollisionGap);
+```
+
+Called after a module changes footprint in place. `boxes` is every module box **including** the
+resized one, already carrying its new rect. Returns a new top-left for each *other* box that had
+to move; boxes that stayed put are not returned, so an empty result means the new footprint fitted
+as-is.
+
+The resized module is never returned and never moves. Displaced boxes are pushed straight down
+past the lowest thing they collided with, then run through `findFreeSlot`, so results are on-grid
+and gap-respecting. The sweep is deterministic (top-to-bottom, then left-to-right, then id) and
+the cascade is capped at `kResolveMaxRounds` passes.
+
+---
+
 ### `computeAutoArrange`
 
 ```cpp
@@ -505,7 +584,11 @@ a slightly different footprint.
 
 ## 9. Visualizer Components
 
-Three in-module visualizer components provide real-time signal display inside module cards.
+Several in-module visualizer components provide real-time signal display inside module cards; one of them (`EQCurveComponent`) is also an editor.
+
+### FrequencyGrid (`Source/UI/FrequencyGrid.h`)
+
+Not a component — the pure log-frequency / dB coordinate maths shared by the two frequency-domain views (`FrequencyResponseComponent` for Filter, `EQCurveComponent` for Parametric EQ). Both plot over the same 20 Hz – 20 kHz log axis, so `freqToX` / `xToFreq` / `indexToFreq` / `formatHzLabel` / `findPeakBin` live here once. The dB axis is *not* fixed — `dbToY` / `yToDb` take `minDb` and `maxDb` per call, because the filter view needs an asymmetric −40…+50 dB window (resonance peaks overshoot a long way) while the EQ view uses a symmetric ±30 dB one. Each component still paints its own grid: they differ in dB step, label set, and whether the 0 dB line is emphasised.
 
 ### FrequencyResponseComponent (`Source/UI/FrequencyResponseComponent.h`)
 
@@ -524,6 +607,40 @@ Serum-style frequency-response curve with an optional FFT spectrum overlay, used
 | `formatHzLabel` | `static juce::String formatHzLabel(float hz)` | `100 → "100Hz"`, `1000 → "1kHz"`, `10000 → "10kHz"` |
 | `freqToXStatic` | `static float freqToXStatic(float freq, float width)` | Log-scaled freq → x pixel; mirrors private `freqToX` (minFreq=20, maxFreq=20000) |
 | `dbToYStatic` | `static float dbToYStatic(float db, float height)` | dB → y pixel; mirrors private `dbToY` (minDb=−40, maxDb=50) |
+
+All four now forward to `synth::ui::FrequencyGrid`; they stay as the component's public API so existing callers and tests are unaffected.
+
+### EQCurveComponent (`Source/UI/EQCurveComponent.h`)
+
+Interactive response curve for `ParametricEQModule`, in the traditional DAW idiom. Used twice over the same module: inline on the card and inside the pop-out `EQWindow`. Both views stay in sync automatically — each one's timer picks the other's edits up on its next tick.
+
+On the card the curve is 150 px tall and laid out *beside* the port labels (`x` from 88 to `width − 88`, starting at `y = 60`) rather than below them. The labels only occupy a narrow gutter down each edge, so on a six-input module this reclaims ~125 px of otherwise dead space at the top of the card.
+
+**Gestures.** All four bands start disabled, so the curve starts empty with a "Double-click to add an EQ point" hint.
+
+| Gesture | Effect |
+|---|---|
+| Double-click empty space | Adds a point, enabling the slot that best fits that frequency (`findBandForNewPoint`) |
+| Double-click a point | Removes it (disables that band; its settings are kept) |
+| Drag a point | Sets frequency (x) and gain (y) |
+| Scroll over a point | Widens / narrows it (Q), multiplicatively |
+| Hover | Halos the handle and shows a `freq / gain / Q` readout bottom-right |
+
+The mouse handlers are deliberately thin wrappers over public `addPointAt` / `removeBand` / `dragBandTo` / `nudgeBandQ` / `hitTestBand`, so the interaction is unit-tested without synthesising `juce::MouseEvent`s (`EQCurveInteraction.*`).
+
+**Undo.** `onGestureStart` / `onGestureEnd` bracket every parameter-changing gesture; `ModuleComponent::wireEqGestureCallbacks` binds them to `AppUndoManager::captureBeforeState` / `pushSnapshotFromCapture`, so one drag is one undo step. Deliberately *not* opened on `mouseDown` — a click that never becomes a drag would otherwise push an empty undo entry. `dragBandTo` itself does no bracketing since it is called repeatedly during a drag. Both are wired through a `Component::SafePointer`, so a pop-out window that outlives its card becomes a no-op rather than a dangling call.
+
+- **dB window**: symmetric ±30 dB, so 0 dB sits at the exact vertical centre and boosts read as the mirror of cuts. dB gridlines at ±12 and ±24; the 0 dB line is drawn brighter as the reference the curve is read against. `gainAtY` clamps to the parameter's ±24 dB, since the view is deliberately wider than the range.
+- **Curve source**: `ParametricEQModule::responseDb()` — the analytic prototypes the module's biquad coefficients are derived from, so the drawing and the DSP cannot drift apart (locked by `ParametricEQAudio.MeasuredResponseTracksTheAnalyticCurve`). Sampled at 512 log-spaced points; the gradient fill hangs off the 0 dB line rather than the bottom edge, so a cut fills downward and a boost upward.
+- **Band handles**: one numbered ring per *enabled* band at (centre freq, band gain) — the parameter pair, so vertical drag maps 1:1 to gain. As in Cubase/Pro-Q, a shelf's handle sits at its corner frequency at the full shelf gain, which is above the curve there (a shelf reaches its full gain only well past the corner).
+- **Spectrum overlay**: 1024-point FFT of the module's `VisualBuffer`, drawn *behind* the curve over its own −80…0 dB window, smoothed with an exponential moving average. **On by default** here (unlike the Filter card) because the curve is meant to be read against it.
+- **Repaint discipline**: 30 Hz timer that repaints when a band setting or the output trim changed, when hover/selection changed, or while the spectrum has actual signal. The analyser gates on peak < 1e-5 and repaints one final frame on the transition to silence, so a default-on spectrum still settles to **zero repaints on an idle patch** — that gate is what keeps this compliant with §10–11. Never make it unconditional.
+
+### EQWindow (`Source/UI/EQWindow.h`)
+
+Pop-out editor for a Parametric EQ, opened from the card's "Open EQ Window" button. Content-only `juce::Component` (same pattern as `SettingsWindow`); the caller wraps it in a `juce::DialogWindow` via `LaunchOptions::launchAsync()`. Hosts a second `EQCurveComponent` over the same module at 720×420 (resizable), plus a spectrum toggle and a gesture hint.
+
+`ModuleComponent` holds the dialog as a `Component::SafePointer` and **deletes it in `detachFromProcessor()`** — the window references the module, so leaving it open across a graph rebuild would dangle. Re-clicking the button brings the existing window to front rather than opening a second one.
 
 ### ScopeComponent (`Source/UI/ScopeComponent.h`)
 
@@ -567,6 +684,22 @@ moves past a visible amount (see `needsRepaint`), leaving the parent's cached im
 | `valueToX` | `static float valueToX(float value, float x, float width) noexcept` | Maps bipolar [-1,1] → x offset within a width; clamps out-of-range input |
 | `needsRepaint` | `static bool needsRepaint(...) noexcept` | Mirrors the `timerCallback` repaint gate; lets the "no repaint while idle" rule be tested without a message loop |
 | `getFlashFrames` | `static constexpr int getFlashFrames() noexcept` | Ticks the fired-flash stays lit |
+
+### WavetableDisplayComponent (`Source/UI/WavetableDisplayComponent.h`)
+
+Wavetable frame view used by the `Wavetable` module card. Draws the frame currently under the scan position as a solid trace, with `kGhostFrames` (3) receding low-alpha traces sampled slightly further along the stack so the scan direction and the table's depth read as three-dimensional. Captioned with the table name and `frame/total`.
+
+**Repaints are gated** — the 15 Hz timer compares a change signature (quantised scan position, table name, frame count) and calls `repaint()` only when it differs. This is required by §10: the display is always visible inside a `setBufferedToImage(true)` module card, so an unconditional per-tick repaint would invalidate that cache 15 times a second.
+
+Alongside it, `ModuleComponent` adds a **"Load Wavetable..."** `TextButton` for `Wavetable` modules. It opens an async `juce::FileChooser`, and on success calls `loadWavetableFile()` and switches the module's `table` choice to `Loaded File`. The completion lambda holds a `Component::SafePointer` and re-derives the module via `dynamic_cast`, since the card can be destroyed while the dialog is open.
+
+**Public static helper** (headless-testable):
+
+| Helper | Signature | Notes |
+|---|---|---|
+| `quantisePosition` | `static int quantisePosition(float position, int steps = 200)` | Clamps to [0,1] and quantises the scan position into `steps` buckets — the repaint gate's change signature |
+
+**Themed colours**: resolved via `dynamic_cast<AppLookAndFeel*>` — `bg1` for the panel, `border` for the frame and zero line, `accent` for the traces, `textMuted` for the caption. Falls back to hardcoded colours when the cast fails (headless).
 
 ---
 

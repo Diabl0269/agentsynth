@@ -65,6 +65,19 @@ incoming MIDI note (or A4/440Hz if none is connected) offset by `octave`/`coarse
     -   `type`: The string name of the module (e.g., "Oscillator", "Filter", "ADSR").
     -   `params`: An optional object containing key-value pairs for module parameters (e.g., "Frequency", "Cutoff").
 
+    -   `state`: An optional object of **non-parameter** module state, round-tripped through
+        `ModuleBase::getExtraState()` / `setExtraState()`. Written by `graphToJSON` for any module
+        that has some (today only `Sampler`, which stores `{"sampleFile": "<absolute path>"}`).
+
+        **Trusted-path only.** `applyJSONToGraph` ignores `state` unless `trusted == true` — i.e. it
+        is honoured for our own undo/redo snapshots and presets, and dropped for anything a provider
+        produced. A module is free to read this as a filename, so accepting it from model output
+        would turn a patch suggestion into an arbitrary file read. `Sampler` nodes remain fully
+        authorable by the model; the node is simply created with no sample loaded.
+
+        Nothing in `getPatchSchema()` advertises `state`, so a constrained decoder is never invited
+        to emit one.
+
 -   **`connections`**: An array detailing the signal flow between modules.
     -   `src`: The `id` of the source module.
     -   `srcPort`: The output port index of the source module.
@@ -573,6 +586,12 @@ provider combo box, via a `visibleProviders` member used consistently by both th
 and `selectedDescriptor()` (indexing the combo's selected item against the *unfiltered* list would
 desync the moment a hidden entry sits between two visible ones). Phase 4 is expected to flip
 `"remote"`'s `hidden` to `false`.
+
+**Eval harness parity.** `Tools/AIEvalHarness` (see its README) can replay its golden prompt set
+through `RemoteProvider` instead of `OllamaProvider` via `--provider remote`, so a model can be
+scored through the exact stack a user hits — client -> service -> Ollama/Groq — instead of an
+approximation of it. The service picks its own model server-side; the harness's `--model` is a
+report label only in this mode.
 
 ## 6. Future Considerations
 

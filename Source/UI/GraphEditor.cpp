@@ -13,15 +13,18 @@
 #include "../Modules/FX/ReverbModule.h"
 #include "../Modules/FilterModule.h"
 #include "../Modules/LFOModule.h"
+#include "../Modules/MacroControlModule.h"
 #include "../Modules/MidiKeyboardModule.h"
 #include "../Modules/NoiseModule.h"
 #include "../Modules/OscillatorModule.h"
 #include "../Modules/PolyMidiModule.h"
 #include "../Modules/PolySequencerModule.h"
 #include "../Modules/SampleHoldModule.h"
+#include "../Modules/SamplerModule.h"
 #include "../Modules/SequencerModule.h"
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
+#include "../Modules/WavetableOscillatorModule.h"
 #include "../PresetManager.h"
 #include "LayoutUtil.h"
 #include "ModuleComponent.h"
@@ -35,15 +38,18 @@
 // Heights match the real component sizes so the library-drag ghost preview is accurate.
 // The final drop placement uses the real component size via finalizeModuleDrag() — the
 // estimate is only used for the live ghost preview.
-static juce::Point<int> estimateModuleSize(const juce::String& typeName) {
+// Heights are measured from the real components, not guessed — see
+// ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents, which constructs every type and
+// fails if this table drifts from what layoutDefaultContent() actually produces.
+juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Oscillator")
-        return {280, 530};
+        return {280, 449};
     if (typeName == "Filter")
-        return {280, 570};
+        return {280, 487};
     if (typeName == "LFO")
-        return {280, 440};
+        return {280, 353};
     if (typeName == "VCA")
-        return {280, 200};
+        return {280, 245};
     if (typeName == "ADSR" || typeName == "Amp Env" || typeName == "Filter Env")
         return {280, 180};
     if (typeName.containsIgnoreCase("Sequencer") && !typeName.containsIgnoreCase("Poly"))
@@ -54,21 +60,47 @@ static juce::Point<int> estimateModuleSize(const juce::String& typeName) {
         typeName.containsIgnoreCase("MIDI Keyboard"))
         return {synth::LayoutUtil::kDoubleWidth, 150};
     if (typeName == "Poly MIDI" || typeName == "PolyMidi")
-        return {280, 100};
+        return {280, 123};
     if (typeName == "Distortion")
-        return {280, 350};
+        return {280, 355};
     if (typeName == "Delay")
-        return {280, 220};
+        return {280, 193};
     if (typeName == "Reverb")
-        return {280, 300};
+        return {280, 269};
     if (typeName == "AudioInput" || typeName == "AudioOutput")
         return {280, 100};
     if (typeName == "Attenuverter")
-        return {280, 120};
+        return {synth::LayoutUtil::kNarrowWidth, synth::LayoutUtil::kNarrowWidth};
     if (typeName == "Noise")
-        return {280, 250};
+        return {280, 293};
     if (typeName == "Sample & Hold")
-        return {280, 640};
+        return {280, 563};
+    if (typeName == "Macros")
+        // Height tracks the bank's "Knobs" count at runtime; the drop estimate uses the default.
+        return {synth::LayoutUtil::kSingleWidth,
+                synth::LayoutUtil::macroBankHeight(MacroControlModule::kDefaultMacros)};
+    if (typeName == "Sampler")
+        return {280, 657};
+    if (typeName == "Wavetable")
+        return {280, 637};
+    if (typeName == "Chorus" || typeName == "Phaser" || typeName == "Flanger")
+        return {280, 309};
+    if (typeName == "Bitcrusher")
+        return {280, 355};
+    if (typeName == "Pitch Shifter")
+        return {280, 423};
+    if (typeName == "Parametric EQ")
+        // Double-width card: a 150px response curve set between the port-label gutters, then a
+        // 4-column band grid (on/off + Freq/Gain/Q). Mirrors parametricEQHeight().
+        return {synth::LayoutUtil::kDoubleWidth, 592};
+    if (typeName == "Compressor")
+        return {280, 269};
+    if (typeName == "Limiter")
+        return {280, 193};
+    if (typeName == "Voice Mixer")
+        return {280, 313};
+    if (typeName == "External MIDI")
+        return {280, 138};
     return {280, 360};
 }
 
@@ -1395,12 +1427,56 @@ void GraphEditor::itemDragExit(const SourceDetails& dragSourceDetails) {
 }
 
 void GraphEditor::itemDropped(const SourceDetails& dragSourceDetails) {
-    juce::String name = dragSourceDetails.description.toString();
+    auto dropPos = content.getLocalPoint(this, dragSourceDetails.localPosition).roundToInt();
+    addModuleAtCanvasPosition(dragSourceDetails.description.toString(), dropPos, {});
+    endDragPreview();
+}
+
+// =============================================================================
+// Audio-file drag and drop — dropping a sample on empty canvas builds a Sampler for it.
+// A drop that lands on an existing Sampler is handled by ModuleComponent instead (JUCE hands the
+// drop to the deepest interested target), which replaces that module's sample.
+// =============================================================================
+
+bool GraphEditor::isInterestedInFileDrag(const juce::StringArray& files) {
+    for (const auto& path : files)
+        if (SamplerModule::isSupportedAudioFile(juce::File(path)))
+            return true;
+    return false;
+}
+
+void GraphEditor::filesDropped(const juce::StringArray& files, int x, int y) {
+    auto canvasPos = content.getLocalPoint(this, juce::Point<int>(x, y)).roundToInt();
+
+    for (const auto& path : files) {
+        const juce::File file(path);
+        if (!SamplerModule::isSupportedAudioFile(file))
+            continue;
+
+        // Load into the processor BEFORE it joins the graph: recordStructuralChange snapshots the
+        // graph afterwards, and that snapshot is what undo/redo replays — so the file path has to be
+        // in place by then or the sample is lost on the first Cmd+Z.
+        addModuleAtCanvasPosition("Sampler", canvasPos, [file](juce::AudioProcessor& processor) {
+            if (auto* sampler = dynamic_cast<SamplerModule*>(&processor))
+                sampler->loadSampleFile(file);
+        });
+
+        // Cascade multiple files so they do not all land on the same spot.
+        canvasPos += juce::Point<int>(32, 32);
+    }
+
+    endDragPreview();
+}
+
+void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Point<int> dropPos,
+                                            const std::function<void(juce::AudioProcessor&)>& configure) {
     auto newProcessor = synth::AIStateMapper::createModule(name);
 
     if (newProcessor) {
+        if (configure)
+            configure(*newProcessor);
+
         auto& graph = audioEngine.getGraph();
-        auto dropPos = content.getLocalPoint(this, dragSourceDetails.localPosition).roundToInt();
         // Use estimate for an initial snapped position; finalizeModuleDrag will re-resolve
         // using the real component size after updateComponents() creates the component.
         auto estSize = estimateModuleSize(name);
@@ -1459,8 +1535,62 @@ void GraphEditor::itemDropped(const SourceDetails& dragSourceDetails) {
             }
         }
     }
+}
 
-    endDragPreview();
+void GraphEditor::handleModuleResized(ModuleComponent* moduleComp) {
+    if (moduleComp == nullptr || moduleComp->getModule() == nullptr)
+        return;
+
+    auto& graph = audioEngine.getGraph();
+    const auto nodeId = moduleComp->getNodeId();
+    if (graph.getNodeForId(nodeId) == nullptr)
+        return;
+
+    // 1. Jacks that just disappeared take their cables with them. Leaving them connected would
+    //    mean a routing that still shows in the mod matrix, still costs a node, and no longer
+    //    carries anything (the module silences hidden channels) — with no jack to unplug it from.
+    //    No undo transaction is opened here: the parameter gesture that changed the count already
+    //    snapshots the whole graph before and after, so this is part of that single undo step.
+    if (auto* mb = dynamic_cast<ModuleBase*>(moduleComp->getModule())) {
+        const int visible = mb->getVisibleOutputPortCount();
+        std::vector<juce::AudioProcessorGraph::Connection> toRemove;
+
+        for (const auto& c : graph.getConnections()) {
+            if (c.source.nodeID != nodeId || c.source.isMIDI() || c.source.channelIndex < visible)
+                continue;
+
+            if (auto* dstNode = graph.getNodeForId(c.destination.nodeID)) {
+                if (dynamic_cast<AttenuverterModule*>(dstNode->getProcessor()) != nullptr) {
+                    audioEngine.removeModRouting(dstNode->nodeID); // drops both legs of the cable
+                    continue;
+                }
+            }
+            toRemove.push_back(c);
+        }
+
+        for (const auto& c : toRemove)
+            graph.removeConnection(c);
+    }
+
+    // 2. Nudge neighbours clear of the new footprint. The resized module stays put.
+    std::vector<synth::LayoutUtil::Box> boxes;
+    for (auto* comp : content.getModules())
+        if (comp != nullptr)
+            boxes.push_back({comp->getNodeId(), comp->getBounds()});
+
+    for (const auto& moved : synth::LayoutUtil::resolveOverlapsAfterResize(nodeId, boxes)) {
+        for (auto* comp : content.getModules()) {
+            if (comp == nullptr || comp->getNodeId() != moved.id)
+                continue;
+            comp->setTopLeftPosition(moved.pos);
+            if (auto* node = graph.getNodeForId(moved.id)) {
+                node->properties.set("x", moved.pos.x);
+                node->properties.set("y", moved.pos.y);
+            }
+        }
+    }
+
+    content.repaint();
 }
 
 juce::Point<int> GraphEditor::resolvePlacement(juce::Point<int> desired, int w, int h,
