@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../AI/AIIntegrationService.h"
+#include "../AI/AccountService.h"
+#include "AccountRow.h"
 #include "Theme/AppLookAndFeel.h"
 #include "UIAnimation.h"
 #include <atomic>
@@ -42,6 +44,21 @@ public:
     void refreshModels();
     void sendButtonClicked();
     void triggerSend() { sendButtonClicked(); }
+
+    /**
+     * @brief Attaches (or detaches, with nullptr) the account UI to `service`.
+     *
+     * Non-owning, nullable — mirrors AIIntegrationService::setUndoManager()'s precedent
+     * ("constructing without one keeps the old ... behaviour"). Forwards to
+     * accountRow.setAccountService() and — per the single-owner-per-callback-slot rule below —
+     * is the ONLY place that sets AccountService::onStateChanged / onAccessTokenChanged. Those
+     * are single-slot std::function members, not a multicast listener list, so a second caller
+     * anywhere that also assigned them would silently steal this one's callback. AccountRow and
+     * SignInDialog never touch those slots themselves; they are notified by AccountRow::refresh()
+     * (called from the onStateChanged lambda installed here), which forwards on to any open
+     * SignInDialog. Only MainComponent calls this, exactly once, after construction.
+     */
+    void setAccountService(AccountService* service);
 
     // Testing hook: directly invokes the cancel action synchronously (mirrors triggerSend).
     // Use in headless tests instead of cancelButton->triggerClick(), which posts async.
@@ -128,6 +145,12 @@ private:
     AIIntegrationService& aiService;
     juce::ApplicationProperties& appProperties;
     bool isWaitingForResponse = false;
+
+    // Non-owning; set (once, by MainComponent) via setAccountService(). Held only so the
+    // destructor can clear the two callback slots it installs on the service — see
+    // setAccountService()'s comment for the single-owner contract those slots are under.
+    AccountService* accountServicePtr = nullptr;
+    AccountRow accountRow;
 
     // Handle for the request currently in flight, so cancelRequest() can tell the provider to
     // actually abandon it. Default (value 0) whenever nothing is outstanding — cleared by the

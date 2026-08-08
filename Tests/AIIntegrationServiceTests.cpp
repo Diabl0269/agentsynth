@@ -45,9 +45,14 @@ public:
     juce::String getCurrentModel() const override { return currentModel; }
     juce::String getProviderName() const override { return "MockProvider"; }
 
+    // Overrides the AIProvider default no-op so tests can observe what
+    // AIIntegrationService::setAuthToken()/setProvider() forwarded.
+    void setAuthToken(const juce::String& token) override { lastAuthToken = token; }
+
     juce::String mockResponse = "{\"nodes\": [], \"connections\": []}";
     bool shouldFail = false;
     juce::String currentModel;
+    juce::String lastAuthToken;
     std::vector<Message> lastConversation;
 };
 
@@ -200,6 +205,35 @@ TEST_F(AIIntegrationServiceTest, ModelManagement) {
 
     service->setModel("test-model");
     EXPECT_EQ(service->getCurrentModel(), "test-model");
+}
+
+// setAuthToken() with a provider already installed forwards straight through to it.
+TEST_F(AIIntegrationServiceTest, SetAuthTokenForwardsToInstalledProvider) {
+    auto provider = std::make_unique<MockAIProvider>();
+    auto* rawProvider = provider.get();
+    service->setProvider(std::move(provider));
+
+    service->setAuthToken("token-abc");
+
+    EXPECT_EQ(rawProvider->lastAuthToken, "token-abc");
+}
+
+// REGRESSION LOCK: mirrors AIChatComponentTest.RefreshModelsSelectsModelWhenProviderInstalled-
+// AfterConstruction's ordering — AccountService::onAccessTokenChanged can fire (and call
+// AIIntegrationService::setAuthToken()) before MainComponent::initialiseCommon() installs the
+// real provider. The token must not be lost: setProvider() has to re-push whatever was set
+// earlier onto the provider it installs.
+TEST_F(AIIntegrationServiceTest, SetAuthTokenBeforeProviderInstalledIsRePushedBySetProvider) {
+    // No provider installed yet — setAuthToken() must still record the value.
+    service->setAuthToken("token-xyz");
+
+    auto provider = std::make_unique<MockAIProvider>();
+    auto* rawProvider = provider.get();
+    EXPECT_TRUE(rawProvider->lastAuthToken.isEmpty());
+
+    service->setProvider(std::move(provider));
+
+    EXPECT_EQ(rawProvider->lastAuthToken, "token-xyz");
 }
 
 TEST_F(AIIntegrationServiceTest, ApplyPatch_MergeMode_PreservesExisting) {

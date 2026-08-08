@@ -358,6 +358,71 @@ jasserts on duplicate IDs, and the picker is left showing stale and fresh entrie
 for the duration of the new fetch. Locked by
 `AIChatComponentTest.RefreshModelsClearsStaleItemsBeforeSecondFetchResolves`.
 
+### Auth Token Re-Push Contract
+
+`AIIntegrationService::setAuthToken()` is a second instance of the same ordering hazard as the
+Model Discovery Ordering Contract above, for the same underlying reason: `AccountService` (and
+the `AIChatComponent`/`AccountRow` wiring that observes it) can exist and fire callbacks before
+`MainComponent::initialiseCommon()` has installed a real `AIProvider` on the service.
+
+`setAuthToken(token)` stores the value in `currentAuthToken` **regardless of whether a provider
+is currently installed**, and forwards it to `provider->setAuthToken(...)` only if one exists.
+`setProvider(...)` then re-pushes `currentAuthToken` (when non-empty) onto whatever provider it
+just installed, so a token set first is never lost. `AIProvider::setAuthToken()` defaults to a
+no-op, so calling it on any provider — including `OllamaProvider`, which has no notion of auth —
+is always safe.
+
+Locked by `AIIntegrationServiceTest.SetAuthTokenForwardsToInstalledProvider` and
+`AIIntegrationServiceTest.SetAuthTokenBeforeProviderInstalledIsRePushedBySetProvider` in
+`Tests/AIIntegrationServiceTests.cpp`.
+
+### Account Sign-In Surface (P3-2: AccountRow / SignInDialog)
+
+The AI panel's account UI is `Source/UI/AccountRow.h/.cpp` (a slim status row: "Sign in" /
+"Signing in…" / email + "Sign out") and `Source/UI/SignInDialog.h/.cpp` (the modal device-code
+flow, launched the same way `SettingsWindow` is — content handed to
+`juce::DialogWindow::LaunchOptions::content.setOwned(...)`, not a `DialogWindow` subclass).
+`AIChatComponent` owns an `AccountRow` member unconditionally; with no `AccountService` attached
+(`setAccountService()` never called) the row is invisible and contributes zero height to
+`resized()`, so every existing caller/test sees byte-identical layout.
+
+**Single-owner-per-callback-slot contract.** `AccountService::onStateChanged` and
+`onAccessTokenChanged` are single `std::function` members, not a multicast listener list.
+`AIChatComponent::setAccountService(AccountService*)` is the **sole** setter of both — it installs
+`onStateChanged` to call `accountRow.refresh()` and `onAccessTokenChanged` to call
+`aiService.setAuthToken(token)`. Neither `AccountRow` nor `SignInDialog` ever assigns those
+callbacks itself:
+- `AccountRow::refresh()` re-reads the snapshot for its own UI, then forwards to a currently-open
+  `SignInDialog` (tracked via a non-owning `juce::Component::SafePointer<SignInDialog>`, so a
+  dialog closed by any path — its own Cancel button, auto-close on success, or the native title
+  bar — never leaves a dangling pointer) by calling `dialog->refresh()`.
+- `SignInDialog::refresh()` re-reads the snapshot for its own UI (code, status text, the one-time
+  auto-open of the verification URL).
+
+If a second call site ever needs `AccountService`'s callbacks, it must go through
+`AIChatComponent::setAccountService()`'s fan-out (extend `refresh()`/its callers) rather than
+assigning `onStateChanged`/`onAccessTokenChanged` directly — a second direct assignment anywhere
+would silently steal the slot from `AIChatComponent`.
+
+Both callback lambdas installed by `setAccountService()` capture a
+`juce::Component::SafePointer<AIChatComponent>`, not `this` — required because
+`AccountService::publishSnapshot()`/`setAccessTokenFromWorker()` copy the `std::function` out of
+the member *before* dispatching it via `MessageManager::callAsync()`, so a callback already queued
+at the moment `AIChatComponent` is destroyed still runs; the `SafePointer` is what makes that safe.
+`~AIChatComponent()` also clears both slots on its stored `AccountService*` as a second layer of
+defense. This is why `MainComponent.h` declares `accountService` **before** `aiChatComponent`:
+members are destroyed in reverse declaration order, so `aiChatComponent` (which owns those two
+callback slots) is torn down first, while `accountService` is still alive to have them cleared.
+
+`MainComponent::initialiseCommon()` calls `aiChatComponent.setAccountService(&accountService)`
+**before** `accountService.attemptSilentSignIn()`, so the wiring is live for any state changes the
+silent sign-in attempt produces. `accountService` is default-constructed (production host,
+`KeychainTokenStore`) — on a machine with no stored refresh token this is a fast, silent no-op
+(see `AccountService::attemptSilentSignIn()`'s own doc comment), which is also why every existing
+`MainComponent`-constructing test continues to run at its normal speed. A machine that *does* have
+a token from a real sign-in could see different behavior when a different (e.g. unsigned/ad-hoc)
+build reads that Keychain item — no test seam for this exists yet; out of scope for P3-2.
+
 ### AI Provider Registry
 
 Providers are registered once, in `synth::AIProviderRegistry::createDefault()`

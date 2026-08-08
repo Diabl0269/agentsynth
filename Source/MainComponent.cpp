@@ -92,6 +92,12 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // /api/chat request is rejected by Ollama with HTTP 400 "model is required".
     // Regression: see #96 / f7cba4a.
     aiChatComponent.refreshModels();
+
+    // Wire the account row/dialog up BEFORE attemptSilentSignIn() so the wiring is live for any
+    // state changes that arrive from it (P3-2: sign-in surface for the AI panel).
+    aiChatComponent.setAccountService(&accountService);
+    accountService.attemptSilentSignIn();
+
     aiService.addListener(this);
     undoManager.setGraphEditor(&graphEditor);
     setWantsKeyboardFocus(true);
