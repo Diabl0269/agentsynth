@@ -5,10 +5,12 @@
 //   2. Theme plumbing: the new midiWire / cableCategory tokens survive a JSON round-trip.
 //   3. The canvas integration: cable enumeration, hit-testing and disconnect on a real graph.
 
+#include "../Source/AI/AIStateMapper.h"
 #include "../Source/Modules/ModuleBase.h"
 #include "../Source/UI/CableColour.h"
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/ModuleComponent.h"
+#include "../Source/UI/ModuleLibraryComponent.h"
 #include "../Source/UI/Theme/BuiltInThemes.h"
 #include "../Source/UI/Theme/ThemeLoader.h"
 #include <gtest/gtest.h>
@@ -19,15 +21,15 @@ using namespace synth::ui;
 
 namespace {
 
-// Every ModuleType the app can instantiate. Kept explicit (rather than a numeric loop) so that
-// adding a module to the enum without deciding its cable colour trips the totality test below.
-const std::vector<ModuleType> kAllModuleTypes{
-    ModuleType::Oscillator, ModuleType::Filter,       ModuleType::VCA,           ModuleType::ADSR,
-    ModuleType::LFO,        ModuleType::Sequencer,    ModuleType::PolySequencer, ModuleType::MidiKeyboard,
-    ModuleType::PolyMidi,   ModuleType::ExternalMidi, ModuleType::Attenuverter,  ModuleType::Delay,
-    ModuleType::Distortion, ModuleType::Reverb,       ModuleType::Chorus,        ModuleType::Phaser,
-    ModuleType::Compressor, ModuleType::Flanger,      ModuleType::Limiter,       ModuleType::VoiceMixer,
-    ModuleType::Bitcrusher, ModuleType::Noise};
+// The ModuleCategory whose display label matches a library section header, or nullopt.
+// The library's headers and moduleCategoryLabel() are deliberately the SAME strings — that
+// correspondence is the invariant the library-driven test below enforces.
+std::optional<ModuleCategory> categoryFromLabel(const juce::String& label) {
+    for (int i = 0; i < kModuleCategoryCount; ++i)
+        if (label == moduleCategoryLabel((ModuleCategory)i))
+            return (ModuleCategory)i;
+    return std::nullopt;
+}
 
 juce::File tempSettingsFile(const juce::String& name) {
     return juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(name + ".settings");
@@ -50,42 +52,49 @@ class DummyDragSource : public juce::Component {};
 // 1. Category mapping
 //==============================================================================
 
-TEST(CableColourCategoryTest, EveryModuleTypeMapsToACategory) {
-    // Totality: categoryFor must handle every enumerator. A new module added to ModuleType
-    // without a case falls through to Utility, which this catches only if the author also adds
-    // it to kAllModuleTypes — so this doubles as a nudge to update both.
-    for (auto t : kAllModuleTypes) {
-        const auto c = categoryFor(t);
-        EXPECT_GE((int)c, 0);
-        EXPECT_LT((int)c, kModuleCategoryCount);
+TEST(CableColourCategoryTest, EveryLibraryModuleMapsToItsLibrarySection) {
+    // Driven off the module library itself rather than a hand-kept list of ModuleType values:
+    // a module added to the library is covered automatically, and a module added to the enum
+    // without a categoryFor() case shows up here as a Utility mismatch instead of silently
+    // taking the fallback colour. (A hand-kept list went stale exactly once; hence this.)
+    ModuleLibraryComponent library;
+    const auto names = library.getDraggableModuleNames();
+    ASSERT_GT(names.size(), 0);
+
+    for (const auto& name : names) {
+        auto processor = synth::AIStateMapper::createModule(name);
+        ASSERT_NE(processor, nullptr) << "library offers \"" << name << "\" but createModule cannot build it";
+        auto* moduleBase = dynamic_cast<ModuleBase*>(processor.get());
+        ASSERT_NE(moduleBase, nullptr) << name;
+
+        const auto section = library.getSectionForModule(name);
+        const auto expected = categoryFromLabel(section);
+        ASSERT_TRUE(expected.has_value())
+            << "library section \"" << section << "\" has no matching ModuleCategory label (module: " << name << ")";
+
+        EXPECT_EQ(categoryFor(moduleBase->getModuleType()), *expected)
+            << name << " sits under \"" << section << "\" in the library but its cable colour category disagrees";
     }
-    EXPECT_EQ(kAllModuleTypes.size(), 22u) << "ModuleType gained/lost an entry — update this list";
 }
 
-TEST(CableColourCategoryTest, GroupingsMatchTheModuleLibrarySections) {
-    EXPECT_EQ(categoryFor(ModuleType::Oscillator), ModuleCategory::Sources);
-    EXPECT_EQ(categoryFor(ModuleType::Noise), ModuleCategory::Sources);
-    EXPECT_EQ(categoryFor(ModuleType::LFO), ModuleCategory::Sources);
+TEST(CableColourCategoryTest, HiddenAttenuverterIsAUtilityModule) {
+    // Attenuverter is never in the library (it is an implementation detail of a mod routing), so
+    // the library-driven test above cannot reach it.
+    EXPECT_EQ(categoryFor(ModuleType::Attenuverter), ModuleCategory::Utility);
+}
 
-    EXPECT_EQ(categoryFor(ModuleType::Sequencer), ModuleCategory::Sequencing);
-    EXPECT_EQ(categoryFor(ModuleType::PolyMidi), ModuleCategory::Sequencing);
-    EXPECT_EQ(categoryFor(ModuleType::ExternalMidi), ModuleCategory::Sequencing);
+TEST(CableColourCategoryTest, EveryCategoryLabelIsAUsableLibrarySectionName) {
+    // The reverse direction: every category must be reachable from some library section, or a
+    // swatch exists in Settings that no cable can ever take.
+    ModuleLibraryComponent library;
+    std::set<int> reached;
+    for (const auto& name : library.getDraggableModuleNames())
+        if (const auto c = categoryFromLabel(library.getSectionForModule(name)))
+            reached.insert((int)*c);
 
-    EXPECT_EQ(categoryFor(ModuleType::ADSR), ModuleCategory::EnvelopesControl);
-    EXPECT_EQ(categoryFor(ModuleType::VCA), ModuleCategory::EnvelopesControl);
-
-    EXPECT_EQ(categoryFor(ModuleType::Filter), ModuleCategory::Filters);
-
-    EXPECT_EQ(categoryFor(ModuleType::Chorus), ModuleCategory::ModulationFX);
-    EXPECT_EQ(categoryFor(ModuleType::Bitcrusher), ModuleCategory::ModulationFX);
-
-    EXPECT_EQ(categoryFor(ModuleType::Delay), ModuleCategory::TimeFX);
-    EXPECT_EQ(categoryFor(ModuleType::Reverb), ModuleCategory::TimeFX);
-
-    EXPECT_EQ(categoryFor(ModuleType::Compressor), ModuleCategory::Dynamics);
-    EXPECT_EQ(categoryFor(ModuleType::Limiter), ModuleCategory::Dynamics);
-
-    EXPECT_EQ(categoryFor(ModuleType::VoiceMixer), ModuleCategory::Utility);
+    for (int i = 0; i < kModuleCategoryCount; ++i)
+        EXPECT_TRUE(reached.count(i) > 0)
+            << "no library module maps to category \"" << moduleCategoryLabel((ModuleCategory)i) << "\"";
 }
 
 TEST(CableColourCategoryTest, PersistedIdsAreUniqueAndStable) {

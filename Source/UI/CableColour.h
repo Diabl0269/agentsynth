@@ -120,7 +120,9 @@ inline const char* moduleCategoryLabel(ModuleCategory c) noexcept {
 inline ModuleCategory categoryFor(ModuleType t) noexcept {
     switch (t) {
     case ModuleType::Oscillator:
+    case ModuleType::Wavetable:
     case ModuleType::Noise:
+    case ModuleType::Sampler:
     case ModuleType::LFO:
         return ModuleCategory::Sources;
 
@@ -136,6 +138,7 @@ inline ModuleCategory categoryFor(ModuleType t) noexcept {
         return ModuleCategory::EnvelopesControl;
 
     case ModuleType::Filter:
+    case ModuleType::ParametricEQ:
         return ModuleCategory::Filters;
 
     case ModuleType::Chorus:
@@ -143,6 +146,7 @@ inline ModuleCategory categoryFor(ModuleType t) noexcept {
     case ModuleType::Flanger:
     case ModuleType::Distortion:
     case ModuleType::Bitcrusher:
+    case ModuleType::PitchShifter:
         return ModuleCategory::ModulationFX;
 
     case ModuleType::Delay:
@@ -153,7 +157,10 @@ inline ModuleCategory categoryFor(ModuleType t) noexcept {
     case ModuleType::Limiter:
         return ModuleCategory::Dynamics;
 
+    case ModuleType::MacroControl:
+    case ModuleType::SampleHold:
     case ModuleType::VoiceMixer:
+    case ModuleType::Math:
     case ModuleType::Attenuverter:
         return ModuleCategory::Utility;
     }
