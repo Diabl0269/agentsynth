@@ -32,6 +32,18 @@ public:
     void setUndoManager(AppUndoManager* um) { undoManager = um; }
 
     /**
+     * @brief Sets (or clears) the bearer token forwarded to the active provider's
+     *        AIProvider::setAuthToken().
+     *
+     * Stored regardless of whether a provider is currently installed — setProvider() re-pushes
+     * it to whatever provider it installs next, mirroring the model-discovery re-push contract
+     * documented for this class (see docs/AI_Engine.md "Model Discovery Ordering Contract"):
+     * AIChatComponent/AccountService can be wired up before MainComponent::initialiseCommon()
+     * installs the real provider, so a value set first must not be lost.
+     */
+    void setAuthToken(const juce::String& token);
+
+    /**
      * @class Listener
      * @brief Interface for observing AI-driven changes to the synthesizer state.
      */
@@ -173,6 +185,7 @@ private:
     std::vector<AIProvider::Message> chatHistory;
     juce::AudioProcessorGraph& audioGraph;
     AppUndoManager* undoManager = nullptr;
+    juce::String currentAuthToken;
     juce::String lastPatchError;
     PatchValidationError lastPatchErrorCode = PatchValidationError::None;
     bool lastPatchModeRepaired = false;
