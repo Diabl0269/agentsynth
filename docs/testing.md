@@ -135,6 +135,21 @@ Tests for the theme system — `Tests/ThemeTests.cpp`. All headless.
 | ThemeLookAndFeelTest (extended) | 4 | `ApplyThemeSetsEveryColourId` extended to cover ListBox and TabbedButtonBar ColourIds; `RetintIconsCalledByApplyTheme` (getIcon non-null across 3 built-ins); `MetricsCodeOnlyFieldsHaveExpectedDefaults` (toolbarHeight==36, statusBarHeight==24, etc.); `MetricsCodeOnlyFieldsNotInJSON` (ThemeLoader output does not contain "toolbarHeight") |
 | StyledWidgetSmokeTest | 9 | `drawComboBox` normal/pressed/disabled × 3 themes; `drawComboBoxTextWhenNothingSelected`; `drawPopupMenuItem` separator/highlighted/ticked/disabled/hasSubMenu; `getDefaultScrollbarWidth()==6`; `drawScrollbar` V/H × over/down; `drawScrollbarButton`; `drawTabbedButtonBarBackground` + `drawTabButton` active/inactive/hover with snapshot pixel check |
 
+### Cable Colour Tests (22 tests)
+
+Suite `Tests/CableColourTests.cpp` covering `Source/UI/CableColour.h` and the cable
+enumeration / hit-testing added to `GraphEditor`. Layered: the pure resolver needs no GUI at
+all, the canvas fixture builds a real two-module patch headlessly.
+
+| Suite | Tests | What it covers |
+|-------|-------|----------------|
+| CableColourCategoryTest | 3 | `categoryFor` totality over all 22 `ModuleType` values, groupings match the ModuleLibrary sections, persisted signal/category ids are unique and stable (`envelopes`, `modcv` spot-checked — renaming breaks saved user colours) |
+| CableColourResolveTest | 7 | Each `CableSignal` maps to its theme token; `midiWire` differs from `audioWire` in every built-in theme; `BySourceCategory` uses the palette and ignores signal; the 8 category colours are mutually distinct per built-in theme; override precedence is mode-scoped; bypass alpha applies to the winning colour but NOT to `resolveCableBaseColour` (what swatches render); clearing an override restores the theme colour |
+| CableColourPersistenceTest | 2 | Mode round-trip through `PropertiesFile`; override round-trip, untouched entries stay unset, reset removes the key entirely |
+| CableColourThemeTest | 3 | `midiWire` + `cableCategory` survive a `themeToJson` → `parseTheme` round-trip; a pre-#157 theme with neither key still loads on defaults; a partial `cableCategory` object overrides only its named keys |
+| CableGeometryTest | 2 | `buildCablePath` starts/ends exactly on the ports; `distanceToCable` ≈ 0 on the wire and large away from it |
+| CableCanvasTest (fixture) | 5 | Enumeration reports the audio cable with the right signal + source category; hit-test hits a point sampled from the drawn curve and misses far away; tolerance is respected; `disconnectCable` removes the graph edge; `colourForCable` follows the active mode and overrides |
+
 ### Icon Library Tests (~11 tests)
 
 Suite `Tests/IconLibraryTests.cpp` covering `Source/UI/Theme/IconLibrary.h/.cpp`.

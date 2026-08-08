@@ -73,6 +73,12 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     graphEditor.setAlignmentGuidesEnabled(
         appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true));
 
+    // Cable colour config (issue #157). Restored HERE rather than only in AppearanceSettingsTab:
+    // that tab is built lazily when the Settings window opens, so leaving it to the tab would
+    // mean the canvas ignored the user's saved colours until they went looking for them.
+    graphEditor.setCableColourMode(synth::ui::loadCableColourMode(*appProperties.getUserSettings()));
+    graphEditor.setCableColourOverrides(synth::ui::loadCableColourOverrides(*appProperties.getUserSettings()));
+
     // Load AI provider preference. "ollama" is the persisted id (see AIProviderRegistry),
     // not a display name — registry.create() falls back to the first registered provider
     // if the saved id is unknown (e.g. stale pre-registry value, or empty).

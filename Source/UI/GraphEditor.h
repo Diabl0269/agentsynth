@@ -2,10 +2,13 @@
 
 #include "../AppUndoManager.h"
 #include "../AudioEngine.h"
+#include "CableColour.h"
 #include "LayoutUtil.h"
 #include "SelectionModel.h"
 #include "UIAnimation.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <optional>
+#include <vector>
 
 class ModuleComponent;
 #include "ModMatrixComponent.h"
@@ -206,6 +209,88 @@ public:
 
     juce::AudioProcessorGraph::NodeID getAttenuverterNodeAt(juce::Point<float> localPos);
 
+    // ---- Cables (issue #157) ----------------------------------------------
+    //
+    // A "cable" is one wire as the USER sees it, which is not the same thing as a graph edge:
+    // an attenuverter chain is two edges plus a hidden node, and a poly bus is N edges. Both
+    // render as a single wire, so anything that identifies, hit-tests, or colours a cable has to
+    // key on this logical view rather than on juce::AudioProcessorGraph::Connection.
+
+    /** Stable identity for a user-visible cable. Survives repaints; used to tell whether the
+     *  hovered cable actually changed (so hover does not repaint on every mouse move). */
+    struct CableId {
+        uint32_t srcUid = 0;
+        int srcPort = 0;
+        uint32_t dstUid = 0;
+        int dstPort = 0;
+        uint32_t attenUid = 0; // non-zero only for an attenuverter chain
+
+        bool operator==(const CableId& o) const noexcept {
+            return srcUid == o.srcUid && srcPort == o.srcPort && dstUid == o.dstUid && dstPort == o.dstPort &&
+                   attenUid == o.attenUid;
+        }
+        bool operator!=(const CableId& o) const noexcept { return !(*this == o); }
+    };
+
+    /** One drawn wire, with everything paint() and hit-testing need. Produced by
+     *  buildVisibleCables() so the canvas and the mouse agree on where cables are — if these
+     *  were computed separately they would drift and clicks would miss the wire. */
+    struct VisibleCable {
+        enum class Kind {
+            Direct,            // a plain audio or MIDI graph edge
+            AttenuverterChain, // source -> attenuverter -> destination, drawn as one wire + knob
+            ModRouting         // DirectCV / PolyBus mod routing
+        };
+
+        CableId id;
+        Kind kind = Kind::Direct;
+        juce::Point<float> p1, p2; // canvas coords
+        synth::ui::CableSignal signal = synth::ui::CableSignal::Audio;
+        synth::ui::ModuleCategory sourceCategory = synth::ui::ModuleCategory::Utility;
+        bool isBypassed = false;
+        float activity = 0.0f;    // drives brightness / width
+        bool isPolyBus = false;   // RoutingKind::PolyBus — drives the "xN" bundle badge
+        int voiceCount = 1;       // PolyBus bundle size (badge)
+        float attenAmount = 0.0f; // AttenuverterChain knob value, -1..1
+    };
+
+    /** Enumerates every cable currently drawn on the canvas, in paint order. */
+    std::vector<VisibleCable> buildVisibleCables();
+
+    /** The cubic bezier a cable is drawn along. Must stay identical to
+     *  AppLookAndFeel::drawConnectionWire's default curve or hit-testing drifts off the wire. */
+    static juce::Path buildCablePath(juce::Point<float> p1, juce::Point<float> p2);
+
+    /** Perpendicular distance from a canvas point to a cable's curve, in pixels. */
+    static float distanceToCable(const VisibleCable& cable, juce::Point<float> canvasPos);
+
+    /** Topmost cable within `tolerance` px of a canvas point, or nullopt.
+     *  Later cables win, matching paint order (mod wires draw over audio wires). */
+    std::optional<VisibleCable> getCableAt(juce::Point<float> canvasPos, float tolerance = kCableHitTolerance);
+
+    /** Click tolerance in canvas px. Wider than the wire itself so thin cables stay grabbable. */
+    static constexpr float kCableHitTolerance = 7.0f;
+
+    /** Removes every graph edge behind a user-visible cable, as one undoable action. */
+    void disconnectCable(const VisibleCable& cable);
+
+    /** Cable colouring config. Owned by MainComponent / AppearanceSettingsTab (which persist it);
+     *  GraphEditor just renders what it is handed, so it needs no ApplicationProperties. */
+    void setCableColourMode(synth::ui::CableColourMode mode);
+    synth::ui::CableColourMode getCableColourMode() const noexcept { return cableColourMode; }
+    void setCableColourOverrides(const synth::ui::CableColourOverrides& overrides);
+    const synth::ui::CableColourOverrides& getCableColourOverrides() const noexcept { return cableColourOverrides; }
+
+    /** Resolved colour for a cable under the current mode + overrides + active theme. */
+    juce::Colour colourForCable(const VisibleCable& cable) const;
+
+    // Test accessors.
+    int getVisibleCableCount() { return (int)buildVisibleCables().size(); }
+    bool hasHoveredCable() const noexcept { return hoveredCableId.has_value(); }
+
+    void mouseMove(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
+
 private:
     class GraphContentComponent : public juce::Component {
     public:
@@ -249,6 +334,13 @@ private:
 
     juce::AudioProcessorGraph::NodeID draggingAttenuverterNodeId;
     float attenDragStartValue = 0.0f;
+
+    // ---- Cable hover / colouring state (issue #157) ----
+    // Only the ID is kept between frames: the geometry is rebuilt each paint anyway, and holding
+    // a stale VisibleCable across a graph edit would dangle conceptually (ports move, nodes go).
+    std::optional<CableId> hoveredCableId;
+    synth::ui::CableColourMode cableColourMode = synth::ui::CableColourMode::BySignalType;
+    synth::ui::CableColourOverrides cableColourOverrides;
 
     // ---- Selection state (issue #156) ----
     synth::ui::SelectionModel selection;
