@@ -7,6 +7,7 @@
 #include "AudioEngine.h"
 #include "PresetManager.h"
 #include "ShortcutManager.h"
+#include "SnippetManager.h"
 #include "UI/AIChatComponent.h"
 #include "UI/GraphEditor.h"
 #include "UI/ModuleLibraryComponent.h"
@@ -97,6 +98,17 @@ public:
     void simulateLoadFactoryPresetForTest(int index);
     void openPresetFromFile();
     synth::AIIntegrationService& getAiServiceForTest() { return aiService; }
+
+    // ---- Snippets (issue #156) ----
+
+    /** Re-reads the snippets directory and pushes the list into the library sidebar. */
+    void refreshSnippetLibrary();
+
+    /** Asks for a name and saves the canvas selection as a snippet. No-op (with a status-bar
+     *  note) when nothing is selected. */
+    void promptSaveSnippet();
+
+    ModuleLibraryComponent& getModuleLibrary() { return moduleLibrary; }
 
 private:
     // AIIntegrationService::Listener

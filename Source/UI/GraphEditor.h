@@ -3,6 +3,7 @@
 #include "../AppUndoManager.h"
 #include "../AudioEngine.h"
 #include "LayoutUtil.h"
+#include "SelectionModel.h"
 #include "UIAnimation.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -70,6 +71,74 @@ public:
     void finalizeModuleDrag(ModuleComponent* module);
     void autoArrange();
 
+    // ---- Multi-select (issue #156) ------------------------------------------------------
+    //
+    // Gesture contract, chosen so the existing drag-to-pan muscle memory is untouched:
+    //   plain drag on empty canvas          -> pan (unchanged)
+    //   Shift + drag on empty canvas        -> marquee select, replacing the selection
+    //   Cmd/Ctrl + Shift + drag             -> marquee select, adding to the selection
+    //   click a module                      -> select just it
+    //   Shift/Cmd + click a module          -> toggle it in the selection
+    //   drag any selected module            -> moves the whole selection together
+    //   Escape / click empty canvas         -> clear
+    //   Delete / Backspace                  -> delete the selection
+
+    const synth::ui::SelectionModel& getSelection() const { return selection; }
+
+    /** Selects a single module. When additive, toggles it instead and leaves the rest alone. */
+    void selectModule(juce::AudioProcessorGraph::NodeID nodeId, bool additive);
+    void setSelectedNodes(const std::vector<juce::AudioProcessorGraph::NodeID>& ids);
+    void clearSelection();
+    void selectAllModules();
+    bool isNodeSelected(juce::AudioProcessorGraph::NodeID nodeId) const { return selection.contains(nodeId); }
+    int getSelectionCount() const { return selection.size(); }
+    std::vector<juce::AudioProcessorGraph::NodeID> getSelectedNodes() const { return selection.getSelected(); }
+
+    /** Removes every selected module as ONE undoable change, so Cmd+Z restores the whole group. */
+    void deleteSelection();
+
+    /** Drops selected ids whose nodes no longer exist. Called after any graph mutation that can
+     *  remove nodes (delete, undo/redo, preset load) — a stale id would otherwise be handed to
+     *  snippet extraction or a group drag. */
+    void pruneSelection();
+
+    // ---- Marquee (rubber-band) selection ----
+    // Points are in CANVAS coordinates (post-transform), so the marquee tracks the content under
+    // the cursor while zoomed or panned.
+    void beginMarquee(juce::Point<int> canvasAnchor, bool additive);
+    void updateMarquee(juce::Point<int> canvasCurrent);
+    void endMarquee();
+    bool isMarqueeActive() const { return marqueeActive; }
+    juce::Rectangle<int> getMarqueeRect() const { return marqueeRect; }
+
+    // ---- Group drag ----
+    // ModuleComponent drives its own drag with a ComponentDragger; when the dragged module is part
+    // of a multi-selection it reports its delta here and every other selected module follows.
+    void beginSelectionDrag();
+    void dragSelectionBy(juce::Point<int> delta, ModuleComponent* initiator);
+    void finalizeSelectionDrag();
+    /** Discards the recorded drag origins without re-resolving any position — for a press that
+     *  never moved (positions loaded from a preset are not necessarily grid-aligned, so a
+     *  finalize on a zero-delta drag would visibly nudge the group). */
+    void cancelSelectionDrag();
+    bool isSelectionDragActive() const { return selectionDragActive; }
+
+    // ---- Snippets (issue #156) ----
+
+    /** Snippet JSON for the current selection, ready to hand to SnippetManager::saveSnippet. */
+    juce::var extractSelectionSnippet(const juce::String& name);
+
+    /** Inserts a snippet at a canvas position as one undoable change, then selects what landed.
+     *  @return true when at least one module was added. */
+    bool insertSnippetAt(const juce::var& snippet, juce::Point<int> canvasPos);
+
+    /** Set by the owner (MainComponent) to prompt for a name and persist the snippet. Invoked
+     *  from the canvas context menu; GraphEditor deliberately owns no file dialogs. */
+    std::function<void()> onSaveSnippetRequested;
+
+    /** Set by the owner to resolve a snippet name (from a library drag payload) to its JSON. */
+    std::function<juce::var(const juce::String&)> snippetProvider;
+
     // Drag-preview (grid + landing ghost shown during a module drag)
     void beginDragPreview(int w, int h, juce::AudioProcessorGraph::NodeID selfId);
     void updateDragPreview(juce::Point<int> desiredTopLeftCanvas);
@@ -130,6 +199,11 @@ public:
     void mouseUp(const juce::MouseEvent& e) override;
     void mouseDoubleClick(const juce::MouseEvent& e) override;
 
+    // Canvas-scoped keys: Delete/Backspace removes the selection, Escape clears it. Deliberately
+    // NOT routed through ShortcutManager — an unmodified Delete binding registered app-wide would
+    // fire from any panel that doesn't consume the key first.
+    bool keyPressed(const juce::KeyPress& key) override;
+
     juce::AudioProcessorGraph::NodeID getAttenuverterNodeAt(juce::Point<float> localPos);
 
 private:
@@ -175,6 +249,37 @@ private:
 
     juce::AudioProcessorGraph::NodeID draggingAttenuverterNodeId;
     float attenDragStartValue = 0.0f;
+
+    // ---- Selection state (issue #156) ----
+    synth::ui::SelectionModel selection;
+
+    // Marquee drag, in canvas coordinates.
+    bool marqueeActive = false;
+    bool marqueeAdditive = false;
+    juce::Point<int> marqueeAnchor;
+    juce::Rectangle<int> marqueeRect;
+    // Selection as it stood when the marquee began — the base an additive marquee unions onto.
+    std::vector<juce::AudioProcessorGraph::NodeID> marqueeBaseSelection;
+
+    // Group drag: each selected module's position when the drag started, so every member can be
+    // placed from its own origin rather than accumulating per-frame deltas (which would drift).
+    bool selectionDragActive = false;
+    std::vector<std::pair<juce::AudioProcessorGraph::NodeID, juce::Point<int>>> selectionDragStartPositions;
+
+    // True while a click on empty canvas has not yet turned into a pan or marquee drag; a mouseUp
+    // in that state is a plain click and clears the selection.
+    bool pendingEmptyCanvasClick = false;
+
+    /** Bounding boxes of every rendered module, for marquee hit-testing and group collision. */
+    std::vector<synth::LayoutUtil::Box> collectModuleBoxes(bool selectedOnly, bool excludeSelected) const;
+
+    /** Footprint of the group a snippet drag payload would drop, for the landing ghost. Falls back
+     *  to a single-module estimate when the payload can't be resolved. */
+    juce::Point<int> estimateSnippetSize(const juce::String& payload) const;
+
+    /** Repaints only the module components whose selected state actually changed. Selection
+     *  changes must never trigger a full-canvas repaint storm during a marquee drag. */
+    void applySelectionChange(const std::vector<juce::AudioProcessorGraph::NodeID>& newSelection);
 
     AppUndoManager* undoManager = nullptr;
     std::vector<AudioEngine::ModulationDisplayInfo> cachedModDisplayInfo;
