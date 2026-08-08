@@ -220,6 +220,7 @@ int roleRank(ModuleType t) {
         return 2;
     case ModuleType::ADSR:
     case ModuleType::LFO:
+    case ModuleType::Math:
     case ModuleType::MacroControl:
     case ModuleType::SampleHold:
         return 3;

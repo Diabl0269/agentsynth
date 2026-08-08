@@ -1,8 +1,10 @@
 #include "../Source/AI/AIStateMapper.h"
 #include "../Source/Modules/MacroControlModule.h"
+#include "../Source/Modules/MathModule.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/SamplerModule.h"
 #include "../Source/Modules/VCAModule.h"
+#include "../Source/Modules/VoiceMixerModule.h"
 #include "../Source/Modules/WavetableOscillatorModule.h"
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/LayoutUtil.h"
@@ -15,6 +17,95 @@
 class ModuleComponentTest : public ::testing::Test {
 protected:
 };
+
+// Every visible jack must sit inside the module's bounds, together with its centred label.
+// Regression guard: the port column used to be reserved from the INPUT count only, so
+// Math (2 in / 5 out) was laid out 140px tall while its 5th output jack sat at y=150 —
+// the jack rendered outside the module and the scope overlapped the ones above it.
+static void expectAllVisiblePortsWithinBounds(ModuleComponent& mc, ModuleBase& mod, const char* what) {
+    const int labelHalfHeight = 10;
+    for (int i = 0; i < mod.getVisibleInputPortCount(); ++i) {
+        auto p = mc.getPortCenter(i, /*isInput*/ true);
+        EXPECT_LE(p.y + labelHalfHeight, mc.getHeight())
+            << what << ": input jack " << i << " overflows the module bottom";
+    }
+    for (int i = 0; i < mod.getVisibleOutputPortCount(); ++i) {
+        auto p = mc.getPortCenter(i, /*isInput*/ false);
+        EXPECT_LE(p.y + labelHalfHeight, mc.getHeight())
+            << what << ": output jack " << i << " overflows the module bottom";
+    }
+}
+
+TEST_F(ModuleComponentTest, OutputHeavyModuleReservesPortColumn) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    MathModule math;
+    ModuleComponent moduleComponent(&math, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    ASSERT_EQ(math.getVisibleOutputPortCount(), 5);
+    ASSERT_GT(math.getVisibleOutputPortCount(), math.getVisibleInputPortCount())
+        << "This test is only meaningful while Math has more outputs than inputs";
+    expectAllVisiblePortsWithinBounds(moduleComponent, math, "Math");
+}
+
+// The reported symptom: with the scope open it was drawn over the lowest output jacks and
+// their labels, because the port column reserved no vertical space for outputs.
+TEST_F(ModuleComponentTest, ScopeDoesNotOverlapPortColumn) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    MathModule math;
+    ModuleComponent moduleComponent(&math, juce::AudioProcessorGraph::NodeID(4), editor);
+
+    juce::ToggleButton* scopeToggle = nullptr;
+    for (int i = 0; i < moduleComponent.getNumChildComponents(); ++i)
+        if (auto* tb = dynamic_cast<juce::ToggleButton*>(moduleComponent.getChildComponent(i)))
+            if (tb->getButtonText() == "Show Scope")
+                scopeToggle = tb;
+    ASSERT_NE(scopeToggle, nullptr) << "Math should expose a Show Scope toggle";
+
+    const int heightBefore = moduleComponent.getHeight();
+    scopeToggle->setToggleState(true, juce::sendNotificationSync);
+    // Guards against this test passing vacuously if the toggle never re-laid the module out.
+    ASSERT_GT(moduleComponent.getHeight(), heightBefore) << "Enabling the scope should grow the module";
+
+    expectAllVisiblePortsWithinBounds(moduleComponent, math, "Math (scope open)");
+
+    // Full-width children (the scope, and freq-response on other modules) span the jack
+    // columns on both edges, so they must not share a row with any jack. Inset controls are
+    // exempt — they sit inside the label margin by design. Checking the jack's whole 20px row
+    // rather than just its centre point matters: the centre lands one pixel outside the
+    // scope's right edge, so a contains() check would silently pass even when overlapping.
+    const int fullWidthThreshold = moduleComponent.getWidth() / 2;
+    for (int i = 0; i < math.getVisibleOutputPortCount(); ++i) {
+        const auto centre = moduleComponent.getPortCenter(i, /*isInput*/ false);
+        const juce::Rectangle<int> jackRow(0, centre.y - 10, moduleComponent.getWidth(), 20);
+        for (int c = 0; c < moduleComponent.getNumChildComponents(); ++c) {
+            auto* child = moduleComponent.getChildComponent(c);
+            if (child == nullptr || !child->isVisible() || child->getWidth() <= fullWidthThreshold)
+                continue;
+            EXPECT_FALSE(child->getBounds().intersects(jackRow))
+                << "Output jack " << i << " row is overlapped by full-width child component " << c;
+        }
+    }
+}
+
+TEST_F(ModuleComponentTest, InputHeavyModuleReservesPortColumn) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+
+    OscillatorModule osc;
+    ModuleComponent oscComponent(&osc, juce::AudioProcessorGraph::NodeID(2), editor);
+    expectAllVisiblePortsWithinBounds(oscComponent, osc, "Oscillator");
+}
+
+TEST_F(ModuleComponentTest, VoiceMixerLastInputJackOverflowsBounds) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+
+    VoiceMixerModule mixer;
+    ModuleComponent mixerComponent(&mixer, juce::AudioProcessorGraph::NodeID(3), editor);
+    expectAllVisiblePortsWithinBounds(mixerComponent, mixer, "Voice Mixer");
+}
 
 namespace {
 // Sets the Macro bank's "Knobs" parameter before the component is built, so createControls()

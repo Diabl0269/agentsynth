@@ -46,7 +46,7 @@ Every concrete module implements `virtual ModuleType getModuleType() const = 0`.
 Oscillator, Filter, VCA, ADSR, LFO, Sequencer, PolySequencer,
 MidiKeyboard, PolyMidi, ExternalMidi, Attenuverter,
 Delay, Distortion, Reverb, Chorus, Phaser, Compressor, Flanger, Limiter,
-ParametricEQ, VoiceMixer, Bitcrusher, PitchShifter, Noise, Sampler, Wavetable,
+ParametricEQ, VoiceMixer, Bitcrusher, PitchShifter, Noise, Math, Sampler, Wavetable,
 MacroControl, SampleHold
 ```
 

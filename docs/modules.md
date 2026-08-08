@@ -121,6 +121,35 @@ Loads an audio file from disk and plays it back one of two ways.
 - **Processing**: Sums all 8 input channels, scales by Level parameter (0–1, default 0.125), then applies `std::tanh` soft saturation for gentle clip protection. Level smoothed over 10 ms to prevent clicks.
 - **Parameter**: `Level` (0.0–1.0, default 0.125).
 
+## Math Module
+- **Source file**: `Source/Modules/MathModule.h`
+- **Purpose**: Dual-input CV/audio math and logic utility, inspired by Make Noise Maths and Mutable Instruments Kinks. All five outputs are computed simultaneously every block — there is no mode selector.
+- **Inputs**: ch0 = **A** (signal or CV), ch1 = **B** (signal or CV).
+- **Outputs**: 5 channels, all computed simultaneously from A and B:
+
+| Channel | Output | Formula |
+|---|---|---|
+| ch0 | Sum | A + B |
+| ch1 | Diff | A - B |
+| ch2 | Min | min(A, B) |
+| ch3 | Max | max(A, B) |
+| ch4 | Mult | A * B |
+
+- **Processing**: Computes Sum/Diff/Min/Max/Mult per-sample from the raw A/B inputs, then applies the `Clip` stage to all five outputs before writing them out.
+- **Parameters**:
+    - `Clip` (choice: `Off` / `Hard` / `Soft`, default **Off**) — applied uniformly to all five outputs.
+        - `Off` — transparent; sums may exceed the nominal [-1, 1] CV range (e.g. two unipolar envelopes sum to 0..2). Intentional default: a math utility shouldn't silently destroy magnitude, and the graph's attenuverters give the user downstream scaling.
+        - `Hard` — `jlimit(-1, 1)`, the Eurorack "clips at the rails" behaviour.
+        - `Soft` — `tanh()` saturation. Also attenuates in-range signals (tanh(1) ~= 0.762) — inherent to saturation, not a bug.
+- **Behaviour notes**:
+    - With nothing patched into **B**, B reads as 0: `Min`/`Max` become negative/positive half-wave rectifiers of A, `Sum` and `Diff` both pass A unchanged (A ± 0), and `Mult` is silent. This is the classic Kinks rectifier trick.
+    - `Min`/`Max` double as analog logic on gate/CV signals — min = AND, max = OR — hence "Math / Logic".
+    - `Mult` is clean four-quadrant multiplication (ring modulation) at audio rate. It is **not oversampled** and **not a diode-ring emulation** — audio-rate multiplication of bright sources will alias.
+    - Integrated visual buffer displays the **Sum** output.
+    - **A**/**B** are signal inputs, not parameter-CV destinations — connections into them are never auto-wrapped in a hidden attenuverter (see [Attenuverter Module](#attenuverter-module-hidden)).
+    - **Bypass**: dry pass-through of A on ch0; ch1-4 (Diff/Min/Max/Mult) cleared. **Mute**: `buffer.clear()` silences all five outputs.
+- **Patch ideas**: Sum two LFOs for a richer composite modulation shape; use Min/Max as analog AND/OR gate logic; leave B unpatched and take Max (or Min) as a half-wave rectifier of A; patch two audio-rate oscillators into A/B and take Mult as clean ring modulation.
+
 ## MIDI Keyboard Module
 - **Purpose**: Provides an interactive on-screen keyboard for MIDI input.
 - **Features**:

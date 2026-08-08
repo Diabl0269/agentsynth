@@ -53,6 +53,7 @@ public:
             {"Macros", false},
             {"Sample & Hold", false},
             {"Voice Mixer", false},
+            {"Math", false},
         };
         // clang-format on
         setMouseCursor(juce::MouseCursor::NormalCursor);
@@ -119,6 +120,8 @@ public:
             return "Latches a source value on each clock edge for stepped random CV.";
         if (moduleName.equalsIgnoreCase("Voice Mixer"))
             return "Sums multiple polyphonic voices down to a stereo mix.";
+        if (moduleName.equalsIgnoreCase("Math"))
+            return "Dual-input math/logic utility - Sum, Difference, Min, Max and Product of A and B.";
         // Generic fallback for any unrecognised module name.
         return "Audio processing module.";
     }

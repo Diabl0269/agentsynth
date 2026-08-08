@@ -48,6 +48,7 @@ enum class ModuleType {
     Bitcrusher,
     PitchShifter,
     Noise,
+    Math,
     Sampler,
     Wavetable,
     MacroControl,

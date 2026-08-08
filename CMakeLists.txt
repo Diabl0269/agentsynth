@@ -64,6 +64,7 @@ add_library(Core STATIC
     Source/Modules/VCAModule.h
     Source/Modules/VoiceMixerModule.h
     Source/Modules/NoiseModule.h
+    Source/Modules/MathModule.h
     Source/Modules/SamplerModule.h
     Source/Modules/WavetableOscillatorModule.h
     Source/Modules/SequencerModule.h

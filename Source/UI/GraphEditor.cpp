@@ -73,6 +73,8 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         return {synth::LayoutUtil::kNarrowWidth, synth::LayoutUtil::kNarrowWidth};
     if (typeName == "Noise")
         return {280, 293};
+    if (typeName == "Math")
+        return {280, 251};
     if (typeName == "Sample & Hold")
         return {280, 563};
     if (typeName == "Macros")
