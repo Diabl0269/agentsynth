@@ -801,7 +801,8 @@ module of the same type instead of adding a copy.
 
 ```cpp
 validatePatch(prepared, graph, /*clearExisting=*/false, /*trusted=*/false);   // strict — reject whole
-applyJSONToGraph(prepared, graph, /*clearExisting=*/false, /*trusted=*/true); // faithful — no rescale
+applyJSONToGraph(prepared, graph, /*clearExisting=*/false, /*trusted=*/true,  // faithful — no rescale
+                 /*autoConnectNewNodes=*/false);                              // exact — no extra wires
 ```
 
 - **Strict validation** because a snippet is a file on disk and can be hand-edited, truncated or
@@ -814,6 +815,18 @@ applyJSONToGraph(prepared, graph, /*clearExisting=*/false, /*trusted=*/true); //
   heuristic would corrupt legitimate small values — an LFO `rateHz` of 0.5 Hz (range 0.01–20) would
   land at roughly 5 Hz. Guarded by
   `SnippetInsert.PreservesParameterValuesThatLookNormalised`.
+- **`autoConnectNewNodes=false`**, and this one is easy to miss. Merge mode otherwise runs a
+  convenience pass that wires every newly created audio node with no outgoing wire straight to
+  Audio Output, and every new MIDI-accepting node to an existing MIDI source. That is right for an
+  AI merge patch (a model that adds an Oscillator means it to be audible) and **wrong** for a
+  snippet, where the absent wires are as deliberate as the present ones — without the opt-out,
+  dropping a snippet into the patch it came from splices the copy's leaf modules into the live
+  output. Guarded by `SnippetInsert.DoesNotSpliceTheInsertedGroupIntoTheSurroundingPatch` and
+  `…DoesNotAttachInsertedModulesToAnExistingMidiSource`; the AI-side behaviour it preserves is
+  locked by `AIStateMapperTest.MergeAutoConnectsNewAudioNodesToOutputByDefault`.
+
+A snippet is therefore **exactly** its internal wiring: what you selected, nothing the surrounding
+patch happened to be connected to, and nothing added for convenience on the way back in.
 
 #### Wiring
 

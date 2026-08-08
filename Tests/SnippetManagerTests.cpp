@@ -423,6 +423,79 @@ TEST(SnippetInsert, InsertingTwiceProducesTwoIndependentCopies) {
             EXPECT_NE(a, b);
 }
 
+TEST(SnippetInsert, DoesNotSpliceTheInsertedGroupIntoTheSurroundingPatch) {
+    // REGRESSION: applyJSONToGraph's merge mode auto-connects new audio nodes with no outgoing wire
+    // to Audio Output (a convenience for AI-authored patches). Snippet insertion must opt out —
+    // otherwise dropping a snippet into the patch it came from wires the copy's leaf modules
+    // straight into the live output, which is audible and completely unexpected.
+    juce::AudioProcessorGraph graph;
+    // Configure play settings BEFORE adding the IO node — the Audio Output node's input channel
+    // count derives from the graph's output channel count, and connections into an unconfigured
+    // output node fail silently.
+    graph.setPlayConfigDetails(0, 2, 44100.0, 512);
+    auto out = graph.addNode(std::make_unique<juce::AudioProcessorGraph::AudioGraphIOProcessor>(
+        juce::AudioProcessorGraph::AudioGraphIOProcessor::audioOutputNode));
+    auto osc = addAt(graph, std::make_unique<OscillatorModule>(), 0, 0);
+    auto filter = addAt(graph, std::make_unique<FilterModule>(), 300, 0);
+    ASSERT_TRUE(graph.addConnection({{osc->nodeID, 0}, {filter->nodeID, 0}}));
+    ASSERT_TRUE(graph.addConnection({{filter->nodeID, 0}, {out->nodeID, 0}}));
+
+    // Select the Osc -> Filter chain; its wire to Audio Output is outside the selection.
+    auto snippet = SnippetManager::extractSnippet(graph, {osc->nodeID, filter->nodeID}, "Chain");
+    ASSERT_EQ(arrayOf(snippet, "connections")->size(), 1) << "only the internal wire is captured";
+
+    std::set<juce::uint32> before;
+    for (auto* node : graph.getNodes())
+        before.insert(node->nodeID.uid);
+
+    auto added = SnippetManager::insertSnippet(snippet, graph, {900, 400});
+    ASSERT_EQ(added.size(), 2u);
+
+    std::set<juce::AudioProcessorGraph::NodeID> newNodes(added.begin(), added.end());
+
+    // No wire may cross between the inserted group and anything that was already there.
+    for (const auto& conn : graph.getConnections()) {
+        const bool srcIsNew = newNodes.count(conn.source.nodeID) > 0;
+        const bool dstIsNew = newNodes.count(conn.destination.nodeID) > 0;
+        EXPECT_EQ(srcIsNew, dstIsNew) << "connection " << conn.source.nodeID.uid << " -> "
+                                      << conn.destination.nodeID.uid << " crosses the snippet boundary";
+    }
+
+    // Specifically: nothing new is attached to the existing Audio Output.
+    for (const auto& conn : graph.getConnections())
+        EXPECT_FALSE(conn.destination.nodeID == out->nodeID && newNodes.count(conn.source.nodeID) > 0)
+            << "an inserted module was auto-connected to the patch's Audio Output";
+
+    // The original chain is untouched.
+    int originalToOutput = 0;
+    for (const auto& conn : graph.getConnections())
+        if (conn.source.nodeID == filter->nodeID && conn.destination.nodeID == out->nodeID)
+            ++originalToOutput;
+    EXPECT_EQ(originalToOutput, 1);
+}
+
+TEST(SnippetInsert, DoesNotAttachInsertedModulesToAnExistingMidiSource) {
+    // Same opt-out, MIDI half: merge mode also wires new MIDI-accepting nodes to an existing MIDI
+    // source. An inserted Oscillator must not start responding to the patch's keyboard.
+    juce::AudioProcessorGraph graph;
+    graph.setPlayConfigDetails(0, 2, 44100.0, 512);
+    auto midiIn = graph.addNode(std::make_unique<juce::AudioProcessorGraph::AudioGraphIOProcessor>(
+        juce::AudioProcessorGraph::AudioGraphIOProcessor::midiInputNode));
+    auto existingOsc = addAt(graph, std::make_unique<OscillatorModule>(), 0, 0);
+    ASSERT_TRUE(graph.addConnection({{midiIn->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                                     {existingOsc->nodeID, juce::AudioProcessorGraph::midiChannelIndex}}));
+
+    auto source = addAt(graph, std::make_unique<OscillatorModule>(), 600, 0);
+    auto snippet = SnippetManager::extractSnippet(graph, {source->nodeID}, "LoneOsc");
+
+    auto added = SnippetManager::insertSnippet(snippet, graph, {900, 400});
+    ASSERT_EQ(added.size(), 1u);
+
+    for (const auto& conn : graph.getConnections())
+        EXPECT_FALSE(conn.destination.nodeID == added[0])
+            << "the inserted oscillator was auto-wired to the patch's MIDI source";
+}
+
 TEST(SnippetInsert, RejectsAnEmptySnippet) {
     juce::AudioProcessorGraph source;
     auto snippet = SnippetManager::extractSnippet(source, {}, "Empty");

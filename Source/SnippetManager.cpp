@@ -319,7 +319,13 @@ SnippetManager::insertSnippet(const juce::var& snippet, juce::AudioProcessorGrap
     for (auto* node : graph.getNodes())
         before.insert(node->nodeID.uid);
 
-    if (!AIStateMapper::applyJSONToGraph(prepared, graph, /*clearExisting=*/false, /*trusted=*/true))
+    // autoConnectNewNodes=false is essential, not incidental. Merge mode otherwise wires every new
+    // audio node with no outgoing wire straight to Audio Output (and every MIDI-accepting node to an
+    // existing MIDI source) as a convenience for AI-authored patches. A snippet is an exact
+    // sub-graph: the wires it does NOT have are as deliberate as the ones it does, and those
+    // convenience connections would splice the inserted group into the surrounding patch.
+    if (!AIStateMapper::applyJSONToGraph(prepared, graph, /*clearExisting=*/false, /*trusted=*/true,
+                                         /*autoConnectNewNodes=*/false))
         return {};
 
     // Diff rather than trusting the requested ids: merge-mode apply assigns its own ids.

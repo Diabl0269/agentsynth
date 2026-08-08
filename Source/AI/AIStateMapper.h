@@ -95,10 +95,19 @@ public:
      * replaying prior graph state). Anything that could originate off-device (an AI provider,
      * local or remote) must go through the default strict path.
      *
+     * @param autoConnectNewNodes  Merge mode only (ignored when clearExisting is true). When true,
+     *        newly created audio nodes with no outgoing audio wire are connected to Audio Output,
+     *        and new MIDI-accepting nodes are connected to an existing MIDI source. That is an
+     *        affordance for AI-authored merge patches — a model that adds an Oscillator mid-patch
+     *        means for it to be audible. Pass false whenever the caller is reproducing an EXACT
+     *        sub-graph and the absence of a wire is meaningful (snippet insertion): the
+     *        convenience wires would otherwise splice the inserted group into the surrounding
+     *        patch. See SnippetManager::insertSnippet.
+     *
      * @return true if the patch was applied successfully.
      */
     static bool applyJSONToGraph(const juce::var& json, juce::AudioProcessorGraph& graph, bool clearExisting = true,
-                                 bool trusted = false);
+                                 bool trusted = false, bool autoConnectNewNodes = true);
 
     /**
      * @brief Validates a patch JSON without applying it, returning a reason on failure.
