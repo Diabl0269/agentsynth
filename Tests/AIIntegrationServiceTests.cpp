@@ -45,9 +45,14 @@ public:
     juce::String getCurrentModel() const override { return currentModel; }
     juce::String getProviderName() const override { return "MockProvider"; }
 
+    // Overrides the AIProvider default no-op so tests can observe what
+    // AIIntegrationService::setAuthToken()/setProvider() forwarded.
+    void setAuthToken(const juce::String& token) override { lastAuthToken = token; }
+
     juce::String mockResponse = "{\"nodes\": [], \"connections\": []}";
     bool shouldFail = false;
     juce::String currentModel;
+    juce::String lastAuthToken;
     std::vector<Message> lastConversation;
 };
 
@@ -202,6 +207,35 @@ TEST_F(AIIntegrationServiceTest, ModelManagement) {
     EXPECT_EQ(service->getCurrentModel(), "test-model");
 }
 
+// setAuthToken() with a provider already installed forwards straight through to it.
+TEST_F(AIIntegrationServiceTest, SetAuthTokenForwardsToInstalledProvider) {
+    auto provider = std::make_unique<MockAIProvider>();
+    auto* rawProvider = provider.get();
+    service->setProvider(std::move(provider));
+
+    service->setAuthToken("token-abc");
+
+    EXPECT_EQ(rawProvider->lastAuthToken, "token-abc");
+}
+
+// REGRESSION LOCK: mirrors AIChatComponentTest.RefreshModelsSelectsModelWhenProviderInstalled-
+// AfterConstruction's ordering — AccountService::onAccessTokenChanged can fire (and call
+// AIIntegrationService::setAuthToken()) before MainComponent::initialiseCommon() installs the
+// real provider. The token must not be lost: setProvider() has to re-push whatever was set
+// earlier onto the provider it installs.
+TEST_F(AIIntegrationServiceTest, SetAuthTokenBeforeProviderInstalledIsRePushedBySetProvider) {
+    // No provider installed yet — setAuthToken() must still record the value.
+    service->setAuthToken("token-xyz");
+
+    auto provider = std::make_unique<MockAIProvider>();
+    auto* rawProvider = provider.get();
+    EXPECT_TRUE(rawProvider->lastAuthToken.isEmpty());
+
+    service->setProvider(std::move(provider));
+
+    EXPECT_EQ(rawProvider->lastAuthToken, "token-xyz");
+}
+
 TEST_F(AIIntegrationServiceTest, ApplyPatch_MergeMode_PreservesExisting) {
     // Add an existing node to the graph
     graph->addNode(std::make_unique<OscillatorModule>());
@@ -232,7 +266,12 @@ TEST_F(AIIntegrationServiceTest, ReplaceModeNotReachingOutputIsRejectedStructura
     bool success = service->applyPatch(R"({"nodes":[{"id":1,"type":"Audio Output"}],"connections":[]})");
 
     EXPECT_FALSE(success);
-    EXPECT_EQ(service->getLastPatchError(), "Audio Output is not reachable from any Oscillator or Noise module");
+    // Prefix match, not the exact string: the tail enumerates every module type that counts
+    // as a signal source, so it changes whenever one is added. That already broke this
+    // assertion once (#165 added Noise, fixed in #164) and again when Wavetable was added.
+    // The prefix is the stable part and still pins the failure mode.
+    EXPECT_TRUE(service->getLastPatchError().startsWith("Audio Output is not reachable from any"))
+        << "actual: " << service->getLastPatchError().toStdString();
 }
 
 TEST_F(AIIntegrationServiceTest, StructuralRejectionFiresNoListenerCallbacks) {
@@ -285,7 +324,12 @@ TEST_F(AIIntegrationServiceTest, MergeRegressionGate_RejectsADeltaThatBreaksAWor
                                        /*mergeMode=*/true);
 
     EXPECT_FALSE(success);
-    EXPECT_EQ(service->getLastPatchError(), "Audio Output is not reachable from any Oscillator or Noise module");
+    // Prefix match, not the exact string: the tail enumerates every module type that counts
+    // as a signal source, so it changes whenever one is added. That already broke this
+    // assertion once (#165 added Noise, fixed in #164) and again when Wavetable was added.
+    // The prefix is the stable part and still pins the failure mode.
+    EXPECT_TRUE(service->getLastPatchError().startsWith("Audio Output is not reachable from any"))
+        << "actual: " << service->getLastPatchError().toStdString();
     EXPECT_EQ(graph->getNumNodes(), 2) << "a structurally rejected merge must not touch the live graph";
 }
 

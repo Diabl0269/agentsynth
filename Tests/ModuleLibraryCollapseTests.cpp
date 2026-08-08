@@ -373,6 +373,23 @@ TEST(ModuleLibrarySnippets, CollapsingTheSnippetsSectionHidesItsRows) {
     EXPECT_EQ(comp.getEntry(first).kind, RowKind::Module);
 }
 
+TEST(ModuleLibrarySnippets, DraggableModuleNamesExcludeSnippetsAndThePlaceholder) {
+    // getDraggableModuleNames() feeds callers that instantiate each name via the module factory
+    // (see ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents). Snippet rows and the
+    // "No snippets yet" placeholder are draggable-or-visible but are NOT module types, so filtering
+    // on "not a header" would hand those callers a name with no factory entry.
+    ModuleLibraryComponent comp;
+
+    auto namesWithNoSnippets = comp.getDraggableModuleNames();
+    EXPECT_FALSE(namesWithNoSnippets.contains("No snippets yet"));
+    EXPECT_TRUE(namesWithNoSnippets.contains("Oscillator"));
+
+    comp.setSnippets(makeSnippets({"My Supersaw Lead"}));
+    auto namesWithSnippets = comp.getDraggableModuleNames();
+    EXPECT_FALSE(namesWithSnippets.contains("My Supersaw Lead"));
+    EXPECT_EQ(namesWithSnippets, namesWithNoSnippets) << "the module list must not move with the snippet list";
+}
+
 TEST(ModuleLibrarySnippets, SnippetTooltipNamesTheGroupAndItsSize) {
     auto tip = ModuleLibraryComponent::snippetDescription("Lead", 4);
     EXPECT_TRUE(tip.contains("Lead"));

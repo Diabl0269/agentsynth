@@ -37,6 +37,9 @@ public:
     static constexpr const char* kSnippetsHeader = "Snippets";
 
     ModuleLibraryComponent() {
+        // The flat entry list is rebuilt rather than assigned literally, because it now has to be
+        // regenerated whenever the snippet list changes. The module catalogue itself lives in
+        // rebuildEntries() — add new modules there.
         rebuildEntries();
         setMouseCursor(juce::MouseCursor::NormalCursor);
     }
@@ -143,8 +146,12 @@ public:
     static juce::String descriptionFor(const juce::String& moduleName) {
         if (moduleName.equalsIgnoreCase("Oscillator"))
             return "Generates audio waveforms (sine, saw, square, triangle).";
+        if (moduleName.equalsIgnoreCase("Wavetable"))
+            return "Scans through 3D wavetables — six built-ins or load your own file.";
         if (moduleName.equalsIgnoreCase("Noise"))
             return "Generates noise (white, pink, brown).";
+        if (moduleName.equalsIgnoreCase("Sampler"))
+            return "Plays an audio file back as a sample or scatters it into grains.";
         if (moduleName.equalsIgnoreCase("LFO"))
             return "Low-frequency oscillator for slow cyclic modulation.";
         if (moduleName.equalsIgnoreCase("Sequencer"))
@@ -163,6 +170,8 @@ public:
             return "Voltage-controlled amplifier — controls signal amplitude via CV.";
         if (moduleName.equalsIgnoreCase("Filter"))
             return "Multi-mode resonant filter (low-pass, high-pass, band-pass).";
+        if (moduleName.equalsIgnoreCase("Parametric EQ"))
+            return "Four-band EQ with a visual response curve for surgical tone shaping.";
         if (moduleName.equalsIgnoreCase("Chorus"))
             return "Adds lush width by layering slightly detuned copies of the signal.";
         if (moduleName.equalsIgnoreCase("Phaser"))
@@ -173,6 +182,8 @@ public:
             return "Waveshaping distortion from soft saturation to hard clipping.";
         if (moduleName.equalsIgnoreCase("Bitcrusher"))
             return "For Lo-Fi, sample-rate reduction, and retro digital grit.";
+        if (moduleName.equalsIgnoreCase("Pitch Shifter"))
+            return "Transposes by semitones or shifts every partial by a fixed number of Hz.";
         if (moduleName.equalsIgnoreCase("Delay"))
             return "Tempo-syncable stereo echo / delay line.";
         if (moduleName.equalsIgnoreCase("Reverb"))
@@ -181,8 +192,14 @@ public:
             return "Dynamic range compressor with threshold, ratio, attack and release.";
         if (moduleName.equalsIgnoreCase("Limiter"))
             return "Brickwall limiter that prevents the signal from exceeding 0 dBFS.";
+        if (moduleName.equalsIgnoreCase("Macros"))
+            return "Bank of assignable macro knobs — one knob drives many parameters at once.";
+        if (moduleName.equalsIgnoreCase("Sample & Hold"))
+            return "Latches a source value on each clock edge for stepped random CV.";
         if (moduleName.equalsIgnoreCase("Voice Mixer"))
             return "Sums multiple polyphonic voices down to a stereo mix.";
+        if (moduleName.equalsIgnoreCase("Math"))
+            return "Dual-input math/logic utility - Sum, Difference, Min, Max and Product of A and B.";
         // Generic fallback for any unrecognised module name.
         return "Audio processing module.";
     }
@@ -433,6 +450,20 @@ public:
     // Test / inspection helpers
     // -------------------------------------------------------------------------
 
+    /** Every draggable (non-header) entry, in display order — exactly the strings this component puts
+     *  in the drag payload. Tests use this so a module added here is automatically covered instead of
+     *  needing a parallel hand-kept list. */
+    /** Names of the module TYPES the library offers — i.e. every row that maps to a factory entry.
+     *  Filtered on RowKind::Module rather than "not a header": the sidebar also carries snippet rows
+     *  and the "No snippets yet" placeholder, and neither is a module type callers can instantiate. */
+    juce::StringArray getDraggableModuleNames() const {
+        juce::StringArray names;
+        for (const auto& entry : entries)
+            if (entry.kind == RowKind::Module)
+                names.add(entry.text);
+        return names;
+    }
+
     /** Returns the currently hovered entry index, or -1 when nothing is hovered. */
     int getHoveredIndex() const noexcept { return hoveredIndex; }
 
@@ -547,16 +578,56 @@ private:
             const char* header;
             std::vector<const char*> modules;
         };
+        // One module per line: this list is the library's visible order, and letting it pack into a
+        // grid turns inserting a module into a whole-block reflow instead of a one-line diff.
+        // clang-format off
         static const std::vector<Category> catalogue = {
-            {"Sources", {"Oscillator", "Noise", "LFO"}},
-            {"Sequencing", {"Sequencer", "Poly Sequencer", "MidiKeyboard", "Poly MIDI", "External MIDI"}},
-            {"Envelopes & Control", {"ADSR", "VCA"}},
-            {"Filters", {"Filter"}},
-            {"Modulation FX", {"Chorus", "Phaser", "Flanger", "Distortion", "Bitcrusher"}},
-            {"Time FX", {"Delay", "Reverb"}},
-            {"Dynamics", {"Compressor", "Limiter"}},
-            {"Utility", {"Voice Mixer"}},
+            {"Sources", {
+                "Oscillator",
+                "Wavetable",
+                "Noise",
+                "Sampler",
+                "LFO",
+            }},
+            {"Sequencing", {
+                "Sequencer",
+                "Poly Sequencer",
+                "MidiKeyboard",
+                "Poly MIDI",
+                "External MIDI",
+            }},
+            {"Envelopes & Control", {
+                "ADSR",
+                "VCA",
+            }},
+            {"Filters", {
+                "Filter",
+                "Parametric EQ",
+            }},
+            {"Modulation FX", {
+                "Chorus",
+                "Phaser",
+                "Flanger",
+                "Distortion",
+                "Bitcrusher",
+                "Pitch Shifter",
+            }},
+            {"Time FX", {
+                "Delay",
+                "Reverb",
+            }},
+            {"Dynamics", {
+                "Compressor",
+                "Limiter",
+            }},
+            {"Utility", {
+                "Macros",
+                "Sample & Hold",
+                "Voice Mixer",
+                "Math",
+            }},
         };
+        // clang-format on
 
         for (const auto& category : catalogue) {
             addHeader(category.header);

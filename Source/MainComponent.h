@@ -2,6 +2,7 @@
 
 #include "AI/AIIntegrationService.h"
 #include "AI/AIProviderRegistry.h"
+#include "AI/AccountService.h"
 #include "AppUndoManager.h"
 #include "AudioEngine.h"
 #include "PresetManager.h"
@@ -177,6 +178,11 @@ private:
     std::unique_ptr<juce::FileChooser> fileChooser;
 
     synth::AIIntegrationService aiService;
+    // Declared BEFORE aiChatComponent: members are destroyed in reverse declaration order, so
+    // aiChatComponent (which installs AccountService::onStateChanged/onAccessTokenChanged in
+    // setAccountService(), see its header comment) is torn down first, while accountService is
+    // still alive to have those callback slots cleared.
+    synth::AccountService accountService;
     synth::AIChatComponent aiChatComponent;
     bool isAiPanelVisible = false;
     bool isLibraryVisible{true};

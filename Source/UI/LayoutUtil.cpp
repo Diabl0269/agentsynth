@@ -17,6 +17,9 @@ ModuleWidthBucket getModuleWidthBucket(ModuleType t) {
     case ModuleType::Sequencer:
     case ModuleType::PolySequencer:
     case ModuleType::MidiKeyboard:
+    // Parametric EQ needs the extra width for a readable response curve plus four band rows of
+    // On / Freq / Gain / Q laid out side by side.
+    case ModuleType::ParametricEQ:
         return ModuleWidthBucket::Double;
     case ModuleType::Attenuverter:
         return ModuleWidthBucket::Narrow;
@@ -119,6 +122,69 @@ juce::Point<int> findFreeSlot(juce::Point<int> desired, int w, int h, const std:
 }
 
 //==============================================================================
+// resolveOverlapsAfterResize
+//==============================================================================
+std::vector<ArrangeResult> resolveOverlapsAfterResize(NodeID resizedId, const std::vector<Box>& boxes, int gap) {
+    std::vector<Box> working = boxes;
+
+    // Deterministic sweep order: top-to-bottom, then left-to-right, then id. Without a fixed
+    // order the same growth could displace a different neighbour run-to-run.
+    std::vector<size_t> order;
+    order.reserve(working.size());
+    for (size_t i = 0; i < working.size(); ++i)
+        if (working[i].id != resizedId)
+            order.push_back(i);
+
+    std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+        const auto& ra = working[a].rect;
+        const auto& rb = working[b].rect;
+        if (ra.getY() != rb.getY())
+            return ra.getY() < rb.getY();
+        if (ra.getX() != rb.getX())
+            return ra.getX() < rb.getX();
+        return working[a].id.uid < working[b].id.uid;
+    });
+
+    for (int round = 0; round < kResolveMaxRounds; ++round) {
+        bool movedAny = false;
+
+        for (size_t idx : order) {
+            auto& box = working[idx];
+            if (!intersectsAny(box.rect, working, box.id, gap))
+                continue;
+
+            // Push straight down past the lowest thing it collides with, then let findFreeSlot
+            // settle it on-grid and clear of everything else.
+            int pushedY = box.rect.getY();
+            auto inflated = box.rect.expanded(gap);
+            for (const auto& other : working) {
+                if (other.id == box.id)
+                    continue;
+                if (inflated.intersects(other.rect))
+                    pushedY = std::max(pushedY, other.rect.getBottom() + gap);
+            }
+
+            auto placed = findFreeSlot({box.rect.getX(), pushedY}, box.rect.getWidth(), box.rect.getHeight(), working,
+                                       box.id, gap);
+            if (placed != box.rect.getPosition()) {
+                box.rect.setPosition(placed);
+                movedAny = true;
+            }
+        }
+
+        if (!movedAny)
+            break;
+    }
+
+    std::vector<ArrangeResult> moved;
+    for (size_t i = 0; i < working.size(); ++i)
+        if (working[i].rect.getPosition() != boxes[i].rect.getPosition())
+            moved.push_back({working[i].id, working[i].rect.getPosition()});
+
+    return moved;
+}
+
+//==============================================================================
 // computeAutoArrange
 //==============================================================================
 namespace {
@@ -133,8 +199,11 @@ int roleRank(ModuleType t) {
     case ModuleType::PolyMidi:
     case ModuleType::ExternalMidi:
     case ModuleType::Noise:
+    case ModuleType::Sampler:
+    case ModuleType::Wavetable:
         return 0;
     case ModuleType::Filter:
+    case ModuleType::ParametricEQ:
     case ModuleType::VCA:
     case ModuleType::VoiceMixer:
         return 1;
@@ -146,9 +215,14 @@ int roleRank(ModuleType t) {
     case ModuleType::Compressor:
     case ModuleType::Flanger:
     case ModuleType::Limiter:
+    case ModuleType::Bitcrusher:
+    case ModuleType::PitchShifter:
         return 2;
     case ModuleType::ADSR:
     case ModuleType::LFO:
+    case ModuleType::Math:
+    case ModuleType::MacroControl:
+    case ModuleType::SampleHold:
         return 3;
     default:
         return 4;
