@@ -194,6 +194,14 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     juce::Logger::setCurrentLogger(this);
 #endif
 
+    // addChildComponent (NOT addAndMakeVisible): AccountRow starts invisible and stays that way
+    // until setAccountService() attaches a real AccountService — addAndMakeVisible would force
+    // it visible here and immediately override that default. Visibility from then on is
+    // controlled entirely by AccountRow's own internal state, not by this component hiding it,
+    // so it plays correctly with AIChatComponent's own top-level setVisible() calls from
+    // MainComponent.
+    addChildComponent(accountRow);
+
     addAndMakeVisible(viewport);
     viewport.setScrollBarsShown(true, false);
     viewport.setViewedComponent(&messageList);
@@ -271,12 +279,44 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
 }
 
 AIChatComponent::~AIChatComponent() {
+    // Clear the two callback slots this component installed in setAccountService(), so a later
+    // publishSnapshot()/setAccessTokenFromWorker() call on a still-alive AccountService (e.g.
+    // MainComponent destroys accountService after aiChatComponent) can't copy a callback that
+    // captures this half-destroyed object. Belt and braces alongside the SafePointer guard
+    // inside those lambdas, which is what actually makes a call arriving mid/after teardown safe.
+    if (accountServicePtr != nullptr) {
+        accountServicePtr->onStateChanged = nullptr;
+        accountServicePtr->onAccessTokenChanged = nullptr;
+    }
+
     stopTimer();
     // Stop any running pulse animation before members are destroyed.
     spinnerDot.stopPulse(vblankUpdater);
 #ifndef NDEBUG
     juce::Logger::setCurrentLogger(nullptr);
 #endif
+}
+
+void AIChatComponent::setAccountService(AccountService* service) {
+    accountServicePtr = service;
+    accountRow.setAccountService(service);
+
+    if (service == nullptr)
+        return;
+
+    // SafePointer guard: AccountService::publishSnapshot()/setAccessTokenFromWorker() copy the
+    // std::function out before dispatching it via MessageManager::callAsync(), so clearing these
+    // members in ~AIChatComponent() alone cannot stop a call already queued at teardown time —
+    // this is what actually makes such a call safe.
+    juce::Component::SafePointer<AIChatComponent> safeThis(this);
+    service->onStateChanged = [safeThis] {
+        if (auto* self = safeThis.getComponent())
+            self->accountRow.refresh();
+    };
+    service->onAccessTokenChanged = [safeThis](juce::String token) {
+        if (auto* self = safeThis.getComponent())
+            self->aiService.setAuthToken(token);
+    };
 }
 
 void AIChatComponent::timerCallback() {
@@ -337,7 +377,12 @@ void AIChatComponent::resized() {
     auto topArea = b.removeFromTop(40);
     newChatButton.setBounds(topArea.removeFromLeft(100));
 
-    auto bottomArea = b.removeFromBottom(70); // Increased height for both rows
+    // Account row: reserved directly above the model-picker row, inside the bottom chrome.
+    // Zero height (and invisible) when no AccountService is attached, so every panel/test that
+    // never calls setAccountService() sees byte-identical layout to before this feature.
+    const int accountRowHeight = accountRow.getPreferredHeight();
+    const int accountRowGap = accountRowHeight > 0 ? 5 : 0;
+    auto bottomArea = b.removeFromBottom(70 + accountRowHeight + accountRowGap); // Increased height for both rows
 
     // Bottom row: Input + Send (+ Cancel when waiting + spinner dot)
     auto inputRow = bottomArea.removeFromBottom(40);
@@ -364,6 +409,11 @@ void AIChatComponent::resized() {
 #ifndef NDEBUG
     toggleDebugButton.setBounds(modelRow.removeFromRight(60));
 #endif
+
+    if (accountRowHeight > 0) {
+        bottomArea.removeFromBottom(accountRowGap);
+        accountRow.setBounds(bottomArea.removeFromBottom(accountRowHeight));
+    }
 
     b.removeFromBottom(10);
 

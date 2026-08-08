@@ -100,6 +100,15 @@ add_library(Core STATIC
     Source/AI/AIProviderRegistry.cpp
     Source/AI/PatchEval.h
     Source/AI/PatchEval.cpp
+    Source/AI/AuthClient.h
+    Source/AI/AuthClient.cpp
+    Source/AI/AccountService.h
+    Source/AI/AccountService.cpp
+    # Auth (device-code sign-in: token storage, no UI)
+    Source/Auth/TokenStore.h
+    Source/Auth/InMemoryTokenStore.h
+    Source/Auth/KeychainTokenStore.h
+    Source/Auth/KeychainTokenStore.cpp
     # UI utilities
     Source/UI/LayoutUtil.h
     Source/UI/LayoutUtil.cpp
@@ -157,6 +166,12 @@ endif()
 if(NOT WIN32)
     find_package(CURL REQUIRED)
     target_link_libraries(Core PUBLIC CURL::libcurl)
+endif()
+
+# KeychainTokenStore (Source/Auth/KeychainTokenStore.cpp) needs Security.framework's SecItem* C
+# API on macOS; every other platform delegates to an in-memory fallback and needs nothing linked.
+if(APPLE)
+    target_link_libraries(Core PUBLIC "-framework Security")
 endif()
 
 target_include_directories(Core PUBLIC
@@ -258,6 +273,10 @@ target_sources(AgentSynth PRIVATE
     Source/MainComponent.h
     # UI (UI depends on Core, but technically could be in App for now)
     Source/UI/AIChatComponent.cpp
+    Source/UI/AccountRow.cpp
+    Source/UI/AccountRow.h
+    Source/UI/SignInDialog.cpp
+    Source/UI/SignInDialog.h
     Source/UI/GraphEditor.cpp
     Source/UI/GraphEditor.h
     Source/UI/ModuleComponent.cpp

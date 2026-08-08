@@ -36,6 +36,9 @@ add_executable(Tests
     AIProviderRegistryTests.cpp
     OllamaProviderTests.cpp
     RemoteProviderTests.cpp
+    AuthClientTests.cpp
+    AccountServiceTests.cpp
+    KeychainTokenStoreTests.cpp
     MainComponentTests.cpp
     GraphEditorTests.cpp
     ModuleComponentTests.cpp
@@ -85,6 +88,8 @@ add_executable(Tests
     ../Source/UI/GraphEditor.cpp
     ../Source/UI/ModMatrixComponent.cpp
     ../Source/UI/AIChatComponent.cpp
+    ../Source/UI/AccountRow.cpp
+    ../Source/UI/SignInDialog.cpp
     ../Source/UI/ModuleComponent.cpp
     ../Source/UI/SettingsWindow.cpp
     ../Source/UI/AppearanceSettingsTab.cpp
