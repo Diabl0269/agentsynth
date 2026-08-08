@@ -42,3 +42,5 @@ build-app/
 build-harness/
 build-release/
 build-test/
+# Catch-all for ad hoc out-of-tree build dirs (build-verify/, build-<branch>/, …)
+build-*/

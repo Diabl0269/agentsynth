@@ -806,7 +806,7 @@ void AIStateMapper::applyExtraStateToProcessor(juce::AudioProcessor* processor, 
 }
 
 bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessorGraph& graph, bool clearExisting,
-                                     bool trusted) {
+                                     bool trusted, bool autoConnectNewNodes) {
     if (!json.isObject()) {
         juce::Logger::writeToLog("applyJSONToGraph: JSON is not an object.");
         return false;
@@ -1096,8 +1096,14 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
         }
     }
 
-    // 4. Auto-connect: in merge mode, connect new unconnected audio nodes to Audio Output
-    if (!clearExisting && !newlyCreatedNodes.empty()) {
+    // 4. Auto-connect: in merge mode, connect new unconnected audio nodes to Audio Output.
+    //
+    // This is a convenience for AI-authored merge patches — a model that adds an Oscillator to an
+    // existing patch means for it to be heard. It is WRONG for any caller reproducing an exact
+    // sub-graph, where a missing wire is deliberate: snippet insertion opts out via
+    // autoConnectNewNodes=false, otherwise every leaf module in the inserted group would be spliced
+    // into the surrounding patch's output (and its MIDI source).
+    if (autoConnectNewNodes && !clearExisting && !newlyCreatedNodes.empty()) {
         // Find the Audio Output node
         juce::AudioProcessorGraph::Node* audioOutputNode = nullptr;
         for (auto* node : graph.getNodes()) {

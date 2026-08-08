@@ -54,6 +54,8 @@ add_library(Core STATIC
     Source/Branding.h
     Source/PresetManager.cpp
     Source/PresetManager.h
+    Source/SnippetManager.cpp
+    Source/SnippetManager.h
     Source/SettingsMigration.cpp
     Source/SettingsMigration.h
     # Modules
@@ -112,6 +114,7 @@ add_library(Core STATIC
     # UI utilities
     Source/UI/LayoutUtil.h
     Source/UI/LayoutUtil.cpp
+    Source/UI/SelectionModel.h
     Source/UI/StatusBarComponent.h
     Source/UI/StatusBarComponent.cpp
     Source/UI/ToolbarComponent.h
