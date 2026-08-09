@@ -101,6 +101,13 @@ All audio modules in Agent Synth inherit from `ModuleBase`, which in turn extend
     *   `isMuted()` → **silence**: call `buffer.clear()` then return.
     *   Never combine the two into a single `if (isBypassed() || isMuted()) buffer.clear()` — that mutes on bypass instead of passing the signal through.
     *   **Exception — modules with no dry audio path** *do* clear their output on bypass, using two separate branches. This covers **pure sources** with no audio input (e.g. `OscillatorModule`, `PolyMidiModule`) and **audio-in / CV-out taps** with no audio output (e.g. `EnvelopeFollowerModule`), where a dry pass-through would send audio-rate samples into a CV destination.
+*   **Every new audio-output module MUST have a level control.** If your module writes audio to its output channels and does not already define its own `level`/`gain` parameter, opt into the shared stage:
+    *   `addOutputLevelParameter()` as the **last** `addParameter()` call in the ctor (before `addMuteParameter()`),
+    *   `prepareOutputLevel(sampleRate)` in `prepareToPlay`,
+    *   `applyOutputLevel(buffer, numAudioChannels)` as the last statement of the normal `processBlock` path — after both early returns, never inside them.
+
+    `ModuleAdoptionTests.EveryAudioOutputModuleHasALevelControl` enforces this: a new audio module without one fails the build's test run until you either adopt the stage or add the module to the documented exclusion list. Skip it **only** if your module outputs pitch/gate CV or MIDI — scaling a V/oct pitch CV detunes it and scaling a gate drops it under the `> 0.5f` trigger threshold. Rules and rationale: [`fx_modules.md § Output Level`](fx_modules.md#output-level-shared-stage).
+*   **Look parameters up by ID, not index.** Use `findParameterByID(processor, "paramID")`; `getParameters()[n]` silently repoints whenever a parameter is added ahead of it.
 
 ## 3. Parameter Management and Modular Routing
 

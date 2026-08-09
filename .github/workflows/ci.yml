@@ -53,13 +53,18 @@ env:
   # Linux-ccache-* entry was ever produced — verifiable via
   # `gh api repos/:owner/:repo/actions/caches`. Pinning CCACHE_DIR explicitly removes the guess.
   CCACHE_DIR: ${{ github.workspace }}/.ccache
-  # `true` on pull requests: a warm cache must already exist (seeded by the push run on main), so
-  # a miss is a real failure. `false` on push: that IS the seeding run, a miss is expected.
-  CACHE_WARM_EXPECTED: ${{ github.event_name == 'pull_request' }}
+  # `true` only when a warm cache must already exist, so that a miss is a real failure:
+  #   - pull_request from a branch in THIS repo — restores the cache seeded by the push run on main
+  #   - push to main                            — that IS the seeding run, a miss is expected
+  #   - pull_request from a FORK                — forks are given a separate, isolated cache scope
+  #     and cannot read the base repository's entries at all, so a miss is guaranteed and is not a
+  #     defect. Without this term, enabling CI_CACHE_CHECK_ENFORCE would fail every outside
+  #     contribution on its first run, for a reason the contributor could do nothing about.
+  CACHE_WARM_EXPECTED: ${{ github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork }}
   # Set the repository variable CI_CACHE_CHECK_ENFORCE to 'true' to make a cold cache fail the
-  # build. Left off by default so the first PRs after this change land before main has seeded its
-  # caches don't fail on a miss that is genuinely expected. Flip it once one merge to main has
-  # completed — Settings > Secrets and variables > Actions > Variables.
+  # build (it is currently 'true'). Kept behind a variable so enforcement can be switched off
+  # without a code change if a runner-image or actions/cache change starts producing false alarms —
+  # Settings > Secrets and variables > Actions > Variables.
   CACHE_CHECK_ENFORCE: ${{ vars.CI_CACHE_CHECK_ENFORCE || 'false' }}
 
 jobs:

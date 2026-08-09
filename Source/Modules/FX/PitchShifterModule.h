@@ -37,6 +37,7 @@ public:
                          new juce::AudioParameterFloat("window", "Window (ms)", kMinWindowMs, kMaxWindowMs, 50.0f));
         addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", 0.0f, kMaxFeedback, 0.0f));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 1.0f));
+        addOutputLevelParameter();
         addMuteParameter();
         enableVisualBuffer(true);
     }
@@ -63,6 +64,7 @@ public:
         smoothedWindow.setCurrentAndTargetValue(*windowParam);
         smoothedFeedback.setCurrentAndTargetValue(*feedbackParam);
         smoothedMix.setCurrentAndTargetValue(*mixParam);
+        prepareOutputLevel(currentSampleRate);
 
         phase = 0.0f;
         oscPhase = 0.0f;
@@ -208,6 +210,10 @@ public:
             if (++writePos >= delayLength)
                 writePos = 0;
         }
+
+        // Output stage, outside the feedback write above — lowering Level does not starve the
+        // shifted tail. Applied before the scope push so the visualiser shows the real output.
+        applyOutputLevel(buffer, 2);
 
         if (auto* vb = getVisualBuffer()) {
             for (int i = 0; i < numSamples; ++i)

@@ -113,11 +113,24 @@ run "broken: neither cache restored — the Aug 2026 state" 1 "::error::" \
     CACHE_WARM_EXPECTED=true \
     CCACHE_STATS_FILE="$WORK/stats-cold.txt"
 
-# --- seeding run: a miss here is expected, not a failure ----------------------------------
-run "seeding run: cold cache is not a failure" 0 "::notice::Cache miss on a cache-seeding run" \
+# --- runs that legitimately start cold: a miss is expected, not a failure ------------------
+# Two cases share this path, both driven by CACHE_WARM_EXPECTED=false from ci.yml: the
+# push-to-main seeding run, and a pull request from a fork (GitHub gives forks an isolated cache
+# scope with no read access to the base repository's entries, so a miss is guaranteed and is not
+# something the contributor can fix).
+run "seeding run: cold cache is not a failure" 0 \
+    "::notice::Cache miss on a run not expected to have a warm cache" \
     CACHE_MATCHED_KEY= \
     DEPS_MATCHED_KEY= \
     CACHE_WARM_EXPECTED=false \
+    CCACHE_STATS_FILE="$WORK/stats-cold.txt"
+
+run "fork PR: cold cache is not a failure even with enforcement on" 0 \
+    "::notice::Cache miss on a run not expected to have a warm cache" \
+    CACHE_MATCHED_KEY= \
+    DEPS_MATCHED_KEY= \
+    CACHE_WARM_EXPECTED=false \
+    CACHE_CHECK_ENFORCE=true \
     CCACHE_STATS_FILE="$WORK/stats-cold.txt"
 
 # --- enforcement toggle -------------------------------------------------------------------
@@ -183,7 +196,9 @@ contradiction_out="$(env -u CACHE_MATCHED_KEY -u DEPS_MATCHED_KEY -u CACHE_WARM_
     CACHE_MATCHED_KEY= DEPS_MATCHED_KEY= CACHE_WARM_EXPECTED=true CACHE_CHECK_ENFORCE=true \
     CCACHE_STATS_FILE="$WORK/stats-perfect.txt" \
     GITHUB_STEP_SUMMARY="$WORK/summary.md" bash "$CHECK" 2>&1)"
-if printf '%s' "$contradiction_out" | grep -qF "cache-seeding run"; then
+# Must match the live notice text in ci-cache-check.sh — if this string drifts out of sync the
+# assertion silently passes for the wrong reason, which is exactly the failure mode being guarded.
+if printf '%s' "$contradiction_out" | grep -qF "not expected to have a warm cache"; then
     printf 'FAIL  fail-safe: does not misreport the contradiction as a seeding run\n%s\n' \
         "$(defang "$contradiction_out")"
     fail=$((fail + 1))

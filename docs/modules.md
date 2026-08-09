@@ -2,6 +2,8 @@
 
 Detailed specifications for Agent Synth's primary synthesis modules.
 
+> **Level parameters.** There is no universal per-module gain. Modules that output audio expose a level control: Oscillator, LFO, Noise and Voice Mixer have their own `level`; VCA has `gain`; Filter and the FX modules use the shared opt-in output-level stage documented in [`fx_modules.md § Output Level`](fx_modules.md#output-level-shared-stage). Modules that output **pitch/gate CV or MIDI** (Sequencer, Poly Sequencer, ADSR, Poly MIDI, MIDI Keyboard, External MIDI) deliberately have none — scaling a V/oct pitch CV transposes it, and scaling a gate drops it below the `> 0.5f` trigger threshold. Attenuverter has none because it already is a gain stage.
+
 ## Oscillator Module
 - **Waveforms**: Sine, Square, Saw, Triangle.
 - **Features**: 
@@ -87,7 +89,7 @@ Loads an audio file from disk and plays it back one of two ways.
 ## Filter Module
 - **Types**: 7 filter types — `LPF24`, `LPF12`, `HPF24`, `HPF12`, `BPF24`, `BPF12`, `Notch`.
 - **Implementation**: `LPF24/12`, `HPF24/12`, `BPF24/12` use `juce::dsp::LadderFilter`; `Notch` uses `juce::dsp::StateVariableTPTFilter` (notch computed as input minus bandpass).
-- **Parameters**: Cutoff (20–20000 Hz), Resonance (0–1), Drive (1–10), Filter Type (choice), Poly (bool).
+- **Parameters**: Cutoff (20–20000 Hz), Resonance (0–1), Drive (1–10), Filter Type (choice), Poly (bool), Level (0–1, default 1.0 — the shared output-level stage; see [`fx_modules.md § Output Level`](fx_modules.md#output-level-shared-stage)). Level scales ch0 in mono mode and all 8 voice channels in poly mode, never the CV inputs.
 - **CV inputs (mono mode)**: Cutoff = ch1, Resonance = ch2, Drive = ch3.
 - **CV inputs (poly mode)**: Cutoff = ch8, Resonance = ch9, Drive = ch10.
 - **Poly mode**: 8 per-voice audio inputs (ch0-7) + 3 shared CV inputs (ch8-10). Shared CV is computed once per block and applied to all active voices.

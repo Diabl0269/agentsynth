@@ -11,6 +11,7 @@ public:
         addParameter(depthParam = new juce::AudioParameterFloat("depth", "Bit Depth", 1.0f, 24.0f, 24.0f));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 1.0f));
         addParameter(ditherParam = new juce::AudioParameterFloat("dither", "Dither", 0.0f, 1.0f, 0.0f));
+        addOutputLevelParameter();
         addMuteParameter();
         enableVisualBuffer(true);
     }
@@ -33,6 +34,8 @@ public:
         phase = 0.0f;
         lastSample[0] = 0.0f;
         lastSample[1] = 0.0f;
+
+        prepareOutputLevel(currentSampleRate);
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -115,6 +118,9 @@ public:
             outL[i] = dryBuffer.getSample(0, i) * (1.0f - currentMix) + lastSample[0] * currentMix;
             outR[i] = dryBuffer.getSample(1, i) * (1.0f - currentMix) + lastSample[1] * currentMix;
         }
+
+        // Applied before the scope push so the visualiser shows the actual module output.
+        applyOutputLevel(buffer, 2);
 
         if (auto* vb = getVisualBuffer()) {
             for (int i = 0; i < numSamples; ++i) {

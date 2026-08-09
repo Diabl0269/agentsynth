@@ -13,6 +13,7 @@ public:
                          new juce::AudioParameterFloat("centreDelay", "Centre Delay (ms)", 1.0f, 5.0f, 2.0f));
         addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", -1.0f, 1.0f, 0.5f));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 0.5f));
+        addOutputLevelParameter();
         addMuteParameter();
     }
 
@@ -28,6 +29,7 @@ public:
         smoothedDepth.reset(sampleRate, 0.005);
         smoothedRate.setCurrentAndTargetValue(*rateParam);
         smoothedDepth.setCurrentAndTargetValue(*depthParam);
+        prepareOutputLevel(sampleRate);
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -85,6 +87,8 @@ public:
         juce::dsp::AudioBlock<float> audioBlock = fullBlock.getSubsetChannelBlock(0, 2);
         juce::dsp::ProcessContextReplacing<float> context(audioBlock);
         flanger.process(context);
+
+        applyOutputLevel(buffer, 2);
 
         // Clear CV channels to prevent leaking to downstream modules
         for (int ch = 2; ch < buffer.getNumChannels(); ++ch)

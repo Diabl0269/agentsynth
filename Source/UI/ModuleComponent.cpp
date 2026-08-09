@@ -423,7 +423,7 @@ void ModuleComponent::createControls() {
             // selectedId 1 -> param 0 (All)
             // selectedId 2 -> param 1 (Channel 1)
             // selectedId 17 -> param 16 (Channel 16)
-            auto* param = dynamic_cast<juce::AudioParameterInt*>(extMidi->getParameters()[1]);
+            auto* param = dynamic_cast<juce::AudioParameterInt*>(findParameterByID(extMidi, "channel"));
             if (param != nullptr) {
                 // If ID is 1, we set 0 (All).
                 // If ID is 2, we set 1 (Ch1).
