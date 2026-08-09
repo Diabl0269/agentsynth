@@ -689,9 +689,25 @@ moves past a visible amount (see `needsRepaint`), leaving the parent's cached im
 
 Wavetable frame view used by the `Wavetable` module card. Draws the frame currently under the scan position as a solid trace, with `kGhostFrames` (3) receding low-alpha traces sampled slightly further along the stack so the scan direction and the table's depth read as three-dimensional. Captioned with the table name and `frame/total`.
 
-**Repaints are gated** — the 15 Hz timer compares a change signature (quantised scan position, table name, frame count) and calls `repaint()` only when it differs. This is required by §10: the display is always visible inside a `setBufferedToImage(true)` module card, so an unconditional per-tick repaint would invalidate that cache 15 times a second.
+The trace is drawn **warped** — `getDisplayWaveformAt()` runs the same `readWarped()` the audio path does. A Warp knob whose effect is invisible is a knob users do not trust.
 
-Alongside it, `ModuleComponent` adds a **"Load Wavetable..."** `TextButton` for `Wavetable` modules. It opens an async `juce::FileChooser`, and on success calls `loadWavetableFile()` and switches the module's `table` choice to `Loaded File`. The completion lambda holds a `Component::SafePointer` and re-derives the module via `dynamic_cast`, since the card can be destroyed while the dialog is open.
+**Repaints are gated** — the 15 Hz timer compares a change signature (quantised scan position, table name, frame count, and `getWarpSignature()` — warp mode + quantised amount + interpolation mode) and calls `repaint()` only when it differs. This is required by §10: the display is always visible inside a `setBufferedToImage(true)` module card, so an unconditional per-tick repaint would invalidate that cache 15 times a second.
+
+#### Wavetable card chrome
+
+`ModuleComponent` builds the following for `Wavetable` modules:
+
+- **"Load Wavetable..."** `TextButton` — opens an async `juce::FileChooser` (starting in the module's browser folder), and on success calls `loadWavetableFile()` and switches the module's `table` choice to `Loaded File`.
+- **Folder browser row** — `[Folder...] [<] [>] [caption]`. `Folder...` opens an async directory chooser and calls `setWavetableFolder()`; `<` / `>` step the folder cursor; the caption shows the loaded file name and `index/total`.
+
+Both completion lambdas hold a `Component::SafePointer` and re-derive the module via `dynamic_cast`, since the card can be destroyed while the dialog is open. The card also implements `FileDragAndDropTarget` for audio files, routing drops through the same import path as the Load button.
+
+The card is **double-width** (issue #180): 15 knobs, 8 combos and a 16-jack port stack. Two branches of `layoutDefaultContent` key off `width >= kDoubleWidth`:
+
+- **Knob grid** doubles to 6 columns, so knobs keep their standard cell width instead of stretching.
+- **Combos** pair up two per row instead of stacking one per row.
+
+The display / load / browser chrome sits **beside** the port stack, starting just under the header and inset by the 88 px port-label gutter on each side — the same reclaim the Parametric EQ card makes for its response curve (see §9). The body still starts below the last jack. That reclaim takes ~130 px off a card that would otherwise clear 1000 px tall; the result is **560×869**, pinned by `EstimatedModuleSizesMatchTheRealComponents`.
 
 **Public static helper** (headless-testable):
 
