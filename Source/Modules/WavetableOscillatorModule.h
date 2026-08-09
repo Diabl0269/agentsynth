@@ -1033,9 +1033,12 @@ private:
         const int sourceFrames = std::max(1, available);
         const int numFrames = std::min(kMaxFrames, sourceFrames);
 
-        // A power-of-two frame can be analysed at its own size; anything else (pitch-detected
-        // periods, a whole-file single cycle) is resampled to kFrameSize first.
-        const bool analyseNative = available >= 1 && isPowerOfTwo(frameLen) && frameLen >= 64;
+        // A power-of-two frame that fits the analysis buffer can be analysed at its own size;
+        // anything else (an odd pitch-detected period, a whole-file single cycle, or a frame
+        // longer than kFrameSize) is resampled into kFrameSize first. The upper bound is load
+        // bearing: `cycle` is exactly kFrameSize long, so copying a longer frame into it
+        // verbatim would run off the end.
+        const bool analyseNative = available >= 1 && isPowerOfTwo(frameLen) && frameLen >= 64 && frameLen <= kFrameSize;
         const int analysisLen = analyseNative ? frameLen : kFrameSize;
 
         TableBuilder builder;
@@ -1117,7 +1120,12 @@ private:
             if (denom <= 1.0e-12)
                 continue;
             const double score = corr / denom;
-            if (score > bestScore) {
+
+            // The margin is what stops the classic octave error: a periodic signal correlates
+            // just as well at 2x and 3x its period, and without it floating-point noise decides
+            // which multiple wins. Requiring a clearly better score keeps the SHORTEST lag,
+            // which is the actual period.
+            if (score > bestScore + 1.0e-3) {
                 bestScore = score;
                 bestLag = lag;
             }
@@ -1321,6 +1329,45 @@ private:
 
     static float asymBreakpoint(float amount) { return 0.5f - juce::jlimit(0.0f, 1.0f, amount) * 0.4f; }
 
+    /** Largest warp amount whose sped-up table read still lands below Nyquist.
+
+        Mip selection band-limits the HARMONICS of a read, but a mode like Sync also multiplies
+        the read's own fundamental — at 8x, a 4 kHz note reads at 33 kHz, which no mip can
+        rescue. Backing the amount off at extreme pitches keeps the anti-aliasing guarantee
+        instead of trading it for a knob that goes all the way up. At musical pitches the clamp
+        never binds: an 8x Sync only starts costing amount above about 1.8 kHz.
+
+        The bound is the BASE Nyquist, deliberately not the oversampled one. The oversampling
+        headroom exists for the harmonics a warp's discontinuity throws off, and those get
+        filtered away on the way back down; the sped-up read's own fundamental has to stay
+        audible after that filter. Spending the headroom here instead would let Sync push the
+        slave past 22 kHz, where the decimator removes it and the knob just fades to silence. */
+    static float clampWarpAmount(Warp mode, float amount, float dt) {
+        if (!(dt > 0.0f))
+            return amount;
+
+        const float maxRate = 0.45f / dt;
+        const auto limitFor = [&](float perUnit) { return juce::jlimit(0.0f, amount, (maxRate - 1.0f) / perUnit); };
+
+        switch (mode) {
+        case Warp::Sync:
+            return limitFor(7.0f);
+        case Warp::Formant:
+            return limitFor(3.0f);
+        case Warp::BendPlus:
+        case Warp::BendMinus:
+        case Warp::Mirror:
+            return limitFor(1.0f);
+        case Warp::Asym: {
+            // rate = 0.5 / (0.5 - 0.4a), so a = (0.5 - 0.5/rate) / 0.4
+            const float maxA = (maxRate > 1.0f) ? ((0.5f - 0.5f / maxRate) / 0.4f) : 0.0f;
+            return juce::jlimit(0.0f, amount, maxA);
+        }
+        default:
+            return amount;
+        }
+    }
+
     static float wrapPhase(float p) { return p - std::floor(p); }
 
     /** Maps the running phase through the mode's phase distortion. `master` is the
@@ -1459,12 +1506,16 @@ private:
         panGains(pan, gainL, gainR);
     }
 
-    /** Equal-power pan law: -1 hard left, 0 centre (both legs at 1/sqrt2), +1 hard right. */
+    /** Balance pan law: centre leaves BOTH legs at unity, and panning attenuates only the leg
+        you are moving away from. -1 is hard left, +1 hard right.
+
+        Deliberately not equal-power. An equal-power centre sits at 1/sqrt2, which would have
+        quietened every existing mono patch by 3 dB the moment this module grew a second output
+        jack — Audio L has to keep carrying exactly what it carried in #172. */
     static void panGains(float pan, float& gainL, float& gainR) {
         const float p = juce::jlimit(-1.0f, 1.0f, pan);
-        const float angle = (p + 1.0f) * 0.25f * juce::MathConstants<float>::pi;
-        gainL = std::cos(angle);
-        gainR = std::sin(angle);
+        gainL = juce::jlimit(0.0f, 1.0f, 1.0f - p);
+        gainR = juce::jlimit(0.0f, 1.0f, 1.0f + p);
     }
 
     static bool isChannelActive(const juce::AudioBuffer<float>& buffer, int ch, int numSamples) {
@@ -1515,11 +1566,18 @@ private:
 
         // Worst-case warp rate over the block, so the mip is chosen for the fastest read the
         // warp will ever perform rather than for its value at sample 0.
-        const float warpRate = warpRateFactor(bs.warp, blockPeakWarpAmount);
+        const float blockDt = juce::jlimit(20.0f, 20000.0f, mipFreq) * invSampleRate;
+        const float warpRate = warpRateFactor(bs.warp, clampWarpAmount(bs.warp, blockPeakWarpAmount, blockDt));
+
+        // Dividing by the oversample factor targets the OVERSAMPLED Nyquist: those extra
+        // harmonics are representable while we render at kOversample x, and the decimator
+        // takes them back out on the way down. Band-limiting to the base Nyquist here instead
+        // would collapse a hard-synced table to a sine before the warp ever saw it.
+        const float mipRateScale = warpRate / (float)oversample;
 
         int uniMip[MAX_UNISON];
         for (int u = 0; u < bs.unisonCount; ++u)
-            uniMip[u] = selectMip(juce::jlimit(20.0f, 20000.0f, mipFreq) * bs.uniRatio[u] * warpRate * invSampleRate);
+            uniMip[u] = selectMip(blockDt * bs.uniRatio[u] * mipRateScale);
 
         const auto& subTable = *builtInTables()[0];
         const float subPosFrames = bs.subPosition * (float)(subTable.numFrames - 1);
@@ -1546,7 +1604,8 @@ private:
             const float position = juce::jlimit(0.0f, 1.0f, positionRamp[(size_t)idx] + cvAt(kJackPosition, idx));
             const float posFrames = position * lastFrame;
             const float level = juce::jlimit(0.0f, 1.0f, levelRamp[(size_t)idx] + cvAt(kJackLevel, idx));
-            const float warpAmount = juce::jlimit(0.0f, 1.0f, warpRamp[(size_t)idx] + cvAt(kJackWarp, idx));
+            const float warpAmount =
+                clampWarpAmount(bs.warp, juce::jlimit(0.0f, 1.0f, warpRamp[(size_t)idx] + cvAt(kJackWarp, idx)), dt);
             const float subLevel = juce::jlimit(0.0f, 1.0f, subRamp[(size_t)idx] + cvAt(kJackSub, idx));
 
             float panL, panR;
@@ -1566,7 +1625,7 @@ private:
 
                 for (int u = 0; u < bs.unisonCount; ++u) {
                     const float uniDt = dt * bs.uniRatio[u] * subStep;
-                    const int mip = bs.pitchModulated ? selectMip(dt * bs.uniRatio[u] * warpRate) : uniMip[u];
+                    const int mip = bs.pitchModulated ? selectMip(dt * bs.uniRatio[u] * mipRateScale) : uniMip[u];
 
                     const float v = readWarped(wt, mip, posFrames, voice.masterPhase[u], bs.warp, warpAmount, hermite);
                     subL += v * bs.uniGainL[u];
@@ -1685,9 +1744,9 @@ private:
             gainSum += voiceGain;
         }
 
-        // Centre-panned unison sums to 1/sqrt2 per leg, so fold that back out to keep the
-        // module's level identical to the mono build at width 0.
-        bs.uniNormalise = (gainSum > 0.0f) ? (juce::MathConstants<float>::sqrt2 / gainSum) : 1.0f;
+        // At width 0 / blend 1 every unison voice contributes unity to both legs, so this
+        // reduces to the 1/unisonCount average #172 used — Audio L keeps its old level.
+        bs.uniNormalise = (gainSum > 0.0f) ? (1.0f / gainSum) : 1.0f;
         return bs;
     }
 
