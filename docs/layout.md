@@ -1024,9 +1024,29 @@ Every section header is now a disclosure toggle, plus a **COLLAPSE ALL / EXPAND 
   `onCollapseStateChanged` deliberately does *not* fire from it — that is the restore path, and
   re-notifying would write back what was just read.
 
-**Known limitation:** the sidebar still has no `juce::Viewport`, so with every section expanded the
-content can exceed the panel height and the overflow is clipped rather than scrollable. Collapsing is
-the mitigation for now; adding a viewport is a separate change.
+### Scrolling
+
+With every section expanded the rows exceed any realistic panel height, so the sidebar scrolls.
+
+- **No `juce::Viewport`.** The library is a single painted component: rows come from one
+  `buildRows()` pass, and it is also the tooltip client and the drag source. A viewport would split
+  all three across an outer wrapper and an inner content component — and, because
+  `findParentDragContainerFor()` walks to the *nearest* container ancestor, an inner component would
+  bind drags to the sidebar instead of `MainComponent`, breaking drops onto the canvas. Instead a
+  `juce::ScrollBar` drives a `scrollOffset` that `paint()` and hit-testing both apply.
+- **The COLLAPSE ALL strip stays pinned** in the top `kTopStripHeight` px — the one control that
+  shortens an overflowing list must never scroll out of reach. `paint()` therefore clips the rows to
+  below the strip and `setOrigin(0, -scrollOffset)`s them, then draws the strip last over its own
+  background fill.
+- **Two coordinate spaces.** `buildRows()`, `getRowCentreY()` and `getEntryIndexAt()` are all
+  *content*-space; mouse handlers go through `getEntryIndexAtComponentY()`, which rejects the pinned
+  strip and then adds `scrollOffset`. Mixing them up is the failure mode this split exists to
+  prevent — guarded by `ModuleLibraryScroll.HitTestingFollowsTheScrollOffset`.
+- **`updateScrollBar()` runs after anything that changes content height** — resize, collapse,
+  snippet refresh, theme change (the bar's width is the `kScrollbarWidth` token). It shows/hides the
+  bar and re-clamps the offset, so a shrinking list can never leave the view scrolled past its end.
+- **Rows lose the bar's width** (`getRowContentWidth()`) while it is visible, so row text and the
+  snippet count never run under the thumb.
 
 ---
 
