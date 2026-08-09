@@ -97,9 +97,15 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y cmake ninja-build libasound2-dev libx11-dev libxinerama-dev libxext-dev libxcomposite-dev libxcursor-dev libxrandr-dev libxrender-dev libfontconfig1-dev libfreetype6-dev libglu1-mesa-dev libcurl4-openssl-dev libgtk-3-dev libjack-jackd2-dev freeglut3-dev pkg-config llvm clang ccache xvfb
 
-    - name: Cache FetchContent Dependencies
+    # NOTE: restore + save are split deliberately. The combined `actions/cache` action declares
+    # exactly ONE output, `cache-hit` (true only on an exact primary-key match); only
+    # `actions/cache/restore` exposes `cache-matched-key`, which is the one signal that reports
+    # whether a restore-key fallback matched. The health check below needs that, and reading it
+    # off the combined action silently yields an empty string — which made the check report MISS
+    # on a run that had in fact restored at a 100% ccache hit rate.
+    - name: Restore FetchContent Dependencies
       id: deps-cache
-      uses: actions/cache@v5
+      uses: actions/cache/restore@v5
       with:
         path: build/_deps
         # Keyed on the dependency pins ALONE (cmake/DependencyVersions.cmake), not on
@@ -112,9 +118,9 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-deps3-
 
-    - name: Cache ccache
+    - name: Restore ccache
       id: ccache-cache
-      uses: actions/cache@v5
+      uses: actions/cache/restore@v5
       with:
         path: ${{ env.CCACHE_DIR }}
         # Exact key is per-commit (never hits) — the restore-keys are what actually match:
@@ -159,6 +165,23 @@ jobs:
         CACHE_MATCHED_KEY: ${{ steps.ccache-cache.outputs.cache-matched-key }}
         DEPS_MATCHED_KEY: ${{ steps.deps-cache.outputs.cache-matched-key }}
       run: bash scripts/ci-cache-check.sh
+
+    # Saved right after the build, `if: always()`, so a compile that succeeded is never thrown
+    # away because a later test failed. `_deps` is skipped on an exact hit — re-uploading an
+    # identical ~350 MB entry only burns budget.
+    - name: Save FetchContent Dependencies
+      if: always() && steps.deps-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: build/_deps
+        key: ${{ steps.deps-cache.outputs.cache-primary-key }}
+
+    - name: Save ccache
+      if: always()
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ steps.ccache-cache.outputs.cache-primary-key }}
 
     - name: Run Tests
       timeout-minutes: 10
@@ -232,9 +255,10 @@ jobs:
     - name: Install Dependencies
       run: brew install cmake ninja ccache
 
-    - name: Cache FetchContent Dependencies
+    # See the build-and-test job for why restore and save are split.
+    - name: Restore FetchContent Dependencies
       id: deps-cache
-      uses: actions/cache@v5
+      uses: actions/cache/restore@v5
       with:
         path: build/_deps
         # See the build-and-test job for why this keys on the pins file alone.
@@ -242,9 +266,9 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-deps3-
 
-    - name: Cache ccache
+    - name: Restore ccache
       id: ccache-cache
-      uses: actions/cache@v5
+      uses: actions/cache/restore@v5
       with:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ runner.os }}-ccache-${{ github.ref_name }}-${{ github.sha }}
@@ -279,6 +303,20 @@ jobs:
         DEPS_MATCHED_KEY: ${{ steps.deps-cache.outputs.cache-matched-key }}
       run: bash scripts/ci-cache-check.sh
 
+    - name: Save FetchContent Dependencies
+      if: always() && steps.deps-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: build/_deps
+        key: ${{ steps.deps-cache.outputs.cache-primary-key }}
+
+    - name: Save ccache
+      if: always()
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ steps.ccache-cache.outputs.cache-primary-key }}
+
     - name: Run Tests
       working-directory: ./build/Tests
       run: ./Tests
@@ -296,9 +334,10 @@ jobs:
     steps:
     - uses: actions/checkout@v6
 
-    - name: Cache FetchContent Dependencies
+    # See the build-and-test job for why restore and save are split.
+    - name: Restore FetchContent Dependencies
       id: deps-cache
-      uses: actions/cache@v5
+      uses: actions/cache/restore@v5
       with:
         path: build/_deps
         # See the build-and-test job for why this keys on the pins file alone.
@@ -306,9 +345,9 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-deps3-
 
-    - name: Cache ccache
+    - name: Restore ccache
       id: ccache-cache
-      uses: actions/cache@v5
+      uses: actions/cache/restore@v5
       with:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ runner.os }}-ccache-${{ github.ref_name }}-${{ github.sha }}
@@ -349,6 +388,20 @@ jobs:
         CACHE_MATCHED_KEY: ${{ steps.ccache-cache.outputs.cache-matched-key }}
         DEPS_MATCHED_KEY: ${{ steps.deps-cache.outputs.cache-matched-key }}
       run: bash scripts/ci-cache-check.sh
+
+    - name: Save FetchContent Dependencies
+      if: always() && steps.deps-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: build/_deps
+        key: ${{ steps.deps-cache.outputs.cache-primary-key }}
+
+    - name: Save ccache
+      if: always()
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ steps.ccache-cache.outputs.cache-primary-key }}
 
     - name: Run Tests
       shell: bash

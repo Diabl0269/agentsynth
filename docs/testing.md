@@ -381,14 +381,18 @@ Two caches carry work between runs. Both are easy to break in ways that look exa
 
 #### The cache health check
 
-`scripts/ci-cache-check.sh` runs after the build on Linux, macOS, and Windows. It reads each `actions/cache` step's `cache-matched-key` output plus `ccache --show-stats`, writes a summary table to the job summary, and:
+`scripts/ci-cache-check.sh` runs after the build on Linux, macOS, and Windows. It reads each cache step's `cache-matched-key` output plus `ccache --show-stats`, writes a summary table to the job summary, and:
 
 - **fails** when a cache that should have restored did not (PR runs only — a miss on the `main` seeding run is expected and reported as a notice);
 - **warns** when the ccache hit rate is under `CACHE_MIN_HIT_RATE` (default 25%), which drops legitimately whenever a PR touches a widely-included header.
 
 Enforcement is off by default. Set the repository variable **`CI_CACHE_CHECK_ENFORCE=true`** (Settings → Secrets and variables → Actions → Variables) to make a cold cache fail the build; leave it unset to report only. It ships off so that PRs opened before `main` has seeded its caches don't fail on a miss that is genuinely expected — turn it on once one merge to `main` has completed.
 
-The script has its own tests (`scripts/tests/ci-cache-check.test.sh`, run by the Lint job): if the thing that detects a broken cache breaks silently, we are back to shipping cold builds unnoticed.
+**4. Cache steps use `actions/cache/restore` + `actions/cache/save`, not the combined `actions/cache`.** The combined action declares exactly one output, `cache-hit`, which is true only on an *exact* primary-key match — and the ccache primary key embeds `github.sha`, so it never matches exactly even when a restore-key fallback works perfectly. Only `actions/cache/restore` exposes **`cache-matched-key`**, the one value that reports a fallback hit. Reading it off the combined action yields an empty string forever: run `31301691346` restored every cache and compiled at a **100% ccache hit rate** while the check reported `MISS` on all three platforms. Enforcement would have failed every build. The split also lets the save step run `if: always()`, so a successful compile is not discarded because a later test failed.
+
+Because of that near-miss the check **fails safe**: an empty `cache-matched-key` contradicted by a high ccache hit rate (≥ `CACHE_SELFCHECK_HIT_RATE`, default 50%) is reported as *a misconfigured check*, not a cold cache, and does not fail the build — a cold build cannot hit 100%, since its only hits are files compiled into two targets in the same run (~15%). A genuinely cold cache still fails.
+
+The script has its own tests (`scripts/tests/ci-cache-check.test.sh`, 14 cases, run by the Lint job): if the thing that detects a broken cache breaks silently, we are back to shipping cold builds unnoticed. Those tests scrub every input variable before each case — `ci.yml` exports `CACHE_CHECK_ENFORCE` and `CACHE_WARM_EXPECTED` workflow-wide, the Lint job inherits them, and a non-hermetic harness silently inherited CI's values and passed cases it should have failed.
 
 To inspect cache state directly:
 
