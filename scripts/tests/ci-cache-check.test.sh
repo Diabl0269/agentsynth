@@ -154,6 +154,51 @@ run "no ccache statistics at all warns" 0 "::warning::No ccache statistics avail
     CACHE_WARM_EXPECTED=true \
     CCACHE_STATS_FILE="$WORK/stats-empty.txt"
 
+# --- fail-safe cross-validation ------------------------------------------------------------
+# Regression cases for the mis-wired-inputs bug: run 31301691346 restored every cache and hit
+# 100%, yet the check reported MISS on all three platforms, because the workflow read
+# cache-matched-key off the combined actions/cache action (which only declares cache-hit) instead
+# of actions/cache/restore. Enforcing on that would have failed every build, so an empty matched
+# key contradicted by a high hit rate must warn about the check — never fail the build.
+cat >"$WORK/stats-perfect.txt" <<'EOF'
+Cacheable calls:   268 / 268 (100.0%)
+  Hits:            268 / 268 (100.0%)
+    Direct:        268 / 268 (100.0%)
+    Preprocessed:    0 / 268 (0.00%)
+  Misses:            0 / 268 (0.00%)
+EOF
+
+run "fail-safe: empty matched keys + 100% hit rate does not fail" 0 \
+    "::warning::Cache reported as not restored, yet ccache hit 100%" \
+    CACHE_MATCHED_KEY= \
+    DEPS_MATCHED_KEY= \
+    CACHE_WARM_EXPECTED=true \
+    CACHE_CHECK_ENFORCE=true \
+    CCACHE_STATS_FILE="$WORK/stats-perfect.txt"
+
+# Negative assertion: the contradiction must not be relabelled as the (benign) seeding-run case,
+# which would hide a mis-wired check behind a reassuring notice.
+contradiction_out="$(env -u CACHE_MATCHED_KEY -u DEPS_MATCHED_KEY -u CACHE_WARM_EXPECTED \
+    -u CACHE_MIN_HIT_RATE -u CACHE_CHECK_ENFORCE -u CCACHE_STATS_FILE \
+    CACHE_MATCHED_KEY= DEPS_MATCHED_KEY= CACHE_WARM_EXPECTED=true CACHE_CHECK_ENFORCE=true \
+    CCACHE_STATS_FILE="$WORK/stats-perfect.txt" \
+    GITHUB_STEP_SUMMARY="$WORK/summary.md" bash "$CHECK" 2>&1)"
+if printf '%s' "$contradiction_out" | grep -qF "cache-seeding run"; then
+    printf 'FAIL  fail-safe: does not misreport the contradiction as a seeding run\n%s\n' \
+        "$(defang "$contradiction_out")"
+    fail=$((fail + 1))
+else
+    printf 'ok    fail-safe: does not misreport the contradiction as a seeding run\n'
+    pass=$((pass + 1))
+fi
+
+run "fail-safe: a genuinely cold cache (15%) still fails" 1 "::error::" \
+    CACHE_MATCHED_KEY= \
+    DEPS_MATCHED_KEY= \
+    CACHE_WARM_EXPECTED=true \
+    CACHE_CHECK_ENFORCE=true \
+    CCACHE_STATS_FILE="$WORK/stats-cold.txt"
+
 # --- job summary is written ---------------------------------------------------------------
 if grep -q "Build cache health" "$WORK/summary.md"; then
     printf 'ok    writes a GitHub job summary\n'

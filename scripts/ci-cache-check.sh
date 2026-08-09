@@ -110,7 +110,33 @@ printf 'ccache cache      : %s\n' "$ccache_state"
 printf 'ccache hit rate   : %s%% (%s hits / %s compiles)\n' "$hit_rate" "$hits" "$total"
 
 # --- verdict ------------------------------------------------------------------------------
-if [ "$CACHE_WARM_EXPECTED" = "true" ]; then
+# Cross-validation, so this script fails SAFE. An empty matched-key alongside a high ccache hit
+# rate is self-contradictory: a genuinely cold build cannot hit ~100%, because on a cold cache the
+# only hits are the handful of files compiled into two targets within the same run (~15% here).
+# That combination means this script's own inputs are mis-wired, not that the cache is cold — and
+# it has happened: the workflow first read `cache-matched-key` off the combined `actions/cache`
+# action, which declares only `cache-hit`, so the value was always empty and every run was
+# reported as MISS even at a 100% hit rate. Enforcing on that would have failed every build. So
+# when the evidence disagrees, warn about the check instead of failing the build.
+#
+# Keyed on the CCACHE contradiction specifically: a high hit rate proves the *ccache* restored, so
+# an empty CACHE_MATCHED_KEY alongside it can only mean the key never reached this script. Both
+# keys arrive through the same plumbing, so that one signal condemns DEPS_MATCHED_KEY too, and
+# both errors are suppressed. A high hit rate on its own proves nothing about build/_deps — when
+# the ccache key IS populated (plumbing demonstrably fine) and only the deps key is empty, that is
+# a real dependency-cache miss and still fails.
+inputs_suspect=0
+if [ "$total" -gt 0 ] && [ "$hit_rate" -ge "${CACHE_SELFCHECK_HIT_RATE:-50}" ] &&
+    [ -z "$CACHE_MATCHED_KEY" ]; then
+    inputs_suspect=1
+    annotate warning "Cache reported as not restored, yet ccache hit ${hit_rate}% — a cold build \
+cannot do that. Treating this as a misconfigured check rather than a cold cache: verify the \
+workflow reads cache-matched-key from an actions/cache/restore step (the combined actions/cache \
+action does not expose it). Not failing the build on this."
+    warnings=$((warnings + 1))
+fi
+
+if [ "$CACHE_WARM_EXPECTED" = "true" ] && [ "$inputs_suspect" -eq 0 ]; then
     if [ -z "$DEPS_MATCHED_KEY" ]; then
         annotate error "build/_deps cache did not restore. Every dependency is being re-fetched \
 and rebuilt from scratch. Check that the push-to-main run seeded a cache for this runner OS and \
@@ -123,7 +149,8 @@ from cold. Verify CCACHE_DIR matches the actions/cache path for this OS, and tha
 push-to-main run has seeded the cache."
         failures=$((failures + 1))
     fi
-elif [ -z "$DEPS_MATCHED_KEY" ] || [ -z "$CACHE_MATCHED_KEY" ]; then
+elif [ "$CACHE_WARM_EXPECTED" != "true" ] &&
+    { [ -z "$DEPS_MATCHED_KEY" ] || [ -z "$CACHE_MATCHED_KEY" ]; }; then
     annotate notice "Cache miss on a cache-seeding run — expected; this run populates the cache \
 that pull requests will restore from."
 fi
