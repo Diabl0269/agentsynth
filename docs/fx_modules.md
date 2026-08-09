@@ -12,7 +12,9 @@ Modules whose output is **audio** carry a `Level` parameter (`outputLevel`, line
 | `prepareOutputLevel(sampleRate)` | in `prepareToPlay` — sets up the 10 ms anti-click ramp |
 | `applyOutputLevel(buffer, numAudioChannels)` | at the **end of the normal `processBlock` path** |
 
-Adopting modules: **Distortion, Delay, Reverb, Chorus, Phaser, Flanger, Filter**.
+Adopting modules: **Distortion, Delay, Reverb, Chorus, Phaser, Flanger, Filter, Bitcrusher, Pitch Shifter**.
+
+**This is a standing rule, not a one-off.** Every *new* module whose output carries audio must have a level control — the shared stage here, or its own `level`/`gain` parameter. `Tests/ModuleAdoptionTests.cpp` enforces it: it classifies every module the factory can build into one of three buckets (shared stage / own parameter / no level by design, with a rationale), and a new module that nobody classified fails `EveryFactoryModuleIsClassified`. A renamed or deleted module fails `ClassificationTableHasNoStaleEntries`. So the decision cannot be skipped — only made explicitly.
 
 Rules that make this safe:
 

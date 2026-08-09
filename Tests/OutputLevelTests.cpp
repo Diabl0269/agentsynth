@@ -4,11 +4,13 @@
 // See docs/fx_modules.md § Output Level and GitHub issue #122.
 
 #include "Modules/AttenuverterModule.h"
+#include "Modules/FX/BitcrusherModule.h"
 #include "Modules/FX/ChorusModule.h"
 #include "Modules/FX/DelayModule.h"
 #include "Modules/FX/DistortionModule.h"
 #include "Modules/FX/FlangerModule.h"
 #include "Modules/FX/PhaserModule.h"
+#include "Modules/FX/PitchShifterModule.h"
 #include "Modules/FX/ReverbModule.h"
 #include "Modules/FilterModule.h"
 #include <gtest/gtest.h>
@@ -66,6 +68,8 @@ std::vector<LevelModuleCase> allCases() {
         {"Phaser", 2, [] { return std::make_unique<PhaserModule>(); }},
         {"Flanger", 2, [] { return std::make_unique<FlangerModule>(); }},
         {"Distortion", 2, [] { return std::make_unique<DistortionModule>(); }},
+        {"Bitcrusher", 2, [] { return std::make_unique<BitcrusherModule>(); }},
+        {"Pitch Shifter", 2, [] { return std::make_unique<PitchShifterModule>(); }},
         {"Filter", 1, [] { return std::make_unique<FilterModule>(); }},
     };
 }

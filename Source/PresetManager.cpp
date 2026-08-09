@@ -53,10 +53,11 @@ juce::String PresetManager::getPresetJSON(int index) {
     //   MIDI Keyboard: 560 x 150 ← DOUBLE-wide
     //   Poly MIDI:   280 x 123
     //   Distortion:  280 x 355
-    //   Delay:       280 x 193
+    //   Delay:       280 x 269   ← +76 (one knob row) from the issue #122 Level knob
     //   Reverb:      280 x 269
-    // (The Level knob added in issue #122 costs no height on these: with kKnobColumns = 3 the extra
-    //  knob fills an existing partial row on every module that adopted it.)
+    // (With kKnobColumns = 3, the Level knob only costs a row on modules whose slider count crossed a
+    //  multiple of 3: Filter 487→563, Delay 193→269, Pitch Shifter 423→499. All others absorbed it into
+    //  an existing partial row. Pinned by ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents.)
     //
     // DOUBLE-width modules (w=560): Sequencer, PolySequencer, MidiKeyboard
     //   Sequencer at x=10: right edge = 570

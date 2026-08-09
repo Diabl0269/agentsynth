@@ -121,7 +121,15 @@ Test persistence, serialization, and state restoration.
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
 | OutputLevelHelper | 9 | Unity default is bit-exact pass-through; only the declared leading audio channels are scaled (CV channels untouched); level 0 silences; a 1.0→0.0 step ramps over 10 ms (max per-sample step < 0.01, reaches zero within the block) instead of clicking; **bypass passes dry audio at level 0**; mute clears at unity; a legacy state blob with no `outputLevel` property loads at unity (old presets sound identical); level survives a state round-trip. Uses an in-test `ModuleBase` subclass so the helper is exercised free of any module's DSP |
-| OutputLevelModules | 9 | Across all 7 adopting modules (Delay, Reverb, Chorus, Phaser, Flanger, Distortion, Filter): parameter present and defaulting to unity; **parameter added last in the list** (positional `getParameters()[n]` sites depend on it); level 0.5 halves the output sample-for-sample; level 0 silences; bypass still passes dry audio at level 0; mute clears at unity. Plus: Delay's level stays outside the feedback path (repeats survive a spell at level 0); Filter scales all 8 voices in poly mode; **`AttenuverterKeepsAmountAtParameterIndexOne`** pins the positional-parameter landmine shut |
+| OutputLevelModules | 9 | Across all 9 adopting modules (Delay, Reverb, Chorus, Phaser, Flanger, Distortion, Bitcrusher, Pitch Shifter, Filter): parameter present and defaulting to unity; **parameter added last in the list** (positional `getParameters()[n]` sites depend on it); level 0.5 halves the output sample-for-sample; level 0 silences; bypass still passes dry audio at level 0; mute clears at unity. Plus: Delay's level stays outside the feedback path (repeats survive a spell at level 0); Filter scales all 8 voices in poly mode; **`AttenuverterKeepsAmountAtParameterIndexOne`** pins the positional-parameter landmine shut |
+
+### Module Adoption Tests (3 tests)
+
+`Tests/ModuleAdoptionTests.cpp` — enforces the standing rule that **every module whose output carries audio has a level control**. Headless.
+
+| Suite | Tests | What it covers |
+|-------|-------|----------------|
+| ModuleAdoptionTests | 3 | A hand-maintained table classifies every module the factory can build into `SharedStage` (adopted `addOutputLevelParameter`), `OwnParameter` (has its own `level`/`gain`/`outputGain`/`inputGain`/`makeupGain`) or `NoLevelByDesign` (CV/gate/MIDI output, with a rationale string). `EveryAudioOutputModuleHasALevelControl` asserts each module matches its declared bucket — including that an `OwnParameter` module does **not** also adopt the shared stage (two level knobs on one panel). `EveryFactoryModuleIsClassified` is the tripwire: it harvests module names from `AIStateMapper::getModuleSchema()` and fails when a newly added module isn't classified, with a message naming the three buckets. `ClassificationTableHasNoStaleEntries` catches the reverse — a renamed/removed module leaving a dead row that silently stops enforcing anything |
 
 ### Layout Tests (~8 tests)
 
