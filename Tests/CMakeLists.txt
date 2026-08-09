@@ -74,6 +74,8 @@ add_executable(Tests
     ShortcutsSettingsTabTests.cpp
     AudioRenderingTests.cpp
     LogicalPortTests.cpp
+    OutputLevelTests.cpp
+    ModuleAdoptionTests.cpp
     StateRoundTripTests.cpp
     CableColourTests.cpp
     AudioEngineModRoutingTests.cpp

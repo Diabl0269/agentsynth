@@ -47,7 +47,7 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Oscillator")
         return {280, 449};
     if (typeName == "Filter")
-        return {280, 487};
+        return {280, 563}; // +1 knob row: the Level knob took it from 3 sliders to 4 (issue #122)
     if (typeName == "LFO")
         return {280, 353};
     if (typeName == "VCA")
@@ -66,7 +66,7 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Distortion")
         return {280, 355};
     if (typeName == "Delay")
-        return {280, 193};
+        return {280, 269}; // +1 knob row: the Level knob took it from 3 sliders to 4 (issue #122)
     if (typeName == "Reverb")
         return {280, 269};
     if (typeName == "AudioInput" || typeName == "AudioOutput")
@@ -95,7 +95,7 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Bitcrusher")
         return {280, 355};
     if (typeName == "Pitch Shifter")
-        return {280, 423};
+        return {280, 499}; // +1 knob row: the Level knob took it from 6 sliders to 7 (issue #122)
     if (typeName == "Parametric EQ")
         // Double-width card: a 150px response curve set between the port-label gutters, then a
         // 4-column band grid (on/off + Freq/Gain/Q). Mirrors parametricEQHeight().
@@ -294,7 +294,7 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::buildVisibleCables() {
                     break;
                 }
             }
-            if (auto* p = node2->getProcessor()->getParameters()[1])
+            if (auto* p = findParameterByID(node2->getProcessor(), "amount"))
                 cable.attenAmount = p->getValue() * 2.0f - 1.0f; // 0..1 -> -1..1
 
             cables.push_back(cable);
@@ -1056,7 +1056,8 @@ void GraphEditor::mouseDrag(const juce::MouseEvent& e) {
             auto& graph = audioEngine.getGraph();
             auto* node = graph.getNodeForId(draggingAttenuverterNodeId);
             if (node) {
-                if (auto* p = dynamic_cast<juce::AudioParameterFloat*>(node->getProcessor()->getParameters()[1])) {
+                if (auto* p =
+                        dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(node->getProcessor(), "amount"))) {
                     float delta = (e.getPosition().y - lastMousePos.y) * -0.01f;
                     float currentVal = p->get(); // -1 to 1
                     currentVal = juce::jlimit(-1.0f, 1.0f, currentVal + delta);
