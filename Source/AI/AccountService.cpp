@@ -1,4 +1,5 @@
 #include "AccountService.h"
+#include "../Auth/DeviceIdStore.h"
 #include "../Auth/KeychainTokenStore.h"
 
 namespace synth {
@@ -34,7 +35,11 @@ juce::String maskEmail(const juce::String& email) {
 
 AccountService::AccountService(juce::String host)
     : Thread("AccountServiceThread")
-    , authClient(std::move(host))
+    // DeviceIdStore() (no explicit path) resolves to the app's standard settings-folder
+    // convention and persists on first read — see Source/Auth/DeviceIdStore.h. A stable id, not
+    // a secret, so reading/generating it here (rather than caching a member) is fine: every call
+    // against the same file returns the same value.
+    , authClient(std::move(host), "synth-desktop", DeviceIdStore().getDeviceId())
     , tokenStore(std::make_unique<KeychainTokenStore>()) {}
 
 AccountService::AccountService(juce::String host, AuthClient::HttpPerformer performer,

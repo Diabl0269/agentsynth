@@ -609,14 +609,20 @@ same as `OllamaProvider` checks `wasCancelled()` right after the network call re
 | `cancelled`                                   | `Cancelled`                      |
 | HTTP 401 / 403                                | `Auth`                            |
 | HTTP 429 (reads `Retry-After`)                | `RateLimit`                      |
-| HTTP 402                                      | `Quota`                           |
+| HTTP 402, `error.code == "TRIAL_EXHAUSTED"`   | `TrialExhausted` (see "Device Id and Anonymous Trial" below) |
+| HTTP 402, any other/no code                   | `Quota`                           |
+| HTTP 503, `error.code == "SERVICE_CAPACITY_EXCEEDED"` | `ServiceCapacityExceeded` (see below) |
 | HTTP 400 / 404                                | `Schema` (client/request-shape problem, not worth retrying as-is) |
-| HTTP 500 / 502 / any other unexpected non-2xx | `Server`                          |
+| HTTP 500 / 502 / 503 (any other code) / any other unexpected non-2xx | `Server` |
 | 2xx with no parseable `data`                  | `Schema`                          |
 
 Whenever the response body parses as JSON with a string `error.message`, it is appended to the
 delivered error message (mirrors the "name the specific failure" ethos on
 `AIIntegrationService::buildCorrectionPrompt`); otherwise the message just names the HTTP status.
+`TrialExhausted` and `ServiceCapacityExceeded` are the two exceptions to "appended": the server's
+`error.message` there is a complete, user-facing sentence on its own (see below), so it is
+delivered verbatim as `AIError::message` rather than tacked onto a generic "reported insufficient
+quota (HTTP 402)"-style prefix.
 
 **Cancellation, simplified vs `OllamaProvider`.** libcurl doesn't need the
 `StreamPublisher`/`activeStream`/`streamLock` machinery `OllamaProvider` uses to abort a
@@ -657,6 +663,46 @@ through `RemoteProvider` instead of `OllamaProvider` via `--provider remote`, so
 scored through the exact stack a user hits — client -> service -> Ollama/Groq — instead of an
 approximation of it. The service picks its own model server-side; the harness's `--model` is a
 report label only in this mode.
+
+### Device Id and Anonymous Trial (P3-3)
+
+`Source/Auth/DeviceIdStore.h/.cpp` generates a stable per-install identifier (`juce::Uuid`,
+dashed-string form) the first time it runs and persists it under the app's standard settings
+folder (`userApplicationDataDirectory/<kSettingsFolderName>/device_id`, the same
+`getSpecialLocation`/`kSettingsFolderName` convention `ThemeManager`/`SnippetManager` use), then
+reuses it for the lifetime of the install. If the file is missing, empty, or its contents don't
+look like a plausible id, a fresh one is generated and written rather than crashing or leaving the
+id blank — a lost/corrupted id just makes the backend see this install as new, which is harmless.
+
+**Not a secret.** Unlike the refresh token (`KeychainTokenStore`, Keychain-backed), the device id
+grants no account access by itself — it is only a "this install" signal — so it is deliberately
+stored in a plain file, not the Keychain. Both `AccountService` (for `AuthClient`) and
+`RemoteProvider` construct their own `DeviceIdStore` in their production constructors and read the
+same persisted value; their test constructors take an explicit `deviceId` string instead (default
+empty, field/header omitted) so unit tests never touch the real per-install file.
+
+**Where it's sent:**
+
+- `AuthClient::requestDeviceCode()` / `pollDeviceToken()` / `refreshToken()` — `device_id` form
+  field alongside the existing `client_id`, whenever non-empty.
+- `RemoteProvider` — `X-Device-Id` header on every `/v1/capability/*` request, sent whether or not
+  `Authorization` is also set: an anonymous free-request-tier signal when there's no bearer token,
+  anti-abuse signal once there is one.
+
+**Trial-exhausted UX path.** When the free trial is used up, the capability endpoint answers
+`402 {"error":{"code":"TRIAL_EXHAUSTED","message":"..."}}`, mapped by `RemoteProvider` to
+`AIErrorKind::TrialExhausted` with the server's `message` carried through unchanged (see the
+error-kind table above). That response reaches `AIChatComponent` through the same path every other
+provider error already does — appended to the conversation as an assistant bubble
+(`"Error: " + error.message`) — so no new UI surface is needed. When the caller is not signed in,
+the server's message text specifically invites signing in with Google to continue; the existing
+`AccountRow` "Sign in" affordance (see "Account Sign-In Surface" above) is already visible
+immediately above the chat whenever an `AccountService` is attached, so the next step (opening
+`SignInDialog`) is always one click away without this feature needing to auto-launch it. A
+service-wide `503 {"error":{"code":"SERVICE_CAPACITY_EXCEEDED","message":"..."}}` is handled the
+same way but mapped to the distinct `AIErrorKind::ServiceCapacityExceeded` — it's a daily cap on
+the service as a whole, unrelated to the caller's own trial/quota, and gets its own message rather
+than being confused with either.
 
 ## 6. Future Considerations
 

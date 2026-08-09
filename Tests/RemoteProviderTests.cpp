@@ -191,6 +191,48 @@ TEST_F(RemoteProviderTest, AuthorizationHeaderOnlySentWhenTokenSet) {
     EXPECT_EQ(capturedHeaders.getValue("Authorization", ""), juce::String("Bearer secret-token-123"));
 }
 
+TEST_F(RemoteProviderTest, DeviceIdHeaderSentWhenConfiguredRegardlessOfAuthToken) {
+    juce::StringPairArray capturedHeaders;
+    auto performer = [&](const juce::String&, const juce::StringPairArray& headers, const juce::String&, int,
+                         const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
+        capturedHeaders = headers;
+        return makeSuccess(R"({"data":{}})");
+    };
+
+    // No setAuthToken() call: X-Device-Id must still be sent — it is an anonymous free-trial
+    // signal when signed out, not something gated on having a bearer token.
+    synth::RemoteProvider provider{kMockHost, performer, "device-uuid-1234"};
+    provider.setTestMode(true);
+
+    MockPromptCallback callback;
+    provider.sendPrompt(
+        {{"user", "hi"}}, [&callback](const synth::AIProvider::AIResponse& r) { callback(r); }, makeSchema());
+    callback.getResult();
+    provider.stopThread(5000);
+
+    EXPECT_EQ(capturedHeaders.getValue("X-Device-Id", ""), juce::String("device-uuid-1234"));
+}
+
+TEST_F(RemoteProviderTest, DeviceIdHeaderOmittedWhenNotConfigured) {
+    juce::StringPairArray capturedHeaders;
+    auto performer = [&](const juce::String&, const juce::StringPairArray& headers, const juce::String&, int,
+                         const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
+        capturedHeaders = headers;
+        return makeSuccess(R"({"data":{}})");
+    };
+
+    synth::RemoteProvider provider{kMockHost, performer};
+    provider.setTestMode(true);
+
+    MockPromptCallback callback;
+    provider.sendPrompt(
+        {{"user", "hi"}}, [&callback](const synth::AIProvider::AIResponse& r) { callback(r); }, makeSchema());
+    callback.getResult();
+    provider.stopThread(5000);
+
+    EXPECT_FALSE(capturedHeaders.containsKey("X-Device-Id"));
+}
+
 // ============================================================================
 // Fail-fast: no network call
 // ============================================================================
@@ -419,6 +461,95 @@ TEST_F(RemoteProviderTest, ErrorBodyMessageIsAppendedToDeliveredError) {
     EXPECT_FALSE(result.success);
     EXPECT_EQ(result.error.kind, synth::AIProvider::AIErrorKind::Server);
     EXPECT_TRUE(result.error.message.contains("model timed out mid-generation"));
+}
+
+TEST_F(RemoteProviderTest, TrialExhaustedMapsToDistinctKindWithServerMessageIntact) {
+    auto performer = [](const juce::String&, const juce::StringPairArray&, const juce::String&, int,
+                        const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
+        return makeStatus(402, R"({"error":{"code":"TRIAL_EXHAUSTED",)"
+                               R"("message":"Your free trial has been used up. Sign in with Google to continue."}})");
+    };
+
+    synth::RemoteProvider provider{kMockHost, performer};
+    provider.setTestMode(true);
+
+    MockPromptCallback callback;
+    provider.sendPrompt(
+        {{"user", "hi"}}, [&callback](const synth::AIProvider::AIResponse& r) { callback(r); }, makeSchema());
+
+    auto result = callback.getResult();
+    provider.stopThread(5000);
+
+    EXPECT_FALSE(result.success);
+    EXPECT_EQ(result.error.kind, synth::AIProvider::AIErrorKind::TrialExhausted);
+    EXPECT_EQ(result.error.message, juce::String("Your free trial has been used up. Sign in with Google to continue."));
+}
+
+// A 402 with no TRIAL_EXHAUSTED code (e.g. a signed-in paid account genuinely out of quota) must
+// keep the pre-existing generic Quota mapping — this is a REGRESSION LOCK on the existing
+// StatusMappingCase{402, Quota} behavior now that 402 has a second branch.
+TEST_F(RemoteProviderTest, NonTrialFourOhTwoStaysGenericQuota) {
+    auto performer = [](const juce::String&, const juce::StringPairArray&, const juce::String&, int,
+                        const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
+        return makeStatus(402, "{}");
+    };
+
+    synth::RemoteProvider provider{kMockHost, performer};
+    provider.setTestMode(true);
+
+    MockPromptCallback callback;
+    provider.sendPrompt(
+        {{"user", "hi"}}, [&callback](const synth::AIProvider::AIResponse& r) { callback(r); }, makeSchema());
+
+    auto result = callback.getResult();
+    provider.stopThread(5000);
+
+    EXPECT_FALSE(result.success);
+    EXPECT_EQ(result.error.kind, synth::AIProvider::AIErrorKind::Quota);
+}
+
+TEST_F(RemoteProviderTest, ServiceCapacityExceededMapsToDistinctKindWithServerMessageIntact) {
+    auto performer = [](const juce::String&, const juce::StringPairArray&, const juce::String&, int,
+                        const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
+        return makeStatus(503, R"({"error":{"code":"SERVICE_CAPACITY_EXCEEDED",)"
+                               R"("message":"The service is at its daily capacity. Please try again later."}})");
+    };
+
+    synth::RemoteProvider provider{kMockHost, performer};
+    provider.setTestMode(true);
+
+    MockPromptCallback callback;
+    provider.sendPrompt(
+        {{"user", "hi"}}, [&callback](const synth::AIProvider::AIResponse& r) { callback(r); }, makeSchema());
+
+    auto result = callback.getResult();
+    provider.stopThread(5000);
+
+    EXPECT_FALSE(result.success);
+    EXPECT_EQ(result.error.kind, synth::AIProvider::AIErrorKind::ServiceCapacityExceeded);
+    EXPECT_EQ(result.error.message, juce::String("The service is at its daily capacity. Please try again later."));
+}
+
+// A 503 with no SERVICE_CAPACITY_EXCEEDED code must fall through to the generic Server mapping,
+// same as any other unrecognized 5xx.
+TEST_F(RemoteProviderTest, NonCapacityFiveOhThreeFallsBackToGenericServer) {
+    auto performer = [](const juce::String&, const juce::StringPairArray&, const juce::String&, int,
+                        const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
+        return makeStatus(503, "{}");
+    };
+
+    synth::RemoteProvider provider{kMockHost, performer};
+    provider.setTestMode(true);
+
+    MockPromptCallback callback;
+    provider.sendPrompt(
+        {{"user", "hi"}}, [&callback](const synth::AIProvider::AIResponse& r) { callback(r); }, makeSchema());
+
+    auto result = callback.getResult();
+    provider.stopThread(5000);
+
+    EXPECT_FALSE(result.success);
+    EXPECT_EQ(result.error.kind, synth::AIProvider::AIErrorKind::Server);
 }
 
 // ============================================================================
