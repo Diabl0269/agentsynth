@@ -35,11 +35,15 @@ fi
 $PROFDATA merge -sparse default.profraw -o default.profdata
 
 echo "Generating coverage report..."
-# Capture the report output
+# Capture the report output.
+# Source/Plugin/PluginEditor is excluded for the same reason as Source/UI and Source/MainComponent:
+# it is pure JUCE Component wiring, not headless-testable to the 85% bar. Source/Plugin/
+# PluginProcessor is deliberately NOT excluded — it is engine/state logic and is covered by
+# Tests/PluginProcessorTests.cpp.
 REPORT=$($COV report \
     ./build/Tests/Tests \
     -instr-profile=default.profdata \
-    -ignore-filename-regex="JuceLibraryCode|build/_deps|Tests|Source/UI|Source/Main\.cpp|Source/MainComponent")
+    -ignore-filename-regex="JuceLibraryCode|build/_deps|Tests|Source/UI|Source/Main\.cpp|Source/MainComponent|Source/Plugin/PluginEditor")
 
 echo "$REPORT"
 

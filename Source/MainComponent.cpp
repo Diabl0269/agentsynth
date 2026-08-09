@@ -6,7 +6,9 @@
 // ---- Primary constructor (injected ThemeManager + LookAndFeel from Main.cpp) ----
 MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLookAndFeel& lf,
                              std::unique_ptr<synth::AIProvider> provider)
-    : graphEditor(audioEngine, &undoManager)
+    : ownedAudioEngine(std::make_unique<AudioEngine>(AudioEngine::HostMode::Standalone))
+    , audioEngine(*ownedAudioEngine)
+    , graphEditor(audioEngine, &undoManager)
     , aiService(audioEngine.getGraph())
     , aiChatComponent(aiService, appProperties)
     , themeManager(&tm)
@@ -30,9 +32,37 @@ MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLo
     initialiseCommon(std::move(provider), synth::AIProviderRegistry::createDefault());
 }
 
+// ---- Plugin constructor (engine owned by AgentSynthAudioProcessor) ----
+// Identical to the primary ctor apart from where the engine comes from; the shared body lives in
+// initialiseCommon(), which skips engine initialise/shutdown when we don't own the engine.
+MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLookAndFeel& lf,
+                             AudioEngine& externalEngine, std::unique_ptr<synth::AIProvider> provider)
+    : audioEngine(externalEngine)
+    , graphEditor(audioEngine, &undoManager)
+    , aiService(audioEngine.getGraph())
+    , aiChatComponent(aiService, appProperties)
+    , themeManager(&tm)
+    , lookAndFeel(&lf) {
+    propertiesOptions.applicationName = synth::branding::kProductName;
+    propertiesOptions.folderName = synth::branding::kSettingsFolderName;
+    propertiesOptions.filenameSuffix = "settings";
+    propertiesOptions.osxLibrarySubFolder = "Application Support";
+    propertiesOptions.storageFormat = juce::PropertiesFile::storeAsXML;
+    appProperties.setStorageParameters(propertiesOptions);
+    shortcutManager.loadFromProperties(appProperties);
+
+    themeManager->initialise(&appProperties);
+    lookAndFeel->applyTheme(themeManager->getActiveTheme());
+    themeManager->addChangeListener(this);
+
+    initialiseCommon(std::move(provider), synth::AIProviderRegistry::createDefault());
+}
+
 // ---- Delegating constructor for tests / legacy call sites ----
 MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry)
-    : graphEditor(audioEngine, &undoManager)
+    : ownedAudioEngine(std::make_unique<AudioEngine>(AudioEngine::HostMode::Standalone))
+    , audioEngine(*ownedAudioEngine)
+    , graphEditor(audioEngine, &undoManager)
     , aiService(audioEngine.getGraph())
     , aiChatComponent(aiService, appProperties) {
     // Own a default ThemeManager + LookAndFeel so the code behaves identically
@@ -276,8 +306,9 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     addAndMakeVisible(settingsButton);
     settingsButton.setComponentID("settingsButton");
     settingsButton.onClick = [this]() {
-        auto* settingsComp = new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService,
-                                                aiChatComponent, shortcutManager, *themeManager, &graphEditor);
+        auto* settingsComp =
+            new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent,
+                               shortcutManager, *themeManager, &graphEditor, /*showAudioTab=*/!audioEngine.isHosted());
         settingsComp->setSize(500, 450);
 
         juce::DialogWindow::LaunchOptions options;
@@ -313,6 +344,14 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     applyToolbarIcons();
     setCurrentPatchName("Default");
 
+    // Engine lifecycle is the owner's job. On the plugin path the processor already called
+    // initialise() (and will call shutdown()), and its graph may already hold host-restored
+    // state — re-initialising here would overwrite the user's session with the default patch.
+    if (ownedAudioEngine == nullptr) {
+        graphEditor.updateComponents();
+        return;
+    }
+
     if (juce::RuntimePermissions::isRequired(juce::RuntimePermissions::recordAudio) &&
         !juce::RuntimePermissions::isGranted(juce::RuntimePermissions::recordAudio)) {
         juce::RuntimePermissions::request(juce::RuntimePermissions::recordAudio, [&](bool granted) {
@@ -334,7 +373,10 @@ MainComponent::~MainComponent() {
     stopTimer();
     aiService.removeListener(this);
     graphEditor.detachAllModuleComponents();
-    audioEngine.shutdown();
+    // Only tear down an engine we own. On the plugin path the processor's engine must survive
+    // the editor being closed and reopened.
+    if (ownedAudioEngine != nullptr)
+        audioEngine.shutdown();
 }
 
 // ---- Theme change callback: re-skin pass ----
@@ -357,7 +399,9 @@ void MainComponent::timerCallback() {
     // only repaints the status bar when a displayed value actually changes. ZERO logging.
     if (++statusBarTickCount_ >= 2) {
         statusBarTickCount_ = 0;
-        const float cpu = (float)(audioEngine.getDeviceManager().getCpuUsage() * 100.0);
+        // Hosted (plugin) mode has no device manager of its own — the host owns the device, so
+        // getCpuUsage() would report a constant 0. Show 0 rather than a misleading reading.
+        const float cpu = audioEngine.isHosted() ? 0.0f : (float)(audioEngine.getDeviceManager().getCpuUsage() * 100.0);
         statusBar.update(cpu, audioEngine.getDisplayVoiceCount(), currentPatchName_);
     }
 }

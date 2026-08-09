@@ -120,15 +120,17 @@ private:
 SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::ApplicationProperties& appProperties,
                                synth::AIIntegrationService& aiService, synth::AIChatComponent& aiChatComponent,
                                ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager,
-                               GraphEditor* graphEditor)
+                               GraphEditor* graphEditor, bool showAudioTab)
     : appProperties(appProperties)
     , themeManager(themeManager) {
-    auto* audioSelector = new juce::AudioDeviceSelectorComponent(deviceManager, 0, 2, // min/max inputs
-                                                                 0, 2,                // min/max outputs
-                                                                 true, true,          // midi
-                                                                 false, false         // bit depths
-    );
-    tabs.addTab("Audio", juce::Colours::transparentBlack, audioSelector, true);
+    if (showAudioTab) {
+        auto* audioSelector = new juce::AudioDeviceSelectorComponent(deviceManager, 0, 2, // min/max inputs
+                                                                     0, 2,                // min/max outputs
+                                                                     true, true,          // midi
+                                                                     false, false         // bit depths
+        );
+        tabs.addTab("Audio", juce::Colours::transparentBlack, audioSelector, true);
+    }
 
     auto* aiSettingsTab = new AISettingsTab(appProperties, aiService, aiChatComponent);
     tabs.addTab("AI", juce::Colours::transparentBlack, aiSettingsTab, true);

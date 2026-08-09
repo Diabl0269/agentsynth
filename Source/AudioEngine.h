@@ -12,11 +12,31 @@ class AudioEngine
     : public juce::AudioIODeviceCallback
     , public juce::MidiInputCallback {
 public:
-    AudioEngine();
+    // How the graph is driven.
+    //   Standalone — AudioEngine owns an AudioDeviceManager, opens the default output device and
+    //                every available MIDI input, and clocks the graph from the device callback.
+    //   Hosted     — a plugin wrapper (AgentSynthAudioProcessor) owns the clock. initialise()
+    //                touches neither the device manager nor MIDI inputs; the host calls
+    //                prepareForHost / processHostBlock / releaseFromHost instead. Opening an audio
+    //                device from inside a plugin would fight the host for the hardware, and opening
+    //                MIDI inputs directly would double-trigger notes the host already forwards.
+    enum class HostMode { Standalone, Hosted };
+
+    explicit AudioEngine(HostMode mode = HostMode::Standalone);
     ~AudioEngine() override;
 
     void initialise();
     void shutdown();
+
+    HostMode getHostMode() const noexcept { return hostMode_; }
+    bool isHosted() const noexcept { return hostMode_ == HostMode::Hosted; }
+
+    // ---- Hosted-mode driving API (no-ops / unused in Standalone mode) ----
+    // Mirror of the AudioIODeviceCallback trio, but fed by the plugin wrapper's
+    // prepareToPlay / processBlock / releaseResources.
+    void prepareForHost(double sampleRate, int blockSize, int numInputChannels, int numOutputChannels);
+    void processHostBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages);
+    void releaseFromHost();
 
     // Voice count / mute API (§4.2)
     struct VoiceInfo {
@@ -94,6 +114,8 @@ public:
     void ensureMidiDeviceOpen(const juce::String& deviceName);
 
 private:
+    const HostMode hostMode_;
+
     juce::AudioDeviceManager deviceManager;
     juce::AudioProcessorGraph mainProcessorGraph;
     juce::AudioProcessorPlayer processorPlayer;
@@ -101,6 +123,11 @@ private:
     std::atomic<bool> masterMuted_{false};
 
     void createDefaultPatch();
+
+    // The one place the graph is actually clocked. Both the standalone device callback and the
+    // hosted processBlock funnel through here so master-mute semantics (zero-fill AFTER the graph
+    // runs, so sequencers / LFOs / envelopes keep advancing) can never drift between the two.
+    void renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages);
 
     juce::MidiMessageCollector midiMessageCollector;
     std::vector<std::unique_ptr<juce::MidiInput>> midiInputs;

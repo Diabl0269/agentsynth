@@ -195,6 +195,26 @@ jobs:
         fi
         chmod +x "artifact/Agent Synth"
 
+        # AgentSynthPlugin_VST3's .vst3 is a directory bundle on Linux, and
+        # softprops/action-gh-release (in the release job below) uploads `artifact/*` as release
+        # assets — GitHub release assets must be files, so the bundle is zipped rather than
+        # copied in raw. `zip -r` from inside the bundle's parent dir preserves its internal
+        # structure. find (not a hardcoded path) so a JUCE artefact-path change fails loudly here
+        # instead of silently shipping an artifact/ with no plugin in it.
+        VST3_PATH=$(find build -name "Agent Synth.vst3" -type d | head -n 1)
+        if [ -z "$VST3_PATH" ]; then
+          echo "Agent Synth.vst3 not found!"
+          exit 1
+        fi
+        VST3_DIR=$(dirname "$VST3_PATH")
+        VST3_NAME=$(basename "$VST3_PATH")
+        ARTIFACT_DIR="$(pwd)/artifact"
+        (cd "$VST3_DIR" && zip -r "$ARTIFACT_DIR/${{ matrix.artifact_name }}-Plugins.zip" "$VST3_NAME")
+        if [ ! -s "artifact/${{ matrix.artifact_name }}-Plugins.zip" ]; then
+          echo "Failed to create plugin zip!"
+          exit 1
+        fi
+
     # Package macOS
     - name: Package macOS Artifact
       if: runner.os == 'macOS'
@@ -213,6 +233,49 @@ jobs:
 
         ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" artifact/${{ matrix.artifact_name }}.zip
 
+        # Plugins (AgentSynthPlugin_VST3 / AgentSynthPlugin_AU) ship as their own zip, separate
+        # from the app above, so a plugin-only user isn't forced to also download the standalone
+        # app. find (not a hardcoded path) so a JUCE artefact-path change fails loudly here
+        # instead of silently shipping a zip with no plugin in it.
+        VST3_PATH=$(find build -name "Agent Synth.vst3" -type d | head -n 1)
+        if [ -z "$VST3_PATH" ]; then
+          echo "Agent Synth.vst3 not found!"
+          exit 1
+        fi
+        echo "Found VST3 at: $VST3_PATH"
+
+        AU_PATH=$(find build -name "Agent Synth.component" -type d | head -n 1)
+        if [ -z "$AU_PATH" ]; then
+          echo "Agent Synth.component not found!"
+          exit 1
+        fi
+        echo "Found AU at: $AU_PATH"
+
+        # Stage both bundles into one directory and archive THAT. `ditto -c -k` takes exactly one
+        # source ("ditto: Can't archive multiple sources"), so the two bundles cannot be passed
+        # side by side. Archiving the staging dir WITHOUT --keepParent puts its contents at the
+        # zip root, so extracting yields "Agent Synth.vst3" and "Agent Synth.component" next to
+        # each other rather than nested under a wrapper folder.
+        PLUGIN_STAGE="$RUNNER_TEMP/plugin-stage"
+        rm -rf "$PLUGIN_STAGE"
+        mkdir -p "$PLUGIN_STAGE"
+        cp -R "$VST3_PATH" "$PLUGIN_STAGE/"
+        cp -R "$AU_PATH" "$PLUGIN_STAGE/"
+
+        # Sign the staged COPIES — these are what ends up in the zip. cp -R preserves the bundle
+        # layout, and signing after the copy guarantees the shipped bundles carry the signature.
+        codesign --force --deep -s - "$PLUGIN_STAGE/$(basename "$VST3_PATH")"
+        codesign --verify --verbose "$PLUGIN_STAGE/$(basename "$VST3_PATH")"
+        codesign --force --deep -s - "$PLUGIN_STAGE/$(basename "$AU_PATH")"
+        codesign --verify --verbose "$PLUGIN_STAGE/$(basename "$AU_PATH")"
+
+        ditto -c -k --sequesterRsrc "$PLUGIN_STAGE" artifact/${{ matrix.artifact_name }}-Plugins.zip
+
+        if [ ! -s "artifact/${{ matrix.artifact_name }}-Plugins.zip" ]; then
+          echo "Failed to create plugin zip!"
+          exit 1
+        fi
+
     # Package Windows
     - name: Package Windows Artifact
       if: runner.os == 'Windows'
@@ -220,6 +283,26 @@ jobs:
       run: |
         New-Item -ItemType Directory -Force -Path artifact
         Get-ChildItem -Path build -Recurse -Filter "Agent Synth.exe" | Copy-Item -Destination artifact\
+
+        # AgentSynthPlugin_VST3's .vst3 is a directory bundle on Windows too (it contains
+        # Contents\x86_64-win\Agent Synth.vst3 internally), and softprops/action-gh-release (in
+        # the release job below) uploads `artifact/*` as release assets — GitHub release assets
+        # must be files, so the bundle is zipped rather than copied in raw. Passing the bundle
+        # DIRECTORY itself to Compress-Archive (no trailing \*) keeps the bundle folder as the
+        # archive root, preserving its internal structure. Get-ChildItem -Recurse
+        # (not a hardcoded path) so a JUCE artefact-path change fails loudly here instead of
+        # silently shipping an artifact\ with no plugin in it.
+        $vst3 = Get-ChildItem -Path build -Recurse -Directory -Filter "Agent Synth.vst3" | Select-Object -First 1
+        if (-not $vst3) {
+          Write-Error "Agent Synth.vst3 not found!"
+          exit 1
+        }
+        $pluginZip = "artifact\${{ matrix.artifact_name }}-Plugins.zip"
+        Compress-Archive -Path $vst3.FullName -DestinationPath $pluginZip
+        if (-not (Test-Path $pluginZip) -or (Get-Item $pluginZip).Length -eq 0) {
+          Write-Error "Failed to create plugin zip!"
+          exit 1
+        }
 
     # Upload Artifact
     - name: Upload Artifact

@@ -97,7 +97,10 @@ add_executable(Tests
     SnippetManagerTests.cpp
     MultiSelectTests.cpp
     PanelAnimationAndLoadingTests.cpp
+    PluginProcessorTests.cpp
     ../Source/MainComponent.cpp
+    ../Source/Plugin/PluginProcessor.cpp
+    ../Source/Plugin/PluginEditor.cpp
     ../Source/UI/GraphEditor.cpp
     ../Source/UI/ModMatrixComponent.cpp
     ../Source/UI/AIChatComponent.cpp

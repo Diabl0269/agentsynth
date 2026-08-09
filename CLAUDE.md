@@ -4,15 +4,17 @@ Guidance for Claude Code (claude.ai/code) in this repository. Keep this file **l
 
 ## Project
 
-Modular synthesizer (JUCE, C++20) with a node-based graph editor for sound design — connect audio/CV modules in a visual patching environment. Two CMake targets:
+Modular synthesizer (JUCE, C++20) with a node-based graph editor for sound design — connect audio/CV modules in a visual patching environment. Four CMake targets:
 
 - **Core** — the library: all audio-processing modules + core logic. Headless-testable (no audio device, no GUI).
-- **AgentSynth** — the JUCE GUI application built on top of the core (GraphEditor, ModuleComponent, chrome).
+- **AppUI** — the editor UI (MainComponent, GraphEditor, ModuleComponent, chrome), shared by the app and the plugin.
+- **AgentSynth** — the JUCE GUI application (`Main.cpp` on top of AppUI).
+- **AgentSynthPlugin** — VST3 (+ AU on macOS) plugin wrapping the same AppUI/Core in a `juce::AudioProcessor`.
 
 ## Commands
 
 ```bash
-# Build
+# Build (ENABLE_PLUGIN defaults ON, so this also builds the VST3/AU plugin — pass -DENABLE_PLUGIN=OFF for an app-only loop)
 cmake -S . -B build && cmake --build build
 
 # Test  (ENABLE_TESTS defaults OFF — must opt in)
@@ -52,6 +54,8 @@ Every implementation plan **must** include:
 - **`applyJSONToGraph` merge mode adds wires you didn't ask for** — when `clearExisting=false`, it auto-connects new audio nodes to Audio Output and new MIDI-accepting nodes to an existing MIDI source. That's an affordance for AI-authored patches; any caller reproducing an *exact* sub-graph (snippet insert, copy/paste, duplicate) must pass `autoConnectNewNodes=false` or the inserted group gets spliced into the surrounding patch. → [`docs/layout.md §12.5`](docs/layout.md)
 - **`trusted=true` on `applyJSONToGraph` is about parameter fidelity, not about skipping checks** — the untrusted apply path rescales any value inside `[0,1]` whose parameter range is wider (a heuristic for models that ignore ranges), which silently corrupts app-authored values like a 0.5 Hz LFO rate. Anything replaying our own `graphToJSON` output (presets, undo/redo, snippets) must apply trusted. When that data came off disk, run `validatePatch(..., trusted=false)` as a separate gate *first* so a hand-edited file is still rejected whole — `SnippetManager::insertSnippet` is the reference for this pairing. → [`docs/layout.md §12.5`](docs/layout.md)
 - **AI model discovery ordering** — `AIChatComponent`'s ctor-time `refreshModels()` is a no-op if its `AIIntegrationService` has no provider yet; any owner (e.g. `MainComponent`) that installs a provider afterward MUST call `refreshModels()` again post-`setProvider()`, or `currentModel` stays empty and every `/api/chat` gets a 400. → [`docs/AI_Engine.md`](docs/AI_Engine.md)
+- **`AudioEngine::HostMode::Hosted` never touches hardware** — it must not open an audio device or a MIDI input (the host owns both); drive it only through `prepareForHost`/`processHostBlock`/`releaseFromHost`. Opening a device fights the host for the hardware; opening MIDI input directly double-triggers notes the host already forwards through `processBlock`. → [`docs/architecture.md`](docs/architecture.md)
+- **A plugin editor must never call `Desktop::setDefaultLookAndFeel`** — it's process-global inside the host and would re-skin the host's own windows and every sibling plugin. Scope with `setLookAndFeel(&processor.getLookAndFeel())` on the editor itself; `ThemeManager`/`AppLookAndFeel` are owned by the processor, not the editor, since hosts recreate the editor repeatedly. → [`docs/architecture.md`](docs/architecture.md)
 - **CI cache is load-bearing and fails silently** — three rules: `ci.yml` keeps its `push: main` trigger (GitHub scopes caches per ref; without a main-scoped cache *no PR can restore one* and every build runs cold); `build/_deps` is keyed on `cmake/DependencyVersions.cmake` only, **never** on `CMakeLists.txt` (a module adding a source line must not invalidate a 350 MB entry — that overran GitHub's 10 GB repo cache limit and evicted everything); `CCACHE_DIR` is set explicitly per job (defaults differ by OS *and* ccache version — a mismatch means the cache is never saved). Add a dependency? Pin it in `cmake/DependencyVersions.cmake`. Guarded by `scripts/ci-cache-check.sh`. → [`docs/testing.md`](docs/testing.md)
 - **A cable is not a graph edge** — one drawn wire can be 1 edge (audio/MIDI), 2 edges + a hidden node (attenuverter chain), or N parallel edges (poly bus). Never identify, hit-test, colour, or delete a cable by `AudioProcessorGraph::Connection`; go through `GraphEditor::buildVisibleCables()`, which is the **single** enumeration feeding both `paint()` and hit-testing (compute them separately and the drawn curve drifts from the clickable one). Wire colour resolves *only* via `synth::ui::resolveCableColour` — never read a `*Wire` theme token at a paint site, or user colour overrides silently stop applying. → [`docs/layout.md §14`](docs/layout.md) · [`docs/theming.md §11`](docs/theming.md)
 - **A module's channel count is fixed for its lifetime** — JUCE settles the bus layout in the `ModuleBase` constructor, and renegotiating it would drop every graph connection the node already has. A module whose port count varies (Macro bank) declares its **maximum** channels up front and varies only `getVisibleOutputPortCount()`, clearing the hidden channels each block. When the visible count shrinks, the owner must drop routings left on the hidden jacks — an invisible jack cannot be unplugged. → [`docs/modules.md`](docs/modules.md)
@@ -59,7 +63,7 @@ Every implementation plan **must** include:
 
 ## Docs map
 
-- [`docs/architecture.md`](docs/architecture.md) — layers, core classes (ModuleBase, AudioEngine, GraphEditor, UndoManager, LookAndFeel), bypass/mute contract, signal flow
+- [`docs/architecture.md`](docs/architecture.md) — layers, core classes (ModuleBase, AudioEngine, GraphEditor, UndoManager, LookAndFeel), bypass/mute contract, signal flow, plugin layer (VST3/AU host modes, ownership, state format)
 - [`docs/modules.md`](docs/modules.md) — per-module specs + poly channel layouts (Oscillator, Filter, VCA, ADSR, LFO, Sequencer, Poly MIDI, Voice Mixer, Math …)
 - [`docs/fx_modules.md`](docs/fx_modules.md) — FX specs (Distortion, Delay, Reverb, Chorus, Phaser, Compressor, Flanger, Limiter, Pitch Shifter, Parametric EQ)
 - [`docs/modulation.md`](docs/modulation.md) — routing model, logical-port API, poly-bus wires, attenuverters, visual signal flow

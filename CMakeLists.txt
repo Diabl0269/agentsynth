@@ -31,6 +31,10 @@ FetchContent_MakeAvailable(juce)
 option(ENABLE_COVERAGE "Enable code coverage testing" OFF)
 option(ENABLE_TESTS "Enable building test suite" OFF)
 option(ENABLE_AI_HARNESS "Build the AI patch validity/quality measurement harnesses (needs a live Ollama)" OFF)
+# ON by default: the plugin ships in every release alongside the standalone app, and building it
+# in PR CI is what stops the shared UI/engine code from silently breaking the plugin wrapper.
+# Turn OFF for a faster local iteration loop when you're only working on the standalone app.
+option(ENABLE_PLUGIN "Build the VST3 (+ AU on macOS) audio-plugin targets" ON)
 
 # Product identity — the single place to override branding at configure time
 # (e.g. `cmake -S . -B build -DSYNTH_PRODUCT_NAME=MySynth`). Mirrored in C++ at
@@ -278,12 +282,18 @@ juce_add_binary_data(Assets SOURCES
 target_link_libraries(Core PUBLIC Assets)
 target_compile_definitions(Core PUBLIC HAS_FONT_ASSETS=1)
 
-# Add source files
-target_sources(AgentSynth PRIVATE
-    Source/Main.cpp
+# The full editor UI (MainComponent + everything under Source/UI that isn't already in Core).
+# Split out of the AgentSynth app target so the standalone app AND the audio-plugin wrapper build
+# ONE copy of this code from ONE source list — a plugin whose UI drifts from the app's is the
+# exact failure mode this library exists to prevent.
+# Deliberately NOT folded into Core: Core is the headless-testable layer, and the Tests target
+# still compiles these sources itself with JUCE_MODAL_LOOPS_PERMITTED=1, which this library is
+# not built with.
+# Main.cpp stays out — it is the standalone entry point (JUCEApplication + the generated
+# JuceHeader.h) and has no meaning inside a plugin.
+add_library(AppUI STATIC
     Source/MainComponent.cpp
     Source/MainComponent.h
-    # UI (UI depends on Core, but technically could be in App for now)
     Source/UI/AIChatComponent.cpp
     Source/UI/AccountRow.cpp
     Source/UI/AccountRow.h
@@ -310,8 +320,29 @@ target_sources(AgentSynth PRIVATE
     Source/ShortcutManager.h
 )
 
+# PUBLIC so consumers (the app and the plugin) inherit Core's JUCE modules, include dirs,
+# the Assets binary-data lib and HAS_FONT_ASSETS.
+target_link_libraries(AppUI PUBLIC Core)
+
+if(MSVC)
+    target_compile_options(AppUI PRIVATE /W4)
+else()
+    target_compile_options(AppUI PRIVATE -Wall -Wextra)
+endif()
+
+if(UNIX AND NOT APPLE)
+    target_link_libraries(AppUI PUBLIC ${GTK3_LIBRARIES})
+    target_include_directories(AppUI PUBLIC ${GTK3_INCLUDE_DIRS})
+endif()
+
+# The standalone app is now just its entry point on top of AppUI.
+target_sources(AgentSynth PRIVATE
+    Source/Main.cpp
+)
+
 # Link against JUCE modules
 target_link_libraries(AgentSynth PRIVATE
+    AppUI # Editor UI, shared with the plugin target
     Core # Link to our core library
     Assets # Embedded font binary data
     juce::juce_core
@@ -344,6 +375,84 @@ if(MSVC)
     target_compile_options(AgentSynth PRIVATE /W4)
 else()
     target_compile_options(AgentSynth PRIVATE -Wall -Wextra)
+endif()
+
+# ----------------------------------------------------------------------------------------------
+# Audio plugin (VST3 everywhere, + AU on macOS)
+#
+# Wraps the SAME AudioEngine and MainComponent the standalone app runs (via the AppUI library
+# above) in a juce::AudioProcessor. The engine is constructed in HostMode::Hosted so it never
+# opens an audio device or MIDI input of its own — the host drives it. See Source/Plugin/ and
+# docs/architecture.md.
+#
+# Standalone is deliberately NOT in FORMATS: JUCE would emit a second "Agent Synth.app" that
+# collides with the AgentSynth app target's own artifact in release packaging, for a build that
+# does strictly less than the real app.
+# ----------------------------------------------------------------------------------------------
+if(ENABLE_PLUGIN)
+    set(SYNTH_PLUGIN_FORMATS VST3)
+    if(APPLE)
+        list(APPEND SYNTH_PLUGIN_FORMATS AU)
+    endif()
+
+    juce_add_plugin(AgentSynthPlugin
+        PRODUCT_NAME "${SYNTH_PRODUCT_NAME}"
+        VERSION "${PROJECT_VERSION}"
+        COMPANY_NAME "${SYNTH_COMPANY_NAME}"
+        # Must differ from the app's bundle ID — macOS refuses to register two bundles that
+        # claim the same CFBundleIdentifier, and a collision silently breaks AU validation.
+        BUNDLE_ID "${SYNTH_BUNDLE_ID}.plugin"
+        # 4-char codes. The manufacturer code MUST contain at least one uppercase character or
+        # Audio Unit registration rejects the component.
+        PLUGIN_MANUFACTURER_CODE Agsy
+        PLUGIN_CODE Agsn
+        FORMATS ${SYNTH_PLUGIN_FORMATS}
+        IS_SYNTH TRUE
+        NEEDS_MIDI_INPUT TRUE
+        NEEDS_MIDI_OUTPUT FALSE
+        IS_MIDI_EFFECT FALSE
+        # The graph editor is keyboard-driven (see docs/shortcuts.md); without this the host
+        # swallows every keystroke before the editor sees it.
+        EDITOR_WANTS_KEYBOARD_FOCUS TRUE
+        # Never install into the user's system plugin folders as a build side effect — CI
+        # packages the artefacts explicitly, and a local build shouldn't mutate ~/Library.
+        COPY_PLUGIN_AFTER_BUILD FALSE
+        VST3_CATEGORIES Instrument Synth
+        AU_MAIN_TYPE kAudioUnitType_MusicDevice
+    )
+
+    target_sources(AgentSynthPlugin PRIVATE
+        Source/Plugin/PluginProcessor.cpp
+        Source/Plugin/PluginProcessor.h
+        Source/Plugin/PluginEditor.cpp
+        Source/Plugin/PluginEditor.h
+    )
+
+    target_link_libraries(AgentSynthPlugin PRIVATE
+        AppUI # Editor UI, shared with the standalone app
+        Core
+        Assets # Embedded font binary data
+        juce::juce_audio_utils
+    )
+
+    target_compile_definitions(AgentSynthPlugin PUBLIC
+        JUCE_WEB_BROWSER=0
+        HAS_FONT_ASSETS=1
+        # JUCE 8 has no VST2 support; be explicit so the VST3 wrapper doesn't try to masquerade
+        # as a VST2 replacement (which would require the long-gone VST2 SDK).
+        JUCE_VST3_CAN_REPLACE_VST2=0
+    )
+
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(AgentSynthPlugin PRIVATE ${GTK3_LIBRARIES})
+        target_include_directories(AgentSynthPlugin PRIVATE ${GTK3_INCLUDE_DIRS})
+    endif()
+
+    if(MSVC)
+        target_compile_options(AgentSynthPlugin PRIVATE /W4)
+    else()
+        target_compile_options(AgentSynthPlugin PRIVATE -Wall -Wextra)
+    endif()
 endif()
 
 if(ENABLE_TESTS)
