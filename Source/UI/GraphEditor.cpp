@@ -60,7 +60,8 @@ static juce::Point<int> estimateModuleSize(const juce::String& typeName) {
         return {280, 220};
     if (typeName == "Reverb")
         return {280, 300};
-    if (typeName == "AudioInput" || typeName == "AudioOutput")
+    if (typeName == "AudioInput" || typeName == "AudioOutput" || typeName == "Audio Input" ||
+        typeName == "Audio Output")
         return {280, 100};
     if (typeName == "Attenuverter")
         return {280, 120};
@@ -1639,8 +1640,27 @@ void GraphEditor::itemDragExit(const SourceDetails& dragSourceDetails) {
     endDragPreview();
 }
 
+bool GraphEditor::isSingletonIOModule(const juce::String& typeName) {
+    return typeName == "Audio Input" || typeName == "Audio Output";
+}
+
+bool GraphEditor::graphHasModuleNamed(juce::AudioProcessorGraph& graph, const juce::String& typeName) {
+    for (auto* node : graph.getNodes())
+        if (node->getProcessor() != nullptr && node->getProcessor()->getName() == typeName)
+            return true;
+    return false;
+}
+
 void GraphEditor::itemDropped(const SourceDetails& dragSourceDetails) {
     juce::String name = dragSourceDetails.description.toString();
+
+    // Audio Input/Output are singletons. JUCE ties every audioOutputNode's channel count to the whole
+    // graph and each one sums into the same device buffer, so a second instance would double the
+    // signal rather than address another output — and every node lookup in the app (auto-connect,
+    // PatchEval, auto-arrange) takes the first match and stops. Dropping a duplicate is a no-op.
+    if (isSingletonIOModule(name) && graphHasModuleNamed(audioEngine.getGraph(), name))
+        return;
+
     auto newProcessor = synth::AIStateMapper::createModule(name);
 
     if (newProcessor) {

@@ -1,3 +1,4 @@
+#include "../Source/Modules/ADSRModule.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/VCAModule.h"
 #include "../Source/UI/GraphEditor.h"
@@ -157,4 +158,25 @@ TEST_F(ModuleComponentTest, GetPortCenter_ClampsOutOfRangeToLastVisibleJack) {
 
     EXPECT_EQ(p_out_5.y, p_out_0.y)
         << "getPortCenter(5,false).y should clamp to getPortCenter(0,false).y (only visible output jack)";
+}
+
+// The ADSR has its own layout branch that used to position only its four sliders and return,
+// leaving every auto-generated toggle at default (0,0,0,0) bounds. That made the "Poly" checkbox
+// invisible and unclickable, so poly mode was unreachable on this module from the UI.
+TEST_F(ModuleComponentTest, AdsrPolyToggleIsLaidOutInsideTheModule) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ADSRModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    juce::ToggleButton* polyToggle = nullptr;
+    for (auto* child : moduleComponent.getChildren())
+        if (auto* toggle = dynamic_cast<juce::ToggleButton*>(child))
+            if (toggle->getComponentID() == "Poly")
+                polyToggle = toggle;
+
+    ASSERT_NE(polyToggle, nullptr) << "ADSR exposes a 'poly' parameter, so it must render a Poly toggle";
+    EXPECT_FALSE(polyToggle->getBounds().isEmpty()) << "Poly toggle must be given real bounds, not (0,0,0,0)";
+    EXPECT_TRUE(moduleComponent.getLocalBounds().contains(polyToggle->getBounds()))
+        << "Poly toggle must sit inside the module's bounds to be visible and clickable";
 }

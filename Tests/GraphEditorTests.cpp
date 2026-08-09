@@ -929,6 +929,34 @@ TEST_F(GraphEditorTest, DisconnectPolyPortRemovesEntireFan) {
     EXPECT_EQ(postCount, 0);
 }
 
+TEST_F(GraphEditorTest, AudioIONodesAreSingletons) {
+    EXPECT_TRUE(GraphEditor::isSingletonIOModule("Audio Output"));
+    EXPECT_TRUE(GraphEditor::isSingletonIOModule("Audio Input"));
+    EXPECT_FALSE(GraphEditor::isSingletonIOModule("Oscillator"));
+
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto& graph = engine.getGraph();
+    graph.clear();
+    EXPECT_FALSE(GraphEditor::graphHasModuleNamed(graph, "Audio Output"));
+
+    DummyDragSource dummySource;
+    juce::var description("Audio Output");
+    juce::DragAndDropTarget::SourceDetails details(description, &dummySource, juce::Point<int>(100, 100));
+
+    // The first drop creates it — the module library offers Audio Output so a deleted one is
+    // recoverable rather than stranding the patch with no way to hear it.
+    editor.itemDropped(details);
+    EXPECT_TRUE(GraphEditor::graphHasModuleNamed(graph, "Audio Output"));
+    auto countAfterFirst = graph.getNodes().size();
+
+    // A second drop must be a no-op: two output nodes would sum into the same device buffer.
+    editor.itemDropped(details);
+    EXPECT_EQ(graph.getNodes().size(), countAfterFirst) << "A duplicate Audio Output must not be created";
+}
+
 TEST_F(GraphEditorTest, DragMonoLfoOntoPolyVcaBroadcastsToEveryVoice) {
     AudioEngine engine;
     GraphEditor editor(engine);

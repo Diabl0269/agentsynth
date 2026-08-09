@@ -131,6 +131,14 @@ public:
                                                      const std::vector<synth::LayoutUtil::Box>& existingBoxes,
                                                      synth::LayoutUtil::NodeID selfId);
 
+    /** True for the module-library entries that must exist at most once per patch (Audio Input /
+     *  Audio Output). A second one would sum into the same device buffer rather than address a
+     *  different physical output, and the app's node lookups all take the first match. */
+    static bool isSingletonIOModule(const juce::String& typeName);
+
+    /** True when the graph already contains a node whose processor reports this name. */
+    static bool graphHasModuleNamed(juce::AudioProcessorGraph& graph, const juce::String& typeName);
+
     // DragAndDropTarget overrides
     bool isInterestedInDragSource(const SourceDetails& dragSourceDetails) override;
     void itemDropped(const SourceDetails& dragSourceDetails) override;

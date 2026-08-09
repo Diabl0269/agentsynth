@@ -539,7 +539,7 @@ void ModuleComponent::updateLayout() {
     }
 
     if (getType(module) == ModuleType::ADSR) {
-        setSize(220 + 60, 180); // 180 is height from ADSR Layout
+        setSize(220 + 60, 220); // Matches the ADSR branch of updateLayout (sliders + one toggle row)
         return;
     }
 
@@ -921,18 +921,29 @@ void ModuleComponent::resized() {
 
     // --- ADSR Layout ---
     if (getType(module) == ModuleType::ADSR) {
-        int margin = 30;                // Side margins for ports
-        setSize(220 + margin * 2, 180); // Increase width
+        int margin = 30; // Side margins for ports
         int y = 30;
-        int contentWidth = getWidth() - margin * 2;
         int sliderWidth = 50;
         int sliderHeight = 120;
+
+        // Reserve a row per auto-generated toggle (the "Poly" checkbox) below the sliders. This
+        // branch used to lay out only the sliders and return, leaving every toggle at its default
+        // (0,0,0,0) bounds — present in the component tree but invisible and unclickable, which made
+        // poly mode unreachable on this module.
+        int toggleY = y + 20 + sliderHeight + 10;
+        setSize(220 + margin * 2, toggleY + toggles.size() * 30 + 10);
+        int contentWidth = getWidth() - margin * 2;
 
         // We expect 4 sliders: A, D, S, R
         for (int i = 0; i < sliders.size(); ++i) {
             int x = margin + 10 + i * sliderWidth;
             sliderLabels[i]->setBounds(x, y, sliderWidth, 20);
             sliders[i]->setBounds(x, y + 20, sliderWidth, sliderHeight);
+        }
+
+        for (int i = 0; i < toggles.size(); ++i) {
+            toggles[i]->setBounds(margin, toggleY, contentWidth, 24);
+            toggleY += 30;
         }
         return;
     }

@@ -43,6 +43,9 @@ public:
             {"Limiter", false},
             {"Utility", true},
             {"Voice Mixer", false},
+            {"I/O", true},
+            {"Audio Input", false},
+            {"Audio Output", false},
         };
         setMouseCursor(juce::MouseCursor::NormalCursor);
     }
@@ -94,6 +97,10 @@ public:
             return "Brickwall limiter that prevents the signal from exceeding 0 dBFS.";
         if (moduleName.equalsIgnoreCase("Voice Mixer"))
             return "Sums multiple polyphonic voices down to a stereo mix.";
+        if (moduleName.equalsIgnoreCase("Audio Input"))
+            return "Audio from the input device. Only one per patch.";
+        if (moduleName.equalsIgnoreCase("Audio Output"))
+            return "Sends the patch to the output device. Only one per patch.";
         // Generic fallback for any unrecognised module name.
         return "Audio processing module.";
     }
