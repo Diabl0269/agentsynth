@@ -810,3 +810,188 @@ TEST_F(GraphEditorTest, AlignmentGuideDrawingThemeAware) {
     // Verify line width matches spec
     EXPECT_FLOAT_EQ(m.guideLineWidth, 1.5f);
 }
+
+// ============================================================================
+// Minimap (issue #159)
+// ============================================================================
+
+namespace {
+
+// Hand-built MouseEvent, same pattern as MinimapComponentTests.cpp — no OS mouse source exists
+// headlessly, but MouseInputSource is copyable and Desktop always exposes one.
+juce::MouseEvent makeGraphEditorMouseEvent(juce::Component& comp, juce::Point<float> position) {
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), position, juce::ModifierKeys(), 0.0f,
+                            0.0f, 0.0f, 0.0f, 0.0f, &comp, &comp, juce::Time::getCurrentTime(), position,
+                            juce::Time::getCurrentTime(), 1, false);
+}
+
+// Maps a GraphEditor-local screen point to the canvas point currently under it, derived purely
+// from getVisibleCanvasRect() (no access to the private pan/zoom state needed).
+juce::Point<float> screenToCanvas(const GraphEditor& editor, juce::Point<float> screenPt) {
+    const auto rect = editor.getVisibleCanvasRect();
+    const auto w = static_cast<float>(editor.getWidth());
+    const auto h = static_cast<float>(editor.getHeight());
+    return {rect.getX() + (screenPt.x / w) * rect.getWidth(), rect.getY() + (screenPt.y / h) * rect.getHeight()};
+}
+
+} // namespace
+
+// toggleMinimapVisibility() flips the reported preference each call.
+TEST_F(GraphEditorTest, ToggleMinimapVisibilityFlipsState) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    ASSERT_TRUE(editor.isMinimapVisible());
+    editor.toggleMinimapVisibility();
+    EXPECT_FALSE(editor.isMinimapVisible());
+    editor.toggleMinimapVisibility();
+    EXPECT_TRUE(editor.isMinimapVisible());
+}
+
+// setMinimapVisible(false) actually hides the child component, not just the preference flag.
+TEST_F(GraphEditorTest, SetMinimapVisibleFalseHidesChildComponent) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    ASSERT_TRUE(editor.getMinimap().isVisible());
+    editor.setMinimapVisible(false);
+    EXPECT_FALSE(editor.isMinimapVisible());
+    EXPECT_FALSE(editor.getMinimap().isVisible());
+}
+
+// Below the 480x360 auto-hide threshold the minimap child must not be visible even though the
+// user preference is untouched; growing back above the threshold restores it.
+TEST_F(GraphEditorTest, MinimapAutoHidesBelowThresholdAndPreferenceSurvives) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+    ASSERT_TRUE(editor.getMinimap().isVisible());
+
+    editor.setSize(400, 300); // below kMinEditorW/H
+    EXPECT_TRUE(editor.isMinimapVisible()) << "preference must survive an auto-hide";
+    EXPECT_FALSE(editor.getMinimap().isVisible());
+
+    editor.setSize(800, 600); // back above threshold
+    EXPECT_TRUE(editor.isMinimapVisible());
+    EXPECT_TRUE(editor.getMinimap().isVisible());
+}
+
+// getVisibleCanvasRect() at identity zoom/pan equals the editor's own local bounds.
+TEST_F(GraphEditorTest, VisibleCanvasRectAtIdentityEqualsLocalBounds) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    const auto rect = editor.getVisibleCanvasRect();
+    EXPECT_NEAR(rect.getX(), 0.0f, 0.01f);
+    EXPECT_NEAR(rect.getY(), 0.0f, 0.01f);
+    EXPECT_NEAR(rect.getWidth(), 800.0f, 0.01f);
+    EXPECT_NEAR(rect.getHeight(), 600.0f, 0.01f);
+}
+
+// centreViewOn(p) must put p at the centre of the returned visible-canvas rect.
+TEST_F(GraphEditorTest, CentreViewOnMovesViewportCentreToRequestedPoint) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    const juce::Point<float> target(1000.0f, -200.0f);
+    editor.centreViewOn(target);
+
+    const auto rect = editor.getVisibleCanvasRect();
+    EXPECT_NEAR(rect.getCentreX(), target.x, 0.5f);
+    EXPECT_NEAR(rect.getCentreY(), target.y, 0.5f);
+}
+
+// zoomAroundCentre's sign matches wheel-zoom direction: positive narrows the visible rect (zoom
+// in), negative widens it (zoom out).
+TEST_F(GraphEditorTest, ZoomAroundCentreMatchesWheelZoomDirection) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    const auto widthBefore = editor.getVisibleCanvasRect().getWidth();
+    editor.zoomAroundCentre(1.0f);
+    EXPECT_LT(editor.getVisibleCanvasRect().getWidth(), widthBefore);
+
+    const auto widthBeforeOut = editor.getVisibleCanvasRect().getWidth();
+    editor.zoomAroundCentre(-1.0f);
+    EXPECT_GT(editor.getVisibleCanvasRect().getWidth(), widthBeforeOut);
+}
+
+// zoomAroundCentre keeps the canvas point at the viewport centre fixed while zooming.
+TEST_F(GraphEditorTest, ZoomAroundCentreKeepsCanvasCentrePointFixed) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    const auto canvasCentreBefore = editor.getVisibleCanvasRect().getCentre();
+    editor.zoomAroundCentre(1.0f);
+    const auto canvasCentreAfter = editor.getVisibleCanvasRect().getCentre();
+
+    EXPECT_NEAR(canvasCentreAfter.x, canvasCentreBefore.x, 0.5f);
+    EXPECT_NEAR(canvasCentreAfter.y, canvasCentreBefore.y, 0.5f);
+}
+
+// Zoom stays clamped to [0.1, 2.0] no matter how many times it's driven in one direction.
+TEST_F(GraphEditorTest, ZoomAroundCentreStaysClampedUnderRepeatedCalls) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    for (int i = 0; i < 200; ++i)
+        editor.zoomAroundCentre(10.0f);
+    EXPECT_NEAR(editor.getVisibleCanvasRect().getWidth(), 800.0f / 2.0f, 1.0f) << "zoom must clamp at 2.0";
+
+    for (int i = 0; i < 200; ++i)
+        editor.zoomAroundCentre(-10.0f);
+    EXPECT_NEAR(editor.getVisibleCanvasRect().getWidth(), 800.0f / 0.1f, 1.0f) << "zoom must clamp at 0.1";
+}
+
+// Regression guard for the applyZoomAt extraction (shared by mouseWheelMove and
+// zoomAroundCentre): a wheel event at an arbitrary screen position must still keep the canvas
+// point under the cursor fixed, and must still actually change the zoom.
+TEST_F(GraphEditorTest, WheelZoomKeepsCanvasPointUnderCursorFixed) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    // Start from a non-trivial pan so this isn't only exercising the identity case.
+    editor.centreViewOn({300.0f, 250.0f});
+
+    const juce::Point<float> cursor(150.0f, 400.0f);
+    const auto canvasBefore = screenToCanvas(editor, cursor);
+    const auto widthBefore = editor.getVisibleCanvasRect().getWidth();
+
+    juce::MouseWheelDetails wheel;
+    wheel.deltaY = 1.5f;
+    editor.mouseWheelMove(makeGraphEditorMouseEvent(editor, cursor), wheel);
+
+    const auto canvasAfter = screenToCanvas(editor, cursor);
+    EXPECT_NEAR(canvasAfter.x, canvasBefore.x, 0.5f);
+    EXPECT_NEAR(canvasAfter.y, canvasBefore.y, 0.5f);
+    EXPECT_LT(editor.getVisibleCanvasRect().getWidth(), widthBefore) << "the wheel event must still have zoomed";
+}
+
+// buildMinimapModel() returns one node per rendered ModuleComponent, and a viewport equal to
+// getVisibleCanvasRect().
+TEST_F(GraphEditorTest, BuildMinimapModelReturnsOneNodePerModuleAndMatchingViewport) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    oscNode->properties.set("x", 50);
+    oscNode->properties.set("y", 50);
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    filterNode->properties.set("x", 400);
+    filterNode->properties.set("y", 300);
+    editor.updateComponents();
+
+    const auto model = editor.buildMinimapModel();
+    EXPECT_EQ(model.nodes.size(), 2u);
+    EXPECT_TRUE(model.viewport == editor.getVisibleCanvasRect());
+}

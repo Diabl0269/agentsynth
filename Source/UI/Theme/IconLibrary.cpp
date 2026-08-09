@@ -83,6 +83,8 @@ std::pair<const void*, int> IconLibrary::binaryDataForIcon(Icon id) {
         {BinaryData::waveformsaw_svg, BinaryData::waveformsaw_svgSize},
         {BinaryData::waveformsquare_svg, BinaryData::waveformsquare_svgSize},
         {BinaryData::waveformtriangle_svg, BinaryData::waveformtriangle_svgSize},
+        // Minimap toggle (issue #159).
+        {BinaryData::toggleminimap_svg, BinaryData::toggleminimap_svgSize},
     };
     static_assert(std::size(kTable) == (size_t)Icon::kCount,
                   "kTable size does not match Icon::kCount — update binaryDataForIcon lookup table");

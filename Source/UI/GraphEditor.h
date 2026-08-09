@@ -11,6 +11,7 @@
 #include <vector>
 
 class ModuleComponent;
+#include "MinimapComponent.h"
 #include "ModMatrixComponent.h"
 
 class GraphEditor
@@ -39,6 +40,26 @@ public:
     void updateComponents();
     void toggleModMatrixVisibility();
     bool isModMatrixVisible() const { return isMatrixVisible; }
+
+    // ---- Minimap (issue #159) ----
+    void setMinimapVisible(bool shouldBeVisible);
+    void toggleMinimapVisibility();
+    bool isMinimapVisible() const noexcept { return minimapVisible; }
+    synth::ui::MinimapComponent& getMinimap() noexcept { return minimap; }
+
+    /** The canvas rect currently visible in the editor — the inverse of the content transform
+     *  applied to getLocalBounds(). */
+    juce::Rectangle<float> getVisibleCanvasRect() const;
+
+    /** Pans so `canvasPoint` sits at the centre of the visible area. Zoom is unchanged. */
+    void centreViewOn(juce::Point<float> canvasPoint);
+
+    /** Multiplies zoom around the centre of the visible area, clamped to the same [0.1, 2.0]
+     *  range as wheel zoom, so the point under the centre stays put. */
+    void zoomAroundCentre(float wheelDelta);
+
+    // Test accessor. Non-const because it calls buildVisibleCables(), which is non-const.
+    synth::ui::MinimapModel buildMinimapModel();
 
     // Interactions
     void beginConnectionDrag(ModuleComponent* sourceModule, int channelIndex, bool isInput, bool isMidi,
@@ -313,6 +334,11 @@ private:
     ModMatrixComponent modMatrix;
     bool isMatrixVisible = false;
 
+    // ---- Minimap (issue #159) ----
+    synth::ui::MinimapComponent minimap;
+    // User preference, independent of resized()'s auto-hide-when-tiny effective visibility.
+    bool minimapVisible = true;
+
     // Navigation State
     float zoomLevel = 1.0f;
     juce::Point<float> panOffset;
@@ -402,6 +428,11 @@ private:
     bool alignmentGuidesEnabled = true;
 
     void updateTransform();
+
+    // Shared zoom math for mouseWheelMove and zoomAroundCentre — keeps the formula (and the
+    // [0.1, 2.0] clamp) in exactly one place. `screenAnchor` is the point (in GraphEditor local/
+    // screen coordinates) whose underlying canvas point must stay put under the cursor/centre.
+    void applyZoomAt(float wheelDelta, juce::Point<float> screenAnchor);
 
     // Internal: start the drop-landing animation for a newly placed module component.
     void animateDropLanding(ModuleComponent* module, juce::Point<int> fromPos, juce::Point<int> toPos);

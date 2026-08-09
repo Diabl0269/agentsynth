@@ -127,6 +127,8 @@ add_library(Core STATIC
     Source/UI/StatusBarComponent.cpp
     Source/UI/ToolbarComponent.h
     Source/UI/ToolbarComponent.cpp
+    Source/UI/MinimapComponent.h
+    Source/UI/MinimapComponent.cpp
     # Theme system
     Source/UI/Theme/Theme.h
     Source/UI/Theme/ThemeManager.h
@@ -270,6 +272,8 @@ juce_add_binary_data(Assets SOURCES
     assets/icons/waveform-saw.svg
     assets/icons/waveform-square.svg
     assets/icons/waveform-triangle.svg
+    # Minimap toggle (issue #159).
+    assets/icons/toggle-minimap.svg
 )
 
 # The themed LookAndFeel lives in Core and pulls typefaces from BinaryData;
