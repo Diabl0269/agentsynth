@@ -131,6 +131,11 @@ public:
                                                      const std::vector<synth::LayoutUtil::Box>& existingBoxes,
                                                      synth::LayoutUtil::NodeID selfId);
 
+    /** Called at the end of every updateComponents(), i.e. whenever the set of modules in the graph
+     *  may have changed (add, delete, replace, preset load, undo). Owners use it to refresh UI that
+     *  depends on what the patch contains — the module library greys out its singleton I/O rows. */
+    std::function<void()> onGraphStructureChanged;
+
     /** True for the module-library entries that must exist at most once per patch (Audio Input /
      *  Audio Output). A second one would sum into the same device buffer rather than address a
      *  different physical output, and the app's node lookups all take the first match. */

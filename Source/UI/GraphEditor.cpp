@@ -754,6 +754,11 @@ void GraphEditor::updateComponents() {
             self->modMatrix.updateRowsFromGraph();
     });
 
+    // Let owners refresh anything that depends on which modules the patch now contains. Event-driven
+    // on purpose: no timer and no per-tick repaint.
+    if (onGraphStructureChanged)
+        onGraphStructureChanged();
+
     repaint();
 }
 

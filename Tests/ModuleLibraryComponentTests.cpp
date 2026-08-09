@@ -92,6 +92,35 @@ static void simulateMouseExit(ModuleLibraryComponent& comp) {
     comp.mouseExit(evt);
 }
 
+TEST(ModuleLibraryAvailability, EveryModuleIsEnabledWhenNoPredicateIsSet) {
+    ModuleLibraryComponent lib;
+    // Row 1 is "Oscillator" (row 0 is the "Sources" header).
+    EXPECT_TRUE(lib.isEntryEnabled(1));
+    EXPECT_FALSE(lib.isEntryEnabled(0)) << "Headers are never draggable";
+    EXPECT_FALSE(lib.isEntryEnabled(-1));
+    EXPECT_FALSE(lib.isEntryEnabled(9999));
+}
+
+TEST(ModuleLibraryAvailability, PredicateDisablesMatchingRows) {
+    ModuleLibraryComponent lib;
+    lib.isModuleAvailable = [](const juce::String& name) { return name != "Audio Output"; };
+
+    int audioOutputRow = -1;
+    int oscillatorRow = -1;
+    for (int i = 0; i < lib.getEntryCount(); ++i) {
+        if (lib.getEntryText(i) == "Audio Output")
+            audioOutputRow = i;
+        if (lib.getEntryText(i) == "Oscillator")
+            oscillatorRow = i;
+    }
+
+    ASSERT_GE(audioOutputRow, 0) << "Audio Output should be offered in the library";
+    ASSERT_GE(oscillatorRow, 0);
+
+    EXPECT_FALSE(lib.isEntryEnabled(audioOutputRow)) << "An unavailable module must not be draggable";
+    EXPECT_TRUE(lib.isEntryEnabled(oscillatorRow)) << "Other modules stay unaffected";
+}
+
 TEST(ModuleLibraryHoverIndex, HoverOnHeaderRowIsMinusOne) {
     ModuleLibraryComponent comp;
     comp.setSize(200, 600);

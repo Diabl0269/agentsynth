@@ -105,6 +105,14 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     startTimerHz(10);
     addAndMakeVisible(graphEditor);
     addAndMakeVisible(moduleLibrary);
+
+    // Grey out the singleton I/O rows once the patch already has one, and repaint the library
+    // whenever the graph's module set changes so that state stays accurate.
+    moduleLibrary.isModuleAvailable = [this](const juce::String& name) {
+        return !GraphEditor::isSingletonIOModule(name) ||
+               !GraphEditor::graphHasModuleNamed(audioEngine.getGraph(), name);
+    };
+    graphEditor.onGraphStructureChanged = [this] { moduleLibrary.repaint(); };
     addAndMakeVisible(aiChatComponent);
     aiChatComponent.setVisible(isAiPanelVisible);
     moduleLibrary.setVisible(isLibraryVisible);
