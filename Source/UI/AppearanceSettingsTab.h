@@ -68,7 +68,13 @@ private:
     std::unique_ptr<ThemeListModel> listModel;
     juce::TextButton openFolderButton{"Open Themes Folder"};
     juce::TextButton reloadButton{"Reload Themes"};
-    juce::Label titleLabel;
+    juce::Label modeLabel;
+    juce::ComboBox modeCombo;
+    juce::Label defaultDarkLabel;
+    juce::ComboBox defaultDarkCombo;
+    juce::Label defaultLightLabel;
+    juce::ComboBox defaultLightCombo;
+
     juce::ToggleButton alignmentGuideToggle{"Show Alignment Guides"};
 
     // ---- Cable colour controls ----

@@ -56,12 +56,12 @@ public:
 
         // Name (+ "user" tag) on top.
         auto nameRow = content.removeFromTop(content.getHeight() / 2);
-        g.setColour(juce::Colours::white);
+        g.setColour(themeManager.getActiveTheme().colors.textPrimary);
         g.setFont(juce::Font(juce::FontOptions(14.0f, isActive ? juce::Font::bold : juce::Font::plain)));
         g.drawText(theme.name, nameRow, juce::Justification::centredLeft, true);
 
         if (theme.isUserTheme) {
-            g.setColour(juce::Colours::lightgrey);
+            g.setColour(themeManager.getActiveTheme().colors.textMuted);
             g.setFont(juce::Font(juce::FontOptions(10.0f)));
             g.drawText("user", nameRow, juce::Justification::centredRight, true);
         }
@@ -155,9 +155,79 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     , appProperties(props) {
     listModel = std::make_unique<ThemeListModel>(themeManager, *this);
 
-    addAndMakeVisible(titleLabel);
-    titleLabel.setText("Theme", juce::dontSendNotification);
-    titleLabel.setFont(juce::Font(juce::FontOptions(18.0f, juce::Font::bold)));
+    // Mode selector
+    addAndMakeVisible(modeLabel);
+    modeLabel.setText("Theme Mode:", juce::dontSendNotification);
+    modeLabel.setFont(juce::Font(juce::FontOptions(13.0f, juce::Font::bold)));
+
+    addAndMakeVisible(modeCombo);
+    modeCombo.addItem("Dark", 1);
+    modeCombo.addItem("Light", 2);
+    modeCombo.addItem("System", 3);
+    auto currentMode = themeManager.getThemeMode();
+    modeCombo.setSelectedId(
+        currentMode == ThemeManager::ThemeMode::Dark ? 1 : (currentMode == ThemeManager::ThemeMode::Light ? 2 : 3),
+        juce::dontSendNotification);
+    modeCombo.onChange = [this] {
+        int id = modeCombo.getSelectedId();
+        if (id == 1)
+            themeManager.setThemeMode(ThemeManager::ThemeMode::Dark);
+        else if (id == 2)
+            themeManager.setThemeMode(ThemeManager::ThemeMode::Light);
+        else if (id == 3)
+            themeManager.setThemeMode(ThemeManager::ThemeMode::System);
+    };
+
+    // Default Dark Theme selector
+    addAndMakeVisible(defaultDarkLabel);
+    defaultDarkLabel.setText("Default Dark Theme:", juce::dontSendNotification);
+    defaultDarkLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+
+    addAndMakeVisible(defaultDarkCombo);
+    const auto& themes = themeManager.getThemes();
+    for (int i = 0; i < (int)themes.size(); ++i) {
+        defaultDarkCombo.addItem(themes[(size_t)i].name, i + 1);
+    }
+    juce::String currentDarkId = themeManager.getDefaultDarkThemeId();
+    for (int i = 0; i < (int)themes.size(); ++i) {
+        if (themes[(size_t)i].id == currentDarkId) {
+            defaultDarkCombo.setSelectedId(i + 1, juce::dontSendNotification);
+            break;
+        }
+    }
+    defaultDarkCombo.onChange = [this] {
+        int itemId = defaultDarkCombo.getSelectedId();
+        if (itemId > 0) {
+            const auto& ths = themeManager.getThemes();
+            if (itemId - 1 < (int)ths.size())
+                themeManager.setDefaultDarkThemeId(ths[(size_t)(itemId - 1)].id);
+        }
+    };
+
+    // Default Light Theme selector
+    addAndMakeVisible(defaultLightLabel);
+    defaultLightLabel.setText("Default Light Theme:", juce::dontSendNotification);
+    defaultLightLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+
+    addAndMakeVisible(defaultLightCombo);
+    for (int i = 0; i < (int)themes.size(); ++i) {
+        defaultLightCombo.addItem(themes[(size_t)i].name, i + 1);
+    }
+    juce::String currentLightId = themeManager.getDefaultLightThemeId();
+    for (int i = 0; i < (int)themes.size(); ++i) {
+        if (themes[(size_t)i].id == currentLightId) {
+            defaultLightCombo.setSelectedId(i + 1, juce::dontSendNotification);
+            break;
+        }
+    }
+    defaultLightCombo.onChange = [this] {
+        int itemId = defaultLightCombo.getSelectedId();
+        if (itemId > 0) {
+            const auto& ths = themeManager.getThemes();
+            if (itemId - 1 < (int)ths.size())
+                themeManager.setDefaultLightThemeId(ths[(size_t)(itemId - 1)].id);
+        }
+    };
 
     addAndMakeVisible(themeList);
     themeList.setModel(listModel.get());
@@ -230,8 +300,21 @@ void AppearanceSettingsTab::paint(juce::Graphics& g) {
 
 void AppearanceSettingsTab::resized() {
     auto bounds = getLocalBounds().reduced(12);
-    titleLabel.setBounds(bounds.removeFromTop(28));
+
+    auto modeRow = bounds.removeFromTop(24);
+    modeLabel.setBounds(modeRow.removeFromLeft(140));
+    modeCombo.setBounds(modeRow.removeFromLeft(160));
     bounds.removeFromTop(6);
+
+    auto darkRow = bounds.removeFromTop(24);
+    defaultDarkLabel.setBounds(darkRow.removeFromLeft(140));
+    defaultDarkCombo.setBounds(darkRow.removeFromLeft(160));
+    bounds.removeFromTop(6);
+
+    auto lightRow = bounds.removeFromTop(24);
+    defaultLightLabel.setBounds(lightRow.removeFromLeft(140));
+    defaultLightCombo.setBounds(lightRow.removeFromLeft(160));
+    bounds.removeFromTop(10);
 
     auto buttonRow = bounds.removeFromBottom(30);
     openFolderButton.setBounds(buttonRow.removeFromLeft(160));
@@ -284,6 +367,28 @@ void AppearanceSettingsTab::changeListenerCallback(juce::ChangeBroadcaster* sour
     }
 
     // External theme change (or our own setActiveTheme): re-sync selection + redraw.
+    auto currentMode = themeManager.getThemeMode();
+    modeCombo.setSelectedId(
+        currentMode == ThemeManager::ThemeMode::Dark ? 1 : (currentMode == ThemeManager::ThemeMode::Light ? 2 : 3),
+        juce::dontSendNotification);
+
+    juce::String currentDarkId = themeManager.getDefaultDarkThemeId();
+    const auto& ths = themeManager.getThemes();
+    for (int i = 0; i < (int)ths.size(); ++i) {
+        if (ths[(size_t)i].id == currentDarkId) {
+            defaultDarkCombo.setSelectedId(i + 1, juce::dontSendNotification);
+            break;
+        }
+    }
+
+    juce::String currentLightId = themeManager.getDefaultLightThemeId();
+    for (int i = 0; i < (int)ths.size(); ++i) {
+        if (ths[(size_t)i].id == currentLightId) {
+            defaultLightCombo.setSelectedId(i + 1, juce::dontSendNotification);
+            break;
+        }
+    }
+
     const int activeRow = activeRowIndex(themeManager);
     if (activeRow >= 0)
         themeList.selectRow(activeRow);

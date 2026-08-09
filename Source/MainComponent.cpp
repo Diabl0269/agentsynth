@@ -265,6 +265,10 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     toggleLibraryButton.setComponentID("toggleLibrary");
     toggleLibraryButton.onClick = [this] { setLibraryVisible(!isLibraryVisible); };
 
+    addAndMakeVisible(themeToggleButton);
+    themeToggleButton.setComponentID("themeToggle");
+    themeToggleButton.onClick = [this] { themeManager->toggleLightDarkMode(); };
+
     addAndMakeVisible(autoArrangeButton);
     autoArrangeButton.setComponentID("autoArrangeButton");
     autoArrangeButton.onClick = [this] { graphEditor.autoArrange(); };
@@ -291,7 +295,8 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // resized() -> layoutButtons() pass finds the registered buttons and positions them.
     // Calling setSize() before setButtons() leaves all buttons with zero bounds on first launch.
     toolbar.setButtons({&toggleLibraryButton, &newButton, &saveButton, &loadButton, &settingsButton, &undoButton,
-                        &redoButton, &autoArrangeButton, &toggleModMatrixButton, &toggleAiPanelButton});
+                        &redoButton, &autoArrangeButton, &toggleModMatrixButton, &toggleAiPanelButton,
+                        &themeToggleButton});
 
     // Now that buttons are registered, trigger the first layout pass. resized() calls
     // toolbar.layoutButtons() which positions the buttons using their registered pointers.
@@ -672,6 +677,7 @@ void MainComponent::applyToolbarIcons() {
     setIcon(autoArrangeButton, Icon::ActionAutoArrange);
     setIcon(toggleModMatrixButton, Icon::ToggleMatrix);
     setIcon(toggleAiPanelButton, Icon::ToggleAI);
+    setIcon(themeToggleButton, Icon::ThemeToggle);
 
     // Master-mute uses the transport-stop glyph (no real play/stop transport this phase).
     if (lf != nullptr)
@@ -690,6 +696,9 @@ void MainComponent::applyToolbarIcons() {
                                                  : (graphEditor.isModMatrixVisible() ? "Hide Matrix" : "Show Matrix"));
     toggleAiPanelButton.setButtonText(iconOnly ? "" : (isAiPanelVisible ? "Hide AI" : "Show AI"));
     toggleLibraryButton.setButtonText(iconOnly ? "" : (isLibraryVisible ? "Hide Library" : "Show Library"));
+    themeToggleButton.setButtonText(
+        iconOnly ? ""
+                 : (themeManager != nullptr && themeManager->getActiveTheme().isDark ? "Light Mode" : "Dark Mode"));
 
     // Tooltips remain available even in icon-only mode; include shortcut hints where applicable.
     auto hint = [&](const juce::String& base, const juce::String& action) {
@@ -704,6 +713,7 @@ void MainComponent::applyToolbarIcons() {
     undoButton.setTooltip(hint("Undo", "undo"));
     redoButton.setTooltip(hint("Redo", "redo"));
     autoArrangeButton.setTooltip(hint("Auto-arrange modules", "autoArrange"));
+    themeToggleButton.setTooltip("Toggle light/dark mode");
 
     const juce::String matrixBase = graphEditor.isModMatrixVisible() ? "Hide Mod Matrix" : "Show Mod Matrix";
     toggleModMatrixButton.setTooltip(hint(matrixBase, "toggleModMatrix"));

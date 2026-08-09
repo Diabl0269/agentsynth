@@ -202,6 +202,12 @@ std::optional<Theme> ThemeLoader::parseTheme(const juce::var& json, const juce::
 
     theme.isUserTheme = false; // caller sets this after parsing
 
+    const juce::var& isDarkVal = json["isDark"];
+    if (!isDarkVal.isVoid() && !isDarkVal.isUndefined())
+        theme.isDark = (bool)isDarkVal;
+    else
+        theme.isDark = true; // default dark
+
     // --------------- Colors ---------------
     // Required minimum: bg0, surface, accent, textPrimary, audioWire, modWire.
     // All other color tokens are optional (default to Obsidian values).
@@ -460,6 +466,7 @@ juce::var ThemeLoader::themeToJson(const Theme& theme) {
     root->setProperty("schemaVersion", kSchemaVersion);
     root->setProperty("name", theme.name);
     root->setProperty("id", theme.id);
+    root->setProperty("isDark", theme.isDark);
 
     // Colors
     {

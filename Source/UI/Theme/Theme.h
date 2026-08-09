@@ -124,6 +124,7 @@ struct Theme {
     juce::String name{"Untitled"}; // human-facing display name (from JSON "name" or built-in)
     juce::String id{"untitled"};   // stable lookup id (slug; built-in or derived from filename)
     bool isUserTheme{false};       // true if loaded from the user themes folder
+    bool isDark{true};             // true for dark themes, false for light themes
     Colors colors{};
     Metrics metrics{};
     Typography type{};

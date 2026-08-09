@@ -256,13 +256,14 @@ TEST(IconLibraryTest, WaveformIconBinaryDataSymbols) {
 // 11. WaveformIconEnumCountCoversNewIcons
 // ---------------------------------------------------------------------------
 TEST(IconLibraryTest, WaveformIconEnumCountCoversNewIcons) {
-    // The enum must now contain 27 entries (22 Phase-3 + ActionNew + 4 waveform). The
+    // The enum must now contain 28 entries (22 Phase-3 + ActionNew + ThemeToggle + 4 waveform). The
     // static_assert in IconLibrary.cpp enforces kTable alignment at compile time; this runtime
     // check catches any mismatch that slips through without a rebuild.
-    EXPECT_EQ((int)Icon::kCount, 27);
-    // Spot-check ordinal positions of the new waveform icons (shifted +1 by ActionNew at index 6).
-    EXPECT_EQ((int)Icon::WaveformSine, 23);
-    EXPECT_EQ((int)Icon::WaveformSaw, 24);
-    EXPECT_EQ((int)Icon::WaveformSquare, 25);
-    EXPECT_EQ((int)Icon::WaveformTriangle, 26);
+    EXPECT_EQ((int)Icon::kCount, 28);
+    // Spot-check ordinal positions of the new waveform icons (shifted +2 by ActionNew at index 6 and ThemeToggle at
+    // index 11).
+    EXPECT_EQ((int)Icon::WaveformSine, 24);
+    EXPECT_EQ((int)Icon::WaveformSaw, 25);
+    EXPECT_EQ((int)Icon::WaveformSquare, 26);
+    EXPECT_EQ((int)Icon::WaveformTriangle, 27);
 }

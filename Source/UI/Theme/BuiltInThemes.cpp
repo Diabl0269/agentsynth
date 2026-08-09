@@ -241,6 +241,73 @@ Theme makeWarm() {
     return t;
 }
 
-std::vector<Theme> builtInThemes() { return {makeObsidian(), makeNeon(), makeWarm()}; }
+Theme makeDaylight() {
+    Theme t;
+    t.name = "Daylight Studio";
+    t.id = "daylight";
+    t.isUserTheme = false;
+    t.isDark = false;
+
+    // Colors - Clean, modern light theme with indigo accent
+    t.colors.bg0 = juce::Colour(0xffE9ECEF);          // page/window background
+    t.colors.bg1 = juce::Colour(0xffF8F9FA);          // canvas background
+    t.colors.surface = juce::Colour(0xffFFFFFF);      // module cards / panels
+    t.colors.surfaceHi = juce::Colour(0xffF1F3F5);    // raised surface
+    t.colors.border = juce::Colour(0xffCED4DA);       // hairline borders
+    t.colors.accent = juce::Colour(0xff4C6EF5);       // primary accent (indigo)
+    t.colors.accent2 = juce::Colour(0xff15AABF);      // secondary accent (cyan)
+    t.colors.audioWire = juce::Colour(0xff212529);    // audio signal wires (dark for contrast)
+    t.colors.modWire = juce::Colour(0xff4C6EF5);      // modulation CV wires
+    t.colors.pitchWire = juce::Colour(0xff15AABF);    // poly pitch wires
+    t.colors.gateWire = juce::Colour(0xffFD7E14);     // poly gate wires
+    t.colors.polyBusWire = juce::Colour(0xff3B5BD5);  // poly bus wires
+    t.colors.textPrimary = juce::Colour(0xff212529);  // primary text (dark grey/black)
+    t.colors.textMuted = juce::Colour(0xff6C757D);    // secondary text
+    t.colors.textDisabled = juce::Colour(0xffADB5BD); // disabled text
+    t.colors.success = juce::Colour(0xff2B8A3E);      // activity LED
+    t.colors.warning = juce::Colour(0xffE67E22);      // warning
+    t.colors.error = juce::Colour(0xffE03131);        // error
+    t.colors.knobBody = juce::Colour(0xffDEE2E6);     // knob body
+    t.colors.knobPointer = juce::Colour(0xff212529);  // knob pointer
+    t.colors.meterFill = juce::Colour(0xff4C6EF5);    // meter fill
+    t.colors.modRingPositive = juce::Colour(0xff4C6EF5);
+    t.colors.modRingNegative = juce::Colour(0xffFD7E14);
+
+    // Metrics
+    t.metrics.cornerRadius = 10.0f;
+    t.metrics.windowRadius = 14.0f;
+    t.metrics.pillRadius = 8.0f;
+    t.metrics.padding = 14;
+    t.metrics.spacingUnit = 6;
+    t.metrics.knobTrackWidth = 4.0f;
+    t.metrics.knobRingWidth = 3.5f;
+    t.metrics.borderWidth = 1.0f;
+    t.metrics.wireCoreWidth = 2.5f;
+    t.metrics.wireCasingWidth = 5.0f;
+    t.metrics.gridSize = 8;
+    t.metrics.guideAlpha = 0.7f;
+    t.metrics.guideLineWidth = 1.5f;
+    t.metrics.cornerRadiusSmall = 4.0f;
+
+    // Typography
+    t.type.uiFamily = "Inter";
+    t.type.monoFamily = "JetBrains Mono";
+    t.type.h1 = 18.0f;
+    t.type.h2 = 13.0f;
+    t.type.label = 10.5f;
+    t.type.value = 10.0f;
+    t.type.micro = 8.5f;
+
+    // Treatment
+    t.treatment.style = ThemeStyle::Flat;
+    t.treatment.glow = 0.0f;
+    t.treatment.shadow = 0.25f; // subtle drop shadow
+    t.treatment.blur = 0.0f;
+    t.treatment.texture = 0.0f;
+
+    return t;
+}
+
+std::vector<Theme> builtInThemes() { return {makeObsidian(), makeNeon(), makeWarm(), makeDaylight()}; }
 
 } // namespace synth::theme
