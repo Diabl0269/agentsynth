@@ -268,7 +268,9 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
                     float modPeak = 0.0f;
                     for (auto& info : editor.cachedModDisplayInfo) {
                         if (info.attenuverterNodeID == node2->nodeID) {
-                            modPeak = info.modSignalPeak;
+                            // Peaks are raw signal magnitudes and not every source is normalised
+                            // (Poly MIDI's pitch CV is in Hz), so clamp before this scales geometry.
+                            modPeak = juce::jlimit(0.0f, 1.0f, info.modSignalPeak);
                             break;
                         }
                     }
@@ -376,7 +378,9 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
             dstComp->getBounds().getPosition() + dstComp->getPortCenter(routing.destVisibleJack, /*isInput=*/true);
 
         // Brightness / width scaled by signal activity (mirrors attenuverter line ~lines 107-110).
-        float modPeak = routing.modSignalPeak;
+        // Clamped for the same reason as the attenuverter branch above: an unbounded peak scales the
+        // stroke width without limit and paints a screen-filling blob instead of a wire.
+        float modPeak = juce::jlimit(0.0f, 1.0f, routing.modSignalPeak);
         float lineWidth = 2.5f + modPeak * 2.0f;
 
         // Color by role from theme tokens: ModCV = poly-bus or direct (modWire), Pitch, Gate.
@@ -494,6 +498,17 @@ namespace {
  *  signal (this is what tells Poly MIDI's Pitch fan from its Gate fan when both share one jack); a
  *  ModCV or unclassified end is a wildcard, since mod inputs accept anything; equal fan widths break
  *  what is left. */
+/** True when a source channel carries a structural, absolute-valued signal rather than normalised
+ *  modulation. Poly MIDI's pitch fan is raw Hz and its gate fan is a 0/1 trigger; neither should ever
+ *  be routed through an attenuverter, which would scale an absolute frequency and feed Hz-magnitude
+ *  peaks into the UI's signal-activity metering. */
+bool carriesStructuralSignal(const ModuleBase* source, int sourceRawChannel) {
+    if (source == nullptr)
+        return false;
+    const PortRole role = source->mapOutputChannel(sourceRawChannel).role;
+    return role == PortRole::Pitch || role == PortRole::Gate;
+}
+
 int scoreJackPair(const ModuleBase::JackTarget& src, const ModuleBase::JackTarget& dst) {
     int score = 0;
     if (src.role == dst.role)
@@ -609,22 +624,23 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
 
                 // Port hit-testing gives visible jack indices, not raw channels. Resolve them through
                 // the logical-port API so a jack fronting an N-voice fan wires all N voices at once.
+                auto* srcModuleBase = dynamic_cast<ModuleBase*>(realSrc->getProcessor());
+                auto* dstModuleBase = dynamic_cast<ModuleBase*>(realDst->getProcessor());
+
                 PolyLink link{srcJack, dstJack, 1};
-                if (!isMidiConn) {
-                    link = resolvePolyLink(dynamic_cast<ModuleBase*>(realSrc->getProcessor()), srcJack,
-                                           dynamic_cast<ModuleBase*>(realDst->getProcessor()), dstJack);
-                }
+                if (!isMidiConn)
+                    link = resolvePolyLink(srcModuleBase, srcJack, dstModuleBase, dstJack);
 
                 // An attenuverter sits in the path of a single mod wire; a poly fan stays direct so
-                // AudioEngine can collapse its N raw edges into one PolyBus.
+                // AudioEngine can collapse its N raw edges into one PolyBus. Structural pitch/gate
+                // sources are never wrapped either — see carriesStructuralSignal.
                 bool isCV = false;
-                if (!isMidiConn && link.voiceCount == 1) {
-                    if (auto* modBase = dynamic_cast<ModuleBase*>(realDst->getProcessor())) {
-                        for (const auto& t : modBase->getModulationTargets()) {
-                            if (t.channelIndex == link.destRawChannel) {
-                                isCV = true;
-                                break;
-                            }
+                if (!isMidiConn && link.voiceCount == 1 && dstModuleBase != nullptr &&
+                    !carriesStructuralSignal(srcModuleBase, link.sourceRawChannel)) {
+                    for (const auto& t : dstModuleBase->getModulationTargets()) {
+                        if (t.channelIndex == link.destRawChannel) {
+                            isCV = true;
+                            break;
                         }
                     }
                 }
@@ -1417,9 +1433,11 @@ void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector
 
         const auto link = resolvePolyLink(sourceModule, sourceJack, destModule, destJack);
 
-        // Only a single mono cable may sit behind an attenuverter; a fan is always direct.
-        const bool useAttenuverter =
-            link.voiceCount == 1 && destModule != nullptr && destModule->isAutoPromotableModTarget(link.destRawChannel);
+        // Only a single mono cable may sit behind an attenuverter; a fan is always direct, and a
+        // structural pitch/gate source is never wrapped (see carriesStructuralSignal).
+        const bool useAttenuverter = link.voiceCount == 1 && destModule != nullptr &&
+                                     !carriesStructuralSignal(sourceModule, link.sourceRawChannel) &&
+                                     destModule->isAutoPromotableModTarget(link.destRawChannel);
 
         if (useAttenuverter) {
             const auto newAttenId =

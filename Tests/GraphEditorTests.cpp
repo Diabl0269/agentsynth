@@ -929,6 +929,104 @@ TEST_F(GraphEditorTest, DisconnectPolyPortRemovesEntireFan) {
     EXPECT_EQ(postCount, 0);
 }
 
+// Poly MIDI's pitch fan carries raw Hz, not normalised CV. Wrapping it in an attenuverter scaled an
+// absolute frequency AND fed an Hz-magnitude peak into the wire-activity metering, which multiplied
+// the stroke width until the "wire" painted as a screen-filling blob.
+TEST_F(GraphEditorTest, PitchSourceIsNeverWrappedInAnAttenuverter) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto polyMidiNode = engine.getGraph().addNode(std::make_unique<PolyMidiModule>());
+    auto oscNode = engine.getGraph().addNode(std::make_unique<OscillatorModule>());
+    // Mono oscillator: channel 0 is "Pitch", which getModulationTargets() lists as promotable.
+    setPolyParam(*oscNode->getProcessor(), false);
+
+    editor.updateComponents();
+
+    ModuleComponent* polyMidiComp = nullptr;
+    ModuleComponent* oscComp = nullptr;
+
+    auto* content = editor.getChildComponent(0);
+    if (content) {
+        for (auto* contentChild : content->getChildren()) {
+            if (auto* mod = dynamic_cast<ModuleComponent*>(contentChild)) {
+                if (mod->getModule() == polyMidiNode->getProcessor())
+                    polyMidiComp = mod;
+                if (mod->getModule() == oscNode->getProcessor())
+                    oscComp = mod;
+            }
+        }
+    }
+
+    ASSERT_NE(polyMidiComp, nullptr);
+    ASSERT_NE(oscComp, nullptr);
+
+    polyMidiComp->setBounds(0, 0, 100, 100);
+    oscComp->setBounds(200, 0, 100, 100);
+
+    editor.beginConnectionDrag(polyMidiComp, 0, false, false, juce::Point<int>(0, 0));
+    editor.dragConnection(juce::Point<int>(50, 0));
+    editor.endConnectionDrag(oscComp->getBounds().getPosition() + oscComp->getPortCenter(0, true));
+
+    auto& graph = engine.getGraph();
+
+    for (auto* node : graph.getNodes())
+        EXPECT_EQ(dynamic_cast<AttenuverterModule*>(node->getProcessor()), nullptr)
+            << "A pitch-role source must be wired direct, never through an attenuverter";
+
+    bool foundDirect = false;
+    for (auto& conn : graph.getConnections())
+        if (conn.source.nodeID == polyMidiNode->nodeID && conn.destination.nodeID == oscNode->nodeID)
+            foundDirect = true;
+    EXPECT_TRUE(foundDirect) << "Poly MIDI should still connect directly to the oscillator's pitch input";
+}
+
+// Toggling poly off collapses the fan back through the same connect path, which is how the blob was
+// originally triggered — it must not reintroduce an attenuverter on the pitch wire either.
+TEST_F(GraphEditorTest, TogglingPolyOffKeepsPitchWireDirect) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto polyMidiNode = engine.getGraph().addNode(std::make_unique<PolyMidiModule>());
+    auto oscNode = engine.getGraph().addNode(std::make_unique<OscillatorModule>());
+    setPolyParam(*oscNode->getProcessor(), true);
+
+    editor.updateComponents();
+
+    ModuleComponent* polyMidiComp = nullptr;
+    ModuleComponent* oscComp = nullptr;
+
+    auto* content = editor.getChildComponent(0);
+    if (content) {
+        for (auto* contentChild : content->getChildren()) {
+            if (auto* mod = dynamic_cast<ModuleComponent*>(contentChild)) {
+                if (mod->getModule() == polyMidiNode->getProcessor())
+                    polyMidiComp = mod;
+                if (mod->getModule() == oscNode->getProcessor())
+                    oscComp = mod;
+            }
+        }
+    }
+
+    ASSERT_NE(polyMidiComp, nullptr);
+    ASSERT_NE(oscComp, nullptr);
+
+    polyMidiComp->setBounds(0, 0, 100, 100);
+    oscComp->setBounds(200, 0, 100, 100);
+
+    editor.beginConnectionDrag(polyMidiComp, 0, false, false, juce::Point<int>(0, 0));
+    editor.dragConnection(juce::Point<int>(50, 0));
+    editor.endConnectionDrag(oscComp->getBounds().getPosition() + oscComp->getPortCenter(0, true));
+
+    setPolyParam(*oscNode->getProcessor(), false);
+
+    for (auto* node : engine.getGraph().getNodes())
+        EXPECT_EQ(dynamic_cast<AttenuverterModule*>(node->getProcessor()), nullptr)
+            << "Collapsing a pitch fan to mono must not insert an attenuverter";
+}
+
 TEST_F(GraphEditorTest, AudioIONodesAreSingletons) {
     EXPECT_TRUE(GraphEditor::isSingletonIOModule("Audio Output"));
     EXPECT_TRUE(GraphEditor::isSingletonIOModule("Audio Input"));
