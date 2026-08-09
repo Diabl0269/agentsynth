@@ -103,6 +103,14 @@ private:
     std::unique_ptr<juce::TextButton> loadWavetableButton;
     std::unique_ptr<juce::FileChooser> wavetableChooser;
 
+    // Wavetable folder browser: pick a directory once, then walk it with prev/next without
+    // reopening a file chooser for every table.
+    std::unique_ptr<juce::TextButton> wavetableFolderButton;
+    std::unique_ptr<juce::TextButton> wavetablePrevButton;
+    std::unique_ptr<juce::TextButton> wavetableNextButton;
+    std::unique_ptr<juce::Label> wavetableNameLabel;
+    std::unique_ptr<juce::FileChooser> wavetableFolderChooser;
+
     // Sampler-only chrome: waveform overview, "Load Sample…" button and the loaded file name.
     std::unique_ptr<SampleWaveformComponent> sampleWaveform;
     std::unique_ptr<juce::TextButton> loadSampleButton;
@@ -164,6 +172,19 @@ private:
     // Opens an async file chooser and, on success, loads the chosen file into the
     // Wavetable module and switches its Table parameter to "Loaded File".
     void openWavetableChooser();
+
+    // Opens an async directory chooser and points the module's browser at the result.
+    void openWavetableFolderChooser();
+
+    // Loads a wavetable file into the module and selects the "Loaded File" table choice.
+    // Shared by the load button, the folder browser and the file drop handler.
+    bool loadWavetableIntoModule(const juce::File& file);
+
+    // Steps the folder browser by delta entries and refreshes the caption.
+    void stepWavetableBrowser(int delta);
+
+    // Repoints the wavetable caption at whatever the module currently holds.
+    void refreshWavetableLabel(const juce::String& fallbackMessage = {});
 
     // Shared step-column layout helper used by Sequencer and PolySequencer.
     // Positions Gate, Pitch/Root, and F.Env/Chord controls for a single step column.

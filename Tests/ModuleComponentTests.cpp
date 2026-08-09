@@ -590,10 +590,12 @@ TEST_F(ModuleComponentTest, WavetableCardBuildsDisplayAndLoadButton) {
     ASSERT_NE(display, nullptr) << "Wavetable cards must own a WavetableDisplayComponent";
     ASSERT_NE(loadButton, nullptr) << "Wavetable cards must own a \"Load Wavetable...\" button";
 
-    // Table choice -> 1 combo; Position/Octave/Coarse/Fine/Level/Unison/Detune -> 7 sliders;
-    // Poly -> 1 toggle, plus the always-present "Show Scope" toggle.
-    EXPECT_EQ(comboCount, 1);
-    EXPECT_EQ(sliderCount, 7);
+    // Table/Warp/Stack/Sub Oct/Sub Wave/Sync In/Import/Interp -> 8 combos;
+    // Position/Octave/Coarse/Fine/Level/Unison/Detune/Warp Amt/Phase/Rand Phase/Spread/
+    // Width/Blend/Sub/Pan -> 15 sliders; Poly -> 1 toggle, plus the always-present
+    // "Show Scope" toggle.
+    EXPECT_EQ(comboCount, 8);
+    EXPECT_EQ(sliderCount, 15);
     EXPECT_EQ(toggleCount, 2);
 
     // Both bespoke children must be laid out inside the card.
@@ -605,8 +607,59 @@ TEST_F(ModuleComponentTest, WavetableCardBuildsDisplayAndLoadButton) {
     // Height is deliberately not asserted here: EstimatedModuleSizesMatchTheRealComponents
     // already pins the real card against GraphEditor::estimateModuleSize for every offered
     // type, so duplicating the number would just be a second thing to update by hand.
-    EXPECT_EQ(moduleComponent.getWidth(), synth::LayoutUtil::kSingleWidth);
+    // Width IS asserted: the card went double-width in issue #180 and the wide-card branches
+    // of layoutDefaultContent (6 knob columns, paired combos) hang off that.
+    EXPECT_EQ(moduleComponent.getWidth(), synth::LayoutUtil::kDoubleWidth);
     EXPECT_GT(moduleComponent.getHeight(), 100);
+}
+
+// The folder browser is the module's, but its chrome is the card's — a Wavetable card without
+// the prev/next buttons leaves the browser unreachable.
+TEST_F(ModuleComponentTest, WavetableCardBuildsFolderBrowserChrome) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    WavetableOscillatorModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    juce::TextButton* folderButton = nullptr;
+    juce::TextButton* prevButton = nullptr;
+    juce::TextButton* nextButton = nullptr;
+
+    for (auto* child : moduleComponent.getChildren()) {
+        if (auto* b = dynamic_cast<juce::TextButton*>(child)) {
+            if (b->getButtonText() == "Folder...")
+                folderButton = b;
+            else if (b->getButtonText() == "<")
+                prevButton = b;
+            else if (b->getButtonText() == ">")
+                nextButton = b;
+        }
+    }
+
+    ASSERT_NE(folderButton, nullptr) << "Wavetable cards must own a \"Folder...\" button";
+    ASSERT_NE(prevButton, nullptr) << "Wavetable cards must own a previous-table button";
+    ASSERT_NE(nextButton, nullptr) << "Wavetable cards must own a next-table button";
+
+    for (auto* b : {folderButton, prevButton, nextButton}) {
+        EXPECT_FALSE(b->getBounds().isEmpty());
+        EXPECT_TRUE(moduleComponent.getLocalBounds().contains(b->getBounds()));
+    }
+
+    // Clicking next with no folder selected must not crash or throw — it just reports back.
+    EXPECT_NO_THROW(nextButton->triggerClick());
+}
+
+// A Wavetable card claims audio-file drops itself. Before issue #180 it returned false and the
+// drop fell through to GraphEditor, which spawned an unrelated Sampler next to it.
+TEST_F(ModuleComponentTest, WavetableCardAcceptsAudioFileDrag) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    WavetableOscillatorModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    EXPECT_TRUE(moduleComponent.isInterestedInFileDrag({"/tmp/table.wav"}));
+    EXPECT_TRUE(moduleComponent.isInterestedInFileDrag({"/tmp/table.flac"}));
+    EXPECT_FALSE(moduleComponent.isInterestedInFileDrag({"/tmp/notes.txt"}));
 }
 
 TEST_F(ModuleComponentTest, WavetableCardPaintsAndTicksWithoutCrashing) {

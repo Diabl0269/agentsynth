@@ -89,7 +89,10 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Sampler")
         return {280, 657};
     if (typeName == "Wavetable")
-        return {280, 637};
+        // Double-width since issue #180: 15 knobs (6 per row), 7 combos (2 per row) and a
+        // 16-jack port stack. The display / load / browser chrome sits beside that stack, so
+        // the body starts at the last jack rather than below the chrome as well.
+        return {synth::LayoutUtil::kDoubleWidth, 869};
     if (typeName == "Chorus" || typeName == "Phaser" || typeName == "Flanger")
         return {280, 309};
     if (typeName == "Bitcrusher")
@@ -367,6 +370,14 @@ juce::Colour GraphEditor::colourForCable(const VisibleCable& cable) const {
     const auto& colors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
     return synth::ui::resolveCableColour(cableColourMode, cable.signal, cable.sourceCategory, colors,
                                          cableColourOverrides, cable.isBypassed);
+}
+
+void GraphEditor::rememberWavetableFolder(const juce::File& folder) {
+    if (folder == lastWavetableFolder)
+        return;
+    lastWavetableFolder = folder;
+    if (onWavetableFolderChanged != nullptr)
+        onWavetableFolderChanged(folder);
 }
 
 void GraphEditor::setCableColourMode(synth::ui::CableColourMode mode) {

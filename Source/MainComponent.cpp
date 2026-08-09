@@ -79,6 +79,19 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     graphEditor.setCableColourMode(synth::ui::loadCableColourMode(*appProperties.getUserSettings()));
     graphEditor.setCableColourOverrides(synth::ui::loadCableColourOverrides(*appProperties.getUserSettings()));
 
+    // Wavetable browser folder (issue #180): GraphEditor holds the value so every Wavetable
+    // card can seed its browser from it, MainComponent owns the ApplicationProperties round
+    // trip — the same split as the cable-colour config above.
+    {
+        const juce::String saved = appProperties.getUserSettings()->getValue("wavetableFolder", juce::String());
+        if (saved.isNotEmpty())
+            graphEditor.rememberWavetableFolder(juce::File(saved));
+    }
+    graphEditor.onWavetableFolderChanged = [this](const juce::File& folder) {
+        appProperties.getUserSettings()->setValue("wavetableFolder", folder.getFullPathName());
+        appProperties.saveIfNeeded();
+    };
+
     // Load AI provider preference. "ollama" is the persisted id (see AIProviderRegistry),
     // not a display name — registry.create() falls back to the first registered provider
     // if the saved id is unknown (e.g. stale pre-registry value, or empty).

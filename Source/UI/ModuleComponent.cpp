@@ -782,9 +782,17 @@ void ModuleComponent::createSamplerControls() {
 // =============================================================================
 
 bool ModuleComponent::isInterestedInFileDrag(const juce::StringArray& files) {
-    // Only a Sampler accepts a file drop. Returning false for everything else matters: JUCE walks
-    // up the hierarchy for an interested target, so a wav dropped on an Oscillator falls through to
-    // GraphEditor, which spawns a new Sampler for it instead of doing nothing.
+    // Only a Sampler or a Wavetable accepts a file drop. Returning false for everything else
+    // matters: JUCE walks up the hierarchy for an interested target, so a wav dropped on an
+    // Oscillator falls through to GraphEditor, which spawns a new Sampler for it instead of
+    // doing nothing.
+    if (dynamic_cast<WavetableOscillatorModule*>(module) != nullptr) {
+        for (const auto& path : files)
+            if (WavetableOscillatorModule::isSupportedWavetableFile(juce::File(path)))
+                return true;
+        return false;
+    }
+
     if (dynamic_cast<SamplerModule*>(module) == nullptr)
         return false;
 
@@ -812,6 +820,25 @@ void ModuleComponent::fileDragExit(const juce::StringArray& files) {
 
 void ModuleComponent::filesDropped(const juce::StringArray& files, int, int) {
     fileDragHighlight = false;
+
+    // A wavetable card takes the first readable file and imports it through exactly the same
+    // path as the Load button, so the Import mode applies to drops too.
+    if (dynamic_cast<WavetableOscillatorModule*>(module) != nullptr) {
+        for (const auto& path : files) {
+            const juce::File file(path);
+            if (!WavetableOscillatorModule::isSupportedWavetableFile(file))
+                continue;
+
+            if (loadWavetableIntoModule(file))
+                refreshWavetableLabel();
+            else
+                refreshWavetableLabel("Could not read " + file.getFileName());
+            repaint();
+            return;
+        }
+        repaint();
+        return;
+    }
 
     auto* sampler = dynamic_cast<SamplerModule*>(module);
     if (sampler == nullptr) {
@@ -861,14 +888,115 @@ void ModuleComponent::createWavetableControls() {
     addAndMakeVisible(*wavetableDisplay);
 
     loadWavetableButton = std::make_unique<juce::TextButton>("Load Wavetable...");
-    loadWavetableButton->setTooltip("Load an audio file as a wavetable (2048-sample frames, Serum style)");
+    loadWavetableButton->setTooltip("Load an audio file as a wavetable, or drop one straight onto this card. The "
+                                    "Import combo below decides how it is cut into frames.");
     loadWavetableButton->onClick = [this] { openWavetableChooser(); };
     addAndMakeVisible(*loadWavetableButton);
+
+    wavetableFolderButton = std::make_unique<juce::TextButton>("Folder...");
+    wavetableFolderButton->setTooltip("Pick a wavetable folder, then step through it with < and >");
+    wavetableFolderButton->onClick = [this] { openWavetableFolderChooser(); };
+    addAndMakeVisible(*wavetableFolderButton);
+
+    wavetablePrevButton = std::make_unique<juce::TextButton>("<");
+    wavetablePrevButton->setTooltip("Previous wavetable in the folder");
+    wavetablePrevButton->onClick = [this] { stepWavetableBrowser(-1); };
+    addAndMakeVisible(*wavetablePrevButton);
+
+    wavetableNextButton = std::make_unique<juce::TextButton>(">");
+    wavetableNextButton->setTooltip("Next wavetable in the folder");
+    wavetableNextButton->onClick = [this] { stepWavetableBrowser(1); };
+    addAndMakeVisible(*wavetableNextButton);
+
+    wavetableNameLabel = std::make_unique<juce::Label>();
+    wavetableNameLabel->setJustificationType(juce::Justification::centredLeft);
+    wavetableNameLabel->setInterceptsMouseClicks(false, false);
+    addAndMakeVisible(*wavetableNameLabel);
+
+    // A card dropped after the user has already browsed somewhere starts pointed at that
+    // folder, so < and > work immediately instead of needing a folder pick per module.
+    if (wtMod->getWavetableFolder() == juce::File()) {
+        const juce::File remembered = owner.getLastWavetableFolder();
+        if (remembered.isDirectory())
+            wtMod->setWavetableFolder(remembered);
+    }
+
+    refreshWavetableLabel();
+}
+
+bool ModuleComponent::loadWavetableIntoModule(const juce::File& file) {
+    auto* wtMod = dynamic_cast<WavetableOscillatorModule*>(module);
+    if (wtMod == nullptr || !wtMod->loadWavetableFile(file))
+        return false;
+
+    // Switch the Table choice to "Loaded File" so the new table is what sounds.
+    for (auto* param : wtMod->getParameters()) {
+        if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param)) {
+            if (choice->paramID == "table" && choice->choices.size() > 1) {
+                const float normalised =
+                    (float)WavetableOscillatorModule::kLoadedTableChoice / (float)(choice->choices.size() - 1);
+                choice->setValueNotifyingHost(normalised);
+            }
+        }
+    }
+    return true;
+}
+
+void ModuleComponent::stepWavetableBrowser(int delta) {
+    auto* wtMod = dynamic_cast<WavetableOscillatorModule*>(module);
+    if (wtMod == nullptr)
+        return;
+
+    if (wtMod->getFolderWavetableCount() == 0) {
+        refreshWavetableLabel("No folder selected");
+        return;
+    }
+
+    if (!wtMod->stepWavetable(delta)) {
+        refreshWavetableLabel("No readable wavetables in folder");
+        return;
+    }
+
+    // stepWavetable already loaded the file; only the Table choice still needs pointing at it.
+    loadWavetableIntoModule(wtMod->getFolderWavetable(wtMod->getFolderIndex()));
+    refreshWavetableLabel();
+    repaint();
+}
+
+void ModuleComponent::refreshWavetableLabel(const juce::String& fallbackMessage) {
+    if (wavetableNameLabel == nullptr)
+        return;
+
+    auto* wtMod = dynamic_cast<WavetableOscillatorModule*>(module);
+    if (wtMod == nullptr)
+        return;
+
+    if (fallbackMessage.isNotEmpty()) {
+        wavetableNameLabel->setText(fallbackMessage, juce::dontSendNotification);
+        wavetableNameLabel->setTooltip(fallbackMessage);
+        return;
+    }
+
+    const int count = wtMod->getFolderWavetableCount();
+    const int index = wtMod->getFolderIndex();
+    const juce::File file = wtMod->getWavetableFile();
+
+    juce::String text = (file == juce::File()) ? juce::String("(built-in table)") : file.getFileName();
+    if (count > 0 && index >= 0)
+        text += "  " + juce::String(index + 1) + "/" + juce::String(count);
+    else if (count > 0)
+        text += "  -/" + juce::String(count);
+
+    wavetableNameLabel->setText(text, juce::dontSendNotification);
+    wavetableNameLabel->setTooltip(wtMod->getWavetableFolder().getFullPathName());
 }
 
 void ModuleComponent::openWavetableChooser() {
+    auto* wtMod = dynamic_cast<WavetableOscillatorModule*>(module);
+    const juce::File startIn = (wtMod != nullptr) ? wtMod->getWavetableFolder() : juce::File();
+
     wavetableChooser =
-        std::make_unique<juce::FileChooser>("Load Wavetable", juce::File(), "*.wav;*.aiff;*.aif;*.flac;*.ogg");
+        std::make_unique<juce::FileChooser>("Load Wavetable", startIn, "*.wav;*.aiff;*.aif;*.flac;*.ogg");
 
     const auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
 
@@ -884,28 +1012,43 @@ void ModuleComponent::openWavetableChooser() {
         if (file == juce::File())
             return;
 
-        auto* wtMod = dynamic_cast<WavetableOscillatorModule*>(self->getModule());
-        if (wtMod == nullptr)
-            return;
-
-        if (!wtMod->loadWavetableFile(file)) {
+        if (!self->loadWavetableIntoModule(file)) {
             juce::NativeMessageBox::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Load Wavetable",
                                                         "Could not read \"" + file.getFileName() +
                                                             "\" as a wavetable.");
             return;
         }
 
-        // Switch the Table choice to "Loaded File" so the new table is what sounds.
-        for (auto* param : wtMod->getParameters()) {
-            if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param)) {
-                if (choice->paramID == "table" && choice->choices.size() > 1) {
-                    const float normalised =
-                        (float)WavetableOscillatorModule::kLoadedTableChoice / (float)(choice->choices.size() - 1);
-                    choice->setValueNotifyingHost(normalised);
-                }
-            }
-        }
+        self->refreshWavetableLabel();
+        self->repaint();
+    });
+}
 
+void ModuleComponent::openWavetableFolderChooser() {
+    auto* wtMod = dynamic_cast<WavetableOscillatorModule*>(module);
+    const juce::File startIn = (wtMod != nullptr) ? wtMod->getWavetableFolder() : juce::File();
+
+    wavetableFolderChooser = std::make_unique<juce::FileChooser>("Choose a wavetable folder", startIn);
+
+    const auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectDirectories;
+
+    juce::Component::SafePointer<ModuleComponent> safeThis(this);
+    wavetableFolderChooser->launchAsync(flags, [safeThis](const juce::FileChooser& chooser) {
+        auto* self = safeThis.getComponent();
+        if (self == nullptr)
+            return;
+
+        const juce::File folder = chooser.getResult();
+        if (folder == juce::File() || !folder.isDirectory())
+            return;
+
+        auto* mod = dynamic_cast<WavetableOscillatorModule*>(self->getModule());
+        if (mod == nullptr)
+            return;
+
+        mod->setWavetableFolder(folder);
+        self->owner.rememberWavetableFolder(folder);
+        self->refreshWavetableLabel();
         self->repaint();
     });
 }
@@ -989,12 +1132,18 @@ void ModuleComponent::updateLayout() {
         return;
     }
 
+    // The Wavetable card carries 15 knobs, 7 combos and 16 input jacks after issue #180, so it
+    // goes double-width and uses the default body layout's wide-card branches (6 knob columns,
+    // paired combos). At single width the same content would run past 1150px tall.
+    const int cardWidth =
+        (getType(module) == ModuleType::Wavetable) ? synth::LayoutUtil::kDoubleWidth : synth::LayoutUtil::kSingleWidth;
+
     // Width must be final before measuring: the slider grid wraps on it.
-    if (getWidth() != synth::LayoutUtil::kSingleWidth)
-        setSize(synth::LayoutUtil::kSingleWidth, juce::jmax(getHeight(), 100));
+    if (getWidth() != cardWidth)
+        setSize(cardWidth, juce::jmax(getHeight(), 100));
 
     const int bodyHeight = layoutDefaultContent(/*apply*/ false);
-    setSize(synth::LayoutUtil::kSingleWidth, std::max(100, bodyHeight));
+    setSize(cardWidth, std::max(100, bodyHeight));
     resized();
 }
 
@@ -1050,23 +1199,79 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
         y += kRowHeight + 8;
     }
 
-    // --- Wavetable chrome: the scanned frame view, then the load button ---
+    // --- Wavetable chrome: the scanned frame view, the load row, then the folder browser ---
     if (wavetableDisplay != nullptr && loadWavetableButton != nullptr) {
-        if (apply)
-            wavetableDisplay->setBounds(contentX, y, contentW, kWaveformHeight);
-        y += kWaveformHeight + 8;
+        // The port labels only occupy a narrow gutter down each edge, so on a double-width card
+        // this chrome sits BESIDE the 16-jack stack, starting just under the header, instead of
+        // below all of it — the same reclaim the Parametric EQ card makes for its response
+        // curve. It takes ~130px off a card that would otherwise clear 1000px tall.
+        constexpr int kPortGutterWidth = 88;
+        constexpr int kChromeTopY = 60;
+
+        const bool besidePorts = width >= synth::LayoutUtil::kDoubleWidth;
+        const int chromeX = besidePorts ? (contentX + kPortGutterWidth) : contentX;
+        const int chromeW = besidePorts ? std::max(120, contentW - kPortGutterWidth * 2) : contentW;
+        const int chromeNarrowW = std::min(chromeW, kNarrowContentWidth);
+        const int chromeNarrowX = chromeX + (chromeW - chromeNarrowW) / 2;
+
+        int chromeY = besidePorts ? kChromeTopY : y;
 
         if (apply)
-            loadWavetableButton->setBounds(narrowX, y, narrowW, kRowHeight);
-        y += kRowHeight + 8;
+            wavetableDisplay->setBounds(chromeX, chromeY, chromeW, kWaveformHeight);
+        chromeY += kWaveformHeight + 8;
+
+        if (apply)
+            loadWavetableButton->setBounds(chromeNarrowX, chromeY, chromeNarrowW, kRowHeight);
+        chromeY += kRowHeight + 6;
+
+        // Browser row: [Folder...] [<] [>] [caption]. Laid out across the chrome band because
+        // the caption needs more room than a narrow centred strip would give it.
+        if (apply && wavetableFolderButton != nullptr) {
+            constexpr int kStepButtonW = 30;
+            constexpr int kGap = 4;
+            constexpr int kFolderW = 72;
+            int x = chromeX;
+            wavetableFolderButton->setBounds(x, chromeY, kFolderW, kRowHeight);
+            x += kFolderW + kGap;
+            wavetablePrevButton->setBounds(x, chromeY, kStepButtonW, kRowHeight);
+            x += kStepButtonW + kGap;
+            wavetableNextButton->setBounds(x, chromeY, kStepButtonW, kRowHeight);
+            x += kStepButtonW + kGap;
+            wavetableNameLabel->setBounds(x, chromeY, std::max(20, chromeX + chromeW - x), kRowHeight);
+        }
+        chromeY += kRowHeight + 8;
+
+        // Beside the ports the body still cannot start above the last jack; below them the
+        // chrome simply pushes it down as before.
+        y = besidePorts ? std::max(y, chromeY) : chromeY;
     }
 
-    for (int i = 0; i < comboBoxes.size(); ++i) {
-        if (apply) {
-            comboLabels[i]->setBounds(narrowX, y, narrowW, kLabelHeight);
-            comboBoxes[i]->setBounds(narrowX, y + kLabelHeight, narrowW, kRowHeight);
+    // Combos stack one per row on a standard card. A double-width card (only the Wavetable
+    // today) pairs them up instead — otherwise its parameter count alone would add ~180px of
+    // dead single-column height to an already tall module.
+    const int comboColumns = (width >= synth::LayoutUtil::kDoubleWidth) ? 2 : 1;
+    if (comboColumns == 1) {
+        for (int i = 0; i < comboBoxes.size(); ++i) {
+            if (apply) {
+                comboLabels[i]->setBounds(narrowX, y, narrowW, kLabelHeight);
+                comboBoxes[i]->setBounds(narrowX, y + kLabelHeight, narrowW, kRowHeight);
+            }
+            y += kLabelHeight + kRowHeight + 6;
         }
-        y += kLabelHeight + kRowHeight + 6;
+    } else {
+        const int cellW = contentW / comboColumns;
+        for (int i = 0; i < comboBoxes.size(); ++i) {
+            const int row = i / comboColumns;
+            const int col = i % comboColumns;
+            const int cellX = contentX + col * cellW;
+            const int rowY = y + row * (kLabelHeight + kRowHeight + 6);
+            if (apply) {
+                comboLabels[i]->setBounds(cellX, rowY, cellW - 8, kLabelHeight);
+                comboBoxes[i]->setBounds(cellX, rowY + kLabelHeight, cellW - 8, kRowHeight);
+            }
+        }
+        const int comboRows = (comboBoxes.size() + comboColumns - 1) / comboColumns;
+        y += comboRows * (kLabelHeight + kRowHeight + 6);
     }
 
     for (int i = 0; i < toggles.size(); ++i) {
@@ -1083,11 +1288,13 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
         y += kTriggerMeterHeight + 6;
     }
 
-    // --- Knob grid: kKnobColumns across, wrapping ---
-    const int knobWidth = contentW / kKnobColumns;
+    // --- Knob grid: kKnobColumns across, wrapping. A double-width card doubles the columns so
+    // the knobs keep their standard cell width instead of stretching to twice the size. ---
+    const int knobColumns = (width >= synth::LayoutUtil::kDoubleWidth) ? (kKnobColumns * 2) : kKnobColumns;
+    const int knobWidth = contentW / knobColumns;
     for (int i = 0; i < sliders.size(); ++i) {
-        const int row = i / kKnobColumns;
-        const int col = i % kKnobColumns;
+        const int row = i / knobColumns;
+        const int col = i % knobColumns;
         const int x = contentX + col * knobWidth;
         const int rowY = y + row * (kLabelHeight + kKnobHeight);
 
@@ -1096,7 +1303,7 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
             sliders[i]->setBounds(x, rowY + kLabelHeight, knobWidth, kKnobHeight);
         }
     }
-    const int knobRows = (sliders.size() + kKnobColumns - 1) / kKnobColumns;
+    const int knobRows = (sliders.size() + knobColumns - 1) / knobColumns;
     y += knobRows * (kLabelHeight + kKnobHeight);
 
     if (freqResponseComponent) {
