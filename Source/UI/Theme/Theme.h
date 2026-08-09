@@ -1,8 +1,21 @@
 #pragma once
 
+#include <array>
 #include <juce_graphics/juce_graphics.h>
 
 namespace synth::theme {
+
+// Number of module-category cable colours. Mirrors synth::ui::kModuleCategoryCount — kept as a
+// separate constant so Theme.h stays free of any UI-layer include.
+inline constexpr int kCableCategoryCount = 8;
+
+// Stable persisted ids for the cableCategory[] entries, index-aligned with
+// synth::ui::ModuleCategory. Defined here (rather than in CableColour.h) so ThemeLoader can
+// parse user JSON without pulling the module layer in — CableColour.h reads these same strings,
+// so there is exactly one definition and the two cannot drift apart.
+// These appear in user theme files and settings keys: never renumber or rename a shipped id.
+inline constexpr std::array<const char*, kCableCategoryCount> kCableCategoryIds{
+    "sources", "sequencing", "envelopes", "filters", "modfx", "timefx", "dynamics", "utility"};
 
 // Surface treatment family. JSON string mapping in section 4.
 enum class ThemeStyle {
@@ -23,6 +36,7 @@ struct Colors {
     juce::Colour accent{0xff00D1FF};          // primary accent (selection, value arc)
     juce::Colour accent2{0xff00D1FF};         // secondary accent (Neon cyan vs magenta etc.)
     juce::Colour audioWire{0xffE8EDF2};       // audio signal wires
+    juce::Colour midiWire{0xffB48EF5};        // MIDI note/event wires
     juce::Colour modWire{0xff00D1FF};         // modulation CV wires (DirectCV / attenuverter)
     juce::Colour pitchWire{0xffAAD4FF};       // poly pitch fan wires (GraphEditor role==Pitch)
     juce::Colour gateWire{0xffFFA500};        // poly gate fan wires (GraphEditor role==Gate)
@@ -38,6 +52,20 @@ struct Colors {
     juce::Colour meterFill{0xff00D1FF};       // output meter fill (top of gradient)
     juce::Colour modRingPositive{0xff00E5FF}; // mod ring, positive modulation
     juce::Colour modRingNegative{0xffFF6E00}; // mod ring, negative modulation
+
+    // Cable colours for CableColourMode::BySourceCategory, indexed by synth::ui::ModuleCategory
+    // (Sources, Sequencing, Envelopes & Control, Filters, Modulation FX, Time FX, Dynamics,
+    // Utility). Eight distinguishable hues rather than one per module type — see CableColour.h.
+    std::array<juce::Colour, kCableCategoryCount> cableCategory{
+        juce::Colour(0xffFFB454), // Sources
+        juce::Colour(0xffC792EA), // Sequencing
+        juce::Colour(0xff7FD962), // Envelopes & Control
+        juce::Colour(0xff4FC1FF), // Filters
+        juce::Colour(0xffFF7AB2), // Modulation FX
+        juce::Colour(0xff56D4C0), // Time FX
+        juce::Colour(0xffF07178), // Dynamics
+        juce::Colour(0xffA0A8B4)  // Utility
+    };
 };
 
 // Geometry / spacing. Pixel units at zoom 1.0.

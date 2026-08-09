@@ -8,6 +8,7 @@
 #include "Modules/FX/FlangerModule.h"
 #include "Modules/FX/LimiterModule.h"
 #include "Modules/FX/PhaserModule.h"
+#include "Modules/FX/PitchShifterModule.h"
 #include "Modules/FX/ReverbModule.h"
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
@@ -1036,4 +1037,16 @@ TEST(PortLabelTests, LimiterPortLabels) {
     EXPECT_EQ(limiter.getInputPortLabel(1), "Right");
     EXPECT_EQ(limiter.getOutputPortLabel(0), "Left");
     EXPECT_EQ(limiter.getOutputPortLabel(1), "Right");
+}
+
+TEST(PortLabelTests, PitchShifterPortLabels) {
+    PitchShifterModule shifter;
+    EXPECT_EQ(shifter.getInputPortLabel(0), "Left");
+    EXPECT_EQ(shifter.getInputPortLabel(1), "Right");
+    EXPECT_EQ(shifter.getInputPortLabel(2), "Pitch");
+    EXPECT_EQ(shifter.getInputPortLabel(3), "Shift");
+    EXPECT_EQ(shifter.getInputPortLabel(4), "Mix");
+    EXPECT_EQ(shifter.getInputPortLabel(5), "Feedback");
+    EXPECT_EQ(shifter.getOutputPortLabel(0), "Left");
+    EXPECT_EQ(shifter.getOutputPortLabel(1), "Right");
 }

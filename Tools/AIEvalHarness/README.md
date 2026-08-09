@@ -18,10 +18,35 @@ cmake --build build --target AIEvalHarness
 
 | Flag | Default | Meaning |
 | :--- | :--- | :--- |
-| `--model` | `gemma4:12b-it-qat` | Ollama model tag. Must be one `ollama list` reports. |
+| `--provider` | `ollama` | `ollama` talks to Ollama's `/api/chat` directly. `remote` talks to a local `synth-platform` inference service instead (see below). |
+| `--model` | `gemma4:12b-it-qat` | With `--provider ollama`: the Ollama model tag, must be one `ollama list` reports. With `--provider remote`: a label for the report only — the service picks its own model server-side (see below). |
 | `--runs` | `1` | How many times to replay the whole scenario set. |
-| `--host` | `http://localhost:11434` | Ollama base URL. |
+| `--host` | `http://localhost:11434` (`ollama`) / `http://localhost:8787` (`remote`) | Base URL of the provider being measured. |
 | `--json` | *(none)* | Write per-attempt records to this file for later analysis. |
+
+## Scoring a model through the service (`--provider remote`)
+
+`--provider ollama` measures a model reached directly, bypassing the `synth-platform` service
+entirely — the numbers describe the model, not the stack a real user hits. `--provider remote`
+routes every request through `RemoteProvider` (`Source/AI/RemoteProvider.h`) at
+`POST {host}/v1/capability/patch.generate` instead, the same code path `AgentSynth`'s Apply/Merge
+button uses once the `remote` provider is enabled. The service picks its own model server-side —
+`--model` only labels the report — so which model actually answers is controlled entirely by the
+service's own `INFERENCE_PROVIDER`/`INFERENCE_MODEL_ID`/`OLLAMA_BASE_URL` env vars
+(`synth-platform/apps/api/.env.example`), not by anything passed to this tool.
+
+```bash
+# In synth-platform/apps/api/.env: INFERENCE_PROVIDER=ollama, INFERENCE_MODEL_ID=gpt-oss:20b
+# (ollama pull gpt-oss:20b first — ~14GB)
+pnpm --filter api dev   # starts the service on :8787
+
+./build/Tools/AIEvalHarness/AIEvalHarness \
+    --provider remote --model gpt-oss:20b --runs 2 --json out.json
+```
+
+`GROQ_API_KEY` is not required for this — `INFERENCE_PROVIDER=ollama` keeps the service on the
+free local backend. Comparing a hosted model (`INFERENCE_PROVIDER=groq`) is out of scope here;
+that needs a Groq key nobody has supplied yet.
 
 ## How this differs from AIPatchHarness
 
@@ -73,11 +98,15 @@ before switching the default model to it.
 ## Caveats
 
 Same as `Tools/AIPatchHarness`: not every backend enforces the JSON schema as a grammar (MLX
-models fall back to prompt compliance), `OllamaProvider` gives up after 240s per request (see
-`kChatRequestTimeoutMs` in `OllamaProvider.cpp` — Ollama's chat endpoint is non-streaming, so this
-doubles as the model's real time-to-finish budget, not just a connect timeout), and results are
-model- and machine-dependent — quote the model tag alongside any number. A model that times out
-scores as `NOT-APPLIED`, indistinguishable from Ollama being unreachable — the first six-model
-sweep run against this harness caught exactly this with `gemma4:12b-it-qat` (~180s/request
-average, close enough to the old 120s bound that most of its attempts failed on timing, not
-quality).
+models fall back to prompt compliance), both providers give up after 240s per request
+(`kChatRequestTimeoutMs` in `OllamaProvider.cpp`, `kRequestTimeoutMs` in `RemoteProvider.cpp` —
+neither backend streams, so this doubles as the model's real time-to-finish budget, not just a
+connect timeout), and results are model- and machine-dependent — quote the model tag alongside any
+number. A model that times out scores as `NOT-APPLIED`, indistinguishable from the provider being
+unreachable — the first six-model sweep run against this harness caught exactly this with
+`gemma4:12b-it-qat` (~180s/request average, close enough to the old 120s bound that most of its
+attempts failed on timing, not quality).
+
+With `--provider remote`, a `NOT-APPLIED`/`PROVIDER-ERROR` result can also mean the service itself
+is misconfigured (wrong `INFERENCE_MODEL_ID`, Ollama not running, port `8787` not listening) —
+check the service's own logs before concluding the model is at fault.

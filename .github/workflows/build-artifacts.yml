@@ -24,6 +24,12 @@ on:
 permissions:
   contents: write
 
+# Releases are tagged from main, so runs must not race each other or two pushes land on the same
+# tag. Never cancel: a cancelled run leaves a version bump without its artifacts.
+concurrency:
+  group: build-and-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Build ${{ matrix.os }}
@@ -84,15 +90,18 @@ jobs:
         path: build/_deps
         # The "-ninja" tag ties the cache to the generator so the stale
         # Visual-Studio-generator sub-build cache (pinned to an old VS version)
-        # is never restored after this workflow switched to Ninja. The "2" bump
-        # invalidates caches saved before the repo was renamed gravisynth ->
-        # agentsynth: their FetchContent subbuild dirs have the old
-        # .../work/gravisynth/gravisynth absolute path baked in, which conflicts
-        # with the new .../work/agentsynth/agentsynth checkout path and trips
-        # CMake's directory-mismatch guard.
-        key: ${{ runner.os }}-release-deps-ninja2-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
+        # is never restored after this workflow switched to Ninja.
+        #
+        # Keyed on cmake/DependencyVersions.cmake — the dependency pins — and NOT on
+        # CMakeLists.txt. build/_deps contains only the fetched JUCE + googletest sources, so a
+        # module adding a source line must not invalidate a ~360 MB entry. Under the old
+        # CMakeLists-wide key this workflow minted 3 fresh entries (~1.1 GB) on every merge that
+        # touched CMakeLists.txt, which together with ci.yml's copies pushed the repo past
+        # GitHub's 10 GB cache budget and LRU-evicted the ccache entries. The "3" is a one-time
+        # bump to orphan the old, wrongly-keyed entries.
+        key: ${{ runner.os }}-release-deps-ninja3-${{ hashFiles('cmake/DependencyVersions.cmake') }}
         restore-keys: |
-          ${{ runner.os }}-release-deps-ninja2-
+          ${{ runner.os }}-release-deps-ninja3-
 
     # Configure CMake — Ninja on every OS so this matches the PR CI build path
     # (see the "Setup MSVC" note above for why Ninja and not the VS generator).

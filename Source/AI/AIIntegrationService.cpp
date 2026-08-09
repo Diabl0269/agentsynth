@@ -1,6 +1,7 @@
 #include "AIIntegrationService.h"
 #include "../AppUndoManager.h"
 #include "../Branding.h"
+#include "PatchEval.h"
 #include <algorithm>
 
 namespace synth {
@@ -13,7 +14,21 @@ AIIntegrationService::AIIntegrationService(juce::AudioProcessorGraph& graph, App
 
 AIIntegrationService::~AIIntegrationService() {}
 
-void AIIntegrationService::setProvider(std::unique_ptr<AIProvider> newProvider) { provider = std::move(newProvider); }
+void AIIntegrationService::setProvider(std::unique_ptr<AIProvider> newProvider) {
+    provider = std::move(newProvider);
+
+    // Re-push contract (mirrors AIChatComponent::refreshModels(), see docs/AI_Engine.md "Model
+    // Discovery Ordering Contract"): a caller may have called setAuthToken() before a provider
+    // existed at all, so the value must be forwarded to whatever provider is installed now.
+    if (provider && currentAuthToken.isNotEmpty())
+        provider->setAuthToken(currentAuthToken);
+}
+
+void AIIntegrationService::setAuthToken(const juce::String& token) {
+    currentAuthToken = token;
+    if (provider)
+        provider->setAuthToken(currentAuthToken);
+}
 
 AIProvider::RequestId AIIntegrationService::sendMessage(const juce::String& text,
                                                         AIProvider::CompletionCallback callback,
@@ -159,6 +174,49 @@ bool AIIntegrationService::applyPatch(const juce::String& jsonString, bool merge
         return false;
     }
 
+    // Structural gate: a patch can be schema-valid and still be useless — silent (nothing wired to
+    // Audio Output) or dangling (an oscillator nobody connected). This is the same bar
+    // Tools/AIEvalHarness measures every model against (PatchEval.h); enforcing it live gives the
+    // model a chance to self-correct via the existing retry mechanism instead of silently handing
+    // the user a patch that produces no sound. Checked on a scratch graph, never the live one, so a
+    // rejection here never fires a listener notification or touches the undo stack (same
+    // "validate BEFORE touching anything" contract as the schema check above).
+    //
+    // allParamsInRange is deliberately not gated on: PatchEval's own doc comment notes it's already
+    // guaranteed by NormalisableRange clamping on every write path.
+    {
+        juce::AudioProcessorGraph scratch;
+        synth::prepareGraphForPatchEval(scratch);
+
+        bool beforeOk = true;
+        if (!clearExisting) {
+            // Merge mode: gate on REGRESSION, not absolute state. A delta is only responsible for
+            // what it changes — an already-incomplete canvas (e.g. no Oscillator yet) merging in an
+            // unrelated edit must not be rejected for a pre-existing gap the edit didn't cause.
+            // Replaying the live graph's current state as trusted mirrors exactly what undo/redo's
+            // own snapshot-restore does (see the "Preserve node identity" comment in
+            // AIStateMapper::applyJSONToGraph), so ids line up with what the candidate patch
+            // references.
+            juce::var currentState = AIStateMapper::graphToJSON(audioGraph);
+            AIStateMapper::applyJSONToGraph(currentState, scratch, /*clearExisting=*/true, /*trusted=*/true);
+            const auto before = synth::evaluatePatch(scratch);
+            beforeOk = before.hasAudioOutput && before.sourceReachesOutput;
+        }
+
+        AIStateMapper::applyJSONToGraph(json, scratch, clearExisting, /*trusted=*/false);
+        const auto after = synth::evaluatePatch(scratch);
+        const bool afterOk = after.hasAudioOutput && after.sourceReachesOutput;
+
+        // Replace mode has no "before" to regress from — clearExisting leaves beforeOk at its
+        // default true, so a from-scratch patch is always held to the unconditional bar.
+        if (beforeOk && !afterOk) {
+            lastPatchError = after.detail.isNotEmpty() ? after.detail : "patch produces no usable signal path";
+            juce::Logger::writeToLog("applyPatch rejected (" + juce::String(mergeMode ? "merge" : "replace") +
+                                     ", structural): " + lastPatchError);
+            return false;
+        }
+    }
+
     // Notify listeners to detach graph-referencing UI BEFORE the graph is rebuilt (avoids a use-after-free
     // where a ScopeComponent timer reads a freed VisualBuffer once applyJSONToGraph clears old processors).
     // Undo and redo rebuild the graph exactly the same way, so the pair must fire around those too — they
@@ -211,10 +269,13 @@ void AIIntegrationService::applyPatchWithRetry(const juce::String& jsonString, b
         return;
     }
 
-    requestPatchCorrection(1, mergeMode, std::move(onComplete), std::move(onRetry));
+    // Captured once, before any correction turn is appended to chatHistory — see
+    // mostRecentUserRequest()'s doc comment for why this must not be re-derived per retry.
+    requestPatchCorrection(1, mergeMode, mostRecentUserRequest(), std::move(onComplete), std::move(onRetry));
 }
 
-void AIIntegrationService::requestPatchCorrection(int failedAttempt, bool mergeMode, PatchApplyCallback onComplete,
+void AIIntegrationService::requestPatchCorrection(int failedAttempt, bool mergeMode,
+                                                  const juce::String& originalRequest, PatchApplyCallback onComplete,
                                                   PatchRetryCallback onRetry) {
     const int totalAttempts = kMaxPatchRetries + 1;
     const juce::String error = lastPatchError;
@@ -239,8 +300,9 @@ void AIIntegrationService::requestPatchCorrection(int failedAttempt, bool mergeM
 
     juce::WeakReference<AIIntegrationService> weakThis(this);
     sendMessage(
-        buildCorrectionPrompt(error),
-        [weakThis, failedAttempt, mergeMode, onComplete, onRetry](const AIProvider::AIResponse& response) {
+        buildCorrectionPrompt(originalRequest, error),
+        [weakThis, failedAttempt, mergeMode, originalRequest, onComplete,
+         onRetry](const AIProvider::AIResponse& response) {
             auto* self = weakThis.get();
             if (self == nullptr)
                 return; // service destroyed mid-retry; nothing left to apply to
@@ -257,18 +319,34 @@ void AIIntegrationService::requestPatchCorrection(int failedAttempt, bool mergeM
                 return;
             }
 
-            self->requestPatchCorrection(failedAttempt + 1, mergeMode, onComplete, onRetry);
+            self->requestPatchCorrection(failedAttempt + 1, mergeMode, originalRequest, onComplete, onRetry);
         },
         /*useStructuredOutput=*/true);
 }
 
-juce::String AIIntegrationService::buildCorrectionPrompt(const juce::String& error) {
+juce::String AIIntegrationService::buildCorrectionPrompt(const juce::String& originalRequest,
+                                                         const juce::String& error) {
     // Naming the specific failure is the point of the retry. A bare "that didn't work, try again"
     // tends to reproduce the same mistake, because nothing told the model which part was wrong.
-    return "The patch you just returned was rejected by the synthesizer and was NOT applied.\n\nReason: " + error +
-           "\n\nReturn a corrected patch as raw JSON that fixes exactly this problem. Keep everything else about "
-           "the patch the same. Use only module types and parameter choice strings that appear in the schema, and "
-           "reference only node ids that exist in the current patch or that this patch itself creates.";
+    //
+    // Restating the original request matters just as much: RemoteProvider sends only this message,
+    // not the conversation, so without it the model has no idea what the patch was even supposed to
+    // be — verified live, it invents a generic fix referencing node ids that don't exist anywhere.
+    return "Original request: " + originalRequest +
+           "\n\nThe patch you returned for that request was rejected by the synthesizer and was NOT applied."
+           "\n\nReason: " +
+           error +
+           "\n\nReturn a corrected patch for the ORIGINAL REQUEST above, as raw JSON, that fixes exactly this "
+           "problem. Keep everything else about the patch the same. Use only module types and parameter choice "
+           "strings that appear in the schema, and reference only node ids that exist in the current patch or "
+           "that this patch itself creates.";
+}
+
+juce::String AIIntegrationService::mostRecentUserRequest() const {
+    for (auto it = chatHistory.rbegin(); it != chatHistory.rend(); ++it)
+        if (it->role == "user")
+            return it->content;
+    return {};
 }
 
 juce::String AIIntegrationService::extractJsonFromResponse(const juce::String& response) {

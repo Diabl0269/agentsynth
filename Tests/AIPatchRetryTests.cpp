@@ -115,6 +115,42 @@ TEST(AIPatchRetryTest, RetryOnValidationFailureFeedsErrorBackToModel) {
     EXPECT_TRUE(retries[0].error.contains("HyperResonator"));
 }
 
+// RemoteProvider (Source/AI/RemoteProvider.h) sends only the LAST conversation message, never
+// full history — so unlike OllamaProvider, a correction turn that doesn't itself restate the
+// original request reaches the model as a bare "fix this JSON" with no idea what the patch was
+// even supposed to be. Verified live against the real service: it invents an unrelated patch
+// referencing node ids that don't exist anywhere. buildCorrectionPrompt() must restate it.
+TEST(AIPatchRetryTest, CorrectionPromptRestatesOriginalRequest) {
+    juce::AudioProcessorGraph graph;
+    AIIntegrationService service(graph);
+
+    // First answer is schema-valid but structurally empty (no Audio Output) — trips the
+    // structural gate, not schema validation, so this also covers the gate feeding the retry loop.
+    // Second answer is valid, so the retry cycle completes.
+    auto provider =
+        std::make_unique<ScriptedProvider>(std::vector<juce::String>{R"({"nodes":[],"connections":[]})", kValidPatch});
+    auto* providerPtr = provider.get();
+    service.setProvider(std::move(provider));
+
+    juce::String firstResponseContent;
+    service.sendMessage(
+        "Design a bell-like FM tone",
+        [&](const AIProvider::AIResponse& response) { firstResponseContent = response.content; },
+        /*useStructuredOutput=*/true);
+
+    bool succeeded = false;
+    service.applyPatchWithRetry(firstResponseContent, /*mergeMode=*/false,
+                                [&](bool ok, const juce::String&) { succeeded = ok; });
+
+    EXPECT_TRUE(succeeded);
+    ASSERT_EQ(providerPtr->callCount, 2) << "the initial sendMessage plus one correction round-trip";
+
+    const juce::String correctionSent = providerPtr->lastUserMessage();
+    EXPECT_TRUE(correctionSent.contains("Design a bell-like FM tone"))
+        << "the correction prompt must restate the original request on its own, since RemoteProvider "
+        << "never sees conversation history — but it was sent: " << correctionSent;
+}
+
 TEST(AIPatchRetryTest, RetryIsBounded) {
     juce::AudioProcessorGraph graph;
     AIIntegrationService service(graph);

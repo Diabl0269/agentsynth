@@ -1,11 +1,28 @@
 #include "ModuleComponent.h"
 #include "../Modules/ExternalMidiModule.h"
+#include "../Modules/MacroControlModule.h"
 #include "../Modules/ModuleBase.h"
 #include "../Modules/PolySequencerModule.h"
+#include "../Modules/SamplerModule.h"
 #include "../Modules/SequencerModule.h"
 #include "GraphEditor.h"
 #include "LayoutUtil.h"
 #include "Theme/AppLookAndFeel.h"
+
+// ---- Default body-layout metrics (see layoutDefaultContent) ----------------------------------
+// Three knobs per row instead of two: the body sits below every jack, so it can use nearly the
+// full card width, and the extra column removes a whole row of height from most modules.
+static constexpr int kKnobColumns = 3;
+static constexpr int kContentMargin = 12;       // left/right gutter for body content
+static constexpr int kNarrowContentWidth = 200; // combos/toggles/load row stay this narrow, centred
+static constexpr int kLabelHeight = 18;
+static constexpr int kRowHeight = 24;  // combo box / toggle / button
+static constexpr int kKnobHeight = 58; // rotary + its text box
+static constexpr int kWaveformHeight = 72;
+static constexpr int kTriggerMeterHeight = 18;
+static constexpr int kBottomPadding = 12;
+// A port label box spans its jack centre ± 10; clear it by a bit more before placing any content.
+static constexpr int kPortLabelClearance = 15;
 
 static ModuleType getType(juce::AudioProcessor* module) {
     if (auto* mb = dynamic_cast<ModuleBase*>(module))
@@ -22,7 +39,9 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
 
     if (auto* modBase = dynamic_cast<ModuleBase*>(module)) {
         if (auto* vb = modBase->getVisualBuffer()) {
-            if (getType(module) != ModuleType::ExternalMidi) {
+            // Parametric EQ keeps its VisualBuffer for the spectrum analyser's FFT, but a scope
+            // on top of that analyser is redundant clutter, so it gets no scope UI.
+            if (getType(module) != ModuleType::ExternalMidi && getType(module) != ModuleType::ParametricEQ) {
                 scopeComponent = std::make_unique<ScopeComponent>(*vb);
                 addAndMakeVisible(scopeComponent.get());
 
@@ -38,6 +57,11 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         }
     }
 
+    if (auto* shMod = dynamic_cast<SampleHoldModule*>(module)) {
+        triggerMeter = std::make_unique<TriggerMeterComponent>(*shMod);
+        addAndMakeVisible(triggerMeter.get());
+    }
+
     if (auto* filterMod = dynamic_cast<FilterModule*>(module)) {
         freqResponseComponent = std::make_unique<FrequencyResponseComponent>(*filterMod);
         addAndMakeVisible(freqResponseComponent.get());
@@ -46,6 +70,25 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         spectrumToggle->setToggleState(false, juce::dontSendNotification);
         spectrumToggle->onClick = [this] { freqResponseComponent->setShowSpectrum(spectrumToggle->getToggleState()); };
         addAndMakeVisible(spectrumToggle.get());
+    }
+
+    if (auto* eqMod = dynamic_cast<ParametricEQModule*>(module)) {
+        eqCurveComponent = std::make_unique<EQCurveComponent>(*eqMod);
+        wireEqGestureCallbacks(*eqCurveComponent);
+        addAndMakeVisible(eqCurveComponent.get());
+
+        // The spectrum is this curve's backdrop, so it starts on (the analyser gates itself on
+        // actual signal, so an idle patch still costs no repaints).
+        spectrumToggle = std::make_unique<juce::ToggleButton>("Show Spectrum");
+        spectrumToggle->setToggleState(eqCurveComponent->getShowSpectrum(), juce::dontSendNotification);
+        spectrumToggle->onClick = [this] { eqCurveComponent->setShowSpectrum(spectrumToggle->getToggleState()); };
+        addAndMakeVisible(spectrumToggle.get());
+
+        eqPopOutButton = std::make_unique<juce::TextButton>("Open EQ Window");
+        eqPopOutButton->setComponentID("eqPopOut");
+        eqPopOutButton->setTooltip("Edit this EQ in a larger resizable window");
+        eqPopOutButton->onClick = [this] { openEqWindow(); };
+        addAndMakeVisible(eqPopOutButton.get());
     }
 
     if (getType(module) != ModuleType::Attenuverter) {
@@ -63,6 +106,9 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         addAndMakeVisible(*deleteButton);
     }
 
+    createSamplerControls();
+    createWavetableControls();
+
     setTitle(module->getName());
     setBufferedToImage(true);
     createControls();
@@ -79,7 +125,33 @@ void ModuleComponent::detachFromProcessor() {
     // Destroy scope component first — it has its own timer reading from the module's VisualBuffer
     scopeComponent.reset();
     scopeToggle.reset();
+    // The pop-out EQ editor holds the module by reference and runs its own timer, so it must be
+    // torn down before the processor goes away. The dialog is self-owning; deleting it closes it.
+    if (eqWindow != nullptr)
+        delete eqWindow.getComponent();
+
+    // Same for the frequency-domain views: their 30 Hz timers poll the module for parameter
+    // values and FFT samples, so they must go before the module pointer is dropped.
+    eqCurveComponent.reset();
+    freqResponseComponent.reset();
+    spectrumToggle.reset();
+    eqPopOutButton.reset();
     keyboardComponent.reset();
+    // Same reasoning: the trigger meter times itself and holds a reference to the module.
+    triggerMeter.reset();
+
+    // Same reason: the waveform view times against the SamplerModule, so it must go before the
+    // processor pointer is dropped.
+    sampleWaveform.reset();
+    loadSampleButton.reset();
+    sampleNameLabel.reset();
+    sampleChooser.reset();
+
+    // Same reason: the wavetable display holds a module reference and its own timer, and the
+    // load button's onClick lambda reaches back into this component.
+    wavetableDisplay.reset();
+    loadWavetableButton.reset();
+    wavetableChooser.reset();
 
     if (auto* parent = getParentComponent())
         parent->removeChildComponent(this);
@@ -278,11 +350,11 @@ void ModuleComponent::timerCallback() {
         }
     }
 
-    // NOTE: condition #4 (visible animated children — scope/freqResponse) is intentionally
-    // omitted.  FrequencyResponseComponent and ScopeComponent manage their own repaints
-    // via their own timers and only invalidate when their data changes.  Forcing a full
-    // parent repaint every tick because a child is visible caused a repaint storm on every
-    // Filter module (freqResponseComponent is always visible).
+    // NOTE: condition #4 (visible animated children — scope/freqResponse/eqCurve) is
+    // intentionally omitted.  FrequencyResponseComponent, EQCurveComponent and ScopeComponent
+    // manage their own repaints via their own timers and only invalidate when their data
+    // changes.  Forcing a full parent repaint every tick because a child is visible caused a
+    // repaint storm on every Filter module (freqResponseComponent is always visible).
 
     if (needsRepaint) {
         lastPaintedRMS = cachedRMS;
@@ -478,6 +550,366 @@ void ModuleComponent::createControls() {
     updateLayout();
 }
 
+//==============================================================================
+// Parametric EQ card
+//==============================================================================
+// Geometry shared by layoutParametricEQ() and parametricEQHeight(). Keeping them in one place is
+// what stops the computed card height from drifting out of step with the actual layout.
+namespace eqCard {
+constexpr int kMargin = 12;
+constexpr int kCurveHeight = 150;
+constexpr int kButtonRow = 28;
+constexpr int kToggleRow = 26;
+constexpr int kNumKnobRows = 3; // Freq / Gain / Q
+constexpr int kNumVisibleInputs = 6;
+constexpr int kScopeHeight = 100;
+
+// Knob geometry is deliberately identical to the generic auto-UI layout, so an EQ knob is the
+// same size as an Oscillator or Filter knob. The columns are wider than a knob, so each one is
+// centred in its column rather than stretched to fill it.
+constexpr int kKnobLabelHeight = 20;
+constexpr int kSliderWidth = 70;
+constexpr int kSliderHeight = 60;
+constexpr int kTextBoxWidth = 50;
+constexpr int kTextBoxHeight = 20;
+constexpr int kKnobRow = kKnobLabelHeight + kSliderHeight;
+
+// getPortCenter puts input i at y = 30 (header) + 20 (MIDI-out offset) + i*20 + 20, and each
+// label is drawn 10px above its jack with height 20 — so the last one ends 10px below its centre.
+constexpr int kPortFirstY = 70;
+constexpr int kPortStep = 20;
+constexpr int kPortLabelBottom = kPortFirstY + (kNumVisibleInputs - 1) * kPortStep + 16;
+
+// The port labels only occupy a narrow gutter down each edge (inputs are drawn at x+10 with
+// width 60 from a jack at x=10; outputs mirror that), so the curve sits BESIDE them starting
+// just under the header rather than below the whole stack. On a six-input module that reclaims
+// ~125px of otherwise dead space at the top of the card.
+constexpr int kCurveTop = 60;
+constexpr int kPortGutter = 88;
+constexpr int kCurveBottom = kCurveTop + kCurveHeight;
+constexpr int kContentTop = (kCurveBottom > kPortLabelBottom ? kCurveBottom : kPortLabelBottom) + 8;
+
+constexpr const char* kKnobSuffix[kNumKnobRows] = {"Freq", "Gain", "Q"};
+} // namespace eqCard
+
+juce::ToggleButton* ModuleComponent::findToggleByName(const juce::String& name) const {
+    for (auto* toggle : toggles)
+        if (toggle->getComponentID().equalsIgnoreCase(name))
+            return toggle;
+    return nullptr;
+}
+
+void ModuleComponent::layoutNamedKnob(const juce::String& name, int x, int y, int w, int h) {
+    juce::ignoreUnused(h);
+    for (int i = 0; i < sliders.size(); ++i) {
+        if (!sliders[i]->getComponentID().equalsIgnoreCase(name))
+            continue;
+        // Fixed knob box centred in the (wider) column, so EQ knobs render at exactly the same
+        // size as every other module's rather than stretching to the column width.
+        const int knobX = x + (w - eqCard::kSliderWidth) / 2;
+        sliderLabels[i]->setBounds(x, y, w, eqCard::kKnobLabelHeight);
+        sliders[i]->setTextBoxStyle(juce::Slider::TextBoxBelow, false, eqCard::kTextBoxWidth, eqCard::kTextBoxHeight);
+        sliders[i]->setBounds(knobX, y + eqCard::kKnobLabelHeight, eqCard::kSliderWidth, eqCard::kSliderHeight);
+        return;
+    }
+}
+
+int ModuleComponent::parametricEQHeight() const {
+    using namespace eqCard;
+    // kContentTop already accounts for the curve, which is laid out beside the port labels.
+    int h = kContentTop;
+    h += kKnobRow + 6;   // Show Spectrum + Open EQ Window, with the Output trim sharing the row
+    h += kToggleRow + 2; // per-band on/off row
+    h += kNumKnobRows * kKnobRow + 4;
+    if (scopeToggle)
+        h += kButtonRow + 4;
+    if (scopeComponent && scopeComponent->isVisible())
+        h += kScopeHeight + 8;
+    return h + 16; // bottom margin
+}
+
+void ModuleComponent::layoutParametricEQ() {
+    using namespace eqCard;
+
+    const int contentW = getWidth() - kMargin * 2;
+    if (contentW <= 0)
+        return;
+
+    // The curve occupies the space between the input and output port-label gutters, level with
+    // the jacks rather than below them.
+    if (eqCurveComponent) {
+        const int curveW = getWidth() - kPortGutter * 2;
+        if (curveW > 0)
+            eqCurveComponent->setBounds(kPortGutter, kCurveTop, curveW, kCurveHeight);
+    }
+
+    int y = kContentTop;
+
+    // Buttons on the left, Output trim on the right of the same row — a full-width row for one
+    // lone knob would leave three empty columns and make the card taller for nothing. The
+    // buttons are nudged down so they sit against the knob's centre rather than its label.
+    const int buttonY = y + (kKnobRow - kButtonRow) / 2;
+    if (spectrumToggle)
+        spectrumToggle->setBounds(kMargin, buttonY, 140, kButtonRow);
+    if (eqPopOutButton)
+        eqPopOutButton->setBounds(kMargin + 150, buttonY, 150, kButtonRow);
+    layoutNamedKnob("Output", getWidth() - kMargin - kSliderWidth, y, kSliderWidth, kKnobRow);
+    y += kKnobRow + 6;
+
+    // One column per band. The on/off toggle's text is the band's type ("1 Low Shelf"), so the
+    // column header and its enable control are the same widget.
+    const int colW = contentW / ParametricEQModule::kNumBands;
+    for (int b = 0; b < ParametricEQModule::kNumBands; ++b) {
+        if (auto* toggle = findToggleByName(ParametricEQModule::rowLabelFor(b)))
+            toggle->setBounds(kMargin + b * colW, y, colW - 4, kToggleRow);
+    }
+    y += kToggleRow + 2;
+
+    for (int row = 0; row < kNumKnobRows; ++row) {
+        for (int b = 0; b < ParametricEQModule::kNumBands; ++b) {
+            const juce::String name = "B" + juce::String(b + 1) + " " + kKnobSuffix[row];
+            layoutNamedKnob(name, kMargin + b * colW, y + row * kKnobRow, colW - 4, kKnobRow);
+        }
+    }
+    y += kNumKnobRows * kKnobRow + 4;
+
+    if (scopeToggle) {
+        scopeToggle->setBounds(kMargin, y, contentW, kButtonRow);
+        y += kButtonRow + 4;
+    }
+    if (scopeComponent && scopeComponent->isVisible())
+        scopeComponent->setBounds(kMargin, y, contentW, kScopeHeight);
+}
+
+void ModuleComponent::wireEqGestureCallbacks(EQCurveComponent& curve) {
+    juce::Component::SafePointer<ModuleComponent> safeThis(this);
+    auto capture = [safeThis](bool isStart) {
+        if (safeThis == nullptr || safeThis->undoManager == nullptr || safeThis->module == nullptr)
+            return;
+        auto& graph = safeThis->owner.getAudioEngine().getGraph();
+        if (isStart)
+            safeThis->undoManager->captureBeforeState(graph);
+        else
+            safeThis->undoManager->pushSnapshotFromCapture(graph);
+    };
+    curve.onGestureStart = [capture] { capture(true); };
+    curve.onGestureEnd = [capture] { capture(false); };
+}
+
+void ModuleComponent::openEqWindow() {
+    if (eqWindow != nullptr) {
+        eqWindow->toFront(true);
+        return;
+    }
+
+    auto* eqMod = dynamic_cast<ParametricEQModule*>(module);
+    if (eqMod == nullptr)
+        return;
+
+    auto content = std::make_unique<EQWindow>(*eqMod);
+    juce::Component::SafePointer<ModuleComponent> safeThis(this);
+    content->setGestureCallbacks(
+        [safeThis] {
+            if (safeThis != nullptr && safeThis->undoManager != nullptr && safeThis->module != nullptr)
+                safeThis->undoManager->captureBeforeState(safeThis->owner.getAudioEngine().getGraph());
+        },
+        [safeThis] {
+            if (safeThis != nullptr && safeThis->undoManager != nullptr && safeThis->module != nullptr)
+                safeThis->undoManager->pushSnapshotFromCapture(safeThis->owner.getAudioEngine().getGraph());
+        });
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned(content.release());
+    options.dialogTitle = module->getName();
+    options.componentToCentreAround = getTopLevelComponent();
+    options.useNativeTitleBar = true;
+    options.resizable = true;
+    eqWindow = options.launchAsync();
+}
+
+void ModuleComponent::createSamplerControls() {
+    auto* sampler = dynamic_cast<SamplerModule*>(module);
+    if (sampler == nullptr)
+        return;
+
+    sampleWaveform = std::make_unique<SampleWaveformComponent>(*sampler);
+    addAndMakeVisible(*sampleWaveform);
+
+    loadSampleButton = std::make_unique<juce::TextButton>("Load Sample...");
+    loadSampleButton->setTooltip("Load an audio file (WAV, AIFF, FLAC, Ogg) into this Sampler");
+    loadSampleButton->onClick = [this] {
+        auto* mod = dynamic_cast<SamplerModule*>(module);
+        if (mod == nullptr)
+            return;
+
+        sampleChooser = std::make_unique<juce::FileChooser>(
+            "Load Sample", juce::File::getSpecialLocation(juce::File::userMusicDirectory),
+            SamplerModule::getSupportedFormatWildcard());
+        auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
+
+        // The chooser outlives this call; SafePointer keeps the callback a no-op if the module
+        // component is destroyed (graph rebuild, undo) while the dialog is open.
+        juce::Component::SafePointer<ModuleComponent> safeThis(this);
+        sampleChooser->launchAsync(flags, [safeThis](const juce::FileChooser& fc) {
+            if (safeThis == nullptr)
+                return;
+            auto file = fc.getResult();
+            if (file == juce::File{})
+                return;
+
+            auto* target = dynamic_cast<SamplerModule*>(safeThis->getModule());
+            if (target == nullptr)
+                return;
+
+            if (target->loadSampleFile(file))
+                safeThis->refreshSampleLabel();
+            else
+                safeThis->refreshSampleLabel("Could not read " + file.getFileName());
+        });
+    };
+    addAndMakeVisible(*loadSampleButton);
+
+    sampleNameLabel = std::make_unique<juce::Label>("Sample", juce::String());
+    sampleNameLabel->setJustificationType(juce::Justification::centredLeft);
+    sampleNameLabel->setMinimumHorizontalScale(0.7f);
+    addAndMakeVisible(*sampleNameLabel);
+
+    refreshSampleLabel();
+}
+
+// =============================================================================
+// Audio-file drag and drop
+// =============================================================================
+
+bool ModuleComponent::isInterestedInFileDrag(const juce::StringArray& files) {
+    // Only a Sampler accepts a file drop. Returning false for everything else matters: JUCE walks
+    // up the hierarchy for an interested target, so a wav dropped on an Oscillator falls through to
+    // GraphEditor, which spawns a new Sampler for it instead of doing nothing.
+    if (dynamic_cast<SamplerModule*>(module) == nullptr)
+        return false;
+
+    for (const auto& path : files)
+        if (SamplerModule::isSupportedAudioFile(juce::File(path)))
+            return true;
+    return false;
+}
+
+void ModuleComponent::fileDragEnter(const juce::StringArray& files, int, int) {
+    juce::ignoreUnused(files);
+    if (!fileDragHighlight) {
+        fileDragHighlight = true;
+        repaint();
+    }
+}
+
+void ModuleComponent::fileDragExit(const juce::StringArray& files) {
+    juce::ignoreUnused(files);
+    if (fileDragHighlight) {
+        fileDragHighlight = false;
+        repaint();
+    }
+}
+
+void ModuleComponent::filesDropped(const juce::StringArray& files, int, int) {
+    fileDragHighlight = false;
+
+    auto* sampler = dynamic_cast<SamplerModule*>(module);
+    if (sampler == nullptr) {
+        repaint();
+        return;
+    }
+
+    // Only the first playable file is used — a Sampler holds one sample. Dropping several onto the
+    // canvas (rather than onto a module) creates one Sampler each; that path lives in GraphEditor.
+    for (const auto& path : files) {
+        const juce::File file(path);
+        if (!SamplerModule::isSupportedAudioFile(file))
+            continue;
+
+        if (sampler->loadSampleFile(file))
+            refreshSampleLabel();
+        else
+            refreshSampleLabel("Could not read " + file.getFileName());
+        return;
+    }
+
+    repaint();
+}
+
+void ModuleComponent::refreshSampleLabel(const juce::String& fallbackMessage) {
+    if (sampleNameLabel == nullptr)
+        return;
+
+    auto* sampler = dynamic_cast<SamplerModule*>(module);
+    juce::String name = (sampler != nullptr) ? sampler->getSampleName() : juce::String();
+
+    if (fallbackMessage.isNotEmpty())
+        sampleNameLabel->setText(fallbackMessage, juce::dontSendNotification);
+    else
+        sampleNameLabel->setText(name.isEmpty() ? juce::String("(no sample)") : name, juce::dontSendNotification);
+
+    sampleNameLabel->setTooltip(name);
+    repaint();
+}
+
+void ModuleComponent::createWavetableControls() {
+    auto* wtMod = dynamic_cast<WavetableOscillatorModule*>(module);
+    if (wtMod == nullptr)
+        return;
+
+    wavetableDisplay = std::make_unique<WavetableDisplayComponent>(*wtMod);
+    addAndMakeVisible(*wavetableDisplay);
+
+    loadWavetableButton = std::make_unique<juce::TextButton>("Load Wavetable...");
+    loadWavetableButton->setTooltip("Load an audio file as a wavetable (2048-sample frames, Serum style)");
+    loadWavetableButton->onClick = [this] { openWavetableChooser(); };
+    addAndMakeVisible(*loadWavetableButton);
+}
+
+void ModuleComponent::openWavetableChooser() {
+    wavetableChooser =
+        std::make_unique<juce::FileChooser>("Load Wavetable", juce::File(), "*.wav;*.aiff;*.aif;*.flac;*.ogg");
+
+    const auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
+
+    // SafePointer: the dialog is async, so this component (and its module) may be gone by
+    // the time the user picks a file.
+    juce::Component::SafePointer<ModuleComponent> safeThis(this);
+    wavetableChooser->launchAsync(flags, [safeThis](const juce::FileChooser& chooser) {
+        auto* self = safeThis.getComponent();
+        if (self == nullptr)
+            return;
+
+        const juce::File file = chooser.getResult();
+        if (file == juce::File())
+            return;
+
+        auto* wtMod = dynamic_cast<WavetableOscillatorModule*>(self->getModule());
+        if (wtMod == nullptr)
+            return;
+
+        if (!wtMod->loadWavetableFile(file)) {
+            juce::NativeMessageBox::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon, "Load Wavetable",
+                                                        "Could not read \"" + file.getFileName() +
+                                                            "\" as a wavetable.");
+            return;
+        }
+
+        // Switch the Table choice to "Loaded File" so the new table is what sounds.
+        for (auto* param : wtMod->getParameters()) {
+            if (auto* choice = dynamic_cast<juce::AudioParameterChoice*>(param)) {
+                if (choice->paramID == "table" && choice->choices.size() > 1) {
+                    const float normalised =
+                        (float)WavetableOscillatorModule::kLoadedTableChoice / (float)(choice->choices.size() - 1);
+                    choice->setValueNotifyingHost(normalised);
+                }
+            }
+        }
+
+        self->repaint();
+    });
+}
+
 void ModuleComponent::layoutSequencerStepColumn(int step, int colX, int startY) {
     // Gate slider (row 0)
     juce::String gateId = "Gate " + juce::String(step);
@@ -531,6 +963,15 @@ void ModuleComponent::updateLayout() {
         return;
     }
 
+    if (auto* macro = dynamic_cast<MacroControlModule*>(module)) {
+        // The bank is the only module whose footprint tracks a parameter: the "Knobs" count
+        // decides how many macro rows (knob + output jack) are shown. It grows downward from an
+        // unchanged top-left, so the module the user is turning never jumps under the cursor.
+        setSize(synth::LayoutUtil::kSingleWidth, synth::LayoutUtil::macroBankHeight(macro->getMacroCount()));
+        resized();
+        return;
+    }
+
     if (getType(module) == ModuleType::Sequencer || getType(module) == ModuleType::PolySequencer) {
         setSize(synth::LayoutUtil::kDoubleWidth, 380);
         return;
@@ -541,34 +982,148 @@ void ModuleComponent::updateLayout() {
         return;
     }
 
-    int contentHeight = 40; // Header
-    // Account for port label space on modules with many inputs
-    int numInputs = module->getTotalNumInputChannels();
-    if (auto* mb = dynamic_cast<ModuleBase*>(module))
-        numInputs = mb->getVisibleInputPortCount();
-    if (numInputs > 2)
-        contentHeight = std::max(contentHeight, 30 + numInputs * 20 + 10);
-    contentHeight += comboBoxes.size() * 50;
-    contentHeight += toggles.size() * 30;
+    // Parametric EQ is double-width with a bespoke band grid, so it measures itself.
+    if (getType(module) == ModuleType::ParametricEQ) {
+        setSize(synth::LayoutUtil::kDoubleWidth, parametricEQHeight());
+        resized();
+        return;
+    }
 
-    if (scopeToggle)
-        contentHeight += 30;
+    // Width must be final before measuring: the slider grid wraps on it.
+    if (getWidth() != synth::LayoutUtil::kSingleWidth)
+        setSize(synth::LayoutUtil::kSingleWidth, juce::jmax(getHeight(), 100));
 
-    int numSliders = sliders.size();
-    int rows = (numSliders + 1) / 2;
-    contentHeight += rows * 80;
-
-    if (scopeComponent && scopeComponent->isVisible())
-        contentHeight += 110;
-
-    if (freqResponseComponent)
-        contentHeight += 130;
-
-    if (spectrumToggle)
-        contentHeight += 30;
-
-    setSize(280, std::max(100, contentHeight + 20));
+    const int bodyHeight = layoutDefaultContent(/*apply*/ false);
+    setSize(synth::LayoutUtil::kSingleWidth, std::max(100, bodyHeight));
     resized();
+}
+
+int ModuleComponent::getContentTopY() {
+    int y = 30; // below the title bar
+    if (module->acceptsMidi())
+        y += 30; // the "Midi In"/"Midi Out" row
+
+    int numIns = module->getTotalNumInputChannels();
+    int numOuts = module->getTotalNumOutputChannels();
+    if (auto* mb = dynamic_cast<ModuleBase*>(module)) {
+        numIns = mb->getVisibleInputPortCount();
+        numOuts = mb->getVisibleOutputPortCount();
+    }
+
+    // Ask for the real jack positions instead of recomputing them: a port label box spans
+    // centre ± 10, so clear the lowest jack by a little more than that.
+    if (numIns > 0)
+        y = std::max(y, getPortCenter(numIns - 1, true).y + kPortLabelClearance);
+    if (numOuts > 0)
+        y = std::max(y, getPortCenter(numOuts - 1, false).y + kPortLabelClearance);
+
+    return y;
+}
+
+int ModuleComponent::layoutDefaultContent(bool apply) {
+    const int width = getWidth();
+
+    // Everything here sits BELOW the last jack (getContentTopY), so the narrow gutters that used to
+    // keep content clear of the port labels are unnecessary — the body gets nearly the full card
+    // width, which is what makes three knobs per row fit.
+    const int contentX = kContentMargin;
+    const int contentW = std::max(60, width - kContentMargin * 2);
+
+    // Single-column widgets (combos, toggles, the load row) look stretched at full width, so they
+    // stay centred in a narrower band.
+    const int narrowW = std::min(contentW, kNarrowContentWidth);
+    const int narrowX = contentX + (contentW - narrowW) / 2;
+
+    int y = getContentTopY();
+
+    // --- Sampler chrome: waveform overview, then the load button + file-name row ---
+    if (sampleWaveform) {
+        if (apply)
+            sampleWaveform->setBounds(contentX, y, contentW, kWaveformHeight);
+        y += kWaveformHeight + 8;
+
+        if (apply) {
+            const int buttonWidth = juce::jmax(96, narrowW / 2);
+            loadSampleButton->setBounds(narrowX, y, buttonWidth, kRowHeight);
+            sampleNameLabel->setBounds(narrowX + buttonWidth + 6, y, narrowW - buttonWidth - 6, kRowHeight);
+        }
+        y += kRowHeight + 8;
+    }
+
+    // --- Wavetable chrome: the scanned frame view, then the load button ---
+    if (wavetableDisplay != nullptr && loadWavetableButton != nullptr) {
+        if (apply)
+            wavetableDisplay->setBounds(contentX, y, contentW, kWaveformHeight);
+        y += kWaveformHeight + 8;
+
+        if (apply)
+            loadWavetableButton->setBounds(narrowX, y, narrowW, kRowHeight);
+        y += kRowHeight + 8;
+    }
+
+    for (int i = 0; i < comboBoxes.size(); ++i) {
+        if (apply) {
+            comboLabels[i]->setBounds(narrowX, y, narrowW, kLabelHeight);
+            comboBoxes[i]->setBounds(narrowX, y + kLabelHeight, narrowW, kRowHeight);
+        }
+        y += kLabelHeight + kRowHeight + 6;
+    }
+
+    for (int i = 0; i < toggles.size(); ++i) {
+        if (apply)
+            toggles[i]->setBounds(narrowX, y, narrowW, kRowHeight);
+        y += kRowHeight + 2;
+    }
+
+    // --- Trigger meter (Sample & Hold): sits directly above the knob grid, whose first knob is
+    // Threshold, so the marker and the control that moves it stay adjacent.
+    if (triggerMeter) {
+        if (apply)
+            triggerMeter->setBounds(contentX, y, contentW, kTriggerMeterHeight);
+        y += kTriggerMeterHeight + 6;
+    }
+
+    // --- Knob grid: kKnobColumns across, wrapping ---
+    const int knobWidth = contentW / kKnobColumns;
+    for (int i = 0; i < sliders.size(); ++i) {
+        const int row = i / kKnobColumns;
+        const int col = i % kKnobColumns;
+        const int x = contentX + col * knobWidth;
+        const int rowY = y + row * (kLabelHeight + kKnobHeight);
+
+        if (apply) {
+            sliderLabels[i]->setBounds(x, rowY, knobWidth, kLabelHeight);
+            sliders[i]->setBounds(x, rowY + kLabelHeight, knobWidth, kKnobHeight);
+        }
+    }
+    const int knobRows = (sliders.size() + kKnobColumns - 1) / kKnobColumns;
+    y += knobRows * (kLabelHeight + kKnobHeight);
+
+    if (freqResponseComponent) {
+        if (apply)
+            freqResponseComponent->setBounds(contentX, y, contentW, 120);
+        y += 128;
+    }
+
+    if (spectrumToggle) {
+        if (apply)
+            spectrumToggle->setBounds(narrowX, y, narrowW, kRowHeight);
+        y += kRowHeight + 2;
+    }
+
+    if (scopeToggle) {
+        if (apply)
+            scopeToggle->setBounds(narrowX, y, narrowW, kRowHeight);
+        y += kRowHeight + 2;
+    }
+
+    if (scopeComponent && scopeComponent->isVisible()) {
+        if (apply)
+            scopeComponent->setBounds(contentX, y, contentW, 100);
+        y += 100;
+    }
+
+    return y + kBottomPadding;
 }
 
 void ModuleComponent::paint(juce::Graphics& g) {
@@ -586,20 +1141,32 @@ void ModuleComponent::paint(juce::Graphics& g) {
     // When the cast is null we fall back to a plain themed-ish fill so those tests don't crash.
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
 
+    // Multi-select state (issue #156). The theme already owns the full selected treatment
+    // (accent border + glow); this just supplies the flag it was always waiting for.
+    const bool isSelected = owner.isNodeSelected(nodeId);
+
     if (lf != nullptr) {
         // Single owner of card treatment: background, drop shadow, body fill, border, and the
-        // header band (filled + title drawn) all come from the active theme. selected=false for
-        // v1 (no per-module selection model yet — see spec section 12).
-        lf->drawModulePanel(g, getLocalBounds().toFloat(), 24, module->getName(), /*selected*/ false, isBypassed);
+        // header band (filled + title drawn) all come from the active theme.
+        lf->drawModulePanel(g, getLocalBounds().toFloat(), 24, module->getName(), isSelected, isBypassed);
     } else {
         // Fallback path (no themed LnF): plain fill + simple header so tests render without crashing.
         g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
-        g.setColour(juce::Colours::black);
+        g.setColour(isSelected ? juce::Colours::aqua : juce::Colours::black);
         g.drawRect(getLocalBounds(), 2);
         g.setColour(juce::Colours::darkgrey);
         g.fillRect(0, 0, getWidth(), 24);
         g.setColour(juce::Colours::white);
         g.drawText(module->getName(), 0, 0, getWidth(), 24, juce::Justification::centred, true);
+    }
+
+    // Drop-target highlight while an audio file hovers over a Sampler.
+    if (fileDragHighlight) {
+        auto dropColour = (lf != nullptr) ? lf->getTheme().colors.accent : juce::Colours::yellow;
+        g.setColour(dropColour.withAlpha(0.12f));
+        g.fillRoundedRectangle(getLocalBounds().toFloat(), 24.0f);
+        g.setColour(dropColour);
+        g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(1.0f), 24.0f, 2.0f);
     }
 
     // Highlight Active Step (Sequencer only) — recolored from theme accent when available.
@@ -752,6 +1319,15 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
         return {getWidth() / 2, getHeight() / 2};
     }
 
+    // Macro bank: jacks sit on their macro's row so knob N and jack N line up horizontally.
+    if (auto* macro = dynamic_cast<MacroControlModule*>(module)) {
+        if (!isInput) {
+            const int visible = macro->getVisibleOutputPortCount();
+            const int clamped = (visible > 0) ? juce::jlimit(0, visible - 1, index) : 0;
+            return {getWidth() - 10, synth::LayoutUtil::macroRowCentreY(clamped)};
+        }
+    }
+
     int yStep = 20;
     int headerHeight = 30;
 
@@ -847,6 +1423,16 @@ void ModuleComponent::resized() {
 
     if (muteButton)
         muteButton->setBounds(getWidth() - 74, 2, 22, 20);
+
+    if (auto* macro = dynamic_cast<MacroControlModule*>(module)) {
+        layoutMacroBank(macro->getMacroCount());
+        return;
+    }
+
+    if (getType(module) == ModuleType::ParametricEQ) {
+        layoutParametricEQ();
+        return;
+    }
 
     if (getType(module) == ModuleType::Sequencer) {
         // --- Sequencer Specific Layout ---
@@ -945,68 +1531,7 @@ void ModuleComponent::resized() {
     }
 
     // --- Default Layout ---
-    int y = 30;
-    // Increase top y if MIDI IN is present to avoid overlap
-    if (module->acceptsMidi())
-        y += 30;
-    // Push content below input port labels
-    int numInputs2 = module->getTotalNumInputChannels();
-    if (auto* mb2 = dynamic_cast<ModuleBase*>(module))
-        numInputs2 = mb2->getVisibleInputPortCount();
-    if (numInputs2 > 2)
-        y = std::max(y, 30 + numInputs2 * 20 + 10);
-
-    int margin = 70; // Wider margin for labels
-    int contentWidth = getWidth() - (margin * 2);
-
-    for (int i = 0; i < comboBoxes.size(); ++i) {
-        comboLabels[i]->setBounds(margin, y, contentWidth, 20);
-        y += 20;
-        comboBoxes[i]->setBounds(margin, y, contentWidth, 24);
-        y += 30;
-    }
-
-    for (int i = 0; i < toggles.size(); ++i) {
-        toggles[i]->setBounds(margin, y, contentWidth, 24);
-        y += 30;
-    }
-
-    int sliderWidth = contentWidth / 2;
-    int sliderHeight = 60;
-
-    for (int i = 0; i < sliders.size(); ++i) {
-        int row = i / 2;
-        int col = i % 2;
-
-        int x = margin + col * sliderWidth;
-        int localY = y + row * (sliderHeight + 20);
-
-        sliderLabels[i]->setBounds(x, localY, sliderWidth, 20);
-        sliders[i]->setBounds(x, localY + 20, sliderWidth, sliderHeight);
-    }
-
-    // Update y to the end of sliders for scope toggle/scope
-    int finalSlidersRow = (sliders.size() + 1) / 2;
-    y += finalSlidersRow * (sliderHeight + 20);
-
-    if (freqResponseComponent) {
-        freqResponseComponent->setBounds(10, y, getWidth() - 20, 120);
-        y += 130;
-    }
-
-    if (spectrumToggle) {
-        spectrumToggle->setBounds(margin, y, contentWidth, 24);
-        y += 30;
-    }
-
-    if (scopeToggle) {
-        scopeToggle->setBounds(margin, y, contentWidth, 24);
-        y += 30;
-    }
-
-    if (scopeComponent && scopeComponent->isVisible()) {
-        scopeComponent->setBounds(10, y, getWidth() - 20, 100);
-    }
+    layoutDefaultContent(/*apply*/ true);
 }
 
 void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) {
@@ -1033,6 +1558,66 @@ void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) 
             if (safeThis != nullptr)
                 safeThis->repaint();
         });
+    } else if (param->paramID == "macroCount") {
+        // Resizing touches the component tree and the graph, so it must happen on the message
+        // thread even though this callback can arrive from the audio thread.
+        juce::Component::SafePointer<ModuleComponent> safeThis(this);
+        juce::MessageManager::callAsync([safeThis] {
+            if (safeThis != nullptr)
+                safeThis->applyMacroCountChange();
+        });
+    }
+}
+
+void ModuleComponent::applyMacroCountChange() {
+    if (module == nullptr || dynamic_cast<MacroControlModule*>(module) == nullptr)
+        return;
+
+    updateLayout();
+    owner.handleModuleResized(this);
+    repaint();
+}
+
+void ModuleComponent::layoutMacroBank(int count) {
+    using namespace synth::LayoutUtil;
+
+    const int margin = 20;
+
+    // Header row: the Knobs count on the left, the Bipolar toggle beside it.
+    for (int i = 0; i < sliders.size(); ++i) {
+        if (!sliders[i]->getComponentID().equalsIgnoreCase("Knobs"))
+            continue;
+        sliderLabels[i]->setBounds(margin, 30, 80, 18);
+        sliders[i]->setBounds(margin, 48, 80, 40);
+        sliders[i]->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 44, 16);
+    }
+
+    for (auto* toggle : toggles) {
+        if (toggle->getComponentID().equalsIgnoreCase("Bipolar"))
+            toggle->setBounds(margin + 96, 56, 100, 24);
+    }
+
+    // One row per macro: knob on the left, value beside it, output jack (drawn in paint()) on
+    // the right edge at the same y. Rows beyond the count are hidden, not destroyed — their
+    // parameters still exist and keep their values if the bank is grown again.
+    for (int i = 0; i < MacroControlModule::kMaxMacros; ++i) {
+        const juce::String id = MacroControlModule::macroName(i);
+        const bool visible = i < count;
+
+        for (int s = 0; s < sliders.size(); ++s) {
+            if (!sliders[s]->getComponentID().equalsIgnoreCase(id))
+                continue;
+
+            sliders[s]->setVisible(visible);
+            if (s < sliderLabels.size())
+                sliderLabels[s]->setVisible(false); // the jack label already names the row
+
+            if (visible) {
+                sliders[s]->setTextBoxStyle(juce::Slider::TextBoxRight, false, 44, 18);
+                const int centreY = macroRowCentreY(i);
+                sliders[s]->setBounds(margin, centreY - (kMacroRowH - 8) / 2, 140, kMacroRowH - 8);
+            }
+        }
     }
 }
 
@@ -1078,7 +1663,25 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             return; // cannot drag
 
         if (e.mods.isPopupMenu()) {
+            // Right-clicking outside the current selection retargets it to this module, so the
+            // menu always acts on something the user can see is selected.
+            if (!owner.isNodeSelected(nodeId))
+                owner.selectModule(nodeId, false);
+
             juce::PopupMenu m;
+
+            // Selection actions (issue #156). Offered whenever this module is selected — a
+            // single-module snippet is legal, it is just a group of one.
+            const int selectionCount = owner.getSelectionCount();
+            m.addItem(selectionCount > 1 ? "Save Selection as Snippet..." : "Save as Snippet...", [this] {
+                if (owner.onSaveSnippetRequested)
+                    owner.onSaveSnippetRequested();
+            });
+            if (selectionCount > 1) {
+                m.addItem("Delete " + juce::String(selectionCount) + " Selected Modules",
+                          [this] { owner.deleteSelection(); });
+            }
+            m.addSeparator();
 
             // Bypass toggle (only for actual modules)
             if (auto* mod = dynamic_cast<ModuleBase*>(module)) {
@@ -1106,23 +1709,32 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                 };
                 std::vector<Category> categories = {
                     {"Sources",
-                     {{"Oscillator", ModuleType::Oscillator}, {"Noise", ModuleType::Noise}, {"LFO", ModuleType::LFO}}},
+                     {{"Oscillator", ModuleType::Oscillator},
+                      {"Wavetable", ModuleType::Wavetable},
+                      {"Noise", ModuleType::Noise},
+                      {"Sampler", ModuleType::Sampler},
+                      {"LFO", ModuleType::LFO}}},
                     {"Sequencing",
                      {{"Sequencer", ModuleType::Sequencer},
                       {"Poly Sequencer", ModuleType::PolySequencer},
                       {"MIDI Keyboard", ModuleType::MidiKeyboard},
                       {"Poly MIDI", ModuleType::PolyMidi},
                       {"External MIDI", ModuleType::ExternalMidi}}},
-                    {"Envelopes & Control", {{"ADSR", ModuleType::ADSR}, {"VCA", ModuleType::VCA}}},
-                    {"Filters", {{"Filter", ModuleType::Filter}}},
+                    {"Envelopes & Control",
+                     {{"ADSR", ModuleType::ADSR},
+                      {"Envelope Follower", ModuleType::EnvelopeFollower},
+                      {"VCA", ModuleType::VCA}}},
+                    {"Filters", {{"Filter", ModuleType::Filter}, {"Parametric EQ", ModuleType::ParametricEQ}}},
                     {"Modulation FX",
                      {{"Chorus", ModuleType::Chorus},
                       {"Phaser", ModuleType::Phaser},
                       {"Flanger", ModuleType::Flanger},
                       {"Distortion", ModuleType::Distortion},
-                      {"Bitcrusher", ModuleType::Bitcrusher}}},
+                      {"Bitcrusher", ModuleType::Bitcrusher},
+                      {"Pitch Shifter", ModuleType::PitchShifter}}},
                     {"Time FX", {{"Delay", ModuleType::Delay}, {"Reverb", ModuleType::Reverb}}},
                     {"Dynamics", {{"Compressor", ModuleType::Compressor}, {"Limiter", ModuleType::Limiter}}},
+                    {"Utility", {{"Sample & Hold", ModuleType::SampleHold}}},
                 };
 
                 for (auto& cat : categories) {
@@ -1146,10 +1758,27 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             m.addItem("Delete Module", [this] { owner.deleteModule(this); });
             m.showMenuAsync(juce::PopupMenu::Options());
         } else {
+            // ---- Selection semantics (issue #156) ----
+            // Shift/Cmd-click toggles membership and does NOT begin a drag: a modifier-click is an
+            // edit to the selection, not a move.
+            const bool additive = e.mods.isShiftDown() || e.mods.isCommandDown() || e.mods.isCtrlDown();
+            if (additive) {
+                owner.selectModule(nodeId, true);
+                return;
+            }
+
+            // A plain click on an already-selected module keeps the whole group intact so it can be
+            // dragged; clicking anything else collapses the selection onto it.
+            if (!owner.isNodeSelected(nodeId))
+                owner.selectModule(nodeId, false);
+
             dragStartPosition = getPosition();
+            bodyDragActive = true;
             if (undoManager)
                 undoManager->captureBeforeState(owner.getAudioEngine().getGraph());
             dragger.startDraggingComponent(this, e);
+            // Record every selected module's origin so they can all follow this one.
+            owner.beginSelectionDrag();
             // Show grid + ghost for this module-body drag.
             owner.beginDragPreview(getWidth(), getHeight(), getNodeId());
         }
@@ -1165,7 +1794,12 @@ void ModuleComponent::mouseDrag(const juce::MouseEvent& e) {
     if (getPortForPoint(e.getMouseDownPosition())) {
         owner.dragConnection(e.getScreenPosition());
     } else {
+        if (!bodyDragActive)
+            return; // modifier-click toggled selection; the dragger was never armed
+
         dragger.dragComponent(this, e, nullptr);
+        // Carry every other selected module by the same delta from its own recorded origin.
+        owner.dragSelectionBy(getPosition() - dragStartPosition, this);
         // Update the landing ghost to follow the live drag position.
         owner.updateDragPreview(getPosition());
         if (auto* p = getParentComponent())
@@ -1177,15 +1811,29 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
     if (getPortForPoint(e.getMouseDownPosition())) {
         owner.endConnectionDrag(e.getScreenPosition());
     } else {
+        if (!bodyDragActive)
+            return;
+        bodyDragActive = false;
+
         // Clear ghost overlay before finalizing so the overlay is gone at the exact
         // moment the module lands in its snapped position.
         owner.endDragPreview();
         if (getPosition() != dragStartPosition) {
             // Snap to grid and resolve overlap BEFORE the undo snapshot so the
             // snapped/cleared final position is what gets captured in the diff.
-            owner.finalizeModuleDrag(this);
+            //
+            // A group drag resolves as one rigid body (finalizeSelectionDrag); resolving each
+            // member independently would spiral them apart and destroy the arrangement.
+            if (owner.isSelectionDragActive())
+                owner.finalizeSelectionDrag();
+            else
+                owner.finalizeModuleDrag(this);
+
             if (undoManager)
                 undoManager->pushSnapshotFromCapture(owner.getAudioEngine().getGraph());
+        } else {
+            // Click without movement: drop the recorded origins without re-resolving positions.
+            owner.cancelSelectionDrag();
         }
     }
 }

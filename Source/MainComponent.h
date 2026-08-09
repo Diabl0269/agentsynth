@@ -2,10 +2,12 @@
 
 #include "AI/AIIntegrationService.h"
 #include "AI/AIProviderRegistry.h"
+#include "AI/AccountService.h"
 #include "AppUndoManager.h"
 #include "AudioEngine.h"
 #include "PresetManager.h"
 #include "ShortcutManager.h"
+#include "SnippetManager.h"
 #include "UI/AIChatComponent.h"
 #include "UI/GraphEditor.h"
 #include "UI/ModuleLibraryComponent.h"
@@ -97,6 +99,17 @@ public:
     void openPresetFromFile();
     synth::AIIntegrationService& getAiServiceForTest() { return aiService; }
 
+    // ---- Snippets (issue #156) ----
+
+    /** Re-reads the snippets directory and pushes the list into the library sidebar. */
+    void refreshSnippetLibrary();
+
+    /** Asks for a name and saves the canvas selection as a snippet. No-op (with a status-bar
+     *  note) when nothing is selected. */
+    void promptSaveSnippet();
+
+    ModuleLibraryComponent& getModuleLibrary() { return moduleLibrary; }
+
 private:
     // AIIntegrationService::Listener
     void aiPatchAboutToApply() override;
@@ -166,6 +179,11 @@ private:
     std::unique_ptr<juce::FileChooser> fileChooser;
 
     synth::AIIntegrationService aiService;
+    // Declared BEFORE aiChatComponent: members are destroyed in reverse declaration order, so
+    // aiChatComponent (which installs AccountService::onStateChanged/onAccessTokenChanged in
+    // setAccountService(), see its header comment) is torn down first, while accountService is
+    // still alive to have those callback slots cleared.
+    synth::AccountService accountService;
     synth::AIChatComponent aiChatComponent;
     bool isAiPanelVisible = false;
     bool isLibraryVisible{true};

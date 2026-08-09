@@ -1,6 +1,7 @@
 # Testing Guide
 
-All tests use GoogleTest and run headless (no audio device, no GUI window). ~523 tests across ~68 suites.
+All tests use GoogleTest and run headless (no audio device, no GUI window). 1283 tests across 156 suites
+(`./build/Tests/Tests` reports the authoritative count; the per-section totals below are approximate).
 
 ```bash
 # Run all tests (ENABLE_TESTS defaults OFF — must be passed explicitly)
@@ -19,7 +20,7 @@ By default, builds skip tests to save time. Use the `-DENABLE_TESTS=ON` flag to 
 
 ## Test Layers
 
-### Audio Rendering Tests (~122 tests)
+### Audio Rendering Tests (~217 tests)
 
 Headless DSP tests that render audio through individual modules and verify output characteristics — RMS levels, silence detection, frequency response, waveform accuracy.
 
@@ -28,10 +29,23 @@ Headless DSP tests that render audio through individual modules and verify outpu
 | OscillatorTest | 11 | Waveform generation (sine, saw, square, triangle), MIDI response, tuning, frequency accuracy |
 | FilterTest | 10 | Low-pass/high-pass filtering, cutoff/resonance parameters, frequency response across 7 filter types |
 | ADSRTest | 10 | Attack/sustain/release shapes, retriggering, poly mode, parameter changes during playback |
+| EnvelopeFollowerModuleTest | 28 | Peak/RMS detection accuracy (unit sine → 1/√2 in RMS), attack/release time-constant ordering, unipolar clamped output, Attack/Release/Sensitivity CV modulation, CV channels cleared on output, bypass/mute emitting no CV, port roles (Audio in / ModCV out), state round-trip, zero-channel/zero-sample/zero-sample-rate robustness |
 | LFOModuleTest | 11 | LFO waveform output, rate modulation, sync behavior |
 | VCAModuleTest | 5 | Gain application, envelope following, silence detection |
 | AttenuverterModuleTest | 4 | CV signal attenuation, bipolar control, CV modulation |
+<<<<<<< HEAD
 | FX module tests | 52 | Delay (passthrough, feedback), Distortion (clipping, drive), Reverb (room size), Chorus, Phaser, Compressor, Flanger, Limiter, Bitcrusher (downsampling, quantization, CV) |
+=======
+| SampleHoldModuleTest | 48 | Port topology & modulation targets, Sample-mode rising-edge latch + hold across blocks, Track-mode follow/freeze, internal free-running clock and Rate CV, random source range, Level/Offset/Slew shaping + their CV inputs, **Schmitt-trigger threshold** (low-amplitude and negative-threshold gates, hysteresis rejects dither and in-gap dips, full release re-arms, Threshold CV), **trigger meter telemetry** (signed block peak, live on internal clock, armed state, capture count, reset on bypass/mute), `TriggerMeterComponent` static helpers (`valueToX` clamping, `needsRepaint` idle-gate) + paint smoke test, trigger/CV channel hygiene, bypass dry pass-through & mute silence, zero-length/zero-channel/single-sample buffers, zero sample rate, state round-trip |
+| MacroControlModuleTest | 14 | Port model (16 channels, 8 visible by default, no MIDI, ModCV role), per-macro CV output, channels above the `Knobs` count silent, hidden knobs keep their values when the bank is re-grown, bipolar mapping, 20 ms smoothing, bypass/mute silence, zero-channel buffer; factory creation, `macroCount`+knob JSON round-trip, one macro fanned out to two destinations |
+| FX module tests | 53 | Delay (passthrough, feedback), Distortion (clipping, drive), Reverb (room size), Chorus, Phaser, Compressor, Flanger, Limiter, Bitcrusher (downsampling, quantization, CV) |
+| PitchShifterModuleTest | 22 | Pitch mode transposition ratios (spectral peak), Frequency mode SSB offset + sideband suppression, CV routing, feedback stability, state round-trip |
+| SamplerModuleTest | 31 | Registration + port/parameter surface; WAV load (success, missing file, unreadable file, failed load keeps the previous sample, clear); Sample mode playback verified sample-exact against a ramp file at unity rate, at `pitch = +12` (2×), via MIDI note transpose, and with `start = 0.5`; monotonic anti-click fade-in; one-shot falls silent at the last frame vs loop keeps going; Granular mode produces bounded finite audio and stays silent with no sample loaded, including at max density × max grain size; gate precedence (free-run with nothing patched, trigger-CV latch silences a low gate, retrigger, a gate rising mid-block is not mistaken for an unpatched jack); bypass/mute clear; CV channels do not leak to the output; level CV sums with the parameter; zero-channel buffer is safe; `getExtraState`/`setExtraState` round trip, restored through `graphToJSON` → `applyJSONToGraph` on the trusted path and **dropped** on the untrusted path |
+| SampleWaveformPeaks | 4 | `SampleWaveformComponent::computePeaks` — empty inputs, columns span the buffer and track min/max extremes, channels averaged (opposite phase cancels), more columns than frames |
+| SampleWaveformPaint | 2 | Paints the empty state ("No sample loaded") and a loaded sample with a live playhead into a `juce::Image`; repeat `timerCallback()` with nothing changed is a no-op; zero-width component is safe |
+| SamplerFormats | 2 | `getSupportedFormatWildcard()` is non-empty and includes `*.wav`; `isSupportedAudioFile` accepts wav/WAV/aiff and rejects .json/.txt/extensionless/directories (extension-only check, so drag-hover stays cheap) |
+| Parametric EQ tests | 64 | `Tests/ParametricEQModuleTests.cpp`. `ParametricEQModuleTest` — identity, 6-in/2-out channel layout, port labels, mod targets, logical-port roles, slot types and row labels, **all four bands start disabled**, enable round-trip and count, a disabled band with a big gain still contributing nothing, setters clamping to range, bypass dry pass-through / CV clearing / mute. `ParametricEQPointPlacement` — `findBandForNewPoint` picks the nearest free slot on a log axis, skips slots in use, returns -1 when full, and resolves out-of-range frequencies. `ParametricEQResponse` — `bandMagnitudeDb` anchor points (bell hits its gain at centre and 0 dB two decades out; cut is the exact mirror of boost; higher Q narrows the bell; a shelf sits at half its gain at the corner; zero-gain bands are flat everywhere; degenerate inputs return unity, not NaN) and `responseDb` skipping disabled bands plus adding the output trim. `ParametricEQCoefficients` — the RBJ digital biquad agrees with the analog prototype it came from within 0.6 dB, zero gain yields a literal pass-through biquad (`b == a`), and centres past Nyquist / a zero sample rate stay finite. `ParametricEQAudio` — real-audio level measurements (all-off is a straight wire; a configured-but-disabled band does not touch audio; enabling applies and disabling restores unity; ±12 dB bells move their band by ±12 dB; a narrow boost leaves distant tones alone; shelves only touch their own end; output gain scales everything; stereo channels come out identical) plus `MeasuredResponseTracksTheAnalyticCurve`, which locks the drawn curve to the measured DSP within 1 dB. `ParametricEQCV` — freq CV is exponential over the full range, gain CV maps onto ±24 dB and clamps, near-silent CV is gated to exactly the unmodulated value while CV above the gate gets through, and the shelves are provably *not* CV-modulated. `ParametricEQEdgeCases` — zero-length/zero-channel/mono buffers, processing without `prepareToPlay`, re-preparing at a new sample rate, band response independent of sample rate, state round-trip preserving enable flags, and every band exposing the full parameter set |
+>>>>>>> origin/main
 | AntiClickTest | 4 | ADSR minimum release, smooth parameter transitions |
 | EdgeCaseTests | 21 | Zero-length buffers, extreme parameters, single-sample buffers, rapid parameter changes, large buffers |
 | AudioRenderingTests | 26 | Snapshot-based tests comparing bit-perfect output against reference files; covers full chains (Osc->Filter->VCA), modulation accuracy, and External MIDI input |
@@ -47,7 +61,7 @@ Test module interactions within the audio graph and cross-system integrations.
 | OllamaProviderTest | 10 | AI LLM HTTP requests, streaming responses, model management, non-blocking discovery; `SendPromptWithNoModelFailsWithoutHittingNetwork` — fail-fast with no network call when `currentModel` is empty; `SendPromptIncludesSelectedModelInRequestBody` — captures the POST body and asserts `"model"` matches `setModel()` (regression lock for f7cba4a / empty-model 400s); `QueuedRequestDuringThreadShutdownStillCompletes` — a request enqueued as the worker winds down still gets a callback (request-loss race); `PendingRequestsAreFailedOnDestruction` — requests still queued at destruction are failed *before* `~OllamaProvider()` returns. Both use bounded `condition_variable` waits and fail on timeout rather than sleeping. **Never call `stopThread(0)` in a test** — it force-kills via `pthread_cancel`, which aborts under glibc |
 | AIIntegrationServiceTest | 9 | Module suggestions, parameter recommendations, graph state mapping |
 
-### Component Workflow Tests (~50 tests)
+### Component Workflow Tests (~143 tests)
 
 Test UI component interactions using in-process construction (no window, no display).
 
@@ -55,12 +69,16 @@ Test UI component interactions using in-process construction (no window, no disp
 |-------|-------|----------------|
 | MainComponentTest | 21 | AI panel visibility toggle, mod matrix toggle, default configuration, command manager registration, redo shortcut; toolbar narrow/wide mode at 480/1600 px, library sidebar toggle + persistence, AI panel persistence, status bar bounds, canvas non-zero at minimum size, timer gating (5 Hz), patch name default + update on preset load, DrawableButton header buttons; `AiProviderGetsModelSelectedOnStartup` — regression lock (f7cba4a) that a model is selected on startup via `aiChatComponent.refreshModels()` called AFTER `setProvider()` |
 | AIChatComponentTest | 3 | Initialization/resizing, send-message updates UI + history via mock provider; `RefreshModelsSelectsModelWhenProviderInstalledAfterConstruction` — reproduces MainComponent's member-init ordering (chat component constructed before a provider is installed), asserting `getCurrentModel()` stays empty until a post-construction `setProvider()` + `refreshModels()` |
-| GraphEditorTest | 11 | Module drag-and-drop, port connection via beginConnectionDrag/endConnectionDrag, deletion, mod matrix visibility, snap-on-drop (position is grid-multiple of 8), overlap resolution (second drop at same coord produces non-overlapping bounding boxes) |
-| ModuleComponentTest | 5 | Initialization, resizing, parameter attachment to UI sliders; bypass/mute/delete are DrawableButtons with correct header bounds; delete button triggers requestDeleteModule |
+| SelectionModelTests | 22 | Multi-select primitives (issue #156, `Source/UI/SelectionModel.h` — pure, no GUI). `SelectionModel` add/remove/toggle/setSelection/clear; `NodeID{0}` rejected as the graph's invalid sentinel; `getSelected()` ordered by uid regardless of insertion order (snippet node order must not depend on click order); `retainOnly` staleness pruning. `marqueeRectFrom` normalises a drag in all four directions. `hitTestMarquee` uses intersection not containment (a clipped edge selects), degenerate band selects nothing, invalid box ids skipped. `unionSelection` for the additive marquee |
+| MultiSelectTests | 31 | GraphEditor-level multi-select (issue #156). Selection API (replace vs additive toggle, select-all, clear, prune after a node is removed behind the editor's back). Marquee: touches-to-select, replace vs add semantics, shrinking the band deselects, band over empty canvas deselects, update-without-begin is a no-op. Group drag: followers move by the initiator's delta, `finalizeSelectionDrag` preserves relative layout and snaps the *group* box to the grid, single selection does not engage group drag, `cancelSelectionDrag` leaves off-grid positions untouched, follower positions reach node properties. `deleteSelection` is ONE undo step for the whole group. Snippet drop through `itemDropped` with a `snippet:` payload; plain module drops still work; canvas Delete/Backspace/Escape keys return `false` when nothing is selected so they fall through |
+| ModuleLibraryCollapseTests | 30 | Collapsible sidebar sections + Snippets section (issue #156). `DraggableModuleNamesExcludeSnippetsAndThePlaceholder` — `getDraggableModuleNames()` feeds callers that instantiate each name via the module factory, so it filters on `RowKind::Module`; snippet rows and the "No snippets yet" placeholder are visible but are not module types. `HitTestingAgreesWithTheRowLayout` — every row's centre maps back to its own entry (paint and hit-testing share `buildRows()`); rows never overlap; collapse hides a section's rows but keeps its header and shrinks `getTotalContentHeight()`; header click and top-strip click toggle; `toggleAllSections` folds from a partial state rather than unfolding; `onCollapseStateChanged` fires only for user-driven changes, never for the `setCollapsedSections` restore path; blank persisted state expands everything; Snippets section shows an empty hint with no snippets, becomes draggable rows when populated, and sits ahead of the module catalogue |
+| GraphEditorTest | 19 | Module drag-and-drop, port connection via beginConnectionDrag/endConnectionDrag, deletion, mod matrix visibility, snap-on-drop (position is grid-multiple of 8), overlap resolution (second drop at same coord produces non-overlapping bounding boxes); `AudioFileDroppedOnCanvasCreatesAPreloadedSampler` — a real wav dropped on empty canvas yields a Sampler already holding it; `NonAudioFileDragIsRejectedByTheCanvas`; **Macro bank resize** — growing 4→16 knobs keeps the bank's top-left fixed, pushes the module below past `kCollisionGap` and persists its new y to node properties; shrinking 16→4 drops the routing on a hidden jack (and its attenuverter) while leaving a still-visible jack's routing intact |
+| ModuleComponentTest | 21 | Initialization, resizing, parameter attachment to UI sliders; bypass/mute/delete are DrawableButtons with correct header bounds; delete button triggers requestDeleteModule; `SamplerHasLoadButtonWaveformAndKnownHeight` — the Sampler gets a `SampleWaveformComponent`, a "Load Sample..." button and a "(no sample)" label, at 280×657; `BodyContentClearsEveryPortLabel` — every visible body child starts below the lowest jack (regression guard for the overlap the old duplicated layout formula caused); `EstimatedModuleSizesMatchTheRealComponents` — builds every library-offered type and fails if `GraphEditor::estimateModuleSize` drifts from the real card, so the drag ghost cannot lie; `KnobsAreLaidOutThreePerRow`; `NonSamplerModulesGetNoSamplerChrome`; audio-file drop — `SamplerAcceptsAudioFileDropAndLoadsIt` (highlight on enter, cleared on drop, sample actually loaded), `SamplerIgnoresNonAudioFileDrag`, `NonSamplerModuleRefusesFileDragSoItFallsThroughToTheCanvas`; `WavetableCardBuildsDisplayAndLoadButton` — a Wavetable card owns a `WavetableDisplayComponent` and a "Load Wavetable..." button, both laid out inside the card, with 1 combo / 7 sliders / 2 toggles; `WavetableCardPaintsAndTicksWithoutCrashing`; **Macro bank layout** — height equals `macroBankHeight(count)` for 1/4/8/16 knobs, each output jack sits on its own knob row and hit-tests to that macro's index, no input or MIDI jacks, knobs clear the output-label gutter and stay inside the module, rows above the count are hidden |
 | MidiKeyboardModuleTest | 4 | Note on/off, key press handling, velocity |
 | VisualBufferTest | 3 | Scope visualization buffer management, read/write, ringbuffer behavior |
 | ModuleBaseTest | 4 | Parameter getters, port labels, bypass functionality |
 | ModuleBypassTest | 5 | Default state, toggle, signal passing when bypassed |
+| FXBypassTest | 23 | Per-FX bypass dry pass-through, CV-channel clearing, mute silencing |
 | VisualSignalFlowTests | 8 | AttenuverterModule peak/mod value tracking, VisualBuffer RMS computation, AudioEngine::getModulationDisplayInfo() population |
 | SettingsWindowTest | 8 | Tab structure, tab persistence, audio device selector, AI settings persistence, resize safety, shortcuts reference |
 | ShortcutManagerTest | 8 | Default bindings, reverse lookup, conflict detection, persistence round-trip, reset to defaults, display strings |
@@ -89,7 +107,7 @@ comp.getAppPropertiesForTest().getUserSettings()->setValue("librarySidebarVisibl
 // TearDown(): reset to defaults, then tmpDir.deleteRecursively()
 ```
 
-### State Management Tests (~46 tests)
+### State Management Tests (~82 tests)
 
 Test persistence, serialization, and state restoration.
 
@@ -97,7 +115,8 @@ Test persistence, serialization, and state restoration.
 |-------|-------|----------------|
 | PresetManagerTest | 12 | Preset listing, load all presets, default preset validation, audio output connectivity, all 7 factory presets load with zero pairwise bounding-box overlaps at kCollisionGap=12; `AllPresetsPositionsOnGrid` (every baked x,y %8==0); estimateModuleSize mirror updated: Sequencer/PolySequencer/MidiKeyboard→560 (kDoubleWidth), Attenuverter excluded via `continue` |
 | UndoRedoTest | 12 | Add/remove modules, connections, parameter changes, complex sequences, rapid operations, auto-arrange is a single undo step (one Cmd+Z restores all pre-arrange positions) |
-| AIStateMapperTest | 24 | Graph JSON round-trip serialization, parameter validation, modulation serialization, merge mode, schema generation |
+| AIStateMapperTest | 26 | Graph JSON round-trip serialization, parameter validation, modulation serialization, merge mode, schema generation; `MergeAutoConnectsNewAudioNodesToOutputByDefault` / `MergeSkipsAutoConnectWhenTheCallerOptsOut` — locks the merge-mode convenience wiring (new audio node → Audio Output) that AI patches rely on and snippet insertion opts out of, so the two cannot drift into each other |
+| SnippetManagerTests | 38 | Module snippets / grouping (issue #156, `Source/SnippetManager.{h,cpp}` — headless). **Extraction:** only selected modules; graph I/O nodes excluded even when selected; only connections with *both* endpoints inside the selection; positions normalised to the selection's top-left with relative layout preserved; modulation stored as a `modulations` entry with the Attenuverter never becoming a snippet node; modulation leaving the selection dropped; stale/absent ids ignored. **Ids:** `nextFreeIdBase` above every existing uid; `prepareForInsert` renumbers + offsets, never mutates its input (the library inserts one loaded snippet repeatedly), clamps away from `NodeID{0}`. **Insert:** merges without disturbing a pre-existing module of the same type (the merge-collision regression), places the group at the drop point, `PreservesParameterValuesThatLookNormalised` (a 0.5 Hz LFO rate on a 0.01–20 range survives — the strict-validate / trusted-apply split), rebuilds modulation chains, two inserts give two independent copies, malformed JSON rejected without partially applying, dangling connections dropped, `DoesNotSpliceTheInsertedGroupIntoTheSurroundingPatch` + `DoesNotAttachInsertedModulesToAnExistingMidiSource` (merge-mode auto-connect opt-out — no wire may cross the snippet boundary on insert). **Persistence:** save/load/list/delete round-trip, insert from disk, name rewritten to the sanitised form, empty snippet and unusable name refused, corrupt files skipped by `listSnippets`, path separators stripped so a name cannot escape the directory, length capped |
 
 ### Layout Tests (~8 tests)
 
@@ -106,7 +125,7 @@ No JUCE GUI components required.
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
-| LayoutUtilTest | 8 | `snap` round-trips (negative-safe, midpoint), `intersectsAny` gap enforcement + selfId exclusion, `findFreeSlot` returns desired when clear, `findFreeSlot` resolves dense cluster (returned slot overlaps none), `computeAutoArrange` signal-depth layering (x strictly increases per depth, Audio Output in last column, no result-box overlaps); **width-bucket mapping** (Sequencer/PolySequencer/MidiKeyboard→Double, Attenuverter→Narrow, all others→Single); **bucket constants on grid** (kNarrowWidth/kSingleWidth/kDoubleWidth all %8==0, kDoubleWidth==2×kSingleWidth); **column stride** (kSingleWidth + kLayerGapX == 360) |
+| LayoutUtilTest | 16 | `snap` round-trips (negative-safe, midpoint), `intersectsAny` gap enforcement + selfId exclusion, `findFreeSlot` returns desired when clear, `findFreeSlot` resolves dense cluster (returned slot overlaps none), `computeAutoArrange` signal-depth layering (x strictly increases per depth, Audio Output in last column, no result-box overlaps); **width-bucket mapping** (Sequencer/PolySequencer/MidiKeyboard→Double, Attenuverter→Narrow, all others→Single); **bucket constants on grid** (kNarrowWidth/kSingleWidth/kDoubleWidth all %8==0, kDoubleWidth==2×kSingleWidth); **column stride** (kSingleWidth + kLayerGapX == 360); **Macro bank geometry** (`macroBankHeight` grows one `kMacroRowH` per macro, `macroRowCentreY` evenly spaced and always inside the bank); **`resolveOverlapsAfterResize`** (no-op when clear, pushes the neighbour below past the new bottom edge and on-grid, never moves the resized module, cascades through a stack until nothing overlaps, shrinking moves nobody back) |
 
 ### Theme Tests (~30 tests)
 
@@ -120,6 +139,21 @@ Tests for the theme system — `Tests/ThemeTests.cpp`. All headless.
 | ThemeLookAndFeelTest | 2 | All ColourId mappings from spec section 3, draw-helper smoke tests (fillThemedBackground / drawModulePanel / drawConnectionWire / drawModulationRing / drawRotarySlider into headless image) |
 | ThemeLookAndFeelTest (extended) | 4 | `ApplyThemeSetsEveryColourId` extended to cover ListBox and TabbedButtonBar ColourIds; `RetintIconsCalledByApplyTheme` (getIcon non-null across 3 built-ins); `MetricsCodeOnlyFieldsHaveExpectedDefaults` (toolbarHeight==36, statusBarHeight==24, etc.); `MetricsCodeOnlyFieldsNotInJSON` (ThemeLoader output does not contain "toolbarHeight") |
 | StyledWidgetSmokeTest | 9 | `drawComboBox` normal/pressed/disabled × 3 themes; `drawComboBoxTextWhenNothingSelected`; `drawPopupMenuItem` separator/highlighted/ticked/disabled/hasSubMenu; `getDefaultScrollbarWidth()==6`; `drawScrollbar` V/H × over/down; `drawScrollbarButton`; `drawTabbedButtonBarBackground` + `drawTabButton` active/inactive/hover with snapshot pixel check |
+
+### Cable Colour Tests (22 tests)
+
+Suite `Tests/CableColourTests.cpp` covering `Source/UI/CableColour.h` and the cable
+enumeration / hit-testing added to `GraphEditor`. Layered: the pure resolver needs no GUI at
+all, the canvas fixture builds a real two-module patch headlessly.
+
+| Suite | Tests | What it covers |
+|-------|-------|----------------|
+| CableColourCategoryTest | 3 | `categoryFor` totality over all 23 `ModuleType` values, groupings match the ModuleLibrary sections, persisted signal/category ids are unique and stable (`envelopes`, `modcv` spot-checked — renaming breaks saved user colours) |
+| CableColourResolveTest | 7 | Each `CableSignal` maps to its theme token; `midiWire` differs from `audioWire` in every built-in theme; `BySourceCategory` uses the palette and ignores signal; the 8 category colours are mutually distinct per built-in theme; override precedence is mode-scoped; bypass alpha applies to the winning colour but NOT to `resolveCableBaseColour` (what swatches render); clearing an override restores the theme colour |
+| CableColourPersistenceTest | 2 | Mode round-trip through `PropertiesFile`; override round-trip, untouched entries stay unset, reset removes the key entirely |
+| CableColourThemeTest | 3 | `midiWire` + `cableCategory` survive a `themeToJson` → `parseTheme` round-trip; a pre-#157 theme with neither key still loads on defaults; a partial `cableCategory` object overrides only its named keys |
+| CableGeometryTest | 2 | `buildCablePath` starts/ends exactly on the ports; `distanceToCable` ≈ 0 on the wire and large away from it |
+| CableCanvasTest (fixture) | 5 | Enumeration reports the audio cable with the right signal + source category; hit-test hits a point sampled from the drawn curve and misses far away; tolerance is respected; `disconnectCable` removes the graph edge; `colourForCable` follows the active mode and overrides |
 
 ### Icon Library Tests (~11 tests)
 
@@ -137,13 +171,17 @@ New suite `Tests/StatusBarTests.cpp` covering `Source/UI/StatusBarComponent.h/.c
 |-------|-------|----------------|
 | StatusBarTest | 9 | `ConstructsWithoutCrash`; `RendersNonEmptyImage` (createComponentSnapshot 400×24); `FormatCpu` — 0.0%, 75.6%, 100.0%; `FormatVoices` — 0→"0 voices", 1→"1 voice", 8→"8 voices"; `FormatPatch` — ""→"Untitled", named patch passes through; `GatedRepaintDoesNotFireOnUnchangedValues` — update() twice with same values triggers repaint only once; `AudioEngine_GetActiveVoiceInfo_ReturnsZeroWithoutPolyModules`; `AudioEngine_CountsPolyMidiVoices` — maxVoices==8 after adding PolyMidiModule; `MasterMute_ZeroesOutput` — setMasterMute(true) → output buffer all zeros post-processBlock |
 
-### Frequency Response Tests (~13 tests)
+### Frequency Response Tests (~50 tests)
 
-New suite `Tests/FrequencyResponseTests.cpp` covering `Source/UI/FrequencyResponseComponent.h`.
+`Tests/FrequencyResponseTests.cpp` covers `Source/UI/FrequencyResponseComponent.h`; `Tests/EQCurveTests.cpp` covers the axis maths both frequency-domain views share (`Source/UI/FrequencyGrid.h`), the Parametric EQ view and its interaction model (`Source/UI/EQCurveComponent.h`), and the pop-out editor (`Source/UI/EQWindow.h`).
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
 | FrequencyResponseTest | 13 | `PeakBinFindsMaximum`/`PeakBinFindsFirstMaxWhenTied`/`PeakBinHandlesEmpty`/`PeakBinSingleElement` — `findPeakBin` returns the max-magnitude bin (first index on ties, -1 for null/zero-length, 0 for single element); `FormatHzLabel_100Hz`/`_1kHz`/`_10kHz`/`_SubKiloHz`/`_FractionalKiloHz` — `formatHzLabel` yields "100Hz"/"1kHz"/"10kHz"/"440Hz"/"1.5…kHz"; `FreqMappingMonotonic`/`FreqMappingEndpoints` — `freqToXStatic` log map is monotonic and pins 20 Hz→x=0, 20 kHz→x=width; `DbMappingMonotonic` — `dbToYStatic` monotonic across +20/0/-20 dB; `PaintSmoke` — paints into a `juce::Image` with no crash, produces opaque pixels |
+| FrequencyGridTest | 14 | `FreqToXSpansTheFullWidth`/`FreqToXIsLogarithmic`/`FreqToXIsMonotonic` — equal frequency *ratios* map to equal pixel distances; `XToFreqInvertsFreqToX`/`XToFreqHandlesZeroWidth`; `IndexToFreqSpansTheAxisAndIsMonotonic`/`IndexToFreqHandlesDegenerateCounts`; `DbToYPutsMaxAtTopAndMinAtBottom`/`DbToYIsMonotonicDownwards`/`YToDbInvertsDbToY`/`YToDbHandlesZeroHeight`; `FormatHzLabel`/`FindPeakBin`; `FilterViewStaticsDelegateToTheSharedGrid` — regression lock that `FrequencyResponseComponent`'s public statics still agree with `FrequencyGrid` after the mapping code was hoisted out of it |
+| EQCurveTest | 8 | `StaticsUseASymmetricThirtyDbWindow` — ±30 dB window puts 0 dB at the vertical centre; `SpectrumIsOnByDefaultSoTheCurveHasABackdrop`; `FreqAtXAndGainAtYInvertTheDrawingTransform`; `GainAtYClampsToTheBandGainRange` — the ±30 dB view is wider than the ±24 dB parameter, so the top clamps; `PaintSmokeEmptyShowsTheHint`/`PaintSmokeWithActiveBands`/`PaintSmokeWithAllFourBandsAndSpectrum` — paint into a `juce::Image` with no crash and opaque pixels, including the FFT overlay driven by an explicit `timerCallback()`; `SilentInputDoesNotLeaveTheSpectrumRunning` — the silence gate that makes a default-on analyser free on an idle patch; `PaintAtDegenerateSizesDoesNotCrash` |
+| EQCurveInteraction | 9 | The Cubase-style gestures, driven through the same methods the mouse handlers call. `AddPointEnablesTheBandAtTheClickedPosition`/`AddPointPicksTheSlotMatchingTheClickedFrequency`/`AddPointReturnsMinusOneOnceAllSlotsAreUsed`; `RemoveBandDisablesItAndClearsSelection`; `HitTestFindsEnabledHandlesAndIgnoresDisabledOnes` — including that a removed handle stops being hit-testable; `DragMovesTheBandInBothFrequencyAndGain` — with clamping past the edges; `ScrollAdjustsQMultiplicatively` — one notch doubles/halves Q and it saturates at the parameter bounds; `EveryEditIsBracketedByExactlyOneGesture` — balanced undo brackets, and a rejected add opens none; `DragIsNotBracketedPerStepSoOneDragIsOneUndoStep`; `ComponentPicksUpBandChangesMadeOnTheModule` — the card and pop-out window converge via the timer |
+| EQWindowTest | 4 | `HostsACurveOverTheSameModule` — sizes itself, lays the curve out, and edits land on the shared module; `SpectrumToggleTracksTheCurve`; `ForwardsGestureCallbacksToTheCurve` — so pop-out edits are undoable; `PaintSmoke` |
 
 ### Scope Tests (~10 tests)
 
@@ -152,6 +190,24 @@ New suite `Tests/ScopeTests.cpp` covering `Source/UI/ScopeComponent.h`.
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
 | ScopeTest | 10 | `NoSignalThreshold_Zero`/`_BoundaryInclusive`/`_JustAbove`/`_FullAmplitude` — `isNoSignal` is true for peak ≤ 0.02f (boundary inclusive), false above; `AmplitudeMapping_TopNearBoundsTop`/`_BottomNearBoundsBottom`/`_ZeroIsVerticalCentre`/`_Symmetry` — `amplitudeToY` maps +1→above centre, -1→below centre, 0→exact vertical centre, symmetric about centre; `PaintSmokeNoSignal`/`PaintSmokeWithSignal` — paint the silent (No-Signal empty-state) and signal states into a `juce::Image` with no crash |
+
+### Wavetable Oscillator Tests (30 tests)
+
+New suite `Tests/WavetableOscillatorModuleTests.cpp` covering `Source/Modules/WavetableOscillatorModule.h`.
+
+| Suite | Tests | What it covers |
+|-------|-------|----------------|
+| WavetableOscillatorModuleTest | 27 | `FactoryInitialisation` — type/name/11 params/13 channels/6 visible in-jacks; `DeclaresEnoughOutputsForEveryCVInput` — guards the buffer-aliasing invariant (highest poly CV channel < `getTotalNumOutputChannels()`); `PortLabelsAndModulationTargets`, `LogicalPortMappingMonoAndPoly` — jack labels, mono ch0-5 mapping, poly pitch fan (`isPolyGroupHead`/`polyVoiceSpan == 8`), shared CV ch8-12, `isAutoPromotableModTarget` false in poly; `ZeroChannelsDoesNotCrash`; `ProducesAudioOnChannelZero` — audio on ch0, silence on ch1-12; `DefaultTablePositionZeroIsASine` — >95% of energy at the fundamental; `ScanningPositionChangesTheSpectrum` — position 1.0 adds ≥10× third-harmonic energy; `EveryBuiltInTableProducesAudio` — all 6 built-ins sound and report 32 frames; `LoadedFileChoiceFallsBackWhenNothingIsLoaded`; `OutputStaysBounded` — 8-voice unison + detune stays under ±2.0; `LowSampleRateWithExtremeTuningStaysFinite` — 8 kHz sample rate with octave +4 / coarse +12 (>1 cycle per sample) stays finite and in range, guarding the phase wrap; **`HighNotesDoNotAlias`** — square at MIDI 108, worst magnitude in 200 Hz–3.5 kHz is <5% of the fundamental (the mip-selection guard); `PositionCVScansTheTableInMonoMode`, `LevelCVAttenuatesInMonoMode`; `PolyModeRendersOneVoicePerPitchCVChannel` — 3 pitch CVs sound, voices 3-7 silent, CV ch8-12 do not leak; `PolyModePositionCVScansAllVoices`; `OctaveParameterTransposesInPolyMode` — 440 Hz CV + octave 1 sounds at 880 Hz; `LoadWavetableFileSplitsFrames`, `LoadedFramesKeepTheirDistinctHarmonics` — frame 0 is the fundamental, last frame the 4th harmonic; `LoadWavetableFileRejectsMissingAndInvalidFiles` — returns false, keeps playing the built-in; `LoadWavetableFileCapsFrameCount` — a >64-frame file decimates to `kMaxFrames`; `ReloadingWhileRenderingStaysStable` — 6 alternating loads interleaved with `processBlock` (exercises the pending/retired handoff); `StateRoundTripRestoresParametersAndWavetable`, `StateRoundTripSurvivesAMissingWavetableFile`; **`TrustedGraphJSONRestoresTheWavetable`** — round-trips through `graphToJSON`/`applyJSONToGraph`, the path presets and undo actually use (a wavetable path living only in `getStateInformation` is dropped there); `UntrustedPatchCannotNameAWavetableFileToOpen` — model-authored JSON must not reach `setExtraState` |
+| WavetableMipGeometry | 1 | `LimitsDecreaseMonotonicallyToTheFundamental` — mip 0 holds 1023 harmonics, the coarsest holds 1, limits strictly decrease, and every mip's limit is within its own Nyquist with length ≥ 64 |
+| MuteAndBypass/WavetableMuteBypassTest | 2 | `OutputIsSilentWhenMutedOrBypassed` — parametrized over mute and bypass; a pure source module clears on both (the documented `OscillatorModule` exception) |
+
+### Wavetable Display Tests (8 tests)
+
+New suite `Tests/WavetableDisplayTests.cpp` covering `Source/UI/WavetableDisplayComponent.h`.
+
+| Suite | Tests | What it covers |
+|-------|-------|----------------|
+| WavetableDisplayTest | 8 | `QuantisePositionEndpointsAndClamping`/`QuantisePositionIsMonotonicAndCollapsesTinyChanges` — `quantisePosition` pins 0→0 and 1→`steps`, clamps out-of-range input, is monotonic, and maps sub-bucket jitter to the same bucket (this is the repaint gate); `RepeatedTimerTicksOnAnUnchangedModuleAreIdempotent` — five ticks leave the trace bit-identical, a real position change is still picked up; `DisplayWaveformTracksScanPosition` — position 0 and 1 traces differ by >0.2 and both stay bounded; `DisplayWaveformHandlesTinyPointCounts` — 0 and 1 requested points still yield ≥2 samples; `PaintSmokeBuiltInTable`/`PaintSmokeAtEveryScanPosition`/`PaintSmokeAtDegenerateSizes` — paints into a `juce::Image` with no crash at 11 scan positions and at 0×0/1×1/4×80 bounds |
 
 ### E2E Workflow Tests (24 tests)
 
@@ -221,6 +277,13 @@ cmake --build build --target AIEvalHarness
 The structural checks themselves (`evaluatePatch()`) have no model dependency and are covered by
 `Tests/PatchEvalTests.cpp` in the regular suite — only the golden-prompt replay needs Ollama.
 
+Note that `evaluatePatch` is not only a scoring function: `AIIntegrationService::applyPatch` gates on
+`sourceReachesOutput` and surfaces `detail` to the user via `getLastPatchError()`, so those strings are
+a contract two `AIIntegrationServiceTest` cases assert verbatim. `SamplerAloneDoesNotCountAsAReachableSource`
+/ `SamplerAlongsideAnOscillatorStillPasses` cover the one module that is a sound source in the library
+but deliberately not one here (a Sampler is silent until a file is loaded, and a model-authored patch
+cannot load one).
+
 ## Adding Tests for New Modules
 
 When adding a new audio module:
@@ -284,7 +347,11 @@ pip install "clang-format==$(cat .clang-format-version)"
 
 ## CI Pipeline
 
-CI runs via `.github/workflows/ci.yml` on pull requests to `main` only, path-filtered to changes under `Source/**`, `Tests/**`, `CMakeLists.txt`, `Tests/CMakeLists.txt`, `scripts/**`, or either workflow file (`ci.yml` / `build-artifacts.yml`).
+CI runs via `.github/workflows/ci.yml` on pull requests to `main` **and on pushes to `main`**, path-filtered to changes under `Source/**`, `Tests/**`, `Tools/**`, `CMakeLists.txt`, `Tests/CMakeLists.txt`, `cmake/**`, `scripts/**`, or either workflow file (`ci.yml` / `build-artifacts.yml`).
+
+The push-to-`main` trigger exists **to seed the build caches** — see [Build caching](#build-caching). Removing it silently doubles every PR's build time, so it is load-bearing, not redundant with the artifact workflow.
+
+A `concurrency` group cancels superseded runs on the same PR (main is never cancelled, since those runs seed the cache).
 
 There are **five jobs**:
 
@@ -298,12 +365,47 @@ There are **five jobs**:
 
 ### Optimizations
 
-- **ccache**: Compiler cache avoids recompiling unchanged files. `CMAKE_C/CXX_COMPILER_LAUNCHER=ccache`, 500 MB max size, cached at `~/.ccache` (Linux) / `~/Library/Caches/ccache` (macOS) / `C:\Users\runneradmin\AppData\Local\ccache` (Windows), keyed by commit SHA with prefix restore.
-- **FetchContent caching**: `build/_deps` (JUCE 8.0.3 + GoogleTest 1.14.0) cached by `actions/cache`, keyed on `CMakeLists.txt` + `Tests/CMakeLists.txt` hashes.
 - **`JUCE_WEB_BROWSER=0`**: Drops unused WebBrowserComponent and removes WebKit/libsoup deps on Linux.
 - **Separate lint job**: Instant formatting feedback without waiting for a full build.
 - **apt package caching**: `awalsh128/cache-apt-pkgs-action` caches Ubuntu packages across runs.
 - **`coverage.sh --report-only`**: In CI, skips redundant configure/build/test steps and only merges profdata + generates the report.
+
+### Build caching
+
+Two caches carry work between runs. Both are easy to break in ways that look exactly like a healthy build, just slower — which is why `scripts/ci-cache-check.sh` gates them (see below).
+
+- **ccache** — compiler cache. `CMAKE_C/CXX_COMPILER_LAUNCHER=ccache`, 2 GB max size, `CCACHE_DIR` pinned explicitly to `${{ github.workspace }}/.ccache` on every platform. Keyed `<os>-ccache-<ref>-<sha>`; the restore-keys fall back this ref → `main` → anything. Also sets `compiler_check=content` and `sloppiness=time_macros,include_file_mtime,include_file_ctime`, because `actions/checkout` rewrites every file's mtime each run and the compiler binary's mtime changes whenever GitHub rebuilds the runner image — under ccache's mtime-based defaults both produce false misses.
+- **FetchContent** — `build/_deps` (JUCE + GoogleTest sources), keyed on `hashFiles('cmake/DependencyVersions.cmake')`.
+
+#### Three rules, each learned from an outage
+
+1. **`ci.yml` must keep its `push: main` trigger.** GitHub scopes a cache to the ref that wrote it; a PR run can read its own ref and the **base branch**, nothing else. From the introduction of ccache until Aug 2026 this workflow ran on `pull_request` alone, so it never wrote a cache into `main`'s scope and **no PR ever restored one** — every run compiled the entire tree cold for months. The logs said `Cache not found for input keys: …` and CI passed regardless.
+2. **Key `build/_deps` on the dependency pins alone**, never on `CMakeLists.txt`. `build/_deps` holds nothing but fetched sources, so adding a module must not invalidate it. The old `hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt')` key minted a fresh ~350 MB entry per platform per workflow on every module PR; with 10 `CMakeLists.txt` edits in the first nine days of Aug 2026 that pushed the repo past **GitHub's 10 GB per-repo cache limit**, which LRU-evicted the ccache entries too. All pins therefore live in `cmake/DependencyVersions.cmake` and the `FetchContent_Declare()` calls read them from there, so key and pin cannot drift.
+3. **`CCACHE_DIR` must be set explicitly.** ccache's default directory varies by platform *and* version. The Linux job cached `~/.ccache` while ccache 4.x on `ubuntu-24.04` writes to `~/.cache/ccache`, so the Linux ccache was never even saved — no `Linux-ccache-*` entry ever existed.
+
+#### The cache health check
+
+`scripts/ci-cache-check.sh` runs after the build on Linux, macOS, and Windows. It reads each cache step's `cache-matched-key` output plus `ccache --show-stats`, writes a summary table to the job summary, and:
+
+- **fails** when a cache that should have restored did not (PR runs only — a miss on the `main` seeding run is expected and reported as a notice);
+- **warns** when the ccache hit rate is under `CACHE_MIN_HIT_RATE` (default 25%), which drops legitimately whenever a PR touches a widely-included header.
+
+Enforcement is off by default. Set the repository variable **`CI_CACHE_CHECK_ENFORCE=true`** (Settings → Secrets and variables → Actions → Variables) to make a cold cache fail the build; leave it unset to report only. It ships off so that PRs opened before `main` has seeded its caches don't fail on a miss that is genuinely expected — turn it on once one merge to `main` has completed.
+
+**4. Cache steps use `actions/cache/restore` + `actions/cache/save`, not the combined `actions/cache`.** The combined action declares exactly one output, `cache-hit`, which is true only on an *exact* primary-key match — and the ccache primary key embeds `github.sha`, so it never matches exactly even when a restore-key fallback works perfectly. Only `actions/cache/restore` exposes **`cache-matched-key`**, the one value that reports a fallback hit. Reading it off the combined action yields an empty string forever: run `31301691346` restored every cache and compiled at a **100% ccache hit rate** while the check reported `MISS` on all three platforms. Enforcement would have failed every build. The split also lets the save step run `if: always()`, so a successful compile is not discarded because a later test failed.
+
+Because of that near-miss the check **fails safe**: an empty `cache-matched-key` contradicted by a high ccache hit rate (≥ `CACHE_SELFCHECK_HIT_RATE`, default 50%) is reported as *a misconfigured check*, not a cold cache, and does not fail the build — a cold build cannot hit 100%, since its only hits are files compiled into two targets in the same run (~15%). A genuinely cold cache still fails.
+
+The script has its own tests (`scripts/tests/ci-cache-check.test.sh`, 14 cases, run by the Lint job): if the thing that detects a broken cache breaks silently, we are back to shipping cold builds unnoticed. Those tests scrub every input variable before each case — `ci.yml` exports `CACHE_CHECK_ENFORCE` and `CACHE_WARM_EXPECTED` workflow-wide, the Lint job inherits them, and a non-hermetic harness silently inherited CI's values and passed cases it should have failed.
+
+To inspect cache state directly:
+
+```bash
+gh api "repos/:owner/:repo/actions/caches?per_page=100" \
+  -q '.actions_caches[] | "\(.size_in_bytes/1048576|floor)MB\t\(.ref)\t\(.key)"'
+# Total size — evictions start once this approaches GitHub's 10 GB limit:
+gh api "repos/:owner/:repo/actions/caches?per_page=100" -q '[.actions_caches[].size_in_bytes]|add/1073741824'
+```
 
 ### What didn't work
 

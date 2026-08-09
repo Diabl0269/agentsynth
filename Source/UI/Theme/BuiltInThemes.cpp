@@ -17,10 +17,21 @@ Theme makeObsidian() {
     t.colors.accent = juce::Colour(0xff00D1FF);
     t.colors.accent2 = juce::Colour(0xff00D1FF);
     t.colors.audioWire = juce::Colour(0xffE8EDF2);
+    t.colors.midiWire = juce::Colour(0xffB48EF5);
     t.colors.modWire = juce::Colour(0xff00D1FF);
     t.colors.pitchWire = juce::Colour(0xffAAD4FF);
     t.colors.gateWire = juce::Colour(0xffFFA500);
     t.colors.polyBusWire = juce::Colour(0xff00E5FF);
+    t.colors.cableCategory = {
+        juce::Colour(0xffFFB454), // Sources
+        juce::Colour(0xffC792EA), // Sequencing
+        juce::Colour(0xff7FD962), // Envelopes & Control
+        juce::Colour(0xff4FC1FF), // Filters
+        juce::Colour(0xffFF7AB2), // Modulation FX
+        juce::Colour(0xff56D4C0), // Time FX
+        juce::Colour(0xffF07178), // Dynamics
+        juce::Colour(0xffA0A8B4)  // Utility
+    };
     t.colors.textPrimary = juce::Colour(0xffEAEEF3);
     t.colors.textMuted = juce::Colour(0xff8A93A0);
     t.colors.textDisabled = juce::Colour(0xff5C6470);
@@ -83,10 +94,21 @@ Theme makeNeon() {
     t.colors.accent = juce::Colour(0xffFF2BD6);
     t.colors.accent2 = juce::Colour(0xff22E0FF);
     t.colors.audioWire = juce::Colour(0xffFFFFFF);
+    t.colors.midiWire = juce::Colour(0xffC77DFF);
     t.colors.modWire = juce::Colour(0xff22E0FF);
     t.colors.pitchWire = juce::Colour(0xffFF2BD6);
     t.colors.gateWire = juce::Colour(0xff46E0A0);
     t.colors.polyBusWire = juce::Colour(0xff22E0FF);
+    t.colors.cableCategory = {
+        juce::Colour(0xffFFD166), // Sources
+        juce::Colour(0xffC77DFF), // Sequencing
+        juce::Colour(0xff46E0A0), // Envelopes & Control
+        juce::Colour(0xff22E0FF), // Filters
+        juce::Colour(0xffFF2BD6), // Modulation FX
+        juce::Colour(0xff7B61FF), // Time FX
+        juce::Colour(0xffFF5C7A), // Dynamics
+        juce::Colour(0xff9C8FC0)  // Utility
+    };
     t.colors.textPrimary = juce::Colour(0xffF4ECFF);
     t.colors.textMuted = juce::Colour(0xff9C8FC0);
     t.colors.textDisabled = juce::Colour(0xff6A5C8C);
@@ -152,10 +174,21 @@ Theme makeWarm() {
     t.colors.accent = juce::Colour(0xffFF9E3D);
     t.colors.accent2 = juce::Colour(0xff9E5A1E);
     t.colors.audioWire = juce::Colour(0xffF2E8D5);
+    t.colors.midiWire = juce::Colour(0xffCE93B8);
     t.colors.modWire = juce::Colour(0xffFFC65C);
     t.colors.pitchWire = juce::Colour(0xffFFB36B);
     t.colors.gateWire = juce::Colour(0xffE07A5F);
     t.colors.polyBusWire = juce::Colour(0xffFFC65C);
+    t.colors.cableCategory = {
+        juce::Colour(0xffF2A65A), // Sources
+        juce::Colour(0xffC98FB0), // Sequencing
+        juce::Colour(0xff9BBF6A), // Envelopes & Control
+        juce::Colour(0xff6BB8C4), // Filters
+        juce::Colour(0xffE07A5F), // Modulation FX
+        juce::Colour(0xff7FBFA8), // Time FX
+        juce::Colour(0xffD9636B), // Dynamics
+        juce::Colour(0xffA89A85)  // Utility
+    };
     t.colors.textPrimary = juce::Colour(0xffF2E8D5);
     t.colors.textMuted = juce::Colour(0xffA89A85);
     t.colors.textDisabled = juce::Colour(0xff7D715F);
