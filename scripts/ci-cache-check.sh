@@ -151,8 +151,12 @@ push-to-main run has seeded the cache."
     fi
 elif [ "$CACHE_WARM_EXPECTED" != "true" ] &&
     { [ -z "$DEPS_MATCHED_KEY" ] || [ -z "$CACHE_MATCHED_KEY" ]; }; then
-    annotate notice "Cache miss on a cache-seeding run — expected; this run populates the cache \
-that pull requests will restore from."
+    # Covers both runs that legitimately start cold: the push-to-main run that seeds the cache,
+    # and a pull request from a fork, which GitHub gives an isolated cache scope with no access to
+    # the base repository's entries.
+    annotate notice "Cache miss on a run not expected to have a warm cache — either the \
+push-to-main run that seeds the cache pull requests restore from, or a fork pull request (forks \
+cannot read base-repository caches). Not a defect."
 fi
 
 if [ "$total" -gt 0 ] && [ "$hit_rate" -lt "$CACHE_MIN_HIT_RATE" ]; then
