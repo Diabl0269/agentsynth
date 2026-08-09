@@ -121,7 +121,8 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
                                synth::AIIntegrationService& aiService, synth::AIChatComponent& aiChatComponent,
                                ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager,
                                GraphEditor* graphEditor)
-    : appProperties(appProperties) {
+    : appProperties(appProperties)
+    , themeManager(themeManager) {
     auto* audioSelector = new juce::AudioDeviceSelectorComponent(deviceManager, 0, 2, // min/max inputs
                                                                  0, 2,                // min/max outputs
                                                                  true, true,          // midi
@@ -143,11 +144,19 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
 
     // Restore last selected tab
     tabs.setCurrentTabIndex(appProperties.getUserSettings()->getIntValue("settingsTab", 0), false);
+
+    themeManager.addChangeListener(this);
 }
 
 SettingsWindow::~SettingsWindow() {
+    themeManager.removeChangeListener(this);
     appProperties.getUserSettings()->setValue("settingsTab", tabs.getCurrentTabIndex());
     appProperties.saveIfNeeded();
 }
 
 void SettingsWindow::resized() { tabs.setBounds(getLocalBounds()); }
+
+void SettingsWindow::changeListenerCallback(juce::ChangeBroadcaster* /*source*/) {
+    sendLookAndFeelChange();
+    repaint();
+}

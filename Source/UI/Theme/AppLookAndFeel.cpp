@@ -202,6 +202,7 @@ void AppLookAndFeel::retintIcons() {
 
     // Toolbar actions + transport-stop + panel toggles render as primary chrome.
     iconLibrary_.setTintColour(Icon::TransportStop, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::ActionNew, c.textPrimary);
     iconLibrary_.setTintColour(Icon::ActionUndo, c.textPrimary);
     iconLibrary_.setTintColour(Icon::ActionRedo, c.textPrimary);
     iconLibrary_.setTintColour(Icon::ActionSave, c.textPrimary);
@@ -422,20 +423,8 @@ void AppLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& button,
 
 void AppLookAndFeel::drawDrawableButton(juce::Graphics& g, juce::DrawableButton& button,
                                         bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) {
-    if (button.getStyle() == juce::DrawableButton::ImageAboveTextLabel) {
-        auto bounds = button.getLocalBounds();
-        auto text = button.getButtonText();
-
-        if (text.isNotEmpty()) {
-            const auto textHeight = 14;
-            auto textBounds = bounds.removeFromBottom(textHeight);
-
-            g.setFont(juce::Font(juce::FontOptions(11.0f)));
-            g.setColour(button.findColour(juce::DrawableButton::textColourId, true)
-                            .withMultipliedAlpha(button.isEnabled() ? 1.0f : 0.5f));
-            g.drawFittedText(text, textBounds, juce::Justification::centred, 1);
-        }
-    }
+    button.setColour(juce::DrawableButton::textColourId, findColour(juce::DrawableButton::textColourId));
+    button.setColour(juce::DrawableButton::textColourOnId, findColour(juce::DrawableButton::textColourOnId));
     LookAndFeel_V4::drawDrawableButton(g, button, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
 }
 

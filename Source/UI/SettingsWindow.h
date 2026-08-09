@@ -9,7 +9,9 @@
 
 class ShortcutManager;
 
-class SettingsWindow : public juce::Component {
+class SettingsWindow
+    : public juce::Component
+    , private juce::ChangeListener {
 public:
     SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::ApplicationProperties& appProperties,
                    synth::AIIntegrationService& aiService, synth::AIChatComponent& aiChatComponent,
@@ -26,7 +28,10 @@ public:
     juce::TabbedComponent& getTabs() { return tabs; }
 
 private:
+    void changeListenerCallback(juce::ChangeBroadcaster* source) override;
+
     juce::ApplicationProperties& appProperties;
+    synth::theme::ThemeManager& themeManager;
     juce::TabbedComponent tabs{juce::TabbedButtonBar::TabsAtTop};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SettingsWindow)
