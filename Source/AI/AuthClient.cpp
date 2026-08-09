@@ -140,9 +140,10 @@ AuthClient::HttpResult performHttpUnavailable(const juce::String&, const juce::S
 
 } // namespace
 
-AuthClient::AuthClient(juce::String hostIn, juce::String clientIdIn)
+AuthClient::AuthClient(juce::String hostIn, juce::String clientIdIn, juce::String deviceIdIn)
     : host(std::move(hostIn))
     , clientId(std::move(clientIdIn))
+    , deviceId(std::move(deviceIdIn))
 #ifndef _WIN32
     , performHttp(performHttpWithCurl)
 #else
@@ -151,9 +152,10 @@ AuthClient::AuthClient(juce::String hostIn, juce::String clientIdIn)
 {
 }
 
-AuthClient::AuthClient(juce::String hostIn, juce::String clientIdIn, HttpPerformer performer)
+AuthClient::AuthClient(juce::String hostIn, juce::String clientIdIn, HttpPerformer performer, juce::String deviceIdIn)
     : host(std::move(hostIn))
     , clientId(std::move(clientIdIn))
+    , deviceId(std::move(deviceIdIn))
     , performHttp(std::move(performer)) {}
 
 AuthClient::DeviceCodeResult AuthClient::requestDeviceCode(const std::atomic<bool>& cancelled) const {
@@ -162,7 +164,10 @@ AuthClient::DeviceCodeResult AuthClient::requestDeviceCode(const std::atomic<boo
     juce::StringPairArray headers;
     headers.set("Content-Type", "application/x-www-form-urlencoded");
 
-    const juce::String body = formEncode({{"client_id", clientId}});
+    std::vector<std::pair<juce::String, juce::String>> params{{"client_id", clientId}};
+    if (deviceId.isNotEmpty())
+        params.emplace_back("device_id", deviceId);
+    const juce::String body = formEncode(params);
     const auto http = performHttp("POST", host + "/v1/auth/device/code", headers, body, kRequestTimeoutMs, cancelled);
 
     if (http.transportFailed || http.timedOut) {
@@ -242,17 +247,22 @@ AuthClient::TokenPollResult AuthClient::postToken(const juce::String& formBody,
 
 AuthClient::TokenPollResult AuthClient::pollDeviceToken(const juce::String& deviceCode,
                                                         const std::atomic<bool>& cancelled) const {
-    const juce::String body = formEncode({{"grant_type", "urn:ietf:params:oauth:grant-type:device_code"},
-                                          {"device_code", deviceCode},
-                                          {"client_id", clientId}});
-    return postToken(body, cancelled);
+    std::vector<std::pair<juce::String, juce::String>> params{
+        {"grant_type", "urn:ietf:params:oauth:grant-type:device_code"},
+        {"device_code", deviceCode},
+        {"client_id", clientId}};
+    if (deviceId.isNotEmpty())
+        params.emplace_back("device_id", deviceId);
+    return postToken(formEncode(params), cancelled);
 }
 
 AuthClient::TokenPollResult AuthClient::refreshToken(const juce::String& refreshTokenValue,
                                                      const std::atomic<bool>& cancelled) const {
-    const juce::String body =
-        formEncode({{"grant_type", "refresh_token"}, {"refresh_token", refreshTokenValue}, {"client_id", clientId}});
-    return postToken(body, cancelled);
+    std::vector<std::pair<juce::String, juce::String>> params{
+        {"grant_type", "refresh_token"}, {"refresh_token", refreshTokenValue}, {"client_id", clientId}};
+    if (deviceId.isNotEmpty())
+        params.emplace_back("device_id", deviceId);
+    return postToken(formEncode(params), cancelled);
 }
 
 AuthClient::MeResult AuthClient::fetchMe(const juce::String& accessToken, const std::atomic<bool>& cancelled) const {

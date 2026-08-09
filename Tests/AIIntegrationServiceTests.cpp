@@ -21,8 +21,8 @@ public:
         AIResponse response;
         if (shouldFail) {
             response.success = false;
-            response.error.kind = AIErrorKind::Server;
-            response.error.message = "Error";
+            response.error.kind = mockErrorKind;
+            response.error.message = mockErrorMessage;
         } else {
             response.success = true;
             response.content = mockResponse;
@@ -51,6 +51,11 @@ public:
 
     juce::String mockResponse = "{\"nodes\": [], \"connections\": []}";
     bool shouldFail = false;
+    // Configurable so tests can exercise any AIErrorKind (e.g. TrialExhausted) through
+    // AIIntegrationService without needing a real RemoteProvider/HTTP mock — see
+    // TrialExhaustedErrorPassesThroughWithServerMessageIntact below.
+    AIErrorKind mockErrorKind = AIErrorKind::Server;
+    juce::String mockErrorMessage = "Error";
     juce::String currentModel;
     juce::String lastAuthToken;
     std::vector<Message> lastConversation;
@@ -234,6 +239,47 @@ TEST_F(AIIntegrationServiceTest, SetAuthTokenBeforeProviderInstalledIsRePushedBy
     service->setProvider(std::move(provider));
 
     EXPECT_EQ(rawProvider->lastAuthToken, "token-xyz");
+}
+
+// P3-3 (anonymous trial): a mocked 402 TRIAL_EXHAUSTED response from the provider must reach the
+// caller as a distinct AIErrorKind::TrialExhausted with the server's message intact — not
+// collapsed into a generic failure. The actual HTTP-status-to-AIErrorKind mapping is RemoteProvider's
+// job (see Tests/RemoteProviderTests.cpp's TrialExhaustedMapsToDistinctKindWithServerMessageIntact
+// for that); this test locks down that AIIntegrationService::sendMessage() is a transparent
+// pass-through and never rewrites error.kind/error.message on the way to the UI-facing callback.
+TEST_F(AIIntegrationServiceTest, TrialExhaustedErrorPassesThroughWithServerMessageIntact) {
+    auto provider = std::make_unique<MockAIProvider>();
+    provider->shouldFail = true;
+    provider->mockErrorKind = AIProvider::AIErrorKind::TrialExhausted;
+    provider->mockErrorMessage = "Your free trial has been used up. Sign in with Google to continue.";
+    service->setProvider(std::move(provider));
+
+    AIProvider::AIResponse received;
+    service->sendMessage("make a bass patch",
+                         [&received](const AIProvider::AIResponse& response) { received = response; });
+
+    EXPECT_FALSE(received.success);
+    EXPECT_EQ(received.error.kind, AIProvider::AIErrorKind::TrialExhausted);
+    EXPECT_EQ(received.error.message,
+              juce::String("Your free trial has been used up. Sign in with Google to continue."));
+}
+
+// Same pass-through guarantee for the other new distinct kind (a service-wide capacity cap,
+// unrelated to the caller's own trial/quota).
+TEST_F(AIIntegrationServiceTest, ServiceCapacityExceededErrorPassesThroughWithServerMessageIntact) {
+    auto provider = std::make_unique<MockAIProvider>();
+    provider->shouldFail = true;
+    provider->mockErrorKind = AIProvider::AIErrorKind::ServiceCapacityExceeded;
+    provider->mockErrorMessage = "The service is at its daily capacity. Please try again later.";
+    service->setProvider(std::move(provider));
+
+    AIProvider::AIResponse received;
+    service->sendMessage("make a bass patch",
+                         [&received](const AIProvider::AIResponse& response) { received = response; });
+
+    EXPECT_FALSE(received.success);
+    EXPECT_EQ(received.error.kind, AIProvider::AIErrorKind::ServiceCapacityExceeded);
+    EXPECT_EQ(received.error.message, juce::String("The service is at its daily capacity. Please try again later."));
 }
 
 TEST_F(AIIntegrationServiceTest, ApplyPatch_MergeMode_PreservesExisting) {

@@ -117,6 +117,8 @@ add_library(Core STATIC
     Source/Auth/InMemoryTokenStore.h
     Source/Auth/KeychainTokenStore.h
     Source/Auth/KeychainTokenStore.cpp
+    Source/Auth/DeviceIdStore.h
+    Source/Auth/DeviceIdStore.cpp
     # UI utilities
     Source/UI/LayoutUtil.h
     Source/UI/LayoutUtil.cpp

@@ -1,4 +1,5 @@
 #include "RemoteProvider.h"
+#include "../Auth/DeviceIdStore.h"
 #include "../Branding.h"
 #include <algorithm>
 
@@ -38,6 +39,24 @@ juce::String extractErrorDetail(const juce::String& body) {
                 auto message = errorObj->getProperty("message");
                 if (message.isString())
                     return message.toString();
+            }
+        }
+    }
+    return {};
+}
+
+/** Extracts `error.code` from a JSON error body (e.g. "TRIAL_EXHAUSTED",
+    "SERVICE_CAPACITY_EXCEEDED"), if present and a string. Returns an empty string otherwise —
+    callers fall back to the generic HTTP-status-only mapping for that status. */
+juce::String extractErrorCode(const juce::String& body) {
+    auto parsed = juce::JSON::parse(body);
+    if (auto* obj = parsed.getDynamicObject()) {
+        if (obj->hasProperty("error")) {
+            auto errorVar = obj->getProperty("error");
+            if (auto* errorObj = errorVar.getDynamicObject()) {
+                auto code = errorObj->getProperty("code");
+                if (code.isString())
+                    return code.toString();
             }
         }
     }
@@ -169,6 +188,9 @@ RemoteProvider::HttpResult performHttpUnavailable(const juce::String&, const juc
 RemoteProvider::RemoteProvider(const juce::String& host)
     : Thread("RemoteProviderThread")
     , remoteHost(host)
+    // DeviceIdStore() (no explicit path) resolves to the app's standard settings-folder
+    // convention and persists on first read — see Source/Auth/DeviceIdStore.h.
+    , deviceId(DeviceIdStore().getDeviceId())
 #ifndef _WIN32
     , performHttp(performHttpWithCurl)
 #else
@@ -177,9 +199,10 @@ RemoteProvider::RemoteProvider(const juce::String& host)
 {
 }
 
-RemoteProvider::RemoteProvider(const juce::String& host, HttpPerformer performer)
+RemoteProvider::RemoteProvider(const juce::String& host, HttpPerformer performer, juce::String deviceIdIn)
     : Thread("RemoteProviderThread")
     , remoteHost(host)
+    , deviceId(std::move(deviceIdIn))
     , performHttp(std::move(performer)) {}
 
 RemoteProvider::~RemoteProvider() {
@@ -490,6 +513,10 @@ void RemoteProvider::processRequest(const Request& req) {
     requestHeaders.set("Content-Type", "application/json");
     if (authToken.isNotEmpty())
         requestHeaders.set("Authorization", "Bearer " + authToken);
+    // Sent whether or not authToken is set: an anonymous free-request-tier signal when there's no
+    // bearer token, anti-abuse signal when there is one. Harmless either way (not a secret).
+    if (deviceId.isNotEmpty())
+        requestHeaders.set("X-Device-Id", deviceId);
 
     const juce::String url = remoteHost + "/v1/capability/patch.generate";
 
@@ -539,10 +566,36 @@ void RemoteProvider::processRequest(const Request& req) {
     }
 
     if (httpStatus == 402) {
+        // TRIAL_EXHAUSTED is a distinct, user-facing state (the free-trial-to-account conversion
+        // moment — see AIErrorKind::TrialExhausted's doc comment), not a generic quota failure: the
+        // server's message is surfaced verbatim rather than folded into a canned "insufficient
+        // quota" string, since (when the caller isn't signed in) that message specifically invites
+        // signing in to continue. Any other 402 shape keeps the pre-existing generic Quota mapping.
+        if (extractErrorCode(result.body) == "TRIAL_EXHAUSTED") {
+            const auto detail = extractErrorDetail(result.body);
+            deliverErr(AIErrorKind::TrialExhausted,
+                       detail.isNotEmpty() ? detail : "Error: Your free trial has been used up.");
+            return;
+        }
+
         deliverErr(AIErrorKind::Quota, withErrorDetail("Error: Remote provider at " + remoteHost +
                                                            " reported insufficient quota (HTTP 402)",
                                                        result.body));
         return;
+    }
+
+    if (httpStatus == 503) {
+        // SERVICE_CAPACITY_EXCEEDED is a service-wide daily cap, unrelated to the caller's own
+        // usage — distinct from TRIAL_EXHAUSTED and from a generic 5xx, so it gets its own kind
+        // and the server's own message verbatim. Any other 503 shape falls through to the generic
+        // Server mapping below.
+        if (extractErrorCode(result.body) == "SERVICE_CAPACITY_EXCEEDED") {
+            const auto detail = extractErrorDetail(result.body);
+            deliverErr(AIErrorKind::ServiceCapacityExceeded,
+                       detail.isNotEmpty() ? detail
+                                           : "Error: The service is at capacity right now. Please try again shortly.");
+            return;
+        }
     }
 
     if (httpStatus == 400 || httpStatus == 404) {

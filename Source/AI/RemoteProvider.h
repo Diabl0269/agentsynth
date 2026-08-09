@@ -51,8 +51,10 @@ public:
 
     RemoteProvider(const juce::String& host = "http://localhost:8787");
 
-    // Test-specific constructor to inject a fake HTTP transport (no real sockets).
-    RemoteProvider(const juce::String& host, HttpPerformer performer);
+    // Test-specific constructor to inject a fake HTTP transport (no real sockets). `deviceId`
+    // defaults to empty (X-Device-Id header omitted) so existing 2-arg call sites keep compiling
+    // and never touch the real per-install DeviceIdStore file.
+    RemoteProvider(const juce::String& host, HttpPerformer performer, juce::String deviceId = "");
 
     ~RemoteProvider() override;
 
@@ -92,6 +94,12 @@ private:
     juce::String remoteHost;
     juce::String currentModel; // cosmetic only: the service picks its own model server-side
     juce::String authToken;
+    // A stable per-install identifier (Source/Auth/DeviceIdStore.h), sent as the X-Device-Id
+    // header on every capability request whether or not authToken is set — used for an anonymous
+    // free-trial tier when there's no bearer token, and as anti-abuse signal once there is one.
+    // NOT a secret. Populated from DeviceIdStore in the production constructor; empty (header
+    // omitted) for the test constructor, mirroring authToken's default-empty/opt-in shape.
+    juce::String deviceId;
     HttpPerformer performHttp;
     bool isTestMode = false;
 
