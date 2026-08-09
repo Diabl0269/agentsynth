@@ -75,6 +75,9 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         return {synth::LayoutUtil::kNarrowWidth, synth::LayoutUtil::kNarrowWidth};
     if (typeName == "Noise")
         return {280, 293};
+    if (typeName == "Envelope Follower")
+        // Noise's control count (3 floats + a choice) plus a taller port gutter for 4 input jacks.
+        return {280, 307};
     if (typeName == "Math")
         return {280, 251};
     if (typeName == "Sample & Hold")

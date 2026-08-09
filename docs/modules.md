@@ -100,6 +100,16 @@ Loads an audio file from disk and plays it back one of two ways.
 - **Poly mode**: 8 gate CV inputs (ch0-7) drive 8 independent ADSR instances; outputs 8 per-voice envelopes (ch0-7).
 - **Uses**: Modulation of VCA gain, Filter cutoff, or Oscillator Level.
 
+## Envelope Follower Module
+- **Role**: A *detector*, not a generator — tracks the amplitude contour of an audio input and emits it as unipolar `[0, 1]` modulation CV. Deliberately separate from ADSR: its input is audio (not a gate), its times are milliseconds (not seconds), and it has no decay/sustain stages.
+- **Detection**: `Peak` (rectify) or `RMS` (mean-square, square-rooted on output), selected by the `detection` choice parameter.
+- **Parameters**: Attack (0.1–200 ms), Release (1–2000 ms), Sensitivity (0–1), Detection (choice), Mute.
+- **Sensitivity**: A unit-interval control mapped to 0.25×–4.0× detector gain (`sensitivityToGain`, exponential, 0.5 = unity). It is *not* a raw gain or a dB value on purpose: `AIStateMapper::applyParamsToProcessor` rescales an in-`[0,1]` value when the parameter's range is wider than `[0,1]`, so a non-unit range here would silently misread AI-authored patches.
+- **Channels**: inputs ch0 = Audio, ch1 = Attack CV, ch2 = Release CV, ch3 = Sensitivity CV. Outputs ch0 = Env CV; ch1-3 are silent (declared only so JUCE cannot alias CV input ch3 onto another node's output buffer).
+- **CV modulation of times**: Attack/Release coefficients are recomputed once per block from the CV value at the block start — one `exp()` per block instead of per sample. Time constants only change how fast the follower tracks, so block-rate updates cannot zipper the output level. Sensitivity *is* applied per sample (smoothed).
+- **Bypass**: Clears its output rather than passing the dry signal through — see the exception note in [architecture.md](architecture.md). The module has an audio input but no audio output, so a dry pass-through would push audio-rate samples into a CV destination.
+- **Uses**: Sidechain-style ducking (follow a drum bus → VCA gain), dynamic auto-wah (follow a signal → Filter cutoff).
+
 ## VCA (Amplifier) Module
 - **Inputs**: 
     - Mono mode: Audio (ch0), CV (ch1).

@@ -74,6 +74,7 @@ add_library(Core STATIC
     Source/Modules/LFOModule.h
     Source/Modules/SampleHoldModule.h
     Source/Modules/AttenuverterModule.h
+    Source/Modules/EnvelopeFollowerModule.h
     Source/Modules/MacroControlModule.h
     Source/Modules/VisualBuffer.h
     Source/Modules/FX/DelayModule.h

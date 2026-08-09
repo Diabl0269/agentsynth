@@ -52,7 +52,8 @@ enum class ModuleType {
     Sampler,
     Wavetable,
     MacroControl,
-    SampleHold
+    SampleHold,
+    EnvelopeFollower
 };
 
 class ModuleBase : public juce::AudioProcessor {

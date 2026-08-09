@@ -4,6 +4,7 @@
 #include "../Modules/ExternalMidiModule.h"
 #include "../Modules/FX/ChorusModule.h"
 
+#include "../Modules/EnvelopeFollowerModule.h"
 #include "../Modules/FX/BitcrusherModule.h"
 #include "../Modules/FX/CompressorModule.h"
 #include "../Modules/FX/DelayModule.h"
@@ -74,6 +75,7 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Bitcrusher", []() { return std::make_unique<BitcrusherModule>(); }},
     {"Pitch Shifter", []() { return std::make_unique<PitchShifterModule>(); }},
     {"Noise", []() { return std::make_unique<NoiseModule>(); }},
+    {"Envelope Follower", []() { return std::make_unique<EnvelopeFollowerModule>(); }},
     {"Math", []() { return std::make_unique<MathModule>(); }},
     {"Macros", []() { return std::make_unique<MacroControlModule>(); }},
     {"Sample & Hold", []() { return std::make_unique<SampleHoldModule>(); }},
@@ -533,6 +535,8 @@ static juce::String getFactoryTypeName(juce::AudioProcessor* processor) {
             return "Pitch Shifter";
         case ModuleType::Noise:
             return "Noise";
+        case ModuleType::EnvelopeFollower:
+            return "Envelope Follower";
         case ModuleType::Math:
             return "Math";
         case ModuleType::MacroControl:

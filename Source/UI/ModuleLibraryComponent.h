@@ -166,6 +166,8 @@ public:
             return "Routes external MIDI device input into the patch graph.";
         if (moduleName.equalsIgnoreCase("ADSR"))
             return "Attack-Decay-Sustain-Release envelope generator.";
+        if (moduleName.equalsIgnoreCase("Envelope Follower"))
+            return "Tracks an audio signal's amplitude and outputs it as modulation CV.";
         if (moduleName.equalsIgnoreCase("VCA"))
             return "Voltage-controlled amplifier — controls signal amplitude via CV.";
         if (moduleName.equalsIgnoreCase("Filter"))
@@ -613,6 +615,7 @@ private:
             }},
             {"Envelopes & Control", {
                 "ADSR",
+                "Envelope Follower",
                 "VCA",
             }},
             {"Filters", {

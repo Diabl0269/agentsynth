@@ -223,6 +223,7 @@ int roleRank(ModuleType t) {
     case ModuleType::Math:
     case ModuleType::MacroControl:
     case ModuleType::SampleHold:
+    case ModuleType::EnvelopeFollower:
         return 3;
     default:
         return 4;
