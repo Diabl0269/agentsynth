@@ -775,6 +775,7 @@ Composes tooltip text with an optional keyboard shortcut hint appended in `[brac
 | **Module drop landing** | Eased tween from drop position → snapped + anti-overlapped final position (`easeOutBack`); `computeDropFinalPosition` is a pure helper | `GraphEditor` |
 | **Mod-matrix show/hide** | Bounds tween, `easeInOutCubic` | `GraphEditor` |
 | **Library sidebar show/hide** | Bounds tween, `easeInOutCubic` | `MainComponent` |
+| **Library section collapse/expand** | Band-height fold (150 ms), `easeInOutCubic` | `ModuleLibraryComponent` |
 | **AI panel show/hide** | Bounds tween, `easeInOutCubic` | `MainComponent` |
 | **Empty-canvas first-run hint** | Static drawn text; no animation — drawn only when `isCanvasEmpty(nodeCount)` returns `true` | `GraphEditor` |
 | **ModuleLibraryComponent rows** | Row hover-highlight; grab/dragging-hand cursor on draggable rows; per-module descriptions via `descriptionFor(name)` surfaced as `setTooltip()` | `ModuleLibraryComponent` |
@@ -1017,7 +1018,29 @@ Every section header is now a disclosure toggle, plus a **COLLAPSE ALL / EXPAND 
 - **The Snippets section stays visible when empty**, showing a "No snippets yet" hint, so the feature
   is discoverable before the first snippet exists.
 - **Chevrons are `juce::Path` triangles, not glyphs** — `▾`/`▸` coverage is not guaranteed across the
-  embedded typefaces (see the font limitation in [`theming.md`](theming.md)).
+  embedded typefaces (see the font limitation in [`theming.md`](theming.md)). The triangle is drawn
+  once (pointing down) and rotated by `-90° × progress`, so it turns with the fold; for a square box
+  the two endpoints are exactly the shapes the old two-state version switched between.
+
+### Fold animation
+
+Collapsing and expanding tween over `kCollapseAnimMs` (150 ms, `easeInOutCubic`) via
+`AnimationDriver` — no free-running repaints, per the animation invariant.
+
+- **`sectionProgress` is purely visual** (0 = open .. 1 = shut). The logical state stays in
+  `collapsedSections` and flips *instantly*, so `isSectionCollapsed()`, `areAllSectionsCollapsed()`,
+  persistence and `onCollapseStateChanged` never lag a frame behind what the user clicked.
+- **One driver for all sections**, so COLLAPSE ALL folds them together instead of racing nine
+  animators. Retargeting mid-flight eases on from the current value rather than snapping back.
+- **Rows are truncated, not squashed.** `buildRows()` gives each section a band of
+  `naturalHeight × (1 - progress)`; rows keep their natural spacing inside it and are clipped at the
+  band's bottom edge (`row.height < kItemHeight` marks a partly clipped row; rows past the band are
+  dropped, so they stop hit-testing). `juce::Graphics::drawText` does not clip on its own, hence the
+  explicit `reduceClipRegion` in `paint()`.
+- **It snaps when not `isShowing()`** — there is no VBlank off screen, so a hidden component would
+  otherwise freeze mid-fold. This is also what keeps the headless tests deterministic.
+  `setCollapsedSections()` (the launch-time restore) always snaps: animating there would look like
+  the sidebar folding itself up on startup.
 - **Collapse state persists** as newline-joined section names under `libraryCollapsedSections` in
   `juce::ApplicationProperties`. `setCollapsedSections()` skips blank entries, because an unset
   preference arrives from `StringArray::fromLines("")` as a single empty string, and

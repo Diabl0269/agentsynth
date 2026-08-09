@@ -88,6 +88,7 @@ add_executable(Tests
     GraphEditorOnboardingTests.cpp
     ModuleLibraryComponentTests.cpp
     ModuleLibraryCollapseTests.cpp
+    ModuleLibraryCollapseAnimationTests.cpp
     ModuleLibraryScrollTests.cpp
     SelectionModelTests.cpp
     SnippetManagerTests.cpp
