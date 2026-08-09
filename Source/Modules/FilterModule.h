@@ -15,6 +15,7 @@ public:
                          "filterType", "Filter Type",
                          juce::StringArray{"LPF24", "LPF12", "HPF24", "HPF12", "BPF24", "BPF12", "Notch"}, 0));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
+        addOutputLevelParameter();
         addMuteParameter();
         enableVisualBuffer(true);
     }
@@ -30,6 +31,7 @@ public:
         applyFilterType(filterTypeParam->getIndex());
         smoothedCutoff.reset(sampleRate, 0.005);
         smoothedCutoff.setCurrentAndTargetValue(*cutoffParam);
+        prepareOutputLevel(sampleRate);
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& /*midiMessages*/) override {
@@ -59,6 +61,10 @@ public:
         } else {
             processPolyMode(buffer, numSamples, numChannels, baseRes, baseDrive);
         }
+
+        // Audio lives on ch0 in mono mode and ch0-7 in poly mode; the CV inputs above
+        // those are cleared below and must not be scaled.
+        applyOutputLevel(buffer, polyParam->get() ? MAX_VOICES : 1);
 
         // Push voice 0 to visual buffer
         if (auto* vb = getVisualBuffer()) {

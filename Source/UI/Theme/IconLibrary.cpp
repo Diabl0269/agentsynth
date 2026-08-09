@@ -66,6 +66,7 @@ std::pair<const void*, int> IconLibrary::binaryDataForIcon(Icon id) {
         {BinaryData::toggleai_svg, BinaryData::toggleai_svgSize},
         {BinaryData::togglematrix_svg, BinaryData::togglematrix_svgSize},
         {BinaryData::togglelibrary_svg, BinaryData::togglelibrary_svgSize},
+        {BinaryData::themetoggle_svg, BinaryData::themetoggle_svgSize},
         {BinaryData::modulebypass_svg, BinaryData::modulebypass_svgSize},
         {BinaryData::modulemute_svg, BinaryData::modulemute_svgSize},
         {BinaryData::moduledelete_svg, BinaryData::moduledelete_svgSize},

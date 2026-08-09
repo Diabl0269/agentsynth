@@ -1,3 +1,4 @@
+#include "../Source/AI/AIStateMapper.h"
 #include "../Source/AppUndoManager.h"
 #include "../Source/Modules/ADSRModule.h"
 #include "../Source/Modules/AttenuverterModule.h"
@@ -6,6 +7,7 @@
 #include "../Source/Modules/ModuleBase.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/PolyMidiModule.h"
+#include "../Source/Modules/SamplerModule.h"
 #include "../Source/Modules/SequencerModule.h"
 #include "../Source/Modules/VCAModule.h"
 #include "../Source/PresetManager.h"
@@ -82,6 +84,63 @@ TEST_F(GraphEditorTest, DropModuleCreatesNode) {
         }
     }
     EXPECT_TRUE(foundOsc);
+}
+
+// --- Audio-file drop on the canvas ------------------------------------------------------------
+// Dropping a sample on empty canvas should build a Sampler already holding it, so the user never has
+// to open the file chooser.
+
+TEST_F(GraphEditorTest, AudioFileDroppedOnCanvasCreatesAPreloadedSampler) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("canvas-drop-146.wav");
+    file.deleteFile();
+    {
+        juce::AudioBuffer<float> audio(1, 512);
+        audio.clear();
+        for (int i = 0; i < 512; ++i)
+            audio.setSample(0, i, 0.3f);
+
+        juce::WavAudioFormat wavFormat;
+        std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
+        ASSERT_NE(stream, nullptr);
+        std::unique_ptr<juce::AudioFormatWriter> writer(wavFormat.createWriterFor(stream.get(), 44100.0, 1, 32, {}, 0));
+        ASSERT_NE(writer, nullptr);
+        stream.release();
+        writer->writeFromAudioSampleBuffer(audio, 0, 512);
+    }
+
+    juce::StringArray files{file.getFullPathName()};
+    EXPECT_TRUE(editor.isInterestedInFileDrag(files));
+
+    const auto before = engine.getGraph().getNodes().size();
+    editor.filesDropped(files, 200, 200);
+    ASSERT_EQ(engine.getGraph().getNodes().size(), before + 1);
+
+    SamplerModule* created = nullptr;
+    for (auto* node : engine.getGraph().getNodes())
+        if (auto* sampler = dynamic_cast<SamplerModule*>(node->getProcessor()))
+            created = sampler;
+
+    ASSERT_NE(created, nullptr) << "the drop should create a Sampler";
+    EXPECT_EQ(created->getSampleFilePath(), file.getFullPathName()) << "and it should already hold the file";
+
+    file.deleteFile();
+}
+
+TEST_F(GraphEditorTest, NonAudioFileDragIsRejectedByTheCanvas) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    juce::StringArray files{"/tmp/preset.json", "/tmp/notes.txt"};
+    EXPECT_FALSE(editor.isInterestedInFileDrag(files));
+
+    const auto before = engine.getGraph().getNodes().size();
+    editor.filesDropped(files, 200, 200);
+    EXPECT_EQ(engine.getGraph().getNodes().size(), before) << "a non-audio drop must not create nodes";
 }
 
 TEST_F(GraphEditorTest, DragConnectionCreatesLink) {
@@ -642,6 +701,113 @@ TEST_F(GraphEditorTest, DropUsesRealModuleSizeForAntiOverlap) {
 // ============================================================================
 // Item 4: Alignment guide rendering tests
 // ============================================================================
+
+// ============================================================================
+// Macro Control bank — runtime resize
+// ============================================================================
+
+namespace {
+
+juce::AudioParameterInt* knobCountParam(juce::AudioProcessor* p) {
+    for (auto* param : p->getParameters())
+        if (auto* i = dynamic_cast<juce::AudioParameterInt*>(param))
+            if (i->paramID == "macroCount")
+                return i;
+    return nullptr;
+}
+
+ModuleComponent* componentFor(GraphEditor& editor, juce::AudioProcessorGraph::NodeID id) {
+    for (auto* comp : editor.getModuleComponents())
+        if (comp != nullptr && comp->getNodeId() == id)
+            return comp;
+    return nullptr;
+}
+
+void setKnobs(juce::AudioProcessor* macros, int count) {
+    auto* p = knobCountParam(macros);
+    p->setValueNotifyingHost(p->convertTo0to1(count));
+    // parameterValueChanged marshals the resize onto the message thread.
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+}
+
+} // namespace
+
+TEST_F(GraphEditorTest, MacroBankGrowsAndPushesTheModuleBelowItDown) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 900);
+
+    auto& graph = engine.getGraph();
+    auto macroNode = graph.addNode(synth::AIStateMapper::createModule("Macros"));
+    auto vcaNode = graph.addNode(std::make_unique<VCAModule>());
+    ASSERT_NE(macroNode, nullptr);
+    ASSERT_NE(vcaNode, nullptr);
+
+    setKnobs(macroNode->getProcessor(), 4);
+
+    macroNode->properties.set("x", 100);
+    macroNode->properties.set("y", 100);
+    vcaNode->properties.set("x", 100);
+    vcaNode->properties.set("y", 500);
+    editor.updateComponents();
+
+    auto* macroComp = componentFor(editor, macroNode->nodeID);
+    auto* vcaComp = componentFor(editor, vcaNode->nodeID);
+    ASSERT_NE(macroComp, nullptr);
+    ASSERT_NE(vcaComp, nullptr);
+
+    const auto macroTopLeftBefore = macroComp->getPosition();
+    const int vcaYBefore = vcaComp->getY();
+    ASSERT_LT(macroComp->getBottom(), vcaComp->getY()) << "test setup: the two must start clear of each other";
+
+    setKnobs(macroNode->getProcessor(), 16);
+
+    EXPECT_EQ(macroComp->getHeight(), synth::LayoutUtil::macroBankHeight(16));
+    EXPECT_EQ(macroComp->getPosition(), macroTopLeftBefore) << "the resized module must not move";
+    EXPECT_GT(vcaComp->getY(), vcaYBefore) << "the module below must be pushed clear";
+    EXPECT_GE(vcaComp->getY(), macroComp->getBottom() + synth::LayoutUtil::kCollisionGap);
+
+    // The displaced position must be persisted, or a reload would drop it back into the overlap.
+    EXPECT_EQ(static_cast<int>(vcaNode->properties.getWithDefault("y", -1)), vcaComp->getY());
+}
+
+TEST_F(GraphEditorTest, ShrinkingTheMacroBankDropsRoutingsOnTheJacksItHides) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 900);
+
+    auto& graph = engine.getGraph();
+    auto macroNode = graph.addNode(synth::AIStateMapper::createModule("Macros"));
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    ASSERT_NE(macroNode, nullptr);
+    ASSERT_NE(filterNode, nullptr);
+
+    setKnobs(macroNode->getProcessor(), 16);
+    editor.updateComponents();
+
+    // M1 (kept) and M12 (about to be hidden) both drive the filter's cutoff CV.
+    engine.addModRouting(macroNode->nodeID, 0, filterNode->nodeID, 8);
+    engine.addModRouting(macroNode->nodeID, 11, filterNode->nodeID, 8);
+
+    auto sourcesFrom = [&](int channel) {
+        int n = 0;
+        for (const auto& c : graph.getConnections())
+            if (c.source.nodeID == macroNode->nodeID && c.source.channelIndex == channel)
+                ++n;
+        return n;
+    };
+
+    ASSERT_EQ(sourcesFrom(0), 1);
+    ASSERT_EQ(sourcesFrom(11), 1);
+    const int attenuvertersBefore = (int)graph.getNodes().size();
+
+    setKnobs(macroNode->getProcessor(), 4);
+
+    EXPECT_EQ(sourcesFrom(0), 1) << "a jack that is still visible must keep its routing";
+    EXPECT_EQ(sourcesFrom(11), 0) << "the hidden jack's routing must be removed";
+    EXPECT_LT((int)graph.getNodes().size(), attenuvertersBefore)
+        << "the orphaned attenuverter must be removed with the routing, not left behind";
+}
 
 TEST_F(GraphEditorTest, AlignmentGuideDrawingThemeAware) {
     // Verify paintOverChildren() uses theme colors correctly.

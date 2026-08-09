@@ -202,6 +202,12 @@ std::optional<Theme> ThemeLoader::parseTheme(const juce::var& json, const juce::
 
     theme.isUserTheme = false; // caller sets this after parsing
 
+    const juce::var& isDarkVal = json["isDark"];
+    if (!isDarkVal.isVoid() && !isDarkVal.isUndefined())
+        theme.isDark = (bool)isDarkVal;
+    else
+        theme.isDark = true; // default dark
+
     // --------------- Colors ---------------
     // Required minimum: bg0, surface, accent, textPrimary, audioWire, modWire.
     // All other color tokens are optional (default to Obsidian values).
@@ -283,6 +289,27 @@ std::optional<Theme> ThemeLoader::parseTheme(const juce::var& json, const juce::
         if (!v)
             return std::nullopt;
         colors.polyBusWire = *v;
+    }
+    {
+        auto v = parseColourKey(colorsVar, "midiWire", false, defaults.midiWire);
+        if (!v)
+            return std::nullopt;
+        colors.midiWire = *v;
+    }
+    // "cableCategory": nested object keyed by the stable category ids (kCableCategoryIds).
+    // Wholly optional, and optional per key — an absent entry keeps the Obsidian default, so a
+    // theme can recolour just the categories it cares about.
+    {
+        colors.cableCategory = defaults.cableCategory;
+        const juce::var& catVar = colorsVar.getProperty(juce::Identifier("cableCategory"), {});
+        if (catVar.isObject()) {
+            for (int i = 0; i < kCableCategoryCount; ++i) {
+                auto v = parseColourKey(catVar, kCableCategoryIds[(size_t)i], false, defaults.cableCategory[(size_t)i]);
+                if (!v)
+                    return std::nullopt; // malformed value -> reject the whole theme (same as any colour)
+                colors.cableCategory[(size_t)i] = *v;
+            }
+        }
     }
     {
         auto v = parseColourKey(colorsVar, "textMuted", false, defaults.textMuted);
@@ -439,6 +466,7 @@ juce::var ThemeLoader::themeToJson(const Theme& theme) {
     root->setProperty("schemaVersion", kSchemaVersion);
     root->setProperty("name", theme.name);
     root->setProperty("id", theme.id);
+    root->setProperty("isDark", theme.isDark);
 
     // Colors
     {
@@ -453,6 +481,7 @@ juce::var ThemeLoader::themeToJson(const Theme& theme) {
         colors->setProperty("accent", colourToHex(c.accent));
         colors->setProperty("accent2", colourToHex(c.accent2));
         colors->setProperty("audioWire", colourToHex(c.audioWire));
+        colors->setProperty("midiWire", colourToHex(c.midiWire));
         colors->setProperty("modWire", colourToHex(c.modWire));
         colors->setProperty("pitchWire", colourToHex(c.pitchWire));
         colors->setProperty("gateWire", colourToHex(c.gateWire));
@@ -468,6 +497,16 @@ juce::var ThemeLoader::themeToJson(const Theme& theme) {
         colors->setProperty("meterFill", colourToHex(c.meterFill));
         colors->setProperty("modRingPositive", colourToHex(c.modRingPositive));
         colors->setProperty("modRingNegative", colourToHex(c.modRingNegative));
+
+        // Cable category palette, emitted as a nested object so the round-trip matches the
+        // parse shape above.
+        {
+            auto* cat = new juce::DynamicObject();
+            for (int i = 0; i < kCableCategoryCount; ++i)
+                cat->setProperty(juce::Identifier(kCableCategoryIds[(size_t)i]),
+                                 colourToHex(c.cableCategory[(size_t)i]));
+            colors->setProperty("cableCategory", juce::var(cat));
+        }
 
         root->setProperty("colors", juce::var(colors));
     }

@@ -24,10 +24,25 @@ on:
 permissions:
   contents: write
 
+# Releases are tagged from main, so runs must not race each other or two pushes land on the same
+# tag. Never cancel: a cancelled run leaves a version bump without its artifacts.
+concurrency:
+  group: build-and-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Build ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    # CCACHE_DIR is pinned per platform rather than left to ccache's default, which varies by OS
+    # AND by ccache version — a path that disagrees with the actions/cache `path:` means the cache
+    # silently never saves (that is exactly how ci.yml's Linux ccache went missing entirely).
+    # It is a matrix value because this is one job spanning three runners, so a job-level override
+    # is not available. Windows uses a forward-slash absolute path: `github.workspace` there is a
+    # backslash path, and backslashes survive as literals inside a quoted bash string, breaking
+    # `mkdir -p`.
+    env:
+      CCACHE_DIR: ${{ matrix.ccache_dir }}
     strategy:
       fail-fast: false
       matrix:
@@ -37,18 +52,21 @@ jobs:
             platform: Linux
             arch: x64
             artifact_name: AgentSynth-Linux-x64
+            ccache_dir: /home/runner/.ccache
 
           # macOS arm64 (Apple Silicon)
           - os: macos-latest
             platform: macOS
             arch: arm64
             artifact_name: AgentSynth-macOS-arm64
+            ccache_dir: /Users/runner/.ccache
 
           # Windows x64
           - os: windows-latest
             platform: Windows
             arch: x64
             artifact_name: AgentSynth-Windows-x64
+            ccache_dir: C:/Users/runneradmin/AppData/Local/ccache
 
     steps:
     - uses: actions/checkout@v6
@@ -58,14 +76,14 @@ jobs:
       if: runner.os == 'Linux'
       uses: awalsh128/cache-apt-pkgs-action@latest
       with:
-        packages: cmake ninja-build libasound2-dev libx11-dev libxinerama-dev libxext-dev libxcomposite-dev libxcursor-dev libxrandr-dev libxrender-dev libfontconfig1-dev libfreetype6-dev libglu1-mesa-dev libcurl4-openssl-dev libgtk-3-dev libjack-jackd2-dev freeglut3-dev pkg-config
-        version: 1.0
+        packages: cmake ninja-build ccache libasound2-dev libx11-dev libxinerama-dev libxext-dev libxcomposite-dev libxcursor-dev libxrandr-dev libxrender-dev libfontconfig1-dev libfreetype6-dev libglu1-mesa-dev libcurl4-openssl-dev libgtk-3-dev libjack-jackd2-dev freeglut3-dev pkg-config
+        version: 1.1
 
     # macOS Dependencies
     - name: Install macOS Dependencies
       if: runner.os == 'macOS'
       run: |
-        brew install cmake ninja
+        brew install cmake ninja ccache
 
     # Windows MSVC environment — required so the Ninja generator can find cl.exe.
     # We use Ninja on every OS so this workflow's build matches the PR CI
@@ -78,31 +96,93 @@ jobs:
       uses: ilammy/msvc-dev-cmd@v1
 
     # Cache FetchContent Dependencies
-    - name: Cache FetchContent Dependencies
-      uses: actions/cache@v5
+    # restore + save are split (rather than the combined actions/cache) so the health check below
+    # can read `cache-matched-key`, which the combined action does not expose — see
+    # docs/testing.md "Build caching", rule 4.
+    - name: Restore FetchContent Dependencies
+      id: deps-cache
+      uses: actions/cache/restore@v5
       with:
         path: build/_deps
         # The "-ninja" tag ties the cache to the generator so the stale
         # Visual-Studio-generator sub-build cache (pinned to an old VS version)
-        # is never restored after this workflow switched to Ninja. The "2" bump
-        # invalidates caches saved before the repo was renamed gravisynth ->
-        # agentsynth: their FetchContent subbuild dirs have the old
-        # .../work/gravisynth/gravisynth absolute path baked in, which conflicts
-        # with the new .../work/agentsynth/agentsynth checkout path and trips
-        # CMake's directory-mismatch guard.
-        key: ${{ runner.os }}-release-deps-ninja2-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
+        # is never restored after this workflow switched to Ninja.
+        #
+        # Keyed on cmake/DependencyVersions.cmake — the dependency pins — and NOT on
+        # CMakeLists.txt. build/_deps contains only the fetched JUCE + googletest sources, so a
+        # module adding a source line must not invalidate a ~360 MB entry. Under the old
+        # CMakeLists-wide key this workflow minted 3 fresh entries (~1.1 GB) on every merge that
+        # touched CMakeLists.txt, which together with ci.yml's copies pushed the repo past
+        # GitHub's 10 GB cache budget and LRU-evicted the ccache entries. The "3" is a one-time
+        # bump to orphan the old, wrongly-keyed entries.
+        key: ${{ runner.os }}-release-deps-ninja3-${{ hashFiles('cmake/DependencyVersions.cmake') }}
         restore-keys: |
-          ${{ runner.os }}-release-deps-ninja2-
+          ${{ runner.os }}-release-deps-ninja3-
+
+    # ccache. This workflow had none until Aug 2026, so every release build recompiled the whole
+    # tree from cold even though ci.yml had just built the identical commit. The key is scoped
+    # `-release-` because this is a different build than the PR CI one (Release, no tests, no
+    # coverage) and its objects must not be confused with ci.yml's.
+    - name: Restore ccache
+      id: ccache-cache
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ runner.os }}-release-ccache-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-release-ccache-
+
+    - name: Configure ccache
+      shell: bash
+      run: |
+        mkdir -p "$CCACHE_DIR"
+        ccache --set-config=max_size=2G
+        # See ci.yml for why these two are needed: checkout rewrites every file's mtime on each
+        # run, and the compiler binary's mtime changes when GitHub rebuilds the runner image.
+        ccache --set-config=compiler_check=content
+        ccache --set-config=sloppiness=time_macros,include_file_mtime,include_file_ctime
+        ccache --zero-stats
 
     # Configure CMake — Ninja on every OS so this matches the PR CI build path
     # (see the "Setup MSVC" note above for why Ninja and not the VS generator).
     - name: Configure CMake
       shell: bash
-      run: cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+      run: |
+        cmake -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
     # Build (Ninja is single-config; the build type comes from configure)
     - name: Build
       run: cmake --build build
+
+    # Report-only: a cold cache must never block a release. CACHE_WARM_EXPECTED is pinned false
+    # so the check writes its summary table and annotates, but cannot fail the job — losing a
+    # release over a cache miss would be a far worse outcome than a slow release.
+    - name: Check Cache Health
+      if: always()
+      shell: bash
+      env:
+        CACHE_MATCHED_KEY: ${{ steps.ccache-cache.outputs.cache-matched-key }}
+        DEPS_MATCHED_KEY: ${{ steps.deps-cache.outputs.cache-matched-key }}
+        CACHE_WARM_EXPECTED: 'false'
+        CACHE_CHECK_ENFORCE: 'false'
+      run: bash scripts/ci-cache-check.sh
+
+    - name: Save FetchContent Dependencies
+      if: always() && steps.deps-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: build/_deps
+        key: ${{ steps.deps-cache.outputs.cache-primary-key }}
+
+    - name: Save ccache
+      if: always()
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ steps.ccache-cache.outputs.cache-primary-key }}
 
     # Package Linux
     - name: Package Linux Artifact

@@ -39,18 +39,25 @@ juce::String PresetManager::getPresetJSON(int index) {
     //
     // REAL module sizes (verified empirically via E2EWorkflowTest.AllPresetsLoadWithoutOverlapAsAuthored):
     //   Audio Input / Audio Output: 280 x 100
-    //   Oscillator:  280 x 530   ← tall
-    //   Filter:      280 x 570   ← tallest
-    //   VCA:         280 x 200
-    //   LFO:         280 x 440
+    //   Oscillator:  280 x 449   ← tall
+    //   Filter:      280 x 487   ← tallest
+    //   VCA:         280 x 245
+    //   LFO:         280 x 353
+    //   Sampler:     280 x 657   ← tallest overall
+    // (Heights shrank when ModuleComponent moved to a 3-knob grid; the authored positions below were
+    //  computed against the older, taller cards, so they stay overlap-free — verified by
+    //  E2EWorkflowTest.AllPresetsLoadWithoutOverlapAsAuthored, which measures the real components.)
     //   Amp Env / Filter Env / ADSR: 280 x 180
     //   Attenuverter:  40 x 40   (not a ModuleComponent; excluded from overlap check)
     //   Sequencer:   560 x 380   ← DOUBLE-wide (kDoubleWidth = 2 × kSingleWidth = 560)
     //   MIDI Keyboard: 560 x 150 ← DOUBLE-wide
-    //   Poly MIDI:   280 x 100
-    //   Distortion:  280 x 350
-    //   Delay:       280 x 220
-    //   Reverb:      280 x 300
+    //   Poly MIDI:   280 x 123
+    //   Distortion:  280 x 355
+    //   Delay:       280 x 269   ← +76 (one knob row) from the issue #122 Level knob
+    //   Reverb:      280 x 269
+    // (With kKnobColumns = 3, the Level knob only costs a row on modules whose slider count crossed a
+    //  multiple of 3: Filter 487→563, Delay 193→269, Pitch Shifter 423→499. All others absorbed it into
+    //  an existing partial row. Pinned by ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents.)
     //
     // DOUBLE-width modules (w=560): Sequencer, PolySequencer, MidiKeyboard
     //   Sequencer at x=10: right edge = 570

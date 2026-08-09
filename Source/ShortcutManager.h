@@ -13,7 +13,9 @@ enum CommandIDs {
     toggleModMatrix,
     toggleAiPanel,
     autoArrange,
-    toggleLibrary
+    toggleLibrary,
+    selectAllModules,
+    saveSnippet
 };
 
 inline juce::CommandID getCommandForAction(const juce::String& actionId) {
@@ -37,6 +39,10 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return autoArrange;
     if (actionId == "toggleLibrary")
         return toggleLibrary;
+    if (actionId == "selectAllModules")
+        return selectAllModules;
+    if (actionId == "saveSnippet")
+        return saveSnippet;
     return 0;
 }
 } // namespace AppCommands
@@ -111,6 +117,11 @@ public:
         bindings["toggleAiPanel"] = juce::KeyPress('a', juce::ModifierKeys::commandModifier, 0);
         bindings["autoArrange"] = juce::KeyPress('l', juce::ModifierKeys::commandModifier, 0);
         bindings["toggleLibrary"] = juce::KeyPress('b', juce::ModifierKeys::commandModifier, 0);
+        // Cmd+A and Cmd+S are already taken (toggleAiPanel / savePreset), hence the Shift variants.
+        bindings["selectAllModules"] =
+            juce::KeyPress('a', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+        bindings["saveSnippet"] =
+            juce::KeyPress('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
     }
 
     static juce::String keyPressToDisplayString(const juce::KeyPress& key) {
@@ -181,6 +192,10 @@ public:
             return "Auto Arrange";
         if (actionId == "toggleLibrary")
             return "Toggle Module Library";
+        if (actionId == "selectAllModules")
+            return "Select All Modules";
+        if (actionId == "saveSnippet")
+            return "Save Selection as Snippet";
         return actionId;
     }
 
@@ -203,8 +218,9 @@ private:
     std::map<juce::String, juce::KeyPress> bindings;
     juce::ApplicationProperties* appProperties = nullptr;
 
-    juce::StringArray actionIds{"openSettings", "savePreset",      "openPreset",    "newPatch",    "undo",
-                                "redo",         "toggleModMatrix", "toggleAiPanel", "autoArrange", "toggleLibrary"};
+    juce::StringArray actionIds{"openSettings", "savePreset",    "openPreset",       "newPatch",
+                                "undo",         "redo",          "toggleModMatrix",  "toggleAiPanel",
+                                "autoArrange",  "toggleLibrary", "selectAllModules", "saveSnippet"};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShortcutManager)
 };

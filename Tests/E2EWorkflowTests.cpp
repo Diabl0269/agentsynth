@@ -231,10 +231,13 @@ TEST_F(E2EWorkflowTest, DropModule_CreatesNode) {
 }
 
 TEST_F(E2EWorkflowTest, DropAllModuleTypes_NoCrash) {
-    const juce::StringArray moduleTypes = {"Oscillator", "Noise",          "Filter",    "ADSR",       "VCA",
-                                           "Sequencer",  "Poly Sequencer", "LFO",       "Distortion", "Delay",
-                                           "Reverb",     "MidiKeyboard",   "Chorus",    "Phaser",     "Compressor",
-                                           "Flanger",    "Limiter",        "Poly MIDI", "Voice Mixer"};
+    const juce::StringArray moduleTypes = {"Oscillator",     "Wavetable",     "Noise",         "Sampler",
+                                           "Filter",         "ADSR",          "VCA",           "Sequencer",
+                                           "Poly Sequencer", "LFO",           "Distortion",    "Delay",
+                                           "Reverb",         "MidiKeyboard",  "Chorus",        "Phaser",
+                                           "Compressor",     "Flanger",       "Limiter",       "Poly MIDI",
+                                           "Voice Mixer",    "Bitcrusher",    "Pitch Shifter", "Parametric EQ",
+                                           "Macros",         "Sample & Hold", "Math",          "Envelope Follower"};
 
     for (const auto& type : moduleTypes) {
         auto nodeBefore = nodeCount();

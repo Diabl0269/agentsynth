@@ -31,6 +31,7 @@ public:
         AutoArrange,
         ToggleModMatrix,
         ToggleAiPanel,
+        ToggleTheme,
         NumSlots
     };
 

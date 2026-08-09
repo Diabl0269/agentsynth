@@ -43,8 +43,17 @@ enum class ModuleType {
     Compressor,
     Flanger,
     Limiter,
+    ParametricEQ,
     VoiceMixer,
-    Noise
+    Bitcrusher,
+    PitchShifter,
+    Noise,
+    Math,
+    Sampler,
+    Wavetable,
+    MacroControl,
+    SampleHold,
+    EnvelopeFollower
 };
 
 class ModuleBase : public juce::AudioProcessor {
@@ -63,6 +72,29 @@ public:
         if (!mutedParam)
             addParameter(mutedParam = new juce::AudioParameterBool("muted", "Muted", false));
     }
+
+    // Opt-in output-level stage for modules whose output is audio.
+    //
+    // Deliberately NOT added in the ModuleBase ctor: parameter position is load-bearing
+    // for a few positional getParameters()[n] call sites, and "gain" is meaningless (or
+    // actively wrong) on pitch/gate CV outputs — scaling a V/oct pitch CV detunes, and
+    // scaling a gate drops it under the > 0.5f trigger threshold. Each module opts in,
+    // and MUST call this AFTER its own addParameter() calls so the new parameter lands
+    // last and existing positional lookups keep resolving to the same parameter.
+    void addOutputLevelParameter(float defaultValue = 1.0f) {
+        if (outputLevelParam)
+            return;
+        addParameter(outputLevelParam =
+                         new juce::AudioParameterFloat("outputLevel", "Level", 0.0f, 1.0f, defaultValue));
+        // Safe default if prepareToPlay (and therefore prepareOutputLevel) never runs:
+        // snap-to-target, so applyOutputLevel takes its steady-state path at unity
+        // instead of ramping up from a default-constructed 0 and silencing the module.
+        smoothedOutputLevel.reset(1);
+        smoothedOutputLevel.setCurrentAndTargetValue(defaultValue);
+    }
+
+    bool hasOutputLevel() const { return outputLevelParam != nullptr; }
+    float getOutputLevel() const { return outputLevelParam != nullptr ? outputLevelParam->get() : 1.0f; }
 
     ~ModuleBase() override = default;
 
@@ -189,6 +221,17 @@ public:
         return false;
     }
 
+    // Non-parameter state that must survive a graph rebuild (undo/redo, preset save/load), e.g. the
+    // Sampler's loaded file path. AIStateMapper::graphToJSON writes whatever this returns as the
+    // node's "state" property and applyJSONToGraph feeds it back through setExtraState().
+    //
+    // Restored ONLY on the trusted path (our own snapshots and presets). Untrusted model output must
+    // never reach setExtraState — a module is free to interpret this as a filename, and letting a
+    // remote model pick that filename would turn a patch suggestion into an arbitrary file read.
+    // Return a void var when there is nothing to persist, so untouched modules add no JSON noise.
+    virtual juce::var getExtraState() const { return {}; }
+    virtual void setExtraState(const juce::var& state) { juce::ignoreUnused(state); }
+
     VisualBuffer* getVisualBuffer() { return visualBuffer.get(); }
     void enableVisualBuffer(bool enable) {
         if (enable && !visualBuffer)
@@ -198,12 +241,69 @@ public:
     }
 
 protected:
+    // Call from prepareToPlay() when the module uses addOutputLevelParameter().
+    void prepareOutputLevel(double sampleRate) {
+        smoothedOutputLevel.reset(sampleRate, 0.01); // 10 ms ramp — anti-click on knob moves
+        smoothedOutputLevel.setCurrentAndTargetValue(getOutputLevel());
+    }
+
+    // Scales the first numAudioChannels channels by the smoothed output level.
+    //
+    // Call at the END of the normal processBlock path only. Never on the bypass branch
+    // (dry pass-through must stay untouched) and never on mute (already cleared) — see
+    // the bypass/mute contract in docs/architecture.md. No-op when the module did not
+    // call addOutputLevelParameter().
+    void applyOutputLevel(juce::AudioBuffer<float>& buffer, int numAudioChannels) {
+        if (outputLevelParam == nullptr)
+            return;
+
+        const int numSamples = buffer.getNumSamples();
+        const int numChannels = juce::jmin(numAudioChannels, buffer.getNumChannels());
+        if (numSamples == 0 || numChannels <= 0)
+            return;
+
+        smoothedOutputLevel.setTargetValue(outputLevelParam->get());
+
+        if (!smoothedOutputLevel.isSmoothing()) {
+            const float gain = smoothedOutputLevel.getCurrentValue();
+            if (gain != 1.0f)
+                for (int ch = 0; ch < numChannels; ++ch)
+                    buffer.applyGain(ch, 0, numSamples, gain);
+            return;
+        }
+
+        // getArrayOfWritePointers() avoids re-resolving the pointer per sample and
+        // allocates nothing — the per-sample walk keeps the ramp exact even when it
+        // completes mid-block.
+        auto* const* channels = buffer.getArrayOfWritePointers();
+        for (int i = 0; i < numSamples; ++i) {
+            const float gain = smoothedOutputLevel.getNextValue();
+            for (int ch = 0; ch < numChannels; ++ch)
+                channels[ch][i] *= gain;
+        }
+    }
+
     juce::AudioParameterBool* bypassedParam = nullptr;
     juce::AudioParameterBool* mutedParam = nullptr;
+    juce::AudioParameterFloat* outputLevelParam = nullptr;
 
 private:
     juce::String moduleName;
     std::unique_ptr<VisualBuffer> visualBuffer;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedOutputLevel;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ModuleBase)
 };
+
+// Look a parameter up by paramID instead of by position. Parameter order is not part of
+// a module's contract — adding one (e.g. addOutputLevelParameter) silently repoints any
+// getParameters()[n] index. Returns nullptr when the processor has no such parameter.
+inline juce::RangedAudioParameter* findParameterByID(juce::AudioProcessor* processor, const juce::String& paramID) {
+    if (processor == nullptr)
+        return nullptr;
+    for (auto* param : processor->getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param))
+            if (ranged->paramID == paramID)
+                return ranged;
+    return nullptr;
+}

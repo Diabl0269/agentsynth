@@ -14,7 +14,21 @@ AIIntegrationService::AIIntegrationService(juce::AudioProcessorGraph& graph, App
 
 AIIntegrationService::~AIIntegrationService() {}
 
-void AIIntegrationService::setProvider(std::unique_ptr<AIProvider> newProvider) { provider = std::move(newProvider); }
+void AIIntegrationService::setProvider(std::unique_ptr<AIProvider> newProvider) {
+    provider = std::move(newProvider);
+
+    // Re-push contract (mirrors AIChatComponent::refreshModels(), see docs/AI_Engine.md "Model
+    // Discovery Ordering Contract"): a caller may have called setAuthToken() before a provider
+    // existed at all, so the value must be forwarded to whatever provider is installed now.
+    if (provider && currentAuthToken.isNotEmpty())
+        provider->setAuthToken(currentAuthToken);
+}
+
+void AIIntegrationService::setAuthToken(const juce::String& token) {
+    currentAuthToken = token;
+    if (provider)
+        provider->setAuthToken(currentAuthToken);
+}
 
 AIProvider::RequestId AIIntegrationService::sendMessage(const juce::String& text,
                                                         AIProvider::CompletionCallback callback,

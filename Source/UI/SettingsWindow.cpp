@@ -121,33 +121,42 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
                                synth::AIIntegrationService& aiService, synth::AIChatComponent& aiChatComponent,
                                ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager,
                                GraphEditor* graphEditor)
-    : appProperties(appProperties) {
+    : appProperties(appProperties)
+    , themeManager(themeManager) {
     auto* audioSelector = new juce::AudioDeviceSelectorComponent(deviceManager, 0, 2, // min/max inputs
                                                                  0, 2,                // min/max outputs
                                                                  true, true,          // midi
                                                                  false, false         // bit depths
     );
-    tabs.addTab("Audio", juce::Colours::darkgrey, audioSelector, true);
+    tabs.addTab("Audio", juce::Colours::transparentBlack, audioSelector, true);
 
     auto* aiSettingsTab = new AISettingsTab(appProperties, aiService, aiChatComponent);
-    tabs.addTab("AI", juce::Colours::darkgrey, aiSettingsTab, true);
+    tabs.addTab("AI", juce::Colours::transparentBlack, aiSettingsTab, true);
 
     auto* shortcutsSettingsTab = new ShortcutsSettingsTab(shortcutManager);
-    tabs.addTab("Keyboard Shortcuts", juce::Colours::darkgrey, shortcutsSettingsTab, true);
+    tabs.addTab("Keyboard Shortcuts", juce::Colours::transparentBlack, shortcutsSettingsTab, true);
 
     auto* appearanceSettingsTab = new AppearanceSettingsTab(themeManager, appProperties);
     appearanceSettingsTab->setGraphEditor(graphEditor); // wire the tab to graph editor
-    tabs.addTab("Appearance", juce::Colours::darkgrey, appearanceSettingsTab, true);
+    tabs.addTab("Appearance", juce::Colours::transparentBlack, appearanceSettingsTab, true);
 
     addAndMakeVisible(tabs);
 
     // Restore last selected tab
     tabs.setCurrentTabIndex(appProperties.getUserSettings()->getIntValue("settingsTab", 0), false);
+
+    themeManager.addChangeListener(this);
 }
 
 SettingsWindow::~SettingsWindow() {
+    themeManager.removeChangeListener(this);
     appProperties.getUserSettings()->setValue("settingsTab", tabs.getCurrentTabIndex());
     appProperties.saveIfNeeded();
 }
 
 void SettingsWindow::resized() { tabs.setBounds(getLocalBounds()); }
+
+void SettingsWindow::changeListenerCallback(juce::ChangeBroadcaster* /*source*/) {
+    sendLookAndFeelChange();
+    repaint();
+}

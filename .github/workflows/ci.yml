@@ -4,21 +4,85 @@ on:
   pull_request:
     branches: [ "main" ]
     types: [opened, synchronize, reopened, labeled]
+    # NOTE: GitHub Actions does not support YAML anchors, so this list is duplicated verbatim
+    # under `push:` below. Keep the two in sync.
     paths:
       - 'Source/**'
       - 'Tests/**'
       - 'Tools/**'
       - 'CMakeLists.txt'
       - 'Tests/CMakeLists.txt'
+      - 'cmake/**'
+      - 'scripts/**'
+      - '.clang-format'
+      - '.clang-format-version'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/build-artifacts.yml'
+  # Seeding runs. GitHub scopes every cache to the ref that wrote it: a pull-request run can read
+  # caches from its own ref and from the BASE branch, and nowhere else. While this workflow ran on
+  # `pull_request` alone it never wrote a cache into main's scope, so no PR could ever restore one
+  # and every run compiled the whole tree cold — for the entire life of the ccache setup. These
+  # push runs exist to populate the main-scoped caches that pull requests restore from.
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'Source/**'
+      - 'Tests/**'
+      - 'Tools/**'
+      - 'CMakeLists.txt'
+      - 'Tests/CMakeLists.txt'
+      - 'cmake/**'
       - 'scripts/**'
       - '.clang-format'
       - '.clang-format-version'
       - '.github/workflows/ci.yml'
       - '.github/workflows/build-artifacts.yml'
 
+# One run per PR. Pushing three times in five minutes used to leave three full matrices racing
+# (feature/theme-additions ran 4x in one hour on 2026-08-06), which burned runner minutes and
+# minted redundant cache entries that pushed the repo over GitHub's 10 GB cache budget. Main is
+# never cancelled — those runs are what seed the cache.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # ccache's default cache directory differs per platform AND per ccache version, and the
+  # actions/cache `path:` has to match it exactly or the cache silently never saves. The Linux job
+  # cached ~/.ccache while ccache 4.x on ubuntu-24.04 writes to ~/.cache/ccache, so no
+  # Linux-ccache-* entry was ever produced — verifiable via
+  # `gh api repos/:owner/:repo/actions/caches`. Pinning CCACHE_DIR explicitly removes the guess.
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  # `true` only when a warm cache must already exist, so that a miss is a real failure:
+  #   - pull_request from a branch in THIS repo — restores the cache seeded by the push run on main
+  #   - push to main                            — that IS the seeding run, a miss is expected
+  #   - pull_request from a FORK                — forks are given a separate, isolated cache scope
+  #     and cannot read the base repository's entries at all, so a miss is guaranteed and is not a
+  #     defect. Without this term, enabling CI_CACHE_CHECK_ENFORCE would fail every outside
+  #     contribution on its first run, for a reason the contributor could do nothing about.
+  CACHE_WARM_EXPECTED: ${{ github.event_name == 'pull_request' && !github.event.pull_request.head.repo.fork }}
+  # Set the repository variable CI_CACHE_CHECK_ENFORCE to 'true' to make a cold cache fail the
+  # build (it is currently 'true'). Kept behind a variable so enforcement can be switched off
+  # without a code change if a runner-image or actions/cache change starts producing false alarms —
+  # Settings > Secrets and variables > Actions > Variables.
+  CACHE_CHECK_ENFORCE: ${{ vars.CI_CACHE_CHECK_ENFORCE || 'false' }}
+
 jobs:
+  # On push to main the jobs below exist ONLY to seed the caches that pull requests restore from,
+  # so everything that is not compilation is skipped there: linting, test execution and coverage
+  # all ran on the pull request against this same tree, and re-running them on the merge result
+  # costs runner minutes without adding signal. `build-artifacts.yml` has always taken this
+  # position for the release build ("no tests — CI already ran them on the PR").
+  #
+  # Crucially this does NOT weaken the cache: `cmake --build build` still compiles the Tests
+  # target, so every test translation unit lands in ccache either way. Only *running* the binary
+  # is skipped. Before this, a push run spent 9.4 runner-minutes; roughly a third of that was
+  # redundant — the macOS job in particular was an 8-second build carrying 118 seconds of tests.
   lint:
     name: Lint
+    # Formatting cannot change between the PR run and the merge commit, and this job also carries
+    # the cache-check unit tests, which are equally a PR-time concern.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
@@ -34,6 +98,10 @@ jobs:
       run: pip install "clang-format==$(cat .clang-format-version)"
     - name: Check Formatting
       run: find Source Tests Tools -name "*.h" -o -name "*.cpp" | xargs clang-format --dry-run --Werror
+    - name: Test CI cache check
+      # The cache check is what tells us the build cache broke; if it breaks silently we are back
+      # to shipping 100%-cold builds unnoticed. Cheap (~1s, no compiler) so it rides along here.
+      run: bash scripts/tests/ci-cache-check.test.sh
 
   build-and-test:
     name: Build, Test, and Coverage
@@ -47,30 +115,50 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y cmake ninja-build libasound2-dev libx11-dev libxinerama-dev libxext-dev libxcomposite-dev libxcursor-dev libxrandr-dev libxrender-dev libfontconfig1-dev libfreetype6-dev libglu1-mesa-dev libcurl4-openssl-dev libgtk-3-dev libjack-jackd2-dev freeglut3-dev pkg-config llvm clang ccache xvfb
 
-    - name: Cache FetchContent Dependencies
-      uses: actions/cache@v5
+    # NOTE: restore + save are split deliberately. The combined `actions/cache` action declares
+    # exactly ONE output, `cache-hit` (true only on an exact primary-key match); only
+    # `actions/cache/restore` exposes `cache-matched-key`, which is the one signal that reports
+    # whether a restore-key fallback matched. The health check below needs that, and reading it
+    # off the combined action silently yields an empty string — which made the check report MISS
+    # on a run that had in fact restored at a 100% ccache hit rate.
+    - name: Restore FetchContent Dependencies
+      id: deps-cache
+      uses: actions/cache/restore@v5
       with:
         path: build/_deps
-        # The "2" bump invalidates caches saved before the repo was renamed
-        # gravisynth -> agentsynth: their FetchContent subbuild dirs have the
-        # old .../work/gravisynth/gravisynth absolute path baked in, which
-        # conflicts with the new .../work/agentsynth/agentsynth checkout path
-        # and trips CMake's directory-mismatch guard.
-        key: ${{ runner.os }}-deps2-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
+        # Keyed on the dependency pins ALONE (cmake/DependencyVersions.cmake), not on
+        # CMakeLists.txt. build/_deps holds nothing but the fetched JUCE + googletest sources, so
+        # adding a module to a target must not invalidate it. Keying on the whole CMakeLists (as
+        # this did until Aug 2026) minted a fresh ~350 MB entry per platform per workflow on every
+        # module PR — 10 CMakeLists edits in nine days, ~2.1 GB apiece, which blew past GitHub's
+        # 10 GB per-repo budget and LRU-evicted every ccache entry with it.
+        key: ${{ runner.os }}-deps3-${{ hashFiles('cmake/DependencyVersions.cmake') }}
         restore-keys: |
-          ${{ runner.os }}-deps2-
+          ${{ runner.os }}-deps3-
 
-    - name: Cache ccache
-      uses: actions/cache@v5
+    - name: Restore ccache
+      id: ccache-cache
+      uses: actions/cache/restore@v5
       with:
-        path: ~/.ccache
-        key: ${{ runner.os }}-ccache-${{ github.sha }}
+        path: ${{ env.CCACHE_DIR }}
+        # Exact key is per-commit (never hits) — the restore-keys are what actually match:
+        # this ref's most recent entry first, then main's seeded entry, then anything.
+        key: ${{ runner.os }}-ccache-${{ github.ref_name }}-${{ github.sha }}
         restore-keys: |
+          ${{ runner.os }}-ccache-${{ github.ref_name }}-
+          ${{ runner.os }}-ccache-main-
           ${{ runner.os }}-ccache-
 
     - name: Configure ccache
       run: |
-        ccache --set-config=max_size=500M
+        # 500M was too small to hold a Debug + coverage build of the whole tree (268 translation
+        # units as of Aug 2026, up from 185 in July), so entries evicted mid-build.
+        ccache --set-config=max_size=2G
+        # actions/checkout writes fresh mtimes on every file every run, and the compiler binary's
+        # mtime changes whenever GitHub rebuilds the runner image — both cause false misses under
+        # ccache's mtime-based defaults.
+        ccache --set-config=compiler_check=content
+        ccache --set-config=sloppiness=time_macros,include_file_mtime,include_file_ctime
         ccache --zero-stats
 
     - name: Configure CMake
@@ -89,10 +177,34 @@ jobs:
     - name: Build
       run: cmake --build build
 
-    - name: ccache Stats
-      run: ccache --show-stats
+    - name: Check Cache Health
+      if: always()
+      env:
+        CACHE_MATCHED_KEY: ${{ steps.ccache-cache.outputs.cache-matched-key }}
+        DEPS_MATCHED_KEY: ${{ steps.deps-cache.outputs.cache-matched-key }}
+      run: bash scripts/ci-cache-check.sh
 
+    # Saved right after the build, `if: always()`, so a compile that succeeded is never thrown
+    # away because a later test failed. `_deps` is skipped on an exact hit — re-uploading an
+    # identical ~350 MB entry only burns budget.
+    - name: Save FetchContent Dependencies
+      if: always() && steps.deps-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: build/_deps
+        key: ${{ steps.deps-cache.outputs.cache-primary-key }}
+
+    - name: Save ccache
+      if: always()
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ steps.ccache-cache.outputs.cache-primary-key }}
+
+    # Test execution, coverage and its artifact are pull-request concerns; a push run is only here
+    # to seed the cache (see the note above the `lint` job).
     - name: Run Tests
+      if: github.event_name == 'pull_request'
       timeout-minutes: 10
       run: |
         export LLVM_PROFILE_FILE="default.profraw"
@@ -101,10 +213,11 @@ jobs:
         ./build/Tests/Tests
 
     - name: Check Coverage
+      if: github.event_name == 'pull_request'
       run: xvfb-run bash scripts/coverage.sh --report-only
 
     - name: Upload Coverage Artifact (Optional)
-      if: always()
+      if: always() && github.event_name == 'pull_request'
       uses: actions/upload-artifact@v7
       with:
         name: coverage-report
@@ -130,14 +243,10 @@ jobs:
       uses: actions/cache@v5
       with:
         path: build/_deps
-        # The "2" bump invalidates caches saved before the repo was renamed
-        # gravisynth -> agentsynth: their FetchContent subbuild dirs have the
-        # old .../work/gravisynth/gravisynth absolute path baked in, which
-        # conflicts with the new .../work/agentsynth/agentsynth checkout path
-        # and trips CMake's directory-mismatch guard.
-        key: ${{ runner.os }}-deps2-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
+        # See the build-and-test job for why this keys on the pins file alone.
+        key: ${{ runner.os }}-deps3-${{ hashFiles('cmake/DependencyVersions.cmake') }}
         restore-keys: |
-          ${{ runner.os }}-deps2-
+          ${{ runner.os }}-deps3-
 
     - name: Configure CMake
       run: |
@@ -168,30 +277,33 @@ jobs:
     - name: Install Dependencies
       run: brew install cmake ninja ccache
 
-    - name: Cache FetchContent Dependencies
-      uses: actions/cache@v5
+    # See the build-and-test job for why restore and save are split.
+    - name: Restore FetchContent Dependencies
+      id: deps-cache
+      uses: actions/cache/restore@v5
       with:
         path: build/_deps
-        # The "2" bump invalidates caches saved before the repo was renamed
-        # gravisynth -> agentsynth: their FetchContent subbuild dirs have the
-        # old .../work/gravisynth/gravisynth absolute path baked in, which
-        # conflicts with the new .../work/agentsynth/agentsynth checkout path
-        # and trips CMake's directory-mismatch guard.
-        key: ${{ runner.os }}-deps2-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
+        # See the build-and-test job for why this keys on the pins file alone.
+        key: ${{ runner.os }}-deps3-${{ hashFiles('cmake/DependencyVersions.cmake') }}
         restore-keys: |
-          ${{ runner.os }}-deps2-
+          ${{ runner.os }}-deps3-
 
-    - name: Cache ccache
-      uses: actions/cache@v5
+    - name: Restore ccache
+      id: ccache-cache
+      uses: actions/cache/restore@v5
       with:
-        path: ~/Library/Caches/ccache
-        key: ${{ runner.os }}-ccache-${{ github.sha }}
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ runner.os }}-ccache-${{ github.ref_name }}-${{ github.sha }}
         restore-keys: |
+          ${{ runner.os }}-ccache-${{ github.ref_name }}-
+          ${{ runner.os }}-ccache-main-
           ${{ runner.os }}-ccache-
 
     - name: Configure ccache
       run: |
-        ccache --set-config=max_size=500M
+        ccache --set-config=max_size=2G
+        ccache --set-config=compiler_check=content
+        ccache --set-config=sloppiness=time_macros,include_file_mtime,include_file_ctime
         ccache --zero-stats
 
     - name: Configure CMake
@@ -206,39 +318,67 @@ jobs:
     - name: Build
       run: cmake --build build
 
-    - name: ccache Stats
-      run: ccache --show-stats
+    - name: Check Cache Health
+      if: always()
+      env:
+        CACHE_MATCHED_KEY: ${{ steps.ccache-cache.outputs.cache-matched-key }}
+        DEPS_MATCHED_KEY: ${{ steps.deps-cache.outputs.cache-matched-key }}
+      run: bash scripts/ci-cache-check.sh
 
+    - name: Save FetchContent Dependencies
+      if: always() && steps.deps-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: build/_deps
+        key: ${{ steps.deps-cache.outputs.cache-primary-key }}
+
+    - name: Save ccache
+      if: always()
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ steps.ccache-cache.outputs.cache-primary-key }}
+
+    # Pull-request only — a push run seeds the cache (see the note above the `lint` job). This is
+    # the starkest case: an 8-second cached build was carrying 118 seconds of test execution.
     - name: Run Tests
+      if: github.event_name == 'pull_request'
       working-directory: ./build/Tests
       run: ./Tests
 
   build-and-test-windows:
     name: Build and Test (Windows)
     runs-on: windows-latest
+    env:
+      # Overrides the workflow-level default. `github.workspace` on Windows is a backslash path
+      # (D:\a\agentsynth\agentsynth), and these steps run under bash, where backslashes in a
+      # quoted string survive as literals and break `mkdir -p`. This forward-slash absolute path
+      # is the one the job used before and is known to work with both bash and actions/cache.
+      CCACHE_DIR: C:/Users/runneradmin/AppData/Local/ccache
 
     steps:
     - uses: actions/checkout@v6
 
-    - name: Cache FetchContent Dependencies
-      uses: actions/cache@v5
+    # See the build-and-test job for why restore and save are split.
+    - name: Restore FetchContent Dependencies
+      id: deps-cache
+      uses: actions/cache/restore@v5
       with:
         path: build/_deps
-        # The "2" bump invalidates caches saved before the repo was renamed
-        # gravisynth -> agentsynth: their FetchContent subbuild dirs have the
-        # old .../work/gravisynth/gravisynth absolute path baked in, which
-        # conflicts with the new .../work/agentsynth/agentsynth checkout path
-        # and trips CMake's directory-mismatch guard.
-        key: ${{ runner.os }}-deps2-${{ hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt') }}
+        # See the build-and-test job for why this keys on the pins file alone.
+        key: ${{ runner.os }}-deps3-${{ hashFiles('cmake/DependencyVersions.cmake') }}
         restore-keys: |
-          ${{ runner.os }}-deps2-
+          ${{ runner.os }}-deps3-
 
-    - name: Cache ccache
-      uses: actions/cache@v5
+    - name: Restore ccache
+      id: ccache-cache
+      uses: actions/cache/restore@v5
       with:
-        path: C:\Users\runneradmin\AppData\Local\ccache
-        key: ${{ runner.os }}-ccache-${{ github.sha }}
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ runner.os }}-ccache-${{ github.ref_name }}-${{ github.sha }}
         restore-keys: |
+          ${{ runner.os }}-ccache-${{ github.ref_name }}-
+          ${{ runner.os }}-ccache-main-
           ${{ runner.os }}-ccache-
 
     - name: Setup MSVC
@@ -247,11 +387,11 @@ jobs:
     - name: Configure ccache
       shell: bash
       run: |
-        mkdir -p C:/Users/runneradmin/AppData/Local/ccache
-        ccache --set-config=max_size=500M
+        mkdir -p "$CCACHE_DIR"
+        ccache --set-config=max_size=2G
+        ccache --set-config=compiler_check=content
+        ccache --set-config=sloppiness=time_macros,include_file_mtime,include_file_ctime
         ccache --zero-stats
-      env:
-        CCACHE_DIR: C:/Users/runneradmin/AppData/Local/ccache
 
     - name: Configure CMake
       shell: bash
@@ -262,19 +402,35 @@ jobs:
           -DENABLE_AI_HARNESS=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-      env:
-        CCACHE_DIR: C:/Users/runneradmin/AppData/Local/ccache
 
     - name: Build
       run: cmake --build build --config Release
 
-    - name: ccache Stats
+    - name: Check Cache Health
+      if: always()
       shell: bash
-      run: ccache --show-stats
       env:
-        CCACHE_DIR: C:/Users/runneradmin/AppData/Local/ccache
+        CACHE_MATCHED_KEY: ${{ steps.ccache-cache.outputs.cache-matched-key }}
+        DEPS_MATCHED_KEY: ${{ steps.deps-cache.outputs.cache-matched-key }}
+      run: bash scripts/ci-cache-check.sh
 
+    - name: Save FetchContent Dependencies
+      if: always() && steps.deps-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: build/_deps
+        key: ${{ steps.deps-cache.outputs.cache-primary-key }}
+
+    - name: Save ccache
+      if: always()
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ steps.ccache-cache.outputs.cache-primary-key }}
+
+    # Pull-request only — a push run seeds the cache (see the note above the `lint` job).
     - name: Run Tests
+      if: github.event_name == 'pull_request'
       shell: bash
       run: |
         find build -name "Tests.exe" -exec {} \;

@@ -68,6 +68,8 @@ public:
     void drawTooltip(juce::Graphics&, const juce::String& text, int width, int height) override;
     void drawTabButton(juce::TabBarButton&, juce::Graphics&, bool isMouseOver, bool isMouseDown) override;
     void drawTabbedButtonBarBackground(juce::TabbedButtonBar&, juce::Graphics&) override;
+    void drawDrawableButton(juce::Graphics&, juce::DrawableButton&, bool shouldDrawButtonAsHighlighted,
+                            bool shouldDrawButtonAsDown) override;
 
     // Resolve a font's family name to an embedded typeface (cached). Falls back to the JUCE
     // default sans/mono if the family is unavailable (tests / missing BinaryData — section 8.4).

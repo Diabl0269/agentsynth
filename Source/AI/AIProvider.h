@@ -37,8 +37,27 @@ public:
     /**
      * @brief Categorizes why a request failed, so callers can react appropriately
      *        (retry, prompt sign-in, show an upgrade path, etc.) instead of parsing error text.
+     *
+     * TrialExhausted and ServiceCapacityExceeded are both surfaced by the capability endpoints as
+     * distinct 402/503 response shapes (see RemoteProvider::processRequest) and are deliberately
+     * NOT folded into Quota/Server: TrialExhausted is the free-trial-to-account conversion moment
+     * (the server's message invites signing in when the caller isn't authenticated yet), and
+     * ServiceCapacityExceeded is a service-wide daily cap unrelated to the caller's own usage —
+     * both need their own user-facing text rather than a generic failure message.
      */
-    enum class AIErrorKind { None, Network, Auth, Quota, RateLimit, Server, Schema, Cancelled, Timeout };
+    enum class AIErrorKind {
+        None,
+        Network,
+        Auth,
+        Quota,
+        RateLimit,
+        Server,
+        Schema,
+        Cancelled,
+        Timeout,
+        TrialExhausted,
+        ServiceCapacityExceeded
+    };
 
     struct AIError {
         AIErrorKind kind = AIErrorKind::None;
