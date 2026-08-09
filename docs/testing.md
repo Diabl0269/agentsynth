@@ -1,6 +1,6 @@
 # Testing Guide
 
-All tests use GoogleTest and run headless (no audio device, no GUI window). 1260 tests across 150 suites
+All tests use GoogleTest and run headless (no audio device, no GUI window). 1283 tests across 156 suites
 (`./build/Tests/Tests` reports the authoritative count; the per-section totals below are approximate).
 
 ```bash
@@ -144,7 +144,7 @@ all, the canvas fixture builds a real two-module patch headlessly.
 
 | Suite | Tests | What it covers |
 |-------|-------|----------------|
-| CableColourCategoryTest | 3 | `categoryFor` totality over all 22 `ModuleType` values, groupings match the ModuleLibrary sections, persisted signal/category ids are unique and stable (`envelopes`, `modcv` spot-checked — renaming breaks saved user colours) |
+| CableColourCategoryTest | 3 | `categoryFor` totality over all 23 `ModuleType` values, groupings match the ModuleLibrary sections, persisted signal/category ids are unique and stable (`envelopes`, `modcv` spot-checked — renaming breaks saved user colours) |
 | CableColourResolveTest | 7 | Each `CableSignal` maps to its theme token; `midiWire` differs from `audioWire` in every built-in theme; `BySourceCategory` uses the palette and ignores signal; the 8 category colours are mutually distinct per built-in theme; override precedence is mode-scoped; bypass alpha applies to the winning colour but NOT to `resolveCableBaseColour` (what swatches render); clearing an override restores the theme colour |
 | CableColourPersistenceTest | 2 | Mode round-trip through `PropertiesFile`; override round-trip, untouched entries stay unset, reset removes the key entirely |
 | CableColourThemeTest | 3 | `midiWire` + `cableCategory` survive a `themeToJson` → `parseTheme` round-trip; a pre-#157 theme with neither key still loads on defaults; a partial `cableCategory` object overrides only its named keys |

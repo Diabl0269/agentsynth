@@ -134,6 +134,7 @@ inline ModuleCategory categoryFor(ModuleType t) noexcept {
         return ModuleCategory::Sequencing;
 
     case ModuleType::ADSR:
+    case ModuleType::EnvelopeFollower:
     case ModuleType::VCA:
         return ModuleCategory::EnvelopesControl;
 

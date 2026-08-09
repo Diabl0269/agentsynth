@@ -128,4 +128,7 @@ target_link_libraries(Tests PRIVATE
 )
 
 include(GoogleTest)
-gtest_discover_tests(Tests)
+# The post-build discovery step runs the binary with --gtest_list_tests. CMake's default budget for
+# that is 5 s, which the suite outgrew somewhere past ~1250 tests: discovery times out, the build
+# fails, and make deletes the just-linked binary. Raise the budget rather than chase the threshold.
+gtest_discover_tests(Tests DISCOVERY_TIMEOUT 120)
