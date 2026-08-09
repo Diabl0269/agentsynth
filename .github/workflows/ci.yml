@@ -68,8 +68,21 @@ env:
   CACHE_CHECK_ENFORCE: ${{ vars.CI_CACHE_CHECK_ENFORCE || 'false' }}
 
 jobs:
+  # On push to main the jobs below exist ONLY to seed the caches that pull requests restore from,
+  # so everything that is not compilation is skipped there: linting, test execution and coverage
+  # all ran on the pull request against this same tree, and re-running them on the merge result
+  # costs runner minutes without adding signal. `build-artifacts.yml` has always taken this
+  # position for the release build ("no tests — CI already ran them on the PR").
+  #
+  # Crucially this does NOT weaken the cache: `cmake --build build` still compiles the Tests
+  # target, so every test translation unit lands in ccache either way. Only *running* the binary
+  # is skipped. Before this, a push run spent 9.4 runner-minutes; roughly a third of that was
+  # redundant — the macOS job in particular was an 8-second build carrying 118 seconds of tests.
   lint:
     name: Lint
+    # Formatting cannot change between the PR run and the merge commit, and this job also carries
+    # the cache-check unit tests, which are equally a PR-time concern.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
@@ -188,7 +201,10 @@ jobs:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ steps.ccache-cache.outputs.cache-primary-key }}
 
+    # Test execution, coverage and its artifact are pull-request concerns; a push run is only here
+    # to seed the cache (see the note above the `lint` job).
     - name: Run Tests
+      if: github.event_name == 'pull_request'
       timeout-minutes: 10
       run: |
         export LLVM_PROFILE_FILE="default.profraw"
@@ -197,10 +213,11 @@ jobs:
         ./build/Tests/Tests
 
     - name: Check Coverage
+      if: github.event_name == 'pull_request'
       run: xvfb-run bash scripts/coverage.sh --report-only
 
     - name: Upload Coverage Artifact (Optional)
-      if: always()
+      if: always() && github.event_name == 'pull_request'
       uses: actions/upload-artifact@v7
       with:
         name: coverage-report
@@ -322,7 +339,10 @@ jobs:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ steps.ccache-cache.outputs.cache-primary-key }}
 
+    # Pull-request only — a push run seeds the cache (see the note above the `lint` job). This is
+    # the starkest case: an 8-second cached build was carrying 118 seconds of test execution.
     - name: Run Tests
+      if: github.event_name == 'pull_request'
       working-directory: ./build/Tests
       run: ./Tests
 
@@ -408,7 +428,9 @@ jobs:
         path: ${{ env.CCACHE_DIR }}
         key: ${{ steps.ccache-cache.outputs.cache-primary-key }}
 
+    # Pull-request only — a push run seeds the cache (see the note above the `lint` job).
     - name: Run Tests
+      if: github.event_name == 'pull_request'
       shell: bash
       run: |
         find build -name "Tests.exe" -exec {} \;
