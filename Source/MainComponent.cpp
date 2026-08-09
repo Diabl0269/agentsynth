@@ -92,9 +92,38 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // /api/chat request is rejected by Ollama with HTTP 400 "model is required".
     // Regression: see #96 / f7cba4a.
     aiChatComponent.refreshModels();
+
+    // Wire the account row/dialog up BEFORE attemptSilentSignIn() so the wiring is live for any
+    // state changes that arrive from it (P3-2: sign-in surface for the AI panel).
+    aiChatComponent.setAccountService(&accountService);
+    accountService.attemptSilentSignIn();
+
     aiService.addListener(this);
     undoManager.setGraphEditor(&graphEditor);
     setWantsKeyboardFocus(true);
+
+    // ---- Snippets + library collapse state (issue #156) ----
+    // GraphEditor owns no file dialogs and the sidebar owns no filesystem access, so
+    // MainComponent brokers between them.
+    graphEditor.onSaveSnippetRequested = [this] { promptSaveSnippet(); };
+    graphEditor.snippetProvider = [this](const juce::String& name) -> juce::var {
+        return synth::SnippetManager::loadSnippet(
+            synth::SnippetManager::fileForName(synth::SnippetManager::getDefaultSnippetsDirectory(), name));
+    };
+    moduleLibrary.onSnippetDeleteRequested = [this](const juce::String& name) {
+        if (synth::SnippetManager::deleteSnippet(synth::SnippetManager::getDefaultSnippetsDirectory(), name)) {
+            refreshSnippetLibrary();
+            statusBar.showMessage("Deleted snippet \"" + name + "\"");
+        }
+    };
+    moduleLibrary.onCollapseStateChanged = [this] {
+        appProperties.getUserSettings()->setValue("libraryCollapsedSections",
+                                                  moduleLibrary.getCollapsedSections().joinIntoString("\n"));
+        appProperties.saveIfNeeded();
+    };
+    moduleLibrary.setCollapsedSections(juce::StringArray::fromLines(
+        appProperties.getUserSettings()->getValue("libraryCollapsedSections", juce::String())));
+    refreshSnippetLibrary();
     // Register commands for the macOS native menu bar (Edit→Undo shows Cmd+Z).
     // Do NOT add commandManager.getKeyMappings() as a KeyListener — it intercepts
     // keys like Cmd+Shift+Z and silently fails to invoke the command, preventing
@@ -370,7 +399,8 @@ void MainComponent::paint(juce::Graphics& g) {
 void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
     commands.addArray({AppCommands::openSettings, AppCommands::savePreset, AppCommands::openPreset,
                        AppCommands::newPatch, AppCommands::undo, AppCommands::redo, AppCommands::toggleModMatrix,
-                       AppCommands::toggleAiPanel, AppCommands::autoArrange, AppCommands::toggleLibrary});
+                       AppCommands::toggleAiPanel, AppCommands::autoArrange, AppCommands::toggleLibrary,
+                       AppCommands::selectAllModules, AppCommands::saveSnippet});
 }
 
 void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationCommandInfo& result) {
@@ -435,6 +465,19 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
+    case AppCommands::selectAllModules: {
+        result.setInfo("Select All Modules", "Select every module on the canvas", "Edit", 0);
+        auto kp = shortcutManager.getBinding("selectAllModules");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case AppCommands::saveSnippet: {
+        result.setInfo("Save Selection as Snippet", "Save the selected modules as a reusable snippet", "Edit", 0);
+        result.setActive(graphEditor.getSelectionCount() > 0);
+        auto kp = shortcutManager.getBinding("saveSnippet");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
     default:
         break;
     }
@@ -478,12 +521,74 @@ bool MainComponent::perform(const InvocationInfo& info) {
     case AppCommands::toggleLibrary:
         setLibraryVisible(!isLibraryVisible);
         return true;
+    case AppCommands::selectAllModules:
+        graphEditor.selectAllModules();
+        statusBar.showMessage("Selected " + juce::String(graphEditor.getSelectionCount()) + " modules");
+        return true;
+    case AppCommands::saveSnippet:
+        promptSaveSnippet();
+        return true;
     default:
         return false;
     }
 }
 
 void MainComponent::updateCommandShortcuts() { commandManager.commandStatusChanged(); }
+
+// ---- Snippets (issue #156) ----
+
+void MainComponent::refreshSnippetLibrary() {
+    moduleLibrary.setSnippets(
+        synth::SnippetManager::listSnippets(synth::SnippetManager::getDefaultSnippetsDirectory()));
+}
+
+void MainComponent::promptSaveSnippet() {
+    const int selectionCount = graphEditor.getSelectionCount();
+    if (selectionCount == 0) {
+        statusBar.showMessage("Select one or more modules first (Shift+drag on the canvas)");
+        return;
+    }
+
+    auto* window = new juce::AlertWindow("Save Snippet",
+                                         "Name this group of " + juce::String(selectionCount) +
+                                             (selectionCount == 1 ? " module:" : " modules:"),
+                                         juce::AlertWindow::NoIcon);
+    window->addTextEditor("name", {}, "Snippet name:");
+    window->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    // SafePointer, not a raw `this`: the dialog outlives this call and the window can be closed
+    // while it is still open, which would otherwise leave the callback touching a destroyed
+    // MainComponent. The AlertWindow itself is owned by the unique_ptr below (it added itself to
+    // the desktop in its constructor, so it is visible without any extra call).
+    juce::Component::SafePointer<MainComponent> safeThis(this);
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create([safeThis, window](int result) {
+                                std::unique_ptr<juce::AlertWindow> owned(window);
+                                if (result != 1)
+                                    return;
+
+                                auto* self = safeThis.getComponent();
+                                if (self == nullptr)
+                                    return;
+
+                                auto name = synth::SnippetManager::sanitiseName(owned->getTextEditorContents("name"));
+                                if (name.isEmpty()) {
+                                    self->statusBar.showMessage("Snippet not saved - the name was empty or unusable");
+                                    return;
+                                }
+
+                                auto snippet = self->graphEditor.extractSelectionSnippet(name);
+                                auto dir = synth::SnippetManager::getDefaultSnippetsDirectory();
+                                if (synth::SnippetManager::saveSnippet(dir, name, snippet)) {
+                                    self->refreshSnippetLibrary();
+                                    self->statusBar.showMessage("Saved snippet \"" + name + "\"");
+                                } else {
+                                    self->statusBar.showMessage("Could not save snippet \"" + name + "\"");
+                                }
+                            }),
+                            false);
+}
 
 bool MainComponent::keyPressed(const juce::KeyPress& key) {
     auto action = shortcutManager.getActionForKeyPress(key);

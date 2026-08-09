@@ -1,5 +1,6 @@
 #include "Modules/ADSRModule.h"
 #include "Modules/AttenuverterModule.h"
+#include "Modules/FX/BitcrusherModule.h"
 #include "Modules/FX/ChorusModule.h"
 #include "Modules/FX/CompressorModule.h"
 #include "Modules/FX/DelayModule.h"
@@ -7,6 +8,7 @@
 #include "Modules/FX/FlangerModule.h"
 #include "Modules/FX/LimiterModule.h"
 #include "Modules/FX/PhaserModule.h"
+#include "Modules/FX/PitchShifterModule.h"
 #include "Modules/FX/ReverbModule.h"
 #include "Modules/FilterModule.h"
 #include "Modules/LFOModule.h"
@@ -854,6 +856,66 @@ TEST_F(LimiterModuleTest, ModuleTypeAndCategoryAreCorrect) {
 }
 
 // ---------------------------------------------------------------------------
+// BitcrusherModule tests
+// ---------------------------------------------------------------------------
+
+class BitcrusherModuleTestFixture : public ::testing::Test {
+protected:
+    void SetUp() override {
+        module = std::make_unique<BitcrusherModule>();
+        module->prepareToPlay(44100.0, 512);
+    }
+    std::unique_ptr<BitcrusherModule> module;
+};
+
+TEST_F(BitcrusherModuleTestFixture, ProcessBlockProducesOutput) {
+    juce::AudioBuffer<float> buffer(5, 512);
+    buffer.clear();
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.5f);
+
+    juce::MidiBuffer midi;
+    module->processBlock(buffer, midi);
+
+    float rms = buffer.getRMSLevel(0, 0, 512);
+    EXPECT_GT(rms, 0.0f);
+}
+
+TEST_F(BitcrusherModuleTestFixture, CVChannelsAreClearedAfterProcessing) {
+    juce::AudioBuffer<float> buffer(5, 512);
+    buffer.clear();
+    for (int ch = 0; ch < 5; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.5f);
+
+    juce::MidiBuffer midi;
+    module->processBlock(buffer, midi);
+
+    for (int ch = 2; ch < 5; ++ch) {
+        for (int i = 0; i < 512; ++i) {
+            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "CV ch" << ch << " sample " << i;
+        }
+    }
+}
+
+TEST_F(BitcrusherModuleTestFixture, PrepareToPlayAndProcessDoNotCrash) {
+    juce::AudioBuffer<float> buffer(5, 512);
+    buffer.clear();
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.3f);
+
+    juce::MidiBuffer midi;
+    EXPECT_NO_THROW(module->processBlock(buffer, midi));
+}
+
+TEST_F(BitcrusherModuleTestFixture, ModuleTypeAndCategoryAreCorrect) {
+    EXPECT_EQ(module->getModuleType(), ModuleType::Bitcrusher);
+    EXPECT_EQ(module->getModulationCategory(), ModulationCategory::FX);
+}
+
+// ---------------------------------------------------------------------------
 // Port Label tests
 // ---------------------------------------------------------------------------
 
@@ -975,4 +1037,16 @@ TEST(PortLabelTests, LimiterPortLabels) {
     EXPECT_EQ(limiter.getInputPortLabel(1), "Right");
     EXPECT_EQ(limiter.getOutputPortLabel(0), "Left");
     EXPECT_EQ(limiter.getOutputPortLabel(1), "Right");
+}
+
+TEST(PortLabelTests, PitchShifterPortLabels) {
+    PitchShifterModule shifter;
+    EXPECT_EQ(shifter.getInputPortLabel(0), "Left");
+    EXPECT_EQ(shifter.getInputPortLabel(1), "Right");
+    EXPECT_EQ(shifter.getInputPortLabel(2), "Pitch");
+    EXPECT_EQ(shifter.getInputPortLabel(3), "Shift");
+    EXPECT_EQ(shifter.getInputPortLabel(4), "Mix");
+    EXPECT_EQ(shifter.getInputPortLabel(5), "Feedback");
+    EXPECT_EQ(shifter.getOutputPortLabel(0), "Left");
+    EXPECT_EQ(shifter.getOutputPortLabel(1), "Right");
 }
