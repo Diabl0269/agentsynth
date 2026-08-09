@@ -50,26 +50,42 @@ EOF
 : >"$WORK/stats-empty.txt"
 
 # run <name> <expected_exit> <expected_substring|-> [env assignments...]
+#
+# Every input the script reads is explicitly unset before the test's own assignments are applied.
+# Without that the tests are not hermetic: ci.yml sets CACHE_CHECK_ENFORCE and CACHE_WARM_EXPECTED
+# as workflow-level env, the Lint job inherits them, and `env VAR=...` ADDS to the ambient
+# environment rather than replacing it — so the three "must exit 1" cases below inherited
+# enforce=false from CI and passed locally while failing in CI. Keep the -u list in sync with the
+# variables documented at the top of ci-cache-check.sh.
 run() {
     local name="$1" want_exit="$2" want_text="$3"
     shift 3
     local out status
-    out="$(env "$@" GITHUB_STEP_SUMMARY="$WORK/summary.md" bash "$CHECK" 2>&1)"
+    out="$(env -u CACHE_MATCHED_KEY -u DEPS_MATCHED_KEY -u CACHE_WARM_EXPECTED \
+               -u CACHE_MIN_HIT_RATE -u CACHE_CHECK_ENFORCE -u CCACHE_STATS_FILE \
+               "$@" GITHUB_STEP_SUMMARY="$WORK/summary.md" bash "$CHECK" 2>&1)"
     status=$?
 
     if [ "$status" -ne "$want_exit" ]; then
-        printf 'FAIL  %s\n      expected exit %s, got %s\n%s\n' "$name" "$want_exit" "$status" "$out"
+        printf 'FAIL  %s\n      expected exit %s, got %s\n%s\n' \
+            "$name" "$want_exit" "$status" "$(defang "$out")"
         fail=$((fail + 1))
         return
     fi
     if [ "$want_text" != "-" ] && ! printf '%s' "$out" | grep -qF "$want_text"; then
-        printf 'FAIL  %s\n      expected output to contain: %s\n%s\n' "$name" "$want_text" "$out"
+        printf 'FAIL  %s\n      expected output to contain: %s\n%s\n' \
+            "$name" "$want_text" "$(defang "$out")"
         fail=$((fail + 1))
         return
     fi
     printf 'ok    %s\n' "$name"
     pass=$((pass + 1))
 }
+
+# The script under test emits GitHub workflow commands (::error::, ::warning::). Echoing them
+# verbatim when a test fails would make Actions render a *fixture* as a real job annotation, so
+# neuter the leading colons before printing.
+defang() { printf '%s' "$1" | sed 's/^::/__/'; }
 
 # --- healthy path -------------------------------------------------------------------------
 run "healthy: both caches restored, high hit rate" 0 "ccache hit rate   : 79%" \
