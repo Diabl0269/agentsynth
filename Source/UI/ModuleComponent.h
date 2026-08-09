@@ -69,6 +69,14 @@ public:
     // Test/inspection helper: true while a valid audio file is hovering over this module.
     bool isFileDragHighlighted() const noexcept { return fileDragHighlight; }
 
+    /** Index of the knob a modulation ring for `paramName` should be drawn on, or -1 when no
+     *  ring belongs on the card right now.
+     *
+     *  Visibility is part of the answer, not just a paint-time detail: a knob on an inactive tab
+     *  page keeps its last bounds, so a ring drawn from them lands on empty card. Public so the
+     *  rule can be tested without a themed LookAndFeel and a live modulation routing. */
+    int getModRingSliderIndex(const juce::String& paramName) const;
+
 private:
     juce::AudioProcessor* module;
     juce::AudioProcessorGraph::NodeID nodeId;
@@ -212,8 +220,16 @@ private:
     // which stops the card resizing (and shoving its neighbours) as tabs are switched.
     int layoutWavetableTabs(int y, int contentX, int contentW, bool apply);
 
-    // True for cards whose jack count justifies a two-column input gutter.
+    // True for cards whose jack count justifies a split (left-edge + right-edge) input gutter.
     int getInputPortColumns() const;
+
+    // How many inputs go down the left edge when the gutter is split; the rest go down the
+    // right edge, below the output jacks.
+    static int getLeftColumnInputCount(int visibleInputs, int visibleOutputs);
+
+    // First jack row the right-edge input column may use — below the outputs, plus a blank row
+    // so the two groups stay visually separate.
+    static int rightColumnFirstRow(int visibleOutputs);
 
     // Shared step-column layout helper used by Sequencer and PolySequencer.
     // Positions Gate, Pitch/Root, and F.Env/Chord controls for a single step column.

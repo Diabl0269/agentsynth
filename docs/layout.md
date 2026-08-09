@@ -702,18 +702,22 @@ The trace is drawn **warped** — `getDisplayWaveformAt()` runs the same `readWa
 
 Both completion lambdas hold a `Component::SafePointer` and re-derive the module via `dynamic_cast`, since the card can be destroyed while the dialog is open. The card also implements `FileDragAndDropTarget` for audio files, routing drops through the same import path as the Load button.
 
-The card is **double-width** (issue #180): 15 knobs, 8 combos and a 16-jack port stack. Laid out flat, that came to 560×869 — technically correct and genuinely unusable, a wall of identical knobs with no hierarchy. Three mechanisms bring it to **560×554** and, more importantly, give it a reading order:
+The card is **double-width** (issue #180): 15 knobs, 8 combos and a 16-jack port stack. Laid out flat, that came to 560×869 — technically correct and genuinely unusable, a wall of identical knobs with no hierarchy. Three mechanisms bring it to **560×577** and, more importantly, give it a reading order:
 
-**1. Two-column jack gutter.** `getInputPortColumns()` returns 2 for a card with more than 10 visible input jacks at double width; `getPortCenter()` then lays the inputs out **column-major** (jack 0 top-left, running down then over) at `kPortColumnStride` (100 px) apart. Sixteen jacks in one column set a ~390 px floor on the card height before a single control is placed; two columns halve it.
+**1. Split jack gutter — both card EDGES.** `getInputPortColumns()` returns 2 for a card with more than 10 visible input jacks at double width. `getPortCenter()` then puts the first `getLeftColumnInputCount()` inputs down the left edge and the rest down the **right** edge, starting at `rightColumnFirstRow()` (below the output jacks, plus one blank row). Sixteen jacks in one column set a ~390 px floor on the card height before a single control is placed.
 
-Everything that touches jack geometry — wire drawing, hit-testing (`getPortForPoint`), painting — reads `getPortCenter`, so this is the only place that changes. Two consequences worth knowing:
+Edges specifically, **not a second column inside the body**. An interior column was tried first and is worse: the module itself covers the lower half of a cable you are dragging towards it, so you cannot see what you are aiming at. Every jack now sits on a boundary with open canvas beyond it.
 
-- `getContentTopY()` now takes the **maximum** y over all inputs rather than the last one's. With more than one column an odd jack count leaves the second column a row short, so the last jack is not the lowest.
-- The wavetable chrome's left inset grows by `(columns - 1) * kPortColumnStride` so it still clears the gutter.
+Everything that touches jack geometry — wire drawing, hit-testing (`getPortForPoint`), painting — reads `getPortCenter`, so this is the only place that changes. Three consequences worth knowing:
+
+- `getContentTopY()` takes the **maximum** y over all inputs rather than the last one's. With a split gutter the last jack is not the lowest.
+- Input labels **right-align** when the jack is on the right edge (`p.x > getWidth() / 2`), mirroring the output labelling; left-aligned text would run off the card.
+- The blank row from `rightColumnFirstRow()` is load-bearing, not padding. Left-is-in / right-is-out is the only cue that a jack is an input — inputs and outputs are drawn identically — and a split gutter breaks it. Without the gap, `Audio R` and the first right-edge input sit adjacent and indistinguishable.
 
 **2. Tabbed control body.** The 23 controls are grouped into five pages — **Tune / Unison / Phase / Sub / File** — by `kWavetablePages` in `ModuleComponent.cpp`, which maps parameter *display names* to pages. Three controls sit outside the strip: `Position` and `Warp` / `Warp Amt` are **pinned** above it (they are what you actually perform with), and `Table` is laid out in the chrome band beside the display it selects.
 
 - **Jacks are never tabbed.** All 16 CV inputs stay on the card at all times, so a cable can never point at a hidden port. Only knobs and combos page.
+- **Modulation rings must consult `getModRingSliderIndex()`**, which returns -1 for a knob whose page is hidden. A hidden knob keeps the bounds it had when its page was last laid out, so a ring drawn straight from `sliders[i]->getBounds()` paints an orange arc over empty card. The rule lives in that one accessor precisely so it is testable without a themed LookAndFeel and a live modulation routing.
 - The card is sized to the **tallest** page, not the active one. A card that grew and shrank would shove its neighbours around the canvas on every tab click.
 - Page knob rows are **centred**, and page combos run three across — most pages carry fewer than the 6 available knob columns, and left-aligning them stranded half the card's width.
 - `createWavetableTabs()` must run **after** `createControls()` (it groups the controls that call creates) and must end by calling `updateLayout()` — `createControls()` already sized the card, so without a second pass the card keeps its flat-grid height and the tabbed layout never applies.

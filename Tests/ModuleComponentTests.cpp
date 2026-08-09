@@ -649,16 +649,18 @@ TEST_F(ModuleComponentTest, WavetableCardBuildsFolderBrowserChrome) {
     EXPECT_NO_THROW(nextButton->triggerClick());
 }
 
-// The 16 CV jacks are split into two columns so the gutter stops dictating the card height.
-// Every jack must still land on a distinct, in-bounds point, because getPortCenter is what wire
-// drawing, hit-testing and painting all read.
-TEST_F(ModuleComponentTest, WavetableCardSplitsItsJackGutterIntoTwoColumns) {
+// The 16 CV jacks are split across the card's two EDGES so the gutter stops dictating the card
+// height. Edges specifically, not two columns inside the body: an interior column is half-hidden
+// by the module while you drag a cable towards it. Every jack must still land on a distinct,
+// in-bounds point, because getPortCenter is what wire drawing, hit-testing and painting all read.
+TEST_F(ModuleComponentTest, WavetableCardSplitsItsJackGutterAcrossBothEdges) {
     AudioEngine engine;
     GraphEditor editor(engine);
     WavetableOscillatorModule processor;
     ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
 
     const int numJacks = processor.getVisibleInputPortCount();
+    const int numOuts = processor.getVisibleOutputPortCount();
     ASSERT_EQ(numJacks, WavetableOscillatorModule::kNumJacks);
 
     std::set<std::pair<int, int>> seen;
@@ -669,16 +671,44 @@ TEST_F(ModuleComponentTest, WavetableCardSplitsItsJackGutterIntoTwoColumns) {
         EXPECT_TRUE(moduleComponent.getLocalBounds().contains(p)) << "jack " << i << " sits outside the card";
         columns.insert(p.x);
     }
-    EXPECT_EQ(columns.size(), 2u) << "expected exactly two jack columns";
+    ASSERT_EQ(columns.size(), 2u) << "expected exactly two jack columns";
 
-    // Column-major: the first half runs down column 0, so jack 0 and the midpoint jack share a row.
-    EXPECT_EQ(moduleComponent.getPortCenter(0, true).y, moduleComponent.getPortCenter(numJacks / 2, true).y);
-    EXPECT_LT(moduleComponent.getPortCenter(0, true).x, moduleComponent.getPortCenter(numJacks / 2, true).x);
+    // Both columns sit ON an edge, not inside the body.
+    EXPECT_EQ(*columns.begin(), 10);
+    EXPECT_EQ(*columns.rbegin(), moduleComponent.getWidth() - 10);
+
+    // An input on the right edge must never share a row with an output jack.
+    for (int i = 0; i < numJacks; ++i) {
+        const auto in = moduleComponent.getPortCenter(i, true);
+        if (in.x < moduleComponent.getWidth() / 2)
+            continue;
+        for (int o = 0; o < numOuts; ++o)
+            EXPECT_NE(in.y, moduleComponent.getPortCenter(o, false).y)
+                << "input jack " << i << " collides with output jack " << o;
+    }
+
+    // A blank row separates the outputs from the right-edge inputs — left-is-in / right-is-out
+    // is the only cue that a jack is an input, and a split gutter breaks it.
+    int firstRightInput = std::numeric_limits<int>::max();
+    for (int i = 0; i < numJacks; ++i) {
+        const auto p = moduleComponent.getPortCenter(i, true);
+        if (p.x > moduleComponent.getWidth() / 2)
+            firstRightInput = std::min(firstRightInput, p.y);
+    }
+    const int lastOutput = moduleComponent.getPortCenter(numOuts - 1, false).y;
+    EXPECT_GT(firstRightInput - lastOutput, 20) << "expected a blank row between outputs and right-edge inputs";
+
+    // The columns end within one row of each other, so neither sets the card height on its own.
+    int leftBottom = 0, rightBottom = 0;
+    for (int i = 0; i < numJacks; ++i) {
+        const auto p = moduleComponent.getPortCenter(i, true);
+        int& bottom = (p.x < moduleComponent.getWidth() / 2) ? leftBottom : rightBottom;
+        bottom = std::max(bottom, p.y);
+    }
+    EXPECT_LE(std::abs(leftBottom - rightBottom), 20) << "the jack columns should bottom out level";
 
     // The body must clear the LOWEST jack, which is no longer the last one.
-    int lowest = 0;
-    for (int i = 0; i < numJacks; ++i)
-        lowest = std::max(lowest, moduleComponent.getPortCenter(i, true).y);
+    const int lowest = std::max(leftBottom, rightBottom);
     for (auto* child : moduleComponent.getChildren())
         if (child->isVisible() && dynamic_cast<juce::Slider*>(child) != nullptr)
             EXPECT_GT(child->getY(), lowest) << "a knob overlaps the jack gutter";
@@ -744,6 +774,36 @@ TEST_F(ModuleComponentTest, WavetableTabsSwitchContentWithoutResizingTheCard) {
         if (dynamic_cast<juce::Slider*>(child) != nullptr)
             ++totalSliders;
     EXPECT_EQ((int)everSeen.size(), totalSliders) << "some knob is not reachable from any tab";
+}
+
+// A modulation ring is drawn from its knob's bounds. A knob on an inactive tab page keeps the
+// bounds it had when its page was last laid out, so before this guard the ring kept painting on
+// empty card after a page switch — an orange arc floating with no knob under it.
+TEST_F(ModuleComponentTest, ModulationRingsSkipKnobsOnInactiveTabPages) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    WavetableOscillatorModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    std::vector<juce::TextButton*> tabs;
+    for (auto* child : moduleComponent.getChildren())
+        if (auto* b = dynamic_cast<juce::TextButton*>(child))
+            if (b->getComponentID().startsWith("wtTab"))
+                tabs.push_back(b);
+    ASSERT_GE(tabs.size(), 2u);
+
+    // Page 0 (Tune) owns Octave; Position is pinned above the strip.
+    EXPECT_GE(moduleComponent.getModRingSliderIndex("Octave"), 0);
+    EXPECT_GE(moduleComponent.getModRingSliderIndex("Position"), 0);
+
+    tabs[1]->onClick(); // headless: triggerClick posts async, with no message pump to deliver it
+
+    EXPECT_EQ(moduleComponent.getModRingSliderIndex("Octave"), -1)
+        << "a ring must not be drawn for a knob whose page is hidden";
+    EXPECT_GE(moduleComponent.getModRingSliderIndex("Position"), 0) << "a pinned knob keeps its ring on every page";
+
+    // A parameter with no knob at all never gets a ring.
+    EXPECT_EQ(moduleComponent.getModRingSliderIndex("Not A Parameter"), -1);
 }
 
 // A Wavetable card claims audio-file drops itself. Before issue #180 it returned false and the

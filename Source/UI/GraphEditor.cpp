@@ -89,10 +89,10 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Sampler")
         return {280, 657};
     if (typeName == "Wavetable")
-        // Double-width since issue #180. The 16 CV jacks run in two columns and the 23 controls
-        // are paged behind a tab strip (only Position and Warp stay pinned), so neither the
-        // gutter nor the control count sets the height on its own.
-        return {synth::LayoutUtil::kDoubleWidth, 554};
+        // Double-width since issue #180. The 16 CV jacks are split across both card edges and
+        // the 23 controls are paged behind a tab strip (only Position and Warp stay pinned), so
+        // neither the gutter nor the control count sets the height on its own.
+        return {synth::LayoutUtil::kDoubleWidth, 577};
     if (typeName == "Chorus" || typeName == "Phaser" || typeName == "Flanger")
         return {280, 309};
     if (typeName == "Bitcrusher")
