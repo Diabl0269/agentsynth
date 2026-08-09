@@ -13,12 +13,17 @@ endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Dependency pins live in one file so CI can key its build/_deps cache on that file alone —
+# adding a source file below must not invalidate a ~350 MB dependency cache. See the header of
+# cmake/DependencyVersions.cmake for the full rationale.
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/DependencyVersions.cmake)
+
 # Fetch JUCE
 include(FetchContent)
 FetchContent_Declare(
     juce
-    GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-    GIT_TAG        8.0.3 # Using a specific tag for stability
+    GIT_REPOSITORY ${SYNTH_JUCE_GIT_REPOSITORY}
+    GIT_TAG        ${SYNTH_JUCE_GIT_TAG}
 )
 FetchContent_MakeAvailable(juce)
 

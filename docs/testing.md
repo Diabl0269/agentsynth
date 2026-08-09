@@ -343,7 +343,11 @@ pip install "clang-format==$(cat .clang-format-version)"
 
 ## CI Pipeline
 
-CI runs via `.github/workflows/ci.yml` on pull requests to `main` only, path-filtered to changes under `Source/**`, `Tests/**`, `CMakeLists.txt`, `Tests/CMakeLists.txt`, `scripts/**`, or either workflow file (`ci.yml` / `build-artifacts.yml`).
+CI runs via `.github/workflows/ci.yml` on pull requests to `main` **and on pushes to `main`**, path-filtered to changes under `Source/**`, `Tests/**`, `Tools/**`, `CMakeLists.txt`, `Tests/CMakeLists.txt`, `cmake/**`, `scripts/**`, or either workflow file (`ci.yml` / `build-artifacts.yml`).
+
+The push-to-`main` trigger exists **to seed the build caches** — see [Build caching](#build-caching). Removing it silently doubles every PR's build time, so it is load-bearing, not redundant with the artifact workflow.
+
+A `concurrency` group cancels superseded runs on the same PR (main is never cancelled, since those runs seed the cache).
 
 There are **five jobs**:
 
@@ -357,12 +361,43 @@ There are **five jobs**:
 
 ### Optimizations
 
-- **ccache**: Compiler cache avoids recompiling unchanged files. `CMAKE_C/CXX_COMPILER_LAUNCHER=ccache`, 500 MB max size, cached at `~/.ccache` (Linux) / `~/Library/Caches/ccache` (macOS) / `C:\Users\runneradmin\AppData\Local\ccache` (Windows), keyed by commit SHA with prefix restore.
-- **FetchContent caching**: `build/_deps` (JUCE 8.0.3 + GoogleTest 1.14.0) cached by `actions/cache`, keyed on `CMakeLists.txt` + `Tests/CMakeLists.txt` hashes.
 - **`JUCE_WEB_BROWSER=0`**: Drops unused WebBrowserComponent and removes WebKit/libsoup deps on Linux.
 - **Separate lint job**: Instant formatting feedback without waiting for a full build.
 - **apt package caching**: `awalsh128/cache-apt-pkgs-action` caches Ubuntu packages across runs.
 - **`coverage.sh --report-only`**: In CI, skips redundant configure/build/test steps and only merges profdata + generates the report.
+
+### Build caching
+
+Two caches carry work between runs. Both are easy to break in ways that look exactly like a healthy build, just slower — which is why `scripts/ci-cache-check.sh` gates them (see below).
+
+- **ccache** — compiler cache. `CMAKE_C/CXX_COMPILER_LAUNCHER=ccache`, 2 GB max size, `CCACHE_DIR` pinned explicitly to `${{ github.workspace }}/.ccache` on every platform. Keyed `<os>-ccache-<ref>-<sha>`; the restore-keys fall back this ref → `main` → anything. Also sets `compiler_check=content` and `sloppiness=time_macros,include_file_mtime,include_file_ctime`, because `actions/checkout` rewrites every file's mtime each run and the compiler binary's mtime changes whenever GitHub rebuilds the runner image — under ccache's mtime-based defaults both produce false misses.
+- **FetchContent** — `build/_deps` (JUCE + GoogleTest sources), keyed on `hashFiles('cmake/DependencyVersions.cmake')`.
+
+#### Three rules, each learned from an outage
+
+1. **`ci.yml` must keep its `push: main` trigger.** GitHub scopes a cache to the ref that wrote it; a PR run can read its own ref and the **base branch**, nothing else. From the introduction of ccache until Aug 2026 this workflow ran on `pull_request` alone, so it never wrote a cache into `main`'s scope and **no PR ever restored one** — every run compiled the entire tree cold for months. The logs said `Cache not found for input keys: …` and CI passed regardless.
+2. **Key `build/_deps` on the dependency pins alone**, never on `CMakeLists.txt`. `build/_deps` holds nothing but fetched sources, so adding a module must not invalidate it. The old `hashFiles('CMakeLists.txt', 'Tests/CMakeLists.txt')` key minted a fresh ~350 MB entry per platform per workflow on every module PR; with 10 `CMakeLists.txt` edits in the first nine days of Aug 2026 that pushed the repo past **GitHub's 10 GB per-repo cache limit**, which LRU-evicted the ccache entries too. All pins therefore live in `cmake/DependencyVersions.cmake` and the `FetchContent_Declare()` calls read them from there, so key and pin cannot drift.
+3. **`CCACHE_DIR` must be set explicitly.** ccache's default directory varies by platform *and* version. The Linux job cached `~/.ccache` while ccache 4.x on `ubuntu-24.04` writes to `~/.cache/ccache`, so the Linux ccache was never even saved — no `Linux-ccache-*` entry ever existed.
+
+#### The cache health check
+
+`scripts/ci-cache-check.sh` runs after the build on Linux, macOS, and Windows. It reads each `actions/cache` step's `cache-matched-key` output plus `ccache --show-stats`, writes a summary table to the job summary, and:
+
+- **fails** when a cache that should have restored did not (PR runs only — a miss on the `main` seeding run is expected and reported as a notice);
+- **warns** when the ccache hit rate is under `CACHE_MIN_HIT_RATE` (default 25%), which drops legitimately whenever a PR touches a widely-included header.
+
+Enforcement is off by default. Set the repository variable **`CI_CACHE_CHECK_ENFORCE=true`** (Settings → Secrets and variables → Actions → Variables) to make a cold cache fail the build; leave it unset to report only. It ships off so that PRs opened before `main` has seeded its caches don't fail on a miss that is genuinely expected — turn it on once one merge to `main` has completed.
+
+The script has its own tests (`scripts/tests/ci-cache-check.test.sh`, run by the Lint job): if the thing that detects a broken cache breaks silently, we are back to shipping cold builds unnoticed.
+
+To inspect cache state directly:
+
+```bash
+gh api "repos/:owner/:repo/actions/caches?per_page=100" \
+  -q '.actions_caches[] | "\(.size_in_bytes/1048576|floor)MB\t\(.ref)\t\(.key)"'
+# Total size — evictions start once this approaches GitHub's 10 GB limit:
+gh api "repos/:owner/:repo/actions/caches?per_page=100" -q '[.actions_caches[].size_in_bytes]|add/1073741824'
+```
 
 ### What didn't work
 

@@ -44,3 +44,7 @@ build-release/
 build-test/
 # Catch-all for ad hoc out-of-tree build dirs (build-verify/, build-<branch>/, …)
 build-*/
+
+# ccache directory — CI pins CCACHE_DIR to <workspace>/.ccache (.github/workflows/ci.yml) so the
+# actions/cache path can never drift from ccache's per-OS default; keep it out of the tree.
+.ccache/

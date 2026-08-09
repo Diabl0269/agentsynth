@@ -1,9 +1,11 @@
 enable_testing()
 
 include(FetchContent)
+# URL pinned in cmake/DependencyVersions.cmake (included by the top-level CMakeLists) so the
+# CI build/_deps cache key tracks the pin and nothing else.
 FetchContent_Declare(
   googletest
-  URL https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip
+  URL ${SYNTH_GOOGLETEST_URL}
 )
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
