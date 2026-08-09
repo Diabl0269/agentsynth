@@ -96,6 +96,7 @@ add_executable(Tests
     SelectionModelTests.cpp
     SnippetManagerTests.cpp
     MultiSelectTests.cpp
+    ClipboardTests.cpp
     PanelAnimationAndLoadingTests.cpp
     ../Source/MainComponent.cpp
     ../Source/UI/GraphEditor.cpp

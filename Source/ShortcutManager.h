@@ -15,7 +15,10 @@ enum CommandIDs {
     autoArrange,
     toggleLibrary,
     selectAllModules,
-    saveSnippet
+    saveSnippet,
+    copySelection,
+    pasteSelection,
+    duplicateSelection
 };
 
 inline juce::CommandID getCommandForAction(const juce::String& actionId) {
@@ -43,6 +46,12 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return selectAllModules;
     if (actionId == "saveSnippet")
         return saveSnippet;
+    if (actionId == "copySelection")
+        return copySelection;
+    if (actionId == "pasteSelection")
+        return pasteSelection;
+    if (actionId == "duplicateSelection")
+        return duplicateSelection;
     return 0;
 }
 } // namespace AppCommands
@@ -122,6 +131,12 @@ public:
             juce::KeyPress('a', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
         bindings["saveSnippet"] =
             juce::KeyPress('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+        // The platform-standard trio. Safe to claim app-wide because JUCE's TextEditor consumes
+        // Cmd+C/Cmd+V itself while it has focus, so these only reach the canvas when no text field
+        // is being edited — see MainComponent::keyPressed, which is the sole dispatch point.
+        bindings["copySelection"] = juce::KeyPress('c', juce::ModifierKeys::commandModifier, 0);
+        bindings["pasteSelection"] = juce::KeyPress('v', juce::ModifierKeys::commandModifier, 0);
+        bindings["duplicateSelection"] = juce::KeyPress('d', juce::ModifierKeys::commandModifier, 0);
     }
 
     static juce::String keyPressToDisplayString(const juce::KeyPress& key) {
@@ -196,6 +211,12 @@ public:
             return "Select All Modules";
         if (actionId == "saveSnippet")
             return "Save Selection as Snippet";
+        if (actionId == "copySelection")
+            return "Copy Selected Modules";
+        if (actionId == "pasteSelection")
+            return "Paste Modules";
+        if (actionId == "duplicateSelection")
+            return "Duplicate Selected Modules";
         return actionId;
     }
 
@@ -218,9 +239,10 @@ private:
     std::map<juce::String, juce::KeyPress> bindings;
     juce::ApplicationProperties* appProperties = nullptr;
 
-    juce::StringArray actionIds{"openSettings", "savePreset",    "openPreset",       "newPatch",
-                                "undo",         "redo",          "toggleModMatrix",  "toggleAiPanel",
-                                "autoArrange",  "toggleLibrary", "selectAllModules", "saveSnippet"};
+    juce::StringArray actionIds{"openSettings",  "savePreset",     "openPreset",        "newPatch",
+                                "undo",          "redo",           "toggleModMatrix",   "toggleAiPanel",
+                                "autoArrange",   "toggleLibrary",  "selectAllModules",  "saveSnippet",
+                                "copySelection", "pasteSelection", "duplicateSelection"};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShortcutManager)
 };

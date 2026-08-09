@@ -1015,6 +1015,12 @@ void GraphEditor::mouseDown(const juce::MouseEvent& e) {
             m.showMenuAsync(juce::PopupMenu::Options());
             return;
         }
+
+        // Nothing under the cursor: the canvas menu, which is how paste is reachable without the
+        // keyboard. Right-clicking empty canvas leaves the selection alone (see mouseUp), so a
+        // paste from here still knows what was selected.
+        showCanvasContextMenu(canvasPos.roundToInt());
+        return;
     }
 
     if (e.mods.isLeftButtonDown()) {
@@ -1383,6 +1389,107 @@ bool GraphEditor::insertSnippetAt(const juce::var& snippet, juce::Point<int> can
     applySelectionChange(added);
     repaint();
     return true;
+}
+
+// ---- Copy / paste / duplicate ----
+
+bool GraphEditor::insertClipboardPayload(const juce::var& payload, juce::Point<int> canvasPos) {
+    auto& graph = audioEngine.getGraph();
+    auto dropPos = synth::LayoutUtil::snap(canvasPos);
+
+    std::vector<juce::AudioProcessorGraph::NodeID> added;
+    auto doInsert = [this, &graph, &payload, dropPos, &added] {
+        // includeExtraState: the payload came from the live graph in this session, so carrying a
+        // Sampler's loaded file or a Wavetable's custom table through is both safe and expected —
+        // a duplicated Sampler that lost its sample would not be a duplicate.
+        added = synth::SnippetManager::insertSnippet(payload, graph, dropPos, /*includeExtraState=*/true);
+        updateComponents();
+    };
+
+    if (undoManager)
+        undoManager->recordStructuralChange(graph, doInsert);
+    else
+        doInsert();
+
+    if (added.empty())
+        return false;
+
+    // Leave the copies selected, not the originals: the group the user just made is what they will
+    // want to drag, delete or duplicate again.
+    applySelectionChange(added);
+    repaint();
+    return true;
+}
+
+bool GraphEditor::copySelection() {
+    auto ids = selection.getSelected();
+    if (ids.empty())
+        return false;
+
+    auto payload = synth::SnippetManager::extractSnippet(audioEngine.getGraph(), ids, "Clipboard",
+                                                         /*includeExtraState=*/true);
+    if (synth::SnippetManager::getModuleCount(payload) <= 0)
+        return false; // nothing eligible (e.g. only Audio Output was selected) — keep what we had
+
+    clipboard.set(payload, synth::SnippetManager::selectionOrigin(audioEngine.getGraph(), ids));
+    return true;
+}
+
+bool GraphEditor::pasteClipboard() {
+    if (clipboard.isEmpty())
+        return false;
+
+    // Take the payload by value first: the cascade advances even if the insert is rejected, which
+    // is the right behaviour — a failed paste must not leave the next one aimed at the same spot.
+    const auto payload = clipboard.getPayload();
+    return insertClipboardPayload(payload, clipboard.nextPastePosition());
+}
+
+bool GraphEditor::pasteClipboardAt(juce::Point<int> canvasPos) {
+    if (clipboard.isEmpty())
+        return false;
+
+    const auto payload = clipboard.getPayload();
+    clipboard.anchorAt(canvasPos);
+    return insertClipboardPayload(payload, canvasPos);
+}
+
+bool GraphEditor::duplicateSelection() {
+    auto ids = selection.getSelected();
+    if (ids.empty())
+        return false;
+
+    auto& graph = audioEngine.getGraph();
+    auto payload = synth::SnippetManager::extractSnippet(graph, ids, "Duplicate", /*includeExtraState=*/true);
+    if (synth::SnippetManager::getModuleCount(payload) <= 0)
+        return false;
+
+    const auto origin = synth::SnippetManager::selectionOrigin(graph, ids);
+    const int step = synth::ui::ModuleClipboard::kOffsetStep;
+    return insertClipboardPayload(payload, origin + juce::Point<int>(step, step));
+}
+
+void GraphEditor::showCanvasContextMenu(juce::Point<int> canvasPos) {
+    juce::Component::SafePointer<GraphEditor> safeThis(this);
+
+    juce::PopupMenu m;
+    const int clipboardCount = clipboard.getModuleCount();
+    juce::PopupMenu::Item paste(clipboardCount > 1 ? "Paste " + juce::String(clipboardCount) + " Modules Here"
+                                                   : "Paste Here");
+    paste.setEnabled(clipboardCount > 0);
+    paste.action = [safeThis, canvasPos] {
+        if (safeThis != nullptr)
+            safeThis->pasteClipboardAt(canvasPos);
+    };
+    m.addItem(paste);
+
+    m.addSeparator();
+    m.addItem("Select All Modules", [safeThis] {
+        if (safeThis != nullptr)
+            safeThis->selectAllModules();
+    });
+
+    m.showMenuAsync(juce::PopupMenu::Options());
 }
 
 bool GraphEditor::keyPressed(const juce::KeyPress& key) {

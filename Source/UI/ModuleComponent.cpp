@@ -1673,6 +1673,21 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             // Selection actions (issue #156). Offered whenever this module is selected — a
             // single-module snippet is legal, it is just a group of one.
             const int selectionCount = owner.getSelectionCount();
+            const juce::String groupSuffix =
+                selectionCount > 1 ? " " + juce::String(selectionCount) + " Modules" : juce::String();
+
+            m.addItem("Copy" + groupSuffix, [this] { owner.copySelection(); });
+            m.addItem("Duplicate" + groupSuffix, [this] { owner.duplicateSelection(); });
+
+            // Paste lands next to whatever was copied, not on this module — pasting on top of the
+            // card the menu was opened from would hide the thing that just arrived.
+            const int clipboardCount = owner.getClipboardModuleCount();
+            juce::PopupMenu::Item paste(clipboardCount > 1 ? "Paste " + juce::String(clipboardCount) + " Modules"
+                                                           : "Paste");
+            paste.setEnabled(clipboardCount > 0);
+            paste.action = [this] { owner.pasteClipboard(); };
+            m.addItem(paste);
+
             m.addItem(selectionCount > 1 ? "Save Selection as Snippet..." : "Save as Snippet...", [this] {
                 if (owner.onSaveSnippetRequested)
                     owner.onSaveSnippetRequested();

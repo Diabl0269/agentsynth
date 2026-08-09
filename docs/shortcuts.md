@@ -16,9 +16,18 @@ Shortcuts are configurable in **Settings → Keyboard Shortcuts** tab (renamed f
 | Cmd+B | Toggle Module Library Sidebar |
 | Cmd+Shift+A | Select All Modules |
 | Cmd+Shift+S | Save Selection as Snippet |
+| Cmd+C | Copy Selected Modules |
+| Cmd+V | Paste Modules |
+| Cmd+D | Duplicate Selected Modules |
 
 `Cmd+Shift+A` / `Cmd+Shift+S` use the Shift variants because `Cmd+A` (Toggle AI Panel) and `Cmd+S`
 (Save Preset) are already bound. Like every row above, both are rebindable in Settings.
+
+`Cmd+C` / `Cmd+V` are safe to claim app-wide because JUCE's `TextEditor` consumes them itself while
+it has focus, so they only reach the canvas when no text field is being edited — the AI chat input
+keeps normal copy/paste. Copy, Paste and Duplicate are marked **inactive** when there is nothing to
+act on (nothing selected / an empty clipboard), which greys the menu row and makes
+`ApplicationCommandTarget::tryToInvoke` refuse the key outright.
 
 ## Context-specific
 
@@ -52,6 +61,12 @@ habit changes. See [`layout.md §12`](layout.md) for the full contract.
 | **Shift**/**Cmd** + click a module | Toggle that module in the selection |
 | Drag any selected module | Move the whole selection together |
 | Click empty canvas | Clear the selection |
+| Right-click a module | Copy / Duplicate / Paste / Save as Snippet / Delete for the whole selection |
+| Right-click empty canvas | Paste Here (at the click point) / Select All Modules |
+
+Right-clicking empty canvas keeps the selection rather than clearing it, so the menu can still act
+on what is selected. "Paste Here" drops the group at the click point and re-anchors the paste
+cascade there, so a following `Cmd+V` continues from the same place.
 
 Escape is handled by `AIChatComponent::keyPressed()` and only acts while a request is in flight;
 otherwise it is passed through so it keeps whatever meaning the enclosing window gives it. It is not

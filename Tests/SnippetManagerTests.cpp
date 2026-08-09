@@ -13,6 +13,7 @@
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/LFOModule.h"
 #include "../Source/Modules/OscillatorModule.h"
+#include "../Source/Modules/SamplerModule.h"
 #include "../Source/Modules/VCAModule.h"
 #include "../Source/SnippetManager.h"
 #include <gtest/gtest.h>
@@ -60,6 +61,27 @@ static void setDenormalised(juce::AudioProcessor* processor, const juce::String&
     auto* param = findParam(processor, paramId);
     ASSERT_NE(param, nullptr);
     param->setValueNotifyingHost(param->getNormalisableRange().convertTo0to1(value));
+}
+
+/** A minimal valid WAV, so a Sampler has something real to have loaded. */
+static bool writeSilentWav(const juce::File& file, int numFrames) {
+    file.deleteFile();
+    juce::AudioBuffer<float> buffer(1, numFrames);
+    buffer.clear();
+
+    juce::WavAudioFormat wavFormat;
+    std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
+    if (stream == nullptr)
+        return false;
+
+    std::unique_ptr<juce::AudioFormatWriter> writer(wavFormat.createWriterFor(stream.get(), 44100.0, 1, 32, {}, 0));
+    if (writer == nullptr)
+        return false;
+
+    stream.release(); // the writer owns it now
+    writer->writeFromAudioSampleBuffer(buffer, 0, numFrames);
+    writer.reset(); // flush
+    return file.existsAsFile();
 }
 
 static float getDenormalised(juce::AudioProcessor* processor, const juce::String& paramId) {
@@ -216,6 +238,116 @@ TEST(SnippetExtract, DropsModulationLeavingTheSelection) {
     auto* modulations = arrayOf(snippet, "modulations");
     ASSERT_NE(modulations, nullptr);
     EXPECT_EQ(modulations->size(), 0);
+}
+
+// ---------------------------------------------------------------------------------------
+// selectionOrigin — the corner extraction normalises against, shared with the clipboard
+// ---------------------------------------------------------------------------------------
+
+TEST(SnippetOrigin, IsTheTopLeftCornerOfTheSelection) {
+    juce::AudioProcessorGraph graph;
+    auto a = addAt(graph, std::make_unique<OscillatorModule>(), 400, 90);
+    auto b = addAt(graph, std::make_unique<FilterModule>(), 120, 300);
+    addAt(graph, std::make_unique<VCAModule>(), 10, 10); // unselected — must not pull the corner
+
+    EXPECT_EQ(SnippetManager::selectionOrigin(graph, {a->nodeID, b->nodeID}), juce::Point<int>(120, 90));
+}
+
+TEST(SnippetOrigin, IgnoresIneligibleAndStaleIdsAndDefaultsToTheCanvasOrigin) {
+    juce::AudioProcessorGraph graph;
+    auto atten = addAt(graph, std::make_unique<AttenuverterModule>(), 5, 5);
+    auto osc = addAt(graph, std::make_unique<OscillatorModule>(), 200, 160);
+
+    // An attenuverter is never a snippet node, so it cannot define the group's corner.
+    EXPECT_EQ(SnippetManager::selectionOrigin(graph, {atten->nodeID, osc->nodeID}), juce::Point<int>(200, 160));
+    EXPECT_EQ(SnippetManager::selectionOrigin(graph, {atten->nodeID}), juce::Point<int>(0, 0));
+    EXPECT_EQ(SnippetManager::selectionOrigin(graph, {}), juce::Point<int>(0, 0));
+    EXPECT_EQ(SnippetManager::selectionOrigin(graph, {NodeID(9999)}), juce::Point<int>(0, 0));
+}
+
+TEST(SnippetOrigin, AgreesWithTheOriginExtractionNormalisesAgainst) {
+    // The contract the clipboard leans on: subtracting selectionOrigin from a node's live position
+    // gives exactly the origin-relative position stored in the snippet. If these two ever drift, a
+    // paste lands somewhere other than where the caller aimed it.
+    juce::AudioProcessorGraph graph;
+    auto a = addAt(graph, std::make_unique<OscillatorModule>(), 340, 220);
+    auto b = addAt(graph, std::make_unique<FilterModule>(), 700, 180);
+
+    const auto origin = SnippetManager::selectionOrigin(graph, {a->nodeID, b->nodeID});
+    auto snippet = SnippetManager::extractSnippet(graph, {a->nodeID, b->nodeID}, "S");
+
+    auto* nodes = arrayOf(snippet, "nodes");
+    ASSERT_NE(nodes, nullptr);
+    ASSERT_EQ(nodes->size(), 2);
+    for (const auto& n : *nodes) {
+        auto* nObj = n.getDynamicObject();
+        auto* pos = nObj->getProperty("position").getDynamicObject();
+        const juce::Point<int> stored{(int)pos->getProperty("x"), (int)pos->getProperty("y")};
+        auto* node = graph.getNodeForId(NodeID((juce::uint32)(int)nObj->getProperty("id")));
+        ASSERT_NE(node, nullptr);
+        const juce::Point<int> live{(int)node->properties["x"], (int)node->properties["y"]};
+        EXPECT_EQ(stored, live - origin);
+    }
+}
+
+// ---------------------------------------------------------------------------------------
+// Extra module state — off for anything that reaches disk, on for the in-app clipboard
+// ---------------------------------------------------------------------------------------
+
+TEST(SnippetExtraState, IsOmittedByDefaultAndCarriedWhenRequested) {
+    auto file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("snippet-extrastate.wav");
+    ASSERT_TRUE(writeSilentWav(file, 256)) << "could not stage a sample file";
+
+    juce::AudioProcessorGraph graph;
+    auto samplerNode = addAt(graph, std::make_unique<SamplerModule>(), 0, 0);
+    auto* sampler = dynamic_cast<SamplerModule*>(samplerNode->getProcessor());
+    ASSERT_NE(sampler, nullptr);
+    ASSERT_TRUE(sampler->loadSampleFile(file));
+    ASSERT_FALSE(sampler->getExtraState().isVoid()) << "the module under test must actually carry extra state";
+
+    const std::vector<NodeID> selection{samplerNode->nodeID};
+
+    auto onDisk = SnippetManager::extractSnippet(graph, selection, "S");
+    auto* onDiskNodes = arrayOf(onDisk, "nodes");
+    ASSERT_NE(onDiskNodes, nullptr);
+    for (const auto& n : *onDiskNodes)
+        EXPECT_FALSE(n.getDynamicObject()->hasProperty("state"))
+            << "a .agsnip is hand-editable and applies on the trusted path — it must not carry `state`";
+
+    auto inMemory = SnippetManager::extractSnippet(graph, selection, "S", /*includeExtraState=*/true);
+    auto* inMemoryNodes = arrayOf(inMemory, "nodes");
+    ASSERT_NE(inMemoryNodes, nullptr);
+    bool sawState = false;
+    for (const auto& n : *inMemoryNodes)
+        sawState = sawState || n.getDynamicObject()->hasProperty("state");
+    EXPECT_TRUE(sawState) << "the clipboard opts in, so a duplicated module keeps its non-parameter state";
+
+    file.deleteFile();
+}
+
+TEST(SnippetExtraState, PrepareForInsertStripsAStateKeyUnlessItWasAskedFor) {
+    // The defence in depth that matters: even if a snippet FILE were hand-edited to carry `state`,
+    // the default insert path drops it before applyJSONToGraph (which honours it when trusted).
+    juce::DynamicObject::Ptr node = new juce::DynamicObject();
+    node->setProperty("id", 1);
+    node->setProperty("type", "Sampler");
+    node->setProperty("state", "/etc/passwd");
+    juce::Array<juce::var> nodes;
+    nodes.add(juce::var(node.get()));
+    juce::DynamicObject::Ptr root = new juce::DynamicObject();
+    root->setProperty("nodes", nodes);
+
+    auto stripped = SnippetManager::prepareForInsert(juce::var(root.get()), {0, 0}, 1);
+    auto* strippedNodes = arrayOf(stripped, "nodes");
+    ASSERT_NE(strippedNodes, nullptr);
+    ASSERT_EQ(strippedNodes->size(), 1);
+    EXPECT_FALSE((*strippedNodes)[0].getDynamicObject()->hasProperty("state"));
+
+    auto kept = SnippetManager::prepareForInsert(juce::var(root.get()), {0, 0}, 1, /*includeExtraState=*/true);
+    auto* keptNodes = arrayOf(kept, "nodes");
+    ASSERT_NE(keptNodes, nullptr);
+    ASSERT_EQ(keptNodes->size(), 1);
+    EXPECT_TRUE((*keptNodes)[0].getDynamicObject()->hasProperty("state"));
 }
 
 // ---------------------------------------------------------------------------------------

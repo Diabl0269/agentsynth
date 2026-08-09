@@ -843,7 +843,7 @@ When you change themes, alignment guides update to the new `textMuted` colour au
 
 ---
 
-## 12. Multi-Select, Group Drag & Snippets (issue #156)
+## 12. Multi-Select, Group Drag, Snippets & Clipboard (issue #156)
 
 ### 12.1 Why the gesture is modifier-gated
 
@@ -861,6 +861,7 @@ the marquee is gated behind **Shift** instead and pan is untouched.
 | Drag any selected module | Move the entire selection together |
 | Click empty canvas (no drag) | Clear the selection |
 | Right-click a module | Select it if it wasn't, then open the menu |
+| Right-click empty canvas | Open the canvas menu (Paste Here / Select All) — the selection is **kept**, so the menu can still act on it |
 
 Two details that are easy to get wrong:
 
@@ -1000,6 +1001,56 @@ rather than the single-module estimate table.
 
 Insert is one undoable change (`recordStructuralChange`), and the newly landed group is left
 selected — it is what the user will want to move next.
+
+### 12.6 Copy / Paste / Duplicate — `Source/UI/ModuleClipboard.h`
+
+Cmd+C / Cmd+V / Cmd+D, plus the same three actions on the module and canvas context menus.
+
+**They are snippets that never reach disk.** `copySelection()` calls the same
+`SnippetManager::extractSnippet` the Save-as-Snippet path calls and parks the result in a
+`ModuleClipboard`; paste and duplicate hand it to the same `insertSnippet`. Nothing about the wiring
+rules is re-derived, which is the point — the three §12.5 rules give a paste its behaviour for free:
+
+| Snippet rule | What it means for a paste |
+|---|---|
+| Only connections with **both** endpoints selected | The copies wire to **each other**, never back to the originals. A wire that ran into the group from outside is dropped rather than duplicated onto the copy. |
+| Modulation stored as intent | An LFO→Filter routing between two copied modules comes back as a rebuilt attenuverter chain, not as a second wire onto the original attenuverter. |
+| Origin-relative positions + fresh id range | The group keeps its internal layout, and `applyJSONToGraph`'s merge mode cannot mistake a copy's id for an existing node and silently retune it. |
+
+`autoConnectNewNodes=false` carries over too, so a pasted module never wires itself to Audio Output.
+Guarded by `ClipboardPaste.RewiresInternalConnectionsBetweenTheCopiesNotBackToTheOriginals`,
+`…DropsConnectionsThatLeftTheCopiedSelection`, `…DoesNotSpliceTheCopiesIntoTheSurroundingPatch` and
+`…RebuildsModulationChainsBetweenTheCopies`.
+
+**Non-parameter state is the one difference from a saved snippet.** `extractSnippet` /
+`prepareForInsert` / `insertSnippet` take an `includeExtraState` flag, **off by default**. A `.agsnip`
+is a hand-editable file that inserts on the *trusted* apply path, and `applyExtraStateToProcessor`
+reads `state` as a filename for `SamplerModule` — so a snippet file must not be able to carry one.
+The clipboard has no such exposure: its payload comes straight from the live graph and never leaves
+the process, so it opts in and a duplicated Sampler keeps its sample.
+(`SnippetExtraState.*`, `ClipboardCopy.CarriesNonParameterModuleStateSoADuplicatedSamplerKeepsItsSample`.)
+
+**Placement.** `SnippetManager::selectionOrigin()` returns the top-left corner extraction normalises
+against — the clipboard's anchor. Both paste and duplicate offset from it by
+`ModuleClipboard::kOffsetStep` (40 px = 5 grid units, so an offset copy stays on-grid):
+
+- **Cmd+V** cascades: each successive paste steps one more offset down-right, so repeated pastes fan
+  out instead of stacking on one pixel and looking like nothing happened.
+- **"Paste Here"** (canvas right-click) drops at the click point and re-anchors the cascade there.
+- **Cmd+D** offsets one step from the *current* selection and leaves the clipboard untouched —
+  Cmd+D must not cost the user what they had copied. Since a duplicate leaves the copies selected,
+  repeating it walks a chain across the canvas rather than piling up on one spot.
+
+Neither runs the group through `findFreeSlot`: a fixed offset is predictable (the Figma/Illustrator
+convention), the copy is visibly its own card, and it arrives selected and ready to drag.
+
+Both are one undoable change for the whole group, on the same `recordStructuralChange` path as a
+snippet drop.
+
+**The clipboard is in-app and in-memory only.** It is deliberately not the system clipboard: Cmd+C on
+the canvas must not silently destroy whatever text the user had copied, and text fields keep their
+own copy/paste because JUCE's `TextEditor` consumes Cmd+C/Cmd+V before the key reaches
+`MainComponent::keyPressed`.
 
 ---
 

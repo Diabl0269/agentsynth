@@ -15,6 +15,35 @@ TEST_F(ShortcutManagerTest, DefaultBindingsCorrect) {
     EXPECT_TRUE(manager.getBinding("redo").getModifiers().isShiftDown());
 }
 
+TEST_F(ShortcutManagerTest, CopyPasteDuplicateUseThePlatformStandardKeys) {
+    EXPECT_EQ(manager.getBinding("copySelection").getKeyCode(), 'c');
+    EXPECT_TRUE(manager.getBinding("copySelection").getModifiers().isCommandDown());
+    EXPECT_FALSE(manager.getBinding("copySelection").getModifiers().isShiftDown());
+
+    EXPECT_EQ(manager.getBinding("pasteSelection").getKeyCode(), 'v');
+    EXPECT_TRUE(manager.getBinding("pasteSelection").getModifiers().isCommandDown());
+
+    EXPECT_EQ(manager.getBinding("duplicateSelection").getKeyCode(), 'd');
+    EXPECT_TRUE(manager.getBinding("duplicateSelection").getModifiers().isCommandDown());
+}
+
+TEST_F(ShortcutManagerTest, EveryDefaultBindingIsUnique) {
+    // Adding an action with a binding that is already taken silently shadows one of the two, since
+    // getActionForKeyPress returns whichever it reaches first.
+    for (const auto& actionId : manager.getActionIds())
+        EXPECT_TRUE(manager.getConflictingAction(actionId, manager.getBinding(actionId)).isEmpty())
+            << actionId << " collides with " << manager.getConflictingAction(actionId, manager.getBinding(actionId));
+}
+
+TEST_F(ShortcutManagerTest, EveryActionIdHasABindingACommandAndADescription) {
+    for (const auto& actionId : manager.getActionIds()) {
+        EXPECT_NE(manager.getBinding(actionId).getKeyCode(), 0) << actionId << " has no default binding";
+        EXPECT_NE(AppCommands::getCommandForAction(actionId), 0) << actionId << " maps to no command";
+        EXPECT_NE(ShortcutManager::getActionDescription(actionId), actionId)
+            << actionId << " has no human-readable description";
+    }
+}
+
 TEST_F(ShortcutManagerTest, GetActionForKeyPress_Correct) {
     juce::KeyPress cmdS('s', juce::ModifierKeys::commandModifier, 0);
     EXPECT_EQ(manager.getActionForKeyPress(cmdS), "savePreset");
