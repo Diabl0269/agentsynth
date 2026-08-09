@@ -141,6 +141,283 @@ GraphEditor::GraphContentComponent::GraphContentComponent(GraphEditor& ed)
     setOpaque(true);
 }
 
+// ============================================================================
+// Cables (issue #157)
+//
+// One enumeration feeds both painting and hit-testing. Keeping them separate was the obvious
+// shortcut and the wrong one: the drawn curve and the clickable curve would drift apart the
+// first time either was tweaked, and clicks would silently miss the wire.
+// ============================================================================
+
+juce::Path GraphEditor::buildCablePath(juce::Point<float> p1, juce::Point<float> p2) {
+    juce::Path wp;
+    const float dx = p2.x - p1.x;
+    wp.startNewSubPath(p1);
+    wp.cubicTo(p1.x + dx * 0.5f, p1.y, p2.x - dx * 0.5f, p2.y, p2.x, p2.y);
+    return wp;
+}
+
+float GraphEditor::distanceToCable(const VisibleCable& cable, juce::Point<float> canvasPos) {
+    auto path = buildCablePath(cable.p1, cable.p2);
+    juce::Point<float> nearest;
+    // getNearestPoint returns the distance ALONG the path; the perpendicular distance we want is
+    // from the cursor to the point it writes out.
+    path.getNearestPoint(canvasPos, nearest);
+    return canvasPos.getDistanceFrom(nearest);
+}
+
+std::optional<GraphEditor::VisibleCable> GraphEditor::getCableAt(juce::Point<float> canvasPos, float tolerance) {
+    std::optional<VisibleCable> best;
+    float bestDist = tolerance;
+    for (const auto& c : buildVisibleCables()) {
+        const float d = distanceToCable(c, canvasPos);
+        // '<=' so a later cable wins a tie, matching paint order (mod wires draw over audio).
+        if (d <= bestDist) {
+            bestDist = d;
+            best = c;
+        }
+    }
+    return best;
+}
+
+namespace {
+// Category of the module a cable leaves from. Unknown/!ModuleBase nodes fall back to Utility so
+// BySourceCategory mode always has a colour to use.
+synth::ui::ModuleCategory categoryForNode(juce::AudioProcessorGraph::Node* node) {
+    if (node != nullptr)
+        if (auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor()))
+            return synth::ui::categoryFor(mb->getModuleType());
+    return synth::ui::ModuleCategory::Utility;
+}
+} // namespace
+
+std::vector<GraphEditor::VisibleCable> GraphEditor::buildVisibleCables() {
+    std::vector<VisibleCable> cables;
+    auto& graph = audioEngine.getGraph();
+    auto& moduleComponents = content.getModules();
+
+    // nodeID -> component, so both passes resolve port positions in O(1).
+    std::unordered_map<uint32_t, ModuleComponent*> nodeCompMap;
+    for (auto* comp : moduleComponents) {
+        if (comp == nullptr)
+            continue;
+        for (auto* node : graph.getNodes()) {
+            if (node->getProcessor() == comp->getModule()) {
+                nodeCompMap[node->nodeID.uid] = comp;
+                break;
+            }
+        }
+    }
+    auto compFor = [&](juce::AudioProcessorGraph::NodeID id) -> ModuleComponent* {
+        auto it = nodeCompMap.find(id.uid);
+        return it == nodeCompMap.end() ? nullptr : it->second;
+    };
+    auto portPos = [](ModuleComponent* c, int port, bool isInput) {
+        return (c->getBounds().getPosition() + c->getPortCenter(port, isInput)).toFloat();
+    };
+
+    // Edges the mod-routing pass will draw; pass 1 must not draw them again in a conflicting
+    // style. AttenuverterChain edges are deliberately excluded — pass 1 owns those.
+    using EdgeKey = std::tuple<uint32_t, int, uint32_t, int>;
+    std::set<EdgeKey> pass2HandledEdges;
+    for (const auto& routing : cachedModRoutings) {
+        if (routing.kind == AudioEngine::RoutingKind::DirectCV) {
+            pass2HandledEdges.emplace(routing.sourceNodeID.uid, routing.sourceChannelIndex, routing.destNodeID.uid,
+                                      routing.destChannelIndex);
+        } else if (routing.kind == AudioEngine::RoutingKind::PolyBus) {
+            for (int i = 0; i < routing.voiceCount; ++i)
+                pass2HandledEdges.emplace(routing.sourceNodeID.uid, routing.sourceChannelIndex + i,
+                                          routing.destNodeID.uid, routing.destChannelIndex + i);
+        }
+    }
+
+    // ---- Pass 1: raw graph edges (audio, MIDI, attenuverter chains) ----
+    for (auto& connection : graph.getConnections()) {
+        auto* node1 = graph.getNodeForId(connection.source.nodeID);
+        auto* node2 = graph.getNodeForId(connection.destination.nodeID);
+        if (!node1 || !node2)
+            continue;
+
+        const bool srcIsMidi = connection.source.channelIndex == juce::AudioProcessorGraph::midiChannelIndex;
+        const bool dstIsMidi = connection.destination.channelIndex == juce::AudioProcessorGraph::midiChannelIndex;
+
+        // Hide poly connections that exceed visible port counts.
+        if (!srcIsMidi) {
+            if (auto* srcMb = dynamic_cast<ModuleBase*>(node1->getProcessor()))
+                if (connection.source.channelIndex >= srcMb->getVisibleOutputPortCount())
+                    continue;
+        }
+        if (!dstIsMidi) {
+            if (auto* dstMb = dynamic_cast<ModuleBase*>(node2->getProcessor()))
+                if (connection.destination.channelIndex >= dstMb->getVisibleInputPortCount())
+                    continue;
+        }
+
+        if (!srcIsMidi && !dstIsMidi) {
+            EdgeKey ek{connection.source.nodeID.uid, connection.source.channelIndex, connection.destination.nodeID.uid,
+                       connection.destination.channelIndex};
+            if (pass2HandledEdges.count(ek))
+                continue;
+        }
+
+        // Attenuverter chain: source -> atten -> real destination, drawn as ONE wire.
+        if (dynamic_cast<AttenuverterModule*>(node2->getProcessor()) != nullptr) {
+            juce::AudioProcessorGraph::Node* realDstNode = nullptr;
+            int realDstPort = 0;
+            for (auto& c : graph.getConnections()) {
+                if (c.source.nodeID == node2->nodeID) {
+                    realDstNode = graph.getNodeForId(c.destination.nodeID);
+                    realDstPort = c.destination.channelIndex;
+                    break;
+                }
+            }
+            if (realDstNode == nullptr)
+                continue;
+
+            auto* srcComp = compFor(node1->nodeID);
+            auto* dstComp = compFor(realDstNode->nodeID);
+            if (srcComp == nullptr || dstComp == nullptr)
+                continue;
+
+            VisibleCable cable;
+            cable.kind = VisibleCable::Kind::AttenuverterChain;
+            cable.id = {node1->nodeID.uid, connection.source.channelIndex, realDstNode->nodeID.uid, realDstPort,
+                        node2->nodeID.uid};
+            cable.p1 = portPos(srcComp, connection.source.channelIndex, false);
+            cable.p2 = portPos(dstComp, realDstPort, true);
+            cable.signal = synth::ui::CableSignal::ModCV;
+            cable.sourceCategory = categoryForNode(node1);
+
+            for (auto& info : cachedModDisplayInfo) {
+                if (info.attenuverterNodeID == node2->nodeID) {
+                    cable.activity = info.modSignalPeak;
+                    break;
+                }
+            }
+            if (auto* p = node2->getProcessor()->getParameters()[1])
+                cable.attenAmount = p->getValue() * 2.0f - 1.0f; // 0..1 -> -1..1
+
+            cables.push_back(cable);
+            continue;
+        }
+        if (dynamic_cast<AttenuverterModule*>(node1->getProcessor()) != nullptr)
+            continue; // the chain's outgoing edge — already covered above
+
+        auto* srcComp = compFor(node1->nodeID);
+        auto* dstComp = compFor(node2->nodeID);
+        if (srcComp == nullptr || dstComp == nullptr)
+            continue;
+
+        VisibleCable cable;
+        cable.kind = VisibleCable::Kind::Direct;
+        cable.id = {node1->nodeID.uid, connection.source.channelIndex, node2->nodeID.uid,
+                    connection.destination.channelIndex, 0};
+        cable.p1 = srcIsMidi ? portPos(srcComp, 0, false) : portPos(srcComp, connection.source.channelIndex, false);
+        // MIDI inputs have no jack of their own; the wire lands on the card's top-left corner.
+        cable.p2 = dstIsMidi ? (dstComp->getBounds().getPosition() + juce::Point<int>(10, 30)).toFloat()
+                             : portPos(dstComp, connection.destination.channelIndex, true);
+        cable.signal = (srcIsMidi || dstIsMidi) ? synth::ui::CableSignal::Midi : synth::ui::CableSignal::Audio;
+        cable.sourceCategory = categoryForNode(node1);
+        cables.push_back(cable);
+    }
+
+    // ---- Pass 2: DirectCV / PolyBus mod routings ----
+    for (const auto& routing : cachedModRoutings) {
+        if (routing.kind == AudioEngine::RoutingKind::AttenuverterChain)
+            continue; // rendered by pass 1
+
+        auto* srcComp = compFor(routing.sourceNodeID);
+        auto* dstComp = compFor(routing.destNodeID);
+        if (srcComp == nullptr || dstComp == nullptr)
+            continue;
+
+        VisibleCable cable;
+        cable.kind = VisibleCable::Kind::ModRouting;
+        cable.id = {routing.sourceNodeID.uid, routing.sourceChannelIndex, routing.destNodeID.uid,
+                    routing.destChannelIndex, 0};
+        // getPortCenter clamps out-of-range indices to the last visible jack, so these always
+        // land on a real rendered port.
+        cable.p1 = portPos(srcComp, routing.sourceVisibleJack, false);
+        cable.p2 = portPos(dstComp, routing.destVisibleJack, true);
+
+        if (routing.role == PortRole::Pitch)
+            cable.signal = synth::ui::CableSignal::Pitch;
+        else if (routing.role == PortRole::Gate)
+            cable.signal = synth::ui::CableSignal::Gate;
+        else
+            cable.signal = routing.kind == AudioEngine::RoutingKind::PolyBus ? synth::ui::CableSignal::PolyBus
+                                                                             : synth::ui::CableSignal::ModCV;
+
+        cable.sourceCategory = categoryForNode(graph.getNodeForId(routing.sourceNodeID));
+        cable.isBypassed = routing.isBypassed;
+        cable.activity = routing.modSignalPeak;
+        cable.isPolyBus = routing.kind == AudioEngine::RoutingKind::PolyBus;
+        cable.voiceCount = routing.voiceCount;
+        cables.push_back(cable);
+    }
+
+    return cables;
+}
+
+juce::Colour GraphEditor::colourForCable(const VisibleCable& cable) const {
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    // Headless tests install the stock JUCE LnF; fall back to the token defaults so colour
+    // resolution stays exercised rather than short-circuited.
+    static const synth::theme::Colors fallbackColors{};
+    const auto& colors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
+    return synth::ui::resolveCableColour(cableColourMode, cable.signal, cable.sourceCategory, colors,
+                                         cableColourOverrides, cable.isBypassed);
+}
+
+void GraphEditor::setCableColourMode(synth::ui::CableColourMode mode) {
+    if (cableColourMode == mode)
+        return;
+    cableColourMode = mode;
+    content.repaint();
+}
+
+void GraphEditor::setCableColourOverrides(const synth::ui::CableColourOverrides& overrides) {
+    cableColourOverrides = overrides;
+    content.repaint();
+}
+
+void GraphEditor::disconnectCable(const VisibleCable& cable) {
+    auto& graph = audioEngine.getGraph();
+
+    // An attenuverter chain is a hidden node plus its two edges — removing the routing takes all
+    // of it, which is also what double-clicking the knob does.
+    if (cable.kind == VisibleCable::Kind::AttenuverterChain) {
+        const juce::AudioProcessorGraph::NodeID attenId{cable.id.attenUid};
+        if (undoManager)
+            undoManager->recordStructuralChange(graph, [this, attenId] { audioEngine.removeModRouting(attenId); });
+        else
+            audioEngine.removeModRouting(attenId);
+        content.repaint();
+        return;
+    }
+
+    const juce::AudioProcessorGraph::NodeID srcId{cable.id.srcUid};
+    const juce::AudioProcessorGraph::NodeID dstId{cable.id.dstUid};
+
+    // A poly bus is voiceCount parallel edges; a DirectCV or audio/MIDI cable is a single edge.
+    // Either way the user sees one wire, so one action removes all of it.
+    const int edgeCount = cable.isPolyBus ? juce::jmax(1, cable.voiceCount) : 1;
+    auto removeEdges = [this, &graph, srcId, dstId, cable, edgeCount] {
+        for (int i = 0; i < edgeCount; ++i) {
+            juce::AudioProcessorGraph::Connection c{{srcId, cable.id.srcPort + i}, {dstId, cable.id.dstPort + i}};
+            graph.removeConnection(c);
+        }
+    };
+
+    if (undoManager)
+        undoManager->recordStructuralChange(graph, removeEdges);
+    else
+        removeEdges();
+
+    hoveredCableId.reset();
+    content.repaint();
+}
+
 void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     // Resolve the themed LookAndFeel once. In headless tests the default JUCE LnF is
     // installed, so the cast returns null and we fall back to plain fills/lines.
@@ -177,40 +454,26 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
     }
     // ---- End drag-preview grid dots ----
 
-    // Theme color tokens (fall back to legacy literals when unthemed).
-    const juce::Colour audioWireColour = lf != nullptr ? lf->getTheme().colors.audioWire : juce::Colours::white;
-    const juce::Colour modWireColour = lf != nullptr ? lf->getTheme().colors.modWire : juce::Colours::yellow;
-    const juce::Colour polyBusWireColour = lf != nullptr ? lf->getTheme().colors.polyBusWire : juce::Colour(0xff00e5ff);
-    const juce::Colour pitchWireColour = lf != nullptr ? lf->getTheme().colors.pitchWire : juce::Colour(0xffaad4ff);
-    const juce::Colour gateWireColour = lf != nullptr ? lf->getTheme().colors.gateWire : juce::Colour(0xffffa500);
+    // Theme color tokens (fall back to legacy literals when unthemed). Wire colours are NOT
+    // read here — they come from GraphEditor::colourForCable so that mode + user overrides are
+    // applied in exactly one place.
     const juce::Colour surfaceColour = lf != nullptr ? lf->getTheme().colors.surface : juce::Colours::darkgrey;
     const juce::Colour knobPointerColour = lf != nullptr ? lf->getTheme().colors.knobPointer : juce::Colours::white;
     const juce::Colour textPrimaryColour = lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white;
-    const juce::Colour textMutedColour = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::white;
-
-    // Build the cubic-bezier wire path (identical to AppLookAndFeel::drawConnectionWire's
-    // default curve) so the animated dots can ride the EXACT same curve as the drawn wire instead
-    // of cutting straight across it.
-    auto buildWirePath = [](juce::Point<float> p1, juce::Point<float> p2) {
-        juce::Path wp;
-        const float dx = p2.x - p1.x;
-        wp.startNewSubPath(p1);
-        wp.cubicTo(p1.x + dx * 0.5f, p1.y, p2.x - dx * 0.5f, p2.y, p2.x, p2.y);
-        return wp;
-    };
 
     // Stroke a wire via the LnF helper (themed) or a curved fallback, and RETURN the path so the
-    // caller can place the animated dots along it.
+    // caller can place the animated dots along it. The curve comes from
+    // GraphEditor::buildCablePath — the same one hit-testing measures against.
     auto strokeWire = [&](juce::Point<float> p1, juce::Point<float> p2, juce::Colour colour, bool isModulation,
-                          float activity, float fallbackWidth) -> juce::Path {
-        juce::Path wire = buildWirePath(p1, p2);
+                          float activity, float fallbackWidth, bool hovered) -> juce::Path {
+        juce::Path wire = GraphEditor::buildCablePath(p1, p2);
         if (lf != nullptr) {
-            lf->drawConnectionWire(g, p1, p2, wire, colour, isModulation, activity, /*hovered*/ false);
+            lf->drawConnectionWire(g, p1, p2, wire, colour, isModulation, activity, hovered);
         } else {
             float brightness = juce::jlimit(0.5f, 1.0f, 0.5f + activity * 0.5f);
             g.setColour(colour.withMultipliedBrightness(brightness));
-            g.strokePath(
-                wire, juce::PathStrokeType(fallbackWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+            g.strokePath(wire, juce::PathStrokeType(hovered ? fallbackWidth + 1.0f : fallbackWidth,
+                                                    juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
         return wire;
     };
@@ -226,228 +489,44 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
         }
     };
 
-    // Draw connections
-    auto& graph = editor.audioEngine.getGraph();
-    g.setColour(modWireColour);
+    // ---- Draw cables ----
+    // One list, built by GraphEditor::buildVisibleCables(), drives both what is painted and what
+    // the mouse can hit. Colour comes from GraphEditor::colourForCable so the active mode and any
+    // user overrides are applied in exactly one place.
+    for (const auto& cable : editor.buildVisibleCables()) {
+        const bool hovered = editor.hoveredCableId.has_value() && *editor.hoveredCableId == cable.id;
+        const juce::Colour colour = editor.colourForCable(cable);
+        const bool isModulation = cable.kind != GraphEditor::VisibleCable::Kind::Direct;
 
-    // Build a set of raw edges that Pass-2 (PolyBus / DirectCV wires) will draw,
-    // so Pass-1 does not render them a second time in a conflicting generic style.
-    // AttenuverterChain edges are intentionally excluded — they are handled by the
-    // existing attenuverter branch inside Pass-1.
-    using EdgeKey = std::tuple<uint32_t, int, uint32_t, int>;
-    std::set<EdgeKey> pass2HandledEdges;
-    for (const auto& routing : editor.cachedModRoutings) {
-        if (routing.kind == AudioEngine::RoutingKind::DirectCV) {
-            pass2HandledEdges.emplace(routing.sourceNodeID.uid, routing.sourceChannelIndex, routing.destNodeID.uid,
-                                      routing.destChannelIndex);
-        } else if (routing.kind == AudioEngine::RoutingKind::PolyBus) {
-            for (int i = 0; i < routing.voiceCount; ++i)
-                pass2HandledEdges.emplace(routing.sourceNodeID.uid, routing.sourceChannelIndex + i,
-                                          routing.destNodeID.uid, routing.destChannelIndex + i);
-        }
-    }
+        float fallbackWidth = 2.0f;
+        if (cable.kind == GraphEditor::VisibleCable::Kind::AttenuverterChain)
+            fallbackWidth = 2.0f + cable.activity * 2.0f;
+        else if (cable.kind == GraphEditor::VisibleCable::Kind::ModRouting)
+            fallbackWidth = 2.5f + cable.activity * 2.0f;
 
-    for (auto& connection : graph.getConnections()) {
-        auto* node1 = graph.getNodeForId(connection.source.nodeID);
-        auto* node2 = graph.getNodeForId(connection.destination.nodeID);
+        auto wirePath = strokeWire(cable.p1, cable.p2, colour, isModulation, cable.activity, fallbackWidth, hovered);
+        drawWireDots(wirePath, colour);
 
-        if (!node1 || !node2)
-            continue;
+        // Attenuverter chains carry their amount knob at the wire midpoint.
+        if (cable.kind == GraphEditor::VisibleCable::Kind::AttenuverterChain) {
+            auto mid = (cable.p1 + cable.p2) / 2.0f;
+            juce::Rectangle<float> knobArea(mid.x - 10.0f, mid.y - 10.0f, 20.0f, 20.0f);
+            g.setColour(surfaceColour);
+            g.fillEllipse(knobArea);
+            g.setColour(knobPointerColour);
+            g.drawEllipse(knobArea, 1.0f);
 
-        // Hide poly connections that exceed visible port counts
-        // Skip drawing if source channel exceeds visible output ports
-        if (connection.source.channelIndex != juce::AudioProcessorGraph::midiChannelIndex) {
-            if (auto* srcMb = dynamic_cast<ModuleBase*>(node1->getProcessor())) {
-                if (connection.source.channelIndex >= srcMb->getVisibleOutputPortCount())
-                    continue;
-            }
+            float angle = juce::jmap(cable.attenAmount, -1.0f, 1.0f, -juce::MathConstants<float>::pi * 0.75f,
+                                     juce::MathConstants<float>::pi * 0.75f);
+            float dx = std::sin(angle) * 8.0f;
+            float dy = -std::cos(angle) * 8.0f;
+            g.drawLine(mid.x, mid.y, mid.x + dx, mid.y + dy, 2.0f);
         }
 
-        // Skip drawing if destination channel exceeds visible input ports
-        if (connection.destination.channelIndex != juce::AudioProcessorGraph::midiChannelIndex) {
-            if (auto* dstMb = dynamic_cast<ModuleBase*>(node2->getProcessor())) {
-                if (connection.destination.channelIndex >= dstMb->getVisibleInputPortCount())
-                    continue;
-            }
-        }
-
-        // Skip raw edges that Pass-2 (PolyBus / DirectCV) will draw to avoid
-        // double-rendering in conflicting styles.
-        if (connection.source.channelIndex != juce::AudioProcessorGraph::midiChannelIndex &&
-            connection.destination.channelIndex != juce::AudioProcessorGraph::midiChannelIndex) {
-            EdgeKey ek{connection.source.nodeID.uid, connection.source.channelIndex, connection.destination.nodeID.uid,
-                       connection.destination.channelIndex};
-            if (pass2HandledEdges.count(ek))
-                continue;
-        }
-
-        if (dynamic_cast<AttenuverterModule*>(node2->getProcessor()) != nullptr) {
-            juce::AudioProcessorGraph::Node* realDstNode = nullptr;
-            int realDstPort = 0;
-            for (auto& c : graph.getConnections()) {
-                if (c.source.nodeID == node2->nodeID) {
-                    realDstNode = graph.getNodeForId(c.destination.nodeID);
-                    realDstPort = c.destination.channelIndex;
-                    break;
-                }
-            }
-
-            if (realDstNode) {
-                juce::Point<int> p1, p2;
-                bool found1 = false, found2 = false;
-                for (auto* comp : moduleComponents) {
-                    if (comp->getModule() == node1->getProcessor()) {
-                        auto localP = comp->getPortCenter(connection.source.channelIndex, false);
-                        p1 = comp->getBounds().getPosition() + localP;
-                        found1 = true;
-                    }
-                    if (comp->getModule() == realDstNode->getProcessor()) {
-                        auto localP = comp->getPortCenter(realDstPort, true);
-                        p2 = comp->getBounds().getPosition() + localP;
-                        found2 = true;
-                    }
-                }
-
-                if (found1 && found2) {
-                    // Pulse modulation line based on signal activity
-                    float modPeak = 0.0f;
-                    for (auto& info : editor.cachedModDisplayInfo) {
-                        if (info.attenuverterNodeID == node2->nodeID) {
-                            modPeak = info.modSignalPeak;
-                            break;
-                        }
-                    }
-                    // Attenuverter chain renders as a modulation wire.
-                    auto wirePath = strokeWire(p1.toFloat(), p2.toFloat(), modWireColour, /*isModulation*/ true,
-                                               modPeak, /*fallbackWidth*/ 2.0f + modPeak * 2.0f);
-
-                    float amt = 0.0f;
-                    if (auto* p = node2->getProcessor()->getParameters()[1]) {
-                        amt = p->getValue();
-                        amt = amt * 2.0f - 1.0f; // 0 to 1 back to -1.0 to 1.0
-                    }
-
-                    auto mid = (p1 + p2) / 2;
-                    juce::Rectangle<float> knobArea(mid.toFloat().x - 10, mid.toFloat().y - 10, 20, 20);
-                    g.setColour(surfaceColour);
-                    g.fillEllipse(knobArea);
-                    g.setColour(knobPointerColour);
-                    g.drawEllipse(knobArea, 1.0f);
-
-                    float angle = juce::jmap(amt, -1.0f, 1.0f, -juce::MathConstants<float>::pi * 0.75f,
-                                             juce::MathConstants<float>::pi * 0.75f);
-                    float dx = std::sin(angle) * 8.0f;
-                    float dy = -std::cos(angle) * 8.0f;
-                    g.drawLine(mid.toFloat().x, mid.toFloat().y, mid.toFloat().x + dx, mid.toFloat().y + dy, 2.0f);
-
-                    // Animated dots ride the bezier wire path.
-                    drawWireDots(wirePath, modWireColour);
-                }
-            }
-            continue;
-        } else if (dynamic_cast<AttenuverterModule*>(node1->getProcessor()) != nullptr) {
-            continue;
-        }
-
-        juce::Point<int> p1, p2;
-        bool found1 = false;
-        bool found2 = false;
-
-        for (auto* comp : moduleComponents) {
-            if (comp->getModule() == node1->getProcessor()) {
-                juce::Point<int> localP;
-                if (connection.source.channelIndex == juce::AudioProcessorGraph::midiChannelIndex) {
-                    localP = comp->getPortCenter(0, false);
-                } else {
-                    localP = comp->getPortCenter(connection.source.channelIndex, false);
-                }
-                p1 = comp->getBounds().getPosition() + localP;
-                found1 = true;
-            }
-            if (comp->getModule() == node2->getProcessor()) {
-                juce::Point<int> localP;
-                if (connection.destination.channelIndex == juce::AudioProcessorGraph::midiChannelIndex) {
-                    localP = juce::Point<int>(10, 30);
-                } else {
-                    localP = comp->getPortCenter(connection.destination.channelIndex, true);
-                }
-                p2 = comp->getBounds().getPosition() + localP;
-                found2 = true;
-            }
-        }
-
-        if (found1 && found2) {
-            // Audio signal wire (solid) + dots that follow the curve.
-            auto wirePath = strokeWire(p1.toFloat(), p2.toFloat(), audioWireColour, /*isModulation*/ false,
-                                       /*activity*/ 0.0f, /*fallbackWidth*/ 2.0f);
-            drawWireDots(wirePath, audioWireColour);
-        }
-    }
-
-    // ---- Draw PolyBus / DirectCV modulation wires ----
-    // Build a nodeID -> ModuleComponent* lookup map once for O(1) per routing.
-    std::unordered_map<uint32_t, ModuleComponent*> nodeCompMap;
-    for (auto* comp : moduleComponents) {
-        if (comp == nullptr)
-            continue;
-        // Match against graph nodes by processor pointer.
-        for (auto* node : graph.getNodes()) {
-            if (node->getProcessor() == comp->getModule()) {
-                nodeCompMap[node->nodeID.uid] = comp;
-                break;
-            }
-        }
-    }
-
-    for (const auto& routing : editor.cachedModRoutings) {
-        if (routing.kind == AudioEngine::RoutingKind::AttenuverterChain)
-            continue; // Already rendered by the existing loop above.
-
-        auto srcIt = nodeCompMap.find(routing.sourceNodeID.uid);
-        auto dstIt = nodeCompMap.find(routing.destNodeID.uid);
-        if (srcIt == nodeCompMap.end() || dstIt == nodeCompMap.end())
-            continue;
-
-        auto* srcComp = srcIt->second;
-        auto* dstComp = dstIt->second;
-        if (srcComp == nullptr || dstComp == nullptr)
-            continue;
-
-        // getPortCenter now clamps out-of-range indices to the last visible jack,
-        // so these points always land on a real rendered port.
-        juce::Point<int> p1 =
-            srcComp->getBounds().getPosition() + srcComp->getPortCenter(routing.sourceVisibleJack, /*isInput=*/false);
-        juce::Point<int> p2 =
-            dstComp->getBounds().getPosition() + dstComp->getPortCenter(routing.destVisibleJack, /*isInput=*/true);
-
-        // Brightness / width scaled by signal activity (mirrors attenuverter line ~lines 107-110).
-        float modPeak = routing.modSignalPeak;
-        float lineWidth = 2.5f + modPeak * 2.0f;
-
-        // Color by role from theme tokens: ModCV = poly-bus or direct (modWire), Pitch, Gate.
-        juce::Colour wireColour;
-        if (routing.role == PortRole::Pitch) {
-            wireColour = pitchWireColour; // pitch fan
-        } else if (routing.role == PortRole::Gate) {
-            wireColour = gateWireColour; // gate fan
-        } else {
-            wireColour = (routing.kind == AudioEngine::RoutingKind::PolyBus) ? polyBusWireColour // ModCV poly bus
-                                                                             : modWireColour;    // ModCV direct CV
-        }
-
-        if (routing.isBypassed)
-            wireColour = wireColour.withAlpha(0.3f);
-
-        // Mod-bus wires render as modulation wires (DirectCV/PolyBus/Pitch/Gate are all CV).
-        auto wirePath = strokeWire(p1.toFloat(), p2.toFloat(), wireColour, /*isModulation*/ true, modPeak,
-                                   /*fallbackWidth*/ lineWidth);
-        drawWireDots(wirePath, wireColour);
-
-        // For poly buses, label the midpoint with "x{voiceCount}" so the bundle is visible.
-        // Drawn as textPrimary on a surface pill.
-        if (routing.kind == AudioEngine::RoutingKind::PolyBus && routing.voiceCount > 1) {
-            auto mid = ((p1 + p2) / 2).toFloat();
-            juce::String badge = "x" + juce::String(routing.voiceCount);
+        // Poly buses label the midpoint with "xN" so the bundle size is visible.
+        if (cable.isPolyBus && cable.voiceCount > 1) {
+            auto mid = (cable.p1 + cable.p2) / 2.0f;
+            juce::String badge = "x" + juce::String(cable.voiceCount);
             g.setFont(11.0f);
             int textW = (int)g.getCurrentFont().getStringWidthFloat(badge) + 8;
             juce::Rectangle<float> pill((float)((int)mid.x + 5), mid.y - 8.0f, (float)textW, 16.0f);
@@ -458,7 +537,7 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
             g.drawText(badge, pill, juce::Justification::centred, false);
         }
     }
-    // ---- End PolyBus / DirectCV wires ----
+    // ---- End cables ----
 
     // Draw Line being dragged
     if (editor.isDraggingConnection) {
@@ -482,9 +561,16 @@ void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
             // easier: editor.dragCurrentPos is screen pos.
             auto mouseLocal = getLocalPoint(nullptr, editor.dragCurrentPos);
 
-            // In-progress drag wire uses the audio-wire token via the LnF helper.
-            strokeWire(posInContent.toFloat(), mouseLocal.toFloat(), audioWireColour, /*isModulation*/ false,
-                       /*activity*/ 0.0f, /*fallbackWidth*/ 3.0f);
+            // In-progress drag wire: resolved through the same colour path as a real cable, so
+            // the preview already looks like the cable it is about to become (in By-source mode
+            // that means the dragged-from module's category colour, not a generic white).
+            GraphEditor::VisibleCable preview;
+            preview.signal = editor.dragSourceIsMidi ? synth::ui::CableSignal::Midi : synth::ui::CableSignal::Audio;
+            if (auto* mb = dynamic_cast<ModuleBase*>(editor.dragSourceModule->getModule()))
+                preview.sourceCategory = synth::ui::categoryFor(mb->getModuleType());
+            strokeWire(posInContent.toFloat(), mouseLocal.toFloat(), editor.colourForCable(preview),
+                       /*isModulation*/ false,
+                       /*activity*/ 0.0f, /*fallbackWidth*/ 3.0f, /*hovered*/ false);
         }
     }
 }
@@ -878,10 +964,58 @@ void GraphEditor::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWhe
     updateTransform();
 }
 
+void GraphEditor::mouseMove(const juce::MouseEvent& e) {
+    auto localPos = content.getLocalPoint(this, e.getPosition());
+
+    std::optional<CableId> newId;
+    if (auto cable = getCableAt(localPos.toFloat()))
+        newId = cable->id;
+
+    // Repaint only when the hovered cable actually CHANGES, not on every mouse move. (The canvas
+    // already repaints at 30Hz for the wire animation, so this just marks the next frame dirty
+    // rather than introducing a new repaint source — see the no-continuous-repaint invariant.)
+    const bool changed =
+        newId.has_value() != hoveredCableId.has_value() || (newId.has_value() && *newId != *hoveredCableId);
+    if (!changed)
+        return;
+
+    hoveredCableId = newId;
+    setMouseCursor(newId.has_value() ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+    content.repaint();
+}
+
+void GraphEditor::mouseExit(const juce::MouseEvent&) {
+    if (!hoveredCableId.has_value())
+        return;
+    hoveredCableId.reset();
+    setMouseCursor(juce::MouseCursor::NormalCursor);
+    content.repaint();
+}
+
 void GraphEditor::mouseDown(const juce::MouseEvent& e) {
     // Any press on the canvas takes focus, so the canvas-scoped Delete/Escape keys land here
-    // rather than on whichever panel happened to be focused last.
+    // rather than on whichever panel happened to be focused last. Must come BEFORE the cable
+    // menu below, which returns early — otherwise a right-click on a wire would skip it.
     grabKeyboardFocus();
+
+    // Right-click on a cable: act on the wire itself. Until this existed the only way to remove
+    // a connection was to right-click one of its PORTS, which is not where users aim.
+    if (e.mods.isPopupMenu()) {
+        auto canvasPos = content.getLocalPoint(this, e.getPosition()).toFloat();
+        if (auto cable = getCableAt(canvasPos)) {
+            const auto captured = *cable;
+            juce::Component::SafePointer<GraphEditor> safeThis(this);
+
+            juce::PopupMenu m;
+            m.addSectionHeader(juce::String(synth::ui::cableSignalLabel(captured.signal)) + " cable");
+            m.addItem("Disconnect Cable", [safeThis, captured] {
+                if (safeThis != nullptr)
+                    safeThis->disconnectCable(captured);
+            });
+            m.showMenuAsync(juce::PopupMenu::Options());
+            return;
+        }
+    }
 
     if (e.mods.isLeftButtonDown()) {
         lastMousePos = e.getPosition();

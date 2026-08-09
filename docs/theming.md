@@ -47,6 +47,7 @@ shorthand, each digit doubled, full alpha).
 | `accent` | `#FF00D1FF` | Primary accent — selection glow, value arc, active states |
 | `accent2` | `#FF00D1FF` | Secondary accent (Neon: magenta vs cyan) |
 | `audioWire` | `#FFE8EDF2` | Audio signal connection wires |
+| `midiWire` | `#FFB48EF5` | MIDI note/event wires |
 | `modWire` | `#FF00D1FF` | Modulation CV wires (DirectCV / attenuverter chains) |
 | `pitchWire` | `#FFAAD4FF` | Poly pitch fan wires (port role = Pitch) |
 | `gateWire` | `#FFFFA500` | Poly gate fan wires (port role = Gate) |
@@ -65,6 +66,34 @@ shorthand, each digit doubled, full alpha).
 
 **Required minimum:** `bg0`, `surface`, `accent`, `textPrimary`, `audioWire`, `modWire`.
 All other colour tokens are optional and fall back to the Obsidian defaults listed above.
+
+#### `cableCategory` — cable colours by module category
+
+A nested object under `colors`, used when cable colouring is set to **By source module**
+(see [§11 Cable colours](#11-cable-colours)). Wholly optional, and optional per key — an absent entry
+keeps the Obsidian default, so a theme can recolour just the categories it cares about.
+
+| Key | Obsidian default | Modules |
+|---|---|---|
+| `sources` | `#FFFFB454` | Oscillator, Noise, LFO |
+| `sequencing` | `#FFC792EA` | Sequencer, Poly Sequencer, MidiKeyboard, Poly MIDI, External MIDI |
+| `envelopes` | `#FF7FD962` | ADSR, VCA |
+| `filters` | `#FF4FC1FF` | Filter |
+| `modfx` | `#FFFF7AB2` | Chorus, Phaser, Flanger, Distortion, Bitcrusher |
+| `timefx` | `#FF56D4C0` | Delay, Reverb |
+| `dynamics` | `#FFF07178` | Compressor, Limiter |
+| `utility` | `#FFA0A8B4` | Voice Mixer, Attenuverter |
+
+```json
+"colors": {
+  "cableCategory": { "filters": "#FF4FC1FF", "timefx": "#FF56D4C0" }
+}
+```
+
+These key names are **stable identifiers** — they also appear in the user's settings file as part
+of a cable-colour override key. They are defined once in `kCableCategoryIds` (`Theme.h`) and read
+from there by both `ThemeLoader` and `CableColour.h`, so the two cannot drift. Never rename a
+shipped id; change the display label instead.
 
 ### Metrics (`metrics`) — all optional
 
@@ -308,6 +337,7 @@ Open the file in any text editor. At minimum change `"name"` and (optionally) `"
     "accent": "#FF7B61FF",
     "accent2": "#FF7B61FF",
     "audioWire": "#FFE8EDF2",
+    "midiWire": "#FFB48EF5",
     "modWire": "#FF7B61FF",
     "pitchWire": "#FFAAD4FF",
     "gateWire": "#FFFFA500",
@@ -322,7 +352,17 @@ Open the file in any text editor. At minimum change `"name"` and (optionally) `"
     "knobPointer": "#FFEAEEF3",
     "meterFill": "#FF7B61FF",
     "modRingPositive": "#FF7B61FF",
-    "modRingNegative": "#FFFF6E00"
+    "modRingNegative": "#FFFF6E00",
+    "cableCategory": {
+      "sources": "#FFFFB454",
+      "sequencing": "#FFC792EA",
+      "envelopes": "#FF7FD962",
+      "filters": "#FF4FC1FF",
+      "modfx": "#FFFF7AB2",
+      "timefx": "#FF56D4C0",
+      "dynamics": "#FFF07178",
+      "utility": "#FFA0A8B4"
+    }
   },
   "metrics": {
     "cornerRadius": 10.0, "windowRadius": 14.0, "pillRadius": 8.0,
@@ -518,3 +558,53 @@ it on every resize frame, `MainComponent::resized()` gates the call: `applyToolb
 only called when the toolbar transitions **into** narrow mode (detected by comparing the new
 `isNarrowMode()` result against the previous value). Normal resize events that do not cross the
 480 px threshold skip the Drawable clone work entirely.
+
+---
+
+## 11. Cable colours
+
+Wires on the patch canvas are coloured through a single resolver,
+`synth::ui::resolveCableColour()` in `Source/UI/CableColour.h`. Nothing in the paint path picks a
+wire colour directly — `GraphEditor::colourForCable()` is the only caller, and the Appearance
+settings swatches resolve through the same function, so a swatch can never show a colour the
+canvas does not actually use.
+
+### Modes
+
+| Mode | Persisted id | Behaviour |
+|---|---|---|
+| **By signal type** (default) | `signalType` | Colour encodes what the cable carries: Audio, MIDI, Mod CV, Poly Bus, Pitch, Gate. Preserves signal semantics — you can tell a gate fan from a pitch fan at a glance. |
+| **By source module** | `sourceCategory` | Colour follows the module the cable leaves from, grouped into the eight `cableCategory` buckets above. |
+
+Colouring by source is deliberately **per category, not per module type**: 22 module types would
+mean 22 colour pickers (which nobody configures) and a newly added module would render uncoloured
+until someone updated a table. With categories, a new module inherits its group's colour for free.
+
+The mode is a canvas-wide setting under **Settings → Appearance → Cables**, persisted as
+`cableColour.mode`.
+
+### User overrides
+
+Theme tokens supply the defaults; the settings panel writes a **sparse override layer** on top —
+the same relationship VS Code has between a colour theme and `workbench.colorCustomizations`.
+
+- An **unset** override means "follow the theme", so a theme switch moves any colour the user has
+  not explicitly pinned.
+- Clicking a swatch pins it (`cableColour.signal.<id>` / `cableColour.category.<id>`, stored as
+  `#AARRGGBB`). Pinned swatches are drawn with a brighter ring.
+- Right-clicking a swatch, or **Reset Cable Colours**, *removes* the key rather than writing the
+  theme's current value in — that is what lets it follow the theme again.
+
+Overrides are stored **globally, not per theme**. If someone picks green cables they want green
+cables, not green-until-the-theme-changes; Reset covers the case where a pinned colour clashes
+with a newly selected theme.
+
+`MainComponent::initialiseCommon()` restores the mode and overrides at launch. This matters:
+`AppearanceSettingsTab` is built lazily when the Settings window opens, so leaving the restore to
+the tab would mean the canvas ignored the user's saved colours until they went looking for them.
+
+### Bypassed cables
+
+`resolveCableColour()` applies `kBypassedCableAlpha` (0.3) to a bypassed modulation cable, after
+mode and overrides. `resolveCableBaseColour()` is the same resolution *without* the bypass alpha —
+that is what the settings swatches render, so a pinned colour is shown at full strength.

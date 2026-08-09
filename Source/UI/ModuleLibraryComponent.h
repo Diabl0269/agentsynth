@@ -466,6 +466,21 @@ public:
         return names;
     }
 
+    /** The section header a draggable entry sits under ("Sources", "Time FX", …), or an empty
+     *  string when `moduleName` is not in the library. Tests use this to assert that other
+     *  per-module groupings — cable colour categories, for one — stay in sync with the library's
+     *  own sections instead of drifting behind a hand-kept copy of this list. */
+    juce::String getSectionForModule(const juce::String& moduleName) const {
+        juce::String currentHeader;
+        for (const auto& entry : entries) {
+            if (entry.isHeader)
+                currentHeader = entry.text;
+            else if (entry.text == moduleName)
+                return currentHeader;
+        }
+        return {};
+    }
+
     /** Returns the currently hovered entry index, or -1 when nothing is hovered. */
     int getHoveredIndex() const noexcept { return hoveredIndex; }
 

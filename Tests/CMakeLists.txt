@@ -73,6 +73,7 @@ add_executable(Tests
     AudioRenderingTests.cpp
     LogicalPortTests.cpp
     StateRoundTripTests.cpp
+    CableColourTests.cpp
     AudioEngineModRoutingTests.cpp
     PerformanceTests.cpp
     ThemeTests.cpp
