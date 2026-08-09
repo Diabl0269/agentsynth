@@ -702,12 +702,25 @@ The trace is drawn **warped** — `getDisplayWaveformAt()` runs the same `readWa
 
 Both completion lambdas hold a `Component::SafePointer` and re-derive the module via `dynamic_cast`, since the card can be destroyed while the dialog is open. The card also implements `FileDragAndDropTarget` for audio files, routing drops through the same import path as the Load button.
 
-The card is **double-width** (issue #180): 15 knobs, 8 combos and a 16-jack port stack. Two branches of `layoutDefaultContent` key off `width >= kDoubleWidth`:
+The card is **double-width** (issue #180): 15 knobs, 8 combos and a 16-jack port stack. Laid out flat, that came to 560×869 — technically correct and genuinely unusable, a wall of identical knobs with no hierarchy. Three mechanisms bring it to **560×554** and, more importantly, give it a reading order:
 
-- **Knob grid** doubles to 6 columns, so knobs keep their standard cell width instead of stretching.
-- **Combos** pair up two per row instead of stacking one per row.
+**1. Two-column jack gutter.** `getInputPortColumns()` returns 2 for a card with more than 10 visible input jacks at double width; `getPortCenter()` then lays the inputs out **column-major** (jack 0 top-left, running down then over) at `kPortColumnStride` (100 px) apart. Sixteen jacks in one column set a ~390 px floor on the card height before a single control is placed; two columns halve it.
 
-The display / load / browser chrome sits **beside** the port stack, starting just under the header and inset by the 88 px port-label gutter on each side — the same reclaim the Parametric EQ card makes for its response curve (see §9). The body still starts below the last jack. That reclaim takes ~130 px off a card that would otherwise clear 1000 px tall; the result is **560×869**, pinned by `EstimatedModuleSizesMatchTheRealComponents`.
+Everything that touches jack geometry — wire drawing, hit-testing (`getPortForPoint`), painting — reads `getPortCenter`, so this is the only place that changes. Two consequences worth knowing:
+
+- `getContentTopY()` now takes the **maximum** y over all inputs rather than the last one's. With more than one column an odd jack count leaves the second column a row short, so the last jack is not the lowest.
+- The wavetable chrome's left inset grows by `(columns - 1) * kPortColumnStride` so it still clears the gutter.
+
+**2. Tabbed control body.** The 23 controls are grouped into five pages — **Tune / Unison / Phase / Sub / File** — by `kWavetablePages` in `ModuleComponent.cpp`, which maps parameter *display names* to pages. Three controls sit outside the strip: `Position` and `Warp` / `Warp Amt` are **pinned** above it (they are what you actually perform with), and `Table` is laid out in the chrome band beside the display it selects.
+
+- **Jacks are never tabbed.** All 16 CV inputs stay on the card at all times, so a cable can never point at a hidden port. Only knobs and combos page.
+- The card is sized to the **tallest** page, not the active one. A card that grew and shrank would shove its neighbours around the canvas on every tab click.
+- Page knob rows are **centred**, and page combos run three across — most pages carry fewer than the 6 available knob columns, and left-aligning them stranded half the card's width.
+- `createWavetableTabs()` must run **after** `createControls()` (it groups the controls that call creates) and must end by calling `updateLayout()` — `createControls()` already sized the card, so without a second pass the card keeps its flat-grid height and the tabbed layout never applies.
+
+**3. Chrome beside the ports.** The display / Table / button row / caption sit **beside** the jack stack, starting just under the header — the same reclaim the Parametric EQ card makes for its response curve (see §9). The body still starts below the lowest jack.
+
+The final size is pinned by `EstimatedModuleSizesMatchTheRealComponents`; `WavetableCardSplitsItsJackGutterIntoTwoColumns` and `WavetableTabsSwitchContentWithoutResizingTheCard` guard the two mechanisms above (including that every knob is reachable from some page — a control on no page is unusable).
 
 **Public static helper** (headless-testable):
 

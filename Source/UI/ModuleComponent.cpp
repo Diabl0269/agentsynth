@@ -23,6 +23,9 @@ static constexpr int kTriggerMeterHeight = 18;
 static constexpr int kBottomPadding = 12;
 // A port label box spans its jack centre ± 10; clear it by a bit more before placing any content.
 static constexpr int kPortLabelClearance = 15;
+// Horizontal step between input-jack columns on a multi-column gutter. A jack sits at x, its
+// label runs from x+10 for 60px, so 100 leaves a 30px gap before the next column's jack.
+static constexpr int kPortColumnStride = 100;
 
 static ModuleType getType(juce::AudioProcessor* module) {
     if (auto* mb = dynamic_cast<ModuleBase*>(module))
@@ -112,6 +115,7 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     setTitle(module->getName());
     setBufferedToImage(true);
     createControls();
+    createWavetableTabs(); // after createControls(): it groups the sliders/combos that call made
     applyHeaderButtonIcons();
     startTimerHz(15); // 15 FPS is plenty for activity glow / step indicator; lower CPU than 30
 }
@@ -924,6 +928,214 @@ void ModuleComponent::createWavetableControls() {
     refreshWavetableLabel();
 }
 
+// =============================================================================
+// Wavetable tab strip
+// =============================================================================
+
+namespace {
+// Controls that live outside the strip.
+constexpr int kTabPinned = -1; // always visible, above the strip
+constexpr int kTabChrome = -2; // laid out with the display band instead
+
+// Page titles, and the control names each page owns. Names are the parameter display names
+// (`param->getName(100)`), which is what the slider/combo labels carry.
+struct WavetablePage {
+    const char* title;
+    const char* members; // space-free, '|'-separated display names
+};
+
+const WavetablePage kWavetablePages[] = {
+    {"Tune", "Octave|Coarse|Fine|Level"},
+    {"Unison", "Unison|Detune|Stack|Blend|Width"},
+    {"Phase", "Phase|Rand Phase|Spread"},
+    {"Sub", "Sub|Sub Oct|Sub Wave|Pan|Sync In"},
+    {"File", "Import|Interp"},
+};
+constexpr int kNumWavetablePages = (int)(sizeof(kWavetablePages) / sizeof(kWavetablePages[0]));
+
+/** Page owning `name`, or kTabPinned / kTabChrome for the controls that live outside the strip. */
+int wavetablePageFor(const juce::String& name) {
+    // Position and Warp are what you actually perform with, so they stay above the strip;
+    // Table belongs with the display it selects.
+    if (name == "Position" || name == "Warp" || name == "Warp Amt")
+        return kTabPinned;
+    if (name == "Table")
+        return kTabChrome;
+
+    for (int page = 0; page < kNumWavetablePages; ++page)
+        for (const auto& member : juce::StringArray::fromTokens(kWavetablePages[page].members, "|", ""))
+            if (member == name)
+                return page;
+
+    return 0; // anything unclassified lands on the first page rather than vanishing
+}
+} // namespace
+
+void ModuleComponent::createWavetableTabs() {
+    if (dynamic_cast<WavetableOscillatorModule*>(module) == nullptr)
+        return;
+
+    sliderTabIndex.clearQuick();
+    for (auto* label : sliderLabels)
+        sliderTabIndex.add(wavetablePageFor(label->getText()));
+
+    comboTabIndex.clearQuick();
+    for (auto* label : comboLabels)
+        comboTabIndex.add(wavetablePageFor(label->getText()));
+
+    for (int page = 0; page < kNumWavetablePages; ++page) {
+        auto* tab = wavetableTabs.add(new juce::TextButton(kWavetablePages[page].title));
+        tab->setComponentID("wtTab" + juce::String(page));
+        tab->setClickingTogglesState(true);
+        tab->setRadioGroupId(1000 + (int)nodeId.uid);
+        tab->setToggleState(page == activeWavetableTab, juce::dontSendNotification);
+        tab->setConnectedEdges((page > 0 ? juce::Button::ConnectedOnLeft : 0) |
+                               (page < kNumWavetablePages - 1 ? juce::Button::ConnectedOnRight : 0));
+        tab->onClick = [this, page] {
+            if (activeWavetableTab == page)
+                return;
+            activeWavetableTab = page;
+            applyWavetableTabVisibility();
+            resized();
+            repaint();
+        };
+        addAndMakeVisible(tab);
+    }
+
+    applyWavetableTabVisibility();
+
+    // createControls() ends by sizing the card, and it ran before this — so without a second
+    // pass the card keeps the flat-grid height and the tabbed layout is never applied.
+    updateLayout();
+}
+
+void ModuleComponent::applyWavetableTabVisibility() {
+    if (wavetableTabs.isEmpty())
+        return;
+
+    const auto onActivePage = [this](int tab) { return tab == kTabPinned || tab == activeWavetableTab; };
+
+    for (int i = 0; i < sliders.size(); ++i) {
+        const bool show = i < sliderTabIndex.size() && onActivePage(sliderTabIndex[i]);
+        sliders[i]->setVisible(show);
+        sliderLabels[i]->setVisible(show);
+    }
+    for (int i = 0; i < comboBoxes.size(); ++i) {
+        const bool show =
+            i < comboTabIndex.size() && (comboTabIndex[i] == kTabChrome || onActivePage(comboTabIndex[i]));
+        comboBoxes[i]->setVisible(show);
+        comboLabels[i]->setVisible(show);
+    }
+
+    for (int page = 0; page < wavetableTabs.size(); ++page)
+        wavetableTabs[page]->setToggleState(page == activeWavetableTab, juce::dontSendNotification);
+}
+
+int ModuleComponent::layoutWavetableTabs(int y, int contentX, int contentW, bool apply) {
+    const int knobColumns = kKnobColumns * 2; // double-width card
+    const int knobWidth = contentW / knobColumns;
+    // Three across rather than two: no page has more than three combos, so this keeps every
+    // page's selectors on one row and takes the tallest page (Sub) from 172px to 124px.
+    const int comboColumns = 3;
+    const int comboCellW = contentW / comboColumns;
+
+    // --- Pinned row: the two performance controls, with Warp's mode selector between them ---
+    {
+        const int cellW = contentW / 3;
+        int col = 0;
+        for (int i = 0; i < sliders.size(); ++i) {
+            if (sliderTabIndex[i] != kTabPinned)
+                continue;
+            if (apply) {
+                const int x = contentX + (col == 0 ? 0 : cellW * 2);
+                sliderLabels[i]->setBounds(x, y, cellW, kLabelHeight);
+                sliders[i]->setBounds(x, y + kLabelHeight, cellW, kKnobHeight);
+            }
+            ++col;
+        }
+        for (int i = 0; i < comboBoxes.size(); ++i) {
+            if (comboTabIndex[i] != kTabPinned)
+                continue;
+            if (apply) {
+                // Label on the knobs' label line, combo vertically centred against the knobs, so
+                // the three pinned controls read as one row rather than a stagger.
+                const int x = contentX + cellW;
+                comboLabels[i]->setBounds(x + 6, y, cellW - 12, kLabelHeight);
+                comboBoxes[i]->setBounds(x + 6, y + kLabelHeight + (kKnobHeight - kRowHeight) / 2, cellW - 12,
+                                         kRowHeight);
+            }
+        }
+        y += kLabelHeight + kKnobHeight + 10;
+    }
+
+    // --- Tab strip ---
+    if (apply) {
+        const int tabW = contentW / std::max(1, wavetableTabs.size());
+        for (int page = 0; page < wavetableTabs.size(); ++page)
+            wavetableTabs[page]->setBounds(contentX + page * tabW, y, tabW, kRowHeight);
+    }
+    y += kRowHeight + 8;
+
+    // --- Active page, measured against every page so the card never resizes on a tab switch ---
+    int tallestPage = 0;
+    for (int page = 0; page < kNumWavetablePages; ++page) {
+        int pageCombos = 0, pageKnobs = 0;
+        for (int i = 0; i < comboTabIndex.size(); ++i)
+            if (comboTabIndex[i] == page)
+                ++pageCombos;
+        for (int i = 0; i < sliderTabIndex.size(); ++i)
+            if (sliderTabIndex[i] == page)
+                ++pageKnobs;
+
+        const int comboRows = (pageCombos + comboColumns - 1) / comboColumns;
+        const int knobRows = (pageKnobs + knobColumns - 1) / knobColumns;
+        tallestPage = std::max(tallestPage,
+                               comboRows * (kLabelHeight + kRowHeight + 6) + knobRows * (kLabelHeight + kKnobHeight));
+    }
+
+    if (apply) {
+        int pageY = y;
+        int comboSlot = 0;
+        for (int i = 0; i < comboBoxes.size(); ++i) {
+            if (comboTabIndex[i] != activeWavetableTab)
+                continue;
+            const int row = comboSlot / comboColumns;
+            const int x = contentX + (comboSlot % comboColumns) * comboCellW;
+            const int rowY = pageY + row * (kLabelHeight + kRowHeight + 6);
+            comboLabels[i]->setBounds(x, rowY, comboCellW - 8, kLabelHeight);
+            comboBoxes[i]->setBounds(x, rowY + kLabelHeight, comboCellW - 8, kRowHeight);
+            ++comboSlot;
+        }
+        pageY += ((comboSlot + comboColumns - 1) / comboColumns) * (kLabelHeight + kRowHeight + 6);
+
+        int pageKnobCount = 0;
+        for (int i = 0; i < sliderTabIndex.size(); ++i)
+            if (sliderTabIndex[i] == activeWavetableTab)
+                ++pageKnobCount;
+
+        int knobSlot = 0;
+        for (int i = 0; i < sliders.size(); ++i) {
+            if (sliderTabIndex[i] != activeWavetableTab)
+                continue;
+            const int row = knobSlot / knobColumns;
+            const int col = knobSlot % knobColumns;
+
+            // Centre each row. Most pages carry fewer than knobColumns knobs, and left-aligning
+            // them stranded half the card's width as dead space.
+            const int inThisRow = std::min(knobColumns, pageKnobCount - row * knobColumns);
+            const int rowIndent = (contentW - inThisRow * knobWidth) / 2;
+
+            const int x = contentX + rowIndent + col * knobWidth;
+            const int rowY = pageY + row * (kLabelHeight + kKnobHeight);
+            sliderLabels[i]->setBounds(x, rowY, knobWidth, kLabelHeight);
+            sliders[i]->setBounds(x, rowY + kLabelHeight, knobWidth, kKnobHeight);
+            ++knobSlot;
+        }
+    }
+
+    return y + tallestPage + 6;
+}
+
 bool ModuleComponent::loadWavetableIntoModule(const juce::File& file) {
     auto* wtMod = dynamic_cast<WavetableOscillatorModule*>(module);
     if (wtMod == nullptr || !wtMod->loadWavetableFile(file))
@@ -1160,13 +1372,25 @@ int ModuleComponent::getContentTopY() {
     }
 
     // Ask for the real jack positions instead of recomputing them: a port label box spans
-    // centre ± 10, so clear the lowest jack by a little more than that.
-    if (numIns > 0)
-        y = std::max(y, getPortCenter(numIns - 1, true).y + kPortLabelClearance);
+    // centre ± 10, so clear the lowest jack by a little more than that. The LAST input is not
+    // necessarily the lowest once the gutter has more than one column (an odd jack count leaves
+    // the second column a row short), so take the maximum over all of them.
+    for (int i = 0; i < numIns; ++i)
+        y = std::max(y, getPortCenter(i, true).y + kPortLabelClearance);
     if (numOuts > 0)
         y = std::max(y, getPortCenter(numOuts - 1, false).y + kPortLabelClearance);
 
     return y;
+}
+
+int ModuleComponent::getInputPortColumns() const {
+    // Only the Wavetable card needs this today: 16 CV jacks in one column would set a ~390px
+    // floor on the card height before any control is placed. Keyed off the jack count rather
+    // than the type so a future high-jack module gets the same treatment for free.
+    if (auto* mb = dynamic_cast<ModuleBase*>(module))
+        if (mb->getVisibleInputPortCount() > 10 && getWidth() >= synth::LayoutUtil::kDoubleWidth)
+            return 2;
+    return 1;
 }
 
 int ModuleComponent::layoutDefaultContent(bool apply) {
@@ -1209,8 +1433,10 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
         constexpr int kChromeTopY = 60;
 
         const bool besidePorts = width >= synth::LayoutUtil::kDoubleWidth;
-        const int chromeX = besidePorts ? (contentX + kPortGutterWidth) : contentX;
-        const int chromeW = besidePorts ? std::max(120, contentW - kPortGutterWidth * 2) : contentW;
+        // The input gutter may be two jack columns wide, so the chrome has to clear both.
+        const int inputGutter = kPortGutterWidth + (getInputPortColumns() - 1) * kPortColumnStride;
+        const int chromeX = besidePorts ? (contentX + inputGutter) : contentX;
+        const int chromeW = besidePorts ? std::max(120, contentW - inputGutter - kPortGutterWidth) : contentW;
         const int chromeNarrowW = std::min(chromeW, kNarrowContentWidth);
         const int chromeNarrowX = chromeX + (chromeW - chromeNarrowW) / 2;
 
@@ -1220,37 +1446,59 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
             wavetableDisplay->setBounds(chromeX, chromeY, chromeW, kWaveformHeight);
         chromeY += kWaveformHeight + 8;
 
-        if (apply)
-            loadWavetableButton->setBounds(chromeNarrowX, chromeY, chromeNarrowW, kRowHeight);
-        chromeY += kRowHeight + 6;
+        // The Table selector belongs with the display it drives, not buried on a tab page.
+        for (int i = 0; i < comboBoxes.size(); ++i) {
+            if (i >= comboTabIndex.size() || comboTabIndex[i] != kTabChrome)
+                continue;
+            if (apply) {
+                comboLabels[i]->setBounds(chromeX, chromeY, chromeW, kLabelHeight);
+                comboBoxes[i]->setBounds(chromeX, chromeY + kLabelHeight, chromeW, kRowHeight);
+            }
+            chromeY += kLabelHeight + kRowHeight + 6;
+        }
 
-        // Browser row: [Folder...] [<] [>] [caption]. Laid out across the chrome band because
-        // the caption needs more room than a narrow centred strip would give it.
+        // One button row, not two: [Load...] [Folder...] [<] [>], with the file caption on its
+        // own line under them so a long wavetable name is readable instead of ellipsised.
         if (apply && wavetableFolderButton != nullptr) {
-            constexpr int kStepButtonW = 30;
+            constexpr int kStepButtonW = 28;
             constexpr int kGap = 4;
-            constexpr int kFolderW = 72;
+            const int stepped = (kStepButtonW + kGap) * 2;
+            const int remaining = std::max(80, chromeW - stepped);
+            const int loadW = remaining / 2 - kGap;
+            const int folderW = remaining - loadW - kGap;
+
             int x = chromeX;
-            wavetableFolderButton->setBounds(x, chromeY, kFolderW, kRowHeight);
-            x += kFolderW + kGap;
+            loadWavetableButton->setBounds(x, chromeY, loadW, kRowHeight);
+            x += loadW + kGap;
+            wavetableFolderButton->setBounds(x, chromeY, folderW, kRowHeight);
+            x += folderW + kGap;
             wavetablePrevButton->setBounds(x, chromeY, kStepButtonW, kRowHeight);
             x += kStepButtonW + kGap;
             wavetableNextButton->setBounds(x, chromeY, kStepButtonW, kRowHeight);
-            x += kStepButtonW + kGap;
-            wavetableNameLabel->setBounds(x, chromeY, std::max(20, chromeX + chromeW - x), kRowHeight);
         }
-        chromeY += kRowHeight + 8;
+        chromeY += kRowHeight + 4;
+
+        if (apply)
+            wavetableNameLabel->setBounds(chromeX, chromeY, chromeW, kLabelHeight);
+        chromeY += kLabelHeight + 8;
 
         // Beside the ports the body still cannot start above the last jack; below them the
         // chrome simply pushes it down as before.
         y = besidePorts ? std::max(y, chromeY) : chromeY;
     }
 
-    // Combos stack one per row on a standard card. A double-width card (only the Wavetable
-    // today) pairs them up instead — otherwise its parameter count alone would add ~180px of
-    // dead single-column height to an already tall module.
+    // A tabbed card (the Wavetable) replaces the two flat grids below with a pinned row, a tab
+    // strip and one page of controls. Everything after the grids — toggles, scope — is shared.
+    const bool tabbed = !wavetableTabs.isEmpty();
+    if (tabbed)
+        y = layoutWavetableTabs(y, contentX, contentW, apply);
+
+    // Combos stack one per row on a standard card. A double-width card pairs them up instead —
+    // otherwise a high parameter count alone would add ~180px of dead single-column height.
     const int comboColumns = (width >= synth::LayoutUtil::kDoubleWidth) ? 2 : 1;
-    if (comboColumns == 1) {
+    if (tabbed) {
+        // handled per page above
+    } else if (comboColumns == 1) {
         for (int i = 0; i < comboBoxes.size(); ++i) {
             if (apply) {
                 comboLabels[i]->setBounds(narrowX, y, narrowW, kLabelHeight);
@@ -1292,19 +1540,21 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
     // the knobs keep their standard cell width instead of stretching to twice the size. ---
     const int knobColumns = (width >= synth::LayoutUtil::kDoubleWidth) ? (kKnobColumns * 2) : kKnobColumns;
     const int knobWidth = contentW / knobColumns;
-    for (int i = 0; i < sliders.size(); ++i) {
-        const int row = i / knobColumns;
-        const int col = i % knobColumns;
-        const int x = contentX + col * knobWidth;
-        const int rowY = y + row * (kLabelHeight + kKnobHeight);
+    if (!tabbed) {
+        for (int i = 0; i < sliders.size(); ++i) {
+            const int row = i / knobColumns;
+            const int col = i % knobColumns;
+            const int x = contentX + col * knobWidth;
+            const int rowY = y + row * (kLabelHeight + kKnobHeight);
 
-        if (apply) {
-            sliderLabels[i]->setBounds(x, rowY, knobWidth, kLabelHeight);
-            sliders[i]->setBounds(x, rowY + kLabelHeight, knobWidth, kKnobHeight);
+            if (apply) {
+                sliderLabels[i]->setBounds(x, rowY, knobWidth, kLabelHeight);
+                sliders[i]->setBounds(x, rowY + kLabelHeight, knobWidth, kKnobHeight);
+            }
         }
+        const int knobRows = (sliders.size() + knobColumns - 1) / knobColumns;
+        y += knobRows * (kLabelHeight + kKnobHeight);
     }
-    const int knobRows = (sliders.size() + knobColumns - 1) / knobColumns;
-    y += knobRows * (kLabelHeight + kKnobHeight);
 
     if (freqResponseComponent) {
         if (apply)
@@ -1555,6 +1805,16 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
     int clamped = (visible > 0) ? juce::jlimit(0, visible - 1, index) : 0;
 
     if (isInput) {
+        // Multi-column gutter: a 16-jack stack in one column costs ~390px of card height before
+        // a single control is placed. Splitting it column-major keeps the reading order (jack 0
+        // top-left, running down then over) while halving that.
+        const int columns = getInputPortColumns();
+        if (columns > 1 && visible > 0) {
+            const int rows = (visible + columns - 1) / columns;
+            const int col = clamped / rows;
+            const int row = clamped % rows;
+            return {10 + col * kPortColumnStride, headerHeight + portOffset + row * yStep + 20};
+        }
         return {10, headerHeight + portOffset + clamped * yStep + 20}; // Left side, apply offset
     } else {
         // No additional midiOffset for outputs here, as MIDI out is now fixed.

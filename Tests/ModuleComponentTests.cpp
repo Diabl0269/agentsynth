@@ -649,6 +649,103 @@ TEST_F(ModuleComponentTest, WavetableCardBuildsFolderBrowserChrome) {
     EXPECT_NO_THROW(nextButton->triggerClick());
 }
 
+// The 16 CV jacks are split into two columns so the gutter stops dictating the card height.
+// Every jack must still land on a distinct, in-bounds point, because getPortCenter is what wire
+// drawing, hit-testing and painting all read.
+TEST_F(ModuleComponentTest, WavetableCardSplitsItsJackGutterIntoTwoColumns) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    WavetableOscillatorModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    const int numJacks = processor.getVisibleInputPortCount();
+    ASSERT_EQ(numJacks, WavetableOscillatorModule::kNumJacks);
+
+    std::set<std::pair<int, int>> seen;
+    std::set<int> columns;
+    for (int i = 0; i < numJacks; ++i) {
+        const auto p = moduleComponent.getPortCenter(i, true);
+        EXPECT_TRUE(seen.insert({p.x, p.y}).second) << "jack " << i << " overlaps another jack";
+        EXPECT_TRUE(moduleComponent.getLocalBounds().contains(p)) << "jack " << i << " sits outside the card";
+        columns.insert(p.x);
+    }
+    EXPECT_EQ(columns.size(), 2u) << "expected exactly two jack columns";
+
+    // Column-major: the first half runs down column 0, so jack 0 and the midpoint jack share a row.
+    EXPECT_EQ(moduleComponent.getPortCenter(0, true).y, moduleComponent.getPortCenter(numJacks / 2, true).y);
+    EXPECT_LT(moduleComponent.getPortCenter(0, true).x, moduleComponent.getPortCenter(numJacks / 2, true).x);
+
+    // The body must clear the LOWEST jack, which is no longer the last one.
+    int lowest = 0;
+    for (int i = 0; i < numJacks; ++i)
+        lowest = std::max(lowest, moduleComponent.getPortCenter(i, true).y);
+    for (auto* child : moduleComponent.getChildren())
+        if (child->isVisible() && dynamic_cast<juce::Slider*>(child) != nullptr)
+            EXPECT_GT(child->getY(), lowest) << "a knob overlaps the jack gutter";
+}
+
+// Controls are paged. Switching pages must not resize the card — a card that grew and shrank
+// would shove its neighbours around the canvas on every tab click.
+TEST_F(ModuleComponentTest, WavetableTabsSwitchContentWithoutResizingTheCard) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    WavetableOscillatorModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    std::vector<juce::TextButton*> tabs;
+    for (auto* child : moduleComponent.getChildren())
+        if (auto* b = dynamic_cast<juce::TextButton*>(child))
+            if (b->getComponentID().startsWith("wtTab"))
+                tabs.push_back(b);
+
+    ASSERT_GE(tabs.size(), 4u) << "expected a multi-page tab strip";
+
+    const auto visibleSliderNames = [&] {
+        std::set<juce::String> names;
+        for (auto* child : moduleComponent.getChildren())
+            if (auto* s = dynamic_cast<juce::Slider*>(child))
+                if (s->isVisible())
+                    names.insert(s->getComponentID());
+        return names;
+    };
+
+    const int height = moduleComponent.getHeight();
+    const auto firstPage = visibleSliderNames();
+
+    // Position and Warp Amt are pinned above the strip, so they survive every page switch.
+    EXPECT_TRUE(firstPage.count("Position")) << "Position must stay pinned";
+    EXPECT_TRUE(firstPage.count("Warp Amt")) << "Warp Amt must stay pinned";
+
+    for (size_t i = 1; i < tabs.size(); ++i) {
+        tabs[i]->onClick(); // headless: triggerClick posts async, with no message pump to deliver it
+        EXPECT_EQ(moduleComponent.getHeight(), height) << "the card resized on tab " << i;
+
+        const auto page = visibleSliderNames();
+        EXPECT_TRUE(page.count("Position")) << "Position vanished on tab " << i;
+        EXPECT_TRUE(page.count("Warp Amt")) << "Warp Amt vanished on tab " << i;
+        EXPECT_NE(page, firstPage) << "tab " << i << " shows the same controls as the first page";
+
+        // Whatever is showing must be laid out inside the card.
+        for (auto* child : moduleComponent.getChildren())
+            if (child->isVisible() && dynamic_cast<juce::Slider*>(child) != nullptr)
+                EXPECT_TRUE(moduleComponent.getLocalBounds().contains(child->getBounds()))
+                    << child->getComponentID() << " is outside the card on tab " << i;
+    }
+
+    // Every knob must be reachable from some page — a control on no page is unusable.
+    std::set<juce::String> everSeen;
+    for (size_t i = 0; i < tabs.size(); ++i) {
+        tabs[i]->onClick(); // headless: triggerClick posts async, with no message pump to deliver it
+        for (const auto& n : visibleSliderNames())
+            everSeen.insert(n);
+    }
+    int totalSliders = 0;
+    for (auto* child : moduleComponent.getChildren())
+        if (dynamic_cast<juce::Slider*>(child) != nullptr)
+            ++totalSliders;
+    EXPECT_EQ((int)everSeen.size(), totalSliders) << "some knob is not reachable from any tab";
+}
+
 // A Wavetable card claims audio-file drops itself. Before issue #180 it returned false and the
 // drop fell through to GraphEditor, which spawned an unrelated Sampler next to it.
 TEST_F(ModuleComponentTest, WavetableCardAcceptsAudioFileDrag) {

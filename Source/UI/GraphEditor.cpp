@@ -89,10 +89,10 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Sampler")
         return {280, 657};
     if (typeName == "Wavetable")
-        // Double-width since issue #180: 15 knobs (6 per row), 7 combos (2 per row) and a
-        // 16-jack port stack. The display / load / browser chrome sits beside that stack, so
-        // the body starts at the last jack rather than below the chrome as well.
-        return {synth::LayoutUtil::kDoubleWidth, 869};
+        // Double-width since issue #180. The 16 CV jacks run in two columns and the 23 controls
+        // are paged behind a tab strip (only Position and Warp stay pinned), so neither the
+        // gutter nor the control count sets the height on its own.
+        return {synth::LayoutUtil::kDoubleWidth, 554};
     if (typeName == "Chorus" || typeName == "Phaser" || typeName == "Flanger")
         return {280, 309};
     if (typeName == "Bitcrusher")

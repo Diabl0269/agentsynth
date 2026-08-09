@@ -111,6 +111,17 @@ private:
     std::unique_ptr<juce::Label> wavetableNameLabel;
     std::unique_ptr<juce::FileChooser> wavetableFolderChooser;
 
+    // Wavetable card tab strip. The module carries 23 controls; showing them all at once made a
+    // flat wall with no hierarchy, so they are grouped into pages with the two performance
+    // controls (Position, Warp) pinned above the strip. Jacks are NEVER tabbed — every CV input
+    // stays on the card so a cable can never point at a hidden port.
+    juce::OwnedArray<juce::TextButton> wavetableTabs;
+    int activeWavetableTab = 0;
+    // Parallel to sliders / comboBoxes: which tab owns each control.
+    // kTabPinned = above the strip, kTabChrome = laid out with the display band.
+    juce::Array<int> sliderTabIndex;
+    juce::Array<int> comboTabIndex;
+
     // Sampler-only chrome: waveform overview, "Load Sample…" button and the loaded file name.
     std::unique_ptr<SampleWaveformComponent> sampleWaveform;
     std::unique_ptr<juce::TextButton> loadSampleButton;
@@ -185,6 +196,24 @@ private:
 
     // Repoints the wavetable caption at whatever the module currently holds.
     void refreshWavetableLabel(const juce::String& fallbackMessage = {});
+
+    // --- Wavetable tab strip ---
+    // Page sentinels (kTabPinned / kTabChrome) live in ModuleComponent.cpp beside the page table.
+
+    // Builds the tab buttons and assigns every slider / combo to a page. Must run AFTER
+    // createControls(), which is what populates sliders and comboBoxes.
+    void createWavetableTabs();
+
+    // Shows only the active page's controls. Called on construction and on every tab click.
+    void applyWavetableTabVisibility();
+
+    // Lays out the pinned row, the tab strip and the active page starting at `y`.
+    // Returns the y below them. Every page is measured so the card is sized to the TALLEST,
+    // which stops the card resizing (and shoving its neighbours) as tabs are switched.
+    int layoutWavetableTabs(int y, int contentX, int contentW, bool apply);
+
+    // True for cards whose jack count justifies a two-column input gutter.
+    int getInputPortColumns() const;
 
     // Shared step-column layout helper used by Sequencer and PolySequencer.
     // Positions Gate, Pitch/Root, and F.Env/Chord controls for a single step column.
