@@ -334,6 +334,39 @@ TEST(MinimapComponentTest, HasNonEmptyTooltip) {
     EXPECT_FALSE(comp.getTooltip().isEmpty());
 }
 
+// Hovering the map must advertise the show/hide shortcut, the same way the toolbar buttons do.
+TEST(MinimapComponentTest, ShortcutHintAppearsInTooltip) {
+    MinimapComponent comp;
+    comp.setShortcutHint("Cmd+K");
+
+    const auto tooltip = comp.getTooltip();
+    EXPECT_TRUE(tooltip.contains("Cmd+K")) << tooltip;
+    EXPECT_TRUE(tooltip.contains("Hide Minimap")) << tooltip;
+    // The navigation gestures must survive alongside the shortcut, not be replaced by it.
+    EXPECT_TRUE(tooltip.contains("navigate")) << tooltip;
+}
+
+// A rebind replaces the advertised key rather than appending to it.
+TEST(MinimapComponentTest, ShortcutHintIsReplacedOnRebind) {
+    MinimapComponent comp;
+    comp.setShortcutHint("Cmd+K");
+    comp.setShortcutHint("Cmd+J");
+
+    const auto tooltip = comp.getTooltip();
+    EXPECT_TRUE(tooltip.contains("Cmd+J")) << tooltip;
+    EXPECT_FALSE(tooltip.contains("Cmd+K")) << tooltip;
+}
+
+// An unbound action must degrade to the plain description, with no empty "()" left behind.
+TEST(MinimapComponentTest, EmptyShortcutHintOmitsTheShortcut) {
+    MinimapComponent comp;
+    comp.setShortcutHint("");
+
+    const auto tooltip = comp.getTooltip();
+    EXPECT_FALSE(tooltip.isEmpty());
+    EXPECT_FALSE(tooltip.contains("(")) << tooltip;
+}
+
 // ---------------------------------------------------------------------------
 // Mouse interaction — onNavigate
 // ---------------------------------------------------------------------------

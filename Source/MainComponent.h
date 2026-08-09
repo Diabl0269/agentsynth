@@ -79,6 +79,7 @@ public:
     GraphEditor& getGraphEditor() { return graphEditor; }
     ToolbarComponent& getToolbar() { return toolbar; }
     StatusBarComponent& getStatusBar() { return statusBar; }
+    ShortcutManager& getShortcutManager() { return shortcutManager; }
     void simulateNewPatchClick() {
         if (newButton.onClick)
             newButton.onClick();

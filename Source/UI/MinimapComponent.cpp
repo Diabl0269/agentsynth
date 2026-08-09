@@ -1,12 +1,27 @@
 #include "MinimapComponent.h"
 #include "Theme/AppLookAndFeel.h"
+#include "UIAnimation.h"
 
 namespace synth::ui {
 
 //==============================================================================
 MinimapComponent::MinimapComponent() {
     setInterceptsMouseClicks(true, false);
-    setTooltip("Minimap - click or drag to navigate, scroll to zoom");
+    updateTooltip();
+}
+
+void MinimapComponent::setShortcutHint(const juce::String& shortcutDisplay) {
+    if (shortcutDisplay_ == shortcutDisplay)
+        return;
+    shortcutDisplay_ = shortcutDisplay;
+    updateTooltip();
+}
+
+void MinimapComponent::updateTooltip() {
+    // Leads with the toggle action + its shortcut, matching how the toolbar buttons read
+    // ("Hide Minimap  (Cmd+K)"), then the navigation gestures. The verb is always "Hide" because
+    // the map can only be hovered while it is on screen.
+    setTooltip(formatShortcutHint("Hide Minimap", shortcutDisplay_) + " - click or drag to navigate, scroll to zoom");
 }
 
 void MinimapComponent::setModel(MinimapModel model) {

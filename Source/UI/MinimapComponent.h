@@ -67,6 +67,13 @@ public:
      *  only on an actual change, same as setModel(). */
     void setViewport(juce::Rectangle<float> viewport);
 
+    /** Sets the display string for the show/hide shortcut (e.g. "Cmd+K") and rebuilds the tooltip,
+     *  so hovering the map surfaces the same binding the toolbar button advertises. The owner
+     *  supplies it already resolved: the binding is rebindable and lives in ShortcutManager, which
+     *  this component deliberately doesn't depend on. Pass an empty string for "no binding", and
+     *  the shortcut is simply omitted. */
+    void setShortcutHint(const juce::String& shortcutDisplay);
+
     /** Canvas point the user asked to centre the view on (click or drag on the map). */
     std::function<void(juce::Point<float>)> onNavigate;
 
@@ -110,7 +117,11 @@ private:
      *  onNavigate. */
     void navigateTo(juce::Point<float> localPos);
 
+    /** Rebuilds the tooltip from the fixed description plus the current shortcut display. */
+    void updateTooltip();
+
     MinimapModel model_;
+    juce::String shortcutDisplay_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MinimapComponent)
 };

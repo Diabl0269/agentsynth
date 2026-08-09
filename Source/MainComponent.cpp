@@ -566,7 +566,13 @@ bool MainComponent::perform(const InvocationInfo& info) {
     }
 }
 
-void MainComponent::updateCommandShortcuts() { commandManager.commandStatusChanged(); }
+void MainComponent::updateCommandShortcuts() {
+    commandManager.commandStatusChanged();
+    // Tooltips embed the resolved key ("Save preset  (Cmd+S)"), so a rebind has to re-run them or
+    // every toolbar hint — and the minimap's — keeps advertising the old binding until some
+    // unrelated toggle happens to refresh it.
+    applyToolbarIcons();
+}
 
 // ---- Snippets (issue #156) ----
 
@@ -745,6 +751,10 @@ void MainComponent::applyToolbarIcons() {
 
     const juce::String minimapBase = graphEditor.isMinimapVisible() ? "Hide Minimap" : "Show Minimap";
     toggleMinimapButton.setTooltip(hint(minimapBase, "toggleMinimap"));
+    // The map itself advertises the same binding on hover. MinimapComponent has no ShortcutManager
+    // dependency, so the display string is resolved here and pushed down.
+    graphEditor.getMinimap().setShortcutHint(
+        ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding("toggleMinimap")));
 
     const juce::String aiBase = isAiPanelVisible ? "Hide AI Panel" : "Show AI Panel";
     toggleAiPanelButton.setTooltip(hint(aiBase, "toggleAiPanel"));

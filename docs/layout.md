@@ -1152,6 +1152,15 @@ one private helper, `applyZoomAt(wheelDelta, screenAnchor)` — the canvas ancho
 position, the minimap anchors on the visible area's centre, but the zoom curve and the `[0.1, 2.0]`
 clamp are identical.
 
+Hovering the map shows a tooltip that leads with the show/hide shortcut, the same way the toolbar
+buttons read (`"Hide Minimap  (Cmd+K)  - click or drag to navigate, scroll to zoom"`). The binding
+is rebindable, so `MinimapComponent` does **not** depend on `ShortcutManager`: it exposes
+`setShortcutHint(displayString)` and `MainComponent::applyToolbarIcons()` resolves the current
+binding and pushes it down alongside the toolbar tooltips. Because tooltips embed the resolved
+keypress, `MainComponent::updateCommandShortcuts()` (the `ShortcutManager::onBindingsChanged` hook)
+re-runs `applyToolbarIcons()` — without that, every toolbar hint *and* the minimap's keeps
+advertising the pre-rebind key until some unrelated toggle happens to refresh it.
+
 ### Repaint discipline
 
 Follows §10. `setModel()` and `setViewport()` only `repaint()` when the incoming data actually
