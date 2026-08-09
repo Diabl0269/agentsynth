@@ -366,6 +366,12 @@ CI runs via `.github/workflows/ci.yml` on pull requests to `main` **and on pushe
 
 The push-to-`main` trigger exists **to seed the build caches** — see [Build caching](#build-caching). Removing it silently doubles every PR's build time, so it is load-bearing, not redundant with the artifact workflow.
 
+**Push runs build only.** Linting, test execution and the coverage check are gated to `pull_request`: they already ran on the PR against this same tree, so repeating them on the merge result costs runner minutes without adding signal — the position `build-artifacts.yml` has always taken for the release build. This does not weaken the cache, because `cmake --build build` still compiles the `Tests` target; only *running* the binary is skipped, so every test translation unit still lands in ccache. It trims a push run from ~9.4 to ~6 runner-minutes; the macOS job was the worst offender, an 8-second cached build carrying 118 seconds of tests.
+
+What this gives up: a post-merge run no longer catches two PRs that are each green alone but conflict once both land. The exposure is small — the next PR's CI runs against the merged result, and the release build still fails if the merge does not compile.
+
+> **Do not rename the `Lint`, `Build, Test, and Coverage`, `Build and Test (macOS)` or `Build and Test (Windows)` jobs.** Those four strings are configured as required status checks in `main`'s branch protection; renaming one leaves a required check permanently pending and blocks every merge. Skipping a job on `push` is safe (protection only gates pull requests) — renaming it is not.
+
 A `concurrency` group cancels superseded runs on the same PR (main is never cancelled, since those runs seed the cache).
 
 There are **five jobs**:
