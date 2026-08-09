@@ -45,7 +45,9 @@ Every concrete module implements `virtual ModuleType getModuleType() const = 0`.
 ```
 Oscillator, Filter, VCA, ADSR, LFO, Sequencer, PolySequencer,
 MidiKeyboard, PolyMidi, ExternalMidi, Attenuverter,
-Delay, Distortion, Reverb, Chorus, Phaser, Compressor, Flanger, Limiter, VoiceMixer
+Delay, Distortion, Reverb, Chorus, Phaser, Compressor, Flanger, Limiter,
+ParametricEQ, VoiceMixer, Bitcrusher, PitchShifter, Noise, Math, Sampler, Wavetable,
+MacroControl, SampleHold, EnvelopeFollower
 ```
 
 `ModuleType` is consumed by `LayoutUtil::getModuleWidthBucket` to classify modules into width buckets (Narrow / Single / Double) and by `ModuleComponent` for type-safe UI layout switching.
@@ -79,6 +81,16 @@ Maps raw audio-buffer channel indices to the visible jack slots shown in the UI.
 
 Guards poly-mode CV inputs from being auto-wrapped in an `AttenuverterModule` by the AI/routing layer. Default: returns `true` iff `dstChannel` is in `getModulationTargets()`. Modules override this to exclude poly-voice pitch/gate channels which should not receive an attenuverter.
 
+#### Extra (non-parameter) State
+
+`virtual juce::var getExtraState() const` / `virtual void setExtraState(const juce::var&)`
+
+For state that has to survive a graph rebuild but is not expressible as a `juce::AudioProcessorParameter` — today only `SamplerModule`'s loaded file path. `AIStateMapper::graphToJSON` writes whatever `getExtraState()` returns as the node's `"state"` property, and `applyJSONToGraph` feeds it back through `setExtraState()`. Return a **void** `var` when there is nothing to persist, so modules that do not use the hook add no JSON.
+
+This matters because undo/redo and preset load both go through `graphToJSON` → `applyJSONToGraph`, which rebuilds processors from scratch: anything not in that JSON is silently lost on the next undo.
+
+`setExtraState` is only ever called on the **trusted** path (our own snapshots and presets). A module may legitimately read this as a filename, so honouring it for untrusted model output would turn a patch suggestion into an arbitrary file read.
+
 #### Port Labels
 
 `virtual juce::String getInputPortLabel(int channelIndex) const` / `getOutputPortLabel(int channelIndex)` — overridden per-module to provide descriptive jack names (e.g. "CV In", "Audio L") shown in the UI.
@@ -102,7 +114,12 @@ if (isMuted()) {
 
 **Never** collapse to `if (isBypassed() || isMuted()) buffer.clear()` — that silences on bypass instead of passing the dry signal through.
 
-**Exception:** pure source modules with no audio input (e.g. `OscillatorModule`, `PolyMidiModule`) clear their output on bypass because there is no dry signal to pass through.
+**Exception:** modules with no dry audio path clear their output on bypass, because there is nothing to pass through. Two shapes qualify:
+
+- **Pure sources** — no audio *input* (e.g. `OscillatorModule`, `PolyMidiModule`).
+- **Audio-in / CV-out taps** — no audio *output* (e.g. `EnvelopeFollowerModule`, whose ch0 output is Env CV). Passing the dry signal through would push audio-rate samples into a CV destination, which is worse than emitting no modulation.
+
+Both still use two separate branches, never a fused `if (isBypassed() || isMuted())`, so the intent stays explicit.
 
 #### Output Level Stage
 

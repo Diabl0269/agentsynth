@@ -1,7 +1,10 @@
 #include "../Source/AI/AIIntegrationService.h"
 #include "../Source/AI/AIProvider.h"
+#include "../Source/AI/AccountService.h"
 #include "../Source/AudioEngine.h"
+#include "../Source/Auth/InMemoryTokenStore.h"
 #include "../Source/UI/AIChatComponent.h"
+#include "../Source/UI/AccountRow.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -226,4 +229,85 @@ TEST_F(AIChatComponentTest, RefreshModelsClearsStaleItemsBeforeSecondFetchResolv
 
     provider->resolvePending({"MockModel1", "MockModel2", "MockModel3"}, true);
     EXPECT_EQ(modelPicker->getNumItems(), 3);
+}
+
+// REGRESSION LOCK: the 2-arg constructor used at 6+ call sites in this file (and by
+// SettingsWindowTests.cpp) must keep working exactly as before — no crash, no visible account
+// row — for every caller that never learns setAccountService() exists.
+TEST_F(AIChatComponentTest, NoAccountServiceMeansNoVisibleAccountRow) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<MockChatProvider>());
+
+    juce::ApplicationProperties props;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Test";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(options);
+
+    synth::AIChatComponent chatComponent(service, props);
+    chatComponent.setSize(400, 600);
+
+    EXPECT_NO_THROW(chatComponent.resized());
+
+    synth::AccountRow* accountRow = nullptr;
+    for (auto* child : chatComponent.getChildren()) {
+        if (auto* row = dynamic_cast<synth::AccountRow*>(child)) {
+            accountRow = row;
+            break;
+        }
+    }
+    ASSERT_NE(accountRow, nullptr);
+    EXPECT_FALSE(accountRow->isVisible());
+    EXPECT_EQ(accountRow->getPreferredHeight(), 0);
+}
+
+// Confirms the wiring connects: setAccountService() makes the row visible and reflects a real
+// AccountService's snapshot. The full device-flow UI interaction is out of scope here — that's
+// implicitly covered by AccountServiceTests.cpp (phase 1).
+TEST_F(AIChatComponentTest, SetAccountServiceMakesAccountRowVisibleAndReflectsSnapshot) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<MockChatProvider>());
+
+    juce::ApplicationProperties props;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Test";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(options);
+
+    // Declared BEFORE chatComponent so it outlives it: locals are destroyed in reverse
+    // declaration order, and chatComponent's destructor clears callback slots on whatever
+    // AccountService it was attached to (see ~AIChatComponent()'s comment) — the same ordering
+    // constraint MainComponent.h documents for its accountService/aiChatComponent members.
+    auto neverResolvingPerformer = [](const juce::String&, const juce::String&, const juce::StringPairArray&,
+                                      const juce::String&, int,
+                                      const std::atomic<bool>&) -> synth::AuthClient::HttpResult {
+        synth::AuthClient::HttpResult result;
+        result.transportFailed = true;
+        result.errorMessage = "not used by this test";
+        return result;
+    };
+    synth::AccountService accountService("http://mock-host:8787", neverResolvingPerformer,
+                                         std::make_unique<synth::InMemoryTokenStore>());
+
+    synth::AIChatComponent chatComponent(service, props);
+    chatComponent.setSize(400, 600);
+
+    chatComponent.setAccountService(&accountService);
+    chatComponent.resized();
+
+    synth::AccountRow* accountRow = nullptr;
+    for (auto* child : chatComponent.getChildren()) {
+        if (auto* row = dynamic_cast<synth::AccountRow*>(child)) {
+            accountRow = row;
+            break;
+        }
+    }
+    ASSERT_NE(accountRow, nullptr);
+    EXPECT_TRUE(accountRow->isVisible());
+    EXPECT_GT(accountRow->getPreferredHeight(), 0);
+    EXPECT_EQ(accountService.getSnapshot().state, synth::AccountState::SignedOut);
 }

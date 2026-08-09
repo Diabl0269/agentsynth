@@ -2,6 +2,7 @@
 
 #include "../Modules/FilterModule.h"
 #include "../Modules/VisualBuffer.h"
+#include "FrequencyGrid.h"
 #include "Theme/AppLookAndFeel.h"
 #include "Theme/Theme.h"
 #include <cmath>
@@ -29,50 +30,36 @@ public:
     bool getShowSpectrum() const { return showSpectrum; }
 
     // ---------- pure static helpers (unit-testable without constructing the GUI) ----------
+    // The axis maths lives in synth::ui::FrequencyGrid so this view and EQCurveComponent
+    // (Parametric EQ) plot on identical axes. These stay as the component's public API.
 
     // Returns the index of the maximum value in mags[0..numBins-1].
     // Returns -1 if numBins <= 0 or mags is nullptr.
     static int findPeakBin(const float* mags, int numBins) noexcept {
-        if (mags == nullptr || numBins <= 0)
-            return -1;
-        int peak = 0;
-        for (int i = 1; i < numBins; ++i)
-            if (mags[i] > mags[peak])
-                peak = i;
-        return peak;
+        return synth::ui::FrequencyGrid::findPeakBin(mags, numBins);
     }
 
     // Human-readable frequency label.
     // 100 -> "100Hz", 1000 -> "1kHz", 10000 -> "10kHz".
     // General rule: values >= 1000 are shown as "<N>kHz" (1 decimal if not integer);
     // values < 1000 are shown as "<N>Hz" (integer, no decimal).
-    static juce::String formatHzLabel(float hz) {
-        if (hz >= 1000.0f) {
-            float kHz = hz / 1000.0f;
-            // Suppress the decimal when it's a whole number
-            if (std::fmod(kHz, 1.0f) < 0.05f)
-                return juce::String((int)std::round(kHz)) + "kHz";
-            return juce::String(kHz, 1) + "kHz";
-        }
-        return juce::String((int)std::round(hz)) + "Hz";
-    }
+    static juce::String formatHzLabel(float hz) { return synth::ui::FrequencyGrid::formatHzLabel(hz); }
 
     // Frequency (Hz) → x pixel in a log-scaled view of width `width`.
     // Mirrors freqToX() for use in unit tests (same constants: minFreq=20, maxFreq=20000).
     static float freqToXStatic(float freq, float width) noexcept {
-        float t = std::log(freq / minFreq) / std::log(maxFreq / minFreq);
-        return t * width;
+        return synth::ui::FrequencyGrid::freqToX(freq, width);
     }
 
     // dB → y pixel in a view of height `height`.
     // Mirrors dbToY() for use in unit tests (same constants: minDb=-40, maxDb=50).
     static float dbToYStatic(float db, float height) noexcept {
-        float normalized = (db - maxDb) / (minDb - maxDb);
-        return normalized * height;
+        return synth::ui::FrequencyGrid::dbToY(db, height, minDb, maxDb);
     }
 
-    static constexpr float minFreq = 20.0f;
-    static constexpr float maxFreq = 20000.0f;
+    static constexpr float minFreq = synth::ui::FrequencyGrid::kMinFreq;
+    static constexpr float maxFreq = synth::ui::FrequencyGrid::kMaxFreq;
+    // Asymmetric on purpose: a resonant ladder peak overshoots far above unity gain.
     static constexpr float minDb = -40.0f;
     static constexpr float maxDb = 50.0f;
 
@@ -327,20 +314,12 @@ private:
     std::vector<float> fftData;
     std::vector<float> spectrumMagnitudes;
 
-    float indexToFreq(int i) const {
-        float t = static_cast<float>(i) / static_cast<float>(numPoints - 1);
-        return minFreq * std::pow(maxFreq / minFreq, t);
-    }
+    float indexToFreq(int i) const { return synth::ui::FrequencyGrid::indexToFreq(i, numPoints); }
 
-    float freqToX(float freq, float width) const {
-        float t = std::log(freq / minFreq) / std::log(maxFreq / minFreq);
-        return t * width;
-    }
+    float freqToX(float freq, float width) const { return synth::ui::FrequencyGrid::freqToX(freq, width); }
 
-    float dbToY(float db, float height) const {
-        float normalized = (db - maxDb) / (minDb - maxDb); // 0 at top (maxDb), 1 at bottom (minDb)
-        return normalized * height;
-    }
+    // 0 at top (maxDb), height at bottom (minDb)
+    float dbToY(float db, float height) const { return synth::ui::FrequencyGrid::dbToY(db, height, minDb, maxDb); }
 
     void recomputeMagnitudes() {
         float cutoff = lastCutoff;

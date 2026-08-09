@@ -54,6 +54,8 @@ add_library(Core STATIC
     Source/Branding.h
     Source/PresetManager.cpp
     Source/PresetManager.h
+    Source/SnippetManager.cpp
+    Source/SnippetManager.h
     Source/SettingsMigration.cpp
     Source/SettingsMigration.h
     # Modules
@@ -64,10 +66,16 @@ add_library(Core STATIC
     Source/Modules/VCAModule.h
     Source/Modules/VoiceMixerModule.h
     Source/Modules/NoiseModule.h
+    Source/Modules/MathModule.h
+    Source/Modules/SamplerModule.h
+    Source/Modules/WavetableOscillatorModule.h
     Source/Modules/SequencerModule.h
     Source/Modules/MidiKeyboardModule.h
     Source/Modules/LFOModule.h
+    Source/Modules/SampleHoldModule.h
     Source/Modules/AttenuverterModule.h
+    Source/Modules/EnvelopeFollowerModule.h
+    Source/Modules/MacroControlModule.h
     Source/Modules/VisualBuffer.h
     Source/Modules/FX/DelayModule.h
     Source/Modules/FX/DistortionModule.h
@@ -77,6 +85,10 @@ add_library(Core STATIC
     Source/Modules/FX/CompressorModule.h
     Source/Modules/FX/FlangerModule.h
     Source/Modules/FX/LimiterModule.h
+    Source/Modules/FX/BitcrusherModule.h
+    Source/Modules/FX/PitchShifterModule.h
+    Source/Modules/FX/ParametricEQModule.h
+    Source/Modules/NoiseModule.h
     # AI
     Source/AI/AIProvider.h
     Source/AI/OllamaProvider.h
@@ -91,9 +103,19 @@ add_library(Core STATIC
     Source/AI/AIProviderRegistry.cpp
     Source/AI/PatchEval.h
     Source/AI/PatchEval.cpp
+    Source/AI/AuthClient.h
+    Source/AI/AuthClient.cpp
+    Source/AI/AccountService.h
+    Source/AI/AccountService.cpp
+    # Auth (device-code sign-in: token storage, no UI)
+    Source/Auth/TokenStore.h
+    Source/Auth/InMemoryTokenStore.h
+    Source/Auth/KeychainTokenStore.h
+    Source/Auth/KeychainTokenStore.cpp
     # UI utilities
     Source/UI/LayoutUtil.h
     Source/UI/LayoutUtil.cpp
+    Source/UI/SelectionModel.h
     Source/UI/StatusBarComponent.h
     Source/UI/StatusBarComponent.cpp
     Source/UI/ToolbarComponent.h
@@ -148,6 +170,12 @@ endif()
 if(NOT WIN32)
     find_package(CURL REQUIRED)
     target_link_libraries(Core PUBLIC CURL::libcurl)
+endif()
+
+# KeychainTokenStore (Source/Auth/KeychainTokenStore.cpp) needs Security.framework's SecItem* C
+# API on macOS; every other platform delegates to an in-memory fallback and needs nothing linked.
+if(APPLE)
+    target_link_libraries(Core PUBLIC "-framework Security")
 endif()
 
 target_include_directories(Core PUBLIC
@@ -249,11 +277,21 @@ target_sources(AgentSynth PRIVATE
     Source/MainComponent.h
     # UI (UI depends on Core, but technically could be in App for now)
     Source/UI/AIChatComponent.cpp
+    Source/UI/AccountRow.cpp
+    Source/UI/AccountRow.h
+    Source/UI/SignInDialog.cpp
+    Source/UI/SignInDialog.h
     Source/UI/GraphEditor.cpp
     Source/UI/GraphEditor.h
     Source/UI/ModuleComponent.cpp
     Source/UI/ModuleComponent.h
     Source/UI/FrequencyResponseComponent.h
+    Source/UI/FrequencyGrid.h
+    Source/UI/EQCurveComponent.h
+    Source/UI/EQWindow.h
+    Source/UI/SampleWaveformComponent.h
+    Source/UI/WavetableDisplayComponent.h
+    Source/UI/TriggerMeterComponent.h
     Source/UI/ModMatrixComponent.cpp
     Source/UI/ModMatrixComponent.h
     Source/UI/SettingsWindow.cpp

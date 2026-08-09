@@ -43,8 +43,17 @@ enum class ModuleType {
     Compressor,
     Flanger,
     Limiter,
+    ParametricEQ,
     VoiceMixer,
-    Noise
+    Bitcrusher,
+    PitchShifter,
+    Noise,
+    Math,
+    Sampler,
+    Wavetable,
+    MacroControl,
+    SampleHold,
+    EnvelopeFollower
 };
 
 class ModuleBase : public juce::AudioProcessor {
@@ -181,6 +190,17 @@ public:
                 return true;
         return false;
     }
+
+    // Non-parameter state that must survive a graph rebuild (undo/redo, preset save/load), e.g. the
+    // Sampler's loaded file path. AIStateMapper::graphToJSON writes whatever this returns as the
+    // node's "state" property and applyJSONToGraph feeds it back through setExtraState().
+    //
+    // Restored ONLY on the trusted path (our own snapshots and presets). Untrusted model output must
+    // never reach setExtraState — a module is free to interpret this as a filename, and letting a
+    // remote model pick that filename would turn a patch suggestion into an arbitrary file read.
+    // Return a void var when there is nothing to persist, so untouched modules add no JSON noise.
+    virtual juce::var getExtraState() const { return {}; }
+    virtual void setExtraState(const juce::var& state) { juce::ignoreUnused(state); }
 
     VisualBuffer* getVisualBuffer() { return visualBuffer.get(); }
     void enableVisualBuffer(bool enable) {

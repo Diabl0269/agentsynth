@@ -136,10 +136,24 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
     MainComponent mainComp(std::make_unique<MockProvider>());
     auto& cm = mainComp.getCommandManager();
     juce::ignoreUnused(cm);
-    // Verify all 10 commands are registered (5 original + New Patch + 2 toggles + Auto Arrange + Toggle Library)
+    // Verify all 12 commands are registered (5 original + New Patch + 2 toggles + Auto Arrange +
+    // Toggle Library + Select All Modules + Save Snippet).
     juce::Array<juce::CommandID> commands;
     mainComp.getAllCommands(commands);
-    EXPECT_EQ(commands.size(), 10);
+    EXPECT_EQ(commands.size(), 12);
+
+    // Spot-check by identity, not just by count, so a rename can't silently keep the total right.
+    EXPECT_TRUE(commands.contains(AppCommands::undo));
+    EXPECT_TRUE(commands.contains(AppCommands::selectAllModules));
+    EXPECT_TRUE(commands.contains(AppCommands::saveSnippet));
+
+    // Every registered command must resolve real info (name + category), or the native menu bar
+    // renders a blank row.
+    for (auto id : commands) {
+        juce::ApplicationCommandInfo info(id);
+        mainComp.getCommandInfo(id, info);
+        EXPECT_FALSE(info.shortName.isEmpty()) << "command " << (int)id << " has no name";
+    }
 }
 
 TEST_F(MainComponentTest, RedoShortcutViaKeyPressed) {

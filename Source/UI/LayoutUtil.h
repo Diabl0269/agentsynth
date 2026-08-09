@@ -23,6 +23,22 @@ inline constexpr int kSingleWidth = 280; // standard module
 inline constexpr int kDoubleWidth = 560; // Sequencer / PolySequencer / MidiKeyboard (= 2 × kSingleWidth)
 // Note: kColumnStride = kSingleWidth + kLayerGapX = 280 + 80 = 360 (no duplicate constant needed)
 
+// ---- Macro Control bank geometry ----
+// The Macro bank is the one module whose footprint changes at runtime (its "Knobs" parameter
+// picks how many macros are exposed). Its geometry lives here, not in ModuleComponent, so the
+// three places that must agree on it — the component layout, the output-jack hit test, and the
+// drag-preview size estimate — all read the same numbers, and so the growth maths stays
+// headless-testable.
+inline constexpr int kMacroHeaderH = 94;   // title bar + the Knobs / Bipolar row
+inline constexpr int kMacroRowH = 44;      // one macro knob and its output jack
+inline constexpr int kMacroBottomPad = 12; // padding below the last row
+
+// Total component height for a bank showing `count` macros.
+inline constexpr int macroBankHeight(int count) { return kMacroHeaderH + count * kMacroRowH + kMacroBottomPad; }
+
+// Vertical centre of macro row `index` — where both the knob and its output jack sit.
+inline constexpr int macroRowCentreY(int index) { return kMacroHeaderH + index * kMacroRowH + kMacroRowH / 2; }
+
 enum class ModuleWidthBucket { Narrow, Single, Double };
 
 // Maps a ModuleType to its width bucket.
@@ -57,6 +73,21 @@ struct ArrangeResult {
     NodeID id;
     juce::Point<int> pos;
 };
+
+// A module has just changed footprint in place (only the Macro bank does this today, when its
+// "Knobs" count changes). `boxes` is every module box INCLUDING the resized one, already carrying
+// its new rect. Returns the new top-left for each OTHER box that had to move to stay clear —
+// boxes that do not move are not returned, so an empty result means the growth fitted as-is.
+//
+// The resized module never moves: it is the one the user is interacting with, and teleporting it
+// out from under the cursor is worse than nudging its neighbours. Displaced boxes are pushed
+// straight down past whatever they collided with and then run through findFreeSlot, so the result
+// is on-grid and gap-respecting. Deterministic: boxes are processed top-to-bottom, then
+// left-to-right, then by id, and the cascade is capped at kResolveMaxRounds passes.
+inline constexpr int kResolveMaxRounds = 4;
+
+std::vector<ArrangeResult> resolveOverlapsAfterResize(NodeID resizedId, const std::vector<Box>& boxes,
+                                                      int gap = kCollisionGap);
 
 // Topological signal-flow layout. sizeOf returns (w,h) footprint for a node id. extraEdges carries
 // modulation routing edges (src->dst) so envelope->VCA etc. influence layering depth.

@@ -39,22 +39,24 @@ juce::String PresetManager::getPresetJSON(int index) {
     //
     // REAL module sizes (verified empirically via E2EWorkflowTest.AllPresetsLoadWithoutOverlapAsAuthored):
     //   Audio Input / Audio Output: 280 x 100
-    //   Oscillator:  280 x 530   ← tall
-    //   Filter:      280 x 570   ← tallest
-    //   VCA:         280 x 200
-    //   LFO:         280 x 440
+    //   Oscillator:  280 x 449   ← tall
+    //   Filter:      280 x 487   ← tallest
+    //   VCA:         280 x 245
+    //   LFO:         280 x 353
+    //   Sampler:     280 x 657   ← tallest overall
+    // (Heights shrank when ModuleComponent moved to a 3-knob grid; the authored positions below were
+    //  computed against the older, taller cards, so they stay overlap-free — verified by
+    //  E2EWorkflowTest.AllPresetsLoadWithoutOverlapAsAuthored, which measures the real components.)
     //   Amp Env / Filter Env / ADSR: 280 x 180
     //   Attenuverter:  40 x 40   (not a ModuleComponent; excluded from overlap check)
     //   Sequencer:   560 x 380   ← DOUBLE-wide (kDoubleWidth = 2 × kSingleWidth = 560)
     //   MIDI Keyboard: 560 x 150 ← DOUBLE-wide
-    //   Poly MIDI:   280 x 100
-    //   Distortion:  280 x 430   ← grew from 350 when the Level knob was added (issue #122):
-    //                              3 sliders instead of 2 crosses a knob-row boundary
-    //                              (rows = (n+1)/2, 80 px per row). Every other module that
-    //                              gained a Level knob had an odd slider count, so the new
-    //                              knob filled an existing half-empty row — no height change.
-    //   Delay:       280 x 220
-    //   Reverb:      280 x 300
+    //   Poly MIDI:   280 x 123
+    //   Distortion:  280 x 355
+    //   Delay:       280 x 193
+    //   Reverb:      280 x 269
+    // (The Level knob added in issue #122 costs no height on these: with kKnobColumns = 3 the extra
+    //  knob fills an existing partial row on every module that adopted it.)
     //
     // DOUBLE-width modules (w=560): Sequencer, PolySequencer, MidiKeyboard
     //   Sequencer at x=10: right edge = 570
@@ -81,9 +83,8 @@ juce::String PresetManager::getPresetJSON(int index) {
     //   Keyboard row:    y = 960  — gap from Seq bottom (940+6=946) → 960-6=954 > 946 ✓
     //
     // FX chain stacking (col 4, x = 1250), starting y = 10:
-    //   Distortion (h=430): y=10,  bottom=440
-    //   Delay      (h=220): y=456, bottom=676  (≥ 440+12=452, rounded up to the 8 px grid)
-    //   Reverb     (h=300): y=696, bottom=996  (≥ 676+12=688 ✓)
+    //   Distortion (h=350): y=10, bottom=360; Delay (h=220): y=380, bottom=600;
+    //   Reverb (h=300):     y=620, bottom=920
     //
     // All pairs verified pairwise with kCollisionGap = 12; zero overlaps per preset.
 
@@ -100,7 +101,7 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"id": 7, "type": "Filter Env", "position": {"x": 880, "y": 600}, "params": {"attack": 0.1, "decay": 0.1, "sustain": 0.8, "release": 0.5}},
     {"id": 8, "type": "Sequencer", "position": {"x": 10, "y": 560}, "params": {"run": false, "bpm": 120.0}},
     {"id": 10, "type": "Distortion", "position": {"x": 1250, "y": 10}, "params": {"drive": 0.5, "mix": 0.5}},
-    {"id": 11, "type": "Delay", "position": {"x": 1250, "y": 456}, "params": {"time": 0.3, "feedback": 0.4, "mix": 0.3}},
+    {"id": 11, "type": "Delay", "position": {"x": 1250, "y": 380}, "params": {"time": 0.3, "feedback": 0.4, "mix": 0.3}},
     {"id": 12, "type": "Reverb", "position": {"x": 1250, "y": 696}, "params": {"roomSize": 0.5, "damping": 0.5, "wet": 0.33, "dry": 0.4, "width": 1.0}},
     {"id": 13, "type": "Attenuverter", "position": {"x": 950, "y": 340}, "params": {"amount": 1.0}},
     {"id": 14, "type": "Attenuverter", "position": {"x": 650, "y": 340}, "params": {"amount": 1.0}},
