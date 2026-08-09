@@ -19,7 +19,7 @@
 class ToolbarComponent : public juce::Component {
 public:
     // Logical slot order — matches the left group [Library..AutoArrange] + right group
-    // [ToggleModMatrix, ToggleAiPanel]. NumSlots is the array size.
+    // [ToggleMinimap, ToggleModMatrix, ToggleAiPanel, ToggleTheme]. NumSlots is the array size.
     enum Slot {
         Library = 0,
         New,
@@ -29,6 +29,9 @@ public:
         Undo,
         Redo,
         AutoArrange,
+        // ToggleMinimap sits before ToggleModMatrix so the right-hand group reads
+        // minimap -> mod matrix -> AI panel -> theme (issue #159).
+        ToggleMinimap,
         ToggleModMatrix,
         ToggleAiPanel,
         ToggleTheme,

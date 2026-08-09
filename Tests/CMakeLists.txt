@@ -94,6 +94,7 @@ add_executable(Tests
     SnippetManagerTests.cpp
     MultiSelectTests.cpp
     PanelAnimationAndLoadingTests.cpp
+    MinimapComponentTests.cpp
     ../Source/MainComponent.cpp
     ../Source/UI/GraphEditor.cpp
     ../Source/UI/ModMatrixComponent.cpp
