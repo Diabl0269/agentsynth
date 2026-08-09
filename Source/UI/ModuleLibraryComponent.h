@@ -2,14 +2,18 @@
 
 #include "../SnippetManager.h"
 #include "Theme/AppLookAndFeel.h"
+#include "UIAnimation.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
+#include <optional>
 #include <set>
 #include <vector>
 
 class ModuleLibraryComponent
     : public juce::Component
     , public juce::DragAndDropContainer
-    , public juce::SettableTooltipClient {
+    , public juce::SettableTooltipClient
+    , private juce::ScrollBar::Listener {
 public:
     /** What a row in the sidebar is, which decides how it paints and what a click does. */
     enum class RowKind {
@@ -41,7 +45,21 @@ public:
         // regenerated whenever the snippet list changes. The module catalogue itself lives in
         // rebuildEntries() — add new modules there.
         rebuildEntries();
+        snapSectionProgressToTargets();
         setMouseCursor(juce::MouseCursor::NormalCursor);
+
+        // addChildComponent, not addAndMakeVisible: updateScrollBar() owns the visibility, so the bar
+        // only appears once the rows actually outgrow the panel.
+        addChildComponent(verticalScrollBar);
+        verticalScrollBar.setAutoHide(false);
+        verticalScrollBar.addListener(this);
+    }
+
+    ~ModuleLibraryComponent() override {
+        // The animator's callbacks capture `this`, so it must not outlive us.
+        if (vblankUpdater.has_value())
+            collapseAnim.stop(*vblankUpdater);
+        verticalScrollBar.removeListener(this);
     }
 
     // -------------------------------------------------------------------------
@@ -55,6 +73,7 @@ public:
         snippets.addArray(newSnippets);
         rebuildEntries();
         clampHoverToVisibleRow();
+        updateScrollBar();
         repaint();
     }
 
@@ -76,7 +95,7 @@ public:
             collapsed ? collapsedSections.insert(header).second : (collapsedSections.erase(header) > 0);
         if (!changed)
             return;
-        clampHoverToVisibleRow();
+        startCollapseAnimation();
         if (onCollapseStateChanged)
             onCollapseStateChanged();
         repaint();
@@ -105,7 +124,7 @@ public:
         if (next == collapsedSections)
             return;
         collapsedSections = std::move(next);
-        clampHoverToVisibleRow();
+        startCollapseAnimation();
         if (onCollapseStateChanged)
             onCollapseStateChanged();
         repaint();
@@ -129,13 +148,53 @@ public:
             if (header.isNotEmpty())
                 collapsedSections.insert(header);
         }
+        // Restore path — snap, never animate: the user did not fold anything, and animating on
+        // launch would look like the sidebar collapsing by itself.
+        snapSectionProgressToTargets();
         clampHoverToVisibleRow();
+        updateScrollBar();
         repaint();
     }
 
     /** Fired whenever the collapse state changes through user interaction, so the owner can
      *  persist it. */
     std::function<void()> onCollapseStateChanged;
+
+    // -------------------------------------------------------------------------
+    // Collapse animation
+    // -------------------------------------------------------------------------
+
+    static constexpr double kCollapseAnimMs = 150.0;
+
+    /** How far a section is folded: 0 = fully open, 1 = fully closed. Between those while the
+     *  accordion is animating. The *logical* state stays in `collapsedSections` and flips
+     *  instantly, so `isSectionCollapsed()`, persistence and `areAllSectionsCollapsed()` never
+     *  lag behind the visuals. */
+    float getSectionProgress(const juce::String& header) const {
+        const auto it = sectionProgress.find(header);
+        return it != sectionProgress.end() ? it->second : targetProgressFor(header);
+    }
+
+    /** Sets the visual fold amount directly, without touching the logical collapse state.
+     *  Normally the animation owns this; it is exposed so the accordion geometry can be exercised
+     *  at intermediate values, which a VBlank-driven clock cannot produce headlessly. */
+    void setSectionProgress(const juce::String& header, float progress) {
+        sectionProgress[header] = juce::jlimit(0.0f, 1.0f, progress);
+        updateScrollBar();
+        repaint();
+    }
+
+    bool isCollapseAnimating() const noexcept { return collapseAnim.isRunning(); }
+
+    /** Drops any in-flight animation onto its final layout. */
+    void finishCollapseAnimation() {
+        if (vblankUpdater.has_value())
+            collapseAnim.stop(*vblankUpdater);
+        snapSectionProgressToTargets();
+        clampHoverToVisibleRow();
+        updateScrollBar();
+        repaint();
+    }
 
     // -------------------------------------------------------------------------
     // Pure static helpers — callable headlessly (no GUI / MessageManager needed)
@@ -222,31 +281,52 @@ public:
         int height;
     };
 
-    /** Visible rows, top to bottom. Rows inside a collapsed section are omitted entirely.
-     *  Painting and hit-testing share this one layout pass, so they cannot disagree about where a
-     *  row is — they used to duplicate the y-advance arithmetic. */
+    /** Visible rows, top to bottom. Painting and hit-testing share this one layout pass, so they
+     *  cannot disagree about where a row is — they used to duplicate the y-advance arithmetic.
+     *
+     *  Each section's rows live in a band whose height is its natural height scaled by
+     *  (1 - collapse progress), the way `height: auto → 0; overflow: hidden` behaves. Rows keep
+     *  their natural spacing inside the band and are *truncated* at its bottom edge rather than
+     *  squashed, so text never distorts mid-animation; `row.height` below `kItemHeight` means the
+     *  row is partly clipped, and rows past the band are dropped (so they stop hit-testing too).
+     *  At progress 0 and 1 this reduces exactly to the un-animated layout. */
     std::vector<Row> buildRows() const {
         std::vector<Row> rows;
         int y = kTopStripHeight + kFirstRowY;
         bool seenHeader = false;
 
-        for (int i = 0; i < (int)entries.size(); ++i) {
-            const auto& entry = entries[(size_t)i];
-
-            if (entry.kind == RowKind::Header) {
-                if (seenHeader)
-                    y += kHeaderGap;
-                seenHeader = true;
-                rows.push_back({i, y, kHeaderHeight});
-                y += kHeaderHeight;
+        size_t i = 0;
+        while (i < entries.size()) {
+            if (entries[i].kind != RowKind::Header) {
+                ++i; // defensive: today every row follows a header
                 continue;
             }
 
-            if (isSectionCollapsed(entry.section))
-                continue;
+            if (seenHeader)
+                y += kHeaderGap;
+            seenHeader = true;
+            rows.push_back({(int)i, y, kHeaderHeight});
+            y += kHeaderHeight;
 
-            rows.push_back({i, y, kItemHeight});
-            y += kItemHeight;
+            // Span of rows belonging to this header.
+            size_t end = i + 1;
+            while (end < entries.size() && entries[end].kind != RowKind::Header)
+                ++end;
+
+            const int naturalHeight = (int)(end - i - 1) * kItemHeight;
+            const float progress = getSectionProgress(entries[i].text);
+            const int bandHeight = juce::roundToInt((float)naturalHeight * (1.0f - progress));
+            const int bandTop = y;
+
+            for (size_t j = i + 1; j < end; ++j) {
+                const int rowTop = bandTop + (int)(j - i - 1) * kItemHeight;
+                const int visibleHeight = juce::jlimit(0, kItemHeight, bandTop + bandHeight - rowTop);
+                if (visibleHeight > 0)
+                    rows.push_back({(int)j, rowTop, visibleHeight});
+            }
+
+            y = bandTop + bandHeight;
+            i = end;
         }
         return rows;
     }
@@ -259,6 +339,50 @@ public:
 
     /** True when y falls inside the collapse-all chrome above the first row. */
     static bool isInTopStrip(int y) noexcept { return y >= 0 && y < kTopStripHeight; }
+
+    // -------------------------------------------------------------------------
+    // Scrolling
+    //
+    // The library is one painted component rather than a Viewport + inner content: rows are drawn
+    // from a single buildRows() pass, and a Viewport would mean splitting that (plus the tooltip
+    // client and the drag source) across two components. Instead the rows are drawn through a
+    // scrollOffset and a juce::ScrollBar drives it. The COLLAPSE ALL strip stays pinned, so the one
+    // control that shortens an overflowing list never scrolls out of reach.
+    // -------------------------------------------------------------------------
+
+    /** Rows scroll inside the panel below the pinned top strip. Both the content and the viewport
+     *  lose the same kTopStripHeight, so the maximum offset is just the plain overflow. */
+    int getMaxScrollOffset() const { return juce::jmax(0, getTotalContentHeight() - juce::jmax(0, getHeight())); }
+
+    int getScrollOffset() const noexcept { return scrollOffset; }
+
+    /** Scrolls to `newOffset`, clamped to [0, getMaxScrollOffset()]. Returns true when it moved. */
+    bool setScrollOffset(int newOffset) {
+        const int clamped = juce::jlimit(0, getMaxScrollOffset(), newOffset);
+        if (clamped == scrollOffset)
+            return false;
+        scrollOffset = clamped;
+        repaint();
+        return true;
+    }
+
+    /** True when the rows overflow the panel and the scrollbar is therefore on screen. */
+    bool isScrollBarVisible() const noexcept { return verticalScrollBar.isVisible(); }
+
+    void resized() override { updateScrollBar(); }
+
+    void lookAndFeelChanged() override {
+        // Scrollbar width is a theme token (AppLookAndFeel::kScrollbarWidth), so a theme switch can
+        // change the bar's footprint and the width left for row text.
+        updateScrollBar();
+    }
+
+    void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override {
+        if (verticalScrollBar.isVisible())
+            verticalScrollBar.mouseWheelMove(e.getEventRelativeTo(&verticalScrollBar), wheel);
+        else
+            juce::Component::mouseWheelMove(e, wheel);
+    }
 
     // -------------------------------------------------------------------------
     // Paint
@@ -285,67 +409,94 @@ public:
 
         g.fillAll(bgColour);
 
-        // ---- Top strip: one control to fold the whole library away ----
+        // Rows stop short of the scrollbar when it is on screen, so text never runs under the thumb.
+        const int contentWidth = getRowContentWidth();
+
+        // ---- Rows: clipped below the pinned strip and shifted by the scroll offset ----
+        // The clip is what keeps a scrolled row from painting over the strip; setOrigin then moves
+        // the content-space row.y values into component space.
         {
-            const bool allCollapsed = areAllSectionsCollapsed();
-            g.setColour(topStripHovered ? accentColour : mutedColour);
-            g.setFont(juce::Font(juce::FontOptions(11.0f)));
-            g.drawText(allCollapsed ? "EXPAND ALL" : "COLLAPSE ALL", 10, 2, getWidth() - 20, kTopStripHeight - 4,
-                       juce::Justification::centredRight);
+            juce::Graphics::ScopedSaveState scrolled(g);
+            g.reduceClipRegion(0, kTopStripHeight, getWidth(), juce::jmax(0, getHeight() - kTopStripHeight));
+            g.setOrigin(0, -scrollOffset);
+
+            for (const auto& row : buildRows()) {
+                const auto& entry = entries[(size_t)row.entryIndex];
+
+                if (entry.kind == RowKind::Header) {
+                    // Disclosure chevron drawn as a path — glyph coverage for ▾/▸ is not guaranteed
+                    // across the embedded typefaces (see the theming font limitation). It rotates on
+                    // the same progress value as the fold, so the two read as one motion.
+                    drawChevron(g, juce::Rectangle<float>(8.0f, (float)row.y + 6.0f, 8.0f, 8.0f),
+                                getSectionProgress(entry.text), headerColour);
+
+                    // Category icon at x=20 (null-guarded — no-op when LnF absent).
+                    synth::theme::Icon catIcon = categoryIconForHeader(entry.text);
+                    const juce::Drawable* icon = (lf != nullptr) ? lf->peekIcon(catIcon) : nullptr;
+
+                    g.setFont(juce::Font(juce::FontOptions(12.0f)));
+                    if (icon != nullptr) {
+                        icon->drawWithin(g, juce::Rectangle<float>(20.0f, (float)row.y + 2.0f, 16.0f, 16.0f),
+                                         juce::RectanglePlacement::centred, 1.0f);
+                        g.setColour(headerColour);
+                        g.drawText(entry.text.toUpperCase(), 40, row.y, contentWidth - 50, 20,
+                                   juce::Justification::centredLeft);
+                    } else {
+                        g.setColour(headerColour);
+                        g.drawText(entry.text.toUpperCase(), 20, row.y, contentWidth - 30, 20,
+                                   juce::Justification::centredLeft);
+                    }
+                    continue;
+                }
+
+                // A row mid-fold is truncated, not resized: clip to the visible slice and keep
+                // drawing the text at its natural height, so it is cut off rather than squashed or
+                // re-centred as the section closes. juce::Graphics::drawText does not clip on its
+                // own, hence the explicit region.
+                std::optional<juce::Graphics::ScopedSaveState> rowClip;
+                if (row.height < kItemHeight) {
+                    rowClip.emplace(g);
+                    g.reduceClipRegion(0, row.y, getWidth(), row.height);
+                }
+
+                if (entry.kind == RowKind::EmptyHint) {
+                    g.setColour(mutedColour.withAlpha(0.7f));
+                    g.setFont(juce::Font(juce::FontOptions(13.0f)));
+                    g.drawText(entry.text, 20, row.y, contentWidth - 40, kItemHeight - 4,
+                               juce::Justification::centredLeft);
+                    continue;
+                }
+
+                // Draggable row (module or snippet).
+                if (row.entryIndex == hoveredIndex) {
+                    g.setColour(accentColour.withAlpha(0.12f));
+                    g.fillRect(0, row.y, contentWidth, row.height);
+                }
+
+                g.setColour(itemColour);
+                g.setFont(juce::Font(juce::FontOptions(16.0f)));
+                g.drawText(entry.text, 20, row.y, contentWidth - 60, kItemHeight - 4, juce::Justification::centredLeft);
+
+                if (entry.kind == RowKind::Snippet) {
+                    g.setColour(mutedColour);
+                    g.setFont(juce::Font(juce::FontOptions(12.0f)));
+                    g.drawText("(" + juce::String(entry.moduleCount) + ")", contentWidth - 44, row.y, 34,
+                               kItemHeight - 4, juce::Justification::centredRight);
+                }
+            }
         }
 
-        for (const auto& row : buildRows()) {
-            const auto& entry = entries[(size_t)row.entryIndex];
-
-            if (entry.kind == RowKind::Header) {
-                const bool collapsed = isSectionCollapsed(entry.text);
-
-                // Disclosure chevron drawn as a path — glyph coverage for ▾/▸ is not guaranteed
-                // across the embedded typefaces (see the theming font limitation).
-                drawChevron(g, juce::Rectangle<float>(8.0f, (float)row.y + 6.0f, 8.0f, 8.0f), collapsed, headerColour);
-
-                // Category icon at x=20 (null-guarded — no-op when LnF absent).
-                synth::theme::Icon catIcon = categoryIconForHeader(entry.text);
-                const juce::Drawable* icon = (lf != nullptr) ? lf->peekIcon(catIcon) : nullptr;
-
-                g.setFont(juce::Font(juce::FontOptions(12.0f)));
-                if (icon != nullptr) {
-                    icon->drawWithin(g, juce::Rectangle<float>(20.0f, (float)row.y + 2.0f, 16.0f, 16.0f),
-                                     juce::RectanglePlacement::centred, 1.0f);
-                    g.setColour(headerColour);
-                    g.drawText(entry.text.toUpperCase(), 40, row.y, getWidth() - 50, 20,
-                               juce::Justification::centredLeft);
-                } else {
-                    g.setColour(headerColour);
-                    g.drawText(entry.text.toUpperCase(), 20, row.y, getWidth() - 30, 20,
-                               juce::Justification::centredLeft);
-                }
-                continue;
-            }
-
-            if (entry.kind == RowKind::EmptyHint) {
-                g.setColour(mutedColour.withAlpha(0.7f));
-                g.setFont(juce::Font(juce::FontOptions(13.0f)));
-                g.drawText(entry.text, 20, row.y, getWidth() - 40, kItemHeight - 4, juce::Justification::centredLeft);
-                continue;
-            }
-
-            // Draggable row (module or snippet).
-            if (row.entryIndex == hoveredIndex) {
-                g.setColour(accentColour.withAlpha(0.12f));
-                g.fillRect(0, row.y, getWidth(), kItemHeight);
-            }
-
-            g.setColour(itemColour);
-            g.setFont(juce::Font(juce::FontOptions(16.0f)));
-            g.drawText(entry.text, 20, row.y, getWidth() - 60, kItemHeight - 4, juce::Justification::centredLeft);
-
-            if (entry.kind == RowKind::Snippet) {
-                g.setColour(mutedColour);
-                g.setFont(juce::Font(juce::FontOptions(12.0f)));
-                g.drawText("(" + juce::String(entry.moduleCount) + ")", getWidth() - 44, row.y, 34, kItemHeight - 4,
-                           juce::Justification::centredRight);
-            }
+        // ---- Top strip: one control to fold the whole library away ----
+        // Painted last, over its own background fill: it is pinned, so scrolled rows must not show
+        // through it.
+        {
+            const bool allCollapsed = areAllSectionsCollapsed();
+            g.setColour(bgColour);
+            g.fillRect(0, 0, getWidth(), kTopStripHeight);
+            g.setColour(topStripHovered ? accentColour : mutedColour);
+            g.setFont(juce::Font(juce::FontOptions(11.0f)));
+            g.drawText(allCollapsed ? "EXPAND ALL" : "COLLAPSE ALL", 10, 2, contentWidth - 20, kTopStripHeight - 4,
+                       juce::Justification::centredRight);
         }
     }
 
@@ -357,7 +508,7 @@ public:
         const bool wasTopStripHovered = topStripHovered;
         topStripHovered = isInTopStrip(e.y);
 
-        const int entryUnderMouse = getEntryIndexAt(e.y);
+        const int entryUnderMouse = getEntryIndexAtComponentY(e.y);
         // Only draggable rows can be hovered; headers and hints clamp to -1.
         const int newIndex = isDraggableEntry(entryUnderMouse) ? entryUnderMouse : -1;
 
@@ -405,7 +556,7 @@ public:
             return;
         }
 
-        const int index = getEntryIndexAt(e.y);
+        const int index = getEntryIndexAtComponentY(e.y);
         if (index < 0 || index >= (int)entries.size())
             return;
 
@@ -509,15 +660,111 @@ public:
         return -1;
     }
 
-    /** Returns the entry index whose visible row contains mouseY, or -1 if none. */
-    int getEntryIndexAt(int mouseY) const {
+    /** Returns the entry index whose visible row contains contentY, or -1 if none.
+     *  Takes a *content-space* y — the same space buildRows() and getRowCentreY() report, which is
+     *  component space only while the panel is scrolled to the top. Mouse handlers go through
+     *  getEntryIndexAtComponentY() instead. */
+    int getEntryIndexAt(int contentY) const {
         for (const auto& row : buildRows())
-            if (mouseY >= row.y && mouseY < row.y + row.height)
+            if (contentY >= row.y && contentY < row.y + row.height)
                 return row.entryIndex;
         return -1;
     }
 
+    /** Component-space y → entry index, or -1. The top strip is pinned chrome, so a row scrolled
+     *  underneath it is never a hit. */
+    int getEntryIndexAtComponentY(int y) const {
+        if (isInTopStrip(y))
+            return -1;
+        return getEntryIndexAt(y + scrollOffset);
+    }
+
 private:
+    float targetProgressFor(const juce::String& header) const { return isSectionCollapsed(header) ? 1.0f : 0.0f; }
+
+    void snapSectionProgressToTargets() {
+        for (const auto& entry : entries)
+            if (entry.kind == RowKind::Header)
+                sectionProgress[entry.text] = targetProgressFor(entry.text);
+    }
+
+    /** Tweens every section from where it is now to where the logical state says it should be.
+     *  One driver covers all sections so "collapse all" folds them together rather than firing
+     *  nine competing animations. */
+    void startCollapseAnimation() {
+        // No VBlank to drive frames when we're not on screen (headless tests, or a restore before
+        // the window exists), so land on the final layout immediately.
+        if (!isShowing()) {
+            snapSectionProgressToTargets();
+            clampHoverToVisibleRow();
+            updateScrollBar();
+            repaint();
+            return;
+        }
+
+        if (!vblankUpdater.has_value())
+            vblankUpdater.emplace(this);
+
+        // Snapshot the *current* values, so retargeting mid-flight eases on from where it is
+        // rather than snapping back to the start.
+        std::map<juce::String, float> from;
+        std::map<juce::String, float> to;
+        for (const auto& entry : entries) {
+            if (entry.kind != RowKind::Header)
+                continue;
+            from[entry.text] = getSectionProgress(entry.text);
+            to[entry.text] = targetProgressFor(entry.text);
+        }
+
+        collapseAnim.start(
+            *vblankUpdater, kCollapseAnimMs, synth::ui::easeInOutCubic,
+            [this, from, to](float t) {
+                for (const auto& [header, start] : from)
+                    sectionProgress[header] = start + (to.at(header) - start) * t;
+                updateScrollBar();
+                repaint();
+            },
+            [this] {
+                snapSectionProgressToTargets();
+                clampHoverToVisibleRow();
+                updateScrollBar();
+                repaint();
+            });
+    }
+
+    void scrollBarMoved(juce::ScrollBar* bar, double newRangeStart) override {
+        if (bar == &verticalScrollBar)
+            setScrollOffset(juce::roundToInt(newRangeStart));
+    }
+
+    /** Slim themed width (AppLookAndFeel::kScrollbarWidth), or the JUCE default headlessly. */
+    int getScrollBarWidth() const { return juce::jmax(4, getLookAndFeel().getDefaultScrollbarWidth()); }
+
+    int getRowContentWidth() const {
+        return getWidth() - (verticalScrollBar.isVisible() ? verticalScrollBar.getWidth() : 0);
+    }
+
+    /** Shows/hides and re-ranges the scrollbar for the current row set, and re-clamps the offset.
+     *  Must run after anything that changes the content height — a resize, a collapse, or a snippet
+     *  refresh — or a shrinking list would leave the view scrolled past its own end. */
+    void updateScrollBar() {
+        const int viewportHeight = getHeight() - kTopStripHeight;
+        const int scrollableHeight = getTotalContentHeight() - kTopStripHeight;
+        const bool needed = viewportHeight > 0 && scrollableHeight > viewportHeight;
+
+        verticalScrollBar.setVisible(needed);
+        setScrollOffset(scrollOffset); // re-clamp against the new maximum (0 when it no longer fits)
+
+        if (!needed)
+            return;
+
+        const int barWidth = getScrollBarWidth();
+        verticalScrollBar.setBounds(getWidth() - barWidth, kTopStripHeight, barWidth, viewportHeight);
+        verticalScrollBar.setSingleStepSize((double)kItemHeight);
+        verticalScrollBar.setRangeLimits(0.0, (double)scrollableHeight, juce::dontSendNotification);
+        verticalScrollBar.setCurrentRange((double)scrollOffset, (double)viewportHeight, juce::dontSendNotification);
+    }
+
     bool isDraggableEntry(int index) const {
         if (index < 0 || index >= (int)entries.size())
             return false;
@@ -540,15 +787,15 @@ private:
         hoveredIndex = -1;
     }
 
-    static void drawChevron(juce::Graphics& g, juce::Rectangle<float> area, bool collapsed, juce::Colour colour) {
+    /** @param progress 0 = open (pointing down) .. 1 = folded (pointing right). Drawn as the open
+     *  triangle rotated by -90° * progress: for a square area the endpoints are exactly the two
+     *  shapes this used to switch between, so 0 and 1 look identical to the old two-state version
+     *  while everything in between is a real rotation. */
+    static void drawChevron(juce::Graphics& g, juce::Rectangle<float> area, float progress, juce::Colour colour) {
         juce::Path p;
-        if (collapsed) {
-            // Pointing right — section folded.
-            p.addTriangle(area.getX(), area.getY(), area.getX(), area.getBottom(), area.getRight(), area.getCentreY());
-        } else {
-            // Pointing down — section open.
-            p.addTriangle(area.getX(), area.getY(), area.getRight(), area.getY(), area.getCentreX(), area.getBottom());
-        }
+        p.addTriangle(area.getX(), area.getY(), area.getRight(), area.getY(), area.getCentreX(), area.getBottom());
+        p.applyTransform(juce::AffineTransform::rotation(-juce::MathConstants<float>::halfPi * progress,
+                                                         area.getCentreX(), area.getCentreY()));
         g.setColour(colour);
         g.fillPath(p);
     }
@@ -659,4 +906,14 @@ private:
     std::set<juce::String> collapsedSections;
     int hoveredIndex = -1;        // -1 = no hover; updated on mouseMove/mouseExit only
     bool topStripHovered = false; // hover state for the collapse-all chrome
+
+    juce::ScrollBar verticalScrollBar{true};
+    int scrollOffset = 0; // px of content scrolled past the top of the row viewport
+
+    // Per-section fold amount, 0 = open .. 1 = closed. Purely visual; the logical state is
+    // `collapsedSections`. Created on demand so a headless component never builds a VBlank
+    // attachment it cannot use.
+    std::map<juce::String, float> sectionProgress;
+    std::optional<juce::VBlankAnimatorUpdater> vblankUpdater;
+    synth::ui::AnimationDriver collapseAnim;
 };

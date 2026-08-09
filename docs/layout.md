@@ -775,6 +775,7 @@ Composes tooltip text with an optional keyboard shortcut hint appended in `[brac
 | **Module drop landing** | Eased tween from drop position → snapped + anti-overlapped final position (`easeOutBack`); `computeDropFinalPosition` is a pure helper | `GraphEditor` |
 | **Mod-matrix show/hide** | Bounds tween, `easeInOutCubic` | `GraphEditor` |
 | **Library sidebar show/hide** | Bounds tween, `easeInOutCubic` | `MainComponent` |
+| **Library section collapse/expand** | Band-height fold (150 ms), `easeInOutCubic` | `ModuleLibraryComponent` |
 | **AI panel show/hide** | Bounds tween, `easeInOutCubic` | `MainComponent` |
 | **Empty-canvas first-run hint** | Static drawn text; no animation — drawn only when `isCanvasEmpty(nodeCount)` returns `true` | `GraphEditor` |
 | **ModuleLibraryComponent rows** | Row hover-highlight; grab/dragging-hand cursor on draggable rows; per-module descriptions via `descriptionFor(name)` surfaced as `setTooltip()` | `ModuleLibraryComponent` |
@@ -1017,16 +1018,58 @@ Every section header is now a disclosure toggle, plus a **COLLAPSE ALL / EXPAND 
 - **The Snippets section stays visible when empty**, showing a "No snippets yet" hint, so the feature
   is discoverable before the first snippet exists.
 - **Chevrons are `juce::Path` triangles, not glyphs** — `▾`/`▸` coverage is not guaranteed across the
-  embedded typefaces (see the font limitation in [`theming.md`](theming.md)).
+  embedded typefaces (see the font limitation in [`theming.md`](theming.md)). The triangle is drawn
+  once (pointing down) and rotated by `-90° × progress`, so it turns with the fold; for a square box
+  the two endpoints are exactly the shapes the old two-state version switched between.
+
+### Fold animation
+
+Collapsing and expanding tween over `kCollapseAnimMs` (150 ms, `easeInOutCubic`) via
+`AnimationDriver` — no free-running repaints, per the animation invariant.
+
+- **`sectionProgress` is purely visual** (0 = open .. 1 = shut). The logical state stays in
+  `collapsedSections` and flips *instantly*, so `isSectionCollapsed()`, `areAllSectionsCollapsed()`,
+  persistence and `onCollapseStateChanged` never lag a frame behind what the user clicked.
+- **One driver for all sections**, so COLLAPSE ALL folds them together instead of racing nine
+  animators. Retargeting mid-flight eases on from the current value rather than snapping back.
+- **Rows are truncated, not squashed.** `buildRows()` gives each section a band of
+  `naturalHeight × (1 - progress)`; rows keep their natural spacing inside it and are clipped at the
+  band's bottom edge (`row.height < kItemHeight` marks a partly clipped row; rows past the band are
+  dropped, so they stop hit-testing). `juce::Graphics::drawText` does not clip on its own, hence the
+  explicit `reduceClipRegion` in `paint()`.
+- **It snaps when not `isShowing()`** — there is no VBlank off screen, so a hidden component would
+  otherwise freeze mid-fold. This is also what keeps the headless tests deterministic.
+  `setCollapsedSections()` (the launch-time restore) always snaps: animating there would look like
+  the sidebar folding itself up on startup.
 - **Collapse state persists** as newline-joined section names under `libraryCollapsedSections` in
   `juce::ApplicationProperties`. `setCollapsedSections()` skips blank entries, because an unset
   preference arrives from `StringArray::fromLines("")` as a single empty string, and
   `onCollapseStateChanged` deliberately does *not* fire from it — that is the restore path, and
   re-notifying would write back what was just read.
 
-**Known limitation:** the sidebar still has no `juce::Viewport`, so with every section expanded the
-content can exceed the panel height and the overflow is clipped rather than scrollable. Collapsing is
-the mitigation for now; adding a viewport is a separate change.
+### Scrolling
+
+With every section expanded the rows exceed any realistic panel height, so the sidebar scrolls.
+
+- **No `juce::Viewport`.** The library is a single painted component: rows come from one
+  `buildRows()` pass, and it is also the tooltip client and the drag source. A viewport would split
+  all three across an outer wrapper and an inner content component — and, because
+  `findParentDragContainerFor()` walks to the *nearest* container ancestor, an inner component would
+  bind drags to the sidebar instead of `MainComponent`, breaking drops onto the canvas. Instead a
+  `juce::ScrollBar` drives a `scrollOffset` that `paint()` and hit-testing both apply.
+- **The COLLAPSE ALL strip stays pinned** in the top `kTopStripHeight` px — the one control that
+  shortens an overflowing list must never scroll out of reach. `paint()` therefore clips the rows to
+  below the strip and `setOrigin(0, -scrollOffset)`s them, then draws the strip last over its own
+  background fill.
+- **Two coordinate spaces.** `buildRows()`, `getRowCentreY()` and `getEntryIndexAt()` are all
+  *content*-space; mouse handlers go through `getEntryIndexAtComponentY()`, which rejects the pinned
+  strip and then adds `scrollOffset`. Mixing them up is the failure mode this split exists to
+  prevent — guarded by `ModuleLibraryScroll.HitTestingFollowsTheScrollOffset`.
+- **`updateScrollBar()` runs after anything that changes content height** — resize, collapse,
+  snippet refresh, theme change (the bar's width is the `kScrollbarWidth` token). It shows/hides the
+  bar and re-clamps the offset, so a shrinking list can never leave the view scrolled past its end.
+- **Rows lose the bar's width** (`getRowContentWidth()`) while it is visible, so row text and the
+  snippet count never run under the thumb.
 
 ---
 
