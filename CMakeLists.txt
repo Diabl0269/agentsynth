@@ -328,6 +328,15 @@ add_library(AppUI STATIC
 # the Assets binary-data lib and HAS_FONT_ASSETS.
 target_link_libraries(AppUI PUBLIC Core)
 
+# The VST3 is a shared object on Linux, and every object linked into a .so must be
+# position-independent. Core/AppUI/Assets are static libraries that were previously only ever
+# linked into an executable, where non-PIC is fine — linking them into the plugin without this
+# fails at link time with "failed to set dynamic section sizes: bad value" from ld. macOS and
+# Windows don't hit it (Mach-O is PIC by default, and PE/DLLs have no equivalent constraint),
+# which is exactly why this only broke the Ubuntu CI job.
+# Set on the targets rather than globally so it travels with the libraries the plugin consumes.
+set_target_properties(Core AppUI Assets PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 if(MSVC)
     target_compile_options(AppUI PRIVATE /W4)
 else()
