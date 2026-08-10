@@ -97,6 +97,7 @@ add_executable(Tests
     SnippetManagerTests.cpp
     MultiSelectTests.cpp
     PanelAnimationAndLoadingTests.cpp
+    MinimapComponentTests.cpp
     PluginProcessorTests.cpp
     ../Source/MainComponent.cpp
     ../Source/Plugin/PluginProcessor.cpp

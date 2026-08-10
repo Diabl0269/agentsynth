@@ -221,14 +221,21 @@ std::vector<AudioEngine::ModulationRouting> AudioEngine::getModulationRoutings()
             if (srcPort.isPolyGroupHead && dstPort.isPolyGroupHead) {
                 int Ns = srcPort.polyVoiceSpan;
                 int Nd = dstPort.polyVoiceSpan;
-                if (Ns == Nd && Ns > 1) {
-                    int N = Ns;
+
+                // A mono modulator broadcast across a per-voice mod-CV fan leaves one source channel
+                // for all N destinations, so its edges are (Hs, Hd+i) rather than (Hs+i, Hd+i).
+                // Collapse it too, otherwise it renders as N wires stacked on the same two jacks.
+                const bool isBroadcast = (Ns == 1 && Nd > 1 && dstPort.role == PortRole::ModCV);
+                const int srcStride = isBroadcast ? 0 : 1;
+
+                if (isBroadcast || (Ns == Nd && Ns > 1)) {
+                    int N = isBroadcast ? Nd : Ns;
                     int Hs = e.srcChannel;
                     int Hd = e.dstChannel;
-                    // Check all N edges (Hs+i, Hd+i) are present
+                    // Check all N edges (Hs + i*srcStride, Hd+i) are present
                     bool complete = true;
                     for (int i = 0; i < N; ++i) {
-                        if (!edgeSet.count({Hs + i, Hd + i})) {
+                        if (!edgeSet.count({Hs + i * srcStride, Hd + i})) {
                             complete = false;
                             break;
                         }
@@ -254,7 +261,7 @@ std::vector<AudioEngine::ModulationRouting> AudioEngine::getModulationRoutings()
                         r.modSignalValue = peak;
                         routings.push_back(r);
                         for (int i = 0; i < N; ++i)
-                            consumed.insert({Hs + i, Hd + i});
+                            consumed.insert({Hs + i * srcStride, Hd + i});
                     }
                 }
             }
@@ -357,15 +364,18 @@ AudioEngine::getModulationDisplayInfo(const std::vector<ModulationRouting>& allR
     return result;
 }
 
-void AudioEngine::addModRouting(juce::AudioProcessorGraph::NodeID sourceNodeID, int sourceChannelIndex,
-                                juce::AudioProcessorGraph::NodeID destNodeID, int destChannelIndex) {
+juce::AudioProcessorGraph::NodeID AudioEngine::addModRouting(juce::AudioProcessorGraph::NodeID sourceNodeID,
+                                                             int sourceChannelIndex,
+                                                             juce::AudioProcessorGraph::NodeID destNodeID,
+                                                             int destChannelIndex) {
     auto attenuverterNode = mainProcessorGraph.addNode(std::make_unique<AttenuverterModule>());
     if (attenuverterNode == nullptr)
-        return;
+        return {};
     if (auto* param = dynamic_cast<juce::AudioParameterFloat*>(attenuverterNode->getProcessor()->getParameters()[1]))
         param->setValueNotifyingHost(param->convertTo0to1(1.0f));
     mainProcessorGraph.addConnection({{sourceNodeID, sourceChannelIndex}, {attenuverterNode->nodeID, 0}});
     mainProcessorGraph.addConnection({{attenuverterNode->nodeID, 0}, {destNodeID, destChannelIndex}});
+    return attenuverterNode->nodeID;
 }
 
 void AudioEngine::addEmptyModRouting() { mainProcessorGraph.addNode(std::make_unique<AttenuverterModule>()); }

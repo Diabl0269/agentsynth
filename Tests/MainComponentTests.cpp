@@ -71,6 +71,7 @@ protected:
         if (auto* s = props.getUserSettings()) {
             s->setValue("librarySidebarVisible", "1"); // default: visible
             s->setValue("aiPanelVisible", "0");        // default: hidden
+            s->setValue("minimapVisible", "1");        // default: visible
             s->saveIfNeeded();
         }
     }
@@ -132,20 +133,61 @@ TEST_F(MainComponentTest, ToggleModMatrixHidesAndShows) {
     EXPECT_FALSE(mainComp.getGraphEditor().isModMatrixVisible());
 }
 
+// simulateToggleMinimapClick() must flip the GraphEditor's minimap visibility (issue #159).
+TEST_F(MainComponentTest, SimulateToggleMinimapClickFlipsMinimapVisibility) {
+    MainComponent mainComp(std::make_unique<MockProvider>());
+
+    const bool before = mainComp.getGraphEditor().isMinimapVisible();
+    mainComp.simulateToggleMinimapClick();
+    EXPECT_EQ(mainComp.getGraphEditor().isMinimapVisible(), !before);
+
+    mainComp.simulateToggleMinimapClick();
+    EXPECT_EQ(mainComp.getGraphEditor().isMinimapVisible(), before);
+}
+
+// MainComponent must push the resolved binding into the minimap, so hovering the map shows the
+// same shortcut the toolbar button advertises (MinimapComponent has no ShortcutManager of its own).
+TEST_F(MainComponentTest, MinimapTooltipAdvertisesTheToggleShortcut) {
+    MainComponent mainComp(std::make_unique<MockProvider>());
+
+    const auto tooltip = mainComp.getGraphEditor().getMinimap().getTooltip();
+    const auto expected =
+        ShortcutManager::keyPressToDisplayString(mainComp.getShortcutManager().getBinding("toggleMinimap"));
+    ASSERT_FALSE(expected.isEmpty());
+    EXPECT_TRUE(tooltip.contains(expected)) << tooltip;
+}
+
+// Rebinding the shortcut must refresh the advertised key. Tooltips embed the resolved keypress, so
+// without a re-run on onBindingsChanged they keep showing the stale binding.
+TEST_F(MainComponentTest, MinimapTooltipFollowsARebind) {
+    MainComponent mainComp(std::make_unique<MockProvider>());
+    auto& shortcuts = mainComp.getShortcutManager();
+
+    // In-memory rebind only — saveToProperties() would write to the shared real settings file.
+    shortcuts.setBinding("toggleMinimap", juce::KeyPress('j', juce::ModifierKeys::commandModifier, 0));
+    ASSERT_TRUE(shortcuts.onBindingsChanged != nullptr);
+    shortcuts.onBindingsChanged();
+
+    const auto tooltip = mainComp.getGraphEditor().getMinimap().getTooltip();
+    const auto rebound = ShortcutManager::keyPressToDisplayString(shortcuts.getBinding("toggleMinimap"));
+    EXPECT_TRUE(tooltip.contains(rebound)) << tooltip;
+}
+
 TEST_F(MainComponentTest, CommandManagerHasCommands) {
     MainComponent mainComp(std::make_unique<MockProvider>());
     auto& cm = mainComp.getCommandManager();
     juce::ignoreUnused(cm);
-    // Verify all 12 commands are registered (5 original + New Patch + 2 toggles + Auto Arrange +
-    // Toggle Library + Select All Modules + Save Snippet).
+    // Verify all 13 commands are registered (5 original + New Patch + 2 toggles + Auto Arrange +
+    // Toggle Library + Select All Modules + Save Snippet + Toggle Minimap).
     juce::Array<juce::CommandID> commands;
     mainComp.getAllCommands(commands);
-    EXPECT_EQ(commands.size(), 12);
+    EXPECT_EQ(commands.size(), 13);
 
     // Spot-check by identity, not just by count, so a rename can't silently keep the total right.
     EXPECT_TRUE(commands.contains(AppCommands::undo));
     EXPECT_TRUE(commands.contains(AppCommands::selectAllModules));
     EXPECT_TRUE(commands.contains(AppCommands::saveSnippet));
+    EXPECT_TRUE(commands.contains(AppCommands::toggleMinimap));
 
     // Every registered command must resolve real info (name + category), or the native menu bar
     // renders a blank row.

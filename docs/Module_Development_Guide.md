@@ -240,7 +240,7 @@ New modules are automatically covered by E2E workflow tests in `Tests/E2EWorkflo
 
 ## 7. Poly Module Channel Conventions
 
-If your module supports polyphonic operation, follow the standard channel layout so the logical-port API and GraphEditor can correctly draw collapsed poly-bus wires.
+If your module supports polyphonic operation, follow the standard channel layout so the logical-port API and GraphEditor can correctly draw collapsed poly-bus wires and fan out drag-created connections.
 
 **Rule:** In poly mode, voices occupy channels 0-7 (audio/pitch/gate) and the shared-CV block starts at channel 8. Declare `numOutputs >= highest CV input channel index you read`, to avoid JUCE `AudioProcessorGraph` buffer aliasing when `inputChan >= getTotalNumOutputChannels()`.
 
@@ -251,6 +251,8 @@ Override `mapInputChannel()` and `mapOutputChannel()` to return a `LogicalPort` 
 - `role` — `PortRole::Audio`, `PortRole::Pitch`, `PortRole::Gate`, `PortRole::ModCV`, etc.
 - `isPolyGroupHead` — `true` only for the lowest channel of a fan (raw == 0 for voice fans, raw == 8 for the first shared-CV channel)
 - `polyVoiceSpan` — `8` for the head of an 8-voice fan; `1` for all others
+
+Only declare a `mapOutputChannel()` fan (`isPolyGroupHead = true`, `polyVoiceSpan = 8`) if your module actually emits one signal per voice — the way Oscillator, Filter and Noise fan their per-voice audio onto a single output jack. If your module sums voices down to a shared/stereo output instead (like VCA), leave `mapOutputChannel()` at the default. These overrides also drive connection *creation*, not just display: `GraphEditor` uses `getJackTargets()` (the inverse of `mapInput/OutputChannel`) and `resolvePolyLink()` to fan a dragged cable out to all N voices at once, so an incorrect fan on a summed output would make the editor try to wire N connections out of something that only ever produces one signal. See [docs/modulation.md — Creating Poly Connections](modulation.md#creating-poly-connections).
 
 Override `isAutoPromotableModTarget()` to return `false` when `polyParam->get()` is true, so that poly CV connections are kept as plain `DirectCV` routings rather than being auto-wrapped in attenuverters.
 

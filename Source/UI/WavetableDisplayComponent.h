@@ -41,13 +41,17 @@ public:
         const int tablePos = quantisePosition(module.getScanPosition());
         const juce::String name = module.getWavetableName();
         const int frames = module.getNumFrames();
+        // The drawn trace is warped (see getDisplayWaveformAt), so the warp mode and amount
+        // are part of what makes it change — without them a Warp tweak would not redraw.
+        const int warp = module.getWarpSignature();
 
-        if (tablePos == lastPosition && name == lastName && frames == lastFrames)
+        if (tablePos == lastPosition && name == lastName && frames == lastFrames && warp == lastWarp)
             return;
 
         lastPosition = tablePos;
         lastName = name;
         lastFrames = frames;
+        lastWarp = warp;
         refreshWaveform();
         repaint();
     }
@@ -137,6 +141,7 @@ private:
 
     int lastPosition = -1;
     int lastFrames = -1;
+    int lastWarp = -1;
     juce::String lastName;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(WavetableDisplayComponent)

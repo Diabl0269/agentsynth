@@ -16,7 +16,7 @@ enum class RoutingKind { AttenuverterChain, DirectCV, PolyBus };
 |------|-----------|---------------|
 | `AttenuverterChain` | A mono source signal passes through an `AttenuverterModule` node before reaching the destination's CV input. This is the standard user-adjustable modulation path. | Created by `AudioEngine::addModRouting()`. The engine automatically inserts an `AttenuverterModule` between source and destination. Amount is set to 1.0 at creation. |
 | `DirectCV` | A source output connects directly into a destination's CV/ModCV input channel, with no intermediary attenuverter. | Any non-attenuverter connection into a mod-CV jack (e.g. env output 0 -> oscillator Level ch12). |
-| `PolyBus` | N per-voice `DirectCV` connections (one per voice) that share the same source module and destination visible jack. The engine collapses them into one logical bus. | Arises when the source's `mapOutputChannel()` and destination's `mapInputChannel()` both describe a poly fan (e.g. ADSR outputs 0-7 -> VCA inputs 8-15 in the Poly Pad). |
+| `PolyBus` | N per-voice `DirectCV` connections (one per voice) that share the same source module and destination visible jack. The engine collapses them into one logical bus. | Arises when the source's `mapOutputChannel()` and destination's `mapInputChannel()` both describe a poly fan (e.g. ADSR outputs 0-7 -> VCA inputs 8-15 in the Poly Pad). Also created directly: dragging a cable between two equally-wide poly jacks, or toggling a module's `poly` parameter, creates/rebuilds all N raw connections at once. A mono modulator dropped on a per-voice `ModCV` fan collapses too, with all N edges leaving the same source channel — see [Creating Poly Connections](#creating-poly-connections) below. |
 
 ---
 
@@ -90,6 +90,22 @@ virtual LogicalPort mapOutputChannel(int rawChannel) const;
 
 Poly-capable modules override these to describe fans. The default base implementation clamps any out-of-range channel to the last visible jack and marks `isPolyGroupHead` based on whether `rawChannel < getVisible*PortCount()`.
 
+### `JackTarget` / `getJackTargets`
+
+The inverse of `mapInput/OutputChannel` — given a visible jack, returns every poly-group head anchored to it:
+
+```cpp
+struct JackTarget {
+    int rawHeadChannel;  // raw channel a wire anchored to this jack should start at
+    PortRole role;
+    int voiceSpan;       // 1 = mono; N = head of an N-voice fan
+};
+
+std::vector<JackTarget> getJackTargets(int visibleJackIndex, bool isInput) const;
+```
+
+Normally returns one entry. Poly MIDI's single "Poly Out" jack fronts two fans — Pitch at raw channel 0 and Gate at raw channel 8 — so it returns both, and the caller (`GraphEditor::resolvePolyLink`) disambiguates by role. Never returns empty: an unmapped jack falls back to the raw==jack identity, so modules without a logical-port override keep the pre-logical-port wiring behaviour.
+
 ### Port Labels
 
 `ModuleBase` also declares virtual port-label accessors:
@@ -108,6 +124,20 @@ Modules override these to supply human-readable jack names shown in the UI (e.g.
 3. If the engine classifies the routing as `PolyBus`, GraphEditor draws only one wire and overlays an "xN" voice-count badge on it (e.g. "x8").
 4. Mono `DirectCV` wires are drawn without a badge.
 5. `AttenuverterChain` wires render a draggable midpoint knob for depth control.
+
+### Creating Poly Connections
+
+`getJackTargets` and `GraphEditor::resolvePolyLink` drive connection *creation*, not just display:
+
+1. `resolvePolyLink(source, sourceVisibleJack, dest, destVisibleJack)` calls `getJackTargets` on both ends and pairs one `JackTarget` from each into a `PolyLink { sourceRawChannel, destRawChannel, voiceCount, sourceStride }`. Pairings are scored: matching `PortRole` is the strongest signal (this is what lets Poly MIDI's single "Poly Out" jack send Pitch to an Oscillator and Gate to an Amp Env from the same jack); a `ModCV`/`Other` end is a wildcard, since mod inputs accept anything; equal fan widths break remaining ties.
+2. `voiceCount = min(sourceSpan, destSpan)` with `sourceStride = 1` — a voice-to-voice fan only forms when both ends are equally wide. A poly-to-mono cable degrades to one head-to-head wire.
+3. **Broadcast exception.** A mono source landing on a per-voice `ModCV` fan sets `voiceCount = destSpan` and `sourceStride = 0`, so one source channel feeds all N destination channels — a single LFO shakes every voice, as on a hardware poly synth. Deliberately limited to `ModCV`:
+   - Broadcasting `Pitch` or `Gate` would make all N voices sound the same note at the same time.
+   - Broadcasting `Audio` would build a paraphonic instrument (N voices filtering an identical signal through a *shared* cutoff CV, so the results are bit-identical for N times the DSP). That is a legitimate patch, but an explicit one — not a side effect of a single drag.
+   - A poly source into a mono jack never broadcasts either; summing N envelopes onto one CV channel is not what the user asked for.
+4. `GraphEditor::endConnectionDrag` resolves the visible jacks the user dropped a cable between through `resolvePolyLink` and adds `voiceCount` connections, `{sourceRawChannel + v * sourceStride} -> {destRawChannel + v}` for each voice. A fan is always wired direct — an `AttenuverterModule` is only inserted for a single mono mod wire (`voiceCount == 1`), because the engine collapses the N raw edges of a fan into one `PolyBus` for display.
+5. `GraphEditor::disconnectPort` removes every raw channel a visible jack owns (via `getJackTargets`), so "Disconnect" on a poly jack does not leave some voices still wired.
+6. Toggling a module's `poly` parameter calls `GraphEditor::rewireForPolyChange`, which re-anchors every cable touching that module: mono cables fan out to N voices when both ends go poly, fans collapse back to one wire when poly is switched off, and an attenuverter-mediated mod wire is recreated (carrying its amount across) or replaced by a direct fan as appropriate. MIDI connections are never moved. `ModuleComponent` snapshots the module's raw->`LogicalPort` maps just before the toggle, because by the time the parameter listener fires the live mapping already reflects the new layout — only the snapshot can say which visible jack an existing raw connection used to be anchored to.
 
 ---
 
@@ -156,6 +186,22 @@ This combination — PolyBus for per-voice gate control, DirectCV for a shared t
 ## Modulation Rings on Knobs (ModuleComponent)
 
 `ModuleComponent` renders Serum-style modulation rings on knobs for any active modulation targeting that module. It calls `AudioEngine::getModulationRoutings()` (via the `GraphEditor`'s cached snapshot) to find which knobs have live modulation and paints a ring overlay proportional to the routed signal value. This gives a real-time visual indication of modulation depth directly on the parameter knob.
+
+**Which knob a ring belongs on is `getModRingSliderIndex()`'s call, and it returns -1 for a knob that is not visible.** A card can page its controls (the Wavetable tab strip, `layout.md` §9), and a knob on a hidden page keeps the bounds it had when its page was last laid out — so a ring drawn straight from `sliders[i]->getBounds()` paints an orange arc over empty card. The rule lives in that one accessor so it can be tested without a themed LookAndFeel and a live routing.
+
+---
+
+## Drag-to-Knob Modulation
+
+A cable released **on a knob** connects the source to that parameter's CV jack, the way Serum's mod drag works. This is the primary way to patch modulation — aiming at a jack in the gutter still works, but on a module with sixteen CV inputs it is the slow path.
+
+- `ModuleComponent::getModTargetPortForPoint()` resolves a point to the visible rotary under it, then maps that knob's `getComponentID()` (the parameter's display name) through `getModulationTargets()` to a channel index, and reports it as the input `Port` its CV jack would be.
+- `GraphEditor::endConnectionDrag()` consults it **only as a fallback**, so an actual jack under the cursor still wins, and **only for a cable dragged from an output** — a mod source drives a destination, and honouring the reverse would wire it backwards.
+- From there it rejoins the normal drop path, so the connection still goes through `AudioEngine::addModRouting()` and still gets an attenuverter auto-promoted onto it. Nothing about the routing model changes; this is purely a second way to name the destination.
+- `GraphEditor::dragConnection()` arms the knob under the cursor via `setModDropTargetChannel()`, which rings it while the cable is in flight, and `endConnectionDrag()` clears every card's highlight. Without the ring the drop is a guess.
+- It is deliberately **not** folded into `getPortForPoint()`: that method also decides what a mouse-down starts, and a knob has to keep starting a value drag there rather than a cable.
+
+Guarded by `GraphEditorTest.DroppingACableOnAKnobCreatesAModRouting` (full LFO output → Position knob → routing, including the highlight arming and clearing) and `KnobDropIsIgnoredForACableDraggedFromAnInput`.
 
 ---
 

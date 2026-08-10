@@ -58,6 +58,19 @@ public:
     std::optional<Port> getPortForPoint(juce::Point<int> localPoint);
     juce::Point<int> getPortCenter(int index, bool isInput);
 
+    /** Serum-style modulation drop: the visible knob under `localPoint`, reported as the input
+     *  Port its CV jack would be.
+     *
+     *  Deliberately NOT folded into getPortForPoint — that one also decides what starts a drag
+     *  on mouse-down, and a knob has to keep starting a value drag there, not a cable. This is
+     *  only consulted when a cable is already in flight and no real jack was hit. */
+    std::optional<Port> getModTargetPortForPoint(juce::Point<int> localPoint) const;
+
+    /** Highlights a knob as the pending modulation drop target, or clears it with -1.
+     *  Returns true when the highlight changed, so the caller can repaint only on a change. */
+    bool setModDropTargetChannel(int channelIndex);
+    int getModDropTargetChannel() const noexcept { return modDropTargetChannel; }
+
     // --- Audio-file drag and drop (Sampler only) ---
     // Returns false for every other module type so the drop falls through to GraphEditor, which
     // creates a new Sampler for it. Dropping onto an existing Sampler replaces its sample.
@@ -68,6 +81,14 @@ public:
 
     // Test/inspection helper: true while a valid audio file is hovering over this module.
     bool isFileDragHighlighted() const noexcept { return fileDragHighlight; }
+
+    /** Index of the knob a modulation ring for `paramName` should be drawn on, or -1 when no
+     *  ring belongs on the card right now.
+     *
+     *  Visibility is part of the answer, not just a paint-time detail: a knob on an inactive tab
+     *  page keeps its last bounds, so a ring drawn from them lands on empty card. Public so the
+     *  rule can be tested without a themed LookAndFeel and a live modulation routing. */
+    int getModRingSliderIndex(const juce::String& paramName) const;
 
 private:
     juce::AudioProcessor* module;
@@ -103,12 +124,33 @@ private:
     std::unique_ptr<juce::TextButton> loadWavetableButton;
     std::unique_ptr<juce::FileChooser> wavetableChooser;
 
+    // Wavetable folder browser: pick a directory once, then walk it with prev/next without
+    // reopening a file chooser for every table.
+    std::unique_ptr<juce::TextButton> wavetableFolderButton;
+    std::unique_ptr<juce::TextButton> wavetablePrevButton;
+    std::unique_ptr<juce::TextButton> wavetableNextButton;
+    std::unique_ptr<juce::Label> wavetableNameLabel;
+    std::unique_ptr<juce::FileChooser> wavetableFolderChooser;
+
+    // Wavetable card tab strip. The module carries 23 controls; showing them all at once made a
+    // flat wall with no hierarchy, so they are grouped into pages with the two performance
+    // controls (Position, Warp) pinned above the strip. Jacks are NEVER tabbed — every CV input
+    // stays on the card so a cable can never point at a hidden port.
+    juce::OwnedArray<juce::TextButton> wavetableTabs;
+    int activeWavetableTab = 0;
+    // Parallel to sliders / comboBoxes: which tab owns each control.
+    // kTabPinned = above the strip, kTabChrome = laid out with the display band.
+    juce::Array<int> sliderTabIndex;
+    juce::Array<int> comboTabIndex;
+
     // Sampler-only chrome: waveform overview, "Load Sample…" button and the loaded file name.
     std::unique_ptr<SampleWaveformComponent> sampleWaveform;
     std::unique_ptr<juce::TextButton> loadSampleButton;
     std::unique_ptr<juce::Label> sampleNameLabel;
     std::unique_ptr<juce::FileChooser> sampleChooser;
     bool fileDragHighlight = false;
+    // Channel index of the knob currently highlighted as a modulation drop target, or -1.
+    int modDropTargetChannel = -1;
 
     std::unique_ptr<juce::DrawableButton> bypassButton;
     std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
@@ -132,6 +174,18 @@ private:
 
     void createControls();
     void updateLayout();
+
+    // Raw->LogicalPort snapshots of the module's current channel layout. Only the "poly" parameter
+    // changes that layout, so these are captured at construction and refreshed on each poly toggle.
+    // Kept because rewireForPolyChange needs to know which visible jack an existing connection was
+    // anchored to *before* the toggle — by the time the listener fires, the live mapping already
+    // describes the new layout.
+    std::vector<LogicalPort> cachedInputPortMap;
+    std::vector<LogicalPort> cachedOutputPortMap;
+    void captureLogicalPortMaps();
+
+    // Re-anchors this module's connections onto its new channel layout after a poly toggle.
+    void applyPolyStateChange();
 
     // Macro bank only. Re-lays the component for the new "Knobs" count and asks the GraphEditor
     // to settle the consequences (drop routings on jacks that just disappeared, nudge neighbours
@@ -164,6 +218,37 @@ private:
     // Opens an async file chooser and, on success, loads the chosen file into the
     // Wavetable module and switches its Table parameter to "Loaded File".
     void openWavetableChooser();
+
+    // Opens an async directory chooser and points the module's browser at the result.
+    void openWavetableFolderChooser();
+
+    // Loads a wavetable file into the module and selects the "Loaded File" table choice.
+    // Shared by the load button, the folder browser and the file drop handler.
+    bool loadWavetableIntoModule(const juce::File& file);
+
+    // Steps the folder browser by delta entries and refreshes the caption.
+    void stepWavetableBrowser(int delta);
+
+    // Repoints the wavetable caption at whatever the module currently holds.
+    void refreshWavetableLabel(const juce::String& fallbackMessage = {});
+
+    // --- Wavetable tab strip ---
+    // Page sentinels (kTabPinned / kTabChrome) live in ModuleComponent.cpp beside the page table.
+
+    // Builds the tab buttons and assigns every slider / combo to a page. Must run AFTER
+    // createControls(), which is what populates sliders and comboBoxes.
+    void createWavetableTabs();
+
+    // Shows only the active page's controls. Called on construction and on every tab click.
+    void applyWavetableTabVisibility();
+
+    // Lays out the pinned row, the tab strip and the active page starting at `y`.
+    // Returns the y below them. Every page is measured so the card is sized to the TALLEST,
+    // which stops the card resizing (and shoving its neighbours) as tabs are switched.
+    int layoutWavetableTabs(int y, int contentX, int contentW, bool apply);
+
+    // True for cards whose jack count justifies a split (left-edge + right-edge) input gutter.
+    int getInputPortColumns() const;
 
     // Shared step-column layout helper used by Sequencer and PolySequencer.
     // Positions Gate, Pitch/Root, and F.Env/Chord controls for a single step column.

@@ -187,21 +187,24 @@ Agent Synth uses SVG `Drawable` icons — **not** an icon or glyph font. This av
 
 ### Icon enum
 
-26 icons are defined in `synth::theme::Icon` (in `Source/UI/Theme/IconLibrary.h`):
+29 icons are defined in `synth::theme::Icon` (in `Source/UI/Theme/IconLibrary.h`):
 
 ```
 TransportPlay    TransportStop    ActionUndo       ActionRedo
-ActionSave       ActionLoad       ActionSettings   ActionAutoArrange
-ToggleAI         ToggleMatrix     ToggleLibrary
-ModuleBypass     ModuleMute       ModuleDelete
+ActionSave       ActionLoad       ActionNew        ActionSettings
+ActionAutoArrange ToggleAI        ToggleMatrix     ToggleLibrary
+ThemeToggle      ModuleBypass     ModuleMute       ModuleDelete
 CatSources       CatSequencing    CatEnvelopes     CatFilters
 CatModulationFX  CatTimeFX        CatDynamics      CatUtility
 WaveformSine     WaveformSaw      WaveformSquare   WaveformTriangle
+ToggleMinimap
 ```
 
 **`Icon::TransportPlay` is scaffolding** — the SVG asset is present and the enum value exists, but no `DrawableButton` is wired to it. It is tinted to `textMuted` and reserved for a future transport affordance.
 
-The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle`, indices 22–25) are rendered in the Oscillator waveform combo via `AppLookAndFeel::drawPopupMenuItem` (14×14 glyph left of the item text) and `drawComboBox` (selected waveform glyph in the closed combo). `positionComboBoxText` shifts the label right when the selected item has an icon.
+The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle`, indices 24–27) are rendered in the Oscillator waveform combo via `AppLookAndFeel::drawPopupMenuItem` (14×14 glyph left of the item text) and `drawComboBox` (selected waveform glyph in the closed combo). `positionComboBoxText` shifts the label right when the selected item has an icon.
+
+**`Icon::ToggleMinimap`** (index 28, the last enum value before `kCount`) is the toolbar toggle for the Graph Editor minimap overlay — see [`layout.md` §15](layout.md#15-minimap-overlay-issue-159).
 
 ### Token → tint map
 
