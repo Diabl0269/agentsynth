@@ -99,6 +99,7 @@ add_executable(Tests
     ClipboardTests.cpp
     PanelAnimationAndLoadingTests.cpp
     MinimapComponentTests.cpp
+    PatchDocumentTests.cpp
     ../Source/MainComponent.cpp
     ../Source/UI/GraphEditor.cpp
     ../Source/UI/ModMatrixComponent.cpp

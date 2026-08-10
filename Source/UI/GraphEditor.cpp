@@ -2763,6 +2763,9 @@ void GraphEditor::autoArrange() {
 
 void GraphEditor::savePreset(juce::File file) {
     auto json = synth::AIStateMapper::graphToJSON(audioEngine.getGraph());
+    // Re-merge whatever unknown top-level keys were stashed on the last load (e.g. a future
+    // build's "timeline") — graphToJSON only knows about the keys this build understands.
+    json = patchDocument.toVar(json);
     file.replaceWithText(juce::JSON::toString(json));
 }
 
@@ -2784,6 +2787,9 @@ void GraphEditor::newPatch() {
         // timer fires against a freed VisualBuffer after graph.clear().
         detachAllModuleComponents();
         graph.clear();
+        // A fresh patch has no file behind it — preserved keys are per-loaded-file and must
+        // never be resurrected into it.
+        patchDocument.clear();
         updateComponents(); // reconciles the now-empty view; the empty-canvas hint will show
     };
 
@@ -2802,6 +2808,10 @@ void GraphEditor::loadPreset(juce::File file) {
                                                "Could not parse preset file.");
         return;
     }
+    // Stash any top-level keys this build doesn't understand (e.g. a future "timeline") before
+    // applyJSONToGraph — it only ever looks at the known patch keys, so this is the one place
+    // that sees the raw root object.
+    patchDocument.loadFromVar(json);
     // Detach before applyJSONToGraph clears the graph (see loadFactoryPreset — avoids scope-timer UAF).
     detachAllModuleComponents();
     // The user picked this file from their own filesystem — trusted, unlike an AI-authored patch.

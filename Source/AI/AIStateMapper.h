@@ -28,6 +28,7 @@ enum class PatchValidationError {
     NodeTypeInvalid,
     UnknownNodeType,
     DuplicateNodeId,
+    NodeIdTypeMismatch,
     InvalidParameterValue,
     InvalidChoiceValue,
     ConnectionEntryInvalid,
@@ -40,6 +41,7 @@ enum class PatchValidationError {
     ModulationSelfCycle,
     RemoveEntryInvalid,
     RemoveModulationEntryInvalid,
+    TimelineNotAllowed,
 };
 
 /**
@@ -80,8 +82,19 @@ public:
     // out at 16 — see PolyMidiModule); this just bounds how large a port index we'll accept.
     static constexpr int kMaxPortIndex = 64;
 
+    // Emitted as the root "schemaVersion" of every patch graphToJSON writes. Readers treat an
+    // ABSENT version as 1 and must not gate behaviour on it: the field exists so a future,
+    // genuinely breaking format change can be detected, not so additive fields can be versioned.
+    // Adding a property is always additive — never bump this for one.
+    static constexpr int kSchemaVersion = 1;
+
     /**
      * @brief Converts the current graph state to a JSON-compatible juce::var.
+     *
+     * Each node carries a "uuid" that is stable for the lifetime of the node: it is generated
+     * lazily here and written back into the graph node's properties, so repeated saves of an
+     * unchanged graph emit the same identity. That uuid — not the integer "id", which merge-mode
+     * apply can renumber — is what long-lived references (automation lanes, track bindings) key on.
      */
     static juce::var graphToJSON(juce::AudioProcessorGraph& graph);
 
@@ -132,6 +145,27 @@ public:
     static juce::var getPatchSchema();
 
     static std::unique_ptr<juce::AudioProcessor> createModule(const juce::String& type);
+
+    /**
+     * @brief The factory key graphToJSON writes for a live processor.
+     *
+     * The inverse of createModule() for every canonical type: createModule(k) must produce a
+     * processor for which this returns k again, or that module silently changes type on every
+     * save/load and every structural undo (which replays the same JSON). Guarded by
+     * AIStateMapperTest.FactoryTypeNamesRoundTrip.
+     */
+    static juce::String getFactoryTypeName(juce::AudioProcessor* processor);
+
+    /** @brief Every key registered in the module factory, sorted. */
+    static juce::StringArray moduleFactoryTypeNames();
+
+    /**
+     * @brief The module types a model is allowed to author, sorted.
+     *
+     * Derived from the factory minus the non-authorable set, so registering a module makes it
+     * model-authorable — which is why the exact contents are pinned by a golden test.
+     */
+    static juce::StringArray authorableModuleTypes();
 
 private:
     /**
