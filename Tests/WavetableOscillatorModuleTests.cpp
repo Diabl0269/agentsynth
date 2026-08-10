@@ -152,15 +152,23 @@ protected:
 // ============================================================================
 
 TEST_F(WavetableOscillatorModuleTest, FactoryInitialisation) {
+    using WT = WavetableOscillatorModule;
     EXPECT_EQ(module->getModuleType(), ModuleType::Wavetable);
     EXPECT_EQ(module->getName(), "Wavetable");
-    // Bypassed, Table, Position, Octave, Coarse, Fine, Level, Poly, Unison, Detune, Muted
-    EXPECT_EQ(module->getParameters().size(), 11);
-    EXPECT_EQ(module->getTotalNumInputChannels(), 13);
-    EXPECT_EQ(module->getTotalNumOutputChannels(), 13);
-    EXPECT_EQ(module->getVisibleInputPortCount(), 6);
-    EXPECT_EQ(module->getVisibleOutputPortCount(), 1);
+    // Bypassed, Table, Position, Octave, Coarse, Fine, Level, Poly, Unison, Detune, Warp,
+    // Warp Amt, Phase, Rand Phase, Spread, Width, Blend, Stack, Sub, Sub Oct, Sub Wave, Pan,
+    // Sync In, Import, Interp, Muted
+    EXPECT_EQ(module->getParameters().size(), 26);
+    EXPECT_EQ(module->getTotalNumInputChannels(), WT::kNumInputs);
+    EXPECT_EQ(module->getTotalNumOutputChannels(), WT::kNumOutputs);
+    EXPECT_EQ(module->getVisibleInputPortCount(), WT::kNumJacks);
+    EXPECT_EQ(module->getVisibleOutputPortCount(), 2); // Audio L + Audio R
     EXPECT_EQ(module->getModulationCategory(), ModulationCategory::Oscillator);
+
+    // The Audio R block has to clear the whole shared-CV block, or a stereo read would land
+    // on a mod-CV input channel.
+    EXPECT_GE(WT::kRightBase, WT::kNumInputs);
+    EXPECT_GE(WT::kNumOutputs, WT::kRightBase + WT::kNumVoices);
 }
 
 TEST_F(WavetableOscillatorModuleTest, DeclaresEnoughOutputsForEveryCVInput) {
@@ -174,21 +182,88 @@ TEST_F(WavetableOscillatorModuleTest, DeclaresEnoughOutputsForEveryCVInput) {
 }
 
 TEST_F(WavetableOscillatorModuleTest, PortLabelsAndModulationTargets) {
-    EXPECT_EQ(module->getInputPortLabel(0), "Pitch");
-    EXPECT_EQ(module->getInputPortLabel(1), "Position");
-    EXPECT_EQ(module->getInputPortLabel(5), "Level");
-    EXPECT_EQ(module->getOutputPortLabel(0), "Audio");
+    using WT = WavetableOscillatorModule;
 
+    EXPECT_EQ(module->getInputPortLabel(WT::kJackPitch), "Pitch");
+    EXPECT_EQ(module->getInputPortLabel(WT::kJackPosition), "Position");
+    EXPECT_EQ(module->getInputPortLabel(WT::kJackLevel), "Level");
+    EXPECT_EQ(module->getInputPortLabel(WT::kJackWarp), "Warp");
+    EXPECT_EQ(module->getInputPortLabel(WT::kJackSync), "Sync");
+    EXPECT_EQ(module->getOutputPortLabel(0), "Audio L");
+    EXPECT_EQ(module->getOutputPortLabel(1), "Audio R");
+
+    // Mono lists every jack including Pitch; poly drives pitch from the fan instead.
     const auto mono = module->getModulationTargets();
-    ASSERT_EQ(mono.size(), 6u);
-    EXPECT_EQ(mono[1].name, "Position");
-    EXPECT_EQ(mono[1].channelIndex, 1);
+    ASSERT_EQ(mono.size(), (size_t)WT::kNumJacks);
+    EXPECT_EQ(mono[WT::kJackPosition].name, "Position");
+    EXPECT_EQ(mono[WT::kJackPosition].channelIndex, WT::kJackPosition);
+    EXPECT_EQ(mono[WT::kJackWarp].name, "Warp");
+    EXPECT_EQ(mono[WT::kJackWarp].channelIndex, WT::kJackWarp);
 
     setBool(*module, "poly", true);
     const auto poly = module->getModulationTargets();
-    ASSERT_EQ(poly.size(), 5u);
+    ASSERT_EQ(poly.size(), (size_t)WT::kNumModCV);
     EXPECT_EQ(poly[0].name, "Position");
-    EXPECT_EQ(poly[0].channelIndex, 8);
+    EXPECT_EQ(poly[0].channelIndex, WT::kPolyModCVBase);
+    EXPECT_EQ(poly.back().name, "Sync");
+    EXPECT_EQ(poly.back().channelIndex, WT::kNumInputs - 1);
+}
+
+// Channels that existed before issue #180 must not have moved: a patch saved against the old
+// six-jack module routes by raw channel index, so shifting Octave/Coarse/Fine/Level would
+// silently repoint every saved modulation.
+TEST_F(WavetableOscillatorModuleTest, LegacyModCVChannelsKeepTheirIndices) {
+    using WT = WavetableOscillatorModule;
+
+    EXPECT_EQ(WT::kJackPitch, 0);
+    EXPECT_EQ(WT::kJackPosition, 1);
+    EXPECT_EQ(WT::kJackOctave, 2);
+    EXPECT_EQ(WT::kJackCoarse, 3);
+    EXPECT_EQ(WT::kJackFine, 4);
+    EXPECT_EQ(WT::kJackLevel, 5);
+
+    // Poly's shared block still starts at channel 8 with the same five entries in order.
+    EXPECT_EQ(WT::modCVChannelFor(WT::kJackPosition, true), 8);
+    EXPECT_EQ(WT::modCVChannelFor(WT::kJackOctave, true), 9);
+    EXPECT_EQ(WT::modCVChannelFor(WT::kJackCoarse, true), 10);
+    EXPECT_EQ(WT::modCVChannelFor(WT::kJackFine, true), 11);
+    EXPECT_EQ(WT::modCVChannelFor(WT::kJackLevel, true), 12);
+}
+
+TEST_F(WavetableOscillatorModuleTest, StereoOutputPortsMapToSeparateChannelBlocks) {
+    using WT = WavetableOscillatorModule;
+
+    // Mono: one channel per leg, neither of which is a poly head spanning voices.
+    const auto monoL = module->mapOutputChannel(0);
+    EXPECT_EQ(monoL.visibleJackIndex, 0);
+    EXPECT_EQ(monoL.role, PortRole::Audio);
+    EXPECT_EQ(monoL.polyVoiceSpan, 1);
+
+    const auto monoR = module->mapOutputChannel(WT::kRightBase);
+    EXPECT_EQ(monoR.visibleJackIndex, 1);
+    EXPECT_EQ(monoR.role, PortRole::Audio);
+
+    setBool(*module, "poly", true);
+
+    // Poly: both legs fan eight wide, so the poly-bus collapse in AudioEngine can carry a
+    // stereo unison stack into the Voice Mixer as two cables rather than sixteen.
+    const auto polyL = module->mapOutputChannel(0);
+    EXPECT_TRUE(polyL.isPolyGroupHead);
+    EXPECT_EQ(polyL.polyVoiceSpan, WT::kNumVoices);
+
+    const auto polyR = module->mapOutputChannel(WT::kRightBase);
+    EXPECT_EQ(polyR.visibleJackIndex, 1);
+    EXPECT_TRUE(polyR.isPolyGroupHead);
+    EXPECT_EQ(polyR.polyVoiceSpan, WT::kNumVoices);
+
+    for (int v = 1; v < WT::kNumVoices; ++v) {
+        EXPECT_FALSE(module->mapOutputChannel(v).isPolyGroupHead);
+        EXPECT_FALSE(module->mapOutputChannel(WT::kRightBase + v).isPolyGroupHead);
+        EXPECT_EQ(module->mapOutputChannel(WT::kRightBase + v).visibleJackIndex, 1);
+    }
+
+    // A channel between the two audio blocks is a silent pass-through, never a bus head.
+    EXPECT_FALSE(module->mapOutputChannel(WT::kPolyModCVBase).isPolyGroupHead);
 }
 
 TEST_F(WavetableOscillatorModuleTest, LogicalPortMappingMonoAndPoly) {
@@ -704,6 +779,677 @@ TEST_F(WavetableOscillatorModuleTest, UntrustedPatchCannotNameAWavetableFileToOp
 // ============================================================================
 // Mute / bypass contract
 // ============================================================================
+
+// ============================================================================
+// Warp modes (issue #180 phase 2 / 4)
+// ============================================================================
+
+namespace {
+
+constexpr int kCh = WavetableOscillatorModule::kNumOutputs;
+
+/** Names in the same order as the "warp" choice parameter, for readable failures. */
+const char* const kWarpNames[] = {"Off",  "Sync",   "Bend +",   "Bend -", "PWM",    "Asym",
+                                  "Flip", "Mirror", "Quantize", "Remap",  "Formant"};
+
+/** Sends a note-on, then renders `blocks` further blocks and returns those. The note-on block
+    itself is discarded — it carries the parameter smoothers' ramp-in. */
+juce::AudioBuffer<float> renderNote(WavetableOscillatorModule& module, int midiNote, int blocks = 8) {
+    juce::AudioBuffer<float> block(kCh, kBlockSize);
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, midiNote, 1.0f), 0);
+    block.clear();
+    module.processBlock(block, midi);
+    return render(module, kCh, blocks);
+}
+
+/** Renders exactly the note-on block, so sample 0 is the first sample after the retrigger. */
+juce::AudioBuffer<float> renderAttack(WavetableOscillatorModule& module, int midiNote) {
+    juce::AudioBuffer<float> block(kCh, kBlockSize);
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, midiNote, 1.0f), 0);
+    block.clear();
+    module.processBlock(block, midi);
+    return block;
+}
+
+/** Loudest bin in a swept band. */
+float peakInBand(const juce::AudioBuffer<float>& buffer, int channel, float fromHz, float toHz, float stepHz) {
+    float peak = 0.0f;
+    for (float hz = fromHz; hz <= toHz; hz += stepHz)
+        peak = std::max(peak, magnitudeAt(buffer, channel, hz, kSampleRate));
+    return peak;
+}
+
+} // namespace
+
+class WavetableWarpAliasTest
+    : public WavetableOscillatorModuleTest
+    , public ::testing::WithParamInterface<int> {};
+
+// The anti-aliasing guarantee is the module's contract, and a warp is exactly the thing that can
+// break it: warps run AFTER mip selection, so they can put back the harmonics the pyramid exists
+// to remove. Every mode is swept at full warp on a high note. Nothing legitimate lives below the
+// fundamental for any of these modes — they all reweight or multiply harmonics of f0 — so any
+// energy down there is folded.
+TEST_P(WavetableWarpAliasTest, EveryWarpModeStaysCleanBelowTheFundamental) {
+    constexpr float kNoteHz = 4186.0f; // MIDI 108
+    const int warpIndex = GetParam();
+
+    setFloat(*module, "position", 1.0f); // squarest frame — the most harmonics to fold
+    setChoice(*module, "warp", warpIndex);
+    setFloat(*module, "warpAmount", 1.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+
+    const auto out = renderNote(*module, 108);
+
+    // Legitimate content: the fundamental and its harmonics, all at or above kNoteHz.
+    const float signal = peakInBand(out, 0, kNoteHz * 0.95f, 20000.0f, 100.0f);
+    ASSERT_GT(signal, 0.01f) << kWarpNames[warpIndex] << " produced no audible signal";
+
+    // Folded content lands below the fundamental.
+    const float alias = peakInBand(out, 0, 300.0f, kNoteHz * 0.85f, 100.0f);
+
+    EXPECT_LT(alias, signal * 0.05f) << "warp \"" << kWarpNames[warpIndex] << "\" aliases: " << alias << " vs signal "
+                                     << signal;
+}
+
+INSTANTIATE_TEST_SUITE_P(AllWarpModes, WavetableWarpAliasTest,
+                         ::testing::Range(0, (int)WavetableOscillatorModule::Warp::Count));
+
+class WavetableWarpBoundsTest
+    : public WavetableOscillatorModuleTest
+    , public ::testing::WithParamInterface<int> {};
+
+TEST_P(WavetableWarpBoundsTest, EveryWarpModeStaysBounded) {
+    setChoice(*module, "warp", GetParam());
+    setFloat(*module, "warpAmount", 1.0f);
+    setInt(*module, "unison", 8);
+    setFloat(*module, "detune", 50.0f);
+    setFloat(*module, "subLevel", 1.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+
+    const auto out = renderNote(*module, 60);
+    for (int ch : {0, WavetableOscillatorModule::kRightBase}) {
+        const float peak = out.getMagnitude(ch, 0, out.getNumSamples());
+        EXPECT_LT(peak, 4.0f) << kWarpNames[GetParam()] << " channel " << ch << " blew up";
+        EXPECT_TRUE(std::isfinite(peak)) << kWarpNames[GetParam()] << " produced a non-finite sample";
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(AllWarpModes, WavetableWarpBoundsTest,
+                         ::testing::Range(0, (int)WavetableOscillatorModule::Warp::Count));
+
+TEST_F(WavetableOscillatorModuleTest, WarpAmountZeroLeavesTheWaveAlone) {
+    setFloat(*module, "position", 0.6f);
+    setChoice(*module, "warp", (int)WavetableOscillatorModule::Warp::Asym);
+    setFloat(*module, "warpAmount", 0.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    const auto warped = renderNote(*module, 60, 4);
+
+    auto plain = std::make_unique<WavetableOscillatorModule>();
+    setFloat(*plain, "position", 0.6f);
+    plain->prepareToPlay(kSampleRate, kBlockSize);
+    const auto reference = renderNote(*plain, 60, 4);
+
+    for (int i = 0; i < reference.getNumSamples(); i += 37)
+        ASSERT_NEAR(warped.getReadPointer(0)[i], reference.getReadPointer(0)[i], 1.0e-5f) << "sample " << i;
+}
+
+TEST_F(WavetableOscillatorModuleTest, WarpChangesTheSpectrum) {
+    // A sine frame warped by Bend gains harmonics it did not have.
+    setFloat(*module, "position", 0.0f); // pure sine
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    const auto clean = renderNote(*module, 60, 4);
+    const float cleanSecond = magnitudeAt(clean, 0, 523.3f, kSampleRate); // 2nd harmonic of C4
+
+    setChoice(*module, "warp", (int)WavetableOscillatorModule::Warp::BendPlus);
+    setFloat(*module, "warpAmount", 1.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    const auto bent = renderNote(*module, 60, 4);
+    const float bentSecond = magnitudeAt(bent, 0, 523.3f, kSampleRate);
+
+    EXPECT_GT(bentSecond, cleanSecond * 4.0f) << "Bend + must add harmonics to a sine";
+}
+
+TEST_F(WavetableOscillatorModuleTest, WarpAmountCVDrivesTheWarp) {
+    using WT = WavetableOscillatorModule;
+    setFloat(*module, "position", 0.0f);
+    setChoice(*module, "warp", (int)WT::Warp::BendPlus);
+    setFloat(*module, "warpAmount", 0.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+
+    // Warm up on a note, then feed full-scale CV into the Warp jack.
+    juce::AudioBuffer<float> block(kCh, kBlockSize);
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 60, 1.0f), 0);
+    block.clear();
+    module->processBlock(block, midi);
+
+    juce::AudioBuffer<float> out(kCh, 4 * kBlockSize);
+    out.clear();
+    for (int b = 0; b < 4; ++b) {
+        block.clear();
+        juce::FloatVectorOperations::fill(block.getWritePointer(WT::kJackWarp), 1.0f, kBlockSize);
+        juce::MidiBuffer empty;
+        module->processBlock(block, empty);
+        for (int ch = 0; ch < kCh; ++ch)
+            out.copyFrom(ch, b * kBlockSize, block, ch, 0, kBlockSize);
+    }
+
+    EXPECT_GT(magnitudeAt(out, 0, 523.3f, kSampleRate), 0.02f)
+        << "CV on the Warp jack must warp the read even with the knob at zero";
+}
+
+// ============================================================================
+// Phase control (issue #180 phase 1)
+// ============================================================================
+
+TEST_F(WavetableOscillatorModuleTest, RetriggerPhaseStartsTheWaveWhereAsked) {
+    setFloat(*module, "position", 0.0f); // sine: phase is directly readable from sample 0
+
+    // Phase 0 starts at the sine's zero crossing, rising.
+    setFloat(*module, "phase", 0.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    EXPECT_NEAR(renderAttack(*module, 60).getReadPointer(0)[0], 0.0f, 0.02f);
+
+    // A quarter turn starts at the positive peak instead.
+    setFloat(*module, "phase", 90.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    EXPECT_GT(renderAttack(*module, 60).getReadPointer(0)[0], 0.8f);
+
+    // Three quarters starts at the negative peak.
+    setFloat(*module, "phase", 270.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    EXPECT_LT(renderAttack(*module, 60).getReadPointer(0)[0], -0.8f);
+}
+
+TEST_F(WavetableOscillatorModuleTest, RandomPhaseDecorrelatesRepeatedNotes) {
+    setFloat(*module, "position", 0.0f);
+    setFloat(*module, "randomPhase", 1.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+
+    // Without randomisation every note-on would start at exactly the same sample value.
+    std::vector<float> firstSamples;
+    for (int n = 0; n < 6; ++n)
+        firstSamples.push_back(renderAttack(*module, 60).getReadPointer(0)[0]);
+
+    float spread = 0.0f;
+    for (float v : firstSamples)
+        spread = std::max(spread, std::abs(v - firstSamples[0]));
+
+    EXPECT_GT(spread, 0.1f) << "random phase must vary the attack between notes";
+}
+
+TEST_F(WavetableOscillatorModuleTest, UnisonSpreadDecorrelatesTheStack) {
+    // Eight phase-correlated sines at the same pitch sum to 8x one sine; spreading their start
+    // phases around the cycle makes them cancel instead. Detune stays at 0 so the ONLY
+    // difference between the two renders is the start phase.
+    setFloat(*module, "position", 0.0f);
+    setInt(*module, "unison", 8);
+    setFloat(*module, "detune", 0.0f);
+    setFloat(*module, "spread", 0.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    const float correlated = rms(renderNote(*module, 60, 2), 0);
+
+    setFloat(*module, "spread", 1.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    const float spread = rms(renderNote(*module, 60, 2), 0);
+
+    EXPECT_LT(spread, correlated * 0.5f) << "spreading unison start phases must break the pile-up";
+}
+
+// ============================================================================
+// Stereo, pan and voicing (issue #180 phase 3)
+// ============================================================================
+
+TEST_F(WavetableOscillatorModuleTest, DefaultsKeepAudioLIdenticalToAudioR) {
+    // Width 0 / pan 0 is mono-compatible: both jacks carry the same signal at full level, so a
+    // patch that only cables Audio L sounds exactly as it did before the module went stereo.
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    const auto out = renderNote(*module, 60, 2);
+
+    const float left = rms(out, 0);
+    ASSERT_GT(left, 0.05f);
+    EXPECT_NEAR(rms(out, WavetableOscillatorModule::kRightBase), left, 1.0e-6f);
+}
+
+TEST_F(WavetableOscillatorModuleTest, UnisonWidthSeparatesTheStereoLegs) {
+    setInt(*module, "unison", 8);
+    setFloat(*module, "detune", 30.0f);
+    setFloat(*module, "width", 0.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+
+    const auto centred = renderNote(*module, 60, 2);
+    const int R = WavetableOscillatorModule::kRightBase;
+
+    // At width 0 the legs are identical, so their difference is silence.
+    float centredDiff = 0.0f;
+    for (int i = 0; i < centred.getNumSamples(); ++i)
+        centredDiff = std::max(centredDiff, std::abs(centred.getReadPointer(0)[i] - centred.getReadPointer(R)[i]));
+    EXPECT_LT(centredDiff, 1.0e-5f);
+
+    setFloat(*module, "width", 1.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    const auto wide = renderNote(*module, 60, 2);
+
+    float wideDiff = 0.0f;
+    for (int i = 0; i < wide.getNumSamples(); ++i)
+        wideDiff = std::max(wideDiff, std::abs(wide.getReadPointer(0)[i] - wide.getReadPointer(R)[i]));
+    EXPECT_GT(wideDiff, 0.05f) << "width must place the detuned unison voices differently in L and R";
+}
+
+TEST_F(WavetableOscillatorModuleTest, PanShiftsEnergyBetweenTheLegs) {
+    const int R = WavetableOscillatorModule::kRightBase;
+
+    setFloat(*module, "pan", -1.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    const auto left = renderNote(*module, 60, 2);
+    EXPECT_GT(rms(left, 0), 0.05f);
+    EXPECT_NEAR(rms(left, R), 0.0f, 1.0e-6f);
+
+    setFloat(*module, "pan", 1.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    const auto right = renderNote(*module, 60, 2);
+    EXPECT_NEAR(rms(right, 0), 0.0f, 1.0e-6f);
+    EXPECT_GT(rms(right, R), 0.05f);
+}
+
+TEST_F(WavetableOscillatorModuleTest, PolyModeWritesBothAudioBlocks) {
+    using WT = WavetableOscillatorModule;
+    setBool(*module, "poly", true);
+    setFloat(*module, "pan", 0.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+
+    juce::AudioBuffer<float> out(kCh, 2 * kBlockSize);
+    out.clear();
+    juce::AudioBuffer<float> block(kCh, kBlockSize);
+    for (int b = 0; b < 2; ++b) {
+        block.clear();
+        // Three sounding voices at distinct pitches.
+        juce::FloatVectorOperations::fill(block.getWritePointer(0), 220.0f, kBlockSize);
+        juce::FloatVectorOperations::fill(block.getWritePointer(1), 330.0f, kBlockSize);
+        juce::FloatVectorOperations::fill(block.getWritePointer(2), 440.0f, kBlockSize);
+        juce::MidiBuffer midi;
+        module->processBlock(block, midi);
+        for (int ch = 0; ch < kCh; ++ch)
+            out.copyFrom(ch, b * kBlockSize, block, ch, 0, kBlockSize);
+    }
+
+    for (int v = 0; v < 3; ++v) {
+        EXPECT_GT(rms(out, v), 0.05f) << "voice " << v << " left leg";
+        EXPECT_GT(rms(out, WT::kRightBase + v), 0.05f) << "voice " << v << " right leg";
+    }
+    // Silent voices stay silent on both legs.
+    EXPECT_NEAR(rms(out, 3), 0.0f, 1.0e-6f);
+    EXPECT_NEAR(rms(out, WT::kRightBase + 3), 0.0f, 1.0e-6f);
+    // The shared CV block between the two audio blocks must not leak audio.
+    EXPECT_NEAR(rms(out, WT::kPolyModCVBase), 0.0f, 1.0e-6f);
+}
+
+TEST_F(WavetableOscillatorModuleTest, SubOscillatorAddsASubOctavePartial) {
+    setFloat(*module, "position", 0.0f);
+    setFloat(*module, "subLevel", 0.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    const auto dry = renderNote(*module, 69, 4); // A4 = 440 Hz
+    const float drySub = magnitudeAt(dry, 0, 220.0f, kSampleRate);
+
+    setFloat(*module, "subLevel", 1.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    const auto wet = renderNote(*module, 69, 4);
+    EXPECT_GT(magnitudeAt(wet, 0, 220.0f, kSampleRate), drySub + 0.2f) << "sub must appear an octave down";
+
+    // Two octaves down puts it at 110 Hz instead.
+    setChoice(*module, "subOctave", 1);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    const auto twoDown = renderNote(*module, 69, 4);
+    EXPECT_GT(magnitudeAt(twoDown, 0, 110.0f, kSampleRate), 0.2f);
+}
+
+TEST_F(WavetableOscillatorModuleTest, StackModesTransposeUnisonVoices) {
+    setFloat(*module, "position", 0.0f);
+    setInt(*module, "unison", 4);
+    setFloat(*module, "detune", 0.0f);
+    setChoice(*module, "stack", (int)WavetableOscillatorModule::Stack::PowerChord);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+
+    const auto out = renderNote(*module, 69, 4); // A4 = 440
+    // Power chord: root, fifth (+7 = 659.3), octave (+12 = 880).
+    EXPECT_GT(magnitudeAt(out, 0, 440.0f, kSampleRate), 0.05f) << "root missing";
+    EXPECT_GT(magnitudeAt(out, 0, 659.3f, kSampleRate), 0.05f) << "fifth missing";
+    EXPECT_GT(magnitudeAt(out, 0, 880.0f, kSampleRate), 0.05f) << "octave missing";
+}
+
+TEST_F(WavetableOscillatorModuleTest, BlendFadesTheStackAgainstTheCentreVoice) {
+    setInt(*module, "unison", 8);
+    setFloat(*module, "detune", 40.0f);
+
+    setFloat(*module, "blend", 1.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    const auto full = renderNote(*module, 60, 2);
+
+    setFloat(*module, "blend", 0.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    const auto centreOnly = renderNote(*module, 60, 2);
+
+    // With the stack muted only the centre voice remains, so the two renders differ.
+    float diff = 0.0f;
+    for (int i = 0; i < full.getNumSamples(); ++i)
+        diff = std::max(diff, std::abs(full.getReadPointer(0)[i] - centreOnly.getReadPointer(0)[i]));
+    EXPECT_GT(diff, 0.02f);
+    EXPECT_GT(rms(centreOnly, 0), 0.05f) << "the centre voice must survive blend 0";
+}
+
+TEST_F(WavetableOscillatorModuleTest, RingModMultipliesBySyncInput) {
+    using WT = WavetableOscillatorModule;
+    setFloat(*module, "position", 0.0f);
+    setChoice(*module, "syncMode", (int)WT::SyncMode::RingMod);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+
+    juce::AudioBuffer<float> block(kCh, kBlockSize);
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 69, 1.0f), 0);
+    block.clear();
+    module->processBlock(block, midi);
+
+    // Ring-modulating a 440 Hz carrier with a 110 Hz sine gives sidebands at 330 and 550,
+    // and suppresses the carrier itself.
+    juce::AudioBuffer<float> out(kCh, 8 * kBlockSize);
+    out.clear();
+    double phase = 0.0;
+    for (int b = 0; b < 8; ++b) {
+        block.clear();
+        float* sync = block.getWritePointer(WT::kJackSync);
+        for (int i = 0; i < kBlockSize; ++i) {
+            sync[i] = (float)std::sin(phase);
+            phase += 2.0 * juce::MathConstants<double>::pi * 110.0 / kSampleRate;
+        }
+        juce::MidiBuffer empty;
+        module->processBlock(block, empty);
+        for (int ch = 0; ch < kCh; ++ch)
+            out.copyFrom(ch, b * kBlockSize, block, ch, 0, kBlockSize);
+    }
+
+    const float carrier = magnitudeAt(out, 0, 440.0f, kSampleRate);
+    const float lower = magnitudeAt(out, 0, 330.0f, kSampleRate);
+    const float upper = magnitudeAt(out, 0, 550.0f, kSampleRate);
+    EXPECT_GT(lower, 0.1f) << "lower sideband missing";
+    EXPECT_GT(upper, 0.1f) << "upper sideband missing";
+    EXPECT_LT(carrier, lower * 0.5f) << "ring mod must suppress the carrier";
+}
+
+TEST_F(WavetableOscillatorModuleTest, HardSyncResetsThePhaseOnTheMasterEdge) {
+    using WT = WavetableOscillatorModule;
+    setFloat(*module, "position", 0.0f);
+    setChoice(*module, "syncMode", (int)WT::SyncMode::HardSync);
+    // The slave must sit at a NON-integer multiple of the master: at an exact multiple it
+    // completes a whole number of cycles per master period and the reset is a no-op.
+    setInt(*module, "octave", 2);
+    setInt(*module, "coarse", 5); // 110 Hz * 4 * 2^(5/12) ~= 587 Hz, ratio 5.34
+    module->prepareToPlay(kSampleRate, kBlockSize);
+
+    juce::AudioBuffer<float> block(kCh, kBlockSize);
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 57, 1.0f), 0); // A2 = 110 Hz -> slave at 440
+    block.clear();
+    module->processBlock(block, midi);
+
+    juce::AudioBuffer<float> out(kCh, 8 * kBlockSize);
+    out.clear();
+    double phase = 0.0;
+    for (int b = 0; b < 8; ++b) {
+        block.clear();
+        float* sync = block.getWritePointer(WT::kJackSync);
+        for (int i = 0; i < kBlockSize; ++i) {
+            sync[i] = (float)std::sin(phase);
+            phase += 2.0 * juce::MathConstants<double>::pi * 110.0 / kSampleRate;
+        }
+        juce::MidiBuffer empty;
+        module->processBlock(block, empty);
+        for (int ch = 0; ch < kCh; ++ch)
+            out.copyFrom(ch, b * kBlockSize, block, ch, 0, kBlockSize);
+    }
+
+    // Retriggering a sine at 110 Hz imposes that period on the output, so energy appears at the
+    // master's fundamental where a free-running 440 Hz sine would have none.
+    EXPECT_GT(magnitudeAt(out, 0, 110.0f, kSampleRate), 0.02f) << "hard sync must imprint the master period";
+}
+
+// ============================================================================
+// Import modes and interpolation (issue #180 phases 1 and 4)
+// ============================================================================
+
+TEST_F(WavetableOscillatorModuleTest, FixedImportSizeSplitsOnThatBoundary) {
+    // Eight 2048-sample frames = 64 frames of 256 samples.
+    const juce::File file = writeWavetableFile("wt180-fixed.wav", 8);
+    ASSERT_TRUE(file.existsAsFile());
+
+    setChoice(*module, "importMode", (int)WavetableOscillatorModule::ImportMode::Fixed256);
+    ASSERT_TRUE(module->loadWavetableFile(file));
+    setChoice(*module, "table", WavetableOscillatorModule::kLoadedTableChoice);
+    EXPECT_EQ(module->getNumFrames(), 64);
+
+    setChoice(*module, "importMode", (int)WavetableOscillatorModule::ImportMode::Fixed2048);
+    ASSERT_TRUE(module->loadWavetableFile(file));
+    EXPECT_EQ(module->getNumFrames(), 8);
+
+    file.deleteFile();
+}
+
+TEST_F(WavetableOscillatorModuleTest, SingleCycleImportMakesExactlyOneFrame) {
+    const juce::File file = writeWavetableFile("wt180-single.wav", 8);
+    ASSERT_TRUE(file.existsAsFile());
+
+    setChoice(*module, "importMode", (int)WavetableOscillatorModule::ImportMode::SingleCycle);
+    ASSERT_TRUE(module->loadWavetableFile(file));
+    setChoice(*module, "table", WavetableOscillatorModule::kLoadedTableChoice);
+    EXPECT_EQ(module->getNumFrames(), 1);
+
+    file.deleteFile();
+}
+
+TEST_F(WavetableOscillatorModuleTest, PitchDetectImportFindsTheSourcePeriod) {
+    // A file whose period is 512 samples, written as 2048-sample blocks of the 4th harmonic.
+    const int frameSize = WavetableOscillatorModule::kFrameSize;
+    const int numBlocks = 8;
+    juce::AudioBuffer<float> buffer(1, numBlocks * frameSize);
+    float* data = buffer.getWritePointer(0);
+    for (int i = 0; i < buffer.getNumSamples(); ++i)
+        data[i] = 0.8f * std::sin((float)i / 512.0f * juce::MathConstants<float>::twoPi);
+
+    const juce::File file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("wt180-pitch.wav");
+    file.deleteFile();
+    juce::WavAudioFormat format;
+    std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
+    ASSERT_NE(stream, nullptr);
+    std::unique_ptr<juce::AudioFormatWriter> writer(format.createWriterFor(stream.get(), kSampleRate, 1, 16, {}, 0));
+    ASSERT_NE(writer, nullptr);
+    stream.release();
+    writer->writeFromAudioSampleBuffer(buffer, 0, buffer.getNumSamples());
+    writer.reset();
+
+    setChoice(*module, "importMode", (int)WavetableOscillatorModule::ImportMode::PitchDetect);
+    ASSERT_TRUE(module->loadWavetableFile(file));
+    setChoice(*module, "table", WavetableOscillatorModule::kLoadedTableChoice);
+
+    // 8 * 2048 / 512 = 32 detected cycles, all of which fit under the 64-frame cap.
+    EXPECT_EQ(module->getNumFrames(), 32);
+
+    // Each detected cycle is one period, so the table plays back as a plain sine.
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    const auto out = renderNote(*module, 69, 4);
+    EXPECT_GT(magnitudeAt(out, 0, 440.0f, kSampleRate), 0.3f);
+    EXPECT_LT(magnitudeAt(out, 0, 880.0f, kSampleRate), 0.05f) << "a detected single cycle must have no 2nd harmonic";
+
+    file.deleteFile();
+}
+
+TEST_F(WavetableOscillatorModuleTest, SpectralImportKeepsMagnitudesAndDropsPhase) {
+    // Two frames of the same harmonic in opposite phase. A normal import keeps them opposed,
+    // so scanning between them cancels; a spectral import collapses both to sine phase, so the
+    // midpoint keeps its level.
+    const int frameSize = WavetableOscillatorModule::kFrameSize;
+    juce::AudioBuffer<float> buffer(1, 2 * frameSize);
+    float* data = buffer.getWritePointer(0);
+    for (int i = 0; i < frameSize; ++i) {
+        const float p = (float)i / (float)frameSize * juce::MathConstants<float>::twoPi;
+        data[i] = 0.8f * std::sin(p);
+        data[frameSize + i] = -0.8f * std::sin(p);
+    }
+
+    const juce::File file =
+        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("wt180-spectral.wav");
+    file.deleteFile();
+    juce::WavAudioFormat format;
+    std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
+    ASSERT_NE(stream, nullptr);
+    std::unique_ptr<juce::AudioFormatWriter> writer(format.createWriterFor(stream.get(), kSampleRate, 1, 16, {}, 0));
+    ASSERT_NE(writer, nullptr);
+    stream.release();
+    writer->writeFromAudioSampleBuffer(buffer, 0, buffer.getNumSamples());
+    writer.reset();
+
+    const auto midpointLevel = [&](WavetableOscillatorModule::ImportMode mode) {
+        auto mod = std::make_unique<WavetableOscillatorModule>();
+        setChoice(*mod, "importMode", (int)mode);
+        EXPECT_TRUE(mod->loadWavetableFile(file));
+        setChoice(*mod, "table", WavetableOscillatorModule::kLoadedTableChoice);
+        setFloat(*mod, "position", 0.5f);
+        mod->prepareToPlay(kSampleRate, kBlockSize);
+        return rms(renderNote(*mod, 60, 4), 0);
+    };
+
+    const float plain = midpointLevel(WavetableOscillatorModule::ImportMode::Auto);
+    const float spectral = midpointLevel(WavetableOscillatorModule::ImportMode::Spectral);
+
+    EXPECT_LT(plain, 0.05f) << "opposed frames must cancel at the midpoint on a normal import";
+    EXPECT_GT(spectral, 0.2f) << "a spectral import must make the frames phase-coherent";
+
+    file.deleteFile();
+}
+
+TEST_F(WavetableOscillatorModuleTest, HermiteInterpolationTracksLinearButStaysBounded) {
+    setFloat(*module, "position", 0.0f);
+    setChoice(*module, "interpolation", (int)WavetableOscillatorModule::Interpolation::Hermite);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+
+    const auto out = renderNote(*module, 60, 4);
+    EXPECT_GT(magnitudeAt(out, 0, 261.6f, kSampleRate), 0.5f) << "a sine must still be a sine";
+    EXPECT_LT(out.getMagnitude(0, 0, out.getNumSamples()), 1.5f);
+
+    // The cubic fit must not ring on the coarse mips a high note selects.
+    setChoice(*module, "table", 5); // Digital — the busiest built-in
+    setFloat(*module, "position", 1.0f);
+    module->prepareToPlay(kSampleRate, kBlockSize);
+    const auto high = renderNote(*module, 108, 4);
+    EXPECT_LT(high.getMagnitude(0, 0, high.getNumSamples()), 2.0f);
+}
+
+// ============================================================================
+// Folder browser (issue #180 phase 1)
+// ============================================================================
+
+TEST_F(WavetableOscillatorModuleTest, FolderBrowserScansStepsAndWraps) {
+    const juce::File folder = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("wt180-browser");
+    folder.deleteRecursively();
+    ASSERT_TRUE(folder.createDirectory());
+
+    // Three readable tables plus a file the loader must ignore.
+    for (const char* name : {"a-table.wav", "b-table.wav", "c-table.wav"}) {
+        const juce::File src = writeWavetableFile(juce::String("tmp-") + name, 4);
+        ASSERT_TRUE(src.existsAsFile());
+        ASSERT_TRUE(src.moveFileTo(folder.getChildFile(name)));
+    }
+    folder.getChildFile("notes.txt").replaceWithText("not a wavetable");
+
+    module->setWavetableFolder(folder);
+    EXPECT_EQ(module->getWavetableFolder(), folder);
+    ASSERT_EQ(module->getFolderWavetableCount(), 3) << "only audio files belong in the browser list";
+    EXPECT_EQ(module->getFolderIndex(), -1) << "scanning must not load anything on its own";
+
+    // Next from a fresh scan lands on the first entry, sorted by name.
+    ASSERT_TRUE(module->nextWavetable());
+    EXPECT_EQ(module->getFolderIndex(), 0);
+    EXPECT_EQ(module->getWavetableFile().getFileName(), "a-table.wav");
+
+    ASSERT_TRUE(module->nextWavetable());
+    EXPECT_EQ(module->getWavetableFile().getFileName(), "b-table.wav");
+
+    // Wrapping at both ends.
+    ASSERT_TRUE(module->nextWavetable());
+    ASSERT_TRUE(module->nextWavetable());
+    EXPECT_EQ(module->getFolderIndex(), 0) << "next past the end must wrap to the start";
+
+    ASSERT_TRUE(module->previousWavetable());
+    EXPECT_EQ(module->getFolderIndex(), 2) << "previous past the start must wrap to the end";
+
+    // An empty folder leaves the browser inert rather than failing.
+    const juce::File empty = folder.getChildFile("empty");
+    ASSERT_TRUE(empty.createDirectory());
+    module->setWavetableFolder(empty);
+    EXPECT_EQ(module->getFolderWavetableCount(), 0);
+    EXPECT_FALSE(module->nextWavetable());
+
+    folder.deleteRecursively();
+}
+
+TEST_F(WavetableOscillatorModuleTest, StateRoundTripRestoresNewParametersAndFolder) {
+    const juce::File folder = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("wt180-state");
+    folder.deleteRecursively();
+    ASSERT_TRUE(folder.createDirectory());
+
+    setChoice(*module, "warp", (int)WavetableOscillatorModule::Warp::Mirror);
+    setFloat(*module, "warpAmount", 0.75f);
+    setFloat(*module, "phase", 180.0f);
+    setFloat(*module, "spread", 0.5f);
+    setFloat(*module, "width", 0.8f);
+    setFloat(*module, "pan", -0.4f);
+    setFloat(*module, "subLevel", 0.6f);
+    setChoice(*module, "stack", (int)WavetableOscillatorModule::Stack::Minor);
+    setChoice(*module, "importMode", (int)WavetableOscillatorModule::ImportMode::Fixed512);
+    setChoice(*module, "interpolation", (int)WavetableOscillatorModule::Interpolation::Hermite);
+    module->setWavetableFolder(folder);
+
+    juce::MemoryBlock state;
+    module->getStateInformation(state);
+
+    auto restored = std::make_unique<WavetableOscillatorModule>();
+    restored->setStateInformation(state.getData(), (int)state.getSize());
+
+    const auto readFloat = [](juce::AudioProcessor& m, const juce::String& id) {
+        for (auto* p : m.getParameters())
+            if (auto* f = dynamic_cast<juce::AudioParameterFloat*>(p))
+                if (f->paramID == id)
+                    return f->get();
+        return -999.0f;
+    };
+    const auto readChoice = [](juce::AudioProcessor& m, const juce::String& id) {
+        for (auto* p : m.getParameters())
+            if (auto* c = dynamic_cast<juce::AudioParameterChoice*>(p))
+                if (c->paramID == id)
+                    return c->getIndex();
+        return -1;
+    };
+
+    EXPECT_EQ(readChoice(*restored, "warp"), (int)WavetableOscillatorModule::Warp::Mirror);
+    EXPECT_NEAR(readFloat(*restored, "warpAmount"), 0.75f, 0.01f);
+    EXPECT_NEAR(readFloat(*restored, "phase"), 180.0f, 0.5f);
+    EXPECT_NEAR(readFloat(*restored, "spread"), 0.5f, 0.01f);
+    EXPECT_NEAR(readFloat(*restored, "width"), 0.8f, 0.01f);
+    EXPECT_NEAR(readFloat(*restored, "pan"), -0.4f, 0.01f);
+    EXPECT_NEAR(readFloat(*restored, "subLevel"), 0.6f, 0.01f);
+    EXPECT_EQ(readChoice(*restored, "stack"), (int)WavetableOscillatorModule::Stack::Minor);
+    EXPECT_EQ(readChoice(*restored, "importMode"), (int)WavetableOscillatorModule::ImportMode::Fixed512);
+    EXPECT_EQ(readChoice(*restored, "interpolation"), (int)WavetableOscillatorModule::Interpolation::Hermite);
+    EXPECT_EQ(restored->getWavetableFolder(), folder);
+
+    // The same settings must survive the AIStateMapper extra-state path presets use.
+    auto viaExtra = std::make_unique<WavetableOscillatorModule>();
+    viaExtra->setExtraState(module->getExtraState());
+    EXPECT_EQ(viaExtra->getWavetableFolder(), folder);
+
+    folder.deleteRecursively();
+}
 
 class WavetableMuteBypassTest
     : public WavetableOscillatorModuleTest

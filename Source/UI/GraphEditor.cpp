@@ -90,7 +90,10 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Sampler")
         return {280, 657};
     if (typeName == "Wavetable")
-        return {280, 637};
+        // Double-width since issue #180. The 16 CV jacks run in two left-hand columns and the 23
+        // controls are paged behind a tab strip (only Position and Warp stay pinned), so neither
+        // the gutter nor the control count sets the height on its own.
+        return {synth::LayoutUtil::kDoubleWidth, 554};
     if (typeName == "Chorus" || typeName == "Phaser" || typeName == "Flanger")
         return {280, 309};
     if (typeName == "Bitcrusher")
@@ -376,6 +379,14 @@ juce::Colour GraphEditor::colourForCable(const VisibleCable& cable) const {
     const auto& colors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
     return synth::ui::resolveCableColour(cableColourMode, cable.signal, cable.sourceCategory, colors,
                                          cableColourOverrides, cable.isBypassed);
+}
+
+void GraphEditor::rememberWavetableFolder(const juce::File& folder) {
+    if (folder == lastWavetableFolder)
+        return;
+    lastWavetableFolder = folder;
+    if (onWavetableFolderChanged != nullptr)
+        onWavetableFolderChanged(folder);
 }
 
 void GraphEditor::setCableColourMode(synth::ui::CableColourMode mode) {
@@ -730,7 +741,26 @@ void GraphEditor::dragConnection(juce::Point<int> screenPos) {
     if (!isDraggingConnection)
         return;
     dragCurrentPos = screenPos;
+
+    // Ring whichever knob the cable would land on, so a Serum-style mod drop is aimed rather
+    // than guessed at. Only a cable dragged FROM an output can land on a knob.
+    for (auto* comp : content.getModules()) {
+        int target = -1;
+        if (!dragSourceIsInput && !dragSourceIsMidi && comp != dragSourceModule) {
+            const auto localPos = comp->getLocalPoint(nullptr, screenPos);
+            if (!comp->getPortForPoint(localPos))
+                if (auto port = comp->getModTargetPortForPoint(localPos))
+                    target = port->index;
+        }
+        comp->setModDropTargetChannel(target);
+    }
+
     content.repaint();
+}
+
+void GraphEditor::clearModDropTargets() {
+    for (auto* comp : content.getModules())
+        comp->setModDropTargetChannel(-1);
 }
 
 void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
@@ -743,6 +773,12 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
     for (auto* comp : content.getModules()) {
         auto localPos = comp->getLocalPoint(nullptr, screenPos);
         auto port = comp->getPortForPoint(localPos);
+
+        // Serum-style modulation drop: a cable released on a KNOB connects to that parameter's
+        // CV jack. Only as a fallback, so an actual jack under the cursor still wins, and only
+        // for a cable coming from an output — a mod source drives a destination, not the reverse.
+        if (!port && !dragSourceIsInput && !dragSourceIsMidi && comp != dragSourceModule)
+            port = comp->getModTargetPortForPoint(localPos);
 
         if (port) {
             if (comp == dragSourceModule)
@@ -819,6 +855,7 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
 
     isDraggingConnection = false;
     dragSourceModule = nullptr;
+    clearModDropTargets();
     content.repaint();
 }
 

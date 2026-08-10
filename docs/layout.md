@@ -689,9 +689,40 @@ moves past a visible amount (see `needsRepaint`), leaving the parent's cached im
 
 Wavetable frame view used by the `Wavetable` module card. Draws the frame currently under the scan position as a solid trace, with `kGhostFrames` (3) receding low-alpha traces sampled slightly further along the stack so the scan direction and the table's depth read as three-dimensional. Captioned with the table name and `frame/total`.
 
-**Repaints are gated** — the 15 Hz timer compares a change signature (quantised scan position, table name, frame count) and calls `repaint()` only when it differs. This is required by §10: the display is always visible inside a `setBufferedToImage(true)` module card, so an unconditional per-tick repaint would invalidate that cache 15 times a second.
+The trace is drawn **warped** — `getDisplayWaveformAt()` runs the same `readWarped()` the audio path does. A Warp knob whose effect is invisible is a knob users do not trust.
 
-Alongside it, `ModuleComponent` adds a **"Load Wavetable..."** `TextButton` for `Wavetable` modules. It opens an async `juce::FileChooser`, and on success calls `loadWavetableFile()` and switches the module's `table` choice to `Loaded File`. The completion lambda holds a `Component::SafePointer` and re-derives the module via `dynamic_cast`, since the card can be destroyed while the dialog is open.
+**Repaints are gated** — the 15 Hz timer compares a change signature (quantised scan position, table name, frame count, and `getWarpSignature()` — warp mode + quantised amount + interpolation mode) and calls `repaint()` only when it differs. This is required by §10: the display is always visible inside a `setBufferedToImage(true)` module card, so an unconditional per-tick repaint would invalidate that cache 15 times a second.
+
+#### Wavetable card chrome
+
+`ModuleComponent` builds the following for `Wavetable` modules:
+
+- **"Load Wavetable..."** `TextButton` — opens an async `juce::FileChooser` (starting in the module's browser folder), and on success calls `loadWavetableFile()` and switches the module's `table` choice to `Loaded File`.
+- **Folder browser row** — `[Folder...] [<] [>] [caption]`. `Folder...` opens an async directory chooser and calls `setWavetableFolder()`; `<` / `>` step the folder cursor; the caption shows the loaded file name and `index/total`.
+
+Both completion lambdas hold a `Component::SafePointer` and re-derive the module via `dynamic_cast`, since the card can be destroyed while the dialog is open. The card also implements `FileDragAndDropTarget` for audio files, routing drops through the same import path as the Load button.
+
+The card is **double-width** (issue #180): 15 knobs, 8 combos and a 16-jack port stack. Laid out flat, that came to 560×869 — technically correct and genuinely unusable, a wall of identical knobs with no hierarchy. Three mechanisms bring it to **560×554** and, more importantly, give it a reading order:
+
+**1. Two-column jack gutter, both columns on the LEFT.** `getInputPortColumns()` returns 2 for a card with more than 10 visible input jacks at double width; `getPortCenter()` then lays the inputs out **column-major** (jack 0 top-left, running down then over) at `kPortColumnStride` (100 px) apart. Sixteen jacks in one column set a ~390 px floor on the card height before a single control is placed.
+
+**Inputs stay on the left, outputs on the right — that convention is not negotiable for a saving in height.** It is what makes signal flow read left to right across a patch. Spilling the overflow down the right edge was tried and reverted: it reads as an output, and inputs and outputs are drawn identically, so the side is the only cue there is.
+
+The real objection to an interior column — the module covers the lower half of a cable you are dragging towards it — is answered by not aiming at the gutter at all. Release the cable **on the destination knob** instead; see [`modulation.md` § Drag-to-Knob Modulation](modulation.md).
+
+Everything that touches jack geometry — wire drawing, hit-testing (`getPortForPoint`), painting — reads `getPortCenter`, so this is the only place that changes. One consequence worth knowing: `getContentTopY()` takes the **maximum** y over all inputs rather than the last one's, because with more than one column an odd jack count leaves the second column a row short, so the last jack is not the lowest.
+
+**2. Tabbed control body.** The 23 controls are grouped into five pages — **Tune / Unison / Phase / Sub / File** — by `kWavetablePages` in `ModuleComponent.cpp`, which maps parameter *display names* to pages. Three controls sit outside the strip: `Position` and `Warp` / `Warp Amt` are **pinned** above it (they are what you actually perform with), and `Table` is laid out in the chrome band beside the display it selects.
+
+- **Jacks are never tabbed.** All 16 CV inputs stay on the card at all times, so a cable can never point at a hidden port. Only knobs and combos page.
+- **Anything that paints from a knob's bounds must check visibility.** A hidden knob keeps the bounds it had when its page was last laid out. Modulation rings go through `getModRingSliderIndex()` and drop targeting through `getModTargetPortForPoint()`; both return "none" for a knob whose page is hidden, so a ring cannot paint over empty card and a hidden knob cannot swallow a cable drop.
+- The card is sized to the **tallest** page, not the active one. A card that grew and shrank would shove its neighbours around the canvas on every tab click.
+- Page knob rows are **centred**, and page combos run three across — most pages carry fewer than the 6 available knob columns, and left-aligning them stranded half the card's width.
+- `createWavetableTabs()` must run **after** `createControls()` (it groups the controls that call creates) and must end by calling `updateLayout()` — `createControls()` already sized the card, so without a second pass the card keeps its flat-grid height and the tabbed layout never applies.
+
+**3. Chrome beside the ports.** The display / Table / button row / caption sit **beside** the jack stack, starting just under the header — the same reclaim the Parametric EQ card makes for its response curve (see §9). The body still starts below the lowest jack.
+
+The final size is pinned by `EstimatedModuleSizesMatchTheRealComponents`; `WavetableCardSplitsItsJackGutterIntoTwoColumns` and `WavetableTabsSwitchContentWithoutResizingTheCard` guard the two mechanisms above (including that every knob is reachable from some page — a control on no page is unusable).
 
 **Public static helper** (headless-testable):
 

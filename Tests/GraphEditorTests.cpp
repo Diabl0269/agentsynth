@@ -10,6 +10,7 @@
 #include "../Source/Modules/SamplerModule.h"
 #include "../Source/Modules/SequencerModule.h"
 #include "../Source/Modules/VCAModule.h"
+#include "../Source/Modules/WavetableOscillatorModule.h"
 #include "../Source/PresetManager.h"
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/LayoutUtil.h"
@@ -141,6 +142,107 @@ TEST_F(GraphEditorTest, NonAudioFileDragIsRejectedByTheCanvas) {
     const auto before = engine.getGraph().getNodes().size();
     editor.filesDropped(files, 200, 200);
     EXPECT_EQ(engine.getGraph().getNodes().size(), before) << "a non-audio drop must not create nodes";
+}
+
+// Serum-style modulation drop: releasing a cable on a KNOB wires the source to that parameter's
+// CV jack. On a module with 16 CV inputs, aiming at the gutter is the slow path; this is the one
+// people actually use.
+TEST_F(GraphEditorTest, DroppingACableOnAKnobCreatesAModRouting) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 900);
+
+    auto lfoNode = engine.getGraph().addNode(std::make_unique<LFOModule>());
+    auto wtNode = engine.getGraph().addNode(std::make_unique<WavetableOscillatorModule>());
+    editor.updateComponents();
+
+    ModuleComponent* lfoComp = nullptr;
+    ModuleComponent* wtComp = nullptr;
+    if (auto* content = editor.getChildComponent(0))
+        for (auto* child : content->getChildren())
+            if (auto* mod = dynamic_cast<ModuleComponent*>(child)) {
+                if (mod->getModule() == lfoNode->getProcessor())
+                    lfoComp = mod;
+                if (mod->getModule() == wtNode->getProcessor())
+                    wtComp = mod;
+            }
+    ASSERT_NE(lfoComp, nullptr);
+    ASSERT_NE(wtComp, nullptr);
+
+    lfoComp->setTopLeftPosition(0, 0);
+    wtComp->setTopLeftPosition(400, 0);
+
+    // "Position" is pinned above the tab strip, so it is on screen whichever page is showing.
+    juce::Slider* position = nullptr;
+    for (auto* child : wtComp->getChildren())
+        if (auto* s = dynamic_cast<juce::Slider*>(child))
+            if (s->getComponentID() == "Position")
+                position = s;
+    ASSERT_NE(position, nullptr);
+
+    const auto knobPoint = wtComp->getBounds().getPosition() + position->getBounds().getCentre();
+
+    editor.beginConnectionDrag(lfoComp, 0, /*isInput*/ false, /*isMidi*/ false, {0, 0});
+    editor.dragConnection(knobPoint);
+
+    // Hovering a knob arms it as the drop target, so the user can see where the cable will land.
+    EXPECT_EQ(wtComp->getModDropTargetChannel(), WavetableOscillatorModule::kJackPosition);
+
+    editor.endConnectionDrag(knobPoint);
+
+    EXPECT_EQ(wtComp->getModDropTargetChannel(), -1) << "the highlight must clear once the cable lands";
+
+    bool routed = false;
+    for (const auto& r : engine.getModulationRoutings())
+        if (r.sourceNodeID == lfoNode->nodeID && r.destNodeID == wtNode->nodeID &&
+            r.destChannelIndex == WavetableOscillatorModule::kJackPosition)
+            routed = true;
+    EXPECT_TRUE(routed) << "dropping on the Position knob must modulate Position";
+}
+
+// A knob only accepts a cable coming FROM an output — a mod source drives a destination, and
+// dragging out of an input and releasing on a knob would otherwise wire it backwards.
+TEST_F(GraphEditorTest, KnobDropIsIgnoredForACableDraggedFromAnInput) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 900);
+
+    auto lfoNode = engine.getGraph().addNode(std::make_unique<LFOModule>());
+    auto wtNode = engine.getGraph().addNode(std::make_unique<WavetableOscillatorModule>());
+    editor.updateComponents();
+
+    ModuleComponent* lfoComp = nullptr;
+    ModuleComponent* wtComp = nullptr;
+    if (auto* content = editor.getChildComponent(0))
+        for (auto* child : content->getChildren())
+            if (auto* mod = dynamic_cast<ModuleComponent*>(child)) {
+                if (mod->getModule() == lfoNode->getProcessor())
+                    lfoComp = mod;
+                if (mod->getModule() == wtNode->getProcessor())
+                    wtComp = mod;
+            }
+    ASSERT_NE(lfoComp, nullptr);
+    ASSERT_NE(wtComp, nullptr);
+
+    lfoComp->setTopLeftPosition(0, 0);
+    wtComp->setTopLeftPosition(400, 0);
+
+    juce::Slider* position = nullptr;
+    for (auto* child : wtComp->getChildren())
+        if (auto* s = dynamic_cast<juce::Slider*>(child))
+            if (s->getComponentID() == "Position")
+                position = s;
+    ASSERT_NE(position, nullptr);
+
+    const auto knobPoint = wtComp->getBounds().getPosition() + position->getBounds().getCentre();
+    const auto before = engine.getModulationRoutings().size();
+
+    editor.beginConnectionDrag(lfoComp, 0, /*isInput*/ true, /*isMidi*/ false, {0, 0});
+    editor.dragConnection(knobPoint);
+    EXPECT_EQ(wtComp->getModDropTargetChannel(), -1) << "an input-sourced drag must not arm a knob";
+
+    editor.endConnectionDrag(knobPoint);
+    EXPECT_EQ(engine.getModulationRoutings().size(), before);
 }
 
 TEST_F(GraphEditorTest, DragConnectionCreatesLink) {
