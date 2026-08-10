@@ -67,6 +67,9 @@ public:
                              juce::Point<int> screenPos);
     void dragConnection(juce::Point<int> screenPos);
     void endConnectionDrag(juce::Point<int> screenPos);
+
+    /** Drops the pending modulation drop-target highlight on every card. */
+    void clearModDropTargets();
     void disconnectPort(ModuleComponent* module, int portIndex, bool isInput, bool isMidi);
 
     /** Raw-channel wiring for a single cable: the channel each end starts at, and how many
@@ -383,6 +386,14 @@ public:
     /** Resolved colour for a cable under the current mode + overrides + active theme. */
     juce::Colour colourForCable(const VisibleCable& cable) const;
 
+    /** Last folder a Wavetable card browsed to. Held here so a newly dropped Wavetable seeds
+     *  its browser from wherever the user was last working; MainComponent owns the round trip
+     *  to ApplicationProperties via onWavetableFolderChanged, keeping GraphEditor
+     *  settings-free (same split as the cable-colour config above). */
+    void rememberWavetableFolder(const juce::File& folder);
+    juce::File getLastWavetableFolder() const noexcept { return lastWavetableFolder; }
+    std::function<void(const juce::File&)> onWavetableFolderChanged;
+
     // Test accessors.
     int getVisibleCableCount() { return (int)buildVisibleCables().size(); }
     bool hasHoveredCable() const noexcept { return hoveredCableId.has_value(); }
@@ -445,6 +456,7 @@ private:
     std::optional<CableId> hoveredCableId;
     synth::ui::CableColourMode cableColourMode = synth::ui::CableColourMode::BySignalType;
     synth::ui::CableColourOverrides cableColourOverrides;
+    juce::File lastWavetableFolder;
 
     // ---- Selection state (issue #156) ----
     synth::ui::SelectionModel selection;

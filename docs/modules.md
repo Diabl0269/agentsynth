@@ -19,12 +19,78 @@ Detailed specifications for Agent Synth's primary synthesis modules.
 Serum / Vital-style wavetable oscillator (`Source/Modules/WavetableOscillatorModule.h`). Type-name string: `"Wavetable"`.
 
 - **Tables**: six built-ins — `Basic Shapes` (sine → triangle → saw → square), `Harmonic Sweep`, `Pulse` (duty-cycle morph), `Formant`, `Bell`, `Digital` — plus `Loaded File` for a table read from disk. Each built-in has 32 frames.
-- **Position (the "3D" scan)**: `Position` (0–1) scans continuously through the frame stack. Reads are **bilinear** — linear within the frame (phase) and linear between the two adjacent frames — so morphing is click-free.
-- **Parameters**: Table (choice), Position (0–1), Octave (−4…+4), Coarse (−12…+12), Fine (±100 cents), Level (0–1), Poly (bool), Unison (1–8), Detune (0–100 cents).
-- **CV inputs (mono mode)**: ch0 = Pitch (inert — see below), ch1 = Position, ch2 = Octave, ch3 = Coarse, ch4 = Fine, ch5 = Level. Six visible jacks.
-- **Poly mode**: 8 voices driven by pitch CV in Hz on ch0-7, shared mod CV on ch8-12. See [Poly Channel Layout](#poly-channel-layout).
+- **Position (the "3D" scan)**: `Position` (0–1) scans continuously through the frame stack. Reads are **bilinear** — linear within the frame (phase) and linear between the two adjacent frames — so morphing is click-free. `Interp` switches the within-frame read to 4-point Catmull-Rom (see [Interpolation quality](#interpolation-quality)).
+- **Parameters**: Table (choice), Position (0–1), Octave (−4…+4), Coarse (−12…+12), Fine (±100 cents), Level (0–1), Poly (bool), Unison (1–8), Detune (0–100 cents), Warp (choice), Warp Amt (0–1), Phase (0–360°), Rand Phase (0–1), Spread (0–1), Width (0–1), Blend (0–1), Stack (choice), Sub (0–1), Sub Oct (−1/−2), Sub Wave (Sine/Square), Pan (±1), Sync In (choice), Import (choice), Interp (choice).
+- **CV inputs (mono mode)**: ch0 = Pitch (inert — see below), then ch1…ch15 = Position, Octave, Coarse, Fine, Level, Warp, Phase, Rand, Detune, Spread, Width, Blend, Sub, Pan, Sync. **16 visible jacks.**
+- **Outputs**: two audio jacks — `Audio L` and `Audio R`. See [Stereo output](#stereo-output).
+- **Poly mode**: 8 voices driven by pitch CV in Hz on ch0-7, shared mod CV from ch8. See [Poly Channel Layout](#poly-channel-layout).
 - **Octave / Coarse / Fine apply in poly mode too** — they transpose the incoming pitch CV. (This differs from `OscillatorModule`, where the tuning parameters only affect the MIDI fallback voice.)
-- **Mono pitch CV is inert**, exactly as in `OscillatorModule`: mono jack 0 shares raw channel 0 with the audio output, so pitch comes from MIDI. The jack is kept so the mono and poly jack layouts match.
+- **Mono pitch CV is inert**, exactly as in `OscillatorModule`: mono jack 0 shares raw channel 0 with `Audio L`, so pitch comes from MIDI. The jack is kept so the mono and poly jack layouts match.
+
+> **Channel indices are append-only.** `Position`/`Octave`/`Coarse`/`Fine`/`Level` keep the raw channel numbers they had before issue #180 (mono ch1-5, poly ch8-12) because saved patches route by raw index — inserting a new jack among them would silently repoint every existing modulation. New jacks go on the end. `WavetableOscillatorModuleTest.LegacyModCVChannelsKeepTheirIndices` pins this.
+
+### Warp
+`Warp` reshapes the table read after mip selection; `Warp Amt` (with CV on the Warp jack) sets the depth. `Off` is index 0, so a preset saved before warps existed loads unwarped.
+
+| Mode | What it does | Anti-aliasing strategy |
+|---|---|---|
+| `Off` | identity | — |
+| `Sync` | slave phase `frac(p·k)`, `k` up to 8, reset when the master wraps | conservative mip + 4× oversampling |
+| `Bend +` / `Bend −` | quadratic phase bend, slope bounded to `1±amount` | conservative mip |
+| `PWM` | `w(p) − w(p+d)` — the wave minus a phase-shifted copy | **none needed** (see below) |
+| `Asym` | two-segment phase map with a moving breakpoint | conservative mip |
+| `Flip` | wavefolder — drive, then reflect past ±1 | 4× oversampling |
+| `Mirror` | phase mirrored about the half cycle | conservative mip |
+| `Quantize` | amplitude staircase | 4× oversampling |
+| `Remap` | phase staircase | 4× oversampling |
+| `Formant` | sped-up read windowed by a raised cosine over the master cycle | conservative mip |
+
+Two defences keep the anti-aliasing guarantee intact, and **both** are needed:
+
+1. **Conservative mip selection.** `warpRateFactor(mode, amount)` reports the steepest phase-map slope a mode reaches — the factor by which it can outrun a plain 1× read. `selectMip()` is fed `dt × factor`, so the stored frame is already band-limited for the fastest read the warp will perform.
+2. **Oversampling.** Modes whose output has a *step* or an *amplitude nonlinearity* generate harmonics no amount of input band-limiting can prevent. Those render at 4× and come back through a 33-tap Blackman-windowed sinc decimator (~−74 dB stopband). The whole voice — every unison sub-oscillator plus the sub — is summed at the oversampled rate and decimated once per stereo leg, which is valid because decimation is linear and costs two filters per voice instead of two per sub-oscillator.
+
+When oversampling is active the mip is chosen against the **oversampled** Nyquist (`warpRate / kOversample`): those extra harmonics are representable while rendering at 4×, and the decimator removes them on the way down. Band-limiting to the base Nyquist there instead would collapse a hard-synced table to a sine before the warp ever saw it.
+
+`PWM` is the interesting exception: subtracting two reads of the same band-limited table cannot introduce harmonics the table did not already have, so it is alias-free by construction and needs neither defence.
+
+**`clampWarpAmount()`** covers what mips cannot. Mip selection band-limits the *harmonics* of a read, but `Sync` and `Formant` also multiply the read's own **fundamental** — at 8×, a 4 kHz note reads at 33 kHz. The clamp backs the amount off at extreme pitches so the sped-up read stays under the **base** Nyquist. Deliberately not the oversampled one: the oversampling headroom exists for the harmonics a discontinuity throws off and gets filtered away on the descent, so spending it here would let `Sync` push the slave past 22 kHz where the decimator removes it and the knob just fades to silence. At musical pitches the clamp never binds — 8× `Sync` only starts costing amount above ~1.8 kHz.
+
+Every mode is swept at full warp on MIDI 108 by `WavetableWarpAliasTest.EveryWarpModeStaysCleanBelowTheFundamental` (parameterised over all 11) and held to bounded output by `WavetableWarpBoundsTest`. **A warp mode that aliases is a regression, not a feature** — extend both suites when adding one.
+
+### Phase control
+Every sub-oscillator restarts on note-on (MIDI note-on in mono; a voice going from silent to sounding in poly):
+
+- **Phase** (0–360°) — where in the cycle the wave restarts.
+- **Rand Phase** (0–1) — per-note jitter added on top.
+- **Spread** (0–1) — walks the unison voices' start phases around the cycle.
+
+Without `Spread` or `Rand Phase`, a unison stack and a poly chord attack perfectly phase-correlated and comb-filter themselves. All three are sampled **at the note-on instant** — they shape the attack, not the sustain — so their CV is read at the block's first sample rather than per-sample.
+
+### Unison, stacking and the sub
+- **Unison** (1–8) with **Detune** (0–100 cents) spreads voices symmetrically about the root.
+- **Stack** applies an interval on top of detune: `Detune` (none), `Octave`, `Power Chord`, `12th`, `Major`, `Minor`. Voice 0 always stays at the root so `Blend` has an unshifted centre to fade against.
+- **Blend** (0–1) fades the detuned/stacked voices against that always-present centre voice, so thinning the chorus does not change the fundamental's level.
+- **Sub** (0–1) adds a sub-oscillator one or two octaves down (`Sub Oct`), as a sine or square (`Sub Wave`). It is **read out of the built-in `Basic Shapes` table** rather than generated naively, so it inherits the same mip anti-aliasing as everything else — a naive square would alias at exactly the pitches the pyramid exists to protect.
+
+### Stereo output
+The module has two output jacks. `Width` pans the unison voices across the stereo field; `Pan` places the whole voice.
+
+- **Mono**: `Audio L` on ch0, `Audio R` on `kRightBase` (ch23).
+- **Poly**: `Audio L` on ch0-7, `Audio R` on ch23-30. Both blocks are poly-bus heads spanning 8 voices, so a stereo unison stack reaches the Voice Mixer as two cables rather than sixteen.
+
+`Audio R` sits on a **dedicated block above every input channel**, not on ch1 — ch1 is `Position` CV, and putting the right leg there would have made the module's flagship parameter unroutable.
+
+The pan law is **balance, not equal-power**: centre leaves both legs at unity and panning only attenuates the leg you move away from. An equal-power centre sits at 1/√2, which would have quietened every existing mono patch by 3 dB the moment the module grew a second jack. At `Width` 0 / `Pan` 0, `Audio L` carries bit-for-bit what the mono build carried (`DefaultsKeepAudioLIdenticalToAudioR`).
+
+### Sync input
+The `Sync` jack takes an audio-rate signal from another oscillator. `Sync In` selects what it does:
+
+- `Hard Sync` — resets every sub-oscillator on the master's rising zero crossing. Crossings are computed **once per block** into a shared array, because each voice renders in its own pass and a running per-sample state would be consumed by voice 0 and wrong for voice 1. Note that at an exact integer frequency ratio the reset is a no-op — the slave already completes a whole number of cycles per master period.
+- `Ring Mod` — multiplies the finished voice by the input.
+- `AM` — multiplies by `0.5 + 0.5·input`.
+
+### Anti-aliasing: mip pyramid
 
 ### Anti-aliasing: mip pyramid
 Every frame is stored as an **11-level mip pyramid** instead of being filtered at render time.
@@ -38,12 +104,41 @@ Every frame is stored as an **11-level mip pyramid** instead of being filtered a
 ### Table synthesis
 Tables are synthesised from harmonic spectra via inverse FFT (`TableBuilder`), one FFT per distinct mip length. The builder **self-calibrates** its inverse-transform gain at construction (a unit fundamental must come out as a unit-amplitude sine), so table amplitudes do not depend on the platform FFT engine's normalisation convention, and every mip of a frame shares one consistent gain. Each finished table is peak-normalised to 1.0 across mip 0, preserving relative frame levels.
 
+### Interpolation quality
+`Interp` chooses how a stored frame is read at a fractional phase:
+
+- `Linear` — two taps, the original behaviour.
+- `Hermite` — 4-point Catmull-Rom. The coarse mips are only 64–256 samples long, where linear interpolation between stored points visibly droops the top harmonics; the cubic fit follows the curve instead of chording it, for three extra taps per read.
+
+Frame-to-frame (scan) interpolation stays linear in both modes.
+
 ### Loading a wavetable file
 - `loadWavetableFile(const juce::File&)` — message thread only. Accepts anything `juce::AudioFormatManager::registerBasicFormats()` can read (WAV, AIFF, FLAC, Ogg); stereo files are summed to mono.
-- Files whose length is a whole number of 2048-sample frames are split on that boundary (the Serum convention). Shorter files are treated as one cycle and resampled to 2048.
+- **Import modes** (`Import` parameter) decide how the file is cut:
+
+  | Mode | Behaviour |
+  |---|---|
+  | `Auto` | whole 2048-sample blocks when the file is long enough, else one resampled cycle (the pre-#180 behaviour) |
+  | `256` / `512` / `1024` / `2048` | whole blocks of that size |
+  | `Single Cycle` | the entire file resampled to one cycle |
+  | `Pitch Detect` | normalised autocorrelation finds the period, then blocks of that period |
+  | `Spectral` | like `Auto`, but every frame is resynthesised zero-phase |
+
+- A power-of-two frame **at or below** `kFrameSize` is analysed at its own size rather than resampled to 2048 first, so a 256-sample table imports with none of the HF droop linear upsampling would add. Anything else (an odd pitch-detected period, a whole-file single cycle, a frame longer than `kFrameSize`) is resampled into `kFrameSize` first. That upper bound is load-bearing — the analysis buffer is exactly `kFrameSize` long, so copying a longer frame into it verbatim overflows the heap.
+- `detectPeriod()` replaces its best lag **only on a clearly better score** (margin `1e-3`). A periodic signal correlates just as well at 2× and 3× its period, so without the margin floating-point noise decides which multiple wins and a 512-sample sine imports as 1536-sample frames.
+- `Spectral` collapses each frame's spectrum onto sine phase, keeping magnitudes. Scanning then cross-fades magnitudes instead of beating phase-incoherent frames against each other — which is what makes a table sampled from unrelated cycles morph smoothly instead of cancelling at the midpoint.
 - At most `kMaxFrames` (64) frames are kept, chosen **evenly spaced** across the file so a 256-frame table still spans its whole morph range.
 - DC (bin 0) is discarded during analysis, so a loaded table cannot introduce a DC offset.
 - The call does **not** touch any parameter. The UI's "Load Wavetable..." button selects the `Loaded File` choice itself after a successful load.
+
+### Wavetable folder browser
+Rather than reopening a file chooser per table, point the module at a directory once and step through it:
+
+- `setWavetableFolder(dir)` scans for readable audio files (non-recursive), sorts them by name and parks the cursor on the currently loaded file if it lives there. **Scanning loads nothing on its own.**
+- `nextWavetable()` / `previousWavetable()` / `stepWavetable(delta)` walk the list, wrapping at both ends and **skipping entries that fail to load**, so one unreadable wav cannot wedge the browser.
+- `selectWavetableAt(index)` jumps directly.
+- The folder path persists two ways: per-module through `getExtraState()`/`getStateInformation` (so a preset reopens pointed at the right place), and app-wide through `ApplicationProperties` — `GraphEditor` holds the last-used folder so a newly dropped Wavetable card seeds its browser from it, and `MainComponent` owns the settings round trip via `onWavetableFolderChanged`. This is the same split the cable-colour config uses: `GraphEditor` stays settings-free.
+- Cards also accept **drag-and-drop** of an audio file, which goes through the same import path as the Load button.
 - Returns `false` and leaves the current table untouched on any failure; the `Loaded File` choice falls back to `Basic Shapes` when nothing is loaded, so a broken preset never goes silent.
 - **State**: the source path is published through `getExtraState()`/`setExtraState()` as a `wavetableFile` property. This is the mechanism presets and undo/redo actually use — `AIStateMapper::graphToJSON` persists parameters plus `getExtraState()` and never calls `getStateInformation`, so a path stored only in the binary `ModuleState` blob would be silently dropped on every preset load. `setExtraState` is reached **only on the trusted path**: untrusted model-authored JSON must never name a file for the app to open (same guard as the Sampler).
 - `getStateInformation`/`setStateInformation` also carry the path, for the plain `juce::AudioProcessor` contract; `setStateInformation` reloads the file first so the restored `table` choice stays authoritative, and silently skips a file that no longer exists.
@@ -293,14 +388,18 @@ Declare your per-voice **output** fan in `mapOutputChannel()` if the module actu
 | **Wavetable (poly)** | ch10 | In | Shared Coarse CV |
 | **Wavetable (poly)** | ch11 | In | Shared Fine CV |
 | **Wavetable (poly)** | ch12 | In | Shared Level CV |
-| **Wavetable (poly)** | ch0-7 | Out | Per-voice audio |
-| **Wavetable (poly)** | ch8-12 | Out | Silent pass-throughs (prevent buffer aliasing) |
-| **Wavetable (mono)** | ch0 | In/Out | Pitch CV in (inert) / Audio out (shared channel) |
+| **Wavetable (poly)** | ch13-22 | In | Shared Warp, Phase, Rand, Detune, Spread, Width, Blend, Sub, Pan, Sync CV |
+| **Wavetable (poly)** | ch0-7 | Out | Per-voice audio **L** |
+| **Wavetable (poly)** | ch8-22 | Out | Silent pass-throughs (prevent buffer aliasing) |
+| **Wavetable (poly)** | ch23-30 | Out | Per-voice audio **R** (`kRightBase`) |
+| **Wavetable (mono)** | ch0 | In/Out | Pitch CV in (inert) / Audio L out (shared channel) |
 | **Wavetable (mono)** | ch1 | In | Position CV |
 | **Wavetable (mono)** | ch2 | In | Octave CV |
 | **Wavetable (mono)** | ch3 | In | Coarse CV |
 | **Wavetable (mono)** | ch4 | In | Fine CV |
 | **Wavetable (mono)** | ch5 | In | Level CV |
+| **Wavetable (mono)** | ch6-15 | In | Warp, Phase, Rand, Detune, Spread, Width, Blend, Sub, Pan, Sync CV |
+| **Wavetable (mono)** | ch23 | Out | Audio R (`kRightBase`) |
 | **Filter (poly)** | ch0-7 | In | Per-voice audio |
 | **Filter (poly)** | ch8 | In | Shared Cutoff CV |
 | **Filter (poly)** | ch9 | In | Shared Resonance CV |
