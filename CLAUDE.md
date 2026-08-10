@@ -70,3 +70,4 @@ Every implementation plan **must** include:
 - [`docs/Module_Development_Guide.md`](docs/Module_Development_Guide.md) — step-by-step guide to adding a module
 - [`docs/AI_Engine.md`](docs/AI_Engine.md) · [`docs/AI_Usage_Guide.md`](docs/AI_Usage_Guide.md) — AI patching subsystem (OllamaProvider, AIStateMapper, chat UI)
 - [`docs/midi_input.md`](docs/midi_input.md) · [`docs/shortcuts.md`](docs/shortcuts.md) — external MIDI routing, keyboard shortcuts
+- [`docs/plans/`](docs/plans/) — feature planning artifacts, not reference docs (e.g. `timeline-plan.html` — P7·1 Timeline/automation concept & task plan; open locally in a browser)
