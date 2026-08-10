@@ -96,6 +96,7 @@ add_executable(Tests
     SelectionModelTests.cpp
     SnippetManagerTests.cpp
     MultiSelectTests.cpp
+    ClipboardTests.cpp
     PanelAnimationAndLoadingTests.cpp
     MinimapComponentTests.cpp
     ../Source/MainComponent.cpp

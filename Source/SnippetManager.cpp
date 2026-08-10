@@ -84,8 +84,31 @@ juce::File SnippetManager::getDefaultSnippetsDirectory() {
 // Extraction
 // ---------------------------------------------------------------------------------------
 
+juce::Point<int> SnippetManager::selectionOrigin(juce::AudioProcessorGraph& graph,
+                                                 const std::vector<NodeID>& selection) {
+    int minX = std::numeric_limits<int>::max();
+    int minY = std::numeric_limits<int>::max();
+
+    for (auto id : selection) {
+        auto* node = graph.getNodeForId(id);
+        if (node == nullptr || !isSnippetEligible(node->getProcessor()))
+            continue;
+
+        // graphToJSON copies these straight through, and they are void for a node that has never
+        // been placed — the same "treat that as 0" rule readPosition applies.
+        const int x = node->properties["x"].isVoid() ? 0 : (int)node->properties["x"];
+        const int y = node->properties["y"].isVoid() ? 0 : (int)node->properties["y"];
+        minX = juce::jmin(minX, x);
+        minY = juce::jmin(minY, y);
+    }
+
+    if (minX == std::numeric_limits<int>::max())
+        return {};
+    return {minX, minY};
+}
+
 juce::var SnippetManager::extractSnippet(juce::AudioProcessorGraph& graph, const std::vector<NodeID>& selection,
-                                         const juce::String& name) {
+                                         const juce::String& name, bool includeExtraState) {
     // Resolve the selection to the uids actually eligible for capture.
     std::set<int> keep;
     for (auto id : selection) {
@@ -106,26 +129,12 @@ juce::var SnippetManager::extractSnippet(juce::AudioProcessorGraph& graph, const
     root->setProperty("name", name);
 
     juce::Array<juce::var> nodes;
-    int minX = std::numeric_limits<int>::max();
-    int minY = std::numeric_limits<int>::max();
+
+    // The selection's top-left corner, so positions can be made origin-relative. Shared with the
+    // clipboard, which needs the same corner to place a paste relative to its source.
+    const auto origin = selectionOrigin(graph, selection);
 
     if (auto* nodeList = arrayProperty(fullObj, "nodes")) {
-        // First pass: find the selection's top-left corner so positions can be made
-        // origin-relative.
-        for (const auto& nVar : *nodeList) {
-            auto* nObj = nVar.getDynamicObject();
-            if (nObj == nullptr || keep.count(intProperty(nObj, "id", -1)) == 0)
-                continue;
-            auto pos = readPosition(nObj);
-            minX = juce::jmin(minX, pos.x);
-            minY = juce::jmin(minY, pos.y);
-        }
-
-        if (minX == std::numeric_limits<int>::max()) {
-            minX = 0;
-            minY = 0;
-        }
-
         for (const auto& nVar : *nodeList) {
             auto* nObj = nVar.getDynamicObject();
             if (nObj == nullptr || keep.count(intProperty(nObj, "id", -1)) == 0)
@@ -136,8 +145,10 @@ juce::var SnippetManager::extractSnippet(juce::AudioProcessorGraph& graph, const
             n->setProperty("type", nObj->getProperty("type"));
             if (nObj->hasProperty("params"))
                 n->setProperty("params", nObj->getProperty("params"));
+            if (includeExtraState && nObj->hasProperty("state"))
+                n->setProperty("state", nObj->getProperty("state"));
             auto pos = readPosition(nObj);
-            n->setProperty("position", makePosition({pos.x - minX, pos.y - minY}));
+            n->setProperty("position", makePosition({pos.x - origin.x, pos.y - origin.y}));
             nodes.add(juce::var(n.get()));
         }
     }
@@ -202,7 +213,8 @@ juce::uint32 SnippetManager::nextFreeIdBase(const juce::AudioProcessorGraph& gra
     return maxUid + 1;
 }
 
-juce::var SnippetManager::prepareForInsert(const juce::var& snippet, juce::Point<int> dropPos, juce::uint32 idBase) {
+juce::var SnippetManager::prepareForInsert(const juce::var& snippet, juce::Point<int> dropPos, juce::uint32 idBase,
+                                           bool includeExtraState) {
     juce::DynamicObject::Ptr root = new juce::DynamicObject();
     auto* src = snippet.getDynamicObject();
 
@@ -229,6 +241,10 @@ juce::var SnippetManager::prepareForInsert(const juce::var& snippet, juce::Point
             n->setProperty("type", nObj->getProperty("type"));
             if (nObj->hasProperty("params"))
                 n->setProperty("params", nObj->getProperty("params"));
+            // Dropped unless explicitly asked for: applyJSONToGraph honours `state` on the trusted
+            // path, and a snippet read off disk must not be able to carry one.
+            if (includeExtraState && nObj->hasProperty("state"))
+                n->setProperty("state", nObj->getProperty("state"));
             auto pos = readPosition(nObj);
             n->setProperty("position", makePosition({pos.x + dropPos.x, pos.y + dropPos.y}));
             nodes.add(juce::var(n.get()));
@@ -290,9 +306,10 @@ juce::var SnippetManager::prepareForInsert(const juce::var& snippet, juce::Point
 // Insertion
 // ---------------------------------------------------------------------------------------
 
-std::vector<SnippetManager::NodeID>
-SnippetManager::insertSnippet(const juce::var& snippet, juce::AudioProcessorGraph& graph, juce::Point<int> dropPos) {
-    auto prepared = prepareForInsert(snippet, dropPos, nextFreeIdBase(graph));
+std::vector<SnippetManager::NodeID> SnippetManager::insertSnippet(const juce::var& snippet,
+                                                                  juce::AudioProcessorGraph& graph,
+                                                                  juce::Point<int> dropPos, bool includeExtraState) {
+    auto prepared = prepareForInsert(snippet, dropPos, nextFreeIdBase(graph), includeExtraState);
 
     auto* preparedObj = prepared.getDynamicObject();
     auto* preparedNodes = arrayProperty(preparedObj, "nodes");

@@ -445,7 +445,8 @@ void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
     commands.addArray({AppCommands::openSettings, AppCommands::savePreset, AppCommands::openPreset,
                        AppCommands::newPatch, AppCommands::undo, AppCommands::redo, AppCommands::toggleModMatrix,
                        AppCommands::toggleMinimap, AppCommands::toggleAiPanel, AppCommands::autoArrange,
-                       AppCommands::toggleLibrary, AppCommands::selectAllModules, AppCommands::saveSnippet});
+                       AppCommands::toggleLibrary, AppCommands::selectAllModules, AppCommands::saveSnippet,
+                       AppCommands::copySelection, AppCommands::pasteSelection, AppCommands::duplicateSelection});
 }
 
 void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationCommandInfo& result) {
@@ -529,6 +530,27 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
+    case AppCommands::copySelection: {
+        result.setInfo("Copy", "Copy the selected modules", "Edit", 0);
+        result.setActive(graphEditor.getSelectionCount() > 0);
+        auto kp = shortcutManager.getBinding("copySelection");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case AppCommands::pasteSelection: {
+        result.setInfo("Paste", "Paste the copied modules onto the canvas", "Edit", 0);
+        result.setActive(graphEditor.canPaste());
+        auto kp = shortcutManager.getBinding("pasteSelection");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case AppCommands::duplicateSelection: {
+        result.setInfo("Duplicate", "Duplicate the selected modules in place", "Edit", 0);
+        result.setActive(graphEditor.getSelectionCount() > 0);
+        auto kp = shortcutManager.getBinding("duplicateSelection");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
     default:
         break;
     }
@@ -582,6 +604,33 @@ bool MainComponent::perform(const InvocationInfo& info) {
     case AppCommands::saveSnippet:
         promptSaveSnippet();
         return true;
+    // Each of these reports what it did in the status bar rather than failing silently. The "did
+    // nothing" branches are the residual cases only — getCommandInfo marks all three inactive when
+    // there is nothing to act on, and ApplicationCommandTarget::tryToInvoke refuses an inactive
+    // command outright, so the menu row greys out and the key never gets this far.
+    case AppCommands::copySelection: {
+        if (graphEditor.copySelection())
+            statusBar.showMessage("Copied " + juce::String(graphEditor.getClipboardModuleCount()) + " modules");
+        else
+            statusBar.showMessage("Nothing to copy - select one or more modules first");
+        return true;
+    }
+    case AppCommands::pasteSelection: {
+        // Counted AFTER the fact: both leave the new copies selected, so the selection is the
+        // authoritative count of what actually landed (ineligible nodes never make it in).
+        if (graphEditor.pasteClipboard())
+            statusBar.showMessage("Pasted " + juce::String(graphEditor.getSelectionCount()) + " modules");
+        else
+            statusBar.showMessage("Nothing to paste - copy a selection first");
+        return true;
+    }
+    case AppCommands::duplicateSelection: {
+        if (graphEditor.duplicateSelection())
+            statusBar.showMessage("Duplicated " + juce::String(graphEditor.getSelectionCount()) + " modules");
+        else
+            statusBar.showMessage("Nothing to duplicate - select one or more modules first");
+        return true;
+    }
     default:
         return false;
     }
