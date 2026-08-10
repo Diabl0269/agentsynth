@@ -81,6 +81,8 @@ Test UI component interactions using in-process construction (no window, no disp
 | SettingsWindowTest | 8 | Tab structure, tab persistence, audio device selector, AI settings persistence, resize safety, shortcuts reference |
 | ShortcutManagerTest | 8 | Default bindings, reverse lookup, conflict detection, persistence round-trip, reset to defaults, display strings |
 
+**Poly connection creation coverage.** `GraphEditorTest` covers poly fan-out on drag (dragging a cable between two poly jacks creates all N per-voice connections) and poly-toggle rewire (toggling a module's `poly` parameter re-anchors its existing cables via `rewireForPolyChange`). `Tests/LogicalPortTests.cpp` adds pure, headless coverage of jack-target resolution — `ModuleBase::getJackTargets` and `GraphEditor::resolvePolyLink`'s pairing/scoring rules — independent of the audio graph.
+
 #### `createComponentSnapshot` smoke-test pattern
 
 Several new tests use `Component::createComponentSnapshot(bounds)` to verify that a component renders without crashing and produces non-empty pixels, without requiring a real display or window. Example: `StatusBarTests::RendersNonEmptyImage` and `ThemeTests::StyledWidgetSmokeTest.*`. The pattern is:

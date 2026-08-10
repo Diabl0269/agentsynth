@@ -981,7 +981,11 @@ void AppLookAndFeel::drawConnectionWire(juce::Graphics& g, juce::Point<float> p1
         wire.cubicTo(p1.x + dx * 0.5f, p1.y, p2.x - dx * 0.5f, p2.y, p2.x, p2.y);
     }
 
-    const float coreWidth = m.wireCoreWidth * (1.0f + activity * 0.4f);
+    // `activity` is a raw signal peak supplied by the caller, and not every CV source is normalised
+    // (Poly MIDI's pitch fan carries Hz). Clamp before it scales any geometry — an unbounded value
+    // turns the stroke into a screen-filling filled region rather than a wire.
+    const float normalisedActivity = juce::jlimit(0.0f, 1.0f, activity);
+    const float coreWidth = m.wireCoreWidth * (1.0f + normalisedActivity * 0.4f);
 
     // Casing (dark underlay).
     g.setColour(theme.colors.bg0.withAlpha(0.6f));
@@ -996,7 +1000,7 @@ void AppLookAndFeel::drawConnectionWire(juce::Graphics& g, juce::Point<float> p1
     }
 
     // Core.
-    auto coreColour = colour.withMultipliedBrightness(0.5f + activity * 0.5f);
+    auto coreColour = colour.withMultipliedBrightness(0.5f + normalisedActivity * 0.5f);
     if (hovered)
         coreColour = colour.brighter(0.3f);
     g.setColour(coreColour);

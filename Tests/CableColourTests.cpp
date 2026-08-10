@@ -64,6 +64,13 @@ TEST(CableColourCategoryTest, EveryLibraryModuleMapsToItsLibrarySection) {
     for (const auto& name : names) {
         auto processor = synth::AIStateMapper::createModule(name);
         ASSERT_NE(processor, nullptr) << "library offers \"" << name << "\" but createModule cannot build it";
+
+        // Audio Input/Output are juce::AudioGraphIOProcessor, not ModuleBase, so they have no
+        // ModuleType and therefore no cable-colour category. They carry plain audio and are drawn
+        // with the Direct cable colour. Giving them a ModuleType is tracked in #188.
+        if (GraphEditor::isSingletonIOModule(name))
+            continue;
+
         auto* moduleBase = dynamic_cast<ModuleBase*>(processor.get());
         ASSERT_NE(moduleBase, nullptr) << name;
 

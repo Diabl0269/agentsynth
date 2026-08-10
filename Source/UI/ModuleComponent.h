@@ -133,6 +133,18 @@ private:
     void createControls();
     void updateLayout();
 
+    // Raw->LogicalPort snapshots of the module's current channel layout. Only the "poly" parameter
+    // changes that layout, so these are captured at construction and refreshed on each poly toggle.
+    // Kept because rewireForPolyChange needs to know which visible jack an existing connection was
+    // anchored to *before* the toggle — by the time the listener fires, the live mapping already
+    // describes the new layout.
+    std::vector<LogicalPort> cachedInputPortMap;
+    std::vector<LogicalPort> cachedOutputPortMap;
+    void captureLogicalPortMaps();
+
+    // Re-anchors this module's connections onto its new channel layout after a poly toggle.
+    void applyPolyStateChange();
+
     // Macro bank only. Re-lays the component for the new "Knobs" count and asks the GraphEditor
     // to settle the consequences (drop routings on jacks that just disappeared, nudge neighbours
     // clear of the new footprint). Message thread only.
