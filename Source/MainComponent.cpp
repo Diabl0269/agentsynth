@@ -73,6 +73,10 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     graphEditor.setAlignmentGuidesEnabled(
         appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true));
 
+    // Minimap overlay visibility (issue #159), defaults to visible.
+    const bool minimapVisible = appProperties.getUserSettings()->getBoolValue("minimapVisible", true);
+    graphEditor.setMinimapVisible(minimapVisible);
+
     // Cable colour config (issue #157). Restored HERE rather than only in AppearanceSettingsTab:
     // that tab is built lazily when the Settings window opens, so leaving it to the tab would
     // mean the canvas ignored the user's saved colours until they went looking for them.
@@ -261,6 +265,15 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         animatePanelTransition(fromResult, toResult, /*hideLib=*/false, /*hideAi=*/!newVisible);
     };
 
+    addAndMakeVisible(toggleMinimapButton);
+    toggleMinimapButton.setComponentID("toggleMinimap");
+    toggleMinimapButton.onClick = [this] {
+        graphEditor.toggleMinimapVisibility();
+        appProperties.getUserSettings()->setValue("minimapVisible", graphEditor.isMinimapVisible() ? "1" : "0");
+        appProperties.getUserSettings()->saveIfNeeded();
+        applyToolbarIcons();
+    };
+
     addAndMakeVisible(toggleModMatrixButton);
     toggleModMatrixButton.setComponentID("toggleModMatrix");
     toggleModMatrixButton.onClick = [this] {
@@ -303,8 +316,8 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // resized() -> layoutButtons() pass finds the registered buttons and positions them.
     // Calling setSize() before setButtons() leaves all buttons with zero bounds on first launch.
     toolbar.setButtons({&toggleLibraryButton, &newButton, &saveButton, &loadButton, &settingsButton, &undoButton,
-                        &redoButton, &autoArrangeButton, &toggleModMatrixButton, &toggleAiPanelButton,
-                        &themeToggleButton});
+                        &redoButton, &autoArrangeButton, &toggleMinimapButton, &toggleModMatrixButton,
+                        &toggleAiPanelButton, &themeToggleButton});
 
     // Now that buttons are registered, trigger the first layout pass. resized() calls
     // toolbar.layoutButtons() which positions the buttons using their registered pointers.
@@ -418,8 +431,8 @@ void MainComponent::paint(juce::Graphics& g) {
 void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
     commands.addArray({AppCommands::openSettings, AppCommands::savePreset, AppCommands::openPreset,
                        AppCommands::newPatch, AppCommands::undo, AppCommands::redo, AppCommands::toggleModMatrix,
-                       AppCommands::toggleAiPanel, AppCommands::autoArrange, AppCommands::toggleLibrary,
-                       AppCommands::selectAllModules, AppCommands::saveSnippet});
+                       AppCommands::toggleMinimap, AppCommands::toggleAiPanel, AppCommands::autoArrange,
+                       AppCommands::toggleLibrary, AppCommands::selectAllModules, AppCommands::saveSnippet});
 }
 
 void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationCommandInfo& result) {
@@ -463,6 +476,12 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
     case AppCommands::toggleModMatrix: {
         result.setInfo("Toggle Mod Matrix", "Toggle the modulation matrix panel", "View", 0);
         auto kp = shortcutManager.getBinding("toggleModMatrix");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case AppCommands::toggleMinimap: {
+        result.setInfo("Toggle Minimap", "Toggle the graph editor minimap overlay", "View", 0);
+        auto kp = shortcutManager.getBinding("toggleMinimap");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
@@ -531,6 +550,9 @@ bool MainComponent::perform(const InvocationInfo& info) {
     case AppCommands::toggleModMatrix:
         toggleModMatrixButton.triggerClick();
         return true;
+    case AppCommands::toggleMinimap:
+        toggleMinimapButton.triggerClick();
+        return true;
     case AppCommands::toggleAiPanel:
         toggleAiPanelButton.triggerClick();
         return true;
@@ -552,7 +574,13 @@ bool MainComponent::perform(const InvocationInfo& info) {
     }
 }
 
-void MainComponent::updateCommandShortcuts() { commandManager.commandStatusChanged(); }
+void MainComponent::updateCommandShortcuts() {
+    commandManager.commandStatusChanged();
+    // Tooltips embed the resolved key ("Save preset  (Cmd+S)"), so a rebind has to re-run them or
+    // every toolbar hint — and the minimap's — keeps advertising the old binding until some
+    // unrelated toggle happens to refresh it.
+    applyToolbarIcons();
+}
 
 // ---- Snippets (issue #156) ----
 
@@ -684,6 +712,7 @@ void MainComponent::applyToolbarIcons() {
     setIcon(redoButton, Icon::ActionRedo);
     setIcon(autoArrangeButton, Icon::ActionAutoArrange);
     setIcon(toggleModMatrixButton, Icon::ToggleMatrix);
+    setIcon(toggleMinimapButton, Icon::ToggleMinimap);
     setIcon(toggleAiPanelButton, Icon::ToggleAI);
     setIcon(themeToggleButton, Icon::ThemeToggle);
 
@@ -702,6 +731,8 @@ void MainComponent::applyToolbarIcons() {
     autoArrangeButton.setButtonText(iconOnly ? "" : "Auto Arrange");
     toggleModMatrixButton.setButtonText(iconOnly ? ""
                                                  : (graphEditor.isModMatrixVisible() ? "Hide Matrix" : "Show Matrix"));
+    toggleMinimapButton.setButtonText(iconOnly ? ""
+                                               : (graphEditor.isMinimapVisible() ? "Hide Minimap" : "Show Minimap"));
     toggleAiPanelButton.setButtonText(iconOnly ? "" : (isAiPanelVisible ? "Hide AI" : "Show AI"));
     toggleLibraryButton.setButtonText(iconOnly ? "" : (isLibraryVisible ? "Hide Library" : "Show Library"));
     themeToggleButton.setButtonText(
@@ -725,6 +756,13 @@ void MainComponent::applyToolbarIcons() {
 
     const juce::String matrixBase = graphEditor.isModMatrixVisible() ? "Hide Mod Matrix" : "Show Mod Matrix";
     toggleModMatrixButton.setTooltip(hint(matrixBase, "toggleModMatrix"));
+
+    const juce::String minimapBase = graphEditor.isMinimapVisible() ? "Hide Minimap" : "Show Minimap";
+    toggleMinimapButton.setTooltip(hint(minimapBase, "toggleMinimap"));
+    // The map itself advertises the same binding on hover. MinimapComponent has no ShortcutManager
+    // dependency, so the display string is resolved here and pushed down.
+    graphEditor.getMinimap().setShortcutHint(
+        ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding("toggleMinimap")));
 
     const juce::String aiBase = isAiPanelVisible ? "Hide AI Panel" : "Show AI Panel";
     toggleAiPanelButton.setTooltip(hint(aiBase, "toggleAiPanel"));

@@ -68,6 +68,10 @@ public:
         if (toggleModMatrixButton.onClick)
             toggleModMatrixButton.onClick();
     }
+    void simulateToggleMinimapClick() {
+        if (toggleMinimapButton.onClick)
+            toggleMinimapButton.onClick();
+    }
     void simulateToggleLibraryClick() {
         if (toggleLibraryButton.onClick)
             toggleLibraryButton.onClick();
@@ -75,6 +79,7 @@ public:
     GraphEditor& getGraphEditor() { return graphEditor; }
     ToolbarComponent& getToolbar() { return toolbar; }
     StatusBarComponent& getStatusBar() { return statusBar; }
+    ShortcutManager& getShortcutManager() { return shortcutManager; }
     void simulateNewPatchClick() {
         if (newButton.onClick)
             newButton.onClick();
@@ -172,6 +177,7 @@ private:
     juce::DrawableButton redoButton{"redo", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton toggleAiPanelButton{"toggleAi", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton toggleModMatrixButton{"toggleMatrix", juce::DrawableButton::ImageAboveTextLabel};
+    juce::DrawableButton toggleMinimapButton{"toggleMinimap", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton autoArrangeButton{"autoArrange", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton toggleLibraryButton{"toggleLibrary", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton themeToggleButton{"toggleTheme", juce::DrawableButton::ImageAboveTextLabel};

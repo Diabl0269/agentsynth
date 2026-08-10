@@ -226,6 +226,15 @@ New suite `Tests/WavetableDisplayTests.cpp` covering `Source/UI/WavetableDisplay
 |-------|-------|----------------|
 | WavetableDisplayTest | 8 | `QuantisePositionEndpointsAndClamping`/`QuantisePositionIsMonotonicAndCollapsesTinyChanges` — `quantisePosition` pins 0→0 and 1→`steps`, clamps out-of-range input, is monotonic, and maps sub-bucket jitter to the same bucket (this is the repaint gate); `RepeatedTimerTicksOnAnUnchangedModuleAreIdempotent` — five ticks leave the trace bit-identical, a real position change is still picked up; `DisplayWaveformTracksScanPosition` — position 0 and 1 traces differ by >0.2 and both stay bounded; `DisplayWaveformHandlesTinyPointCounts` — 0 and 1 requested points still yield ≥2 samples; `PaintSmokeBuiltInTable`/`PaintSmokeAtEveryScanPosition`/`PaintSmokeAtDegenerateSizes` — paints into a `juce::Image` with no crash at 11 scan positions and at 0×0/1×1/4×80 bounds |
 
+### Minimap Tests (25 tests)
+
+New suite `Tests/MinimapComponentTests.cpp` covering `Source/UI/MinimapComponent.h/.cpp` (issue #159). See [`layout.md` §15](layout.md#15-minimap-overlay-issue-159) for the feature.
+
+| Suite | Tests | What it covers |
+|-------|-------|----------------|
+| MinimapComponentTest | 19 | `computeWorldBounds` — empty model falls back to a `kMinWorldSpan` square at the origin, nodes-only/viewport-only/both are contained, a single small node is clamped out to the min span while staying centred on it; `computeWorldToMap` — preserves aspect ratio in a non-square map area, maps inside and centres in the map area, zero-width world / zero-height map area stay NaN/Inf-free; `mapToWorld` round-trips several points through the forward transform; `setModel` reflects a differing model and no-ops on an equal one (observed via `getModel()`); `setViewport` updates only the viewport, leaving nodes/cables untouched; construction at a realistic size and a non-empty tooltip; paints a non-empty image after `setModel`; `mouseDown`/`mouseDrag` fire `onNavigate` with the point `mapToWorld` itself predicts; mouse and wheel handlers are safe no-ops with `onNavigate`/`onZoom` unset |
+| MinimapModelTest | 6 | `MinimapModel::operator==`/`!=` — identical models are equal; differing viewport, node count, a moved node, a node differing only in `selected`, or a cable differing only in colour all make models unequal |
+
 ### E2E Workflow Tests (24 tests)
 
 Full application workflow tests in `Tests/E2EWorkflowTests.cpp`. Each test constructs a complete `MainComponent` with a mock AI provider and exercises real UI interaction code paths.

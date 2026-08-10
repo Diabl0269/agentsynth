@@ -11,6 +11,7 @@ Shortcuts are configurable in **Settings → Keyboard Shortcuts** tab (renamed f
 | Cmd+Z | Undo |
 | Cmd+Shift+Z | Redo |
 | Cmd+M | Toggle Mod Matrix |
+| Cmd+K | Toggle Minimap |
 | Cmd+A | Toggle AI Panel |
 | Cmd+L | Auto Arrange |
 | Cmd+B | Toggle Module Library Sidebar |

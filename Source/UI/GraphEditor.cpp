@@ -121,6 +121,14 @@ GraphEditor::GraphEditor(AudioEngine& engine, AppUndoManager* undoMgr)
     addAndMakeVisible(modMatrix);
     content.setInterceptsMouseClicks(false, true); // Fallback clicks to parent
 
+    // Minimap (issue #159): visibility is driven by setMinimapVisible(), called by the owner once
+    // it has restored the persisted preference — NOT addAndMakeVisible, which would show it before
+    // that preference is known.
+    addChildComponent(minimap);
+    minimap.setVisible(minimapVisible);
+    minimap.onNavigate = [this](juce::Point<float> p) { centreViewOn(p); };
+    minimap.onZoom = [this](float d) { zoomAroundCentre(d); };
+
     // Tooltips on GraphEditor-owned affordances.
     // The canvas itself hints at pan/zoom. Double-click on an attenuverter knob removes it.
     setTooltip(synth::ui::formatShortcutHint("Patch canvas - drag modules here to build your patch",
@@ -959,6 +967,24 @@ void GraphEditor::resized() {
         modMatrixTargetBounds = isMatrixVisible ? juce::Rectangle<int>(getWidth() - 600, 0, 600, getHeight())
                                                 : juce::Rectangle<int>(getWidth(), 0, 600, getHeight());
     }
+
+    // ---- Minimap (issue #159) ----
+    // Bottom-LEFT with a 12px margin — the mod-matrix panel occupies a 600px panel on the right.
+    // Auto-hide when the editor is too small to show it without swallowing the view, but never
+    // clobber the user's preference: `minimapVisible` still reflects what they asked for, and
+    // resized() just recomputes whether that preference currently fits.
+    {
+        constexpr int kMargin = 12;
+        // Absolute floors, not a fraction of the editor: a fraction-of-self test is always
+        // satisfied (w/4 * 2 <= w for any w), so it would never actually hide anything.
+        constexpr int kMinEditorW = 480, kMinEditorH = 360;
+        const int mmW = juce::jmin(220, getWidth() / 4);
+        const int mmH = juce::jmin(150, getHeight() / 4);
+        const bool fits = getWidth() >= kMinEditorW && getHeight() >= kMinEditorH;
+        minimap.setBounds(kMargin, getHeight() - mmH - kMargin, mmW, mmH);
+        minimap.setVisible(minimapVisible && fits);
+    }
+
     updateTransform();
 }
 
@@ -1011,31 +1037,105 @@ void GraphEditor::updateTransform() {
     content.setBounds(0, 0, 10000, 10000);
     content.setTransform(t);
     repaint();
+
+    // Keep the minimap tracking pan/zoom immediately rather than waiting up to 33ms for the next
+    // timer tick. Only the viewport rect is pushed here: pan/zoom move what you're LOOKING at, not
+    // where the modules and cables are, so rebuilding the full model on every drag frame would
+    // re-walk every graph edge for nothing. The 30 Hz tick owns node/cable changes.
+    if (minimap.isVisible())
+        minimap.setViewport(getVisibleCanvasRect());
 }
 
-void GraphEditor::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) {
+void GraphEditor::applyZoomAt(float wheelDelta, juce::Point<float> screenAnchor) {
     float oldZoom = zoomLevel;
-    zoomLevel += wheel.deltaY * 0.1f * zoomLevel;
+    zoomLevel += wheelDelta * 0.1f * zoomLevel;
     zoomLevel = juce::jlimit(0.1f, 2.0f, zoomLevel);
 
     if (oldZoom != zoomLevel) {
-        auto mousePos = e.position;
-        // Transform the mouse position to get the graph point before scaling
+        // Transform the anchor position to get the graph point before scaling
         auto invT =
             juce::AffineTransform::translation(-panOffset.x, -panOffset.y).scaled(1.0f / oldZoom, 1.0f / oldZoom);
-        float gx = mousePos.x;
-        float gy = mousePos.y;
+        float gx = screenAnchor.x;
+        float gy = screenAnchor.y;
         invT.transformPoint(gx, gy);
 
-        // Transform the mouse position to get the graph point after scaling
-        // We want to keep the graph point under the mouse constant
-        // mousePos = (graphPointBefore * zoomLevel) + newPanOffset
-        // newPanOffset = mousePos - (graphPointBefore * zoomLevel)
-        panOffset.x = mousePos.x - (gx * zoomLevel);
-        panOffset.y = mousePos.y - (gy * zoomLevel);
+        // We want to keep the graph point under the anchor constant:
+        // anchor = (graphPointBefore * zoomLevel) + newPanOffset
+        // newPanOffset = anchor - (graphPointBefore * zoomLevel)
+        panOffset.x = screenAnchor.x - (gx * zoomLevel);
+        panOffset.y = screenAnchor.y - (gy * zoomLevel);
     }
 
     updateTransform();
+}
+
+void GraphEditor::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) {
+    applyZoomAt(wheel.deltaY, e.position);
+}
+
+juce::Rectangle<float> GraphEditor::getVisibleCanvasRect() const {
+    // Rebuilt from zoomLevel/panOffset rather than reading content.getTransform(), so this stays
+    // independent of child state and can be const.
+    const juce::AffineTransform t = juce::AffineTransform().scaled(zoomLevel, zoomLevel).translated(panOffset);
+    return getLocalBounds().toFloat().transformedBy(t.inverted());
+}
+
+void GraphEditor::centreViewOn(juce::Point<float> canvasPoint) {
+    panOffset = getLocalBounds().getCentre().toFloat() - canvasPoint * zoomLevel;
+    updateTransform();
+}
+
+void GraphEditor::zoomAroundCentre(float wheelDelta) {
+    applyZoomAt(wheelDelta, getLocalBounds().getCentre().toFloat());
+}
+
+void GraphEditor::setMinimapVisible(bool shouldBeVisible) {
+    minimapVisible = shouldBeVisible;
+    // resized() recomputes the effective (preference && fits) visibility.
+    resized();
+    // Seed the full model on the way in: updateTransform() only pushes the viewport, so without
+    // this the map would show an empty canvas until the next 30 Hz tick.
+    if (minimap.isVisible())
+        minimap.setModel(buildMinimapModel());
+}
+
+void GraphEditor::toggleMinimapVisibility() { setMinimapVisible(!minimapVisible); }
+
+synth::ui::MinimapModel GraphEditor::buildMinimapModel() {
+    synth::ui::MinimapModel model;
+
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    static const synth::theme::Colors fallbackColors{};
+    const auto& colors = lf != nullptr ? lf->getTheme().colors : fallbackColors;
+
+    for (auto* comp : content.getModules()) {
+        if (comp == nullptr || comp->getModule() == nullptr)
+            continue;
+
+        // Per-category theme colour, the same source buildVisibleCables()/colourForCable() use for
+        // "By source module" cable colouring — there is no cheap per-instance colour on
+        // ModuleComponent itself, but category IS available cheaply via ModuleBase::getModuleType().
+        auto category = synth::ui::ModuleCategory::Utility;
+        if (auto* mb = dynamic_cast<ModuleBase*>(comp->getModule()))
+            category = synth::ui::categoryFor(mb->getModuleType());
+
+        synth::ui::MinimapModel::Node node;
+        node.bounds = comp->getBounds().toFloat();
+        node.colour = synth::ui::themeColourForCategory(colors, category);
+        node.selected = isNodeSelected(comp->getNodeId());
+        model.nodes.push_back(node);
+    }
+
+    for (const auto& cable : buildVisibleCables()) {
+        synth::ui::MinimapModel::Cable mc;
+        mc.p1 = cable.p1;
+        mc.p2 = cable.p2;
+        mc.colour = colourForCable(cable);
+        model.cables.push_back(mc);
+    }
+
+    model.viewport = getVisibleCanvasRect();
+    return model;
 }
 
 void GraphEditor::mouseMove(const juce::MouseEvent& e) {
@@ -2012,6 +2112,12 @@ void GraphEditor::timerCallback() {
     if (content.connectionAnimPhase >= 1.0f)
         content.connectionAnimPhase -= 1.0f;
     content.repaint();
+
+    // Minimap (issue #159): only build the model while visible, and only when it's needed —
+    // setModel() itself only repaints when the model actually changed (no repaint storm on a
+    // static patch).
+    if (minimap.isVisible())
+        minimap.setModel(buildMinimapModel());
 }
 
 // ============================================================================
