@@ -267,6 +267,8 @@ This table shows the raw `AudioProcessorGraph` channel assignments for each poly
 
 In poly mode, voices occupy channels 0-7 (audio/pitch/gate) and the shared-CV block starts at channel 8. **Declare `numOutputs >= highest CV input channel index you read**, to avoid JUCE `AudioProcessorGraph` buffer aliasing when `inputChan >= getTotalNumOutputChannels()`.
 
+Declare your per-voice **output** fan in `mapOutputChannel()` if the module actually emits one signal per voice — Oscillator, Filter and Noise all fan raw ch0-7 onto a single Audio jack this way. Don't, if the module sums voices down instead: VCA has no `mapOutputChannel()` override because its poly mode sums all 8 voices to stereo on ch0-1, a plain jack rather than a fan. Getting this wrong misdirects `GraphEditor::resolvePolyLink` (see [docs/modulation.md](modulation.md#creating-poly-connections)) into fanning a dragged cable out of an output that only ever produces one signal.
+
 | Module | Channel | Direction | Content |
 |--------|---------|-----------|---------|
 | **PolyMidi** | ch0-7 | Out | Pitch CV per voice (Hz) |
@@ -336,6 +338,9 @@ Agent Synth uses a **hidden Attenuverter architecture** for modulation depth con
 ### Poly Bus Wires
 - When N per-voice `DirectCV` connections share the same source module and destination visible jack, the GraphEditor collapses them into a single wire with an "xN" badge (e.g. "x8").
 - These `PolyBus` wires have no midpoint knob because there is no attenuverter in the path.
+- Dragging a cable between two equally-wide poly jacks creates all N per-voice connections directly — no need to hand-author each voice in preset JSON.
+- Toggling a module's `poly` parameter re-anchors its existing cables to the new channel layout: mono cables fan out when both ends go poly, and fans collapse back to one wire when poly is switched off.
+- A mono modulator (e.g. an LFO) dropped on a per-voice **mod-CV** fan such as the poly VCA's CV jack is broadcast to every voice — one source channel, N wires. This applies to `ModCV` only: `Pitch`/`Gate` fans and audio fans still take a single head-to-head wire, since duplicating those would stack N identical voices.
 
 ### Mod Matrix Panel
 - Sits on the right edge of the Graph Editor (toggleable).

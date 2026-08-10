@@ -119,3 +119,33 @@ TEST_F(ShortcutManagerTest, GetActionDescription_Works) {
     EXPECT_EQ(ShortcutManager::getActionDescription("undo"), "Undo");
     EXPECT_EQ(ShortcutManager::getActionDescription("redo"), "Redo");
 }
+
+// ---------------------------------------------------------------------------
+// Minimap toggle (issue #159)
+// ---------------------------------------------------------------------------
+
+// Default binding for the minimap toggle must be Cmd+K, with no extra modifiers.
+TEST_F(ShortcutManagerTest, ToggleMinimapDefaultBindingIsCmdK) {
+    const auto kp = manager.getBinding("toggleMinimap");
+    EXPECT_EQ(kp.getKeyCode(), 'k');
+    EXPECT_TRUE(kp.getModifiers().isCommandDown());
+    EXPECT_FALSE(kp.getModifiers().isShiftDown());
+    EXPECT_FALSE(kp.getModifiers().isAltDown());
+}
+
+// AppCommands::getCommandForAction must resolve "toggleMinimap" to the real command ID.
+TEST_F(ShortcutManagerTest, GetCommandForAction_ResolvesToggleMinimap) {
+    EXPECT_EQ(AppCommands::getCommandForAction("toggleMinimap"), AppCommands::toggleMinimap);
+}
+
+// "toggleMinimap" must be a registered action id (drives Settings' shortcut list).
+TEST_F(ShortcutManagerTest, ActionIds_ContainsToggleMinimap) {
+    EXPECT_TRUE(manager.getActionIds().contains("toggleMinimap"));
+}
+
+// The action needs a human-readable, non-empty description for the Settings UI.
+TEST_F(ShortcutManagerTest, GetActionDescription_ToggleMinimapIsNonEmpty) {
+    const auto description = ShortcutManager::getActionDescription("toggleMinimap");
+    EXPECT_FALSE(description.isEmpty());
+    EXPECT_EQ(description, "Toggle Minimap");
+}

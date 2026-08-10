@@ -196,6 +196,22 @@ public:
         repaint();
     }
 
+    /** Optional predicate deciding whether a module can currently be added. Used for the singleton
+     *  I/O modules: once a patch has an Audio Output, its row greys out and stops being draggable,
+     *  rather than accepting a drag that would silently do nothing. Unset means everything is
+     *  available, which keeps headless tests and every non-singleton module unaffected. */
+    std::function<bool(const juce::String&)> isModuleAvailable;
+
+    /** True when the row at `index` is a draggable row that can currently be added. Snippet rows are
+     *  draggable but never gated — the predicate only ever describes module types. */
+    bool isEntryEnabled(int index) const {
+        if (!isDraggableEntry(index))
+            return false;
+        if (entries[(size_t)index].kind != RowKind::Module)
+            return true;
+        return !isModuleAvailable || isModuleAvailable(entries[(size_t)index].text);
+    }
+
     // -------------------------------------------------------------------------
     // Pure static helpers — callable headlessly (no GUI / MessageManager needed)
     // -------------------------------------------------------------------------
@@ -204,7 +220,8 @@ public:
      *  fallback string for unknown names. */
     static juce::String descriptionFor(const juce::String& moduleName) {
         if (moduleName.equalsIgnoreCase("Oscillator"))
-            return "Generates audio waveforms (sine, saw, square, triangle).";
+            return "Generates audio waveforms (sine, saw, square, triangle). Switch Poly on to run "
+                   "8 voices driven by a Poly MIDI pitch fan.";
         if (moduleName.equalsIgnoreCase("Wavetable"))
             return "Scans through 3D wavetables — six built-ins or load your own file.";
         if (moduleName.equalsIgnoreCase("Noise"))
@@ -220,17 +237,22 @@ public:
         if (moduleName.equalsIgnoreCase("MidiKeyboard"))
             return "On-screen MIDI keyboard for note input.";
         if (moduleName.equalsIgnoreCase("Poly MIDI"))
-            return "Converts MIDI input into polyphonic pitch and gate signals.";
+            return "Converts MIDI into 8 voices of pitch and gate CV. Patch Poly Out to an "
+                   "Oscillator's Pitch and an ADSR's Gate, and switch Poly on for every module in "
+                   "the chain (Oscillator, ADSR, Filter, VCA) — with Poly off, only one voice sounds.";
         if (moduleName.equalsIgnoreCase("External MIDI"))
             return "Routes external MIDI device input into the patch graph.";
         if (moduleName.equalsIgnoreCase("ADSR"))
-            return "Attack-Decay-Sustain-Release envelope generator.";
+            return "Attack-Decay-Sustain-Release envelope generator. With Poly on it takes one gate "
+                   "per voice; with Poly off it is driven by MIDI rather than its Gate jack.";
         if (moduleName.equalsIgnoreCase("Envelope Follower"))
             return "Tracks an audio signal's amplitude and outputs it as modulation CV.";
         if (moduleName.equalsIgnoreCase("VCA"))
-            return "Voltage-controlled amplifier — controls signal amplitude via CV.";
+            return "Voltage-controlled amplifier — controls signal amplitude via CV. Switch Poly on "
+                   "to gain-control 8 voices and sum them to stereo.";
         if (moduleName.equalsIgnoreCase("Filter"))
-            return "Multi-mode resonant filter (low-pass, high-pass, band-pass).";
+            return "Multi-mode resonant filter (low-pass, high-pass, band-pass). Switch Poly on to "
+                   "filter 8 voices; cutoff and resonance CV stay shared across them.";
         if (moduleName.equalsIgnoreCase("Parametric EQ"))
             return "Four-band EQ with a visual response curve for surgical tone shaping.";
         if (moduleName.equalsIgnoreCase("Chorus"))
@@ -261,6 +283,10 @@ public:
             return "Sums multiple polyphonic voices down to a stereo mix.";
         if (moduleName.equalsIgnoreCase("Math"))
             return "Dual-input math/logic utility - Sum, Difference, Min, Max and Product of A and B.";
+        if (moduleName.equalsIgnoreCase("Audio Input"))
+            return "Audio from the input device. Only one per patch.";
+        if (moduleName.equalsIgnoreCase("Audio Output"))
+            return "Sends the patch to the output device. Only one per patch.";
         // Generic fallback for any unrecognised module name.
         return "Audio processing module.";
     }
@@ -468,12 +494,15 @@ public:
                 }
 
                 // Draggable row (module or snippet).
-                if (row.entryIndex == hoveredIndex) {
+                const bool enabled = isEntryEnabled(row.entryIndex);
+
+                if (row.entryIndex == hoveredIndex && enabled) {
                     g.setColour(accentColour.withAlpha(0.12f));
                     g.fillRect(0, row.y, contentWidth, row.height);
                 }
 
-                g.setColour(itemColour);
+                // Greyed out = already in the patch and not addable again.
+                g.setColour(enabled ? itemColour : mutedColour.withAlpha(0.5f));
                 g.setFont(juce::Font(juce::FontOptions(16.0f)));
                 g.drawText(entry.text, 20, row.y, contentWidth - 60, kItemHeight - 4, juce::Justification::centredLeft);
 
@@ -522,8 +551,11 @@ public:
                 setTooltip("Collapse or expand every category in the library.");
             } else if (hoveredIndex >= 0) {
                 const auto& entry = entries[(size_t)hoveredIndex];
-                setTooltip(entry.kind == RowKind::Snippet ? snippetDescription(entry.text, entry.moduleCount)
-                                                          : descriptionFor(entry.text));
+                juce::String tip = entry.kind == RowKind::Snippet ? snippetDescription(entry.text, entry.moduleCount)
+                                                                  : descriptionFor(entry.text);
+                if (!isEntryEnabled(hoveredIndex))
+                    tip += " (already in this patch)";
+                setTooltip(tip);
             } else {
                 setTooltip({});
             }
@@ -532,7 +564,8 @@ public:
         }
 
         // Update cursor: grab hand for draggable items, pointing hand for the clickable chrome.
-        if (hoveredIndex >= 0)
+        // An unavailable row is not draggable, so it must not advertise the grab hand.
+        if (hoveredIndex >= 0 && isEntryEnabled(hoveredIndex))
             setMouseCursor(juce::MouseCursor::DraggingHandCursor);
         else if (topStripHovered || isHeaderEntry(entryUnderMouse))
             setMouseCursor(juce::MouseCursor::PointingHandCursor);
@@ -582,6 +615,11 @@ public:
         }
 
         if (e.mods.isPopupMenu())
+            return;
+
+        // An unavailable row must not start a drag at all — accepting one and then dropping it on
+        // the floor reads as the canvas being broken rather than the module being unavailable.
+        if (!isEntryEnabled(index))
             return;
 
         // Snippet payloads carry a prefix so the canvas can tell a group drop from a module drop
@@ -637,6 +675,11 @@ public:
 
     /** Total number of entries (headers + items), collapsed or not. */
     int getEntryCount() const noexcept { return (int)entries.size(); }
+
+    /** Display text of the entry at `index`, or an empty string when out of range. */
+    juce::String getEntryText(int index) const {
+        return (index >= 0 && index < (int)entries.size()) ? entries[index].text : juce::String();
+    }
 
     const Entry& getEntry(int index) const { return entries[(size_t)index]; }
 
@@ -890,6 +933,12 @@ private:
                 "Sample & Hold",
                 "Voice Mixer",
                 "Math",
+            }},
+            // Singletons — a patch holds at most one of each, so these rows grey out once the
+            // canvas already has them (see isModuleAvailable).
+            {"I/O", {
+                "Audio Input",
+                "Audio Output",
             }},
         };
         // clang-format on

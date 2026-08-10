@@ -541,6 +541,8 @@ void ModuleComponent::createControls() {
     for (auto* param : module->getParameters())
         param->addListener(this);
 
+    captureLogicalPortMaps();
+
     // Auto-resize
     if (getType(module) == ModuleType::Sequencer || getType(module) == ModuleType::PolySequencer) {
         setSize(synth::LayoutUtil::kDoubleWidth, 380); // 8 cols * 60 + margins, 3 rows
@@ -978,7 +980,7 @@ void ModuleComponent::updateLayout() {
     }
 
     if (getType(module) == ModuleType::ADSR) {
-        setSize(220 + 60, 180); // 180 is height from ADSR Layout
+        setSize(220 + 60, 220); // Matches the ADSR branch of updateLayout (sliders + one toggle row)
         return;
     }
 
@@ -1505,18 +1507,29 @@ void ModuleComponent::resized() {
 
     // --- ADSR Layout ---
     if (getType(module) == ModuleType::ADSR) {
-        int margin = 30;                // Side margins for ports
-        setSize(220 + margin * 2, 180); // Increase width
+        int margin = 30; // Side margins for ports
         int y = 30;
-        int contentWidth = getWidth() - margin * 2;
         int sliderWidth = 50;
         int sliderHeight = 120;
+
+        // Reserve a row per auto-generated toggle (the "Poly" checkbox) below the sliders. This
+        // branch used to lay out only the sliders and return, leaving every toggle at its default
+        // (0,0,0,0) bounds — present in the component tree but invisible and unclickable, which made
+        // poly mode unreachable on this module.
+        int toggleY = y + 20 + sliderHeight + 10;
+        setSize(220 + margin * 2, toggleY + toggles.size() * 30 + 10);
+        int contentWidth = getWidth() - margin * 2;
 
         // We expect 4 sliders: A, D, S, R
         for (int i = 0; i < sliders.size(); ++i) {
             int x = margin + 10 + i * sliderWidth;
             sliderLabels[i]->setBounds(x, y, sliderWidth, 20);
             sliders[i]->setBounds(x, y + 20, sliderWidth, sliderHeight);
+        }
+
+        for (int i = 0; i < toggles.size(); ++i) {
+            toggles[i]->setBounds(margin, toggleY, contentWidth, 24);
+            toggleY += 30;
         }
         return;
     }
@@ -1558,6 +1571,26 @@ void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) 
             if (safeThis != nullptr)
                 safeThis->repaint();
         });
+    } else if (param->paramID == "poly") {
+        // The module's channel layout just changed underneath its existing cables — re-anchor them
+        // so a poly pair fans out to all voices and a mono pair collapses back to one.
+        // Graph mutation is message-thread-only. The toggle-button path is already on that thread,
+        // and running inline there keeps the rewire inside the parameter gesture's undo snapshot.
+        if (juce::MessageManager::existsAndIsCurrentThread()) {
+            applyPolyStateChange();
+        } else {
+            juce::Component::SafePointer<ModuleComponent> safeThis(this);
+            juce::MessageManager::callAsync([safeThis] {
+                if (safeThis == nullptr || safeThis->module == nullptr)
+                    return;
+                // Deferred, so the gesture's snapshot has already closed — take our own transaction.
+                if (auto* undo = safeThis->undoManager)
+                    undo->recordStructuralChange(safeThis->owner.getAudioEngine().getGraph(),
+                                                 [safeThis] { safeThis->applyPolyStateChange(); });
+                else
+                    safeThis->applyPolyStateChange();
+            });
+        }
     } else if (param->paramID == "macroCount") {
         // Resizing touches the component tree and the graph, so it must happen on the message
         // thread even though this callback can arrive from the audio thread.
@@ -1619,6 +1652,30 @@ void ModuleComponent::layoutMacroBank(int count) {
             }
         }
     }
+}
+
+void ModuleComponent::captureLogicalPortMaps() {
+    cachedInputPortMap.clear();
+    cachedOutputPortMap.clear();
+
+    auto* modBase = dynamic_cast<ModuleBase*>(module);
+    if (modBase == nullptr)
+        return;
+
+    for (int raw = 0; raw < modBase->getTotalNumInputChannels(); ++raw)
+        cachedInputPortMap.push_back(modBase->mapInputChannel(raw));
+    for (int raw = 0; raw < modBase->getTotalNumOutputChannels(); ++raw)
+        cachedOutputPortMap.push_back(modBase->mapOutputChannel(raw));
+}
+
+void ModuleComponent::applyPolyStateChange() {
+    if (module == nullptr)
+        return;
+
+    const auto previousInputMap = cachedInputPortMap;
+    const auto previousOutputMap = cachedOutputPortMap;
+    captureLogicalPortMaps(); // adopt the new layout before the graph is touched
+    owner.rewireForPolyChange(this, previousInputMap, previousOutputMap);
 }
 
 void ModuleComponent::parameterGestureChanged(int parameterIndex, bool gestureIsStarting) {

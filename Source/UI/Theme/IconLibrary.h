@@ -45,6 +45,8 @@ enum class Icon : int {
     WaveformSaw,
     WaveformSquare,
     WaveformTriangle,
+    // Toolbar toggle for the GraphEditor minimap overlay (issue #159).
+    ToggleMinimap,
     kCount
 };
 

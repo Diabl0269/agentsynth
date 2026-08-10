@@ -98,6 +98,7 @@ add_executable(Tests
     MultiSelectTests.cpp
     ClipboardTests.cpp
     PanelAnimationAndLoadingTests.cpp
+    MinimapComponentTests.cpp
     ../Source/MainComponent.cpp
     ../Source/UI/GraphEditor.cpp
     ../Source/UI/ModMatrixComponent.cpp
