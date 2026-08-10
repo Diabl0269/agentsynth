@@ -58,6 +58,19 @@ public:
     std::optional<Port> getPortForPoint(juce::Point<int> localPoint);
     juce::Point<int> getPortCenter(int index, bool isInput);
 
+    /** Serum-style modulation drop: the visible knob under `localPoint`, reported as the input
+     *  Port its CV jack would be.
+     *
+     *  Deliberately NOT folded into getPortForPoint — that one also decides what starts a drag
+     *  on mouse-down, and a knob has to keep starting a value drag there, not a cable. This is
+     *  only consulted when a cable is already in flight and no real jack was hit. */
+    std::optional<Port> getModTargetPortForPoint(juce::Point<int> localPoint) const;
+
+    /** Highlights a knob as the pending modulation drop target, or clears it with -1.
+     *  Returns true when the highlight changed, so the caller can repaint only on a change. */
+    bool setModDropTargetChannel(int channelIndex);
+    int getModDropTargetChannel() const noexcept { return modDropTargetChannel; }
+
     // --- Audio-file drag and drop (Sampler only) ---
     // Returns false for every other module type so the drop falls through to GraphEditor, which
     // creates a new Sampler for it. Dropping onto an existing Sampler replaces its sample.
@@ -136,6 +149,8 @@ private:
     std::unique_ptr<juce::Label> sampleNameLabel;
     std::unique_ptr<juce::FileChooser> sampleChooser;
     bool fileDragHighlight = false;
+    // Channel index of the knob currently highlighted as a modulation drop target, or -1.
+    int modDropTargetChannel = -1;
 
     std::unique_ptr<juce::DrawableButton> bypassButton;
     std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;
@@ -222,14 +237,6 @@ private:
 
     // True for cards whose jack count justifies a split (left-edge + right-edge) input gutter.
     int getInputPortColumns() const;
-
-    // How many inputs go down the left edge when the gutter is split; the rest go down the
-    // right edge, below the output jacks.
-    static int getLeftColumnInputCount(int visibleInputs, int visibleOutputs);
-
-    // First jack row the right-edge input column may use — below the outputs, plus a blank row
-    // so the two groups stay visually separate.
-    static int rightColumnFirstRow(int visibleOutputs);
 
     // Shared step-column layout helper used by Sequencer and PolySequencer.
     // Positions Gate, Pitch/Root, and F.Env/Chord controls for a single step column.

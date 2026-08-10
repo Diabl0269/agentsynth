@@ -157,6 +157,22 @@ This combination — PolyBus for per-voice gate control, DirectCV for a shared t
 
 `ModuleComponent` renders Serum-style modulation rings on knobs for any active modulation targeting that module. It calls `AudioEngine::getModulationRoutings()` (via the `GraphEditor`'s cached snapshot) to find which knobs have live modulation and paints a ring overlay proportional to the routed signal value. This gives a real-time visual indication of modulation depth directly on the parameter knob.
 
+**Which knob a ring belongs on is `getModRingSliderIndex()`'s call, and it returns -1 for a knob that is not visible.** A card can page its controls (the Wavetable tab strip, `layout.md` §9), and a knob on a hidden page keeps the bounds it had when its page was last laid out — so a ring drawn straight from `sliders[i]->getBounds()` paints an orange arc over empty card. The rule lives in that one accessor so it can be tested without a themed LookAndFeel and a live routing.
+
+---
+
+## Drag-to-Knob Modulation
+
+A cable released **on a knob** connects the source to that parameter's CV jack, the way Serum's mod drag works. This is the primary way to patch modulation — aiming at a jack in the gutter still works, but on a module with sixteen CV inputs it is the slow path.
+
+- `ModuleComponent::getModTargetPortForPoint()` resolves a point to the visible rotary under it, then maps that knob's `getComponentID()` (the parameter's display name) through `getModulationTargets()` to a channel index, and reports it as the input `Port` its CV jack would be.
+- `GraphEditor::endConnectionDrag()` consults it **only as a fallback**, so an actual jack under the cursor still wins, and **only for a cable dragged from an output** — a mod source drives a destination, and honouring the reverse would wire it backwards.
+- From there it rejoins the normal drop path, so the connection still goes through `AudioEngine::addModRouting()` and still gets an attenuverter auto-promoted onto it. Nothing about the routing model changes; this is purely a second way to name the destination.
+- `GraphEditor::dragConnection()` arms the knob under the cursor via `setModDropTargetChannel()`, which rings it while the cable is in flight, and `endConnectionDrag()` clears every card's highlight. Without the ring the drop is a guess.
+- It is deliberately **not** folded into `getPortForPoint()`: that method also decides what a mouse-down starts, and a knob has to keep starting a value drag there rather than a cable.
+
+Guarded by `GraphEditorTest.DroppingACableOnAKnobCreatesAModRouting` (full LFO output → Position knob → routing, including the highlight arming and clearing) and `KnobDropIsIgnoredForACableDraggedFromAnInput`.
+
 ---
 
 ## Visual Signal Flow

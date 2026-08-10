@@ -45,6 +45,9 @@ public:
                              juce::Point<int> screenPos);
     void dragConnection(juce::Point<int> screenPos);
     void endConnectionDrag(juce::Point<int> screenPos);
+
+    /** Drops the pending modulation drop-target highlight on every card. */
+    void clearModDropTargets();
     void disconnectPort(ModuleComponent* module, int portIndex, bool isInput, bool isMidi);
     void deleteModule(ModuleComponent* module);
     // Request deletion by NodeID (called from ModuleComponent's delete button).

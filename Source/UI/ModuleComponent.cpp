@@ -23,6 +23,9 @@ static constexpr int kTriggerMeterHeight = 18;
 static constexpr int kBottomPadding = 12;
 // A port label box spans its jack centre ± 10; clear it by a bit more before placing any content.
 static constexpr int kPortLabelClearance = 15;
+// Horizontal step between input-jack columns on a multi-column gutter. A jack sits at x, its
+// label runs from x+10 for 60px, so 100 leaves a 30px gap before the next column's jack.
+static constexpr int kPortColumnStride = 100;
 
 static ModuleType getType(juce::AudioProcessor* module) {
     if (auto* mb = dynamic_cast<ModuleBase*>(module))
@@ -1390,21 +1393,6 @@ int ModuleComponent::getInputPortColumns() const {
     return 1;
 }
 
-int ModuleComponent::getLeftColumnInputCount(int visibleInputs, int visibleOutputs) {
-    // The right column has to start below the output jacks, so it holds fewer rows for the same
-    // bottom row. Give the left column the difference and the two end (near enough) level —
-    // otherwise the right one hangs lower and sets the card height on its own.
-    const int right = std::max(0, (visibleInputs - rightColumnFirstRow(visibleOutputs)) / 2);
-    return visibleInputs - right;
-}
-
-int ModuleComponent::rightColumnFirstRow(int visibleOutputs) {
-    // One blank row between the outputs and the right-edge inputs. Left-is-in / right-is-out is
-    // the only cue that a jack is an input, and a split gutter breaks it — without the gap
-    // "Audio R" and the first input sit adjacent and identically styled.
-    return visibleOutputs + 1;
-}
-
 int ModuleComponent::layoutDefaultContent(bool apply) {
     const int width = getWidth();
 
@@ -1445,9 +1433,10 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
         constexpr int kChromeTopY = 60;
 
         const bool besidePorts = width >= synth::LayoutUtil::kDoubleWidth;
-        // Both jack columns hug a card edge, so the chrome clears one label gutter per side.
-        const int chromeX = besidePorts ? (contentX + kPortGutterWidth) : contentX;
-        const int chromeW = besidePorts ? std::max(120, contentW - kPortGutterWidth * 2) : contentW;
+        // Every input column is on the left, so the chrome has to clear all of them.
+        const int inputGutter = kPortGutterWidth + (getInputPortColumns() - 1) * kPortColumnStride;
+        const int chromeX = besidePorts ? (contentX + inputGutter) : contentX;
+        const int chromeW = besidePorts ? std::max(120, contentW - inputGutter - kPortGutterWidth) : contentW;
         const int chromeNarrowW = std::min(chromeW, kNarrowContentWidth);
         const int chromeNarrowX = chromeX + (chromeW - chromeNarrowW) / 2;
 
@@ -1705,14 +1694,8 @@ void ModuleComponent::paint(juce::Graphics& g) {
         else if (dynamic_cast<juce::AudioProcessorGraph::AudioGraphIOProcessor*>(module))
             label = (i == 0) ? "Left" : (i == 1) ? "Right" : "In " + juce::String(i);
 
-        // An input on the right edge (split gutter) mirrors the output labelling, or the text
-        // would run off the card.
         g.setColour(labelColour);
-        const bool onRightEdge = p.x > getWidth() / 2;
-        if (onRightEdge)
-            g.drawText(label, p.x - 70, p.y - 10, 60, 20, juce::Justification::right, false);
-        else
-            g.drawText(label, p.x + 10, p.y - 10, 60, 20, juce::Justification::left, false);
+        g.drawText(label, p.x + 10, p.y - 10, 60, 20, juce::Justification::left, false);
     }
 
     // Outputs
@@ -1733,6 +1716,23 @@ void ModuleComponent::paint(juce::Graphics& g) {
             label = (i == 0) ? "Left" : (i == 1) ? "Right" : "Out " + juce::String(i);
         g.setColour(labelColour);
         g.drawText(label, p.x - 70, p.y - 10, 60, 20, juce::Justification::right, false);
+    }
+
+    // Pending modulation drop target: ring the knob a released cable would land on, so the drop
+    // is aimed rather than guessed at.
+    if (mod != nullptr && modDropTargetChannel >= 0) {
+        for (const auto& t : mod->getModulationTargets()) {
+            if (t.channelIndex != modDropTargetChannel)
+                continue;
+            const int si = getModRingSliderIndex(t.name);
+            if (si < 0)
+                break;
+            const auto b = sliders[si]->getBounds().toFloat();
+            const float radius = std::min(b.getWidth(), b.getHeight()) / 2.0f - 6.0f;
+            g.setColour(jackAccentColour);
+            g.drawEllipse(b.getCentreX() - radius, b.getCentreY() - 10.0f - radius, radius * 2.0f, radius * 2.0f, 2.0f);
+            break;
+        }
     }
 
     // Serum-style modulation rings on knobs
@@ -1778,6 +1778,41 @@ void ModuleComponent::paint(juce::Graphics& g) {
             }
         }
     }
+}
+
+std::optional<ModuleComponent::Port> ModuleComponent::getModTargetPortForPoint(juce::Point<int> localPoint) const {
+    auto* mod = dynamic_cast<ModuleBase*>(module);
+    if (mod == nullptr)
+        return std::nullopt;
+
+    const auto targets = mod->getModulationTargets();
+
+    for (int si = 0; si < sliders.size(); ++si) {
+        auto* slider = sliders[si];
+        // A knob on an inactive tab page keeps its last bounds, so it must not swallow a drop.
+        if (!slider->isVisible() || !slider->getBounds().contains(localPoint))
+            continue;
+
+        // Only rotaries are modulation targets; the ADSR's vertical sliders are not addressed
+        // this way and neither is anything without a matching CV jack.
+        if (slider->getSliderStyle() != juce::Slider::RotaryHorizontalVerticalDrag)
+            continue;
+
+        for (const auto& t : targets) {
+            if (t.name != slider->getComponentID())
+                continue;
+            return Port{slider->getBounds(), t.channelIndex, /*isInput*/ true, /*isMidi*/ false};
+        }
+    }
+    return std::nullopt;
+}
+
+bool ModuleComponent::setModDropTargetChannel(int channelIndex) {
+    if (modDropTargetChannel == channelIndex)
+        return false;
+    modDropTargetChannel = channelIndex;
+    repaint();
+    return true;
 }
 
 int ModuleComponent::getModRingSliderIndex(const juce::String& paramName) const {
@@ -1832,24 +1867,18 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
     int clamped = (visible > 0) ? juce::jlimit(0, visible - 1, index) : 0;
 
     if (isInput) {
-        // Split gutter: a 16-jack stack in one column costs ~390px of card height before a single
-        // control is placed. The overflow goes down the RIGHT edge rather than into a second
-        // column inside the body — an interior column is half-hidden by the module itself while
-        // you drag a cable towards it, which is the whole point of a jack.
-        if (getInputPortColumns() > 1 && visible > 0) {
-            int visibleOuts = 0;
-            if (auto* mb = dynamic_cast<ModuleBase*>(module))
-                visibleOuts = mb->getVisibleOutputPortCount();
-            else
-                visibleOuts = module->getTotalNumOutputChannels();
-
-            const int leftCount = getLeftColumnInputCount(visible, visibleOuts);
-            if (clamped < leftCount)
-                return {10, headerHeight + portOffset + clamped * yStep + 20};
-
-            // Right column starts below the output jacks, with a blank row between the groups.
-            const int row = rightColumnFirstRow(visibleOuts) + (clamped - leftCount);
-            return {getWidth() - 10, headerHeight + portOffset + row * yStep + 20};
+        // Multi-column gutter: a 16-jack stack in one column costs ~390px of card height before a
+        // single control is placed. Both columns stay on the LEFT: inputs-left / outputs-right is
+        // the convention that makes signal flow read left to right, and splitting inputs across
+        // both edges costs more in comprehension than the height saves. The interior column being
+        // partly covered by its own module while you drag a cable at it is solved by dropping
+        // straight onto the destination knob instead (see GraphEditor's mod-drop).
+        const int columns = getInputPortColumns();
+        if (columns > 1 && visible > 0) {
+            const int rows = (visible + columns - 1) / columns;
+            const int col = clamped / rows;
+            const int row = clamped % rows;
+            return {10 + col * kPortColumnStride, headerHeight + portOffset + row * yStep + 20};
         }
         return {10, headerHeight + portOffset + clamped * yStep + 20}; // Left side, apply offset
     } else {

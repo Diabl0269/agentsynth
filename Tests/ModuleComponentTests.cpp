@@ -649,11 +649,10 @@ TEST_F(ModuleComponentTest, WavetableCardBuildsFolderBrowserChrome) {
     EXPECT_NO_THROW(nextButton->triggerClick());
 }
 
-// The 16 CV jacks are split across the card's two EDGES so the gutter stops dictating the card
-// height. Edges specifically, not two columns inside the body: an interior column is half-hidden
-// by the module while you drag a cable towards it. Every jack must still land on a distinct,
-// in-bounds point, because getPortCenter is what wire drawing, hit-testing and painting all read.
-TEST_F(ModuleComponentTest, WavetableCardSplitsItsJackGutterAcrossBothEdges) {
+// The 16 CV jacks run in two columns so the gutter stops dictating the card height — but BOTH
+// stay on the left. Inputs-left / outputs-right is what makes signal flow read left to right,
+// and splitting inputs across both edges costs more in comprehension than the height saves.
+TEST_F(ModuleComponentTest, WavetableCardKeepsEveryInputJackOnTheLeft) {
     AudioEngine engine;
     GraphEditor editor(engine);
     WavetableOscillatorModule processor;
@@ -669,49 +668,96 @@ TEST_F(ModuleComponentTest, WavetableCardSplitsItsJackGutterAcrossBothEdges) {
         const auto p = moduleComponent.getPortCenter(i, true);
         EXPECT_TRUE(seen.insert({p.x, p.y}).second) << "jack " << i << " overlaps another jack";
         EXPECT_TRUE(moduleComponent.getLocalBounds().contains(p)) << "jack " << i << " sits outside the card";
+        EXPECT_LT(p.x, moduleComponent.getWidth() / 2) << "input jack " << i << " must stay on the left half";
         columns.insert(p.x);
     }
-    ASSERT_EQ(columns.size(), 2u) << "expected exactly two jack columns";
+    EXPECT_EQ(columns.size(), 2u) << "expected exactly two jack columns";
 
-    // Both columns sit ON an edge, not inside the body.
-    EXPECT_EQ(*columns.begin(), 10);
-    EXPECT_EQ(*columns.rbegin(), moduleComponent.getWidth() - 10);
+    // Outputs keep the right edge to themselves.
+    for (int o = 0; o < numOuts; ++o)
+        EXPECT_GT(moduleComponent.getPortCenter(o, false).x, moduleComponent.getWidth() / 2);
 
-    // An input on the right edge must never share a row with an output jack.
-    for (int i = 0; i < numJacks; ++i) {
-        const auto in = moduleComponent.getPortCenter(i, true);
-        if (in.x < moduleComponent.getWidth() / 2)
-            continue;
-        for (int o = 0; o < numOuts; ++o)
-            EXPECT_NE(in.y, moduleComponent.getPortCenter(o, false).y)
-                << "input jack " << i << " collides with output jack " << o;
-    }
+    // Column-major: the first half runs down column 0, so jack 0 and the midpoint jack share a row.
+    EXPECT_EQ(moduleComponent.getPortCenter(0, true).y, moduleComponent.getPortCenter(numJacks / 2, true).y);
+    EXPECT_LT(moduleComponent.getPortCenter(0, true).x, moduleComponent.getPortCenter(numJacks / 2, true).x);
 
-    // A blank row separates the outputs from the right-edge inputs — left-is-in / right-is-out
-    // is the only cue that a jack is an input, and a split gutter breaks it.
-    int firstRightInput = std::numeric_limits<int>::max();
-    for (int i = 0; i < numJacks; ++i) {
-        const auto p = moduleComponent.getPortCenter(i, true);
-        if (p.x > moduleComponent.getWidth() / 2)
-            firstRightInput = std::min(firstRightInput, p.y);
-    }
-    const int lastOutput = moduleComponent.getPortCenter(numOuts - 1, false).y;
-    EXPECT_GT(firstRightInput - lastOutput, 20) << "expected a blank row between outputs and right-edge inputs";
-
-    // The columns end within one row of each other, so neither sets the card height on its own.
-    int leftBottom = 0, rightBottom = 0;
-    for (int i = 0; i < numJacks; ++i) {
-        const auto p = moduleComponent.getPortCenter(i, true);
-        int& bottom = (p.x < moduleComponent.getWidth() / 2) ? leftBottom : rightBottom;
-        bottom = std::max(bottom, p.y);
-    }
-    EXPECT_LE(std::abs(leftBottom - rightBottom), 20) << "the jack columns should bottom out level";
-
-    // The body must clear the LOWEST jack, which is no longer the last one.
-    const int lowest = std::max(leftBottom, rightBottom);
+    // The body must clear the LOWEST jack, which is not necessarily the last one.
+    int lowest = 0;
+    for (int i = 0; i < numJacks; ++i)
+        lowest = std::max(lowest, moduleComponent.getPortCenter(i, true).y);
     for (auto* child : moduleComponent.getChildren())
         if (child->isVisible() && dynamic_cast<juce::Slider*>(child) != nullptr)
             EXPECT_GT(child->getY(), lowest) << "a knob overlaps the jack gutter";
+}
+
+// Serum-style modulation drop: releasing a cable on a KNOB resolves to that parameter's CV jack,
+// so a 16-jack module can be patched without aiming at the gutter at all.
+TEST_F(ModuleComponentTest, KnobsResolveToTheirCVJackAsModulationDropTargets) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    WavetableOscillatorModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    juce::Slider* position = nullptr;
+    for (auto* child : moduleComponent.getChildren())
+        if (auto* s = dynamic_cast<juce::Slider*>(child))
+            if (s->getComponentID() == "Position")
+                position = s;
+    ASSERT_NE(position, nullptr);
+    ASSERT_TRUE(position->isVisible()) << "Position is pinned, so it shows on every page";
+
+    const auto hit = moduleComponent.getModTargetPortForPoint(position->getBounds().getCentre());
+    ASSERT_TRUE(hit.has_value()) << "a visible knob must be a modulation drop target";
+    EXPECT_TRUE(hit->isInput) << "a knob resolves to an INPUT port";
+    EXPECT_FALSE(hit->isMidi);
+    EXPECT_EQ(hit->index, WavetableOscillatorModule::kJackPosition)
+        << "the drop must land on the parameter's own CV channel";
+
+    // Empty card is not a drop target.
+    EXPECT_FALSE(moduleComponent.getModTargetPortForPoint({moduleComponent.getWidth() - 4, 4}).has_value());
+
+    // A knob on a hidden page keeps its bounds, so it must not swallow a drop aimed elsewhere.
+    juce::Slider* octave = nullptr;
+    for (auto* child : moduleComponent.getChildren())
+        if (auto* s = dynamic_cast<juce::Slider*>(child))
+            if (s->getComponentID() == "Octave")
+                octave = s;
+    ASSERT_NE(octave, nullptr);
+    const auto octaveCentre = octave->getBounds().getCentre();
+    ASSERT_TRUE(moduleComponent.getModTargetPortForPoint(octaveCentre).has_value());
+
+    for (auto* child : moduleComponent.getChildren())
+        if (auto* b = dynamic_cast<juce::TextButton*>(child))
+            if (b->getComponentID() == "wtTab1")
+                b->onClick(); // headless: triggerClick posts async, with no pump to deliver it
+
+    EXPECT_FALSE(moduleComponent.getModTargetPortForPoint(octaveCentre).has_value())
+        << "a knob whose page is hidden must not accept a modulation drop";
+}
+
+// The highlight is what makes the drop aimed rather than guessed at.
+TEST_F(ModuleComponentTest, ModulationDropTargetHighlightTracksTheHoveredKnob) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    WavetableOscillatorModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    EXPECT_EQ(moduleComponent.getModDropTargetChannel(), -1);
+
+    EXPECT_TRUE(moduleComponent.setModDropTargetChannel(WavetableOscillatorModule::kJackPosition));
+    EXPECT_EQ(moduleComponent.getModDropTargetChannel(), WavetableOscillatorModule::kJackPosition);
+
+    // Setting the same target again is not a change, so the caller can skip the repaint.
+    EXPECT_FALSE(moduleComponent.setModDropTargetChannel(WavetableOscillatorModule::kJackPosition));
+
+    EXPECT_TRUE(moduleComponent.setModDropTargetChannel(-1));
+    EXPECT_EQ(moduleComponent.getModDropTargetChannel(), -1);
+
+    // Painting with a highlight set must not crash (headless: no themed LookAndFeel).
+    moduleComponent.setModDropTargetChannel(WavetableOscillatorModule::kJackPosition);
+    juce::Image img(juce::Image::ARGB, moduleComponent.getWidth(), moduleComponent.getHeight(), true);
+    juce::Graphics g(img);
+    EXPECT_NO_THROW(moduleComponent.paint(g));
 }
 
 // Controls are paged. Switching pages must not resize the card — a card that grew and shrank
