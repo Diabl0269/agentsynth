@@ -806,6 +806,7 @@ Composes tooltip text with an optional keyboard shortcut hint appended in `[brac
 | **Module drop landing** | Eased tween from drop position → snapped + anti-overlapped final position (`easeOutBack`); `computeDropFinalPosition` is a pure helper | `GraphEditor` |
 | **Mod-matrix show/hide** | Bounds tween, `easeInOutCubic` | `GraphEditor` |
 | **Library sidebar show/hide** | Bounds tween, `easeInOutCubic` | `MainComponent` |
+| **Library section collapse/expand** | Band-height fold (150 ms), `easeInOutCubic` | `ModuleLibraryComponent` |
 | **AI panel show/hide** | Bounds tween, `easeInOutCubic` | `MainComponent` |
 | **Empty-canvas first-run hint** | Static drawn text; no animation — drawn only when `isCanvasEmpty(nodeCount)` returns `true` | `GraphEditor` |
 | **ModuleLibraryComponent rows** | Row hover-highlight; grab/dragging-hand cursor on draggable rows; per-module descriptions via `descriptionFor(name)` surfaced as `setTooltip()` | `ModuleLibraryComponent` |
@@ -1048,16 +1049,58 @@ Every section header is now a disclosure toggle, plus a **COLLAPSE ALL / EXPAND 
 - **The Snippets section stays visible when empty**, showing a "No snippets yet" hint, so the feature
   is discoverable before the first snippet exists.
 - **Chevrons are `juce::Path` triangles, not glyphs** — `▾`/`▸` coverage is not guaranteed across the
-  embedded typefaces (see the font limitation in [`theming.md`](theming.md)).
+  embedded typefaces (see the font limitation in [`theming.md`](theming.md)). The triangle is drawn
+  once (pointing down) and rotated by `-90° × progress`, so it turns with the fold; for a square box
+  the two endpoints are exactly the shapes the old two-state version switched between.
+
+### Fold animation
+
+Collapsing and expanding tween over `kCollapseAnimMs` (150 ms, `easeInOutCubic`) via
+`AnimationDriver` — no free-running repaints, per the animation invariant.
+
+- **`sectionProgress` is purely visual** (0 = open .. 1 = shut). The logical state stays in
+  `collapsedSections` and flips *instantly*, so `isSectionCollapsed()`, `areAllSectionsCollapsed()`,
+  persistence and `onCollapseStateChanged` never lag a frame behind what the user clicked.
+- **One driver for all sections**, so COLLAPSE ALL folds them together instead of racing nine
+  animators. Retargeting mid-flight eases on from the current value rather than snapping back.
+- **Rows are truncated, not squashed.** `buildRows()` gives each section a band of
+  `naturalHeight × (1 - progress)`; rows keep their natural spacing inside it and are clipped at the
+  band's bottom edge (`row.height < kItemHeight` marks a partly clipped row; rows past the band are
+  dropped, so they stop hit-testing). `juce::Graphics::drawText` does not clip on its own, hence the
+  explicit `reduceClipRegion` in `paint()`.
+- **It snaps when not `isShowing()`** — there is no VBlank off screen, so a hidden component would
+  otherwise freeze mid-fold. This is also what keeps the headless tests deterministic.
+  `setCollapsedSections()` (the launch-time restore) always snaps: animating there would look like
+  the sidebar folding itself up on startup.
 - **Collapse state persists** as newline-joined section names under `libraryCollapsedSections` in
   `juce::ApplicationProperties`. `setCollapsedSections()` skips blank entries, because an unset
   preference arrives from `StringArray::fromLines("")` as a single empty string, and
   `onCollapseStateChanged` deliberately does *not* fire from it — that is the restore path, and
   re-notifying would write back what was just read.
 
-**Known limitation:** the sidebar still has no `juce::Viewport`, so with every section expanded the
-content can exceed the panel height and the overflow is clipped rather than scrollable. Collapsing is
-the mitigation for now; adding a viewport is a separate change.
+### Scrolling
+
+With every section expanded the rows exceed any realistic panel height, so the sidebar scrolls.
+
+- **No `juce::Viewport`.** The library is a single painted component: rows come from one
+  `buildRows()` pass, and it is also the tooltip client and the drag source. A viewport would split
+  all three across an outer wrapper and an inner content component — and, because
+  `findParentDragContainerFor()` walks to the *nearest* container ancestor, an inner component would
+  bind drags to the sidebar instead of `MainComponent`, breaking drops onto the canvas. Instead a
+  `juce::ScrollBar` drives a `scrollOffset` that `paint()` and hit-testing both apply.
+- **The COLLAPSE ALL strip stays pinned** in the top `kTopStripHeight` px — the one control that
+  shortens an overflowing list must never scroll out of reach. `paint()` therefore clips the rows to
+  below the strip and `setOrigin(0, -scrollOffset)`s them, then draws the strip last over its own
+  background fill.
+- **Two coordinate spaces.** `buildRows()`, `getRowCentreY()` and `getEntryIndexAt()` are all
+  *content*-space; mouse handlers go through `getEntryIndexAtComponentY()`, which rejects the pinned
+  strip and then adds `scrollOffset`. Mixing them up is the failure mode this split exists to
+  prevent — guarded by `ModuleLibraryScroll.HitTestingFollowsTheScrollOffset`.
+- **`updateScrollBar()` runs after anything that changes content height** — resize, collapse,
+  snippet refresh, theme change (the bar's width is the `kScrollbarWidth` token). It shows/hides the
+  bar and re-clamps the offset, so a shrinking list can never leave the view scrolled past its end.
+- **Rows lose the bar's width** (`getRowContentWidth()`) while it is visible, so row text and the
+  snippet count never run under the thumb.
 
 ---
 
@@ -1129,3 +1172,96 @@ See [`docs/theming.md` §11](theming.md#11-cable-colours) for cable colour modes
 `cableCategory` palette and the user override layer. `GraphEditor` renders whatever mode and
 overrides it is handed via `setCableColourMode()` / `setCableColourOverrides()`; it never reads
 `ApplicationProperties` itself.
+
+---
+
+## 15. Minimap Overlay (issue #159)
+
+`Source/UI/MinimapComponent.h/.cpp` — `synth::ui::MinimapComponent`, a small always-current
+overview of the graph.
+
+### What it is
+
+An untransformed sibling overlay on `GraphEditor`, the same pattern as `ModMatrixComponent` — it
+does not live inside the panned/zoomed `GraphContentComponent`, so its own bounds are plain screen
+space. Everything it draws is expressed in **canvas coordinates** (the space `ModuleComponent`s and
+cables already live in) and mapped down to the small map area with `computeWorldToMap()`.
+
+### Placement, sizing, auto-hide
+
+Positioned **bottom-left** with a 12 px margin, sized `min(220, w/4) × min(150, h/4)`. Bottom-left
+is deliberate: the mod-matrix panel occupies the right-hand 600 px (§5). Below a 480×360 editor the
+minimap auto-hides — `GraphEditor::resized()` recomputes `minimapVisible && fits` on every layout
+pass against absolute floors (a fraction-of-self test like `w/4 * 2 <= w` is always true, so it
+would never actually hide anything). This never clobbers the user's preference: `minimapVisible`
+still records what they asked for, and reappears the moment the window grows back past the floor.
+
+### What it draws
+
+Renders from a `MinimapModel` snapshot — nodes, cables, and the current viewport rect, all in
+canvas coordinates:
+
+- **Nodes** — filled rounded rects in the module's per-category theme colour
+  (`themeColourForCategory`), clamped to a `kMinNodeSize` (2 px) floor so zoomed-out modules stay
+  visible; selected nodes get an additional `accent` stroke.
+- **Cables** — thin straight lines in the cable's colour at reduced alpha, not the bezier the
+  canvas draws — this is a thumbnail, not a second connection view.
+- **Viewport** — the area outside the currently visible canvas rect is dimmed with a translucent
+  `bg0` wash (an even-odd path fill punches a "hole" over the viewport rect rather than drawing
+  four separate bars); the viewport itself is stroked in `accent`.
+
+`computeWorldBounds()` derives what the map actually shows: the union of every node's bounds and
+the viewport, inflated by an 80 px margin (`kWorldMargin`), and never narrower/shorter than 1200 px
+(`kMinWorldSpan`) per axis, so a single module doesn't blow up to fill the map. All three drawing
+and hit-testing helpers (`computeWorldBounds`, `computeWorldToMap`, `mapToWorld`) are pure static
+functions with no `Component` state — unit-tested directly (`Tests/MinimapComponentTests.cpp`).
+
+### Interaction
+
+Click or drag on the map converts the event position to a canvas point (`mapToWorld`) and fires
+`onNavigate`, which `GraphEditor` wires to `centreViewOn()` — pans so that point is centred; zoom is
+unchanged. Scroll wheel fires `onZoom` with the wheel's `deltaY`, wired to `zoomAroundCentre()`.
+Both the minimap's wheel-zoom and the canvas's own wheel-zoom (`GraphEditor::mouseWheelMove`) share
+one private helper, `applyZoomAt(wheelDelta, screenAnchor)` — the canvas anchors on the mouse
+position, the minimap anchors on the visible area's centre, but the zoom curve and the `[0.1, 2.0]`
+clamp are identical.
+
+Hovering the map shows a tooltip that leads with the show/hide shortcut, the same way the toolbar
+buttons read (`"Hide Minimap  (Cmd+K)  - click or drag to navigate, scroll to zoom"`). The binding
+is rebindable, so `MinimapComponent` does **not** depend on `ShortcutManager`: it exposes
+`setShortcutHint(displayString)` and `MainComponent::applyToolbarIcons()` resolves the current
+binding and pushes it down alongside the toolbar tooltips. Because tooltips embed the resolved
+keypress, `MainComponent::updateCommandShortcuts()` (the `ShortcutManager::onBindingsChanged` hook)
+re-runs `applyToolbarIcons()` — without that, every toolbar hint *and* the minimap's keeps
+advertising the pre-rebind key until some unrelated toggle happens to refresh it.
+
+### Repaint discipline
+
+Follows §10. `setModel()` and `setViewport()` only `repaint()` when the incoming data actually
+differs from the current model (`MinimapModel::operator==`, a field-wise comparison over nodes,
+cables and viewport). `GraphEditor::timerCallback()` — the existing 30 Hz tick that already drives
+the connection-flow animation — pushes a freshly built model via `buildMinimapModel()` **only while
+the minimap is visible**, so a hidden minimap costs nothing: no graph walk, no model diffing.
+`updateTransform()` (called on every pan/zoom frame) pushes **only the viewport rect** via
+`setViewport()`, because panning/zooming changes what's visible, not where modules or cables are —
+rebuilding the full model on every drag frame would re-walk every graph edge for nothing.
+
+### GraphEditor API
+
+| Member | Purpose |
+|---|---|
+| `setMinimapVisible(bool)` | Sets the user preference and re-runs `resized()`'s fits check; also seeds a full model immediately so the map isn't blank until the next 30 Hz tick |
+| `toggleMinimapVisibility()` | `setMinimapVisible(!minimapVisible)` |
+| `isMinimapVisible()` | The user preference (not the fits-adjusted effective visibility) |
+| `getMinimap()` | Direct access to the `MinimapComponent` |
+| `getVisibleCanvasRect()` | The canvas rect currently visible — inverse of the content transform applied to `getLocalBounds()` |
+| `centreViewOn(canvasPoint)` | Pans so `canvasPoint` is centred; zoom unchanged |
+| `zoomAroundCentre(wheelDelta)` | `applyZoomAt` anchored on the visible area's centre |
+| `buildMinimapModel()` | Walks every module and `buildVisibleCables()` into a `MinimapModel` snapshot |
+
+### Toolbar, shortcut, persistence
+
+A toolbar toggle (`ToggleMinimap`, right-hand group, before `ToggleModMatrix`) and the **Cmd+K**
+shortcut (action id `toggleMinimap`; see [`shortcuts.md`](shortcuts.md)) both call
+`GraphEditor::toggleMinimapVisibility()`. Visibility persists under the `minimapVisible` key in
+`juce::ApplicationProperties`, default `true`.

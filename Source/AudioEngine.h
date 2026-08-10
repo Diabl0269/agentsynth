@@ -84,8 +84,12 @@ public:
     std::vector<ModRoutingInfo> getActiveModRoutings() const;
     std::vector<ModulationDisplayInfo> getModulationDisplayInfo() const;
     std::vector<ModulationDisplayInfo> getModulationDisplayInfo(const std::vector<ModulationRouting>& routings) const;
-    void addModRouting(juce::AudioProcessorGraph::NodeID sourceNodeID, int sourceChannelIndex,
-                       juce::AudioProcessorGraph::NodeID destNodeID, int destChannelIndex);
+    /** Inserts an attenuverter between source and destination. Returns the new attenuverter's
+     *  NodeID (invalid on failure) so callers that rebuild a routing can carry the old
+     *  attenuverter's amount across; callers that just want the wire can ignore it. */
+    juce::AudioProcessorGraph::NodeID addModRouting(juce::AudioProcessorGraph::NodeID sourceNodeID,
+                                                    int sourceChannelIndex,
+                                                    juce::AudioProcessorGraph::NodeID destNodeID, int destChannelIndex);
     void addEmptyModRouting();
     void removeModRouting(juce::AudioProcessorGraph::NodeID attenuverterNodeID);
     void toggleModBypass(juce::AudioProcessorGraph::NodeID attenuverterNodeID);

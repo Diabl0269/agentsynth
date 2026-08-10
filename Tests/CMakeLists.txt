@@ -42,6 +42,7 @@ add_executable(Tests
     AuthClientTests.cpp
     AccountServiceTests.cpp
     KeychainTokenStoreTests.cpp
+    DeviceIdStoreTests.cpp
     MainComponentTests.cpp
     GraphEditorTests.cpp
     ModuleComponentTests.cpp
@@ -90,10 +91,13 @@ add_executable(Tests
     GraphEditorOnboardingTests.cpp
     ModuleLibraryComponentTests.cpp
     ModuleLibraryCollapseTests.cpp
+    ModuleLibraryCollapseAnimationTests.cpp
+    ModuleLibraryScrollTests.cpp
     SelectionModelTests.cpp
     SnippetManagerTests.cpp
     MultiSelectTests.cpp
     PanelAnimationAndLoadingTests.cpp
+    MinimapComponentTests.cpp
     ../Source/MainComponent.cpp
     ../Source/UI/GraphEditor.cpp
     ../Source/UI/ModMatrixComponent.cpp

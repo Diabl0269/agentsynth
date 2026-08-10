@@ -8,6 +8,7 @@ namespace {
 
 const juce::String kHost = "http://mock-host:8787";
 const juce::String kClientId = "synth-desktop";
+const juce::String kDeviceId = "device-uuid-1234";
 
 synth::AuthClient::HttpResult makeStatus(int status, const juce::String& body,
                                          const juce::StringPairArray& headers = {}) {
@@ -86,6 +87,53 @@ TEST(AuthClientTest, RequestDeviceCodeHappyPathParsesEveryField) {
     EXPECT_EQ(parseForm(capturedBody)["client_id"], kClientId);
 }
 
+TEST(AuthClientTest, RequestDeviceCodeIncludesDeviceIdWhenConfigured) {
+    juce::String capturedBody;
+
+    auto performer = [&](const juce::String&, const juce::String&, const juce::StringPairArray&,
+                         const juce::String& body, int, const std::atomic<bool>&) -> synth::AuthClient::HttpResult {
+        capturedBody = body;
+        return makeStatus(200, R"({
+            "device_code": "devcode-abc",
+            "user_code": "ABCD-1234",
+            "verification_uri": "https://example.com/activate",
+            "verification_uri_complete": "https://example.com/activate?user_code=ABCD-1234",
+            "expires_in": 900,
+            "interval": 5
+        })");
+    };
+
+    synth::AuthClient client{kHost, kClientId, performer, kDeviceId};
+    const auto result = client.requestDeviceCode(kNeverCancelled);
+
+    ASSERT_TRUE(result.ok);
+    EXPECT_EQ(parseForm(capturedBody)["device_id"], kDeviceId);
+}
+
+TEST(AuthClientTest, RequestDeviceCodeOmitsDeviceIdWhenNotConfigured) {
+    juce::String capturedBody;
+
+    auto performer = [&](const juce::String&, const juce::String&, const juce::StringPairArray&,
+                         const juce::String& body, int, const std::atomic<bool>&) -> synth::AuthClient::HttpResult {
+        capturedBody = body;
+        return makeStatus(200, R"({
+            "device_code": "devcode-abc",
+            "user_code": "ABCD-1234",
+            "verification_uri": "https://example.com/activate",
+            "verification_uri_complete": "https://example.com/activate?user_code=ABCD-1234",
+            "expires_in": 900,
+            "interval": 5
+        })");
+    };
+
+    // 3-arg constructor: deviceId defaults to empty, so the field must be omitted entirely
+    // (not sent as "device_id=") rather than a parallel mechanism being required to opt out.
+    synth::AuthClient client{kHost, kClientId, performer};
+    client.requestDeviceCode(kNeverCancelled);
+
+    EXPECT_EQ(parseForm(capturedBody).count("device_id"), 0u);
+}
+
 TEST(AuthClientTest, RequestDeviceCodeTransportFailure) {
     auto performer = [](const juce::String&, const juce::String&, const juce::StringPairArray&, const juce::String&,
                         int,
@@ -131,6 +179,21 @@ TEST(AuthClientTest, PollDeviceTokenSuccessParsesEveryFieldAndSendsCorrectBody) 
     EXPECT_EQ(form.at("grant_type"), juce::String("urn:ietf:params:oauth:grant-type:device_code"));
     EXPECT_EQ(form.at("device_code"), juce::String("devcode-abc"));
     EXPECT_EQ(form.at("client_id"), kClientId);
+}
+
+TEST(AuthClientTest, PollDeviceTokenIncludesDeviceIdWhenConfigured) {
+    juce::String capturedBody;
+
+    auto performer = [&](const juce::String&, const juce::String&, const juce::StringPairArray&,
+                         const juce::String& body, int, const std::atomic<bool>&) -> synth::AuthClient::HttpResult {
+        capturedBody = body;
+        return makeStatus(200, R"({"access_token":"a","token_type":"Bearer","expires_in":60,"refresh_token":"r"})");
+    };
+
+    synth::AuthClient client{kHost, kClientId, performer, kDeviceId};
+    client.pollDeviceToken("devcode-abc", kNeverCancelled);
+
+    EXPECT_EQ(parseForm(capturedBody)["device_id"], kDeviceId);
 }
 
 struct PollErrorCase {
@@ -203,6 +266,21 @@ TEST(AuthClientTest, RefreshTokenSuccessSendsCorrectBody) {
     EXPECT_EQ(form.at("grant_type"), juce::String("refresh_token"));
     EXPECT_EQ(form.at("refresh_token"), juce::String("old-refresh-token"));
     EXPECT_EQ(form.at("client_id"), kClientId);
+}
+
+TEST(AuthClientTest, RefreshTokenIncludesDeviceIdWhenConfigured) {
+    juce::String capturedBody;
+
+    auto performer = [&](const juce::String&, const juce::String&, const juce::StringPairArray&,
+                         const juce::String& body, int, const std::atomic<bool>&) -> synth::AuthClient::HttpResult {
+        capturedBody = body;
+        return makeStatus(200, R"({"access_token":"a2","token_type":"Bearer","expires_in":60,"refresh_token":"r2"})");
+    };
+
+    synth::AuthClient client{kHost, kClientId, performer, kDeviceId};
+    client.refreshToken("old-refresh-token", kNeverCancelled);
+
+    EXPECT_EQ(parseForm(capturedBody)["device_id"], kDeviceId);
 }
 
 TEST(AuthClientTest, RefreshTokenInvalidGrant) {

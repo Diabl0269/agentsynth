@@ -105,6 +105,43 @@ static int firstDraggableRowY(const ModuleLibraryComponent& comp) {
     return index >= 0 ? comp.getRowCentreY(index) : -1;
 }
 
+// Row index of a module by name, or -1. Looked up rather than hard-coded for the same reason as
+// firstDraggableRowY above.
+static int rowIndexForModule(const ModuleLibraryComponent& comp, const juce::String& name) {
+    for (int i = 0; i < comp.getEntryCount(); ++i)
+        if (comp.getEntryText(i) == name)
+            return i;
+    return -1;
+}
+
+TEST(ModuleLibraryAvailability, EveryModuleIsEnabledWhenNoPredicateIsSet) {
+    ModuleLibraryComponent lib;
+    const int oscillatorRow = rowIndexForModule(lib, "Oscillator");
+    ASSERT_GE(oscillatorRow, 0);
+
+    EXPECT_TRUE(lib.isEntryEnabled(oscillatorRow));
+    EXPECT_FALSE(lib.isEntryEnabled(-1));
+    EXPECT_FALSE(lib.isEntryEnabled(9999));
+
+    for (int i = 0; i < lib.getEntryCount(); ++i)
+        if (lib.getEntry(i).kind == ModuleLibraryComponent::RowKind::Header)
+            EXPECT_FALSE(lib.isEntryEnabled(i)) << "Headers are never draggable";
+}
+
+TEST(ModuleLibraryAvailability, PredicateDisablesMatchingRows) {
+    ModuleLibraryComponent lib;
+    lib.isModuleAvailable = [](const juce::String& name) { return name != "Audio Output"; };
+
+    const int audioOutputRow = rowIndexForModule(lib, "Audio Output");
+    const int oscillatorRow = rowIndexForModule(lib, "Oscillator");
+
+    ASSERT_GE(audioOutputRow, 0) << "Audio Output should be offered in the library";
+    ASSERT_GE(oscillatorRow, 0);
+
+    EXPECT_FALSE(lib.isEntryEnabled(audioOutputRow)) << "An unavailable module must not be draggable";
+    EXPECT_TRUE(lib.isEntryEnabled(oscillatorRow)) << "Other modules stay unaffected";
+}
+
 TEST(ModuleLibraryHoverIndex, HoverOnHeaderRowIsMinusOne) {
     ModuleLibraryComponent comp;
     comp.setSize(200, 600);

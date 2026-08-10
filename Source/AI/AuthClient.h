@@ -76,10 +76,12 @@ public:
         juce::String transportError;
     };
 
-    explicit AuthClient(juce::String host = "http://localhost:8787", juce::String clientId = "synth-desktop");
+    explicit AuthClient(juce::String host = "http://localhost:8787", juce::String clientId = "synth-desktop",
+                        juce::String deviceId = "");
 
-    // Test-specific constructor to inject a fake HTTP transport (no real sockets).
-    AuthClient(juce::String host, juce::String clientId, HttpPerformer performer);
+    // Test-specific constructor to inject a fake HTTP transport (no real sockets). `deviceId`
+    // defaults to empty (omitted from requests) so existing 3-arg call sites keep compiling.
+    AuthClient(juce::String host, juce::String clientId, HttpPerformer performer, juce::String deviceId = "");
 
     /** POST /v1/auth/device/code — starts a device-code flow. */
     DeviceCodeResult requestDeviceCode(const std::atomic<bool>& cancelled) const;
@@ -106,6 +108,11 @@ public:
 private:
     juce::String host;
     juce::String clientId;
+    // A stable per-install identifier (see Source/Auth/DeviceIdStore.h), sent as the `device_id`
+    // form field on device-code issuance and token exchange whenever non-empty. NOT a secret —
+    // unlike clientId/HttpPerformer this is optional: an empty string just omits the field, which
+    // is what every pre-existing 3-arg constructor call (all current callers) gets.
+    juce::String deviceId;
     HttpPerformer performHttp;
 
     /** Shared implementation for pollDeviceToken()/refreshToken(): both hit the same endpoint and

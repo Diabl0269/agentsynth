@@ -11,6 +11,7 @@
 #include <vector>
 
 class ModuleComponent;
+#include "MinimapComponent.h"
 #include "ModMatrixComponent.h"
 
 class GraphEditor
@@ -40,6 +41,26 @@ public:
     void toggleModMatrixVisibility();
     bool isModMatrixVisible() const { return isMatrixVisible; }
 
+    // ---- Minimap (issue #159) ----
+    void setMinimapVisible(bool shouldBeVisible);
+    void toggleMinimapVisibility();
+    bool isMinimapVisible() const noexcept { return minimapVisible; }
+    synth::ui::MinimapComponent& getMinimap() noexcept { return minimap; }
+
+    /** The canvas rect currently visible in the editor — the inverse of the content transform
+     *  applied to getLocalBounds(). */
+    juce::Rectangle<float> getVisibleCanvasRect() const;
+
+    /** Pans so `canvasPoint` sits at the centre of the visible area. Zoom is unchanged. */
+    void centreViewOn(juce::Point<float> canvasPoint);
+
+    /** Multiplies zoom around the centre of the visible area, clamped to the same [0.1, 2.0]
+     *  range as wheel zoom, so the point under the centre stays put. */
+    void zoomAroundCentre(float wheelDelta);
+
+    // Test accessor. Non-const because it calls buildVisibleCables(), which is non-const.
+    synth::ui::MinimapModel buildMinimapModel();
+
     // Interactions
     void beginConnectionDrag(ModuleComponent* sourceModule, int channelIndex, bool isInput, bool isMidi,
                              juce::Point<int> screenPos);
@@ -49,6 +70,42 @@ public:
     /** Drops the pending modulation drop-target highlight on every card. */
     void clearModDropTargets();
     void disconnectPort(ModuleComponent* module, int portIndex, bool isInput, bool isMidi);
+
+    /** Raw-channel wiring for a single cable: the channel each end starts at, and how many
+     *  consecutive per-voice channels the cable covers (1 = an ordinary mono wire).
+     *  Voice v connects sourceRawChannel + v * sourceStride -> destRawChannel + v. */
+    struct PolyLink {
+        int sourceRawChannel = 0;
+        int destRawChannel = 0;
+        int voiceCount = 1;
+        // 1 for a voice-to-voice fan; 0 when a single mono source is broadcast to every voice of
+        // the destination fan, so all N wires leave the same source channel.
+        int sourceStride = 1;
+    };
+
+    /** Works out which raw-channel fan a cable dropped between two *visible* jacks should wire.
+     *  Port hit-testing yields visible jack indices, which are not raw channel numbers once a
+     *  module goes poly (a poly VCA's CV jack is jack 1 but raw channel 8).  When both ends front
+     *  equally wide fans the cable covers all N voices; otherwise it degrades to one head-to-head
+     *  wire.  The one exception is a mono source landing on a per-voice *mod-CV* fan: that is
+     *  broadcast to every voice (one LFO shakes all eight), which is what sourceStride == 0 means.
+     *  Where a jack fronts more than one fan (Poly MIDI's "Poly Out" carries both Pitch and
+     *  Gate) the pairing whose roles agree wins.  A null end (the graph's audio I/O nodes, which have
+     *  no logical ports) is treated as a plain mono jack whose index is its raw channel.
+     *  Pure — no graph access, headless-testable. */
+    static PolyLink resolvePolyLink(const ModuleBase* source, int sourceVisibleJack, const ModuleBase* dest,
+                                    int destVisibleJack);
+
+    /** Re-evaluates every connection touching `module` after its "poly" parameter changed, so the
+     *  graph matches the module's new channel layout: mono wires fan out to N voices when both ends
+     *  are poly, fans collapse back to one wire when poly is switched off, and wires move to the raw
+     *  channels the new layout puts them on.  MIDI connections are left alone.
+     *  `previousInputMap`/`previousOutputMap` are the module's raw->LogicalPort maps captured
+     *  *before* the change — they are the only way to tell which visible jack each existing raw
+     *  connection was anchored to, since the live mapping already reflects the new state.
+     *  Does not record undo state; the caller owns the surrounding transaction. */
+    void rewireForPolyChange(ModuleComponent* module, const std::vector<LogicalPort>& previousInputMap,
+                             const std::vector<LogicalPort>& previousOutputMap);
     void deleteModule(ModuleComponent* module);
     // Request deletion by NodeID (called from ModuleComponent's delete button).
     // Resolves the module component and delegates to the single removal path.
@@ -174,6 +231,19 @@ public:
     static juce::Point<int> computeDropFinalPosition(juce::Point<int> dropPoint, int w, int h,
                                                      const std::vector<synth::LayoutUtil::Box>& existingBoxes,
                                                      synth::LayoutUtil::NodeID selfId);
+
+    /** Called at the end of every updateComponents(), i.e. whenever the set of modules in the graph
+     *  may have changed (add, delete, replace, preset load, undo). Owners use it to refresh UI that
+     *  depends on what the patch contains — the module library greys out its singleton I/O rows. */
+    std::function<void()> onGraphStructureChanged;
+
+    /** True for the module-library entries that must exist at most once per patch (Audio Input /
+     *  Audio Output). A second one would sum into the same device buffer rather than address a
+     *  different physical output, and the app's node lookups all take the first match. */
+    static bool isSingletonIOModule(const juce::String& typeName);
+
+    /** True when the graph already contains a node whose processor reports this name. */
+    static bool graphHasModuleNamed(juce::AudioProcessorGraph& graph, const juce::String& typeName);
 
     /** Estimated (w, h) footprint for a module type name, used for the library drag ghost before a
      *  real component exists. Public so a test can hold it to the real component sizes — see
@@ -324,6 +394,11 @@ private:
     ModMatrixComponent modMatrix;
     bool isMatrixVisible = false;
 
+    // ---- Minimap (issue #159) ----
+    synth::ui::MinimapComponent minimap;
+    // User preference, independent of resized()'s auto-hide-when-tiny effective visibility.
+    bool minimapVisible = true;
+
     // Navigation State
     float zoomLevel = 1.0f;
     juce::Point<float> panOffset;
@@ -414,6 +489,11 @@ private:
     bool alignmentGuidesEnabled = true;
 
     void updateTransform();
+
+    // Shared zoom math for mouseWheelMove and zoomAroundCentre — keeps the formula (and the
+    // [0.1, 2.0] clamp) in exactly one place. `screenAnchor` is the point (in GraphEditor local/
+    // screen coordinates) whose underlying canvas point must stay put under the cursor/centre.
+    void applyZoomAt(float wheelDelta, juce::Point<float> screenAnchor);
 
     // Internal: start the drop-landing animation for a newly placed module component.
     void animateDropLanding(ModuleComponent* module, juce::Point<int> fromPos, juce::Point<int> toPos);

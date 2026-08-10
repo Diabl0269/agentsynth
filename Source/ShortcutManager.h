@@ -11,6 +11,7 @@ enum CommandIDs {
     undo,
     redo,
     toggleModMatrix,
+    toggleMinimap,
     toggleAiPanel,
     autoArrange,
     toggleLibrary,
@@ -33,6 +34,8 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return redo;
     if (actionId == "toggleModMatrix")
         return toggleModMatrix;
+    if (actionId == "toggleMinimap")
+        return toggleMinimap;
     if (actionId == "toggleAiPanel")
         return toggleAiPanel;
     if (actionId == "autoArrange")
@@ -114,6 +117,9 @@ public:
         bindings["redo"] =
             juce::KeyPress('z', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
         bindings["toggleModMatrix"] = juce::KeyPress('m', juce::ModifierKeys::commandModifier, 0);
+        // 'k' with plain Cmd is unused by any other binding (Cmd+, / S / O / N / Z / Shift+Z / M
+        // / A / L / B, Shift+A, Shift+S) — safe to claim for the minimap toggle (issue #159).
+        bindings["toggleMinimap"] = juce::KeyPress('k', juce::ModifierKeys::commandModifier, 0);
         bindings["toggleAiPanel"] = juce::KeyPress('a', juce::ModifierKeys::commandModifier, 0);
         bindings["autoArrange"] = juce::KeyPress('l', juce::ModifierKeys::commandModifier, 0);
         bindings["toggleLibrary"] = juce::KeyPress('b', juce::ModifierKeys::commandModifier, 0);
@@ -186,6 +192,8 @@ public:
             return "Redo";
         if (actionId == "toggleModMatrix")
             return "Toggle Mod Matrix";
+        if (actionId == "toggleMinimap")
+            return "Toggle Minimap";
         if (actionId == "toggleAiPanel")
             return "Toggle AI Panel";
         if (actionId == "autoArrange")
@@ -218,9 +226,9 @@ private:
     std::map<juce::String, juce::KeyPress> bindings;
     juce::ApplicationProperties* appProperties = nullptr;
 
-    juce::StringArray actionIds{"openSettings", "savePreset",    "openPreset",       "newPatch",
-                                "undo",         "redo",          "toggleModMatrix",  "toggleAiPanel",
-                                "autoArrange",  "toggleLibrary", "selectAllModules", "saveSnippet"};
+    juce::StringArray actionIds{"openSettings",  "savePreset",       "openPreset",    "newPatch",      "undo",
+                                "redo",          "toggleModMatrix",  "toggleMinimap", "toggleAiPanel", "autoArrange",
+                                "toggleLibrary", "selectAllModules", "saveSnippet"};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShortcutManager)
 };

@@ -21,6 +21,7 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
         72.0f,  // Undo
         72.0f,  // Redo
         120.0f, // AutoArrange
+        108.0f, // ToggleMinimap ("Hide Minimap"/"Show Minimap")
         104.0f, // ToggleModMatrix
         92.0f,  // ToggleAiPanel
         110.0f  // ToggleTheme
@@ -44,8 +45,8 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
     // Flexible spacer pushes the right group to the far edge.
     fb.items.add(juce::FlexItem().withFlex(1.0f));
 
-    // Right group: ToggleModMatrix, ToggleAiPanel, ToggleTheme.
-    for (int slot = ToggleModMatrix; slot <= ToggleTheme; ++slot)
+    // Right group: ToggleMinimap, ToggleModMatrix, ToggleAiPanel, ToggleTheme.
+    for (int slot = ToggleMinimap; slot <= ToggleTheme; ++slot)
         if (buttons_[(size_t)slot] != nullptr)
             fb.items.add(juce::FlexItem(*buttons_[(size_t)slot])
                              .withMinWidth(0.0f)
