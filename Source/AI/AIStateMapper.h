@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
 #include <memory>
@@ -123,6 +124,45 @@ public:
                                  bool trusted = false, bool autoConnectNewNodes = true);
 
     /**
+     * @brief Restores one of OUR OWN graphToJSON snapshots by diffing it against the live graph.
+     *
+     * The undo/redo path only. applyJSONToGraph(clearExisting=true) reaches the same end state by
+     * destroying and re-creating every node, which throws away all module runtime state (sequencer
+     * step, envelope stage, sounding voices), and does it while holding the graph callback lock.
+     * This entry point instead computes the difference and touches only what actually changed:
+     * an undo of a parameter-only edit performs ZERO topology operations, so JUCE never rebuilds
+     * its render sequence and the audio callback never blocks.
+     *
+     * Node identity is the per-node "uuid" (see graphToJSON) — NOT the integer "id", which merge
+     * mode renumbers. A live node whose uuid appears in the snapshot is KEPT and updated in place;
+     * one whose uuid is absent is removed; a snapshot node with no live match is created (adopting
+     * both its uuid and, when free, its original id).
+     *
+     * Everything is planned before anything is mutated, and the function returns false WITHOUT
+     * having touched the graph whenever identity cannot be established with certainty — a live or
+     * snapshot node with no uuid, a duplicate uuid or id, a uuid whose type no longer matches the
+     * live processor, an unknown module type, a connection naming a node the snapshot does not
+     * define, or a merge delta ("remove"/"removeModulations") rather than a full snapshot. The
+     * caller must then fall back to applyJSONToGraph(..., clearExisting=true, trusted=true), which
+     * is always correct.
+     *
+     * The snapshot's "modulations" array is ignored on purpose: in a graphToJSON snapshot it is
+     * derived from the attenuverter nodes and their wires, both of which are already carried
+     * verbatim by "nodes" and "connections". For the same reason no auto-promotion, auto-connect
+     * or value rescaling happens here — a snapshot is reproduced exactly, not interpreted.
+     *
+     * @param beforeNodeRemoval Invoked at most once, immediately before the first node is removed,
+     *        i.e. before any processor is freed. This is the caller's only chance to detach UI that
+     *        points into those processors (GraphEditor::detachAllModuleComponents). It is NOT
+     *        called when the restore removes no nodes, which is exactly when the UI has nothing to
+     *        detach from and can keep its components.
+     *
+     * @return true if the snapshot was applied; false if the caller must fall back (graph untouched).
+     */
+    static bool applySnapshotPreservingNodes(const juce::var& snapshot, juce::AudioProcessorGraph& graph,
+                                             std::function<void()> beforeNodeRemoval = {});
+
+    /**
      * @brief Validates a patch JSON without applying it, returning a reason on failure.
      *
      * @param graph existing graph the patch would be applied to — used in merge mode
@@ -174,8 +214,12 @@ private:
      */
     static int findChoiceIndex(juce::AudioParameterChoice* p, const juce::String& choiceText);
 
+    // skipUnchanged suppresses writes to parameters that already hold the target value. Only for
+    // processors that are already IN the graph: setValueNotifyingHost notifies unconditionally, and
+    // some listeners mutate the graph (ModuleComponent re-anchors a module's cables when "poly"
+    // changes), so re-applying a whole snapshot's worth of no-op writes is not free.
     static void applyParamsToProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* paramsObj,
-                                       bool trusted = false);
+                                       bool trusted = false, bool skipUnchanged = false);
 
     // Feeds a node's "state" property back into ModuleBase::setExtraState — trusted callers only.
     static void applyExtraStateToProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* nodeObj,

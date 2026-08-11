@@ -110,6 +110,15 @@ Per-node `uuid` is honoured on the trusted path only (`applyJSONToGraph` with `t
 untrusted input gets fresh identities regenerated on the next `graphToJSON`. This ensures a model
 cannot hand two nodes the same identity or claim one that something else already points at.
 
+That uuid is also what makes undo/redo node-preserving: `AIStateMapper::applySnapshotPreservingNodes`
+(the third apply path, used **only** by `AppUndoManager::SnapshotAction`) diffs one of our own
+`graphToJSON` snapshots against the live graph and keeps every node whose uuid still matches,
+instead of replaying it through `applyJSONToGraph` and re-creating everything. It refuses anything
+whose identity is ambiguous — leaving the graph untouched — and the caller then falls back to
+`applyJSONToGraph(..., clearExisting=true, trusted=true)`. `applyJSONToGraph` itself is unchanged;
+presets, snippets and AI apply all keep their existing semantics. See
+[`docs/architecture.md`](architecture.md#appundomanager).
+
 None of `schemaVersion`, `uuid` or `"timeline"` appears in `getPatchSchema()` — every property there
 is an invitation to emit it, and all three are ours to write. Pinned by
 `AIStateMapperTest.SchemaOmitsReservedFields`.
