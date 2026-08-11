@@ -1088,7 +1088,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
                           "outputGain"},
         {"Phaser", "bypassed, centreFreq, depth, feedback, mix, muted, outputLevel, rate"},
         {"Pitch Shifter", "bypassed, feedback, fine, mix, muted, outputLevel, pitch, shiftHz, shiftMode, window"},
-        {"Poly MIDI", "bypassed"},
+        {"Poly MIDI", "bypassed, voiceSteal"},
         {"Poly Sequencer", "Gate 1, Gate 2, Gate 3, Gate 4, Gate 5, Gate 6, Gate 7, Gate 8, Step 1 Chord, Step 1 Root, "
                            "Step 2 Chord, Step 2 Root, Step 3 Chord, Step 3 Root, Step 4 Chord, Step 4 Root, "
                            "Step 5 Chord, Step 5 Root, Step 6 Chord, Step 6 Root, Step 7 Chord, Step 7 Root, "

@@ -216,7 +216,17 @@ Loads an audio file from disk and plays it back one of two ways.
 
 ## Poly MIDI Module
 - **Capacity**: 8 simultaneous voices.
-- **Allocation**: Least Recently Used (LRU) algorithm.
+- **Allocation**: a note-on re-uses the voice already holding that note, else the first free voice, else steals one per the **Voice Steal** parameter.
+- **Parameter**: `voiceSteal` — `Oldest` (default) | `Round-Robin` | `Random`.
+
+| Mode | Which voice loses its note |
+|---|---|
+| `Oldest` | Least recently used — the voice whose last note-on is furthest in the past. |
+| `Round-Robin` | The next voice in a 0→7 cycle, regardless of age. The cursor advances only on a steal. |
+| `Random` | A voice picked by a module-owned PRNG. |
+
+- **Voice ages are sample counts, never wall-clock time** (issue #198). `processBlock` advances a monotonic `sampleCounter_` (before the bypass check, so ages stay ordered across a bypass toggle) and each note-on is stamped with `blockStartSample + its MIDI sample offset`. Two consequences the module depends on: a chord delivered inside one block steals in arrival order rather than collapsing onto voice 0, and offline renders are reproducible. Stamps are additionally clamped to `lastStamp_ + 1` so notes sharing one sample offset still order strictly. `Random` seeds its `juce::Random` from a fixed constant in `prepareToPlay` and advances it only on a steal, so it too renders identically every run — **never** reintroduce `juce::Time`, `std::random_device`, or an unseeded PRNG on this path.
+- **Not yet handled** (tracked separately): note velocity is ignored, and a same-pitch retrigger updates the held frequency without producing a new gate edge, so back-to-back repeated notes don't re-articulate a downstream ADSR.
 - **Outputs**: 16 total channels — ch0-7 = per-voice pitch (Hz), ch8-15 = per-voice gate (0/1).
 - **Visible ports**: 1 output jack ("Poly Out") representing the entire poly bus.
 - **Voice mask atomic**: `voiceMaskAtomic_` (`std::atomic<uint8_t>`) is written at the end of every `processBlock` with `std::memory_order_relaxed` — one bit per voice (bit 0 = voice 0, … bit 7 = voice 7), set when `voices[i].active` is true. `AudioEngine::getDisplayVoiceCount()` reads it lock-free and counts set bits via `std::popcount` (C++20 `<bit>`).
