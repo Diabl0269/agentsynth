@@ -526,6 +526,59 @@ TEST_F(AudioRenderingTest, AllPresetsRenderNonSilent) {
 }
 
 // ===========================================================================
+// Test 8b: the "Poly Pad" preset renders identically twice (issue #198)
+//
+// Pushes an over-full chord through the real preset graph (MIDI Keyboard -> Poly MIDI -> 8-voice
+// Oscillator -> Filter -> VCA -> Reverb) — the path an offline bounce or a golden-render regression
+// would take — and requires the whole chain to be bit-reproducible.
+//
+// Scope, deliberately: this is a *forward* guard, not a detector for the original bug. Checked by
+// experiment — with voice age restored to juce::Time::getMillisecondCounter() this test still
+// passes 8/8, because every note here lands at one sample offset, so the buggy code degenerates
+// *consistently* (always voice 0) and both runs agree. What actually catches wall-clock stamping
+// is PolyMidiModuleTest.SameBlockNotesStealInArrivalOrder / OverfullChordInOneBlock…, which pin
+// *which* voice is stolen. This test's job is to fail if anything in the poly chain later
+// introduces nondeterminism (an unseeded PRNG, a clock read, uninitialised state).
+// ===========================================================================
+juce::AudioBuffer<float> renderPolyPadChord(int numNotes, int numBlocks) {
+    AudioEngine engine; // do NOT initialise() — that would open a real audio device
+    auto& graph = engine.getGraph();
+    graph.setPlayConfigDetails(0, 2, kSampleRate, kBlockSize);
+    synth::PresetManager::loadPreset(6, graph);
+    graph.prepareToPlay(kSampleRate, kBlockSize);
+
+    for (auto* node : graph.getNodes())
+        if (auto* kb = dynamic_cast<MidiKeyboardModule*>(node->getProcessor()))
+            for (int i = 0; i < numNotes; ++i)
+                kb->getKeyboardState().noteOn(1, 60 + i, 1.0f);
+
+    juce::AudioBuffer<float> result(2, numBlocks * kBlockSize);
+    result.clear();
+    for (int b = 0; b < numBlocks; ++b) {
+        juce::AudioBuffer<float> block(2, kBlockSize);
+        block.clear();
+        juce::MidiBuffer emptyMidi;
+        graph.processBlock(block, emptyMidi);
+        for (int ch = 0; ch < 2; ++ch)
+            result.copyFrom(ch, b * kBlockSize, block, ch, 0, kBlockSize);
+    }
+    return result;
+}
+
+TEST_F(AudioRenderingTest, PolyPadPresetRendersIdenticallyTwice) {
+    ASSERT_EQ(synth::PresetManager::getPresetNames()[6], "Poly Pad") << "preset index 6 moved";
+
+    const auto first = renderPolyPadChord(12, 20); // 12 notes into 8 voices — 4 steals
+    juce::Thread::sleep(3);                        // a wall-clock stamp would tick over here
+    const auto second = renderPolyPadChord(12, 20);
+
+    ASSERT_EQ(first.getNumSamples(), second.getNumSamples());
+    EXPECT_FALSE(TestAudioHelpers::isSilent(first, 0)) << "nothing was rendered, so nothing is proven";
+    EXPECT_EQ(TestAudioHelpers::compareBuffers(first, second), 0.0f)
+        << "the same chord must render bit-identically — voice stealing may not depend on wall-clock time";
+}
+
+// ===========================================================================
 // Test 9: ADSR envelope shape (attack/sustain/release phases)
 // ===========================================================================
 TEST_F(AudioRenderingTest, ADSREnvelopeShape) {

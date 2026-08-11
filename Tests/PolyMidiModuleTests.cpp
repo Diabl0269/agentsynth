@@ -169,7 +169,10 @@ TEST_F(PolyMidiModuleTest, OverfullChordInOneBlockStealsInArrivalOrder) {
     EXPECT_NEAR(voicePitch(buffer, 3), noteHz(63), 1.0f);
 }
 
-// The regression test for issue #198: identical input renders identically, every time.
+// Issue #198's headline property: identical input renders identically, every time. Note this alone
+// is a weak detector — wall-clock stamping fails it only when a millisecond boundary happens to
+// fall between the two runs. The tests above are the deterministic ones, because they pin *which*
+// voice gets stolen.
 TEST_F(PolyMidiModuleTest, RenderIsDeterministicAcrossRuns) {
     for (auto mode : {PolyMidiModule::StealMode::Oldest, PolyMidiModule::StealMode::RoundRobin,
                       PolyMidiModule::StealMode::Random}) {
