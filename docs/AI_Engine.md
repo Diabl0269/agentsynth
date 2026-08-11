@@ -78,6 +78,57 @@ incoming MIDI note (or A4/440Hz if none is connected) offset by `octave`/`coarse
         Nothing in `getPatchSchema()` advertises `state`, so a constrained decoder is never invited
         to emit one.
 
+    -   `uuid`: A stable per-node identity, generated lazily by `graphToJSON` and persisted back
+        into the graph node's `properties`, so repeated saves of an unchanged node emit the same
+        string. This — not the integer `id`, which merge-mode apply renumbers — is what long-lived
+        references key on.
+
+        **Trusted-path only**, like `state`: `applyJSONToGraph` adopts an incoming `uuid` when
+        `trusted == true` and ignores it otherwise, so a provider cannot hand two nodes the same
+        identity or claim one that something else already points at. Untrusted nodes simply get a
+        fresh uuid on the next `graphToJSON`.
+
+### Patch format forward-compatibility
+
+Parameter values remain a flat scalar map forever — time-varying data will live under the reserved
+`"timeline"` root key, never in a polymorphic param value. This gives every older and newer build
+something clear to do with it: old builds preserve it (see `PatchDocument` below), new builds honor
+it, neither corrupts the other's data.
+
+`"timeline"` is reserved and **refused, not ignored**, on the untrusted path
+(`PatchValidationError::TimelineNotAllowed`). The validator lets unknown keys through, so a future
+build that starts honouring timeline data would otherwise silently begin executing provider-authored
+automation against patches accepted today. Refusing now means that door can only be opened by a
+commit that deliberately deletes the check. The trusted path (preset/undo replay) accepts it.
+
+`graphToJSON` writes a root `"schemaVersion": 1` (`AIStateMapper::kSchemaVersion`). **Readers treat
+an absent version as 1 and gate no behaviour on it** — the field exists so a genuinely breaking
+format change can be detected later. Adding a property is always additive; never bump the version
+for one.
+
+Per-node `uuid` is honoured on the trusted path only (`applyJSONToGraph` with `trusted == true`);
+untrusted input gets fresh identities regenerated on the next `graphToJSON`. This ensures a model
+cannot hand two nodes the same identity or claim one that something else already points at.
+
+None of `schemaVersion`, `uuid` or `"timeline"` appears in `getPatchSchema()` — every property there
+is an invitation to emit it, and all three are ours to write. Pinned by
+`AIStateMapperTest.SchemaOmitsReservedFields`.
+
+Unknown top-level keys (anything besides `nodes`, `connections`, `modulations`, `mode`, `remove`,
+`removeModulations`, `schemaVersion`) are preserved across a save/load round-trip by `PatchDocument`
+(see `Source/PatchDocument.h`). These preserved keys are inert — never interpreted, never validated,
+and never fed into any apply path — and live only on the user preset save/load path. Undo/redo,
+snippets, and AI apply all replay in-session graph state and must not resurrect file-level keys into
+that flow.
+
+Node type strings must round-trip: `graphToJSON` writes `getFactoryTypeName(processor)` and
+`applyJSONToGraph` feeds that string straight back to `createModule`, so a mismatch is silent data
+loss on every save/load **and** every structural undo (which replays the same JSON).
+`ModuleType::PolySequencer` mapped to `"Sequencer"`, which downgraded every saved Poly Sequencer
+to a mono one (issue #196). `AIStateMapperTest.FactoryTypeNamesRoundTrip` walks every factory key
+and fails on any new mismatch; `AIStateMapperTest.ParamIdsGolden` does the same for `paramID`s,
+which presets, undo snapshots and AI patches all address parameters by.
+
 -   **`connections`**: An array detailing the signal flow between modules.
     -   `src`: The `id` of the source module.
     -   `srcPort`: The output port index of the source module.
@@ -163,6 +214,13 @@ against:
     - The `node.type` enum is generated from `moduleFactory`, not hand-written. The old literal had
       drifted — `Voice Mixer` was creatable but missing from the schema, so a constrained decoder
       could never produce one. Guarded by `SchemaModuleTypesMatchTheFactory`.
+
+      Because the enum is *derived*, **registering a module makes it model-authorable by default** —
+      the right default for an ordinary DSP module, the wrong one for anything that names an
+      external resource or carries privileged state (a hosted plugin, a timeline feed). Such a
+      module goes into `kNonAuthorableModuleTypes` (AIStateMapper.cpp) when it is registered.
+      `AIStateMapperTest.AuthorableModuleTypesGolden` pins the exact resulting list, so either kind
+      of addition fails the build until the choice is made deliberately.
     - `node.params` enumerates every **choice** parameter's real options, so a model physically
       cannot emit `"waveform": "White Noise"`. `additionalProperties` stays `true` so numeric
       parameters remain expressible — a grammar restricted to the listed keys would make `cutoff`
@@ -183,6 +241,13 @@ against:
 
     Rejection messages name the offending id **and list the valid ones**. This is not cosmetic: a
     bare "unknown node id" gives the model nothing to aim at and the retry tends to repeat itself.
+
+    **Merge-mode id collisions are rejected, not resolved** (`NodeIdTypeMismatch`). A patch node
+    whose `id` matches a live node but whose `type` differs used to fall through the
+    update-in-place branch and create a *second* node, rebinding `idMap[id]` to it — so every later
+    connection/modulation in the same patch that meant the original node silently re-pointed at the
+    new one. Ids the same patch also `remove` are exempt: removals run first, so re-using such an id
+    names a genuinely new node. The trusted path is unaffected by design.
 
 3.  **Repair — one rule only.** A patch that states no `"mode"` and is rejected as a *replace* is
     re-validated as a *merge*, and applied that way if it passes. This costs no round-trip and

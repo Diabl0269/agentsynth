@@ -59,6 +59,8 @@ add_library(Core STATIC
     Source/Branding.h
     Source/PresetManager.cpp
     Source/PresetManager.h
+    Source/PatchDocument.cpp
+    Source/PatchDocument.h
     Source/SnippetManager.cpp
     Source/SnippetManager.h
     Source/SettingsMigration.cpp

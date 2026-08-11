@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Timeline + Per-Module Automation — Concept &amp; Plan (P7·1)</title>
+<style>
+  :root{
+    --bg0:#0B0D10; --bg1:#13161B; --surface:#1B1F26; --surface-hi:#232833; --border:#2A2F38;
+    --accent:#00D1FF; --text:#EAEEF3; --muted:#8A93A0; --disabled:#5C6470;
+    --midi:#B48EF5; --audio:#E8EDF2; --poly:#00E5FF; --gate:#FFA500;
+    --ok:#46C66B; --warn:#E0A33D; --err:#E5484D;
+    --t1:#FFB454; --t2:#FF7AB2; --t3:#56D4C0; --t4:#C792EA;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg0);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.55}
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 24px 80px}
+  h1{font-size:26px;margin:0 0 4px} h1 .tag{font-size:13px;color:var(--accent);font-family:var(--mono);vertical-align:middle;margin-left:10px}
+  h2{font-size:20px;margin:44px 0 12px;padding-top:18px;border-top:1px solid var(--border)}
+  h3{font-size:16px;margin:24px 0 8px}
+  p{margin:8px 0} .muted{color:var(--muted)} .small{font-size:13px}
+  code{font-family:var(--mono);font-size:.86em;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:1px 5px}
+  .meta{color:var(--muted);font-size:13px;margin-bottom:24px}
+  .pill{display:inline-block;font-family:var(--mono);font-size:11.5px;padding:1px 8px;border-radius:10px;border:1px solid var(--border);background:var(--surface);margin-right:6px;white-space:nowrap}
+  .pill.now{border-color:var(--ok);color:var(--ok)}
+  .pill.opus{color:#FF9E3D}.pill.sonnet{color:var(--accent)}.pill.haiku{color:var(--ok)}.pill.local{color:var(--muted)}
+  .pill.S{color:var(--muted)}.pill.M{color:var(--text)}.pill.L{color:var(--warn)}.pill.XL{color:var(--err)}
+  .callout{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:6px;padding:12px 16px;margin:14px 0}
+  .callout.warn{border-left-color:var(--warn)} .callout.err{border-left-color:var(--err)} .callout.ok{border-left-color:var(--ok)}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13.5px}
+  th{color:var(--muted);text-align:left;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+  th,td{padding:7px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+  tr:hover td{background:rgba(255,255,255,.015)}
+  td.t{min-width:210px;font-weight:600} td.d{color:#c7cdd6} td.nowrap{white-space:nowrap}
+  ul{margin:6px 0;padding-left:22px} li{margin:5px 0}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:10px 28px}
+  @media(max-width:900px){.cols{grid-template-columns:1fr}}
+  .decision{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 16px}
+  .decision b{color:var(--accent)}
+  .flow{display:flex;gap:8px;flex-wrap:wrap;align-items:stretch;margin:14px 0}
+  .mile{flex:1;min-width:170px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px}
+  .mile h4{margin:0 0 4px;font-size:13.5px} .mile.now{border-color:var(--ok)} .mile p{font-size:12.5px;color:var(--muted);margin:0}
+  .num{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--accent);color:#00222b;font-size:11px;font-weight:700;font-family:var(--mono);flex:none}
+  .legend li{list-style:none;display:flex;gap:10px;margin:8px 0}
+  .legend ul{padding-left:0}
+  /* ------------ mockup ------------ */
+  .mock{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg1);box-shadow:0 20px 60px rgba(0,0,0,.5);margin:18px 0;font-size:11px;user-select:none}
+  .mock .bar{display:flex;align-items:center;gap:10px;background:var(--surface);border-bottom:1px solid var(--border);padding:0 12px;height:38px}
+  .mock .brand{font-weight:700;font-size:12px;letter-spacing:.02em}
+  .mock .grp{display:flex;align-items:center;gap:4px;background:var(--bg1);border:1px solid var(--border);border-radius:6px;padding:3px 6px}
+  .mock .btn{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;border-radius:4px;color:var(--muted);padding:0 4px;font-size:11px}
+  .mock .btn.on{background:var(--surface-hi);color:var(--text)}
+  .mock .btn.play{color:var(--ok)} .mock .btn.rec{color:var(--err)}
+  .mock .mono{font-family:var(--mono);font-size:11px}
+  .mock .spacer{flex:1}
+  .badge{position:absolute;z-index:30;width:18px;height:18px;border-radius:50%;background:var(--accent);color:#00222b;font:700 11px/18px var(--mono);text-align:center;box-shadow:0 0 0 3px rgba(0,209,255,.18)}
+  /* graph */
+  .graph{position:relative;height:292px;background:
+    radial-gradient(circle at 1px 1px, rgba(255,255,255,.045) 1px, transparent 1px) 0 0/22px 22px, var(--bg1)}
+  .graph svg{position:absolute;inset:0;width:100%;height:100%}
+  .node{position:absolute;width:128px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 8px 8px;box-shadow:0 4px 14px rgba(0,0,0,.35)}
+  .node .nh{display:flex;align-items:center;gap:6px;font-weight:600;font-size:11px;margin-bottom:5px}
+  .node .dot{width:7px;height:7px;border-radius:50%;flex:none}
+  .node .nb{display:flex;gap:6px;align-items:center}
+  .knob{width:16px;height:16px;border-radius:50%;background:conic-gradient(var(--accent) 0 62%, var(--surface-hi) 62% 100%);position:relative;flex:none}
+  .knob::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--bg1)}
+  .knob.mod{box-shadow:0 0 0 2px rgba(180,142,245,.45)}
+  .node .lbl{color:var(--muted);font-size:9.5px}
+  .node.track{border-color:rgba(255,180,84,.55)} .node.track2{border-color:rgba(255,122,178,.55)}
+  .node.hosted{border-style:dashed;border-color:var(--t4)}
+  .node .chip{font-family:var(--mono);font-size:9px;background:var(--bg1);border:1px solid var(--border);border-radius:4px;padding:1px 5px;color:var(--muted)}
+  /* divider */
+  .divider{height:7px;background:var(--surface);border-top:1px solid var(--border);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;gap:3px;cursor:row-resize}
+  .divider i{width:3px;height:3px;border-radius:50%;background:var(--disabled)}
+  /* arrange */
+  .arr{position:relative;background:var(--bg1)}
+  .arr .tools{display:flex;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid var(--border);background:var(--surface)}
+  .arr .tool{width:22px;height:20px;display:inline-flex;align-items:center;justify-content:center;border-radius:4px;color:var(--muted)}
+  .arr .tool.on{background:var(--surface-hi);color:var(--accent)}
+  .rowgrid{display:grid;grid-template-columns:198px 1fr}
+  .thead{border-right:1px solid var(--border);border-bottom:1px solid var(--border);padding:6px 8px;background:var(--surface)}
+  .thead .tn{display:flex;align-items:center;gap:6px;font-weight:600;font-size:11px}
+  .thead .cchip{width:8px;height:8px;border-radius:2px;flex:none}
+  .thead .r2{display:flex;gap:4px;margin-top:4px;align-items:center;flex-wrap:wrap}
+  .mini{font-family:var(--mono);font-size:9px;border:1px solid var(--border);border-radius:3px;padding:0 4px;color:var(--muted);background:var(--bg1)}
+  .mini.on{color:var(--text);background:var(--surface-hi)}
+  .mini.arm{color:var(--err);border-color:rgba(229,72,77,.5)}
+  .mini.route{color:var(--midi)}
+  .mini.w{color:var(--err)}
+  .lane{position:relative;border-bottom:1px solid var(--border);background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,.035) 0 1px, transparent 1px 6.25%)}
+  .lane.alt{background:repeating-linear-gradient(90deg, rgba(255,255,255,.025) 0 1px, transparent 1px 6.25%), rgba(0,0,0,.14)}
+  .clip{position:absolute;top:6px;bottom:6px;border-radius:5px;border:1px solid;overflow:hidden}
+  .clip .cn{font-size:9px;font-family:var(--mono);padding:1px 5px;display:block;white-space:nowrap;overflow:hidden}
+  .ruler{position:relative;height:26px;border-bottom:1px solid var(--border);background:var(--surface)}
+  .ruler .bnum{position:absolute;top:5px;font-family:var(--mono);font-size:9px;color:var(--muted)}
+  .loopbrace{position:absolute;top:0;height:5px;background:rgba(0,209,255,.55);border-radius:0 0 3px 3px}
+  .playhead{position:absolute;top:0;bottom:0;width:1.5px;background:var(--accent);box-shadow:0 0 8px rgba(0,209,255,.8);z-index:20}
+  .playhead::before{content:"";position:absolute;top:0;left:-5px;border:6px solid transparent;border-top-color:var(--accent)}
+  .statusbar{display:flex;gap:16px;align-items:center;background:var(--surface);border-top:1px solid var(--border);padding:5px 12px;font-family:var(--mono);font-size:10px;color:var(--muted)}
+  .statusbar b{color:var(--text);font-weight:500}
+  .kv{display:grid;grid-template-columns:150px 1fr;gap:4px 16px;font-size:13.5px;margin:8px 0}
+  .kv dt{color:var(--muted)} .kv dd{margin:0}
+  .phase-h{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  .phase-h .goal{color:var(--muted);font-size:13px}
+  a{color:var(--accent);text-decoration:none} a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Timeline + Per-Module Automation <span class="tag">P7·1 · XL · client</span></h1>
+<div class="meta">Concept design &amp; implementation plan · 2026-08-10 · planning artifact — the feature stays parked until after revenue; only <b style="color:var(--ok)">Phase TL0</b> is do-now work.
+Derived from a 3-design / adversarial-critique planning pass over the actual codebase; every file:line claim below was spot-verified in source.</div>
+
+<!-- ============================================================ 1. CONCEPT -->
+<h2>1 · The concept: the arrangement over the rack</h2>
+<p>In a normal DAW you double-click a track to reveal a hidden instrument. Here the instrument is already on screen — <b>the graph is the rack</b> — so the window splits: rack on top, arrangement below, and a track is not a container for an instrument, it is a <b>feed into the rack</b>. You look <i>up</i>, not <i>in</i>. That single reframing is the product story, and it is the thing Cubase structurally cannot copy.</p>
+<p>Architecturally the timeline is a <b>conductor, not a second engine</b>. At audio time it does exactly two things the user already does by hand: inject MIDI into a graph node (play a keyboard) and move a parameter's base value (turn a knob). Nothing in the audio path gets new semantics, existing CV modulation stacks on top unchanged, and disabling the timeline leaves a fully working patch — which is what makes every phase independently shippable and revertible.</p>
+<p class="muted">Five pillars covered by this plan: ① MIDI tracks → graph modules · ② hosted VST/AU modules · ③ hardware audio input through the graph · ④ recording graph output onto audio tracks · ⑤ Cubase-style automation (record + manual edit), with AI-authored arrangement as the end-game layer.</p>
+
+<!-- ============================================================ 2. MOCKUP -->
+<h2>2 · Concept design (align on this before any code)</h2>
+
+<div class="mock">
+  <!-- toolbar -->
+  <div class="bar">
+    <span class="brand">AgentSynth</span>
+    <span class="grp"><span class="btn">⏮</span><span class="btn play on">▶</span><span class="btn">⏹</span><span class="btn rec">●</span><span class="btn on" title="loop">⟲</span></span>
+    <span class="grp mono"><span style="color:var(--text)">6.3.2</span><span style="color:var(--disabled)">|</span><span>00:47.1</span></span>
+    <span class="grp mono"><span style="color:var(--text)">120.0</span><span class="lbl" style="color:var(--muted)">bpm</span><span style="color:var(--disabled)">·</span><span>4/4</span></span>
+    <span class="grp"><span class="btn on" title="metronome">♩</span><span class="btn" title="count-in">1bar</span></span>
+    <span class="grp" title="global automation Read / Write"><span class="btn on" style="color:var(--ok)">R</span><span class="btn" style="color:var(--err)">W</span></span>
+    <span class="spacer"></span>
+    <span class="grp"><span class="btn on">Rack ⌃</span><span class="btn">Arrange ⌄</span><span class="btn">AI ✦</span></span>
+  </div>
+
+  <!-- graph -->
+  <div class="graph">
+    <svg viewBox="0 0 1140 292" preserveAspectRatio="none">
+      <!-- midi cables (purple) -->
+      <path d="M150,64 C 190,64 200,64 238,64" stroke="var(--midi)" stroke-width="2" fill="none"/>
+      <path d="M150,168 C 250,168 300,168 380,168" stroke="var(--midi)" stroke-width="2" fill="none"/>
+      <!-- poly bus (cyan) -->
+      <path d="M368,64 C 410,64 420,58 456,58" stroke="var(--poly)" stroke-width="2" fill="none" stroke-dasharray="7 3"/>
+      <!-- audio cables -->
+      <path d="M586,58 C 640,58 650,64 700,64" stroke="var(--audio)" stroke-width="1.6" fill="none"/>
+      <path d="M830,64 C 900,64 920,110 984,116" stroke="var(--audio)" stroke-width="1.6" fill="none"/>
+      <path d="M510,168 C 600,168 640,168 700,168" stroke="var(--audio)" stroke-width="1.6" fill="none"/>
+      <path d="M830,168 C 910,168 930,132 984,126" stroke="var(--audio)" stroke-width="1.6" fill="none"/>
+      <path d="M150,258 C 300,258 380,242 456,238" stroke="var(--audio)" stroke-width="1.6" fill="none"/>
+      <path d="M586,232 C 760,228 880,180 984,134" stroke="var(--audio)" stroke-width="1.6" fill="none"/>
+    </svg>
+    <div class="badge" style="left:4px;top:22px">1</div>
+    <div class="badge" style="left:364px;top:130px">2</div>
+    <div class="badge" style="left:4px;top:216px">3</div>
+    <div class="badge" style="left:684px;top:130px">4</div>
+
+    <div class="node track" style="left:22px;top:40px"><div class="nh"><span class="dot" style="background:var(--t1)"></span>▶ Track 1 · Drums</div><div class="nb"><span class="chip">MIDI out</span><span class="lbl">timeline feed</span></div></div>
+    <div class="node" style="left:238px;top:36px"><div class="nh"><span class="dot" style="background:var(--poly)"></span>Poly MIDI</div><div class="nb"><span class="knob"></span><span class="knob"></span><span class="lbl">8 voices</span></div></div>
+    <div class="node" style="left:458px;top:30px"><div class="nh"><span class="dot" style="background:var(--t1)"></span>Wavetable</div><div class="nb"><span class="knob"></span><span class="knob mod"></span><span class="knob"></span><span class="lbl">poly</span></div></div>
+    <div class="node" style="left:702px;top:36px"><div class="nh"><span class="dot" style="background:#4FC1FF"></span>Filter 1</div><div class="nb"><span class="knob mod" title="cutoff — automated base + LFO CV"></span><span class="knob"></span><span class="lbl">cutoff · res</span></div></div>
+    <div class="node track2" style="left:22px;top:144px"><div class="nh"><span class="dot" style="background:var(--t2)"></span>▶ Track 2 · Bass</div><div class="nb"><span class="chip">MIDI out</span></div></div>
+    <div class="node hosted" style="left:382px;top:144px"><div class="nh"><span class="dot" style="background:var(--t4)"></span>VST · Diva</div><div class="nb"><span class="chip">hosted</span><span class="chip">UI ↗</span><span class="lbl">2/2 ch</span></div></div>
+    <div class="node" style="left:702px;top:144px"><div class="nh"><span class="dot" style="background:var(--err)"></span>Rec Tap</div><div class="nb"><span class="chip">→ Track 3</span><span class="lbl">thru</span></div></div>
+    <div class="node" style="left:22px;top:234px"><div class="nh"><span class="dot" style="background:var(--t3)"></span>Audio In 1-2</div><div class="nb"><span class="chip">hw</span><span class="lbl">monitor: arm</span></div></div>
+    <div class="node" style="left:458px;top:214px"><div class="nh"><span class="dot" style="background:#56D4C0"></span>Reverb</div><div class="nb"><span class="knob"></span><span class="knob"></span><span class="lbl">mix</span></div></div>
+    <div class="node" style="left:986px;top:96px;width:118px"><div class="nh"><span class="dot" style="background:var(--audio)"></span>Audio Output</div><div class="nb"><span class="lbl">master · rec src</span></div></div>
+  </div>
+
+  <div class="divider"><i></i><i></i><i></i></div>
+
+  <!-- arrange -->
+  <div class="arr">
+    <div class="tools">
+      <span class="tool on" title="pointer">▭</span><span class="tool" title="pencil">✎</span><span class="tool" title="line/ramp">╱</span><span class="tool" title="eraser">⌫</span><span class="tool" title="range">⬚</span>
+      <span class="mini">Snap 1/16 ▾</span><span class="mini">Grid bar ▾</span>
+      <span class="spacer" style="flex:1"></span>
+      <span class="mini">＋ MIDI Track</span><span class="mini">＋ Audio Track</span><span class="mini on">Zoom ─●───</span>
+    </div>
+
+    <div class="rowgrid">
+      <div class="thead" style="background:var(--bg1);border-bottom:1px solid var(--border)"></div>
+      <div class="ruler">
+        <div class="loopbrace" style="left:25%;width:25%"></div>
+        <span class="bnum" style="left:1%">1</span><span class="bnum" style="left:13%">3</span><span class="bnum" style="left:25%">5</span><span class="bnum" style="left:37%">7</span><span class="bnum" style="left:50%">9</span><span class="bnum" style="left:62%">11</span><span class="bnum" style="left:75%">13</span><span class="bnum" style="left:87%">15</span>
+      </div>
+    </div>
+
+    <div class="rowgrid" style="position:relative">
+      <div>
+        <div class="thead" style="height:52px"><div class="tn"><span class="cchip" style="background:var(--t1)"></span>1 · Drums <span class="badge" style="position:static;margin-left:auto">5</span></div>
+          <div class="r2"><span class="mini">M</span><span class="mini">S</span><span class="mini route">→ Poly MIDI</span></div></div>
+        <div class="thead" style="height:52px"><div class="tn"><span class="cchip" style="background:var(--t2)"></span>2 · Bass</div>
+          <div class="r2"><span class="mini">M</span><span class="mini">S</span><span class="mini route">→ VST · Diva</span><span class="mini">▾ lanes</span></div></div>
+        <div class="thead alt" style="height:44px;background:var(--bg1)"><div class="tn" style="font-weight:500;color:var(--muted);font-size:10px"><span style="width:10px"></span>↳ Filter 1 · cutoff <span class="badge" style="position:static;margin-left:auto">6</span></div>
+          <div class="r2"><span class="mini on" style="color:var(--ok)">R</span><span class="mini">T</span><span class="mini">L</span><span class="mini w on">W</span><span class="mini mono">1.24 kHz</span></div></div>
+        <div class="thead" style="height:52px"><div class="tn"><span class="cchip" style="background:var(--t3)"></span>3 · Vocals <span class="mini arm" style="margin-left:auto">● arm</span></div>
+          <div class="r2"><span class="mini">M</span><span class="mini">S</span><span class="mini route" style="color:var(--t3)">In 1-2 ▾</span><span class="mini">mon</span></div></div>
+        <div class="thead" style="height:34px;background:var(--bg1)"><div class="tn" style="color:var(--muted);font-weight:500">Rack automation · 2 lanes <span class="mini" style="margin-left:auto">▸</span></div></div>
+      </div>
+
+      <div style="position:relative">
+        <div class="playhead" style="left:41%"></div>
+        <!-- Track 1 lane -->
+        <div class="lane" style="height:52px">
+          <div class="clip" style="left:1%;width:23%;background:rgba(255,180,84,.16);border-color:rgba(255,180,84,.6)"><span class="cn" style="color:var(--t1)">beat A</span>
+            <svg style="position:absolute;inset:12px 4px 4px" viewBox="0 0 100 20" preserveAspectRatio="none"><g fill="var(--t1)"><rect x="2" y="14" width="5" height="3"/><rect x="14" y="8" width="5" height="3"/><rect x="27" y="14" width="5" height="3"/><rect x="39" y="4" width="5" height="3"/><rect x="52" y="14" width="5" height="3"/><rect x="64" y="8" width="5" height="3"/><rect x="77" y="14" width="5" height="3"/><rect x="89" y="4" width="5" height="3"/></g></svg></div>
+          <div class="clip" style="left:25%;width:25%;background:rgba(255,180,84,.16);border-color:rgba(255,180,84,.6)"><span class="cn" style="color:var(--t1)">beat A</span></div>
+          <div class="clip" style="left:56%;width:31%;background:rgba(255,180,84,.16);border-color:rgba(255,180,84,.6)"><span class="cn" style="color:var(--t1)">fill</span></div>
+        </div>
+        <!-- Track 2 lane -->
+        <div class="lane" style="height:52px">
+          <div class="clip" style="left:1%;width:49%;background:rgba(255,122,178,.14);border-color:rgba(255,122,178,.6)"><span class="cn" style="color:var(--t2)">bassline · 8 bars</span>
+            <svg style="position:absolute;inset:12px 4px 4px" viewBox="0 0 100 20" preserveAspectRatio="none"><g fill="var(--t2)"><rect x="2" y="12" width="9" height="2.6"/><rect x="13" y="8" width="6" height="2.6"/><rect x="21" y="12" width="9" height="2.6"/><rect x="33" y="5" width="6" height="2.6"/><rect x="45" y="12" width="9" height="2.6"/><rect x="58" y="8" width="6" height="2.6"/><rect x="70" y="14" width="9" height="2.6"/><rect x="83" y="6" width="12" height="2.6"/></g></svg></div>
+        </div>
+        <!-- automation lane -->
+        <div class="lane alt" style="height:44px">
+          <svg style="position:absolute;inset:4px 0" viewBox="0 0 1000 36" preserveAspectRatio="none">
+            <path d="M0,30 L120,30 C 200,30 220,8 300,8 L410,8 C 470,8 500,26 560,26 L700,26 C 780,26 800,14 900,12 L1000,12"
+              stroke="var(--accent)" stroke-width="1.6" fill="none"/>
+            <path d="M0,30 L120,30 C 200,30 220,8 300,8 L410,8 C 470,8 500,26 560,26 L700,26 C 780,26 800,14 900,12 L1000,12 L1000,36 L0,36 Z" fill="rgba(0,209,255,.08)" stroke="none"/>
+            <g fill="var(--bg1)" stroke="var(--accent)" stroke-width="1.4">
+              <circle cx="120" cy="30" r="3.4"/><circle cx="300" cy="8" r="3.4"/><circle cx="410" cy="8" r="3.4"/><circle cx="560" cy="26" r="3.4"/><circle cx="700" cy="26" r="3.4"/><circle cx="900" cy="12" r="3.4"/>
+            </g>
+          </svg>
+        </div>
+        <!-- Track 3 audio lane -->
+        <div class="lane" style="height:52px">
+          <div class="clip" style="left:13%;width:49%;background:rgba(86,212,192,.13);border-color:rgba(86,212,192,.6)"><span class="cn" style="color:var(--t3)">take 3 · vocals.wav</span>
+            <svg style="position:absolute;inset:13px 2px 3px" viewBox="0 0 200 20" preserveAspectRatio="none">
+              <path d="M0,10 L4,6 8,13 12,4 16,15 20,7 24,12 28,3 32,16 36,8 40,11 44,5 48,14 52,9 56,12 60,2 64,17 68,7 72,12 76,5 80,14 84,9 88,11 92,4 96,15 100,8 104,12 108,6 112,13 116,9 120,11 124,3 128,16 132,8 136,12 140,5 144,14 148,10 152,11 156,6 160,13 164,9 168,11 172,7 176,12 180,9 184,10 188,8 192,11 196,9 200,10" stroke="var(--t3)" stroke-width="1" fill="none"/></svg></div>
+          <div class="clip" style="left:41%;width:9%;background:rgba(229,72,77,.12);border-color:rgba(229,72,77,.55);border-style:dashed"><span class="cn" style="color:var(--err)">● rec</span></div>
+        </div>
+        <!-- Rack collapsed -->
+        <div class="lane" style="height:34px"><span class="mini" style="position:absolute;left:1%;top:8px">LFO 1 · rate</span><span class="mini" style="position:absolute;left:12%;top:8px">Reverb · mix</span></div>
+        <div class="badge" style="left:40%;top:-10px">7</div>
+        <div class="badge" style="left:60%;top:158px">8</div>
+      </div>
+    </div>
+
+    <div class="statusbar">
+      <span><b>▶ 6.3.2</b> · 00:47.1</span><span>120.0 BPM · 4/4</span><span>RT 18%</span>
+      <span>I/O latency <b>5.8 / 6.6 ms</b> · rec comp on</span><span class="spacer" style="flex:1"></span><span>Timeline · 4 tracks · 3 lanes</span>
+    </div>
+  </div>
+</div>
+
+<ul class="legend">
+  <li><span class="num">1</span><span><b>A track is a node.</b> Creating a MIDI track creates a small, real, visible <i>Track In</i> node in the graph, named and coloured after the track. You <i>see</i> that Track 2 feeds the Diva VST because there is an ordinary purple MIDI cable from a node called "Track 2" — rendered, hit-tested and serialized like every other cable. No hidden side-channels.</span></li>
+  <li><span class="num">2</span><span><b>External plugins are modules.</b> A hosted VST/AU instrument or effect is one dashed-border node: patch MIDI in, patch audio out through the filter rack, open its native UI in a floating window. Its parameters become automatable lanes like any module's.</span></li>
+  <li><span class="num">3</span><span><b>Hardware input is a module.</b> Mic / analog synth comes in as an <i>Audio In</i> node you can route through any chain (input is off by default — monitoring only when a track is armed, with a feedback guard).</span></li>
+  <li><span class="num">4</span><span><b>Record anywhere.</b> A <i>Rec Tap</i> node captures any point of the graph — not just master — onto an audio track. Master output stays the one-click default.</span></li>
+  <li><span class="num">5</span><span><b>Routing chip.</b> The track header names its destination ("→ Poly MIDI"). Unbound tracks turn amber with one-click re-bind; deleting a module never silently deletes clips or automation (orphan, never delete).</span></li>
+  <li><span class="num">6</span><span><b>Automation lanes, Cubase-style.</b> Per-<code>(module, parameter)</code> lanes with <b>R</b>ead / <b>T</b>ouch / <b>L</b>atch / <b>W</b>rite, recorded from real knob gestures (thinned on commit) or drawn with pencil / line / tension-drag tools. Right-click any knob in the rack → <i>"Show automation lane"</i>. Automation moves the knob's <b>base value</b>; CV modulation keeps wobbling on top — the knob's ring shows the automated base, the arc shows CV depth.</span></li>
+  <li><span class="num">7</span><span><b>Playhead.</b> Sweeps only while the transport runs, repainting a confined strip — the second documented exception to the app's time-bounded-animation rule (same pattern as the AI spinner).</span></li>
+  <li><span class="num">8</span><span><b>Audio clips stream from disk</b> (recorded takes are not Sampler-style RAM loads), draw a live-growing waveform while recording, and land latency-compensated at the position you actually played.</span></li>
+</ul>
+
+<div class="callout"><b>Two view states:</b> Split (default, above) and Arrange-Full, where the rack collapses to a thin rail — one shortcut, Ableton-Tab muscle memory. There is deliberately no tabbed mode: a user drawing a filter sweep must be able to see the filter. Fonts stay Inter + JetBrains Mono, colours resolve through one <code>resolveTrackColour()</code> (the <code>resolveCableColour</code> rule), and the whole panel is one new region in <code>MainComponent::resized()</code>.</div>
+
+<!-- ============================================================ 3. DECISIONS -->
+<h2>3 · Ten architecture decisions (and why)</h2>
+<p class="muted small">Synthesized from three independently-generated designs + an adversarial critique. Spine: engine-first. Packaging: incremental. Identity &amp; product framing: DAW-UX.</p>
+<div class="cols">
+  <div class="decision"><b>1 · Conductor, not engine.</b> The timeline only injects MIDI and writes parameter base values. Removing it leaves a working patch; every phase is revertible. It ships behind <code>SYNTH_ENABLE_TIMELINE</code> with a CI job that builds+tests with the flag OFF — revertibility proven, not claimed.</div>
+  <div class="decision"><b>2 · Real nodes, real cables.</b> Track feeds, audio in, record taps and hosted plugins are ordinary <code>ModuleBase</code> nodes — routing, cable rendering, poly fan-out, serialization and undo come free. The existing <code>ExternalMidiModule::pushMidiMessage</code> back-channel (which stamps everything at sample 0) is explicitly the anti-pattern.</div>
+  <div class="decision"><b>3 · Pull, don't push.</b> Timeline source modules read an immutable <code>TimelineSnapshot</code> + per-block <code>BlockTimeInfo</code> and compute their own events — deterministic under seek/loop/tempo change, no cross-thread event queues, correct <code>metadata.samplePosition</code> on every note.</div>
+  <div class="decision"><b>4 · One clock.</b> <code>TransportService</code> in Core ticks once per audio callback before the graph runs. All time conversion goes through a two-method <code>TempoMap</code> seam (<code>beatFromSample</code>/<code>sampleFromBeat</code>) — constant BPM in v1, tempo maps later without touching lanes or clips. Beats are canonical; each track/lane carries <code>timeBase: musical|linear</code>. Existing Sequencer/PolySequencer keep their private BPM and gain an opt-in <i>Sync to Transport</i> (default off — presets stay byte-identical).</div>
+  <div class="decision"><b>5 · Automation writes the base value.</b> Verified: every module reads <code>param-&gt;get()</code> fresh per block and applies CV as an offset on top (<code>OscillatorModule.h:329</code>, <code>AttenuverterModule.h:46</code>). So automation = "someone turning the knob very precisely": <code>param-&gt;setValue()</code> per 64-sample slice — never <code>setValueNotifyingHost</code> on the audio thread — and zero per-module DSP changes. Zipper noise handled by slicing + a SmoothedValue audit enforced by a parameterised test (11 of ~21 modules smooth today).</div>
+  <div class="decision"><b>6 · Snapshot/RCU handoff.</b> Message thread edits <code>TimelineDoc</code>, publishes an immutable flattened snapshot via one atomic pointer; the audio thread loads it once per callback. Epoch-based reclamation (free after <code>audioEpoch</code>+2), zero allocation/locks/logging on the audio thread. Drags edit a preview overlay and publish on mouse-up.</div>
+  <div class="decision"><b>7 · Identity = per-node uuid.</b> Bindings and lanes must not key on the integer node id: merge-mode apply can silently alias ids (<code>AIStateMapper.cpp:914-971</code>). A stable <code>uuid</code> per node (honoured trusted-only, regenerated for untrusted input) is the identity everything keys on; unresolvable targets become <b>orphaned, never deleted</b>.</div>
+  <div class="decision"><b>8 · Denormalized values + range snapshot.</b> Lane points store natural units ("cutoff 200→8000 Hz") like <code>params</code> already does — human/AI-readable, validatable against the parameter's real range, immune to the untrusted <code>[0,1]</code> rescale heuristic. Each lane snapshots its range at author time so a later range change clamps detectably. <span class="muted">(One-way door — flagged in §9.)</span></div>
+  <div class="decision"><b>9 · Reserve exactly three schema things now.</b> <code>schemaVersion</code>, <code>nodes[].uuid</code>, and <code>timeline: z.unknown().optional()</code> — one root key, shape deliberately undefined, <b>refused</b> (not ignored) on the untrusted path, kept out of <code>getPatchSchema()</code>, with an additive-only golden-schema CI gate. <code>params</code> stays a flat scalar map forever. Everything else (tempo, tracks, clips, lanes, assets) nests inside <code>timeline</code> later.</div>
+  <div class="decision"><b>10 · Hard trust boundary.</b> Hosted-plugin nodes and timeline data are trusted-path-only: untrusted provider output can never name a plugin binary, hand it a state blob, or smuggle automation (<code>TimelineNotAllowed</code>). <code>isInternalOnlyModule</code>'s two-name check becomes an explicit authorable allowlist with a golden test, so registering a new module type never silently becomes model-authorable. Asset references are relative-inside-bundle only.</div>
+</div>
+
+<!-- ============================================================ 4. FINDINGS -->
+<h2>4 · What the code says today (verified during planning)</h2>
+<p class="muted small">Found by the planning pass, spot-verified in source. The first three are live bugs worth fixing regardless of the timeline.</p>
+<div class="callout err"><b>Live data-loss bug:</b> <code>getFactoryTypeName</code> maps <code>ModuleType::PolySequencer</code> to <code>"Sequencer"</code> (<code>AIStateMapper.cpp:504-505</code>) while the factory registers <code>"Poly Sequencer"</code>. Every save/load — and every structural undo, which replays the same JSON — silently downgrades a Poly Sequencer to a mono Sequencer. <b>Fix now (TL0.8).</b></div>
+<div class="callout warn"><b>Undo rebuilds the world:</b> every undo/redo replays the entire graph via <code>applyJSONToGraph(clearExisting=true)</code> under the audio callback lock (<code>AppUndoManager.cpp:27,36</code>). Fine for today's modules; fatal once hosted plugins exist (every Cmd+Z would re-instantiate every VST while holding the audio lock) and bad for timeline nodes mid-playback. A diffing/node-preserving restore is a hard prerequisite for plugin hosting (TL2.7).</div>
+<div class="callout warn"><b>Wall-clock on the audio thread:</b> <code>PolyMidiModule</code> uses <code>Time::getMillisecondCounter()</code> for voice stealing and ignores velocity entirely (<code>PolyMidiModule.h:150-151</code>) — every offline/bounce render with polyphony is non-deterministic, and machine-generated MIDI exposes it (identical timestamps degenerate LRU; same-pitch retrigger produces no new gate edge).</div>
+<dl class="kv">
+  <dt>PDC misconception</dt><dd>JUCE's graph <b>already</b> delay-compensates parallel paths internally. The real missing work: shift recorded audio back by device+graph latency, offset the drawn playhead by output latency, rebuild when a hosted plugin's latency changes.</dd>
+  <dt>Patch format</dt><dd><code>{nodes[{id,type,params,state?,position}], connections, modulations}</code> + <code>mode/remove/removeModulations</code>. No version field. <code>validatePatch</code> never inspects unknown keys — and <code>graphToJSON</code> rebuilds from live state, so unknown keys are <b>silently dropped</b> on the next save. "Forward-compatible" requires the TL0 preservation work; it does not exist today.</dd>
+  <dt>Audio input</dt><dd>Hard-disabled: device opened with 0 inputs, callback ignores <code>inputChannelData</code>. Pillar ③ is greenfield and changes every user's persisted device state (migration task included).</dd>
+  <dt>No global clock</dt><dd>Sequencer and PolySequencer each own a private BPM parameter and count samples locally. External MIDI reaches the graph via two uncoordinated paths, one of which stamps events at sample 0.</dd>
+  <dt>Parameters</dt><dd>Hardcoded string <code>paramID</code>s, stability by convention only; UI via stock JUCE attachments with <code>begin/endChangeGesture</code> (the automation-capture seam); undo is per-gesture whole-graph snapshots — an automation writer must bypass it or explode the 30 MB undo buffer.</dd>
+  <dt>Contracts package</dt><dd><code>synth-platform/packages/contracts</code> was not found on this machine and the C++ <code>getPatchSchema</code> is hand-written — TL0.1 verifies whether the Zod→JSON-Schema→C++ codegen actually exists before any schema task is written against it.</dd>
+</dl>
+
+<!-- ============================================================ 5. MILESTONES -->
+<h2>5 · Milestones</h2>
+<div class="flow">
+  <div class="mile now"><h4>TL0 · Format &amp; identity <span class="pill now">do now</span></h4><p>Schema reservation, node uuid, trust refusal, unknown-key preservation, 3 live-bug fixes. Zero UI. Ships alone; commits to nothing.</p></div>
+  <div class="mile"><h4>TL1–TL5 · Timeline v1</h4><p>Transport spine → document/handoff → MIDI tracks → automation engine → UI. MIDI + full automation, no audio tracks. Each phase demoable.</p></div>
+  <div class="mile"><h4>TL6 · v1.5 Audio</h4><p>Hardware input, recording to tracks, disk streaming, latency alignment, bounce polish.</p></div>
+  <div class="mile"><h4>TL7 · v2 Plugins</h4><p>Hosted VST/AU/CLAP modules — gated on the licensing decision and the undo fix.</p></div>
+  <div class="mile"><h4>TL8 · Agentic</h4><p>AI reads &amp; writes the arrangement through its own validated capabilities — the "Agentic Audio Workstation" layer.</p></div>
+</div>
+<p class="muted small">Size legend (agent-assisted work): S &lt; ½ day · M 1–2 days · L 3–5 days · XL 1–2 weeks. Model legend: <span class="pill haiku">haiku</span> mechanical, well-specified edits — these are also the only realistic <b>local-model</b> candidates; <span class="pill sonnet">sonnet</span> standard feature work with a clear spec; <span class="pill opus">opus</span> architecture, real-time audio, threading, schema/security surfaces. Real-time audio code should never go below sonnet.</p>
+
+<!-- ============================================================ 6. PLAN -->
+<h2>6 · The plan — 61 tasks in 9 phases</h2>
+
+<h3 class="phase-h">TL0 — Format, identity &amp; live-bug fixes <span class="pill now">do now · ships standalone</span><span class="goal">The only pre-revenue work. Makes the patch format able to carry time-varying data later with no breaking change, and closes the holes that would corrupt timeline data.</span></h3>
+<table>
+<tr><th>#</th><th>Task</th><th>What &amp; why</th><th>Size</th><th>Model</th></tr>
+<tr><td>0.1</td><td class="t">Verify the contracts pipeline exists</td><td class="d">Confirm <code>synth-platform/packages/contracts</code> + the Zod→JSON-Schema→C++ codegen are real (not found on this machine; the C++ <code>getPatchSchema</code> is hand-written). If codegen doesn't exist, TL0.2 becomes "edit both schemas by hand + a cross-check test that the C++ authorable-types enum and the Zod shape agree".</td><td><span class="pill S">S</span></td><td><span class="pill sonnet">sonnet</span> <span class="muted">svc</span></td></tr>
+<tr><td>0.2</td><td class="t">Reserve <code>schemaVersion</code> + <code>nodes[].uuid</code> + <code>timeline</code> in the contracts schema</td><td class="d"><code>timeline: z.unknown().optional()</code> — one root key, shape deliberately undefined (a wrong shape locked into a backend grammar is worse than none). Pin in comment + test: <code>params</code> stays a flat scalar map forever; time-varying data never rides a polymorphic param value. Nothing goes in <code>required</code>.</td><td><span class="pill S">S</span></td><td><span class="pill opus">opus</span> <span class="muted">svc</span></td></tr>
+<tr><td>0.3</td><td class="t">Emit <code>schemaVersion:1</code> + per-node <code>uuid</code> in graphToJSON</td><td class="d">Readers default absent→1; uuid honoured on the trusted path, regenerated for untrusted input so a model can't collide identities. Never bump the version for additive changes.</td><td><span class="pill S">S</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>0.4</td><td class="t">validatePatch: refuse <code>timeline</code> untrusted</td><td class="d">New <code>PatchValidationError::TimelineNotAllowed</code>. Refusal, not silent drop: the validator ignores unknown keys today, so a future build honouring <code>timeline</code> would silently start executing provider-authored automation. Refusing now means that door opens only via a commit that deletes the refusal — same class as the <code>state</code>-blob rule.</td><td><span class="pill M">M</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>0.5</td><td class="t">Keep reserved fields out of getPatchSchema</td><td class="d">Every property in the model-facing schema is an invitation to emit it. Pinned <code>SchemaOmitsReservedFields</code> test so a careless addition fails the build.</td><td><span class="pill S">S</span></td><td><span class="pill haiku">haiku</span></td></tr>
+<tr><td>0.6</td><td class="t">PatchDocument: preserve unknown top-level keys on round-trip</td><td class="d">graphToJSON rebuilds from live state, so an older build destroys a newer build's arrangement on save. Top-level scope only (per-node preservation has nowhere natural to live). Preserved keys are inert — never fed to <code>setExtraState</code>, never validated as patch content.</td><td><span class="pill M">M</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>0.7</td><td class="t">Additive-only golden-schema CI gate</td><td class="d">Committed golden schema; CI fails on field removal / type narrowing / enum removal, passes on additions. The only mechanism that mechanically enforces "no breaking change later". If TL0.1 finds no codegen, the golden is <code>getPatchSchema()</code> output.</td><td><span class="pill S">S</span></td><td><span class="pill sonnet">sonnet</span> <span class="muted">svc</span></td></tr>
+<tr><td>0.8</td><td class="t">Fix PolySequencer round-trip type loss <span class="pill" style="color:var(--err)">live bug</span></td><td class="d"><code>AIStateMapper.cpp:504-505</code> — every save/load and every undo silently converts Poly Sequencer → mono Sequencer. Fix + a guard test that every factory key round-trips through <code>createModule → getFactoryTypeName</code>, + a paramID-stability golden so renames can't slip through either.</td><td><span class="pill S">S</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>0.9</td><td class="t">Fix untrusted merge-mode node-id aliasing</td><td class="d">A patch node whose id collides with a live node's uid but whose type differs overwrites <code>idMap[oldId]</code> (<code>AIStateMapper.cpp:914-971</code>), silently re-pointing later references. Reject id collisions in merge-mode validation; uuid (0.3) becomes the durable identity.</td><td><span class="pill M">M</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>0.10</td><td class="t">Authorable-modules allowlist</td><td class="d">Replace <code>isInternalOnlyModule</code>'s two-name equality chain with an explicit allowlist + golden test pinning <code>authorableModuleTypes()</code>. Otherwise registering PluginHost/TrackIn/RecTap later silently makes them model-authorable and untrusted-valid.</td><td><span class="pill S">S</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>0.11</td><td class="t">Docs: the forward-compat contract</td><td class="d">docs/AI_Engine.md: params-stay-scalar, <code>timeline</code> reserved &amp; refused untrusted, unknown-key preservation; one-line CLAUDE.md invariant pointing at it.</td><td><span class="pill S">S</span></td><td><span class="pill haiku">haiku</span></td></tr>
+</table>
+
+<h3 class="phase-h">TL1 — Transport spine <span class="goal">One sample-accurate clock in Core, headless-testable, zero behaviour change to existing presets.</span></h3>
+<table>
+<tr><th>#</th><th>Task</th><th>What &amp; why</th><th>Size</th><th>Model</th></tr>
+<tr><td>1.1</td><td class="t">TransportService + TempoMap seam</td><td class="d">Play state, sample position, BPM, time-sig, loop bounds in beats; <code>TempoMap</code> = exactly <code>beatFromSample</code>/<code>sampleFromBeat</code>, implemented by <code>ConstantTempoMap</code>. No JUCE device dependency, no allocation on the read path.</td><td><span class="pill M">M</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>1.2</td><td class="t">Transport command FIFO</td><td class="d">SPSC <code>AbstractFifo</code> of POD commands (Play/Stop/Locate/SetLoop/SetBpm) drained at the top of the callback, order-preserving. Never a lock — the <code>ExternalMidiModule</code> CriticalSection is the codebase's one audio/message lock and must not be the template.</td><td><span class="pill S">S</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>1.3</td><td class="t">AudioEngine tick + BlockTimeInfo + context injection</td><td class="d">Advance transport once per callback before <code>graph.processBlock</code>; publish immutable <code>BlockTimeInfo</code> (start/end ppq, loop-wrap sample) via double-buffer/seqlock. TransportContext injection must hang off a choke point that <b>also fires on undo-driven graph rebuilds</b> (every structural undo re-creates all nodes), or Cmd+Z nulls every timeline module's clock. Also aggregate + report (not compensate) graph latency.</td><td><span class="pill M">M</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>1.4</td><td class="t">OfflineTransportDriver (headless render harness)</td><td class="d">Runs the graph at fixed rate/block with no audio device; "render N blocks / to beat X" helpers. Every engine test in TL2–TL6 depends on it — build it first (this repo's tests already need unsandboxed runs; device tests would be worse). Promoted to user-facing bounce in TL4.6.</td><td><span class="pill M">M</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>1.5</td><td class="t">Remove wall-clock from the audio path</td><td class="d"><code>PolyMidiModule.h:150</code> uses <code>Time::getMillisecondCounter()</code> for voice LRU → replace with a monotonic sample counter. Without it every offline/golden render with polyphony flakes — the foundation 1.4 assumes.</td><td><span class="pill S">S</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>1.6</td><td class="t">Fix MIDI timestamping inconsistencies</td><td class="d"><code>PolyMidiModule</code> reads <code>msg.getTimeStamp()</code> (0 for external MIDI) instead of <code>metadata.samplePosition</code>; <code>ExternalMidiModule::pushMidiMessage</code> stamps everything at sample 0. Audit all MIDI consumers — timeline notes would otherwise collapse to block starts and feel "loose" forever.</td><td><span class="pill S">S</span></td><td><span class="pill haiku">haiku</span></td></tr>
+<tr><td>1.7</td><td class="t">Poly note contract for machine MIDI</td><td class="d">Define + test: same-pitch retrigger produces a gate edge (today it early-returns updating only frequency); velocity honoured (today <code>ignoreUnused</code>); note-off/on ordering at clip boundaries with a minimum gate gap; defined 9-note-chord-on-8-voices policy. The difference between "the timeline plays" and "plays like a DAW".</td><td><span class="pill M">M</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>1.8</td><td class="t">Sequencer/PolySequencer opt-in transport sync</td><td class="d"><code>syncToTransport</code> bool, default <b>off</b> — every existing preset stores <code>bpm</code> as a plain node param and must sound identical. Golden-buffer test for the off state.</td><td><span class="pill M">M</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>1.9</td><td class="t"><code>SYNTH_ENABLE_TIMELINE</code> flag + flag-OFF CI job</td><td class="d">Build option + runtime setting; a CI matrix job builds and runs the full suite with the flag OFF so revertibility is asserted, not hoped.</td><td><span class="pill S">S</span></td><td><span class="pill haiku">haiku</span></td></tr>
+</table>
+
+<h3 class="phase-h">TL2 — Timeline document &amp; lock-free handoff <span class="goal">A mutable, undoable, serialisable model on the message thread; an RT-safe immutable view on the audio thread. No sound yet — the correctness core.</span></h3>
+<table>
+<tr><th>#</th><th>Task</th><th>What &amp; why</th><th>Size</th><th>Model</th></tr>
+<tr><td>2.1</td><td class="t">TimelineDoc model</td><td class="d">Tracks (stable TrackIds, kind enum with reserved values), clips in beats, lanes keyed <code>(nodeUuid, paramId)</code> with a per-lane range snapshot. One mutation API = one choke point for undo + republication. Compiles in Core with no GUI module.</td><td><span class="pill L">L</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>2.2</td><td class="t">TimelineSnapshot + epoch-reclaimed publication</td><td class="d">Flattened POD arrays with precomputed indices, built on the message thread, swapped via one atomic pointer (release/acquire); freed only after <code>audioEpoch</code> advances ≥2. TSan/ASan stress test + zero-allocation guard on the read path. No shared_ptr atomics.</td><td><span class="pill L">L</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>2.3</td><td class="t">MIDI clip content model + editing API</td><td class="d">Notes (beat start/length, pitch, velocity, channel), insert/delete/move/resize/quantise, clip split/join/duplicate. Sorted-by-start invariant so snapshot building is a flatten, not a sort per publish.</td><td><span class="pill M">M</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>2.4</td><td class="t"><code>.agsproj</code> bundle + timeline serialization</td><td class="d">Bundle dir: <code>project.json</code> (patch byte-identical to today's dialect + <code>timeline</code>) + <code>Audio/</code> + <code>Peaks/</code>. Load order fixed: validate whole doc untrusted-strict → apply patch trusted → bind by uuid → reconcile orphans (<code>SnippetManager::insertSnippet</code> is the reference pairing). Assets relative-path-only; absolute paths rejected. Plain patch <code>.json</code> keeps working.</td><td><span class="pill M">M</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>2.5</td><td class="t">Timeline undo (separate from graph snapshots)</td><td class="d"><code>TimelineUndoable</code> with before/after timeline JSON — folding into graph snapshots would multiply every undo's size (undo already stores full graph JSON per gesture). Cross-domain edits (delete a bound module) push one compound action.</td><td><span class="pill M">M</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>2.6</td><td class="t">Lane/track reconciliation on graph mutation</td><td class="d">Re-resolve every binding after any graph change; unresolvable → <b>orphaned</b> (retained, greyed, re-bindable). AI merge patches renumber ids and <i>will</i> orphan lanes — auto-delete would let one patch destroy an hour of automation.</td><td><span class="pill M">M</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>2.7</td><td class="t">Survivable structural undo</td><td class="d">Spike a diffing / node-preserving restore (reuse instances whose type+uuid are unchanged) to replace the full teardown-rebuild under the callback lock. Hard prerequisite for plugin hosting; until it lands, gate track create/delete and plugin load out of the transport-running state.</td><td><span class="pill L">L</span></td><td><span class="pill opus">opus</span></td></tr>
+</table>
+
+<h3 class="phase-h">TL3 — MIDI tracks into the graph <span class="goal">Pillar ①: clips play sample-accurately into a chosen module through ordinary cables.</span></h3>
+<table>
+<tr><th>#</th><th>Task</th><th>What &amp; why</th><th>Size</th><th>Model</th></tr>
+<tr><td>3.1</td><td class="t">TimelineMidiSourceModule ("Track In")</td><td class="d">Real visible node (0 audio, MIDI out), one per MIDI track, coloured/named after it. Pull model: reads BlockTimeInfo + snapshot, emits with correct <code>metadata.samplePosition</code>. Auto-wire uses <code>applyJSONToGraph(trusted=true, autoConnectNewNodes=false)</code> + one explicit connection — merge-mode auto-connect would splice it into the surrounding patch. Two-branch bypass/mute; pure-source clears on bypass.</td><td><span class="pill L">L</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>3.2</td><td class="t">Scheduling edge cases: loop wrap, locate, note hygiene</td><td class="d">Block straddling a loop boundary splits into two beat ranges; all-notes-off for exactly the notes this source started on stop/locate/wrap; note-offs falling outside the loop handled. Fuzz: no stuck notes after 1000 randomized transport ops.</td><td><span class="pill M">M</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>3.3</td><td class="t">Record external MIDI into clips</td><td class="d">Armed track + rolling transport → timestamped take, committed as one undo step. External MIDI currently reaches the app via two uncoordinated paths — record from the collector only, with a double-path regression test so notes can't record twice.</td><td><span class="pill M">M</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>3.4</td><td class="t">MIDI file import/export</td><td class="d">Standard interchange for the arrangement pillar, an escape hatch while the piano roll is minimal, and the safest future AI surface (a .mid blob carries no file paths and no plugin identifiers).</td><td><span class="pill M">M</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>3.5</td><td class="t">Headless E2E: clip → module → audio</td><td class="d">Core test: Track In → Poly MIDI → Oscillator → Output; two-bar clip rendered offline; energy at expected sample ranges, silence elsewhere. The regression net for every later scheduling change.</td><td><span class="pill S">S</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+</table>
+
+<h3 class="phase-h">TL4 — Automation engine <span class="goal">Pillar ⑤'s engine half: lanes evaluated on the audio thread, applied as base values, zipper-free, RT-clean.</span></h3>
+<table>
+<tr><th>#</th><th>Task</th><th>What &amp; why</th><th>Size</th><th>Model</th></tr>
+<tr><td>4.1</td><td class="t">Lane evaluation kernel</td><td class="d">Sorted breakpoints (denormalized value + tension + Hold/Linear, Bezier reserved), precomputed slopes, cached cursor → O(1) sequential, one binary search on seek. Allocation-free; no <code>juce::var</code>/String anywhere near it.</td><td><span class="pill L">L</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>4.2</td><td class="t">AutomationApplier + control-rate slicing</td><td class="d">Split the graph call into 64-sample sub-blocks; write via <code>param-&gt;setValue()</code> (plain atomic store — never <code>setValueNotifyingHost</code> on the audio thread). Slicing behind a measured flag with a CPU benchmark on a 50-node patch <b>and a golden-render A/B across FX modules</b> — sub-blocks change observable audio for FFT/hop effects and mip selection, not just CPU.</td><td><span class="pill L">L</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>4.3</td><td class="t">Zipper audit + parameterised AutomationZipperTest</td><td class="d">Automation writes base; each module's CV combination is untouched (Filter = exponential cutoff reference). Any param feeding a DSP coefficient raw gets a <code>SmoothedValue</code> (~10 of 21 module headers need work). Test iterates ModuleType × float param, renders a fast full-range ramp, asserts bounded inter-sample delta + no NaN — the <code>WavetableWarpAliasTest</code> enforcement idiom.</td><td><span class="pill M">M</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>4.4</td><td class="t">Record modes + gesture capture + thinning</td><td class="d">Off/Read/Touch/Latch/Write per lane + global R/W. Capture rides <code>begin/endChangeGesture</code> from the existing slider attachments into a pre-allocated SPSC ring (no allocation, <b>no logging</b> — a per-parameter log once froze the app). Guard: preset load / AI apply / undo call <code>setValueNotifyingHost</code> and must never be recorded (gesture-gated + suspended during programmatic applies). RDP thinning on commit, one undo step; Write auto-drops to Touch on stop (Cubase behaviour).</td><td><span class="pill L">L</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>4.5</td><td class="t">UI reflection without a feedback loop</td><td class="d">The player writes silently; a second SPSC FIFO drains at ~30 Hz on the message thread into <code>slider-&gt;setValue(dontSendNotification)</code>. Knobs move during playback via the existing gated 15 Hz cached-image repaint; recorder never hears the player.</td><td><span class="pill M">M</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>4.6</td><td class="t">Offline bounce/export (real feature)</td><td class="d">Promote the TL1.4 driver: render the transport range to WAV faster-than-realtime through the same graph, with a defined policy for non-render-safe modules (external MIDI, hardware input). Prerequisite for freeze/bounce-in-place and any AI "listen to what you made" loop. A DAW replacement cannot ship without a mixdown.</td><td><span class="pill L">L</span></td><td><span class="pill opus">opus</span></td></tr>
+</table>
+
+<h3 class="phase-h">TL5 — Timeline UI <span class="goal">The bottom panel — built last, on an engine already proven headless.</span></h3>
+<table>
+<tr><th>#</th><th>Task</th><th>What &amp; why</th><th>Size</th><th>Model</th></tr>
+<tr><td>5.1</td><td class="t">Bottom-docked panel + toggle + slide animation</td><td class="d">New region in <code>MainComponent::resized()</code> (carved after the status bar), third <code>AnimationDriver</code> on the shared vblank updater, toolbar button + rebindable shortcut (toggleMinimap pattern). Height in the <b>code-only</b> section of <code>Theme::Metrics</code>. Splitter-resizing is a founder decision (§9) — no splitter component exists in the codebase.</td><td><span class="pill L">L</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>5.2</td><td class="t">Ruler, grid, zoom/scroll, snap, loop brace</td><td class="d">Bar:beat ruler, pixel↔(beat,value) mapping tested at zoom extremes, snap selector, drag-to-loop brace, click-to-seek.</td><td><span class="pill L">L</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>5.3</td><td class="t">Track headers + binding chips + add-track flow</td><td class="d">Name/colour/M/S/arm + routing chip; amber unbound state with one-click re-bind (never auto-rebind by name); "＋ MIDI Track" creates the Track In node and wires it if exactly one MIDI-accepting target is unambiguous. Colours via one <code>resolveTrackColour()</code>. <b>Skip the focus-wash idea</b> — fading every module invalidates all cached module images per click (the <code>setBufferedToImage</code> discipline); highlight the bound node + cable instead.</td><td><span class="pill L">L</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>5.4</td><td class="t">Playhead — the second documented animation exception</td><td class="d">Model on <code>AIChatComponent::SpinnerDot</code>: repaints only while playing, confined to a ~3px strip (old+new x-range), offset by output latency so it matches what is heard, stopped explicitly on stop/pause. Update docs/layout.md §11 + CLAUDE.md to name it as the second — and only other — exception. Paint-count test: zero repaints over 100 idle frames.</td><td><span class="pill M">M</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>5.5</td><td class="t">Transport bar + status readout</td><td class="d">Play/stop/rec/loop cluster + BPM/time-sig editors + bar:beat readout (JetBrains Mono) on the existing 5 Hz gated status-bar poll — repaint only when the string changes.</td><td><span class="pill M">M</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>5.6</td><td class="t">Metronome + count-in</td><td class="d">Click generated by the transport and summed <b>post-graph</b> — it must never appear in a bounce or a recorded take. Count-in interacts with punch and record-arm; that's engine work behind a toolbar button.</td><td><span class="pill M">M</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>5.7</td><td class="t">Clip lanes + ClipSelectionModel</td><td class="d">Drag/trim/split/duplicate + marquee. New <code>ClipSelectionModel</code> patterned on <code>Source/UI/SelectionModel.h</code> (which is NodeID-keyed and doesn't fit clips); reuse GraphEditor's deferred-deselect-on-mouse-up trick.</td><td><span class="pill L">L</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>5.8</td><td class="t">Minimal piano roll</td><td class="d">Draw/move/resize/delete + velocity + quantise, inside the panel (no separate window). Without it the timeline is a demo, not a feature. Fonts via AppLookAndFeel only (JUCE 8 + CoreText corrupts raw family swaps).</td><td><span class="pill L">L</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>5.9</td><td class="t">Automation lane editor + "Show automation lane"</td><td class="d">Pointer/pencil/line/eraser + tension drag + per-segment curve toggle; lane mode selector R/T/L/W; right-click any knob → lane for that exact <code>(node, param)</code>. Drags edit a preview overlay, publish once on mouse-up (never rebuild the snapshot at 60 Hz). Line tool with ramp/shape cycling is the highest-value tool for modular users.</td><td><span class="pill L">L</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>5.10</td><td class="t">Keyboard/focus arbitration</td><td class="d">Cmd+C/V/D shipped for graph modules (#195) and the timeline needs the same verbs for clips, plus Space/Delete. One focus-ownership rule; panel-scoped registration like GraphEditor's canvas-scoped Delete; a test per verb asserting only the focused surface acts.</td><td><span class="pill S">S</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>5.11</td><td class="t">Docs: timeline UI + shortcuts</td><td class="d">docs/layout.md new timeline section (structured like §15 Minimap), docs/shortcuts.md rows.</td><td><span class="pill S">S</span></td><td><span class="pill haiku">haiku</span></td></tr>
+</table>
+
+<h3 class="phase-h">TL6 — Real audio I/O &amp; recording <span class="goal">Pillars ③+④: hardware in through the graph; graph out onto tracks — with honest latency.</span></h3>
+<table>
+<tr><th>#</th><th>Task</th><th>What &amp; why</th><th>Size</th><th>Model</th></tr>
+<tr><td>6.1</td><td class="t">Enable device input + settings migration</td><td class="d">Change <code>initialiseWithDefaultDevices(0,2)</code>, stop ignoring <code>inputChannelData</code>. This alters every user's persisted device state — <code>SettingsMigration.cpp</code> is the precedent. Input default-off; requesting inputs is opt-in.</td><td><span class="pill M">M</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>6.2</td><td class="t">AudioInputModule</td><td class="d">Replaces the bare <code>AudioGraphIOProcessor</code> factory entry (wired today to a device with zero inputs). Declares max channels, varies <code>getVisibleOutputPortCount()</code> to the device, clears hidden channels each block (MacroControl pattern); owner drops routings on shrink.</td><td><span class="pill M">M</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>6.3</td><td class="t">RecordTapModule + writer thread</td><td class="d">Pass-through tap (sits anywhere, not just master) → pre-allocated FIFO → <code>ThreadedWriter</code> to WAV in the bundle, peaks accumulated en route. Overrun = atomic flag surfaced as a dropped-take warning; audio thread never blocks/allocates/logs.</td><td><span class="pill L">L</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>6.4</td><td class="t">Disk-streaming audio clip player</td><td class="d">Shared prefetch thread fills per-clip rings ahead of the playhead; clip gain + fades. Explicitly NOT the Sampler's whole-file-in-RAM model (120 s cap) — a ten-minute take must not be a 100 MB allocation, and recording without streaming playback is a broken headline feature.</td><td><span class="pill L">L</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>6.5</td><td class="t">Waveform peaks + clip rendering</td><td class="d"><code>Peaks/</code> files; live-growing waveform during recording from the writer's already-computed peaks; repaint only on data arrival or view change.</td><td><span class="pill M">M</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>6.6</td><td class="t">Asset management</td><td class="d">Import-copies-into-bundle, relative refs only, missing-asset placeholder + relink (never silent delete), collect/clean unused audio.</td><td><span class="pill M">M</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>6.7</td><td class="t">Monitoring + feedback guard</td><td class="d">Monitor only while armed; detector for sustained near-clipping on an input→output path mutes with a warning. Mic + speakers + resonant filter is genuinely dangerous.</td><td><span class="pill S">S</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>6.8</td><td class="t">Latency alignment (the real "PDC" work)</td><td class="d">JUCE's graph already compensates internal parallel paths. What's missing: shift recorded audio back by device-in + graph + device-out latency so takes land where played; offset the drawn playhead by output latency; show the number in the status bar. Test: a recorded impulse lands at the sample it was played.</td><td><span class="pill M">M</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>6.9</td><td class="t">Device/sample-rate change with a project open</td><td class="d">Re-derive transport position from musical time (never a stored sample count), invalidate prefetch rings + peak caches, survive a device that refuses duplex.</td><td><span class="pill M">M</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+</table>
+
+<h3 class="phase-h">TL7 — Hosted external plugins <span class="goal">Pillar ②: third-party instruments/FX as graph modules — gated on licensing and the undo fix (TL2.7).</span></h3>
+<table>
+<tr><th>#</th><th>Task</th><th>What &amp; why</th><th>Size</th><th>Model</th></tr>
+<tr><td>7.1</td><td class="t">Plugin format + licensing decision gate</td><td class="d">Written decision before any code: VST3 SDK is Steinberg-proprietary-or-GPLv3 — the GPL branch is ruled out by org licensing policy, so it's the Steinberg agreement, or CLAP (MIT) + AU (macOS). Separately: which JUCE license tier AgentSynth ships under. Output: docs page + any new pin in <code>cmake/DependencyVersions.cmake</code> with its license recorded.</td><td><span class="pill S">S</span></td><td><span class="pill opus">opus</span> <span class="muted">+you/legal</span></td></tr>
+<tr><td>7.2</td><td class="t">HostedPluginBackend + HostedPluginModule</td><td class="d">Format-agnostic backend behind an abstraction; module declares <code>kMaxPluginChannels</code> (16/16) at construction (bus layouts settle in the ModuleBase ctor — the fixed-channels invariant), exposes the plugin's real count as visible ports, clears the rest, refuses over-max plugins with a clear message. Async instantiation: audio thread sees an atomic pointer, passes through until ready.</td><td><span class="pill XL">XL</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>7.3</td><td class="t">Out-of-process scanning + stable plugin identity</td><td class="d">Scan in a child process (a crashing plugin can't take the app down), persisted scan list with blacklist; projects reference <code>format+uid+name</code>, resolved via the scan list — never an absolute path (portability + the path-injection reasoning of assets). Unscanned plugin → placeholder node, not a failed project.</td><td><span class="pill L">L</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>7.4</td><td class="t">Security: plugin nodes are trusted-path-only</td><td class="d"><code>validatePatch(trusted=false)</code> rejects hosted-plugin node types (via the TL0.10 allowlist); the state blob rides <code>setExtraState</code> (already trusted-only). Untrusted model output must never instantiate a binary or hand it an opaque blob — that's a code-execution surface, not a patch parameter.</td><td><span class="pill M">M</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>7.5</td><td class="t">Native plugin editor window</td><td class="d"><code>DocumentWindow</code> hosting the plugin's own editor (all module UI is inline today; SettingsWindow is the only precedent). Resize requests, close-on-node-delete, multi-window lifetime; entirely outside GraphEditor's paint/timer path.</td><td><span class="pill L">L</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>7.6</td><td class="t">Hosted plugin parameters as automation lanes</td><td class="d">Parameter sets are discovered at load: key lanes on the plugin's paramID string, index fallback, orphan on mismatch — never silently automate the wrong parameter across plugin versions.</td><td><span class="pill M">M</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>7.7</td><td class="t">Latency-change rebuild + PDC verification</td><td class="d">JUCE ties prepared state to <code>{layout, latencySamples}</code> — force a graph rebuild when a hosted node's reported latency changes, verify parallel-path alignment with a hosted-plugin impulse test, keep the status-bar number honest.</td><td><span class="pill M">M</span></td><td><span class="pill opus">opus</span></td></tr>
+</table>
+
+<h3 class="phase-h">TL8 — The agentic timeline <span class="goal">AI reads and writes the arrangement — through its own validated capabilities, never through the patch grammar.</span></h3>
+<table>
+<tr><th>#</th><th>Task</th><th>What &amp; why</th><th>Size</th><th>Model</th></tr>
+<tr><td>8.1</td><td class="t">validateTimeline (untrusted) with hard caps</td><td class="d">Separate validator mirroring the <code>kMax*</code> idiom: max tracks/clips/events/lanes/breakpoints, ppq bounds, values inside the target parameter's declared range; assets and plugin blobs remain trusted-only forever. This is the commit that deliberately opens the TL0.4 door.</td><td><span class="pill L">L</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>8.2</td><td class="t"><code>automation.generate</code> / timeline capabilities (own schemas)</td><td class="d">New capabilities in the platform's registry with their own schemas — <code>getPatchSchema</code> never grows timeline fields (every property invites the model to emit it on every patch request). Versioned like the existing prompt/capability discipline.</td><td><span class="pill L">L</span></td><td><span class="pill opus">opus</span> <span class="muted">svc</span></td></tr>
+<tr><td>8.3</td><td class="t">Arrangement context serializer</td><td class="d">Compact read-path summary of tracks/clips/lanes for the AI panel so the model can reason about the arrangement (token-bounded, like the patch context injection).</td><td><span class="pill M">M</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>8.4</td><td class="t">Timeline operations as agent tools + preview/undo</td><td class="d">Add-track / place-clips / write-lane as discrete app-side operations with preview-before-apply and one-step undo — the same trust posture as patch apply, and the seam where "AI does DAW operations" becomes real.</td><td><span class="pill L">L</span></td><td><span class="pill opus">opus</span></td></tr>
+<tr><td>8.5</td><td class="t">AI MIDI via .mid blobs + eval scenarios</td><td class="d">Note data as MIDI files (no paths, no code — bounds-checking only), plus AIPatchHarness-style scenarios measuring timeline-generation validity before anything ships.</td><td><span class="pill M">M</span></td><td><span class="pill sonnet">sonnet</span></td></tr>
+<tr><td>8.6</td><td class="t">Docs: agentic timeline security model</td><td class="d">docs/AI_Engine.md — what AI may author (notes, lanes within caps), what it may never touch (assets, plugin blobs, file paths), and why.</td><td><span class="pill S">S</span></td><td><span class="pill haiku">haiku</span></td></tr>
+</table>
+
+<!-- ============================================================ 7. ROLLUP -->
+<h2>7 · Effort &amp; model rollup</h2>
+<table>
+<tr><th>Phase</th><th>Tasks</th><th>opus</th><th>sonnet</th><th>haiku (local-candidate)</th><th>Weight*</th></tr>
+<tr><td>TL0 · Format &amp; identity <span class="pill now">now</span></td><td>11</td><td>4</td><td>5</td><td>2</td><td>~7 d</td></tr>
+<tr><td>TL1 · Transport spine</td><td>9</td><td>4</td><td>3</td><td>2</td><td>~9 d</td></tr>
+<tr><td>TL2 · Document &amp; handoff</td><td>7</td><td>3</td><td>4</td><td>0</td><td>~17 d</td></tr>
+<tr><td>TL3 · MIDI tracks</td><td>5</td><td>2</td><td>3</td><td>0</td><td>~10 d</td></tr>
+<tr><td>TL4 · Automation engine</td><td>6</td><td>5</td><td>1</td><td>0</td><td>~17 d</td></tr>
+<tr><td>TL5 · Timeline UI</td><td>11</td><td>1</td><td>9</td><td>1</td><td>~23 d</td></tr>
+<tr><td>TL6 · Audio I/O</td><td>9</td><td>5</td><td>4</td><td>0</td><td>~16 d</td></tr>
+<tr><td>TL7 · Plugins</td><td>7</td><td>5</td><td>2</td><td>0</td><td>~21 d</td></tr>
+<tr><td>TL8 · Agentic</td><td>6</td><td>3</td><td>2</td><td>1</td><td>~14 d</td></tr>
+<tr><td><b>Total</b></td><td><b>61</b></td><td><b>32</b></td><td><b>33</b></td><td><b>6</b></td><td><b>~134 d</b></td></tr>
+</table>
+<p class="muted small">*Weight = rough agent-assisted-day equivalent (S=0.5, M=1.5, L=4, XL=8) — for relative sizing between phases, not a schedule. The roadmap's XL rating for P7·1 holds: this is ~4–5× the AI-engine build. Genuinely local-model-safe work is limited to the handful of haiku doc/flag/mechanical tasks — everything touching the audio thread, the schema trust boundary, or threading should stay at sonnet or above.</p>
+
+<!-- ============================================================ 8. TESTS & DOCS -->
+<h2>8 · Tests &amp; docs updates (planning-rule sections)</h2>
+<div class="cols">
+<div>
+<h3>Test surface created</h3>
+<ul class="small">
+  <li><b>TL0:</b> PatchDocumentTests (unknown-key round-trip), TimelineNotAllowed rejection, SchemaOmitsReservedFields, factory-name + paramID round-trip goldens, authorableModuleTypes golden, contracts golden-schema diff (CI).</li>
+  <li><b>TL1:</b> TransportServiceTests (beat↔sample, loop wrap, command ordering), MidiTimingTests, poly note-contract tests, sequencer golden-buffer sync-off test, flag-OFF CI job, OfflineTransportDriver determinism smoke.</li>
+  <li><b>TL2:</b> TimelineDocTests, TimelineSnapshotTests + TSan/ASan stress + zero-allocation guard, ProjectFileTests, TimelineUndoTests, LaneReconciliationTests.</li>
+  <li><b>TL3:</b> TimelineMidiSourceTests (exact sample offsets, loop wrap, 1000-op stuck-note fuzz), MidiRecordTests (double-path regression), MIDI file round-trip, headless E2E energy assertions.</li>
+  <li><b>TL4:</b> AutomationLaneTests, AutomationApplierTests (RT-clean guard + CPU benchmark), <b>AutomationZipperTest</b> (parameterised ModuleType × param), AutomationRecordTests (incl. programmatic-write guard), FX golden-render A/B for slicing, bounce determinism.</li>
+  <li><b>TL5:</b> PlayheadTests (paint-count), ClipSelectionModelTests, PianoRollTests, AutomationEditorTests (one doc mutation per gesture), focus-arbitration per verb, panel bounds arithmetic.</li>
+  <li><b>TL6:</b> AudioInputTests (fake device), RecorderTests (starvation), AudioClipPlaybackTests (no file I/O on audio thread), PeakFileTests, FeedbackGuardTests (+false-positive corpus), <b>latency impulse test</b>, device-change tests.</li>
+  <li><b>TL7:</b> HostedPluginTests (stub instance), PluginScanTests (crash isolation), plugin-node untrusted rejection, PluginEditorWindowTests, lane re-binding across plugin versions, latency-change rebuild.</li>
+  <li><b>TL8:</b> validateTimeline cap/rejection matrix, capability schema tests, harness eval scenarios with recorded fixtures.</li>
+</ul>
+</div>
+<div>
+<h3>Docs to update</h3>
+<ul class="small">
+  <li><code>docs/timeline.md</code> — <b>new</b>: concept, transport, data model, snapshot handoff, project bundle, record modes.</li>
+  <li><code>docs/AI_Engine.md</code> — reserved keys + TimelineNotAllowed, authorable allowlist, agentic timeline security model, capability additions.</li>
+  <li><code>docs/layout.md</code> — timeline panel section, playhead as the second animation exception (§11), clip selection, shortcuts.</li>
+  <li><code>docs/modulation.md</code> — the automation-writes-base / CV-stacks-on-top contract.</li>
+  <li><code>docs/modules.md</code> — Track In, Audio In, Rec Tap, Audio Clip Player, Hosted Plugin specs + channel patterns.</li>
+  <li><code>docs/Module_Development_Guide.md</code> — "automatable params must use SmoothedValue" rule + transport-context usage.</li>
+  <li><code>docs/testing.md</code> — OfflineTransportDriver, new suites, flag-OFF CI job, TSan stress targets.</li>
+  <li><code>CLAUDE.md</code> — new invariants: playhead exception; <code>timeline</code> reserved &amp; refused untrusted; params stay scalar; authorable allowlist; snapshot/epoch audio-thread rules.</li>
+  <li><code>synth-platform/packages/contracts</code> README — reservation rules + additive-only gate.</li>
+</ul>
+</div>
+</div>
+
+<!-- ============================================================ 9. QUESTIONS -->
+<h2>9 · Open questions — founder decisions before build</h2>
+<table>
+<tr><th></th><th>Decision</th><th>Recommendation &amp; why it matters</th></tr>
+<tr><td>1</td><td class="t">Scope of "now"</td><td class="d"><b>TL0 only</b> — matches "parked until after revenue"; everything else stays a spec. TL0 is ~a week and commits to nothing.</td></tr>
+<tr><td>2</td><td class="t">Project container</td><td class="d"><b>Bundle directory</b> (<code>.agsproj</code> with audio inside) — safe, portable, relink-able. Cost: ends "a patch is one small JSON you can email"; the patch-only <code>.json</code> path keeps working alongside.</td></tr>
+<tr><td>3</td><td class="t">Plugin format &amp; JUCE tier</td><td class="d">VST3 needs the <b>Steinberg proprietary agreement</b> (its GPLv3 branch conflicts with org licensing policy); <b>CLAP (MIT) + AU</b> is the friction-free alternative with a smaller plugin universe. Also: which JUCE license tier the product ships under — needed before TL7, ideally before revenue.</td></tr>
+<tr><td>4</td><td class="t">Automation value encoding</td><td class="d"><b>Denormalized parameter units + per-lane range snapshot</b> (recommended: matches <code>params</code>, AI-readable, dodges the rescale heuristic). This is a <b>one-way door</b> once files exist — the alternative (normalized 0..1) survives range widening but is opaque in files.</td></tr>
+<tr><td>5</td><td class="t">Timeline nodes in the graph</td><td class="d"><b>Visible</b> (recommended — routing, cables, undo, serialization all free, and it IS the product story). Hidden-node alternative keeps the rack "clean" but means teaching <code>buildVisibleCables</code> new tricks.</td></tr>
+<tr><td>6</td><td class="t">Panel resizing</td><td class="d">Fixed heights with presets is much cheaper; a drag splitter is genuinely new UI surface (none exists in the codebase). Recommend fixed for v1, splitter later.</td></tr>
+<tr><td>7</td><td class="t">Record source model</td><td class="d"><b>Rec Tap anywhere</b> (modular-native, records any point) with master-output as the one-click default — or master-only for v1?</td></tr>
+<tr><td>8</td><td class="t">AI writes automation how?</td><td class="d">Recommended: <b>own capabilities + app-side tools</b> (TL8), never through the patch grammar. Alternative — extending patch JSON — pollutes every patch request and widens the untrusted surface.</td></tr>
+<tr><td>9</td><td class="t">Sequencer clock long-term</td><td class="d">Opt-in sync keeps presets intact, but two clock concepts will eventually confuse users. Decide the end state now (default-on for new instances after v2?) even if migration waits.</td></tr>
+<tr><td>10</td><td class="t">Piano roll depth for v1</td><td class="d">Minimal (draw/move/resize/velocity/quantise) recommended — plus MIDI import (TL3.4) as the escape hatch. A full piano roll is its own XL and should not block the timeline.</td></tr>
+</table>
+
+<p class="muted small" style="margin-top:36px">Planning method: 5 parallel codebase mappers → 3 independent concept designs (incremental / engine-first / DAW-UX) → adversarial completeness critique → synthesis. All quoted file:line claims were spot-verified in source at commit <code>0ffb7f2</code>. Task format matches <code>.tmp-roadmap/tasks.md</code> conventions for later publishing; a machine-readable task list is embedded at the bottom of this file (<code>&lt;script id="tasks-data"&gt;</code>).</p>
+
+<script type="application/json" id="tasks-data">
+{"feature":"Timeline + per-module automation (P7·1)","phases":[
+{"id":"TL0","title":"Format, identity & live-bug fixes","doNow":true,"tasks":[
+{"id":"0.1","t":"Verify contracts pipeline exists","size":"S","model":"sonnet","side":"service"},
+{"id":"0.2","t":"Reserve schemaVersion + nodes[].uuid + timeline in contracts schema","size":"S","model":"opus","side":"service","deps":["0.1"]},
+{"id":"0.3","t":"Emit schemaVersion + uuid in graphToJSON","size":"S","model":"sonnet","side":"client","deps":["0.2"]},
+{"id":"0.4","t":"validatePatch refuses timeline untrusted (TimelineNotAllowed)","size":"M","model":"opus","side":"client","deps":["0.2"]},
+{"id":"0.5","t":"Keep reserved fields out of getPatchSchema + pinned test","size":"S","model":"haiku","side":"client","deps":["0.2"]},
+{"id":"0.6","t":"PatchDocument unknown-top-level-key preservation","size":"M","model":"sonnet","side":"client"},
+{"id":"0.7","t":"Additive-only golden-schema CI gate","size":"S","model":"sonnet","side":"service","deps":["0.1"]},
+{"id":"0.8","t":"Fix PolySequencer round-trip type loss + factory/paramID goldens","size":"S","model":"sonnet","side":"client"},
+{"id":"0.9","t":"Fix untrusted merge-mode node-id aliasing","size":"M","model":"opus","side":"client","deps":["0.3"]},
+{"id":"0.10","t":"Authorable-modules allowlist + golden test","size":"S","model":"opus","side":"client"},
+{"id":"0.11","t":"Docs: forward-compat contract","size":"S","model":"haiku","side":"client","deps":["0.4","0.6"]}]},
+{"id":"TL1","title":"Transport spine","tasks":[
+{"id":"1.1","t":"TransportService + TempoMap seam","size":"M","model":"opus","side":"client"},
+{"id":"1.2","t":"Transport command FIFO","size":"S","model":"sonnet","side":"client","deps":["1.1"]},
+{"id":"1.3","t":"AudioEngine tick + BlockTimeInfo + context injection (undo-safe)","size":"M","model":"opus","side":"client","deps":["1.1"]},
+{"id":"1.4","t":"OfflineTransportDriver headless harness","size":"M","model":"opus","side":"client","deps":["1.3"]},
+{"id":"1.5","t":"Remove wall-clock from audio path (PolyMidi LRU)","size":"S","model":"sonnet","side":"client"},
+{"id":"1.6","t":"Fix MIDI timestamping (samplePosition; ExternalMidi sample-0)","size":"S","model":"haiku","side":"client"},
+{"id":"1.7","t":"Poly note contract for machine MIDI","size":"M","model":"opus","side":"client","deps":["1.5","1.6"]},
+{"id":"1.8","t":"Sequencer/PolySequencer opt-in transport sync (default off)","size":"M","model":"sonnet","side":"client","deps":["1.3"]},
+{"id":"1.9","t":"SYNTH_ENABLE_TIMELINE flag + flag-OFF CI job","size":"S","model":"haiku","side":"client"}]},
+{"id":"TL2","title":"Timeline document & lock-free handoff","tasks":[
+{"id":"2.1","t":"TimelineDoc model (tracks/clips/lanes, one mutation API)","size":"L","model":"opus","side":"client"},
+{"id":"2.2","t":"TimelineSnapshot + epoch-reclaimed atomic publication","size":"L","model":"opus","side":"client","deps":["2.1"]},
+{"id":"2.3","t":"MIDI clip content model + editing API","size":"M","model":"sonnet","side":"client","deps":["2.1"]},
+{"id":"2.4","t":".agsproj bundle + timeline serialization","size":"M","model":"sonnet","side":"client","deps":["2.1","0.6"]},
+{"id":"2.5","t":"Timeline undo (separate TimelineUndoable)","size":"M","model":"sonnet","side":"client","deps":["2.4"]},
+{"id":"2.6","t":"Lane/track reconciliation (orphan-never-delete)","size":"M","model":"sonnet","side":"client","deps":["2.1"]},
+{"id":"2.7","t":"Survivable structural undo (node-preserving restore)","size":"L","model":"opus","side":"client"}]},
+{"id":"TL3","title":"MIDI tracks into the graph","tasks":[
+{"id":"3.1","t":"TimelineMidiSourceModule (Track In node, pull model)","size":"L","model":"opus","side":"client","deps":["2.2","1.4","1.6"]},
+{"id":"3.2","t":"Loop wrap, locate, note hygiene + fuzz","size":"M","model":"opus","side":"client","deps":["3.1"]},
+{"id":"3.3","t":"Record external MIDI into clips (single-source)","size":"M","model":"sonnet","side":"client","deps":["3.2","2.3"]},
+{"id":"3.4","t":"MIDI file import/export","size":"M","model":"sonnet","side":"client","deps":["2.3"]},
+{"id":"3.5","t":"Headless E2E: clip → module → audio","size":"S","model":"sonnet","side":"client","deps":["3.2"]}]},
+{"id":"TL4","title":"Automation engine","tasks":[
+{"id":"4.1","t":"Lane evaluation kernel","size":"L","model":"opus","side":"client","deps":["2.2"]},
+{"id":"4.2","t":"AutomationApplier + control-rate slicing (measured flag + FX golden A/B)","size":"L","model":"opus","side":"client","deps":["4.1","1.4"]},
+{"id":"4.3","t":"Zipper audit + parameterised AutomationZipperTest","size":"M","model":"opus","side":"client","deps":["4.2"]},
+{"id":"4.4","t":"Record modes + gesture capture + programmatic-write guard + thinning","size":"L","model":"opus","side":"client","deps":["4.2"]},
+{"id":"4.5","t":"UI reflection without feedback loop","size":"M","model":"sonnet","side":"client","deps":["4.2"]},
+{"id":"4.6","t":"Offline bounce/export as a real feature","size":"L","model":"opus","side":"client","deps":["1.4","1.5"]}]},
+{"id":"TL5","title":"Timeline UI","tasks":[
+{"id":"5.1","t":"Bottom-docked panel + toggle + slide animation","size":"L","model":"sonnet","side":"client"},
+{"id":"5.2","t":"Ruler, grid, zoom/scroll, snap, loop brace","size":"L","model":"sonnet","side":"client","deps":["5.1"]},
+{"id":"5.3","t":"Track headers + binding chips + add-track flow","size":"L","model":"sonnet","side":"client","deps":["5.1","3.1"]},
+{"id":"5.4","t":"Playhead — second documented animation exception","size":"M","model":"opus","side":"client","deps":["5.1","1.3"]},
+{"id":"5.5","t":"Transport bar + status readout","size":"M","model":"sonnet","side":"client","deps":["5.1"]},
+{"id":"5.6","t":"Metronome + count-in (post-graph click)","size":"M","model":"sonnet","side":"client","deps":["1.3"]},
+{"id":"5.7","t":"Clip lanes + ClipSelectionModel","size":"L","model":"sonnet","side":"client","deps":["5.2","2.3"]},
+{"id":"5.8","t":"Minimal piano roll","size":"L","model":"sonnet","side":"client","deps":["5.7"]},
+{"id":"5.9","t":"Automation lane editor + Show-automation-lane","size":"L","model":"sonnet","side":"client","deps":["5.7","4.4"]},
+{"id":"5.10","t":"Keyboard/focus arbitration (Cmd+C/V/D, Space, Delete)","size":"S","model":"sonnet","side":"client","deps":["5.7"]},
+{"id":"5.11","t":"Docs: timeline UI + shortcuts","size":"S","model":"haiku","side":"client","deps":["5.4"]}]},
+{"id":"TL6","title":"Real audio I/O & recording","tasks":[
+{"id":"6.1","t":"Enable device input + settings migration","size":"M","model":"opus","side":"client"},
+{"id":"6.2","t":"AudioInputModule (max-channel/visible-port)","size":"M","model":"opus","side":"client","deps":["6.1"]},
+{"id":"6.3","t":"RecordTapModule + writer thread","size":"L","model":"opus","side":"client","deps":["2.4"]},
+{"id":"6.4","t":"Disk-streaming audio clip player","size":"L","model":"opus","side":"client","deps":["6.3"]},
+{"id":"6.5","t":"Waveform peaks + clip rendering","size":"M","model":"sonnet","side":"client","deps":["6.4","5.7"]},
+{"id":"6.6","t":"Asset management (import/relink/clean)","size":"M","model":"sonnet","side":"client","deps":["6.3"]},
+{"id":"6.7","t":"Monitoring + feedback guard","size":"S","model":"sonnet","side":"client","deps":["6.2"]},
+{"id":"6.8","t":"Latency alignment: record offset + playhead offset","size":"M","model":"opus","side":"client","deps":["6.3"]},
+{"id":"6.9","t":"Device/sample-rate change with project open","size":"M","model":"sonnet","side":"client","deps":["6.1"]}]},
+{"id":"TL7","title":"Hosted external plugins","tasks":[
+{"id":"7.1","t":"Plugin format + licensing decision gate","size":"S","model":"opus","side":"service"},
+{"id":"7.2","t":"HostedPluginBackend + HostedPluginModule","size":"XL","model":"opus","side":"client","deps":["7.1","2.7"]},
+{"id":"7.3","t":"Out-of-process scanning + stable plugin identity","size":"L","model":"opus","side":"client","deps":["7.2"]},
+{"id":"7.4","t":"Security: plugin nodes trusted-path-only","size":"M","model":"opus","side":"client","deps":["7.2","0.10"]},
+{"id":"7.5","t":"Native plugin editor window","size":"L","model":"sonnet","side":"client","deps":["7.2"]},
+{"id":"7.6","t":"Hosted plugin params as automation lanes","size":"M","model":"sonnet","side":"client","deps":["7.2","2.6"]},
+{"id":"7.7","t":"Latency-change rebuild + PDC verification","size":"M","model":"opus","side":"client","deps":["7.2","6.8"]}]},
+{"id":"TL8","title":"The agentic timeline","tasks":[
+{"id":"8.1","t":"validateTimeline (untrusted) with hard caps","size":"L","model":"opus","side":"client","deps":["2.4"]},
+{"id":"8.2","t":"automation.generate / timeline capabilities (own schemas)","size":"L","model":"opus","side":"service","deps":["8.1"]},
+{"id":"8.3","t":"Arrangement context serializer","size":"M","model":"sonnet","side":"client","deps":["2.4"]},
+{"id":"8.4","t":"Timeline ops as agent tools + preview/undo","size":"L","model":"opus","side":"client","deps":["8.1","2.5"]},
+{"id":"8.5","t":"AI MIDI via .mid blobs + eval scenarios","size":"M","model":"sonnet","side":"client","deps":["3.4","8.2"]},
+{"id":"8.6","t":"Docs: agentic timeline security model","size":"S","model":"haiku","side":"client","deps":["8.4"]}]}
+]}
+</script>
+</div>
+</body>
+</html>

@@ -2,6 +2,7 @@
 
 #include "../AppUndoManager.h"
 #include "../AudioEngine.h"
+#include "../PatchDocument.h"
 #include "CableColour.h"
 #include "LayoutUtil.h"
 #include "ModuleClipboard.h"
@@ -503,6 +504,12 @@ private:
     void applySelectionChange(const std::vector<juce::AudioProcessorGraph::NodeID>& newSelection);
 
     AppUndoManager* undoManager = nullptr;
+
+    // Top-level JSON keys the current build doesn't understand (e.g. a future "timeline"),
+    // stashed on load and re-merged on save so re-saving with an older build never destroys a
+    // newer build's data. Per-loaded-file: newPatch() clears it. Only the user preset save/load
+    // path (savePreset/loadPreset) touches this — undo/redo, snippets, and AI apply must not.
+    synth::PatchDocument patchDocument;
     std::vector<AudioEngine::ModulationDisplayInfo> cachedModDisplayInfo;
     std::vector<AudioEngine::ModulationRouting> cachedModRoutings;
 
