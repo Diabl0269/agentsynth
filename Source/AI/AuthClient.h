@@ -76,6 +76,21 @@ public:
         juce::String transportError;
     };
 
+    /** Result of GET /v1/entitlement (P4-2/P4-3/P4-4). `requestsUsed`/`usagePeriodStartIso` come
+        from the response's `usage` object; both stay at their defaults (0 / empty) against a
+        server that doesn't send it yet — see docs/billing.md for the full response shape. */
+    struct EntitlementResult {
+        bool ok = false;
+        juce::String plan;
+        juce::String status;
+        juce::String periodEndIso;
+        bool cancelAtPeriodEnd = false;
+        int monthlyRequestLimit = 0;
+        int requestsUsed = 0;
+        juce::String usagePeriodStartIso;
+        juce::String transportError;
+    };
+
     explicit AuthClient(juce::String host = "http://localhost:8787", juce::String clientId = "synth-desktop",
                         juce::String deviceId = "");
 
@@ -95,6 +110,9 @@ public:
 
     /** GET /v1/auth/me with `Authorization: Bearer <accessToken>`. */
     MeResult fetchMe(const juce::String& accessToken, const std::atomic<bool>& cancelled) const;
+
+    /** GET /v1/entitlement with `Authorization: Bearer <accessToken>`. */
+    EntitlementResult fetchEntitlement(const juce::String& accessToken, const std::atomic<bool>& cancelled) const;
 
     /** POST /v1/auth/revoke. Fire-and-forget: the endpoint always answers 200 with an empty body,
         so the return value only reflects whether the transport succeeded — callers are not

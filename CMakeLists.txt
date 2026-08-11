@@ -291,6 +291,8 @@ target_sources(AgentSynth PRIVATE
     Source/UI/AIChatComponent.cpp
     Source/UI/AccountRow.cpp
     Source/UI/AccountRow.h
+    Source/UI/PlanBadge.cpp
+    Source/UI/PlanBadge.h
     Source/UI/SignInDialog.cpp
     Source/UI/SignInDialog.h
     Source/UI/GraphEditor.cpp
