@@ -62,7 +62,7 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         typeName.containsIgnoreCase("MIDI Keyboard"))
         return {synth::LayoutUtil::kDoubleWidth, 150};
     if (typeName == "Poly MIDI" || typeName == "PolyMidi")
-        return {280, 123};
+        return {280, 171}; // +48 (one combo row) from the issue #198 Voice Steal selector
     if (typeName == "Distortion")
         return {280, 355};
     if (typeName == "Delay")
