@@ -180,6 +180,12 @@ public:
     juce::String getCurrentModel() const;
     void fetchAvailableModels(std::function<void(const juce::StringArray& models, bool success)> callback);
 
+    /**
+     * @brief True when the active provider sends the prompt/patch to a remote/hosted server
+     *        (RemoteProvider). False for a local provider (Ollama) or when none is installed yet.
+     */
+    bool isCurrentProviderHosted() const { return provider != nullptr && provider->isHosted(); }
+
 private:
     std::unique_ptr<AIProvider> provider;
     std::vector<AIProvider::Message> chatHistory;

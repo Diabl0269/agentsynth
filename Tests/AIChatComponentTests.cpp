@@ -112,6 +112,32 @@ private:
     juce::String currentModel;
 };
 
+// P4-6: stands in for RemoteProvider without any network dependency — isHosted() true, and
+// fetchAvailableModels() resolves success=true with an empty list, mirroring RemoteProvider's own
+// "the service picks its own model server-side" contract (see its doc comment).
+class HostedMockProvider : public synth::AIProvider {
+public:
+    juce::String getProviderName() const override { return "HostedMockProvider"; }
+    bool isHosted() const override { return true; }
+
+    void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
+        callback({}, true);
+    }
+
+    RequestId sendPrompt(const std::vector<synth::AIProvider::Message>&, CompletionCallback callback,
+                         const juce::var& = juce::var(), std::function<void(const juce::String&)> = {}) override {
+        callback(AIResponse{});
+        return {};
+    }
+
+    void cancel(RequestId) override {}
+    void setModel(const juce::String& name) override { currentModel = name; }
+    juce::String getCurrentModel() const override { return currentModel; }
+
+private:
+    juce::String currentModel;
+};
+
 // Finds the juce::Viewport AIChatComponent adds as a direct child and returns its viewed
 // component (messageList) — the parent of every rendered MessageBubble. MessageBubble itself is a
 // private nested type, but its base juce::Component* children (labels, buttons) are inspectable
@@ -299,6 +325,112 @@ TEST_F(AIChatComponentTest, RefreshModelsClearsStaleItemsBeforeSecondFetchResolv
 
     provider->resolvePending({"MockModel1", "MockModel2", "MockModel3"}, true);
     EXPECT_EQ(modelPicker->getNumItems(), 3);
+}
+
+// P4-6: the privacy disclosure label is invisible for a local (non-hosted) provider — same
+// zero-height-when-absent contract as accountRow/planBadge.
+TEST_F(AIChatComponentTest, LocalProviderShowsNoHostedModeNotice) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<MockChatProvider>());
+
+    juce::ApplicationProperties props;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Test";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(options);
+
+    synth::AIChatComponent chatComponent(service, props);
+
+    // The label exists in the tree (added via addChildComponent, same as accountRow/planBadge)
+    // but must not be visible — findDescendantWithText() matches on text/type only, not
+    // visibility, so the assertion has to be on isVisible() explicitly.
+    auto* notice = findDescendantWithText<juce::Label>(
+        &chatComponent, "Hosted mode sends your prompt and current patch to Agent Synth's servers.");
+    ASSERT_NE(notice, nullptr);
+    EXPECT_FALSE(notice->isVisible());
+}
+
+// P4-6: a hosted provider (isHosted() == true) makes the privacy disclosure visible — this is the
+// "visible line near the model picker" the P4-6 acceptance criteria requires, since a tooltip
+// alone would not satisfy "should not be discoverable only by reading a policy page".
+TEST_F(AIChatComponentTest, HostedProviderShowsHostedModeNotice) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<HostedMockProvider>());
+
+    juce::ApplicationProperties props;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Test";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(options);
+
+    synth::AIChatComponent chatComponent(service, props);
+
+    auto* notice = findDescendantWithText<juce::Label>(
+        &chatComponent, "Hosted mode sends your prompt and current patch to Agent Synth's servers.");
+    ASSERT_NE(notice, nullptr);
+    EXPECT_TRUE(notice->isVisible());
+}
+
+// P4-6: switching FROM a hosted TO a local provider must hide the notice again — regression lock
+// for the resync happening in refreshModels() rather than only once at construction.
+TEST_F(AIChatComponentTest, HostedModeNoticeHidesAgainAfterSwitchingToLocalProvider) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<HostedMockProvider>());
+
+    juce::ApplicationProperties props;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Test";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(options);
+
+    synth::AIChatComponent chatComponent(service, props);
+    ASSERT_TRUE(findDescendantWithText<juce::Label>(
+                    &chatComponent, "Hosted mode sends your prompt and current patch to Agent Synth's servers.")
+                    ->isVisible());
+
+    service.setProvider(std::make_unique<MockChatProvider>());
+    chatComponent.refreshModels();
+
+    auto* notice = findDescendantWithText<juce::Label>(
+        &chatComponent, "Hosted mode sends your prompt and current patch to Agent Synth's servers.");
+    ASSERT_NE(notice, nullptr);
+    EXPECT_FALSE(notice->isVisible());
+}
+
+// P4-6: a hosted provider's empty-but-successful fetchAvailableModels() result (the service picks
+// its own model server-side — see RemoteProvider::fetchAvailableModels()'s doc comment) must not
+// render as "Error fetching models". That text is actively misleading once hosted is the default
+// provider: nothing failed.
+TEST_F(AIChatComponentTest, HostedProviderEmptyModelListShowsNoErrorText) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<HostedMockProvider>());
+
+    juce::ApplicationProperties props;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Test";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(options);
+
+    synth::AIChatComponent chatComponent(service, props);
+
+    juce::ComboBox* modelPicker = nullptr;
+    for (auto* child : chatComponent.getChildren()) {
+        if (auto* combo = dynamic_cast<juce::ComboBox*>(child)) {
+            modelPicker = combo;
+            break;
+        }
+    }
+    ASSERT_NE(modelPicker, nullptr);
+    ASSERT_EQ(modelPicker->getNumItems(), 1);
+    EXPECT_EQ(modelPicker->getItemText(0), "Model chosen automatically");
 }
 
 // REGRESSION LOCK: the 2-arg constructor used at 6+ call sites in this file (and by

@@ -26,8 +26,8 @@ namespace synth {
  * Non-streaming: onDelta is accepted for interface compatibility but never invoked, because the
  * service's patch.generate endpoint is not streaming-capable (a single `c.json({data})`).
  *
- * Ships registered in AIProviderRegistry but hidden from the Settings UI
- * (ProviderDescriptor::hidden) until a later phase turns it on.
+ * Registered in AIProviderRegistry as "remote" and, as of P4-6, the default provider — see
+ * ProviderDescriptor::hidden and AIProviderRegistry::createDefault().
  */
 class RemoteProvider
     : public AIProvider
@@ -78,6 +78,7 @@ public:
     void cancel(RequestId requestId) override;
 
     juce::String getProviderName() const override { return "Remote"; }
+    bool isHosted() const override { return true; }
 
     using juce::Thread::stopThread; // Make stopThread public for testing purposes
 
@@ -89,6 +90,10 @@ public:
     void setAuthToken(const juce::String& token) override;
 
     void setTestMode(bool testMode) { isTestMode = testMode; }
+
+    // Test-only accessor so a test can confirm which host a provider ended up constructed with
+    // (e.g. AIProviderRegistry's empty-host fallback) without making a real HTTP call.
+    juce::String getHostForTesting() const { return remoteHost; }
 
 private:
     juce::String remoteHost;

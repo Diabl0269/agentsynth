@@ -122,6 +122,14 @@ public:
      *        default, so providers with no notion of auth (e.g. local Ollama) are unaffected.
      */
     virtual void setAuthToken(const juce::String&) {}
+
+    /**
+     * @brief True when this provider sends the prompt and current patch to a remote/hosted
+     *        server for processing (RemoteProvider); false for a purely local provider (Ollama)
+     *        or any test double. Drives the hosted-mode privacy notice in AIChatComponent — see
+     *        AIIntegrationService::isCurrentProviderHosted().
+     */
+    virtual bool isHosted() const { return false; }
 };
 
 } // namespace synth
