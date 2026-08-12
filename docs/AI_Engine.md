@@ -673,7 +673,8 @@ same as `OllamaProvider` checks `wasCancelled()` right after the network call re
 | `timedOut`                                    | `Timeout`                        |
 | `cancelled`                                   | `Cancelled`                      |
 | HTTP 401 / 403                                | `Auth`                            |
-| HTTP 429 (reads `Retry-After`)                | `RateLimit`                      |
+| HTTP 429, `error.code == "QUOTA_EXCEEDED"`    | `Quota` (P4-3's monthly quota — see "Quota UI and the Upgrade Path" below) |
+| HTTP 429, any other/no code                   | `RateLimit` (reads `Retry-After`) |
 | HTTP 402, `error.code == "TRIAL_EXHAUSTED"`   | `TrialExhausted` (see "Device Id and Anonymous Trial" below) |
 | HTTP 402, any other/no code                   | `Quota`                           |
 | HTTP 503, `error.code == "SERVICE_CAPACITY_EXCEEDED"` | `ServiceCapacityExceeded` (see below) |
@@ -684,10 +685,12 @@ same as `OllamaProvider` checks `wasCancelled()` right after the network call re
 Whenever the response body parses as JSON with a string `error.message`, it is appended to the
 delivered error message (mirrors the "name the specific failure" ethos on
 `AIIntegrationService::buildCorrectionPrompt`); otherwise the message just names the HTTP status.
-`TrialExhausted` and `ServiceCapacityExceeded` are the two exceptions to "appended": the server's
-`error.message` there is a complete, user-facing sentence on its own (see below), so it is
-delivered verbatim as `AIError::message` rather than tacked onto a generic "reported insufficient
-quota (HTTP 402)"-style prefix.
+`TrialExhausted`, `ServiceCapacityExceeded`, and `Quota` via the `QUOTA_EXCEEDED` 429 path are the
+exceptions to "appended": the server's `error.message` there is a complete, user-facing sentence on
+its own (see below and "Quota UI and the Upgrade Path"), so it is delivered verbatim as
+`AIError::message` rather than tacked onto a generic prefix. The pre-existing generic-402 `Quota`
+mapping (no recognised code) keeps the appended-prefix behaviour — only the `QUOTA_EXCEEDED` 429
+path is verbatim.
 
 **Cancellation, simplified vs `OllamaProvider`.** libcurl doesn't need the
 `StreamPublisher`/`activeStream`/`streamLock` machinery `OllamaProvider` uses to abort a
@@ -759,15 +762,58 @@ empty, field/header omitted) so unit tests never touch the real per-install file
 `AIErrorKind::TrialExhausted` with the server's `message` carried through unchanged (see the
 error-kind table above). That response reaches `AIChatComponent` through the same path every other
 provider error already does — appended to the conversation as an assistant bubble
-(`"Error: " + error.message`) — so no new UI surface is needed. When the caller is not signed in,
-the server's message text specifically invites signing in with Google to continue; the existing
+(`"Error: " + error.message`) — so no new UI surface is needed. This "no new UI surface" reasoning
+is specific to `TrialExhausted`: the caller isn't signed in yet, so "upgrade" isn't the right verb —
+the server's message text specifically invites signing in with Google to continue, and the existing
 `AccountRow` "Sign in" affordance (see "Account Sign-In Surface" above) is already visible
 immediately above the chat whenever an `AccountService` is attached, so the next step (opening
 `SignInDialog`) is always one click away without this feature needing to auto-launch it. A
 service-wide `503 {"error":{"code":"SERVICE_CAPACITY_EXCEEDED","message":"..."}}` is handled the
 same way but mapped to the distinct `AIErrorKind::ServiceCapacityExceeded` — it's a daily cap on
 the service as a whole, unrelated to the caller's own trial/quota, and gets its own message rather
-than being confused with either.
+than being confused with either. `AIErrorKind::Quota` (a signed-in account over its *paid* plan's
+allowance) is the one case that does get a new UI surface — see below.
+
+### Quota UI and the Upgrade Path (P4-4)
+
+Once a caller is signed in, P4-3's monthly request quota (`enforce-quota.ts`, `synth-platform`)
+answers `429 {"error":{"code":"QUOTA_EXCEEDED","message":"..."}}` when it's exhausted, mapped by
+`RemoteProvider` to `AIErrorKind::Quota` with the server's message carried through unchanged (see
+the error-kind table above). Unlike `TrialExhausted`, this *is* the "you're signed in, you're over
+your plan, upgrading raises it" moment, so `AIChatComponent` gives it a distinct treatment instead
+of the flat error bubble every other kind gets:
+
+- The assistant bubble carries the server's message verbatim (no `"Error: "` prefix, same as
+  `TrialExhausted`/`ServiceCapacityExceeded`) plus an **"Upgrade to Pro"** button, opening
+  `synth::branding::kUpgradeUrl` (`Source/Branding.h` — a static Polar checkout link; P4-4 does not
+  create checkout sessions dynamically, per `docs/billing.md`'s "what this deliberately does not
+  do") via the injected `urlOpener` (`AIChatComponent::setUrlOpenerForTesting()` swaps this for a
+  non-browser-launching fake in tests).
+- This button is carried on `MessageData::showUpgradeAction`, which is deliberately **not**
+  reconstructed by the history-replay loop in `AIChatComponent`'s constructor — a `New Chat` or app
+  restart drops it along with the rest of that turn's transient UI state (the same way
+  Cancel-button/spinner state never survives a reload).
+- A `Quota` error also triggers `AccountService::refreshEntitlement()` — a fire-and-forget re-fetch
+  of `GET /v1/entitlement` that updates the account's cached plan/limit/usage without touching
+  sign-in state, so a user who upgrades mid-session and immediately retries sees their new plan
+  reflected (in `PlanBadge`, below) without restarting the app.
+
+**`PlanBadge`** (`Source/UI/PlanBadge.h/.cpp`) is a small usage indicator placed in the same
+bottom-chrome stack as `AccountRow` and the model picker, showing `"Free · 240 / 1000 this month"`
+or `"Pro · 1,203 / 10,000 this month"`. It follows `AccountRow`'s exact zero-height-when-absent
+contract (`setAccountService()`/`refresh()`/`getPreferredHeight()`) — invisible and contributing
+nothing to layout until an `AccountService` is attached *and* has a known entitlement
+(`AccountSnapshot::entitlementKnown`), which `AccountService::completeSignIn()` populates alongside
+`fetchMe()` (same non-fatal contract: an entitlement-fetch failure never blocks sign-in) and
+`refreshEntitlement()` updates on demand. `usage.requests_used` is a P4-4 addition to the
+`GET /v1/entitlement` response (`docs/billing.md`) — `AuthClient::fetchEntitlement()` degrades to
+`requestsUsed = 0` rather than failing the whole parse if an older server doesn't send it.
+
+**Not yet end-to-end reachable.** `RemoteProvider` is still `hidden=true` (see "Ships hidden"
+above) — flipping the default to hosted is P4-6. This feature is fully built and unit-tested (the
+429→`Quota` mapping, `fetchEntitlement()`, `AccountService`'s entitlement fields, `PlanBadge`, and
+the upgrade bubble), but nothing in the shipped app can currently select the hosted provider that
+would ever produce a real `Quota` error.
 
 ## 6. Future Considerations
 
