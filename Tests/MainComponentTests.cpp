@@ -470,6 +470,61 @@ TEST_F(MainComponentTest, StartupUsesRegistryAndStillSelectsAModel) {
     EXPECT_EQ(mc.getAiServiceForTest().getCurrentModel(), "mock-model-a");
 }
 
+// P4-6: resolveDefaultProviderId() is the pure decision MainComponent::initialiseCommon() bases
+// the migration on — a fresh install (no settings file at all) gets the new hosted-by-default,
+// an install that has already launched before keeps its working local Ollama default even though
+// it has never touched the "aiProvider" key specifically (see initialiseCommon()'s comment for
+// why key-absence alone can't tell those two cases apart). Tested directly, without touching a
+// real properties file, since MainComponent hardcodes its settings folder.
+TEST(MainComponentDefaultProviderIdTest, FreshInstallDefaultsToHosted) {
+    EXPECT_EQ(MainComponent::resolveDefaultProviderId(/*hasExistingSettingsFile=*/false), "remote");
+}
+
+TEST(MainComponentDefaultProviderIdTest, ExistingInstallKeepsLocalOllamaDefault) {
+    EXPECT_EQ(MainComponent::resolveDefaultProviderId(/*hasExistingSettingsFile=*/true), "ollama");
+}
+
+// Integration counterpart to the pure-function tests above: this fixture's shared "Agent Synth"
+// settings file already exists on disk by the time this test runs (resetPanelKeys() in SetUp()
+// writes it), so it stands in for "existing install, AI settings never touched" — the "aiProvider"
+// key itself is removed here to simulate a user who never opened the AI settings tab. Confirms the
+// migration reaches all the way through initialiseCommon() into which provider id the registry is
+// actually asked to construct, not just the pure decision function in isolation.
+TEST_F(MainComponentTest, ExistingInstallWithNoAiProviderKeyRequestsOllamaFromRegistry) {
+    {
+        juce::PropertiesFile::Options opts;
+        opts.applicationName = "Agent Synth";
+        opts.folderName = "Agent Synth";
+        opts.filenameSuffix = "settings";
+        opts.osxLibrarySubFolder = "Application Support";
+        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+
+        juce::ApplicationProperties props;
+        props.setStorageParameters(opts);
+        if (auto* s = props.getUserSettings()) {
+            s->removeValue("aiProvider");
+            s->saveIfNeeded();
+        }
+    }
+
+    juce::String requestedId;
+    synth::AIProviderRegistry registry;
+    registry.registerProvider({"ollama", "Ollama (local)", true, false,
+                               [&requestedId](const synth::ProviderConfig&) -> std::unique_ptr<synth::AIProvider> {
+                                   requestedId = "ollama";
+                                   return std::make_unique<ModelTrackingMockProvider>();
+                               }});
+    registry.registerProvider({"remote", "Remote (hosted)", true, true,
+                               [&requestedId](const synth::ProviderConfig&) -> std::unique_ptr<synth::AIProvider> {
+                                   requestedId = "remote";
+                                   return std::make_unique<ModelTrackingMockProvider>();
+                               }});
+
+    MainComponent mc(nullptr, registry);
+
+    EXPECT_EQ(requestedId, "ollama");
+}
+
 // Regression: toolbar buttons must have non-zero bounds immediately after construction,
 // WITHOUT any additional manual resize or sidebar toggle. Pre-fix, setSize() fired
 // resized() -> layoutButtons() before setButtons() was called, leaving all button bounds

@@ -171,6 +171,11 @@ private:
     juce::TextButton newChatButton;
     juce::ComboBox modelPicker;
 
+    // P4-6 privacy disclosure: visible only while the active provider is hosted (RemoteProvider).
+    // Zero-height/invisible otherwise, same contract as accountRow/planBadge below it in the
+    // bottom-chrome stack — see updateHostedModeNotice() and resized().
+    juce::Label hostedModeNotice;
+
     // Pulse animation for the "AI is thinking" state indicator.
     // VBlankAnimatorUpdater is attached to this Component.
     juce::VBlankAnimatorUpdater vblankUpdater{this};
@@ -182,6 +187,12 @@ private:
 
     void updateChatDisplay();
     void scrollToBottom();
+
+    // Syncs hostedModeNotice's visibility to aiService.isCurrentProviderHosted(). Called
+    // synchronously (provider identity is known immediately after setProvider(), no need to wait
+    // for the async model fetch) from refreshModels() — the same post-setProvider() resync point
+    // documented for model discovery (see CLAUDE.md "AI model discovery ordering").
+    void updateHostedModeNotice();
 
     struct MessageData {
         juce::String role;

@@ -623,7 +623,7 @@ Locked by `OllamaProviderTest.CancelledRequestInvokesCallbackWithCancelledKind`,
 > hit Cancel, and confirm the input frees immediately and the next message is answered without delay.
 > A regression here is invisible to the suite — the mock path would still pass.
 
-### RemoteProvider: synth-platform Inference Service (libcurl, hidden pending Phase 4)
+### RemoteProvider: synth-platform Inference Service (libcurl, default as of P4-6)
 
 `Source/AI/RemoteProvider.{h,cpp}` is the first non-Ollama `AIProvider`: it talks to a local
 instance of the `synth-platform` inference service over libcurl instead of `juce::WebInputStream`.
@@ -716,15 +716,47 @@ Root `CMakeLists.txt` requires `CURL` (`find_package(CURL REQUIRED)`) under `if(
 covering both Linux and macOS (whose SDK ships a `curl.tbd` stub, so no Homebrew dependency is
 needed there) — and deliberately does not require it on `WIN32`.
 
-**Ships hidden.** `ProviderDescriptor::hidden` (`Source/AI/AIProviderRegistry.h`) is a runtime
-flag, not a build-time one: `RemoteProvider` is fully registered and constructible via
+**Visible as of P4-6.** `ProviderDescriptor::hidden` (`Source/AI/AIProviderRegistry.h`) is a
+runtime flag, not a build-time one: `RemoteProvider` is fully registered and constructible via
 `AIProviderRegistry::createDefault()` (id `"remote"`, registered after `"ollama"` so the
-unknown-id fallback to `descriptors.front()` is unaffected), but `AISettingsTab`
-(`Source/UI/SettingsWindow.cpp`) filters out any `hidden` descriptor before populating the
-provider combo box, via a `visibleProviders` member used consistently by both the population loop
-and `selectedDescriptor()` (indexing the combo's selected item against the *unfiltered* list would
-desync the moment a hidden entry sits between two visible ones). Phase 4 is expected to flip
-`"remote"`'s `hidden` to `false`.
+unknown-id fallback to `descriptors.front()` is unaffected — and stays that way deliberately: an
+unrecognised/corrupt persisted id fails safe to the provider that sends no data anywhere, never to
+the one that does), and since P4-6 `hidden=false`, so `AISettingsTab`
+(`Source/UI/SettingsWindow.cpp`) offers it in the provider combo box alongside `"ollama"`. The
+`visibleProviders` member (still present even with nothing currently hidden) is used consistently
+by both the population loop and `selectedDescriptor()` — indexing the combo's selected item
+against the *unfiltered* `providerRegistry.listAll()` would desync the moment a future hidden
+provider sits between two visible ones.
+
+**Default provider (P4-6).** `"remote"` (hosted) is the default for a brand new install;
+`"ollama"` (local) remains the default for an install that has already launched before, even if it
+has never opened AI settings — see `MainComponent::resolveDefaultProviderId()` and the migration
+comment in `MainComponent::initialiseCommon()`. The persisted `"aiProvider"` key is only ever
+*written* by `AISettingsTab::updateSettings()`, so its absence alone can't distinguish "brand new
+install" from "existing user who never touched AI settings"; `initialiseCommon()` instead checks
+whether the settings file already existed on disk before this launch. Each provider persists its
+own host under its own key (`"ollamaHost"` / `"remoteHost"`) — sharing one key, the pre-P4-6
+behaviour, meant switching providers in Settings silently pointed the new one at whatever host
+string the previous provider had left behind. An empty/unset `"remoteHost"` falls back to
+`synth::branding::kApiBaseUrl` (`Source/Branding.h`), the production Cloud Run URL — see that
+constant's comment for the P4-7 caveat that the service doesn't accept public traffic yet.
+
+**Privacy disclosure (P4-6 acceptance criterion).** A visible line — not just a tooltip, since the
+acceptance criterion is explicit that this "should not be discoverable only by reading a policy
+page" — appears next to the model picker in `AIChatComponent` whenever the active provider is
+hosted: `"Hosted mode sends your prompt and current patch to Agent Synth's servers."`
+`AIProvider::isHosted()` (default `false`, overridden `true` in `RemoteProvider`) drives this via
+`AIIntegrationService::isCurrentProviderHosted()`; `AIChatComponent::updateHostedModeNotice()` is
+called from `refreshModels()`, the same post-`setProvider()` resync point documented above for
+model discovery, so the notice's visibility never lags a provider switch. `AISettingsTab`'s
+provider combo box also carries the same disclosure as a tooltip, for the toggle itself.
+
+**Model picker in hosted mode.** `RemoteProvider::fetchAvailableModels()` always resolves
+`success=true` with an empty list (the service picks its own model server-side — see that method's
+doc comment). `AIChatComponent::refreshModels()`'s callback treats `success && models.isEmpty()`
+as "nothing to choose from," not a fetch failure: the picker shows a single disabled
+`"Model chosen automatically"` entry rather than the misleading `"Error fetching models"` a plain
+`success` check would have produced for every hosted-mode user.
 
 **Eval harness parity.** `Tools/AIEvalHarness` (see its README) can replay its golden prompt set
 through `RemoteProvider` instead of `OllamaProvider` via `--provider remote`, so a model can be
@@ -809,11 +841,14 @@ nothing to layout until an `AccountService` is attached *and* has a known entitl
 `GET /v1/entitlement` response (`docs/billing.md`) — `AuthClient::fetchEntitlement()` degrades to
 `requestsUsed = 0` rather than failing the whole parse if an older server doesn't send it.
 
-**Not yet end-to-end reachable.** `RemoteProvider` is still `hidden=true` (see "Ships hidden"
-above) — flipping the default to hosted is P4-6. This feature is fully built and unit-tested (the
-429→`Quota` mapping, `fetchEntitlement()`, `AccountService`'s entitlement fields, `PlanBadge`, and
-the upgrade bubble), but nothing in the shipped app can currently select the hosted provider that
-would ever produce a real `Quota` error.
+**Reachable client-side as of P4-6, still blocked at the infra layer.** `RemoteProvider` is no
+longer `hidden` (see "Visible as of P4-6" above) and is the default provider for a fresh install,
+so this feature — the 429→`Quota` mapping, `fetchEntitlement()`, `AccountService`'s entitlement
+fields, `PlanBadge`, and the upgrade bubble — is reachable end to end from the client for the first
+time. It still can't complete against production today: the deployed Cloud Run service has no
+`allUsers` invoker binding, so every request 403s at the IAM layer before the app's own
+`AUTH_REQUIRED` check ever runs — a deliberate P4-7 follow-up, not a defect in this client (see
+`synth::branding::kApiBaseUrl`'s comment in `Source/Branding.h`).
 
 ## 6. Future Considerations
 

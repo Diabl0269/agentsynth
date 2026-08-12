@@ -282,6 +282,17 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
         appProperties.getUserSettings()->saveIfNeeded();
     };
 
+    // Starts invisible (same contract as accountRow/planBadge) — updateHostedModeNotice(), called
+    // from refreshModels() below, sets its real visibility once a provider is known.
+    addChildComponent(hostedModeNotice);
+    hostedModeNotice.setJustificationType(juce::Justification::centredLeft);
+    hostedModeNotice.setMinimumHorizontalScale(1.0f);
+    hostedModeNotice.setFont(juce::Font(11.0f));
+    hostedModeNotice.setText("Hosted mode sends your prompt and current patch to Agent Synth's servers.",
+                             juce::dontSendNotification);
+    hostedModeNotice.setTooltip("Local (Ollama) mode keeps everything on this machine. See " +
+                                juce::String(synth::branding::kWebsiteUrl) + "/privacy for details.");
+
     refreshModels();
 
     // Populate history
@@ -421,8 +432,13 @@ void AIChatComponent::resized() {
     const int planBadgeHeight = planBadge.getPreferredHeight();
     const int planBadgeGap = planBadgeHeight > 0 ? 5 : 0;
 
-    auto bottomArea = b.removeFromBottom(70 + accountRowHeight + accountRowGap + planBadgeHeight +
-                                         planBadgeGap); // Increased height for all three rows
+    // Hosted-mode privacy notice: same zero-height-when-absent contract, reserved only while the
+    // active provider is hosted (see updateHostedModeNotice()).
+    const int hostedNoticeHeight = hostedModeNotice.isVisible() ? 18 : 0;
+    const int hostedNoticeGap = hostedNoticeHeight > 0 ? 5 : 0;
+
+    auto bottomArea = b.removeFromBottom(70 + accountRowHeight + accountRowGap + planBadgeHeight + planBadgeGap +
+                                         hostedNoticeHeight + hostedNoticeGap); // Increased height for all four rows
 
     // Bottom row: Input + Send (+ Cancel when waiting + spinner dot)
     auto inputRow = bottomArea.removeFromBottom(40);
@@ -449,6 +465,11 @@ void AIChatComponent::resized() {
 #ifndef NDEBUG
     toggleDebugButton.setBounds(modelRow.removeFromRight(60));
 #endif
+
+    if (hostedNoticeHeight > 0) {
+        bottomArea.removeFromBottom(hostedNoticeGap);
+        hostedModeNotice.setBounds(bottomArea.removeFromBottom(hostedNoticeHeight));
+    }
 
     if (planBadgeHeight > 0) {
         bottomArea.removeFromBottom(planBadgeGap);
@@ -723,6 +744,10 @@ void AIChatComponent::updateChatDisplay() {
 void AIChatComponent::scrollToBottom() { viewport.setViewPosition(0, messageList.getHeight()); }
 
 void AIChatComponent::refreshModels() {
+    // Provider identity (unlike its model list) is known synchronously right after
+    // setProvider() — no need to wait for the fetch below to resolve.
+    updateHostedModeNotice();
+
     // refreshModels() is called repeatedly over the component's lifetime (once at
     // construction with no provider yet, again after MainComponent installs one, and
     // again whenever Settings triggers a re-fetch) — never just once. Without this
@@ -761,11 +786,29 @@ void AIChatComponent::refreshModels() {
                 modelPicker.setSelectedId(1, juce::dontSendNotification);
                 aiService.setModel(models[0]);
             }
+        } else if (success) {
+            // Empty-but-successful is not a fetch failure — RemoteProvider's fetchAvailableModels()
+            // always resolves this way, because the hosted service picks its own model server-side
+            // (see RemoteProvider::fetchAvailableModels()'s doc comment). Showing "Error fetching
+            // models" here would be actively misleading to every hosted-mode user.
+            modelPicker.addItem("Model chosen automatically", 1);
+            modelPicker.setSelectedId(1, juce::dontSendNotification);
+            modelPicker.setEnabled(false);
         } else {
             modelPicker.addItem("Error fetching models", 1);
             modelPicker.setSelectedId(1, juce::dontSendNotification);
         }
     });
+}
+
+void AIChatComponent::updateHostedModeNotice() {
+    const bool hosted = aiService.isCurrentProviderHosted();
+    if (hosted) {
+        if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+            hostedModeNotice.setColour(juce::Label::textColourId, lf->getTheme().colors.textMuted);
+    }
+    hostedModeNotice.setVisible(hosted);
+    resized();
 }
 
 #ifndef NDEBUG

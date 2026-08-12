@@ -5,8 +5,9 @@ This guide provides practical instructions and tips for effectively using the AI
 ## 1. Getting Started with the AI Sound Designer
 
 1.  **Open the AI Chat Panel**: In the Agent Synth application, locate and open the AI chat panel. This is typically accessible via a dedicated button or menu option.
-2.  **Select an AI Model**: Use the model picker dropdown to choose an available AI model (e.g., `qwen3-coder-next:latest`). Ensure your Ollama server (or other AI backend) is running and accessible if using local models.
-3.  **Start Chatting**: Type your requests or descriptions in the input field and press "Send" or Enter.
+2.  **Choose Hosted or Local**: By default, a new install uses **Hosted** mode — no setup required, but your prompt and current patch are sent to Agent Synth's servers for processing (a notice next to the model picker says so whenever hosted mode is active; see Settings → AI for the toggle and the same disclosure on hover). Switch to **Ollama (local)** in Settings → AI to keep everything on this machine instead; that requires your own Ollama server running and accessible.
+3.  **Select an AI Model**: In local (Ollama) mode, use the model picker dropdown to choose an available AI model (e.g., `qwen3-coder-next:latest`). In hosted mode the picker shows "Model chosen automatically" — the service selects its own model server-side, so there's nothing to pick.
+4.  **Start Chatting**: Type your requests or descriptions in the input field and press "Send" or Enter.
 
 ## 2. Prompting Best Practices
 
@@ -52,8 +53,9 @@ Here are some examples of effective prompts you can use:
 
 ## 4. Troubleshooting
 
-*   **"Error: No AI provider selected."**: Ensure you have selected an AI model from the dropdown. If no models appear, check if your Ollama server is running and accessible at `http://localhost:11434`.
-*   **"Error fetching models"**: Your Agent Synth application might not be able to connect to the Ollama server. Verify the server is running and there are no firewall issues. Check the application logs for "AI Discovery Error" messages.
+*   **"Error: No AI provider selected."**: In local (Ollama) mode, ensure you have selected an AI model from the dropdown. If no models appear, check if your Ollama server is running and accessible at `http://localhost:11434`. (In hosted mode the picker shows "Model chosen automatically" instead — that's expected, not an error.)
+*   **"Error fetching models"**: This only appears in local (Ollama) mode, and means Agent Synth couldn't connect to the Ollama server. Verify the server is running and there are no firewall issues. Check the application logs for "AI Discovery Error" messages.
+*   **Nothing happens after sending a prompt, in hosted mode**: The hosted service may not be reachable yet in this environment. Switch to Ollama (local) in Settings → AI as a fallback, or check with your Agent Synth administrator.
 *   **AI provides text, but no patch is applied**: The AI's response might not contain a valid JSON patch in the expected ````json` block format, or the JSON might be malformed. Try rephrasing your prompt to explicitly ask for a JSON patch (e.g., "Provide the patch as a JSON block").
 *   **Unexpected Patch Behavior**: The AI might generate a patch that doesn't sound as expected. Review the generated JSON (by expanding the patch card) to understand the AI's interpretation and refine your prompt accordingly.
 
