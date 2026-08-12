@@ -115,6 +115,13 @@ void AccountService::signOut() {
         startJob(PendingJob::Kind::revoke, refreshTokenToRevoke);
 }
 
+void AccountService::refreshEntitlement() {
+    const juce::String token = getAccessToken();
+    if (token.isEmpty())
+        return; // signed out — nothing to refresh
+    startJob(PendingJob::Kind::refreshEntitlement, token);
+}
+
 void AccountService::startJob(PendingJob::Kind kind, juce::String arg) {
     bool mustStart = false;
     {
@@ -197,6 +204,9 @@ void AccountService::run() {
                 break;
             case PendingJob::Kind::revoke:
                 runRevokeFlow(job.arg);
+                break;
+            case PendingJob::Kind::refreshEntitlement:
+                runRefreshEntitlementFlow(job.arg);
                 break;
             case PendingJob::Kind::none:
                 break;
@@ -328,6 +338,32 @@ void AccountService::runRevokeFlow(const juce::String& token) {
     authClient.revoke(token, cancelRequested);
 }
 
+void AccountService::runRefreshEntitlementFlow(const juce::String& accessTokenForRefresh) {
+    if (threadShouldExit() || cancelRequested.load())
+        return;
+
+    const auto entitlement = authClient.fetchEntitlement(accessTokenForRefresh, cancelRequested);
+    if (!entitlement.ok) {
+        juce::Logger::writeToLog("AccountService: refreshEntitlement failed (non-fatal): " +
+                                 entitlement.transportError);
+        return;
+    }
+
+    // Merge onto the currently published snapshot rather than a fresh AccountSnapshot{} — this
+    // job only ever touches entitlement fields, never sign-in state. If a sign-out raced this job
+    // (the snapshot is no longer SignedIn by the time the fetch returns), publishing entitlement
+    // data on top of it would resurrect a stale plan for a moment, so just drop the result.
+    AccountSnapshot s = getSnapshot();
+    if (s.state != AccountState::SignedIn)
+        return;
+
+    s.plan = entitlement.plan;
+    s.monthlyRequestLimit = entitlement.monthlyRequestLimit;
+    s.requestsUsed = entitlement.requestsUsed;
+    s.entitlementKnown = true;
+    publishSnapshot(s);
+}
+
 void AccountService::completeSignIn(const juce::String& newAccessToken, const juce::String& newRefreshToken) {
     // Guards the window between "the network round trip that produced this token pair completed"
     // and "it's persisted and published": without this check, a cancelSignIn() or signOut() that
@@ -362,11 +398,32 @@ void AccountService::completeSignIn(const juce::String& newAccessToken, const ju
         juce::Logger::writeToLog("AccountService: fetchMe after sign-in failed (non-fatal): " + me.transportError);
     }
 
+    // Same non-fatal contract as fetchMe() above: entitlement is cosmetic (a usage indicator, an
+    // upgrade path), never a reason to fail an otherwise-successful sign-in.
+    juce::String plan;
+    int monthlyRequestLimit = 0;
+    int requestsUsed = 0;
+    bool entitlementKnown = false;
+    const auto entitlement = authClient.fetchEntitlement(newAccessToken, cancelRequested);
+    if (entitlement.ok) {
+        plan = entitlement.plan;
+        monthlyRequestLimit = entitlement.monthlyRequestLimit;
+        requestsUsed = entitlement.requestsUsed;
+        entitlementKnown = true;
+    } else {
+        juce::Logger::writeToLog("AccountService: fetchEntitlement after sign-in failed (non-fatal): " +
+                                 entitlement.transportError);
+    }
+
     setAccessTokenFromWorker(newAccessToken);
 
     AccountSnapshot s;
     s.state = AccountState::SignedIn;
     s.email = email;
+    s.plan = plan;
+    s.monthlyRequestLimit = monthlyRequestLimit;
+    s.requestsUsed = requestsUsed;
+    s.entitlementKnown = entitlementKnown;
     publishSnapshot(s);
 
     juce::Logger::writeToLog("AccountService: sign-in succeeded (" + maskEmail(email) + ").");

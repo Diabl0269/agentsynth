@@ -51,7 +51,7 @@ juce::String PresetManager::getPresetJSON(int index) {
     //   Attenuverter:  40 x 40   (not a ModuleComponent; excluded from overlap check)
     //   Sequencer:   560 x 380   ← DOUBLE-wide (kDoubleWidth = 2 × kSingleWidth = 560)
     //   MIDI Keyboard: 560 x 150 ← DOUBLE-wide
-    //   Poly MIDI:   280 x 123
+    //   Poly MIDI:   280 x 171   ← +48 (one combo row) from the issue #198 Voice Steal selector
     //   Distortion:  280 x 355
     //   Delay:       280 x 269   ← +76 (one knob row) from the issue #122 Level knob
     //   Reverb:      280 x 269

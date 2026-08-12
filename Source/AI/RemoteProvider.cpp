@@ -557,6 +557,19 @@ void RemoteProvider::processRequest(const Request& req) {
     }
 
     if (httpStatus == 429) {
+        // P4-3's monthly quota (enforce-quota.ts) answers 429 QUOTA_EXCEEDED, not the 402 the
+        // Quota mapping below was originally written for — without this check, the real
+        // paid-plan quota-exceeded response is silently misclassified as a generic rate limit and
+        // the upgrade-bubble UI (P4-4) never fires. Any other/no code on a 429 keeps the
+        // pre-existing generic RateLimit mapping — nothing else currently returns 429 to
+        // /v1/capability/*, so this is defensive.
+        if (extractErrorCode(result.body) == "QUOTA_EXCEEDED") {
+            const auto detail = extractErrorDetail(result.body);
+            deliverErr(AIErrorKind::Quota,
+                       detail.isNotEmpty() ? detail : "Error: Your monthly request quota is used up.");
+            return;
+        }
+
         const int retryAfterSeconds = result.headers.getValue("Retry-After", "").getIntValue();
         deliverErr(AIErrorKind::RateLimit,
                    withErrorDetail("Error: Remote provider at " + remoteHost + " rate-limited the request (HTTP 429)",

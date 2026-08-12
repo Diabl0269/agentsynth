@@ -1,4 +1,5 @@
 #include "AIProviderRegistry.h"
+#include "../Branding.h"
 #include "OllamaProvider.h"
 #include "RemoteProvider.h"
 
@@ -34,18 +35,20 @@ AIProviderRegistry AIProviderRegistry::createDefault() {
          }});
 
     // Registered AFTER "ollama" — order matters: AIProviderRegistry::create() falls back to
-    // descriptors.front() for an unknown/empty id, and that fallback must stay "ollama".
-    // hidden=true: ships wired up (constructible, registered, testable) but not yet offered in
-    // AISettingsTab's provider combo. Phase 4 is expected to flip this to false.
+    // descriptors.front() for an unknown/empty id, and that fallback must stay "ollama". This is
+    // deliberate even now that "remote" is the default (see MainComponent::resolveDefaultProviderId()):
+    // an unrecognised/corrupt persisted id fails safe to the provider that sends no data anywhere,
+    // never to the one that does.
+    // hidden=false as of P4-6: offered in AISettingsTab's provider combo alongside "ollama".
     registry.registerProvider({"remote", "Remote (hosted)", true, true,
                                [](const ProviderConfig& config) -> std::unique_ptr<AIProvider> {
                                    auto provider = std::make_unique<RemoteProvider>(
-                                       config.host.isNotEmpty() ? config.host : "http://localhost:8787");
+                                       config.host.isNotEmpty() ? config.host : synth::branding::kApiBaseUrl);
                                    if (config.authToken.isNotEmpty())
                                        provider->setAuthToken(config.authToken);
                                    return provider;
                                },
-                               /*hidden=*/true});
+                               /*hidden=*/false});
 
     return registry;
 }

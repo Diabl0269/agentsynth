@@ -177,17 +177,26 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
     MainComponent mainComp(std::make_unique<MockProvider>());
     auto& cm = mainComp.getCommandManager();
     juce::ignoreUnused(cm);
-    // Verify all 13 commands are registered (5 original + New Patch + 2 toggles + Auto Arrange +
-    // Toggle Library + Select All Modules + Save Snippet + Toggle Minimap).
     juce::Array<juce::CommandID> commands;
     mainComp.getAllCommands(commands);
-    EXPECT_EQ(commands.size(), 13);
+
+    // Pinned to the shortcut table rather than to a literal: every rebindable action needs a
+    // command behind it, or its key fires and nothing happens (MainComponent::keyPressed resolves
+    // action -> command -> perform). A new action with no command here would otherwise ship silent.
+    ShortcutManager shortcuts;
+    EXPECT_EQ(commands.size(), shortcuts.getActionIds().size());
+    for (const auto& actionId : shortcuts.getActionIds())
+        EXPECT_TRUE(commands.contains(AppCommands::getCommandForAction(actionId)))
+            << actionId << " is bindable but has no registered command";
 
     // Spot-check by identity, not just by count, so a rename can't silently keep the total right.
     EXPECT_TRUE(commands.contains(AppCommands::undo));
     EXPECT_TRUE(commands.contains(AppCommands::selectAllModules));
     EXPECT_TRUE(commands.contains(AppCommands::saveSnippet));
     EXPECT_TRUE(commands.contains(AppCommands::toggleMinimap));
+    EXPECT_TRUE(commands.contains(AppCommands::copySelection));
+    EXPECT_TRUE(commands.contains(AppCommands::pasteSelection));
+    EXPECT_TRUE(commands.contains(AppCommands::duplicateSelection));
 
     // Every registered command must resolve real info (name + category), or the native menu bar
     // renders a blank row.
@@ -228,6 +237,59 @@ TEST_F(MainComponentTest, RedoShortcutViaKeyPressed) {
 
     // At minimum, verify keyPressed doesn't crash
     SUCCEED();
+}
+
+TEST_F(MainComponentTest, CopyPasteDuplicateCommandsReachTheCanvas) {
+    // Driven through the command manager rather than through keyPressed: MainComponent loads the
+    // real ApplicationProperties, so a user-customised binding would make a key-level assertion
+    // flaky. What matters here is that the command IDs are wired to the editor at all.
+    MainComponent mainComp(std::make_unique<MockProvider>());
+    auto& editor = mainComp.getGraphEditor();
+    auto& cm = mainComp.getCommandManager();
+    auto& graph = mainComp.getAudioEngine().getGraph();
+
+    editor.itemDropped(juce::DragAndDropTarget::SourceDetails(juce::String("Oscillator"), &editor, {200, 200}));
+    editor.selectAllModules();
+    ASSERT_GT(editor.getSelectionCount(), 0);
+    const int afterOneModule = graph.getNumNodes();
+
+    // asynchronously = false: the async path posts a CommandMessage and needs a message loop.
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::copySelection, false));
+    EXPECT_TRUE(editor.canPaste());
+
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::pasteSelection, false));
+    EXPECT_GT(graph.getNumNodes(), afterOneModule);
+
+    const int afterPaste = graph.getNumNodes();
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::duplicateSelection, false));
+    EXPECT_GT(graph.getNumNodes(), afterPaste);
+}
+
+TEST_F(MainComponentTest, PasteCommandIsInertUntilSomethingHasBeenCopied) {
+    MainComponent mainComp(std::make_unique<MockProvider>());
+    auto& editor = mainComp.getGraphEditor();
+    auto& graph = mainComp.getAudioEngine().getGraph();
+
+    editor.itemDropped(juce::DragAndDropTarget::SourceDetails(juce::String("Oscillator"), &editor, {200, 200}));
+    const int before = graph.getNumNodes();
+    ASSERT_FALSE(editor.canPaste());
+
+    juce::ApplicationCommandInfo info(AppCommands::pasteSelection);
+    mainComp.getCommandInfo(AppCommands::pasteSelection, info);
+    EXPECT_NE(info.flags & juce::ApplicationCommandInfo::isDisabled, 0)
+        << "Paste must render greyed out in the menu bar until the clipboard has something in it";
+
+    // ApplicationCommandTarget::tryToInvoke refuses an inactive command, so the disabled flag is
+    // what actually stops a stray Cmd+V — perform() is never even reached, and the patch stands.
+    EXPECT_FALSE(mainComp.getCommandManager().invokeDirectly(AppCommands::pasteSelection, false));
+    EXPECT_EQ(graph.getNumNodes(), before);
+
+    // …and it becomes live the moment something is on the clipboard.
+    editor.selectAllModules();
+    ASSERT_TRUE(editor.copySelection());
+    juce::ApplicationCommandInfo liveInfo(AppCommands::pasteSelection);
+    mainComp.getCommandInfo(AppCommands::pasteSelection, liveInfo);
+    EXPECT_EQ(liveInfo.flags & juce::ApplicationCommandInfo::isDisabled, 0);
 }
 
 // ===========================================================================
@@ -406,6 +468,61 @@ TEST_F(MainComponentTest, StartupUsesRegistryAndStillSelectsAModel) {
 
     EXPECT_FALSE(mc.getAiServiceForTest().getCurrentModel().isEmpty());
     EXPECT_EQ(mc.getAiServiceForTest().getCurrentModel(), "mock-model-a");
+}
+
+// P4-6: resolveDefaultProviderId() is the pure decision MainComponent::initialiseCommon() bases
+// the migration on — a fresh install (no settings file at all) gets the new hosted-by-default,
+// an install that has already launched before keeps its working local Ollama default even though
+// it has never touched the "aiProvider" key specifically (see initialiseCommon()'s comment for
+// why key-absence alone can't tell those two cases apart). Tested directly, without touching a
+// real properties file, since MainComponent hardcodes its settings folder.
+TEST(MainComponentDefaultProviderIdTest, FreshInstallDefaultsToHosted) {
+    EXPECT_EQ(MainComponent::resolveDefaultProviderId(/*hasExistingSettingsFile=*/false), "remote");
+}
+
+TEST(MainComponentDefaultProviderIdTest, ExistingInstallKeepsLocalOllamaDefault) {
+    EXPECT_EQ(MainComponent::resolveDefaultProviderId(/*hasExistingSettingsFile=*/true), "ollama");
+}
+
+// Integration counterpart to the pure-function tests above: this fixture's shared "Agent Synth"
+// settings file already exists on disk by the time this test runs (resetPanelKeys() in SetUp()
+// writes it), so it stands in for "existing install, AI settings never touched" — the "aiProvider"
+// key itself is removed here to simulate a user who never opened the AI settings tab. Confirms the
+// migration reaches all the way through initialiseCommon() into which provider id the registry is
+// actually asked to construct, not just the pure decision function in isolation.
+TEST_F(MainComponentTest, ExistingInstallWithNoAiProviderKeyRequestsOllamaFromRegistry) {
+    {
+        juce::PropertiesFile::Options opts;
+        opts.applicationName = "Agent Synth";
+        opts.folderName = "Agent Synth";
+        opts.filenameSuffix = "settings";
+        opts.osxLibrarySubFolder = "Application Support";
+        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+
+        juce::ApplicationProperties props;
+        props.setStorageParameters(opts);
+        if (auto* s = props.getUserSettings()) {
+            s->removeValue("aiProvider");
+            s->saveIfNeeded();
+        }
+    }
+
+    juce::String requestedId;
+    synth::AIProviderRegistry registry;
+    registry.registerProvider({"ollama", "Ollama (local)", true, false,
+                               [&requestedId](const synth::ProviderConfig&) -> std::unique_ptr<synth::AIProvider> {
+                                   requestedId = "ollama";
+                                   return std::make_unique<ModelTrackingMockProvider>();
+                               }});
+    registry.registerProvider({"remote", "Remote (hosted)", true, true,
+                               [&requestedId](const synth::ProviderConfig&) -> std::unique_ptr<synth::AIProvider> {
+                                   requestedId = "remote";
+                                   return std::make_unique<ModelTrackingMockProvider>();
+                               }});
+
+    MainComponent mc(nullptr, registry);
+
+    EXPECT_EQ(requestedId, "ollama");
 }
 
 // Regression: toolbar buttons must have non-zero bounds immediately after construction,

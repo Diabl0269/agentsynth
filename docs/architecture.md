@@ -91,7 +91,7 @@ Guards poly-mode CV inputs from being auto-wrapped in an `AttenuverterModule` by
 
 For state that has to survive a graph rebuild but is not expressible as a `juce::AudioProcessorParameter` — today only `SamplerModule`'s loaded file path. `AIStateMapper::graphToJSON` writes whatever `getExtraState()` returns as the node's `"state"` property, and `applyJSONToGraph` feeds it back through `setExtraState()`. Return a **void** `var` when there is nothing to persist, so modules that do not use the hook add no JSON.
 
-This matters because undo/redo and preset load both go through `graphToJSON` → `applyJSONToGraph`, which rebuilds processors from scratch: anything not in that JSON is silently lost on the next undo.
+This matters because preset load — and any undo that has to fall back to a full rebuild — goes through `graphToJSON` → `applyJSONToGraph`, which rebuilds processors from scratch: anything not in that JSON is silently lost. (An ordinary undo restores by diffing and keeps the processor, so it re-applies `"state"` only when it actually changed — see [AppUndoManager](#appundomanager).)
 
 `setExtraState` is only ever called on the **trusted** path (our own snapshots and presets). A module may legitimately read this as a filename, so honouring it for untrusted model output would turn a patch suggestion into an arbitrary file read.
 
@@ -202,6 +202,16 @@ Intermediary inserted between a modulation source and its destination to scale C
 `Source/AppUndoManager.h/.cpp`
 
 Snapshot-based undo/redo wrapping `juce::UndoManager`. Structural graph changes (add/remove module, connect/disconnect) are captured as JSON before/after snapshots via `SnapshotAction`. Parameter and position changes have dedicated action types. Safe detach/reattach lifecycle — `setGraphEditor(nullptr)` before graph teardown.
+
+#### Restoring a snapshot is a diff, not a rebuild
+
+`SnapshotAction` restores through `AIStateMapper::applySnapshotPreservingNodes`, which compares the target snapshot against the live graph and touches only what differs. It does **not** replay the snapshot through `applyJSONToGraph`, which reaches the same end state by destroying and re-creating every node.
+
+- **Identity is the per-node `uuid`**, not the integer `id` (merge mode renumbers ids). A live node whose uuid appears in the snapshot is **kept** and updated in place — parameters via the trusted param path, position from `"position"`, and `"state"` re-applied through `setExtraState` **only when it changed** (it reloads a sample/wavetable off disk, so an unconditional re-apply would hit the filesystem on every Cmd+Z). A live node whose uuid is absent from the snapshot is removed; a snapshot node with no live match is created, re-adopting both its uuid and its original id when that id is free.
+- **A parameter-only undo performs zero topology operations.** No node and no connection is added or removed, so JUCE never rebuilds its render sequence and the audio callback never blocks. Mixed restores batch their topology ops (`UpdateKind::none`) and rebuild exactly once at the end. No graph callback lock is taken at any point.
+- **Module runtime state survives.** Sequencer position, envelope stage and sounding voices belong to the processor instance, which is no longer thrown away. This is also what makes hosted plugins and timeline-driven MIDI sources viable: neither can afford to be re-instantiated on every Cmd+Z.
+- **Any doubt falls back to the old full rebuild.** `applySnapshotPreservingNodes` plans the whole restore before mutating anything and returns `false` — graph untouched — on a live or snapshot node with no uuid, a duplicate uuid or id, a uuid whose module type no longer matches, an unknown type, a connection naming an undefined node, or a merge delta (`"remove"` / `"removeModulations"`) rather than a full snapshot. `SnapshotAction` then runs `applyJSONToGraph(..., clearExisting=true, trusted=true)`, which is always correct. Correctness beats preservation.
+- **UI teardown is now conditional.** The action's `preRestore` hook (`GraphEditor::detachAllModuleComponents`, and the AI service's `aiPatchAboutToApply`) exists to detach UI from processors that are about to be freed, so it fires only when a node is actually being removed — or on the fallback, which frees everything. When nothing is freed there is nothing to detach, and `updateComponents()` (the `postRestore` hook) reconciles additively, so a parameter-only undo no longer destroys and re-creates every `ModuleComponent` either.
 
 ### AppLookAndFeel + ThemeManager
 

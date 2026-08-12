@@ -1,4 +1,5 @@
 #include "AIChatComponent.h"
+#include "../Branding.h"
 
 namespace synth {
 
@@ -94,7 +95,8 @@ private:
 //==============================================================================
 class AIChatComponent::MessageBubble : public juce::Component {
 public:
-    MessageBubble(const MessageData& data, std::function<void(const juce::String&)> applyPatch, bool isMerge) {
+    MessageBubble(const MessageData& data, std::function<void(const juce::String&)> applyPatch, bool isMerge,
+                  std::function<void(const juce::URL&)> urlOpener) {
         role = data.role;
         text = data.text;
 
@@ -107,6 +109,14 @@ public:
             patchCard = std::make_unique<PatchCard>(
                 data.jsonPatch, [applyPatch, json = data.jsonPatch]() { applyPatch(json); }, isMerge);
             addAndMakeVisible(*patchCard);
+        }
+
+        if (data.showUpgradeAction) {
+            upgradeButton = std::make_unique<juce::TextButton>();
+            upgradeButton->setButtonText("Upgrade to Pro");
+            upgradeButton->setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF6B4FBB));
+            upgradeButton->onClick = [urlOpener] { urlOpener(juce::URL(synth::branding::kUpgradeUrl)); };
+            addAndMakeVisible(*upgradeButton);
         }
     }
 
@@ -138,6 +148,11 @@ public:
             b.removeFromBottom(5);
         }
 
+        if (upgradeButton) {
+            upgradeButton->setBounds(b.removeFromBottom(kUpgradeButtonHeight));
+            b.removeFromBottom(5);
+        }
+
         textLabel.setBounds(b);
     }
 
@@ -155,14 +170,21 @@ public:
             height += 10 + patchCard->getRequiredHeight();
         }
 
+        if (upgradeButton) {
+            height += 5 + kUpgradeButtonHeight;
+        }
+
         return juce::jmax(40, height);
     }
 
 private:
+    static constexpr int kUpgradeButtonHeight = 28;
+
     juce::String role;
     juce::String text;
     juce::Label textLabel;
     std::unique_ptr<PatchCard> patchCard;
+    std::unique_ptr<juce::TextButton> upgradeButton;
 };
 
 //==============================================================================
@@ -201,6 +223,11 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     // so it plays correctly with AIChatComponent's own top-level setVisible() calls from
     // MainComponent.
     addChildComponent(accountRow);
+
+    // Same addChildComponent (not addAndMakeVisible) rationale as accountRow just above: starts
+    // invisible/zero-height and stays that way until setAccountService() attaches a real
+    // AccountService with a known entitlement.
+    addChildComponent(planBadge);
 
     addAndMakeVisible(viewport);
     viewport.setScrollBarsShown(true, false);
@@ -255,6 +282,17 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
         appProperties.getUserSettings()->saveIfNeeded();
     };
 
+    // Starts invisible (same contract as accountRow/planBadge) — updateHostedModeNotice(), called
+    // from refreshModels() below, sets its real visibility once a provider is known.
+    addChildComponent(hostedModeNotice);
+    hostedModeNotice.setJustificationType(juce::Justification::centredLeft);
+    hostedModeNotice.setMinimumHorizontalScale(1.0f);
+    hostedModeNotice.setFont(juce::Font(11.0f));
+    hostedModeNotice.setText("Hosted mode sends your prompt and current patch to Agent Synth's servers.",
+                             juce::dontSendNotification);
+    hostedModeNotice.setTooltip("Local (Ollama) mode keeps everything on this machine. See " +
+                                juce::String(synth::branding::kWebsiteUrl) + "/privacy for details.");
+
     refreshModels();
 
     // Populate history
@@ -272,6 +310,8 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
                 cleanText = msg.content.substring(0, start) + msg.content.substring(end + 3);
             }
         }
+        // showUpgradeAction deliberately left at its default false: a replayed history turn never
+        // resurrects the Upgrade button, same as Cancel-button/spinner state being session-only.
         messages.push_back({msg.role, cleanText.trim(), json});
     }
 
@@ -300,6 +340,7 @@ AIChatComponent::~AIChatComponent() {
 void AIChatComponent::setAccountService(AccountService* service) {
     accountServicePtr = service;
     accountRow.setAccountService(service);
+    planBadge.setAccountService(service);
 
     if (service == nullptr)
         return;
@@ -310,8 +351,10 @@ void AIChatComponent::setAccountService(AccountService* service) {
     // this is what actually makes such a call safe.
     juce::Component::SafePointer<AIChatComponent> safeThis(this);
     service->onStateChanged = [safeThis] {
-        if (auto* self = safeThis.getComponent())
+        if (auto* self = safeThis.getComponent()) {
             self->accountRow.refresh();
+            self->planBadge.refresh();
+        }
     };
     service->onAccessTokenChanged = [safeThis](juce::String token) {
         if (auto* self = safeThis.getComponent())
@@ -382,7 +425,20 @@ void AIChatComponent::resized() {
     // never calls setAccountService() sees byte-identical layout to before this feature.
     const int accountRowHeight = accountRow.getPreferredHeight();
     const int accountRowGap = accountRowHeight > 0 ? 5 : 0;
-    auto bottomArea = b.removeFromBottom(70 + accountRowHeight + accountRowGap); // Increased height for both rows
+
+    // Plan badge: same zero-height-when-absent contract as accountRow — reserved only once an
+    // AccountService is attached AND its entitlement is known (SignedOut/SigningIn/unknown all
+    // collapse to 0, same as accountRow collapsing to 0 with no service).
+    const int planBadgeHeight = planBadge.getPreferredHeight();
+    const int planBadgeGap = planBadgeHeight > 0 ? 5 : 0;
+
+    // Hosted-mode privacy notice: same zero-height-when-absent contract, reserved only while the
+    // active provider is hosted (see updateHostedModeNotice()).
+    const int hostedNoticeHeight = hostedModeNotice.isVisible() ? 18 : 0;
+    const int hostedNoticeGap = hostedNoticeHeight > 0 ? 5 : 0;
+
+    auto bottomArea = b.removeFromBottom(70 + accountRowHeight + accountRowGap + planBadgeHeight + planBadgeGap +
+                                         hostedNoticeHeight + hostedNoticeGap); // Increased height for all four rows
 
     // Bottom row: Input + Send (+ Cancel when waiting + spinner dot)
     auto inputRow = bottomArea.removeFromBottom(40);
@@ -409,6 +465,16 @@ void AIChatComponent::resized() {
 #ifndef NDEBUG
     toggleDebugButton.setBounds(modelRow.removeFromRight(60));
 #endif
+
+    if (hostedNoticeHeight > 0) {
+        bottomArea.removeFromBottom(hostedNoticeGap);
+        hostedModeNotice.setBounds(bottomArea.removeFromBottom(hostedNoticeHeight));
+    }
+
+    if (planBadgeHeight > 0) {
+        bottomArea.removeFromBottom(planBadgeGap);
+        planBadge.setBounds(bottomArea.removeFromBottom(planBadgeHeight));
+    }
 
     if (accountRowHeight > 0) {
         bottomArea.removeFromBottom(accountRowGap);
@@ -535,6 +601,16 @@ void AIChatComponent::sendButtonClicked() {
                     }
 
                     self->messages.push_back({"assistant", cleanText.trim(), json});
+                } else if (aiResponse.error.kind == AIProvider::AIErrorKind::Quota) {
+                    // The server's message is already a complete, user-facing sentence — no
+                    // "Error: " prefix, same precedent as TrialExhausted/ServiceCapacityExceeded.
+                    // showUpgradeAction=true adds the Upgrade-to-Pro button (see MessageBubble).
+                    self->messages.push_back({"assistant", aiResponse.error.message, "", false,
+                                              /*showUpgradeAction=*/true});
+                    // The user may have just paid mid-session — check again so a retry right after
+                    // upgrading reflects the new plan without restarting the app.
+                    if (self->accountServicePtr != nullptr)
+                        self->accountServicePtr->refreshEntitlement();
                 } else {
                     self->messages.push_back({"assistant", "Error: " + aiResponse.error.message, ""});
                 }
@@ -650,7 +726,7 @@ void AIChatComponent::updateChatDisplay() {
                         refreshLater();
                     });
             },
-            isMerge);
+            isMerge, urlOpener);
         messageList.addAndMakeVisible(bubble);
     }
 
@@ -668,6 +744,10 @@ void AIChatComponent::updateChatDisplay() {
 void AIChatComponent::scrollToBottom() { viewport.setViewPosition(0, messageList.getHeight()); }
 
 void AIChatComponent::refreshModels() {
+    // Provider identity (unlike its model list) is known synchronously right after
+    // setProvider() — no need to wait for the fetch below to resolve.
+    updateHostedModeNotice();
+
     // refreshModels() is called repeatedly over the component's lifetime (once at
     // construction with no provider yet, again after MainComponent installs one, and
     // again whenever Settings triggers a re-fetch) — never just once. Without this
@@ -706,11 +786,29 @@ void AIChatComponent::refreshModels() {
                 modelPicker.setSelectedId(1, juce::dontSendNotification);
                 aiService.setModel(models[0]);
             }
+        } else if (success) {
+            // Empty-but-successful is not a fetch failure — RemoteProvider's fetchAvailableModels()
+            // always resolves this way, because the hosted service picks its own model server-side
+            // (see RemoteProvider::fetchAvailableModels()'s doc comment). Showing "Error fetching
+            // models" here would be actively misleading to every hosted-mode user.
+            modelPicker.addItem("Model chosen automatically", 1);
+            modelPicker.setSelectedId(1, juce::dontSendNotification);
+            modelPicker.setEnabled(false);
         } else {
             modelPicker.addItem("Error fetching models", 1);
             modelPicker.setSelectedId(1, juce::dontSendNotification);
         }
     });
+}
+
+void AIChatComponent::updateHostedModeNotice() {
+    const bool hosted = aiService.isCurrentProviderHosted();
+    if (hosted) {
+        if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+            hostedModeNotice.setColour(juce::Label::textColourId, lf->getTheme().colors.textMuted);
+    }
+    hostedModeNotice.setVisible(hosted);
+    resized();
 }
 
 #ifndef NDEBUG

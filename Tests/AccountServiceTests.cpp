@@ -59,6 +59,10 @@ public:
     AuthClient::HttpResult deviceCodeResponse = makeTransportFailure();
     AuthClient::HttpResult meResponse = makeStatus(200, R"({"id":"","email":"","display_name":"","created_at":""})");
     AuthClient::HttpResult revokeResponse = makeStatus(200, "");
+    // Defaults to a transport failure, same as every other unset canned response here — tests that
+    // don't care about entitlement get the same "fetchEntitlement failed, non-fatal" path
+    // completeSignIn() already tolerates for fetchMe(), so they don't need to set this explicitly.
+    AuthClient::HttpResult entitlementResponse = makeTransportFailure();
     // Consumed FIFO by /v1/auth/token calls (covers both the device-code poll and refreshToken());
     // the last entry repeats once exhausted, so a test that only cares about the first N calls
     // doesn't need to size this exactly.
@@ -69,6 +73,7 @@ public:
     int tokenCallCount = 0;
     int meCallCount = 0;
     int revokeCallCount = 0;
+    int entitlementCallCount = 0;
     std::vector<std::chrono::steady_clock::time_point> tokenCallTimes;
 
     AuthClient::HttpPerformer performer() {
@@ -98,8 +103,17 @@ public:
                 ++revokeCallCount;
                 return revokeResponse;
             }
+            if (url.endsWith("/v1/entitlement")) {
+                ++entitlementCallCount;
+                return entitlementResponse;
+            }
             return makeTransportFailure();
         };
+    }
+
+    int entitlementCalls() const {
+        const std::lock_guard<std::mutex> lock(mutex);
+        return entitlementCallCount;
     }
 
     int tokenCalls() const {
@@ -146,6 +160,24 @@ AuthClient::HttpResult makeMeSuccess(const juce::String& email) {
     obj->setProperty("email", email);
     obj->setProperty("display_name", "Test User");
     obj->setProperty("created_at", "2024-01-01");
+    return makeStatus(200, juce::JSON::toString(juce::var(obj.get())));
+}
+
+AuthClient::HttpResult makeEntitlementSuccess(const juce::String& plan, int limit, int used) {
+    juce::DynamicObject::Ptr usage = new juce::DynamicObject();
+    usage->setProperty("requests_used", used);
+    usage->setProperty("period_start", "2026-08-01");
+
+    juce::DynamicObject::Ptr limits = new juce::DynamicObject();
+    limits->setProperty("monthly_requests", limit);
+
+    juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+    obj->setProperty("plan", plan);
+    obj->setProperty("status", "active");
+    obj->setProperty("period_end", juce::var());
+    obj->setProperty("cancel_at_period_end", false);
+    obj->setProperty("limits", juce::var(limits.get()));
+    obj->setProperty("usage", juce::var(usage.get()));
     return makeStatus(200, juce::JSON::toString(juce::var(obj.get())));
 }
 
@@ -437,6 +469,91 @@ TEST(AccountServiceTest, AttemptSilentSignInWithNoStoredTokenStaysSignedOutWitho
     juce::Thread::sleep(200);
     EXPECT_EQ(service.getSnapshot().state, AccountState::SignedOut);
     EXPECT_EQ(server.tokenCalls(), 0);
+}
+
+// ============================================================================
+// entitlement (P4-4)
+// ============================================================================
+
+TEST(AccountServiceTest, CompleteSignInPopulatesEntitlementFromSuccessfulFetch) {
+    FakeAuthServer server;
+    server.deviceCodeResponse = makeDeviceCodeResponse(0);
+    server.tokenResponses = {makeTokenSuccess("at1", "rt1")};
+    server.meResponse = makeMeSuccess("jane@example.com");
+    server.entitlementResponse = makeEntitlementSuccess("pro", 10000, 743);
+
+    AccountService service{kHost, server.performer(), std::make_unique<InMemoryTokenStore>()};
+    service.beginSignIn();
+
+    ASSERT_TRUE(waitUntil([&] { return service.getSnapshot().state == AccountState::SignedIn; }));
+    ASSERT_TRUE(waitUntil([&] { return service.getSnapshot().entitlementKnown; })) << "entitlement was never populated";
+
+    const auto snapshot = service.getSnapshot();
+    EXPECT_EQ(snapshot.plan, juce::String("pro"));
+    EXPECT_EQ(snapshot.monthlyRequestLimit, 10000);
+    EXPECT_EQ(snapshot.requestsUsed, 743);
+}
+
+TEST(AccountServiceTest, CompleteSignInLeavesEntitlementAtDefaultsWhenFetchFails) {
+    FakeAuthServer server;
+    server.deviceCodeResponse = makeDeviceCodeResponse(0);
+    server.tokenResponses = {makeTokenSuccess("at1", "rt1")};
+    server.meResponse = makeMeSuccess("jane@example.com");
+    // entitlementResponse left at its default transport failure.
+
+    AccountService service{kHost, server.performer(), std::make_unique<InMemoryTokenStore>()};
+    service.beginSignIn();
+
+    ASSERT_TRUE(waitUntil([&] { return service.getSnapshot().state == AccountState::SignedIn; }));
+    // Sign-in must not have been blocked by the entitlement failure — give the (failed) fetch a
+    // moment to have definitely run, then assert it left no trace.
+    juce::Thread::sleep(200);
+
+    const auto snapshot = service.getSnapshot();
+    EXPECT_FALSE(snapshot.entitlementKnown);
+    EXPECT_TRUE(snapshot.plan.isEmpty());
+    EXPECT_EQ(snapshot.monthlyRequestLimit, 0);
+    EXPECT_EQ(snapshot.requestsUsed, 0);
+}
+
+TEST(AccountServiceTest, RefreshEntitlementUpdatesSnapshotWithoutChangingSignInState) {
+    FakeAuthServer server;
+    server.deviceCodeResponse = makeDeviceCodeResponse(0);
+    server.tokenResponses = {makeTokenSuccess("at1", "rt1")};
+    server.meResponse = makeMeSuccess("jane@example.com");
+    server.entitlementResponse = makeEntitlementSuccess("free", 1000, 100);
+
+    AccountService service{kHost, server.performer(), std::make_unique<InMemoryTokenStore>()};
+    service.beginSignIn();
+    ASSERT_TRUE(waitUntil([&] { return service.getSnapshot().entitlementKnown; }));
+    ASSERT_EQ(service.getSnapshot().plan, juce::String("free"));
+    const int entitlementCallsAfterSignIn = server.entitlementCalls();
+
+    // Simulate "the user upgraded mid-session": the server now reports Pro.
+    server.entitlementResponse = makeEntitlementSuccess("pro", 10000, 101);
+    service.refreshEntitlement();
+
+    ASSERT_TRUE(waitUntil([&] { return server.entitlementCalls() > entitlementCallsAfterSignIn; }))
+        << "refreshEntitlement() never hit the network";
+    ASSERT_TRUE(waitUntil([&] { return service.getSnapshot().plan == juce::String("pro"); }));
+
+    const auto snapshot = service.getSnapshot();
+    EXPECT_EQ(snapshot.state, AccountState::SignedIn) << "refreshEntitlement() must not touch sign-in state";
+    EXPECT_EQ(snapshot.email, juce::String("jane@example.com")) << "refreshEntitlement() must not touch email";
+    EXPECT_EQ(snapshot.monthlyRequestLimit, 10000);
+    EXPECT_EQ(snapshot.requestsUsed, 101);
+}
+
+TEST(AccountServiceTest, RefreshEntitlementIsNoOpWhenSignedOut) {
+    FakeAuthServer server;
+
+    AccountService service{kHost, server.performer(), std::make_unique<InMemoryTokenStore>()};
+    ASSERT_EQ(service.getSnapshot().state, AccountState::SignedOut);
+
+    service.refreshEntitlement();
+
+    juce::Thread::sleep(200);
+    EXPECT_EQ(server.entitlementCalls(), 0);
 }
 
 // ============================================================================

@@ -126,16 +126,47 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         appProperties.saveIfNeeded();
     };
 
-    // Load AI provider preference. "ollama" is the persisted id (see AIProviderRegistry),
-    // not a display name — registry.create() falls back to the first registered provider
-    // if the saved id is unknown (e.g. stale pre-registry value, or empty).
-    juce::String savedProviderId = appProperties.getUserSettings()->getValue("aiProvider", "ollama");
-    juce::String savedOllamaHost = appProperties.getUserSettings()->getValue("ollamaHost", "http://localhost:11434");
-
     if (provider) {
         aiService.setProvider(std::move(provider));
     } else {
-        aiService.setProvider(registry.create(savedProviderId, {savedOllamaHost, {}}));
+        // Load AI provider preference. The persisted id (see AIProviderRegistry) is not a
+        // display name — registry.create() falls back to the first registered provider ("ollama")
+        // if the saved id is unknown (e.g. stale pre-registry value, or empty).
+        //
+        // P4-6 migration: "aiProvider" is only ever WRITTEN by AISettingsTab::updateSettings(), so
+        // most existing installs have never persisted it, even after months of use — its absence
+        // alone can't distinguish "brand new install" from "existing user who never opened AI
+        // settings". existsAsFile() can: it reflects whether the settings file was already on disk
+        // before this launch touched anything (nothing above this point in initialiseCommon(), nor
+        // shortcutManager.loadFromProperties()/themeManager->initialise() in the constructor, writes
+        // to appProperties — all read-only). See resolveDefaultProviderId() for the pure decision.
+        const bool hasExistingSettingsFile = appProperties.getUserSettings()->getFile().existsAsFile();
+        const juce::String defaultProviderId = resolveDefaultProviderId(hasExistingSettingsFile);
+        juce::String savedProviderId = appProperties.getUserSettings()->getValue("aiProvider", defaultProviderId);
+
+        // Pin the resolved id so every other reader of "aiProvider" (AISettingsTab) agrees with
+        // what actually got constructed here, instead of independently re-deriving a default.
+        // saveIfNeeded() is required, not optional: without it, a fresh install that resolves to
+        // "remote" here only holds that in memory — if the process exits before some OTHER write
+        // flushes the file, launch 2 finds a settings file on disk (from this launch's theme/
+        // shortcut/panel-visibility writes) with no "aiProvider" key in it, resolves
+        // hasExistingSettingsFile=true, and silently reverts a brand new install to "ollama".
+        if (!appProperties.getUserSettings()->containsKey("aiProvider")) {
+            appProperties.getUserSettings()->setValue("aiProvider", savedProviderId);
+            appProperties.saveIfNeeded();
+        }
+
+        // Each provider persists its own host under its own key — "ollamaHost" and "remoteHost"
+        // must never collide, or switching providers in Settings silently points one of them at
+        // the other's address (see AISettingsTab::hostSettingsKeyFor()). An empty remoteHost
+        // default lets AIProviderRegistry::createDefault() fall back to
+        // synth::branding::kApiBaseUrl.
+        const juce::String hostKey = savedProviderId == "remote" ? "remoteHost" : "ollamaHost";
+        const juce::String hostDefault =
+            savedProviderId == "remote" ? juce::String() : juce::String("http://localhost:11434");
+        juce::String savedHost = appProperties.getUserSettings()->getValue(hostKey, hostDefault);
+
+        aiService.setProvider(registry.create(savedProviderId, {savedHost, {}}));
     }
 
     // ORDERING CONTRACT: aiChatComponent is a member, so its constructor (which calls
@@ -489,7 +520,8 @@ void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
     commands.addArray({AppCommands::openSettings, AppCommands::savePreset, AppCommands::openPreset,
                        AppCommands::newPatch, AppCommands::undo, AppCommands::redo, AppCommands::toggleModMatrix,
                        AppCommands::toggleMinimap, AppCommands::toggleAiPanel, AppCommands::autoArrange,
-                       AppCommands::toggleLibrary, AppCommands::selectAllModules, AppCommands::saveSnippet});
+                       AppCommands::toggleLibrary, AppCommands::selectAllModules, AppCommands::saveSnippet,
+                       AppCommands::copySelection, AppCommands::pasteSelection, AppCommands::duplicateSelection});
 }
 
 void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationCommandInfo& result) {
@@ -573,6 +605,27 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
+    case AppCommands::copySelection: {
+        result.setInfo("Copy", "Copy the selected modules", "Edit", 0);
+        result.setActive(graphEditor.getSelectionCount() > 0);
+        auto kp = shortcutManager.getBinding("copySelection");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case AppCommands::pasteSelection: {
+        result.setInfo("Paste", "Paste the copied modules onto the canvas", "Edit", 0);
+        result.setActive(graphEditor.canPaste());
+        auto kp = shortcutManager.getBinding("pasteSelection");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case AppCommands::duplicateSelection: {
+        result.setInfo("Duplicate", "Duplicate the selected modules in place", "Edit", 0);
+        result.setActive(graphEditor.getSelectionCount() > 0);
+        auto kp = shortcutManager.getBinding("duplicateSelection");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
     default:
         break;
     }
@@ -626,6 +679,33 @@ bool MainComponent::perform(const InvocationInfo& info) {
     case AppCommands::saveSnippet:
         promptSaveSnippet();
         return true;
+    // Each of these reports what it did in the status bar rather than failing silently. The "did
+    // nothing" branches are the residual cases only — getCommandInfo marks all three inactive when
+    // there is nothing to act on, and ApplicationCommandTarget::tryToInvoke refuses an inactive
+    // command outright, so the menu row greys out and the key never gets this far.
+    case AppCommands::copySelection: {
+        if (graphEditor.copySelection())
+            statusBar.showMessage("Copied " + juce::String(graphEditor.getClipboardModuleCount()) + " modules");
+        else
+            statusBar.showMessage("Nothing to copy - select one or more modules first");
+        return true;
+    }
+    case AppCommands::pasteSelection: {
+        // Counted AFTER the fact: both leave the new copies selected, so the selection is the
+        // authoritative count of what actually landed (ineligible nodes never make it in).
+        if (graphEditor.pasteClipboard())
+            statusBar.showMessage("Pasted " + juce::String(graphEditor.getSelectionCount()) + " modules");
+        else
+            statusBar.showMessage("Nothing to paste - copy a selection first");
+        return true;
+    }
+    case AppCommands::duplicateSelection: {
+        if (graphEditor.duplicateSelection())
+            statusBar.showMessage("Duplicated " + juce::String(graphEditor.getSelectionCount()) + " modules");
+        else
+            statusBar.showMessage("Nothing to duplicate - select one or more modules first");
+        return true;
+    }
     default:
         return false;
     }

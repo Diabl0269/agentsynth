@@ -126,6 +126,82 @@ TEST_F(SettingsWindowTest, AITabPersistsProviderSetting) {
     }
 }
 
+// P4-6: "remote" is no longer hidden, so both providers must be offered.
+TEST_F(SettingsWindowTest, AITabOffersBothOllamaAndRemoteProviders) {
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr);
+    settingsWindow.setSize(600, 400);
+    settingsWindow.resized();
+
+    auto* aiTab = settingsWindow.getTabs().getTabContentComponent(1);
+    ASSERT_NE(aiTab, nullptr);
+
+    juce::ComboBox* providerCombo = nullptr;
+    for (auto* child : aiTab->getChildren()) {
+        if (auto* combo = dynamic_cast<juce::ComboBox*>(child)) {
+            providerCombo = combo;
+            break;
+        }
+    }
+    ASSERT_NE(providerCombo, nullptr);
+
+    ASSERT_EQ(providerCombo->getNumItems(), 2);
+    EXPECT_EQ(providerCombo->getItemText(0), "Ollama (local)");
+    EXPECT_EQ(providerCombo->getItemText(1), "Remote (hosted)");
+}
+
+// Regression lock for the pre-P4-6 host-key collision: Ollama and Remote each persist (and
+// display) their OWN host, under separate settings keys ("ollamaHost"/"remoteHost") — the
+// pre-P4-6 code shared a single "ollamaHost" key, so switching providers silently carried one
+// provider's host text over as the other's (e.g. RemoteProvider ending up pointed at Ollama's
+// port).
+//
+// Verified by reconstructing AISettingsTab against differently-persisted state, NOT by live-
+// switching the combo mid-test: AISettingsTab has no seam to inject a fake provider registry, so
+// triggering its onChange/updateSettings() for real would construct an actual OllamaProvider or
+// RemoteProvider — touching real threads, the network and DeviceIdStore's on-disk file, none of
+// which belong in a unit test and one of which (confirmed while writing this test) hangs/aborts
+// in this headless environment. The constructor path alone (read the persisted host for whichever
+// provider is selected) exercises the exact same hostSettingsKeyFor()/defaultHostFor() lookup that
+// updateSettings() uses to choose which key to WRITE, so this still locks the collision fix.
+TEST_F(SettingsWindowTest, EachProviderReadsItsOwnPersistedHost) {
+    appProperties.getUserSettings()->setValue("ollamaHost", "http://ollama.example:11434");
+    appProperties.getUserSettings()->setValue("remoteHost", "https://remote.example");
+
+    auto findHostEditor = [](juce::Component* aiTab) -> juce::TextEditor* {
+        for (auto* child : aiTab->getChildren())
+            if (auto* editor = dynamic_cast<juce::TextEditor*>(child))
+                return editor;
+        return nullptr;
+    };
+
+    appProperties.getUserSettings()->setValue("aiProvider", "ollama");
+    {
+        SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                      themeManager, nullptr);
+        settingsWindow.setSize(600, 400);
+        settingsWindow.resized();
+        auto* aiTab = settingsWindow.getTabs().getTabContentComponent(1);
+        ASSERT_NE(aiTab, nullptr);
+        auto* hostEditor = findHostEditor(aiTab);
+        ASSERT_NE(hostEditor, nullptr);
+        EXPECT_EQ(hostEditor->getText(), "http://ollama.example:11434");
+    }
+
+    appProperties.getUserSettings()->setValue("aiProvider", "remote");
+    {
+        SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                      themeManager, nullptr);
+        settingsWindow.setSize(600, 400);
+        settingsWindow.resized();
+        auto* aiTab = settingsWindow.getTabs().getTabContentComponent(1);
+        ASSERT_NE(aiTab, nullptr);
+        auto* hostEditor = findHostEditor(aiTab);
+        ASSERT_NE(hostEditor, nullptr);
+        EXPECT_EQ(hostEditor->getText(), "https://remote.example");
+    }
+}
+
 TEST_F(SettingsWindowTest, RemembersLastSelectedTab) {
     // Set the settingsTab preference to 1 (AI tab) before constructing
     appProperties.getUserSettings()->setValue("settingsTab", 1);

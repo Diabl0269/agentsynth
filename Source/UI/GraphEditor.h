@@ -2,8 +2,10 @@
 
 #include "../AppUndoManager.h"
 #include "../AudioEngine.h"
+#include "../PatchDocument.h"
 #include "CableColour.h"
 #include "LayoutUtil.h"
+#include "ModuleClipboard.h"
 #include "SelectionModel.h"
 #include "UIAnimation.h"
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -201,6 +203,34 @@ public:
 
     /** Set by the owner to resolve a snippet name (from a library drag payload) to its JSON. */
     std::function<juce::var(const juce::String&)> snippetProvider;
+
+    // ---- Copy / paste / duplicate -------------------------------------------------------
+    //
+    // All three run through the snippet pipeline rather than a parallel copy format, which is what
+    // makes the wiring right: a snippet keeps only connections with BOTH endpoints inside the
+    // group and re-expresses modulation as intent, and insertion renumbers every id. The copies
+    // therefore wire to each other, never back to the originals, and nothing is spliced into the
+    // surrounding patch — the same rule a snippet dropped from the library follows.
+
+    /** Copies the current selection into the in-app clipboard.
+     *  @return false when the selection holds nothing copyable (empty, or only graph I/O nodes),
+     *          in which case the previous clipboard contents are left alone. */
+    bool copySelection();
+
+    bool canPaste() const { return !clipboard.isEmpty(); }
+    int getClipboardModuleCount() const { return clipboard.getModuleCount(); }
+
+    /** Pastes at the next cascade position — one step down-right of wherever the last paste (or the
+     *  copy itself) sat, so repeated pastes fan out instead of stacking on one pixel. */
+    bool pasteClipboard();
+
+    /** Pastes at an explicit canvas position (the canvas context menu's "Paste Here") and re-anchors
+     *  the cascade there, so a following keyboard paste continues from the same place. */
+    bool pasteClipboardAt(juce::Point<int> canvasPos);
+
+    /** Copies the selection and immediately drops it back one step down-right, WITHOUT touching the
+     *  clipboard — Cmd+D must not cost the user whatever they had copied. */
+    bool duplicateSelection();
 
     // Drag-preview (grid + landing ghost shown during a module drag)
     void beginDragPreview(int w, int h, juce::AudioProcessorGraph::NodeID selfId);
@@ -432,6 +462,19 @@ private:
     // ---- Selection state (issue #156) ----
     synth::ui::SelectionModel selection;
 
+    // Copy/paste payload. In-app and in-memory only: it is never written to disk and never touches
+    // the system clipboard, so Cmd+C on the canvas cannot silently destroy the user's copied text.
+    synth::ui::ModuleClipboard clipboard;
+
+    /** Inserts a clipboard-dialect payload at a canvas position, carrying non-parameter module
+     *  state through. Shared by paste and duplicate; `insertSnippetAt` is the disk-snippet path and
+     *  deliberately does not. */
+    bool insertClipboardPayload(const juce::var& payload, juce::Point<int> canvasPos);
+
+    /** Right-click on empty canvas: paste / select-all. Built here rather than inline in mouseDown
+     *  so the menu stays out of the hit-testing path. */
+    void showCanvasContextMenu(juce::Point<int> canvasPos);
+
     // Marquee drag, in canvas coordinates.
     bool marqueeActive = false;
     bool marqueeAdditive = false;
@@ -461,6 +504,12 @@ private:
     void applySelectionChange(const std::vector<juce::AudioProcessorGraph::NodeID>& newSelection);
 
     AppUndoManager* undoManager = nullptr;
+
+    // Top-level JSON keys the current build doesn't understand (e.g. a future "timeline"),
+    // stashed on load and re-merged on save so re-saving with an older build never destroys a
+    // newer build's data. Per-loaded-file: newPatch() clears it. Only the user preset save/load
+    // path (savePreset/loadPreset) touches this — undo/redo, snippets, and AI apply must not.
+    synth::PatchDocument patchDocument;
     std::vector<AudioEngine::ModulationDisplayInfo> cachedModDisplayInfo;
     std::vector<AudioEngine::ModulationRouting> cachedModRoutings;
 

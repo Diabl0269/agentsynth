@@ -47,6 +47,7 @@ add_executable(Tests
     GraphEditorTests.cpp
     ModuleComponentTests.cpp
     AIChatComponentTests.cpp
+    PlanBadgeTests.cpp
     PolyMidiModuleTests.cpp
     PolySequencerModuleTests.cpp
     AIIntegrationServiceTests.cpp
@@ -96,9 +97,11 @@ add_executable(Tests
     SelectionModelTests.cpp
     SnippetManagerTests.cpp
     MultiSelectTests.cpp
+    ClipboardTests.cpp
     PanelAnimationAndLoadingTests.cpp
     MinimapComponentTests.cpp
     PluginProcessorTests.cpp
+    PatchDocumentTests.cpp
     ../Source/MainComponent.cpp
     ../Source/Plugin/PluginProcessor.cpp
     ../Source/Plugin/PluginEditor.cpp
@@ -106,6 +109,7 @@ add_executable(Tests
     ../Source/UI/ModMatrixComponent.cpp
     ../Source/UI/AIChatComponent.cpp
     ../Source/UI/AccountRow.cpp
+    ../Source/UI/PlanBadge.cpp
     ../Source/UI/SignInDialog.cpp
     ../Source/UI/ModuleComponent.cpp
     ../Source/UI/SettingsWindow.cpp

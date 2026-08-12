@@ -25,9 +25,12 @@ TEST(StateRoundTripTests, PolyPadJSONRoundTripIsLossless) {
     EXPECT_GT(g1_nodes, 0) << "Poly Pad should have nodes";
     EXPECT_GT(g1_connections, 0) << "Poly Pad should have connections";
 
-    // Step 2: Apply J1 to fresh g2, capture its JSON
+    // Step 2: Apply J1 to fresh g2, capture its JSON.
+    // Trusted, like every app caller that replays our own graphToJSON output (PresetManager,
+    // AppUndoManager, SnippetManager): the untrusted path deliberately rescales unit-interval
+    // parameters and regenerates node uuids, so it is not a fixpoint by design.
     juce::AudioProcessorGraph g2;
-    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(J1, g2, /*clearExisting=*/true))
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(J1, g2, /*clearExisting=*/true, /*trusted=*/true))
         << "applyJSONToGraph J1->g2 failed";
     juce::var J2 = synth::AIStateMapper::graphToJSON(g2);
 
@@ -36,7 +39,7 @@ TEST(StateRoundTripTests, PolyPadJSONRoundTripIsLossless) {
 
     // Step 3: Apply J2 to fresh g3, capture its JSON
     juce::AudioProcessorGraph g3;
-    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(J2, g3, /*clearExisting=*/true))
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(J2, g3, /*clearExisting=*/true, /*trusted=*/true))
         << "applyJSONToGraph J2->g3 failed";
     juce::var J3 = synth::AIStateMapper::graphToJSON(g3);
 

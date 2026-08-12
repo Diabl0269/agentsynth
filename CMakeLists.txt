@@ -63,6 +63,8 @@ add_library(Core STATIC
     Source/Branding.h
     Source/PresetManager.cpp
     Source/PresetManager.h
+    Source/PatchDocument.cpp
+    Source/PatchDocument.h
     Source/SnippetManager.cpp
     Source/SnippetManager.h
     Source/SettingsMigration.cpp
@@ -301,6 +303,8 @@ add_library(AppUI STATIC
     Source/UI/AIChatComponent.cpp
     Source/UI/AccountRow.cpp
     Source/UI/AccountRow.h
+    Source/UI/PlanBadge.cpp
+    Source/UI/PlanBadge.h
     Source/UI/SignInDialog.cpp
     Source/UI/SignInDialog.h
     Source/UI/GraphEditor.cpp

@@ -62,9 +62,27 @@ public:
      *  Ids that are absent from the graph, are graph I/O nodes (Audio In/Out, MIDI In), or are
      *  Attenuverters are skipped — see the class comment. Returns a snippet with an empty
      *  `nodes` array when nothing eligible was selected.
+     *
+     *  @param includeExtraState  Carry each module's non-parameter `state` (the Sampler's loaded
+     *         file, a Wavetable's custom table). **Off for anything that will be written to disk.**
+     *         A `.agsnip` is a hand-editable file and `applyJSONToGraph` consumes `state` on the
+     *         trusted path, so a snippet file carrying one could name an arbitrary file for the app
+     *         to open. The in-memory clipboard has no such exposure — its payload comes straight
+     *         from the live graph and never leaves the process — so copy/paste turns it on and a
+     *         duplicated Sampler keeps its sample.
      */
     static juce::var extractSnippet(juce::AudioProcessorGraph& graph, const std::vector<NodeID>& selection,
-                                    const juce::String& name);
+                                    const juce::String& name, bool includeExtraState = false);
+
+    /** Top-left canvas corner `extractSnippet` normalises `selection` against — the min (x, y) over
+     *  every *eligible* selected node, or (0, 0) when the selection holds none.
+     *
+     *  Exposed because a caller that wants to place a copy relative to where it came from (paste,
+     *  duplicate) has to know the corner the snippet's origin-relative positions were measured
+     *  from. Deriving it independently would drift from the eligibility rule above the moment one
+     *  of them changed, so both read this.
+     */
+    static juce::Point<int> selectionOrigin(juce::AudioProcessorGraph& graph, const std::vector<NodeID>& selection);
 
     /** Lowest node id that cannot collide with anything already in `graph` (max uid + 1, never
      *  below 1). Snippet ids MUST be renumbered above this before a merge-apply: applyJSONToGraph
@@ -75,15 +93,19 @@ public:
     /** Renumbers every id in `snippet` to a fresh range starting at `idBase` and offsets every
      *  node position by `dropPos`. Emits only the keys applyJSONToGraph consumes (nodes,
      *  connections, modulations) — snippet metadata is left behind. Does not mutate `snippet`,
-     *  so one loaded snippet can be inserted repeatedly. */
-    static juce::var prepareForInsert(const juce::var& snippet, juce::Point<int> dropPos, juce::uint32 idBase);
+     *  so one loaded snippet can be inserted repeatedly.
+     *  @param includeExtraState  see extractSnippet; a `state` key is dropped unless asked for, so
+     *         a hand-edited snippet file cannot smuggle one into the trusted apply. */
+    static juce::var prepareForInsert(const juce::var& snippet, juce::Point<int> dropPos, juce::uint32 idBase,
+                                      bool includeExtraState = false);
 
     // ---- Graph mutation --------------------------------------------------------------
 
     /** Inserts `snippet` into `graph` at `dropPos` without disturbing what is already there.
+     *  @param includeExtraState  see extractSnippet.
      *  @return the node ids added (Attenuverters excluded), empty on rejection/failure. */
     static std::vector<NodeID> insertSnippet(const juce::var& snippet, juce::AudioProcessorGraph& graph,
-                                             juce::Point<int> dropPos);
+                                             juce::Point<int> dropPos, bool includeExtraState = false);
 
     // ---- Snippet metadata ------------------------------------------------------------
 

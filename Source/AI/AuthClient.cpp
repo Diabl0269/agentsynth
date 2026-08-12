@@ -299,6 +299,51 @@ AuthClient::MeResult AuthClient::fetchMe(const juce::String& accessToken, const 
     return result;
 }
 
+AuthClient::EntitlementResult AuthClient::fetchEntitlement(const juce::String& accessToken,
+                                                           const std::atomic<bool>& cancelled) const {
+    EntitlementResult result;
+
+    juce::StringPairArray headers;
+    headers.set("Authorization", "Bearer " + accessToken);
+
+    const auto http = performHttp("GET", host + "/v1/entitlement", headers, {}, kRequestTimeoutMs, cancelled);
+
+    if (http.transportFailed || http.timedOut) {
+        result.transportError = http.errorMessage.isNotEmpty() ? http.errorMessage : "Error: request failed.";
+        return result;
+    }
+
+    if (http.httpStatus != 200) {
+        result.transportError = "Error: /v1/entitlement failed (HTTP " + juce::String(http.httpStatus) + ").";
+        return result;
+    }
+
+    const auto parsed = juce::JSON::parse(http.body);
+    auto* obj = parsed.getDynamicObject();
+    if (obj == nullptr) {
+        result.transportError = "Error: could not parse /v1/entitlement response.";
+        return result;
+    }
+
+    result.plan = obj->getProperty("plan").toString();
+    result.status = obj->getProperty("status").toString();
+    result.periodEndIso = obj->getProperty("period_end").toString();
+    result.cancelAtPeriodEnd = static_cast<bool>(obj->getProperty("cancel_at_period_end"));
+
+    if (auto* limits = obj->getProperty("limits").getDynamicObject())
+        result.monthlyRequestLimit = static_cast<int>(limits->getProperty("monthly_requests"));
+
+    // `usage` is a P4-4 addition to the response; absent against an older server is not a parse
+    // failure — the client just shows 0 used rather than failing the whole entitlement fetch.
+    if (auto* usage = obj->getProperty("usage").getDynamicObject()) {
+        result.requestsUsed = static_cast<int>(usage->getProperty("requests_used"));
+        result.usagePeriodStartIso = usage->getProperty("period_start").toString();
+    }
+
+    result.ok = true;
+    return result;
+}
+
 bool AuthClient::revoke(const juce::String& token, const std::atomic<bool>& cancelled) const {
     juce::StringPairArray headers;
     headers.set("Content-Type", "application/x-www-form-urlencoded");

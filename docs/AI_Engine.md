@@ -78,6 +78,66 @@ incoming MIDI note (or A4/440Hz if none is connected) offset by `octave`/`coarse
         Nothing in `getPatchSchema()` advertises `state`, so a constrained decoder is never invited
         to emit one.
 
+    -   `uuid`: A stable per-node identity, generated lazily by `graphToJSON` and persisted back
+        into the graph node's `properties`, so repeated saves of an unchanged node emit the same
+        string. This — not the integer `id`, which merge-mode apply renumbers — is what long-lived
+        references key on.
+
+        **Trusted-path only**, like `state`: `applyJSONToGraph` adopts an incoming `uuid` when
+        `trusted == true` and ignores it otherwise, so a provider cannot hand two nodes the same
+        identity or claim one that something else already points at. Untrusted nodes simply get a
+        fresh uuid on the next `graphToJSON`.
+
+### Patch format forward-compatibility
+
+Parameter values remain a flat scalar map forever — time-varying data will live under the reserved
+`"timeline"` root key, never in a polymorphic param value. This gives every older and newer build
+something clear to do with it: old builds preserve it (see `PatchDocument` below), new builds honor
+it, neither corrupts the other's data.
+
+`"timeline"` is reserved and **refused, not ignored**, on the untrusted path
+(`PatchValidationError::TimelineNotAllowed`). The validator lets unknown keys through, so a future
+build that starts honouring timeline data would otherwise silently begin executing provider-authored
+automation against patches accepted today. Refusing now means that door can only be opened by a
+commit that deliberately deletes the check. The trusted path (preset/undo replay) accepts it.
+
+`graphToJSON` writes a root `"schemaVersion": 1` (`AIStateMapper::kSchemaVersion`). **Readers treat
+an absent version as 1 and gate no behaviour on it** — the field exists so a genuinely breaking
+format change can be detected later. Adding a property is always additive; never bump the version
+for one.
+
+Per-node `uuid` is honoured on the trusted path only (`applyJSONToGraph` with `trusted == true`);
+untrusted input gets fresh identities regenerated on the next `graphToJSON`. This ensures a model
+cannot hand two nodes the same identity or claim one that something else already points at.
+
+That uuid is also what makes undo/redo node-preserving: `AIStateMapper::applySnapshotPreservingNodes`
+(the third apply path, used **only** by `AppUndoManager::SnapshotAction`) diffs one of our own
+`graphToJSON` snapshots against the live graph and keeps every node whose uuid still matches,
+instead of replaying it through `applyJSONToGraph` and re-creating everything. It refuses anything
+whose identity is ambiguous — leaving the graph untouched — and the caller then falls back to
+`applyJSONToGraph(..., clearExisting=true, trusted=true)`. `applyJSONToGraph` itself is unchanged;
+presets, snippets and AI apply all keep their existing semantics. See
+[`docs/architecture.md`](architecture.md#appundomanager).
+
+None of `schemaVersion`, `uuid` or `"timeline"` appears in `getPatchSchema()` — every property there
+is an invitation to emit it, and all three are ours to write. Pinned by
+`AIStateMapperTest.SchemaOmitsReservedFields`.
+
+Unknown top-level keys (anything besides `nodes`, `connections`, `modulations`, `mode`, `remove`,
+`removeModulations`, `schemaVersion`) are preserved across a save/load round-trip by `PatchDocument`
+(see `Source/PatchDocument.h`). These preserved keys are inert — never interpreted, never validated,
+and never fed into any apply path — and live only on the user preset save/load path. Undo/redo,
+snippets, and AI apply all replay in-session graph state and must not resurrect file-level keys into
+that flow.
+
+Node type strings must round-trip: `graphToJSON` writes `getFactoryTypeName(processor)` and
+`applyJSONToGraph` feeds that string straight back to `createModule`, so a mismatch is silent data
+loss on every save/load **and** every structural undo (which replays the same JSON).
+`ModuleType::PolySequencer` mapped to `"Sequencer"`, which downgraded every saved Poly Sequencer
+to a mono one (issue #196). `AIStateMapperTest.FactoryTypeNamesRoundTrip` walks every factory key
+and fails on any new mismatch; `AIStateMapperTest.ParamIdsGolden` does the same for `paramID`s,
+which presets, undo snapshots and AI patches all address parameters by.
+
 -   **`connections`**: An array detailing the signal flow between modules.
     -   `src`: The `id` of the source module.
     -   `srcPort`: The output port index of the source module.
@@ -163,6 +223,13 @@ against:
     - The `node.type` enum is generated from `moduleFactory`, not hand-written. The old literal had
       drifted — `Voice Mixer` was creatable but missing from the schema, so a constrained decoder
       could never produce one. Guarded by `SchemaModuleTypesMatchTheFactory`.
+
+      Because the enum is *derived*, **registering a module makes it model-authorable by default** —
+      the right default for an ordinary DSP module, the wrong one for anything that names an
+      external resource or carries privileged state (a hosted plugin, a timeline feed). Such a
+      module goes into `kNonAuthorableModuleTypes` (AIStateMapper.cpp) when it is registered.
+      `AIStateMapperTest.AuthorableModuleTypesGolden` pins the exact resulting list, so either kind
+      of addition fails the build until the choice is made deliberately.
     - `node.params` enumerates every **choice** parameter's real options, so a model physically
       cannot emit `"waveform": "White Noise"`. `additionalProperties` stays `true` so numeric
       parameters remain expressible — a grammar restricted to the listed keys would make `cutoff`
@@ -183,6 +250,13 @@ against:
 
     Rejection messages name the offending id **and list the valid ones**. This is not cosmetic: a
     bare "unknown node id" gives the model nothing to aim at and the retry tends to repeat itself.
+
+    **Merge-mode id collisions are rejected, not resolved** (`NodeIdTypeMismatch`). A patch node
+    whose `id` matches a live node but whose `type` differs used to fall through the
+    update-in-place branch and create a *second* node, rebinding `idMap[id]` to it — so every later
+    connection/modulation in the same patch that meant the original node silently re-pointed at the
+    new one. Ids the same patch also `remove` are exempt: removals run first, so re-using such an id
+    names a genuinely new node. The trusted path is unaffected by design.
 
 3.  **Repair — one rule only.** A patch that states no `"mode"` and is rejected as a *replace* is
     re-validated as a *merge*, and applied that way if it passes. This costs no round-trip and
@@ -558,7 +632,7 @@ Locked by `OllamaProviderTest.CancelledRequestInvokesCallbackWithCancelledKind`,
 > hit Cancel, and confirm the input frees immediately and the next message is answered without delay.
 > A regression here is invisible to the suite — the mock path would still pass.
 
-### RemoteProvider: synth-platform Inference Service (libcurl, hidden pending Phase 4)
+### RemoteProvider: synth-platform Inference Service (libcurl, default as of P4-6)
 
 `Source/AI/RemoteProvider.{h,cpp}` is the first non-Ollama `AIProvider`: it talks to a local
 instance of the `synth-platform` inference service over libcurl instead of `juce::WebInputStream`.
@@ -608,7 +682,8 @@ same as `OllamaProvider` checks `wasCancelled()` right after the network call re
 | `timedOut`                                    | `Timeout`                        |
 | `cancelled`                                   | `Cancelled`                      |
 | HTTP 401 / 403                                | `Auth`                            |
-| HTTP 429 (reads `Retry-After`)                | `RateLimit`                      |
+| HTTP 429, `error.code == "QUOTA_EXCEEDED"`    | `Quota` (P4-3's monthly quota — see "Quota UI and the Upgrade Path" below) |
+| HTTP 429, any other/no code                   | `RateLimit` (reads `Retry-After`) |
 | HTTP 402, `error.code == "TRIAL_EXHAUSTED"`   | `TrialExhausted` (see "Device Id and Anonymous Trial" below) |
 | HTTP 402, any other/no code                   | `Quota`                           |
 | HTTP 503, `error.code == "SERVICE_CAPACITY_EXCEEDED"` | `ServiceCapacityExceeded` (see below) |
@@ -619,10 +694,12 @@ same as `OllamaProvider` checks `wasCancelled()` right after the network call re
 Whenever the response body parses as JSON with a string `error.message`, it is appended to the
 delivered error message (mirrors the "name the specific failure" ethos on
 `AIIntegrationService::buildCorrectionPrompt`); otherwise the message just names the HTTP status.
-`TrialExhausted` and `ServiceCapacityExceeded` are the two exceptions to "appended": the server's
-`error.message` there is a complete, user-facing sentence on its own (see below), so it is
-delivered verbatim as `AIError::message` rather than tacked onto a generic "reported insufficient
-quota (HTTP 402)"-style prefix.
+`TrialExhausted`, `ServiceCapacityExceeded`, and `Quota` via the `QUOTA_EXCEEDED` 429 path are the
+exceptions to "appended": the server's `error.message` there is a complete, user-facing sentence on
+its own (see below and "Quota UI and the Upgrade Path"), so it is delivered verbatim as
+`AIError::message` rather than tacked onto a generic prefix. The pre-existing generic-402 `Quota`
+mapping (no recognised code) keeps the appended-prefix behaviour — only the `QUOTA_EXCEEDED` 429
+path is verbatim.
 
 **Cancellation, simplified vs `OllamaProvider`.** libcurl doesn't need the
 `StreamPublisher`/`activeStream`/`streamLock` machinery `OllamaProvider` uses to abort a
@@ -648,15 +725,47 @@ Root `CMakeLists.txt` requires `CURL` (`find_package(CURL REQUIRED)`) under `if(
 covering both Linux and macOS (whose SDK ships a `curl.tbd` stub, so no Homebrew dependency is
 needed there) — and deliberately does not require it on `WIN32`.
 
-**Ships hidden.** `ProviderDescriptor::hidden` (`Source/AI/AIProviderRegistry.h`) is a runtime
-flag, not a build-time one: `RemoteProvider` is fully registered and constructible via
+**Visible as of P4-6.** `ProviderDescriptor::hidden` (`Source/AI/AIProviderRegistry.h`) is a
+runtime flag, not a build-time one: `RemoteProvider` is fully registered and constructible via
 `AIProviderRegistry::createDefault()` (id `"remote"`, registered after `"ollama"` so the
-unknown-id fallback to `descriptors.front()` is unaffected), but `AISettingsTab`
-(`Source/UI/SettingsWindow.cpp`) filters out any `hidden` descriptor before populating the
-provider combo box, via a `visibleProviders` member used consistently by both the population loop
-and `selectedDescriptor()` (indexing the combo's selected item against the *unfiltered* list would
-desync the moment a hidden entry sits between two visible ones). Phase 4 is expected to flip
-`"remote"`'s `hidden` to `false`.
+unknown-id fallback to `descriptors.front()` is unaffected — and stays that way deliberately: an
+unrecognised/corrupt persisted id fails safe to the provider that sends no data anywhere, never to
+the one that does), and since P4-6 `hidden=false`, so `AISettingsTab`
+(`Source/UI/SettingsWindow.cpp`) offers it in the provider combo box alongside `"ollama"`. The
+`visibleProviders` member (still present even with nothing currently hidden) is used consistently
+by both the population loop and `selectedDescriptor()` — indexing the combo's selected item
+against the *unfiltered* `providerRegistry.listAll()` would desync the moment a future hidden
+provider sits between two visible ones.
+
+**Default provider (P4-6).** `"remote"` (hosted) is the default for a brand new install;
+`"ollama"` (local) remains the default for an install that has already launched before, even if it
+has never opened AI settings — see `MainComponent::resolveDefaultProviderId()` and the migration
+comment in `MainComponent::initialiseCommon()`. The persisted `"aiProvider"` key is only ever
+*written* by `AISettingsTab::updateSettings()`, so its absence alone can't distinguish "brand new
+install" from "existing user who never touched AI settings"; `initialiseCommon()` instead checks
+whether the settings file already existed on disk before this launch. Each provider persists its
+own host under its own key (`"ollamaHost"` / `"remoteHost"`) — sharing one key, the pre-P4-6
+behaviour, meant switching providers in Settings silently pointed the new one at whatever host
+string the previous provider had left behind. An empty/unset `"remoteHost"` falls back to
+`synth::branding::kApiBaseUrl` (`Source/Branding.h`), the production Cloud Run URL — see that
+constant's comment for the P4-7 caveat that the service doesn't accept public traffic yet.
+
+**Privacy disclosure (P4-6 acceptance criterion).** A visible line — not just a tooltip, since the
+acceptance criterion is explicit that this "should not be discoverable only by reading a policy
+page" — appears next to the model picker in `AIChatComponent` whenever the active provider is
+hosted: `"Hosted mode sends your prompt and current patch to Agent Synth's servers."`
+`AIProvider::isHosted()` (default `false`, overridden `true` in `RemoteProvider`) drives this via
+`AIIntegrationService::isCurrentProviderHosted()`; `AIChatComponent::updateHostedModeNotice()` is
+called from `refreshModels()`, the same post-`setProvider()` resync point documented above for
+model discovery, so the notice's visibility never lags a provider switch. `AISettingsTab`'s
+provider combo box also carries the same disclosure as a tooltip, for the toggle itself.
+
+**Model picker in hosted mode.** `RemoteProvider::fetchAvailableModels()` always resolves
+`success=true` with an empty list (the service picks its own model server-side — see that method's
+doc comment). `AIChatComponent::refreshModels()`'s callback treats `success && models.isEmpty()`
+as "nothing to choose from," not a fetch failure: the picker shows a single disabled
+`"Model chosen automatically"` entry rather than the misleading `"Error fetching models"` a plain
+`success` check would have produced for every hosted-mode user.
 
 **Eval harness parity.** `Tools/AIEvalHarness` (see its README) can replay its golden prompt set
 through `RemoteProvider` instead of `OllamaProvider` via `--provider remote`, so a model can be
@@ -694,15 +803,61 @@ empty, field/header omitted) so unit tests never touch the real per-install file
 `AIErrorKind::TrialExhausted` with the server's `message` carried through unchanged (see the
 error-kind table above). That response reaches `AIChatComponent` through the same path every other
 provider error already does — appended to the conversation as an assistant bubble
-(`"Error: " + error.message`) — so no new UI surface is needed. When the caller is not signed in,
-the server's message text specifically invites signing in with Google to continue; the existing
+(`"Error: " + error.message`) — so no new UI surface is needed. This "no new UI surface" reasoning
+is specific to `TrialExhausted`: the caller isn't signed in yet, so "upgrade" isn't the right verb —
+the server's message text specifically invites signing in with Google to continue, and the existing
 `AccountRow` "Sign in" affordance (see "Account Sign-In Surface" above) is already visible
 immediately above the chat whenever an `AccountService` is attached, so the next step (opening
 `SignInDialog`) is always one click away without this feature needing to auto-launch it. A
 service-wide `503 {"error":{"code":"SERVICE_CAPACITY_EXCEEDED","message":"..."}}` is handled the
 same way but mapped to the distinct `AIErrorKind::ServiceCapacityExceeded` — it's a daily cap on
 the service as a whole, unrelated to the caller's own trial/quota, and gets its own message rather
-than being confused with either.
+than being confused with either. `AIErrorKind::Quota` (a signed-in account over its *paid* plan's
+allowance) is the one case that does get a new UI surface — see below.
+
+### Quota UI and the Upgrade Path (P4-4)
+
+Once a caller is signed in, P4-3's monthly request quota (`enforce-quota.ts`, `synth-platform`)
+answers `429 {"error":{"code":"QUOTA_EXCEEDED","message":"..."}}` when it's exhausted, mapped by
+`RemoteProvider` to `AIErrorKind::Quota` with the server's message carried through unchanged (see
+the error-kind table above). Unlike `TrialExhausted`, this *is* the "you're signed in, you're over
+your plan, upgrading raises it" moment, so `AIChatComponent` gives it a distinct treatment instead
+of the flat error bubble every other kind gets:
+
+- The assistant bubble carries the server's message verbatim (no `"Error: "` prefix, same as
+  `TrialExhausted`/`ServiceCapacityExceeded`) plus an **"Upgrade to Pro"** button, opening
+  `synth::branding::kUpgradeUrl` (`Source/Branding.h` — a static Polar checkout link; P4-4 does not
+  create checkout sessions dynamically, per `docs/billing.md`'s "what this deliberately does not
+  do") via the injected `urlOpener` (`AIChatComponent::setUrlOpenerForTesting()` swaps this for a
+  non-browser-launching fake in tests).
+- This button is carried on `MessageData::showUpgradeAction`, which is deliberately **not**
+  reconstructed by the history-replay loop in `AIChatComponent`'s constructor — a `New Chat` or app
+  restart drops it along with the rest of that turn's transient UI state (the same way
+  Cancel-button/spinner state never survives a reload).
+- A `Quota` error also triggers `AccountService::refreshEntitlement()` — a fire-and-forget re-fetch
+  of `GET /v1/entitlement` that updates the account's cached plan/limit/usage without touching
+  sign-in state, so a user who upgrades mid-session and immediately retries sees their new plan
+  reflected (in `PlanBadge`, below) without restarting the app.
+
+**`PlanBadge`** (`Source/UI/PlanBadge.h/.cpp`) is a small usage indicator placed in the same
+bottom-chrome stack as `AccountRow` and the model picker, showing `"Free · 240 / 1000 this month"`
+or `"Pro · 1,203 / 10,000 this month"`. It follows `AccountRow`'s exact zero-height-when-absent
+contract (`setAccountService()`/`refresh()`/`getPreferredHeight()`) — invisible and contributing
+nothing to layout until an `AccountService` is attached *and* has a known entitlement
+(`AccountSnapshot::entitlementKnown`), which `AccountService::completeSignIn()` populates alongside
+`fetchMe()` (same non-fatal contract: an entitlement-fetch failure never blocks sign-in) and
+`refreshEntitlement()` updates on demand. `usage.requests_used` is a P4-4 addition to the
+`GET /v1/entitlement` response (`docs/billing.md`) — `AuthClient::fetchEntitlement()` degrades to
+`requestsUsed = 0` rather than failing the whole parse if an older server doesn't send it.
+
+**Reachable client-side as of P4-6, still blocked at the infra layer.** `RemoteProvider` is no
+longer `hidden` (see "Visible as of P4-6" above) and is the default provider for a fresh install,
+so this feature — the 429→`Quota` mapping, `fetchEntitlement()`, `AccountService`'s entitlement
+fields, `PlanBadge`, and the upgrade bubble — is reachable end to end from the client for the first
+time. It still can't complete against production today: the deployed Cloud Run service has no
+`allUsers` invoker binding, so every request 403s at the IAM layer before the app's own
+`AUTH_REQUIRED` check ever runs — a deliberate P4-7 follow-up, not a defect in this client (see
+`synth::branding::kApiBaseUrl`'s comment in `Source/Branding.h`).
 
 ## 6. Future Considerations
 

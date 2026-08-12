@@ -5,6 +5,7 @@
 #include "AI/AccountService.h"
 #include "AppUndoManager.h"
 #include "AudioEngine.h"
+#include "Branding.h"
 #include "PresetManager.h"
 #include "ShortcutManager.h"
 #include "SnippetManager.h"
@@ -64,6 +65,18 @@ public:
 
     juce::ApplicationCommandManager& getCommandManager() { return commandManager; }
     void updateCommandShortcuts();
+
+    // P4-6: pure decision function for the AI provider id used when no "aiProvider" key is
+    // persisted yet. A brand new install (no pre-existing settings file at all) defaults to
+    // "remote" (hosted); an install that has launched before but never touched AI settings — the
+    // common case, since that key is only ever written by AISettingsTab::updateSettings() —
+    // keeps its working "ollama" default rather than being silently moved to hosted on upgrade.
+    // Extracted as a free function so this decision is unit-testable without touching a real
+    // properties file — see initialiseCommon() for the caller and the existsAsFile() check it's
+    // based on.
+    static juce::String resolveDefaultProviderId(bool hasExistingSettingsFile) {
+        return hasExistingSettingsFile ? juce::String("ollama") : juce::String("remote");
+    }
 
     // Testing Hooks
     bool isAiPanelConfiguredVisible() const { return isAiPanelVisible; }
@@ -204,7 +217,9 @@ private:
     // aiChatComponent (which installs AccountService::onStateChanged/onAccessTokenChanged in
     // setAccountService(), see its header comment) is torn down first, while accountService is
     // still alive to have those callback slots cleared.
-    synth::AccountService accountService;
+    // P4-6: explicit production host — the AccountService(host) default of localhost:8787 is a
+    // dev/test convenience only, and MainComponent is the real composition root.
+    synth::AccountService accountService{synth::branding::kApiBaseUrl};
     synth::AIChatComponent aiChatComponent;
     bool isAiPanelVisible = false;
     bool isLibraryVisible{true};

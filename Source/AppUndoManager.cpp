@@ -22,22 +22,10 @@ public:
             return true;
         }
 
-        if (preRestore)
-            preRestore();
-        synth::AIStateMapper::applyJSONToGraph(afterState, graph, true, true);
-        if (postRestore)
-            postRestore();
-        return true;
+        return restore(afterState);
     }
 
-    bool undo() override {
-        if (preRestore)
-            preRestore();
-        synth::AIStateMapper::applyJSONToGraph(beforeState, graph, true, true);
-        if (postRestore)
-            postRestore();
-        return true;
-    }
+    bool undo() override { return restore(beforeState); }
 
     int getSizeInUnits() override {
         return static_cast<int>(
@@ -45,6 +33,42 @@ public:
     }
 
 private:
+    /**
+     * Restores one snapshot, keeping every node the target state still contains.
+     *
+     * The node-preserving apply is tried first: it reaches the same state by diffing, so modules
+     * that survive the edit keep their processor instance and all its runtime state (sequencer
+     * position, envelope stage, sounding voices) and an undo of a parameter-only change performs
+     * no topology operation at all. It refuses — without touching the graph — any snapshot whose
+     * node identities it cannot establish, and then the original destroy-and-rebuild apply runs,
+     * which is always correct.
+     *
+     * preRestore is what detaches graph-referencing UI before processors are freed, so it fires
+     * lazily: on the fallback (which frees everything) and, on the preserving path, only if a node
+     * is actually being removed. When nothing is freed there is nothing to detach from, and
+     * GraphEditor::updateComponents reconciles the rest — so a parameter-only undo no longer
+     * destroys and re-creates every ModuleComponent either.
+     */
+    bool restore(const juce::var& state) {
+        bool preRestoreFired = false;
+        auto firePreRestore = [this, &preRestoreFired] {
+            if (preRestoreFired)
+                return;
+            preRestoreFired = true;
+            if (preRestore)
+                preRestore();
+        };
+
+        if (!synth::AIStateMapper::applySnapshotPreservingNodes(state, graph, firePreRestore)) {
+            firePreRestore();
+            synth::AIStateMapper::applyJSONToGraph(state, graph, true, true);
+        }
+
+        if (postRestore)
+            postRestore();
+        return true;
+    }
+
     juce::var beforeState;
     juce::var afterState;
     juce::AudioProcessorGraph& graph;

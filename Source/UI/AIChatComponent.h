@@ -3,6 +3,7 @@
 #include "../AI/AIIntegrationService.h"
 #include "../AI/AccountService.h"
 #include "AccountRow.h"
+#include "PlanBadge.h"
 #include "Theme/AppLookAndFeel.h"
 #include "UIAnimation.h"
 #include <atomic>
@@ -72,6 +73,10 @@ public:
 
     // Testing hook: returns the current isWaitingForResponse flag.
     bool isWaiting() const { return isWaitingForResponse; }
+
+    // Testing hook: replaces the real "open in default browser" action a Quota error's Upgrade
+    // button invokes, so tests can assert on the URL without ever launching a real browser.
+    void setUrlOpenerForTesting(std::function<void(const juce::URL&)> opener) { urlOpener = std::move(opener); }
 
 private:
     void timerCallback() override;
@@ -151,6 +156,7 @@ private:
     // setAccountService()'s comment for the single-owner contract those slots are under.
     AccountService* accountServicePtr = nullptr;
     AccountRow accountRow;
+    PlanBadge planBadge;
 
     // Handle for the request currently in flight, so cancelRequest() can tell the provider to
     // actually abandon it. Default (value 0) whenever nothing is outstanding — cleared by the
@@ -165,19 +171,39 @@ private:
     juce::TextButton newChatButton;
     juce::ComboBox modelPicker;
 
+    // P4-6 privacy disclosure: visible only while the active provider is hosted (RemoteProvider).
+    // Zero-height/invisible otherwise, same contract as accountRow/planBadge below it in the
+    // bottom-chrome stack — see updateHostedModeNotice() and resized().
+    juce::Label hostedModeNotice;
+
     // Pulse animation for the "AI is thinking" state indicator.
     // VBlankAnimatorUpdater is attached to this Component.
     juce::VBlankAnimatorUpdater vblankUpdater{this};
     SpinnerDot spinnerDot;
 
+    // Opens a Quota error's "Upgrade to Pro" button target. Real default; overridden in tests via
+    // setUrlOpenerForTesting() so no test ever launches a real browser.
+    std::function<void(const juce::URL&)> urlOpener = [](const juce::URL& u) { u.launchInDefaultBrowser(); };
+
     void updateChatDisplay();
     void scrollToBottom();
+
+    // Syncs hostedModeNotice's visibility to aiService.isCurrentProviderHosted(). Called
+    // synchronously (provider identity is known immediately after setProvider(), no need to wait
+    // for the async model fetch) from refreshModels() — the same post-setProvider() resync point
+    // documented for model discovery (see CLAUDE.md "AI model discovery ordering").
+    void updateHostedModeNotice();
 
     struct MessageData {
         juce::String role;
         juce::String text;
         juce::String jsonPatch;
         bool isExpanded = false;
+        // P4-4: true only for a live Quota-error response — renders an "Upgrade to Pro" button on
+        // the bubble. Deliberately NOT reconstructed by the history-replay loop in the
+        // constructor, so a New Chat or app restart drops it along with the rest of that turn's
+        // transient UI state (mirrors how Cancel-button/spinner state is session-only).
+        bool showUpgradeAction = false;
     };
     std::vector<MessageData> messages;
 
