@@ -184,7 +184,15 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
     // command behind it, or its key fires and nothing happens (MainComponent::keyPressed resolves
     // action -> command -> perform). A new action with no command here would otherwise ship silent.
     ShortcutManager shortcuts;
-    EXPECT_EQ(commands.size(), shortcuts.getActionIds().size());
+    // checkForUpdates (macOS only, AppCommands::checkForUpdates) is deliberately absent from the
+    // shortcut table — Sparkle's own convention is a menu-only "Check for Updates…" item with no
+    // keyboard shortcut, so the "keypress fires and nothing happens" risk this invariant guards
+    // against doesn't apply to it.
+    auto expectedCommandCount = shortcuts.getActionIds().size();
+#if JUCE_MAC
+    expectedCommandCount += 1;
+#endif
+    EXPECT_EQ(commands.size(), expectedCommandCount);
     for (const auto& actionId : shortcuts.getActionIds())
         EXPECT_TRUE(commands.contains(AppCommands::getCommandForAction(actionId)))
             << actionId << " is bindable but has no registered command";

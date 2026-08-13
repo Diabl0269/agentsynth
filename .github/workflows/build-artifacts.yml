@@ -145,13 +145,24 @@ jobs:
 
     # Configure CMake — Ninja on every OS so this matches the PR CI build path
     # (see the "Setup MSVC" note above for why Ninja and not the VS generator).
+    # GRAVISYNTH_BUILD_NUMBER becomes CFBundleVersion, the value Sparkle actually compares to decide
+    # an update is available (see CMakeLists.txt's comment on GRAVISYNTH_BUILD_NUMBER for why this
+    # can't just be the project's marketing VERSION: that's hand-bumped in CMakeLists.txt, while
+    # this workflow's tag-and-release step below bumps semver tags independently). run_number is
+    # known before this step runs and increases every run, so it stays correct regardless of what
+    # tag the release job mints afterwards. SYNTH_SPARKLE_PUBLIC_KEY reads from a repo VARIABLE
+    # (not a secret — SUPublicEDKey is the public half of the key pair) that doesn't exist yet; see
+    # docs/distribution.md. Both are harmless no-ops on Linux/Windows, where SYNTH_SPARKLE_* is
+    # unused.
     - name: Configure CMake
       shell: bash
       run: |
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DGRAVISYNTH_BUILD_NUMBER=${{ github.run_number }} \
+          -DSYNTH_SPARKLE_PUBLIC_KEY="${{ vars.SPARKLE_PUBLIC_KEY }}"
 
     # Build (Ninja is single-config; the build type comes from configure)
     - name: Build
@@ -237,6 +248,8 @@ jobs:
     # (incl. the Windows build) before merging.
     if: always() && !contains(needs.build.result, 'failure') && github.event_name == 'push'
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag_version.outputs.new_tag }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -266,3 +279,51 @@ jobs:
           files: artifacts/*
           draft: false
           prerelease: true
+
+  publish-appcast:
+    name: Publish Sparkle appcast
+    needs: [release]
+    # Skips cleanly (not a failure) until both halves of the EdDSA signing key exist: the public
+    # key as a repo VARIABLE (embedded into the app's Info.plist by the build job above) and the
+    # private key as this job's SPARKLE_PRIVATE_KEY secret. See docs/distribution.md for how to
+    # generate both with Sparkle's own `generate_keys` tool. Until then, "Check for Updates" in the
+    # app itself also stays inert (UpdateManager checks for a non-empty SUPublicEDKey at startup).
+    if: needs.release.result == 'success' && vars.SPARKLE_PUBLIC_KEY != ''
+    runs-on: macos-latest
+    steps:
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: AgentSynth-macOS-arm64
+          path: appcast-work
+
+      # Version pin duplicated from cmake/DependencyVersions.cmake's SYNTH_SPARKLE_URL/
+      # SYNTH_SPARKLE_SHA256 — this job runs standalone (no CMake configure), so it re-fetches the
+      # same release directly rather than parsing the .cmake file. Keep both in sync when bumping.
+      - name: Fetch Sparkle tools
+        run: |
+          curl -sL -o sparkle.tar.xz https://github.com/sparkle-project/Sparkle/releases/download/2.9.5/Sparkle-2.9.5.tar.xz
+          echo "015336b601493e05c237964954bff6191370003d94edefe663724c88840d73cc  sparkle.tar.xz" | shasum -a 256 -c -
+          mkdir sparkle-tools
+          tar -xf sparkle.tar.xz -C sparkle-tools
+
+      # --download-url-prefix points at this same release's GitHub asset URLs, so only this small
+      # appcast.xml file needs hosting on agentsynth.app — the zip itself stays on GitHub Releases.
+      - name: Generate appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          echo "$SPARKLE_PRIVATE_KEY" | ./sparkle-tools/bin/generate_appcast \
+            --ed-key-file - \
+            --download-url-prefix "https://github.com/${{ github.repository }}/releases/download/${{ needs.release.outputs.tag }}/" \
+            -o appcast.xml \
+            appcast-work/
+
+      # Attaches appcast.xml to the release as a downloadable/inspectable asset. This is NOT the
+      # same as deploying it to https://agentsynth.app/updates/appcast.xml (the app's SUFeedURL) —
+      # that publish step still needs to be wired up separately (marketing site / Cloudflare), see
+      # docs/distribution.md's "what's not automated yet".
+      - name: Attach appcast to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload ${{ needs.release.outputs.tag }} appcast.xml --clobber --repo ${{ github.repository }}

@@ -114,6 +114,24 @@ add_executable(Tests
     ../Source/UI/ShortcutsSettingsTab.cpp
 )
 
+# MainComponent.cpp above pulls in synth::update::UpdateManager (Source/Update/UpdateManager.h) on
+# macOS — Tests compiles MainComponent.cpp directly rather than linking the AgentSynth target, so
+# it needs the same Sparkle sources/linking AgentSynth gets in the top-level CMakeLists.txt.
+if(APPLE)
+    target_sources(Tests PRIVATE ../Source/Update/SparkleUpdateManager.mm)
+    set_source_files_properties(../Source/Update/SparkleUpdateManager.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+    target_compile_options(Tests PRIVATE "-F${sparkle_SOURCE_DIR}")
+    target_link_libraries(Tests PRIVATE "-F${sparkle_SOURCE_DIR}" "-framework Sparkle")
+
+    # Tests is a plain executable (not a .app bundle), always run from the build tree, so — unlike
+    # AgentSynth — there's no Contents/Frameworks to embed into; just point rpath straight at
+    # Sparkle.framework's fetched location.
+    set_target_properties(Tests PROPERTIES
+        BUILD_WITH_INSTALL_RPATH TRUE
+        INSTALL_RPATH "${sparkle_SOURCE_DIR}"
+    )
+endif()
+
 target_link_libraries(Tests PRIVATE
     GTest::gtest
     Core
