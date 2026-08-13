@@ -23,3 +23,12 @@ set(SYNTH_JUCE_GIT_TAG "8.0.3"
 
 set(SYNTH_GOOGLETEST_URL "https://github.com/google/googletest/archive/refs/tags/v1.14.0.zip"
     CACHE STRING "googletest archive fetched via FetchContent (test builds only)")
+
+# Sparkle ships as a prebuilt .xcframework, not a CMake project — fetched only on APPLE (see
+# CMakeLists.txt), so this adds ~15 MB to build/_deps on macOS only, well under the budget that
+# made the CMakeLists-wide cache key a problem (see header comment above).
+set(SYNTH_SPARKLE_URL "https://github.com/sparkle-project/Sparkle/releases/download/2.9.5/Sparkle-2.9.5.tar.xz"
+    CACHE STRING "Sparkle (macOS auto-update) binary distribution fetched via FetchContent")
+
+set(SYNTH_SPARKLE_SHA256 "015336b601493e05c237964954bff6191370003d94edefe663724c88840d73cc"
+    CACHE STRING "SHA-256 of SYNTH_SPARKLE_URL — verified against the GitHub release asset at pin time")
