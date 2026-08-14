@@ -47,6 +47,16 @@ Two numbers are baked into every macOS build, and they mean different things:
 - No App Sandbox / XPC services: the app isn't sandboxed today, so the simpler non-sandboxed Sparkle
   integration applies (see Sparkle's [sandboxing docs](https://sparkle-project.org/documentation/sandboxing/)
   if that ever changes).
+- **Plugin targets (VST3/AU) link Sparkle weakly, not the app's hard `-framework`.** `MainComponent`
+  (shared via `AppUI`) owns an `UpdateManager` member unconditionally, so `AgentSynthPlugin_VST3`/`_AU`
+  need the same `.mm` source and framework as the app just to satisfy the linker — but
+  `juce_vst3_helper` dlopens the freshly-linked bundle immediately after linking (to write
+  `moduleinfo.json`), *before* that target's own framework-embed step has run, so a hard dependency
+  makes that load fail outright. `-weak_framework Sparkle` (`LC_LOAD_WEAK_DYLIB`) lets the bundle load
+  regardless of whether Sparkle is present yet. This also matches actual intent: the plugin's
+  Info.plist never gets `SUFeedURL`/`SUPublicEDKey` merged in (only the app's does), so
+  `isAvailable()` is always `false` there — Sparkle is genuinely optional for the plugin, not just
+  incidentally absent at one point in the build.
 
 ## Generating the EdDSA signing key (one-time, you run this — not CI)
 

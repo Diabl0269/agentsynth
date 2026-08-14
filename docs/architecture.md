@@ -6,14 +6,16 @@ Agent Synth is built on a modular graph architecture using JUCE's `AudioProcesso
 
 ## Project Structure
 
-The build produces two CMake targets:
+The build produces four CMake targets:
 
 | Target | Kind | Contents |
 |---|---|---|
 | `Core` | Static library | All audio modules, `AudioEngine`, `PresetManager`, `AppUndoManager`, theme system, `LayoutUtil`. Headless-testable — no audio device or GUI window required. |
-| `AgentSynth` | JUCE GUI app | Links `Core`. Houses all UI components: `GraphEditor`, `ModuleComponent`, `ToolbarComponent`, `StatusBarComponent`, etc. |
+| `AppUI` | Static library | `MainComponent` plus everything under `Source/UI` not already in `Core` (`GraphEditor`, `ModuleComponent`, `AIChatComponent`, `SettingsWindow`, `ModMatrixComponent`, etc.). Links `Core` PUBLIC. Shared by `AgentSynth` and `AgentSynthPlugin` so the app and the plugin build **one** copy of the editor UI from **one** source list — a plugin whose UI drifts from the app's is the exact failure this library exists to prevent. Deliberately not folded into `Core`: `Core` is the headless-testable layer, and the `Tests` target still compiles these sources itself with `JUCE_MODAL_LOOPS_PERMITTED=1`, which `AppUI` is not built with. |
+| `AgentSynth` | JUCE GUI app | Links `AppUI` + `Core`. Adds only `Source/Main.cpp` — the standalone `JUCEApplication` entry point (and the generated `JuceHeader.h`), which has no meaning inside a plugin and so stays out of `AppUI`. |
+| `AgentSynthPlugin` | Audio plugin — VST3 on every platform, + AU on macOS | Links `AppUI` + `Core`. Wraps the same `AudioEngine`/`MainComponent` in a `juce::AudioProcessor` (`Source/Plugin/`). Built when the `ENABLE_PLUGIN` CMake option is on (default `ON`). Standalone format is deliberately excluded from its `FORMATS` list — JUCE would emit a second "Agent Synth.app" that collides with the `AgentSynth` target's own release artifact. See [Plugin Layer](#plugin-layer) below. |
 
-`Assets` is a separate binary-data target that embeds font files and SVG icons; it is linked into `Core` so both the app and test targets resolve `BinaryData` symbols.
+`Assets` is a separate binary-data target that embeds font files and SVG icons; it is linked into `Core` (and therefore `AppUI`, `AgentSynth`, and `AgentSynthPlugin`) so every target resolves `BinaryData` symbols.
 
 ---
 
@@ -30,6 +32,7 @@ Manages audio device I/O (via `juce::AudioIODeviceCallback`), the `juce::AudioPr
 - **Preset load/save** — delegates to `PresetManager`.
 - **Modulation-matrix view** — `getModulationRoutings()` returns a `std::vector<ModulationRouting>` derived on demand from the live graph. Never serialized. `RoutingKind` values: `AttenuverterChain`, `DirectCV`, `PolyBus`. `getActiveModRoutings()` and `getModulationDisplayInfo()` are thin adapters over it.
 - **Voice count / mute API** — `getDisplayVoiceCount()`, `setMasterMute(bool)`, `isMasterMuted()`.
+- **Host modes** — `HostMode::Standalone` (default) vs `HostMode::Hosted` (used by the audio-plugin wrapper). Both funnel through one private `renderNextBlock` so master-mute semantics can't drift between them. See [Plugin Layer](#plugin-layer) below.
 - Requires `#include <bit>` for `std::popcount` (C++20).
 
 ### 2. ModuleBase
@@ -146,6 +149,31 @@ The visual patching interface. Lives in the `AgentSynth` app target.
 - **Delete** — `requestDeleteModule(NodeID)` is the canonical deletion entry point; `ModuleComponent::deleteButton.onClick` delegates here.
 
 See [`docs/layout.md`](layout.md) for the grid model, anti-overlap algorithm, and `autoArrange` constants.
+
+---
+
+## Plugin Layer
+
+`Source/Plugin/` wraps the same `AudioEngine` and `MainComponent` the standalone app runs in a `juce::AudioProcessor` (`AgentSynthAudioProcessor` / `AgentSynthPluginEditor`), producing the VST3/AU targets described in Project Structure above.
+
+### Host modes (`AudioEngine::HostMode`)
+
+- **`Standalone`** — `AudioEngine` owns a `juce::AudioDeviceManager`, opens the default output device and every available MIDI input, and is clocked by its own `audioDeviceIOCallbackWithContext`.
+- **`Hosted`** — the only mode `AgentSynthAudioProcessor` uses. `initialise()` opens **no** audio device and **no** MIDI input — it only builds the initial patch. The host drives the graph instead, through a mirror of the device-callback trio: `prepareForHost(sampleRate, blockSize, numIn, numOut)` (from `prepareToPlay`), `processHostBlock(buffer, midi)` (from `processBlock`), `releaseFromHost()` (from `releaseResources`). Opening a device from inside a plugin would fight the host for the hardware; opening MIDI input directly would double-trigger notes the host already forwards.
+- Both modes funnel through one private `AudioEngine::renderNextBlock`, which calls `mainProcessorGraph.processBlock` and then zero-fills on master-mute — the single choke point that keeps mute semantics from drifting between the two paths.
+
+### Who owns what
+
+- **AudioEngine** — owned by `MainComponent` (`ownedAudioEngine`) on the standalone path; owned by `AgentSynthAudioProcessor` and *injected* into `MainComponent` by reference on the plugin path (`MainComponent(tm, lf, AudioEngine&, ...)`). `MainComponent::initialiseCommon` skips `audioEngine.initialise()`/`shutdown()` whenever it doesn't own the engine, so opening/closing the plugin editor never re-initialises or tears down the running graph — only the processor's constructor/destructor call `initialise()`/`shutdown()`.
+- **ThemeManager + AppLookAndFeel** — owned by `AgentSynthAudioProcessor`, not by the editor. A host may create and destroy `AgentSynthPluginEditor` many times over one plugin instance's life (every time its window is closed and reopened), and the LookAndFeel must outlive every `Component` that references it. `PluginProcessor.h` declares `themeManager`/`lookAndFeel` **before** `engine` specifically so they are destroyed *after* it and after any editor (which the base `AudioProcessor` tears down first) — the same shutdown-order guard `Main.cpp` uses for the standalone `AppApplication`.
+- **LookAndFeel scope** — `AgentSynthPluginEditor` calls `setLookAndFeel(&processor.getLookAndFeel())` on itself and clears it in its destructor. It never calls `Desktop::setDefaultLookAndFeel`, which is process-global inside the host and would re-skin the host's own windows and every sibling plugin.
+- **Settings window** — `MainComponent` passes `showAudioTab = !audioEngine.isHosted()` to `SettingsWindow`, which omits the Audio device tab in the plugin: the host owns the device, so an `AudioDeviceSelectorComponent` there would be inert at best, and dangerous if the user touched it.
+
+### Plugin state format
+
+`AgentSynthAudioProcessor::getStateInformation` / `setStateInformation` serialize a small JSON envelope — `stateVersion`, `patch`, `editorWidth`, `editorHeight`. The `patch` value is exactly `AIStateMapper::graphToJSON`'s output, the same shape a `.json` preset file uses, so plugin session state and preset files stay interchangeable; `setStateInformation` also accepts a bare patch object with no envelope, so a raw preset dropped straight into a host's state slot still loads.
+
+Restore always calls `applyJSONToGraph(..., trusted=false)`: a host session file travels between machines and users, so it goes through the full `validatePatch` boundary (see [`docs/AI_Engine.md`](AI_Engine.md)) and is rejected whole — never partially applied — if it doesn't check out. Around the load, an open editor detaches its module components first (`prepareForGraphReplacement`) and rebuilds them after (`refreshAfterGraphReplacement`) — the same detach-before-clear ordering `GraphEditor::loadPreset` and `MainComponent::aiPatchAboutToApply` use to avoid a `ScopeComponent` timer firing against a freed `VisualBuffer`.
 
 ---
 

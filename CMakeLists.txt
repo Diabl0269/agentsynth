@@ -50,6 +50,10 @@ endif()
 option(ENABLE_COVERAGE "Enable code coverage testing" OFF)
 option(ENABLE_TESTS "Enable building test suite" OFF)
 option(ENABLE_AI_HARNESS "Build the AI patch validity/quality measurement harnesses (needs a live Ollama)" OFF)
+# ON by default: the plugin ships in every release alongside the standalone app, and building it
+# in PR CI is what stops the shared UI/engine code from silently breaking the plugin wrapper.
+# Turn OFF for a faster local iteration loop when you're only working on the standalone app.
+option(ENABLE_PLUGIN "Build the VST3 (+ AU on macOS) audio-plugin targets" ON)
 
 # Product identity — the single place to override branding at configure time
 # (e.g. `cmake -S . -B build -DSYNTH_PRODUCT_NAME=MySynth`). Mirrored in C++ at
@@ -332,12 +336,18 @@ juce_add_binary_data(Assets SOURCES
 target_link_libraries(Core PUBLIC Assets)
 target_compile_definitions(Core PUBLIC HAS_FONT_ASSETS=1)
 
-# Add source files
-target_sources(AgentSynth PRIVATE
-    Source/Main.cpp
+# The full editor UI (MainComponent + everything under Source/UI that isn't already in Core).
+# Split out of the AgentSynth app target so the standalone app AND the audio-plugin wrapper build
+# ONE copy of this code from ONE source list — a plugin whose UI drifts from the app's is the
+# exact failure mode this library exists to prevent.
+# Deliberately NOT folded into Core: Core is the headless-testable layer, and the Tests target
+# still compiles these sources itself with JUCE_MODAL_LOOPS_PERMITTED=1, which this library is
+# not built with.
+# Main.cpp stays out — it is the standalone entry point (JUCEApplication + the generated
+# JuceHeader.h) and has no meaning inside a plugin.
+add_library(AppUI STATIC
     Source/MainComponent.cpp
     Source/MainComponent.h
-    # UI (UI depends on Core, but technically could be in App for now)
     Source/UI/AIChatComponent.cpp
     Source/UI/AccountRow.cpp
     Source/UI/AccountRow.h
@@ -367,6 +377,35 @@ target_sources(AgentSynth PRIVATE
     Source/Update/UpdateManager.h
 )
 
+# PUBLIC so consumers (the app and the plugin) inherit Core's JUCE modules, include dirs,
+# the Assets binary-data lib and HAS_FONT_ASSETS.
+target_link_libraries(AppUI PUBLIC Core)
+
+# The VST3 is a shared object on Linux, and every object linked into a .so must be
+# position-independent. Core/AppUI/Assets are static libraries that were previously only ever
+# linked into an executable, where non-PIC is fine — linking them into the plugin without this
+# fails at link time with "failed to set dynamic section sizes: bad value" from ld. macOS and
+# Windows don't hit it (Mach-O is PIC by default, and PE/DLLs have no equivalent constraint),
+# which is exactly why this only broke the Ubuntu CI job.
+# Set on the targets rather than globally so it travels with the libraries the plugin consumes.
+set_target_properties(Core AppUI Assets PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+if(MSVC)
+    target_compile_options(AppUI PRIVATE /W4)
+else()
+    target_compile_options(AppUI PRIVATE -Wall -Wextra)
+endif()
+
+if(UNIX AND NOT APPLE)
+    target_link_libraries(AppUI PUBLIC ${GTK3_LIBRARIES})
+    target_include_directories(AppUI PUBLIC ${GTK3_INCLUDE_DIRS})
+endif()
+
+# The standalone app is now just its entry point on top of AppUI.
+target_sources(AgentSynth PRIVATE
+    Source/Main.cpp
+)
+
 if(APPLE)
     target_sources(AgentSynth PRIVATE Source/Update/SparkleUpdateManager.mm)
     # ARC explicitly, rather than relying on JUCE's project-wide ObjC++ default (which is
@@ -377,6 +416,7 @@ endif()
 
 # Link against JUCE modules
 target_link_libraries(AgentSynth PRIVATE
+    AppUI # Editor UI, shared with the plugin target
     Core # Link to our core library
     Assets # Embedded font binary data
     juce::juce_core
@@ -435,6 +475,120 @@ if(MSVC)
     target_compile_options(AgentSynth PRIVATE /W4)
 else()
     target_compile_options(AgentSynth PRIVATE -Wall -Wextra)
+endif()
+
+# ----------------------------------------------------------------------------------------------
+# Audio plugin (VST3 everywhere, + AU on macOS)
+#
+# Wraps the SAME AudioEngine and MainComponent the standalone app runs (via the AppUI library
+# above) in a juce::AudioProcessor. The engine is constructed in HostMode::Hosted so it never
+# opens an audio device or MIDI input of its own — the host drives it. See Source/Plugin/ and
+# docs/architecture.md.
+#
+# Standalone is deliberately NOT in FORMATS: JUCE would emit a second "Agent Synth.app" that
+# collides with the AgentSynth app target's own artifact in release packaging, for a build that
+# does strictly less than the real app.
+# ----------------------------------------------------------------------------------------------
+if(ENABLE_PLUGIN)
+    set(SYNTH_PLUGIN_FORMATS VST3)
+    if(APPLE)
+        list(APPEND SYNTH_PLUGIN_FORMATS AU)
+    endif()
+
+    juce_add_plugin(AgentSynthPlugin
+        PRODUCT_NAME "${SYNTH_PRODUCT_NAME}"
+        VERSION "${PROJECT_VERSION}"
+        COMPANY_NAME "${SYNTH_COMPANY_NAME}"
+        # Must differ from the app's bundle ID — macOS refuses to register two bundles that
+        # claim the same CFBundleIdentifier, and a collision silently breaks AU validation.
+        BUNDLE_ID "${SYNTH_BUNDLE_ID}.plugin"
+        # 4-char codes. The manufacturer code MUST contain at least one uppercase character or
+        # Audio Unit registration rejects the component.
+        PLUGIN_MANUFACTURER_CODE Agsy
+        PLUGIN_CODE Agsn
+        FORMATS ${SYNTH_PLUGIN_FORMATS}
+        IS_SYNTH TRUE
+        NEEDS_MIDI_INPUT TRUE
+        NEEDS_MIDI_OUTPUT FALSE
+        IS_MIDI_EFFECT FALSE
+        # The graph editor is keyboard-driven (see docs/shortcuts.md); without this the host
+        # swallows every keystroke before the editor sees it.
+        EDITOR_WANTS_KEYBOARD_FOCUS TRUE
+        # Never install into the user's system plugin folders as a build side effect — CI
+        # packages the artefacts explicitly, and a local build shouldn't mutate ~/Library.
+        COPY_PLUGIN_AFTER_BUILD FALSE
+        VST3_CATEGORIES Instrument Synth
+        AU_MAIN_TYPE kAudioUnitType_MusicDevice
+    )
+
+    target_sources(AgentSynthPlugin PRIVATE
+        Source/Plugin/PluginProcessor.cpp
+        Source/Plugin/PluginProcessor.h
+        Source/Plugin/PluginEditor.cpp
+        Source/Plugin/PluginEditor.h
+    )
+
+    target_link_libraries(AgentSynthPlugin PRIVATE
+        AppUI # Editor UI, shared with the standalone app
+        Core
+        Assets # Embedded font binary data
+        juce::juce_audio_utils
+    )
+
+    target_compile_definitions(AgentSynthPlugin PUBLIC
+        JUCE_WEB_BROWSER=0
+        HAS_FONT_ASSETS=1
+        # JUCE 8 has no VST2 support; be explicit so the VST3 wrapper doesn't try to masquerade
+        # as a VST2 replacement (which would require the long-gone VST2 SDK).
+        JUCE_VST3_CAN_REPLACE_VST2=0
+    )
+
+    if(UNIX AND NOT APPLE)
+        target_link_libraries(AgentSynthPlugin PRIVATE ${GTK3_LIBRARIES})
+        target_include_directories(AgentSynthPlugin PRIVATE ${GTK3_INCLUDE_DIRS})
+    endif()
+
+    if(MSVC)
+        target_compile_options(AgentSynthPlugin PRIVATE /W4)
+    else()
+        target_compile_options(AgentSynthPlugin PRIVATE -Wall -Wextra)
+    endif()
+
+    # MainComponent.cpp (in AppUI, which this plugin links) pulls in synth::update::UpdateManager
+    # on macOS, same as AgentSynth and Tests — see the Sparkle block above and
+    # Tests/CMakeLists.txt's identical comment. Neither AgentSynthPlugin's Info.plist nor AU's gets
+    # SUFeedURL/SUPublicEDKey merged in (only AgentSynth's does, above), so UpdateManager::isAvailable()
+    # reads empty keys and stays inert in the plugin — this wiring exists purely to satisfy the
+    # linker, not to make the plugin self-update.
+    if(APPLE)
+        foreach(plugin_format_target AgentSynthPlugin_VST3 AgentSynthPlugin_AU)
+            target_sources(${plugin_format_target} PRIVATE Source/Update/SparkleUpdateManager.mm)
+            target_compile_options(${plugin_format_target} PRIVATE "-F${sparkle_SOURCE_DIR}")
+            # Weak (not "-framework Sparkle" as AgentSynth/Tests use): juce_vst3_helper dlopens this
+            # bundle at build time, right after linking, to write moduleinfo.json — before this
+            # target's own POST_BUILD embed step below has run — so a hard dependency makes that
+            # load fail outright ("The bundle ... couldn't be loaded"). Weak-linking also matches
+            # actual intent here better than a hard link would: unlike AgentSynth, this plugin never
+            # gets SUFeedURL/SUPublicEDKey in its Info.plist, so Sparkle is always inert for it.
+            target_link_libraries(${plugin_format_target} PRIVATE "-F${sparkle_SOURCE_DIR}" "-weak_framework Sparkle")
+
+            # @loader_path (not @executable_path — the plugin bundle is loaded by the host app, not
+            # run as one) resolves to Contents/MacOS, so ../Frameworks lands on Contents/Frameworks,
+            # matching the embed step below.
+            set_target_properties(${plugin_format_target} PROPERTIES
+                BUILD_WITH_INSTALL_RPATH TRUE
+                INSTALL_RPATH "@loader_path/../Frameworks"
+            )
+
+            add_custom_command(TARGET ${plugin_format_target} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_CONTENT_DIR:${plugin_format_target}>/Frameworks"
+                COMMAND ${CMAKE_COMMAND} -E rm -rf "$<TARGET_BUNDLE_CONTENT_DIR:${plugin_format_target}>/Frameworks/Sparkle.framework"
+                COMMAND ditto "${sparkle_SOURCE_DIR}/Sparkle.framework" "$<TARGET_BUNDLE_CONTENT_DIR:${plugin_format_target}>/Frameworks/Sparkle.framework"
+                COMMENT "Embedding Sparkle.framework into ${plugin_format_target}"
+            )
+        endforeach()
+        set_source_files_properties(Source/Update/SparkleUpdateManager.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+    endif()
 endif()
 
 if(ENABLE_TESTS)

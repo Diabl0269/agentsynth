@@ -32,7 +32,15 @@ class MainComponent
 public:
     // Primary ctor: receives injected ThemeManager and LookAndFeel from Main.cpp.
     // provider is optional (nullptr → reads saved provider pref from appProperties).
+    // Owns its own (standalone) AudioEngine, which it initialises and shuts down.
     MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLookAndFeel& lf,
+                  std::unique_ptr<synth::AIProvider> provider = nullptr);
+
+    // Plugin ctor: the editor's AudioEngine is owned by AgentSynthAudioProcessor and outlives
+    // every editor instance, so it is injected rather than owned here. The engine's lifecycle
+    // (initialise/shutdown) belongs to the processor — this component must not touch it, or
+    // closing the plugin window would tear down the running graph.
+    MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLookAndFeel& lf, AudioEngine& externalEngine,
                   std::unique_ptr<synth::AIProvider> provider = nullptr);
 
     // Delegating ctor for tests and legacy call sites that don't inject theme objects.
@@ -173,7 +181,14 @@ private:
     synth::theme::AppLookAndFeel* lookAndFeel{nullptr};
 
     AppUndoManager undoManager;
-    AudioEngine audioEngine;
+
+    // Owned only on the standalone paths (both ctors that don't take an external engine).
+    // Null when the plugin ctor injected the processor's engine — see the `audioEngine`
+    // reference below, which is the single access point either way. Mirrors the
+    // ownedThemeManager / themeManager split above.
+    std::unique_ptr<AudioEngine> ownedAudioEngine;
+    AudioEngine& audioEngine;
+
     GraphEditor graphEditor;
     ModuleLibraryComponent moduleLibrary;
 

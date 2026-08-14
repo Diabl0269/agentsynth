@@ -13,10 +13,13 @@ class SettingsWindow
     : public juce::Component
     , private juce::ChangeListener {
 public:
+    // showAudioTab=false omits the audio-device selector. Used by the plugin build: the host owns
+    // the audio device, so an AudioDeviceSelectorComponent there would be inert at best and, if the
+    // user touched it, would try to open hardware out from under the host.
     SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::ApplicationProperties& appProperties,
                    synth::AIIntegrationService& aiService, synth::AIChatComponent& aiChatComponent,
-                   ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager,
-                   GraphEditor* graphEditor);
+                   ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager, GraphEditor* graphEditor,
+                   bool showAudioTab = true);
     ~SettingsWindow() override;
 
     void resized() override;

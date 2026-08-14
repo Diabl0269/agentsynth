@@ -342,6 +342,17 @@ cmake --build build
 
 `ENABLE_TESTS` defaults `OFF` — pass `-DENABLE_TESTS=ON` to generate the `Tests` target. `ENABLE_COVERAGE` is a separate opt-in flag used by the Ubuntu CI job and `scripts/coverage.sh`.
 
+### Plugin target (`ENABLE_PLUGIN`)
+
+`ENABLE_PLUGIN` defaults `ON`, so the plain `cmake --build build` above also builds `AgentSynthPlugin` — VST3 on every platform, plus AU on macOS — from the same `AudioEngine`/`MainComponent` code the standalone app uses (see [`docs/architecture.md`](architecture.md#plugin-layer)). Disable it for a faster app-only local loop:
+
+```bash
+cmake -S . -B build -DENABLE_PLUGIN=OFF
+cmake --build build
+```
+
+PR CI (`.github/workflows/ci.yml`) does not override `ENABLE_PLUGIN`, so its default-`ON` build compiles the plugin as part of the normal `cmake --build build` step on all three platforms it runs (Ubuntu, macOS, Windows) — a shared-code change that silently breaks the plugin wrapper fails the same job as the app, with no separate opt-in required.
+
 ## Git Hooks
 
 Install once per clone (hooks are **not** auto-installed):
