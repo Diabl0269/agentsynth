@@ -46,6 +46,18 @@ Headless DSP tests that render audio through individual modules and verify outpu
 | EdgeCaseTests | 21 | Zero-length buffers, extreme parameters, single-sample buffers, rapid parameter changes, large buffers |
 | AudioRenderingTests | 26 | Snapshot-based tests comparing bit-perfect output against reference files; covers full chains (Osc->Filter->VCA), modulation accuracy, and External MIDI input |
 
+### Transport / offline render tests (34 tests)
+
+The timeline's clock and the headless render harness built on it. No audio device, no sleeps, fully deterministic: engines here are always `HostMode::Hosted` (a Standalone engine must never have `initialise()` called on it in a test — that opens real hardware) and the graph is clocked through `prepareForHost()` / `processHostBlock()`, which funnel into the same `renderNextBlock()` the standalone device callback uses.
+
+| Suite | Tests | What it covers |
+|-------|-------|----------------|
+| TransportServiceTest | 21 | `Source/Transport/TransportService.*` in isolation — command FIFO ordering and drop-when-full, play/stop/locate/loop/BPM/time-signature, `BlockTimeInfo` per block, loop wrap (including the exact-boundary and tiny-loop cases), beats-are-canonical behaviour across BPM and sample-rate changes, `getPositionSnapshot()` / `juce::AudioPlayHead` reads staying consistent, including under concurrent readers |
+| AudioEngineTransportTest | 6 | `Tests/AudioEngineTransportTests.cpp` — the transport's wiring inside `AudioEngine`: exactly one `tick()` per rendered block in both host modes, a stopped transport freezing the position, `prepareForHost` handing the host sample rate to the transport, the playhead installed once on the graph and re-applied by JUCE to every node (including nodes re-created by an undo restore), a node reading block-start position through `getPlayHead()`, latency reported not compensated |
+| OfflineTransportDriverTest | 7 | `Tests/OfflineTransportDriverTests.cpp` — `synth::OfflineTransportDriver`: `renderBlocks(n)` returns exactly n×blockSize samples and advances the transport by one block per block; `renderToBeat` renders whole blocks until `endPpq` reaches the target (from beat 0 that is exactly `ceil(sampleFromBeat(beat) / blockSize) × blockSize` samples, overshooting by < 1 block) and returns an empty buffer without spinning when the transport is stopped or the target is behind the playhead; the per-block callback sees consecutive `BlockTimeInfo` (block start samples 0, 512, 1024 …); rendered audio is finite and in range; a free-running oscillator patched to Audio Output is audible **whether or not the transport is playing** — the transport is a conductor, not the engine |
+
+**Writing an engine-level timeline test:** use `synth::OfflineTransportDriver` rather than hand-rolling a `processHostBlock` loop. Construct the engine `Hosted`, `initialise()` it, wire whatever the patch needs (before the driver is constructed — its constructor calls `prepareForHost`, which prepares the nodes), then `renderBlocks` / `renderToBeat` and assert on the returned buffer or on the `BlockTimeInfo` stream the block callback hands you. At 48000 Hz / 120 BPM one beat is exactly 24000 samples, which keeps the expected sample counts integers. The default patch may legitimately be silent with no MIDI input, so a non-silence assertion needs a source that runs without MIDI (an `OscillatorModule` is a drone in mono mode) patched to the graph's Audio Output node.
+
 ### Integration Tests (~38 tests)
 
 Test module interactions within the audio graph and cross-system integrations.
