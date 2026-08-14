@@ -25,7 +25,7 @@ AudioEngine::~AudioEngine() { shutdown(); }
 void AudioEngine::initialise() {
     // Hosted mode: the plugin wrapper owns the audio clock and forwards the host's MIDI, so we
     // skip device/MIDI acquisition entirely and only build the initial patch. prepareForHost()
-    // supplies the sample rate later, since there is no device to ask.
+    // supplies the real sample rate/channel count later, since there is no device to ask.
     if (!isHosted()) {
         deviceManager.initialiseWithDefaultDevices(0, 2);
         deviceManager.addAudioCallback(this);
@@ -41,6 +41,16 @@ void AudioEngine::initialise() {
                 midiInputs.push_back(std::move(input));
             }
         }
+    } else {
+        // A default-constructed AudioProcessorGraph reports 0 output channels until something
+        // sets its channel layout. The graph's "Audio Output" IO node snapshots that count once,
+        // the moment it's added below (AudioGraphIOProcessor::setParentGraph) — so any patch
+        // connection into it made before the host's first prepareToPlay() would otherwise be
+        // rejected as out-of-range and silently dropped. Standalone gets this for free from
+        // audioDeviceAboutToStart(), which always runs before the patch is built; mirror it here
+        // with the same placeholder (0 in / 2 out) the plugin's BusesProperties declares.
+        // prepareForHost() reconciles this with the host's real layout before playback starts.
+        mainProcessorGraph.setPlayConfigDetails(0, 2, 44100.0, 512);
     }
 
     if (!synth::PresetManager::loadDefaultPreset(mainProcessorGraph)) {

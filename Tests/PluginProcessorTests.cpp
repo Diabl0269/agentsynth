@@ -12,8 +12,8 @@
 #include "../Source/AI/AIStateMapper.h"
 #include "../Source/AudioEngine.h"
 #include "../Source/MainComponent.h"
-#include "../Source/Modules/ModuleBase.h"
 #include "../Source/Modules/LFOModule.h"
+#include "../Source/Modules/ModuleBase.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Plugin/PluginEditor.h"
 #include "../Source/Plugin/PluginProcessor.h"
@@ -99,6 +99,35 @@ TEST(AudioEngineHostedModeTest, InitialiseOpensNoDeviceButBuildsNonEmptyGraph) {
     // The single most important guarantee: a plugin that grabs the audio hardware fights its host.
     EXPECT_EQ(engine.getDeviceManager().getCurrentAudioDevice(), nullptr);
     EXPECT_GT(engine.getGraph().getNumNodes(), 0);
+
+    engine.shutdown();
+}
+
+TEST(AudioEngineHostedModeTest, DefaultPatchWiresIntoAudioOutputBeforeHostPreparesToPlay) {
+    // Regression: a default-constructed AudioProcessorGraph reports 0 output channels until
+    // something sets its channel layout, and the graph's "Audio Output" IO node snapshots that
+    // count once, the moment it's added. In hosted mode the real channel count wasn't known until
+    // prepareForHost() (called from the host's first prepareToPlay()), which runs strictly after
+    // initialise() builds the default patch — so every connection into Audio Output (the shipped
+    // Default preset's Reverb -> Output wires included) was silently rejected as out-of-range.
+    // Deliberately do NOT call prepareForHost() here: the bug only reproduces before it runs.
+    AudioEngine engine(AudioEngine::HostMode::Hosted);
+    engine.initialise();
+
+    juce::AudioProcessorGraph::Node* outputNode = nullptr;
+    for (auto* node : engine.getGraph().getNodes())
+        if (node->getProcessor()->getName() == "Audio Output")
+            outputNode = node;
+    ASSERT_NE(outputNode, nullptr) << "default patch must contain an Audio Output node";
+
+    int connectionsIntoOutput = 0;
+    for (const auto& connection : engine.getGraph().getConnections())
+        if (connection.destination.nodeID == outputNode->nodeID)
+            ++connectionsIntoOutput;
+
+    EXPECT_GE(connectionsIntoOutput, 2)
+        << "default patch's audio chain must reach both output channels on load, before the host "
+           "ever calls prepareToPlay()";
 
     engine.shutdown();
 }
