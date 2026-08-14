@@ -124,11 +124,18 @@ void AgentSynthAudioProcessor::setStateInformation(const void* data, int sizeInB
     if (editor != nullptr)
         editor->prepareForGraphReplacement();
 
-    // trusted=false on purpose. Host session files travel between machines and users — they are
-    // not the same trust class as a preset the user just picked out of their own filesystem — so
-    // this goes through the full validatePatch() boundary and is rejected outright, never
-    // partially applied, if it doesn't check out. See docs/AI_Engine.md.
-    AIStateMapper::applyJSONToGraph(patch, engine.getGraph(), /*clearExisting=*/true, /*trusted=*/false);
+    // Validate untrusted, then apply trusted — the SnippetManager::insertSnippet pairing from
+    // docs/layout.md §12.5. Host session files travel between machines and users, so they must
+    // pass the full validatePatch() boundary and be rejected whole if tampered with. But the
+    // values themselves are our own graphToJSON output: applying them untrusted would run the
+    // [0,1] rescale heuristic meant for sloppy model output and silently corrupt exact values
+    // (a 0.5 Hz LFO rate on a 0.01–20 Hz range reloads as ~10 Hz). Trusted apply preserves them.
+    if (!AIStateMapper::validatePatch(patch, engine.getGraph(), /*clearExisting=*/true, /*trusted=*/false).ok) {
+        if (editor != nullptr)
+            editor->refreshAfterGraphReplacement();
+        return;
+    }
+    AIStateMapper::applyJSONToGraph(patch, engine.getGraph(), /*clearExisting=*/true, /*trusted=*/true);
 
     // Reconcile the view against whatever the graph now holds — including after a rejected
     // patch, where the graph is left untouched and the editor must rebuild what it just detached.

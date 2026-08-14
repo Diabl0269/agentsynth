@@ -13,6 +13,7 @@
 #include "../Source/AudioEngine.h"
 #include "../Source/MainComponent.h"
 #include "../Source/Modules/ModuleBase.h"
+#include "../Source/Modules/LFOModule.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Plugin/PluginEditor.h"
 #include "../Source/Plugin/PluginProcessor.h"
@@ -260,6 +261,35 @@ TEST(AgentSynthAudioProcessorStateTest, GraphSurvivesStateRoundTripAcrossInstanc
 
     EXPECT_EQ(graph2.getNumNodes(), nodeCount1);
     EXPECT_EQ(collectNodeTypeKeys(graph2), collectNodeTypeKeys(graph1));
+}
+
+TEST(AgentSynthAudioProcessorStateTest, ParameterValuesSurviveStateRoundTripExactly) {
+    // Regression: session state used to be APPLIED untrusted, so the untrusted path's [0,1]
+    // rescale heuristic (meant for sloppy model output) corrupted exact app-authored values —
+    // an LFO rate of 0.5 Hz on the 0.01–20 Hz range reloaded as ~10 Hz. setStateInformation now
+    // validates untrusted, then applies trusted (the docs/layout.md §12.5 pairing), so values
+    // inside [0,1] on wider ranges must survive bit-for-bit.
+    synth::AgentSynthAudioProcessor first;
+    auto& graph1 = first.getAudioEngine().getGraph();
+    auto lfoNode = graph1.addNode(std::make_unique<LFOModule>());
+    auto* rate1 = findParameterByID(lfoNode->getProcessor(), "rateHz");
+    ASSERT_NE(rate1, nullptr);
+    rate1->setValueNotifyingHost(rate1->convertTo0to1(0.5f)); // 0.5 Hz — the corruption case
+
+    juce::MemoryBlock state;
+    first.getStateInformation(state);
+    ASSERT_GT(state.getSize(), 0u);
+
+    synth::AgentSynthAudioProcessor second;
+    second.setStateInformation(state.getData(), (int)state.getSize());
+
+    juce::RangedAudioParameter* rate2 = nullptr;
+    for (auto* node : second.getAudioEngine().getGraph().getNodes())
+        if (dynamic_cast<LFOModule*>(node->getProcessor()) != nullptr)
+            rate2 = findParameterByID(node->getProcessor(), "rateHz");
+    ASSERT_NE(rate2, nullptr) << "LFO node lost in state round-trip";
+    EXPECT_NEAR(0.5f, rate2->convertFrom0to1(rate2->getValue()), 1e-3f)
+        << "untrusted rescale heuristic corrupted an exact session value";
 }
 
 TEST(AgentSynthAudioProcessorStateTest, EditorSizeSurvivesStateRoundTrip) {
