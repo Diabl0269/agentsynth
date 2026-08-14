@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Modules/ModuleBase.h"
+#include "Transport/TransportService.h"
 #include <atomic>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_devices/juce_audio_devices.h>
@@ -60,6 +61,17 @@ public:
 
     juce::AudioProcessorGraph& getGraph() { return mainProcessorGraph; }
     juce::AudioDeviceManager& getDeviceManager() { return deviceManager; }
+
+    // The one clock. Installed as the graph's AudioPlayHead in the constructor and ticked once per
+    // callback in renderNextBlock; message-thread callers use play()/stop()/locateBeat()/... and
+    // any thread may read getPositionSnapshot().
+    synth::TransportService& getTransport() noexcept { return transport; }
+    const synth::TransportService& getTransport() const noexcept { return transport; }
+
+    // Total latency the graph reports for itself, in samples. This is report-only latency
+    // aggregation: juce::AudioProcessorGraph already compensates parallel paths internally, so we
+    // only surface the total (for the UI / host to display or pass on) — we do NOT compensate.
+    int getGraphLatencySamples() const noexcept { return mainProcessorGraph.getLatencySamples(); }
 
     struct ModRoutingInfo {
         juce::AudioProcessorGraph::NodeID attenuverterNodeID;
@@ -121,6 +133,9 @@ private:
     const HostMode hostMode_;
 
     juce::AudioDeviceManager deviceManager;
+    // Declared before the graph on purpose: the graph holds a raw AudioPlayHead pointer to the
+    // transport, and members are destroyed in reverse declaration order, so the graph goes first.
+    synth::TransportService transport;
     juce::AudioProcessorGraph mainProcessorGraph;
     juce::AudioProcessorPlayer processorPlayer;
 

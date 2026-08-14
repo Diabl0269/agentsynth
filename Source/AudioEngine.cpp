@@ -18,7 +18,14 @@
 #include <set>
 
 AudioEngine::AudioEngine(HostMode mode)
-    : hostMode_(mode) {}
+    : hostMode_(mode) {
+    // Install the transport as the graph's playhead exactly once, here. JUCE's
+    // AudioProcessorGraph re-applies graph.getPlayHead() to every node processor on every render
+    // pass, so every module — including nodes re-created later by a preset load or an undo restore
+    // — sees it through the standard getPlayHead() API. No per-node injection, and nothing to
+    // re-wire when the graph's node set changes.
+    mainProcessorGraph.setPlayHead(&transport);
+}
 
 AudioEngine::~AudioEngine() { shutdown(); }
 
@@ -552,6 +559,11 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
 }
 
 void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
+    // The one clock site: both the standalone device callback and the hosted processBlock funnel
+    // through here, so the transport advances exactly once per block in either mode. Must run
+    // before the graph so every node renders against this block's position.
+    transport.tick(buffer.getNumSamples());
+
     mainProcessorGraph.processBlock(buffer, midiMessages);
 
     // Zero-fill AFTER processBlock so sequencers / LFOs / envelopes keep advancing.
@@ -564,6 +576,9 @@ void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device) {
         mainProcessorGraph.setPlayConfigDetails(device->getActiveInputChannels().countNumberOfSetBits(),
                                                 device->getActiveOutputChannels().countNumberOfSetBits(),
                                                 device->getCurrentSampleRate(), device->getCurrentBufferSizeSamples());
+        // Before the graph: nodes read the playhead from their first prepared block onwards, so the
+        // transport must already be on the device's sample rate when they do.
+        transport.prepare(device->getCurrentSampleRate(), device->getCurrentBufferSizeSamples());
         mainProcessorGraph.prepareToPlay(device->getCurrentSampleRate(), device->getCurrentBufferSizeSamples());
     }
 }
@@ -576,6 +591,9 @@ void AudioEngine::prepareForHost(double sampleRate, int blockSize, int numInputC
     // timestamps land in the wrong block.
     midiMessageCollector.reset(sampleRate);
     mainProcessorGraph.setPlayConfigDetails(numInputChannels, numOutputChannels, sampleRate, blockSize);
+    // Before the graph, for the same reason as audioDeviceAboutToStart: the musical position is
+    // preserved across the rate change, the sample position is re-derived.
+    transport.prepare(sampleRate, blockSize);
     mainProcessorGraph.prepareToPlay(sampleRate, blockSize);
 }
 

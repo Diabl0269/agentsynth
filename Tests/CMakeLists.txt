@@ -102,6 +102,7 @@ add_executable(Tests
     PanelAnimationAndLoadingTests.cpp
     MinimapComponentTests.cpp
     PluginProcessorTests.cpp
+    AudioEngineTransportTests.cpp
     PatchDocumentTests.cpp
     ../Source/MainComponent.cpp
     ../Source/Plugin/PluginProcessor.cpp
