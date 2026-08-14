@@ -549,7 +549,8 @@ void ModuleComponent::createControls() {
 
     // Auto-resize
     if (getType(module) == ModuleType::Sequencer || getType(module) == ModuleType::PolySequencer) {
-        setSize(synth::LayoutUtil::kDoubleWidth, 380); // 8 cols * 60 + margins, 3 rows
+        // 8 cols * 60 + margins, 3 rows, +26 for the TL1-8 Sync to Transport toggle row.
+        setSize(synth::LayoutUtil::kDoubleWidth, 406);
         return;
     }
 
@@ -1330,7 +1331,8 @@ void ModuleComponent::updateLayout() {
     }
 
     if (getType(module) == ModuleType::Sequencer || getType(module) == ModuleType::PolySequencer) {
-        setSize(synth::LayoutUtil::kDoubleWidth, 380);
+        // +26 for the TL1-8 Sync to Transport toggle row — see the ADSR comment above for the pattern.
+        setSize(synth::LayoutUtil::kDoubleWidth, 406);
         return;
     }
 
@@ -1999,6 +2001,12 @@ void ModuleComponent::resized() {
             layoutSequencerStepColumn(step, colX, startY);
         }
 
+        // Sync to Transport toggle (TL1-8): a 26px row appended below the step grid.
+        for (auto* toggle : toggles) {
+            if (toggle->getComponentID().equalsIgnoreCase("Sync to Transport"))
+                toggle->setBounds(startX, 380, 200, 24);
+        }
+
         return;
     }
 
@@ -2032,6 +2040,12 @@ void ModuleComponent::resized() {
         for (int step = 1; step <= 8; ++step) {
             int colX = startX + (step - 1) * stepWidth;
             layoutSequencerStepColumn(step, colX, startY);
+        }
+
+        // Sync to Transport toggle (TL1-8): a 26px row appended below the step grid.
+        for (auto* toggle : toggles) {
+            if (toggle->getComponentID().equalsIgnoreCase("Sync to Transport"))
+                toggle->setBounds(startX, 380, 200, 24);
         }
 
         return;

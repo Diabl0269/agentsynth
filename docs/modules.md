@@ -308,6 +308,7 @@ Hand-played MIDI rarely repeats a pitch inside an envelope's attack; **machine-g
     - `Gate 1–8` (0.1–1.0, default 0.5) — gate length as fraction of one beat.
     - `F.Env 1–8` (0.0–1.0, default 0.5) — per-step filter envelope amount, sent as MIDI CC 74.
 - **Timing**: One step per beat at the configured BPM. `currentActiveStep` (`std::atomic<int>`) is written each block for UI step-highlight.
+- **Sync to Transport** (`syncToTransport`, bool, default **off**, TL1-8): opt-in. Off (default): behaves exactly as above — `BPM` stays authoritative and every existing preset produces a byte-identical event schedule (`AIStateMapperTest.ParamIdsGolden` and `SequencerModuleTest.LegacyScheduleIsByteIdenticalWithSyncOff` pin this). On: the module locks to the graph transport instead — tempo comes from the transport (`BPM` is ignored), the step index is a pure function of the beat (beat *B* plays step `B % 8`), note-on/off land at sample-accurate crossing offsets within the block (not the legacy 0/1-sample hack), a loop wrap fires the wrapped range's beats (e.g. the loop-start step) at `loopWrapSample + <offset>` with no double-fire or skipped beat, and a stopped transport emits one note-off for any held note and goes silent without advancing. `Run` still gates everything in both modes. The transport is read via `dynamic_cast<synth::TransportService*>(getPlayHead())`; only this app's own `AudioEngine` installs a `TransportService` as the playhead, so a foreign host (or a null playhead) falls back to the legacy free-running clock for that block instead of going silent.
 - **Width**: DOUBLE (560 px). See [docs/layout.md](layout.md).
 
 ## Poly Sequencer Module
@@ -320,6 +321,7 @@ Hand-played MIDI rarely repeats a pitch inside an envelope's attack; **machine-g
     - `Step 1–8 Chord` (choice) — chord voicing: Unison, Major (0/4/7), Minor (0/3/7), Maj7 (0/4/7/11), Min7 (0/3/7/10), 5ths (0/7), Octs (0/12), Random (±12 semitones).
     - `Gate 1–8` (0.1–1.0, default 0.5) — gate length as fraction of one beat.
 - **Timing**: One step per beat. `currentActiveStep` (`std::atomic<int>`) written each block for UI step-highlight.
+- **Sync to Transport** (`syncToTransport`, bool, default **off**, TL1-8): same contract as the Sequencer module above — off keeps `BPM` authoritative with a byte-identical legacy schedule; on locks the whole chord (fire and kill together) to the transport's BPM and beat-locked step index (`B % 8`), with sample-accurate crossing offsets, correct loop-wrap behaviour, and one note-off per held chord note on stop. Same `TransportService` downcast caveat: a foreign host's playhead falls back to the legacy clock for that block.
 - **Width**: DOUBLE (560 px). See [docs/layout.md](layout.md).
 
 ## Sample & Hold Module

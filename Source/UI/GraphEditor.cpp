@@ -55,9 +55,11 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "ADSR" || typeName == "Amp Env" || typeName == "Filter Env")
         return {280, 220}; // sliders + the Poly toggle row — see the ADSR branch of updateLayout
     if (typeName.containsIgnoreCase("Sequencer") && !typeName.containsIgnoreCase("Poly"))
-        return {synth::LayoutUtil::kDoubleWidth, 380};
+        // +26 (one toggle row) for the TL1-8 Sync to Transport switch, appended below the step grid.
+        return {synth::LayoutUtil::kDoubleWidth, 406};
     if (typeName.containsIgnoreCase("Poly") && typeName.containsIgnoreCase("Sequencer"))
-        return {synth::LayoutUtil::kDoubleWidth, 380};
+        // +26 (one toggle row) for the TL1-8 Sync to Transport switch, appended below the step grid.
+        return {synth::LayoutUtil::kDoubleWidth, 406};
     if (typeName.containsIgnoreCase("MidiKeyboard") || typeName.containsIgnoreCase("Midi Keyboard") ||
         typeName.containsIgnoreCase("MIDI Keyboard"))
         return {synth::LayoutUtil::kDoubleWidth, 150};

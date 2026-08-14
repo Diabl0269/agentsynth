@@ -49,7 +49,8 @@ juce::String PresetManager::getPresetJSON(int index) {
     //  E2EWorkflowTest.AllPresetsLoadWithoutOverlapAsAuthored, which measures the real components.)
     //   Amp Env / Filter Env / ADSR: 280 x 180
     //   Attenuverter:  40 x 40   (not a ModuleComponent; excluded from overlap check)
-    //   Sequencer:   560 x 380   ← DOUBLE-wide (kDoubleWidth = 2 × kSingleWidth = 560)
+    //   Sequencer:   560 x 406   ← DOUBLE-wide (kDoubleWidth = 2 × kSingleWidth = 560); +26 for the
+    //                              TL1-8 Sync to Transport toggle row (was 380)
     //   MIDI Keyboard: 560 x 150 ← DOUBLE-wide
     //   Poly MIDI:   280 x 171   ← +48 (one combo row) from the issue #198 Voice Steal selector
     //   Distortion:  280 x 355
@@ -79,9 +80,10 @@ juce::String PresetManager::getPresetJSON(int index) {
     // Row y-positions:
     //   Signal row:      y = 10   — Osc bottom = 540, Filter bottom = 580
     //   Sequencer row:   y = 560  — top of Seq; gap from Osc bottom (540+12/2=546) → 560-6=554 > 546 ✓
-    //                              Seq bottom = 940
+    //                              Seq bottom = 966 (TL1-8: was 940 before the Sync to Transport row)
     //   Modulator row:   y = 600  — gap from Filter bottom (580+6=586) → 600-6=594 > 586 ✓
-    //   Keyboard row:    y = 960  — gap from Seq bottom (940+6=946) → 960-6=954 > 946 ✓
+    //   Keyboard row:    y = 990  — gap from Seq bottom (966+6=972) → 990-6=984 > 972 ✓ (TL1-8: rebaked
+    //                              from 960 to clear the taller Sequencer card)
     //
     // FX chain stacking (col 4, x = 1250), starting y = 10:
     //   Distortion (h=350): y=10, bottom=360; Delay (h=220): y=380, bottom=600;
@@ -106,7 +108,7 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"id": 12, "type": "Reverb", "position": {"x": 1250, "y": 696}, "params": {"roomSize": 0.5, "damping": 0.5, "wet": 0.33, "dry": 0.4, "width": 1.0}},
     {"id": 13, "type": "Attenuverter", "position": {"x": 950, "y": 340}, "params": {"amount": 1.0}},
     {"id": 14, "type": "Attenuverter", "position": {"x": 650, "y": 340}, "params": {"amount": 1.0}},
-    {"id": 15, "type": "MIDI Keyboard", "position": {"x": 10, "y": 960}}
+    {"id": 15, "type": "MIDI Keyboard", "position": {"x": 10, "y": 990}}
   ],
   "connections": [
     {"src": 8, "srcPort": -1, "dst": 3, "dstPort": -1},
@@ -144,7 +146,7 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"id": 5, "type": "VCA", "position": {"x": 950, "y": 10}, "params": {"gain": 0.8}},
     {"id": 6, "type": "Amp Env", "position": {"x": 584, "y": 600}, "params": {"attack": 0.01, "decay": 0.2, "sustain": 0.7, "release": 0.3}},
     {"id": 7, "type": "Filter Env", "position": {"x": 880, "y": 600}, "params": {"attack": 0.01, "decay": 0.3, "sustain": 0.3, "release": 0.2}},
-    {"id": 8, "type": "MIDI Keyboard", "position": {"x": 10, "y": 960}},
+    {"id": 8, "type": "MIDI Keyboard", "position": {"x": 10, "y": 990}},
     {"id": 9, "type": "Attenuverter", "position": {"x": 950, "y": 340}, "params": {"amount": 1.0}},
     {"id": 10, "type": "Attenuverter", "position": {"x": 650, "y": 340}, "params": {"amount": 0.7}},
     {"id": 11, "type": "Sequencer", "position": {"x": 10, "y": 560}, "params": {"run": false}}
@@ -178,7 +180,7 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"id": 6, "type": "ADSR", "position": {"x": 650, "y": 600}, "params": {"attack": 1.5, "decay": 1.0, "sustain": 0.8, "release": 2.0}},
     {"id": 7, "type": "Delay", "position": {"x": 1250, "y": 10}, "params": {"time": 0.5, "feedback": 0.6, "mix": 0.4}},
     {"id": 8, "type": "Reverb", "position": {"x": 1250, "y": 340}, "params": {"roomSize": 0.9, "damping": 0.3, "wet": 0.5}},
-    {"id": 9, "type": "MIDI Keyboard", "position": {"x": 10, "y": 960}},
+    {"id": 9, "type": "MIDI Keyboard", "position": {"x": 10, "y": 990}},
     {"id": 10, "type": "Attenuverter", "position": {"x": 950, "y": 340}, "params": {"amount": 1.0}},
     {"id": 11, "type": "Sequencer", "position": {"x": 10, "y": 560}, "params": {"run": false}}
   ],
@@ -210,7 +212,7 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"id": 5, "type": "VCA", "position": {"x": 950, "y": 10}, "params": {"gain": 0.9}},
     {"id": 6, "type": "LFO", "position": {"x": 950, "y": 600}, "params": {"rateHz": 1.5, "shape": "Triangle", "level": 1.0, "bipolar": true}},
     {"id": 7, "type": "ADSR", "position": {"x": 650, "y": 600}, "params": {"attack": 0.01, "decay": 0.3, "sustain": 0.8, "release": 0.3}},
-    {"id": 8, "type": "MIDI Keyboard", "position": {"x": 10, "y": 960}},
+    {"id": 8, "type": "MIDI Keyboard", "position": {"x": 10, "y": 990}},
     {"id": 9, "type": "Attenuverter", "position": {"x": 650, "y": 340}, "params": {"amount": 0.4}},
     {"id": 10, "type": "Attenuverter", "position": {"x": 950, "y": 340}, "params": {"amount": 1.0}},
     {"id": 11, "type": "Sequencer", "position": {"x": 10, "y": 560}, "params": {"run": false}}
@@ -242,7 +244,7 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"id": 6, "type": "VCA", "position": {"x": 950, "y": 10}, "params": {"gain": 0.8}},
     {"id": 7, "type": "ADSR", "position": {"x": 650, "y": 600}, "params": {"attack": 0.01, "decay": 0.15, "sustain": 0.0, "release": 0.05}},
     {"id": 8, "type": "Attenuverter", "position": {"x": 950, "y": 340}, "params": {"amount": 1.0}},
-    {"id": 9, "type": "MIDI Keyboard", "position": {"x": 10, "y": 960}}
+    {"id": 9, "type": "MIDI Keyboard", "position": {"x": 10, "y": 990}}
   ],
   "connections": [
     {"src": 3, "srcPort": -1, "dst": 4, "dstPort": -1},
@@ -266,7 +268,7 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"id": 3, "type": "Oscillator", "position": {"x": 350, "y": 10}, "params": {"waveform": "Triangle", "octave": 0}},
     {"id": 4, "type": "Filter", "position": {"x": 650, "y": 10}, "params": {"cutoff": 2000.0, "resonance": 0.1}},
     {"id": 5, "type": "VCA", "position": {"x": 950, "y": 10}, "params": {"gain": 0.8}},
-    {"id": 6, "type": "MIDI Keyboard", "position": {"x": 10, "y": 960}},
+    {"id": 6, "type": "MIDI Keyboard", "position": {"x": 10, "y": 990}},
     {"id": 7, "type": "Sequencer", "position": {"x": 10, "y": 560}, "params": {"run": false}},
     {"id": 8, "type": "Amp Env", "position": {"x": 584, "y": 600}, "params": {"attack": 0.01, "decay": 0.4, "sustain": 0.4, "release": 0.5}},
     {"id": 9, "type": "Filter Env", "position": {"x": 880, "y": 600}, "params": {"attack": 0.01, "decay": 0.2, "sustain": 0.1, "release": 0.3}},
