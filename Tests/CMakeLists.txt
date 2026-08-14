@@ -32,6 +32,7 @@ add_executable(Tests
     LFOModuleTests.cpp
     SampleHoldModuleTests.cpp
     SequencerModuleTests.cpp
+    TransportServiceTests.cpp
     AIStateMapperTests.cpp
     AIPatchValidationTests.cpp
     AIPatchRetryTests.cpp

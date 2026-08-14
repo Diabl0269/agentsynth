@@ -107,6 +107,11 @@ add_library(Core STATIC
     Source/SnippetManager.h
     Source/SettingsMigration.cpp
     Source/SettingsMigration.h
+    # Transport
+    Source/Transport/BlockTimeInfo.h
+    Source/Transport/TempoMap.h
+    Source/Transport/TransportService.cpp
+    Source/Transport/TransportService.h
     # Modules
     Source/Modules/ModuleBase.h
     Source/Modules/OscillatorModule.h

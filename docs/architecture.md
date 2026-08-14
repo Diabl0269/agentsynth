@@ -35,7 +35,19 @@ Manages audio device I/O (via `juce::AudioIODeviceCallback`), the `juce::AudioPr
 - **Host modes** — `HostMode::Standalone` (default) vs `HostMode::Hosted` (used by the audio-plugin wrapper). Both funnel through one private `renderNextBlock` so master-mute semantics can't drift between them. See [Plugin Layer](#plugin-layer) below.
 - Requires `#include <bit>` for `std::popcount` (C++20).
 
-### 2. ModuleBase
+### 2. TransportService (the one clock)
+
+`Source/Transport/TransportService.h/.cpp`, `Source/Transport/TempoMap.h`, `Source/Transport/BlockTimeInfo.h`
+
+The timeline's transport spine (TL1): play state, sample position, BPM, time signature, and loop bounds (in beats), headless-testable with no device dependency.
+
+- **Beats are canonical.** All musical-time conversion goes through the two-method `TempoMap` seam (`beatFromSample`/`sampleFromBeat`), implemented by `ConstantTempoMap` for v1. A BPM change preserves the beat position and re-derives the sample position; so does a sample-rate change (`prepare`).
+- **Command FIFO, never a lock.** The message thread posts POD commands (`play`/`stop`/`locateBeat`/`setLoop`/`setBpm`/`setTimeSignature`) through a lock-free SPSC `juce::AbstractFifo`, drained in posting order at the top of `tick()`. Posts are non-blocking and return `false` when the FIFO is full (dropped, caller may re-post). Commands take effect at sample 0 of the next block.
+- **`tick(numSamples)` once per callback** computes an immutable POD `BlockTimeInfo` (block start/end ppq, loop-wrap sample offset, bpm, time sig, play/loop state) describing the block *before* the graph renders it, then advances the position, wrapping at the loop end (a wrap landing exactly on the block boundary reports `loopWrapSample == -1`; tiny loops wrap by modulo). Zero allocation on the audio path.
+- **It is a `juce::AudioPlayHead`.** The engine installs it with `graph.setPlayHead(...)`; `juce::AudioProcessorGraph` re-applies the playhead to every node processor on every render pass, so every module — however created (fresh drop, preset load, undo restore) — reads the transport via the standard `getPlayHead()->getPosition()` API with no per-node injection bookkeeping. Sample-accurate consumers on the audio thread use `getCurrentBlockInfo()` instead.
+- **Cross-thread reads** (UI playhead, status bar) go through `getPositionSnapshot()`, a seqlock over individual atomics — consistent multi-field reads, no locks, no tearing. The snapshot reflects the start of the current block (what's audible now).
+
+### 3. ModuleBase
 
 `Source/Modules/ModuleBase.h`
 
@@ -133,7 +145,7 @@ Two constraints follow from the contract above: `applyOutputLevel` must sit **af
 
 Related: look parameters up with `findParameterByID(processor, "paramID")` rather than `getParameters()[n]`. Parameter order is not part of a module's contract, and positional lookups silently repoint when a parameter is added.
 
-### 3. GraphEditor
+### 4. GraphEditor
 
 `Source/UI/GraphEditor.h/.cpp`
 
