@@ -16,6 +16,9 @@ public:
         // Port 1: Gate CV (8 channels)
         addParameter(voiceStealParam = new juce::AudioParameterChoice("voiceSteal", "Voice Steal",
                                                                       {"Oldest", "Round-Robin", "Random"}, 0));
+        // Off by default: gate stays a plain 0/1 flag, so every patch saved before this parameter
+        // existed loads with byte-identical gate CV.
+        addParameter(velToGateParam = new juce::AudioParameterBool("velToGate", "Vel → Gate", false));
         enableVisualBuffer(true);
     }
 
@@ -24,14 +27,18 @@ public:
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
         juce::ignoreUnused(samplesPerBlock);
         sampleCounter_ = 0;
+        blockStartSample_ = 0;
         lastStamp_ = 0;
         roundRobinCursor_ = 0;
         stealRandom_.setSeed(kStealSeed);
+        minGateGapSamples_ = juce::jmax(16, static_cast<int>(sampleRate * 0.001)); // 1 ms, ≥ 16 samples
         for (auto& v : voices) {
             v.note = -1;
             v.active = false;
             v.lastUsedSample = 0;
             v.currentFreq = 0.0f;
+            v.gateLevel = 1.0f;
+            v.gateReopenAtSample = 0;
             v.smoothedGate.reset(sampleRate, 0.005); // 5ms smoothing for gates
             v.smoothedFreq.reset(sampleRate, 0.005); // 5ms smoothing for pitch
         }
@@ -45,6 +52,7 @@ public:
         // block rate, so a chord delivered inside one block still steals in arrival order. Advanced
         // before the bypass check so ages stay ordered across a bypass toggle.
         const juce::int64 blockStartSample = sampleCounter_;
+        blockStartSample_ = blockStartSample; // renderChunk needs absolute sample positions
         sampleCounter_ += numSamples;
 
         if (isBypassed()) {
@@ -144,20 +152,29 @@ private:
     std::atomic<uint8_t> voiceMaskAtomic_{0};
 
     juce::AudioParameterChoice* voiceStealParam = nullptr;
+    juce::AudioParameterBool* velToGateParam = nullptr;
+
+    // A gate this small is indistinguishable from silence downstream, so a voice sitting below it
+    // counts as "already low" and its next note-on needs no artificial gap.
+    static constexpr float kGateSilenceEpsilon = 1.0e-4f;
 
     struct Voice {
         int note = -1;
         bool active = false;
         juce::int64 lastUsedSample = 0;
-        float currentFreq = 0.0f; // Store freq to hold it on NoteOff
+        float currentFreq = 0.0f;           // Store freq to hold it on NoteOff
+        float gateLevel = 1.0f;             // height the gate rises to while this note is held
+        juce::int64 gateReopenAtSample = 0; // absolute sample the gate may go high again (see startNote)
         juce::SmoothedValue<float> smoothedGate;
         juce::SmoothedValue<float> smoothedFreq;
     };
     Voice voices[MAX_VOICES];
 
-    juce::int64 sampleCounter_ = 0; // samples elapsed since prepareToPlay
-    juce::int64 lastStamp_ = 0;     // last stamp handed out — keeps ages strictly increasing
-    int roundRobinCursor_ = 0;      // next voice StealMode::RoundRobin will take
+    juce::int64 sampleCounter_ = 0;    // samples elapsed since prepareToPlay
+    juce::int64 blockStartSample_ = 0; // absolute sample index of the block being rendered
+    juce::int64 lastStamp_ = 0;        // last stamp handed out — keeps ages strictly increasing
+    int roundRobinCursor_ = 0;         // next voice StealMode::RoundRobin will take
+    int minGateGapSamples_ = 16;       // minimum low-gate window on a re-articulation (set in prepareToPlay)
     juce::Random stealRandom_{kStealSeed};
 
     // Helper to render state to buffer
@@ -166,29 +183,38 @@ private:
             return;
 
         for (int i = 0; i < MAX_VOICES; ++i) {
+            auto& v = voices[i];
             float* pitchCh = buffer.getWritePointer(i);
             float* gateCh = buffer.getWritePointer(i + 8);
 
-            voices[i].smoothedFreq.setTargetValue(voices[i].currentFreq);
-            voices[i].smoothedGate.setTargetValue(voices[i].active ? 1.0f : 0.0f);
+            v.smoothedFreq.setTargetValue(v.currentFreq);
+
+            // While a voice is inside its re-articulation gap the target stays at 0 no matter what
+            // `active` says; the per-sample check below flips it up on the exact sample the gap
+            // ends. Chunk boundaries are MIDI event samples, so a gap routinely ends mid-chunk.
+            bool gapOpen = (blockStartSample_ + startSample) < v.gateReopenAtSample;
+            v.smoothedGate.setTargetValue(v.active && !gapOpen ? v.gateLevel : 0.0f);
 
             for (int s = startSample; s < endSample; ++s) {
-                pitchCh[s] = voices[i].smoothedFreq.getNextValue();
-                gateCh[s] = voices[i].smoothedGate.getNextValue();
+                pitchCh[s] = v.smoothedFreq.getNextValue();
+                if (gapOpen && (blockStartSample_ + s) >= v.gateReopenAtSample) {
+                    v.smoothedGate.setTargetValue(v.active ? v.gateLevel : 0.0f);
+                    gapOpen = false;
+                }
+                gateCh[s] = v.smoothedGate.getNextValue();
             }
         }
     }
 
     void handleNoteOn(int note, float velocity, juce::int64 eventSample) {
-        juce::ignoreUnused(velocity);
         const juce::int64 now = stampFor(eventSample);
-        float freq = juce::MidiMessage::getMidiNoteInHertz(note);
+        const float freq = juce::MidiMessage::getMidiNoteInHertz(note);
+        const float level = velToGateParam->get() ? juce::jlimit(0.0f, 1.0f, velocity) : 1.0f;
 
         // Try to find existing note to re-trigger
         for (int i = 0; i < MAX_VOICES; ++i) {
             if (voices[i].active && voices[i].note == note) {
-                voices[i].lastUsedSample = now;
-                voices[i].currentFreq = freq;
+                startNote(voices[i], note, freq, level, now, eventSample);
                 return;
             }
         }
@@ -196,20 +222,36 @@ private:
         // Find empty voice
         for (int i = 0; i < MAX_VOICES; ++i) {
             if (!voices[i].active) {
-                voices[i].note = note;
-                voices[i].active = true;
-                voices[i].lastUsedSample = now;
-                voices[i].currentFreq = freq;
+                startNote(voices[i], note, freq, level, now, eventSample);
                 return;
             }
         }
 
         // All eight voices are busy — the Voice Steal parameter decides which one loses its note.
-        int stealIdx = selectVoiceToSteal();
-        voices[stealIdx].note = note;
-        voices[stealIdx].active = true;
-        voices[stealIdx].lastUsedSample = now;
-        voices[stealIdx].currentFreq = freq;
+        startNote(voices[selectVoiceToSteal()], note, freq, level, now, eventSample);
+    }
+
+    // The single place a voice starts sounding — retrigger, free-voice allocation and steal all go
+    // through it, so all three produce the same gate edge downstream (the poly note contract).
+    //
+    // If the voice is still emitting gate CV, the gate drops to 0 *instantly* at the event sample
+    // (an instant CV step is a real edge; the 5 ms smoothing still shapes the rise) and is pinned
+    // low for `minGateGapSamples_` so the edge cannot be smoothed into invisibility — which is what
+    // makes an adjacent note-off/note-on pair at one sample position re-articulate. A voice whose
+    // gate is already at rest skips the gap entirely and starts rising on the event sample.
+    void startNote(Voice& v, int note, float freq, float level, juce::int64 stamp, juce::int64 eventSample) {
+        if (v.smoothedGate.getCurrentValue() > kGateSilenceEpsilon) {
+            v.smoothedGate.setCurrentAndTargetValue(0.0f);
+            v.gateReopenAtSample = eventSample + minGateGapSamples_;
+        } else {
+            v.gateReopenAtSample = eventSample;
+        }
+
+        v.note = note;
+        v.active = true;
+        v.lastUsedSample = stamp;
+        v.currentFreq = freq;
+        v.gateLevel = level;
     }
 
     // Voice ages must be strictly increasing, not merely non-decreasing: a chord whose notes share

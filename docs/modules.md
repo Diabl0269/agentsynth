@@ -217,7 +217,7 @@ Loads an audio file from disk and plays it back one of two ways.
 ## Poly MIDI Module
 - **Capacity**: 8 simultaneous voices.
 - **Allocation**: a note-on re-uses the voice already holding that note, else the first free voice, else steals one per the **Voice Steal** parameter.
-- **Parameter**: `voiceSteal` — `Oldest` (default) | `Round-Robin` | `Random`.
+- **Parameters**: `voiceSteal` — `Oldest` (default) | `Round-Robin` | `Random`; `velToGate` ("Vel → Gate", default **off**).
 
 | Mode | Which voice loses its note |
 |---|---|
@@ -226,10 +226,21 @@ Loads an audio file from disk and plays it back one of two ways.
 | `Random` | A voice picked by a module-owned PRNG. |
 
 - **Voice ages are sample counts, never wall-clock time** (issue #198). `processBlock` advances a monotonic `sampleCounter_` (before the bypass check, so ages stay ordered across a bypass toggle) and each note-on is stamped with `blockStartSample + its MIDI sample offset`. Two consequences the module depends on: a chord delivered inside one block steals in arrival order rather than collapsing onto voice 0, and offline renders are reproducible. Stamps are additionally clamped to `lastStamp_ + 1` so notes sharing one sample offset still order strictly. `Random` seeds its `juce::Random` from a fixed constant in `prepareToPlay` and advances it only on a steal, so it too renders identically every run — **never** reintroduce `juce::Time`, `std::random_device`, or an unseeded PRNG on this path.
-- **Not yet handled** (tracked separately): note velocity is ignored, and a same-pitch retrigger updates the held frequency without producing a new gate edge, so back-to-back repeated notes don't re-articulate a downstream ADSR.
-- **Outputs**: 16 total channels — ch0-7 = per-voice pitch (Hz), ch8-15 = per-voice gate (0/1).
+- **Outputs**: 16 total channels — ch0-7 = per-voice pitch (Hz), ch8-15 = per-voice gate (0..1).
 - **Visible ports**: 1 output jack ("Poly Out") representing the entire poly bus.
 - **Voice mask atomic**: `voiceMaskAtomic_` (`std::atomic<uint8_t>`) is written at the end of every `processBlock` with `std::memory_order_relaxed` — one bit per voice (bit 0 = voice 0, … bit 7 = voice 7), set when `voices[i].active` is true. `AudioEngine::getDisplayVoiceCount()` reads it lock-free and counts set bits via `std::popcount` (C++20 `<bit>`).
+
+### Poly note contract (machine MIDI)
+
+Hand-played MIDI rarely repeats a pitch inside an envelope's attack; **machine-generated MIDI does it constantly** — this is the contract the timeline's Track In node (TL3) schedules its clips against, so it is stated in samples, not in "should sound fine".
+
+- **Every re-articulation produces a gate edge.** All three paths that start a note on a voice — same-pitch retrigger, voice steal, and reuse of a voice released moments earlier — go through one function (`startNote`). If that voice's gate CV is not already at rest (`smoothedGate.getCurrentValue() > 1e-4`, deliberately *not* the `active` flag — a just-released voice is inactive but still emitting), the gate drops to **0 instantly** at the event sample via `setCurrentAndTargetValue(0.0f)`. An instant CV step is a real edge; the usual 5 ms smoothing still shapes the rise back up.
+- **Minimum 1 ms low-gate gap.** The voice records `gateReopenAtSample` (absolute, off the same monotonic `sampleCounter_` the age stamps use) = event sample + `jmax(16, sampleRate * 0.001)`. `renderChunk` checks it per sample, so a gap that ends mid-chunk still reopens exactly on time. Without the gap a drop followed immediately by a rise can smooth into a dip too shallow and short for anything downstream to register — that is precisely the clip-boundary case, where a note-off and the next note-on for one pitch land on the **same** sample.
+- **A fresh note on an idle voice has no gap** — its gate is already 0, so the rise starts on the event sample itself.
+- **Note-off is unchanged**: gate target 0 with the 5 ms smoothing, pitch held.
+- **`Vel → Gate` (`velToGate`, default off).** Off: the gate rises to exactly 1.0, as it always has — a preset saved before this parameter existed loads with the default and renders byte-identically. On: the gate rises to the note-on velocity (0..1), stored per voice, so held voices keep their own levels.
+- **Chord larger than the voice count.** Nine same-sample note-ons on eight voices in `Oldest` mode drop the chord's **first** note: stamps are strictly increasing (`stampFor` clamps to `lastStamp_ + 1`), so note 1 is the oldest by one count and note 9 steals it. Notes 2–9 sound, and the stolen voice re-attacks by the rule above rather than gliding.
+- **Downstream reality check (`ADSRModule`)**: the ADSR's poly branch samples its gate input **once per block** (`gateData[0]`), so the 1 ms gap re-articulates it only when the gap covers a block boundary; a mid-block retrigger is invisible to *that* module even though the CV is correct. Pinned end-to-end by `PolyMidiToAdsrTest.RetriggerReArticulatesAdsrWhenTheGapSpansABlockBoundary`. Fix belongs in ADSR's edge detection, not by widening this gap.
 
 ## Voice Mixer Module
 - **Purpose**: Explicit 8-to-stereo voice summing with level control and soft saturation. An alternative to VCA's internal poly summing for patches that need a separate mix stage.

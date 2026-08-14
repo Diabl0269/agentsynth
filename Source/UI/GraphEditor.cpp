@@ -62,7 +62,9 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         typeName.containsIgnoreCase("MIDI Keyboard"))
         return {synth::LayoutUtil::kDoubleWidth, 150};
     if (typeName == "Poly MIDI" || typeName == "PolyMidi")
-        return {280, 171}; // +48 (one combo row) from the issue #198 Voice Steal selector
+        // +48 (one combo row) from the issue #198 Voice Steal selector, then +26 (one toggle row)
+        // for the TL1-7 Vel → Gate switch.
+        return {280, 197};
     if (typeName == "Distortion")
         return {280, 355};
     if (typeName == "Delay")
