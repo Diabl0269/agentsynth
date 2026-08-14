@@ -522,6 +522,9 @@ void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
                        AppCommands::toggleMinimap, AppCommands::toggleAiPanel, AppCommands::autoArrange,
                        AppCommands::toggleLibrary, AppCommands::selectAllModules, AppCommands::saveSnippet,
                        AppCommands::copySelection, AppCommands::pasteSelection, AppCommands::duplicateSelection});
+#if JUCE_MAC
+    commands.add(AppCommands::checkForUpdates);
+#endif
 }
 
 void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationCommandInfo& result) {
@@ -626,6 +629,13 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
+#if JUCE_MAC
+    case AppCommands::checkForUpdates: {
+        result.setInfo("Check for Updates…", "Check for a newer version of the app", "Help", 0);
+        result.setActive(updateManager.isAvailable());
+        break;
+    }
+#endif
     default:
         break;
     }
@@ -706,6 +716,11 @@ bool MainComponent::perform(const InvocationInfo& info) {
             statusBar.showMessage("Nothing to duplicate - select one or more modules first");
         return true;
     }
+#if JUCE_MAC
+    case AppCommands::checkForUpdates:
+        updateManager.checkForUpdates();
+        return true;
+#endif
     default:
         return false;
     }

@@ -17,6 +17,7 @@
 #include "UI/Theme/ThemeManager.h"
 #include "UI/ToolbarComponent.h"
 #include "UI/UIAnimation.h"
+#include "Update/UpdateManager.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -241,6 +242,10 @@ private:
 
     ShortcutManager shortcutManager;
     juce::ApplicationCommandManager commandManager;
+
+#if JUCE_MAC
+    synth::update::UpdateManager updateManager;
+#endif
 
     // ---- Panel slide animations (time-bounded, auto-stop) ----
     // One VBlankAnimatorUpdater shared by both panel animations (driven by MainComponent).

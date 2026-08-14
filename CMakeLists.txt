@@ -2,6 +2,12 @@ cmake_minimum_required(VERSION 3.22)
 
 project(AgentSynth VERSION 0.13.2)
 
+# Sparkle's update bridge (Source/Update/SparkleUpdateManager.mm) is Objective-C++. JUCE's own
+# project() only declares C/CXX, so this must be enabled explicitly before any .mm source is added.
+if(APPLE)
+    enable_language(OBJCXX)
+endif()
+
 # Enable ccache if available
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)
@@ -27,6 +33,19 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(juce)
 
+# Fetch Sparkle (macOS auto-update). Prebuilt .xcframework distribution, not a CMake project —
+# FetchContent_MakeAvailable populates it and, finding no CMakeLists.txt at its root, does not try
+# to add_subdirectory it. See docs/distribution.md for the WinSparkle (Windows) equivalent, tracked
+# as a separate roadmap task.
+if(APPLE)
+    FetchContent_Declare(
+        sparkle
+        URL      ${SYNTH_SPARKLE_URL}
+        URL_HASH SHA256=${SYNTH_SPARKLE_SHA256}
+    )
+    FetchContent_MakeAvailable(sparkle)
+endif()
+
 # Coverage Option
 option(ENABLE_COVERAGE "Enable code coverage testing" OFF)
 option(ENABLE_TESTS "Enable building test suite" OFF)
@@ -43,6 +62,25 @@ option(ENABLE_PLUGIN "Build the VST3 (+ AU on macOS) audio-plugin targets" ON)
 set(SYNTH_PRODUCT_NAME "Agent Synth" CACHE STRING "Display name: window title, About box, installer")
 set(SYNTH_COMPANY_NAME "yourcompany" CACHE STRING "JUCE COMPANY_NAME / macOS bundle vendor")
 set(SYNTH_BUNDLE_ID "com.agentsynth.app" CACHE STRING "macOS/iOS CFBundleIdentifier")
+
+# Auto-update (Sparkle on macOS — see docs/distribution.md). SYNTH_SPARKLE_PUBLIC_KEY is
+# deliberately empty by default: SparkleUpdateManager checks for a non-empty key at startup and
+# stays inert without one, so a dev/local build never shows Sparkle's "app is misconfigured" alert.
+# CI supplies the real key via -DSYNTH_SPARKLE_PUBLIC_KEY, read from the (non-secret, public)
+# SPARKLE_PUBLIC_KEY repository variable once it exists.
+set(SYNTH_UPDATE_FEED_URL "https://agentsynth.app/updates/appcast.xml"
+    CACHE STRING "Sparkle SUFeedURL — the appcast this build checks for updates")
+set(SYNTH_SPARKLE_PUBLIC_KEY "" CACHE STRING "Sparkle SUPublicEDKey (base64, public half of the EdDSA signing key)")
+
+# CFBundleVersion (Sparkle's actual update-comparison key) is intentionally NOT the same as
+# PROJECT_VERSION above: PROJECT_VERSION is the human-facing marketing version, hand-bumped in this
+# file, while the release workflow auto-tags every push to main independently (mathieudutour/
+# github-tag-action) without touching this file. A build number that only advances when a human
+# remembers to bump it would make Sparkle either never detect an update or always think one is
+# available. GITHUB_RUN_NUMBER is known before the build starts and increases every run regardless
+# of what tag the release job later mints, so CI passes it via -DGRAVISYNTH_BUILD_NUMBER. Local
+# builds default to "0" — never distributed, so Sparkle comparison doesn't matter for them.
+set(GRAVISYNTH_BUILD_NUMBER "0" CACHE STRING "CFBundleVersion — monotonic build number, CI sets this to the workflow run number")
 
 if(ENABLE_COVERAGE)
     if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
@@ -203,14 +241,24 @@ else()
     target_compile_options(Core PRIVATE -Wall -Wextra)
 endif()
 
+# Sparkle Info.plist keys, merged into JUCE's generated plist. Empty string on non-Apple
+# platforms, where JUCE ignores the argument entirely.
+set(SYNTH_SPARKLE_PLIST_TO_MERGE "")
+if(APPLE)
+    set(SYNTH_SPARKLE_PLIST_TO_MERGE
+        "<?xml version='1.0' encoding='UTF-8'?><plist version='1.0'><dict><key>SUFeedURL</key><string>${SYNTH_UPDATE_FEED_URL}</string><key>SUEnableAutomaticChecks</key><true/><key>SUScheduledCheckInterval</key><integer>86400</integer><key>SUPublicEDKey</key><string>${SYNTH_SPARKLE_PUBLIC_KEY}</string></dict></plist>")
+endif()
+
 # Create the application target
 juce_add_gui_app(AgentSynth
     PRODUCT_NAME "${SYNTH_PRODUCT_NAME}"
-    VERSION "0.13.2"
+    VERSION "${PROJECT_VERSION}"
+    BUILD_VERSION "${GRAVISYNTH_BUILD_NUMBER}"
     COMPANY_NAME "${SYNTH_COMPANY_NAME}"
     BUNDLE_ID "${SYNTH_BUNDLE_ID}"
     BLUETOOTH_PERMISSION_ENABLED TRUE
     BLUETOOTH_PERMISSION_TEXT "We need Bluetooth access to connect to your external MIDI devices."
+    PLIST_TO_MERGE "${SYNTH_SPARKLE_PLIST_TO_MERGE}"
 )
 
 juce_generate_juce_header(AgentSynth)
@@ -326,6 +374,7 @@ add_library(AppUI STATIC
     Source/UI/AppearanceSettingsTab.h
     Source/UI/ShortcutsSettingsTab.cpp
     Source/ShortcutManager.h
+    Source/Update/UpdateManager.h
 )
 
 # PUBLIC so consumers (the app and the plugin) inherit Core's JUCE modules, include dirs,
@@ -357,6 +406,14 @@ target_sources(AgentSynth PRIVATE
     Source/Main.cpp
 )
 
+if(APPLE)
+    target_sources(AgentSynth PRIVATE Source/Update/SparkleUpdateManager.mm)
+    # ARC explicitly, rather than relying on JUCE's project-wide ObjC++ default (which is
+    # non-ARC — JUCE's own .mm files manage retain/release by hand), so this one bridge file can
+    # use SPUStandardUpdaterController without hand-written retain/release bookkeeping.
+    set_source_files_properties(Source/Update/SparkleUpdateManager.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+endif()
+
 # Link against JUCE modules
 target_link_libraries(AgentSynth PRIVATE
     AppUI # Editor UI, shared with the plugin target
@@ -385,6 +442,32 @@ target_compile_definitions(AgentSynth PRIVATE
 if(UNIX AND NOT APPLE)
     target_link_libraries(AgentSynth PRIVATE ${GTK3_LIBRARIES})
     target_include_directories(AgentSynth PRIVATE ${GTK3_INCLUDE_DIRS})
+endif()
+
+if(APPLE)
+    # `-F` must be a COMPILE flag too, not just a link flag — target_link_libraries only puts it on
+    # the link line, but #import <Sparkle/Sparkle.h> in SparkleUpdateManager.mm needs the compiler
+    # to see it as well.
+    target_compile_options(AgentSynth PRIVATE "-F${sparkle_SOURCE_DIR}")
+    target_link_libraries(AgentSynth PRIVATE "-F${sparkle_SOURCE_DIR}" "-framework Sparkle")
+
+    set_target_properties(AgentSynth PROPERTIES
+        BUILD_WITH_INSTALL_RPATH TRUE
+        INSTALL_RPATH "@executable_path/../Frameworks"
+    )
+
+    # Sparkle.framework is a prebuilt binary, not something CMake's bundle logic knows to embed —
+    # this project builds with Ninja (see build-artifacts.yml), which has no "Embed Frameworks"
+    # build phase the way an Xcode project would, so copy it into Contents/Frameworks ourselves.
+    # `ditto` (not `cp`) preserves the framework's Versions/Current symlink structure, matching how
+    # CI already ditto's the whole .app for packaging. CI's `codesign --deep` step re-signs this
+    # nested framework along with everything else in the bundle.
+    add_custom_command(TARGET AgentSynth POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_CONTENT_DIR:AgentSynth>/Frameworks"
+        COMMAND ${CMAKE_COMMAND} -E rm -rf "$<TARGET_BUNDLE_CONTENT_DIR:AgentSynth>/Frameworks/Sparkle.framework"
+        COMMAND ditto "${sparkle_SOURCE_DIR}/Sparkle.framework" "$<TARGET_BUNDLE_CONTENT_DIR:AgentSynth>/Frameworks/Sparkle.framework"
+        COMMENT "Embedding Sparkle.framework"
+    )
 endif()
 
 # Enable strict warnings to catch issues early
@@ -469,6 +552,42 @@ if(ENABLE_PLUGIN)
         target_compile_options(AgentSynthPlugin PRIVATE /W4)
     else()
         target_compile_options(AgentSynthPlugin PRIVATE -Wall -Wextra)
+    endif()
+
+    # MainComponent.cpp (in AppUI, which this plugin links) pulls in synth::update::UpdateManager
+    # on macOS, same as AgentSynth and Tests — see the Sparkle block above and
+    # Tests/CMakeLists.txt's identical comment. Neither AgentSynthPlugin's Info.plist nor AU's gets
+    # SUFeedURL/SUPublicEDKey merged in (only AgentSynth's does, above), so UpdateManager::isAvailable()
+    # reads empty keys and stays inert in the plugin — this wiring exists purely to satisfy the
+    # linker, not to make the plugin self-update.
+    if(APPLE)
+        foreach(plugin_format_target AgentSynthPlugin_VST3 AgentSynthPlugin_AU)
+            target_sources(${plugin_format_target} PRIVATE Source/Update/SparkleUpdateManager.mm)
+            target_compile_options(${plugin_format_target} PRIVATE "-F${sparkle_SOURCE_DIR}")
+            # Weak (not "-framework Sparkle" as AgentSynth/Tests use): juce_vst3_helper dlopens this
+            # bundle at build time, right after linking, to write moduleinfo.json — before this
+            # target's own POST_BUILD embed step below has run — so a hard dependency makes that
+            # load fail outright ("The bundle ... couldn't be loaded"). Weak-linking also matches
+            # actual intent here better than a hard link would: unlike AgentSynth, this plugin never
+            # gets SUFeedURL/SUPublicEDKey in its Info.plist, so Sparkle is always inert for it.
+            target_link_libraries(${plugin_format_target} PRIVATE "-F${sparkle_SOURCE_DIR}" "-weak_framework Sparkle")
+
+            # @loader_path (not @executable_path — the plugin bundle is loaded by the host app, not
+            # run as one) resolves to Contents/MacOS, so ../Frameworks lands on Contents/Frameworks,
+            # matching the embed step below.
+            set_target_properties(${plugin_format_target} PROPERTIES
+                BUILD_WITH_INSTALL_RPATH TRUE
+                INSTALL_RPATH "@loader_path/../Frameworks"
+            )
+
+            add_custom_command(TARGET ${plugin_format_target} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_CONTENT_DIR:${plugin_format_target}>/Frameworks"
+                COMMAND ${CMAKE_COMMAND} -E rm -rf "$<TARGET_BUNDLE_CONTENT_DIR:${plugin_format_target}>/Frameworks/Sparkle.framework"
+                COMMAND ditto "${sparkle_SOURCE_DIR}/Sparkle.framework" "$<TARGET_BUNDLE_CONTENT_DIR:${plugin_format_target}>/Frameworks/Sparkle.framework"
+                COMMENT "Embedding Sparkle.framework into ${plugin_format_target}"
+            )
+        endforeach()
+        set_source_files_properties(Source/Update/SparkleUpdateManager.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
     endif()
 endif()
 
