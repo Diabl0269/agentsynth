@@ -81,7 +81,26 @@ TL2-2: the immutable, flattened projection of `TimelineDoc` the audio thread rea
 - **Engine wiring.** `AudioEngine` owns the exchange (`getTimelineSnapshots()`), and `renderNextBlock` opens exactly one block on it per callback, right after `transport.tick(...)`, inside the `SYNTH_ENABLE_TIMELINE` guard. The returned reference is discarded for now — TL3's Track In modules fetch it through the engine — but the call is not a no-op: it is what advances the reclamation epoch. Unlike the tick it is deliberately *not* gated on `setTransportEnabled`, since freezing the transport is a musical decision and must not stall reclamation.
 - **Testing.** `Tests/TimelineSnapshotTests.cpp` pins the flatten policy and the reclamation protocol, including a `TimelineSnapshot::liveInstanceCount()` counter (always compiled in) that proves snapshots are actually freed. `StressPublishAcquire` runs a reader thread against a publisher for ~1.2 s; on its own it only proves nothing crashed, but under the label-gated `run-asan` CI job it becomes a hard use-after-free detector — a premature free racing a concurrent read is exactly what ASAN reports.
 
-### 5. ModuleBase
+### 5. ProjectBundle (.agsproj)
+
+`Source/ProjectBundle.h/.cpp`
+
+TL2-4: the on-disk project format that pairs a patch with a `TimelineDoc`. A bundle is a directory named `*.agsproj` containing `project.json` plus two reserved, empty-on-creation asset subdirectories, `Audio/` and `Peaks/` (TL6 — nothing reads or writes into them yet). `project.json` is everything `AIStateMapper::graphToJSON` writes (nodes, connections, modulations, schemaVersion, any keys `PatchDocument` had stashed from a prior load) with one addition: a top-level `"timeline"` key holding `TimelineDoc::toVar()`.
+
+- **`"timeline"` is reserved everywhere else, meaningful only here.** A plain `.json` preset that happens to carry one only ever stashes it inertly via `PatchDocument` (see §3 above); `AIStateMapper::validatePatch` refuses it outright from provider-authored output (`PatchValidationError::TimelineNotAllowed`) so a model can never author automation. `ProjectBundle` is the one place a `"timeline"` key is actually interpreted.
+- **Fixed, all-or-nothing load order**, mirroring `SnippetManager::insertSnippet`'s trusted/untrusted pairing:
+  1. Parse `project.json` — unparseable or non-object is rejected.
+  2. **Detach `"timeline"` from the root before anything else.** This has to happen *before* the gate in step 3: the untrusted validator refuses any patch carrying a `"timeline"` key, and a bundle's `"timeline"` is this format's own dialect, not provider output smuggled in — pulling it out first means it's validated on its own terms in step 4 instead of tripping a check meant for a different threat. The remaining root is "the patch".
+  3. **Gate:** `AIStateMapper::validatePatch(patch, graph, clearExisting=true, trusted=false)`. `project.json` is a file on disk, hand-editable exactly like a preset or a snippet — a malformed patch is rejected whole, never partially applied.
+  4. Validate the timeline into a **local** `TimelineDoc` via `fromVar` (already all-or-nothing). A missing `"timeline"` key is not an error — it means a plain patch is being opened as, or upgraded into, a bundle, and the timeline starts empty. A present-but-malformed one is rejected whole.
+  5. Only once *both* validations pass does anything mutate: `applyJSONToGraph(patch, graph, clearExisting=true, trusted=true)` — trusted, so node `"uuid"`s are honoured and parameter values aren't rescaled by the untrusted-input heuristic, the same reasoning as the snippet insert path; `patchDocument.loadFromVar(patch)` on the timeline-stripped root, so `"timeline"` is never double-stored in the stash; then the live `timeline` is brought to the validated state (`fromVar` on the same var already proven valid against the local doc, or `clear()` when the key was absent).
+  6. **Binding pass — never delete.** A track's `bindingUuid` or a lane's `nodeUuid` that no longer resolves to any live node's `"uuid"` property is retained untouched. Orphan handling (relinking, flagging, prompting) is TL2-6; the rule enforced today is only that nothing is deleted on load.
+  - On any failure before step 5, `graph`, `timeline` and `patchDocument` are left exactly as they were.
+- **Save order matters too.** `graphToJSON(graph)` → `patchDocument.toVar(...)` (re-merging whatever unknown top-level keys were stashed on this bundle's last load) → **then** `"timeline"` is set to `timeline.toVar()` **last**, so a live timeline always overwrites a stale one sitting in the stash (e.g. a bundle that started life as a plain `.json` carrying an old `"timeline"`).
+- **Asset policy, reserved for TL6.** Any future asset reference is a path *relative to the bundle root* (`Audio/foo.wav`) — an absolute or escaping path must be rejected, the same restriction as `ModuleBase::setExtraState`'s trusted-only file paths. No enforcement code exists yet because nothing references an asset by path yet.
+- **Plain `.json` save/load is unaffected.** `GraphEditor::savePreset`/`loadPreset` are untouched by this class — a `.agsproj` is a parallel format, not a replacement.
+
+### 6. ModuleBase
 
 `Source/Modules/ModuleBase.h`
 
@@ -179,7 +198,7 @@ Two constraints follow from the contract above: `applyOutputLevel` must sit **af
 
 Related: look parameters up with `findParameterByID(processor, "paramID")` rather than `getParameters()[n]`. Parameter order is not part of a module's contract, and positional lookups silently repoint when a parameter is added.
 
-### 6. GraphEditor
+### 7. GraphEditor
 
 `Source/UI/GraphEditor.h/.cpp`
 

@@ -108,6 +108,7 @@ add_executable(Tests
     AudioEngineTransportTests.cpp
     OfflineTransportDriverTests.cpp
     PatchDocumentTests.cpp
+    ProjectBundleTests.cpp
     ../Source/MainComponent.cpp
     ../Source/Plugin/PluginProcessor.cpp
     ../Source/Plugin/PluginEditor.cpp

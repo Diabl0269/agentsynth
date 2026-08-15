@@ -112,6 +112,8 @@ add_library(Core STATIC
     Source/PresetManager.h
     Source/PatchDocument.cpp
     Source/PatchDocument.h
+    Source/ProjectBundle.cpp
+    Source/ProjectBundle.h
     Source/SnippetManager.cpp
     Source/SnippetManager.h
     Source/SettingsMigration.cpp
