@@ -1788,3 +1788,108 @@ Tests: `Tests/TimelineClipLaneTests.cpp` — `ClipSelectionModel`/`clipHitTestMa
 pure-geometry tests for `computeClipRect`, and interaction tests driven by hand-built
 `juce::MouseEvent`s (same pattern as TL5-2's ruler tests in `Tests/TimelinePanelTests.cpp`) against
 a bare `TimelineDoc` + `AppUndoManager` + `TimelineClipLaneArea`, no `MainComponent` needed.
+
+### TL5-8: piano roll
+
+`Source/UI/PianoRollComponent.h/.cpp` (`synth::ui::PianoRollComponent`) is a minimal per-clip note
+editor shown INSIDE the timeline panel's lanes region — no separate window. Backed by
+`synth::ui::NoteSelectionModel` (`Source/UI/NoteSelectionModel.h`), `ClipSelectionModel`'s sibling
+keyed on `synth::NoteId` with the identical add/remove/toggle/setSelection/retainOnly contract,
+plus a `noteHitTestMarquee` free function mirroring `clipHitTestMarquee`.
+
+**Entry/exit.** Double-clicking a clip in `TimelineClipLaneArea` fires its `onClipDoubleClicked(ClipId)`
+callback, which `TimelinePanelComponent`'s constructor wires to `openPianoRoll(ClipId)`. That call:
+hides `clipLaneArea_`, shows `pianoRoll_` (same rect — see Z-order below), and calls
+`PianoRollComponent::openClip`, which centres the pitch scroll on the clip's median note pitch (60
+for an empty clip). A drawn "◀ Clips" back button (top-left of the header strip) and Escape (when
+nothing is selected — a first Escape only clears the selection) both call the roll's own
+`requestClose()`, which closes itself immediately (so `isOpen()` is accurate even with no owner
+wired) and fires `onCloseRequested` — the panel wires this to `closePianoRoll()`, which re-shows
+`clipLaneArea_`. If the edited clip disappears from the doc (any mutation, from any path —
+`TimelinePanelComponent::timelineChanged()` calls `pianoRoll_.refreshFromDoc()` on every doc
+notification, mirroring the clip-lane area's own refresh seam), `refreshFromDoc()` notices the clip
+is gone and closes the roll the same way. Panel API: `openPianoRoll(ClipId)` / `closePianoRoll()` /
+`isPianoRollOpen()`.
+
+**Z-order.** `pianoRoll_` occupies the exact same rect `clipLaneArea_` does (`gridLanesBounds_`),
+added via `addChildComponent` (not `addAndMakeVisible`, so it starts invisible) right after
+`clipLaneArea_` and before `playhead_` — so only one of clip-lane-area/piano-roll is ever visible,
+and the playhead overlay stays topmost and untouched either way (same bounds, same
+`viewState_.beatToX` mapping it always had).
+
+**Coordinate system — the one deliberate deviation from a conventional piano roll.** The design
+calls for a 44 px keys column at the left and a note grid to its right, both reading absolute beats
+off the SAME shared `TimelineViewState` so zoom/scroll stay consistent with the lanes and "the
+playhead lines up." A conventional layout would reserve the keys column as a margin and offset the
+grid's origin by its width — but `TimelinePlayheadOverlay` is untouched by this task (same bounds,
+same unmodified `beatToX(beat)` call), so an offset grid would drift out of alignment with it. The
+fix: note x positions use `viewState_.beatToX(beat)` **unmodified**, in exactly the same
+component-local coordinate frame `TimelineClipLaneArea` draws clips in (which is also
+`TimelinePlayheadOverlay`'s frame) — a note at absolute beat *B* always lands on the same pixel the
+playhead line would at beat *B*. The 44 px keys column is therefore not a margin that shifts that
+origin; it is a fixed opaque strip painted OVER the leftmost 44 px of that same frame (mouseDown/
+mouseDrag/mouseDoubleClick all gate `x < kKeysColumnWidth` as inert — no virtual-keyboard preview in
+v1). The trade-off — whatever beat is currently scrolled to local x == 0 sits visually under the
+keys column rather than being pushed rightward — is accepted for v1 and documented at the top of
+`PianoRollComponent.h`, not a bug.
+
+Vertically there is no such external constraint (nothing else on screen maps pitch to y), so pitch
+uses a plain fixed mapping: 10 px/semitone, `firstVisiblePitch_` names the HIGHEST pitch drawn at
+the grid's top row, clamped to `[0, 127]`. A 20 px header strip sits above both the keys column and
+the grid, housing the back button and a "Q" (quantise) button — both plain `juce::Path`/text shapes,
+never a Unicode glyph through a themed font (the same "draw it, don't asset it" rule
+`TimelineTransportBar`'s `GlyphButton` follows, and the reason `TimelineViewState::divisionBeats`
+below and every label here go through `AppLookAndFeel` — see the CLAUDE.md font-swap invariant).
+
+**Rendering.** Row backgrounds alternate white/black-key tint (`colors.bg1` / `colors.surfaceHi`,
+the same tokens `ModuleComponent`'s themed `MidiKeyboardComponent` uses), a C-octave label per
+octave in the keys column (mono font via `juce::Font::getDefaultMonospacedFontName()`, resolved to
+the theme's mono family by `AppLookAndFeel::getTypefaceForFont` — never a raw family string), and
+the clip's span outside `[clipStart, clipEnd)` dimmed. Notes are rounded rects tinted by velocity
+(`colors.midiWire`, brightened by `velocity/127`), selected notes get an accent border. Repaints
+happen only on doc/listener refresh, interaction, and view-state changes — no timer.
+
+**Gestures** (each previews locally — a member delta/length/velocity read back by `paint()` through
+`effectiveGeometryFor()` — and commits ONCE via `AppUndoManager::recordTimelineChange` on mouse-up,
+so a multi-note move/scrub/delete is one undo step):
+
+| Gesture | Effect |
+|---|---|
+| Click empty grid, drag | DRAWS a note — pitch from the row, start/length Snap-quantised, floored at one snap unit (or 1/16 beat when Snap is Off); velocity 100, channel 1. A plain click with no drag still commits a minimum-length note. |
+| Shift+drag from empty grid | Marquee (intersection hit-test, additive with Cmd/Ctrl) |
+| Click a note | Selects it (Shift adds); drag the body moves it (+ every other selected note, by one shared snapped beat delta and one shared semitone delta) |
+| Drag within 5 px of a note's right edge | Resizes (trims) just that note's length, Snap-quantised, floored at 1/16 beat — even inside a wider selection |
+| Double-click a note | Deletes it, one step |
+| Delete / Backspace | Deletes the selection, one step; returns `false` when the selection is empty |
+| Escape | Clears the selection; closes the roll when nothing is selected |
+| Cmd+vertical-drag on a note | Scrubs velocity, ~1/px, clamped to `[1, 127]` independently per note (multi-selection scrubs all by the same delta) |
+| "Q" button | Quantises the selected notes' starts to the current Snap (per-note `moveNote`, one mutation lambda — `TimelineDoc::quantiseNotes` has no note-subset overload); with nothing selected, quantises every note in the clip via `quantiseNotes` directly. A no-op when Snap is Off. |
+
+**Pencil-by-default, not deferred-click.** Unlike `TimelineClipLaneArea`'s deferred-empty-click
+trick (needed there to tell "deselect" from "marquee begins"), a plain drag from empty grid here
+*always* draws — there is no ambiguity to defer, so no pending-click state exists. Marquee is
+reached only through Shift, decided entirely at `mouseDown`.
+
+**Edits stay inside the clip window.** `TimelineDoc` itself only clamps a note's `startBeat >= 0`
+finite — "notes can only exist inside the clip" is this editor's own policy, enforced before every
+write: draw/resize clamp `[start, start+length)` into `[0, clipLength)`; a multi-note move clamps
+its shared delta so the group's earliest start never goes below 0 and its latest end never crosses
+`clipLength` (the same clamp-the-group-together reasoning as `TimelineClipLaneArea::mouseDrag`'s
+Move branch, extended with an upper bound because notes, unlike clips, live inside one). A note
+whose available room shrinks to zero-length is rejected by `TimelineDoc::addNote`'s own validation.
+
+**Wheel.** Plain vertical wheel scrolls pitch (`kPitchScrollSemitonesPerWheelUnit`, clamped to
+`[0, 127]`); `deltaX` scrolls time through the shared `TimelineViewState`. Cmd+wheel is forwarded
+verbatim via `juce::Component::mouseWheelMove(e, wheel)` — the base implementation walks up to the
+nearest enabled ancestor, the same mechanism `TimelineRulerComponent` relies on by not overriding
+wheel handling at all — so `TimelinePanelComponent::mouseWheelMove`'s existing zoom-around-cursor
+code runs unmodified rather than being duplicated.
+
+`TimelineViewState::divisionBeats(beatsPerBar)` (factored out of `snapBeat` for this task) exposes
+the current snap grid as a plain beat value — what `performQuantise()` feeds `quantiseNotes`/
+`moveNote`, since neither takes a `TimelineViewState::Snap` directly.
+
+Tests: `Tests/PianoRollTests.cpp` — `NoteSelectionModel`/`noteHitTestMarquee` unit coverage (mirrors
+`TimelineClipLaneTests.cpp`'s groups 1–2) and `PianoRollComponent` interaction tests driven by
+hand-built `juce::MouseEvent`s against a bare `TimelineDoc` + `AppUndoManager` +
+`PianoRollComponent`, no `TimelinePanelComponent` needed.

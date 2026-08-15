@@ -3,6 +3,7 @@
 #include "../Timeline/TimelineDoc.h"
 #include "ClipSelectionModel.h"
 #include "TimelineViewState.h"
+#include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
 #include <utility>
@@ -66,6 +67,13 @@ public:
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
     void mouseMove(const juce::MouseEvent& e) override;
+    // TL5-8: double-clicking a clip opens the piano roll for it. Fires onClipDoubleClicked (if
+    // set) with the hit clip's id; a double-click on empty lane space is a no-op.
+    void mouseDoubleClick(const juce::MouseEvent& e) override;
+
+    // Non-owning callback; may be unset. TimelinePanelComponent wires this to
+    // PianoRollComponent::openClip via its own openPianoRoll(ClipId).
+    std::function<void(synth::ClipId)> onClipDoubleClicked;
 
     // Panel-scoped Delete/Escape (see GraphEditor's identical idiom). Grabs focus on mouseDown, so
     // pressing Delete right after a click lands here rather than on whichever panel had focus

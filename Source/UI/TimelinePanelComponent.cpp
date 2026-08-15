@@ -68,6 +68,14 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // grid (painted by this component's own paint(), which — as a parent — always paints before
     // its children) and below the playhead.
     addAndMakeVisible(clipLaneArea_);
+    clipLaneArea_.onClipDoubleClicked = [this](synth::ClipId id) { openPianoRoll(id); };
+
+    // TL5-8: same slot as clipLaneArea_ (added right after it, before the playhead), but starts
+    // invisible — addChildComponent (not addAndMakeVisible) keeps it hidden until openPianoRoll()
+    // shows it.
+    addChildComponent(pianoRoll_);
+    pianoRoll_.setComponentID("timelinePianoRoll");
+    pianoRoll_.onCloseRequested = [this] { closePianoRoll(); };
 
     // TL5-4: added LAST so it is topmost — it draws over the ruler, the lanes grid AND the clips.
     addAndMakeVisible(playhead_);
@@ -85,6 +93,7 @@ void TimelinePanelComponent::setTransport(synth::TransportService* transport) {
     playhead_.setTransport(transport);
     transportBar_.setTransport(transport);
     clipLaneArea_.setTransport(transport);
+    pianoRoll_.setTransport(transport);
 }
 
 void TimelinePanelComponent::setMetronome(synth::Metronome* metronome) { transportBar_.setMetronome(metronome); }
@@ -129,9 +138,30 @@ void TimelinePanelComponent::setTimelineDoc(synth::TimelineDoc* doc) {
         doc_->addListener(this);
     syncTrackHeaders();
     clipLaneArea_.setTimelineDoc(doc_);
+    pianoRoll_.setTimelineDoc(doc_);
 }
 
-void TimelinePanelComponent::setUndoManager(AppUndoManager* undoManager) { clipLaneArea_.setUndoManager(undoManager); }
+void TimelinePanelComponent::setUndoManager(AppUndoManager* undoManager) {
+    clipLaneArea_.setUndoManager(undoManager);
+    pianoRoll_.setUndoManager(undoManager);
+}
+
+void TimelinePanelComponent::openPianoRoll(synth::ClipId id) {
+    pianoRoll_.openClip(id);
+    if (!pianoRoll_.isOpen())
+        return; // id didn't resolve to a live clip — PianoRollComponent::openClip's own contract
+
+    clipLaneArea_.setVisible(false);
+    pianoRoll_.setVisible(true);
+    pianoRoll_.grabKeyboardFocus();
+}
+
+void TimelinePanelComponent::closePianoRoll() {
+    pianoRoll_.closeRoll();
+    pianoRoll_.setVisible(false);
+    clipLaneArea_.setVisible(true);
+    clipLaneArea_.grabKeyboardFocus();
+}
 
 void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
     trackHeaderHost_ = host;
@@ -144,6 +174,10 @@ void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
 void TimelinePanelComponent::timelineChanged(const synth::TimelineDoc&) {
     syncTrackHeaders();
     clipLaneArea_.refreshFromDoc();
+    // TL5-8: if the roll is open on a clip this mutation just removed, refreshFromDoc() closes it
+    // itself and fires onCloseRequested -> closePianoRoll() (wired in the constructor), which is
+    // what swaps clipLaneArea_ back into view.
+    pianoRoll_.refreshFromDoc();
 }
 
 void TimelinePanelComponent::syncTrackHeaders() {
@@ -275,6 +309,10 @@ void TimelinePanelComponent::resized() {
     // TL5-7: the clip-lane area fills EXACTLY the rect the grid below is painted into (paint()'s
     // gridLanesBounds_ loop, unchanged) — so clips line up with the bar/beat grid pixel-for-pixel.
     clipLaneArea_.setBounds(gridLanesBounds_);
+    // TL5-8: the piano roll occupies the SAME rect, unconditionally (whichever of the two is
+    // invisible just doesn't paint) — this is also what keeps its beatToX(beat) mapping identical
+    // to the clip lanes' and the playhead's (see PianoRollComponent's class comment).
+    pianoRoll_.setBounds(gridLanesBounds_);
 
     // The playhead spans the WHOLE lanes region, ruler included, so the line reads as one stroke
     // from the ruler down through the tracks. Its local x == 0 is lanesBounds_.getX(), which is

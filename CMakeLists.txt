@@ -407,6 +407,9 @@ add_library(AppUI STATIC
     Source/UI/TimelineClipLaneArea.h
     Source/UI/TimelineClipLaneArea.cpp
     Source/UI/ClipSelectionModel.h
+    Source/UI/PianoRollComponent.h
+    Source/UI/PianoRollComponent.cpp
+    Source/UI/NoteSelectionModel.h
     Source/UI/TrackColour.h
     Source/UI/TimelineViewState.h
     Source/UI/AIChatComponent.cpp

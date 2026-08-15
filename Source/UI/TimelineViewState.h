@@ -44,34 +44,37 @@ struct TimelineViewState {
     enum class Snap : int { Off = 0, Bar, Beat, Half, Quarter, Eighth, Sixteenth };
     Snap snap = Snap::Beat;
 
+    // The current snap division, expressed as a fraction of one beat (0.0 for Snap::Off, meaning
+    // "no grid"). beatsPerBar is only consulted for Snap::Bar (pass TransportService's
+    // tsNum * 4 / tsDen). Factored out of snapBeat() (TL5-8) so a caller that needs the raw grid
+    // size — PianoRollComponent::performQuantise, which feeds TimelineDoc::quantiseNotes a
+    // gridBeats value rather than snapping a single beat — doesn't duplicate this switch.
+    double divisionBeats(double beatsPerBar) const noexcept {
+        switch (snap) {
+        case Snap::Off:
+            return 0.0;
+        case Snap::Bar:
+            return beatsPerBar;
+        case Snap::Beat:
+            return 1.0;
+        case Snap::Half:
+            return 0.5;
+        case Snap::Quarter:
+            return 0.25;
+        case Snap::Eighth:
+            return 0.125;
+        case Snap::Sixteenth:
+            return 0.0625;
+        }
+        return 0.0;
+    }
+
     // Nearest multiple of the snap division; beatsPerBar is only consulted for Snap::Bar (pass
     // TransportService's tsNum * 4 / tsDen). Off passes `beat` through unchanged. Ties (exactly
     // halfway between two grid lines) round up (toward +infinity) — deterministic and simple;
     // beats are never negative in practice so this is also "away from zero".
     double snapBeat(double beat, double beatsPerBar) const noexcept {
-        double division = 0.0;
-        switch (snap) {
-        case Snap::Off:
-            return beat;
-        case Snap::Bar:
-            division = beatsPerBar;
-            break;
-        case Snap::Beat:
-            division = 1.0;
-            break;
-        case Snap::Half:
-            division = 0.5;
-            break;
-        case Snap::Quarter:
-            division = 0.25;
-            break;
-        case Snap::Eighth:
-            division = 0.125;
-            break;
-        case Snap::Sixteenth:
-            division = 0.0625;
-            break;
-        }
+        const double division = divisionBeats(beatsPerBar);
         if (division <= 0.0)
             return beat;
         return std::floor(beat / division + 0.5) * division;

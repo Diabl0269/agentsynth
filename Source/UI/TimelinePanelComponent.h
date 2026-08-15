@@ -2,6 +2,7 @@
 
 #include "../Timeline/TimelineDoc.h"
 #include "ClipSelectionModel.h"
+#include "PianoRollComponent.h"
 #include "TimelineClipLaneArea.h"
 #include "TimelinePlayheadOverlay.h"
 #include "TimelineRulerComponent.h"
@@ -112,6 +113,19 @@ public:
     synth::ui::ClipSelectionModel& getClipSelection() noexcept { return clipSelection_; }
     synth::ui::TimelineClipLaneArea& getClipLaneArea() noexcept { return clipLaneArea_; }
 
+    // ---- Piano roll (TL5-8) ----
+    // Swaps the lanes region (gridLanesBounds_ — the same rect the clip-lane area occupies) to
+    // synth::ui::PianoRollComponent, editing `id`. A no-op if `id` does not resolve to a live
+    // clip (PianoRollComponent::openClip's own contract). Double-clicking a clip in the lane area
+    // calls this via the onClipDoubleClicked hook wired in the constructor.
+    void openPianoRoll(synth::ClipId id);
+    // Swaps back to the clip lanes. Wired to PianoRollComponent::onCloseRequested (back button,
+    // Escape with nothing selected, or the edited clip disappearing from the doc) — also callable
+    // directly.
+    void closePianoRoll();
+    bool isPianoRollOpen() const noexcept { return pianoRoll_.isOpen(); }
+    synth::ui::PianoRollComponent& getPianoRoll() noexcept { return pianoRoll_; }
+
     // Pure geometry getters — later tasks and tests build on the same rects rather than
     // re-deriving the arithmetic in resized().
     juce::Rectangle<int> getTransportBarBounds() const noexcept { return transportBarBounds_; }
@@ -168,8 +182,15 @@ private:
     // paint() always precedes children) and BEFORE playhead_ (added last, below), so z-order reads
     // grid -> clips -> playhead with no second place ever painting the grid.
     synth::ui::TimelineClipLaneArea clipLaneArea_{viewState_, clipSelection_};
-    // Added LAST in the constructor so it sits on top of the ruler AND the clip lane area; spans
-    // ruler + lanes and intercepts no mouse clicks (see TimelinePlayheadOverlay's ctor).
+    // TL5-8: occupies the exact same rect as clipLaneArea_ (gridLanesBounds_), added right after
+    // it (addChildComponent — not addAndMakeVisible, so it starts invisible) so z-order still
+    // reads grid -> clips/piano-roll -> playhead. Only one of clipLaneArea_/pianoRoll_ is visible
+    // at a time; openPianoRoll()/closePianoRoll() toggle it. See PianoRollComponent's class
+    // comment for why its note x positions use viewState_.beatToX(beat) unmodified (no keys-
+    // column offset) — that is what keeps them aligned with playhead_ below.
+    synth::ui::PianoRollComponent pianoRoll_{viewState_};
+    // Added LAST in the constructor so it sits on top of the ruler AND the clip lane area/piano
+    // roll; spans ruler + lanes and intercepts no mouse clicks (see TimelinePlayheadOverlay's ctor).
     TimelinePlayheadOverlay playhead_{viewState_};
     juce::ComboBox snapCombo_;
     // TL5-5: left-aligned in the transport-bar strip, the snap combo stays right of it.

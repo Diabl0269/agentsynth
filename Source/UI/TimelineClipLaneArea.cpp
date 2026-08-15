@@ -400,6 +400,12 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
     repaint();
 }
 
+void TimelineClipLaneArea::mouseDoubleClick(const juce::MouseEvent& e) {
+    auto hit = hitTestClip(e.getPosition());
+    if (hit && onClipDoubleClicked)
+        onClipDoubleClicked(hit->id);
+}
+
 void TimelineClipLaneArea::mouseMove(const juce::MouseEvent& e) {
     auto hit = hitTestClip(e.getPosition());
     if (hit && (hit->zone == ClipHit::Zone::LeftEdge || hit->zone == ClipHit::Zone::RightEdge))
