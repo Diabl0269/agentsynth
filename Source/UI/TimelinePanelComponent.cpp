@@ -64,7 +64,12 @@ TimelinePanelComponent::TimelinePanelComponent() {
         ruler_.repaint();
     };
 
-    // TL5-4: added LAST so it is topmost — it draws over the ruler AND the lanes grid.
+    // TL5-7: added after everything else but BEFORE the playhead below, so clips draw above the
+    // grid (painted by this component's own paint(), which — as a parent — always paints before
+    // its children) and below the playhead.
+    addAndMakeVisible(clipLaneArea_);
+
+    // TL5-4: added LAST so it is topmost — it draws over the ruler, the lanes grid AND the clips.
     addAndMakeVisible(playhead_);
     playhead_.setComponentID("timelinePlayhead");
 }
@@ -79,6 +84,7 @@ void TimelinePanelComponent::setTransport(synth::TransportService* transport) {
     ruler_.setTransport(transport);
     playhead_.setTransport(transport);
     transportBar_.setTransport(transport);
+    clipLaneArea_.setTransport(transport);
 }
 
 void TimelinePanelComponent::setMetronome(synth::Metronome* metronome) { transportBar_.setMetronome(metronome); }
@@ -122,7 +128,10 @@ void TimelinePanelComponent::setTimelineDoc(synth::TimelineDoc* doc) {
     if (doc_ != nullptr)
         doc_->addListener(this);
     syncTrackHeaders();
+    clipLaneArea_.setTimelineDoc(doc_);
 }
+
+void TimelinePanelComponent::setUndoManager(AppUndoManager* undoManager) { clipLaneArea_.setUndoManager(undoManager); }
 
 void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
     trackHeaderHost_ = host;
@@ -132,7 +141,10 @@ void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
     syncTrackHeaders();
 }
 
-void TimelinePanelComponent::timelineChanged(const synth::TimelineDoc&) { syncTrackHeaders(); }
+void TimelinePanelComponent::timelineChanged(const synth::TimelineDoc&) {
+    syncTrackHeaders();
+    clipLaneArea_.refreshFromDoc();
+}
 
 void TimelinePanelComponent::syncTrackHeaders() {
     if (doc_ == nullptr) {
@@ -173,7 +185,13 @@ void TimelinePanelComponent::syncTrackHeaders() {
 }
 
 void TimelinePanelComponent::layoutTrackHeaders() {
-    const int rowHeight = TimelineTrackHeaderComponent::kRowHeight;
+    // TL5-7: themed with a literal fallback, same pattern as resized() above — and the SAME token
+    // synth::ui::TimelineClipLaneArea reads for its own row height, so header rows and clip rows
+    // never drift apart.
+    int rowHeight = TimelineTrackHeaderComponent::kRowHeight;
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        rowHeight = lf->getTheme().metrics.timelineTrackRowHeight;
+
     const int count = trackHeaderList_.headers.size();
     const int width = std::max(0, trackHeaderViewport_.getMaximumVisibleWidth());
 
@@ -253,6 +271,10 @@ void TimelinePanelComponent::resized() {
     auto lanes = lanesBounds_;
     ruler_.setBounds(lanes.removeFromTop(rulerHeight));
     gridLanesBounds_ = lanes;
+
+    // TL5-7: the clip-lane area fills EXACTLY the rect the grid below is painted into (paint()'s
+    // gridLanesBounds_ loop, unchanged) — so clips line up with the bar/beat grid pixel-for-pixel.
+    clipLaneArea_.setBounds(gridLanesBounds_);
 
     // The playhead spans the WHOLE lanes region, ruler included, so the line reads as one stroke
     // from the ruler down through the tracks. Its local x == 0 is lanesBounds_.getX(), which is

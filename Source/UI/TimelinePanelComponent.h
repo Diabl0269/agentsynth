@@ -1,6 +1,8 @@
 #pragma once
 
 #include "../Timeline/TimelineDoc.h"
+#include "ClipSelectionModel.h"
+#include "TimelineClipLaneArea.h"
 #include "TimelinePlayheadOverlay.h"
 #include "TimelineRulerComponent.h"
 #include "TimelineTrackHeaderComponent.h"
@@ -8,6 +10,8 @@
 #include "TimelineViewState.h"
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+
+class AppUndoManager; // Forward declaration (Source/AppUndoManager.h)
 
 namespace synth {
 class TransportService;
@@ -58,7 +62,8 @@ public:
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
 
     // Non-owning; may be null (tests, or before MainComponent finishes wiring). Forwarded to the
-    // ruler and the playhead overlay — the two sub-components that talk to the transport directly.
+    // ruler and the playhead overlay — the two sub-components that talk to the transport directly
+    // — and, TL5-7, to the clip-lane area (it only reads the time signature, for Snap::Bar).
     void setTransport(synth::TransportService* transport);
 
     // TL5-6: forwarded straight to the transport bar's own metronome toggle — see
@@ -86,7 +91,8 @@ public:
     // TL5-3. Non-owning; may be null (a SYNTH_ENABLE_TIMELINE=OFF build never sets one, and the
     // panel is then an inert shell with an empty header column). The panel listens to the doc and
     // rebuilds/refreshes the track headers on every notification — that is the ONLY thing that
-    // updates them: no timer, no polling.
+    // updates them: no timer, no polling. TL5-7: also forwarded to the clip-lane area, which runs
+    // the same "set doc, refresh once" seam (TimelineClipLaneArea::setTimelineDoc).
     void setTimelineDoc(synth::TimelineDoc* doc);
     synth::TimelineDoc* getTimelineDoc() const noexcept { return doc_; }
 
@@ -94,6 +100,17 @@ public:
     // header column's whole conversation with the app goes through one seam. Must be set before
     // (or at the same time as) setTimelineDoc for the first build to be fully wired.
     void setTrackHeaderHost(TrackHeaderHost* host);
+
+    // TL5-7: forwarded to the clip-lane area — MainComponent's existing AppUndoManager is what
+    // makes every clip drag/trim/split/duplicate/delete ONE undo step. Non-owning; may be null
+    // (mutations then apply directly, off the undo stack — same degrade-gracefully contract every
+    // other non-owning setter here has).
+    void setUndoManager(AppUndoManager* undoManager);
+
+    // The clip lane area and the selection model behind it (TL5-7). The panel owns the selection
+    // model; the lane area only holds a reference to it (see TimelineClipLaneArea's ctor).
+    synth::ui::ClipSelectionModel& getClipSelection() noexcept { return clipSelection_; }
+    synth::ui::TimelineClipLaneArea& getClipLaneArea() noexcept { return clipLaneArea_; }
 
     // Pure geometry getters — later tasks and tests build on the same rects rather than
     // re-deriving the arithmetic in resized().
@@ -126,7 +143,8 @@ public:
     }
 
 private:
-    // TimelineDoc::Listener — the single trigger for a header rebuild/refresh.
+    // TimelineDoc::Listener — the single trigger for a header rebuild/refresh, AND (TL5-7) the
+    // clip-lane area's refresh (prunes the clip selection of anything the mutation removed).
     void timelineChanged(const synth::TimelineDoc& doc) override;
 
     void persistSnapChoice();
@@ -141,9 +159,17 @@ private:
     };
 
     TimelineViewState viewState_;
+    // TL5-7: the panel owns the clip selection; the lane area only holds a reference to it (same
+    // relationship it has with viewState_ below).
+    synth::ui::ClipSelectionModel clipSelection_;
     TimelineRulerComponent ruler_{viewState_};
-    // Added LAST in the constructor so it sits on top of the ruler; spans ruler + lanes and
-    // intercepts no mouse clicks (see TimelinePlayheadOverlay's ctor).
+    // Positioned over gridLanesBounds_ in resized() — the SAME rect the grid below it is painted
+    // into by this component's own paint(). Added as a child AFTER the grid is painted (parent
+    // paint() always precedes children) and BEFORE playhead_ (added last, below), so z-order reads
+    // grid -> clips -> playhead with no second place ever painting the grid.
+    synth::ui::TimelineClipLaneArea clipLaneArea_{viewState_, clipSelection_};
+    // Added LAST in the constructor so it sits on top of the ruler AND the clip lane area; spans
+    // ruler + lanes and intercepts no mouse clicks (see TimelinePlayheadOverlay's ctor).
     TimelinePlayheadOverlay playhead_{viewState_};
     juce::ComboBox snapCombo_;
     // TL5-5: left-aligned in the transport-bar strip, the snap combo stays right of it.

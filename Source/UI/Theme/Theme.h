@@ -103,6 +103,11 @@ struct Metrics {
     int timelineTrackHeaderWidth{160};  // code-only; not parsed from user JSON
     int timelineTransportBarHeight{28}; // code-only; not parsed from user JSON
     int timelineRulerHeight{24};        // code-only; not parsed from user JSON (TL5-2)
+    // TL5-7: the row height BOTH the track-header column and the clip-lane area lay their rows
+    // out at — the single source that keeps header rows and clip rows aligned. Replaces what used
+    // to be TimelineTrackHeaderComponent::kRowHeight's exclusive say in the matter; that constant
+    // now only serves as the headless literal fallback and is kept equal to this default.
+    int timelineTrackRowHeight{56}; // code-only; not parsed from user JSON (TL5-7)
 };
 
 // Font family NAMES (resolved to embedded typefaces by the LnF) + a type scale (pt).

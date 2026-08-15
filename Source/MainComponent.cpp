@@ -453,6 +453,10 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         });
     timelinePanel.setTrackHeaderHost(this);
     timelinePanel.setTimelineDoc(&timelineDoc);
+    // TL5-7: same undo stack every graph/timeline mutation already shares — a clip drag/trim/
+    // split/duplicate/delete is one more AppUndoManager::recordTimelineChange call, same as every
+    // other timeline-only edit.
+    timelinePanel.setUndoManager(&undoManager);
     // One publish before anything else happens, so the audio thread starts from this document
     // rather than from the exchange's never-published empty fallback.
     publishTimelineAndRebindRecorder();

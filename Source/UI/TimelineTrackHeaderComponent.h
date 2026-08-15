@@ -68,7 +68,14 @@ class TimelineTrackHeaderComponent : public juce::Component {
 public:
     // Fixed row height. The header column scrolls (juce::Viewport in TimelinePanelComponent) rather
     // than compressing rows, so this stays constant however many tracks there are.
-    static constexpr int kRowHeight = 44;
+    //
+    // TL5-7: the themed source of truth is Theme::Metrics::timelineTrackRowHeight — TimelinePanelComponent::
+    // layoutTrackHeaders() reads that (falling back to this literal when no themed LookAndFeel is
+    // installed, e.g. headless tests), and TimelineClipLaneArea reads the SAME token so a track's
+    // header row and its clip-lane row always land at the same y. Kept equal to the themed default
+    // rather than deleted so a header built directly against a stub host (TimelineTrackHeaderTests.cpp)
+    // still has a sizing constant to build against.
+    static constexpr int kRowHeight = 56;
 
     // Menu ids. The candidate nodes take 1..N; these sit above any plausible candidate count
     // (TimelineDoc::kMaxTracks is 256, and there can be no more Track In nodes than that in a sane

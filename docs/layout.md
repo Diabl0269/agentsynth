@@ -1473,7 +1473,9 @@ both regions share identical behaviour from one implementation.
 ### TL5-3: track headers, binding chips, add-track
 
 `Source/UI/TimelineTrackHeaderComponent.h/.cpp` (`synth::ui::TimelineTrackHeaderComponent`) — one
-44 px row per `synth::Track`, living in the panel's track-header column. The column is a fixed
+row per `synth::Track` (`Metrics::timelineTrackRowHeight`, 56 px — shared with the clip-lane area,
+TL5-7 below, so header rows and clip rows always line up), living in the panel's track-header
+column. The column is a fixed
 `"+ MIDI Track"` strip (22 px) at the top plus a `juce::Viewport` below it, so a project with more
 tracks than fit **scrolls**; rows are never compressed. Both live inside `getTrackHeaderBounds()`,
 so the panel's three regions still tile exactly.
@@ -1710,3 +1712,79 @@ elsewhere. See `docs/architecture.md`'s Metronome subsection for the full count-
 Layout: `metronomeButton_` (22 px) + 4 px gap + `countInCombo_` (64 px) + 8 px gap, inserted between
 the loop button and the BPM label — the bar's fixed-width strip grows by ~98 px, well inside the
 timeline panel's normal width.
+
+### TL5-7: clip lanes
+
+`Source/UI/TimelineClipLaneArea.h/.cpp` (`synth::ui::TimelineClipLaneArea`) fills the lanes region
+below the ruler (`getLanesBounds()` minus the ruler strip — the same rect the bar/beat grid is
+painted into) with per-track rows of `synth::Clip` rects: drag to move, drag an edge to trim, a
+context menu to split/duplicate/delete, and marquee (rubber-band) multi-select. Backed by
+`synth::ui::ClipSelectionModel` (`Source/UI/ClipSelectionModel.h`), the clip analogue of
+`SelectionModel` (§12.2) — a `std::set<synth::ClipId>` with the same add/remove/toggle/
+setSelection/retainOnly contract, ordered ascending by id so a batched move or delete always walks
+clips in a stable order regardless of click order.
+
+**Ownership.** `TimelinePanelComponent` owns the `ClipSelectionModel` and the lane area
+(`getClipSelection()` / `getClipLaneArea()`); the lane area holds the selection model and the
+shared `TimelineViewState` by reference, exactly the relationship the ruler already has with the
+view state. `MainComponent` forwards its one `AppUndoManager` in (`TimelinePanelComponent::
+setUndoManager`), the same gated `#if SYNTH_ENABLE_TIMELINE` wiring block that installs the doc,
+transport and track-header host (TL5-3).
+
+**Z-order, and the one relocation this task makes.** `TimelinePanelComponent::paint()` still paints
+the bar/beat grid directly, unchanged — that stays the ONE place the grid is painted. The lane area
+is added as a child positioned over exactly that same rect, *before* the playhead overlay (added
+last). Since JUCE always paints a parent before its children, the result is grid → clips →
+playhead with no extra bookkeeping.
+
+**Row geometry.** `Metrics::timelineTrackRowHeight` (56 px, code-only) is the single row height
+both the track-header column and the clip-lane area lay out at — see TL5-3 above.
+`TimelineTrackHeaderComponent::kRowHeight` is kept as the matching headless literal fallback rather
+than deleted, read by both components' `dynamic_cast<AppLookAndFeel*>`-with-fallback pattern.
+`TimelineClipLaneArea::computeClipRect(viewState, trackIndex, startBeat, lengthBeats, rowHeight)` is
+a pure static function (no doc, no component) — `[beatToX(start), beatToX(start+length)]` × `[row *
+rowHeight, rowHeight]` — so geometry is unit-testable with no component or LookAndFeel at all.
+
+**Rendering.** Every track in doc order gets one row; every clip on it, a rounded rect filled with
+`synth::ui::resolveTrackColour(track.colourArgb, trackIndex, track.muted)` (§TL5-3's resolver,
+reused rather than re-invented), a name (width > ~40 px) and a thin pitch-mapped note preview
+(width > ~24 px, clip-relative note beats offset by the clip's current — possibly mid-drag —
+start). Selected clips get a brighter border and a slight fill lift. Repaints happen only on: doc
+changes (`refreshFromDoc()`, routed in from `TimelinePanelComponent::timelineChanged()`, which also
+calls `ClipSelectionModel::retainOnly` so a clip removed by any path can never stay selected),
+view-state changes (zoom/scroll/snap), and interactions — never a timer.
+
+**Interactions:**
+
+| Gesture | Effect |
+|---|---|
+| Click a clip | Selects it (replacing the selection unless Shift/Cmd/Ctrl, which toggles just that clip) |
+| Click empty lane space | Deferred: only a press that never becomes a drag clears the selection on mouse-up — the same `pendingEmptyCanvasClick` trick `GraphEditor::mouseDown/mouseUp` uses for the canvas, so a drag is never mistaken for a deselect |
+| Drag from empty lane space | Marquee — intersection hit-test (`clipHitTestMarquee`), additive with Shift; there is no drag-to-pan here (scrolling is wheel-only, TL5-2), so a plain drag also starts a (non-additive) marquee |
+| Drag a clip's body | Moves it (and every other selected clip, same-track only) by one Snap-quantised delta shared across the whole selection, computed from the clip that was grabbed and clamped so no clip's start goes below 0 |
+| Drag within 6 px of the right edge | Resizes (trims) the clip's length, Snap-quantised, floored at 1/16 beat |
+| Drag within 6 px of the left edge | Moves the start and shrinks/grows the length so the **end** stays fixed; the clip's notes (clip-relative) travel with it — a deliberate divergence from per-note-anchored trimming, deferred to a later task |
+| Right-click a clip | `PopupMenu`: **Split at pointer** (enabled only when the Snap-quantised pointer lands strictly inside the clip), **Duplicate**, **Delete** — preserves the existing selection, the same rule `GraphEditor`'s cable/canvas menus follow |
+| Delete / Backspace | Deletes every selected clip as ONE undo step; returns `false` (key falls through) when the selection is empty |
+| Escape | Clears the selection; returns `false` when it is already empty |
+
+**One undo step per gesture.** Every drag/trim previews locally (a member offset or length, read
+back by `paint()` through `effectiveGeometryFor()`) and commits to the doc exactly once on
+mouse-up, through `AppUndoManager::recordTimelineChange` — a multi-clip move or a multi-clip Delete
+is one `recordTimelineChange` call however many clips it touches, mirroring
+`GraphEditor::dragSelectionBy()`/`finalizeSelectionDrag()` and `deleteSelection()`'s one-transaction
+contract for modules. `showMenuAsync` never runs headlessly, so the context menu's three actions are
+exercised in tests through `applyClipContextChoice(ClipId, choice, pointerBeat)` — the same
+menu-without-the-menu idiom `TimelineTrackHeaderComponent::applyBindingMenuChoice`/
+`applyContextMenuChoice` already establish (TL5-3).
+
+**Panel-scoped Delete key.** The lane area grabs keyboard focus on `mouseDown` (same as
+`GraphEditor::mouseDown`), so pressing Delete right after a click lands on `TimelineClipLaneArea::
+keyPressed` rather than whichever panel had focus before. This is only the *local* half of Delete-key
+arbitration — TL5-10 is where cross-panel arbitration (which of several panels' Delete handlers
+should fire) gets formalised.
+
+Tests: `Tests/TimelineClipLaneTests.cpp` — `ClipSelectionModel`/`clipHitTestMarquee` unit coverage,
+pure-geometry tests for `computeClipRect`, and interaction tests driven by hand-built
+`juce::MouseEvent`s (same pattern as TL5-2's ruler tests in `Tests/TimelinePanelTests.cpp`) against
+a bare `TimelineDoc` + `AppUndoManager` + `TimelineClipLaneArea`, no `MainComponent` needed.

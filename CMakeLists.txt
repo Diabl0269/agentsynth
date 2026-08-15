@@ -404,6 +404,9 @@ add_library(AppUI STATIC
     Source/UI/TimelineTrackHeaderComponent.cpp
     Source/UI/TimelineTransportBar.h
     Source/UI/TimelineTransportBar.cpp
+    Source/UI/TimelineClipLaneArea.h
+    Source/UI/TimelineClipLaneArea.cpp
+    Source/UI/ClipSelectionModel.h
     Source/UI/TrackColour.h
     Source/UI/TimelineViewState.h
     Source/UI/AIChatComponent.cpp
