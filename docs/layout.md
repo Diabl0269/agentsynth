@@ -744,7 +744,8 @@ Guidelines to preserve smooth frame rates:
 - **`applyToolbarIcons()` is gated**: cloning `Drawable` objects is expensive. The call is restricted to narrow-mode transitions in `MainComponent::resized()` — not executed on every resize frame. See §5 for the gate logic.
 - **Status bar polls at 5 Hz** and repaints only itself (`repaint()` on `StatusBarComponent` only). There are zero `writeToLog` calls in the status-polling path.
 - **TL4-5 automation → UI reflection adds no new timer.** `GraphEditor::timerCallback()`'s existing 30 Hz tick drains `AudioEngine::getAutomationUiFeed()` and calls `ModuleComponent::reflectParameterValue()`, which only ever calls `slider->setValue(..., juce::dontSendNotification)` — no direct `repaint()`; the card's own gated 15 Hz timer and buffered-image cache pick the change up on their own schedule, same as any other control change.
-- **All UI animations are time-bounded** (see §11). They run for a finite transition duration and stop when settled. Never add continuous / per-frame animations outside the loading-spinner exception defined in §11.
+- **All UI animations are time-bounded** (see §11). They run for a finite transition duration and stop when settled. Never add continuous / per-frame animations outside the **two** exceptions defined in §11 (the AI thinking spinner and the timeline playhead), each of which is bounded by an activity, not by a duration.
+- **The timeline panel adds no timer.** Its transport poll rides MainComponent's existing 10 Hz tick, only while the panel is visible, and repaints the ruler only when the ruler's own state (time signature, loop trio) changed. The playhead's 30 Hz strip repaint is the §11 exception and runs only while the transport is playing.
 
 ---
 
@@ -813,15 +814,56 @@ Composes tooltip text with an optional keyboard shortcut hint appended in `[brac
 | **ModuleLibraryComponent rows** | Row hover-highlight; grab/dragging-hand cursor on draggable rows; per-module descriptions via `descriptionFor(name)` surfaced as `setTooltip()` | `ModuleLibraryComponent` |
 | **Preset-load feedback** | Status bar text updated during load; no spinner | `MainComponent` → `StatusBarComponent` |
 | **AI request Cancel + spinner** | Cancel button visible while a request is in flight; pulsing "thinking" spinner (time-bounded — stops on completion or cancel, confined to its region) | `AIChatComponent` |
+| **Timeline playhead** | 30 Hz vertical position line, **playing only**, repainting only the strip between its old and new x | `TimelinePlayheadOverlay` (TL5-4) |
 
 ### Time-bounded animation rule
 
-**All animations MUST be time-bounded.** An `AnimationDriver` runs for a finite duration and stops at `t = 1.0`. The single permitted exception is the AI thinking spinner — it pulses only while a network request is in flight and stops immediately on completion or cancel. Its repaint is confined to its own component region.
+**All animations MUST be time-bounded.** An `AnimationDriver` runs for a finite duration and stops at `t = 1.0`.
+
+There are exactly **two** permitted exceptions, and both are bounded by an *activity* rather than by a duration:
+
+| Exception | Runs while | Confined to | Stops |
+|---|---|---|---|
+| AI thinking spinner (`AIChatComponent::SpinnerDot`) | a network request is in flight | its own 8×8 component | on completion or cancel |
+| Timeline playhead (`TimelinePlayheadOverlay`) | the transport is PLAYING | a strip a few px wide, spanning the panel's ruler + lanes | on stop/pause, with one final strip |
 
 Never add:
 - Continuous `timerCallback` repaints on `ModuleComponent` or its children outside the existing gated 15 Hz gate.
 - A free-running `AnimationDriver` (no duration, or duration far longer than the visible transition).
 - Per-frame `repaint()` calls in any path that is always active (not gated to an active transition).
+
+#### The playhead's confinement contract (TL5-4)
+
+A third exception is not granted just because the second was. The playhead earned it by satisfying three clauses, all enforced in code and asserted in `Tests/TimelinePlayheadTests.cpp`:
+
+1. **Playing only.** The 30 Hz `juce::Timer` is started on the play transition and stopped on the stop/pause transition — it never runs while the transport is stopped, so an idle app repaints nothing (`ZeroRepaintsOver100IdleFrames`).
+2. **Strip only.** A frame never repaints the component. It repaints the *union of the old and new line strips* (`kStripHalfWidth` px either side of the line), clipped to the bounds; a frame whose rounded x did not move requests nothing at all (`PlayingRequestsConfinedStrips`).
+3. **Explicit stop.** Stopping emits exactly **one** final strip — so the line settles on the position playback ended at — and then goes silent (`StopEmitsOneFinalStripThenSilence`).
+
+#### The paint-count pattern
+
+`TimelinePlayheadOverlay` routes **every** repaint it asks for through one protected virtual:
+
+```cpp
+protected:
+    virtual void requestRepaintStrip (juce::Rectangle<int> strip);   // default: repaint (strip)
+```
+
+A test subclasses the component and overrides that seam to count calls and record rects, which turns "how many repaints does an idle app cost?" into an ordinary headless assertion — no peer, no message loop, no screenshot diffing:
+
+```cpp
+struct CountingPlayhead : synth::ui::TimelinePlayheadOverlay {
+    using TimelinePlayheadOverlay::TimelinePlayheadOverlay;
+    int requests = 0;
+    void requestRepaintStrip (juce::Rectangle<int> r) override {
+        ++requests;
+        TimelinePlayheadOverlay::requestRepaintStrip (r);
+    }
+    void tick() { timerCallback(); }   // the protected timer callback, driven by hand
+};
+```
+
+**Reuse this pattern for any future timed repaint.** A repaint budget that cannot be asserted is a repaint budget that will regress.
 
 ---
 
@@ -1400,8 +1442,10 @@ non-owning, may be null). `paint()` reads `getPositionSnapshot()` once per frame
 cheap) for the time signature and loop bounds, draws bar ticks/labels with adaptive density (the
 labelled-bar stride doubles until labels are `>= 40px` apart, so they never overlap; per-beat ticks
 only appear once `pixelsPerBeat >= 8`) and, when the snapshot reports `looping`, a bracket over
-`[loopStartPpq, loopEndPpq]` in the theme's accent colour. No timer — the playhead is TL5-4;
-`repaint()` is called only after an interaction or a posted transport command.
+`[loopStartPpq, loopEndPpq]` in the theme's accent colour. No timer of its own: `repaint()` is called
+after one of its own interactions, or by the panel's 10 Hz poll when the time signature or loop range
+changed from elsewhere (TL5-4, below). The moving position line is the separate
+`TimelinePlayheadOverlay` drawn over it.
 
 **Ruler interactions:**
 
@@ -1495,3 +1539,56 @@ Headless test seams (a `juce::PopupMenu` never runs in the test binary): `collec
 menu, and `handleChipClick(showMenu=false)` exercises the selection affordance on its own. The row
 talks to the app exclusively through `synth::ui::TrackHeaderHost` (implemented by `MainComponent`),
 so it is fully testable against a stub with no graph — see `Tests/TimelineTrackHeaderTests.cpp`.
+
+### TL5-4: the playhead
+
+`Source/UI/TimelinePlayheadOverlay.h/.cpp` (`synth::ui::TimelinePlayheadOverlay`) — a transparent,
+non-intercepting (`setInterceptsMouseClicks(false, false)`) overlay the panel adds **last** (so it is
+topmost) and sizes to `getLanesBounds()`, i.e. the whole ruler + lanes region. Its local `x == 0` is
+`lanesBounds_.getX()`, which is also the ruler's origin and therefore exactly `TimelineViewState`'s —
+no offset arithmetic anywhere in the overlay. It draws a `kLineWidth = 2 px` vertical line in
+`theme.colors.accent` (literal cyan fallback with no themed LnF), full height.
+
+**This is the second of the two exceptions to the no-unconditional-per-tick-repaint rule.** Its
+confinement contract, the paint-count test pattern it introduces, and why a third exception is not
+free are all in §11 — read that before touching this component.
+
+**Two timers, one of them borrowed:**
+
+| Rate | Owner | What it does |
+|---|---|---|
+| 10 Hz | `MainComponent::timerCallback` (**existing** timer, `#if SYNTH_ENABLE_TIMELINE`, only while `timelinePanel.isVisible()`) | `TimelinePanelComponent::updateFromTransport(snapshot, outputLatencySeconds)` |
+| 30 Hz | `TimelinePlayheadOverlay`'s own `juce::Timer` | re-reads the transport and requests the movement strip — **only while playing** |
+
+The low-rate poll is the **sole** owner of the 30 Hz timer's lifecycle: it sees the play/stop
+transition and calls `startTimerHz`/`stopTimer`. The 30 Hz tick deliberately does *not* stop itself
+when it notices a stopped transport — one owner is easier to reason about, and a tick after playback
+stopped simply finds an unchanged x and requests nothing. Worst case the timer runs for one extra
+poll interval, repainting nothing.
+
+`TimelinePanelComponent::updateFromTransport` has a second job: the ruler paints the time signature
+and the loop brace, and **nothing else repaints it** when those change from outside its own mouse
+gestures (a bundle load, a host tempo map, TL5-5's transport controls). So the poll diffs a small
+`RulerTransportState` (time signature + loop trio — the *position* is deliberately excluded, since
+the playhead is the only thing that moves with it) and repaints the ruler only on a change; a time
+signature change also repaints the panel, whose lanes grid derives its bar spacing from it. The first
+poll seeds the struct instead of counting as a change.
+
+**Latency offset.** The drawn beat is `ppq - outputLatencySeconds * (bpm / 60)`, clamped `>= 0`, so
+the line matches what is being **heard** rather than the block currently being rendered.
+`outputLatencySeconds` comes from the new `AudioEngine::getOutputLatencySamples()` — the open output
+device's `getOutputLatencyInSamples()`, `0` in Hosted mode and `0` when no device is open (every
+headless test). It is report-only, exactly like `getGraphLatencySamples()`. Graph latency is
+deliberately *not* added in: it is patch-dependent, mostly zero, and never compensated anywhere,
+whereas the device buffer is the term that actually separates "rendered" from "heard".
+
+**Zoom/scroll while playing.** The old line position is remembered in **pixel** space
+(`getLastRequestedLineX()`), never re-derived from the old beat. A zoom changes the mapping, so the
+stale pixels that must be repainted are where the line *actually was* — remapping the old beat would
+repaint the wrong place and leave a smear. One zoom therefore costs one wider-than-usual strip, which
+is the correct trade (repainting extra is safe; missing pixels is not). A loop wrap costs the same:
+one strip spanning the jump.
+
+**Stopped** the overlay asks for nothing, but it still *draws*: `paint()` renders the line at the
+current position whenever the panel paints for any other reason. Painting is not what the contract
+restricts; asking for a repaint is.

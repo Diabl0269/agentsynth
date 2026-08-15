@@ -14,9 +14,11 @@ class TransportService;
 // TransportService pointer may be null (tests, or a build/flag state with no engine wired in yet):
 // paint() then just shows an empty ruler and mouse interactions are no-ops.
 //
-// No timer, no animation of its own — repaint() is called only after an interaction changes
-// something this component paints (view-state zoom/scroll, or after posting a transport command).
-// The playhead itself is TL5-4.
+// No timer, no animation of its own — repaint() is called after an interaction changes something
+// this component paints (view-state zoom/scroll, or after posting a transport command), or by
+// TimelinePanelComponent::updateFromTransport's 10 Hz diff when the time signature / loop range
+// changed from somewhere else. The moving position line is a separate topmost overlay drawn over
+// this strip and the lanes below it — see TimelinePlayheadOverlay (TL5-4).
 namespace synth::ui {
 
 class TimelineRulerComponent : public juce::Component {

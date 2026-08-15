@@ -187,6 +187,21 @@ public:
     // only surface the total (for the UI / host to display or pass on) — we do NOT compensate.
     int getGraphLatencySamples() const noexcept { return mainProcessorGraph.getLatencySamples(); }
 
+    // The OUTPUT DEVICE's latency, in samples — the buffering between the graph writing a block and
+    // that block leaving the speakers. Report-only, exactly like getGraphLatencySamples above: we
+    // never compensate for it, we only surface it (TL5-4 offsets the drawn playhead by it so the
+    // line matches what is being HEARD).
+    //
+    // 0 in Hosted mode (the host owns the device; asking our own idle AudioDeviceManager would be a
+    // lie) and 0 whenever no device is open — e.g. every headless test.
+    int getOutputLatencySamples() const noexcept {
+        if (isHosted())
+            return 0;
+        if (auto* device = deviceManager.getCurrentAudioDevice())
+            return device->getOutputLatencyInSamples();
+        return 0;
+    }
+
     struct ModRoutingInfo {
         juce::AudioProcessorGraph::NodeID attenuverterNodeID;
         juce::AudioProcessorGraph::NodeID sourceNodeID;

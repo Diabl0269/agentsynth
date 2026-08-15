@@ -641,6 +641,20 @@ void MainComponent::timerCallback() {
     // the transport (Write spans open on play; every open span commits on stop). Allocation-free
     // and — like everything else in this callback — completely silent.
     automationRecorder.update();
+
+    // TL5-4: the timeline panel's low-rate transport poll, on the same existing timer — no new
+    // timer, and nothing at all when the panel is hidden (a collapsed timeline must cost exactly
+    // what it did before TL5-4). This is what starts/stops the playhead's playing-only 30 Hz strip
+    // repaint; see docs/layout.md §11.
+    if (timelinePanel.isVisible()) {
+        const auto position = audioEngine.getTransport().getPositionSnapshot();
+        // Device-buffer latency only. The graph's own reported latency is deliberately left out:
+        // it is report-only, patch-dependent and mostly zero, whereas the output buffer is the term
+        // that actually separates "rendered" from "heard".
+        const double sampleRate = position.sampleRate > 0.0 ? position.sampleRate : 44100.0;
+        const double outputLatencySeconds = (double)audioEngine.getOutputLatencySamples() / sampleRate;
+        timelinePanel.updateFromTransport(position, outputLatencySeconds);
+    }
 #endif
 
     // Status bar polls at 5 Hz (every 2nd tick of the 10 Hz timer). update() is gated — it

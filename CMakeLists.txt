@@ -396,6 +396,8 @@ add_library(AppUI STATIC
     Source/UI/TimelinePanelComponent.cpp
     Source/UI/TimelineRulerComponent.h
     Source/UI/TimelineRulerComponent.cpp
+    Source/UI/TimelinePlayheadOverlay.h
+    Source/UI/TimelinePlayheadOverlay.cpp
     Source/UI/TimelineTrackHeaderComponent.h
     Source/UI/TimelineTrackHeaderComponent.cpp
     Source/UI/TrackColour.h

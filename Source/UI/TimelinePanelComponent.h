@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Timeline/TimelineDoc.h"
+#include "TimelinePlayheadOverlay.h"
 #include "TimelineRulerComponent.h"
 #include "TimelineTrackHeaderComponent.h"
 #include "TimelineViewState.h"
@@ -17,7 +18,10 @@ class TransportService;
 // MainComponent docks this full-width, above the status bar, toggled via the toolbar button /
 // Cmd+T shortcut and slid in/out through the same coordinated AnimationDriver that already
 // animates the library/AI panels (see MainComponent::animatePanelTransition()). This class owns
-// none of that: it is pure layout + paint, with no timers and no animation of its own.
+// none of that: it is layout + paint, with no timer and no animation of its own — TL5-4's
+// updateFromTransport() is driven by MainComponent's EXISTING 10 Hz timer, and the only timer
+// anywhere under this panel is the playhead overlay's, which runs only while the transport plays
+// (see TimelinePlayheadOverlay.h and docs/layout.md §11).
 //
 // resized() lays out three regions every task shares the same arithmetic for:
 //   - transport bar strip   (top,    Metrics::timelineTransportBarHeight) — houses the snap
@@ -51,8 +55,20 @@ public:
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
 
     // Non-owning; may be null (tests, or before MainComponent finishes wiring). Forwarded to the
-    // ruler, which is the only sub-component that talks to the transport directly.
+    // ruler and the playhead overlay — the two sub-components that talk to the transport directly.
     void setTransport(synth::TransportService* transport);
+
+    // TL5-4: THE low-rate transport poll, called from MainComponent's EXISTING 10 Hz timer (gated
+    // #if SYNTH_ENABLE_TIMELINE, and only while this panel is visible). It adds no timer of its own.
+    // Two jobs:
+    //   - hand the snapshot to the playhead overlay, which owns its 30 Hz playing-only timer from
+    //     the play/stop transitions it sees here (see TimelinePlayheadOverlay.h);
+    //   - diff the small slice of transport state the RULER paints (time signature + loop trio) and
+    //     repaint it only on a change. The position is deliberately NOT part of that diff: the
+    //     playhead is the only thing that moves with it, and it repaints its own strip. Same gated
+    //     idiom as the status bar's 5 Hz poll.
+    void updateFromTransport(const synth::TransportService::PositionSnapshot& snapshot, double outputLatencySeconds);
+
     // Non-owning. Restores/persists the snap-selector choice under the "timelineSnap" key, same
     // pattern as AIChatComponent::setAccountService()'s non-owning setter.
     void setApplicationProperties(juce::ApplicationProperties* props);
@@ -79,7 +95,12 @@ public:
 
     TimelineViewState& getViewState() noexcept { return viewState_; }
     TimelineRulerComponent& getRuler() noexcept { return ruler_; }
+    TimelinePlayheadOverlay& getPlayhead() noexcept { return playhead_; }
     juce::ComboBox& getSnapCombo() noexcept { return snapCombo_; }
+
+    /** How many times updateFromTransport() has been called. Test hook: it is what proves the
+     *  10 Hz poll never reaches a hidden panel. */
+    int getTransportUpdateCountForTest() const noexcept { return transportUpdateCount_; }
 
     // ---- Track headers (TL5-3) ----
     juce::TextButton& getAddTrackButton() noexcept { return addTrackButton_; }
@@ -109,7 +130,29 @@ private:
 
     TimelineViewState viewState_;
     TimelineRulerComponent ruler_{viewState_};
+    // Added LAST in the constructor so it sits on top of the ruler; spans ruler + lanes and
+    // intercepts no mouse clicks (see TimelinePlayheadOverlay's ctor).
+    TimelinePlayheadOverlay playhead_{viewState_};
     juce::ComboBox snapCombo_;
+
+    // The slice of transport state the RULER paints, diffed by updateFromTransport. `hasRulerState_`
+    // keeps the very first poll from counting as a change (the default-constructed struct below is
+    // not what a live transport reports — its loop end starts at 4 beats).
+    struct RulerTransportState {
+        int timeSigNumerator = 4;
+        int timeSigDenominator = 4;
+        bool looping = false;
+        double loopStartPpq = 0.0;
+        double loopEndPpq = 0.0;
+
+        bool operator==(const RulerTransportState& other) const noexcept {
+            return timeSigNumerator == other.timeSigNumerator && timeSigDenominator == other.timeSigDenominator &&
+                   looping == other.looping && loopStartPpq == other.loopStartPpq && loopEndPpq == other.loopEndPpq;
+        }
+    };
+    RulerTransportState rulerState_;
+    bool hasRulerState_ = false;
+    int transportUpdateCount_ = 0;
 
     juce::ApplicationProperties* appProperties_ = nullptr;
     synth::TimelineDoc* doc_ = nullptr;

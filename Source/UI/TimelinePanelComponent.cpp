@@ -58,6 +58,10 @@ TimelinePanelComponent::TimelinePanelComponent() {
         persistSnapChoice();
         ruler_.repaint();
     };
+
+    // TL5-4: added LAST so it is topmost — it draws over the ruler AND the lanes grid.
+    addAndMakeVisible(playhead_);
+    playhead_.setComponentID("timelinePlayhead");
 }
 
 TimelinePanelComponent::~TimelinePanelComponent() {
@@ -66,7 +70,39 @@ TimelinePanelComponent::~TimelinePanelComponent() {
 }
 
 //==============================================================================
-void TimelinePanelComponent::setTransport(synth::TransportService* transport) { ruler_.setTransport(transport); }
+void TimelinePanelComponent::setTransport(synth::TransportService* transport) {
+    ruler_.setTransport(transport);
+    playhead_.setTransport(transport);
+}
+
+void TimelinePanelComponent::updateFromTransport(const synth::TransportService::PositionSnapshot& snapshot,
+                                                 double outputLatencySeconds) {
+    ++transportUpdateCount_;
+    playhead_.updateFromTransport(snapshot, outputLatencySeconds);
+
+    // Nothing else repaints the ruler when the time signature or the loop range changes from
+    // OUTSIDE its own mouse gestures (a preset/bundle load, a host tempo map, TL5-5's transport
+    // controls), so this poll is where that is noticed. Diffed, not unconditional: an idle poll
+    // repaints nothing.
+    const RulerTransportState state{snapshot.timeSigNumerator, snapshot.timeSigDenominator, snapshot.looping,
+                                    snapshot.loopStartPpq, snapshot.loopEndPpq};
+    if (!hasRulerState_) {
+        hasRulerState_ = true;
+        rulerState_ = state;
+        return;
+    }
+    if (state == rulerState_)
+        return;
+
+    const bool timeSigChanged = state.timeSigNumerator != rulerState_.timeSigNumerator ||
+                                state.timeSigDenominator != rulerState_.timeSigDenominator;
+    rulerState_ = state;
+    ruler_.repaint();
+    // The lanes grid's bar spacing comes from the time signature too — but only that, so a mere
+    // loop change costs the ruler strip alone.
+    if (timeSigChanged)
+        repaint();
+}
 
 void TimelinePanelComponent::setTimelineDoc(synth::TimelineDoc* doc) {
     if (doc_ == doc)
@@ -204,6 +240,12 @@ void TimelinePanelComponent::resized() {
     auto lanes = lanesBounds_;
     ruler_.setBounds(lanes.removeFromTop(rulerHeight));
     gridLanesBounds_ = lanes;
+
+    // The playhead spans the WHOLE lanes region, ruler included, so the line reads as one stroke
+    // from the ruler down through the tracks. Its local x == 0 is lanesBounds_.getX(), which is
+    // also the ruler's — i.e. exactly TimelineViewState's origin, so no offset arithmetic is
+    // needed anywhere in the overlay.
+    playhead_.setBounds(lanesBounds_);
 
     // Snap selector: right-hand side of the transport bar; the rest of that strip stays empty
     // until TL5-5's transport controls arrive.
