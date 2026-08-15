@@ -48,6 +48,32 @@ public:
     void processHostBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages);
     void releaseFromHost();
 
+    // ---- Device-callback attachment (Standalone only) ----
+    // True exactly while this engine is registered as an AudioIODeviceCallback on its own
+    // AudioDeviceManager — i.e. between initialise() and shutdown() in Standalone mode, minus any
+    // window a caller has explicitly suspended. Always false in Hosted mode (the host owns the
+    // clock and this engine never registers anywhere).
+    //
+    // The reason it exists: "is something else clocking this graph right now?" is the precondition
+    // every offline renderer needs, and HostMode alone can't answer it — a Standalone engine whose
+    // callback has been detached is just as quiescent as a Hosted one. See
+    // synth::OfflineTransportDriver and synth::BounceExporter.
+    bool isReceivingDeviceCallbacks() const noexcept { return deviceCallbackAttached_; }
+
+    // MESSAGE THREAD. Detaches this engine from the device callback so nothing clocks the graph,
+    // and returns true if it actually detached (false when it wasn't attached in the first place —
+    // Hosted mode, before initialise(), after shutdown(), or already suspended). Mirrors exactly
+    // how initialise() attached it. juce::AudioDeviceManager calls audioDeviceStopped() on the way
+    // out, which releases the graph's resources, so whoever suspends owns re-preparing the graph
+    // for whatever it renders next.
+    bool suspendDeviceCallback();
+
+    // MESSAGE THREAD. Undoes suspendDeviceCallback(). juce::AudioDeviceManager::addAudioCallback
+    // calls audioDeviceAboutToStart() on the callback it is adding whenever a device is open, so
+    // this also re-applies the DEVICE's sample rate / block size to the transport and re-prepares
+    // the graph — callers must not do that by hand. A no-op in Hosted mode or if already attached.
+    void resumeDeviceCallback();
+
     // Voice count / mute API (§4.2)
     struct VoiceInfo {
         int activeVoices = 0;
@@ -240,6 +266,11 @@ private:
     synth::AutomationUiFeed automationUiFeed_;
     juce::AudioProcessorGraph mainProcessorGraph;
     juce::AudioProcessorPlayer processorPlayer;
+
+    // Message-thread only (initialise / shutdown / suspendDeviceCallback / resumeDeviceCallback),
+    // read on the message thread by offline renderers. Never touched from the audio thread, so a
+    // plain bool is the whole story.
+    bool deviceCallbackAttached_ = false;
 
     std::atomic<bool> masterMuted_{false};
     std::atomic<bool> transportEnabled_{true};

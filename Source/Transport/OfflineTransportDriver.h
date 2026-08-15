@@ -15,13 +15,20 @@ namespace synth {
 // nothing here is audio-thread safe, and nothing here needs to be, because *this* is the thread
 // that clocks the graph.
 //
-// The engine must be HostMode::Hosted: the driver drives the graph through
-// prepareForHost / processHostBlock, the same path a plugin host uses, so a Standalone engine
-// (which owns a real device and clocks itself) would be fighting for the same graph.
+// PRECONDITION: the engine must not be receiving audio-device callbacks while a driver is alive on
+// it. The driver clocks the graph itself through prepareForHost / processHostBlock (the same path a
+// plugin host uses), so anything else clocking the same graph would tick the transport twice per
+// block and race the device thread. A HostMode::Hosted engine satisfies this by construction — it
+// never opens a device. A HostMode::Standalone engine satisfies it only once its device callback is
+// detached (AudioEngine::suspendDeviceCallback), which is exactly what synth::BounceExporter does
+// around an offline render; the constructor asserts on AudioEngine::isReceivingDeviceCallbacks(),
+// which is the property that actually matters rather than the host mode that used to stand in for
+// it.
 //
-// The one place a block is produced is renderOneBlock(); both public render calls are thin loops
-// around it, and bounce/export streams `scratch` to disk from the same seam instead of
-// accumulating in RAM.
+// The one place a block is produced is renderOneBlock(); every public render call is a thin loop
+// around it. The stream* calls are the same loops with nothing accumulated — bounce/export writes
+// `scratch` straight to disk from the per-block callback, which is what keeps a ten-minute take off
+// the heap.
 class OfflineTransportDriver {
 public:
     // Borrows `engineToUse` — it must outlive the driver — and puts it on the requested render
@@ -52,6 +59,18 @@ public:
     // takes effect on the first tick, so "is it playing?" is unanswerable before then).
     // maxBlocks bounds a runaway render; hitting it asserts and stops.
     juce::AudioBuffer<float> renderToBeat(double beat, const BlockCallback& perBlock = {}, int maxBlocks = 1 << 18);
+
+    // Streaming twins of the two calls above: block-for-block identical, but nothing is
+    // accumulated — the callback is the only way to see the audio, and the return value is the
+    // number of blocks rendered (the same count the corresponding render* call would have divided
+    // by blockSize). renderBlocks/renderToBeat are implemented ON TOP of these, so there is still
+    // exactly one loop per shape.
+    //
+    // This is what bounce/export uses. renderToBeat would hand it a single contiguous buffer of the
+    // whole take — ~230 MB for ten minutes of 48 kHz stereo — for no reason, since every block is
+    // written to disk and never looked at again.
+    int streamBlocks(int numBlocks, const BlockCallback& perBlock);
+    int streamToBeat(double beat, const BlockCallback& perBlock, int maxBlocks = 1 << 18);
 
     TransportService& getTransport();
 

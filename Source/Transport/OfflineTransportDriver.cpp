@@ -18,9 +18,12 @@ OfflineTransportDriver::OfflineTransportDriver(AudioEngine& engineToUse, double 
     , sampleRate(sampleRateToUse)
     , blockSize(blockSizeToUse)
     , numChannels(numChannelsToUse) {
-    // A Standalone engine owns an audio device and clocks itself; driving its graph from here as
-    // well would tick the transport twice per block and race the device thread.
-    jassert(engine.isHosted());
+    // The precondition is "nothing else is clocking this graph", not "this engine is hosted":
+    // driving a graph that a device callback is also driving would tick the transport twice per
+    // block and race the device thread. A Hosted engine is quiescent by construction; a Standalone
+    // one is quiescent once AudioEngine::suspendDeviceCallback() has detached it, which is how
+    // synth::BounceExporter renders a live app's patch offline.
+    jassert(!engine.isReceivingDeviceCallbacks());
     jassert(sampleRate > 0.0);
     jassert(blockSize > 0);
     jassert(numChannels > 0);
@@ -48,6 +51,56 @@ void OfflineTransportDriver::copyBlockInto(juce::AudioBuffer<float>& destination
         destination.copyFrom(ch, destStartSample, scratch, ch, 0, blockSize);
 }
 
+int OfflineTransportDriver::streamBlocks(int numBlocks, const BlockCallback& perBlock) {
+    int blocksRendered = 0;
+    for (int b = 0; b < numBlocks; ++b) {
+        const auto& info = renderOneBlock();
+        ++blocksRendered;
+        if (perBlock)
+            perBlock(scratch, info);
+    }
+    return blocksRendered;
+}
+
+int OfflineTransportDriver::streamToBeat(double beat, const BlockCallback& perBlock, int maxBlocks) {
+    // Read the position before rendering anything: a target that is not ahead of us can never be
+    // reached by rendering forwards, so there is nothing to do and nothing to spin on.
+    const auto snapshot = getTransport().getPositionSnapshot();
+    if (maxBlocks <= 0 || !(beat > snapshot.ppq))
+        return 0;
+
+    int blocksRendered = 0;
+    bool hitSafetyCap = true; // cleared by every non-cap exit below
+    for (int b = 0; b < maxBlocks; ++b) {
+        const auto& info = renderOneBlock();
+
+        // A stopped transport never reaches any beat. Drop the block that discovered it (so a
+        // transport that was never started yields nothing) and stop. A consumer that wants OUT of
+        // this loop early — a cancelled bounce, say — posts transport.stop() from its callback and
+        // arrives here one block later; there is deliberately no second way to break the loop.
+        if (!info.playing) {
+            hitSafetyCap = false;
+            break;
+        }
+
+        ++blocksRendered;
+
+        if (perBlock)
+            perBlock(scratch, info);
+
+        if (info.endPpq >= beat) {
+            hitSafetyCap = false;
+            break;
+        }
+    }
+
+    // Reaching the cap is a bug backstop, not a mode: the target beat was never going to arrive.
+    jassert(!hitSafetyCap);
+    juce::ignoreUnused(hitSafetyCap);
+
+    return blocksRendered;
+}
+
 juce::AudioBuffer<float> OfflineTransportDriver::renderBlocks(int numBlocks, const BlockCallback& perBlock) {
     juce::AudioBuffer<float> out;
     if (numBlocks <= 0)
@@ -56,12 +109,13 @@ juce::AudioBuffer<float> OfflineTransportDriver::renderBlocks(int numBlocks, con
     out.setSize(numChannels, numBlocks * blockSize);
     out.clear();
 
-    for (int b = 0; b < numBlocks; ++b) {
-        const auto& info = renderOneBlock();
-        copyBlockInto(out, b * blockSize);
+    int blocksKept = 0;
+    streamBlocks(numBlocks, [&](const juce::AudioBuffer<float>& block, const BlockTimeInfo& info) {
+        copyBlockInto(out, blocksKept * blockSize);
+        ++blocksKept;
         if (perBlock)
-            perBlock(scratch, info);
-    }
+            perBlock(block, info);
+    });
 
     return out;
 }
@@ -70,8 +124,8 @@ juce::AudioBuffer<float> OfflineTransportDriver::renderToBeat(double beat, const
                                                               int maxBlocks) {
     juce::AudioBuffer<float> out;
 
-    // Read the position before rendering anything: a target that is not ahead of us can never be
-    // reached by rendering forwards, so there is nothing to do and nothing to spin on.
+    // Same bail-out as streamToBeat's, repeated here only so the capacity below isn't computed for
+    // a render that isn't going to happen; the authoritative check is the one inside the loop.
     const auto snapshot = getTransport().getPositionSnapshot();
     if (maxBlocks <= 0 || !(beat > snapshot.ppq))
         return out;
@@ -86,37 +140,21 @@ juce::AudioBuffer<float> OfflineTransportDriver::renderToBeat(double beat, const
     out.clear();
 
     int blocksKept = 0;
-    bool hitSafetyCap = true; // cleared by every non-cap exit below
-    for (int b = 0; b < maxBlocks; ++b) {
-        const auto& info = renderOneBlock();
+    streamToBeat(
+        beat,
+        [&](const juce::AudioBuffer<float>& block, const BlockTimeInfo& info) {
+            if (blocksKept + 1 > capacityBlocks) {
+                capacityBlocks = juce::jmin(maxBlocks, juce::jmax(blocksKept * 2, blocksKept + 1));
+                out.setSize(numChannels, capacityBlocks * blockSize, true, true, false);
+            }
 
-        // A stopped transport never reaches any beat. Drop the block that discovered it (so a
-        // transport that was never started yields an empty buffer) and stop.
-        if (!info.playing) {
-            hitSafetyCap = false;
-            break;
-        }
+            copyBlockInto(out, blocksKept * blockSize);
+            ++blocksKept;
 
-        if (blocksKept + 1 > capacityBlocks) {
-            capacityBlocks = juce::jmin(maxBlocks, juce::jmax(blocksKept * 2, blocksKept + 1));
-            out.setSize(numChannels, capacityBlocks * blockSize, true, true, false);
-        }
-
-        copyBlockInto(out, blocksKept * blockSize);
-        ++blocksKept;
-
-        if (perBlock)
-            perBlock(scratch, info);
-
-        if (info.endPpq >= beat) {
-            hitSafetyCap = false;
-            break;
-        }
-    }
-
-    // Reaching the cap is a bug backstop, not a mode: the target beat was never going to arrive.
-    jassert(!hitSafetyCap);
-    juce::ignoreUnused(hitSafetyCap);
+            if (perBlock)
+                perBlock(block, info);
+        },
+        maxBlocks);
 
     out.setSize(numChannels, blocksKept * blockSize, true, true, false);
     return out;

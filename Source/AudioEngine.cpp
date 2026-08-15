@@ -41,6 +41,7 @@ void AudioEngine::initialise() {
     if (!isHosted()) {
         deviceManager.initialiseWithDefaultDevices(0, 2);
         deviceManager.addAudioCallback(this);
+        deviceCallbackAttached_ = true;
 
         // Initialise MIDI input collector
         midiMessageCollector.reset(deviceManager.getAudioDeviceSetup().sampleRate);
@@ -73,6 +74,7 @@ void AudioEngine::initialise() {
 void AudioEngine::shutdown() {
     if (!isHosted()) {
         deviceManager.removeAudioCallback(this);
+        deviceCallbackAttached_ = false;
 #if JUCE_LINUX || JUCE_BSD || JUCE_MAC || JUCE_IOS
         for (auto& input : midiInputs) {
             input->stop();
@@ -786,3 +788,28 @@ void AudioEngine::processHostBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
 }
 
 void AudioEngine::releaseFromHost() { mainProcessorGraph.releaseResources(); }
+
+bool AudioEngine::suspendDeviceCallback() {
+    if (!deviceCallbackAttached_)
+        return false;
+
+    // The exact inverse of initialise()'s addAudioCallback. JUCE calls audioDeviceStopped() on us
+    // from inside this (which releases the graph's resources) and, importantly, does not return
+    // until the device thread is out of our callback — so once this returns, nothing is clocking
+    // the graph and an offline renderer may take it over.
+    deviceManager.removeAudioCallback(this);
+    deviceCallbackAttached_ = false;
+    return true;
+}
+
+void AudioEngine::resumeDeviceCallback() {
+    if (isHosted() || deviceCallbackAttached_)
+        return;
+
+    // juce::AudioDeviceManager::addAudioCallback calls audioDeviceAboutToStart() on the new
+    // callback BEFORE adding it to its list whenever a device is open, so by the time the device
+    // thread can reach us the transport is back on the device's sample rate and the graph is
+    // prepared for the device's block size. Nothing here re-applies that by hand.
+    deviceManager.addAudioCallback(this);
+    deviceCallbackAttached_ = true;
+}

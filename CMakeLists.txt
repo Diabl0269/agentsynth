@@ -120,6 +120,8 @@ add_library(Core STATIC
     Source/SettingsMigration.h
     # Transport
     Source/Transport/BlockTimeInfo.h
+    Source/Transport/BounceExporter.cpp
+    Source/Transport/BounceExporter.h
     Source/Transport/OfflineTransportDriver.cpp
     Source/Transport/OfflineTransportDriver.h
     Source/Transport/TempoMap.h
