@@ -10,6 +10,10 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_core/juce_core.h>
 
+namespace synth {
+class MidiRecorder; // Forward declaration (Source/Timeline/MidiRecorder.h)
+}
+
 class AudioEngine
     : public juce::AudioIODeviceCallback
     , public juce::MidiInputCallback {
@@ -81,6 +85,15 @@ public:
     // the clock. TL3's Track In modules read the published snapshot through this accessor.
     synth::TimelineSnapshotExchange& getTimelineSnapshots() noexcept { return timelineSnapshots; }
     const synth::TimelineSnapshotExchange& getTimelineSnapshots() const noexcept { return timelineSnapshots; }
+
+    // TL3-3: registers the sink that records external MIDI into timeline clips. Null by default —
+    // capture is then a no-op. The recorder is called from exactly one site, renderNextBlock's
+    // SYNTH_ENABLE_TIMELINE block, against the SAME buffer the graph itself renders — the collector-
+    // drained (standalone) or host-delivered (hosted) stream, never the ExternalMidiModule push-path
+    // copies handleIncomingMidiMessage also makes. See docs/architecture.md's "MIDI recording" note.
+    void setMidiCaptureSink(synth::MidiRecorder* sink) noexcept {
+        midiCaptureSink_.store(sink, std::memory_order_relaxed);
+    }
 
     // Total latency the graph reports for itself, in samples. This is report-only latency
     // aggregation: juce::AudioProcessorGraph already compensates parallel paths internally, so we
@@ -159,6 +172,9 @@ private:
 
     std::atomic<bool> masterMuted_{false};
     std::atomic<bool> transportEnabled_{true};
+    // TL3-3: borrowed, never owned. Set by setMidiCaptureSink(); read once per callback in
+    // renderNextBlock. Null default means capture is a no-op with no caller having to check.
+    std::atomic<synth::MidiRecorder*> midiCaptureSink_{nullptr};
 
     void createDefaultPatch();
 

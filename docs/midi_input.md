@@ -29,6 +29,12 @@ This replaces the old hand-rolled `incomingMessages` buffer + `CriticalSection`,
 
 Messages timestamped `0` (untimestamped — e.g. hand-constructed messages from tests or other synthetic sources) still land at sample 0 of the next block: `MidiMessageCollector` computes a deeply negative sample offset for them relative to its wall-clock reference point and clamps it to `0` on drain, preserving the old behaviour for callers that never call `setTimeStamp()`.
 
+## Recording (TL3-3): the recorder taps one of these two paths only
+
+`synth::MidiRecorder` (`Source/Timeline/MidiRecorder.h/.cpp`) is the single place external MIDI is recorded into a timeline clip, and it hangs off the **collector-merged buffer only** — the same `midiMessages` the graph itself renders (drained from `midiMessageCollector` in standalone mode, or handed straight to `processHostBlock` by the host). `AudioEngine::renderNextBlock` calls `recorder->captureBlock(midiMessages, transport.getCurrentBlockInfo())` once per callback, right after the timeline snapshot is opened.
+
+It never reads the `ExternalMidiModule::pushMidiMessage()` copies from the *other* path: those messages are queued into that module's own `juce::MidiMessageCollector` and drained inside its own `processBlock`, entirely internal to that node — they never reach the top-level buffer the recorder sees. Since `handleIncomingMidiMessage` queues every message into the collector regardless of whether an `ExternalMidiModule` also received a copy, tapping the collector-merged buffer alone is what guarantees a note is recorded **exactly once**: recording from both paths would double-record any note whose source also has an ExternalMidi node bound to it.
+
 **Caveat on "future" timestamps:** `MidiMessageCollector::removeNextBlockOfMessages()` unconditionally drains and clears its *entire* queue on every call — it does not hold back events whose timestamp lies beyond the current block. A message queued long before it's actually due gets flushed (position-clamped into the current block) on the very next drain, regardless of how far "in the future" its timestamp claims to be. This matches real usage: a `juce::MidiInput` callback delivers a message when it physically arrives, timestamped at (approximately) that same moment — it never hands you a message seconds ahead of time. Sample-accurate placement therefore depends on `pushMidiMessage()` being called close to a message's timestamp, as a real MIDI thread does.
 
 ## MIDI timestamp handling audit

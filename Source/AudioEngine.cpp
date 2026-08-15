@@ -13,6 +13,7 @@
 #include "Modules/SequencerModule.h"
 #include "Modules/VCAModule.h"
 #include "PresetManager.h"
+#include "Timeline/MidiRecorder.h"
 #include <bit>
 #include <map>
 #include <set>
@@ -590,6 +591,17 @@ void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
     // and stalling reclamation with it would let retired snapshots pile up for as long as the
     // setting is off.
     transport.setCurrentTimelineSnapshot(&timelineSnapshots.beginAudioBlock());
+
+    // TL3-3: the single MIDI-recording capture point. `midiMessages` here is already the buffer
+    // that BOTH standalone (collector drain, see audioDeviceIOCallbackWithContext) and hosted
+    // (delivered directly by the host into processHostBlock) modes converge on before the graph
+    // ever sees it — the one place every external MIDI message is guaranteed to appear exactly
+    // once. This must never read the ExternalMidiModule pushMidiMessage() copies
+    // handleIncomingMidiMessage also makes (those flow only inside that module's own processing,
+    // never through this buffer) — recording from both paths would double-record any note whose
+    // source also has an ExternalMidi node bound to it.
+    if (auto* recorder = midiCaptureSink_.load(std::memory_order_relaxed))
+        recorder->captureBlock(midiMessages, transport.getCurrentBlockInfo());
 #endif
 
     mainProcessorGraph.processBlock(buffer, midiMessages);

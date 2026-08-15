@@ -126,6 +126,8 @@ add_library(Core STATIC
     Source/Transport/TransportService.cpp
     Source/Transport/TransportService.h
     # Timeline
+    Source/Timeline/MidiRecorder.cpp
+    Source/Timeline/MidiRecorder.h
     Source/Timeline/TimelineDoc.cpp
     Source/Timeline/TimelineDoc.h
     Source/Timeline/TimelineReconciler.cpp
