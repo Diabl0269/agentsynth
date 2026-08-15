@@ -119,6 +119,7 @@ add_executable(Tests
     TimelineTrackHeaderTests.cpp
     TimelineClipLaneTests.cpp
     PianoRollTests.cpp
+    AutomationEditorTests.cpp
     TimelineTransportBarTests.cpp
     TimelineViewStateTests.cpp
     MinimapComponentTests.cpp
@@ -138,6 +139,7 @@ add_executable(Tests
     ../Source/UI/TimelineTransportBar.cpp
     ../Source/UI/TimelineClipLaneArea.cpp
     ../Source/UI/PianoRollComponent.cpp
+    ../Source/UI/AutomationLaneEditor.cpp
     ../Source/Plugin/PluginProcessor.cpp
     ../Source/Plugin/PluginEditor.cpp
     ../Source/UI/GraphEditor.cpp

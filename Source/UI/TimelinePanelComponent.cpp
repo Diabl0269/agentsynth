@@ -1,4 +1,5 @@
 #include "TimelinePanelComponent.h"
+#include "../AppUndoManager.h"
 #include "../Transport/TransportService.h"
 #include "Theme/AppLookAndFeel.h"
 #include <algorithm>
@@ -25,6 +26,14 @@ constexpr const char* kTimelineSnapPropertyKey = "timelineSnap";
 // TL5-3: the "+ MIDI Track" strip at the top of the track-header column. Fixed height — the
 // headers below it scroll, the button never does.
 constexpr int kAddTrackButtonHeight = 22;
+
+// TL5-9: automation strip chrome geometry. Code-only (mirrors the rest of this file's literal
+// fallbacks); the strip's own height comes from the themed Metrics::timelineAutomationStripHeight.
+constexpr int kAutomationStripHeaderHeight = 24;
+constexpr int kAutomationToolButtonWidth = 24;
+constexpr int kAutomationRecordModeComboWidth = 90;
+constexpr int kAutomationCloseButtonWidth = 24;
+constexpr int kAutomationToolRadioGroupId = 4200;
 } // namespace
 
 //==============================================================================
@@ -77,6 +86,49 @@ TimelinePanelComponent::TimelinePanelComponent() {
     pianoRoll_.setComponentID("timelinePianoRoll");
     pianoRoll_.onCloseRequested = [this] { closePianoRoll(); };
 
+    // TL5-9: automation strip. All start invisible — resized()/showAutomationLane()/
+    // closeAutomationStrip() are the only things that flip visibility, driven by
+    // automationStripVisible_.
+    addChildComponent(automationEditor_);
+    automationEditor_.setComponentID("timelineAutomationEditor");
+
+    auto setUpToolButton = [this](juce::TextButton& button, const juce::String& glyph, const char* componentId,
+                                  synth::ui::AutomationLaneEditor::Tool tool) {
+        addChildComponent(button);
+        button.setComponentID(componentId);
+        button.setButtonText(glyph);
+        button.setClickingTogglesState(true);
+        button.setRadioGroupId(kAutomationToolRadioGroupId);
+        button.onClick = [this, tool] { automationEditor_.setTool(tool); };
+    };
+    setUpToolButton(automationToolPointerButton_, "P", "automationToolPointer",
+                    synth::ui::AutomationLaneEditor::Tool::Pointer);
+    setUpToolButton(automationToolPencilButton_, juce::String::fromUTF8("\xE2\x9C\x8E"), "automationToolPencil",
+                    synth::ui::AutomationLaneEditor::Tool::Pencil);
+    setUpToolButton(automationToolLineButton_, juce::String::fromUTF8("\xE2\x95\xB1"), "automationToolLine",
+                    synth::ui::AutomationLaneEditor::Tool::Line);
+    setUpToolButton(automationToolEraserButton_, juce::String::fromUTF8("\xE2\x8C\xAB"), "automationToolEraser",
+                    synth::ui::AutomationLaneEditor::Tool::Eraser);
+    automationToolPointerButton_.setToggleState(true, juce::dontSendNotification);
+
+    addChildComponent(laneCombo_);
+    laneCombo_.setComponentID("automationLaneCombo");
+    laneCombo_.onChange = [this] { applyAutomationLaneMenuChoice(laneCombo_.getSelectedId()); };
+
+    addChildComponent(recordModeCombo_);
+    recordModeCombo_.setComponentID("automationRecordModeCombo");
+    recordModeCombo_.addItem("Off", 1);
+    recordModeCombo_.addItem("Read", 2);
+    recordModeCombo_.addItem("Touch", 3);
+    recordModeCombo_.addItem("Latch", 4);
+    recordModeCombo_.addItem("Write", 5);
+    recordModeCombo_.onChange = [this] { applyAutomationRecordModeChoice(recordModeCombo_.getSelectedId()); };
+
+    addChildComponent(automationCloseButton_);
+    automationCloseButton_.setComponentID("automationCloseButton");
+    automationCloseButton_.setButtonText(juce::String::fromUTF8("\xE2\x9C\x95"));
+    automationCloseButton_.onClick = [this] { closeAutomationStrip(); };
+
     // TL5-4: added LAST so it is topmost — it draws over the ruler, the lanes grid AND the clips.
     addAndMakeVisible(playhead_);
     playhead_.setComponentID("timelinePlayhead");
@@ -94,6 +146,7 @@ void TimelinePanelComponent::setTransport(synth::TransportService* transport) {
     transportBar_.setTransport(transport);
     clipLaneArea_.setTransport(transport);
     pianoRoll_.setTransport(transport);
+    automationEditor_.setTransport(transport);
 }
 
 void TimelinePanelComponent::setMetronome(synth::Metronome* metronome) { transportBar_.setMetronome(metronome); }
@@ -139,11 +192,20 @@ void TimelinePanelComponent::setTimelineDoc(synth::TimelineDoc* doc) {
     syncTrackHeaders();
     clipLaneArea_.setTimelineDoc(doc_);
     pianoRoll_.setTimelineDoc(doc_);
+    automationEditor_.setTimelineDoc(doc_);
+    // TL5-9: a lane id selected against the OLD doc can't mean anything against a new one (a fresh
+    // preset/bundle load, or the flag-OFF null-doc case) — close outright rather than trying to
+    // re-resolve it.
+    automationStripVisible_ = false;
+    selectedAutomationLane_ = {};
+    automationEditor_.setActiveLane({});
 }
 
 void TimelinePanelComponent::setUndoManager(AppUndoManager* undoManager) {
+    undoManager_ = undoManager;
     clipLaneArea_.setUndoManager(undoManager);
     pianoRoll_.setUndoManager(undoManager);
+    automationEditor_.setUndoManager(undoManager);
 }
 
 void TimelinePanelComponent::openPianoRoll(synth::ClipId id) {
@@ -163,6 +225,94 @@ void TimelinePanelComponent::closePianoRoll() {
     clipLaneArea_.grabKeyboardFocus();
 }
 
+//==============================================================================
+// ---- Automation strip (TL5-9) ----
+
+void TimelinePanelComponent::showAutomationLane(synth::LaneId id) {
+    if (doc_ == nullptr || doc_->getLane(id) == nullptr)
+        return;
+
+    selectedAutomationLane_ = id;
+    automationStripVisible_ = true;
+    automationEditor_.setTimelineDoc(doc_);
+    automationEditor_.setActiveLane(id);
+    syncAutomationLaneCombo();
+    syncAutomationRecordModeCombo();
+    resized();
+    repaint();
+}
+
+void TimelinePanelComponent::closeAutomationStrip() {
+    if (!automationStripVisible_)
+        return;
+    automationStripVisible_ = false;
+    resized();
+    repaint();
+}
+
+std::vector<TimelinePanelComponent::AutomationLaneOption> TimelinePanelComponent::collectAutomationLaneOptions() const {
+    std::vector<AutomationLaneOption> options;
+    if (doc_ == nullptr)
+        return options;
+
+    for (const auto& track : doc_->getTracks()) {
+        for (const auto& lane : track.lanes) {
+            juce::String nodeLabel =
+                trackHeaderHost_ != nullptr ? trackHeaderHost_->getNodeDisplayName(lane.nodeUuid) : juce::String();
+            if (nodeLabel.isEmpty())
+                nodeLabel = lane.nodeUuid.substring(0, 8); // uuid-head fallback (TL5-9 design)
+            options.push_back({lane.id, nodeLabel + " \xC2\xB7 " + lane.paramId});
+        }
+    }
+    return options;
+}
+
+void TimelinePanelComponent::syncAutomationLaneCombo() {
+    laneCombo_.clear(juce::dontSendNotification);
+    const auto options = collectAutomationLaneOptions();
+    int selectedId = 0;
+    for (int i = 0; i < (int)options.size(); ++i) {
+        laneCombo_.addItem(options[(size_t)i].label, i + 1);
+        if (options[(size_t)i].id == selectedAutomationLane_)
+            selectedId = i + 1;
+    }
+    laneCombo_.setSelectedId(selectedId, juce::dontSendNotification);
+}
+
+void TimelinePanelComponent::syncAutomationRecordModeCombo() {
+    int selectedId = 2; // Read — TimelineDoc's own default for a lane with no explicit mode set
+    if (const auto* lane = doc_ != nullptr ? doc_->getLane(selectedAutomationLane_) : nullptr)
+        selectedId = lane->recordMode + 1;
+    recordModeCombo_.setSelectedId(selectedId, juce::dontSendNotification);
+}
+
+void TimelinePanelComponent::applyAutomationLaneMenuChoice(int selectedId) {
+    const auto options = collectAutomationLaneOptions();
+    if (selectedId < 1 || selectedId > (int)options.size())
+        return;
+    showAutomationLane(options[(size_t)(selectedId - 1)].id);
+}
+
+void TimelinePanelComponent::applyAutomationRecordModeChoice(int selectedId) {
+    if (doc_ == nullptr || !selectedAutomationLane_.isValid())
+        return;
+    const int mode = selectedId - 1;
+    const auto laneId = selectedAutomationLane_;
+    auto mutate = [this, laneId, mode] { doc_->setLaneRecordMode(laneId, mode); };
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+}
+
+bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
+    if (key == juce::KeyPress::escapeKey && automationStripVisible_) {
+        closeAutomationStrip();
+        return true;
+    }
+    return false;
+}
+
 void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
     trackHeaderHost_ = host;
     // Headers are constructed with the host, so any that already exist have to be rebuilt against
@@ -178,6 +328,22 @@ void TimelinePanelComponent::timelineChanged(const synth::TimelineDoc&) {
     // itself and fires onCloseRequested -> closePianoRoll() (wired in the constructor), which is
     // what swaps clipLaneArea_ back into view.
     pianoRoll_.refreshFromDoc();
+
+    // TL5-9: if the strip is open, re-derive it from the doc — the SAME "refresh, don't poll"
+    // discipline every other timeline sub-component follows. A mutation that removed the selected
+    // lane closes the strip outright (there is nothing left to show); anything else just repaints
+    // the curve and re-syncs the two pickers (a lane could have been added/removed elsewhere, or
+    // its recordMode could have changed from under us — AutomationRecorder's own Write-drops-to-
+    // Touch-on-stop).
+    if (automationStripVisible_) {
+        if (doc_ == nullptr || doc_->getLane(selectedAutomationLane_) == nullptr) {
+            closeAutomationStrip();
+        } else {
+            syncAutomationLaneCombo();
+            syncAutomationRecordModeCombo();
+            automationEditor_.repaint();
+        }
+    }
 }
 
 void TimelinePanelComponent::syncTrackHeaders() {
@@ -283,11 +449,13 @@ void TimelinePanelComponent::resized() {
     int transportBarHeight = 28;
     int trackHeaderWidth = 160;
     int rulerHeight = 24;
+    int automationStripHeight = 72;
     if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
         const auto& m = lf->getTheme().metrics;
         transportBarHeight = m.timelineTransportBarHeight;
         trackHeaderWidth = m.timelineTrackHeaderWidth;
         rulerHeight = m.timelineRulerHeight;
+        automationStripHeight = m.timelineAutomationStripHeight;
     }
 
     auto bounds = getLocalBounds();
@@ -306,6 +474,14 @@ void TimelinePanelComponent::resized() {
     ruler_.setBounds(lanes.removeFromTop(rulerHeight));
     gridLanesBounds_ = lanes;
 
+    // TL5-9: the automation strip is carved from the BOTTOM of gridLanesBounds_ (which is what
+    // shrinks the clip-lane area/piano roll below), leaving the ruler untouched above.
+    if (automationStripVisible_ && gridLanesBounds_.getHeight() > automationStripHeight) {
+        automationStripBounds_ = gridLanesBounds_.removeFromBottom(automationStripHeight);
+    } else {
+        automationStripBounds_ = {};
+    }
+
     // TL5-7: the clip-lane area fills EXACTLY the rect the grid below is painted into (paint()'s
     // gridLanesBounds_ loop, unchanged) — so clips line up with the bar/beat grid pixel-for-pixel.
     clipLaneArea_.setBounds(gridLanesBounds_);
@@ -317,8 +493,34 @@ void TimelinePanelComponent::resized() {
     // The playhead spans the WHOLE lanes region, ruler included, so the line reads as one stroke
     // from the ruler down through the tracks. Its local x == 0 is lanesBounds_.getX(), which is
     // also the ruler's — i.e. exactly TimelineViewState's origin, so no offset arithmetic is
-    // needed anywhere in the overlay.
-    playhead_.setBounds(lanesBounds_);
+    // needed anywhere in the overlay. TL5-9: trimmed by the strip height too, so the line never
+    // draws underneath the strip's own chrome.
+    playhead_.setBounds(!automationStripBounds_.isEmpty() ? lanesBounds_.withTrimmedBottom(automationStripHeight)
+                                                          : lanesBounds_);
+
+    // TL5-9: strip header row (tool buttons, lane/record-mode pickers, close) above the curve
+    // canvas. Visibility follows automationStripVisible_ exactly — nothing else flips it.
+    const bool stripOpen = !automationStripBounds_.isEmpty();
+    automationEditor_.setVisible(stripOpen);
+    automationToolPointerButton_.setVisible(stripOpen);
+    automationToolPencilButton_.setVisible(stripOpen);
+    automationToolLineButton_.setVisible(stripOpen);
+    automationToolEraserButton_.setVisible(stripOpen);
+    laneCombo_.setVisible(stripOpen);
+    recordModeCombo_.setVisible(stripOpen);
+    automationCloseButton_.setVisible(stripOpen);
+    if (stripOpen) {
+        auto strip = automationStripBounds_;
+        auto header = strip.removeFromTop(kAutomationStripHeaderHeight);
+        automationToolPointerButton_.setBounds(header.removeFromLeft(kAutomationToolButtonWidth).reduced(2));
+        automationToolPencilButton_.setBounds(header.removeFromLeft(kAutomationToolButtonWidth).reduced(2));
+        automationToolLineButton_.setBounds(header.removeFromLeft(kAutomationToolButtonWidth).reduced(2));
+        automationToolEraserButton_.setBounds(header.removeFromLeft(kAutomationToolButtonWidth).reduced(2));
+        automationCloseButton_.setBounds(header.removeFromRight(kAutomationCloseButtonWidth).reduced(2));
+        recordModeCombo_.setBounds(header.removeFromRight(kAutomationRecordModeComboWidth).reduced(2));
+        laneCombo_.setBounds(header.reduced(2));
+        automationEditor_.setBounds(strip);
+    }
 
     // Snap selector: right-hand side of the transport bar. TL5-5's transport controls (play/stop/
     // record/loop + BPM/time-sig + readout) fill the rest, left-aligned.

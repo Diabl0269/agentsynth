@@ -254,6 +254,13 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // GraphEditor owns no file dialogs and the sidebar owns no filesystem access, so
     // MainComponent brokers between them.
     graphEditor.onSaveSnippetRequested = [this] { promptSaveSnippet(); };
+    // TL5-9: right-click-any-knob -> the automation lane editor. Mirrors onSaveSnippetRequested's
+    // shape exactly — GraphEditor owns no TimelineDoc, so it hands the (nodeId, paramId) pair back
+    // to the one component that owns both the doc and the graph.
+    graphEditor.onAutomateParameterRequested = [this](juce::AudioProcessorGraph::NodeID nodeId,
+                                                      const juce::String& paramId) {
+        automateParameter(nodeId, paramId);
+    };
     graphEditor.snippetProvider = [this](const juce::String& name) -> juce::var {
         return synth::SnippetManager::loadSnippet(
             synth::SnippetManager::fileForName(synth::SnippetManager::getDefaultSnippetsDirectory(), name));
@@ -1623,6 +1630,78 @@ juce::String MainComponent::createTrackInNode() {
     return uuid;
 #else
     return {};
+#endif
+}
+
+void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
+#if SYNTH_ENABLE_TIMELINE
+    auto* node = audioEngine.getGraph().getNodeForId(nodeId);
+    auto* module = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
+    if (module == nullptr) {
+        statusBar.showMessage("Can't automate: module not found");
+        return;
+    }
+
+    // Ensure-uuid, mirrored into the processor in the same breath — the same idiom
+    // createTrackInNode() and AIStateMapper use at every uuid writer site (see
+    // ModuleBase::setNodeUuid). getNodeUuid() is the audio-safe mirror; the node property is the
+    // canonical copy addLane keys on.
+    juce::String uuid = node->properties["uuid"].toString();
+    if (uuid.isEmpty()) {
+        uuid = juce::Uuid().toDashedString();
+        node->properties.set("uuid", uuid);
+        module->setNodeUuid(uuid);
+    }
+
+    juce::RangedAudioParameter* param = nullptr;
+    for (auto* p : node->getProcessor()->getParameters()) {
+        auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(p);
+        if (ranged != nullptr && ranged->paramID == paramId) {
+            param = ranged;
+            break;
+        }
+    }
+    if (param == nullptr) {
+        statusBar.showMessage("Can't automate: parameter not found");
+        return;
+    }
+
+    // find-or-create the doc's ONE Automation-kind track, then bind the lane — both in the SAME
+    // mutation lambda, so creating the track (when this is the first automated parameter in the
+    // whole patch) and binding the lane is ONE undo step, not two. addLane dedupes doc-wide, so a
+    // repeat call for a parameter that already has a lane mutates nothing and this is a no-op.
+    synth::LaneId laneId;
+    const juce::String uuidCopy = uuid;
+    auto mutate = [this, &laneId, uuidCopy, paramId, param] {
+        synth::TrackId trackId;
+        for (const auto& track : timelineDoc.getTracks()) {
+            if (track.kind == synth::TrackKind::Automation) {
+                trackId = track.id;
+                break;
+            }
+        }
+        if (!trackId.isValid())
+            trackId = timelineDoc.addTrack(synth::TrackKind::Automation, "Automation");
+        if (!trackId.isValid())
+            return; // kMaxTracks reached — nothing to bind onto
+
+        synth::AutomationLane::RangeSnapshot range;
+        range.minValue = param->getNormalisableRange().start;
+        range.maxValue = param->getNormalisableRange().end;
+        range.defaultValue = param->convertFrom0to1(param->getDefaultValue());
+        laneId = timelineDoc.addLane(trackId, uuidCopy, paramId, range);
+    };
+    undoManager.recordTimelineChange(timelineDoc, mutate);
+    if (!laneId.isValid())
+        return;
+
+    // Reuse the toggle path exactly (same call simulateToggleTimelineClick() makes) rather than
+    // duplicating what it does to isTimelineVisible/persistence/layout.
+    if (!isTimelineVisible && toggleTimelineButton.onClick)
+        toggleTimelineButton.onClick();
+    timelinePanel.showAutomationLane(laneId);
+#else
+    juce::ignoreUnused(nodeId, paramId);
 #endif
 }
 

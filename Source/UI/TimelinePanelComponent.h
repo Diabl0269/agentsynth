@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Timeline/TimelineDoc.h"
+#include "AutomationLaneEditor.h"
 #include "ClipSelectionModel.h"
 #include "PianoRollComponent.h"
 #include "TimelineClipLaneArea.h"
@@ -11,6 +12,7 @@
 #include "TimelineViewState.h"
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <vector>
 
 class AppUndoManager; // Forward declaration (Source/AppUndoManager.h)
 
@@ -126,6 +128,46 @@ public:
     bool isPianoRollOpen() const noexcept { return pianoRoll_.isOpen(); }
     synth::ui::PianoRollComponent& getPianoRoll() noexcept { return pianoRoll_; }
 
+    // ---- Automation strip (TL5-9) ----
+    // Docked at the BOTTOM of the lanes region (gridLanesBounds_), toggled by lane selection: the
+    // clip-lane area (and the piano roll, sharing the same rect) shrink by exactly
+    // Metrics::timelineAutomationStripHeight while the strip is open. Right-click-any-knob
+    // (ModuleComponent -> GraphEditor::onAutomateParameterRequested -> MainComponent) is the other
+    // entry point into this — see MainComponent::automateParameter().
+
+    /** Opens the strip editing `id`. A no-op if `id` doesn't resolve to a live lane. */
+    void showAutomationLane(synth::LaneId id);
+    /** Closes the strip (clip-lane area/piano roll return to full height). The strip's own close
+     *  button and this panel's Escape-when-idle (keyPressed below) both route here. */
+    void closeAutomationStrip();
+    bool isAutomationStripVisible() const noexcept { return automationStripVisible_; }
+    synth::LaneId getSelectedAutomationLane() const noexcept { return selectedAutomationLane_; }
+    synth::ui::AutomationLaneEditor& getAutomationLaneEditor() noexcept { return automationEditor_; }
+    juce::ComboBox& getAutomationLaneCombo() noexcept { return laneCombo_; }
+    juce::ComboBox& getAutomationRecordModeCombo() noexcept { return recordModeCombo_; }
+    juce::Button& getAutomationCloseButton() noexcept { return automationCloseButton_; }
+    juce::Rectangle<int> getAutomationStripBounds() const noexcept { return automationStripBounds_; }
+
+    /** One entry in the lane picker: a doc lane labelled "NodeName \xC2\xB7 paramId" (resolved via
+     *  TrackHeaderHost::getNodeDisplayName; falls back to the uuid's first 8 characters when the
+     *  node doesn't resolve). In track order then lane order — index i is menu id i + 1, the same
+     *  convention TimelineTrackHeaderComponent::collectBindingOptions() uses. */
+    struct AutomationLaneOption {
+        synth::LaneId id;
+        juce::String label;
+    };
+    std::vector<AutomationLaneOption> collectAutomationLaneOptions() const;
+
+    // ---- Headless hooks (juce::PopupMenu::showMenuAsync's "doesn't run headlessly" idiom applies
+    // here too — tests drive the choice directly rather than through a live juce::ComboBox) ----
+    void applyAutomationLaneMenuChoice(int selectedId);
+    void applyAutomationRecordModeChoice(int selectedId);
+
+    // Escape closes the strip when it's open and idle (the editor's own keyPressed already
+    // consumed it if there was tool-drag state to cancel — see AutomationLaneEditor's class
+    // comment). Same panel-scoped idiom as every other timeline sub-component's Delete/Escape.
+    bool keyPressed(const juce::KeyPress& key) override;
+
     // Pure geometry getters — later tasks and tests build on the same rects rather than
     // re-deriving the arithmetic in resized().
     juce::Rectangle<int> getTransportBarBounds() const noexcept { return transportBarBounds_; }
@@ -166,6 +208,14 @@ private:
     // refreshes the existing ones in place (a mute toggle must not destroy and re-create rows).
     void syncTrackHeaders();
     void layoutTrackHeaders();
+
+    // ---- Automation strip (TL5-9) ----
+    // Repopulates the lane picker from the doc, preserving the current selection when it still
+    // resolves. Called whenever the doc notifies while the strip is open, and by showAutomationLane().
+    void syncAutomationLaneCombo();
+    // Re-reads the active lane's recordMode into the combo (no notification — this is a REFLECTION
+    // of doc state, not an edit).
+    void syncAutomationRecordModeCombo();
 
     // The Viewport's content: a plain container whose height is (track count * row height).
     struct TrackHeaderList : juce::Component {
@@ -222,6 +272,25 @@ private:
     juce::TextButton addTrackButton_{"+ MIDI Track"};
     juce::Viewport trackHeaderViewport_;
     TrackHeaderList trackHeaderList_;
+
+    // TL5-9: the strip's own copy of the undo manager (record-mode/lane-picker edits made directly
+    // by this panel, as opposed to automationEditor_'s edits, which it holds its own copy for).
+    AppUndoManager* undoManager_ = nullptr;
+
+    // Automation strip chrome — docked at the bottom of gridLanesBounds_ when automationStripVisible_.
+    // All start invisible (addChildComponent, not addAndMakeVisible); resized()/showAutomationLane()/
+    // closeAutomationStrip() are the only things that flip their visibility.
+    synth::ui::AutomationLaneEditor automationEditor_{viewState_};
+    juce::TextButton automationToolPointerButton_;
+    juce::TextButton automationToolPencilButton_;
+    juce::TextButton automationToolLineButton_;
+    juce::TextButton automationToolEraserButton_;
+    juce::ComboBox laneCombo_;
+    juce::ComboBox recordModeCombo_;
+    juce::TextButton automationCloseButton_;
+    bool automationStripVisible_ = false;
+    synth::LaneId selectedAutomationLane_;
+    juce::Rectangle<int> automationStripBounds_; // empty when the strip is closed
 
     juce::Rectangle<int> transportBarBounds_;
     juce::Rectangle<int> trackHeaderBounds_;

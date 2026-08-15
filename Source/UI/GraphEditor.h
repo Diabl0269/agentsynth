@@ -215,6 +215,12 @@ public:
     /** Set by the owner to resolve a snippet name (from a library drag payload) to its JSON. */
     std::function<juce::var(const juce::String&)> snippetProvider;
 
+    /** TL5-9: right-click-any-knob -> "Automate '<Param>'" (ModuleComponent's generic auto-UI
+     *  slider branch). Set by the owner (MainComponent::automateParameter) to resolve the node's
+     *  uuid, find-or-create the doc's Automation track, bind a lane and open the automation strip
+     *  — GraphEditor deliberately owns no TimelineDoc, mirroring onSaveSnippetRequested above. */
+    std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onAutomateParameterRequested;
+
     // ---- Copy / paste / duplicate -------------------------------------------------------
     //
     // All three run through the snippet pipeline rather than a parallel copy format, which is what

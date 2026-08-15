@@ -817,6 +817,39 @@ bool TimelineDoc::removeBreakpoint(LaneId laneId, double beat) {
     });
 }
 
+bool TimelineDoc::editBreakpoints(LaneId laneId, const std::vector<double>& removeBeats,
+                                  const std::vector<AutomationLane::Breakpoint>& addPoints) {
+    auto* lane = findLane(laneId);
+    if (lane == nullptr)
+        return false;
+    if (removeBeats.empty() && addPoints.empty())
+        return true; // nothing to do: no-op, no revision bump
+
+    for (const auto& p : addPoints)
+        if (!isFiniteAtOrAfterZero(p.beat) || !std::isfinite(p.value) || !std::isfinite(p.tension) ||
+            !isValidCurve(p.curve))
+            return false;
+
+    // Plan against a COPY first — same "simulate, then commit" shape as splitClip/reconcileBindings
+    // — so a cap violation is rejected before the live lane is ever touched.
+    auto simulated = lane->points;
+    for (double beat : removeBeats) {
+        const auto pos = lowerBoundByBeat(simulated, beat);
+        if (pos != simulated.end() && pos->beat == beat)
+            simulated.erase(pos);
+    }
+    for (const auto& p : addPoints)
+        insertBreakpoint(simulated, makeBreakpoint(lane->range, p.beat, p.value, p.tension, p.curve));
+
+    if (static_cast<int>(simulated.size()) > kMaxBreakpointsPerLane)
+        return false;
+
+    return applyMutation([&] {
+        lane->points = std::move(simulated);
+        return true;
+    });
+}
+
 bool TimelineDoc::setLaneRecordMode(LaneId id, int mode) {
     auto* lane = findLane(id);
     if (lane == nullptr || !isValidRecordMode(mode))

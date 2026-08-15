@@ -108,6 +108,11 @@ struct Metrics {
     // to be TimelineTrackHeaderComponent::kRowHeight's exclusive say in the matter; that constant
     // now only serves as the headless literal fallback and is kept equal to this default.
     int timelineTrackRowHeight{56}; // code-only; not parsed from user JSON (TL5-7)
+
+    // TL5-9: the automation strip docked at the BOTTOM of the panel's lanes region (header row of
+    // tool buttons + lane/record-mode pickers, above the AutomationLaneEditor curve canvas). The
+    // clip-lane area (and the piano roll) shrink by exactly this much while the strip is open.
+    int timelineAutomationStripHeight{72}; // code-only; not parsed from user JSON (TL5-9)
 };
 
 // Font family NAMES (resolved to embedded typefaces by the LnF) + a type scale (pt).

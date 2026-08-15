@@ -122,6 +122,14 @@ public:
     // paths the buttons and file dialogs do, minus the dialogs.
     synth::TimelineDoc& getTimelineDoc() { return timelineDoc; }
     synth::AutomationRecorder& getAutomationRecorder() { return automationRecorder; }
+    // TL5-9: right-click-any-knob's headless hook, and the production entry point
+    // GraphEditor::onAutomateParameterRequested is wired to. Resolves `nodeId`'s uuid (assigning
+    // one if it has none yet — the same ensure-uuid idiom createTrackInNode() uses), finds-or-
+    // creates the doc's Automation-kind track, binds a lane for `paramId` with the parameter's real
+    // NormalisableRange, and opens the timeline panel's automation strip on it. A no-op (with a
+    // status-bar message) if `nodeId` doesn't resolve to a live ModuleBase or `paramId` doesn't
+    // resolve to a real parameter on it.
+    void automateParameter(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId);
     // TL5-5: the app's one live MidiRecorder — see docs/architecture.md's MidiRecorder wiring
     // entry. Test-only access mirrors getAutomationRecorder() above.
     synth::MidiRecorder& getMidiRecorderForTest() { return midiRecorder; }

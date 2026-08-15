@@ -190,6 +190,15 @@ private:
     void createControls();
     void updateLayout();
 
+    /** TL5-9: right-click-any-knob entry point into the automation lane editor. Attached as a
+     *  MouseListener on every generic auto-UI slider (createControls()'s float/int branches) via
+     *  addMouseListener(this, false) — mouseDown() dispatches here first when e.eventComponent
+     *  isn't this component's own body (checked by identity against `sliders`, index-parallel to
+     *  `sliderParams` exactly like reflectParameterValue()'s lookup). Fires
+     *  owner.onAutomateParameterRequested (if set) with this module's nodeId and the parameter's
+     *  paramID; a no-op otherwise (headless build, no host wired, or a null sliderParams entry). */
+    void showAutomateMenuForSlider(juce::RangedAudioParameter* param);
+
     // Raw->LogicalPort snapshots of the module's current channel layout. Only the "poly" parameter
     // changes that layout, so these are captured at construction and refreshed on each poly toggle.
     // Kept because rewireForPolyChange needs to know which visible jack an existing connection was

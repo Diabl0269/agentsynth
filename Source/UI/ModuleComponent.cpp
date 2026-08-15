@@ -488,6 +488,11 @@ void ModuleComponent::createControls() {
                     slider->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 20);
                 }
                 addAndMakeVisible(slider);
+                // TL5-9: right-click-any-knob. `this` outlives every child slider (sliders is a
+                // member OwnedArray, destroyed as part of this component's own teardown before the
+                // outer object finishes destructing), so attaching `this` as the listener rather
+                // than a separately-owned object has no dangling-pointer window to reason about.
+                slider->addMouseListener(this, false);
 
                 auto* attach = sliderAttachments.add(new juce::SliderParameterAttachment(*floatParam, *slider));
                 sliderParams.add(floatParam); // TL4-5: param -> control mapping for reflection
@@ -503,6 +508,7 @@ void ModuleComponent::createControls() {
                 // slider->setRange(intParam->getRange().start,
                 // intParam->getRange().end, 1.0); // Attachment handles range
                 addAndMakeVisible(slider);
+                slider->addMouseListener(this, false); // TL5-9: right-click-any-knob, see above
 
                 auto* attach = sliderAttachments.add(new juce::SliderParameterAttachment(*intParam, *slider));
                 sliderParams.add(intParam); // TL4-5: param -> control mapping for reflection
@@ -641,6 +647,31 @@ void ModuleComponent::reflectParameterValue(const juce::AudioProcessorParameter*
         }
         return;
     }
+}
+
+// TL5-9: right-click-any-knob -> "Automate '<Param>'". `param` may be null (a control this
+// component built without a real RangedAudioParameter behind it, e.g. the ExternalMidiModule
+// device/channel combos — never true for anything reaching here through `sliders`, but checked
+// anyway since sliderParams can hold a null entry per its own header comment).
+void ModuleComponent::showAutomateMenuForSlider(juce::RangedAudioParameter* param) {
+    if (param == nullptr)
+        return;
+
+    // The popup's action runs asynchronously (showMenuAsync), so `this` must be re-checked rather
+    // than captured raw — the module (and its GraphEditor selection) could be gone by the time the
+    // user picks an item (a delete, an undo, a preset load while the menu is open).
+    juce::Component::SafePointer<ModuleComponent> safeThis(this);
+    const auto nodeIdCopy = nodeId;
+    const juce::String paramId = param->paramID;
+
+    juce::PopupMenu menu;
+    menu.addItem("Automate '" + param->getName(100) + "'", [safeThis, nodeIdCopy, paramId] {
+        if (safeThis == nullptr)
+            return;
+        if (safeThis->owner.onAutomateParameterRequested)
+            safeThis->owner.onAutomateParameterRequested(nodeIdCopy, paramId);
+    });
+    menu.showMenuAsync(juce::PopupMenu::Options());
 }
 
 void ModuleComponent::layoutNamedKnob(const juce::String& name, int x, int y, int w, int h) {
@@ -2281,6 +2312,23 @@ void ModuleComponent::parameterGestureChanged(int parameterIndex, bool gestureIs
 }
 
 void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
+    // TL5-9: a click that landed on a CHILD control this component attached itself to as a
+    // MouseListener (currently just the generic auto-UI sliders — see createControls()) rather
+    // than on this component's own body. e.getPosition() below is in THAT CHILD's local space, not
+    // this one's, so none of the body-click geometry further down may run against it — checked
+    // first, by identity against `sliders` (index-parallel to `sliderParams`, exactly like
+    // reflectParameterValue()'s lookup).
+    if (e.eventComponent != this) {
+        for (int i = 0; i < sliders.size(); ++i) {
+            if (sliders[i] == e.eventComponent) {
+                if (e.mods.isPopupMenu())
+                    showAutomateMenuForSlider(sliderParams[i]);
+                return;
+            }
+        }
+        return; // some other attached child's own click — nothing for the module body to do
+    }
+
     auto port = getPortForPoint(e.getPosition());
     if (port) {
         if (e.mods.isPopupMenu()) {

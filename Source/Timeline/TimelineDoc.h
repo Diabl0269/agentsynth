@@ -341,6 +341,27 @@ public:
     bool addBreakpoint(LaneId laneId, double beat, double value, float tension = 0.0f,
                        int curve = static_cast<int>(BreakpointCurve::Linear));
     bool removeBreakpoint(LaneId laneId, double beat);
+
+    // TL5-9: the automation lane editor's ONE batched commit primitive. A single user gesture
+    // (a pencil stroke, a straight line, a dragged handle, an eraser sweep) can touch several
+    // points at once, and each such gesture must cost exactly one revision bump / one
+    // Listener::timelineChanged call — never one per point moved, or every downstream republish
+    // (audio-thread snapshot, undo capture) fires once per point instead of once per gesture.
+    //
+    // Removes every existing point whose beat is in `removeBeats` (a beat with no matching point
+    // is silently skipped, same as removeBreakpoint), then inserts every point in `addPoints`,
+    // each validated and clamped exactly like addBreakpoint (finite beat >= 0, finite value/
+    // tension, a legal curve; value clamped into the lane's range, tension into [-1, 1]; a point
+    // whose beat collides with an earlier one already inserted from `addPoints` replaces it, the
+    // same "last one wins" rule a single addBreakpoint call has for a repeated beat). Order and
+    // duplicates within `removeBeats` don't matter.
+    //
+    // Rejected outright — no mutation — if the lane doesn't resolve, if ANY point in `addPoints`
+    // is invalid, or if the resulting point count would exceed kMaxBreakpointsPerLane. Both lists
+    // empty is a no-op (no revision bump, no notification), like every other mutator here.
+    bool editBreakpoints(LaneId laneId, const std::vector<double>& removeBeats,
+                         const std::vector<AutomationLane::Breakpoint>& addPoints);
+
     // TL4-4: sets the lane's record mode. `mode` must be a LaneRecordMode value (0..4) — anything
     // else is rejected outright rather than clamped, so an out-of-range int can never reach the
     // snapshot the audio thread switches on. Setting the mode the lane already has is a no-op (no
