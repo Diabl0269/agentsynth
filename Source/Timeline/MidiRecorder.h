@@ -36,9 +36,12 @@ namespace synth {
  *
  * startRecording() / stopAndCommit() — MESSAGE THREAD ONLY.
  *
- * The only state captureBlock() reads that the message thread writes is the armed-and-recording
- * flag; the only data that crosses from the audio thread to the message thread is the SPSC ring.
- * Nothing else is shared between the two sides.
+ * The state captureBlock() reads that the message thread writes is the armed-and-recording flag and
+ * (TL5-6) the punch-in beat — both plain relaxed atomics, written once by startRecording() before
+ * `recording` flips true and never mutated again until the next startRecording(), so captureBlock()
+ * never observes a punch-in value from a DIFFERENT take than the one it is currently capturing. The
+ * only data that crosses from the audio thread to the message thread is the SPSC ring. Nothing else
+ * is shared between the two sides.
  *
  * -- What a "take" is -----------------------------------------------------------------------------
  *
@@ -68,14 +71,26 @@ public:
     // Called once per callback (see AudioEngine::renderNextBlock). A no-op unless armed-and-
     // recording AND the transport is playing. For every NoteOn/NoteOff in `midi`, computes its
     // absolute beat from `info` (wrap-aware: a sample at or after info.loopWrapSample uses the
-    // post-wrap range) and pushes it onto the ring. Never allocates, never blocks, never logs.
+    // post-wrap range); an event whose beat is BEFORE `punchInBeat` (TL5-6: a count-in pre-roll) is
+    // dropped rather than pushed — the pre-roll bars a performer plays along with the click must
+    // never land in the committed take. Never allocates, never blocks, never logs.
     void captureBlock(const juce::MidiBuffer& midi, const BlockTimeInfo& info) noexcept;
 
     // -- Message thread --------------------------------------------------------
-    // Clears the ring and any prior take's state, arms recording onto `armedTrack`. `punchInBeat`
-    // is recorded for the caller's own bookkeeping (e.g. UI punch-in display); the committed clip's
-    // bounds are derived from the captured notes themselves, not from this value.
+    // Clears the ring and any prior take's state, arms recording onto `armedTrack`. `punchInBeat` is
+    // BOTH the caller's own bookkeeping value (e.g. UI punch-in display) AND the audio thread's
+    // filter threshold (TL5-6): captureBlock() drops any event before it, which is what makes a
+    // count-in's pre-roll bars silent in the committed take even though the transport (and the
+    // recorder's armed-and-recording flag) are already live through them. Pass the CURRENT position
+    // for "no pre-roll" (record engaged while already playing, or count-in off) — nothing before
+    // "now" can arrive anyway, so the filter is then a no-op. The committed clip's bounds are still
+    // derived from the captured notes themselves, never from this value.
     void startRecording(TrackId armedTrack, double punchInBeat);
+
+    // Message thread (or any thread — see the class comment: this is the one piece of "message-
+    // thread-only" bookkeeping a caller also needs to read live, to know when a count-in pre-roll is
+    // over). Mirrors whatever punchInBeat startRecording() was last called with.
+    double getPunchInBeat() const noexcept { return punchInBeat_.load(std::memory_order_relaxed); }
 
     // Disarms recording, drains the ring, and — if anything was captured — commits ONE new clip on
     // the armed track as a single undo step via undo.recordTimelineChange(). Returns false (and
@@ -114,7 +129,13 @@ private:
     // Message-thread-only bookkeeping, set by startRecording and read by stopAndCommit. Never
     // touched by the audio thread.
     TrackId armedTrack;
-    double punchInBeat = 0.0;
+
+    // TL5-6: written by startRecording() (message thread), read by BOTH stopAndCommit() (message
+    // thread, informational) and captureBlock() (audio thread, the actual pre-roll filter) — a
+    // relaxed atomic double, the same cross-thread-signal-value convention TransportService's
+    // simpler settings (masterMuted_, transportEnabled_) use, rather than the full seqlock its own
+    // multi-field PositionSnapshot needs.
+    std::atomic<double> punchInBeat_{0.0};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MidiRecorder)
 };

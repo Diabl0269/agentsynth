@@ -81,6 +81,8 @@ void TimelinePanelComponent::setTransport(synth::TransportService* transport) {
     transportBar_.setTransport(transport);
 }
 
+void TimelinePanelComponent::setMetronome(synth::Metronome* metronome) { transportBar_.setMetronome(metronome); }
+
 void TimelinePanelComponent::updateFromTransport(const synth::TransportService::PositionSnapshot& snapshot,
                                                  double outputLatencySeconds) {
     ++transportUpdateCount_;
@@ -189,6 +191,10 @@ void TimelinePanelComponent::setApplicationProperties(juce::ApplicationPropertie
     saved = juce::jlimit((int)TimelineViewState::Snap::Off, (int)TimelineViewState::Snap::Sixteenth, saved);
     viewState_.snap = (TimelineViewState::Snap)saved;
     snapCombo_.setSelectedId(saved + 1, juce::dontSendNotification);
+
+    // TL5-6: a pure forward — the transport bar owns and persists its own two keys. See this
+    // method's header comment.
+    transportBar_.setApplicationProperties(props);
 }
 
 void TimelinePanelComponent::persistSnapChoice() {

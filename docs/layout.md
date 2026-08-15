@@ -1679,3 +1679,34 @@ implementation (installed in `initialiseCommon()`, `#if SYNTH_ENABLE_TIMELINE`):
 `MidiRecorder::captureBlock` from `AudioEngine::renderNextBlock`'s one collector-merged buffer) —
 see `Tests/MidiRecorderTests.cpp` for the model-level coverage and
 `Tests/TimelineTransportBarTests.cpp` for the button-to-commit path.
+
+### TL5-6: metronome + count-in
+
+Two more controls join the transport-bar strip, right after the loop button and before the BPM
+label: a metronome toggle and a 3-item count-in selector. Both are `TimelineTransportBar` members —
+not routed through `TimelinePanelComponent`, which has no other reason to know either setting
+exists — and both persist themselves via the bar's own `setApplicationProperties(props)`, restoring
+`"timelineMetronomeEnabled"` (bool, default off) and `"timelineCountInBars"` (int 0–2, default 0)
+and re-persisting on every change, the same restore-then-persist-on-change idiom
+`TimelinePanelComponent` uses for its snap combo. `TimelinePanelComponent::setApplicationProperties`
+is a pure forward to the bar's version for these two keys; `TimelinePanelComponent::setMetronome`
+forwards a `synth::Metronome*` the same way `setTransport` forwards a `TransportService*`.
+
+**Metronome toggle** — one more `GlyphButton` (`Glyph::Metronome`), drawing a plain "quarter note"
+(a filled ellipse notehead + a `juce::Rectangle` stem) rather than a `juce::Path` like its three
+siblings — asset-free for the same CLAUDE.md reason the others are. Unlike Record, there is no
+owner-side veto: the click directly flips both the button's own visual state and
+`synth::Metronome::setEnabled` (via the bar's non-owning `synth::Metronome*`, set through
+`setMetronome()`, mirroring `setTransport`'s null-safe contract) — no intent/outcome split is
+needed. `setMetronome()` and `setApplicationProperties()` may run in either order: whichever runs
+SECOND is what makes the persisted enabled value real, since each applies the last-known value to
+the metronome pointer if the other has already been supplied.
+
+**Count-in selector** — a `juce::ComboBox` ("Off" / "1 bar" / "2 bars", `getCountInBars()` returning
+0/1/2), read by `MainComponent`'s record flow at the moment Record is clicked — never cached
+elsewhere. See `docs/architecture.md`'s Metronome subsection for the full count-in choreography
+(locate-back, forced-on click, the punch-in filter) this selector feeds.
+
+Layout: `metronomeButton_` (22 px) + 4 px gap + `countInCombo_` (64 px) + 8 px gap, inserted between
+the loop button and the BPM label — the bar's fixed-width strip grows by ~98 px, well inside the
+timeline panel's normal width.

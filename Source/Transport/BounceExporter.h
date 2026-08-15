@@ -88,8 +88,12 @@ public:
     // AudioEngine::handleIncomingMidiMessage, so a note physically played on a MIDI keyboard while
     // a bounce is running can still land in the file. Don't play while you bounce.
     //
-    // The metronome (TL5-6, not yet built) must be summed AFTER the graph, which is what keeps it
-    // out of a bounce by construction rather than by a flag anyone has to remember to check.
+    // The metronome (TL5-6) is summed AFTER the graph in AudioEngine::renderPass, which is what
+    // keeps it out of any in-graph tap by construction — but a bounce captures exactly that
+    // post-graph buffer, so post-graph summing alone does NOT keep it out of a bounce. bounce()
+    // therefore forces it off explicitly (both the user toggle and the count-in forced-on flag) for
+    // the duration of the render and restores it afterwards via an RAII guard — see
+    // MetronomeForceOffGuard in BounceExporter.cpp.
     //
     // In a SYNTH_ENABLE_TIMELINE=0 build the transport never ticks, so a bounce renders one block
     // plus the tail and stops — the feature has no meaning without the timeline compiled in.

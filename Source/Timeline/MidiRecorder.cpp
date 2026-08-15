@@ -16,6 +16,12 @@ void MidiRecorder::captureBlock(const juce::MidiBuffer& midi, const BlockTimeInf
     if (!(beatsPerSample > 0.0))
         return;
 
+    // TL5-6: a count-in's pre-roll bars are live through the transport (and this flag) but must
+    // never land in the committed take — startRecording() sets this to the punch-in point, and
+    // "record while already playing" / "count-in off" both pass the CURRENT position, making the
+    // filter a no-op for every take that isn't a count-in pre-roll.
+    const double punchInBeat = punchInBeat_.load(std::memory_order_relaxed);
+
     for (const auto metadata : midi) {
         const auto message = metadata.getMessage();
         const bool isOn = message.isNoteOn();
@@ -29,6 +35,9 @@ void MidiRecorder::captureBlock(const juce::MidiBuffer& midi, const BlockTimeInf
             beat = info.loopStartPpq + (double)(samplePosition - info.loopWrapSample) * beatsPerSample;
         else
             beat = info.startPpq + (double)samplePosition * beatsPerSample;
+
+        if (beat < punchInBeat)
+            continue; // pre-roll: heard, but never recorded
 
         Event event;
         event.beat = beat;
@@ -56,7 +65,7 @@ void MidiRecorder::startRecording(TrackId armedTrackIn, double punchInBeatIn) {
     ring.reset();
     overrunFlag.store(false, std::memory_order_relaxed);
     armedTrack = armedTrackIn;
-    punchInBeat = punchInBeatIn;
+    punchInBeat_.store(punchInBeatIn, std::memory_order_relaxed);
     recording.store(true, std::memory_order_relaxed);
 }
 

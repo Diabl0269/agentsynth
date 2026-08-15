@@ -713,6 +713,16 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
 #endif
 
     mainProcessorGraph.processBlock(buffer, midiMessages);
+
+#if SYNTH_ENABLE_TIMELINE
+    // TL5-6: the metronome click, generated from the transport and summed POST-graph — after the
+    // graph has produced its own output (so the click can never appear in anything the graph itself
+    // taps or that a bounce renders from inside the graph — see BounceExporter's force-off guard)
+    // and BEFORE renderNextBlock's master-mute zero-fill, which runs after renderPass/renderSliced
+    // return. That ordering is deliberate: master mute clears the WHOLE buffer, so it silences the
+    // click along with everything else the engine produces, exactly as it silences the graph.
+    metronome_.renderClicks(buffer, transport.getCurrentBlockInfo());
+#endif
 }
 
 void AudioEngine::renderSliced(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {

@@ -11,7 +11,8 @@
 
 namespace synth {
 class TransportService;
-}
+class Metronome; // Forward declaration (Source/Transport/Metronome.h)
+} // namespace synth
 
 // TimelinePanelComponent — TL5-1: bottom-docked timeline panel SHELL; TL5-2 fills in the ruler,
 // grid, zoom/scroll, snap selector and click-to-seek/drag-to-loop.
@@ -60,6 +61,10 @@ public:
     // ruler and the playhead overlay — the two sub-components that talk to the transport directly.
     void setTransport(synth::TransportService* transport);
 
+    // TL5-6: forwarded straight to the transport bar's own metronome toggle — see
+    // TimelineTransportBar::setMetronome. Non-owning; may be null.
+    void setMetronome(synth::Metronome* metronome);
+
     // TL5-4: THE low-rate transport poll, called from MainComponent's EXISTING 10 Hz timer (gated
     // #if SYNTH_ENABLE_TIMELINE, and only while this panel is visible). It adds no timer of its own.
     // Two jobs:
@@ -72,7 +77,10 @@ public:
     void updateFromTransport(const synth::TransportService::PositionSnapshot& snapshot, double outputLatencySeconds);
 
     // Non-owning. Restores/persists the snap-selector choice under the "timelineSnap" key, same
-    // pattern as AIChatComponent::setAccountService()'s non-owning setter.
+    // pattern as AIChatComponent::setAccountService()'s non-owning setter. Also forwarded to the
+    // transport bar (TL5-6), which restores/persists ITS OWN two keys ("timelineMetronomeEnabled",
+    // "timelineCountInBars") — this panel has no other reason to know either setting exists, so it
+    // is a pure forward, not a third copy of the restore/persist idiom.
     void setApplicationProperties(juce::ApplicationProperties* props);
 
     // TL5-3. Non-owning; may be null (a SYNTH_ENABLE_TIMELINE=OFF build never sets one, and the

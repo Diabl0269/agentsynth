@@ -245,6 +245,57 @@ TEST(MidiRecorderTest, WrapAwareBeatMath) {
 }
 
 // ============================================================================
+// 5b. PunchInFiltersPreRoll (TL5-6)
+// ============================================================================
+
+// startRecording(track, punchInBeat) is also the audio-thread filter threshold: captureBlock()
+// must drop any event whose beat is before it (a count-in's pre-roll), while everything at or
+// after the punch-in lands normally. "Punch in NOW" (punchInBeat == 0.0, the convention every
+// other test in this file uses) exercises the filter as a no-op, which is why none of them needed
+// updating when this filter was added.
+TEST(MidiRecorderTest, PunchInFiltersPreRoll) {
+    Harness h;
+    TimelineDoc doc;
+    AppUndoManager undo;
+    const auto track = doc.addTrack(TrackKind::Midi, "Track 1");
+
+    ASSERT_TRUE(h.transport.play());
+    h.recorder.startRecording(track, 2.0); // punch in at beat 2 — a count-in pre-roll of beats [0,2)
+
+    // Pre-roll note (beat ~1): must be dropped. Punch-point-and-after notes (beats ~2 and ~3): must
+    // land. One block per beat for simplicity: block N covers samples [N*512, (N+1)*512).
+    const int beat1Block = (int)(1 * kSamplesPerBeat / kBlock);     // beat 1 (pre-roll)
+    const int beat2Block = (int)(2 * kSamplesPerBeat / kBlock) + 1; // just after the punch beat
+    const int beat3Block = (int)(3 * kSamplesPerBeat / kBlock);     // well after
+
+    for (int block = 0; block <= beat3Block + 1; ++block) {
+        juce::MidiBuffer midi;
+        if (block == beat1Block)
+            midi.addEvent(juce::MidiMessage::noteOn(1, 61, (juce::uint8)100), 0);
+        if (block == beat2Block)
+            midi.addEvent(juce::MidiMessage::noteOn(1, 62, (juce::uint8)100), 0);
+        if (block == beat3Block)
+            midi.addEvent(juce::MidiMessage::noteOn(1, 63, (juce::uint8)100), 0);
+        h.renderBlock(midi);
+    }
+
+    ASSERT_TRUE(h.recorder.stopAndCommit(doc, undo));
+    const auto* trackPtr = doc.getTrack(track);
+    ASSERT_NE(trackPtr, nullptr);
+    ASSERT_EQ(trackPtr->clips.size(), 1u);
+
+    auto hasPitch = [&](int pitch) {
+        for (const auto& note : trackPtr->clips[0].notes)
+            if (note.pitch == pitch)
+                return true;
+        return false;
+    };
+    EXPECT_FALSE(hasPitch(61)) << "the pre-roll note (before the punch-in) must never be recorded";
+    EXPECT_TRUE(hasPitch(62)) << "a note at/after the punch-in must be recorded";
+    EXPECT_TRUE(hasPitch(63)) << "a note well after the punch-in must be recorded";
+}
+
+// ============================================================================
 // 6. OverrunSetsFlagAndDrops
 // ============================================================================
 

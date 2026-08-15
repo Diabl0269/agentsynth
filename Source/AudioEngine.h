@@ -4,6 +4,7 @@
 #include "Timeline/AutomationApplier.h"
 #include "Timeline/EpochExchange.h"
 #include "Timeline/TimelineSnapshotExchange.h"
+#include "Transport/Metronome.h"
 #include "Transport/TransportService.h"
 #include <atomic>
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -108,6 +109,13 @@ public:
     // any thread may read getPositionSnapshot().
     synth::TransportService& getTransport() noexcept { return transport; }
     const synth::TransportService& getTransport() const noexcept { return transport; }
+
+    // TL5-6: the click generator, summed POST-graph in renderPass (see the class comment there and
+    // docs/architecture.md's Metronome subsection). Message-thread callers use setEnabled/
+    // setForcedOn/isEnabled/isForcedOn; the audio thread only ever calls renderClicks(), from inside
+    // renderPass.
+    synth::Metronome& getMetronome() noexcept { return metronome_; }
+    const synth::Metronome& getMetronome() const noexcept { return metronome_; }
 
     // The timeline's message-thread -> audio-thread hand-off (TL2-2). The message thread publishes
     // snapshots here (and may reap on a timer); the engine opens exactly one audio block on it per
@@ -265,6 +273,10 @@ private:
     // Declared before the graph on purpose: the graph holds a raw AudioPlayHead pointer to the
     // transport, and members are destroyed in reverse declaration order, so the graph goes first.
     synth::TransportService transport;
+    // TL5-6: the click generator. Independent of the graph (it only reads a BlockTimeInfo and writes
+    // into the caller's buffer), so its declaration order relative to the graph carries no lifetime
+    // constraint — placed here because it is conceptually paired with the transport it clicks from.
+    synth::Metronome metronome_;
     // Declared before the graph for the same reason as the transport: TL3's timeline modules read
     // the exchange from the engine, and reverse-order destruction must take the graph's nodes down
     // first. Its own destructor reclaims everything published.

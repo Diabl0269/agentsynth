@@ -1,6 +1,7 @@
 #include "BounceExporter.h"
 
 #include "../AudioEngine.h"
+#include "Metronome.h"
 #include "OfflineTransportDriver.h"
 #include <cmath>
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -9,6 +10,32 @@
 namespace synth {
 
 namespace {
+
+// TL5-6: the metronome is summed POST-graph, so a bounce — which captures exactly the graph's own
+// output buffer — would otherwise pick the click up (post-graph summing only keeps it out of
+// in-graph taps by construction; the bounce IS the post-graph output, so nothing structural saves it
+// here). Force BOTH the user toggle and the count-in forced-on flag off for the render and restore
+// them afterwards, on every exit path — including cancellation and every early return below — which
+// is exactly what an RAII guard is for.
+struct MetronomeForceOffGuard {
+    explicit MetronomeForceOffGuard(Metronome& metronomeIn) noexcept
+        : metronome(metronomeIn)
+        , savedEnabled(metronomeIn.isEnabled())
+        , savedForcedOn(metronomeIn.isForcedOn()) {
+        metronome.setEnabled(false);
+        metronome.setForcedOn(false);
+    }
+    ~MetronomeForceOffGuard() noexcept {
+        metronome.setEnabled(savedEnabled);
+        metronome.setForcedOn(savedForcedOn);
+    }
+
+    Metronome& metronome;
+    bool savedEnabled;
+    bool savedForcedOn;
+
+    JUCE_DECLARE_NON_COPYABLE(MetronomeForceOffGuard)
+};
 
 // A safety cap for the range render, sized off the exact block count the tempo implies. Under a
 // constant tempo the render lands on the expected count exactly; this only exists so a future
@@ -55,6 +82,11 @@ BounceResult BounceExporter::bounce(AudioEngine& engine, const juce::File& outFi
 
     auto& transport = engine.getTransport();
     auto& graph = engine.getGraph();
+
+    // Constructed here, alive for the rest of this function: every return path below (the two file/
+    // writer failures, cancellation, write failure, and the final success) restores whatever the
+    // user's metronome/count-in state was, via the guard's destructor.
+    MetronomeForceOffGuard metronomeGuard(engine.getMetronome());
 
     // ---- Everything that has to go back afterwards, read before anything is disturbed ----
     const auto before = transport.getPositionSnapshot();

@@ -6,6 +6,7 @@
 #include "Timeline/TimelineReconciler.h"
 #include "UI/SettingsWindow.h"
 #include "UI/TrackColour.h"
+#include <algorithm>
 #include <map>
 #include <set>
 
@@ -425,6 +426,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // this block — a SYNTH_ENABLE_TIMELINE=OFF build never shows/carves the panel, so it has no
     // need of either.
     timelinePanel.setTransport(&audioEngine.getTransport());
+    timelinePanel.setMetronome(&audioEngine.getMetronome());
     timelinePanel.setApplicationProperties(&appProperties);
 
     // TL5-3: this component owns the app's one live TimelineDoc, so it owns the four hooks that
@@ -483,10 +485,33 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         // Record implies roll (DAW convention): starting a take also starts the transport if it
         // isn't already running.
         auto& transport = audioEngine.getTransport();
-        if (!transport.getPositionSnapshot().playing)
-            transport.play();
+        const auto snap = transport.getPositionSnapshot();
+        const int countInBars = timelinePanel.getTransportBar().getCountInBars();
 
-        midiRecorder.startRecording(armedTrack, transport.getPositionSnapshot().ppq);
+        // TL5-6: count-in pre-roll, only from a full stop — a record engaged while already playing
+        // gets no pre-roll (the user is already mid-performance) and no forced click, matching
+        // today's plain "record implies roll" behaviour exactly.
+        if (!snap.playing && countInBars > 0) {
+            const double beatsPerBar =
+                (double)snap.timeSigNumerator * 4.0 / (double)std::max(1, snap.timeSigDenominator);
+            const double punchInBeat = snap.ppq;
+            const double preRollStart = std::max(0.0, punchInBeat - (double)countInBars * beatsPerBar);
+            transport.locateBeat(preRollStart);
+            // Forced audible through the pre-roll regardless of the user's own metronome toggle;
+            // cleared by the 10 Hz poll once the transport reaches punchInBeat (see timerCallback)
+            // and unconditionally by commitMidiRecording() on stop.
+            audioEngine.getMetronome().setForcedOn(true);
+            transport.play();
+            // punchInBeat is BOTH the recorder's own bookkeeping and (TL5-6) the audio-thread filter
+            // threshold — captureBlock() drops everything before it, so the pre-roll bars the
+            // performer plays along with the click are heard but never committed.
+            midiRecorder.startRecording(armedTrack, punchInBeat);
+        } else {
+            if (!snap.playing)
+                transport.play();
+            midiRecorder.startRecording(armedTrack, transport.getPositionSnapshot().ppq);
+        }
+
         timelinePanel.getTransportBar().setRecordingState(true);
     };
 
@@ -687,6 +712,13 @@ void MainComponent::timerCallback() {
     if (wasTransportPlaying_ && !position.playing && midiRecorder.isRecording())
         commitMidiRecording();
     wasTransportPlaying_ = position.playing;
+
+    // TL5-6: clears the count-in pre-roll's forced-on click once the transport reaches the punch-in
+    // point. Gated on isRecording() so this never fires outside an actual take; idempotent
+    // otherwise (setForcedOn(false) on an already-off metronome is a no-op), so polling it every
+    // tick while recording costs nothing once the pre-roll has already ended.
+    if (midiRecorder.isRecording() && position.ppq >= midiRecorder.getPunchInBeat())
+        audioEngine.getMetronome().setForcedOn(false);
 
     // TL5-4: the timeline panel's low-rate transport poll, on the same existing timer — no new
     // timer, and nothing at all when the panel is hidden (a collapsed timeline must cost exactly
@@ -1515,6 +1547,10 @@ void MainComponent::commitMidiRecording() {
     if (midiRecorder.hadOverrun())
         statusBar.showMessage("Dropped MIDI events during recording");
     timelinePanel.getTransportBar().setRecordingState(false);
+    // TL5-6: every stop (explicit or auto-committed) ends any in-flight count-in pre-roll —
+    // unconditional and idempotent, so a take that was never in a pre-roll to begin with just
+    // clears an already-false flag.
+    audioEngine.getMetronome().setForcedOn(false);
 #endif
 }
 

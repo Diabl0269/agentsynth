@@ -1,4 +1,5 @@
 #include "TimelineTransportBar.h"
+#include "../Transport/Metronome.h"
 #include "Theme/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
@@ -11,6 +12,12 @@ constexpr int kGap = 4;
 constexpr int kBpmLabelWidth = 52;
 constexpr int kTimeSigLabelWidth = 40;
 constexpr int kReadoutWidth = 92;
+constexpr int kCountInComboWidth = 64;
+
+// TL5-6 persistence keys — restored/persisted in setApplicationProperties(), the same idiom
+// TimelinePanelComponent uses for its own "timelineSnap" key.
+constexpr const char* kMetronomeEnabledKey = "timelineMetronomeEnabled";
+constexpr const char* kCountInBarsKey = "timelineCountInBars";
 
 // BPM drag tuning: this many pixels of vertical drag per "step" (1.0 BPM normally, 0.1 BPM fine).
 constexpr float kBpmDragPixelsPerStep = 4.0f;
@@ -91,6 +98,19 @@ void TimelineTransportBar::GlyphButton::paintButton(juce::Graphics& g, bool shou
         g.fillPath(arrow);
         break;
     }
+    case Glyph::Metronome: {
+        // A plain "quarter note" glyph (notehead + stem) — asset-free and distinct at a glance from
+        // Record's plain circle. Lit accent when the metronome is on, dim otherwise.
+        g.setColour(getToggleState() ? accent : textPrimary.withAlpha(0.7f));
+        const float headWidth = glyphArea.getWidth() * 0.62f;
+        const float headHeight = glyphArea.getHeight() * 0.42f;
+        const juce::Rectangle<float> head(glyphArea.getX(), glyphArea.getBottom() - headHeight, headWidth, headHeight);
+        g.fillEllipse(head);
+        const float stemWidth = headWidth * 0.16f;
+        const float stemX = head.getRight() - stemWidth;
+        g.fillRect(stemX, glyphArea.getY(), stemWidth, glyphArea.getHeight() - headHeight * 0.5f);
+        break;
+    }
     }
 }
 
@@ -140,6 +160,37 @@ TimelineTransportBar::TimelineTransportBar() {
             return;
         const auto snap = transport_->getPositionSnapshot();
         transport_->setLoop(snap.loopStartPpq, snap.loopEndPpq, !snap.looping);
+    };
+
+    addAndMakeVisible(metronomeButton_);
+    metronomeButton_.setComponentID("timelineTransportMetronome");
+    metronomeButton_.setClickingTogglesState(false); // this bar owns the visual explicitly below
+    metronomeButton_.setTooltip("Metronome click (summed after the graph — never recorded or bounced)");
+    metronomeButton_.onClick = [this] {
+        const bool newState = !metronomeButton_.getToggleState();
+        metronomeButton_.setToggleState(newState, juce::dontSendNotification);
+        pendingMetronomeEnabled_ = newState;
+        if (metronome_ != nullptr)
+            metronome_->setEnabled(newState);
+        if (appProperties_ != nullptr && appProperties_->getUserSettings() != nullptr) {
+            appProperties_->getUserSettings()->setValue(kMetronomeEnabledKey, newState);
+            appProperties_->saveIfNeeded();
+        }
+    };
+
+    addAndMakeVisible(countInCombo_);
+    countInCombo_.setComponentID("timelineTransportCountIn");
+    countInCombo_.setTooltip("Count-in before recording");
+    countInCombo_.addItem("Off", 1);
+    countInCombo_.addItem("1 bar", 2);
+    countInCombo_.addItem("2 bars", 3);
+    countInCombo_.setSelectedId(1, juce::dontSendNotification);
+    countInCombo_.onChange = [this] {
+        countInBars_ = countInCombo_.getSelectedId() - 1;
+        if (appProperties_ != nullptr && appProperties_->getUserSettings() != nullptr) {
+            appProperties_->getUserSettings()->setValue(kCountInBarsKey, countInBars_);
+            appProperties_->saveIfNeeded();
+        }
     };
 
     addAndMakeVisible(bpmLabel_);
@@ -201,6 +252,29 @@ void TimelineTransportBar::applyDraggedBpm(double anchorBpm, float deltaY, bool 
 //==============================================================================
 void TimelineTransportBar::setRecordingState(bool recording) noexcept {
     recordButton_.setToggleState(recording, juce::dontSendNotification);
+}
+
+//==============================================================================
+void TimelineTransportBar::setMetronome(synth::Metronome* metronome) noexcept {
+    metronome_ = metronome;
+    if (metronome_ != nullptr)
+        metronome_->setEnabled(pendingMetronomeEnabled_);
+}
+
+void TimelineTransportBar::setApplicationProperties(juce::ApplicationProperties* props) {
+    appProperties_ = props;
+    if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
+        return;
+
+    auto* settings = appProperties_->getUserSettings();
+    pendingMetronomeEnabled_ = settings->getBoolValue(kMetronomeEnabledKey, false);
+    countInBars_ = juce::jlimit(0, 2, settings->getIntValue(kCountInBarsKey, 0));
+
+    metronomeButton_.setToggleState(pendingMetronomeEnabled_, juce::dontSendNotification);
+    countInCombo_.setSelectedId(countInBars_ + 1, juce::dontSendNotification);
+
+    if (metronome_ != nullptr)
+        metronome_->setEnabled(pendingMetronomeEnabled_);
 }
 
 //==============================================================================
@@ -278,6 +352,11 @@ void TimelineTransportBar::resized() {
     recordButton_.setBounds(bounds.removeFromLeft(kButtonSize));
     bounds.removeFromLeft(kGap);
     loopButton_.setBounds(bounds.removeFromLeft(kButtonSize));
+    bounds.removeFromLeft(kGap * 2);
+
+    metronomeButton_.setBounds(bounds.removeFromLeft(kButtonSize));
+    bounds.removeFromLeft(kGap);
+    countInCombo_.setBounds(bounds.removeFromLeft(kCountInComboWidth));
     bounds.removeFromLeft(kGap * 2);
 
     bpmLabel_.setBounds(bounds.removeFromLeft(kBpmLabelWidth));
