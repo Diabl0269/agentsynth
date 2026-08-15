@@ -123,6 +123,9 @@ add_library(Core STATIC
     Source/Transport/TempoMap.h
     Source/Transport/TransportService.cpp
     Source/Transport/TransportService.h
+    # Timeline
+    Source/Timeline/TimelineDoc.cpp
+    Source/Timeline/TimelineDoc.h
     # Modules
     Source/Modules/ModuleBase.h
     Source/Modules/OscillatorModule.h

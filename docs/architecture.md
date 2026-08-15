@@ -50,7 +50,21 @@ The timeline's transport spine (TL1): play state, sample position, BPM, time sig
 - **Revertibility flag.** `SYNTH_ENABLE_TIMELINE` (CMake option, default ON) compiles out only the *integration points* — the playhead install, the engine's per-block tick, and the sequencer sync dispatch; the Core Transport classes stay compiled and inert. A flag-OFF build must reproduce today's app and pass the full suite, asserted by the `Build and Test (Timeline OFF)` CI job on every PR. The runtime companion is `AudioEngine::setTransportEnabled` (persisted as the `timelineEnabled` setting, default on), which freezes/resumes the transport without a rebuild.
 - **Offline rendering** — `synth::OfflineTransportDriver` (`Source/Transport/OfflineTransportDriver.h/.cpp`) clocks an `AudioEngine`'s graph at a fixed sample rate / block size with **no audio device**: it drives the engine through `prepareForHost` / `processHostBlock` (so `HostMode::Hosted` is required — a Standalone engine clocks itself) and offers `renderBlocks(n)` and `renderToBeat(beat)`, the latter rendering whole blocks until the just-rendered block's `endPpq` reaches the target, so it may overshoot by up to one block and returns an empty buffer rather than spinning if the target isn't ahead of a *playing* transport. This is the headless harness every engine-level timeline test uses; the per-block observer (`BlockCallback`, handed the rendered block plus its `BlockTimeInfo`) and the single `renderOneBlock` seam behind both entry points are what the user-facing bounce/export is later built on — export streams blocks to disk from the same loop instead of accumulating them. Allocation happens once per render call on the message thread; the per-block path allocates nothing.
 
-### 3. ModuleBase
+### 3. TimelineDoc (the timeline document model)
+
+`Source/Timeline/TimelineDoc.h/.cpp`
+
+The message-thread model behind the timeline (TL2-1): tracks → clips → notes, plus automation lanes. Mutable, serialisable, headless — no GUI, editor or audio dependency. Everything downstream (the audio-thread snapshot, undo, `.agsproj` save) hangs off it.
+
+- **Beats are canonical, and tempo isn't here.** Every time in the document is a beat position; BPM and time signature stay on `TransportService`. A tempo map moves into the doc only when real (non-constant) tempo maps arrive.
+- **One mutation choke point.** Every public mutator validates its arguments first, then funnels the actual edit through the private `applyMutation()`, which bumps `getRevision()` and fires `Listener::timelineChanged` exactly once. Because validation happens *before* that seam, a call that changes nothing — a rejected note, `addLane` finding an existing lane, a setter given the value already stored — neither bumps the revision nor notifies. Snapshot republication (TL2-2), undo capture (TL2-5) and save-dirty marking (TL2-4) all attach here rather than diffing the model.
+- **Ids are handles, not indices.** `TrackId`/`ClipId`/`LaneId` are distinct tagged types (`value == 0` is the invalid sentinel), assigned monotonically, never reused within a doc's lifetime, and stable across a save/load — the next-id counters are serialised too, and on load they're floored at one past the highest id in the file so a hand-edited counter can't reissue a live id.
+- **Sorted invariants are the model's contract**, not a convenience: clips within a track by `(startBeat, id)`, notes within a clip by `(startBeat, pitch)`, breakpoints by beat. That's what lets TL2-2 build its snapshot by flattening instead of sorting. Note positions are clip-relative, so moving a clip never rewrites its notes. Overlapping clips are legal in the model; whether the UI draws them is a policy decision above.
+- **A lane's identity is `(nodeUuid, paramId)`, doc-wide.** It binds to the graph node's `"uuid"` property — never its integer `NodeID`, which merge-mode graph apply is free to renumber. `addLane` for a pair that already exists anywhere in the document returns the existing lane's id and mutates nothing. Point values are stored **denormalised**, alongside a `RangeSnapshot` of the parameter's range captured at lane creation: if the range changes in a later build the mismatch is detectable instead of silently reinterpreting every point. Values are clamped into that snapshot on insert.
+- **Hard caps, enforced by rejection** (`kMaxTracks` 256, `kMaxClipsPerTrack` 4096, `kMaxNotesPerClip` 16384, `kMaxLanesPerTrack` 512, `kMaxBreakpointsPerLane` 16384) — the model is bounded before `validateTimeline` (TL8-1) ever sees untrusted input. Exceeding a cap is refused, never clamped or truncated.
+- **`toVar()`/`fromVar()` is the dialect TL2-4 embeds under the reserved top-level `"timeline"` key** (the one `AIStateMapper::validatePatch` refuses from provider output). `fromVar` is all-or-nothing: any malformed field — wrong type, out-of-range value, duplicate id, reserved track kind, a cap exceeded, a `"version"` that isn't 1 — returns `false` and leaves the doc byte-identical, same revision, no notification. On success it replaces the whole doc and fires once. A missing field takes its default; a *present* one must be well-typed. Ordering is repaired rather than trusted (the loader re-sorts), because no reader downstream should have to defend against a file with a broken sort invariant.
+
+### 4. ModuleBase
 
 `Source/Modules/ModuleBase.h`
 
@@ -148,7 +162,7 @@ Two constraints follow from the contract above: `applyOutputLevel` must sit **af
 
 Related: look parameters up with `findParameterByID(processor, "paramID")` rather than `getParameters()[n]`. Parameter order is not part of a module's contract, and positional lookups silently repoint when a parameter is added.
 
-### 4. GraphEditor
+### 5. GraphEditor
 
 `Source/UI/GraphEditor.h/.cpp`
 

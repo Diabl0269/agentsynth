@@ -33,6 +33,7 @@ add_executable(Tests
     SampleHoldModuleTests.cpp
     SequencerModuleTests.cpp
     TransportServiceTests.cpp
+    TimelineDocTests.cpp
     AIStateMapperTests.cpp
     AIPatchValidationTests.cpp
     AIPatchRetryTests.cpp
