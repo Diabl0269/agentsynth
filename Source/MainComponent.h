@@ -440,6 +440,17 @@ private:
     // once per 10 Hz poll tick — mirrors AutomationRecorder's own `lastPlaying` bookkeeping.
     bool wasTransportPlaying_ = false;
 
+    // TL6-7: the feedback-guard re-arm latch. True from a guard trip until the explicit reset
+    // gesture — the armed-Audio-track set going from NONE armed to at least one armed again (disarm
+    // then re-arm). While true, the poll keeps input monitoring off even though an Audio track is
+    // still armed; simply staying armed must not re-enable it. Exists unconditionally (inert with
+    // the flag off, like every member in this block); only the poll that writes it is
+    // #if SYNTH_ENABLE_TIMELINE.
+    bool feedbackGuardLatched_ = false;
+    // Previous poll's "is any Audio-kind track armed" result — the FALSE -> TRUE edge is what
+    // clears the latch above.
+    bool wasAnyAudioTrackArmed_ = false;
+
     // TL6-3: the in-flight audio take (see the AudioTake declaration above).
     AudioTake audioTake_;
     // The bundle this document was last saved to or opened from, or an invalid File for a project

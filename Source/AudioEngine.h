@@ -119,6 +119,30 @@ public:
     void setMasterMute(bool muted) noexcept;
     bool isMasterMuted() const noexcept;
 
+    // ---- Input monitoring gate + feedback guard (TL6-7) ----
+    // ANY THREAD (message-thread writes from MainComponent's poll; the audio thread also writes it,
+    // on a guard trip). Published to the transport carrier once per render pass — see
+    // TransportService::setInputMonitoringEnabledForBlock — which is what AudioInputModule actually
+    // reads; nothing downstream of the graph ever reads this atomic directly. See
+    // docs/architecture.md's "Input monitoring & feedback guard (TL6-7)".
+    void setInputMonitoringEnabled(bool enabled) noexcept;
+    bool isInputMonitoringEnabled() const noexcept;
+
+    // The feedback guard's one-shot report: true if the guard tripped since the last call, false
+    // otherwise — and an atomic exchange back to false in the same call, so a caller that polls
+    // (MainComponent's 10 Hz timer) consumes a trip exactly once however many ticks pass before it
+    // reads it.
+    bool consumeFeedbackGuardTripped() noexcept;
+
+    // Thresholds the feedback guard trips on. A block's peak sample magnitude (over the graph's
+    // OUTPUT channels only, post-graph) staying at or above kFeedbackPeakThreshold for a running
+    // total of kFeedbackSustainSeconds — measured in elapsed SAMPLES, not block count, so the timing
+    // is block-size-agnostic — disables monitoring, latches the tripped flag above, and zeroes that
+    // block's output immediately. Never evaluated while monitoring is disabled. See renderPass /
+    // runFeedbackGuard and docs/architecture.md.
+    static constexpr float kFeedbackPeakThreshold = 0.97f;
+    static constexpr double kFeedbackSustainSeconds = 0.25;
+
     // TL1-9 runtime companion to SYNTH_ENABLE_TIMELINE: lets the transport be frozen/resumed without
     // a rebuild. Only meaningful when the flag is compiled in — see renderNextBlock(). Default true
     // (today's ticking behaviour) so a build that never touches this setting is unaffected.
@@ -386,6 +410,20 @@ private:
 
     std::atomic<bool> masterMuted_{false};
     std::atomic<bool> transportEnabled_{true};
+    // TL6-7. Message-thread writes (MainComponent's poll) and audio-thread writes (the guard, on a
+    // trip); read on the audio thread each render pass to publish to the transport carrier, and on
+    // the message thread by isInputMonitoringEnabled(). Default false: with nothing ever calling
+    // setInputMonitoringEnabled(true) — a SYNTH_ENABLE_TIMELINE=OFF build, or a build with the flag
+    // on but nothing armed — this is exactly today's silent-input behaviour.
+    std::atomic<bool> inputMonitoringEnabled_{false};
+    // TL6-7. Set true by the guard (audio thread) on a trip; consumed (and reset) by
+    // consumeFeedbackGuardTripped() (message thread poll).
+    std::atomic<bool> feedbackGuardTripped_{false};
+    // TL6-7, AUDIO THREAD ONLY: the guard's running "how many consecutive samples has the block
+    // peak stayed >= kFeedbackPeakThreshold" counter, in samples so its timing is block-size-
+    // agnostic. Reset to 0 whenever a block falls under the threshold, monitoring is disabled, or
+    // the guard trips.
+    std::int64_t feedbackGuardConsecutiveSamples_ = 0;
     // TL4-2 stage 2. Off by default — see setAutomationSlicingEnabled().
     std::atomic<bool> automationSlicingEnabled_{false};
     // TL3-3: borrowed, never owned. Set by setMidiCaptureSink(); read once per callback in
@@ -472,6 +510,12 @@ private:
     void captureDeviceInput(const float* const* inputChannelData, int numInputChannels, int numSamples) noexcept;
     // AUDIO THREAD, once per render pass. Points the transport at this pass's slice of the capture.
     void publishDeviceInputForPass(int sampleOffset, int numSamples) noexcept;
+
+    // TL6-7: the feedback guard itself. Called from renderPass, post-graph and pre-master-mute
+    // (beside the metronome), ungated like the monitoring flag — an input-path safety feature, not a
+    // timeline one. `monitoringEnabledThisPass` is the SAME value renderPass just published to the
+    // transport, so the guard and the module it's gating agree within one render pass.
+    void runFeedbackGuard(juce::AudioBuffer<float>& buffer, bool monitoringEnabledThisPass) noexcept;
 
     // Preallocated slicing scratch. `sliceChannelPointers_` backs the juce::AudioBuffer view
     // constructed per slice (the channel-pointer ctor takes no ownership and allocates nothing);

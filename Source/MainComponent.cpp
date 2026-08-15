@@ -862,6 +862,30 @@ void MainComponent::timerCallback() {
         (audioTake_.capturing && position.ppq >= audioTake_.punchInBeat))
         audioEngine.getMetronome().setForcedOn(false);
 
+    // TL6-7: the input-monitoring gate's poll-side half. Any Audio-kind track armed -> monitoring
+    // should be on; none armed -> off. A guard trip (audioEngine.consumeFeedbackGuardTripped(),
+    // consumed exactly once here) latches monitoring off for as long as the SAME arm state
+    // persists — disarming every Audio track and re-arming one is the explicit reset gesture, and
+    // that is exactly the false->true edge of "is any Audio track armed" below. See
+    // docs/architecture.md's "Input monitoring & feedback guard (TL6-7)".
+    bool anyAudioTrackArmed = false;
+    for (const auto& track : timelineDoc.getTracks()) {
+        if (track.kind == synth::TrackKind::Audio && track.armed) {
+            anyAudioTrackArmed = true;
+            break;
+        }
+    }
+    if (anyAudioTrackArmed && !wasAnyAudioTrackArmed_)
+        feedbackGuardLatched_ = false; // the reset gesture: disarmed, then armed again
+    wasAnyAudioTrackArmed_ = anyAudioTrackArmed;
+
+    if (audioEngine.consumeFeedbackGuardTripped()) {
+        feedbackGuardLatched_ = true;
+        statusBar.showMessage("Input muted — sustained clipping (feedback protection)");
+    }
+
+    audioEngine.setInputMonitoringEnabled(anyAudioTrackArmed && !feedbackGuardLatched_);
+
     // TL5-4: the timeline panel's low-rate transport poll, on the same existing timer — no new
     // timer, and nothing at all when the panel is hidden (a collapsed timeline must cost exactly
     // what it did before TL5-4). This is what starts/stops the playhead's playing-only 30 Hz strip

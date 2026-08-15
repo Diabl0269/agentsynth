@@ -114,6 +114,25 @@ public:
     /** How many samples of each channel above are valid — the current render pass's length. */
     int getNumDeviceInputSamples() const noexcept { return numDeviceInputSamples; }
 
+    // -- This block's INPUT MONITORING flag (TL6-7) --------------------------
+    // The same carrier idea as the device input above, for a different reason: AudioEngine decides,
+    // once per render pass, whether AudioInputModule's graph output should be gated (recording taps
+    // the graph, so "monitoring enabled" IS the record path for input chains — this is what keeps an
+    // idle mic out of the speakers) and parks the answer here so the module can read it off the
+    // playhead it already has, with no per-node injection. Deliberately NOT gated on
+    // SYNTH_ENABLE_TIMELINE — like device input, this is an input-path property, not a timeline one.
+    //
+    // Threading and lifetime: written and read on the AUDIO THREAD ONLY, within one render pass —
+    // AudioEngine::renderPass sets it before the graph runs, right alongside the device-input
+    // publish. Unlike the device-input pointers above there is nothing to invalidate afterwards (a
+    // stale bool carries no dangling-pointer risk), so it is not reset at the end of the pass.
+    //
+    // Defaults to false, which is exactly the silent behaviour every reader already falls back to
+    // when there is no transport at all (a foreign host, a bare TransportService in a unit test, or
+    // a SYNTH_ENABLE_TIMELINE=OFF build that never calls the setter that would flip it).
+    void setInputMonitoringEnabledForBlock(bool enabled) noexcept { inputMonitoringEnabledForBlock = enabled; }
+    bool isInputMonitoringEnabledForBlock() const noexcept { return inputMonitoringEnabledForBlock; }
+
     // -- Any-thread reads ----------------------------------------------------
     struct PositionSnapshot {
         double ppq = 0.0;
@@ -179,6 +198,9 @@ private:
     std::array<const float*, kMaxDeviceInputChannels> deviceInputChannels{};
     int numDeviceInputChannels = 0;
     int numDeviceInputSamples = 0;
+
+    // TL6-7. Audio thread only; see setInputMonitoringEnabledForBlock.
+    bool inputMonitoringEnabledForBlock = false;
 
     // -- Command FIFO (message thread -> audio thread) ------------------------
     static constexpr int kFifoCapacity = 256;

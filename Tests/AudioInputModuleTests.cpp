@@ -73,6 +73,10 @@ struct ModuleRig {
     ModuleRig() {
         module.setPlayHead(&transport);
         module.prepareToPlay(kSampleRate, kBlockSize);
+        // TL6-7: this harness exists to pin the module's own copy/clear/clamp/bypass contract, which
+        // is orthogonal to the monitoring gate — enable monitoring unconditionally so every existing
+        // assertion here keeps meaning what it always meant. The gate itself is Tests/FeedbackGuardTests.cpp's job.
+        transport.setInputMonitoringEnabledForBlock(true);
     }
 
     /** Publishes `channels` of device input for one block and renders it. Channel c carries a ramp
@@ -215,6 +219,10 @@ TEST(AudioInputModuleTest, DeviceInputFlowsThroughModule) {
 
     FakeAudioIODevice fake(2, 2);
     engine.audioDeviceAboutToStart(&fake);
+    // TL6-7: this test is about the copy path (crossed wiring, snapshot vs. render buffer), which is
+    // orthogonal to the monitoring gate — enable it so the module's output isn't gated here too. The
+    // gate itself is Tests/FeedbackGuardTests.cpp's job.
+    engine.setInputMonitoringEnabled(true);
 
     auto inLeft = makeRamp(kBlockSize);
     auto inRight = makeSine(kBlockSize);
@@ -255,6 +263,9 @@ TEST(AudioInputModuleTest, HostedInputFlows) {
 
     engine.prepareForHost(kSampleRate, kBlockSize, 2, 2);
     EXPECT_EQ(engine.getDeviceInputChannelCount(), 2);
+    // TL6-7: orthogonal to what this test pins (the snapshot survives the host's in-place render) —
+    // see the comment on DeviceInputFlowsThroughModule above.
+    engine.setInputMonitoringEnabled(true);
 
     auto hostLeft = makeRamp(kBlockSize);
     auto hostRight = makeSine(kBlockSize);

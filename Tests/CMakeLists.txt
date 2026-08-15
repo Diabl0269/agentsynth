@@ -129,6 +129,7 @@ add_executable(Tests
     AudioEngineTransportTests.cpp
     AudioInputTests.cpp
     AudioInputModuleTests.cpp
+    FeedbackGuardTests.cpp
     OfflineTransportDriverTests.cpp
     BounceExporterTests.cpp
     MetronomeTests.cpp
