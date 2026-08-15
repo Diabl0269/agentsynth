@@ -520,6 +520,34 @@ void AIChatComponent::paint(juce::Graphics& g) {
     }
 }
 
+bool AIChatComponent::shouldUseStructuredOutput(const juce::String& text, const juce::StringArray& moduleTypeNames) {
+    // Any real module/effect type name (Chorus, Distortion, Oscillator, ...) means the user is
+    // almost certainly talking about the graph, even without an explicit edit verb ("what does
+    // the Reverb's decay knob do?"). Deriving this from the module factory registry — rather than
+    // a hand-picked handful — means a new module type is covered automatically; the old hardcoded
+    // list (oscillator/filter/vca/adsr) silently missed everything else, which is what caused this
+    // bug ("Add a chorus between the distortion to the delay" matched none of the four).
+    for (const auto& moduleType : moduleTypeNames)
+        if (text.containsIgnoreCase(moduleType))
+            return true;
+
+    // Generic edit-intent verbs/nouns that show up in a patch-authoring request regardless of
+    // which module is named (or when no module is named at all, e.g. "add a filter" without
+    // capitalizing on a specific type, or "increase the cutoff"). Bias toward inclusion: a false
+    // positive here just spends ~1.5k tokens of unnecessary patch context; a false negative
+    // reproduces the original bug (request goes out with no graph context and the model has to
+    // guess or ask).
+    static const char* kEditIntentWords[] = {
+        "patch",   "create", "modify", "sound",    "preset",   "add",  "remove", "delete",
+        "connect", "change", "set",    "increase", "decrease", "swap", "insert", "between",
+    };
+    for (const auto* word : kEditIntentWords)
+        if (text.containsIgnoreCase(word))
+            return true;
+
+    return false;
+}
+
 void AIChatComponent::sendButtonClicked() {
     auto text = inputField.getText().trim();
     if (text.isEmpty())
@@ -527,11 +555,7 @@ void AIChatComponent::sendButtonClicked() {
 
     inputField.clear();
 
-    // Heuristic to decide if we want structured output (e.g. if the user asks for a patch)
-    bool useStructuredOutput =
-        text.containsIgnoreCase("patch") || text.containsIgnoreCase("create") || text.containsIgnoreCase("modify") ||
-        text.containsIgnoreCase("oscillator") || text.containsIgnoreCase("filter") || text.containsIgnoreCase("vca") ||
-        text.containsIgnoreCase("adsr") || text.containsIgnoreCase("sound") || text.containsIgnoreCase("preset");
+    bool useStructuredOutput = shouldUseStructuredOutput(text, AIStateMapper::moduleFactoryTypeNames());
 
     // Add user message to local state immediately
     messages.push_back({"user", text, ""});

@@ -655,7 +655,10 @@ for the rules this inherits unchanged.
 **Why `userPrompt` can carry the client's already-wrapped text unmodified.**
 `AIIntegrationService::buildPatchAugmentedContent()` renders the current graph into the *last*
 conversation message as `"Current patch state:\n\`\`\`json\n<JSON>\n\`\`\`\n\nUser request:
-<text>"` whenever the graph is non-empty, and leaves it as plain text otherwise. The service's own
+<text>"` whenever the graph is non-empty, and as `"Current patch is empty.\n\nUser request:
+<text>"` when it has zero nodes — the model always gets an explicit signal about whether a patch
+already exists, rather than silently falling back to the bare request text (which left "is there
+already a patch?" unanswered for a fresh-session prompt like "create a bass patch"). The service's own
 `buildUserMessage()` (`synth-platform/packages/capabilities/src/patch-generate/capability.ts`)
 performs the *exact same* wrapping server-side, from a separate `currentPatch` + `userPrompt`
 pair, and only wraps when `currentPatch` is present. Sending the client's already-wrapped text as

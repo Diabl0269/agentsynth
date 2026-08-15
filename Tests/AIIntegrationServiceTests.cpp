@@ -421,6 +421,27 @@ TEST_F(AIIntegrationServiceTest, OutgoingRequestStillIncludesPatchContext) {
     EXPECT_TRUE(rawProvider->lastConversation.back().content.contains("Add a filter"));
 }
 
+// Regression: buildPatchAugmentedContent() used to silently return bare `text` when the live
+// graph had zero nodes, giving the model no signal either way about whether a patch already
+// exists. A fresh-session "create a bass patch" request needs an explicit "empty" marker instead,
+// or the model has no way to distinguish "there is a patch but you weren't told about it" from
+// "there is genuinely nothing yet".
+TEST_F(AIIntegrationServiceTest, OutgoingRequestOnEmptyGraphStatesPatchIsEmpty) {
+    // No nodes added to `graph` — deliberately left empty.
+    auto provider = std::make_unique<MockAIProvider>();
+    auto* rawProvider = provider.get();
+    service->setProvider(std::move(provider));
+
+    service->sendMessage("Create a fat bass patch", nullptr, true);
+
+    ASSERT_FALSE(rawProvider->lastConversation.empty());
+    const auto& content = rawProvider->lastConversation.back().content;
+    EXPECT_TRUE(content.contains("Current patch is empty"));
+    EXPECT_TRUE(content.contains("Create a fat bass patch"));
+    // Must not claim a patch state block that doesn't exist.
+    EXPECT_FALSE(content.contains("Current patch state"));
+}
+
 TEST_F(AIIntegrationServiceTest, HistoryIsTrimmedToCap) {
     auto provider = std::make_unique<MockAIProvider>();
     service->setProvider(std::move(provider));
