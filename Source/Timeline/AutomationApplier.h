@@ -3,9 +3,11 @@
 #include "../Transport/BlockTimeInfo.h"
 #include "AutomationKernel.h"
 #include "AutomationRecorder.h" // GestureClaims / AutomationRecordState — the audio-visible half
+#include "AutomationUiFeed.h"   // TL4-5: the audio -> UI reflection ring
 #include "EpochExchange.h"
 #include "TimelineSnapshot.h"
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <limits>
 #include <vector>
 
 namespace synth {
@@ -56,11 +58,20 @@ struct AutomationBindingTable {
         int laneIndex = -1;                        // into snapshot->lanes
         juce::AudioProcessorGraph::Node::Ptr node; // refcounted: keeps `param`'s owner alive (above)
         juce::RangedAudioParameter* param = nullptr;
+        // TL4-5: the node's id, captured alongside `node` at build time (AudioEngine::publishTimeline)
+        // rather than re-read from `node->nodeID` at push time — this is the identity the UI feed's
+        // events carry, and a binding built by a hand-rolled test table (no real Node::Ptr) can still
+        // populate it directly.
+        juce::AudioProcessorGraph::NodeID nodeID;
         // Audio-thread-only evaluation state, owned by the table (which outlives every block it is
         // published for). `mutable` because the applier receives the table by const reference — the
         // exchange hands out a borrowed const view, and the cursor is the one part of it the audio
         // thread is allowed to write.
         mutable AutomationCursor cursor;
+        // TL4-5 dedupe: the last normalised value pushed to the UI feed for this binding, so a static
+        // lane pushes once rather than once per block. NaN means "never pushed" — NaN != NaN is
+        // always true, so the very first write always pushes regardless of what value it carries.
+        mutable float lastPushedNormalized = std::numeric_limits<float>::quiet_NaN();
     };
 
     std::vector<Binding> bindings;
@@ -111,10 +122,18 @@ public:
     //     against a wider range (or a build that later narrowed one) therefore pins at the endpoint
     //     instead of wrapping or asserting. A non-finite value is skipped outright rather than
     //     handed to JUCE, which would trip a debug assertion inside NormalisableRange.
+    //   - **TL4-5 UI reflection rides `uiFeed`, not a notification.** After the plain store above,
+    //     if this write's normalised value differs from the binding's `lastPushedNormalized` (or
+    //     that field is still NaN — never pushed), push `{nodeID, param, newNormalised}` to
+    //     `uiFeed` and update `lastPushedNormalized`. This is the ONLY place that dedupe check
+    //     happens, so a lane holding still for a thousand blocks pushes exactly once, and a ramping
+    //     one pushes roughly once per block (whenever its value actually moves). `uiFeed` is null in
+    //     every build/test that doesn't care (default argument), in which case this is skipped
+    //     entirely — a null feed is not an error, it just means nothing is listening.
     //
     // No allocation, no locks, no logging, no juce::String. `noexcept`.
     void applyBlock(const AutomationBindingTable& table, const BlockTimeInfo& info,
-                    const AutomationRecordState* recordState = nullptr) noexcept;
+                    const AutomationRecordState* recordState = nullptr, AutomationUiFeed* uiFeed = nullptr) noexcept;
 };
 
 } // namespace synth

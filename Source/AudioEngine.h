@@ -100,6 +100,14 @@ public:
         return automationBindings_;
     }
 
+    // TL4-5: the audio -> UI reflection ring. AutomationApplier::applyBlock (renderPass, audio
+    // thread) pushes into it; GraphEditor's 30 Hz timer drains it on the message thread to move
+    // sliders without looping back through a parameter write. Always present (even in a
+    // SYNTH_ENABLE_TIMELINE=0 build) so callers never need to null-check it — nothing pushes to it
+    // in that build, so it simply stays empty.
+    synth::AutomationUiFeed& getAutomationUiFeed() noexcept { return automationUiFeed_; }
+    const synth::AutomationUiFeed& getAutomationUiFeed() const noexcept { return automationUiFeed_; }
+
     // TL4-2, MESSAGE THREAD: the one call that hands a TimelineDoc to the audio thread. Builds the
     // snapshot, resolves every automation lane against the CURRENT graph, and publishes the
     // snapshot FIRST and the binding table SECOND — that order is what makes a table's snapshot
@@ -227,6 +235,9 @@ private:
     // exchange explicitly anyway, so it never happens in practice.
     synth::EpochExchange<synth::AutomationBindingTable> automationBindings_;
     synth::AutomationApplier automationApplier_;
+    // TL4-5. Pre-allocated at construction (see AutomationUiFeed::kCapacity) — never grows, never
+    // allocates from the audio thread.
+    synth::AutomationUiFeed automationUiFeed_;
     juce::AudioProcessorGraph mainProcessorGraph;
     juce::AudioProcessorPlayer processorPlayer;
 

@@ -2271,6 +2271,25 @@ void GraphEditor::timerCallback() {
     // static patch).
     if (minimap.isVisible())
         minimap.setModel(buildMinimapModel());
+
+#if SYNTH_ENABLE_TIMELINE
+    // TL4-5: drain the audio thread's UI reflection ring on the same 30 Hz cadence as everything
+    // else in this callback — no separate free-running timer. A drain against an empty ring is just
+    // one prepareToRead() call, so this is effectively free on every tick that has nothing queued.
+    // Reflection never calls anything that repaints on its own: setValue(..., dontSendNotification)
+    // marks the slider dirty and it rides the existing buffered-image repaint, same as any other
+    // control change.
+    audioEngine.getAutomationUiFeed().drain([this](const synth::AutomationUiEvent& event) {
+        for (auto* comp : content.getModules()) {
+            if (comp->getNodeId().uid != event.nodeId)
+                continue;
+            comp->reflectParameterValue(event.param, event.newNormalized);
+            return;
+        }
+        // No live component for this NodeID (module hidden mid-teardown or already deleted) —
+        // the event is simply discarded.
+    });
+#endif
 }
 
 // ============================================================================

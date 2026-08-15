@@ -4,7 +4,7 @@
 namespace synth {
 
 void AutomationApplier::applyBlock(const AutomationBindingTable& table, const BlockTimeInfo& info,
-                                   const AutomationRecordState* recordState) noexcept {
+                                   const AutomationRecordState* recordState, AutomationUiFeed* uiFeed) noexcept {
     // Knobs stay free while the transport is stopped — see the header for why.
     if (!info.playing)
         return;
@@ -66,7 +66,16 @@ void AutomationApplier::applyBlock(const AutomationBindingTable& table, const Bl
         // convertTo0to1 clamps into [0, 1] itself, so a lane authored against a wider range pins at
         // the parameter's endpoint. setValue and NOT setValueNotifyingHost: a plain store, no
         // listener notification from the audio thread (see the header).
-        binding.param->setValue(binding.param->convertTo0to1(denormalised));
+        const float newNormalized = binding.param->convertTo0to1(denormalised);
+        binding.param->setValue(newNormalized);
+
+        // TL4-5: reflect into the UI feed, deduped per binding. NaN != NaN is always true, so a
+        // binding's very first write always pushes; every write after that only pushes when the
+        // value actually moved.
+        if (uiFeed != nullptr && newNormalized != binding.lastPushedNormalized) {
+            binding.lastPushedNormalized = newNormalized;
+            uiFeed->push({binding.nodeID.uid, binding.param, newNormalized});
+        }
     }
 }
 

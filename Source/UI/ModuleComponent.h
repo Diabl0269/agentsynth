@@ -90,6 +90,13 @@ public:
      *  rule can be tested without a themed LookAndFeel and a live modulation routing. */
     int getModRingSliderIndex(const juce::String& paramName) const;
 
+    /** TL4-5: applies an automation-driven value to whichever slider/combo was built for `param`,
+     *  denormalised via that parameter's own range, via setValue(..., dontSendNotification) — never
+     *  touches the parameter, never fires the attachment, so there is no write-back loop and
+     *  AutomationRecorder (a parameter listener) hears nothing. A `param` this component never built
+     *  a control for (custom chrome, or a stale event for the wrong node) is a silent no-op. */
+    void reflectParameterValue(const juce::AudioProcessorParameter* param, float normalized);
+
 private:
     juce::AudioProcessor* module;
     juce::AudioProcessorGraph::NodeID nodeId;
@@ -102,6 +109,14 @@ private:
     juce::OwnedArray<juce::ComboBox> comboBoxes;
     juce::OwnedArray<juce::Label> comboLabels;
     juce::OwnedArray<juce::ToggleButton> toggles;
+
+    // TL4-5: param -> control mapping for reflectParameterValue(), index-parallel to `sliders` /
+    // `comboBoxes` respectively. Populated only in createControls()'s generic auto-UI branch (the
+    // float/int slider and choice-combo cases) — a control built by bespoke chrome, or the
+    // ExternalMidiModule device/channel combos (which don't go through ComboBoxParameterAttachment),
+    // gets a null entry so the arrays stay aligned and a match against them is a safe no-op.
+    juce::Array<juce::RangedAudioParameter*> sliderParams;
+    juce::Array<juce::RangedAudioParameter*> comboParams;
 
     // Attachments need to be kept alive.
     // We are using raw pointers for parameters currently.

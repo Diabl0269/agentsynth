@@ -60,6 +60,7 @@ add_executable(Tests
     MainComponentTests.cpp
     GraphEditorTests.cpp
     ModuleComponentTests.cpp
+    AutomationUiReflectionTests.cpp
     AIChatComponentTests.cpp
     PlanBadgeTests.cpp
     PolyMidiModuleTests.cpp

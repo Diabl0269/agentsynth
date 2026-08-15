@@ -8,6 +8,7 @@
 #include "GraphEditor.h"
 #include "LayoutUtil.h"
 #include "Theme/AppLookAndFeel.h"
+#include <cmath>
 
 // ---- Default body-layout metrics (see layoutDefaultContent) ----------------------------------
 // Three knobs per row instead of two: the body sits below every jack, so it can use nearly the
@@ -399,6 +400,7 @@ void ModuleComponent::createControls() {
             deviceCombo->addItem(info.name, i++);
         }
         deviceCombo->setSelectedId(1, juce::dontSendNotification);
+        comboParams.add(nullptr); // TL4-5: not ComboBoxParameterAttachment-driven — see the header
 
         deviceCombo->onChange = [extMidi, deviceCombo, devices, this]() {
             int selectedId = deviceCombo->getSelectedId();
@@ -421,6 +423,7 @@ void ModuleComponent::createControls() {
             channelCombo->addItem("Channel " + juce::String(c), c + 1);
         }
         channelCombo->setSelectedId(1, juce::dontSendNotification);
+        comboParams.add(nullptr); // TL4-5: not ComboBoxParameterAttachment-driven — see the header
 
         channelCombo->onChange = [extMidi, channelCombo]() {
             int selectedId = channelCombo->getSelectedId();
@@ -470,6 +473,7 @@ void ModuleComponent::createControls() {
                 addAndMakeVisible(combo);
 
                 auto* attach = comboAttachments.add(new juce::ComboBoxParameterAttachment(*choiceParam, *combo));
+                comboParams.add(choiceParam); // TL4-5: param -> control mapping for reflection
 
                 auto* label = comboLabels.add(new juce::Label(param->getName(100), param->getName(100)));
                 addAndMakeVisible(label);
@@ -486,6 +490,7 @@ void ModuleComponent::createControls() {
                 addAndMakeVisible(slider);
 
                 auto* attach = sliderAttachments.add(new juce::SliderParameterAttachment(*floatParam, *slider));
+                sliderParams.add(floatParam); // TL4-5: param -> control mapping for reflection
 
                 auto* label = sliderLabels.add(new juce::Label(param->getName(100), param->getName(100)));
                 label->setJustificationType(juce::Justification::centred);
@@ -500,6 +505,7 @@ void ModuleComponent::createControls() {
                 addAndMakeVisible(slider);
 
                 auto* attach = sliderAttachments.add(new juce::SliderParameterAttachment(*intParam, *slider));
+                sliderParams.add(intParam); // TL4-5: param -> control mapping for reflection
 
                 auto* label = sliderLabels.add(new juce::Label(param->getName(100), param->getName(100)));
                 label->setJustificationType(juce::Justification::centred);
@@ -604,6 +610,37 @@ juce::ToggleButton* ModuleComponent::findToggleByName(const juce::String& name) 
         if (toggle->getComponentID().equalsIgnoreCase(name))
             return toggle;
     return nullptr;
+}
+
+// TL4-5: automation -> UI reflection. `sliderParams`/`comboParams` are index-parallel to
+// `sliders`/`comboBoxes` (see the header), so this is a straight linear scan for pointer identity —
+// no name matching, no ambiguity between two params that happen to share a display name. A `param`
+// nobody built a control for (nullptr entries included) simply matches nothing and returns.
+void ModuleComponent::reflectParameterValue(const juce::AudioProcessorParameter* param, float normalized) {
+    if (param == nullptr || module == nullptr)
+        return; // nothing to reflect into, or this component is mid-teardown (detachFromProcessor)
+
+    for (int i = 0; i < sliderParams.size(); ++i) {
+        if (sliderParams[i] != param)
+            continue;
+        // Denormalise via the SAME RangedAudioParameter the slider's own NormalisableRange mirrors
+        // (see SliderParameterAttachment's ctor) — the slider's range is already in these units, so
+        // this is exactly the value the attachment itself would have pushed.
+        const double denormalised = static_cast<double>(sliderParams[i]->convertFrom0to1(normalized));
+        sliders[i]->setValue(denormalised, juce::dontSendNotification);
+        return;
+    }
+
+    for (int i = 0; i < comboParams.size(); ++i) {
+        if (comboParams[i] != param)
+            continue;
+        if (auto* choiceParam = dynamic_cast<juce::AudioParameterChoice*>(comboParams[i])) {
+            const int index = juce::jlimit(0, choiceParam->choices.size() - 1,
+                                           static_cast<int>(std::lround(choiceParam->convertFrom0to1(normalized))));
+            comboBoxes[i]->setSelectedItemIndex(index, juce::dontSendNotification);
+        }
+        return;
+    }
 }
 
 void ModuleComponent::layoutNamedKnob(const juce::String& name, int x, int y, int w, int h) {

@@ -134,6 +134,7 @@ void AudioEngine::publishTimeline(const synth::TimelineDoc& doc) {
             binding.laneIndex = static_cast<int>(laneIndex);
             binding.node = found->second; // refcounted — see AutomationApplier.h
             binding.param = param;
+            binding.nodeID = found->second->nodeID; // TL4-5: identity for the UI feed's events
             table->bindings.push_back(std::move(binding));
         }
     }
@@ -702,8 +703,11 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // in the same pass it was written).
     // TL4-4: the recorder's audio-visible half rides along so per-lane record modes and in-flight
     // gesture claims are honoured. Null unless an owner installed a recorder.
+    // TL4-5: the UI reflection feed rides along too, so a slider can follow automation without a
+    // notifying write. Always passed (see getAutomationUiFeed()) — nothing drains it without a
+    // GraphEditor around to do so, so a headless render pass just fills a ring nobody reads.
     automationApplier_.applyBlock(automationBindings_.beginAudioBlock(), transport.getCurrentBlockInfo(),
-                                  automationRecordState_.load(std::memory_order_relaxed));
+                                  automationRecordState_.load(std::memory_order_relaxed), &automationUiFeed_);
 #endif
 
     mainProcessorGraph.processBlock(buffer, midiMessages);
