@@ -44,6 +44,7 @@ add_executable(Tests
     AccountServiceTests.cpp
     KeychainTokenStoreTests.cpp
     DeviceIdStoreTests.cpp
+    PatchFeedbackStoreTests.cpp
     MainComponentTests.cpp
     GraphEditorTests.cpp
     ModuleComponentTests.cpp
