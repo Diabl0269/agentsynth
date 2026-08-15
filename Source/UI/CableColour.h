@@ -168,6 +168,9 @@ inline ModuleCategory categoryFor(ModuleType t) noexcept {
     // own (its partner, Audio Output, is not even a ModuleBase). Utility is the bucket that means
     // "plumbing", which is exactly what a device tap is.
     case ModuleType::AudioInput:
+    // Rec Tap (TL6-3) is plumbing in the purest sense: a transparent stereo pass-through that
+    // exists only so a take has somewhere to be copied out of. Same bucket as the device tap.
+    case ModuleType::RecordTap:
         return ModuleCategory::Utility;
     }
     return ModuleCategory::Utility;

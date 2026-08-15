@@ -231,6 +231,12 @@ against:
       `AIStateMapperTest.AuthorableModuleTypesGolden` pins the exact resulting list, so either kind
       of addition fails the build until the choice is made deliberately.
 
+      The set today: `Attenuverter` / `Mod Slot` (an implementation detail of the `modulations`
+      array), `Track In` (a timeline feed, whose only meaningful state lives outside the patch), and
+      **`Rec Tap`** (TL6-3). Rec Tap's reason is the sharpest of the four: it **names a file path on
+      disk**, so a model that could author one could aim a recording anywhere the app can write —
+      the write-side twin of the `"state"` file-path restriction below.
+
       **The deny set is enforced by the validator, not just by the schema** (TL7-4's mechanism,
       landed early with TL3-1's Track In node). `validatePatch(..., trusted=false)` rejects any node
       whose type is in `kNonAuthorableModuleTypes` with `PatchValidationError::InternalModuleNotAllowed`.

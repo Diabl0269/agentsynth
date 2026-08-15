@@ -22,6 +22,19 @@ constexpr const char* kPatchFileFilter = "*.json";
 #endif
 
 #if SYNTH_ENABLE_TIMELINE
+// TL6-3: where an UNSAVED project's takes go, under <app data>/<settings folder>. Also the reserved
+// prefix such a take's clip assetRef carries — see chooseTakeFiles and ProjectBundle's asset policy.
+constexpr const char* kRecordingsFolderName = "Recordings";
+
+// Upper bound on the take-number search. A folder with 10000 takes in it is a bug report, not a
+// session, and an unbounded loop on a stat() call is not something a UI click should be able to do.
+constexpr int kMaxTakeNumber = 10000;
+
+// Floor on a committed audio clip's length, so a take stopped the instant it started still produces
+// a clip the model accepts (addClip requires a strictly positive length). Same value and same
+// reasoning as synth::MidiRecorder::kMinNoteLengthBeats.
+constexpr double kMinAudioClipLengthBeats = 1.0 / 32.0;
+
 // The add-track flow's auto-wire target set: MIDI-DRIVEN INSTRUMENTS only.
 //
 // juce::AudioProcessor::acceptsMidi() cannot be the rule — ModuleBase overrides it to `true` for
@@ -483,16 +496,26 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     audioEngine.setMidiCaptureSink(&midiRecorder);
     timelinePanel.getTransportBar().onRecordToggled = [this](bool wantRecording) {
         if (!wantRecording) {
+            // Both are no-ops unless their own kind of take is in flight, so Record-off can call
+            // them unconditionally and neither path has to know the other exists.
+            commitAudioRecording();
             commitMidiRecording();
             return;
         }
 
         // Fail fast on no armed track, BEFORE touching the transport — a rejected request must not
         // have the side effect of starting playback.
+        //
+        // TL6-3: the lookup considers Audio tracks too, and FIRST-ARMED WINS. With one armed track
+        // of each kind the one earlier in the document decides which kind of take this is; there is
+        // deliberately no "record both at once" (two takes, two commits, two undo steps for one
+        // gesture). Automation-kind tracks are not recordable and are skipped.
         synth::TrackId armedTrack;
+        synth::TrackKind armedKind = synth::TrackKind::Midi;
         for (const auto& track : timelineDoc.getTracks()) {
-            if (track.armed && track.kind == synth::TrackKind::Midi) {
+            if (track.armed && (track.kind == synth::TrackKind::Midi || track.kind == synth::TrackKind::Audio)) {
                 armedTrack = track.id;
+                armedKind = track.kind;
                 break;
             }
         }
@@ -500,6 +523,27 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
             timelinePanel.getTransportBar().setRecordingState(false);
             statusBar.showMessage("Arm a track to record");
             return;
+        }
+
+        // TL6-3: an audio take's tap and its destination files are resolved BEFORE the transport
+        // moves, for the same reason the armed-track check is — a request that cannot be honoured
+        // must not leave the transport rolling.
+        const bool isAudioTake = (armedKind == synth::TrackKind::Audio);
+        AudioTake take;
+        if (isAudioTake) {
+            auto* tapNode = ensureMasterRecordTap();
+            if (tapNode == nullptr) {
+                timelinePanel.getTransportBar().setRecordingState(false);
+                statusBar.showMessage("Can't record audio: no Audio Output in the patch");
+                return;
+            }
+            take.track = armedTrack;
+            take.tapNode = tapNode->nodeID;
+            if (!chooseTakeFiles(take)) {
+                timelinePanel.getTransportBar().setRecordingState(false);
+                statusBar.showMessage("Can't record audio: could not create the take file");
+                return;
+            }
         }
 
         // Record implies roll (DAW convention): starting a take also starts the transport if it
@@ -511,10 +555,10 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         // TL5-6: count-in pre-roll, only from a full stop — a record engaged while already playing
         // gets no pre-roll (the user is already mid-performance) and no forced click, matching
         // today's plain "record implies roll" behaviour exactly.
+        double punchInBeat = snap.ppq;
         if (!snap.playing && countInBars > 0) {
             const double beatsPerBar =
                 (double)snap.timeSigNumerator * 4.0 / (double)std::max(1, snap.timeSigDenominator);
-            const double punchInBeat = snap.ppq;
             const double preRollStart = std::max(0.0, punchInBeat - (double)countInBars * beatsPerBar);
             transport.locateBeat(preRollStart);
             // Forced audible through the pre-roll regardless of the user's own metronome toggle;
@@ -522,14 +566,25 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
             // and unconditionally by commitMidiRecording() on stop.
             audioEngine.getMetronome().setForcedOn(true);
             transport.play();
+        } else {
+            if (!snap.playing)
+                transport.play();
+            punchInBeat = transport.getPositionSnapshot().ppq;
+        }
+
+        if (isAudioTake) {
+            // The capture itself starts on the 10 Hz poll, when the transport actually reaches the
+            // punch — NOT here. See the "punch-start slop" note in docs/architecture.md: it costs
+            // up to one poll tick (~100 ms) of head trim in v1, and TL6-8's alignment work replaces
+            // it with a sample-accurate start.
+            take.punchInBeat = punchInBeat;
+            take.pending = true;
+            audioTake_ = take;
+        } else {
             // punchInBeat is BOTH the recorder's own bookkeeping and (TL5-6) the audio-thread filter
             // threshold — captureBlock() drops everything before it, so the pre-roll bars the
             // performer plays along with the click are heard but never committed.
             midiRecorder.startRecording(armedTrack, punchInBeat);
-        } else {
-            if (!snap.playing)
-                transport.play();
-            midiRecorder.startRecording(armedTrack, transport.getPositionSnapshot().ppq);
         }
 
         timelinePanel.getTransportBar().setRecordingState(true);
@@ -767,13 +822,44 @@ void MainComponent::timerCallback() {
     const auto position = audioEngine.getTransport().getPositionSnapshot();
     if (wasTransportPlaying_ && !position.playing && midiRecorder.isRecording())
         commitMidiRecording();
+
+    // TL6-3: the audio half of the same two rules.
+    //
+    //  1. THE PUNCH. The capture starts here — on this poll — the first tick at or after the
+    //     punch-in beat, not at the Record-on click. That is what makes a count-in's pre-roll bars
+    //     absent from the take instead of merely inaudible, and it is why a v1 take can be missing
+    //     up to one poll interval (~100 ms) of head. Documented as a known limit in
+    //     docs/architecture.md; TL6-8's alignment work replaces it with a sample-accurate start.
+    //  2. COMMIT ON STOP, mirroring the MIDI rule above: a take still open when the transport stops
+    //     (the user hit Space rather than the record button) commits down the same path.
+    if (audioTake_.pending && position.playing && position.ppq >= audioTake_.punchInBeat) {
+        auto* tap = findMasterRecordTap();
+        const double rate = position.sampleRate > 0.0 ? position.sampleRate : 44100.0;
+        if (tap != nullptr &&
+            tap->startCapture(audioTake_.wavFile, audioTake_.peaksFile, rate, RecordTapModule::kNumChannels)) {
+            audioTake_.pending = false;
+            audioTake_.capturing = true;
+        } else {
+            // The tap vanished, or the file could not be opened. Abandon rather than retry every
+            // tick: whatever failed is not going to un-fail on its own.
+            audioTake_ = {};
+            timelinePanel.getTransportBar().setRecordingState(false);
+            audioEngine.getMetronome().setForcedOn(false);
+            statusBar.showMessage("Can't record audio: the take file could not be opened");
+        }
+    }
+    if (wasTransportPlaying_ && !position.playing && (audioTake_.pending || audioTake_.capturing))
+        commitAudioRecording();
+
     wasTransportPlaying_ = position.playing;
 
     // TL5-6: clears the count-in pre-roll's forced-on click once the transport reaches the punch-in
     // point. Gated on isRecording() so this never fires outside an actual take; idempotent
     // otherwise (setForcedOn(false) on an already-off metronome is a no-op), so polling it every
     // tick while recording costs nothing once the pre-roll has already ended.
-    if (midiRecorder.isRecording() && position.ppq >= midiRecorder.getPunchInBeat())
+    // TL6-3 rides the same rule: an audio take's pre-roll ends at its own punch-in beat.
+    if ((midiRecorder.isRecording() && position.ppq >= midiRecorder.getPunchInBeat()) ||
+        (audioTake_.capturing && position.ppq >= audioTake_.punchInBeat))
         audioEngine.getMetronome().setForcedOn(false);
 
     // TL5-4: the timeline panel's low-rate transport poll, on the same existing timer — no new
@@ -870,6 +956,9 @@ void MainComponent::saveToFile(const juce::File& file) {
             statusBar.showMessage("Save failed: " + result.message);
             return;
         }
+        // TL6-3: from here on this document IS a bundle, so the next take is written into it
+        // (Audio/ + Peaks/) rather than into app data.
+        currentBundleDir_ = file;
         setCurrentPatchName(file.getFileNameWithoutExtension());
         statusBar.showMessage("Saved: " + file.getFileNameWithoutExtension());
         return;
@@ -907,6 +996,8 @@ bool MainComponent::openFromFile(const juce::File& file) {
             return false;
         }
 
+        // TL6-3: takes recorded from here on belong to THIS bundle.
+        currentBundleDir_ = file;
         // ProjectBundle::load already reconciled once; this republishes the freshly loaded document
         // (and rebinds the recorder) against the graph as it now stands.
         reconcileTimelineAfterGraphChange();
@@ -1150,6 +1241,11 @@ bool MainComponent::perform(const InvocationInfo& info) {
         // and the post-restore reconcile re-derives the bindings after each.
         clearTimelineForNewPatch();
         graphEditor.newPatch();
+#if SYNTH_ENABLE_TIMELINE
+        // TL6-3: a new document is not the old bundle, so the next take goes to app data rather
+        // than into a bundle this patch no longer belongs to.
+        currentBundleDir_ = juce::File();
+#endif
         reconcileTimelineAfterGraphChange();
         setCurrentPatchName("Untitled");
         statusBar.showMessage("New patch");
@@ -1743,6 +1839,200 @@ void MainComponent::commitMidiRecording() {
     // unconditional and idempotent, so a take that was never in a pre-roll to begin with just
     // clears an already-false flag.
     audioEngine.getMetronome().setForcedOn(false);
+#endif
+}
+
+// ---- TL6-3: audio recording ----
+
+juce::AudioProcessorGraph::Node* MainComponent::ensureMasterRecordTap() {
+#if SYNTH_ENABLE_TIMELINE
+    auto& graph = audioEngine.getGraph();
+
+    // Already spliced in? THE master tap is a singleton by construction — this function is the only
+    // thing that ever creates one — so the first Rec Tap found is it.
+    for (auto* node : graph.getNodes())
+        if (node != nullptr && dynamic_cast<RecordTapModule*>(node->getProcessor()) != nullptr)
+            return node;
+
+    // The node the tap goes in FRONT of. Still a bare juce::AudioGraphIOProcessor (unlike Audio
+    // Input since TL6-2), so it is identified by name exactly like every other lookup in the app.
+    juce::AudioProcessorGraph::Node* outputNode = nullptr;
+    for (auto* node : graph.getNodes())
+        if (node != nullptr && node->getProcessor() != nullptr && node->getProcessor()->getName() == "Audio Output")
+            outputNode = node;
+    if (outputNode == nullptr)
+        return nullptr; // nothing to record: there is no master bus
+
+    juce::AudioProcessorGraph::Node* created = nullptr;
+    // ONE compound undo step for the node, its position, and the whole re-splice. recordCombinedChange
+    // pushes only the domain(s) that actually changed, so this is a single graph SnapshotAction —
+    // the timeline is untouched here (the clip is a separate step, committed when the take ends).
+    undoManager.recordCombinedChange(graph, timelineDoc, [&] {
+        // Through the factory, not constructed ad hoc: that is what makes the node round-trip
+        // through graphToJSON/applyJSONToGraph, which is how undo, redo and .agsproj save all
+        // reproduce it. Same reasoning as createTrackInNode().
+        auto processor = synth::AIStateMapper::createModule("Rec Tap");
+        if (processor == nullptr)
+            return;
+        auto node = graph.addNode(std::move(processor));
+        if (node == nullptr)
+            return;
+        created = node.get();
+
+        // Ensure-uuid, mirrored into the processor in the same breath — the pairing every uuid
+        // writer site keeps (see ModuleBase::setNodeUuid).
+        const juce::String uuid = juce::Uuid().toDashedString();
+        node->properties.set("uuid", uuid);
+        if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
+            module->setNodeUuid(uuid);
+
+        const auto size = GraphEditor::estimateModuleSize("Rec Tap");
+        const auto position = graphEditor.findLeftEdgeSlotBelowModules(size.x, size.y);
+        node->properties.set("x", position.x);
+        node->properties.set("y", position.y);
+
+        // THE SPLICE. Everything that fed the output's audio channels now feeds the tap's matching
+        // input, and the tap's outputs feed the output. Collected first and mutated afterwards
+        // because removeConnection invalidates the list we would otherwise be iterating.
+        //
+        // MIDI connections into the output are left alone (a tap carries audio, not MIDI), and so
+        // is anything on a channel the tap does not have — re-routing an 8-channel master through a
+        // stereo tap would silently drop six channels.
+        std::vector<juce::AudioProcessorGraph::Connection> intoOutput;
+        for (const auto& connection : graph.getConnections()) {
+            if (connection.destination.nodeID != outputNode->nodeID)
+                continue;
+            const int channel = connection.destination.channelIndex;
+            if (channel < 0 || channel >= RecordTapModule::kNumChannels)
+                continue;
+            intoOutput.push_back(connection);
+        }
+        for (const auto& connection : intoOutput) {
+            graph.removeConnection(connection);
+            graph.addConnection({connection.source, {node->nodeID, connection.destination.channelIndex}});
+        }
+        for (int channel = 0; channel < RecordTapModule::kNumChannels; ++channel)
+            graph.addConnection({{node->nodeID, channel}, {outputNode->nodeID, channel}});
+    });
+
+    graphEditor.updateComponents();
+    return created;
+#else
+    return nullptr;
+#endif
+}
+
+RecordTapModule* MainComponent::findMasterRecordTap() const {
+#if SYNTH_ENABLE_TIMELINE
+    auto& graph = const_cast<MainComponent*>(this)->audioEngine.getGraph();
+    if (auto* node = graph.getNodeForId(audioTake_.tapNode))
+        if (auto* tap = dynamic_cast<RecordTapModule*>(node->getProcessor()))
+            return tap;
+
+    // The id no longer resolves — an undo/redo mid-take rebuilds the graph and renumbers nodes.
+    // The tap is a singleton, so a scan still identifies it unambiguously.
+    for (auto* node : graph.getNodes())
+        if (node != nullptr)
+            if (auto* tap = dynamic_cast<RecordTapModule*>(node->getProcessor()))
+                return tap;
+#endif
+    return nullptr;
+}
+
+bool MainComponent::chooseTakeFiles(AudioTake& take) const {
+#if SYNTH_ENABLE_TIMELINE
+    juce::File audioDir;
+    juce::File peaksDir;
+    juce::String refPrefix;
+
+    if (currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_)) {
+        audioDir = currentBundleDir_.getChildFile(synth::ProjectBundle::kAudioSubdirName);
+        peaksDir = currentBundleDir_.getChildFile(synth::ProjectBundle::kPeaksSubdirName);
+        refPrefix = juce::String(synth::ProjectBundle::kAudioSubdirName) + "/";
+    } else {
+        // TODO(TL6-6): an UNSAVED project has no bundle to write into, so takes land in app data
+        // and the clip's assetRef carries the reserved "Recordings/" prefix, which resolves against
+        // <app data>/<settings folder> rather than a bundle root. TL6-6's import/adopt pass moves
+        // these into the bundle on the first save and rewrites the refs to "Audio/...". Until then
+        // the ref is still bundle-RELATIVE in form (isValidAssetRef accepts it), which is what
+        // keeps the one path rule — no absolute paths, ever — true for both cases.
+        auto root = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                        .getChildFile(synth::branding::kSettingsFolderName)
+                        .getChildFile(kRecordingsFolderName);
+        audioDir = root;
+        peaksDir = root;
+        refPrefix = juce::String(kRecordingsFolderName) + "/";
+    }
+
+    if (!audioDir.exists() && !audioDir.createDirectory().wasOk())
+        return false;
+    if (!peaksDir.exists() && !peaksDir.createDirectory().wasOk())
+        return false;
+
+    // First free take number in whichever folder pair this is. Both files are checked so a take
+    // never half-overwrites an earlier one.
+    for (int n = 1; n <= kMaxTakeNumber; ++n) {
+        const juce::String stem = "take-" + juce::String(n);
+        const auto wav = audioDir.getChildFile(stem + ".wav");
+        const auto peaks = peaksDir.getChildFile(stem + ".agpk");
+        if (wav.exists() || peaks.exists())
+            continue;
+        take.wavFile = wav;
+        take.peaksFile = peaks;
+        take.assetRef = refPrefix + stem + ".wav";
+        return true;
+    }
+    return false;
+#else
+    juce::ignoreUnused(take);
+    return false;
+#endif
+}
+
+void MainComponent::commitAudioRecording() {
+#if SYNTH_ENABLE_TIMELINE
+    if (!audioTake_.pending && !audioTake_.capturing)
+        return;
+
+    // Cleared FIRST: every path out of here means the take is over, and leaving the state set would
+    // let the 10 Hz poll re-enter this on the next tick.
+    const AudioTake take = audioTake_;
+    audioTake_ = {};
+
+    RecordTapModule::TakeResult result;
+    if (auto* tap = findMasterRecordTap())
+        result = tap->stopCapture();
+
+    timelinePanel.getTransportBar().setRecordingState(false);
+    // Every stop (explicit or auto-committed) ends any in-flight count-in pre-roll — unconditional
+    // and idempotent, exactly like commitMidiRecording's own call.
+    audioEngine.getMetronome().setForcedOn(false);
+
+    // Nothing captured: record was disengaged during the count-in, or the tap never armed. No clip
+    // and no undo step, mirroring MidiRecorder's "an empty take commits nothing" contract.
+    if (!result.ok || result.lengthSamples <= 0)
+        return;
+
+    // Samples -> beats through the transport's tempo. A take is bounded by the transport it was
+    // recorded against, so its own rate/bpm are the right conversion even if the device changed
+    // since (which would have stopped the take anyway).
+    const auto snap = audioEngine.getTransport().getPositionSnapshot();
+    const double sampleRate = snap.sampleRate > 0.0 ? snap.sampleRate : 44100.0;
+    const double bpm = snap.bpm > 0.0 ? snap.bpm : 120.0;
+    const double lengthBeats =
+        std::max((double)result.lengthSamples * bpm / (60.0 * sampleRate), kMinAudioClipLengthBeats);
+
+    // ONE undo step for the clip AND its asset binding: recordTimelineChange snapshots the doc
+    // before and after the whole lambda, so the two mutations inside are a single entry.
+    undoManager.recordTimelineChange(timelineDoc, [&] {
+        const auto clip = timelineDoc.addClip(take.track, take.punchInBeat, lengthBeats, "Take");
+        if (!clip.isValid())
+            return; // the track went away, or it is at kMaxClipsPerTrack: a no-op commit
+        timelineDoc.setClipAsset(clip, take.assetRef, 0.0);
+    });
+
+    if (result.overran)
+        statusBar.showMessage("Dropped audio during recording");
 #endif
 }
 

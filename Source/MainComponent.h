@@ -6,6 +6,7 @@
 #include "AppUndoManager.h"
 #include "AudioEngine.h"
 #include "Branding.h"
+#include "Modules/RecordTapModule.h"
 #include "PresetManager.h"
 #include "ShortcutManager.h"
 #include "SnippetManager.h"
@@ -238,6 +239,46 @@ private:
     // off, the other forgets to). A no-op (compiles to an empty body) with the flag off.
     void commitMidiRecording();
 
+    // ---- TL6-3: audio recording ----
+
+    // Everything an armed-Audio-track take needs between the Record-on click and the commit. All
+    // message-thread state; `pending` vs `capturing` is what lets the 10 Hz poll tell "waiting for
+    // the punch" from "rolling" from "nothing going on".
+    struct AudioTake {
+        bool pending = false;     // record engaged, waiting for the transport to reach punchInBeat
+        bool capturing = false;   // the tap is writing
+        synth::TrackId track;     // the armed Audio track the clip lands on
+        double punchInBeat = 0.0; // where the committed clip starts
+        juce::File wavFile;       // absolute path being written
+        juce::File peaksFile;     // its .agpk sidecar
+        juce::String assetRef;    // what the committed clip stores (see synth::Clip::assetRef)
+        juce::AudioProcessorGraph::NodeID tapNode;
+    };
+
+    // The master tap, found or created: a "Rec Tap" node spliced IN FRONT OF the Audio Output node,
+    // with every connection that fed the output re-routed through it. One compound undo step when
+    // it has to be created; a plain lookup (no undo step) when one is already there. Returns
+    // nullptr if the patch has no Audio Output node to splice in front of.
+    juce::AudioProcessorGraph::Node* ensureMasterRecordTap();
+
+    // The live master tap, or nullptr. Resolves the take's NodeID first and falls back to a scan —
+    // an undo taken mid-take rebuilds the graph and renumbers nodes, and losing the tap that way
+    // must lose the take, not crash.
+    RecordTapModule* findMasterRecordTap() const;
+
+    // Where this take's files go: `<bundle>/Audio/take-N.wav` + `<bundle>/Peaks/take-N.agpk` for a
+    // saved project, `<app data>/Recordings/take-N.wav` + `.../Recordings/take-N.agpk` for one that
+    // has never been saved (see the unsaved-project policy on ProjectBundle). N is the first free
+    // number in whichever folder. Fills the file/assetRef fields of `take`; returns false if the
+    // directories could not be created.
+    bool chooseTakeFiles(AudioTake& take) const;
+
+    // TL6-3's counterpart to commitMidiRecording(): the ONE place an audio take ever commits. Stops
+    // the tap, then creates the clip in a single recordTimelineChange. A no-op unless a take is
+    // actually in flight, so both callers (the Record-off click and the poll's commit-on-stop) can
+    // call it unconditionally.
+    void commitAudioRecording();
+
     // RAII suspension of automation capture for the duration of a programmatic rewrite. Compiles to
     // an empty object in a SYNTH_ENABLE_TIMELINE=OFF build, so call sites stay #if-free.
     struct ProgrammaticApplyScope {
@@ -398,6 +439,12 @@ private:
     // TL5-5: playing->stopped edge detection for the MIDI recorder's auto-commit-on-stop, updated
     // once per 10 Hz poll tick — mirrors AutomationRecorder's own `lastPlaying` bookkeeping.
     bool wasTransportPlaying_ = false;
+
+    // TL6-3: the in-flight audio take (see the AudioTake declaration above).
+    AudioTake audioTake_;
+    // The bundle this document was last saved to or opened from, or an invalid File for a project
+    // that has never been saved. Decides where a take is written (see chooseTakeFiles).
+    juce::File currentBundleDir_;
 
     // Open programmatic-apply scopes for the undo/redo restore span, as a stack rather than a
     // single slot: an undo of a COMBINED (graph + timeline) change performs two restores, and the

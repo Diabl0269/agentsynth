@@ -27,14 +27,30 @@ struct ProjectLoadResult {
  *  - `project.json` — everything `AIStateMapper::graphToJSON` writes (nodes, connections,
  *    modulations, schemaVersion, ...), any top-level keys `PatchDocument` had stashed from a prior
  *    load, and a `"timeline"` key holding `TimelineDoc::toVar()`.
- *  - `Audio/`, `Peaks/` — created empty. Reserved for sample/audio-clip assets and their cached
- *    waveform peaks (TL6). **Asset policy, enforced when that work lands, not here:** any asset
- *    reference is a path *relative to the bundle root* — `Audio/foo.wav`, never `/Users/.../foo.wav`
- *    or `../foo.wav`. An absolute (or escaping) path must be rejected outright, the same way a
+ *  - `Audio/`, `Peaks/` — audio-clip assets and their cached waveform peaks. Since TL6-3 the record
+ *    flow writes into both: a take is `Audio/take-<n>.wav` (32-bit float) plus
+ *    `Peaks/take-<n>.agpk` (the sidecar `RecordTapModule` documents).
+ *
+ *    **Asset policy.** Any asset reference stored in the document (`synth::Clip::assetRef`) is a
+ *    path *relative to the bundle root* — `Audio/foo.wav`, never `/Users/.../foo.wav` or
+ *    `../foo.wav`. An absolute (or escaping) path is rejected outright, the same way a
  *    provider-authored patch's `"state"` is restricted to the trusted path (see
  *    `ModuleBase::setExtraState`) — a bundle can be handed to someone else, and an absolute path
- *    baked into it would read whatever happens to be at that path on their machine. Nothing in this
- *    class reads or writes into these directories yet; nothing today references an asset by path.
+ *    baked into it would read whatever happens to be at that path on their machine. The rule is
+ *    enforced in `TimelineDoc::isValidAssetRef`, by BOTH `setClipAsset` and `fromVar`, so a
+ *    hand-edited `project.json` is not a way around it.
+ *
+ *    **The unsaved-project case (TL6-3, temporary).** A take can be recorded before the project has
+ *    ever been saved, when there is no bundle to write into. Those takes go to
+ *    `<user app data>/<settings folder>/Recordings/` and their clips carry the reserved prefix
+ *    `Recordings/take-<n>.wav` — still relative in form (so the one path rule above holds), but
+ *    resolved against app data rather than against a bundle root. **TODO(TL6-6):** the import/adopt
+ *    pass moves those files into `Audio/` on the first save and rewrites the refs to `Audio/...`,
+ *    after which `Recordings/` is never seen inside a bundle. `Recordings/` is therefore reserved:
+ *    do not use it as a real subdirectory name inside a bundle.
+ *
+ *    Nothing is ever auto-deleted from these directories — undoing a take removes the clip, not the
+ *    recording. Reaping files no clip references is TL6-6's clean pass.
  *
  * `"timeline"` is otherwise a **reserved** top-level key everywhere else in the codebase: a plain
  * `.json` preset that happens to carry one only ever stashes it inertly (`PatchDocument`), and

@@ -129,6 +129,12 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         // 100 px floor in updateLayout is what sets the height. Not in the library — the timeline's
         // add-track flow places it — so this only ever feeds a programmatic size query.
         return {280, 100};
+    if (typeName == "Rec Tap")
+        // Like Track In it has no body controls (only the inherited bypass, which lives in the
+        // header), but it has two jacks a side, so the port gutter — not the 100 px floor — sets
+        // the height. Also library-less: the record flow places it (TL6-3). Measured against the
+        // real card by RecordTapTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
+        return {280, 123};
     return {280, 360};
 }
 

@@ -62,7 +62,11 @@ enum class ModuleType {
     AudioInput,
     // Internal-only (TL3-1): the timeline's "Track In" node. Created by the add-track flow, never
     // offered by the library and never authorable by a model.
-    TimelineMidiSource
+    TimelineMidiSource,
+    // Internal-only (TL6-3): the "Rec Tap" node an audio take records through. Auto-spliced in
+    // front of Audio Output by the record flow; same three exclusions as Track In (no library row,
+    // no replace-menu entry, never authorable — it names a file path on disk).
+    RecordTap
 };
 
 class ModuleBase : public juce::AudioProcessor {

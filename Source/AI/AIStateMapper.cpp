@@ -26,6 +26,7 @@
 #include "../Modules/OscillatorModule.h"
 #include "../Modules/PolyMidiModule.h"
 #include "../Modules/PolySequencerModule.h"
+#include "../Modules/RecordTapModule.h"
 #include "../Modules/SampleHoldModule.h"
 #include "../Modules/SamplerModule.h"
 #include "../Modules/SequencerModule.h"
@@ -97,6 +98,11 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     // factory (rather than constructed ad hoc by the add-track flow) purely so our own saves
     // round-trip it; kNonAuthorableModuleTypes below keeps it away from the model.
     {"Track In", []() { return std::make_unique<TimelineMidiSourceModule>(); }},
+    // TL6-3, gated for exactly the same reason as Track In above: the class compiles
+    // unconditionally, but only a timeline build can create the node — from a preset, from undo or
+    // from the record flow. In the factory so our own saves round-trip a patch that has one;
+    // kNonAuthorableModuleTypes below keeps it away from the model.
+    {"Rec Tap", []() { return std::make_unique<RecordTapModule>(); }},
 #endif
 };
 
@@ -123,6 +129,11 @@ const std::set<juce::String> kNonAuthorableModuleTypes = {
     // creates a node that plays nothing, or (worse) one that latches onto a track the user owns.
     // The timeline's own add-track flow is the only thing that may create these.
     "Track In",
+    // The audio-take tap (TL6-3). It names a FILE PATH on disk — a model that could author one
+    // could aim a recording anywhere the app can write, which is the same class of authority the
+    // Sampler's `"state"` file path is denied on the untrusted path. The record flow is the only
+    // thing that may create these.
+    "Rec Tap",
 };
 
 bool isInternalOnlyModule(const juce::String& typeName) { return kNonAuthorableModuleTypes.count(typeName) > 0; }
@@ -718,6 +729,8 @@ juce::String AIStateMapper::getFactoryTypeName(juce::AudioProcessor* processor) 
             return "External MIDI";
         case ModuleType::TimelineMidiSource:
             return "Track In";
+        case ModuleType::RecordTap:
+            return "Rec Tap";
         case ModuleType::AudioInput:
             // Deliberately the same string JUCE's audioInputNode reported (and therefore the same
             // string every pre-TL6-2 save wrote), so the two are interchangeable on disk.

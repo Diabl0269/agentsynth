@@ -41,6 +41,38 @@ bool isValidNote(const MidiNote& note) noexcept {
            note.pitch <= 127 && note.velocity >= 1 && note.velocity <= 127 && note.channel >= 1 && note.channel <= 16;
 }
 
+// TL6-3: the asset-reference rule, in one place because setClipAsset and fromVar must agree
+// EXACTLY — a path the mutation API refuses must not be loadable from a file, or a hand-edited
+// bundle becomes the way around the check. See Clip::assetRef for the threat.
+//
+// Rejected: a leading '/' or '\' (absolute POSIX / UNC), a Windows drive letter ("C:..."), any
+// segment that is exactly ".." (escapes the bundle root), and any embedded NUL. Everything else —
+// including a plain file name with no directory — is accepted, because a bundle-relative path is
+// resolved against the bundle root and nothing else.
+bool isValidAssetRefString(const juce::String& ref) noexcept {
+    if (ref.isEmpty())
+        return true; // "no asset": what every MIDI clip carries
+
+    if (ref.containsChar('\0'))
+        return false;
+    const juce::juce_wchar first = ref[0];
+    if (first == '/' || first == '\\')
+        return false;
+    // "C:", "C:/", "C:\..." — a drive-relative path is absolute enough to escape the bundle.
+    if (ref.length() >= 2 && ref[1] == ':')
+        return false;
+
+    // Both separators are checked: a bundle written on Windows and opened on macOS must be
+    // rejected by the same rule, not merely mis-resolved.
+    juce::StringArray segments;
+    segments.addTokens(ref.replaceCharacter('\\', '/'), "/", {});
+    for (const auto& segment : segments)
+        if (segment == "..")
+            return false;
+
+    return true;
+}
+
 bool isValidRange(const AutomationLane::RangeSnapshot& range) noexcept {
     return std::isfinite(range.minValue) && std::isfinite(range.maxValue) && std::isfinite(range.defaultValue) &&
            range.minValue <= range.maxValue;
@@ -532,6 +564,18 @@ std::pair<ClipId, ClipId> TimelineDoc::splitClip(ClipId id, double atBeat) {
         right.startBeat = rightStart;
         right.lengthBeats = rightLength;
         right.notes = std::move(rightNotes);
+        // TL6-3 audio fields: the halves keep pointing at the same asset with the same gain, and
+        // each keeps the fade at the edge it still owns (the left half's fade-out and the right
+        // half's fade-in are at the cut, where there is nothing to fade). `sourceStartSeconds` is
+        // deliberately COPIED UNCHANGED rather than advanced by the split offset: converting
+        // `atBeat` to seconds needs a tempo map, and this document has none by design (see the
+        // class comment). Splitting an audio clip is TL6-4's work and re-seating the right half's
+        // source offset belongs there, with the tempo map in hand.
+        right.assetRef = clip->assetRef;
+        right.gainDb = clip->gainDb;
+        right.fadeOutBeats = clip->fadeOutBeats;
+        right.sourceStartSeconds = clip->sourceStartSeconds;
+        clip->fadeOutBeats = 0.0;
 
         // `clip` (and therefore `id`, the original/left id) stays valid; only insert may
         // reallocate, and we don't dereference `clip` again after this point.
@@ -577,6 +621,11 @@ bool TimelineDoc::joinClips(ClipId a, ClipId b) {
                    std::back_inserter(merged), noteLess);
         clipA->notes = std::move(merged);
         clipA->lengthBeats = newEnd - clipA->startBeat;
+        // TL6-3: `a` keeps its OWN asset, gain, source offset and fade-in; `b`'s are dropped along
+        // with `b`. Two audio clips naming different assets cannot become one clip naming both, so
+        // "the survivor's asset wins" is the only answer that doesn't invent a crossfade. `a` does
+        // inherit b's fade-OUT, because that edge is now a's.
+        clipA->fadeOutBeats = clipB->fadeOutBeats;
 
         // Erase b last: clipA and clipB alias the same vector, but nothing above dereferences
         // clipA or clipB again after this.
@@ -599,6 +648,13 @@ ClipId TimelineDoc::duplicateClip(ClipId id) {
         dup.name = clip->name;
         dup.startBeat = clip->startBeat + clip->lengthBeats;
         dup.lengthBeats = clip->lengthBeats;
+        // TL6-3: a duplicate plays the same asset, from the same offset, with the same gain and
+        // fades. Nothing here needs a tempo map (unlike splitClip), so the copy is exact.
+        dup.assetRef = clip->assetRef;
+        dup.gainDb = clip->gainDb;
+        dup.fadeInBeats = clip->fadeInBeats;
+        dup.fadeOutBeats = clip->fadeOutBeats;
+        dup.sourceStartSeconds = clip->sourceStartSeconds;
         dup.notes.reserve(clip->notes.size());
         for (const auto& note : clip->notes) {
             MidiNote copy = note;
@@ -609,6 +665,57 @@ ClipId TimelineDoc::duplicateClip(ClipId id) {
         // the copy is sorted too — no re-sort needed.
         const auto pos = std::lower_bound(owner->clips.begin(), owner->clips.end(), dup, clipLess);
         return owner->clips.insert(pos, std::move(dup))->id;
+    });
+}
+
+// ---------------------------------------------------------------- audio clips --
+
+bool TimelineDoc::isValidAssetRef(const juce::String& ref) { return isValidAssetRefString(ref); }
+
+bool TimelineDoc::setClipAsset(ClipId id, const juce::String& assetRef, double sourceStartSeconds) {
+    if (!isValidAssetRefString(assetRef) || !isFiniteAtOrAfterZero(sourceStartSeconds))
+        return false;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    if (clip->assetRef == assetRef && clip->sourceStartSeconds == sourceStartSeconds)
+        return true; // already there: no revision bump, no notification
+
+    return applyMutation([&] {
+        clip->assetRef = assetRef;
+        clip->sourceStartSeconds = sourceStartSeconds;
+        return true;
+    });
+}
+
+bool TimelineDoc::setClipGainDb(ClipId id, double gainDb) {
+    if (!std::isfinite(gainDb))
+        return false;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    if (clip->gainDb == gainDb)
+        return true;
+
+    return applyMutation([&] {
+        clip->gainDb = gainDb;
+        return true;
+    });
+}
+
+bool TimelineDoc::setClipFades(ClipId id, double fadeInBeats, double fadeOutBeats) {
+    if (!isFiniteAtOrAfterZero(fadeInBeats) || !isFiniteAtOrAfterZero(fadeOutBeats))
+        return false;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    if (clip->fadeInBeats == fadeInBeats && clip->fadeOutBeats == fadeOutBeats)
+        return true;
+
+    return applyMutation([&] {
+        clip->fadeInBeats = fadeInBeats;
+        clip->fadeOutBeats = fadeOutBeats;
+        return true;
     });
 }
 
@@ -969,6 +1076,14 @@ juce::var TimelineDoc::toVar() const {
             c->setProperty("name", clip.name);
             c->setProperty("startBeat", clip.startBeat);
             c->setProperty("lengthBeats", clip.lengthBeats);
+            // TL6-3 audio fields, written ALWAYS (not only when non-default): a reader that
+            // predates them ignores unknown keys, and a reader that has them gets one shape to
+            // parse rather than two. Additive — kFormatVersion stays 1.
+            c->setProperty("assetRef", clip.assetRef);
+            c->setProperty("gainDb", clip.gainDb);
+            c->setProperty("fadeInBeats", clip.fadeInBeats);
+            c->setProperty("fadeOutBeats", clip.fadeOutBeats);
+            c->setProperty("sourceStartSeconds", clip.sourceStartSeconds);
 
             juce::Array<juce::var> noteVars;
             for (const auto& note : clip.notes) {
@@ -1114,6 +1229,22 @@ bool TimelineDoc::fromVar(const juce::var& state) {
                         !readOptionalDouble(cObj->getProperty("lengthBeats"), clip.lengthBeats))
                         return false;
                     if (!isFiniteAtOrAfterZero(clip.startBeat) || !isFinitePositive(clip.lengthBeats))
+                        return false;
+
+                    // TL6-3 audio fields. All optional — absent means the struct default, which is
+                    // exactly what every clip written before TL6-3 loads as. A PRESENT but illegal
+                    // value is malformed, not something to clamp: `assetRef` is the security rule
+                    // (see isValidAssetRefString — a hand-edited bundle must not be the way around
+                    // setClipAsset's check), and a NaN fade would poison the renderer downstream.
+                    if (!readOptionalString(cObj->getProperty("assetRef"), clip.assetRef) ||
+                        !readOptionalDouble(cObj->getProperty("gainDb"), clip.gainDb) ||
+                        !readOptionalDouble(cObj->getProperty("fadeInBeats"), clip.fadeInBeats) ||
+                        !readOptionalDouble(cObj->getProperty("fadeOutBeats"), clip.fadeOutBeats) ||
+                        !readOptionalDouble(cObj->getProperty("sourceStartSeconds"), clip.sourceStartSeconds))
+                        return false;
+                    if (!isValidAssetRefString(clip.assetRef) || !std::isfinite(clip.gainDb) ||
+                        !isFiniteAtOrAfterZero(clip.fadeInBeats) || !isFiniteAtOrAfterZero(clip.fadeOutBeats) ||
+                        !isFiniteAtOrAfterZero(clip.sourceStartSeconds))
                         return false;
 
                     const juce::Array<juce::var>* noteList = nullptr;

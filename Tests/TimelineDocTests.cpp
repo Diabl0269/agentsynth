@@ -1,5 +1,6 @@
 #include "Timeline/TimelineDoc.h"
 #include <gtest/gtest.h>
+#include <limits>
 
 using synth::AutomationLane;
 using synth::BreakpointCurve;
@@ -706,4 +707,191 @@ TEST_F(TimelineDocTest, FromVarClampsBreakpointValuesToTheRangeSnapshot) {
     ASSERT_EQ(points.size(), 2u);
     EXPECT_DOUBLE_EQ(points[0].value, 1000.0);
     EXPECT_DOUBLE_EQ(points[1].value, 100.0);
+}
+
+// ------------------------------------------------ 13. audio clip fields (TL6-3) --
+//
+// The audio half of Clip: an asset reference that must stay inside the bundle, a gain, two fades
+// and a source offset. Everything here is ADDITIVE — kFormatVersion stays 1, an absent field loads
+// as its default, and the path rule is enforced identically by the mutation API and by fromVar.
+
+TEST_F(TimelineDocTest, AudioTrackKindIsFullyUsable) {
+    const auto track = doc.addTrack(TrackKind::Audio, "Audio 1");
+    ASSERT_TRUE(track.isValid());
+    ASSERT_NE(doc.getTrack(track), nullptr);
+    EXPECT_EQ(doc.getTrack(track)->kind, TrackKind::Audio);
+
+    // Clips, arming and binding all work on an Audio track exactly as on a MIDI one — nothing in
+    // the model is MIDI-only.
+    const auto clip = doc.addClip(track, 4.0, 8.0, "Take");
+    ASSERT_TRUE(clip.isValid());
+    EXPECT_TRUE(doc.setTrackArmed(track, true));
+    EXPECT_TRUE(doc.setTrackBinding(track, "uuid-audio-1"));
+}
+
+TEST_F(TimelineDocTest, NewClipDefaultsToNoAsset) {
+    const auto track = doc.addTrack(TrackKind::Audio, "A");
+    const auto clip = doc.addClip(track, 0.0, 4.0, "c");
+    const auto* c = doc.getClip(clip);
+    ASSERT_NE(c, nullptr);
+    EXPECT_TRUE(c->assetRef.isEmpty());
+    EXPECT_DOUBLE_EQ(c->gainDb, 0.0);
+    EXPECT_DOUBLE_EQ(c->fadeInBeats, 0.0);
+    EXPECT_DOUBLE_EQ(c->fadeOutBeats, 0.0);
+    EXPECT_DOUBLE_EQ(c->sourceStartSeconds, 0.0);
+}
+
+TEST_F(TimelineDocTest, SetClipAssetGainAndFadesMutateOnce) {
+    const auto track = doc.addTrack(TrackKind::Audio, "A");
+    const auto clip = doc.addClip(track, 0.0, 4.0, "c");
+    const auto revisionAfterAdd = doc.getRevision();
+    const int callsAfterAdd = listener.calls;
+
+    ASSERT_TRUE(doc.setClipAsset(clip, "Audio/take-1.wav", 0.25));
+    ASSERT_TRUE(doc.setClipGainDb(clip, -3.5));
+    ASSERT_TRUE(doc.setClipFades(clip, 0.5, 1.5));
+
+    const auto* c = doc.getClip(clip);
+    ASSERT_NE(c, nullptr);
+    EXPECT_EQ(c->assetRef, "Audio/take-1.wav");
+    EXPECT_DOUBLE_EQ(c->sourceStartSeconds, 0.25);
+    EXPECT_DOUBLE_EQ(c->gainDb, -3.5);
+    EXPECT_DOUBLE_EQ(c->fadeInBeats, 0.5);
+    EXPECT_DOUBLE_EQ(c->fadeOutBeats, 1.5);
+
+    // Three effective mutations, three notifications.
+    EXPECT_EQ(doc.getRevision(), revisionAfterAdd + 3);
+    EXPECT_EQ(listener.calls, callsAfterAdd + 3);
+
+    // Setting the value already stored is a no-op on all three: no bump, no notification.
+    const auto revision = doc.getRevision();
+    const int calls = listener.calls;
+    EXPECT_TRUE(doc.setClipAsset(clip, "Audio/take-1.wav", 0.25));
+    EXPECT_TRUE(doc.setClipGainDb(clip, -3.5));
+    EXPECT_TRUE(doc.setClipFades(clip, 0.5, 1.5));
+    EXPECT_EQ(doc.getRevision(), revision);
+    EXPECT_EQ(listener.calls, calls);
+}
+
+TEST_F(TimelineDocTest, SetClipAssetRejectsEscapingPaths) {
+    const auto track = doc.addTrack(TrackKind::Audio, "A");
+    const auto clip = doc.addClip(track, 0.0, 4.0, "c");
+    const auto revision = doc.getRevision();
+
+    // Every one of these would let a bundle read a file outside itself on whoever opens it.
+    const juce::StringArray escaping = {
+        "/etc/passwd",           "/Users/someone/take.wav",   "../take.wav",
+        "Audio/../../take.wav",  "Audio/../../../etc/passwd", "..\\take.wav",
+        "C:\\Windows\\take.wav", "C:/Windows/take.wav",       "\\\\server\\share\\take.wav"};
+    for (const auto& ref : escaping) {
+        EXPECT_FALSE(doc.setClipAsset(clip, ref, 0.0)) << "accepted escaping assetRef: " << ref;
+        EXPECT_FALSE(TimelineDoc::isValidAssetRef(ref)) << "isValidAssetRef accepted: " << ref;
+    }
+
+    // Legal ones: bundle-relative, and the empty "no asset" value every MIDI clip carries.
+    for (const auto& ref : juce::StringArray{"Audio/take-1.wav", "take.wav", "Audio/Nested/take..wav", ""})
+        EXPECT_TRUE(TimelineDoc::isValidAssetRef(ref)) << "rejected legal assetRef: " << ref;
+
+    // A non-finite source offset and a non-finite gain/fade are rejected too.
+    EXPECT_FALSE(doc.setClipAsset(clip, "Audio/take-1.wav", std::numeric_limits<double>::quiet_NaN()));
+    EXPECT_FALSE(doc.setClipAsset(clip, "Audio/take-1.wav", -1.0));
+    EXPECT_FALSE(doc.setClipGainDb(clip, std::numeric_limits<double>::infinity()));
+    EXPECT_FALSE(doc.setClipFades(clip, -0.1, 0.0));
+    EXPECT_FALSE(doc.setClipFades(clip, 0.0, std::numeric_limits<double>::quiet_NaN()));
+
+    // Nothing was mutated by any rejection.
+    EXPECT_EQ(doc.getRevision(), revision);
+    EXPECT_TRUE(doc.getClip(clip)->assetRef.isEmpty());
+}
+
+TEST_F(TimelineDocTest, AudioClipFieldsSurviveRoundTrip) {
+    const auto track = doc.addTrack(TrackKind::Audio, "A");
+    const auto clip = doc.addClip(track, 4.0, 8.0, "Take 1");
+    ASSERT_TRUE(doc.setClipAsset(clip, "Audio/take-1.wav", 1.5));
+    ASSERT_TRUE(doc.setClipGainDb(clip, -6.0));
+    ASSERT_TRUE(doc.setClipFades(clip, 0.25, 0.75));
+
+    TimelineDoc reloaded;
+    ASSERT_TRUE(reloaded.fromVar(doc.toVar()));
+    EXPECT_EQ(dump(reloaded), dump(doc));
+
+    ASSERT_EQ(reloaded.getTracks().size(), 1u);
+    EXPECT_EQ(reloaded.getTracks()[0].kind, TrackKind::Audio);
+    ASSERT_EQ(reloaded.getTracks()[0].clips.size(), 1u);
+    const auto& c = reloaded.getTracks()[0].clips[0];
+    EXPECT_EQ(c.assetRef, "Audio/take-1.wav");
+    EXPECT_DOUBLE_EQ(c.sourceStartSeconds, 1.5);
+    EXPECT_DOUBLE_EQ(c.gainDb, -6.0);
+    EXPECT_DOUBLE_EQ(c.fadeInBeats, 0.25);
+    EXPECT_DOUBLE_EQ(c.fadeOutBeats, 0.75);
+}
+
+TEST_F(TimelineDocTest, FromVarDefaultsAudioFieldsWhenAbsent) {
+    // Exactly what a file written before TL6-3 looks like: no audio keys at all, version still 1.
+    const auto* text = R"({"version":1,"tracks":[{"id":1,"kind":1,"name":"A",
+        "clips":[{"id":1,"name":"c","startBeat":0.0,"lengthBeats":4.0,"notes":[]}]}]})";
+    ASSERT_TRUE(doc.fromVar(juce::JSON::parse(text)));
+
+    const auto& c = doc.getTracks()[0].clips[0];
+    EXPECT_TRUE(c.assetRef.isEmpty());
+    EXPECT_DOUBLE_EQ(c.gainDb, 0.0);
+    EXPECT_DOUBLE_EQ(c.fadeInBeats, 0.0);
+    EXPECT_DOUBLE_EQ(c.fadeOutBeats, 0.0);
+    EXPECT_DOUBLE_EQ(c.sourceStartSeconds, 0.0);
+}
+
+TEST_F(TimelineDocTest, FromVarRejectsEscapingOrMalformedAudioFields) {
+    // A hand-edited bundle must not be the way around setClipAsset's check.
+    const juce::StringArray bad = {
+        R"({"version":1,"tracks":[{"id":1,"clips":[{"id":1,"assetRef":"../../etc/passwd"}]}]})",
+        R"({"version":1,"tracks":[{"id":1,"clips":[{"id":1,"assetRef":"/etc/passwd"}]}]})",
+        R"({"version":1,"tracks":[{"id":1,"clips":[{"id":1,"assetRef":"C:/Windows/take.wav"}]}]})",
+        R"({"version":1,"tracks":[{"id":1,"clips":[{"id":1,"assetRef":17}]}]})",
+        R"({"version":1,"tracks":[{"id":1,"clips":[{"id":1,"fadeInBeats":-1.0}]}]})",
+        R"({"version":1,"tracks":[{"id":1,"clips":[{"id":1,"sourceStartSeconds":-0.5}]}]})",
+    };
+    for (const auto& text : bad) {
+        TimelineDoc target;
+        EXPECT_FALSE(target.fromVar(juce::JSON::parse(text))) << "accepted malformed clip: " << text;
+        EXPECT_TRUE(target.isEmpty()) << "a rejected load must leave the doc untouched";
+    }
+}
+
+TEST_F(TimelineDocTest, DuplicateAndSplitCarryAudioFields) {
+    const auto track = doc.addTrack(TrackKind::Audio, "A");
+    const auto clip = doc.addClip(track, 0.0, 8.0, "Take");
+    ASSERT_TRUE(doc.setClipAsset(clip, "Audio/take-1.wav", 2.0));
+    ASSERT_TRUE(doc.setClipGainDb(clip, -2.0));
+    ASSERT_TRUE(doc.setClipFades(clip, 0.5, 1.0));
+
+    // Duplicate is an exact copy of every audio field (no tempo map needed).
+    const auto dup = doc.duplicateClip(clip);
+    ASSERT_TRUE(dup.isValid());
+    const auto* d = doc.getClip(dup);
+    ASSERT_NE(d, nullptr);
+    EXPECT_EQ(d->assetRef, "Audio/take-1.wav");
+    EXPECT_DOUBLE_EQ(d->sourceStartSeconds, 2.0);
+    EXPECT_DOUBLE_EQ(d->gainDb, -2.0);
+    EXPECT_DOUBLE_EQ(d->fadeInBeats, 0.5);
+    EXPECT_DOUBLE_EQ(d->fadeOutBeats, 1.0);
+
+    // Split: both halves keep the asset and gain, each keeps the fade at the edge it still owns,
+    // and the right half's sourceStartSeconds is deliberately NOT advanced (no tempo map here —
+    // see splitClip's comment; TL6-4 owns that).
+    const auto halves = doc.splitClip(clip, 4.0);
+    ASSERT_TRUE(halves.first.isValid());
+    ASSERT_TRUE(halves.second.isValid());
+    const auto* left = doc.getClip(halves.first);
+    const auto* right = doc.getClip(halves.second);
+    ASSERT_NE(left, nullptr);
+    ASSERT_NE(right, nullptr);
+    EXPECT_EQ(left->assetRef, "Audio/take-1.wav");
+    EXPECT_EQ(right->assetRef, "Audio/take-1.wav");
+    EXPECT_DOUBLE_EQ(left->gainDb, -2.0);
+    EXPECT_DOUBLE_EQ(right->gainDb, -2.0);
+    EXPECT_DOUBLE_EQ(left->fadeInBeats, 0.5);
+    EXPECT_DOUBLE_EQ(left->fadeOutBeats, 0.0);
+    EXPECT_DOUBLE_EQ(right->fadeInBeats, 0.0);
+    EXPECT_DOUBLE_EQ(right->fadeOutBeats, 1.0);
+    EXPECT_DOUBLE_EQ(right->sourceStartSeconds, 2.0);
 }

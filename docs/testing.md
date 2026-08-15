@@ -100,6 +100,24 @@ The timeline's clock and the headless render harness built on it. No audio devic
 | `SingletonRuleStillHolds` | `isSingletonIOModule` / `graphHasModuleNamed` still recognise it, a second drop is a no-op, and `extractSnippet` refuses to capture it |
 | `DeviceShrinkDropsHiddenRoutings` | 8-in device ⇒ 8 jacks and a cable on ch3 survives; switch to a 2-in device + `refreshIoModulesAfterDeviceChange()` ⇒ ch3's routing is dropped, ch0/ch1 keep theirs, and the card gets shorter |
 
+### Rec Tap / audio recording tests (13 tests)
+
+`Tests/RecordTapTests.cpp` — TL6-3. Three layers. **Module-level** tests drive a `RecordTapModule` directly (no engine, no device, no graph), exactly the way `MidiRecorderTests.cpp` drives `synth::MidiRecorder`. **Registration** tests are the internal-only checklist Track In established. **Flow** tests drive `MainComponent` with the device callback suspended, the transport ticked by hand and the tap's `processBlock` called directly. The last two groups are `#if SYNTH_ENABLE_TIMELINE`-gated, since the factory entry and the record wiring both are.
+
+| What it covers | |
+|-------|-------|
+| `PassThroughAlways` | armed or not, the output is the input **bit-exactly** — the tap is transparent |
+| `CaptureWritesExactWav` | 8 × 512 frames of an exactly-representable ramp: the WAV parses with JUCE's own reader at 48 kHz / 32-bit / IEEE-float / 2 ch, is exactly 4096 frames, and compares **equal sample for sample**; the `.agpk` sidecar's magic/version/bucketSize/channels parse, the bucket count is `ceil(4096/256)`, and every bucket's per-channel min/max is the ramp's first/last frame (ch1 is ch0 negated, so a channel mix-up cannot pass) |
+| `PartialFinalPeakBucketCoversOnlyTheFramesThatExist` | a 300-frame take is 2 buckets, the second covering `[256, 300)` — short, never padded |
+| `OverrunSetsFlagAndKeepsAudioThreadClean` | a 64-frame ring against 512-frame blocks (deterministic, not a race): the flag is set, the audio still passes through untouched, the take is SHORT but finalised, and `lengthSamples` equals the WAV's real length |
+| `BypassPassesDryAndStopsCapturePushes` | bypass passes the dry signal (this module has a dry path — it does **not** clear) and records nothing; un-bypassing resumes on the very next block |
+| `StopWithoutStartIsSafe` / `DoubleStartRejected` | stop with no take, a double stop, and processing while disarmed are all inert; a second `startCapture` is refused and leaves the other file untouched; a bad rate/channel count arms nothing |
+| `DestructorFinalisesAnInFlightTake` | destroying the module mid-take closes the WAV and writes the sidecar rather than abandoning a half-written file |
+| `RegisteredButInternalOnly` / `AbsentFromTheLibraryWithAPinnedSizeEstimate` | factory key, module type, channel counts, `getFactoryTypeName`, non-authorable, Utility cable colour; absent from the library, with `estimateModuleSize("Rec Tap")` measured against the real card |
+| `RecordFlowCreatesAudioClip` | bundle-saved project + armed Audio track: Record-on splices exactly one tap between Reverb and Audio Output (both channels re-routed, the direct connections gone) as **one** undo step; capture starts on the poll, not the click; rolling 8 blocks and Record-off produces **one** clip with `assetRef == "Audio/take-1.wav"`, `startBeat` at the punch and a length matching `lengthSamples × bpm / (60 × rate)`; the WAV and `.agpk` exist inside the bundle; a second take re-uses the tap and gets `take-2`; undo removes the clip and **leaves the file** |
+| `MidiArmedPathUnchanged` | an armed MIDI track records exactly as TL5-5 left it — no tap is created at the click or by the poll, and the committed clip has notes and an empty `assetRef` |
+| `AudioRecordWithoutAnAudioOutputIsRefused` | no master bus ⇒ refused with a status message, no tap, no clip, and the transport is **not** started |
+
 ### Integration Tests (~38 tests)
 
 Test module interactions within the audio graph and cross-system integrations.

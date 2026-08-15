@@ -166,6 +166,8 @@ add_library(Core STATIC
     Source/Modules/AttenuverterModule.h
     Source/Modules/EnvelopeFollowerModule.h
     Source/Modules/MacroControlModule.h
+    Source/Modules/RecordTapModule.cpp
+    Source/Modules/RecordTapModule.h
     Source/Modules/VisualBuffer.h
     Source/Modules/FX/DelayModule.h
     Source/Modules/FX/DistortionModule.h

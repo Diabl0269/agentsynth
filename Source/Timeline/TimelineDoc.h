@@ -123,12 +123,39 @@ struct MidiNote {
 // audio-thread snapshot build (TL2-2) a flatten instead of a sort. The id is only a tiebreaker
 // (startBeat/pitch collisions are legal — e.g. a chord). TimelineDoc's mutation API maintains
 // the order on every path and fromVar re-establishes it defensively.
+//
+// TL6-3 adds the AUDIO half of the struct. One Clip type covers both kinds: a MIDI clip is one
+// whose `assetRef` is empty and whose notes carry the music; an audio clip is one that names a
+// rendered asset instead. Nothing forbids a clip from carrying both — the model is deliberately
+// permissive, and it is the track's TrackKind that says which half a player reads. Every audio
+// field is ADDITIVE (absent in a file => the default below) and the format version stays 1.
 struct Clip {
     ClipId id;
     juce::String name;
     double startBeat = 0.0;
     double lengthBeats = 4.0;
     std::vector<MidiNote> notes;
+
+    // TL6-3. The clip's audio asset, as a path RELATIVE TO THE BUNDLE ROOT ("Audio/take-1.wav").
+    // EMPTY for a MIDI clip. The relative-only rule is a security boundary, not a convenience:
+    // a bundle can be handed to someone else, and an absolute (or `..`-escaping) path baked into
+    // one would read whatever happens to sit at that path on their machine — the same reasoning
+    // that keeps a provider-authored patch's `"state"` on the trusted path only (see
+    // ModuleBase::setExtraState and the asset policy on ProjectBundle). setClipAsset and fromVar
+    // both REJECT anything that is not bundle-relative; there is no sanitising fallback.
+    juce::String assetRef;
+
+    // Playback gain applied to the asset, in dB. 0 dB = unity, and the value is deliberately
+    // unbounded here (the model does not know what a sane ceiling is for a given renderer).
+    double gainDb = 0.0;
+
+    // Fades measured in beats from the clip's own start / end. 0 = no fade. Never negative.
+    double fadeInBeats = 0.0;
+    double fadeOutBeats = 0.0;
+
+    // Where inside the ASSET this clip starts reading, in seconds. Seconds rather than beats
+    // because it indexes a recorded file, whose samples do not move when the tempo map does.
+    double sourceStartSeconds = 0.0;
 };
 
 // One automated parameter. Identity is the (nodeUuid, paramId) pair, doc-wide: there is at
@@ -299,6 +326,26 @@ public:
     // and length, with a fresh id for the clip and for every one of its (deep-copied) notes.
     // Rejects if the track is already at kMaxClipsPerTrack.
     ClipId duplicateClip(ClipId id);
+
+    // -- Audio clips (TL6-3) ---------------------------------------------------
+    // Points the clip at an audio asset. `assetRef` MUST be bundle-root-relative — an absolute
+    // path, a Windows drive letter, a leading '/' or '\', or any `..` segment is REJECTED outright
+    // (no mutation, returns false), because a bundle is a document that gets handed to other
+    // machines. Passing an EMPTY assetRef is legal and means "this clip has no asset" (the MIDI
+    // default); `sourceStartSeconds` must be finite and >= 0. Setting exactly what the clip
+    // already has is a no-op, like every other setter here.
+    bool setClipAsset(ClipId id, const juce::String& assetRef, double sourceStartSeconds);
+    // Playback gain in dB. Rejects a non-finite value; otherwise unbounded (see Clip::gainDb).
+    bool setClipGainDb(ClipId id, double gainDb);
+    // Fade lengths in beats from the clip's start / end. Both must be finite and >= 0; they are
+    // NOT clamped against the clip's length, so a later resize cannot silently rewrite them.
+    bool setClipFades(ClipId id, double fadeInBeats, double fadeOutBeats);
+
+    /** True if `ref` is a legal bundle-relative asset reference: empty (no asset), or a relative
+     *  path with no `..` segment, no leading separator and no drive letter. The single predicate
+     *  setClipAsset and fromVar both gate on — see Clip::assetRef for why it is a security rule
+     *  rather than a formatting one. */
+    static bool isValidAssetRef(const juce::String& ref);
 
     // -- Notes ----------------------------------------------------------------
     // Assigns and returns a stable NoteId; an invalid id means the note was rejected — a
