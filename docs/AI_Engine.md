@@ -152,6 +152,94 @@ which presets, undo snapshots and AI patches all address parameters by.
 -   **Model Management**: Users can select from various available AI models (e.g., different Ollama models) via the application's UI.
 -   **Extensible Provider System**: The `AIProvider` interface allows for easy integration of new AI backends in the future.
 -   **Undoable Patches**: Apply/Merge on a patch card is recorded on the app undo stack, so `Cmd+Z` restores the user's previous patch (see below).
+-   **Patch Diff Preview**: A proposed patch's `PatchCard` shows a human-readable change list by
+    default (see below) — the user sees what a patch will actually do before clicking Apply/Merge.
+
+### Patch Diff Preview (PatchCard)
+
+`AIChatComponent::PatchCard` (`Source/UI/AIChatComponent.cpp`) shows a change list — "+ Reverb",
+"Filter: Cutoff 400 -> 800", "+ mod LFO -> Filter Cutoff" — as its **default** view, computed in
+`updateChatDisplay()` when each message is rendered. Raw JSON stays available behind a secondary
+"View JSON" toggle for anyone who wants it; the card's height is derived from the diff's line
+count (capped, with the toggle as the escape hatch for a very long diff), not a fixed constant.
+
+**The diff is computed from two full graph snapshots, never the raw patch JSON.** This is the
+whole point, not an implementation detail: diffing the patch JSON against the live graph would
+misreport three things the patch itself never states —
+
+- merge mode auto-connects a new audio node with no outgoing wire to Audio Output, and a new
+  MIDI-accepting node to an existing MIDI source (`applyJSONToGraph`'s `autoConnectNewNodes`);
+- replace mode deletes every node the patch doesn't restate;
+- the untrusted-apply path rescales any `[0,1]`-range value against a wider parameter range
+  (`AIStateMapper::applyParamsToProcessor`'s normalized-value heuristic) — the value that lands is
+  not the value the patch states.
+
+`AIIntegrationService::computePatchPreview(jsonString, mergeMode, before, after)`
+(`Source/AI/AIIntegrationService.h/.cpp`) produces the two snapshots without touching the live
+graph:
+
+- `before` is `AIStateMapper::graphToJSON(audioGraph)` for replace mode. For merge mode it is
+  `graphToJSON` of a scratch graph immediately after `replayLiveGraphTrusted()` — the live graph
+  replayed onto scratch trusted, clearExisting=true — rather than a second direct call on
+  `audioGraph`. Both must travel the *same* param round-trip (denormalize ->
+  `setValueNotifyingHost` -> renormalize, including `snapToLegalValue` on a skewed or interval
+  range) or an untouched node on a skewed range (e.g. `LFOModule`'s `rateHz`) can show a phantom
+  `ParamChanged` purely from replay rounding. Guarded by
+  `PatchDiffIntegrationTest.NoOpPatchWithSkewedParamProducesEmptyDiff`.
+- `after` is `graphToJSON` of that same scratch graph once the untrusted candidate patch has
+  actually been applied to it (`applyJSONToGraph(json, scratch, clearExisting, trusted=false)`) —
+  the exact scratch-graph construction `applyPatch()`'s own `PatchEval` regression check uses
+  (`replayLiveGraphTrusted()` is the extracted, shared piece).
+- Mirrors `applyPatch()`'s mode-less-patch repair (a replace that only validates as a merge is
+  applied as a merge) so the previewed diff matches what Apply/Merge will actually do.
+- Never mutates `getLastPatchError()` / `getLastPatchErrorCode()` / `didLastPatchRepairMode()` —
+  it runs entirely against a scratch graph and must not clobber the error state from a previous
+  real Apply attempt still on screen. Guarded by
+  `PatchDiffIntegrationTest.ComputePatchPreviewDoesNotClobberLastPatchError`.
+- Returns `false` (with `before`/`after` still populated) if the candidate patch fails validation
+  or application on the scratch graph; `PatchCard` shows "Preview unavailable" rather than a diff
+  in that case, since `after` would otherwise reflect the unapplied, pre-patch state (misleadingly
+  "everything removed" for a failed replace-mode patch, whose scratch starts empty).
+
+`Source/AI/PatchDiff.h`'s `computeDiff(before, after)` is a pure function over two
+`graphToJSON`-shaped `juce::var` snapshots, returning `std::vector<PatchChange>`
+(`NodeAdded`/`NodeRemoved`/`ParamChanged`/`ConnectionAdded`/`ConnectionRemoved`/
+`ModulationAdded`/`ModulationRemoved`), each renderable via `describe()`. Structural notes:
+
+- **Node identity is the `uuid` field, not the integer `id`.** Merge mode's trusted replay
+  preserves both `id` and `uuid` for nodes it recreates 1:1 from the live graph
+  (`applyJSONToGraph`'s `preservedId` + `adoptUuidIfTrusted`, trusted-path only), and the
+  subsequent untrusted patch apply never reassigns a matched node's `uuid`. A brand-new node has
+  no `uuid` in `before`, so it never spuriously matches. Connection/modulation endpoints (which
+  reference nodes by `id`, meaningful only within one snapshot) are resolved to `uuid` via each
+  snapshot's own `id -> uuid` map before comparing.
+- **Replace mode has no stable node identity between snapshots.** `applyJSONToGraph` only
+  preserves `id`/`uuid` on the trusted path, and a replace-mode apply is always untrusted, so a
+  replace-mode diff shows the entire prior graph removed and the entire new patch added — even
+  where a node is conceptually unchanged. This matches what actually happens to the running graph
+  (every processor really is destroyed and recreated on replace) and is not the common case in
+  practice: `AIChatComponent`'s merge-vs-replace inference routes any tweak-shaped request
+  ("change", "add", "more", "brighter", …) to merge, so replace is reserved for from-scratch
+  patches where "+ everything" is the correct diff.
+- **`graphToJSON` already collapses attenuverter chains into a `modulations` array** (scanning
+  `AttenuverterModule` nodes and their wires), so `computeDiff` does not need to pattern-match
+  attenuverter plumbing itself — it diffs `modulations` directly. It does exclude
+  `type == "Attenuverter"` nodes from the node diff and any connection with an Attenuverter
+  endpoint from the connection diff, so a modulation change is reported exactly once (as
+  `ModulationAdded`/`Removed`), not also as raw node/connection noise. One known omission: an
+  attenuverter wired on only one side produces no `modulations` entry in `graphToJSON` at all, so
+  it is silently dropped from the diff rather than shown as add/remove noise — deliberate, since a
+  half-wired attenuverter only arises from a malformed patch.
+- Only a node's `params` object is diffed — never `position`, `state`, `id`, or `uuid` — so a
+  merge-mode patch that repositions or re-lists an unrelated existing node doesn't read as
+  "moved"/"changed" noise. A parameter's display name comes from a throwaway, never-processed
+  instance of its module type (`AIStateMapper::createModule`), falling back to the raw param ID
+  when not found; numeric values render at ~3 significant figures (no per-module unit-formatting
+  table exists in this codebase, so no units are shown).
+
+Tests: `Tests/PatchDiffTests.cpp` — pure `computeDiff` cases plus two regression tests
+(`MergeModeAutoWireAppearsInDiff`, `UntrustedRescaleShowsLandedValueNotRawPatchValue`) proving the
+snapshot-diff catches what a raw-patch-vs-live-graph diff would miss.
 
 ### AI Patch Undo/Redo Contract
 

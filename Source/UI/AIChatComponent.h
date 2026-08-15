@@ -2,6 +2,7 @@
 
 #include "../AI/AIIntegrationService.h"
 #include "../AI/AccountService.h"
+#include "../AI/PatchDiff.h"
 #include "AccountRow.h"
 #include "PlanBadge.h"
 #include "Theme/AppLookAndFeel.h"
@@ -204,8 +205,29 @@ private:
         // constructor, so a New Chat or app restart drops it along with the rest of that turn's
         // transient UI state (mirrors how Cancel-button/spinner state is session-only).
         bool showUpgradeAction = false;
+
+        // Patch diff preview, computed ONCE (attachPatchPreview()) at the point this message is
+        // created, not on every updateChatDisplay() re-render — see that method's doc comment.
+        // patchIsMerge also pins which mode Apply/Merge will actually use, so it can't drift if
+        // the live graph changes while this message is still on screen.
+        bool patchIsMerge = false;
+        bool patchDiffAvailable = false;
+        std::vector<PatchChange> patchDiff;
     };
     std::vector<MessageData> messages;
+
+    // Computes and caches data.patchIsMerge/patchDiff/patchDiffAvailable ONCE, at the point a
+    // message carrying a patch is created (every messages.push_back() site that can set
+    // jsonPatch) — NOT in updateChatDisplay(), which reruns on every redraw (message arrival,
+    // apply result, retry announcement) and would otherwise rebuild a scratch graph per
+    // patch-bearing message on every single one of those redraws. See docs/AI_Engine.md
+    // "Patch Diff Preview". Also more correct, not just faster: the diff is a snapshot of the
+    // graph at proposal time and must not silently change if the live graph is edited later
+    // (e.g. an earlier patch in the same conversation gets applied) while this message is still
+    // on screen. No-op when data.jsonPatch is empty. Reads `messages` (must already contain every
+    // turn up to and including `data`, for the merge-vs-replace user-intent heuristic) and
+    // `aiService`, so it must be called after data is appended to `messages`.
+    void attachPatchPreview(MessageData& data);
 
 #ifndef NDEBUG
     juce::TextEditor debugConsole;
