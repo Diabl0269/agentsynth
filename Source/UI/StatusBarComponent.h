@@ -32,6 +32,10 @@ public:
 
     juce::DrawableButton& getMasterMuteButton() noexcept { return masterMuteButton_; }
 
+    // Test-only: the currently-displayed transient message ("" when none is active). Production
+    // code never reads this back — showMessage() is fire-and-forget.
+    const juce::String& getTransientMessageForTest() const noexcept { return transientMessage_; }
+
     // --- Static format helpers (headless-testable, no JUCE GUI deps) ---
     // formatCpu: 0.756f -> "75.6%"
     static juce::String formatCpu(float fraction);

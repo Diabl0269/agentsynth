@@ -117,6 +117,7 @@ add_executable(Tests
     TimelinePanelTests.cpp
     TimelinePlayheadTests.cpp
     TimelineTrackHeaderTests.cpp
+    TimelineTransportBarTests.cpp
     TimelineViewStateTests.cpp
     MinimapComponentTests.cpp
     PluginProcessorTests.cpp
@@ -131,6 +132,7 @@ add_executable(Tests
     ../Source/UI/TimelineRulerComponent.cpp
     ../Source/UI/TimelinePlayheadOverlay.cpp
     ../Source/UI/TimelineTrackHeaderComponent.cpp
+    ../Source/UI/TimelineTransportBar.cpp
     ../Source/Plugin/PluginProcessor.cpp
     ../Source/Plugin/PluginEditor.cpp
     ../Source/UI/GraphEditor.cpp

@@ -87,6 +87,13 @@ public:
     // just truncated. Surfaced by the caller as a dropped-take warning.
     bool hadOverrun() const noexcept { return overrunFlag.load(std::memory_order_relaxed); }
 
+    // TL5-5: message-thread probe for "is a take currently armed?" — MainComponent's 10 Hz poll
+    // uses this to detect a transport stop happening WHILE recording (Space/Stop rather than the
+    // record button itself) and route it through the same stopAndCommit path. Safe from the
+    // message thread: it only ever reads its own atomic, which the message thread itself writes
+    // (startRecording/stopAndCommit); the audio thread never writes `recording` from here.
+    bool isRecording() const noexcept { return recording.load(std::memory_order_relaxed); }
+
 private:
     struct Event {
         double beat = 0.0;

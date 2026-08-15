@@ -4,6 +4,7 @@
 #include "TimelinePlayheadOverlay.h"
 #include "TimelineRulerComponent.h"
 #include "TimelineTrackHeaderComponent.h"
+#include "TimelineTransportBar.h"
 #include "TimelineViewState.h"
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -25,7 +26,8 @@ class TransportService;
 //
 // resized() lays out three regions every task shares the same arithmetic for:
 //   - transport bar strip   (top,    Metrics::timelineTransportBarHeight) — houses the snap
-//     selector (TL5-2, right-hand side); the rest is empty until TL5-5's transport controls.
+//     selector (TL5-2, right-hand side) and TL5-5's synth::ui::TimelineTransportBar (play/stop/
+//     record/loop + BPM/time-sig editors + the bar:beat readout), left-aligned in the rest.
 //   - track-header column   (left,   Metrics::timelineTrackHeaderWidth)
 //   - lanes/ruler area      (remainder) — TimelineRulerComponent (Metrics::timelineRulerHeight)
 //     docked at its top, a bar/beat grid painted directly by this component below it.
@@ -97,6 +99,8 @@ public:
     TimelineRulerComponent& getRuler() noexcept { return ruler_; }
     TimelinePlayheadOverlay& getPlayhead() noexcept { return playhead_; }
     juce::ComboBox& getSnapCombo() noexcept { return snapCombo_; }
+    // TL5-5: play/stop/record/loop + BPM/time-sig editors + the bar:beat readout.
+    TimelineTransportBar& getTransportBar() noexcept { return transportBar_; }
 
     /** How many times updateFromTransport() has been called. Test hook: it is what proves the
      *  10 Hz poll never reaches a hidden panel. */
@@ -134,6 +138,8 @@ private:
     // intercepts no mouse clicks (see TimelinePlayheadOverlay's ctor).
     TimelinePlayheadOverlay playhead_{viewState_};
     juce::ComboBox snapCombo_;
+    // TL5-5: left-aligned in the transport-bar strip, the snap combo stays right of it.
+    TimelineTransportBar transportBar_;
 
     // The slice of transport state the RULER paints, diffed by updateFromTransport. `hasRulerState_`
     // keeps the very first poll from counting as a change (the default-constructed struct below is

@@ -455,6 +455,41 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // rather than from the exchange's never-published empty fallback.
     publishTimelineAndRebindRecorder();
 
+    // TL5-5: MidiRecorder is now app-wired (docs/architecture.md's TL5-3 hook inventory gains a
+    // fifth entry) — this component owns the one live MidiRecorder, since it is the only thing
+    // that can see both the armed tracks (timelineDoc) and the transport bar's record button.
+    audioEngine.setMidiCaptureSink(&midiRecorder);
+    timelinePanel.getTransportBar().onRecordToggled = [this](bool wantRecording) {
+        if (!wantRecording) {
+            commitMidiRecording();
+            return;
+        }
+
+        // Fail fast on no armed track, BEFORE touching the transport — a rejected request must not
+        // have the side effect of starting playback.
+        synth::TrackId armedTrack;
+        for (const auto& track : timelineDoc.getTracks()) {
+            if (track.armed && track.kind == synth::TrackKind::Midi) {
+                armedTrack = track.id;
+                break;
+            }
+        }
+        if (!armedTrack.isValid()) {
+            timelinePanel.getTransportBar().setRecordingState(false);
+            statusBar.showMessage("Arm a track to record");
+            return;
+        }
+
+        // Record implies roll (DAW convention): starting a take also starts the transport if it
+        // isn't already running.
+        auto& transport = audioEngine.getTransport();
+        if (!transport.getPositionSnapshot().playing)
+            transport.play();
+
+        midiRecorder.startRecording(armedTrack, transport.getPositionSnapshot().ppq);
+        timelinePanel.getTransportBar().setRecordingState(true);
+    };
+
     addAndMakeVisible(toggleTimelineButton);
     toggleTimelineButton.setComponentID("toggleTimeline");
     toggleTimelineButton.onClick = [this] {
@@ -610,6 +645,7 @@ MainComponent::~MainComponent() {
     timelineDoc.removeListener(this);
     timelinePanel.setTimelineDoc(nullptr);
     audioEngine.setAutomationRecorder(nullptr);
+    audioEngine.setMidiCaptureSink(nullptr);
     automationRecorder.detach();
     undoManager.setRestoreHooks({}, {});
 #endif
@@ -642,12 +678,21 @@ void MainComponent::timerCallback() {
     // and — like everything else in this callback — completely silent.
     automationRecorder.update();
 
+    // TL5-5: mirrors AutomationRecorder's own playing->stopped edge detection (see its update()) —
+    // a MIDI take still open when the transport stops (the user hit Space/Stop rather than the
+    // record button itself) commits exactly the same way an explicit Record-off click does. Read
+    // unconditionally (cheap, lock-free) rather than only when the panel is visible: recording must
+    // not depend on the timeline panel staying open.
+    const auto position = audioEngine.getTransport().getPositionSnapshot();
+    if (wasTransportPlaying_ && !position.playing && midiRecorder.isRecording())
+        commitMidiRecording();
+    wasTransportPlaying_ = position.playing;
+
     // TL5-4: the timeline panel's low-rate transport poll, on the same existing timer — no new
     // timer, and nothing at all when the panel is hidden (a collapsed timeline must cost exactly
     // what it did before TL5-4). This is what starts/stops the playhead's playing-only 30 Hz strip
     // repaint; see docs/layout.md §11.
     if (timelinePanel.isVisible()) {
-        const auto position = audioEngine.getTransport().getPositionSnapshot();
         // Device-buffer latency only. The graph's own reported latency is deliberately left out:
         // it is report-only, patch-dependent and mostly zero, whereas the output buffer is the term
         // that actually separates "rendered" from "heard".
@@ -1458,6 +1503,18 @@ void MainComponent::reconcileTimelineAfterGraphChange() {
 void MainComponent::reconcileTimelineBindingsOnly() {
 #if SYNTH_ENABLE_TIMELINE
     synth::TimelineReconciler::reconcile(timelineDoc, audioEngine.getGraph());
+#endif
+}
+
+void MainComponent::commitMidiRecording() {
+#if SYNTH_ENABLE_TIMELINE
+    // stopAndCommit()'s own return just says whether a clip was created (an empty take commits
+    // nothing) — not something either caller (the transport bar's Record-off click, and the 10 Hz
+    // poll's auto-commit-on-stop) needs to react to differently, so it is deliberately ignored here.
+    midiRecorder.stopAndCommit(timelineDoc, undoManager);
+    if (midiRecorder.hadOverrun())
+        statusBar.showMessage("Dropped MIDI events during recording");
+    timelinePanel.getTransportBar().setRecordingState(false);
 #endif
 }
 

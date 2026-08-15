@@ -10,6 +10,7 @@
 #include "ShortcutManager.h"
 #include "SnippetManager.h"
 #include "Timeline/AutomationRecorder.h"
+#include "Timeline/MidiRecorder.h"
 #include "Timeline/TimelineDoc.h"
 #include "UI/AIChatComponent.h"
 #include "UI/GraphEditor.h"
@@ -121,6 +122,9 @@ public:
     // paths the buttons and file dialogs do, minus the dialogs.
     synth::TimelineDoc& getTimelineDoc() { return timelineDoc; }
     synth::AutomationRecorder& getAutomationRecorder() { return automationRecorder; }
+    // TL5-5: the app's one live MidiRecorder — see docs/architecture.md's MidiRecorder wiring
+    // entry. Test-only access mirrors getAutomationRecorder() above.
+    synth::MidiRecorder& getMidiRecorderForTest() { return midiRecorder; }
     void simulateAddMidiTrackClick() {
         if (timelinePanel.getAddTrackButton().onClick)
             timelinePanel.getAddTrackButton().onClick();
@@ -198,6 +202,12 @@ private:
     // post-apply site (a module deleted from the canvas). See the call site for why publishing
     // there would be waste.
     void reconcileTimelineBindingsOnly();
+
+    // TL5-5: the ONE place a MIDI take ever commits — the transport bar's Record-off click and the
+    // 10 Hz poll's auto-commit-on-stop (playing -> stopped while still recording) both route
+    // through here, so the two paths can never diverge (one warns on overrun and flips the button
+    // off, the other forgets to). A no-op (compiles to an empty body) with the flag off.
+    void commitMidiRecording();
 
     // RAII suspension of automation capture for the duration of a programmatic rewrite. Compiles to
     // an empty object in a SYNTH_ENABLE_TIMELINE=OFF build, so call sites stay #if-free.
@@ -295,6 +305,10 @@ private:
     // mutates the doc, and the recorder is never attached) — only the wiring is gated.
     synth::TimelineDoc timelineDoc;
     synth::AutomationRecorder automationRecorder;
+    // TL5-5: the app's one live MidiRecorder — no lifetime constraint against undoManager the way
+    // timelineDoc/automationRecorder have (it holds no reference to the doc or the undo manager
+    // between calls; stopAndCommit() takes both as parameters), so ordering here is not load-bearing.
+    synth::MidiRecorder midiRecorder;
 
     AppUndoManager undoManager;
 
@@ -352,6 +366,9 @@ private:
     // only the toolbar button/command/carve that could ever flip isTimelineVisible are gated.
     synth::ui::TimelinePanelComponent timelinePanel;
     bool isTimelineVisible = false;
+    // TL5-5: playing->stopped edge detection for the MIDI recorder's auto-commit-on-stop, updated
+    // once per 10 Hz poll tick — mirrors AutomationRecorder's own `lastPlaying` bookkeeping.
+    bool wasTransportPlaying_ = false;
 
     // Open programmatic-apply scopes for the undo/redo restore span, as a stack rather than a
     // single slot: an undo of a COMBINED (graph + timeline) change performs two restores, and the

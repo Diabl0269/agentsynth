@@ -400,6 +400,8 @@ add_library(AppUI STATIC
     Source/UI/TimelinePlayheadOverlay.cpp
     Source/UI/TimelineTrackHeaderComponent.h
     Source/UI/TimelineTrackHeaderComponent.cpp
+    Source/UI/TimelineTransportBar.h
+    Source/UI/TimelineTransportBar.cpp
     Source/UI/TrackColour.h
     Source/UI/TimelineViewState.h
     Source/UI/AIChatComponent.cpp

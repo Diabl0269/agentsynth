@@ -1430,8 +1430,9 @@ non-`Bar`/non-`Off` value is a fraction of **one beat** (not a whole note): `Bea
 multiples of `beatsPerBar` (`tsNum * 4 / tsDen` off the transport's time signature — same formula
 `TransportService::getPosition()` already uses). Ties round up (toward +infinity, beats are never
 negative in practice). The snap choice lives in a `juce::ComboBox` docked in the transport bar's
-right-hand side (items `Off/Bar/1/1⁄2/1⁄4/1⁄8/1⁄16`; the rest of that strip stays empty for TL5-5)
-and persists under the `"timelineSnap"` int key in `juce::ApplicationProperties`, set via
+right-hand side (items `Off/Bar/1/1⁄2/1⁄4/1⁄8/1⁄16`; `synth::ui::TimelineTransportBar` fills the rest
+of that strip, left-aligned — see TL5-5 below) and persists under the `"timelineSnap"` int key in
+`juce::ApplicationProperties`, set via
 `TimelinePanelComponent::setApplicationProperties()` (non-owning pointer setter, same shape as
 `AIChatComponent::setAccountService()`).
 
@@ -1486,8 +1487,8 @@ them, so a mute click doesn't destroy the row the user is typing a name into.
 
 **Row contents:** colour swatch (click cycles the palette), name label (double-click to edit),
 `M` / `S` / `R` toggles, and the binding chip. `R` flips `Track::armed` in the document and nothing
-else — arming is not recording; the record button and `MidiRecorder::startRecording` arrive with the
-transport bar in TL5-5.
+else — arming is not recording; the record button and `MidiRecorder::startRecording` live on the
+transport bar (TL5-5, below), which looks for the first `armed` track when it starts a take.
 
 **Colour** resolves *only* through `synth::ui::resolveTrackColour` (`Source/UI/TrackColour.h`): the
 track's stored `colourArgb` when non-zero, otherwise a deterministic 8-entry palette indexed by the
@@ -1592,3 +1593,89 @@ one strip spanning the jump.
 **Stopped** the overlay asks for nothing, but it still *draws*: `paint()` renders the line at the
 current position whenever the panel paints for any other reason. Painting is not what the contract
 restricts; asking for a repaint is.
+
+### TL5-5: the transport bar
+
+`Source/UI/TimelineTransportBar.h/.cpp` (`synth::ui::TimelineTransportBar`) — play/stop, record,
+loop, BPM and time-signature editors, and the bar:beat readout, left-aligned in the transport-bar
+strip (the snap combo stays docked right, TL5-2 above). Buttons are ~22 px squares with `kGap = 4px`
+between them; the two editable labels and the readout follow, in that order.
+
+**No SVG assets.** All three buttons are one `GlyphButton` (a `juce::Button` subclass) drawing a
+plain `juce::Path` per glyph in `paintButton` — a triangle/square for play-stop, a circle for
+record, an open arc with an arrowhead for loop. This mirrors the CLAUDE.md rule that themes never
+swap typefaces: a one-off shape for a single caller doesn't earn a new icon asset either.
+
+**The transport is the truth, read fresh, not cached.** Every button click and every editor commit
+reads `TransportService::getPositionSnapshot()` **at the moment of the action**, rather than from a
+value this bar remembers between polls:
+
+- **Play/Stop** — one `GlyphButton` whose glyph flips between the two icons on `getToggleState()`.
+  The click reads `getPositionSnapshot().playing` to decide `play()` vs `stop()`, so it works
+  correctly even if nothing has polled `updateFromTransport()` since the last click (no dependency
+  on visual resync happening in between).
+- **Loop** — the click reads the CURRENT `loopStartPpq`/`loopEndPpq` off the snapshot and re-posts
+  `setLoop(start, end, !looping)`. `TransportService`'s own construction default is `[0, 4)`, so "no
+  bounds ever set" and "preserve existing bounds" fall out of the same one-line handler — there is
+  no separate "default bounds" case to maintain.
+- **BPM label** — a `juce::Label` (`setEditable(false, true, false)`, the same double-click-to-edit
+  idiom as the track-name label), whose `onTextChange` calls `transport->setBpm()` — always accepted
+  (clamped to `[TransportService::kMinBpm, kMaxBpm]` inside the service), so there is no revert case.
+  It is also **draggable**: a nested `BpmDragLabel` overrides `mouseDown`/`mouseDrag` to turn
+  vertical movement into a live `setBpm()` call, ±1.0 BPM per 4 px (±0.1 with Cmd held, for fine
+  adjustment), anchored to the snapshot's BPM at `mouseDown` so the gesture is reproducible from the
+  anchor + total delta regardless of how many `mouseDrag` calls land in between. Double-click and
+  drag are independent gestures: JUCE dispatches `mouseDoubleClick` separately from
+  `mouseDown`/`mouseDrag`/`mouseUp`, so overriding the latter three does not disturb `Label`'s own
+  `editDoubleClick` handling.
+- **Time-sig label** — same double-click idiom, parses `"N/D"` and calls `setTimeSignature(n, d)`,
+  which validates numerator `1..64` and a fixed denominator set (`1/2/4/8/16/32`) and returns `false`
+  **without posting anything** on rejection. The label then reverts to whatever the snapshot is
+  CURRENTLY reporting (not a remembered value) — a rejected edit never touched the transport, so the
+  snapshot is already the last known-good time signature.
+- **`updateFromTransport()`** (the drive seam, called from the panel's existing 10 Hz poll) resyncs
+  the play/loop button visuals and the two labels' text from the snapshot — so a Space-bar play
+  triggered elsewhere reflects here within one tick — but skips a label mid-edit
+  (`Label::isBeingEdited()`): `Label::setText()` unconditionally discards an open editor's contents,
+  so a poll landing mid-keystroke would otherwise fight the user's own typing.
+
+**Bar:beat readout** — `TimelineTransportBar::formatBarBeat(ppq, tsNumerator, tsDenominator)` is a
+**static, pure** helper (no `Component`, headless-testable on its own): `"BAR.BEAT.TICKS"`, 1-based
+bar (zero-padded to 3 digits), 1-based beat (unpadded), ticks = 1/960 of a beat (zero-padded to 3
+digits) — `beatsPerBar = tsNum * 4 / tsDen`, the same formula used throughout the timeline panel.
+Pinned examples (see `Tests/TimelineTransportBarTests.cpp::FormatBarBeatTable`): `(0.0, 4/4)` ->
+`"001.1.000"`, `(5.5, 4/4)` -> `"002.2.480"`, `(3.0, 3/4)` -> `"002.1.000"`. Painted in JetBrains
+Mono via `juce::Font(juce::Font::getDefaultMonospacedFontName(), theme.type.value + 1, plain)` —
+`AppLookAndFeel::getTypefaceForFont` resolves the default monospaced font name to
+`theme.type.monoFamily` (JetBrains Mono in every built-in theme), the same indirection
+`AIChatComponent`'s debug console and `SignInDialog`'s code label already use. Repainted **only
+when the formatted string changes** — a plain string-diff cache, not a strip-confinement contract
+like the playhead's (§11): the readout has no timer of its own and moves only when its owner polls
+it, so there is nothing to bound beyond "don't repaint an unchanged tick".
+`getReadoutRepaintCountForTest()` is the test seam, the same counting idiom
+`TimelinePanelComponent::getTransportUpdateCountForTest()` uses.
+
+**Recording is the one control the bar is not authoritative over.** Starting a take needs an armed
+MIDI track, which only `MainComponent` can see (it owns the `TimelineDoc`). The record button's
+click computes `!getToggleState()` and reports that as *intent* through
+`std::function<void(bool)> onRecordToggled` — it never flips its own toggle state. `setRecordingState(bool)`
+is the ONE thing that ever does, called back by the owner with the real outcome. `MainComponent`'s
+implementation (installed in `initialiseCommon()`, `#if SYNTH_ENABLE_TIMELINE`):
+
+- **ON** — iterates `timelineDoc.getTracks()` for the first `armed && kind == TrackKind::Midi`
+  track. None found -> `setRecordingState(false)` + `statusBar.showMessage("Arm a track to
+  record")`, and the transport is left untouched — a rejected request must not have the side effect
+  of starting playback. Found -> **record implies roll** (a DAW convention: the record button starts
+  the transport if it isn't already playing), then `midiRecorder.startRecording(track, currentPpq)`.
+- **OFF** (button click, or the 10 Hz poll noticing `playing -> stopped` while
+  `midiRecorder.isRecording()` — the user hit Space/Stop instead of the record button) — both routes
+  go through one `MainComponent::commitMidiRecording()`: `midiRecorder.stopAndCommit(doc, undo)`,
+  `midiRecorder.hadOverrun()` -> `statusBar.showMessage("Dropped MIDI events during recording")`,
+  then `setRecordingState(false)`. One choke point means the explicit and the auto-commit paths can
+  never diverge — see `docs/architecture.md`'s MidiRecorder wiring entry (hook 5) for the full
+  before/after ordering (armed-check before roll, so a rejected click has zero side effects).
+
+`AudioEngine::setMidiCaptureSink(&midiRecorder)` is the other half of the app-level wiring (feeds
+`MidiRecorder::captureBlock` from `AudioEngine::renderNextBlock`'s one collector-merged buffer) —
+see `Tests/MidiRecorderTests.cpp` for the model-level coverage and
+`Tests/TimelineTransportBarTests.cpp` for the button-to-commit path.

@@ -43,6 +43,11 @@ TimelinePanelComponent::TimelinePanelComponent() {
     trackHeaderViewport_.setScrollBarsShown(true, false);
     trackHeaderViewport_.setViewedComponent(&trackHeaderList_, false);
 
+    // TL5-5: added before the snap combo so it sits left of it in z-order too (they never overlap,
+    // but this keeps tab-order/z-order matching visual left-to-right order).
+    addAndMakeVisible(transportBar_);
+    transportBar_.setComponentID("timelineTransportBar");
+
     addAndMakeVisible(snapCombo_);
     snapCombo_.setComponentID("timelineSnapCombo");
     snapCombo_.addItem("Off", 1);
@@ -73,12 +78,14 @@ TimelinePanelComponent::~TimelinePanelComponent() {
 void TimelinePanelComponent::setTransport(synth::TransportService* transport) {
     ruler_.setTransport(transport);
     playhead_.setTransport(transport);
+    transportBar_.setTransport(transport);
 }
 
 void TimelinePanelComponent::updateFromTransport(const synth::TransportService::PositionSnapshot& snapshot,
                                                  double outputLatencySeconds) {
     ++transportUpdateCount_;
     playhead_.updateFromTransport(snapshot, outputLatencySeconds);
+    transportBar_.updateFromTransport(snapshot);
 
     // Nothing else repaints the ruler when the time signature or the loop range changes from
     // OUTSIDE its own mouse gestures (a preset/bundle load, a host tempo map, TL5-5's transport
@@ -247,10 +254,11 @@ void TimelinePanelComponent::resized() {
     // needed anywhere in the overlay.
     playhead_.setBounds(lanesBounds_);
 
-    // Snap selector: right-hand side of the transport bar; the rest of that strip stays empty
-    // until TL5-5's transport controls arrive.
+    // Snap selector: right-hand side of the transport bar. TL5-5's transport controls (play/stop/
+    // record/loop + BPM/time-sig + readout) fill the rest, left-aligned.
     auto transportBar = transportBarBounds_;
     snapCombo_.setBounds(transportBar.removeFromRight(kSnapComboWidth).reduced(2));
+    transportBar_.setBounds(transportBar);
 }
 
 //==============================================================================
