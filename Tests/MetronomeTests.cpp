@@ -88,6 +88,10 @@ BlockTimeInfo makeInfo(double sampleRate, double bpm, int timeSigNumerator, int 
 // 1. ClicksAtExactBeatCrossings
 // ============================================================================
 
+// Engine-driven: these assert the flag-gated integration (renderPass only calls the metronome
+// under SYNTH_ENABLE_TIMELINE), so they compile out with the flag to keep the OFF CI job green.
+#if SYNTH_ENABLE_TIMELINE
+
 TEST(MetronomeTest, ClicksAtExactBeatCrossings) {
     Fixture f;
     f.build();
@@ -164,6 +168,8 @@ TEST(MetronomeTest, DownbeatAccented) {
 // 3. ClickSpansBlockBoundary
 // ============================================================================
 
+#endif // SYNTH_ENABLE_TIMELINE (engine-driven crossing/accent tests)
+
 // A downbeat click 5 samples before a 512-sample block boundary must continue into the next call
 // with no discontinuity — proven by comparing a two-call (block-split) render against a single
 // uninterrupted render of the identical click, driving synth::Metronome directly (no engine needed:
@@ -211,6 +217,9 @@ TEST(MetronomeTest, ClickSpansBlockBoundary) {
 // 4. LoopWrapClicks
 // ============================================================================
 
+// Engine-driven like sections 1-2: compiled out with the flag.
+#if SYNTH_ENABLE_TIMELINE
+
 TEST(MetronomeTest, LoopWrapClicks) {
     Fixture f;
     f.build();
@@ -240,6 +249,8 @@ TEST(MetronomeTest, LoopWrapClicks) {
             << "the wrapped range's beat-0 click must fire right at the wrap offset, every pass";
     }
 }
+
+#endif // SYNTH_ENABLE_TIMELINE (LoopWrapClicks)
 
 // ============================================================================
 // 5. NeverInABounce
