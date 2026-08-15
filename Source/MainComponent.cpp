@@ -48,6 +48,15 @@ bool isMidiInstrumentNode(juce::AudioProcessor* processor) {
         return false;
     }
 }
+// TL5-10: true when `candidate` IS `ancestor` or sits anywhere inside its component subtree. The
+// "click grabs focus" idiom (GraphEditor::mouseDown and every timeline sub-component that copies
+// it) means the currently-focused component is always either a surface's root component itself or
+// one of its rare children, never a cousin — checking both keeps resolveEditSurface() correct even
+// if a sub-widget ever grows its own focusable child.
+bool isOrIsChildOf(const juce::Component* candidate, const juce::Component& ancestor) noexcept {
+    return candidate != nullptr && (candidate == &ancestor || ancestor.isParentOf(candidate));
+}
+
 #endif // SYNTH_ENABLE_TIMELINE
 
 // Human-readable identity for a graph node in the binding chip and its menu. Every Track In node
@@ -891,7 +900,11 @@ void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
                        AppCommands::newPatch, AppCommands::undo, AppCommands::redo, AppCommands::toggleModMatrix,
                        AppCommands::toggleMinimap, AppCommands::toggleAiPanel, AppCommands::autoArrange,
                        AppCommands::toggleLibrary, AppCommands::selectAllModules, AppCommands::saveSnippet,
-                       AppCommands::copySelection, AppCommands::pasteSelection, AppCommands::duplicateSelection});
+                       AppCommands::copySelection, AppCommands::pasteSelection, AppCommands::duplicateSelection,
+                       // TL5-10: registered unconditionally (like every command above) so a
+                       // SYNTH_ENABLE_TIMELINE=OFF build still reports it — inactive — rather than
+                       // dropping it from the Settings shortcut list entirely.
+                       AppCommands::togglePlayback});
 #if SYNTH_ENABLE_TIMELINE
     commands.add(AppCommands::toggleTimelinePanel);
 #endif
@@ -983,22 +996,79 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
     }
     case AppCommands::copySelection: {
         result.setInfo("Copy", "Copy the selected modules", "Edit", 0);
+        // TL5-10: routed by resolveEditSurface() — Graph's own behaviour (below) is unchanged; the
+        // timeline surfaces gate on the clip-clipboard's own selection/piano-roll-is-inactive rule.
+#if SYNTH_ENABLE_TIMELINE
+        switch (resolveEditSurface()) {
+        case EditSurface::TimelineClips:
+            result.setActive(timelinePanel.getClipSelection().size() > 0);
+            break;
+        case EditSurface::PianoRoll:
+            result.setActive(false); // v1 deliberate gap — the roll's own editing verbs suffice
+            break;
+        case EditSurface::Graph:
+            result.setActive(graphEditor.getSelectionCount() > 0);
+            break;
+        }
+#else
         result.setActive(graphEditor.getSelectionCount() > 0);
+#endif
         auto kp = shortcutManager.getBinding("copySelection");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
     case AppCommands::pasteSelection: {
         result.setInfo("Paste", "Paste the copied modules onto the canvas", "Edit", 0);
+#if SYNTH_ENABLE_TIMELINE
+        switch (resolveEditSurface()) {
+        case EditSurface::TimelineClips:
+            result.setActive(timelinePanel.canPasteClips());
+            break;
+        case EditSurface::PianoRoll:
+            result.setActive(false);
+            break;
+        case EditSurface::Graph:
+            result.setActive(graphEditor.canPaste());
+            break;
+        }
+#else
         result.setActive(graphEditor.canPaste());
+#endif
         auto kp = shortcutManager.getBinding("pasteSelection");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
     case AppCommands::duplicateSelection: {
         result.setInfo("Duplicate", "Duplicate the selected modules in place", "Edit", 0);
+#if SYNTH_ENABLE_TIMELINE
+        switch (resolveEditSurface()) {
+        case EditSurface::TimelineClips:
+            result.setActive(timelinePanel.getClipSelection().size() > 0);
+            break;
+        case EditSurface::PianoRoll:
+            result.setActive(false);
+            break;
+        case EditSurface::Graph:
+            result.setActive(graphEditor.getSelectionCount() > 0);
+            break;
+        }
+#else
         result.setActive(graphEditor.getSelectionCount() > 0);
+#endif
         auto kp = shortcutManager.getBinding("duplicateSelection");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case AppCommands::togglePlayback: {
+        result.setInfo("Toggle Playback", "Play or stop the timeline transport", "Transport", 0);
+        // TL5-10: Space is GLOBAL — no resolveEditSurface() branch, unlike C/V/D above. Inactive
+        // outright in a SYNTH_ENABLE_TIMELINE=OFF build, where there is no transport to toggle.
+#if SYNTH_ENABLE_TIMELINE
+        result.setActive(true);
+#else
+        result.setActive(false);
+#endif
+        auto kp = shortcutManager.getBinding("togglePlayback");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
@@ -1084,6 +1154,24 @@ bool MainComponent::perform(const InvocationInfo& info) {
     // there is nothing to act on, and ApplicationCommandTarget::tryToInvoke refuses an inactive
     // command outright, so the menu row greys out and the key never gets this far.
     case AppCommands::copySelection: {
+#if SYNTH_ENABLE_TIMELINE
+        // TL5-10: routed by the SAME resolveEditSurface() getCommandInfo just consulted — the
+        // command manager already refused an inactive PianoRoll invocation (see
+        // ApplicationCommandTarget::tryToInvoke), so the PianoRoll case below is belt-and-suspenders
+        // for a caller that invokes perform() directly.
+        switch (resolveEditSurface()) {
+        case EditSurface::TimelineClips:
+            if (timelinePanel.copySelectedClips())
+                statusBar.showMessage("Copied " + juce::String(timelinePanel.getClipSelection().size()) + " clips");
+            else
+                statusBar.showMessage("Nothing to copy - select one or more clips first");
+            return true;
+        case EditSurface::PianoRoll:
+            return true; // v1 deliberate no-op — see getCommandInfo's setActive(false) above
+        case EditSurface::Graph:
+            break;
+        }
+#endif
         if (graphEditor.copySelection())
             statusBar.showMessage("Copied " + juce::String(graphEditor.getClipboardModuleCount()) + " modules");
         else
@@ -1091,6 +1179,20 @@ bool MainComponent::perform(const InvocationInfo& info) {
         return true;
     }
     case AppCommands::pasteSelection: {
+#if SYNTH_ENABLE_TIMELINE
+        switch (resolveEditSurface()) {
+        case EditSurface::TimelineClips:
+            if (timelinePanel.pasteClipsAtPlayhead())
+                statusBar.showMessage("Pasted " + juce::String(timelinePanel.getClipSelection().size()) + " clips");
+            else
+                statusBar.showMessage("Nothing to paste - copy some clips first");
+            return true;
+        case EditSurface::PianoRoll:
+            return true;
+        case EditSurface::Graph:
+            break;
+        }
+#endif
         // Counted AFTER the fact: both leave the new copies selected, so the selection is the
         // authoritative count of what actually landed (ineligible nodes never make it in).
         if (graphEditor.pasteClipboard())
@@ -1100,12 +1202,35 @@ bool MainComponent::perform(const InvocationInfo& info) {
         return true;
     }
     case AppCommands::duplicateSelection: {
+#if SYNTH_ENABLE_TIMELINE
+        switch (resolveEditSurface()) {
+        case EditSurface::TimelineClips:
+            if (timelinePanel.duplicateSelectedClips())
+                statusBar.showMessage("Duplicated " + juce::String(timelinePanel.getClipSelection().size()) + " clips");
+            else
+                statusBar.showMessage("Nothing to duplicate - select one or more clips first");
+            return true;
+        case EditSurface::PianoRoll:
+            return true;
+        case EditSurface::Graph:
+            break;
+        }
+#endif
         if (graphEditor.duplicateSelection())
             statusBar.showMessage("Duplicated " + juce::String(graphEditor.getSelectionCount()) + " modules");
         else
             statusBar.showMessage("Nothing to duplicate - select one or more modules first");
         return true;
     }
+    case AppCommands::togglePlayback:
+#if SYNTH_ENABLE_TIMELINE
+        // Reuses the transport bar's own play/stop choke point (reads the transport's CURRENT
+        // playing state at click time) rather than re-deciding play-vs-stop here, so the bar's
+        // button visual and a Space-bar toggle can never disagree — same triggerClick() idiom as
+        // toggleModMatrix/toggleMinimap/toggleAiPanel above.
+        timelinePanel.getTransportBar().getPlayStopButton().triggerClick();
+#endif
+        return true;
 #if SYNTH_ENABLE_TIMELINE
     case AppCommands::toggleTimelinePanel:
         toggleTimelineButton.triggerClick();
@@ -1182,6 +1307,26 @@ void MainComponent::promptSaveSnippet() {
                                 }
                             }),
                             false);
+}
+
+// ---- TL5-10: keyboard/focus arbitration ----
+MainComponent::EditSurface MainComponent::resolveEditSurface() const {
+    if (editSurfaceOverrideForTest_.has_value())
+        return *editSurfaceOverrideForTest_;
+
+#if SYNTH_ENABLE_TIMELINE
+    // A hidden panel never owns the verbs, whatever a stale focus pointer inside it points at —
+    // check visibility BEFORE even asking what's focused.
+    if (isTimelineVisible) {
+        if (auto* focused = juce::Component::getCurrentlyFocusedComponent()) {
+            if (isOrIsChildOf(focused, timelinePanel.getPianoRoll()))
+                return EditSurface::PianoRoll;
+            if (isOrIsChildOf(focused, timelinePanel.getClipLaneArea()))
+                return EditSurface::TimelineClips;
+        }
+    }
+#endif
+    return EditSurface::Graph;
 }
 
 bool MainComponent::keyPressed(const juce::KeyPress& key) {

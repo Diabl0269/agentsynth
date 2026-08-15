@@ -141,6 +141,7 @@ TimelinePanelComponent::~TimelinePanelComponent() {
 
 //==============================================================================
 void TimelinePanelComponent::setTransport(synth::TransportService* transport) {
+    transport_ = transport; // TL5-10: this panel's own copy — see the member's comment
     ruler_.setTransport(transport);
     playhead_.setTransport(transport);
     transportBar_.setTransport(transport);
@@ -303,6 +304,144 @@ void TimelinePanelComponent::applyAutomationRecordModeChoice(int selectedId) {
         undoManager_->recordTimelineChange(*doc_, mutate);
     else
         mutate();
+}
+
+//==============================================================================
+// ---- Clip clipboard (TL5-10) ----
+
+double TimelinePanelComponent::currentBeatsPerBarForPaste() const {
+    double beatsPerBar = 4.0;
+    if (transport_ != nullptr) {
+        const auto snap = transport_->getPositionSnapshot();
+        const double tsBeatsPerBar = (double)snap.timeSigNumerator * 4.0 / (double)std::max(1, snap.timeSigDenominator);
+        if (tsBeatsPerBar > 0.0)
+            beatsPerBar = tsBeatsPerBar;
+    }
+    return beatsPerBar;
+}
+
+bool TimelinePanelComponent::copySelectedClips() {
+    if (doc_ == nullptr)
+        return false;
+
+    const auto selected = clipSelection_.getSelected(); // ascending id order
+    if (selected.empty())
+        return false;
+
+    // Pass 1: the earliest selected clip's start — every captured entry is stored relative to it.
+    bool haveEarliest = false;
+    double earliestStart = 0.0;
+    for (auto id : selected) {
+        const auto* clip = doc_->getClip(id);
+        if (clip == nullptr)
+            continue;
+        if (!haveEarliest || clip->startBeat < earliestStart) {
+            earliestStart = clip->startBeat;
+            haveEarliest = true;
+        }
+    }
+    if (!haveEarliest)
+        return false; // every selected id was stale
+
+    // Pass 2: capture each clip relative to that start.
+    std::vector<ClipboardClip> captured;
+    for (auto id : selected) {
+        const auto* clip = doc_->getClip(id);
+        const auto* track = doc_->getTrackForClip(id);
+        if (clip == nullptr || track == nullptr)
+            continue;
+        ClipboardClip entry;
+        entry.originalTrack = track->id;
+        entry.relativeStartBeat = clip->startBeat - earliestStart;
+        entry.lengthBeats = clip->lengthBeats;
+        entry.name = clip->name;
+        entry.notes = clip->notes;
+        captured.push_back(std::move(entry));
+    }
+    if (captured.empty())
+        return false;
+
+    clipClipboard_ = std::move(captured);
+    return true;
+}
+
+bool TimelinePanelComponent::pasteClipsAtPlayhead() {
+    if (doc_ == nullptr || clipClipboard_.empty())
+        return false;
+
+    double playheadBeat = 0.0;
+    if (transport_ != nullptr)
+        playheadBeat = transport_->getPositionSnapshot().ppq;
+    const double snappedPlayhead = viewState_.snapBeat(playheadBeat, currentBeatsPerBarForPaste());
+
+    // Resolved ONCE, before the mutation: the doc's first Midi-kind track, if any — the fallback
+    // target for a clip whose original track no longer exists.
+    synth::TrackId fallbackTrack;
+    for (const auto& track : doc_->getTracks()) {
+        if (track.kind == synth::TrackKind::Midi) {
+            fallbackTrack = track.id;
+            break;
+        }
+    }
+
+    std::vector<synth::ClipId> newIds;
+    auto mutate = [this, snappedPlayhead, fallbackTrack, &newIds] {
+        for (const auto& entry : clipClipboard_) {
+            synth::TrackId targetTrack = entry.originalTrack;
+            if (doc_->getTrack(targetTrack) == nullptr)
+                targetTrack = fallbackTrack;
+            if (!targetTrack.isValid())
+                continue; // no original track and nothing to fall back to — skip this clip
+
+            const double startBeat = std::max(0.0, snappedPlayhead + entry.relativeStartBeat);
+            const auto newId = doc_->addClip(targetTrack, startBeat, entry.lengthBeats, entry.name);
+            if (!newId.isValid())
+                continue;
+            for (const auto& note : entry.notes)
+                doc_->addNote(newId, note);
+            newIds.push_back(newId);
+        }
+    };
+
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+
+    if (newIds.empty())
+        return false;
+
+    clipSelection_.setSelection(newIds);
+    return true;
+}
+
+bool TimelinePanelComponent::duplicateSelectedClips() {
+    if (doc_ == nullptr)
+        return false;
+
+    const auto selected = clipSelection_.getSelected();
+    if (selected.empty())
+        return false;
+
+    std::vector<synth::ClipId> newIds;
+    auto mutate = [this, &selected, &newIds] {
+        for (auto id : selected) {
+            const auto newId = doc_->duplicateClip(id);
+            if (newId.isValid())
+                newIds.push_back(newId);
+        }
+    };
+
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+
+    if (newIds.empty())
+        return false;
+
+    clipSelection_.setSelection(newIds);
+    return true;
 }
 
 bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {

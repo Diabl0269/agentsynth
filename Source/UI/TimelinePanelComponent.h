@@ -114,6 +114,34 @@ public:
     // model; the lane area only holds a reference to it (see TimelineClipLaneArea's ctor).
     synth::ui::ClipSelectionModel& getClipSelection() noexcept { return clipSelection_; }
     synth::ui::TimelineClipLaneArea& getClipLaneArea() noexcept { return clipLaneArea_; }
+    // const overload: MainComponent::resolveEditSurface() (TL5-10) is itself const and only needs
+    // to compare addresses / walk the component tree, never to mutate either sub-component.
+    const synth::ui::TimelineClipLaneArea& getClipLaneArea() const noexcept { return clipLaneArea_; }
+
+    // ---- Clip clipboard (TL5-10: Cmd+C/V/D on the TimelineClips surface) ----
+    // This panel owns the clipboard because it already owns the selection it copies from — see
+    // MainComponent::resolveEditSurface()/perform(), which delegate here exactly the way
+    // GraphEditor owns its own module clipboard.
+    //
+    // Copies the CURRENTLY SELECTED clips — their notes, lengths, and starts expressed RELATIVE
+    // to the earliest selected clip's start — into an internal clipboard, replacing whatever was
+    // there. Returns false (clipboard left untouched) when nothing is selected or there's no doc.
+    bool copySelectedClips();
+    // True once copySelectedClips() has captured at least one clip and nothing has cleared it
+    // since — getCommandInfo's Paste-active gate for the TimelineClips surface.
+    bool canPasteClips() const noexcept { return !clipClipboard_.empty(); }
+    // Inserts every clipboard clip back onto ITS ORIGINAL TRACK, re-based so the EARLIEST clip
+    // lands at the transport's CURRENT position (snapped via the shared view-state snap and the
+    // transport's live time signature) and every other clip keeps its relative offset. A clip
+    // whose original track no longer exists lands on the doc's first Midi-kind track, or is
+    // skipped entirely when there is none. One recordTimelineChange for the whole paste; the
+    // pasted clips end up selected. Returns false (no-op, clipboard untouched) when the clipboard
+    // is empty, there's no doc, or every clip was skipped.
+    bool pasteClipsAtPlayhead();
+    // doc_->duplicateClip() per selected clip, batched into one recordTimelineChange however many
+    // clips are selected; the new clips end up selected. Returns false when nothing is selected or
+    // there's no doc.
+    bool duplicateSelectedClips();
 
     // ---- Piano roll (TL5-8) ----
     // Swaps the lanes region (gridLanesBounds_ — the same rect the clip-lane area occupies) to
@@ -127,6 +155,9 @@ public:
     void closePianoRoll();
     bool isPianoRollOpen() const noexcept { return pianoRoll_.isOpen(); }
     synth::ui::PianoRollComponent& getPianoRoll() noexcept { return pianoRoll_; }
+    // const overload — see getClipLaneArea()'s twin above for why (MainComponent::
+    // resolveEditSurface(), TL5-10).
+    const synth::ui::PianoRollComponent& getPianoRoll() const noexcept { return pianoRoll_; }
 
     // ---- Automation strip (TL5-9) ----
     // Docked at the BOTTOM of the lanes region (gridLanesBounds_), toggled by lane selection: the
@@ -217,6 +248,23 @@ private:
     // of doc state, not an edit).
     void syncAutomationRecordModeCombo();
 
+    // ---- Clip clipboard (TL5-10) ----
+    // One captured clip, relative to the earliest selected clip's start at copy time (see
+    // copySelectedClips()). Notes are already clip-relative in the doc, so they need no rebasing;
+    // addNote() reassigns their ids on paste regardless of what's stored here.
+    struct ClipboardClip {
+        synth::TrackId originalTrack;
+        double relativeStartBeat = 0.0;
+        double lengthBeats = 4.0;
+        juce::String name;
+        std::vector<synth::MidiNote> notes;
+    };
+    std::vector<ClipboardClip> clipClipboard_;
+    // The beatsPerBar TimelineViewState::snapBeat needs for pasteClipsAtPlayhead()'s Snap::Bar
+    // case — same formula (and same "4.0 with no transport" fallback) as every other timeline
+    // sub-component's own currentBeatsPerBar()/beatsPerBarFrom() helper.
+    double currentBeatsPerBarForPaste() const;
+
     // The Viewport's content: a plain container whose height is (track count * row height).
     struct TrackHeaderList : juce::Component {
         juce::OwnedArray<TimelineTrackHeaderComponent> headers;
@@ -268,6 +316,12 @@ private:
     juce::ApplicationProperties* appProperties_ = nullptr;
     synth::TimelineDoc* doc_ = nullptr;
     TrackHeaderHost* trackHeaderHost_ = nullptr;
+    // TL5-10: non-owning, set by setTransport() alongside the sub-component forwards it already
+    // does. Every other consumer of the transport reads it from its OWN copy (ruler_/playhead_/
+    // transportBar_/clipLaneArea_/pianoRoll_/automationEditor_); this is the one operation the
+    // panel itself performs directly against it — reading the CURRENT position/time-signature at
+    // paste time (see pasteClipsAtPlayhead()).
+    synth::TransportService* transport_ = nullptr;
 
     juce::TextButton addTrackButton_{"+ MIDI Track"};
     juce::Viewport trackHeaderViewport_;

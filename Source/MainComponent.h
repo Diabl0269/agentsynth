@@ -26,6 +26,7 @@
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <optional>
 #include <vector>
 
 class MainComponent
@@ -77,6 +78,26 @@ public:
 
     juce::ApplicationCommandManager& getCommandManager() { return commandManager; }
     void updateCommandShortcuts();
+
+    // ---- TL5-10: keyboard/focus arbitration ----
+    // Which surface currently owns Cmd+C/V/D (Space's togglePlayback is deliberately
+    // surface-independent — see ShortcutManager's binding comment and docs/shortcuts.md).
+    // TimelineClips/PianoRoll require BOTH the timeline panel to be visible AND real keyboard
+    // focus (juce::Component::getCurrentlyFocusedComponent()) to sit inside the clip-lane area /
+    // piano roll respectively — a hidden panel never owns the verbs, whatever a stale focus
+    // pointer points at. Every one of those surfaces already grabs focus on mouseDown (the canvas
+    // idiom GraphEditor::mouseDown established, followed by TimelineClipLaneArea/
+    // PianoRollComponent/AutomationLaneEditor), so "last-clicked surface owns the verbs" falls out
+    // of ordinary JUCE focus tracking with no extra bookkeeping in this class. Public: both
+    // perform()/getCommandInfo() and FocusArbitrationTests.cpp call it directly.
+    enum class EditSurface { Graph, TimelineClips, PianoRoll };
+    EditSurface resolveEditSurface() const;
+
+    // Headless tests can't always create a real keyboard-focus grab (grabKeyboardFocus() needs a
+    // native peer — see FocusArbitrationTests.cpp's SurfaceResolverRealFocus for why this repo
+    // doesn't attempt one). Consulted FIRST, before any real-focus check; std::nullopt (the
+    // default) falls through to that check.
+    void setEditSurfaceOverrideForTest(std::optional<EditSurface> surface) { editSurfaceOverrideForTest_ = surface; }
 
     // P4-6: pure decision function for the AI provider id used when no "aiProvider" key is
     // persisted yet. A brand new install (no pre-existing settings file at all) defaults to
@@ -406,6 +427,9 @@ private:
 
     ShortcutManager shortcutManager;
     juce::ApplicationCommandManager commandManager;
+
+    // TL5-10: consulted first by resolveEditSurface(); std::nullopt means "use real focus".
+    std::optional<EditSurface> editSurfaceOverrideForTest_;
 
 #if JUCE_MAC
     synth::update::UpdateManager updateManager;

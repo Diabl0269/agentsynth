@@ -119,6 +119,7 @@ add_executable(Tests
     TimelineTrackHeaderTests.cpp
     TimelineClipLaneTests.cpp
     PianoRollTests.cpp
+    FocusArbitrationTests.cpp
     AutomationEditorTests.cpp
     TimelineTransportBarTests.cpp
     TimelineViewStateTests.cpp

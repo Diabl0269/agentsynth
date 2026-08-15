@@ -1360,26 +1360,53 @@ shortcut (action id `toggleMinimap`; see [`shortcuts.md`](shortcuts.md)) both ca
 `GraphEditor::toggleMinimapVisibility()`. Visibility persists under the `minimapVisible` key in
 `juce::ApplicationProperties`, default `true`.
 
-## 16. Timeline panel (TL5-1)
+## 16. Timeline panel (TL5-1 through TL5-10)
 
 `Source/UI/TimelinePanelComponent.h/.cpp` — `synth::ui::TimelinePanelComponent`, a bottom-docked
-panel owned by `MainComponent`.
+panel owned by `MainComponent`. This section was written incrementally, one subsection per task
+(TL5-1 laid down the shell; TL5-2 through TL5-9 filled it with real content; TL5-10 added the
+keyboard/focus rule that arbitrates between it and the graph editor) — each subsection below is
+still the reference for its own piece, and this intro is only a map of how they compose.
+
+Region layout, low-rate transport poll aside (see TL5-4 below), everything here is pure
+layout-plus-paint with no timer or animation of its own — one region diagram for the whole panel:
+
+```
++--------------------------------------------------------------------+
+| Transport bar strip  (play/stop/record/loop, BPM, time-sig, ruler   |  TL5-5 (+ TL5-2's
+| readout, metronome/count-in .......................... snap combo) |   snap selector)
++---------------------+----------------------------------------------+
+| "+ MIDI Track"       | Ruler  (bar/beat ticks, loop brace)          |  TL5-3 (+ TL5-2)
+| Track header column  +----------------------------------------------+
+| (name/colour/M/S/R/  | Clip lanes  <-or->  Piano roll               |  TL5-3 / TL5-7 <-> TL5-8
+|  binding chip),      | (one of the two, same rect, playhead overlay |
+|  scrolls              | drawn on top of either)                     |  TL5-4 (playhead)
+|                       +----------------------------------------------+
+|                       | Automation strip (opens by shrinking the     |  TL5-9 (docked, optional)
+|                       |  region above by its own fixed height)       |
++---------------------+----------------------------------------------+
+```
+
+Keyboard focus is orthogonal to this diagram, not another region: whichever of the graph editor /
+clip lanes / piano roll the user last clicked owns Cmd+C/V/D, per the **Keyboard & focus**
+subsection at the end of this section (TL5-10).
 
 ### What it is
 
-For TL5-1 this is only the SHELL later tasks (TL5-2+) build content into: a themed background
-(`theme.colors.bg0`-family, same fallback pattern as the toolbar/status-bar/sidebar panels), a
-thin top border separating it from the graph editor above, and three placeholder child regions
-already laid out in `resized()`:
+The always-present scaffold (TL5-1): a themed background (`theme.colors.bg0`-family, same fallback
+pattern as the toolbar/status-bar/sidebar panels), a thin top border separating it from the graph
+editor above, and three child regions laid out in `resized()` — the diagram above is what each one
+now holds; TL5-1 itself left the lanes/ruler area an unfilled centred "Timeline" placeholder, all
+since replaced by the ruler/grid/clips/piano-roll/playhead content the subsections below describe:
 
 - **Transport bar** (top strip, `Metrics::timelineTransportBarHeight`)
 - **Track-header column** (left, `Metrics::timelineTrackHeaderWidth`)
-- **Lanes/ruler area** (remainder) — the only region that currently paints anything, a centred
-  "Timeline" placeholder
+- **Lanes/ruler area** (remainder)
 
 All three are exposed as public rect getters (`getTransportBarBounds()`, `getTrackHeaderBounds()`,
-`getLanesBounds()`) so later tasks and tests build on the same arithmetic instead of re-deriving
-it. The component owns no timer and no animation of its own.
+`getLanesBounds()`) so every later task and its tests build on the same arithmetic instead of
+re-deriving it. The component owns no timer and no animation of its own (TL5-4's playhead overlay
+and TL5-9's knob-entry-point aside, each scoped to its own subsection below).
 
 ### Docking, toggle, shortcut
 
@@ -1410,7 +1437,9 @@ carve itself — is gated `#if SYNTH_ENABLE_TIMELINE`, so a `-DSYNTH_ENABLE_TIME
 no button, no shortcut effect, and never carves the panel into the layout (see the CMake option's
 own comment in the root `CMakeLists.txt`).
 
-Contents (transport controls, tracks, clips, ruler) arrive in TL5-2 and later tasks.
+Contents (ruler/grid/snap, track headers, the playhead, the transport bar, clip lanes, the piano
+roll, the automation strip, and finally the keyboard/focus rule tying it to the graph editor) are
+TL5-2 through TL5-10, each documented in its own subsection below.
 
 ### TL5-2: ruler, grid, zoom/scroll, snap, loop brace
 
@@ -1780,9 +1809,10 @@ menu-without-the-menu idiom `TimelineTrackHeaderComponent::applyBindingMenuChoic
 
 **Panel-scoped Delete key.** The lane area grabs keyboard focus on `mouseDown` (same as
 `GraphEditor::mouseDown`), so pressing Delete right after a click lands on `TimelineClipLaneArea::
-keyPressed` rather than whichever panel had focus before. This is only the *local* half of Delete-key
-arbitration — TL5-10 is where cross-panel arbitration (which of several panels' Delete handlers
-should fire) gets formalised.
+keyPressed` rather than whichever panel had focus before. This is the *local* half of Delete-key
+arbitration — this section's final **Keyboard & focus** subsection (TL5-10) formalises the
+cross-panel rule that decides which of the graph editor / clip lanes / piano roll a given keypress
+belongs to in the first place.
 
 Tests: `Tests/TimelineClipLaneTests.cpp` — `ClipSelectionModel`/`clipHitTestMarquee` unit coverage,
 pure-geometry tests for `computeClipRect`, and interaction tests driven by hand-built
@@ -1982,3 +2012,81 @@ coverage (mirrors the `TimelineClipLaneArea`/`PianoRollComponent` hand-built-`ju
 idiom against a bare `TimelineDoc` + `AppUndoManager`), the panel's strip open/close/record-mode
 selector, and a `#if SYNTH_ENABLE_TIMELINE`-gated `MainComponent` integration test for the knob
 entry point.
+
+### TL5-10: keyboard & focus
+
+By TL5-9 the panel has THREE independently-editable surfaces competing for the same physical
+keys: the graph editor, the clip lanes, and the piano roll (each already grabbing keyboard focus on
+its own `mouseDown` — TL5-7/TL5-8's own subsections above). Cmd+C/V/D are global
+`ApplicationCommandManager` commands owned by `MainComponent`, so — unlike Delete/Escape, which
+each surface already intercepts locally via its own `keyPressed` — nothing decided *which*
+surface's selection and clipboard they should act on until this task.
+
+**The one resolver.** `MainComponent::resolveEditSurface() const` is the single focus-ownership
+rule:
+
+```cpp
+enum class EditSurface { Graph, TimelineClips, PianoRoll };
+```
+
+It returns `TimelineClips`/`PianoRoll` when the timeline panel is visible AND real keyboard focus
+(`juce::Component::getCurrentlyFocusedComponent()`) sits inside the clip-lane area / piano roll
+respectively, and `Graph` otherwise — including when the timeline panel is hidden outright,
+regardless of what a stale focus pointer inside it might point at. Nothing new grabs focus for
+this: every surface already does it on `mouseDown` (`GraphEditor::mouseDown` is the idiom's
+original; `TimelineClipLaneArea`, `PianoRollComponent` and `AutomationLaneEditor` all copy it), so
+"the surface you last clicked owns the verbs" falls out of ordinary JUCE focus tracking with no
+extra bookkeeping. Headless tests can't always create a real focus grab (`grabKeyboardFocus()`
+needs a native peer — see `Tests/FocusArbitrationTests.cpp`'s `SurfaceResolverRealFocus`, which
+documents why this repo doesn't attempt one), so `MainComponent::setEditSurfaceOverrideForTest()`
+is consulted FIRST and short-circuits the real-focus check when set.
+
+**Cmd+C/V/D route by surface** — `MainComponent::getCommandInfo`/`perform` branch on
+`resolveEditSurface()` for `AppCommands::copySelection/pasteSelection/duplicateSelection`:
+
+- **Graph** — unchanged: `GraphEditor::copySelection()/pasteClipboard()/duplicateSelection()`
+  against its own `ModuleClipboard`, exactly as before this task.
+- **TimelineClips** — a NEW clip clipboard, owned by `TimelinePanelComponent` (it already owns the
+  clip selection — see TL5-7): `copySelectedClips()` serialises the selected clips (notes, lengths,
+  starts relative to the earliest selected clip) into it; `pasteClipsAtPlayhead()` re-inserts them
+  onto their ORIGINAL tracks (by `TrackId`), re-based so the earliest clip lands at the transport's
+  CURRENT position (snapped via the shared `TimelineViewState`), in ONE
+  `AppUndoManager::recordTimelineChange`; a clip whose original track no longer exists lands on the
+  doc's first `Midi`-kind track, or is skipped if there is none. `duplicateSelectedClips()` calls
+  `TimelineDoc::duplicateClip()` per selected clip, batched the same way. All three leave their
+  result selected, mirroring `GraphEditor`'s own "the copies are what you probably want next"
+  convention.
+- **PianoRoll** — C/V/D are INACTIVE (`getCommandInfo` calls `result.setActive(false)`). A
+  deliberate v1 gap: the roll's own note gestures (draw, drag, double-click-delete, all already one
+  undo step each) cover copy/duplicate/undo well enough that a second clipboard for individual
+  notes wasn't worth building yet.
+
+`getCommandInfo`'s Paste case is active only when the SURFACE-MATCHING clipboard has something in
+it — `GraphEditor::canPaste()` for Graph, `TimelinePanelComponent::canPasteClips()` for
+TimelineClips — so copying modules never makes Paste live on the clip lanes, or vice versa. See
+[`shortcuts.md`](shortcuts.md#surface-routing-tl5-10-who-cmdcvd-act-on) for the user-facing table.
+
+**Space is global.** `AppCommands::togglePlayback` (`ShortcutManager` action id `togglePlayback`,
+default binding: bare spacebar, no modifiers) is deliberately NOT routed by `resolveEditSurface()`
+— it always toggles the transport, from any surface, via
+`TimelinePanelComponent::getTransportBar().getPlayStopButton().triggerClick()` (the SAME choke
+point the transport bar's own click handler uses — see TL5-5 above — so the button's visual state
+and a Space-triggered toggle can never disagree). Safe to claim app-wide for the same reason
+Cmd+C/V is (see `shortcuts.md`): a focused `juce::TextEditor` consumes the spacebar itself (types a
+space character) before `MainComponent::keyPressed`, the sole dispatch point, ever sees it. Inactive
+outright (`getCommandInfo` -> `setActive(false)`) in a `SYNTH_ENABLE_TIMELINE=OFF` build, where
+there is no transport to toggle.
+
+**Delete stays panel-local.** Unlike C/V/D, Delete/Escape were never routed through
+`ShortcutManager`/`ApplicationCommandManager` at all (see `shortcuts.md`'s reasoning) — each
+surface's own `keyPressed` already handles its own selection and falls through (`return false`) on
+an empty one, which is what let an unmodified `Delete` binding be surface-scoped for free since
+before this task. TL5-10 adds no new production code here, only
+`Tests/FocusArbitrationTests.cpp`'s `DeletePerSurface`, which pins that a clips-focused Delete never
+touches the graph, a graph-focused Delete never touches the clips, and an empty selection on either
+falls through rather than eating the key.
+
+Tests: `Tests/FocusArbitrationTests.cpp` — one test per verb x surface (`resolveEditSurface()`
+override coverage, clip copy/paste-at-playhead/duplicate incl. the missing-track fallback, the
+piano-roll inactive gap, Space from every surface, per-surface Delete, and the resolver's real-focus
+fallback behaviour).
