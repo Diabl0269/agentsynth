@@ -355,6 +355,12 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // (flip + persist BEFORE animating, applyToolbarIcons, from/to computePanelBounds, synchronous
     // resized() for headless tests, then the shared animated transition) — only the axis differs
     // (bottom slide instead of a side panel).
+    // TL5-2: wire the panel to the real transport + persisted settings. Gated with the rest of
+    // this block — a SYNTH_ENABLE_TIMELINE=OFF build never shows/carves the panel, so it has no
+    // need of either.
+    timelinePanel.setTransport(&audioEngine.getTransport());
+    timelinePanel.setApplicationProperties(&appProperties);
+
     addAndMakeVisible(toggleTimelineButton);
     toggleTimelineButton.setComponentID("toggleTimeline");
     toggleTimelineButton.onClick = [this] {

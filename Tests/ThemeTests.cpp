@@ -662,6 +662,7 @@ TEST(ThemeMetricsTest, MetricsCodeOnlyFieldsHaveExpectedDefaults) {
     EXPECT_EQ(m.timelinePanelHeight, 220);
     EXPECT_EQ(m.timelineTrackHeaderWidth, 160);
     EXPECT_EQ(m.timelineTransportBarHeight, 28);
+    EXPECT_EQ(m.timelineRulerHeight, 24);
 }
 
 // ---------------------------------------------------------------------------
@@ -685,6 +686,7 @@ TEST(ThemeLoaderTest, MetricsCodeOnlyFieldsNotInJSON) {
     EXPECT_FALSE(jsonStr.contains("timelinePanelHeight"));
     EXPECT_FALSE(jsonStr.contains("timelineTrackHeaderWidth"));
     EXPECT_FALSE(jsonStr.contains("timelineTransportBarHeight"));
+    EXPECT_FALSE(jsonStr.contains("timelineRulerHeight"));
 }
 
 // ---------------------------------------------------------------------------

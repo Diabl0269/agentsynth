@@ -1369,3 +1369,58 @@ no button, no shortcut effect, and never carves the panel into the layout (see t
 own comment in the root `CMakeLists.txt`).
 
 Contents (transport controls, tracks, clips, ruler) arrive in TL5-2 and later tasks.
+
+### TL5-2: ruler, grid, zoom/scroll, snap, loop brace
+
+`Source/UI/TimelineViewState.h` (`synth::ui::TimelineViewState`) is the single pure,
+headless-testable beat<->pixel mapping shared by every consumer: `pixelsPerBeat` (zoom, clamped to
+`[kMinPixelsPerBeat=1.5, kMaxPixelsPerBeat=512]`), `firstVisibleBeat` (horizontal scroll, clamped
+`>= 0`), `beatToX()`/`xToBeat()`, `zoomAroundX(factor, anchorX)` (keeps the beat under `anchorX`
+fixed on screen, clamps preserved — see the comment on why the anchor invariant yields to the
+`firstVisibleBeat >= 0` clamp at extreme zoom-out), `scrollBeats(delta)`, and `snapBeat(beat,
+beatsPerBar)`. No JUCE dependency; `TimelinePanelComponent` owns the one instance and exposes it
+via `getViewState()`.
+
+**Snap** (`TimelineViewState::Snap`) — `Off, Bar, Beat, Half, Quarter, Eighth, Sixteenth`. Every
+non-`Bar`/non-`Off` value is a fraction of **one beat** (not a whole note): `Beat` (combo label
+`"1"`, the default) = 1.0 beat, `Half` = 0.5, `Quarter` = 0.25, `Eighth` = 0.125, `Sixteenth` =
+0.0625 — the same unit as `TransportService::kMinLoopLengthBeats` (1/16 of a beat). `Bar` snaps to
+multiples of `beatsPerBar` (`tsNum * 4 / tsDen` off the transport's time signature — same formula
+`TransportService::getPosition()` already uses). Ties round up (toward +infinity, beats are never
+negative in practice). The snap choice lives in a `juce::ComboBox` docked in the transport bar's
+right-hand side (items `Off/Bar/1/1⁄2/1⁄4/1⁄8/1⁄16`; the rest of that strip stays empty for TL5-5)
+and persists under the `"timelineSnap"` int key in `juce::ApplicationProperties`, set via
+`TimelinePanelComponent::setApplicationProperties()` (non-owning pointer setter, same shape as
+`AIChatComponent::setAccountService()`).
+
+`Source/UI/TimelineRulerComponent.h/.cpp` (`synth::ui::TimelineRulerComponent`) is a thin strip
+(`Metrics::timelineRulerHeight = 24`) docked at the top of the lanes region. It owns nothing: a
+`TimelineViewState&` (shared with the panel) and an optional `synth::TransportService*` (setter,
+non-owning, may be null). `paint()` reads `getPositionSnapshot()` once per frame (message thread,
+cheap) for the time signature and loop bounds, draws bar ticks/labels with adaptive density (the
+labelled-bar stride doubles until labels are `>= 40px` apart, so they never overlap; per-beat ticks
+only appear once `pixelsPerBeat >= 8`) and, when the snapshot reports `looping`, a bracket over
+`[loopStartPpq, loopEndPpq]` in the theme's accent colour. No timer — the playhead is TL5-4;
+`repaint()` is called only after an interaction or a posted transport command.
+
+**Ruler interactions:**
+
+| Gesture | Effect |
+|---|---|
+| Click (no drag) | `transport->locateBeat()` to the snapped beat under the cursor |
+| Press-drag-release | `transport->setLoop(min, max, true)` to the snapped `[start,end]` range (dragging leftwards normalises) |
+| Cmd+click (no drag) | Toggles looping off, keeping the existing bounds (v1 — no re-enable-from-click) |
+
+During a drag, `setLoop()` is posted from `mouseDrag` whenever the snapped pair changes since the
+last post (not on every pixel of movement — `TransportService`'s command FIFO dedupes nothing);
+`mouseUp` reuses the same throttle, so it's a no-op if the last drag update already posted the
+final pair.
+
+**Grid + wheel:** `TimelinePanelComponent::paint()` draws the same bar/beat lines directly into the
+lanes region below the ruler (bar lines at full `colors.border`, beat lines at 35% alpha — no
+dedicated grid tokens exist, and one caller didn't justify adding any). `mouseWheelMove()` is
+implemented once, on the panel: plain wheel scrolls (`deltaY` converted to beats at the current
+zoom — a constant *pixel* distance per wheel unit, so the same physical gesture covers less musical
+time zoomed in); Cmd+wheel (`mods.isCommandDown()`, already Ctrl-on-other-platforms via JUCE) zooms
+around the cursor. JUCE bubbles an unhandled wheel event from the ruler child up to the panel, so
+both regions share identical behaviour from one implementation.

@@ -115,6 +115,7 @@ add_executable(Tests
     ClipboardTests.cpp
     PanelAnimationAndLoadingTests.cpp
     TimelinePanelTests.cpp
+    TimelineViewStateTests.cpp
     MinimapComponentTests.cpp
     PluginProcessorTests.cpp
     AudioEngineTransportTests.cpp
@@ -125,6 +126,7 @@ add_executable(Tests
     ProjectBundleTests.cpp
     ../Source/MainComponent.cpp
     ../Source/UI/TimelinePanelComponent.cpp
+    ../Source/UI/TimelineRulerComponent.cpp
     ../Source/Plugin/PluginProcessor.cpp
     ../Source/Plugin/PluginEditor.cpp
     ../Source/UI/GraphEditor.cpp

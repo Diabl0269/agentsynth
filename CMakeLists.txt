@@ -394,6 +394,9 @@ add_library(AppUI STATIC
     Source/MainComponent.h
     Source/UI/TimelinePanelComponent.h
     Source/UI/TimelinePanelComponent.cpp
+    Source/UI/TimelineRulerComponent.h
+    Source/UI/TimelineRulerComponent.cpp
+    Source/UI/TimelineViewState.h
     Source/UI/AIChatComponent.cpp
     Source/UI/AccountRow.cpp
     Source/UI/AccountRow.h
