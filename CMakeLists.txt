@@ -129,6 +129,8 @@ add_library(Core STATIC
     Source/Timeline/AutomationApplier.cpp
     Source/Timeline/AutomationApplier.h
     Source/Timeline/AutomationKernel.h
+    Source/Timeline/AutomationRecorder.cpp
+    Source/Timeline/AutomationRecorder.h
     Source/Timeline/EpochExchange.h
     Source/Timeline/MidiClipFile.cpp
     Source/Timeline/MidiClipFile.h

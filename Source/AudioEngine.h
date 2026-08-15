@@ -137,6 +137,17 @@ public:
         midiCaptureSink_.store(sink, std::memory_order_relaxed);
     }
 
+    // TL4-4: registers the automation recorder whose gesture claims and global record arm the
+    // applier consults each block (see AutomationApplier::applyBlock). Borrowed, never owned — the
+    // same contract as setMidiCaptureSink: the owner must null this before destroying the recorder.
+    // Null by default, in which case every lane plays back by its mode alone with no claims to
+    // yield to. Only the AUDIO-VISIBLE half of the recorder is stored, so the audio thread can
+    // never reach its doc, its undo manager or its capture buffers.
+    void setAutomationRecorder(synth::AutomationRecorder* recorder) noexcept {
+        automationRecordState_.store(recorder != nullptr ? &recorder->getAudioState() : nullptr,
+                                     std::memory_order_relaxed);
+    }
+
     // Total latency the graph reports for itself, in samples. This is report-only latency
     // aggregation: juce::AudioProcessorGraph already compensates parallel paths internally, so we
     // only surface the total (for the UI / host to display or pass on) — we do NOT compensate.
@@ -226,6 +237,9 @@ private:
     // TL3-3: borrowed, never owned. Set by setMidiCaptureSink(); read once per callback in
     // renderNextBlock. Null default means capture is a no-op with no caller having to check.
     std::atomic<synth::MidiRecorder*> midiCaptureSink_{nullptr};
+    // TL4-4: borrowed, never owned. Set by setAutomationRecorder(); read once per render pass and
+    // handed straight to the applier. Null default means "no recorder", not "no automation".
+    std::atomic<const synth::AutomationRecordState*> automationRecordState_{nullptr};
 
     void createDefaultPatch();
 

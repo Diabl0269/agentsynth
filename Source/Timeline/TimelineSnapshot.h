@@ -67,6 +67,10 @@ struct TimelineSnapshot {
         float minValue = 0.0f;
         float maxValue = 1.0f;
         float defaultValue = 0.0f;
+        // TL4-4: a synth::LaneRecordMode value, copied verbatim from the lane. The applier reads it
+        // per block to decide whether this lane may write at all (Off / Write-while-recording) or
+        // must yield to a hand on the knob (Touch / Latch) — see AutomationApplier::applyBlock.
+        int recordMode = static_cast<int>(LaneRecordMode::Read);
         int firstPoint = 0; // range into points[]
         int numPoints = 0;
     };

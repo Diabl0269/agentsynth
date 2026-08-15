@@ -72,6 +72,40 @@ static_assert(static_cast<int>(BreakpointCurve::Linear) == 1,
 static_assert(static_cast<int>(BreakpointCurve::Bezier) == 2,
               "BreakpointCurve is serialised as an int — renumbering breaks files");
 
+// TL4-4: per-lane automation record mode. Serialised as an int (same contract as TrackKind and
+// BreakpointCurve: the numbers are format), and flattened into TimelineSnapshot::LaneInfo so the
+// audio thread's applier can honour it without touching the doc.
+//
+// Semantics (the applier implements the audio half, synth::AutomationRecorder the capture half):
+//   Off   — the lane is inert. Automation never plays back and nothing is ever recorded into it.
+//   Read  — playback only. The default, and what every lane authored before TL4-4 loads as.
+//   Touch — plays back, but the user's hand wins WHILE a parameter gesture is in flight: the
+//           applier skips a claimed parameter, and the gesture is captured and committed when the
+//           user lets go. Let go and playback resumes immediately.
+//   Latch — like Touch, except the capture span stays open after the gesture ends and only closes
+//           on stop (or when global record is disabled) — the last value the user set "latches".
+//   Write — while the transport is playing and global record is enabled, the lane does not play
+//           back at all and its whole play-to-stop span is overwritten. With global record OFF a
+//           Write lane behaves exactly like Read. Auto-drops to Touch on stop (Cubase behaviour).
+enum class LaneRecordMode : int {
+    Off = 0,
+    Read = 1,
+    Touch = 2,
+    Latch = 3,
+    Write = 4,
+};
+
+static_assert(static_cast<int>(LaneRecordMode::Off) == 0,
+              "LaneRecordMode is serialised as an int — renumbering breaks files");
+static_assert(static_cast<int>(LaneRecordMode::Read) == 1,
+              "LaneRecordMode is serialised as an int — renumbering breaks files");
+static_assert(static_cast<int>(LaneRecordMode::Touch) == 2,
+              "LaneRecordMode is serialised as an int — renumbering breaks files");
+static_assert(static_cast<int>(LaneRecordMode::Latch) == 3,
+              "LaneRecordMode is serialised as an int — renumbering breaks files");
+static_assert(static_cast<int>(LaneRecordMode::Write) == 4,
+              "LaneRecordMode is serialised as an int — renumbering breaks files");
+
 // One note inside a clip. startBeat is CLIP-RELATIVE (offset from the clip's own startBeat),
 // so moving a clip moves its notes with it and never rewrites them. `id` is a stable,
 // doc-assigned handle (TL2-3) — never reused, and it survives a toVar/fromVar round trip the
@@ -124,6 +158,12 @@ struct AutomationLane {
     RangeSnapshot range;
     std::vector<Breakpoint> points; // sorted by beat; beats are unique (a second insert at the
                                     // same beat replaces the existing point)
+
+    // TL4-4: a LaneRecordMode value, stored as an int because it is serialised as one. Read is the
+    // default and what a file that predates the field loads as. Written through
+    // TimelineDoc::setLaneRecordMode, which validates the range — a raw int outside 0..4 must never
+    // reach the snapshot, where the applier switches on it.
+    int recordMode = static_cast<int>(LaneRecordMode::Read);
 
     // RUNTIME-ONLY (TL2-6): true when nodeUuid is non-empty but does not resolve to any live
     // graph node's "uuid" property. Never set directly by a caller — TimelineDoc::reconcileBindings
@@ -301,6 +341,16 @@ public:
     bool addBreakpoint(LaneId laneId, double beat, double value, float tension = 0.0f,
                        int curve = static_cast<int>(BreakpointCurve::Linear));
     bool removeBreakpoint(LaneId laneId, double beat);
+    // TL4-4: sets the lane's record mode. `mode` must be a LaneRecordMode value (0..4) — anything
+    // else is rejected outright rather than clamped, so an out-of-range int can never reach the
+    // snapshot the audio thread switches on. Setting the mode the lane already has is a no-op (no
+    // revision bump, no notification), like every other setter here.
+    //
+    // NOT a user edit in the undo sense: a mode flip records no musical intent and is deliberately
+    // never wrapped in AppUndoManager::recordTimelineChange — synth::AutomationRecorder's
+    // Write-drops-to-Touch-on-stop rule calls this directly, and undoing the data a take wrote must
+    // not silently re-arm the lane.
+    bool setLaneRecordMode(LaneId id, int mode);
 
     const AutomationLane* getLane(LaneId id) const;
     const Track* getTrackForLane(LaneId id) const;

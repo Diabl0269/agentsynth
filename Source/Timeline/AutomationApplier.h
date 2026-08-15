@@ -2,6 +2,7 @@
 
 #include "../Transport/BlockTimeInfo.h"
 #include "AutomationKernel.h"
+#include "AutomationRecorder.h" // GestureClaims / AutomationRecordState — the audio-visible half
 #include "EpochExchange.h"
 #include "TimelineSnapshot.h"
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -77,15 +78,34 @@ public:
     // For each resolved binding: evaluate its lane at `info.startPpq` (block-rate — one value per
     // block, at the block's start position) and store it into the bound parameter.
     //
+    // `recordState` is AutomationRecorder's audio-visible half (null when no recorder is installed,
+    // which is the "playback only" build and every unit test that doesn't care). It is read, never
+    // written, and only through atomics — see AutomationRecorder.h.
+    //
     // Semantics, all deliberate:
     //   - **Not playing => nothing is written.** A stopped transport leaves every knob free for the
-    //     user to turn; automation only takes the wheel while the timeline is moving. TL4-4's record
-    //     modes refine this (latch/touch need to know a knob was moved *while* playing); until then
-    //     the rule is simply `if (!info.playing) return;`.
+    //     user to turn; automation only takes the wheel while the timeline is moving.
+    //   - **TL4-4 per-lane record modes** (`TimelineSnapshot::LaneInfo::recordMode`), on top of that:
+    //       Off          — never written. The lane is inert in both directions.
+    //       Read         — always written. The pre-TL4-4 behaviour, and the default.
+    //       Touch/Latch  — written UNLESS the bound parameter is CLAIMED, i.e. a user gesture on it
+    //                      is in flight. The hand wins for as long as it is on the knob; the instant
+    //                      the claim is released, playback resumes from the lane. This is a
+    //                      per-parameter pointer scan of eight atomic slots, not a search.
+    //       Write        — never written while global record is armed. Recording overwrites the
+    //                      span, and playing stale data back into the same parameter would fight the
+    //                      hand that is writing it. With global record OFF, Write reads like Read —
+    //                      an armed-but-not-recording lane still has to play back.
+    //     A recordMode outside 0..4 cannot occur (TimelineDoc::setLaneRecordMode and fromVar both
+    //     reject one), and would fall through to the Read branch if it somehow did.
     //   - **setValue, never setValueNotifyingHost.** This is a plain store of the normalised value.
     //     Notifying would fire parameter listeners from the audio thread — the host's automation
     //     lane and our own UI both — for every automated parameter on every block. UI reflection of
     //     automation is TL4-5's job and belongs on a message-thread timer reading the parameter.
+    //     Since TL4-4 this is also a correctness rule, not only a performance one: notifying here
+    //     would feed the player's own output straight back into AutomationRecorder's parameter
+    //     listener, and every playback pass would re-record itself. Pinned by
+    //     AutomationRecordTest.RecorderNeverHearsTheApplier.
     //   - **Values clamp into the parameter's CURRENT range**, via
     //     RangedAudioParameter::convertTo0to1, which clamps to [0, 1] internally. A lane authored
     //     against a wider range (or a build that later narrowed one) therefore pins at the endpoint
@@ -93,7 +113,8 @@ public:
     //     handed to JUCE, which would trip a debug assertion inside NormalisableRange.
     //
     // No allocation, no locks, no logging, no juce::String. `noexcept`.
-    void applyBlock(const AutomationBindingTable& table, const BlockTimeInfo& info) noexcept;
+    void applyBlock(const AutomationBindingTable& table, const BlockTimeInfo& info,
+                    const AutomationRecordState* recordState = nullptr) noexcept;
 };
 
 } // namespace synth

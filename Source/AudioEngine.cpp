@@ -700,7 +700,10 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // TL4-2: push this pass's automation values into their bound parameters, after the tick (so the
     // beat position is this pass's) and before the graph (so every node reads the automated value
     // in the same pass it was written).
-    automationApplier_.applyBlock(automationBindings_.beginAudioBlock(), transport.getCurrentBlockInfo());
+    // TL4-4: the recorder's audio-visible half rides along so per-lane record modes and in-flight
+    // gesture claims are honoured. Null unless an owner installed a recorder.
+    automationApplier_.applyBlock(automationBindings_.beginAudioBlock(), transport.getCurrentBlockInfo(),
+                                  automationRecordState_.load(std::memory_order_relaxed));
 #endif
 
     mainProcessorGraph.processBlock(buffer, midiMessages);

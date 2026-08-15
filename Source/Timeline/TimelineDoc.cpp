@@ -50,6 +50,10 @@ bool isValidCurve(int curve) noexcept {
     return curve >= static_cast<int>(BreakpointCurve::Hold) && curve <= static_cast<int>(BreakpointCurve::Bezier);
 }
 
+bool isValidRecordMode(int mode) noexcept {
+    return mode >= static_cast<int>(LaneRecordMode::Off) && mode <= static_cast<int>(LaneRecordMode::Write);
+}
+
 AutomationLane::Breakpoint makeBreakpoint(const AutomationLane::RangeSnapshot& range, double beat, double value,
                                           float tension, int curve) {
     AutomationLane::Breakpoint point;
@@ -813,6 +817,18 @@ bool TimelineDoc::removeBreakpoint(LaneId laneId, double beat) {
     });
 }
 
+bool TimelineDoc::setLaneRecordMode(LaneId id, int mode) {
+    auto* lane = findLane(id);
+    if (lane == nullptr || !isValidRecordMode(mode))
+        return false;
+    if (lane->recordMode == mode)
+        return true; // already there: no revision bump, no notification
+    return applyMutation([&] {
+        lane->recordMode = mode;
+        return true;
+    });
+}
+
 // -------------------------------------------------------- bindings / TL2-6 --
 
 bool TimelineDoc::reconcileBindings(const std::function<bool(const juce::String& uuid)>& uuidResolves) {
@@ -943,6 +959,7 @@ juce::var TimelineDoc::toVar() const {
             l->setProperty("id", lane.id.value);
             l->setProperty("nodeUuid", lane.nodeUuid);
             l->setProperty("paramId", lane.paramId);
+            l->setProperty("recordMode", lane.recordMode);
 
             juce::DynamicObject::Ptr r = new juce::DynamicObject();
             r->setProperty("minValue", static_cast<double>(lane.range.minValue));
@@ -1144,6 +1161,14 @@ bool TimelineDoc::fromVar(const juce::var& state) {
                         return false;
                     }
                     if (!isValidRange(lane.range))
+                        return false;
+
+                    // TL4-4. Absent (a file written before record modes existed) => the default
+                    // already on `lane`, which is Read. Present but out of range is malformed, not
+                    // something to clamp: the value ends up in the snapshot the applier switches on.
+                    if (!readOptionalInt(lObj->getProperty("recordMode"), lane.recordMode))
+                        return false;
+                    if (!isValidRecordMode(lane.recordMode))
                         return false;
 
                     const juce::Array<juce::var>* pointList = nullptr;

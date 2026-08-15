@@ -3,9 +3,9 @@
 
 namespace synth {
 
-void AutomationApplier::applyBlock(const AutomationBindingTable& table, const BlockTimeInfo& info) noexcept {
-    // Knobs stay free while the transport is stopped — see the header for why, and for what TL4-4
-    // has to change here when record modes (latch/touch) arrive.
+void AutomationApplier::applyBlock(const AutomationBindingTable& table, const BlockTimeInfo& info,
+                                   const AutomationRecordState* recordState) noexcept {
+    // Knobs stay free while the transport is stopped — see the header for why.
     if (!info.playing)
         return;
 
@@ -20,6 +20,9 @@ void AutomationApplier::applyBlock(const AutomationBindingTable& table, const Bl
     const auto numLanes = snapshot->lanes.size();
     const auto numPoints = snapshot->points.size();
 
+    // One relaxed load for the whole block rather than one per binding.
+    const bool recordArmed = recordState != nullptr && recordState->globalRecordEnable.load(std::memory_order_relaxed);
+
     for (const auto& binding : table.bindings) {
         if (binding.param == nullptr || binding.laneIndex < 0)
             continue;
@@ -32,6 +35,22 @@ void AutomationApplier::applyBlock(const AutomationBindingTable& table, const Bl
         if (lane.firstPoint < 0 || lane.numPoints < 0 ||
             static_cast<std::size_t>(lane.firstPoint) + static_cast<std::size_t>(lane.numPoints) > numPoints)
             continue;
+
+        // TL4-4 record modes — the full table is in the header. Everything here is a compare or a
+        // scan of eight relaxed atomic loads; no branch reaches memory the message thread can move.
+        if (lane.recordMode == static_cast<int>(LaneRecordMode::Off))
+            continue;
+
+        if (lane.recordMode == static_cast<int>(LaneRecordMode::Write)) {
+            if (recordArmed)
+                continue; // the take is overwriting this span — do not play stale data back into it
+        } else if (lane.recordMode == static_cast<int>(LaneRecordMode::Touch) ||
+                   lane.recordMode == static_cast<int>(LaneRecordMode::Latch)) {
+            // Claims only ever exist while global record is armed (the recorder drops them all when
+            // it disarms), so this needs no extra gate on recordArmed.
+            if (recordState != nullptr && recordState->claims.isClaimed(binding.param))
+                continue; // a hand is on this knob: it wins for as long as it is there
+        }
 
         const TimelineSnapshot::Point* points = snapshot->points.data() + lane.firstPoint;
 

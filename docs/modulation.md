@@ -17,6 +17,12 @@ Two consequences worth stating explicitly:
 - **Automation is visible to the user as a moved knob**, because it really is one. That is why the applier deliberately does *not* call `setValueNotifyingHost` — pushing a listener notification per automated parameter per block from the audio thread is the wrong mechanism for that; UI reflection is a message-thread concern (TL4-5).
 - **Automation only writes while the transport is playing.** Stopped, the knob is the user's again and the applier writes nothing, so a paused session never fights a mouse drag. CV, by contrast, keeps flowing whenever its source module is producing signal — a stopped transport does not silence an LFO.
 
+### Recording a knob (TL4-4)
+
+The reverse direction is the same idea run backwards, and it has one contract worth stating here because it governs every knob in the app: **turning a knob only records automation while a real gesture is in flight.** `synth::AutomationRecorder` listens for `beginChangeGesture` / `setValueNotifyingHost` / `endChangeGesture` — the trio every JUCE slider attachment produces — and captures a value change **only** while a capture span is open, which only a gesture (or, for a `Write` lane, the transport starting to play) can open. That single rule is what keeps a preset load, an AI patch apply or an undo restore from silently overwriting every armed lane: they all move parameters exactly like a knob drag does, and they all do it without a gesture.
+
+While a gesture *is* in flight, the hand wins: the parameter is "claimed", the applier skips it, and the automation lane stops fighting the mouse for as long as the button is down. Let go and playback resumes on the very next block — for a `Touch` lane; a `Latch` lane keeps writing until the transport stops. Full mode table and the commit/thinning rules: [`docs/architecture.md` → AutomationRecorder](architecture.md#automationrecorder-tl4-4-record-modes-and-gesture-capture).
+
 ---
 
 ## Routing Kinds
