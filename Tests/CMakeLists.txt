@@ -112,6 +112,7 @@ add_executable(Tests
     PluginProcessorTests.cpp
     AudioEngineTransportTests.cpp
     OfflineTransportDriverTests.cpp
+    TimelineE2ETests.cpp
     PatchDocumentTests.cpp
     ProjectBundleTests.cpp
     ../Source/MainComponent.cpp
