@@ -388,6 +388,11 @@ bool TimelineDoc::setTrackBinding(TrackId id, const juce::String& nodeUuid) {
         return true;
     return applyMutation([&] {
         track->bindingUuid = nodeUuid;
+        // Optimistic: whatever the track's prior orphan state was, a changed binding hasn't been
+        // checked against the graph yet. reconcileBindings re-derives the truth on the next pass;
+        // in the meantime an empty nodeUuid is "unbound" (never orphaned) and a non-empty one is
+        // presumed live rather than left flagged against a target it no longer even names.
+        track->orphaned = false;
         return true;
     });
 }
@@ -804,6 +809,76 @@ bool TimelineDoc::removeBreakpoint(LaneId laneId, double beat) {
 
     return applyMutation([&] {
         lane->points.erase(pos);
+        return true;
+    });
+}
+
+// -------------------------------------------------------- bindings / TL2-6 --
+
+bool TimelineDoc::reconcileBindings(const std::function<bool(const juce::String& uuid)>& uuidResolves) {
+    // Plan first, exactly like splitClip/applySnapshotPreservingNodes: compute what every flag
+    // SHOULD be without touching anything, so a reconcile that changes nothing never enters
+    // applyMutation (no bump, no notification) and uuidResolves is called exactly once per
+    // binding rather than once per binding per pass.
+    struct TrackPlan {
+        bool orphaned = false;
+        std::vector<bool> laneOrphaned;
+    };
+
+    std::vector<TrackPlan> plans;
+    plans.reserve(tracks.size());
+    bool anyChanged = false;
+
+    for (auto& track : tracks) {
+        TrackPlan plan;
+        plan.orphaned = track.bindingUuid.isNotEmpty() && !uuidResolves(track.bindingUuid);
+        if (plan.orphaned != track.orphaned)
+            anyChanged = true;
+
+        plan.laneOrphaned.reserve(track.lanes.size());
+        for (auto& lane : track.lanes) {
+            const bool laneOrphaned = lane.nodeUuid.isNotEmpty() && !uuidResolves(lane.nodeUuid);
+            plan.laneOrphaned.push_back(laneOrphaned);
+            if (laneOrphaned != lane.orphaned)
+                anyChanged = true;
+        }
+        plans.push_back(std::move(plan));
+    }
+
+    if (!anyChanged)
+        return false; // every flag already matches: no bump, no notification
+
+    return applyMutation([&] {
+        for (size_t i = 0; i < tracks.size(); ++i) {
+            tracks[i].orphaned = plans[i].orphaned;
+            for (size_t j = 0; j < tracks[i].lanes.size(); ++j)
+                tracks[i].lanes[j].orphaned = plans[i].laneOrphaned[j];
+        }
+        return true;
+    });
+}
+
+bool TimelineDoc::rebindLane(LaneId id, const juce::String& newNodeUuid) {
+    Track* owner = nullptr;
+    auto* lane = findLane(id, &owner);
+    if (lane == nullptr || newNodeUuid.isEmpty())
+        return false;
+
+    // Doc-wide one-lane-per-parameter invariant: reject if some OTHER lane already owns
+    // (newNodeUuid, this lane's paramId). The lane being rebound is allowed to "collide" with
+    // itself (rebinding to the uuid it already has is a legal no-op path below).
+    if (auto* existing = findLaneForParam(newNodeUuid, lane->paramId))
+        if (existing->id != id)
+            return false;
+
+    if (lane->nodeUuid == newNodeUuid && !lane->orphaned)
+        return true; // already bound here and already resolved: no-op, no bump
+
+    return applyMutation([&] {
+        lane->nodeUuid = newNodeUuid;
+        // Optimistic, same reasoning as setTrackBinding: the next reconcileBindings re-derives
+        // whether this uuid actually resolves.
+        lane->orphaned = false;
         return true;
     });
 }

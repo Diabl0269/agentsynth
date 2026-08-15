@@ -37,6 +37,7 @@ add_executable(Tests
     TimelineClipEditingTests.cpp
     TimelineSnapshotTests.cpp
     TimelineUndoTests.cpp
+    TimelineReconciliationTests.cpp
     AIStateMapperTests.cpp
     AIPatchValidationTests.cpp
     AIPatchRetryTests.cpp

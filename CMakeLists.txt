@@ -128,6 +128,8 @@ add_library(Core STATIC
     # Timeline
     Source/Timeline/TimelineDoc.cpp
     Source/Timeline/TimelineDoc.h
+    Source/Timeline/TimelineReconciler.cpp
+    Source/Timeline/TimelineReconciler.h
     Source/Timeline/TimelineSnapshot.cpp
     Source/Timeline/TimelineSnapshot.h
     Source/Timeline/TimelineSnapshotExchange.cpp

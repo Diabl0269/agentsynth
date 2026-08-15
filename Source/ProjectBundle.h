@@ -66,10 +66,11 @@ struct ProjectLoadResult {
  *     double-stored in the stash; then the live `timeline` is brought to the validated state
  *     (`timeline.fromVar()` on the same var already proven valid against the local doc, or
  *     `timeline.clear()` when the key was absent).
- *  6. **Binding pass:** a track's `bindingUuid` or a lane's `nodeUuid` that no longer resolves to
- *     any live node's `"uuid"` property is retained untouched. Orphan handling (relinking,
- *     flagging, prompting) is TL2-6's job; the only rule enforced *here* is "never delete on load"
- *     — there is deliberately no code for this beyond not writing any.
+ *  6. **Binding pass (TL2-6):** `TimelineReconciler::reconcile(timeline, graph)` recomputes every
+ *     track's `bindingUuid` and lane's `nodeUuid` against the freshly-loaded graph's live node
+ *     uuids. A binding that no longer resolves is retained and flagged `orphaned` — NEVER
+ *     deleted; a resolvable one is (re-)confirmed. This is what makes a freshly opened project
+ *     show correct orphan state immediately, without the user having to touch anything first.
  *
  * On any failure before step 5, `graph`, `timeline` and `patchDocument` are left exactly as they
  * were — nothing partially applied.

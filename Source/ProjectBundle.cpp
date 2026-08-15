@@ -1,4 +1,5 @@
 #include "ProjectBundle.h"
+#include "Timeline/TimelineReconciler.h"
 
 namespace synth {
 
@@ -101,9 +102,11 @@ ProjectLoadResult ProjectBundle::load(const juce::File& bundleDir, juce::AudioPr
     else
         timeline.clear();
 
-    // Binding pass (TL2-6 territory): a track's bindingUuid or a lane's nodeUuid that no longer
-    // resolves to any live node's "uuid" property is retained untouched — orphan handling lands
-    // later. There is nothing to do here beyond NOT deleting anything.
+    // Step 6 (TL2-6): a track's bindingUuid or a lane's nodeUuid that no longer resolves to any
+    // live node's "uuid" property is retained untouched — reconcileBindings never deletes, it
+    // only flags. This is what makes that fact visible immediately as correct `orphaned` flags,
+    // rather than leaving it latent until whatever next happens to call reconcile.
+    TimelineReconciler::reconcile(timeline, graph);
 
     return {true, {}};
 }

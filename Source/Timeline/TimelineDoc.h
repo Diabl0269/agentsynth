@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <juce_core/juce_core.h>
 #include <type_traits>
 #include <utility>
@@ -123,6 +124,19 @@ struct AutomationLane {
     RangeSnapshot range;
     std::vector<Breakpoint> points; // sorted by beat; beats are unique (a second insert at the
                                     // same beat replaces the existing point)
+
+    // RUNTIME-ONLY (TL2-6): true when nodeUuid is non-empty but does not resolve to any live
+    // graph node's "uuid" property. Never set directly by a caller — TimelineDoc::reconcileBindings
+    // is the only writer, driven by synth::TimelineReconciler against a real graph. NOT written by
+    // toVar and always reset to false by fromVar (a freshly-loaded doc has no graph to check
+    // against, so the very next reconcile is what re-derives the truth — this field is derived
+    // state, not part of the document's persistent identity).
+    //
+    // Distinct from "unbound": an EMPTY nodeUuid never was bound to anything and is merely
+    // unbound, not orphaned. Orphaned means it WAS bound and no longer resolves — a deleted
+    // module, a rejected restore — and per TL2-6 policy the lane is retained regardless: an
+    // orphaned binding is surfaced for the user to re-bind (see rebindLane), never auto-deleted.
+    bool orphaned = false;
 };
 
 // Clips within a track stay sorted by (startBeat, id). Overlapping clips are legal in the
@@ -139,6 +153,11 @@ struct Track {
                               // May be empty — an unbound track is legal, it just plays nowhere.
     std::vector<Clip> clips;
     std::vector<AutomationLane> lanes;
+
+    // RUNTIME-ONLY (TL2-6): same contract as AutomationLane::orphaned, but for bindingUuid — see
+    // that field's comment for the full unbound-vs-orphaned distinction. Never written by toVar,
+    // always false after fromVar, and the only writer is TimelineDoc::reconcileBindings.
+    bool orphaned = false;
 };
 
 // The timeline's message-thread document model (TL2-1): tracks, clips, notes and automation
@@ -289,6 +308,35 @@ public:
     // dedupes against.
     const AutomationLane* getLaneForParam(const juce::String& nodeUuid, const juce::String& paramId) const;
 
+    // -- Bindings / reconciliation (TL2-6) --------------------------------------
+    // Recomputes EVERY track's and lane's `orphaned` flag: orphaned = binding is non-empty AND
+    // uuidResolves(binding) returns false. This doc never sees an AudioProcessorGraph itself —
+    // synth::TimelineReconciler is the bridge that builds `uuidResolves` from a real graph's live
+    // node uuids and is the intended caller for anything graph-aware; this overload exists so the
+    // doc (and its tests) stay graph-agnostic and headless.
+    //
+    // Routed through the single applyMutation choke point ONLY if at least one flag actually
+    // changes: one revision bump and one Listener::timelineChanged call cover however many
+    // bindings flipped in this pass. A reconcile that changes nothing (including one run against
+    // an empty doc) is a genuine no-op — returns false, no bump, no notification.
+    //
+    // NOT a user edit: reconciliation derives runtime state from the current graph, it doesn't
+    // record an intent a user should be able to undo. Callers must never wrap this in
+    // AppUndoManager::recordTimelineChange (or recordCombinedChange) — see docs/architecture.md.
+    bool reconcileBindings(const std::function<bool(const juce::String& uuid)>& uuidResolves);
+
+    // The one-click "re-bind" gesture's model half: retargets an orphaned (or any) lane's
+    // nodeUuid. Rejected — no mutation — if newNodeUuid is empty, if `id` doesn't resolve to a
+    // lane, or if ANOTHER lane anywhere in the doc already owns (newNodeUuid, this lane's
+    // paramId): the same doc-wide one-lane-per-parameter invariant addLane enforces.
+    //
+    // On success, clears `orphaned` to false OPTIMISTICALLY — this does not itself confirm
+    // newNodeUuid resolves to a live node; the next reconcileBindings re-derives the true state
+    // from the graph. A normal mutation: bumps the revision and notifies listeners exactly like
+    // any other mutator (unlike reconcileBindings, this IS a user gesture and callers should wrap
+    // it in recordTimelineChange).
+    bool rebindLane(LaneId id, const juce::String& newNodeUuid);
+
     // -- Document-level --------------------------------------------------------
     // Drops every track. Id counters are NOT reset — ids stay unique for the doc's lifetime.
     // No-op (and no notification) on an already-empty doc.
@@ -303,7 +351,8 @@ public:
     // -- Serialisation ---------------------------------------------------------
     // The dialect PatchDocument/TL2-4 embeds under the reserved top-level "timeline" key.
     // Field names are lowerCamelCase; the next-id counters ride along so ids stay stable
-    // across save/load.
+    // across save/load. Track::orphaned / AutomationLane::orphaned are NOT written — they are
+    // runtime-derived (TL2-6), not part of the document's persistent identity.
     juce::var toVar() const;
 
     // All-or-nothing: on ANY malformed field (wrong type, out-of-range value, duplicate id,
@@ -314,6 +363,11 @@ public:
     // Ordering is repaired rather than trusted: a hand-edited file with mis-ordered clips,
     // notes or breakpoints loads fine and comes back sorted, because no reader downstream
     // should have to defend against a broken sort invariant.
+    //
+    // Every loaded Track/AutomationLane starts with orphaned == false, whatever a hand-edited
+    // file might claim (the field isn't read at all) — there is no graph at load time to check
+    // bindings against, so the caller must run reconcileBindings (via TimelineReconciler)
+    // afterwards to get correct flags.
     bool fromVar(const juce::var& state);
 
 private:
