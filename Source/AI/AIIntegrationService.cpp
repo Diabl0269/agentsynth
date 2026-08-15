@@ -95,7 +95,11 @@ juce::String AIIntegrationService::buildPatchAugmentedContent(const juce::String
             }
         }
     }
-    return text;
+    // Structured output was requested but the live graph has no nodes. Silently falling back to
+    // bare `text` gave the model no signal either way about whether a patch already exists, so a
+    // fresh-session "create a bass patch" request would come back asking the user to paste their
+    // (nonexistent) current patch. Say explicitly that the canvas is empty instead.
+    return "Current patch is empty.\n\nUser request: " + text;
 }
 
 void AIIntegrationService::trimHistory() {

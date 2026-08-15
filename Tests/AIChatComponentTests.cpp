@@ -245,6 +245,57 @@ TEST_F(AIChatComponentTest, SendMessageUpdatesUIAndHistory) {
     EXPECT_GT(service.getHistory().size(), initialHistorySize + 1);
 }
 
+// AIChatComponent::shouldUseStructuredOutput() classifies whether a user message should carry
+// live patch JSON + the structured-output schema. Regression coverage for the bug where a
+// hand-picked keyword list (patch/create/modify/oscillator/filter/vca/adsr/sound/preset) silently
+// missed real module names like "Chorus", "Distortion", and "Delay" — the classifier under test
+// derives its module-name match set from the real module factory registry instead.
+TEST(AIChatComponentClassifierTest, ExactBugReportStringIsRecognizedAsPatchRelated) {
+    // The reported failing message: matched none of the 4 hardcoded module names in the old
+    // classifier (oscillator/filter/vca/adsr), even though it names three real modules
+    // (Chorus, Distortion, Delay) plus the edit-intent word "between".
+    EXPECT_TRUE(synth::AIChatComponent::shouldUseStructuredOutput("Add a chorus between the distortion to the delay",
+                                                                  synth::AIStateMapper::moduleFactoryTypeNames()));
+}
+
+TEST(AIChatComponentClassifierTest, AnyRealModuleTypeNameTriggersStructuredOutput) {
+    // A synthetic registry, independent of the real module list, proves the classifier walks
+    // whatever names it is given rather than a hardcoded subset.
+    // Neither sentence below contains any of the classifier's generic edit-intent words, so a true
+    // result can only come from matching the registry entry itself.
+    juce::StringArray registry{"Widget", "Gizmo"};
+    EXPECT_TRUE(
+        synth::AIChatComponent::shouldUseStructuredOutput("I really like the tone of a Widget lately.", registry));
+    EXPECT_FALSE(synth::AIChatComponent::shouldUseStructuredOutput("What is a gadget?", registry));
+}
+
+// These two are close calls between "conversational" and "patch-related" — see the bias-toward-
+// inclusion rule in AIChatComponent.cpp: attaching unnecessary context costs ~1.5k tokens, while
+// missing a real edit request reproduces this exact bug. Both strings happen to contain a real
+// word from the classifier's match set ("filter" is a module type name; "sound" is a generic
+// edit-intent word carried over from the original list), so the classifier intentionally treats
+// them as patch-related even though a human reading them in isolation might call them "just
+// conversation". That is the correct tradeoff: a user asking "what does a low-pass filter do" is
+// one clarifying follow-up away from "now add one to my patch", and the live graph context is
+// harmless to include either way.
+TEST(AIChatComponentClassifierTest, FilterQuestionIsTreatedAsPatchRelated) {
+    EXPECT_TRUE(synth::AIChatComponent::shouldUseStructuredOutput("What does a low-pass filter do conceptually?",
+                                                                  synth::AIStateMapper::moduleFactoryTypeNames()));
+}
+
+TEST(AIChatComponentClassifierTest, BassSoundTipsIsTreatedAsPatchRelated) {
+    EXPECT_TRUE(synth::AIChatComponent::shouldUseStructuredOutput("Any tips for a fat bass sound?",
+                                                                  synth::AIStateMapper::moduleFactoryTypeNames()));
+}
+
+// A genuinely keyword-free conversational message — no module type name, no edit-intent verb —
+// stays conversational. This is the counterpart to the two tests above: it proves the classifier
+// doesn't degenerate into "always true" once module names are folded in.
+TEST(AIChatComponentClassifierTest, KeywordFreeMusicTheoryQuestionStaysConversational) {
+    EXPECT_FALSE(synth::AIChatComponent::shouldUseStructuredOutput(
+        "How does subtractive synthesis differ from FM synthesis?", synth::AIStateMapper::moduleFactoryTypeNames()));
+}
+
 // REGRESSION LOCK: reproduces MainComponent's member-init ordering, where AIChatComponent is
 // constructed BEFORE the owning component installs a provider on the service. The ctor's own
 // refreshModels() call therefore finds no provider and short-circuits, leaving currentModel

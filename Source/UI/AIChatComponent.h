@@ -46,6 +46,14 @@ public:
     void sendButtonClicked();
     void triggerSend() { sendButtonClicked(); }
 
+    // Decides whether an outgoing message should carry the live patch JSON + structured-output
+    // schema (see AIIntegrationService::sendMessage). Pure and free-standing (no UI state) so it
+    // can be unit-tested directly: any message naming a real module/effect type, or using a
+    // generic edit-intent verb, is treated as patch-related. `moduleTypeNames` is normally
+    // AIStateMapper::moduleFactoryTypeNames() — passed in explicitly so a test can supply a
+    // synthetic registry without touching the real module factory.
+    static bool shouldUseStructuredOutput(const juce::String& text, const juce::StringArray& moduleTypeNames);
+
     /**
      * @brief Attaches (or detaches, with nullptr) the account UI to `service`.
      *
