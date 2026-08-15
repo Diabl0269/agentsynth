@@ -7,11 +7,13 @@
 #include "Transport/Metronome.h"
 #include "Transport/TransportService.h"
 #include <atomic>
+#include <functional>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_core/juce_core.h>
+#include <memory>
 #include <vector>
 
 namespace synth {
@@ -21,7 +23,8 @@ class TimelineDoc;  // Forward declaration (Source/Timeline/TimelineDoc.h)
 
 class AudioEngine
     : public juce::AudioIODeviceCallback
-    , public juce::MidiInputCallback {
+    , public juce::MidiInputCallback
+    , public juce::ChangeListener {
 public:
     // How the graph is driven.
     //   Standalone — AudioEngine owns an AudioDeviceManager, opens the default output device and
@@ -38,6 +41,35 @@ public:
 
     void initialise();
     void shutdown();
+
+    // ---- Persisted device state (TL6-1, Standalone only) ----
+    // MESSAGE THREAD, before initialise(). Hands the engine the device setup an earlier session
+    // persisted (a juce::AudioDeviceManager "DEVICESETUP" element, as produced by
+    // getDeviceManager().createStateXml() and handed to the owner through onDeviceStateChanged
+    // below). With a state set, initialise() restores it; with none — a fresh install, or any
+    // install whose user has never touched the Audio tab — initialise() takes exactly the path it
+    // always took, so audio INPUT stays off until the user opts in. There is no migration step for
+    // existing users: "no saved state" IS the legacy behaviour.
+    //
+    // A setter rather than an initialise(const XmlElement*) overload because both of
+    // MainComponent's initialise() call sites (the runtime-permission callback and the direct one)
+    // would otherwise have to carry the argument, and because the engine keeps the state for any
+    // later re-initialise.
+    void setSavedDeviceState(std::unique_ptr<juce::XmlElement> state);
+    bool hasSavedDeviceState() const noexcept { return savedDeviceState_ != nullptr; }
+
+    // MESSAGE THREAD, installed by the OWNER (MainComponent on the standalone path) before
+    // initialise(). Called whenever the AudioDeviceManager reports a change — the user picking a
+    // device, a sample rate, or ticking an input channel in the Audio tab — with the manager's
+    // fresh state to persist. The engine deliberately knows nothing about ApplicationProperties:
+    // Core never touches settings, so the owner does the storing.
+    //
+    // The payload may be null: juce::AudioDeviceManager only produces a DEVICESETUP element once a
+    // setup has been chosen EXPLICITLY (its startup defaults are not "explicit"), which is exactly
+    // what keeps an untouched install on the legacy defaults path above. Owners must null-check.
+    std::function<void(std::unique_ptr<juce::XmlElement>)> onDeviceStateChanged;
+
+    void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
     HostMode getHostMode() const noexcept { return hostMode_; }
     bool isHosted() const noexcept { return hostMode_ == HostMode::Hosted; }
@@ -210,6 +242,36 @@ public:
         return 0;
     }
 
+    // The INPUT DEVICE's latency, in samples — the buffering between a sample arriving at the
+    // hardware input and the graph seeing it. Report-only, exactly like the two above; TL6-8
+    // consumes it when aligning recorded input against the timeline.
+    //
+    // Unlike getOutputLatencySamples() this reads a value CACHED at audioDeviceAboutToStart rather
+    // than asking the device manager: it is the latency of the stream that is actually running
+    // (JUCE re-runs audioDeviceAboutToStart on every device change or restart, so the cache can't
+    // go stale while a callback is attached), and caching is what makes it assertable headlessly
+    // against a fake device. 0 in Hosted mode and 0 whenever no device has started — the same two
+    // "there is nothing to report" cases.
+    int getInputLatencySamples() const noexcept {
+        if (isHosted())
+            return 0;
+        return deviceInputLatencySamples_.load(std::memory_order_relaxed);
+    }
+
+    // TL6-1 introspection for tests: the dimensions audioDeviceAboutToStart sized the device
+    // callback's scratch to. The callback must never allocate, so the scratch has to cover the
+    // widest/longest block the device can deliver BEFORE the first one arrives — see
+    // Tests/AudioInputTests.cpp.
+    struct DeviceScratchInfo {
+        int numChannelPointers = 0; // channel-pointer array the render buffer is built from
+        int numScratchChannels = 0; // spare writable channels (inputs past the output count)
+        int numScratchSamples = 0;
+    };
+    DeviceScratchInfo getDeviceScratchInfo() const noexcept {
+        return {static_cast<int>(deviceChannelPointers_.size()), deviceScratch_.getNumChannels(),
+                deviceScratch_.getNumSamples()};
+    }
+
     struct ModRoutingInfo {
         juce::AudioProcessorGraph::NodeID attenuverterNodeID;
         juce::AudioProcessorGraph::NodeID sourceNodeID;
@@ -265,6 +327,16 @@ public:
     bool isModBypassed(juce::AudioProcessorGraph::NodeID attenuverterNodeID) const;
     void updateModuleNames();
     void ensureMidiDeviceOpen(const juce::String& deviceName);
+
+protected:
+    // TL6-1 TEST SEAM, and the ONE place initialise() touches real hardware in Standalone mode:
+    // it opens the audio device (from `savedDeviceState` when there is one, from JUCE's defaults
+    // when there isn't), attaches this engine as the device callback, subscribes to device-state
+    // changes and opens every available MIDI input. A test subclass overrides it to assert WHICH
+    // branch initialise() chose without any of the side effects — no device is opened, no MIDI
+    // input is grabbed, and the engine is left unattached (isReceivingDeviceCallbacks() stays
+    // false), which is precisely the state a headless test wants.
+    virtual void initialiseDevices(const juce::XmlElement* savedDeviceState);
 
 private:
     const HostMode hostMode_;
@@ -335,6 +407,27 @@ private:
     // Control-rate slice length. 64 samples is ~1.45 ms at 44.1 kHz — finer than any knob gesture
     // and coarse enough that the per-slice graph-traversal overhead stays bounded.
     static constexpr int kAutomationSliceSamples = 64;
+
+    // TL6-1: the device setup restored by initialise(), or null for "use JUCE's defaults, inputs
+    // off". Message thread only (setSavedDeviceState / initialise).
+    std::unique_ptr<juce::XmlElement> savedDeviceState_;
+
+    // TL6-1 device-callback scratch, both sized in audioDeviceAboutToStart and never resized from
+    // the audio thread. `deviceChannelPointers_` backs the juce::AudioBuffer the callback renders
+    // through (max(in, out) channels — see audioDeviceIOCallbackWithContext for why that buffer is
+    // not simply the device's output pointers); `deviceScratch_` provides writable storage for the
+    // channels the device's outputs don't cover, i.e. a device with more inputs than outputs.
+    std::vector<float*> deviceChannelPointers_;
+    juce::AudioBuffer<float> deviceScratch_;
+
+    // TL6-1: cached at audioDeviceAboutToStart, cleared at audioDeviceStopped. Written from
+    // whichever thread JUCE prepares the device on, read by anyone — hence atomic. See
+    // getInputLatencySamples().
+    std::atomic<int> deviceInputLatencySamples_{0};
+
+    // Sizes the device-callback scratch above. Called from audioDeviceAboutToStart only — the
+    // hosted path renders into the host's own buffer and needs none of this.
+    void prepareDeviceScratch(int numInputChannels, int numOutputChannels, int blockSize);
 
     // Preallocated slicing scratch. `sliceChannelPointers_` backs the juce::AudioBuffer view
     // constructed per slice (the channel-pointer ctor takes no ownership and allocates nothing);

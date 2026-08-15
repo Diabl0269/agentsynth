@@ -39,21 +39,7 @@ void AudioEngine::initialise() {
     // skip device/MIDI acquisition entirely and only build the initial patch. prepareForHost()
     // supplies the real sample rate/channel count later, since there is no device to ask.
     if (!isHosted()) {
-        deviceManager.initialiseWithDefaultDevices(0, 2);
-        deviceManager.addAudioCallback(this);
-        deviceCallbackAttached_ = true;
-
-        // Initialise MIDI input collector
-        midiMessageCollector.reset(deviceManager.getAudioDeviceSetup().sampleRate);
-
-        // Enable all available MIDI inputs by default
-        for (auto& info : juce::MidiInput::getAvailableDevices()) {
-            auto input = juce::MidiInput::openDevice(info.identifier, this);
-            if (input != nullptr) {
-                input->start();
-                midiInputs.push_back(std::move(input));
-            }
-        }
+        initialiseDevices(savedDeviceState_.get());
     } else {
         // A default-constructed AudioProcessorGraph reports 0 output channels until something
         // sets its channel layout. The graph's "Audio Output" IO node snapshots that count once,
@@ -71,8 +57,64 @@ void AudioEngine::initialise() {
     }
 }
 
+void AudioEngine::setSavedDeviceState(std::unique_ptr<juce::XmlElement> state) { savedDeviceState_ = std::move(state); }
+
+void AudioEngine::initialiseDevices(const juce::XmlElement* savedDeviceState) {
+    if (savedDeviceState != nullptr) {
+        // TL6-1: restore the user's own device setup — which is the only way audio INPUT ever gets
+        // enabled, since the Audio tab writes the channel mask into this XML the moment the user
+        // ticks an input channel (juce::AudioDeviceSelectorComponent sets useDefaultInputChannels
+        // = false, and juce::AudioDeviceManager then persists "audioDeviceInChans").
+        //
+        // The 0 input channels NEEDED is load-bearing, and deliberately not 2: it is the count JUCE
+        // falls back to whenever the saved setup does NOT pin its input channels (a state saved
+        // after the user changed only their output device or sample rate) and whenever the saved
+        // device can't be opened at all (interface unplugged — selectDefaultDeviceOnFailure below
+        // re-runs with these same counts). Asking for 2 there would silently switch a microphone on
+        // for a user who never asked for one. It costs nothing when the saved state IS explicit:
+        // juce::AudioDeviceManager::setAudioDeviceSetup re-derives the needed count from the mask.
+        deviceManager.initialise(0, 2, savedDeviceState, /*selectDefaultDeviceOnFailure*/ true);
+    } else {
+        // No saved state — a fresh install, or an existing user who has never touched the Audio
+        // tab. This is byte-identical to what initialise() has always done (output only, input
+        // hard-off), which is what makes TL6-1 need no migration step: absence of state IS the
+        // legacy behaviour, and inputs stay opt-in.
+        deviceManager.initialiseWithDefaultDevices(0, 2);
+    }
+
+    deviceManager.addAudioCallback(this);
+    deviceCallbackAttached_ = true;
+
+    // Persist-on-change (TL6-1): every device/rate/channel change the user makes broadcasts here,
+    // and changeListenerCallback hands the new state to whoever installed onDeviceStateChanged.
+    deviceManager.addChangeListener(this);
+
+    // Initialise MIDI input collector
+    midiMessageCollector.reset(deviceManager.getAudioDeviceSetup().sampleRate);
+
+    // Enable all available MIDI inputs by default
+    for (auto& info : juce::MidiInput::getAvailableDevices()) {
+        auto input = juce::MidiInput::openDevice(info.identifier, this);
+        if (input != nullptr) {
+            input->start();
+            midiInputs.push_back(std::move(input));
+        }
+    }
+}
+
+void AudioEngine::changeListenerCallback(juce::ChangeBroadcaster* source) {
+    // Only ever subscribed to our own device manager, and only in Standalone mode; both checks are
+    // here so a future subscription can't silently start persisting something else's state.
+    if (isHosted() || source != &deviceManager)
+        return;
+
+    if (onDeviceStateChanged)
+        onDeviceStateChanged(deviceManager.createStateXml());
+}
+
 void AudioEngine::shutdown() {
     if (!isHosted()) {
+        deviceManager.removeChangeListener(this);
         deviceManager.removeAudioCallback(this);
         deviceCallbackAttached_ = false;
 #if JUCE_LINUX || JUCE_BSD || JUCE_MAC || JUCE_IOS
@@ -623,12 +665,67 @@ void AudioEngine::handleIncomingMidiMessage(juce::MidiInput* source, const juce:
 void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChannelData, int numInputChannels,
                                                    float* const* outputChannelData, int numOutputChannels,
                                                    int numSamples, const juce::AudioIODeviceCallbackContext& context) {
-    juce::ignoreUnused(inputChannelData, numInputChannels, context);
-    for (int i = 0; i < numOutputChannels; ++i) {
-        if (outputChannelData[i])
-            std::fill(outputChannelData[i], outputChannelData[i] + numSamples, 0.0f);
+    juce::ignoreUnused(context);
+
+    // TL6-1 — the channel-aliasing subtlety, which is why this is not simply a buffer wrapped
+    // around outputChannelData:
+    //
+    // juce::AudioProcessor renders IN PLACE over ONE buffer of max(numIn, numOut) channels.
+    // Channels [0, numInputChannels) are what the graph's "Audio Input" node reads and channels
+    // [0, numOutputChannels) are what its "Audio Output" node writes — the SAME memory. So the
+    // device's input has to be COPIED into that buffer before the graph runs: the device's input
+    // block is const and the graph is going to overwrite these channels with its result. Any
+    // channel the input doesn't cover starts silent, exactly as before.
+    //
+    // The channels the device's outputs don't cover (a device with more inputs than outputs) come
+    // from deviceScratch_. Both it and the pointer array are sized in audioDeviceAboutToStart, so
+    // nothing here allocates; if a block ever arrives wider or longer than that, we serve the
+    // output channels alone rather than allocate. This is juce::AudioProcessorPlayer's pattern.
+    const auto pointerCapacity = static_cast<int>(deviceChannelPointers_.size());
+    const int scratchChannels = deviceScratch_.getNumChannels();
+    const bool scratchFitsBlock = deviceScratch_.getNumSamples() >= numSamples;
+
+    int totalChannels = std::min(std::max(numInputChannels, numOutputChannels), pointerCapacity);
+    int nextScratchChannel = 0;
+
+    for (int channel = 0; channel < totalChannels; ++channel) {
+        float* dest =
+            (channel < numOutputChannels && outputChannelData != nullptr) ? outputChannelData[channel] : nullptr;
+        if (dest == nullptr) {
+            // An input channel past the output count, or an output channel the device handed us as
+            // null. Borrow a scratch channel; if there is none to borrow, stop here — the render
+            // buffer keeps every channel it has already resolved, which always includes the ones
+            // the speakers will actually read.
+            if (!scratchFitsBlock || nextScratchChannel >= scratchChannels) {
+                totalChannels = channel;
+                break;
+            }
+            dest = deviceScratch_.getWritePointer(nextScratchChannel++);
+        }
+
+        const float* src =
+            (channel < numInputChannels && inputChannelData != nullptr) ? inputChannelData[channel] : nullptr;
+
+        // TODO(TL6-7): the monitoring / feedback guard hangs off exactly this copy. Live input
+        // reaching the graph makes a mic -> speaker loop possible, but only once the user PATCHES
+        // the Audio Input node onward — the default patch leaves it unconnected, so nothing is
+        // audible until they wire it up.
+        if (src != nullptr)
+            std::copy(src, src + numSamples, dest);
+        else
+            std::fill(dest, dest + numSamples, 0.0f);
+
+        deviceChannelPointers_[static_cast<std::size_t>(channel)] = dest;
     }
-    juce::AudioBuffer<float> buffer(const_cast<float**>(outputChannelData), numOutputChannels, numSamples);
+
+    // Any output channel that did not make it into the render buffer (only reachable in the
+    // degraded no-scratch path above, or if a block somehow arrived before a prepare) still has to
+    // leave the speakers silent rather than replaying whatever the device left in it.
+    for (int channel = totalChannels; channel < numOutputChannels; ++channel)
+        if (outputChannelData != nullptr && outputChannelData[channel] != nullptr)
+            std::fill(outputChannelData[channel], outputChannelData[channel] + numSamples, 0.0f);
+
+    juce::AudioBuffer<float> buffer(deviceChannelPointers_.data(), totalChannels, numSamples);
     juce::MidiBuffer midiMessages;
     midiMessageCollector.removeNextBlockOfMessages(midiMessages, numSamples);
 
@@ -766,19 +863,44 @@ void AudioEngine::prepareSliceScratch(int numChannels, int blockSize) {
 
 void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device) {
     if (device) {
-        mainProcessorGraph.setPlayConfigDetails(device->getActiveInputChannels().countNumberOfSetBits(),
-                                                device->getActiveOutputChannels().countNumberOfSetBits(),
-                                                device->getCurrentSampleRate(), device->getCurrentBufferSizeSamples());
+        const int numInputChannels = device->getActiveInputChannels().countNumberOfSetBits();
+        const int numOutputChannels = device->getActiveOutputChannels().countNumberOfSetBits();
+        const double sampleRate = device->getCurrentSampleRate();
+        const int blockSize = device->getCurrentBufferSizeSamples();
+
+        mainProcessorGraph.setPlayConfigDetails(numInputChannels, numOutputChannels, sampleRate, blockSize);
         // Before the graph: nodes read the playhead from their first prepared block onwards, so the
         // transport must already be on the device's sample rate when they do.
-        transport.prepare(device->getCurrentSampleRate(), device->getCurrentBufferSizeSamples());
-        prepareSliceScratch(device->getActiveOutputChannels().countNumberOfSetBits(),
-                            device->getCurrentBufferSizeSamples());
-        mainProcessorGraph.prepareToPlay(device->getCurrentSampleRate(), device->getCurrentBufferSizeSamples());
+        transport.prepare(sampleRate, blockSize);
+        // TL6-1: both scratches are sized against max(in, out) — that is the channel count the
+        // render buffer has once the device's input is copied into it, so sizing either on the
+        // output count alone would make a 2-in/1-out device fall out of the sliced path (and, for
+        // the device scratch, force an allocation in the callback).
+        prepareDeviceScratch(numInputChannels, numOutputChannels, blockSize);
+        prepareSliceScratch(std::max(numInputChannels, numOutputChannels), blockSize);
+        deviceInputLatencySamples_.store(device->getInputLatencyInSamples(), std::memory_order_relaxed);
+        mainProcessorGraph.prepareToPlay(sampleRate, blockSize);
     }
 }
 
-void AudioEngine::audioDeviceStopped() { mainProcessorGraph.releaseResources(); }
+void AudioEngine::prepareDeviceScratch(int numInputChannels, int numOutputChannels, int blockSize) {
+    // Message thread (or whichever thread JUCE prepares the device on) — never the callback. Two
+    // spare channels of headroom for the same reason prepareSliceScratch keeps them: a device that
+    // hands us a wider block than it declared must not push the callback into allocating.
+    const int channels = std::max({numInputChannels, numOutputChannels, 2}) + 2;
+    deviceChannelPointers_.assign(static_cast<std::size_t>(channels), nullptr);
+
+    // Sized to hold EVERY channel, not just the ones past the output count: a device may also hand
+    // the callback a null pointer for an output channel, and that channel then needs scratch too.
+    deviceScratch_.setSize(channels, std::max(blockSize, 1), /*keepExistingContent*/ false,
+                           /*clearExtraSpace*/ true, /*avoidReallocating*/ false);
+    deviceScratch_.clear();
+}
+
+void AudioEngine::audioDeviceStopped() {
+    deviceInputLatencySamples_.store(0, std::memory_order_relaxed);
+    mainProcessorGraph.releaseResources();
+}
 
 void AudioEngine::prepareForHost(double sampleRate, int blockSize, int numInputChannels, int numOutputChannels) {
     // The collector is still used in hosted mode: ExternalMidiModule-bound messages and any

@@ -398,6 +398,15 @@ Changing `Knobs` resizes the module in place, anchored at its top-left, at `Layo
 
 ---
 
+## Audio Input / Audio Output (Graph I/O)
+
+Not `ModuleBase` subclasses — both are `juce::AudioProcessorGraph::AudioGraphIOProcessor` nodes, so they have no parameters, no level control and no bypass/mute contract. Both are **singletons**: at most one of each per patch (`GraphEditor::isSingletonIOModule`), because JUCE ties the graph's channel count to them.
+
+- **Audio Output** — everything you want to hear ends here.
+- **Audio Input** — since TL6-1 this carries **real device input**: the standalone engine copies the device's input channels into the render buffer before the graph runs, so whatever the open device has active on channels `[0, numIn)` appears on this node's outputs. It emits silence when the device has no active inputs, which is the default — inputs are **opt-in** via *Settings → Audio*, and a fresh install (or any install whose user has never chosen a device setup) opens output-only exactly as before. Hosted (plugin) mode gets whatever input buses the host provides. Nothing is audible until you patch this node onward; the default patch leaves it unconnected. See [`architecture.md § AudioEngine`](architecture.md#1-audioengine) for the copy-in/scratch mechanics, the persisted device state and the pending monitoring guard (TL6-7).
+
+---
+
 ## Attenuverter Module (Hidden)
 - **Purpose**: Invisible gain/polarity stage automatically inserted on every mono CV connection routed via the mod matrix.
 - **Parameters**: `Amount` — ranges from -1.0 (full inversion) to +1.0 (full depth), **constructor default 0.0**.

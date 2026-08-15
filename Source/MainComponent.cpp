@@ -652,6 +652,33 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         audioEngine.setTransportEnabled(appProperties.getUserSettings()->getBoolValue("timelineEnabled", true));
     }
 
+    // Audio device state (TL6-1). Guarded like the block above: on the plugin path the host owns
+    // the device (there is not even an Audio tab), so this app's settings file has no say over it.
+    //
+    // ORDERING CONTRACT: both halves must be in place BEFORE audioEngine.initialise() below — the
+    // saved state because initialise() is what restores it, the callback because opening a device
+    // can itself broadcast a change. MainComponent owns the ApplicationProperties round trip and
+    // the engine owns the device: Core never reads or writes settings.
+    if (ownedAudioEngine != nullptr) {
+        const juce::String savedDeviceXml =
+            appProperties.getUserSettings()->getValue("audioDeviceState", juce::String());
+        if (savedDeviceXml.isNotEmpty()) {
+            if (auto parsed = juce::parseXML(savedDeviceXml))
+                audioEngine.setSavedDeviceState(std::move(parsed));
+        }
+
+        audioEngine.onDeviceStateChanged = [this](std::unique_ptr<juce::XmlElement> state) {
+            // Null until the user has explicitly chosen a device setup — see the declaration of
+            // onDeviceStateChanged. Persisting nothing then is the point: the absent key is what
+            // keeps the next launch on the inputs-off defaults.
+            if (state == nullptr)
+                return;
+            appProperties.getUserSettings()->setValue("audioDeviceState",
+                                                      state->toString(juce::XmlElement::TextFormat().singleLine()));
+            appProperties.saveIfNeeded();
+        };
+    }
+
     // Engine lifecycle is the owner's job. On the plugin path the processor already called
     // initialise() (and will call shutdown()), and its graph may already hold host-restored
     // state — re-initialising here would overwrite the user's session with the default patch.
@@ -697,8 +724,12 @@ MainComponent::~MainComponent() {
     graphEditor.detachAllModuleComponents();
     // Only tear down an engine we own. On the plugin path the processor's engine must survive
     // the editor being closed and reopened.
-    if (ownedAudioEngine != nullptr)
+    if (ownedAudioEngine != nullptr) {
+        // TL6-1: drop the device-state callback first — it captures `this`, and shutdown() is the
+        // call that unsubscribes the engine from its device manager.
+        audioEngine.onDeviceStateChanged = nullptr;
         audioEngine.shutdown();
+    }
 }
 
 // ---- Theme change callback: re-skin pass ----

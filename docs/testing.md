@@ -64,6 +64,24 @@ The timeline's clock and the headless render harness built on it. No audio devic
 
 **Writing an engine-level timeline test:** use `synth::OfflineTransportDriver` rather than hand-rolling a `processHostBlock` loop. Construct the engine `Hosted`, `initialise()` it, wire whatever the patch needs (before the driver is constructed — its constructor calls `prepareForHost`, which prepares the nodes), then `renderBlocks` / `renderToBeat` and assert on the returned buffer or on the `BlockTimeInfo` stream the block callback hands you. At 48000 Hz / 120 BPM one beat is exactly 24000 samples, which keeps the expected sample counts integers. The default patch may legitimately be silent with no MIDI input, so a non-silence assertion needs a source that runs without MIDI (an `OscillatorModule` is a drone in mono mode) patched to the graph's Audio Output node.
 
+### Audio input / device state tests (11 tests)
+
+`Tests/AudioInputTests.cpp` — TL6-1. The first tests in the repo that drive `AudioEngine`'s **device-callback** half (before them, no test did — see the apology in `StatusBarTests.cpp`'s `MasterMute_ZeroesOutput`).
+
+**The `FakeAudioIODevice` pattern.** A test-local `juce::AudioIODevice` subclass that opens nothing, **starts no thread** (`start()` ignores the callback it is handed) and reports fixed numbers — name "Fake", type "Test", 48000 Hz / 512 samples, settable active input/output channel `BigInteger`s, latency 64 in / 128 out. The test then calls `engine.audioDeviceAboutToStart(&fake)` and `engine.audioDeviceIOCallbackWithContext(...)` **by hand**, in the order a real device would, with synthetic input arrays it can assert against — so there is exactly one thread and every block lands where the test put it. Extend this fake rather than writing a second one. The engine is `HostMode::Standalone` here (that is the mode with a device callback) but `initialise()` is **never** called on it — that is still the rule; the two tests that do exercise `initialise()` subclass the engine and override the `initialiseDevices` seam, which is the only part of it that touches hardware.
+
+| What it covers | |
+|-------|-------|
+| `InputReachesTheGraph` | device input ch0 (a ramp) arrives at an `AudioGraphIOProcessor(audioInputNode)` and passes through to Audio Output unchanged, while an unconnected output channel renders **silent** rather than leaking the input channel that aliases it |
+| `InputCountZeroBehavesAsToday` | a null input array + 0 channels renders the same patch **sample-for-sample** as the hosted `processHostBlock` reference, and dereferences nothing |
+| `MoreInputsThanOutputs` | 2 in / 1 out: input ch1 survives the scratch round trip (it is the only thing connected to the single output, so the assertion can't pass without it) |
+| `CallbackNeverAllocates…` | the channel-pointer array and scratch are sized in `audioDeviceAboutToStart` — on `max(in, out)`, for a whole device block — via `getDeviceScratchInfo()` |
+| `CallbackBeforePrepareStillSilencesTheOutput` | the belt-and-braces path: with no scratch to render through, the callback silences the device's output rather than replaying what was in the block |
+| `DeviceStateChangeReachesTheOwnerCallback` | a device-manager change notification reaches `onDeviceStateChanged` exactly once; another broadcaster doesn't; a Hosted engine never persists |
+| `SavedDeviceStateSelectsTheRestorePath` | through the `initialiseDevices` seam: no saved state ⇒ legacy defaults path, saved state ⇒ restore path, Hosted ⇒ no device acquisition at all, and the seam leaves the engine unattached |
+| `InputLatencyAccessor` | the fake's 64 samples after `audioDeviceAboutToStart`, back to 0 after `audioDeviceStopped`, 0 in Hosted mode |
+| `MainComponentDeviceStateTest` (3) | the owner half: the persist callback writes `"audioDeviceState"` (and a null payload writes nothing), and a stored string is parsed and handed to the engine before `initialise()`. Uses the AppProperties isolation pattern below, snapshotting and restoring that one key so a developer's real device choice survives a test run |
+
 ### Integration Tests (~38 tests)
 
 Test module interactions within the audio graph and cross-system integrations.

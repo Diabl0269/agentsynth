@@ -126,6 +126,7 @@ add_executable(Tests
     MinimapComponentTests.cpp
     PluginProcessorTests.cpp
     AudioEngineTransportTests.cpp
+    AudioInputTests.cpp
     OfflineTransportDriverTests.cpp
     BounceExporterTests.cpp
     MetronomeTests.cpp

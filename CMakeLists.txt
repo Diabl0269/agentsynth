@@ -298,6 +298,12 @@ juce_add_gui_app(AgentSynth
     BUNDLE_ID "${SYNTH_BUNDLE_ID}"
     BLUETOOTH_PERMISSION_ENABLED TRUE
     BLUETOOTH_PERMISSION_TEXT "We need Bluetooth access to connect to your external MIDI devices."
+    # TL6-1: the Audio tab can now open an input device (opt-in). macOS kills any process that
+    # touches an input stream without NSMicrophoneUsageDescription in its Info.plist, so this is
+    # not optional once inputs are reachable. The plugin target needs no equivalent — the host
+    # owns the device there, and its own entitlement covers it.
+    MICROPHONE_PERMISSION_ENABLED TRUE
+    MICROPHONE_PERMISSION_TEXT "We need audio input access so you can patch a microphone or instrument into the synth."
     PLIST_TO_MERGE "${SYNTH_SPARKLE_PLIST_TO_MERGE}"
 )
 
@@ -410,6 +416,8 @@ add_library(AppUI STATIC
     Source/UI/PianoRollComponent.h
     Source/UI/PianoRollComponent.cpp
     Source/UI/NoteSelectionModel.h
+    Source/UI/AutomationLaneEditor.h
+    Source/UI/AutomationLaneEditor.cpp
     Source/UI/TrackColour.h
     Source/UI/TimelineViewState.h
     Source/UI/AIChatComponent.cpp
