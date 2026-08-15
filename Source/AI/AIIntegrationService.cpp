@@ -121,6 +121,52 @@ void AIIntegrationService::trimHistory() {
                       chatHistory.begin() + static_cast<long>(start + messagesToRemove));
 }
 
+void AIIntegrationService::replayLiveGraphTrusted(juce::AudioProcessorGraph& scratch) const {
+    juce::var currentState = AIStateMapper::graphToJSON(audioGraph);
+    AIStateMapper::applyJSONToGraph(currentState, scratch, /*clearExisting=*/true, /*trusted=*/true);
+}
+
+bool AIIntegrationService::computePatchPreview(const juce::String& jsonString, bool mergeMode, juce::var& before,
+                                               juce::var& after) {
+    juce::String extractedJson = extractJsonFromResponse(jsonString);
+    juce::var json = juce::JSON::parse(extractedJson);
+    if (!json.isObject())
+        return false;
+
+    bool clearExisting = !mergeMode;
+
+    // Mirror applyPatch()'s mode-less-patch repair (see the identical check there): a patch with
+    // no stated "mode" that only validates as a merge is applied as a merge, so the previewed
+    // diff must use the same clearExisting the real apply will use, or the user approves one
+    // diff and gets a different one.
+    if (clearExisting && !hasExplicitMode(json)) {
+        auto asReplace = AIStateMapper::validatePatch(json, audioGraph, /*clearExisting=*/true, /*trusted=*/false);
+        if (!asReplace.ok) {
+            auto asMerge = AIStateMapper::validatePatch(json, audioGraph, /*clearExisting=*/false, /*trusted=*/false);
+            if (asMerge.ok)
+                clearExisting = false;
+        }
+    }
+
+    juce::AudioProcessorGraph scratch;
+    synth::prepareGraphForPatchEval(scratch);
+    if (!clearExisting)
+        replayLiveGraphTrusted(scratch);
+
+    // Both "before" and "after" are read off graphToJSON() — never the raw patch JSON — so the
+    // diff sees exactly what applying the patch would actually do to the graph (auto-wiring,
+    // deletions, value rescaling included). For merge mode, "before" is the scratch's
+    // just-replayed state rather than a second graphToJSON(audioGraph) call: both travel the same
+    // param round-trip (denormalize -> setValueNotifyingHost -> renormalize, including any
+    // snapToLegalValue on a skewed/int range), so a no-op patch can't show a phantom param change
+    // from replay-only rounding that the live graph's own snapshot never went through.
+    before = clearExisting ? AIStateMapper::graphToJSON(audioGraph) : AIStateMapper::graphToJSON(scratch);
+
+    bool applied = AIStateMapper::applyJSONToGraph(json, scratch, clearExisting, /*trusted=*/false);
+    after = AIStateMapper::graphToJSON(scratch);
+    return applied;
+}
+
 bool AIIntegrationService::hasExplicitMode(const juce::var& json) {
     auto* obj = json.getDynamicObject();
     if (obj == nullptr || !obj->hasProperty("mode"))
@@ -200,9 +246,8 @@ bool AIIntegrationService::applyPatch(const juce::String& jsonString, bool merge
             // Replaying the live graph's current state as trusted mirrors exactly what undo/redo's
             // own snapshot-restore does (see the "Preserve node identity" comment in
             // AIStateMapper::applyJSONToGraph), so ids line up with what the candidate patch
-            // references.
-            juce::var currentState = AIStateMapper::graphToJSON(audioGraph);
-            AIStateMapper::applyJSONToGraph(currentState, scratch, /*clearExisting=*/true, /*trusted=*/true);
+            // references. Shared with computePatchPreview() — see replayLiveGraphTrusted().
+            replayLiveGraphTrusted(scratch);
             const auto before = synth::evaluatePatch(scratch);
             beforeOk = before.hasAudioOutput && before.sourceReachesOutput;
         }

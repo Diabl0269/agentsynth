@@ -152,6 +152,8 @@ add_library(Core STATIC
     Source/AI/AIProviderRegistry.cpp
     Source/AI/PatchEval.h
     Source/AI/PatchEval.cpp
+    Source/AI/PatchDiff.h
+    Source/AI/PatchDiff.cpp
     Source/AI/AuthClient.h
     Source/AI/AuthClient.cpp
     Source/AI/AccountService.h

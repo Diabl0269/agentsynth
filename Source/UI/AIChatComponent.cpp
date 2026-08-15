@@ -1,4 +1,5 @@
 #include "AIChatComponent.h"
+#include "../AI/PatchDiff.h"
 #include "../Branding.h"
 
 namespace synth {
@@ -24,10 +25,58 @@ juce::StringArray extractJSONBlocks(const juce::String& text) {
     return blocks;
 }
 
+namespace {
+
+// Colour for a merge-mode diff line, grouped by PatchChange::Kind (see groupChangesByKind() in
+// PatchDiff.h). "+"-prefixed adds are green, "-"-prefixed removals are red/orange; param changes
+// and modulation add/remove (which are often a matched pair representing one conceptual "change",
+// not an independent add and remove) get a neutral amber rather than fighting for green/red.
+juce::Colour colourForKind(PatchChange::Kind kind) {
+    using Kind = PatchChange::Kind;
+    switch (kind) {
+    case Kind::NodeAdded:
+    case Kind::ConnectionAdded:
+        return juce::Colours::lightgreen;
+    case Kind::NodeRemoved:
+    case Kind::ConnectionRemoved:
+        return juce::Colour(0xFFFF8A65); // orange-red
+    case Kind::ParamChanged:
+    case Kind::ModulationAdded:
+    case Kind::ModulationRemoved:
+        return juce::Colour(0xFFFFC107); // amber
+    }
+    return juce::Colours::white;
+}
+
+// Round-trips `raw` through JUCE's JSON formatter for indentation, so the "View JSON" panel isn't
+// one unbroken line in a ~280px-wide chat column. Falls back to the raw string on parse failure
+// (shouldn't happen — this is a patch that already round-tripped through extractJSONBlocks — but
+// must not blank the view if it ever does).
+juce::String prettyPrintJson(const juce::String& raw) {
+    juce::var parsed = juce::JSON::parse(raw);
+    if (parsed.isVoid())
+        return raw;
+    return juce::JSON::toString(parsed, /*allOnOneLine=*/false);
+}
+
+} // namespace
+
 //==============================================================================
 class AIChatComponent::PatchCard : public juce::Component {
 public:
-    PatchCard(const juce::String& json, std::function<void()> applyCallback, bool isMerge)
+    // `changes`/`diffAvailable`/`summary` come from AIIntegrationService::computePatchPreview()'s
+    // before/after AIStateMapper::graphToJSON() snapshots, computed by the caller in
+    // attachPatchPreview() — see docs/AI_Engine.md "Patch Diff Preview". This IS the preview: it's
+    // the card's default view, rendered before Apply/Merge is ever clicked. The raw JSON stays
+    // available behind the "View JSON" toggle for anyone who wants it.
+    //
+    // `changes` (synth::computeDiff() output) is used for merge-mode cards, which have stable node
+    // identity to diff against. `summary` (synth::summarizePatch() of just the "after" snapshot) is
+    // used for replace-mode cards instead: replace mode has no stable node identity between
+    // snapshots, so a diff would show the entire prior graph removed and the entire new patch
+    // added — technically correct, useless to read. See PatchDiff.h.
+    PatchCard(const juce::String& json, std::function<void()> applyCallback, bool isMerge,
+              const std::vector<PatchChange>& changes, bool diffAvailable, const PatchSummary& summary)
         : patchJson(json)
         , onApply(applyCallback) {
 
@@ -38,11 +87,11 @@ public:
                               isMerge ? juce::Colours::lightyellow : juce::Colours::lightgreen);
 
         addAndMakeVisible(expandButton);
-        expandButton.setButtonText("Expand JSON");
+        expandButton.setButtonText("View JSON");
         expandButton.setToggleable(true);
         expandButton.onClick = [this]() {
             isExpanded = !isExpanded;
-            expandButton.setButtonText(isExpanded ? "Collapse" : "Expand JSON");
+            expandButton.setButtonText(isExpanded ? "Hide JSON" : "View JSON");
             if (auto* parent = getParentComponent())
                 parent->resized();
         };
@@ -53,10 +102,52 @@ public:
                               isMerge ? juce::Colour(0xFF8B6914) : juce::Colours::darkgreen);
         applyButton.onClick = onApply;
 
+        addAndMakeVisible(diffDisplay);
+        diffDisplay.setMultiLine(true);
+        diffDisplay.setReadOnly(true);
+        diffDisplay.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black.withAlpha(0.3f));
+
+        if (!diffAvailable) {
+            diffLineCount = 1;
+            diffDisplay.setText("Preview unavailable - this patch may be rejected when applied.");
+        } else if (isMerge) {
+            // Grouped by Kind (adds, then removes, then param changes, then connection
+            // adds/removes, then modulation adds/removes) so the list doesn't interleave — see
+            // groupChangesByKind()'s doc comment. Rendered line-by-line via insertTextAtCaret with
+            // the TextEditor's textColourId set per segment (setText() can't colour per-line; this
+            // is the same pattern flushDebugLog() uses for insertTextAtCaret, minus the colouring).
+            auto grouped = groupChangesByKind(changes);
+            if (grouped.empty()) {
+                diffLineCount = 1;
+                diffDisplay.setText("No changes.");
+            } else {
+                diffLineCount = (int)grouped.size();
+                for (size_t i = 0; i < grouped.size(); ++i) {
+                    diffDisplay.setColour(juce::TextEditor::textColourId, colourForKind(grouped[i].kind));
+                    diffDisplay.insertTextAtCaret(grouped[i].describe());
+                    if (i + 1 < grouped.size())
+                        diffDisplay.insertTextAtCaret("\n");
+                }
+            }
+        } else {
+            // Replace mode: a plain positive summary of what the new patch contains, not a diff
+            // against the old graph (see class doc comment above).
+            juce::StringArray lines;
+            lines.add("New patch: " + juce::String((int)summary.nodeTypes.size()) +
+                      (summary.nodeTypes.size() == 1 ? " module" : " modules"));
+            for (const auto& t : summary.nodeTypes)
+                lines.add(t);
+            if (summary.connectionCount > 0)
+                lines.add(juce::String(summary.connectionCount) +
+                          (summary.connectionCount == 1 ? " connection" : " connections"));
+            diffLineCount = lines.size();
+            diffDisplay.setText(lines.joinIntoString("\n"));
+        }
+
         addAndMakeVisible(jsonDisplay);
         jsonDisplay.setMultiLine(true);
         jsonDisplay.setReadOnly(true);
-        jsonDisplay.setText(patchJson);
+        jsonDisplay.setText(prettyPrintJson(patchJson));
         jsonDisplay.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black.withAlpha(0.3f));
         jsonDisplay.setVisible(false);
     }
@@ -70,25 +161,47 @@ public:
         applyButton.setBounds(buttons.removeFromRight(80).reduced(2));
         expandButton.setBounds(buttons.removeFromRight(90).reduced(2));
 
+        b.removeFromTop(5);
         if (isExpanded) {
+            diffDisplay.setBounds(b.removeFromTop(diffAreaHeight()));
             b.removeFromTop(5);
             jsonDisplay.setVisible(true);
             jsonDisplay.setBounds(b);
         } else {
+            diffDisplay.setBounds(b);
             jsonDisplay.setVisible(false);
         }
     }
 
-    int getRequiredHeight() const { return isExpanded ? 200 : 35; }
+    int getRequiredHeight() const {
+        int height = 35 + diffAreaHeight();
+        if (isExpanded)
+            height += 5 + kRawJsonHeight;
+        return height;
+    }
 
 private:
+    static constexpr int kLineHeight = 16;
+    static constexpr int kMinDiffHeight = 24;
+    // Caps how tall a very long diff can grow the card; the "View JSON" toggle (which also shows
+    // the diff area above the raw JSON, both individually scrollable TextEditors) is the escape
+    // hatch rather than letting the message list grow unbounded.
+    static constexpr int kMaxDiffHeight = 220;
+    // Grew from 160: pretty-printed (indented) JSON runs noticeably taller than the single
+    // unbroken line this used to hold.
+    static constexpr int kRawJsonHeight = 240;
+
+    int diffAreaHeight() const { return juce::jlimit(kMinDiffHeight, kMaxDiffHeight, diffLineCount * kLineHeight + 8); }
+
     juce::String patchJson;
     std::function<void()> onApply;
     bool isExpanded = false;
+    int diffLineCount = 1;
 
     juce::Label headerLabel;
     juce::TextButton expandButton;
     juce::TextButton applyButton;
+    juce::TextEditor diffDisplay;
     juce::TextEditor jsonDisplay;
 };
 
@@ -96,7 +209,8 @@ private:
 class AIChatComponent::MessageBubble : public juce::Component {
 public:
     MessageBubble(const MessageData& data, std::function<void(const juce::String&)> applyPatch, bool isMerge,
-                  std::function<void(const juce::URL&)> urlOpener) {
+                  std::function<void(const juce::URL&)> urlOpener, const std::vector<PatchChange>& patchDiff,
+                  bool patchDiffAvailable, const PatchSummary& patchSummary) {
         role = data.role;
         text = data.text;
 
@@ -107,7 +221,8 @@ public:
 
         if (data.jsonPatch.isNotEmpty()) {
             patchCard = std::make_unique<PatchCard>(
-                data.jsonPatch, [applyPatch, json = data.jsonPatch]() { applyPatch(json); }, isMerge);
+                data.jsonPatch, [applyPatch, json = data.jsonPatch]() { applyPatch(json); }, isMerge, patchDiff,
+                patchDiffAvailable, patchSummary);
             addAndMakeVisible(*patchCard);
         }
 
@@ -313,6 +428,7 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
         // showUpgradeAction deliberately left at its default false: a replayed history turn never
         // resurrects the Upgrade button, same as Cancel-button/spinner state being session-only.
         messages.push_back({msg.role, cleanText.trim(), json});
+        attachPatchPreview(messages.back());
     }
 
     updateChatDisplay();
@@ -625,6 +741,7 @@ void AIChatComponent::sendButtonClicked() {
                     }
 
                     self->messages.push_back({"assistant", cleanText.trim(), json});
+                    self->attachPatchPreview(self->messages.back());
                 } else if (aiResponse.error.kind == AIProvider::AIErrorKind::Quota) {
                     // The server's message is already a complete, user-facing sentence — no
                     // "Error: " prefix, same precedent as TrialExhausted/ServiceCapacityExceeded.
@@ -652,47 +769,70 @@ void AIChatComponent::sendButtonClicked() {
         activeRequestId = requestId;
 }
 
+void AIChatComponent::attachPatchPreview(MessageData& data) {
+    if (data.jsonPatch.isEmpty())
+        return;
+
+    // Determine merge mode for this message's patch (used for button text + apply behavior, and
+    // to pick the merge/replace branch computePatchPreview() diffs below).
+    bool isMerge = false;
+    juce::var parsed = juce::JSON::parse(data.jsonPatch);
+    if (auto* obj = parsed.getDynamicObject()) {
+        juce::String mode = obj->getProperty("mode").toString();
+        if (mode == "merge") {
+            isMerge = true;
+        } else if (mode.isEmpty()) {
+            // AI didn't specify mode — infer from user intent + graph state. `data` is already
+            // the last element of `messages` (see this method's doc comment), so scan backward
+            // from the end for the preceding user turn.
+            juce::String userText;
+            for (auto it = messages.rbegin(); it != messages.rend(); ++it) {
+                if (it->role == "user") {
+                    userText = it->text;
+                    break;
+                }
+            }
+            juce::var ctx = juce::JSON::parse(aiService.getPatchContext());
+            bool graphHasNodes = false;
+            if (auto* ctxObj = ctx.getDynamicObject()) {
+                if (auto* nodes = ctxObj->getProperty("nodes").getArray())
+                    graphHasNodes = !nodes->isEmpty();
+            }
+            if (graphHasNodes && userText.isNotEmpty()) {
+                isMerge = userText.containsIgnoreCase("add") || userText.containsIgnoreCase("change") ||
+                          userText.containsIgnoreCase("modify") || userText.containsIgnoreCase("tweak") ||
+                          userText.containsIgnoreCase("adjust") || userText.containsIgnoreCase("remove") ||
+                          userText.containsIgnoreCase("delete") || userText.containsIgnoreCase("make it") ||
+                          userText.containsIgnoreCase("more") || userText.containsIgnoreCase("less") ||
+                          userText.containsIgnoreCase("brighter") || userText.containsIgnoreCase("warmer") ||
+                          userText.containsIgnoreCase("darker");
+            }
+        }
+    }
+    data.patchIsMerge = isMerge;
+
+    // The human-readable preview — the PatchCard's default view. Computed from before/after
+    // AIStateMapper::graphToJSON() snapshots (never the raw patch JSON): see PatchDiff.h for why
+    // that's the only correct way to preview merge-mode auto-wiring, replace-mode deletions, and
+    // value rescaling. Merge mode has stable node identity to diff against, so it gets
+    // computeDiff(); replace mode does not (PatchDiff.h), so it gets summarizePatch() of the new
+    // patch's contents instead — never a diff against the old graph.
+    juce::var diffBefore, diffAfter;
+    data.patchDiffAvailable = aiService.computePatchPreview(data.jsonPatch, isMerge, diffBefore, diffAfter);
+    if (data.patchDiffAvailable) {
+        if (isMerge)
+            data.patchDiff = computeDiff(diffBefore, diffAfter);
+        else
+            data.patchSummary = summarizePatch(diffAfter);
+    }
+}
+
 void AIChatComponent::updateChatDisplay() {
     messageList.deleteAllChildren();
 
     for (size_t i = 0; i < messages.size(); ++i) {
         const auto& data = messages[i];
-
-        // Determine merge mode for this message's patch (used for button text + apply behavior)
-        bool isMerge = false;
-        if (data.jsonPatch.isNotEmpty()) {
-            juce::var parsed = juce::JSON::parse(data.jsonPatch);
-            if (auto* obj = parsed.getDynamicObject()) {
-                juce::String mode = obj->getProperty("mode").toString();
-                if (mode == "merge") {
-                    isMerge = true;
-                } else if (mode.isEmpty()) {
-                    // AI didn't specify mode — infer from user intent + graph state
-                    juce::String userText;
-                    for (int j = (int)i - 1; j >= 0; --j) {
-                        if (messages[(size_t)j].role == "user") {
-                            userText = messages[(size_t)j].text;
-                            break;
-                        }
-                    }
-                    juce::var ctx = juce::JSON::parse(aiService.getPatchContext());
-                    bool graphHasNodes = false;
-                    if (auto* ctxObj = ctx.getDynamicObject()) {
-                        if (auto* nodes = ctxObj->getProperty("nodes").getArray())
-                            graphHasNodes = !nodes->isEmpty();
-                    }
-                    if (graphHasNodes && userText.isNotEmpty()) {
-                        isMerge = userText.containsIgnoreCase("add") || userText.containsIgnoreCase("change") ||
-                                  userText.containsIgnoreCase("modify") || userText.containsIgnoreCase("tweak") ||
-                                  userText.containsIgnoreCase("adjust") || userText.containsIgnoreCase("remove") ||
-                                  userText.containsIgnoreCase("delete") || userText.containsIgnoreCase("make it") ||
-                                  userText.containsIgnoreCase("more") || userText.containsIgnoreCase("less") ||
-                                  userText.containsIgnoreCase("brighter") || userText.containsIgnoreCase("warmer") ||
-                                  userText.containsIgnoreCase("darker");
-                    }
-                }
-            }
-        }
+        bool isMerge = data.patchIsMerge;
 
         auto* bubble = new MessageBubble(
             data,
@@ -750,7 +890,7 @@ void AIChatComponent::updateChatDisplay() {
                         refreshLater();
                     });
             },
-            isMerge, urlOpener);
+            isMerge, urlOpener, data.patchDiff, data.patchDiffAvailable, data.patchSummary);
         messageList.addAndMakeVisible(bubble);
     }
 
