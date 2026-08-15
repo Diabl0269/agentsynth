@@ -40,6 +40,7 @@ add_executable(Tests
     TimelineReconciliationTests.cpp
     TimelineMidiSourceTests.cpp
     MidiRecorderTests.cpp
+    MidiClipFileTests.cpp
     AIStateMapperTests.cpp
     AIPatchValidationTests.cpp
     AIPatchRetryTests.cpp
