@@ -27,8 +27,13 @@ public:
 
         smoothedRate.reset(sampleRate, 0.05);
         smoothedDepth.reset(sampleRate, 0.005);
+        // Centre Freq is the allpass bank's cutoff: stepping it swaps every stage's coefficients
+        // at once, which lands as a step in the notched output. Multiplicative so the ramp is
+        // even in pitch, 50 ms to match Rate.
+        smoothedCentreFreq.reset(sampleRate, 0.05);
         smoothedRate.setCurrentAndTargetValue(*rateParam);
         smoothedDepth.setCurrentAndTargetValue(*depthParam);
+        smoothedCentreFreq.setCurrentAndTargetValue(*centreFreqParam);
         prepareOutputLevel(sampleRate);
     }
 
@@ -73,13 +78,16 @@ public:
 
         smoothedRate.setTargetValue(*rateParam);
         smoothedDepth.setTargetValue(*depthParam);
+        smoothedCentreFreq.setTargetValue(*centreFreqParam);
 
         float rate = juce::jlimit(0.1f, 20.0f, smoothedRate.getCurrentValue() + cvRateVal * 10.0f);
         float depth = juce::jlimit(0.0f, 1.0f, smoothedDepth.getCurrentValue() + cvDepthVal);
 
         phaser.setRate(rate);
         phaser.setDepth(depth);
-        phaser.setCentreFrequency(*centreFreqParam);
+        phaser.setCentreFrequency(smoothedCentreFreq.getCurrentValue());
+        // Feedback and Mix are already ramped inside juce::dsp::Phaser (a per-channel
+        // SmoothedValue and a DryWetMixer), so smoothing them again here would only add lag.
         phaser.setFeedback(*feedbackParam);
         phaser.setMix(*mixParam);
 
@@ -96,6 +104,7 @@ public:
 
         smoothedRate.skip(numSamples);
         smoothedDepth.skip(numSamples);
+        smoothedCentreFreq.skip(numSamples);
     }
 
     juce::String getInputPortLabel(int i) const override {
@@ -113,6 +122,7 @@ private:
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedRate;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedDepth;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> smoothedCentreFreq{1300.0f};
 
     juce::AudioParameterFloat* rateParam;
     juce::AudioParameterFloat* depthParam;

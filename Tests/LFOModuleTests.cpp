@@ -202,10 +202,16 @@ TEST_F(LFOModuleTest, LevelParameter) {
     EXPECT_NEAR(maxVal0_5, 0.5f, 0.05f);
     EXPECT_NEAR(minVal0_5, -0.5f, 0.05f);
 
-    // Test with level 0.0
+    // Test with level 0.0.
+    // Level is smoothed over 10 ms (TL4-3) so that timeline automation cannot step the emitted
+    // CV, which means the drop from 0.5 to 0 ramps instead of snapping. The ramp itself must stay
+    // inside the level it is leaving; silence is asserted once it has finished.
+    constexpr int kLevelRampSamples = (int)(0.010 * 44100.0) + 2;
     levelParam->setValueNotifyingHost(0.0f);
     lfo->processBlock(buffer, midi);
-    for (int i = 0; i < buffer.getNumSamples(); ++i) {
+    for (int i = 0; i < kLevelRampSamples; ++i)
+        EXPECT_LE(std::abs(buffer.getSample(0, i)), 0.5f + 0.001f) << "ramp overshot the level it started from";
+    for (int i = kLevelRampSamples; i < buffer.getNumSamples(); ++i) {
         EXPECT_NEAR(buffer.getSample(0, i), 0.0f, 0.001f); // Output should be silent
     }
 

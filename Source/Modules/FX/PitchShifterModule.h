@@ -64,6 +64,10 @@ public:
         smoothedWindow.setCurrentAndTargetValue(*windowParam);
         smoothedFeedback.setCurrentAndTargetValue(*feedbackParam);
         smoothedMix.setCurrentAndTargetValue(*mixParam);
+        // Snapped, not ramped, so a render that starts at (or away from) unity is unchanged —
+        // only a transition through unity mid-render is faded.
+        unityBlend.reset(currentSampleRate, kUnityFadeSeconds);
+        unityBlend.setCurrentAndTargetValue(isAtUnityRatio(smoothedPitch.getCurrentValue()) ? 1.0f : 0.0f);
         prepareOutputLevel(currentSampleRate);
 
         phase = 0.0f;
@@ -170,13 +174,20 @@ public:
                 const float ratio = std::pow(2.0f, semitones / 12.0f);
                 const float windowSamples = juce::jmax(32.0f, windowMs * 0.001f * (float)currentSampleRate);
 
-                if (std::abs(ratio - 1.0f) < kUnityRatioEpsilon) {
-                    // At unity the two taps would sit at fixed, different delays and comb-filter
-                    // the input, so Pitch = 0 emits the signal untransposed instead.
-                    phase = 0.0f;
-                    wetL = inL;
-                    wetR = inR;
-                } else {
+                // At unity the two taps would sit at fixed, different delays and comb-filter the
+                // input, so Pitch = 0 emits the signal untransposed instead. Entering and leaving
+                // that state swaps between two genuinely different signals, so it is CROSSFADED
+                // over kUnityFadeSeconds rather than switched: a slow Pitch/Fine sweep parks
+                // inside the epsilon window for tens of samples, and switching there was an
+                // audible click (caught by AutomationZipperTests). Time-based rather than
+                // ratio-based, so the fade cannot be outrun by a fast sweep.
+                unityBlend.setTargetValue(std::abs(ratio - 1.0f) < kUnityRatioEpsilon ? 1.0f : 0.0f);
+                const float dryWeight = unityBlend.getNextValue();
+
+                float tapL = inL;
+                float tapR = inR;
+
+                if (dryWeight < 1.0f) {
                     // r(t) = w(t) - d(t) must advance at `ratio`, so d' = 1 - ratio; normalising
                     // by the window turns that into a phase that sweeps one window per cycle.
                     phase += (1.0f - ratio) / windowSamples;
@@ -196,9 +207,14 @@ public:
                     const float delayA = juce::jlimit(kMinReadDelay, windowSamples, fracA * windowSamples);
                     const float delayB = juce::jlimit(kMinReadDelay, windowSamples, fracB * windowSamples);
 
-                    wetL = gainA * readDelayed(0, delayA) + gainB * readDelayed(0, delayB);
-                    wetR = gainA * readDelayed(1, delayA) + gainB * readDelayed(1, delayB);
+                    tapL = gainA * readDelayed(0, delayA) + gainB * readDelayed(0, delayB);
+                    tapR = gainA * readDelayed(1, delayA) + gainB * readDelayed(1, delayB);
+                } else {
+                    phase = 0.0f;
                 }
+
+                wetL = dryWeight * inL + (1.0f - dryWeight) * tapL;
+                wetR = dryWeight * inR + (1.0f - dryWeight) * tapR;
             }
 
             lastShifted[0] = wetL;
@@ -246,6 +262,13 @@ private:
     static constexpr float kMaxFeedback = 0.95f;
     // ~0.0017 semitones — narrow enough that sweeping the knob passes straight through it.
     static constexpr float kUnityRatioEpsilon = 1.0e-4f;
+    // Crossfade time in and out of the unity pass-through. Short enough to feel instant, long
+    // enough that the swap between the tap output and the dry signal cannot click.
+    static constexpr double kUnityFadeSeconds = 0.005;
+
+    static bool isAtUnityRatio(float semitones) noexcept {
+        return std::abs(std::pow(2.0f, semitones / 12.0f) - 1.0f) < kUnityRatioEpsilon;
+    }
     // The cubic interpolator looks one sample ahead of the read index, so never read closer
     // than two samples behind the write head (both taps are windowed to ~0 gain there anyway).
     static constexpr float kMinReadDelay = 2.0f;
@@ -365,6 +388,7 @@ private:
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedWindow;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedFeedback;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedMix;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> unityBlend;
 
     juce::AudioParameterChoice* modeParam = nullptr;
     juce::AudioParameterFloat* pitchParam = nullptr;

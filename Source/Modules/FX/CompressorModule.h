@@ -27,8 +27,12 @@ public:
 
         smoothedThreshold.reset(sampleRate, 0.01);
         smoothedMakeupGain.reset(sampleRate, 0.005);
+        // Ratio sets the slope of the gain computer, so stepping it steps the applied gain
+        // reduction exactly like Threshold does. Same 10 ms block-rate treatment.
+        smoothedRatio.reset(sampleRate, 0.01);
         smoothedThreshold.setCurrentAndTargetValue(*thresholdParam);
         smoothedMakeupGain.setCurrentAndTargetValue(*makeupGainParam);
+        smoothedRatio.setCurrentAndTargetValue(*ratioParam);
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -49,9 +53,12 @@ public:
 
         smoothedThreshold.setTargetValue(*thresholdParam);
         smoothedMakeupGain.setTargetValue(*makeupGainParam);
+        smoothedRatio.setTargetValue(*ratioParam);
 
         compressor.setThreshold(smoothedThreshold.getCurrentValue());
-        compressor.setRatio(*ratioParam);
+        compressor.setRatio(smoothedRatio.getCurrentValue());
+        // Attack/Release are detector time constants, not levels: stepping one changes how fast
+        // the envelope follower tracks, never the current gain. Deliberately not smoothed.
         compressor.setAttack(*attackParam);
         compressor.setRelease(*releaseParam);
 
@@ -67,6 +74,7 @@ public:
         }
 
         smoothedThreshold.skip(numSamples);
+        smoothedRatio.skip(numSamples);
     }
 
     juce::String getInputPortLabel(int i) const override { return i == 0 ? "Left" : "Right"; }
@@ -81,6 +89,7 @@ private:
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedThreshold;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedMakeupGain;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedRatio;
 
     juce::AudioParameterFloat* thresholdParam;
     juce::AudioParameterFloat* ratioParam;

@@ -12,6 +12,7 @@ Detailed specifications for Agent Synth's primary synthesis modules.
     - MIDI-to-Frequency tracking with unison and detune support.
     - Integrated visual buffer for real-time waveform display.
 - **Poly mode**: 8 voices driven by pitch CV (Hz). See [Poly Channel Layout](#poly-channel-layout) for channel details.
+- **Smoothing**: Level is smoothed over 10 ms, materialised into a per-block ramp before the voice loop so poly mode does not advance the smoother once per voice. Fine reaches the output through the existing 5 ms frequency smoother; Detune is a frequency ratio (phase-continuous) and is deliberately not smoothed.
 - **Poly `processBlock` CV-save order**: In poly mode, both the per-voice pitch CVs (ch0-7) and the shared mod CVs (ch8-12) are copied into pre-allocated `std::array` caches (`pitchCVCache`, `waveformCVCache`, `octaveCVCache`, `coarseCVCache`, `fineCVCache`, `levelCVCache`) **before** the output buffer is cleared. This is necessary because ch0-7 carry both output audio (written after the clear) and input pitch CV, so they must be read first.
 - **Buffer aliasing note**: Declared with 14 output channels so JUCE's `AudioProcessorGraph` correctly copies shared mod-CV input channels (8-13) when they fan out to multiple downstream nodes. Channels 8-13 of the output are silent pass-throughs.
 
@@ -158,6 +159,7 @@ Built-in tables are immutable and shared, so they need no synchronisation. A fil
     - Level control and integrated visual buffer.
     - Mono and Poly mode support (8 voices).
 - **CV Channels**: Channel 8 = Color CV, Channel 9 = Level CV.
+- **Smoothing**: Color and Level are both smoothed over 10 ms into per-block ramps (poly mode renders one voice after another). Color is not only a filter cutoff — it also ends in a make-up gain — so stepping it steps the level.
 
 ## Sampler Module
 Loads an audio file from disk and plays it back one of two ways.
@@ -176,6 +178,7 @@ Loads an audio file from disk and plays it back one of two ways.
 - **Pitch**: `2^((pitch + pitchCV×24 + (midiNote − rootNote)) / 12)`, times the file-rate/device-rate ratio so a 48 kHz file plays at the right speed on a 44.1 kHz device. Reads are 4-point Catmull-Rom interpolated.
 - **Granular engine**: 24-grain pool, Hann-windowed, spawned every `sampleRate / density` samples while the gate is open; grain start positions wrap rather than clamp so `spray` keeps scattering near either end. Output is scaled by `1/sqrt(density × grainSize)` so loudness stays roughly constant as the cloud thickens, then hard-limited to [-1, 1]. When the pool is exhausted new grains are dropped.
 - **Anti-click**: a 64-sample linear ramp on trigger and release; a one-shot ramps out at the last frame rather than cutting.
+- **Smoothing**: Level is smoothed over 10 ms, but *snapped* on every rising gate — a new note starts at the knob's current value rather than ramping up to it from whatever the last note left behind (the 64-sample fade-in above is what keeps the note start click-free). Pitch is a playback rate and Start / Grain Size / Density / Spray are only consulted when a grain spawns or a loop wraps, so none of them is smoothed.
 - **Bypass**: clears its output — the documented pure-source exception to the bypass/mute contract (every input is CV/gate, so there is no dry signal to pass through).
 - **Sample lifetime**: `loadSampleFile()` (message thread) publishes a reference-counted `SampleData` under a `SpinLock`; `processBlock` takes the *try*-lock, so the audio thread never blocks — a block that races a load renders silence. Replaced samples stay alive in a message-thread-owned array so no destructor ever runs on the audio thread. Files longer than `kMaxSampleSeconds` (120 s) are truncated, with one log line.
 - **Persistence**: the loaded path is *not* a parameter, so it round-trips through `ModuleBase::getExtraState()` / `setExtraState()`, which `AIStateMapper` serialises as the node's `"state"` object. Restored **only on the trusted path** (our own undo/redo snapshots and presets) — untrusted model output must never be able to name a file for the app to open. See [`AI_Engine.md`](AI_Engine.md).
@@ -188,6 +191,7 @@ Loads an audio file from disk and plays it back one of two ways.
 - **CV inputs (mono mode)**: Cutoff = ch1, Resonance = ch2, Drive = ch3.
 - **CV inputs (poly mode)**: Cutoff = ch8, Resonance = ch9, Drive = ch10.
 - **Poly mode**: 8 per-voice audio inputs (ch0-7) + 3 shared CV inputs (ch8-10). Shared CV is computed once per block and applied to all active voices.
+- **Smoothing**: Cutoff, Resonance and Drive are each smoothed over 5 ms — per sample in mono mode, a block at a time in poly mode (one ladder per voice, coefficients set once per block). Resonance and Drive scale the ladder's feedback and saturation, so an automated step lands straight on the output level.
 - **Atomic modulated params**: `modulatedCutoff`, `modulatedResonance`, and `modulatedDrive` are `std::atomic<float>` members updated every `processBlock` (before voice processing in poly mode; per-sample in mono mode). `FrequencyResponseComponent` reads `getCurrentCutoff()` / `getModulatedResonance()` on the UI thread without locks.
 - **`isAutoPromotableModTarget`**: Returns `false` in poly mode (poly CV connections stay plain `DirectCV`, not auto-wrapped in attenuverters).
 
@@ -195,6 +199,7 @@ Loads an audio file from disk and plays it back one of two ways.
 - **Stages**: Attack, Decay, Sustain, Release.
 - **Mono output**: Generates a single control signal (0.0 to 1.0) on channel 0, triggered by MIDI.
 - **Poly mode**: 8 gate CV inputs (ch0-7) drive 8 independent ADSR instances; outputs 8 per-voice envelopes (ch0-7).
+- **Smoothing**: Sustain is smoothed over 20 ms (a block at a time — `juce::ADSR` only takes parameters through `setParameters`). It is the one stage that is a *level*: `juce::ADSR` emits it verbatim while a note is held, so an automated step steps every destination. Attack/Decay/Release are ramp *rates* and are deliberately not smoothed.
 - **Uses**: Modulation of VCA gain, Filter cutoff, or Oscillator Level.
 
 ## Envelope Follower Module
@@ -296,6 +301,7 @@ Hand-played MIDI rarely repeats a pitch inside an envelope's attack; **machine-g
 - **S&H Glide**: On each phase wrap a new random value is drawn; `Glide > 0` ramps to it over up to 0.5 s using `juce::LinearSmoothedValue`.
 - **Retrig**: A MIDI Note On resets the phase to 0.0 when `Retrig` is enabled.
 - **Output**: Single CV channel (ch0). Pushes to `VisualBuffer` for scope display.
+- **Smoothing**: Level is smoothed over 10 ms per sample — it scales the emitted CV, so a step there steps every destination downstream. Rate is a frequency (phase-continuous) and Glide is read only at an S&H step edge, so neither is smoothed.
 - **Width**: SINGLE (280 px). See [docs/layout.md](layout.md).
 
 ## Sequencer Module
@@ -337,6 +343,7 @@ Hand-played MIDI rarely repeats a pitch inside an envelope's attack; **machine-g
     - `Level` (0.0–1.0, default 1.0) — output scaling.
     - `Offset` (-1.0–1.0, default 0.0) — output offset; use +0.5 with Level 0.5 for a unipolar 0–1 CV.
 - **Output**: bipolar CV on ch0, clamped to [-1, 1].
+- **Smoothing**: Level and Offset are smoothed over 10 ms per sample — they scale and shift the emitted CV. Rate (a clock frequency), Slew (a one-pole coefficient) and Threshold (a comparator level that only decides *whether* an edge fires) cannot put a step in the output and are deliberately read raw.
 - **Why `Source`/`Clock` are explicit choices**: the module deliberately does *not* infer "is anything patched in?" from channel activity. A gate signal sits at 0 most of the time and a slow LFO crosses zero, so activity detection misfires. Defaults (Internal clock + Random source) make the module produce stepped random CV the moment it is dropped on the canvas, with nothing patched.
 - **Trigger detection**: a Schmitt trigger. It arms when the Trigger input rises above `Threshold` and only re-arms once the signal falls a fixed `kTriggerHysteresis` (0.05) *below* it. Gate state is carried across block boundaries — a gate that stays high spanning two blocks is one edge, not two. The hysteresis is deliberately not user-exposed (see the Module Development Guide on not crowding modules with knobs); without it, any signal loitering near the threshold — a slow sine, anything with dither on it — would retrigger every sample.
 - **Trigger meter**: `Source/UI/TriggerMeterComponent.h` draws the live Trigger level as a bipolar bar with a marker at the effective threshold, so the threshold can be set by eye against the real signal. The module publishes `getTriggerLevel()` / `getEffectiveThreshold()` / `isTriggerHigh()` / `getTriggerCount()` as atomics for it. The meter is tracked **whichever clock is selected**, so the threshold can be dialled in before switching to External.

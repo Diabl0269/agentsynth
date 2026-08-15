@@ -27,6 +27,7 @@ add_executable(Tests
     ModuleBaseTests.cpp
     VisualBufferTests.cpp
     AntiClickTests.cpp
+    AutomationZipperTests.cpp
     MidiKeyboardModuleTests.cpp
     VCAModuleTests.cpp
     LFOModuleTests.cpp

@@ -27,8 +27,13 @@ public:
 
         smoothedRate.reset(sampleRate, 0.05);
         smoothedDepth.reset(sampleRate, 0.005);
+        // Centre Delay is added straight onto the modulated delay-line read position inside
+        // juce::dsp::Chorus, so a per-block step jumps the read head by (delta_ms * fs / 1000)
+        // samples — an audible discontinuity. 50 ms, matching Rate.
+        smoothedCentreDelay.reset(sampleRate, 0.05);
         smoothedRate.setCurrentAndTargetValue(*rateParam);
         smoothedDepth.setCurrentAndTargetValue(*depthParam);
+        smoothedCentreDelay.setCurrentAndTargetValue(*centreDelayParam);
         prepareOutputLevel(sampleRate);
     }
 
@@ -73,13 +78,16 @@ public:
 
         smoothedRate.setTargetValue(*rateParam);
         smoothedDepth.setTargetValue(*depthParam);
+        smoothedCentreDelay.setTargetValue(*centreDelayParam);
 
         float rate = juce::jlimit(0.05f, 5.0f, smoothedRate.getCurrentValue() + cvRateVal * 2.5f);
         float depth = juce::jlimit(0.0f, 1.0f, smoothedDepth.getCurrentValue() + cvDepthVal);
 
         flanger.setRate(rate);
         flanger.setDepth(depth);
-        flanger.setCentreDelay(std::max(1.0f, (float)*centreDelayParam));
+        flanger.setCentreDelay(std::max(1.0f, smoothedCentreDelay.getCurrentValue()));
+        // Feedback and Mix are already ramped inside juce::dsp::Chorus (a per-channel
+        // SmoothedValue and a DryWetMixer), so smoothing them again here would only add lag.
         flanger.setFeedback(*feedbackParam);
         flanger.setMix(*mixParam);
 
@@ -96,6 +104,7 @@ public:
 
         smoothedRate.skip(numSamples);
         smoothedDepth.skip(numSamples);
+        smoothedCentreDelay.skip(numSamples);
     }
 
     juce::String getInputPortLabel(int i) const override {
@@ -113,6 +122,7 @@ private:
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedRate;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedDepth;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedCentreDelay;
 
     juce::AudioParameterFloat* rateParam;
     juce::AudioParameterFloat* depthParam;

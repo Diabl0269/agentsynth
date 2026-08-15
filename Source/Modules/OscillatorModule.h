@@ -40,6 +40,12 @@ public:
             voices[v].smoothedFreq.reset(sampleRate, 0.005);
             voices[v].smoothedFreq.setCurrentAndTargetValue(initFreq);
         }
+
+        // Level is a straight output gain, so an automated step is a click. 10 ms is the same
+        // anti-click ramp ModuleBase::prepareOutputLevel uses. Snapped to the current knob value
+        // so a static render is bit-identical to the un-smoothed version.
+        smoothedLevel.reset(sampleRate, 0.01);
+        smoothedLevel.setCurrentAndTargetValue(levelParam->get());
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -198,6 +204,15 @@ private:
 
     VoiceState voices[MAX_VOICES];
 
+    /** Fills levelRamp[0..len) with this block's smoothed Level. Poly mode renders one voice
+        after another, so the ramp has to be materialised once up front rather than pulled from
+        the smoother inside a per-voice loop (which would advance it eight times per block). */
+    void fillLevelRamp(int len) {
+        smoothedLevel.setTargetValue(levelParam->get());
+        for (int i = 0; i < len; ++i)
+            levelRamp[(size_t)i] = smoothedLevel.getNextValue();
+    }
+
     // -------------------------------------------------------------------------
     // Mono mode processing (voice 0 only, MIDI driven)
     // -------------------------------------------------------------------------
@@ -277,7 +292,13 @@ private:
         auto* ch0 = buffer.getWritePointer(0);
 
         int unisonCount = unisonParam->get();
+        // Detune is a frequency RATIO, not a level: a step in it changes each unison
+        // oscillator's phase increment while the phase itself stays continuous, so it
+        // cannot produce a discontinuity. Deliberately not smoothed.
         float detuneCents = detuneParam->get();
+
+        const int levelLen = std::max(1, std::min(numSamples, 4096));
+        fillLevelRamp(levelLen);
 
         for (int i = 0; i < numSamples; ++i) {
             float baseFreq = voices[0].smoothedFreq.getNextValue();
@@ -325,7 +346,7 @@ private:
                 voices[0].previousWaveform = waveform;
             }
 
-            float level = levelParam->get();
+            float level = levelRamp[(size_t)std::min(i, levelLen - 1)];
             if (cvLevelCh)
                 level = juce::jlimit(0.0f, 1.0f, level + cvLevelCh[i]);
 
@@ -431,6 +452,9 @@ private:
 
         bool pitchMod = hasOctCV || hasCoarseCV || hasFineCV;
 
+        // Materialised once, before the voice loop — see fillLevelRamp.
+        fillLevelRamp(ns);
+
         // Clear output channels 0..getTotalNumOutputChannels()-1 (==14). This range includes the
         // shared mod-CV input channels (8-12 poly), but clearing them here is SAFE because:
         // (a) those CVs were already cached above (into *CVCache) before this clear; and
@@ -472,8 +496,8 @@ private:
             float freq = juce::jlimit(20.0f, 20000.0f, basePitchHz);
             float baseDt = freq / (float)currentSampleRate;
             int wf = waveformParam->getIndex();
-            float level = levelParam->get();
             int unisonCount = unisonParam->get();
+            // See processMonoMode: Detune is a ratio, phase-continuous, deliberately unsmoothed.
             float detuneCents = detuneParam->get();
 
             if (!pitchMod) {
@@ -522,6 +546,7 @@ private:
                     if (hasWaveCV && voices[v].crossfadeSamplesRemaining > 0)
                         --voices[v].crossfadeSamplesRemaining;
 
+                    const float level = levelRamp[(size_t)idx];
                     float lv = hasLevelCV ? juce::jlimit(0.0f, 1.0f, level + levelCVCache[idx]) : level;
                     output[s] = (sample / (float)unisonCount) * lv;
                 }
@@ -585,6 +610,7 @@ private:
                     if (hasWaveCV && voices[v].crossfadeSamplesRemaining > 0)
                         --voices[v].crossfadeSamplesRemaining;
 
+                    const float level = levelRamp[(size_t)idx];
                     float lv = hasLevelCV ? juce::jlimit(0.0f, 1.0f, level + levelCVCache[idx]) : level;
                     output[s] = (sample / (float)unisonCount) * lv;
                 }
@@ -681,6 +707,9 @@ private:
     std::array<float, 4096> coarseCVCache{};
     std::array<float, 4096> fineCVCache{};
     std::array<float, 4096> levelCVCache{};
+    std::array<float, 4096> levelRamp{};
+
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedLevel;
 
     juce::AudioParameterChoice* waveformParam = nullptr;
     juce::AudioParameterInt* octaveParam = nullptr;

@@ -25,6 +25,11 @@ public:
 
         smoothedInputGain.reset(sampleRate, 0.005);
         smoothedInputGain.setCurrentAndTargetValue(*inputGainParam);
+        // Threshold is where the gain computer starts pulling the signal down, so stepping it
+        // steps the applied gain reduction. Advanced a block at a time (juce::dsp::Limiter only
+        // takes it through setThreshold), snapped at prepare so a static render is unchanged.
+        smoothedThreshold.reset(sampleRate, 0.01);
+        smoothedThreshold.setCurrentAndTargetValue(*thresholdParam);
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -44,8 +49,12 @@ public:
             return;
 
         smoothedInputGain.setTargetValue(*inputGainParam);
-        limiter.setThreshold(*thresholdParam);
+        smoothedThreshold.setTargetValue(*thresholdParam);
+        limiter.setThreshold(smoothedThreshold.getCurrentValue());
+        // Release is a detector time constant: stepping it changes how fast gain recovers, never
+        // the current gain. Deliberately not smoothed.
         limiter.setRelease(*releaseParam);
+        smoothedThreshold.skip(numSamples);
 
         // Apply input gain per-sample (smoothed)
         for (int i = 0; i < numSamples; ++i) {
@@ -70,6 +79,7 @@ private:
     juce::dsp::Limiter<float> limiter;
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedInputGain;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedThreshold;
 
     juce::AudioParameterFloat* thresholdParam;
     juce::AudioParameterFloat* releaseParam;
