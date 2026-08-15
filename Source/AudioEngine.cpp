@@ -14,6 +14,8 @@
 #include "Modules/VCAModule.h"
 #include "PresetManager.h"
 #include "Timeline/MidiRecorder.h"
+#include "Timeline/TimelineDoc.h"
+#include <algorithm>
 #include <bit>
 #include <map>
 #include <set>
@@ -83,8 +85,66 @@ void AudioEngine::shutdown() {
     // Last, after the device callback is gone and the graph is empty: nothing can call
     // beginAudioBlock() any more, which is the precondition reclaimAllUnsafe() demands. Ungated by
     // SYNTH_ENABLE_TIMELINE — with the flag off nothing was ever published, so this frees nothing
-    // and costs a null check.
+    // and costs a null check. The binding tables go too: each holds refcounted Node::Ptrs, so
+    // leaving them until the destructor would keep the just-cleared graph's processors alive for
+    // no reason.
     timelineSnapshots.reclaimAllUnsafe();
+    automationBindings_.reclaimAllUnsafe();
+}
+
+void AudioEngine::publishTimeline(const synth::TimelineDoc& doc) {
+#if SYNTH_ENABLE_TIMELINE
+    auto snapshot = synth::TimelineSnapshot::buildFrom(doc);
+
+    // The snapshot's address is stable across the move into publish() (unique_ptr moves the
+    // pointer, not the object), so the binding table can point at it before it is handed over.
+    const synth::TimelineSnapshot* snapshotPtr = snapshot.get();
+
+    auto table = std::make_unique<synth::AutomationBindingTable>();
+    table->snapshot = snapshotPtr;
+
+    if (snapshotPtr != nullptr && !snapshotPtr->lanes.empty()) {
+        // uuid -> node, built once: resolving lane-by-lane against getNodes() would be
+        // O(lanes * nodes) on a doc that can carry hundreds of lanes.
+        std::map<juce::String, juce::AudioProcessorGraph::Node*> nodesByUuid;
+        for (auto* node : mainProcessorGraph.getNodes()) {
+            if (node == nullptr)
+                continue;
+            const juce::String uuid = node->properties["uuid"].toString();
+            if (uuid.isNotEmpty())
+                nodesByUuid.emplace(uuid, node);
+        }
+
+        table->bindings.reserve(snapshotPtr->lanes.size());
+
+        for (std::size_t laneIndex = 0; laneIndex < snapshotPtr->lanes.size(); ++laneIndex) {
+            const auto& lane = snapshotPtr->lanes[laneIndex];
+            if (lane.nodeUuid[0] == '\0' || lane.paramId[0] == '\0')
+                continue; // never bound to anything — not orphaned, just unbound
+
+            const auto found = nodesByUuid.find(juce::String(lane.nodeUuid));
+            if (found == nodesByUuid.end())
+                continue; // orphaned: the lane is retained in the doc (TL2-6) but automates nothing
+
+            auto* param = findParameterByID(found->second->getProcessor(), juce::String(lane.paramId));
+            if (param == nullptr)
+                continue; // the node exists but no longer has that parameter
+
+            synth::AutomationBindingTable::Binding binding;
+            binding.laneIndex = static_cast<int>(laneIndex);
+            binding.node = found->second; // refcounted — see AutomationApplier.h
+            binding.param = param;
+            table->bindings.push_back(std::move(binding));
+        }
+    }
+
+    // Snapshot FIRST, bindings SECOND. The whole coherence argument in AutomationApplier.h rests on
+    // this order — do not reorder these two lines.
+    timelineSnapshots.publish(std::move(snapshot));
+    automationBindings_.publish(std::move(table));
+#else
+    juce::ignoreUnused(doc);
+#endif
 }
 
 void AudioEngine::ensureMidiDeviceOpen(const juce::String& deviceName) {
@@ -469,6 +529,14 @@ void AudioEngine::setTransportEnabled(bool enabled) noexcept {
 
 bool AudioEngine::isTransportEnabled() const noexcept { return transportEnabled_.load(std::memory_order_relaxed); }
 
+void AudioEngine::setAutomationSlicingEnabled(bool enabled) noexcept {
+    automationSlicingEnabled_.store(enabled, std::memory_order_relaxed);
+}
+
+bool AudioEngine::isAutomationSlicingEnabled() const noexcept {
+    return automationSlicingEnabled_.load(std::memory_order_relaxed);
+}
+
 void AudioEngine::createDefaultPatch() {
     mainProcessorGraph.clear();
     using AudioGraphIOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
@@ -575,21 +643,47 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
 
 void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
 #if SYNTH_ENABLE_TIMELINE
+    // TL4-2 stage 2. Off by default, in which case this is one pass over the whole buffer and the
+    // behaviour is byte-identical to what it was before slicing existed. The scratch check is a
+    // belt-and-braces fallback: a callback arriving with more channels than prepare() sized for
+    // would otherwise have to allocate, and allocating here is not allowed.
+    const int numChannels = buffer.getNumChannels();
+    const bool canSlice = numChannels > 0 && buffer.getNumSamples() > kAutomationSliceSamples &&
+                          static_cast<std::size_t>(numChannels) <= sliceChannelPointers_.size();
+
+    if (automationSlicingEnabled_.load(std::memory_order_relaxed) && canSlice)
+        renderSliced(buffer, midiMessages);
+    else
+        renderPass(buffer, midiMessages);
+#else
+    renderPass(buffer, midiMessages);
+#endif
+
+    // Zero-fill AFTER the graph has run (and after every slice, not per slice) so sequencers /
+    // LFOs / envelopes keep advancing.
+    if (masterMuted_.load(std::memory_order_relaxed))
+        buffer.clear();
+}
+
+void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
+#if SYNTH_ENABLE_TIMELINE
     // The one clock site: both the standalone device callback and the hosted processBlock funnel
-    // through here, so the transport advances exactly once per block in either mode. Must run
-    // before the graph so every node renders against this block's position. Gated on the runtime
+    // through here, so the transport advances exactly once per render pass in either mode. Must run
+    // before the graph so every node renders against this pass's position. Gated on the runtime
     // setting too (TL1-9): disabling it mid-session simply freezes the transport in place.
     if (transportEnabled_.load(std::memory_order_relaxed))
         transport.tick(buffer.getNumSamples());
 
-    // Open this block's timeline snapshot (TL2-2), once per callback exactly like the tick, and
-    // park it on the transport so every node can reach it through the playhead it already has
-    // (TL3-1 — see TransportService::setCurrentTimelineSnapshot). Exactly one beginAudioBlock()
-    // per callback is the epoch-reclamation contract; the borrowed reference must not outlive
-    // this block, which is why the transport's copy is overwritten at the top of the next one.
-    // Deliberately NOT gated on transportEnabled_: freezing the transport is a musical decision,
-    // and stalling reclamation with it would let retired snapshots pile up for as long as the
-    // setting is off.
+    // Open this pass's timeline snapshot (TL2-2), exactly like the tick, and park it on the
+    // transport so every node can reach it through the playhead it already has (TL3-1 — see
+    // TransportService::setCurrentTimelineSnapshot). Exactly one beginAudioBlock() per RENDER PASS
+    // is the epoch-reclamation contract (it used to read "per callback"; with slicing on, a
+    // callback is several passes — the contract is unchanged, only the unit is named more
+    // precisely, and slicing only makes the epoch advance faster). The borrowed reference must not
+    // outlive this pass, which is why the transport's copy is overwritten at the top of the next
+    // one. Deliberately NOT gated on transportEnabled_: freezing the transport is a musical
+    // decision, and stalling reclamation with it would let retired snapshots pile up for as long as
+    // the setting is off.
     transport.setCurrentTimelineSnapshot(&timelineSnapshots.beginAudioBlock());
 
     // TL3-3: the single MIDI-recording capture point. `midiMessages` here is already the buffer
@@ -602,13 +696,53 @@ void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
     // source also has an ExternalMidi node bound to it.
     if (auto* recorder = midiCaptureSink_.load(std::memory_order_relaxed))
         recorder->captureBlock(midiMessages, transport.getCurrentBlockInfo());
+
+    // TL4-2: push this pass's automation values into their bound parameters, after the tick (so the
+    // beat position is this pass's) and before the graph (so every node reads the automated value
+    // in the same pass it was written).
+    automationApplier_.applyBlock(automationBindings_.beginAudioBlock(), transport.getCurrentBlockInfo());
 #endif
 
     mainProcessorGraph.processBlock(buffer, midiMessages);
+}
 
-    // Zero-fill AFTER processBlock so sequencers / LFOs / envelopes keep advancing.
-    if (masterMuted_.load(std::memory_order_relaxed))
-        buffer.clear();
+void AudioEngine::renderSliced(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
+    const int numChannels = buffer.getNumChannels();
+    const int totalSamples = buffer.getNumSamples();
+
+    for (int offset = 0; offset < totalSamples; offset += kAutomationSliceSamples) {
+        const int sliceLength = std::min(kAutomationSliceSamples, totalSamples - offset);
+
+        for (int channel = 0; channel < numChannels; ++channel)
+            sliceChannelPointers_[static_cast<std::size_t>(channel)] = buffer.getWritePointer(channel) + offset;
+
+        // A view, not a copy: this ctor wraps the caller's channel pointers and allocates nothing.
+        juce::AudioBuffer<float> sliceView(sliceChannelPointers_.data(), numChannels, sliceLength);
+
+        // Re-base this slice's MIDI to slice-relative positions. clear() keeps the storage
+        // ensureSize() reserved in prepare, and the (data, numBytes, position) overload of addEvent
+        // avoids constructing a juce::MidiMessage (which would allocate for a sysex).
+        sliceMidi_.clear();
+        for (const auto metadata : midiMessages) {
+            if (metadata.samplePosition >= offset && metadata.samplePosition < offset + sliceLength)
+                sliceMidi_.addEvent(metadata.data, metadata.numBytes, metadata.samplePosition - offset);
+        }
+
+        renderPass(sliceView, sliceMidi_);
+    }
+}
+
+void AudioEngine::prepareSliceScratch(int numChannels, int blockSize) {
+    // Message thread (both prepare paths). Sized with headroom so a host that hands us a wider
+    // buffer than it declared still takes the sliced path instead of silently falling back.
+    const int channels = std::max(numChannels, 2) + 2;
+    sliceChannelPointers_.assign(static_cast<std::size_t>(channels), nullptr);
+
+    // Worst case for one slice is every event in the block landing inside it. juce::MidiBuffer
+    // stores 4 bytes of header + the message bytes per event; 16 bytes per event is generous for
+    // the note/CC traffic this path sees, and ensureSize is a no-op once the storage is big enough.
+    sliceMidi_.clear();
+    sliceMidi_.ensureSize(static_cast<std::size_t>(std::max(blockSize, kAutomationSliceSamples)) * 16u);
 }
 
 void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device) {
@@ -619,6 +753,8 @@ void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device) {
         // Before the graph: nodes read the playhead from their first prepared block onwards, so the
         // transport must already be on the device's sample rate when they do.
         transport.prepare(device->getCurrentSampleRate(), device->getCurrentBufferSizeSamples());
+        prepareSliceScratch(device->getActiveOutputChannels().countNumberOfSetBits(),
+                            device->getCurrentBufferSizeSamples());
         mainProcessorGraph.prepareToPlay(device->getCurrentSampleRate(), device->getCurrentBufferSizeSamples());
     }
 }
@@ -634,6 +770,7 @@ void AudioEngine::prepareForHost(double sampleRate, int blockSize, int numInputC
     // Before the graph, for the same reason as audioDeviceAboutToStart: the musical position is
     // preserved across the rate change, the sample position is re-derived.
     transport.prepare(sampleRate, blockSize);
+    prepareSliceScratch(std::max(numInputChannels, numOutputChannels), blockSize);
     mainProcessorGraph.prepareToPlay(sampleRate, blockSize);
 }
 

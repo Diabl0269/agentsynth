@@ -37,6 +37,8 @@ add_executable(Tests
     TimelineClipEditingTests.cpp
     TimelineSnapshotTests.cpp
     AutomationKernelTests.cpp
+    AutomationApplierTests.cpp
+    AutomationSlicingTests.cpp
     TimelineUndoTests.cpp
     TimelineReconciliationTests.cpp
     TimelineMidiSourceTests.cpp

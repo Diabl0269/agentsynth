@@ -4,6 +4,21 @@ This document describes the modulation architecture: how routing is modeled, how
 
 ---
 
+## Automation writes the base value; CV stacks on top
+
+Timeline automation (TL4-2) and CV modulation are **not** competing for the same slot, and neither one is layered on top of the other by any code that knows about both — the layering is a consequence of how modules already work.
+
+- **Automation is a very precise knob turn.** `synth::AutomationApplier` stores the lane's value straight into the target `juce::RangedAudioParameter` (`setValue`, denormalised → normalised, clamped into the parameter's own range) once per render pass, before the graph runs. Nothing distinguishes that store from the user dragging the knob: it changes the parameter's **base value**, permanently, until something else changes it.
+- **CV is added per sample, on top of whatever the base value currently is.** Every module reads `param->get()` fresh at the top of its own `processBlock` and then adds the CV it finds on the corresponding input channel (scaled by the attenuverter on the cable). It never writes the parameter back.
+- **So the two compose without either knowing about the other**: automation moves the base, CV wiggles around wherever the base happens to be. Automating a filter's cutoff while an envelope also modulates it gives "the envelope, riding the automated curve" — which is what a user drawing an automation lane on a modulated parameter expects.
+
+Two consequences worth stating explicitly:
+
+- **Automation is visible to the user as a moved knob**, because it really is one. That is why the applier deliberately does *not* call `setValueNotifyingHost` — pushing a listener notification per automated parameter per block from the audio thread is the wrong mechanism for that; UI reflection is a message-thread concern (TL4-5).
+- **Automation only writes while the transport is playing.** Stopped, the knob is the user's again and the applier writes nothing, so a paused session never fights a mouse drag. CV, by contrast, keeps flowing whenever its source module is producing signal — a stopped transport does not silence an LFO.
+
+---
+
 ## Routing Kinds
 
 Every CV connection in the graph resolves to one of three routing kinds, defined in `AudioEngine.h`:

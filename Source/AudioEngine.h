@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Modules/ModuleBase.h"
+#include "Timeline/AutomationApplier.h"
+#include "Timeline/EpochExchange.h"
 #include "Timeline/TimelineSnapshotExchange.h"
 #include "Transport/TransportService.h"
 #include <atomic>
@@ -9,10 +11,12 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_core/juce_core.h>
+#include <vector>
 
 namespace synth {
 class MidiRecorder; // Forward declaration (Source/Timeline/MidiRecorder.h)
-}
+class TimelineDoc;  // Forward declaration (Source/Timeline/TimelineDoc.h)
+} // namespace synth
 
 class AudioEngine
     : public juce::AudioIODeviceCallback
@@ -85,6 +89,44 @@ public:
     // the clock. TL3's Track In modules read the published snapshot through this accessor.
     synth::TimelineSnapshotExchange& getTimelineSnapshots() noexcept { return timelineSnapshots; }
     const synth::TimelineSnapshotExchange& getTimelineSnapshots() const noexcept { return timelineSnapshots; }
+
+    // TL4-2: the automation binding table's hand-off — the resolved "lane -> live parameter" list
+    // the applier walks each block. Published by publishTimeline() below; exposed mainly so tests
+    // can inspect what resolved.
+    synth::EpochExchange<synth::AutomationBindingTable>& getAutomationBindings() noexcept {
+        return automationBindings_;
+    }
+    const synth::EpochExchange<synth::AutomationBindingTable>& getAutomationBindings() const noexcept {
+        return automationBindings_;
+    }
+
+    // TL4-2, MESSAGE THREAD: the one call that hands a TimelineDoc to the audio thread. Builds the
+    // snapshot, resolves every automation lane against the CURRENT graph, and publishes the
+    // snapshot FIRST and the binding table SECOND — that order is what makes a table's snapshot
+    // pointer at most one publish behind the snapshot exchange (see AutomationApplier.h's lifetime
+    // argument).
+    //
+    // Callers MUST re-call this after any graph change that adds, removes or replaces nodes (undo /
+    // redo, patch apply, preset load, a module delete): bindings are resolved once, here, and a
+    // stale table keeps automating the nodes it already resolved — safe, because each binding holds
+    // a refcounted Node::Ptr, but a node added since the last publish is not automated until the
+    // next one. Re-calling it with an unchanged doc is cheap and always correct.
+    //
+    // A no-op in a SYNTH_ENABLE_TIMELINE=0 build.
+    void publishTimeline(const synth::TimelineDoc& doc);
+
+    // TL4-2 stage 2: run the whole per-block sequence (transport tick, snapshot open, MIDI capture,
+    // automation apply, graph render) once per 64-sample slice instead of once per callback, so
+    // block-rate automation becomes control-rate automation.
+    //
+    // Default OFF, and it must stay that way until measured per patch: slicing is not audio-neutral.
+    // Time-invariant processing doesn't care about block size, but anything with a per-block LFO
+    // update or an FFT hop (Chorus, Phaser, PitchShifter …) renders audibly differently at 64
+    // samples than at 512 — see AutomationSlicingTest.SliceParityTimeInvariantChain, which measures
+    // exactly that difference. It also multiplies the per-block overhead (graph traversal, playhead
+    // re-application, transport tick) by blockSize/64.
+    void setAutomationSlicingEnabled(bool enabled) noexcept;
+    bool isAutomationSlicingEnabled() const noexcept;
 
     // TL3-3: registers the sink that records external MIDI into timeline clips. Null by default —
     // capture is then a no-op. The recorder is called from exactly one site, renderNextBlock's
@@ -167,11 +209,20 @@ private:
     // the exchange from the engine, and reverse-order destruction must take the graph's nodes down
     // first. Its own destructor reclaims everything published.
     synth::TimelineSnapshotExchange timelineSnapshots;
+    // TL4-2. Declared before the graph for the same reverse-destruction-order reason, and with one
+    // extra consequence worth naming: a published binding table holds refcounted Node::Ptrs, so a
+    // table outliving the graph would keep those nodes' processors alive until it is freed. That is
+    // safe (a juce::AudioProcessorGraph::Node references nothing back), and shutdown() reclaims the
+    // exchange explicitly anyway, so it never happens in practice.
+    synth::EpochExchange<synth::AutomationBindingTable> automationBindings_;
+    synth::AutomationApplier automationApplier_;
     juce::AudioProcessorGraph mainProcessorGraph;
     juce::AudioProcessorPlayer processorPlayer;
 
     std::atomic<bool> masterMuted_{false};
     std::atomic<bool> transportEnabled_{true};
+    // TL4-2 stage 2. Off by default — see setAutomationSlicingEnabled().
+    std::atomic<bool> automationSlicingEnabled_{false};
     // TL3-3: borrowed, never owned. Set by setMidiCaptureSink(); read once per callback in
     // renderNextBlock. Null default means capture is a no-op with no caller having to check.
     std::atomic<synth::MidiRecorder*> midiCaptureSink_{nullptr};
@@ -182,6 +233,31 @@ private:
     // hosted processBlock funnel through here so master-mute semantics (zero-fill AFTER the graph
     // runs, so sequencers / LFOs / envelopes keep advancing) can never drift between the two.
     void renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages);
+
+    // One complete render pass over `buffer`: transport tick, timeline snapshot open, MIDI capture,
+    // automation apply, then the graph. With slicing off this runs once per callback over the whole
+    // buffer; with slicing on it runs once per 64-sample slice. Everything the "once per callback"
+    // contracts used to say is really "once per render pass" — that is what this function is.
+    void renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages);
+
+    // TL4-2 stage 2: renderPass() per kAutomationSliceSamples-sample slice, over views into
+    // `buffer` and per-slice MIDI re-based to slice-relative sample positions. Allocation-free —
+    // the channel-pointer array and the MIDI scratch are sized in prepare (see prepareSliceScratch).
+    void renderSliced(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages);
+
+    // Sizes the slicing scratch for a given channel count / block size. Called from both prepare
+    // paths (audioDeviceAboutToStart, prepareForHost) — never from the audio callback.
+    void prepareSliceScratch(int numChannels, int blockSize);
+
+    // Control-rate slice length. 64 samples is ~1.45 ms at 44.1 kHz — finer than any knob gesture
+    // and coarse enough that the per-slice graph-traversal overhead stays bounded.
+    static constexpr int kAutomationSliceSamples = 64;
+
+    // Preallocated slicing scratch. `sliceChannelPointers_` backs the juce::AudioBuffer view
+    // constructed per slice (the channel-pointer ctor takes no ownership and allocates nothing);
+    // `sliceMidi_` is refilled per slice with ensureSize()'d storage that clear() keeps.
+    std::vector<float*> sliceChannelPointers_;
+    juce::MidiBuffer sliceMidi_;
 
     juce::MidiMessageCollector midiMessageCollector;
     std::vector<std::unique_ptr<juce::MidiInput>> midiInputs;

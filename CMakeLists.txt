@@ -126,7 +126,10 @@ add_library(Core STATIC
     Source/Transport/TransportService.cpp
     Source/Transport/TransportService.h
     # Timeline
+    Source/Timeline/AutomationApplier.cpp
+    Source/Timeline/AutomationApplier.h
     Source/Timeline/AutomationKernel.h
+    Source/Timeline/EpochExchange.h
     Source/Timeline/MidiClipFile.cpp
     Source/Timeline/MidiClipFile.h
     Source/Timeline/MidiRecorder.cpp
@@ -137,7 +140,6 @@ add_library(Core STATIC
     Source/Timeline/TimelineReconciler.h
     Source/Timeline/TimelineSnapshot.cpp
     Source/Timeline/TimelineSnapshot.h
-    Source/Timeline/TimelineSnapshotExchange.cpp
     Source/Timeline/TimelineSnapshotExchange.h
     # Modules
     Source/Modules/ModuleBase.h
