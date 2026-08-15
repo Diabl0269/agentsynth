@@ -21,24 +21,21 @@ namespace synth {
  *
  * ### Call sites
  *
- * Today, only ProjectBundle::load calls this — right after the trusted applyJSONToGraph and the
- * timeline's own fromVar, so a freshly opened project shows correct orphan flags before the user
- * touches anything.
+ * ProjectBundle::load calls this right after the trusted applyJSONToGraph and the timeline's own
+ * fromVar, so a freshly opened project shows correct orphan flags before the user touches anything.
  *
- * Once the app owns a live TimelineDoc alongside its graph (TL3+), this must ALSO run after
- * every one of AppUndoManager's graph-restoring choke points — anywhere a node can appear or
- * disappear is a place a binding can start or stop resolving:
- *  - After AIStateMapper::applyJSONToGraph (AI patch apply/merge, and the clearExisting=true
- *    fallback SnapshotAction::restore() takes when the node-preserving path below declines).
- *  - After AIStateMapper::applySnapshotPreservingNodes (SnapshotAction's preferred undo/redo
- *    path — the node-preserving restore itself keeps a kept node's "uuid" untouched and adopts
- *    the snapshot's uuid onto every re-created node, but a node the snapshot doesn't contain is
- *    still gone, and anything bound to it is now orphaned).
- *  - After any direct node delete outside the undo manager entirely (a "delete module" gesture
- *    that doesn't go through recordStructuralChange/recordCombinedChange).
- *
- * None of those call sites exist yet — there is no live TimelineDoc wired into the running app
- * today — which is why this struct's only current caller is ProjectBundle::load.
+ * TL5-3 wired up the rest: MainComponent owns the running app's live TimelineDoc and calls this
+ * from every place a node can appear or disappear, because each of those is a place a binding can
+ * start or stop resolving. The definitive list lives in docs/architecture.md ("App wiring (TL5-3)")
+ * — keep the two in step. In outline:
+ *  - MainComponent::reconcileTimelineAfterGraphChange(), from preset load, factory-preset load, New
+ *    Patch, .agsproj open and AIIntegrationService's post-apply notification (which also covers
+ *    AIStateMapper::applyJSONToGraph's undo/redo path).
+ *  - AppUndoManager::setRestoreHooks' afterRestore, around EVERY undo/redo restore — the
+ *    node-preserving path (applySnapshotPreservingNodes) as well as the clearExisting=true
+ *    fallback, and timeline-only restores too (fromVar always comes back with orphaned == false).
+ *  - GraphEditor::onGraphStructureChanged, the catch-all for a direct node delete that goes through
+ *    recordStructuralChange rather than a restore.
  */
 struct TimelineReconciler {
     /**

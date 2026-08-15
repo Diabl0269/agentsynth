@@ -2701,6 +2701,28 @@ juce::Point<int> GraphEditor::resolvePlacement(juce::Point<int> desired, int w, 
     return synth::LayoutUtil::findFreeSlot(snapped, w, h, boxes, selfId);
 }
 
+juce::Point<int> GraphEditor::findLeftEdgeSlotBelowModules(int w, int h) {
+    // Left edge, below everything: a Track In node is the head of a chain the user reads
+    // left-to-right, and stacking new ones downwards keeps successive tracks in track order rather
+    // than scattered wherever a free slot happened to be.
+    int left = synth::LayoutUtil::kArrangeOriginX;
+    int bottom = synth::LayoutUtil::kArrangeOriginY;
+    bool any = false;
+
+    for (auto* comp : content.getModules()) {
+        if (comp == nullptr)
+            continue;
+        const auto bounds = comp->getBounds();
+        left = any ? std::min(left, bounds.getX()) : bounds.getX();
+        bottom = any ? std::max(bottom, bounds.getBottom()) : bounds.getBottom();
+        any = true;
+    }
+
+    const juce::Point<int> desired(left, any ? bottom + synth::LayoutUtil::kArrangeOriginY
+                                             : synth::LayoutUtil::kArrangeOriginY);
+    return resolvePlacement(desired, w, h, juce::AudioProcessorGraph::NodeID{});
+}
+
 // static
 juce::Point<int> GraphEditor::computeDropFinalPosition(juce::Point<int> dropPoint, int w, int h,
                                                        const std::vector<synth::LayoutUtil::Box>& existingBoxes,

@@ -9,6 +9,8 @@
 #include "PresetManager.h"
 #include "ShortcutManager.h"
 #include "SnippetManager.h"
+#include "Timeline/AutomationRecorder.h"
+#include "Timeline/TimelineDoc.h"
 #include "UI/AIChatComponent.h"
 #include "UI/GraphEditor.h"
 #include "UI/ModuleLibraryComponent.h"
@@ -16,12 +18,14 @@
 #include "UI/Theme/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include "UI/TimelinePanelComponent.h"
+#include "UI/TimelineTrackHeaderComponent.h"
 #include "UI/ToolbarComponent.h"
 #include "UI/UIAnimation.h"
 #include "Update/UpdateManager.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <vector>
 
 class MainComponent
     : public juce::Component
@@ -29,7 +33,12 @@ class MainComponent
     , public juce::Timer
     , public juce::ApplicationCommandTarget
     , private juce::ChangeListener
-    , private synth::AIIntegrationService::Listener {
+    , private synth::AIIntegrationService::Listener
+    // TL5-3: the app owns the one live TimelineDoc, so it is also the thing that republishes it to
+    // the audio thread on every edit (timelineChanged) and the thing the track headers ask to
+    // create/re-bind/delete their Track In nodes (TrackHeaderHost).
+    , private synth::TimelineDoc::Listener
+    , private synth::ui::TrackHeaderHost {
 public:
     // Primary ctor: receives injected ThemeManager and LookAndFeel from Main.cpp.
     // provider is optional (nullptr → reads saved provider pref from appProperties).
@@ -107,6 +116,21 @@ public:
 #endif
     bool isTimelineConfiguredVisible() const { return isTimelineVisible; }
     synth::ui::TimelinePanelComponent& getTimelinePanel() { return timelinePanel; }
+    // TL5-3 test hooks. The doc and the recorder are real app state (not test-only objects), so
+    // these are plain accessors; the simulate*/…ForTest entry points below drive the same code
+    // paths the buttons and file dialogs do, minus the dialogs.
+    synth::TimelineDoc& getTimelineDoc() { return timelineDoc; }
+    synth::AutomationRecorder& getAutomationRecorder() { return automationRecorder; }
+    void simulateAddMidiTrackClick() {
+        if (timelinePanel.getAddTrackButton().onClick)
+            timelinePanel.getAddTrackButton().onClick();
+    }
+    /** Exactly what the Save dialog's callback runs: a name ending in `.agsproj` writes a project
+     *  bundle (graph + timeline), anything else writes a plain `.json` preset. */
+    void saveProjectForTest(const juce::File& file) { saveToFile(file); }
+    /** Exactly what the Open dialog's callback runs: an `.agsproj` bundle directory loads graph +
+     *  timeline, anything else loads a plain `.json` preset. */
+    bool openProjectForTest(const juce::File& file) { return openFromFile(file); }
     GraphEditor& getGraphEditor() { return graphEditor; }
     ToolbarComponent& getToolbar() { return toolbar; }
     StatusBarComponent& getStatusBar() { return statusBar; }
@@ -151,6 +175,73 @@ private:
     void aiPatchAboutToApply() override;
     void aiPatchApplied() override;
 
+    // ---- Timeline app wiring (TL5-3). Every body below is #if SYNTH_ENABLE_TIMELINE inside;
+    //      a flag-OFF build compiles them as no-ops so no call site needs its own #if. ----
+
+    // TimelineDoc::Listener — fired once per effective doc mutation. THE publish seam: republishes
+    // the timeline to the audio thread and rebuilds the automation recorder's lane bindings.
+    void timelineChanged(const synth::TimelineDoc& doc) override;
+
+    // Publishes the doc to the engine and re-resolves the recorder's per-lane parameter bindings
+    // against the CURRENT graph (the same uuid -> node -> parameter resolution
+    // AudioEngine::publishTimeline does for the applier's binding table).
+    void publishTimelineAndRebindRecorder();
+
+    // Reconciles every track/lane binding against the live graph after a graph change that happened
+    // outside a doc mutation (preset load, new patch, AI apply, undo/redo, bundle open). Publishes
+    // ONLY when the reconcile itself changed nothing — a reconcile that flips a flag is a doc
+    // mutation, so timelineChanged has already published by the time it returns.
+    void reconcileTimelineAfterGraphChange();
+
+    // The cheap half of the above, with no republish of its own: installed on
+    // GraphEditor::onGraphStructureChanged as the catch-all for graph edits that have no explicit
+    // post-apply site (a module deleted from the canvas). See the call site for why publishing
+    // there would be waste.
+    void reconcileTimelineBindingsOnly();
+
+    // RAII suspension of automation capture for the duration of a programmatic rewrite. Compiles to
+    // an empty object in a SYNTH_ENABLE_TIMELINE=OFF build, so call sites stay #if-free.
+    struct ProgrammaticApplyScope {
+        explicit ProgrammaticApplyScope(MainComponent& owner)
+#if SYNTH_ENABLE_TIMELINE
+            : guard(owner.automationRecorder)
+#endif
+        {
+            juce::ignoreUnused(owner);
+        }
+#if SYNTH_ENABLE_TIMELINE
+        synth::AutomationRecorder::ScopedProgrammaticApply guard;
+#endif
+    };
+
+    // ---- TrackHeaderHost (TL5-3) ----
+    std::vector<BindingOption> getAvailableTrackInNodes(synth::TrackId forTrack) override;
+    juce::String getNodeDisplayName(const juce::String& uuid) override;
+    void bindTrackTo(synth::TrackId track, const juce::String& uuid) override;
+    void createAndBindTrackInNode(synth::TrackId track) override;
+    void selectNodeInGraph(const juce::String& uuid) override;
+    void deleteTrack(synth::TrackId track) override;
+    void performTrackEdit(const std::function<void()>& mutation) override;
+    void addMidiTrack() override;
+
+    // Creates a "Track In" node with a fresh uuid at the canvas' left edge, wires it to the single
+    // MIDI instrument in the patch when there is exactly one, and returns its uuid (empty on
+    // failure). Called INSIDE the caller's undo transaction — it opens none of its own.
+    juce::String createTrackInNode();
+
+    // The graph node carrying this uuid, or nullptr.
+    juce::AudioProcessorGraph::Node* findNodeByUuid(const juce::String& uuid) const;
+
+    // ---- File handlers, minus the dialogs ----
+    // `file` is whatever the chooser returned; the .agsproj branch is what makes a bundle a bundle.
+    void saveToFile(const juce::File& file);
+    bool openFromFile(const juce::File& file);
+    // One choke point for "load factory preset N + keep the timeline in step", shared by the Load
+    // menu and simulateLoadFactoryPresetForTest.
+    void loadFactoryPresetAtIndex(int index);
+    // New Patch empties the timeline as well as the canvas, as its own undoable step.
+    void clearTimelineForNewPatch();
+
     // ChangeListener (juce::ChangeListener override) — called when ThemeManager broadcasts.
     // Implements the 3-step re-skin pass: applyTheme → sendLookAndFeelChangeMessage → repaint.
     void changeListenerCallback(juce::ChangeBroadcaster* source) override;
@@ -192,6 +283,18 @@ private:
     // owned fallbacks above).
     synth::theme::ThemeManager* themeManager{nullptr};
     synth::theme::AppLookAndFeel* lookAndFeel{nullptr};
+
+    // TL5-3: the app's ONE live timeline document, and the recorder that captures parameter
+    // gestures into its automation lanes.
+    //
+    // DECLARATION ORDER IS LOAD-BEARING — both are declared before `undoManager`, so both outlive
+    // it: a TimelineSnapshotAction sitting on the undo stack holds a reference to this doc (see
+    // AppUndoManager::recordTimelineChange), and members are destroyed in reverse declaration
+    // order. The recorder likewise must not be destroyed while an undo action could still commit
+    // into it. Both members exist in a SYNTH_ENABLE_TIMELINE=OFF build too (inert: nothing ever
+    // mutates the doc, and the recorder is never attached) — only the wiring is gated.
+    synth::TimelineDoc timelineDoc;
+    synth::AutomationRecorder automationRecorder;
 
     AppUndoManager undoManager;
 
@@ -249,6 +352,18 @@ private:
     // only the toolbar button/command/carve that could ever flip isTimelineVisible are gated.
     synth::ui::TimelinePanelComponent timelinePanel;
     bool isTimelineVisible = false;
+
+    // Open programmatic-apply scopes for the undo/redo restore span, as a stack rather than a
+    // single slot: an undo of a COMBINED (graph + timeline) change performs two restores, and the
+    // AppUndoManager hooks that push/pop these are called around each of them.
+    std::vector<std::unique_ptr<ProgrammaticApplyScope>> programmaticApplyScopes;
+
+    // The AI apply's span: opened in aiPatchAboutToApply, closed in aiPatchApplied. Kept in its own
+    // slot rather than on the stack above because the pair is NOT guaranteed balanced — an apply
+    // whose applyJSONToGraph fails never fires aiPatchApplied (see AIIntegrationService::applyNow)
+    // — and assigning a new scope over an abandoned one closes it, so a failed apply cannot leave
+    // capture suspended for longer than until the next apply.
+    std::unique_ptr<ProgrammaticApplyScope> aiApplyScope;
 
     // Cached narrow-mode state — applyToolbarIcons() re-clones icons ONLY on the transition.
     bool toolbarNarrowMode_{false};

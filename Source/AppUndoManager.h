@@ -138,6 +138,28 @@ public:
     bool recordCombinedChange(juce::AudioProcessorGraph& graph, synth::TimelineDoc& doc,
                               const std::function<void()>& mutation);
 
+    /**
+     * @brief Hooks fired around EVERY restore this manager performs on undo/redo — the graph's
+     *        SnapshotAction and the timeline's TimelineSnapshotAction alike.
+     *
+     * Distinct from the pre/post-restore lambdas SnapshotAction already carries: those are the
+     * GraphEditor's component lifecycle (detach before processors are freed, reconcile after), and
+     * the "pre" half of that pair deliberately fires LAZILY — a parameter-only undo frees nothing,
+     * so it never runs. These two always fire, in every case, which is what a caller needs for:
+     *
+     *  - `beforeRestore` — opening an AutomationRecorder::ScopedProgrammaticApply, so the parameter
+     *    writes a restore performs are never mistaken for a user's gesture. A parameter-only undo
+     *    is exactly the case that writes parameters, so hanging this off the lazy hook would miss it.
+     *  - `afterRestore` — re-running the timeline's binding reconciliation + publish. A graph
+     *    restore can strand a track/lane binding, and a timeline restore comes back out of
+     *    TimelineDoc::fromVar with every orphan flag reset to false (it is runtime-derived state),
+     *    so BOTH domains need the same pass.
+     *
+     * Installed once by the app-level owner (MainComponent). Actions capture this manager, not the
+     * callbacks, so hooks installed after an action was pushed still apply to it.
+     */
+    void setRestoreHooks(std::function<void()> beforeRestore, std::function<void()> afterRestore);
+
     // Convenience methods that delegate to undoManager
     bool canUndo() const { return undoManager.canUndo(); }
     bool canRedo() const { return undoManager.canRedo(); }
@@ -146,10 +168,25 @@ public:
     void clearUndoHistory() { undoManager.clearUndoHistory(); }
     void beginNewTransaction() { undoManager.beginNewTransaction(); }
 
+    // Called by the undoable actions this manager creates — never by anything else.
+    void fireBeforeRestore() {
+        if (beforeRestore_)
+            beforeRestore_();
+    }
+    void fireAfterRestore() {
+        if (afterRestore_)
+            afterRestore_();
+    }
+
 private:
     GraphEditor* graphEditor = nullptr;
     juce::UndoManager undoManager{30000000, 50}; // 30MB limit, 50 min transactions
     juce::var capturedBeforeState;
+
+    // See setRestoreHooks(). Safe for an action to hold `this` and call through these: every action
+    // lives inside `undoManager`, which is a member destroyed with this object.
+    std::function<void()> beforeRestore_;
+    std::function<void()> afterRestore_;
 
     // Builds a graph SnapshotAction wired to graphEditor's detach/reattach lifecycle — the
     // pre/post-restore lambda plumbing recordStructuralChange, pushSnapshotFromCapture, and the

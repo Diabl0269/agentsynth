@@ -1424,3 +1424,74 @@ zoom — a constant *pixel* distance per wheel unit, so the same physical gestur
 time zoomed in); Cmd+wheel (`mods.isCommandDown()`, already Ctrl-on-other-platforms via JUCE) zooms
 around the cursor. JUCE bubbles an unhandled wheel event from the ruler child up to the panel, so
 both regions share identical behaviour from one implementation.
+
+### TL5-3: track headers, binding chips, add-track
+
+`Source/UI/TimelineTrackHeaderComponent.h/.cpp` (`synth::ui::TimelineTrackHeaderComponent`) — one
+44 px row per `synth::Track`, living in the panel's track-header column. The column is a fixed
+`"+ MIDI Track"` strip (22 px) at the top plus a `juce::Viewport` below it, so a project with more
+tracks than fit **scrolls**; rows are never compressed. Both live inside `getTrackHeaderBounds()`,
+so the panel's three regions still tile exactly.
+
+**The document is the truth.** A header stores no state of its own: it re-reads name, colour,
+mute/solo/arm and binding from the doc in `refreshFromDoc()`, and every edit is written back
+through the doc. Headers are rebuilt/refreshed **only** from `TimelineDoc::Listener::timelineChanged`
+(`TimelinePanelComponent` is the listener) — no timer, no polling. A notification whose track *set*
+is unchanged refreshes the existing rows in place; only an added/removed/reordered track rebuilds
+them, so a mute click doesn't destroy the row the user is typing a name into.
+
+**Row contents:** colour swatch (click cycles the palette), name label (double-click to edit),
+`M` / `S` / `R` toggles, and the binding chip. `R` flips `Track::armed` in the document and nothing
+else — arming is not recording; the record button and `MidiRecorder::startRecording` arrive with the
+transport bar in TL5-5.
+
+**Colour** resolves *only* through `synth::ui::resolveTrackColour` (`Source/UI/TrackColour.h`): the
+track's stored `colourArgb` when non-zero, otherwise a deterministic 8-entry palette indexed by the
+track's position; a muted track comes back desaturated and dimmed (same hue). The palette is fixed
+rather than theme-derived because the add-track flow *writes* the resolved colour into the document —
+a theme-dependent value would mean a project opened under another theme came back recoloured. Unlike
+`CableColour.h` there is no persisted override layer: the doc already stores the choice.
+
+**Binding chip semantics** — three states, two of them amber (`theme.colors.warning`):
+
+| Track state | Chip | Meaning |
+|---|---|---|
+| `bindingUuid` resolves | the node's display name (`"Track In #<id>"`) | plays through that node |
+| `bindingUuid` empty | `"Unbound"` (amber) | never pointed anywhere; the track plays nowhere |
+| `orphaned` | `"Missing"` (amber) | it WAS bound and the node is gone — retained, never auto-deleted |
+
+Clicking the chip does two things: it **selects** the bound node in the GraphEditor's
+`SelectionModel` (a highlight only — no canvas scroll, no focus change) and opens a menu listing
+every live `Track In` node **not claimed by another track**, plus `"New Track In node"`. Picking one
+calls `TimelineDoc::setTrackBinding` as one undoable step, then reconciles.
+
+> **A binding is NEVER re-established automatically — least of all by name.** An orphaned track
+> stays orphaned until the user picks a node from that menu. Two nodes can carry the same display
+> name, and a silent re-bind would quietly play a track through someone else's instrument.
+
+**"+ MIDI Track"** is ONE compound undo step (`AppUndoManager::recordCombinedChange`, graph +
+timeline in a single transaction, so one Cmd+Z removes all of it and redo restores it with the same
+node uuid):
+
+1. create a `Track In` node through `AIStateMapper::createModule` (so it round-trips through
+   `graphToJSON`/`applyJSONToGraph` — that is how undo, redo and `.agsproj` reproduce it), assign a
+   fresh uuid and mirror it into the processor with `ModuleBase::setNodeUuid`, and place it at the
+   canvas' left edge below every existing module (`GraphEditor::findLeftEdgeSlotBelowModules`);
+2. **auto-wire only when unambiguous** — if the patch contains **exactly one** MIDI-driven
+   instrument (module type `Poly MIDI`, `Oscillator`, `Wavetable`, `Sampler`, `Sequencer` or
+   `Poly Sequencer`; MIDI *sources* — `Track In`, `External MIDI`, `MIDI Keyboard` — are excluded),
+   connect `Track In -> that node` on the MIDI channel. With none or several, no wire is drawn: a
+   chip that reads "bound" over an unwired node is fine, the cable is the user's to draw, whereas
+   guessing wrong plays the track through the wrong instrument. Note `acceptsMidi()` cannot be the
+   rule — `ModuleBase` returns `true` for every module in the app;
+3. add a `Midi` track named `Track N`, bind it to the new node's uuid, and give it the palette
+   colour for its index.
+
+**Delete track** (right-click a header) is the same compound step in reverse: the track and its
+bound `Track In` node go together, and come back together.
+
+Headless test seams (a `juce::PopupMenu` never runs in the test binary): `collectBindingOptions()` /
+`applyBindingMenuChoice(id)` and `applyContextMenuChoice(id)` are the menus' semantics without the
+menu, and `handleChipClick(showMenu=false)` exercises the selection affordance on its own. The row
+talks to the app exclusively through `synth::ui::TrackHeaderHost` (implemented by `MainComponent`),
+so it is fully testable against a stub with no graph — see `Tests/TimelineTrackHeaderTests.cpp`.

@@ -72,9 +72,10 @@ struct AutomationRecordState {
  *
  * ScopedProgrammaticApply is the belt-and-braces second guard, for a future path that wraps its
  * writes in gestures (a UI control being driven programmatically, a macro-recall animating knobs):
- * while one is alive, even gestured events are dropped. Intended call sites — to be wired when the
- * app-level owner lands in TL5 — are PresetManager's load, AIStateMapper::applyJSONToGraph on the
- * apply path, and AppUndoManager's undo/redo restore.
+ * while one is alive, even gestured events are dropped. TL5-3 wired it in at the app level, where
+ * MainComponent opens one (via its ProgrammaticApplyScope) around preset load, factory-preset load,
+ * New Patch, .agsproj open, the AI apply span, and every AppUndoManager undo/redo restore — see
+ * docs/architecture.md's "App wiring (TL5-3)" for the definitive list.
  *
  * -- Re-entrancy -----------------------------------------------------------------------------------
  *

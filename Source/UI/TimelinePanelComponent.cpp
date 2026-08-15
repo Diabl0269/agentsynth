@@ -1,6 +1,7 @@
 #include "TimelinePanelComponent.h"
 #include "../Transport/TransportService.h"
 #include "Theme/AppLookAndFeel.h"
+#include <algorithm>
 #include <cmath>
 
 namespace synth::ui {
@@ -20,11 +21,27 @@ constexpr double kScrollPixelsPerWheelUnit = 200.0;
 
 constexpr int kSnapComboWidth = 90;
 constexpr const char* kTimelineSnapPropertyKey = "timelineSnap";
+
+// TL5-3: the "+ MIDI Track" strip at the top of the track-header column. Fixed height — the
+// headers below it scroll, the button never does.
+constexpr int kAddTrackButtonHeight = 22;
 } // namespace
 
 //==============================================================================
 TimelinePanelComponent::TimelinePanelComponent() {
     addAndMakeVisible(ruler_);
+
+    addAndMakeVisible(addTrackButton_);
+    addTrackButton_.setComponentID("timelineAddTrackButton");
+    addTrackButton_.onClick = [this] {
+        if (trackHeaderHost_ != nullptr)
+            trackHeaderHost_->addMidiTrack();
+    };
+
+    addAndMakeVisible(trackHeaderViewport_);
+    trackHeaderViewport_.setComponentID("timelineTrackHeaderViewport");
+    trackHeaderViewport_.setScrollBarsShown(true, false);
+    trackHeaderViewport_.setViewedComponent(&trackHeaderList_, false);
 
     addAndMakeVisible(snapCombo_);
     snapCombo_.setComponentID("timelineSnapCombo");
@@ -43,8 +60,82 @@ TimelinePanelComponent::TimelinePanelComponent() {
     };
 }
 
+TimelinePanelComponent::~TimelinePanelComponent() {
+    if (doc_ != nullptr)
+        doc_->removeListener(this);
+}
+
 //==============================================================================
 void TimelinePanelComponent::setTransport(synth::TransportService* transport) { ruler_.setTransport(transport); }
+
+void TimelinePanelComponent::setTimelineDoc(synth::TimelineDoc* doc) {
+    if (doc_ == doc)
+        return;
+    if (doc_ != nullptr)
+        doc_->removeListener(this);
+    doc_ = doc;
+    if (doc_ != nullptr)
+        doc_->addListener(this);
+    syncTrackHeaders();
+}
+
+void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
+    trackHeaderHost_ = host;
+    // Headers are constructed with the host, so any that already exist have to be rebuilt against
+    // the new one rather than refreshed.
+    trackHeaderList_.headers.clear();
+    syncTrackHeaders();
+}
+
+void TimelinePanelComponent::timelineChanged(const synth::TimelineDoc&) { syncTrackHeaders(); }
+
+void TimelinePanelComponent::syncTrackHeaders() {
+    if (doc_ == nullptr) {
+        if (!trackHeaderList_.headers.isEmpty()) {
+            trackHeaderList_.headers.clear();
+            layoutTrackHeaders();
+        }
+        return;
+    }
+
+    const auto& tracks = doc_->getTracks();
+
+    // Rebuild only when the SET of tracks changed. A mute toggle, a rename or a re-bind must not
+    // destroy and re-create every row (it would drop an in-progress name edit and churn the UI).
+    bool sameTracks = (int)tracks.size() == trackHeaderList_.headers.size();
+    if (sameTracks) {
+        for (int i = 0; i < (int)tracks.size(); ++i) {
+            if (!(trackHeaderList_.headers.getUnchecked(i)->getTrackId() == tracks[(size_t)i].id)) {
+                sameTracks = false;
+                break;
+            }
+        }
+    }
+
+    if (sameTracks) {
+        for (auto* header : trackHeaderList_.headers)
+            header->refreshFromDoc();
+        return;
+    }
+
+    trackHeaderList_.headers.clear();
+    for (const auto& track : tracks) {
+        auto* header =
+            trackHeaderList_.headers.add(new TimelineTrackHeaderComponent(*doc_, track.id, trackHeaderHost_));
+        trackHeaderList_.addAndMakeVisible(header);
+    }
+    layoutTrackHeaders();
+}
+
+void TimelinePanelComponent::layoutTrackHeaders() {
+    const int rowHeight = TimelineTrackHeaderComponent::kRowHeight;
+    const int count = trackHeaderList_.headers.size();
+    const int width = std::max(0, trackHeaderViewport_.getMaximumVisibleWidth());
+
+    trackHeaderList_.setSize(width, std::max(count * rowHeight, trackHeaderViewport_.getMaximumVisibleHeight()));
+    for (int i = 0; i < count; ++i)
+        trackHeaderList_.headers.getUnchecked(i)->setBounds(0, i * rowHeight, width, rowHeight);
+}
 
 void TimelinePanelComponent::setApplicationProperties(juce::ApplicationProperties* props) {
     appProperties_ = props;
@@ -102,6 +193,13 @@ void TimelinePanelComponent::resized() {
     transportBarBounds_ = bounds.removeFromTop(transportBarHeight);
     trackHeaderBounds_ = bounds.removeFromLeft(trackHeaderWidth);
     lanesBounds_ = bounds; // remainder
+
+    // TL5-3: "+ MIDI Track" pinned at the top of the header column, the scrolling header list
+    // below it. Both live INSIDE trackHeaderBounds_, so the panel's three regions still tile.
+    auto headerColumn = trackHeaderBounds_;
+    addTrackButton_.setBounds(headerColumn.removeFromTop(kAddTrackButtonHeight).reduced(2, 1));
+    trackHeaderViewport_.setBounds(headerColumn);
+    layoutTrackHeaders();
 
     auto lanes = lanesBounds_;
     ruler_.setBounds(lanes.removeFromTop(rulerHeight));

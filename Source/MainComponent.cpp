@@ -1,7 +1,64 @@
 #include "MainComponent.h"
 #include "AI/AIProviderRegistry.h"
+#include "AI/AIStateMapper.h"
 #include "Branding.h"
+#include "ProjectBundle.h"
+#include "Timeline/TimelineReconciler.h"
 #include "UI/SettingsWindow.h"
+#include "UI/TrackColour.h"
+#include <map>
+#include <set>
+
+namespace {
+
+// The file filter both patch dialogs use. A `.agsproj` project bundle only exists in a build that
+// has the timeline compiled in — offering it otherwise would let a user save a "project" whose
+// timeline half can never be non-empty.
+#if SYNTH_ENABLE_TIMELINE
+constexpr const char* kPatchFileFilter = "*.json;*.agsproj";
+#else
+constexpr const char* kPatchFileFilter = "*.json";
+#endif
+
+#if SYNTH_ENABLE_TIMELINE
+// The add-track flow's auto-wire target set: MIDI-DRIVEN INSTRUMENTS only.
+//
+// juce::AudioProcessor::acceptsMidi() cannot be the rule — ModuleBase overrides it to `true` for
+// EVERY module in this app, so it would match a Reverb. The module type is the rule instead, and
+// the set mirrors AIStateMapper's own midiAcceptingTypes (Oscillator, Sampler, Sequencer, Poly
+// Sequencer, Poly MIDI) plus Wavetable, which consumes note-ons exactly the way Oscillator does.
+//
+// MIDI *sources* are deliberately excluded: Track In itself, External MIDI and MIDI Keyboard
+// generate notes, so wiring a new Track In into one of them is never what the user meant.
+bool isMidiInstrumentNode(juce::AudioProcessor* processor) {
+    auto* module = dynamic_cast<ModuleBase*>(processor);
+    if (module == nullptr)
+        return false;
+
+    switch (module->getModuleType()) {
+    case ModuleType::PolyMidi:
+    case ModuleType::Oscillator:
+    case ModuleType::Wavetable:
+    case ModuleType::Sampler:
+    case ModuleType::Sequencer:
+    case ModuleType::PolySequencer:
+        return true;
+    default:
+        return false;
+    }
+}
+#endif // SYNTH_ENABLE_TIMELINE
+
+// Human-readable identity for a graph node in the binding chip and its menu. Every Track In node
+// reports the same processor name, so the node id is appended — two "Track In" rows a user cannot
+// tell apart is exactly how a track ends up bound to the wrong one.
+juce::String describeNodeForBinding(juce::AudioProcessorGraph::Node* node) {
+    if (node == nullptr || node->getProcessor() == nullptr)
+        return {};
+    return node->getProcessor()->getName() + " #" + juce::String((int)node->nodeID.uid);
+}
+
+} // namespace
 
 // ---- Primary constructor (injected ThemeManager + LookAndFeel from Main.cpp) ----
 MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLookAndFeel& lf,
@@ -231,7 +288,19 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         return !GraphEditor::isSingletonIOModule(name) ||
                !GraphEditor::graphHasModuleNamed(audioEngine.getGraph(), name);
     };
-    graphEditor.onGraphStructureChanged = [this] { moduleLibrary.repaint(); };
+    graphEditor.onGraphStructureChanged = [this] {
+        moduleLibrary.repaint();
+        // TL5-3 safety net for graph changes with no explicit post-apply site of their own — the
+        // canonical one being "the user deleted the Track In node from the canvas", which goes
+        // through recordStructuralChange (a RECORD, not a restore, so the undo hooks don't fire).
+        //
+        // Deliberately reconcile-ONLY, never an unconditional republish: this runs at the end of
+        // every updateComponents(), and building a snapshot each time would be wasteful. A
+        // reconcile that flips a flag is itself a doc mutation, so timelineChanged republishes for
+        // exactly the cases that need it — a binding can only start or stop resolving when a node
+        // appears or disappears, which is also the only way an orphan flag moves.
+        reconcileTimelineBindingsOnly();
+    };
     addAndMakeVisible(aiChatComponent);
     aiChatComponent.setVisible(isAiPanelVisible);
     moduleLibrary.setVisible(isLibraryVisible);
@@ -257,16 +326,12 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     saveButton.setComponentID("saveButton");
     saveButton.onClick = [this] {
         fileChooser = std::make_unique<juce::FileChooser>(
-            "Save Preset", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory), "*.json");
+            "Save Preset", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory), kPatchFileFilter);
         auto flags = juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles;
         fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc) {
             auto file = fc.getResult();
-            if (file != juce::File{}) {
-                statusBar.showMessage("Saving...");
-                graphEditor.savePreset(file);
-                setCurrentPatchName(file.getFileNameWithoutExtension());
-                statusBar.showMessage("Saved: " + file.getFileNameWithoutExtension());
-            }
+            if (file != juce::File{})
+                saveToFile(file);
         });
     };
 
@@ -292,9 +357,10 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
                 openPresetFromFile();
             } else if (result > 0) {
                 statusBar.showMessage("Loading preset...");
-                // loadFactoryPreset detaches existing components (stopping scope timers) before the graph
-                // is cleared — avoids a use-after-free where a ScopeComponent reads a freed VisualBuffer.
-                graphEditor.loadFactoryPreset(result - 1);
+                // loadFactoryPresetAtIndex detaches existing components (stopping scope timers) before the
+                // graph is cleared — avoids a use-after-free where a ScopeComponent reads a freed
+                // VisualBuffer — and reconciles the timeline's bindings against the new graph.
+                loadFactoryPresetAtIndex(result - 1);
                 setCurrentPatchName(presets[result - 1].name);
                 statusBar.showMessage("Loaded: " + presets[result - 1].name);
             }
@@ -360,6 +426,34 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // need of either.
     timelinePanel.setTransport(&audioEngine.getTransport());
     timelinePanel.setApplicationProperties(&appProperties);
+
+    // TL5-3: this component owns the app's one live TimelineDoc, so it owns the four hooks that
+    // keep the rest of the system in step with it. The full inventory is in docs/architecture.md
+    // ("App wiring (TL5-3)") — keep the two in sync.
+    //
+    //  1. PUBLISH-ON-CHANGE: every effective doc mutation notifies us, and we republish the
+    //     snapshot to the audio thread and rebuild the recorder's lane bindings.
+    //  2. RECORDER: attached to (doc, undo, transport) and registered with the engine so the
+    //     applier can see its gesture claims; driven by update() on the existing 10 Hz timer.
+    //  3. RESTORE HOOKS: undo/redo suspends capture for the span of the restore and reconciles
+    //     bindings afterwards (both domains — see AppUndoManager::setRestoreHooks).
+    //  4. PANEL: the track-header column reads the doc and calls back into us (TrackHeaderHost)
+    //     to create, re-bind and delete the Track In nodes its chips name.
+    timelineDoc.addListener(this);
+    automationRecorder.attachTo(timelineDoc, undoManager, audioEngine.getTransport());
+    audioEngine.setAutomationRecorder(&automationRecorder);
+    undoManager.setRestoreHooks(
+        [this] { programmaticApplyScopes.push_back(std::make_unique<ProgrammaticApplyScope>(*this)); },
+        [this] {
+            if (!programmaticApplyScopes.empty())
+                programmaticApplyScopes.pop_back();
+            reconcileTimelineAfterGraphChange();
+        });
+    timelinePanel.setTrackHeaderHost(this);
+    timelinePanel.setTimelineDoc(&timelineDoc);
+    // One publish before anything else happens, so the audio thread starts from this document
+    // rather than from the exchange's never-published empty fallback.
+    publishTimelineAndRebindRecorder();
 
     addAndMakeVisible(toggleTimelineButton);
     toggleTimelineButton.setComponentID("toggleTimeline");
@@ -506,6 +600,19 @@ MainComponent::~MainComponent() {
         themeManager->removeChangeListener(this);
     stopTimer();
     aiService.removeListener(this);
+#if SYNTH_ENABLE_TIMELINE
+    // Order matters: stop listening to the doc first (nothing may republish while we tear down),
+    // drop the panel's view of it, unhook the engine from the recorder's audio-visible state, and
+    // only then detach the recorder — which commits anything still in flight into the doc and the
+    // undo manager, both of which are still alive here (and outlive this body; see the declaration
+    // order note in MainComponent.h). Finally drop the undo hooks: they reach back into members
+    // that are about to go.
+    timelineDoc.removeListener(this);
+    timelinePanel.setTimelineDoc(nullptr);
+    audioEngine.setAutomationRecorder(nullptr);
+    automationRecorder.detach();
+    undoManager.setRestoreHooks({}, {});
+#endif
     graphEditor.detachAllModuleComponents();
     // Only tear down an engine we own. On the plugin path the processor's engine must survive
     // the editor being closed and reopened.
@@ -529,6 +636,13 @@ void MainComponent::timerCallback() {
     undoButton.setEnabled(undoManager.canUndo());
     redoButton.setEnabled(undoManager.canRedo());
 
+#if SYNTH_ENABLE_TIMELINE
+    // TL4-4's message-thread driver, on the timer we already run: drains the gesture ring and polls
+    // the transport (Write spans open on play; every open span commits on stop). Allocation-free
+    // and — like everything else in this callback — completely silent.
+    automationRecorder.update();
+#endif
+
     // Status bar polls at 5 Hz (every 2nd tick of the 10 Hz timer). update() is gated — it
     // only repaints the status bar when a displayed value actually changes. ZERO logging.
     if (++statusBarTickCount_ >= 2) {
@@ -544,9 +658,17 @@ void MainComponent::aiPatchAboutToApply() {
     // Runs synchronously before the AI patch clears/rebuilds the graph. Detach module components now so
     // their ScopeComponent timers stop and no component references a soon-to-be-freed VisualBuffer.
     graphEditor.detachAllModuleComponents();
+    // Everything the apply writes into parameters is programmatic. Assignment closes any scope an
+    // earlier, failed apply abandoned (see the member's comment).
+    aiApplyScope = std::make_unique<ProgrammaticApplyScope>(*this);
 }
 
 void MainComponent::aiPatchApplied() {
+    aiApplyScope.reset();
+    // The graph is fully applied by the time this fires (on the initial apply AND on undo/redo,
+    // which reuse this pair as their restore hooks), so bindings can be reconciled straight away —
+    // no need to wait for the async updateComponents() below.
+    reconcileTimelineAfterGraphChange();
     setCurrentPatchName("AI Patch");
     juce::Component::SafePointer<MainComponent> safeThis(this);
     juce::MessageManager::callAsync([safeThis]() {
@@ -559,23 +681,100 @@ void MainComponent::simulateLoadFactoryPresetForTest(int index) {
     auto presets = synth::PresetManager::getPresetList();
     if (index < 0 || index >= presets.size())
         return;
-    graphEditor.loadFactoryPreset(index);
+    loadFactoryPresetAtIndex(index);
     setCurrentPatchName(presets[index].name);
+}
+
+void MainComponent::loadFactoryPresetAtIndex(int index) {
+    ProgrammaticApplyScope guard(*this);
+    graphEditor.loadFactoryPreset(index);
+    reconcileTimelineAfterGraphChange();
 }
 
 void MainComponent::openPresetFromFile() {
     fileChooser = std::make_unique<juce::FileChooser>(
-        "Load Preset", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory), "*.json");
+        "Load Preset", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory), kPatchFileFilter);
+    // A `.agsproj` bundle is a DIRECTORY, not a file, so the browser has to allow picking one; a
+    // plain `.json` preset is still an ordinary file pick. openFromFile() branches on what comes
+    // back, so the two cases never depend on which flag the platform's dialog honoured.
     auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
+#if SYNTH_ENABLE_TIMELINE
+    flags |= juce::FileBrowserComponent::canSelectDirectories;
+#endif
     fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc) {
         auto file = fc.getResult();
-        if (file != juce::File{}) {
-            statusBar.showMessage("Loading preset...");
-            graphEditor.loadPreset(file);
-            setCurrentPatchName(file.getFileNameWithoutExtension());
-            statusBar.showMessage("Loaded: " + file.getFileNameWithoutExtension());
-        }
+        if (file != juce::File{})
+            openFromFile(file);
     });
+}
+
+// ---- Save / open: one `.json` preset path, one `.agsproj` bundle path ----
+
+void MainComponent::saveToFile(const juce::File& file) {
+    statusBar.showMessage("Saving...");
+
+#if SYNTH_ENABLE_TIMELINE
+    if (file.getFileExtension() == synth::ProjectBundle::kBundleExtension) {
+        // The bundle carries the graph AND the timeline; PatchDocument comes from the graph editor
+        // so the unknown-top-level-key stash a plain preset load filled is re-merged here too.
+        const auto result =
+            synth::ProjectBundle::save(file, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument());
+        if (!result.ok) {
+            statusBar.showMessage("Save failed: " + result.message);
+            return;
+        }
+        setCurrentPatchName(file.getFileNameWithoutExtension());
+        statusBar.showMessage("Saved: " + file.getFileNameWithoutExtension());
+        return;
+    }
+#endif
+
+    // Plain preset save — byte-identical to what it has always written.
+    graphEditor.savePreset(file);
+    setCurrentPatchName(file.getFileNameWithoutExtension());
+    statusBar.showMessage("Saved: " + file.getFileNameWithoutExtension());
+}
+
+bool MainComponent::openFromFile(const juce::File& file) {
+    statusBar.showMessage("Loading preset...");
+
+#if SYNTH_ENABLE_TIMELINE
+    if (file.isDirectory() || file.getFileExtension() == synth::ProjectBundle::kBundleExtension) {
+        if (!synth::ProjectBundle::isBundle(file)) {
+            statusBar.showMessage("Not a project bundle: " + file.getFileName());
+            return false;
+        }
+
+        ProgrammaticApplyScope guard(*this);
+        // Detach BEFORE the load frees the current graph's processors — the same ordering
+        // GraphEditor::loadPreset uses, and for the same reason (a live ScopeComponent timer would
+        // otherwise read a freed VisualBuffer).
+        graphEditor.detachAllModuleComponents();
+        const auto result =
+            synth::ProjectBundle::load(file, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument());
+        // Reconcile the view whatever happened: on failure the load left the graph exactly as it
+        // was, and the components still have to come back after the detach above.
+        graphEditor.updateComponents();
+        if (!result.ok) {
+            statusBar.showMessage("Load failed: " + result.message);
+            return false;
+        }
+
+        // ProjectBundle::load already reconciled once; this republishes the freshly loaded document
+        // (and rebinds the recorder) against the graph as it now stands.
+        reconcileTimelineAfterGraphChange();
+        setCurrentPatchName(file.getFileNameWithoutExtension());
+        statusBar.showMessage("Loaded: " + file.getFileNameWithoutExtension());
+        return true;
+    }
+#endif
+
+    ProgrammaticApplyScope guard(*this);
+    graphEditor.loadPreset(file);
+    reconcileTimelineAfterGraphChange();
+    setCurrentPatchName(file.getFileNameWithoutExtension());
+    statusBar.showMessage("Loaded: " + file.getFileNameWithoutExtension());
+    return true;
 }
 
 //==============================================================================
@@ -734,11 +933,20 @@ bool MainComponent::perform(const InvocationInfo& info) {
     case AppCommands::openPreset:
         openPresetFromFile();
         return true;
-    case AppCommands::newPatch:
+    case AppCommands::newPatch: {
+        ProgrammaticApplyScope guard(*this);
+        // Two undo steps, deliberately: GraphEditor::newPatch() owns the graph's own
+        // recordStructuralChange, and folding the timeline into it would mean either nesting
+        // transactions or duplicating the clear. The timeline is cleared FIRST so the graph's step
+        // is the newer one — Cmd+Z brings the canvas back, Cmd+Z again brings the timeline back,
+        // and the post-restore reconcile re-derives the bindings after each.
+        clearTimelineForNewPatch();
         graphEditor.newPatch();
+        reconcileTimelineAfterGraphChange();
         setCurrentPatchName("Untitled");
         statusBar.showMessage("New patch");
         return true;
+    }
     case AppCommands::undo:
         if (undoManager.canUndo())
             undoManager.undo();
@@ -1177,4 +1385,260 @@ void MainComponent::setAlignmentGuidesEnabled(bool enabled) {
 void MainComponent::setCurrentPatchName(const juce::String& name) {
     currentPatchName_ = name;
     statusBar.repaint();
+}
+
+// =============================================================================
+// Timeline app wiring (TL5-3)
+//
+// Every body below is gated INSIDE, so a SYNTH_ENABLE_TIMELINE=OFF build compiles them as no-ops
+// and no call site in this file needs an #if of its own.
+// =============================================================================
+
+void MainComponent::timelineChanged(const synth::TimelineDoc&) { publishTimelineAndRebindRecorder(); }
+
+void MainComponent::publishTimelineAndRebindRecorder() {
+#if SYNTH_ENABLE_TIMELINE
+    audioEngine.publishTimeline(timelineDoc);
+
+    // The recorder's binding table is rebuilt with the SAME resolution AudioEngine::publishTimeline
+    // runs for the applier's table — uuid -> node (built once, not per lane), then paramId ->
+    // parameter — because a lane the applier can play back is exactly a lane the recorder must be
+    // able to capture into. Anything unresolvable is simply left unbound (an orphaned lane is
+    // retained in the doc, it just automates nothing).
+    automationRecorder.unbindAll();
+
+    std::map<juce::String, juce::AudioProcessorGraph::Node*> nodesByUuid;
+    for (auto* node : audioEngine.getGraph().getNodes()) {
+        if (node == nullptr)
+            continue;
+        const juce::String uuid = node->properties["uuid"].toString();
+        if (uuid.isNotEmpty())
+            nodesByUuid.emplace(uuid, node);
+    }
+
+    for (const auto& track : timelineDoc.getTracks()) {
+        for (const auto& lane : track.lanes) {
+            if (lane.nodeUuid.isEmpty() || lane.paramId.isEmpty())
+                continue;
+            const auto found = nodesByUuid.find(lane.nodeUuid);
+            if (found == nodesByUuid.end())
+                continue;
+            if (auto* param = findParameterByID(found->second->getProcessor(), lane.paramId))
+                automationRecorder.bindLane(lane.id, param, found->second);
+        }
+    }
+#endif
+}
+
+void MainComponent::reconcileTimelineAfterGraphChange() {
+#if SYNTH_ENABLE_TIMELINE
+    // reconcileBindings routes through the doc's single mutation choke point when (and only when) a
+    // flag actually flips, which fires timelineChanged and therefore publishes. Publishing again
+    // here would be a wasted snapshot build, so this only publishes for the "nothing flipped" case
+    // — where the graph still changed under us and the recorder's bindings must be re-resolved.
+    if (!synth::TimelineReconciler::reconcile(timelineDoc, audioEngine.getGraph()))
+        publishTimelineAndRebindRecorder();
+#endif
+}
+
+void MainComponent::reconcileTimelineBindingsOnly() {
+#if SYNTH_ENABLE_TIMELINE
+    synth::TimelineReconciler::reconcile(timelineDoc, audioEngine.getGraph());
+#endif
+}
+
+void MainComponent::clearTimelineForNewPatch() {
+#if SYNTH_ENABLE_TIMELINE
+    if (timelineDoc.isEmpty())
+        return; // clear() on an empty doc is a genuine no-op — no undo step for it either
+    undoManager.recordTimelineChange(timelineDoc, [this] { timelineDoc.clear(); });
+#endif
+}
+
+juce::AudioProcessorGraph::Node* MainComponent::findNodeByUuid(const juce::String& uuid) const {
+    if (uuid.isEmpty())
+        return nullptr;
+    for (auto* node : audioEngine.getGraph().getNodes())
+        if (node != nullptr && node->properties["uuid"].toString() == uuid)
+            return node;
+    return nullptr;
+}
+
+juce::String MainComponent::createTrackInNode() {
+#if SYNTH_ENABLE_TIMELINE
+    auto& graph = audioEngine.getGraph();
+
+    // Through the factory, not constructed ad hoc: that is what makes the node round-trip through
+    // graphToJSON/applyJSONToGraph, which is how undo, redo and .agsproj save all reproduce it.
+    auto processor = synth::AIStateMapper::createModule("Track In");
+    if (processor == nullptr)
+        return {};
+
+    auto node = graph.addNode(std::move(processor));
+    if (node == nullptr)
+        return {};
+
+    // Ensure-uuid, mirrored into the processor in the same breath. The Track In module strcmps its
+    // own uuid against the snapshot's bindingUuid on the AUDIO thread, so the node property and the
+    // processor's copy must never diverge — the same pairing AIStateMapper keeps at each of its
+    // three uuid writer sites (see ModuleBase::setNodeUuid).
+    const juce::String uuid = juce::Uuid().toDashedString();
+    node->properties.set("uuid", uuid);
+    if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
+        module->setNodeUuid(uuid);
+
+    const auto size = GraphEditor::estimateModuleSize("Track In");
+    const auto position = graphEditor.findLeftEdgeSlotBelowModules(size.x, size.y);
+    node->properties.set("x", position.x);
+    node->properties.set("y", position.y);
+
+    // Auto-wire ONLY when the answer is unambiguous: exactly one MIDI instrument in the patch. With
+    // none, or with two, no wire is drawn — a chip that reads "bound" over an unwired node is fine
+    // (the cable is the user's to draw), whereas guessing wrong silently plays a track through the
+    // wrong instrument.
+    juce::AudioProcessorGraph::Node* target = nullptr;
+    int candidates = 0;
+    for (auto* other : graph.getNodes()) {
+        if (other == nullptr || other == node.get() || !isMidiInstrumentNode(other->getProcessor()))
+            continue;
+        ++candidates;
+        target = other;
+    }
+    if (candidates == 1 && target != nullptr)
+        graph.addConnection({{node->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                             {target->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
+
+    graphEditor.updateComponents();
+    return uuid;
+#else
+    return {};
+#endif
+}
+
+// ---- TrackHeaderHost ----
+
+std::vector<synth::ui::TrackHeaderHost::BindingOption>
+MainComponent::getAvailableTrackInNodes(synth::TrackId forTrack) {
+    std::vector<BindingOption> options;
+#if SYNTH_ENABLE_TIMELINE
+    // A Track In node feeds exactly one track, so anything another track already claims is off the
+    // menu. This track's own current binding stays on it (ticked), so the menu always shows where
+    // it points today.
+    std::set<juce::String> claimedByOtherTracks;
+    for (const auto& track : timelineDoc.getTracks())
+        if (!(track.id == forTrack) && track.bindingUuid.isNotEmpty())
+            claimedByOtherTracks.insert(track.bindingUuid);
+
+    for (auto* node : audioEngine.getGraph().getNodes()) {
+        if (node == nullptr)
+            continue;
+        auto* module = dynamic_cast<ModuleBase*>(node->getProcessor());
+        if (module == nullptr || module->getModuleType() != ModuleType::TimelineMidiSource)
+            continue;
+
+        const juce::String uuid = node->properties["uuid"].toString();
+        if (uuid.isEmpty() || claimedByOtherTracks.count(uuid) > 0)
+            continue;
+
+        options.push_back({uuid, describeNodeForBinding(node)});
+    }
+#else
+    juce::ignoreUnused(forTrack);
+#endif
+    return options;
+}
+
+juce::String MainComponent::getNodeDisplayName(const juce::String& uuid) {
+    return describeNodeForBinding(findNodeByUuid(uuid));
+}
+
+void MainComponent::bindTrackTo(synth::TrackId track, const juce::String& uuid) {
+#if SYNTH_ENABLE_TIMELINE
+    if (uuid.isEmpty())
+        return;
+    // A user gesture, so it goes on the undo stack (unlike reconciliation, which derives runtime
+    // state and is deliberately not undoable).
+    undoManager.recordTimelineChange(timelineDoc, [this, track, uuid] { timelineDoc.setTrackBinding(track, uuid); });
+    // Derive the orphan flag against the live graph immediately, so the chip stops reading
+    // "Missing" the moment the user picks a node rather than at the next graph change.
+    reconcileTimelineAfterGraphChange();
+#else
+    juce::ignoreUnused(track, uuid);
+#endif
+}
+
+void MainComponent::createAndBindTrackInNode(synth::TrackId track) {
+#if SYNTH_ENABLE_TIMELINE
+    undoManager.recordCombinedChange(audioEngine.getGraph(), timelineDoc, [this, track] {
+        const juce::String uuid = createTrackInNode();
+        if (uuid.isNotEmpty())
+            timelineDoc.setTrackBinding(track, uuid);
+    });
+    reconcileTimelineAfterGraphChange();
+#else
+    juce::ignoreUnused(track);
+#endif
+}
+
+void MainComponent::selectNodeInGraph(const juce::String& uuid) {
+    if (auto* node = findNodeByUuid(uuid))
+        graphEditor.selectModule(node->nodeID, /*additive=*/false);
+}
+
+void MainComponent::deleteTrack(synth::TrackId track) {
+#if SYNTH_ENABLE_TIMELINE
+    const auto* existing = timelineDoc.getTrack(track);
+    if (existing == nullptr)
+        return;
+    const juce::String uuid = existing->bindingUuid;
+
+    // ONE undo step covering both domains: the track and the node that fed it disappear together,
+    // and come back together.
+    undoManager.recordCombinedChange(audioEngine.getGraph(), timelineDoc, [this, track, uuid] {
+        if (auto* node = findNodeByUuid(uuid)) {
+            // Mirrors GraphEditor::requestDeleteModule: drop the mod-matrix rows before the node
+            // (and the connections into it) go, then reconcile the canvas.
+            graphEditor.getModMatrix().clearRows();
+            audioEngine.getGraph().removeNode(node->nodeID);
+            graphEditor.updateComponents();
+        }
+        timelineDoc.removeTrack(track);
+    });
+    reconcileTimelineAfterGraphChange();
+#else
+    juce::ignoreUnused(track);
+#endif
+}
+
+void MainComponent::performTrackEdit(const std::function<void()>& mutation) {
+    if (!mutation)
+        return;
+#if SYNTH_ENABLE_TIMELINE
+    // recordTimelineChange pushes nothing when the mutation turns out to be a no-op, so a header
+    // that writes the value already in the doc costs no undo step.
+    undoManager.recordTimelineChange(timelineDoc, mutation);
+#else
+    mutation();
+#endif
+}
+
+void MainComponent::addMidiTrack() {
+#if SYNTH_ENABLE_TIMELINE
+    const int index = (int)timelineDoc.getTracks().size();
+
+    // ONE compound undo step: the Track In node, its auto-wire, the track, its binding and its
+    // colour are a single gesture, so a single Cmd+Z removes all of it.
+    const bool pushed = undoManager.recordCombinedChange(audioEngine.getGraph(), timelineDoc, [this, index] {
+        const juce::String uuid = createTrackInNode();
+        const auto trackId = timelineDoc.addTrack(synth::TrackKind::Midi, "Track " + juce::String(index + 1));
+        if (!trackId.isValid())
+            return; // at kMaxTracks: the node is rolled back with the rest of the step
+        if (uuid.isNotEmpty())
+            timelineDoc.setTrackBinding(trackId, uuid);
+        timelineDoc.setTrackColour(trackId, synth::ui::trackPaletteColour(index).getARGB());
+    });
+
+    reconcileTimelineAfterGraphChange();
+    statusBar.showMessage(pushed ? "Added Track " + juce::String(index + 1) : "Could not add a track");
+#endif
 }

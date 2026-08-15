@@ -127,8 +127,19 @@ public:
     // undoable structural change when undoManager is present (Cmd+Z restores the prior patch).
     void newPatch();
 
+    /** The per-loaded-file stash of top-level JSON keys this build doesn't understand (see
+     *  `patchDocument` below). Exposed so the app's `.agsproj` save/load path can re-merge the very
+     *  same stash a plain `.json` save/load already does — GraphEditor owns no file dialogs, and
+     *  MainComponent owns no PatchDocument. */
+    synth::PatchDocument& getPatchDocument() noexcept { return patchDocument; }
+
     // Layout / anti-overlap
     juce::Point<int> resolvePlacement(juce::Point<int> desired, int w, int h, juce::AudioProcessorGraph::NodeID selfId);
+
+    /** A free canvas slot at the LEFT edge, below every module currently on the canvas — where the
+     *  timeline's add-track flow drops the "Track In" node it creates (TL5-3). Falls back to the
+     *  canvas origin on an empty canvas. Anti-overlapped through resolvePlacement like any drop. */
+    juce::Point<int> findLeftEdgeSlotBelowModules(int w, int h);
     // A module changed footprint in place (the Macro bank, when its "Knobs" count changes).
     // Drops any routing left on an output jack that is no longer visible, then pushes overlapping
     // neighbours clear. The resized module itself never moves.

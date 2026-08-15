@@ -192,6 +192,15 @@ TL2-4: the on-disk project format that pairs a patch with a `TimelineDoc`. A bun
 - **Asset policy, reserved for TL6.** Any future asset reference is a path *relative to the bundle root* (`Audio/foo.wav`) — an absolute or escaping path must be rejected, the same restriction as `ModuleBase::setExtraState`'s trusted-only file paths. No enforcement code exists yet because nothing references an asset by path yet.
 - **Plain `.json` save/load is unaffected.** `GraphEditor::savePreset`/`loadPreset` are untouched by this class — a `.agsproj` is a parallel format, not a replacement.
 
+#### Opening and saving one from the app (TL5-3)
+
+The toolbar's existing Save and Load-from-file dialogs carry both formats (`"*.json;*.agsproj"`), and `MainComponent::saveToFile()` / `openFromFile()` — the dialog callbacks' whole bodies, and the two `…ForTest` hooks tests drive instead of a dialog — branch on the `juce::File` they are handed:
+
+- **Save.** A name ending in `.agsproj` writes a bundle (`ProjectBundle::save(dir, graph, timelineDoc, graphEditor.getPatchDocument())`, creating the directory and its `Audio/`/`Peaks/` subdirectories). Anything else is `GraphEditor::savePreset` exactly as before — a plain `.json` preset carries no `"timeline"` key.
+- **Open.** A `.agsproj` is a **directory**, so the open dialog also sets `canSelectDirectories`; the handler confirms `ProjectBundle::isBundle()` before doing anything. The load is bracketed the way `GraphEditor::loadPreset` brackets its own (detach module components *before* the graph's processors are freed, `updateComponents()` after, whatever the outcome), wrapped in a programmatic-apply scope, and followed by the standard reconcile+publish pass. Anything else goes down the untouched `loadPreset` path, which leaves the live timeline alone.
+- The `PatchDocument` is the graph editor's own (`GraphEditor::getPatchDocument()`), so a bundle re-merges the very same unknown-top-level-key stash a plain preset load filled.
+- Both branches are `#if SYNTH_ENABLE_TIMELINE`: with the flag off the filter offers `.json` only, since a "project" whose timeline half can never be non-empty would be a lie.
+
 ### 6. ModuleBase
 
 `Source/Modules/ModuleBase.h`
@@ -314,6 +323,30 @@ The visual patching interface. Lives in the `AgentSynth` app target.
 
 See [`docs/layout.md`](layout.md) for the grid model, anti-overlap algorithm, and `autoArrange` constants.
 
+### 8. App wiring (TL5-3) — who owns the timeline, and every hook that keeps it in step
+
+`Source/MainComponent.h/.cpp`
+
+**`MainComponent` owns the app's one live `synth::TimelineDoc` and its `synth::AutomationRecorder`**, as plain members. Both exist unconditionally; every line of wiring below is `#if SYNTH_ENABLE_TIMELINE`, so a `-DSYNTH_ENABLE_TIMELINE=OFF` build has an inert document nothing ever mutates. The plugin path gets the same wiring for free — `MainComponent` is shared by both targets — with the one difference that the engine is injected rather than owned.
+
+**Declaration order is load-bearing:** `timelineDoc` and `automationRecorder` are declared *before* `undoManager`, so they outlive it. A `TimelineSnapshotAction` sitting on the undo stack holds a reference to the doc (see `AppUndoManager` below), and members are destroyed in reverse declaration order.
+
+This is the definitive hook inventory. There are four kinds, and nothing else in the app publishes, reconciles or arms the recorder:
+
+| # | Hook | Where | What it does |
+|---|---|---|---|
+| 1 | **Publish-on-change** | `TimelineDoc::Listener::timelineChanged` | `publishTimelineAndRebindRecorder()`: `AudioEngine::publishTimeline(doc)`, then `recorder.unbindAll()` + one `bindLane()` per resolvable lane. The rebind repeats `publishTimeline`'s own resolution (uuid -> node map built once, then `findParameterByID`) deliberately: a lane the applier can play back is exactly a lane the recorder must capture into. |
+| 2 | **Reconcile-after-graph-change** | `reconcileTimelineAfterGraphChange()`, called from: preset load (`openFromFile`), factory-preset load (`loadFactoryPresetAtIndex` — the one choke point behind both the Load menu and the test hook), New Patch, `.agsproj` open, AI apply (`aiPatchApplied`), and the undo manager's post-restore hook | `TimelineReconciler::reconcile(doc, graph)`, then `publishTimelineAndRebindRecorder()` **only if it returned `false`**. A reconcile that flips a flag is itself a doc mutation, so hook 1 has already published by the time it returns — publishing again would just rebuild a snapshot for nothing. |
+| 2b | **Catch-all** | `GraphEditor::onGraphStructureChanged` (fires at the end of every `updateComponents()`) | `reconcileTimelineBindingsOnly()` — reconcile with **no** unconditional republish. This is what covers a graph edit with no explicit site of its own, the canonical one being "the user deleted the Track In node from the canvas" (that goes through `recordStructuralChange`, a *record*, not a restore, so the undo hooks never fire). Kept cheap on purpose: `updateComponents()` is called after every structural mutation, and a binding can only start or stop resolving when a node appears or disappears — which is also the only way an orphan flag moves, so hook 1 still publishes for exactly the cases that need it. |
+| 3 | **Programmatic-apply guard** | `MainComponent::ProgrammaticApplyScope` (an `AutomationRecorder::ScopedProgrammaticApply` that compiles to an empty object with the flag off, so call sites need no `#if`) around: preset load, factory load, New Patch, `.agsproj` open, the AI apply span (`aiPatchAboutToApply` -> `aiPatchApplied`), and every undo/redo restore | Suspends automation capture so a programmatic rewrite of parameters is never mistaken for a user gesture. Belt-and-braces over the recorder's primary guard (a capture span only ever opens from a real gesture). |
+| 4 | **Recorder driving** | the existing 10 Hz `timerCallback` | `automationRecorder.update()` — drains the gesture ring and polls the transport. No new timer. |
+
+`initialiseCommon()` installs all of it: `timelineDoc.addListener(this)`, `recorder.attachTo(doc, undoManager, engine.getTransport())`, `engine.setAutomationRecorder(&recorder)`, `undoManager.setRestoreHooks(...)`, the panel's doc + `TrackHeaderHost`, and one initial publish so the audio thread starts from this document rather than the exchange's empty fallback. The destructor unwinds in the reverse order: stop listening, drop the panel's view, unhook the engine, `recorder.detach()` (which commits anything in flight while the doc and undo manager are still alive), clear the restore hooks.
+
+**Track headers** call back into `MainComponent` through `synth::ui::TrackHeaderHost` — create/re-bind/delete `Track In` nodes, select one in the graph, and run any track edit as one undoable step. See [`docs/layout.md` §16](layout.md) for the chip semantics, the add-track rule and the never-auto-rebind rule.
+
+**New Patch clears the timeline too**, as its own undo step: `GraphEditor::newPatch()` owns the graph's `recordStructuralChange`, and folding the timeline into it would mean nesting transactions. The timeline is cleared *first*, so the graph's step is the newer one — Cmd+Z brings the canvas back, Cmd+Z again brings the timeline back, and the post-restore reconcile re-derives the bindings after each.
+
 ---
 
 ## Plugin Layer
@@ -383,7 +416,16 @@ TL2-5: `TimelineDoc` edits (tracks, clips, notes, automation lanes) go through a
 
 - `recordTimelineChange(doc, mutation)` snapshots `toVar()` before and after the mutation; if the two serialisations are identical (the doc rejected the edit, or it was a genuine no-op) nothing is pushed and it returns `false` — a no-op must not create an undo step.
 - `recordCombinedChange(graph, doc, mutation)` is for edits that touch both domains in one gesture — the canonical case is deleting a module a timeline lane is bound to. It opens ONE transaction, captures graph + timeline "before", runs the single mutation, then pushes a graph `SnapshotAction` and/or a `TimelineSnapshotAction` — only for whichever domain(s) actually changed — inside that same transaction, so one `undo()`/`redo()` reverts or re-applies both together, never half the edit. It reuses the exact same pre/post-restore lambda plumbing (`detachAllModuleComponents` / `updateComponents`) `recordStructuralChange` gives the graph half, factored into a private `createGraphSnapshotAction` helper rather than duplicated.
-- **Lifetime rule, extended:** exactly like `SnapshotAction` holding the graph, a pushed `TimelineSnapshotAction` holds a reference to the `TimelineDoc` — the doc must outlive the `AppUndoManager`, or `clearUndoHistory()` must run before the doc is destroyed.
+- **Lifetime rule, extended:** exactly like `SnapshotAction` holding the graph, a pushed `TimelineSnapshotAction` holds a reference to the `TimelineDoc` — the doc must outlive the `AppUndoManager`, or `clearUndoHistory()` must run before the doc is destroyed. `MainComponent` satisfies this by declaration order (see §8 above).
+
+#### Restore hooks (TL5-3)
+
+`setRestoreHooks(beforeRestore, afterRestore)` installs one pair of callbacks fired around **every** restore this manager performs — the graph's `SnapshotAction` and the timeline's `TimelineSnapshotAction` alike, on undo and on redo. They are deliberately *not* the same thing as `SnapshotAction`'s existing `preRestore`/`postRestore` pair, which is the GraphEditor's component lifecycle and whose "pre" half fires **lazily** (only when a node is actually being freed). These always fire, which is what the two current users need:
+
+- `beforeRestore` opens an `AutomationRecorder::ScopedProgrammaticApply`. A parameter-only undo frees nothing — and is exactly the case that writes parameter values — so hanging the guard off the lazy hook would miss it entirely.
+- `afterRestore` re-runs the timeline's binding reconciliation and publish. A **graph** restore can strand a track/lane binding; a **timeline** restore comes back out of `TimelineDoc::fromVar` with every `orphaned` flag reset to `false` (it is runtime-derived state, never serialised). Both need the same pass, and a combined step performs both restores, so the hook fires once per restore rather than once per transaction.
+
+Actions capture the manager, not the callbacks, so hooks installed after an action was pushed still apply to it.
 
 ### AppLookAndFeel + ThemeManager
 
