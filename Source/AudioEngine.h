@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Modules/ModuleBase.h"
+#include "Timeline/TimelineSnapshotExchange.h"
 #include "Transport/TransportService.h"
 #include <atomic>
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -74,6 +75,13 @@ public:
     synth::TransportService& getTransport() noexcept { return transport; }
     const synth::TransportService& getTransport() const noexcept { return transport; }
 
+    // The timeline's message-thread -> audio-thread hand-off (TL2-2). The message thread publishes
+    // snapshots here (and may reap on a timer); the engine opens exactly one audio block on it per
+    // callback, alongside the transport tick, so the reclamation epoch advances in lockstep with
+    // the clock. TL3's Track In modules read the published snapshot through this accessor.
+    synth::TimelineSnapshotExchange& getTimelineSnapshots() noexcept { return timelineSnapshots; }
+    const synth::TimelineSnapshotExchange& getTimelineSnapshots() const noexcept { return timelineSnapshots; }
+
     // Total latency the graph reports for itself, in samples. This is report-only latency
     // aggregation: juce::AudioProcessorGraph already compensates parallel paths internally, so we
     // only surface the total (for the UI / host to display or pass on) — we do NOT compensate.
@@ -142,6 +150,10 @@ private:
     // Declared before the graph on purpose: the graph holds a raw AudioPlayHead pointer to the
     // transport, and members are destroyed in reverse declaration order, so the graph goes first.
     synth::TransportService transport;
+    // Declared before the graph for the same reason as the transport: TL3's timeline modules read
+    // the exchange from the engine, and reverse-order destruction must take the graph's nodes down
+    // first. Its own destructor reclaims everything published.
+    synth::TimelineSnapshotExchange timelineSnapshots;
     juce::AudioProcessorGraph mainProcessorGraph;
     juce::AudioProcessorPlayer processorPlayer;
 

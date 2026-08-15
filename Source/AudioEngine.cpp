@@ -78,6 +78,12 @@ void AudioEngine::shutdown() {
 #endif
     }
     mainProcessorGraph.clear();
+
+    // Last, after the device callback is gone and the graph is empty: nothing can call
+    // beginAudioBlock() any more, which is the precondition reclaimAllUnsafe() demands. Ungated by
+    // SYNTH_ENABLE_TIMELINE — with the flag off nothing was ever published, so this frees nothing
+    // and costs a null check.
+    timelineSnapshots.reclaimAllUnsafe();
 }
 
 void AudioEngine::ensureMidiDeviceOpen(const juce::String& deviceName) {
@@ -574,6 +580,15 @@ void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
     // setting too (TL1-9): disabling it mid-session simply freezes the transport in place.
     if (transportEnabled_.load(std::memory_order_relaxed))
         transport.tick(buffer.getNumSamples());
+
+    // Open this block's timeline snapshot (TL2-2), once per callback exactly like the tick. The
+    // returned reference is deliberately dropped here — nothing consumes it until TL3's Track In
+    // modules fetch it through getTimelineSnapshots() — but the call is not a no-op: it is what
+    // advances the reclamation epoch, so the message thread can free superseded snapshots.
+    // Deliberately NOT gated on transportEnabled_: freezing the transport is a musical decision,
+    // and stalling reclamation with it would let retired snapshots pile up for as long as the
+    // setting is off.
+    (void)timelineSnapshots.beginAudioBlock();
 #endif
 
     mainProcessorGraph.processBlock(buffer, midiMessages);
