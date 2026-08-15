@@ -33,9 +33,19 @@ namespace synth {
 //     NUL-terminated. uuids are 36 chars and paramIds are short, so this never bites in practice;
 //     the audio thread does strcmp against a char array and never touches a juce::String (whose
 //     copy is refcounted and therefore not audio-safe).
+//   - TL6-4: an AUDIO track contributes an audioClips run and NO notes; a MIDI track contributes
+//     notes and NO audio clips. One Clip type covers both kinds in the doc (see synth::Clip), and
+//     the track's TrackKind is what decides which half is flattened — so a stray note on an audio
+//     track, or a stray assetRef on a MIDI clip, is inert rather than half-played.
 struct TimelineSnapshot {
     // Fixed string capacity, including the NUL. 63 usable bytes: a uuid is 36.
     static constexpr int kMaxStringBytes = 64;
+
+    // TL6-4: capacity of an audio clip's asset reference, including the NUL. Deliberately much
+    // larger than kMaxStringBytes — an assetRef is a bundle-relative PATH ("Audio/take-12.wav"),
+    // not an identifier, and truncating one silently would point the streamer at a different file
+    // (or at nothing) rather than merely at a name that fails to match.
+    static constexpr int kMaxAssetRefBytes = 256;
 
     struct TrackInfo {
         std::int64_t trackId = 0;
@@ -48,6 +58,8 @@ struct TimelineSnapshot {
         int numNotes = 0;
         int firstLane = 0; // range into lanes[]
         int numLanes = 0;
+        int firstAudioClip = 0; // TL6-4: range into audioClips[]
+        int numAudioClips = 0;
     };
 
     struct NoteEvent {
@@ -82,10 +94,31 @@ struct TimelineSnapshot {
         int curve = 0; // a synth::BreakpointCurve value
     };
 
+    // TL6-4: one audio clip on an Audio-kind track, in the form the audio thread needs it.
+    //
+    // `clipId` is the doc's own ClipId value and is the IDENTITY synth::AudioClipStreamer keys its
+    // stream pool on — it is stable for the clip's lifetime and never reused, so a stream stays
+    // bound to its clip across moves, trims and gain changes (all of which republish the snapshot).
+    //
+    // `gainLinear` is the clip's gainDb already converted, ONCE, here on the message thread: the
+    // audio thread must not run a pow() per clip per block, and the conversion has a floor (see
+    // buildFrom) rather than being an unbounded exponential of an unbounded field.
+    struct AudioClipInfo {
+        std::int64_t clipId = 0;
+        double startBeat = 0.0; // absolute, timeline beats
+        double lengthBeats = 0.0;
+        char assetRef[kMaxAssetRefBytes] = {}; // NUL-terminated, bundle-relative; empty == inert
+        float gainLinear = 1.0f;
+        double fadeInBeats = 0.0;
+        double fadeOutBeats = 0.0;
+        double sourceStartSeconds = 0.0; // where inside the asset this clip starts reading
+    };
+
     static_assert(std::is_trivially_copyable_v<TrackInfo>, "audio-thread PODs only — no juce::String, no vectors");
     static_assert(std::is_trivially_copyable_v<NoteEvent>, "audio-thread PODs only — no juce::String, no vectors");
     static_assert(std::is_trivially_copyable_v<LaneInfo>, "audio-thread PODs only — no juce::String, no vectors");
     static_assert(std::is_trivially_copyable_v<Point>, "audio-thread PODs only — no juce::String, no vectors");
+    static_assert(std::is_trivially_copyable_v<AudioClipInfo>, "audio-thread PODs only — no juce::String, no vectors");
 
     TimelineSnapshot();
     ~TimelineSnapshot();
@@ -99,6 +132,8 @@ struct TimelineSnapshot {
     std::vector<NoteEvent> notes; // per-track runs, absolute beats, each run sorted by startBeat
     std::vector<LaneInfo> lanes;  // per-track runs
     std::vector<Point> points;    // per-lane runs, sorted by beat
+    // TL6-4: per-track runs, sorted by startBeat. Only Audio-kind tracks contribute.
+    std::vector<AudioClipInfo> audioClips;
 
     // True when at least one MIDI track has soloed set. Solo is a document-wide predicate ("is
     // anything soloed?" decides whether a non-soloed track is silent), so it is computed ONCE in

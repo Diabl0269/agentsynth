@@ -2,6 +2,7 @@
 #include "AI/AIProviderRegistry.h"
 #include "AI/AIStateMapper.h"
 #include "Branding.h"
+#include "Modules/TimelineAudioSourceModule.h"
 #include "ProjectBundle.h"
 #include "Timeline/TimelineReconciler.h"
 #include "UI/SettingsWindow.h"
@@ -486,6 +487,9 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // split/duplicate/delete is one more AppUndoManager::recordTimelineChange call, same as every
     // other timeline-only edit.
     timelinePanel.setUndoManager(&undoManager);
+    // TL6-4: BEFORE the first publish below — publishTimeline() syncs the clip streamer, and it can
+    // only resolve an asset ref once it knows the roots.
+    refreshAssetRoots();
     // One publish before anything else happens, so the audio thread starts from this document
     // rather than from the exchange's never-published empty fallback.
     publishTimelineAndRebindRecorder();
@@ -959,6 +963,7 @@ void MainComponent::saveToFile(const juce::File& file) {
         // TL6-3: from here on this document IS a bundle, so the next take is written into it
         // (Audio/ + Peaks/) rather than into app data.
         currentBundleDir_ = file;
+        refreshAssetRoots(); // TL6-4: clip playback resolves against the bundle we just became
         setCurrentPatchName(file.getFileNameWithoutExtension());
         statusBar.showMessage("Saved: " + file.getFileNameWithoutExtension());
         return;
@@ -998,6 +1003,9 @@ bool MainComponent::openFromFile(const juce::File& file) {
 
         // TL6-3: takes recorded from here on belong to THIS bundle.
         currentBundleDir_ = file;
+        // TL6-4: BEFORE the republish below, so the streamer's syncToSnapshot resolves this
+        // bundle's refs rather than the previous document's roots.
+        refreshAssetRoots();
         // ProjectBundle::load already reconciled once; this republishes the freshly loaded document
         // (and rebinds the recorder) against the graph as it now stands.
         reconcileTimelineAfterGraphChange();
@@ -1245,6 +1253,7 @@ bool MainComponent::perform(const InvocationInfo& info) {
         // TL6-3: a new document is not the old bundle, so the next take goes to app data rather
         // than into a bundle this patch no longer belongs to.
         currentBundleDir_ = juce::File();
+        refreshAssetRoots(); // TL6-4: no bundle any more, so no bundle-relative ref resolves
 #endif
         reconcileTimelineAfterGraphChange();
         setCurrentPatchName("Untitled");
@@ -2104,6 +2113,79 @@ juce::String MainComponent::createTrackInNode() {
 #endif
 }
 
+juce::String MainComponent::createTrackAudioNode() {
+#if SYNTH_ENABLE_TIMELINE
+    auto& graph = audioEngine.getGraph();
+
+    // Through the factory, for the same reason createTrackInNode() is: that is what makes the node
+    // round-trip through graphToJSON/applyJSONToGraph, which is how undo, redo and .agsproj save all
+    // reproduce it.
+    auto processor = synth::AIStateMapper::createModule("Track Audio");
+    if (processor == nullptr)
+        return {};
+
+    auto node = graph.addNode(std::move(processor));
+    if (node == nullptr)
+        return {};
+
+    // Ensure-uuid, mirrored into the processor in the same breath. The Track Audio module strcmps
+    // its own uuid against the snapshot's bindingUuid on the AUDIO thread, so the node property and
+    // the processor's copy must never diverge (see ModuleBase::setNodeUuid).
+    const juce::String uuid = juce::Uuid().toDashedString();
+    node->properties.set("uuid", uuid);
+    if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
+        module->setNodeUuid(uuid);
+
+    const auto size = GraphEditor::estimateModuleSize("Track Audio");
+    const auto position = graphEditor.findLeftEdgeSlotBelowModules(size.x, size.y);
+    node->properties.set("x", position.x);
+    node->properties.set("y", position.y);
+
+    // Auto-wire into the MASTER BUS. Unlike Track In's "exactly one MIDI instrument" rule this is
+    // never ambiguous — the master bus is a singleton — but there are two possible sinks and the
+    // order matters: if TL6-3's Rec Tap has already been spliced in front of Audio Output, wiring
+    // straight to the output would route this track AROUND the tap and quietly leave it out of every
+    // subsequent take. Preferring the tap when one exists makes the two orderings compose: an audio
+    // track added before the first take is re-spliced by ensureMasterRecordTap(), and one added
+    // after it lands on the tap directly.
+    juce::AudioProcessorGraph::Node* sink = nullptr;
+    for (auto* other : graph.getNodes())
+        if (other != nullptr && dynamic_cast<RecordTapModule*>(other->getProcessor()) != nullptr)
+            sink = other;
+    if (sink == nullptr)
+        for (auto* other : graph.getNodes())
+            if (other != nullptr && other->getProcessor() != nullptr &&
+                other->getProcessor()->getName() == "Audio Output")
+                sink = other;
+
+    if (sink != nullptr)
+        for (int channel = 0; channel < TimelineAudioSourceModule::kNumChannels; ++channel)
+            graph.addConnection({{node->nodeID, channel}, {sink->nodeID, channel}});
+
+    graphEditor.updateComponents();
+    return uuid;
+#else
+    return {};
+#endif
+}
+
+void MainComponent::refreshAssetRoots() {
+#if SYNTH_ENABLE_TIMELINE
+    // The bundle root is the open .agsproj directory, or invalid when this document has never been
+    // saved (in which case only "Recordings/" refs can resolve — see ProjectBundle's asset policy).
+    const juce::File bundleRoot =
+        (currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_)) ? currentBundleDir_
+                                                                                                 : juce::File();
+    // The SAME folder chooseTakeFiles() writes unsaved-project takes into — kept in one expression
+    // on each side rather than a shared helper so a change to either is visible at the other.
+    const juce::File recordingsRoot = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                          .getChildFile(synth::branding::kSettingsFolderName)
+                                          .getChildFile(kRecordingsFolderName);
+
+    audioEngine.getAudioClipStreamer().setAssetRoots(bundleRoot, recordingsRoot);
+#endif
+}
+
 void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
 #if SYNTH_ENABLE_TIMELINE
     auto* node = audioEngine.getGraph().getNodeForId(nodeId);
@@ -2190,11 +2272,20 @@ MainComponent::getAvailableTrackInNodes(synth::TrackId forTrack) {
         if (!(track.id == forTrack) && track.bindingUuid.isNotEmpty())
             claimedByOtherTracks.insert(track.bindingUuid);
 
+    // TL6-4: which NODE TYPE can feed this track depends on the track's kind — a MIDI track wants a
+    // Track In, an audio track wants a Track Audio. Offering the wrong one would let a user bind a
+    // track to a node that structurally cannot play it (the modules match on kind as well as uuid,
+    // so the result would be a track that silently plays nothing).
+    const auto* track = timelineDoc.getTrack(forTrack);
+    const ModuleType wantedType = (track != nullptr && track->kind == synth::TrackKind::Audio)
+                                      ? ModuleType::TimelineAudioSource
+                                      : ModuleType::TimelineMidiSource;
+
     for (auto* node : audioEngine.getGraph().getNodes()) {
         if (node == nullptr)
             continue;
         auto* module = dynamic_cast<ModuleBase*>(node->getProcessor());
-        if (module == nullptr || module->getModuleType() != ModuleType::TimelineMidiSource)
+        if (module == nullptr || module->getModuleType() != wantedType)
             continue;
 
         const juce::String uuid = node->properties["uuid"].toString();
@@ -2230,8 +2321,13 @@ void MainComponent::bindTrackTo(synth::TrackId track, const juce::String& uuid) 
 
 void MainComponent::createAndBindTrackInNode(synth::TrackId track) {
 #if SYNTH_ENABLE_TIMELINE
-    undoManager.recordCombinedChange(audioEngine.getGraph(), timelineDoc, [this, track] {
-        const juce::String uuid = createTrackInNode();
+    // TL6-4: kind-aware for the same reason getAvailableTrackInNodes() is — the chip's "new node"
+    // entry must create the node type the track can actually be fed by.
+    const auto* existing = timelineDoc.getTrack(track);
+    const bool wantsAudio = existing != nullptr && existing->kind == synth::TrackKind::Audio;
+
+    undoManager.recordCombinedChange(audioEngine.getGraph(), timelineDoc, [this, track, wantsAudio] {
+        const juce::String uuid = wantsAudio ? createTrackAudioNode() : createTrackInNode();
         if (uuid.isNotEmpty())
             timelineDoc.setTrackBinding(track, uuid);
     });
@@ -2301,5 +2397,27 @@ void MainComponent::addMidiTrack() {
 
     reconcileTimelineAfterGraphChange();
     statusBar.showMessage(pushed ? "Added Track " + juce::String(index + 1) : "Could not add a track");
+#endif
+}
+
+void MainComponent::addAudioTrack() {
+#if SYNTH_ENABLE_TIMELINE
+    const int index = (int)timelineDoc.getTracks().size();
+
+    // The exact mirror of addMidiTrack(): ONE compound undo step covering the Track Audio node, its
+    // auto-wire into the master bus, the track, its binding and its colour, so a single Cmd+Z
+    // removes all of it.
+    const bool pushed = undoManager.recordCombinedChange(audioEngine.getGraph(), timelineDoc, [this, index] {
+        const juce::String uuid = createTrackAudioNode();
+        const auto trackId = timelineDoc.addTrack(synth::TrackKind::Audio, "Audio " + juce::String(index + 1));
+        if (!trackId.isValid())
+            return; // at kMaxTracks: the node is rolled back with the rest of the step
+        if (uuid.isNotEmpty())
+            timelineDoc.setTrackBinding(trackId, uuid);
+        timelineDoc.setTrackColour(trackId, synth::ui::trackPaletteColour(index).getARGB());
+    });
+
+    reconcileTimelineAfterGraphChange();
+    statusBar.showMessage(pushed ? "Added Audio " + juce::String(index + 1) : "Could not add a track");
 #endif
 }

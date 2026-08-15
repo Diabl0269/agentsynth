@@ -56,6 +56,7 @@ public:
     }
 
     void addMidiTrack() override { ++addTrackCalls; }
+    void addAudioTrack() override { ++addAudioTrackCalls; } // TL6-4
 
     std::vector<BindingOption> options;
     std::map<juce::String, juce::String> names;
@@ -65,6 +66,7 @@ public:
     int deleteCalls = 0;
     int editCalls = 0;
     int addTrackCalls = 0;
+    int addAudioTrackCalls = 0;
 
 private:
     TimelineDoc& doc_;

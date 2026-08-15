@@ -59,9 +59,14 @@ struct TrackHeaderHost {
      *  header never has to know an AppUndoManager exists. */
     virtual void performTrackEdit(const std::function<void()>& mutation) = 0;
 
-    /** The "+ MIDI Track" button at the top of the header column. Lives on this interface rather
-     *  than on a separate callback so the whole header column talks to the app through one seam. */
+    /** The "+ Track" button's MIDI entry. Lives on this interface rather than on a separate callback
+     *  so the whole header column talks to the app through one seam. */
     virtual void addMidiTrack() = 0;
+
+    /** The "+ Track" button's Audio entry (TL6-4): a "Track Audio" node wired into the master bus,
+     *  plus an Audio-kind track bound to it, as ONE compound undo step — the exact mirror of
+     *  addMidiTrack(). */
+    virtual void addAudioTrack() = 0;
 };
 
 class TimelineTrackHeaderComponent : public juce::Component {

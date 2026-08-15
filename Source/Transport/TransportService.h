@@ -10,6 +10,7 @@
 namespace synth {
 
 struct TimelineSnapshot;
+class AudioClipStreamer;
 
 // The one clock (TL1). Owns play state, sample position, BPM, time signature and
 // loop bounds (in beats). The message thread posts commands through a lock-free
@@ -76,6 +77,19 @@ public:
     // driven by a bare TransportService in a unit test — so every reader must null-check.
     void setCurrentTimelineSnapshot(const TimelineSnapshot* snapshot) noexcept { currentTimelineSnapshot = snapshot; }
     const TimelineSnapshot* getCurrentTimelineSnapshot() const noexcept { return currentTimelineSnapshot; }
+
+    // -- The audio-clip streamer (TL6-4) -------------------------------------
+    // The second passenger on the same carrier, and for the same reason: TimelineAudioSourceModule
+    // needs the engine's synth::AudioClipStreamer, and the playhead is the only handle it already
+    // has. Unlike the snapshot above this pointer is NOT per-block — the streamer is owned by the
+    // engine for its whole lifetime, so the engine installs it once and it stays valid until
+    // shutdown. It is still written and read on the audio thread only (AudioEngine::renderPass sets
+    // it alongside the snapshot), hence a plain pointer rather than an atomic.
+    //
+    // Legitimately null: a bare TransportService in a unit test, or an engine that never installed
+    // one. Every reader must null-check.
+    void setAudioClipStreamer(AudioClipStreamer* streamer) noexcept { audioClipStreamer = streamer; }
+    AudioClipStreamer* getAudioClipStreamer() const noexcept { return audioClipStreamer; }
 
     // -- This block's DEVICE INPUT (TL6-2) -----------------------------------
     // The same carrier idea as the timeline snapshot above, for a different payload and for a
@@ -173,6 +187,10 @@ private:
 
     // Borrowed, never owned; valid for the current block only. See setCurrentTimelineSnapshot.
     const TimelineSnapshot* currentTimelineSnapshot = nullptr;
+
+    // TL6-4. Borrowed, never owned; owned by the engine and valid until its shutdown. See
+    // setAudioClipStreamer.
+    AudioClipStreamer* audioClipStreamer = nullptr;
 
     // TL6-2. Borrowed, never owned; valid for the current render pass only. See
     // setDeviceInputForBlock.

@@ -23,8 +23,8 @@ constexpr double kScrollPixelsPerWheelUnit = 200.0;
 constexpr int kSnapComboWidth = 90;
 constexpr const char* kTimelineSnapPropertyKey = "timelineSnap";
 
-// TL5-3: the "+ MIDI Track" strip at the top of the track-header column. Fixed height — the
-// headers below it scroll, the button never does.
+// TL5-3: the "+ Track" strip at the top of the track-header column. Fixed height — the headers
+// below it scroll, the button never does.
 constexpr int kAddTrackButtonHeight = 22;
 
 // TL5-9: automation strip chrome geometry. Code-only (mirrors the rest of this file's literal
@@ -42,10 +42,7 @@ TimelinePanelComponent::TimelinePanelComponent() {
 
     addAndMakeVisible(addTrackButton_);
     addTrackButton_.setComponentID("timelineAddTrackButton");
-    addTrackButton_.onClick = [this] {
-        if (trackHeaderHost_ != nullptr)
-            trackHeaderHost_->addMidiTrack();
-    };
+    addTrackButton_.onClick = [this] { showAddTrackMenu(); };
 
     addAndMakeVisible(trackHeaderViewport_);
     trackHeaderViewport_.setComponentID("timelineTrackHeaderViewport");
@@ -458,6 +455,28 @@ void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
     // the new one rather than refreshed.
     trackHeaderList_.headers.clear();
     syncTrackHeaders();
+}
+
+void TimelinePanelComponent::applyAddTrackMenuChoice(int menuId) {
+    if (trackHeaderHost_ == nullptr)
+        return;
+
+    if (menuId == kAddMidiTrackMenuId)
+        trackHeaderHost_->addMidiTrack();
+    else if (menuId == kAddAudioTrackMenuId)
+        trackHeaderHost_->addAudioTrack();
+}
+
+void TimelinePanelComponent::showAddTrackMenu() {
+    juce::PopupMenu menu;
+    menu.addItem(kAddMidiTrackMenuId, "MIDI Track");
+    menu.addItem(kAddAudioTrackMenuId, "Audio Track");
+
+    juce::Component::SafePointer<TimelinePanelComponent> safeThis(this);
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&addTrackButton_), [safeThis](int result) {
+        if (auto* self = safeThis.getComponent())
+            self->applyAddTrackMenuChoice(result);
+    });
 }
 
 void TimelinePanelComponent::timelineChanged(const synth::TimelineDoc&) {

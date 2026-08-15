@@ -130,6 +130,8 @@ add_library(Core STATIC
     Source/Transport/TransportService.cpp
     Source/Transport/TransportService.h
     # Timeline
+    Source/Timeline/AudioClipStreamer.cpp
+    Source/Timeline/AudioClipStreamer.h
     Source/Timeline/AutomationApplier.cpp
     Source/Timeline/AutomationApplier.h
     Source/Timeline/AutomationKernel.h
@@ -168,6 +170,8 @@ add_library(Core STATIC
     Source/Modules/MacroControlModule.h
     Source/Modules/RecordTapModule.cpp
     Source/Modules/RecordTapModule.h
+    Source/Modules/TimelineAudioSourceModule.h
+    Source/Modules/TimelineMidiSourceModule.h
     Source/Modules/VisualBuffer.h
     Source/Modules/FX/DelayModule.h
     Source/Modules/FX/DistortionModule.h

@@ -118,6 +118,30 @@ The timeline's clock and the headless render harness built on it. No audio devic
 | `MidiArmedPathUnchanged` | an armed MIDI track records exactly as TL5-5 left it — no tap is created at the click or by the poll, and the committed clip has notes and an empty `assetRef` |
 | `AudioRecordWithoutAnAudioOutputIsRefused` | no master bus ⇒ refused with a status message, no tap, no clip, and the transport is **not** started |
 
+### Audio clip playback tests (24 tests)
+
+`Tests/AudioClipPlaybackTests.cpp` — TL6-4. Five layers, all `#if SYNTH_ENABLE_TIMELINE`-gated. Playback tests render through `synth::OfflineTransportDriver` exactly the way `TimelineE2ETests.cpp` does, but assert **bit-exact sample content** rather than RMS windows, which two things make possible: the test WAV is 32-bit IEEE float carrying exactly-representable values (`n / 65536`), and the streamer's prefetch thread is **paused** (`setPrefetchPausedForTest`) and driven by `pumpForTest()` from the render loop's per-block callback. There is no sleep and no "eventually the ring fills" wait anywhere in the file.
+
+| What it covers | |
+|-------|-------|
+| `AudioClipSnapshotTest.*` | an Audio track flattens an `audioClips` run and **no** notes (and a MIDI track the reverse); runs sorted by `startBeat`; `gainDb` converted to linear once; a 400-char ref truncated but still NUL-terminated; a soloed **audio** track now sets `anySoloed` |
+| `UnresolvableEscapingRefRefused` | with a real file sitting just outside the root, `../…`, `Audio/../../…`, an absolute path and `/etc/passwd` all resolve to nothing, while a legitimate ref still resolves — the streamer never opens outside its roots |
+| `RecordingsRefResolvesAgainstTheRecordingsRoot` | TL6-3's `Recordings/take-1.wav` form resolves against the folder containing `Recordings/`; with no bundle root a bundle-relative ref resolves to nothing rather than falling back |
+| `RamStaysBounded` | a **60-second** take: resident capacity is `kRingFrames`, never the file's length, and playing the whole minute in one-second hops does not move `getTotalResidentBytes()` off one ring |
+| `PoolCapDropsExcessClipsGracefully` | 33 clips ⇒ exactly 32 stream, the last (document order) is silent, and reading through an absent handle zero-fills instead of crashing |
+| `MonoFileIsUpmixedToStereo` | a mono asset fills **both** ring channels, not one and a zero |
+| `ClipPlaysWhereItSits` | a clip on beats [2, 4): content equals the source segment sample for sample, silence outside it is **exact**, and the right channel carries the file's right channel |
+| `SourceOffsetHonoured` | `sourceStartSeconds = 1.0` ⇒ the block matches `file[48000 …]` |
+| `GainAndFadesShapeTheEnvelope` | a DC source, so the rendered sample **is** the envelope: `-6 dB` × a 1-beat linear fade-in × a 2-beat fade-out matches at every sample, with the three landmarks named individually |
+| `SeekIntoTheMiddlePlaysFromTheRightFrame` | locate past the pre-filled window: the un-pumped block is **exactly silent** (a seek gap is silence, never garbage), and one pump later playback resumes at the right frame |
+| `LoopWrapReplaysTheClip` | four loop passes reproduce the clip bit-exactly on every pass |
+| `OverlappingClipsSum` | two clips at the same beat from the same asset ⇒ two streams, output exactly doubled |
+| `MissingAssetIsSilentNoCrash` | a well-formed but non-existent ref: no stream, exact silence, no crash |
+| `MutedTrackSilent` / `SoloElsewhereSilencesThisTrack` / `BypassClears` / `StoppedSilent` / `UnboundNodePlaysNothing` | the five ways a Track Audio node legitimately renders nothing |
+| `RegisteredButInternalOnly` / `AbsentFromTheLibraryWithAPinnedSizeEstimate` | the internal-only checklist: factory key, module type, 0-in/2-out, `getFactoryTypeName`, non-authorable, **Sources** cable colour; absent from the library, with `estimateModuleSize("Track Audio")` measured against the real card |
+| `AddAudioTrackFlowTest.AddAudioTrackFlow` | the "+ Track" menu's Audio entry: **one** undo step creating a uuid'd `Track Audio` node wired `0→0`/`1→1` into Audio Output plus an Audio-kind track bound to it; undo removes both |
+| `AddAudioTrackFlowTest.AddMidiTrackFromTheSameMenuIsUnchanged` | the MIDI entry still does exactly what it did before the menu existed |
+
 ### Integration Tests (~38 tests)
 
 Test module interactions within the audio graph and cross-system integrations.

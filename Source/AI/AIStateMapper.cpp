@@ -30,6 +30,7 @@
 #include "../Modules/SampleHoldModule.h"
 #include "../Modules/SamplerModule.h"
 #include "../Modules/SequencerModule.h"
+#include "../Modules/TimelineAudioSourceModule.h"
 #include "../Modules/TimelineMidiSourceModule.h"
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
@@ -103,6 +104,10 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     // from the record flow. In the factory so our own saves round-trip a patch that has one;
     // kNonAuthorableModuleTypes below keeps it away from the model.
     {"Rec Tap", []() { return std::make_unique<RecordTapModule>(); }},
+    // TL6-4, gated for exactly the same reason as the two above: the class compiles unconditionally,
+    // but only a timeline build can create the node. In the factory so our own saves round-trip a
+    // patch that has one; kNonAuthorableModuleTypes below keeps it away from the model.
+    {"Track Audio", []() { return std::make_unique<TimelineAudioSourceModule>(); }},
 #endif
 };
 
@@ -134,6 +139,11 @@ const std::set<juce::String> kNonAuthorableModuleTypes = {
     // Sampler's `"state"` file path is denied on the untrusted path. The record flow is the only
     // thing that may create these.
     "Rec Tap",
+    // The audio-track player (TL6-4). Same authority argument as Rec Tap from the other direction:
+    // a Track Audio node plays whatever clips the track bound to it names, so a model authoring one
+    // and latching it onto a track would be choosing what gets read off disk and rendered. The
+    // timeline's own add-track flow is the only thing that may create these.
+    "Track Audio",
 };
 
 bool isInternalOnlyModule(const juce::String& typeName) { return kNonAuthorableModuleTypes.count(typeName) > 0; }
@@ -731,6 +741,8 @@ juce::String AIStateMapper::getFactoryTypeName(juce::AudioProcessor* processor) 
             return "Track In";
         case ModuleType::RecordTap:
             return "Rec Tap";
+        case ModuleType::TimelineAudioSource:
+            return "Track Audio";
         case ModuleType::AudioInput:
             // Deliberately the same string JUCE's audioInputNode reported (and therefore the same
             // string every pre-TL6-2 save wrote), so the two are interchangeable on disk.

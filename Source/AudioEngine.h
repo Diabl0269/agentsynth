@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Modules/ModuleBase.h"
+#include "Timeline/AudioClipStreamer.h"
 #include "Timeline/AutomationApplier.h"
 #include "Timeline/EpochExchange.h"
 #include "Timeline/TimelineSnapshotExchange.h"
@@ -156,6 +157,13 @@ public:
     // the clock. TL3's Track In modules read the published snapshot through this accessor.
     synth::TimelineSnapshotExchange& getTimelineSnapshots() noexcept { return timelineSnapshots; }
     const synth::TimelineSnapshotExchange& getTimelineSnapshots() const noexcept { return timelineSnapshots; }
+
+    // TL6-4: the disk-streaming service behind "Track Audio" clip playback. Owned by the engine (it
+    // outlives any one snapshot, unlike the exchange's payloads), kept in step with the published
+    // timeline by publishTimeline(), and handed to the modules through the playhead in renderPass.
+    // Exposed mainly so MainComponent can set its asset roots and tests can drive its pump.
+    synth::AudioClipStreamer& getAudioClipStreamer() noexcept { return clipStreamer_; }
+    const synth::AudioClipStreamer& getAudioClipStreamer() const noexcept { return clipStreamer_; }
 
     // TL4-2: the automation binding table's hand-off — the resolved "lane -> live parameter" list
     // the applier walks each block. Published by publishTimeline() below; exposed mainly so tests
@@ -372,6 +380,11 @@ private:
     // safe (a juce::AudioProcessorGraph::Node references nothing back), and shutdown() reclaims the
     // exchange explicitly anyway, so it never happens in practice.
     synth::EpochExchange<synth::AutomationBindingTable> automationBindings_;
+    // TL6-4. Declared before the graph for the same reverse-destruction-order reason as the
+    // transport and the exchanges: nodes read it through the playhead while they render, so the
+    // graph's nodes must be gone before it is. Its own destructor stops the prefetch thread and
+    // frees every reader.
+    synth::AudioClipStreamer clipStreamer_;
     synth::AutomationApplier automationApplier_;
     // TL4-5. Pre-allocated at construction (see AutomationUiFeed::kCapacity) — never grows, never
     // allocates from the audio thread.

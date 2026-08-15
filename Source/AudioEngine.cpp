@@ -135,6 +135,9 @@ void AudioEngine::shutdown() {
     // no reason.
     timelineSnapshots.reclaimAllUnsafe();
     automationBindings_.reclaimAllUnsafe();
+    // TL6-4, same precondition and same place: nothing can render any more, so the streamer's
+    // prefetch thread can be stopped and every open reader closed.
+    clipStreamer_.releaseAll();
 }
 
 void AudioEngine::publishTimeline(const synth::TimelineDoc& doc) {
@@ -183,6 +186,14 @@ void AudioEngine::publishTimeline(const synth::TimelineDoc& doc) {
             table->bindings.push_back(std::move(binding));
         }
     }
+
+    // TL6-4: the streamer is brought to THIS snapshot before it is published, so a clip the audio
+    // thread is about to see either has a stream already opening or is one the streamer deliberately
+    // declined (unresolvable, or past its pool cap) — never one it has not been told about. Runs on
+    // the message thread and opens no files itself: it resolves refs and hands the resulting paths
+    // to its prefetch thread.
+    if (snapshotPtr != nullptr)
+        clipStreamer_.syncToSnapshot(*snapshotPtr);
 
     // Snapshot FIRST, bindings SECOND. The whole coherence argument in AutomationApplier.h rests on
     // this order — do not reorder these two lines.
@@ -794,6 +805,11 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // decision, and stalling reclamation with it would let retired snapshots pile up for as long as
     // the setting is off.
     transport.setCurrentTimelineSnapshot(&timelineSnapshots.beginAudioBlock());
+
+    // TL6-4: the second passenger on the same carrier. Unlike the snapshot this pointer is not
+    // per-block — the streamer lives as long as the engine does — but it is installed here, beside
+    // the snapshot, so the two always arrive together and a node never sees one without the other.
+    transport.setAudioClipStreamer(&clipStreamer_);
 
     // TL3-3: the single MIDI-recording capture point. `midiMessages` here is already the buffer
     // that BOTH standalone (collector drain, see audioDeviceIOCallbackWithContext) and hosted

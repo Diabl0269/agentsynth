@@ -135,6 +135,12 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         // the height. Also library-less: the record flow places it (TL6-3). Measured against the
         // real card by RecordTapTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
         return {280, 123};
+    if (typeName == "Track Audio")
+        // Same shape as Rec Tap — no body controls, jacks setting the height — but with outputs
+        // only. Library-less like the other two internal nodes: the add-track flow places it
+        // (TL6-4). Measured against the real card by
+        // AudioClipPlaybackTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
+        return {280, 123};
     return {280, 360};
 }
 

@@ -219,7 +219,17 @@ public:
     int getTransportUpdateCountForTest() const noexcept { return transportUpdateCount_; }
 
     // ---- Track headers (TL5-3) ----
+    // Menu ids for the "+ Track" button's two-item menu (TL6-4). Numbered from 1 because
+    // juce::PopupMenu reserves 0 for "dismissed".
+    static constexpr int kAddMidiTrackMenuId = 1;
+    static constexpr int kAddAudioTrackMenuId = 2;
+
     juce::TextButton& getAddTrackButton() noexcept { return addTrackButton_; }
+
+    /** Applies an "+ Track" menu choice. Exposed as the headless test seam for a menu that never
+     *  runs in a test process — the same split TimelineTrackHeaderComponent's binding and context
+     *  menus use (applyBindingMenuChoice / applyContextMenuChoice). Anything else is ignored. */
+    void applyAddTrackMenuChoice(int menuId);
     juce::Viewport& getTrackHeaderViewport() noexcept { return trackHeaderViewport_; }
     int getTrackHeaderCount() const noexcept { return trackHeaderList_.headers.size(); }
     /** Header for the track at `index` in the doc's track order, or nullptr when out of range. */
@@ -323,7 +333,11 @@ private:
     // paste time (see pasteClipsAtPlayhead()).
     synth::TransportService* transport_ = nullptr;
 
-    juce::TextButton addTrackButton_{"+ MIDI Track"};
+    // TL6-4: was "+ MIDI Track"; the button now opens a MIDI/Audio menu instead of adding a MIDI
+    // track outright.
+    juce::TextButton addTrackButton_{"+ Track"};
+
+    void showAddTrackMenu();
     juce::Viewport trackHeaderViewport_;
     TrackHeaderList trackHeaderList_;
 

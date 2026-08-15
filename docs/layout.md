@@ -1377,7 +1377,7 @@ layout-plus-paint with no timer or animation of its own — one region diagram f
 | Transport bar strip  (play/stop/record/loop, BPM, time-sig, ruler   |  TL5-5 (+ TL5-2's
 | readout, metronome/count-in .......................... snap combo) |   snap selector)
 +---------------------+----------------------------------------------+
-| "+ MIDI Track"       | Ruler  (bar/beat ticks, loop brace)          |  TL5-3 (+ TL5-2)
+| "+ Track"            | Ruler  (bar/beat ticks, loop brace)          |  TL5-3 (+ TL5-2)
 | Track header column  +----------------------------------------------+
 | (name/colour/M/S/R/  | Clip lanes  <-or->  Piano roll               |  TL5-3 / TL5-7 <-> TL5-8
 |  binding chip),      | (one of the two, same rect, playhead overlay |
@@ -1506,7 +1506,7 @@ both regions share identical behaviour from one implementation.
 row per `synth::Track` (`Metrics::timelineTrackRowHeight`, 56 px — shared with the clip-lane area,
 TL5-7 below, so header rows and clip rows always line up), living in the panel's track-header
 column. The column is a fixed
-`"+ MIDI Track"` strip (22 px) at the top plus a `juce::Viewport` below it, so a project with more
+`"+ Track"` strip (22 px) at the top plus a `juce::Viewport` below it, so a project with more
 tracks than fit **scrolls**; rows are never compressed. Both live inside `getTrackHeaderBounds()`,
 so the panel's three regions still tile exactly.
 
@@ -1539,14 +1539,26 @@ a theme-dependent value would mean a project opened under another theme came bac
 
 Clicking the chip does two things: it **selects** the bound node in the GraphEditor's
 `SelectionModel` (a highlight only — no canvas scroll, no focus change) and opens a menu listing
-every live `Track In` node **not claimed by another track**, plus `"New Track In node"`. Picking one
-calls `TimelineDoc::setTrackBinding` as one undoable step, then reconciles.
+every live node of **the type this track's kind can be fed by** — `Track In` for a MIDI track,
+`Track Audio` for an Audio track (TL6-4) — **not claimed by another track**, plus
+`"New Track In node"` (which likewise creates whichever type the track's kind needs). Offering the
+wrong type would let a user bind a track to a node that structurally cannot play it: both modules
+match on **kind as well as uuid**, so the result would be a track that silently plays nothing.
+Picking one calls `TimelineDoc::setTrackBinding` as one undoable step, then reconciles.
 
 > **A binding is NEVER re-established automatically — least of all by name.** An orphaned track
 > stays orphaned until the user picks a node from that menu. Two nodes can carry the same display
 > name, and a silent re-bind would quietly play a track through someone else's instrument.
 
-**"+ MIDI Track"** is ONE compound undo step (`AppUndoManager::recordCombinedChange`, graph +
+**"+ Track"** (TL6-4; it read `"+ MIDI Track"` and added one outright until audio tracks existed)
+opens a two-item menu — **MIDI Track** / **Audio Track** — whose ids are
+`TimelinePanelComponent::kAddMidiTrackMenuId` / `kAddAudioTrackMenuId`. Both entries land on
+`TrackHeaderHost` (`addMidiTrack()` / `addAudioTrack()`), and
+`TimelinePanelComponent::applyAddTrackMenuChoice(id)` is the headless seam — the same split the
+binding and context menus use, since a `juce::PopupMenu` never runs in the test binary.
+`MainComponent::simulateAddMidiTrackClick()` / `simulateAddAudioTrackClick()` call straight into it.
+
+**The MIDI entry** is ONE compound undo step (`AppUndoManager::recordCombinedChange`, graph +
 timeline in a single transaction, so one Cmd+Z removes all of it and redo restores it with the same
 node uuid):
 
@@ -1564,8 +1576,19 @@ node uuid):
 3. add a `Midi` track named `Track N`, bind it to the new node's uuid, and give it the palette
    colour for its index.
 
+**The Audio entry** mirrors it exactly (one compound step, factory-created node, uuid minted and
+mirrored, placed at the left edge, an `Audio` track named `Audio N` bound to it with its palette
+colour), with one difference in step 2: the auto-wire target is never ambiguous, because the master
+bus is a singleton — but there are **two** possible sinks and the order matters. If TL6-3's
+`Rec Tap` has already been spliced in front of Audio Output, wiring straight to the output would
+route the track **around** the tap and quietly leave it out of every subsequent take, so
+`createTrackAudioNode()` prefers the tap when one exists and falls back to Audio Output otherwise.
+That makes both orderings compose: a track added *before* the first take is re-spliced by
+`ensureMasterRecordTap()`, and one added *after* it lands on the tap directly. Both channels are
+wired (`0 → 0`, `1 → 1`).
+
 **Delete track** (right-click a header) is the same compound step in reverse: the track and its
-bound `Track In` node go together, and come back together.
+bound `Track In` / `Track Audio` node go together, and come back together.
 
 Headless test seams (a `juce::PopupMenu` never runs in the test binary): `collectBindingOptions()` /
 `applyBindingMenuChoice(id)` and `applyContextMenuChoice(id)` are the menus' semantics without the

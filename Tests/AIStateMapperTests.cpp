@@ -1108,7 +1108,12 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
                       "Gate 3, Gate 4, Gate 5, Gate 6, Gate 7, Gate 8, Pitch 1, Pitch 2, Pitch 3, Pitch 4, Pitch 5, "
                       "Pitch 6, Pitch 7, Pitch 8, bpm, bypassed, run, syncToTransport"},
 #if SYNTH_ENABLE_TIMELINE
-        // TL3-1. The only factory entry gated on the timeline flag, so the row is gated too.
+        // TL6-4. Gated with its factory entry, like the two above. Every playback value it needs
+        // (gain, fades, trim) lives on the CLIP, not on the node, so the inherited bypass is the
+        // whole parameter set — and there is deliberately no mute, since a muted track is a document
+        // state the module already honours.
+        {"Track Audio", "bypassed"},
+        // TL3-1. Gated on the timeline flag, so the row is gated too.
         {"Track In", "bypassed"},
 #endif
         {"VCA", "bypassed, gain, muted, poly"},
@@ -1197,6 +1202,9 @@ TEST(AIStateMapperTest, AuthorableModuleTypesGolden) {
     // but never offered to a model, and refused outright by validatePatch on the untrusted path —
     // it names a file path on disk, so authoring one is authoring a write target.
     EXPECT_FALSE(actual.contains("Rec Tap"));
+    // TL6-4: the audio-track player. Same reasoning from the other direction — it plays whatever
+    // clips the track bound to it names, so authoring one is choosing what gets read off disk.
+    EXPECT_FALSE(actual.contains("Track Audio"));
 
     // The schema hands the model exactly this list.
     const juce::var schema = synth::AIStateMapper::getPatchSchema(); // held: the chain below points into it
@@ -1220,7 +1228,8 @@ TEST(AIStateMapperTest, UntrustedPatchRejectsInternalOnlyModuleTypes) {
     juce::StringArray internalTypes = {"Attenuverter", "Mod Slot"};
 #if SYNTH_ENABLE_TIMELINE
     internalTypes.add("Track In");
-    internalTypes.add("Rec Tap"); // TL6-3
+    internalTypes.add("Rec Tap");     // TL6-3
+    internalTypes.add("Track Audio"); // TL6-4
 #endif
 
     for (const auto& type : internalTypes) {

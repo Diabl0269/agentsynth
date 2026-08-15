@@ -124,6 +124,11 @@ inline ModuleCategory categoryFor(ModuleType t) noexcept {
     case ModuleType::Noise:
     case ModuleType::Sampler:
     case ModuleType::LFO:
+    // Track Audio (TL6-4) is bucketed with the Sampler rather than with its sibling Track In: in
+    // ByModuleCategory mode the bucket colours the CABLE, and what leaves this node is audio read
+    // off a file — exactly what leaves a Sampler. Track In stays under Sequencing because what
+    // leaves it is notes.
+    case ModuleType::TimelineAudioSource:
         return ModuleCategory::Sources;
 
     case ModuleType::Sequencer:

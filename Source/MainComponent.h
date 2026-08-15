@@ -155,9 +155,15 @@ public:
     // TL5-5: the app's one live MidiRecorder — see docs/architecture.md's MidiRecorder wiring
     // entry. Test-only access mirrors getAutomationRecorder() above.
     synth::MidiRecorder& getMidiRecorderForTest() { return midiRecorder; }
+    // TL6-4: the "+ Track" button opens a MIDI/Audio menu rather than adding a track outright, and a
+    // juce::PopupMenu never runs in a test process — so these drive the menu's own headless seam
+    // (TimelinePanelComponent::applyAddTrackMenuChoice), which is exactly what the async callback
+    // calls when the user picks an item.
     void simulateAddMidiTrackClick() {
-        if (timelinePanel.getAddTrackButton().onClick)
-            timelinePanel.getAddTrackButton().onClick();
+        timelinePanel.applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddMidiTrackMenuId);
+    }
+    void simulateAddAudioTrackClick() {
+        timelinePanel.applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddAudioTrackMenuId);
     }
     /** Exactly what the Save dialog's callback runs: a name ending in `.agsproj` writes a project
      *  bundle (graph + timeline), anything else writes a plain `.json` preset. */
@@ -303,11 +309,24 @@ private:
     void deleteTrack(synth::TrackId track) override;
     void performTrackEdit(const std::function<void()>& mutation) override;
     void addMidiTrack() override;
+    void addAudioTrack() override;
 
     // Creates a "Track In" node with a fresh uuid at the canvas' left edge, wires it to the single
     // MIDI instrument in the patch when there is exactly one, and returns its uuid (empty on
     // failure). Called INSIDE the caller's undo transaction — it opens none of its own.
     juce::String createTrackInNode();
+
+    // TL6-4's twin of createTrackInNode(): a "Track Audio" node with a fresh uuid, wired stereo into
+    // the master bus — the Rec Tap when one is spliced in, otherwise the Audio Output node directly,
+    // so the two orderings compose (adding an audio track before or after the first take both end up
+    // with the track's audio flowing THROUGH the tap). Returns its uuid, empty on failure. Called
+    // INSIDE the caller's undo transaction.
+    juce::String createTrackAudioNode();
+
+    // TL6-4. Points the engine's AudioClipStreamer at the current document's asset roots: the open
+    // bundle directory (invalid when the project has never been saved) plus the app-data Recordings
+    // folder TL6-3 writes unsaved-project takes into. Called wherever `currentBundleDir_` changes.
+    void refreshAssetRoots();
 
     // The graph node carrying this uuid, or nullptr.
     juce::AudioProcessorGraph::Node* findNodeByUuid(const juce::String& uuid) const;
