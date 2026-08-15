@@ -44,6 +44,7 @@ add_executable(Tests
     TimelineUndoTests.cpp
     TimelineReconciliationTests.cpp
     TimelineValidatorTests.cpp
+    ArrangementContextTests.cpp
     TimelineMidiSourceTests.cpp
     MidiRecorderTests.cpp
     MidiClipFileTests.cpp
