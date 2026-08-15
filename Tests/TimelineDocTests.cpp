@@ -185,7 +185,7 @@ TEST_F(TimelineDocTest, MoveClipReSortsAndKeepsNotes) {
     const auto track = doc.addTrack(TrackKind::Midi, "T");
     const auto first = doc.addClip(track, 0.0, 4.0, "first");
     const auto second = doc.addClip(track, 4.0, 4.0, "second");
-    ASSERT_TRUE(doc.addNote(first, makeNote(1.0, 60)));
+    ASSERT_TRUE(doc.addNote(first, makeNote(1.0, 60)).isValid());
 
     ASSERT_TRUE(doc.moveClip(first, 16.0));
     const auto* t = doc.getTrack(track);
@@ -238,10 +238,10 @@ TEST_F(TimelineDocTest, ClipLookupHelpersResolveOwner) {
 TEST_F(TimelineDocTest, NotesStaySortedByStartThenPitch) {
     const auto track = doc.addTrack(TrackKind::Midi, "T");
     const auto clip = doc.addClip(track, 0.0, 4.0, "c");
-    ASSERT_TRUE(doc.addNote(clip, makeNote(2.0, 60)));
-    ASSERT_TRUE(doc.addNote(clip, makeNote(0.0, 72)));
-    ASSERT_TRUE(doc.addNote(clip, makeNote(0.0, 64)));
-    ASSERT_TRUE(doc.addNote(clip, makeNote(1.0, 61)));
+    ASSERT_TRUE(doc.addNote(clip, makeNote(2.0, 60)).isValid());
+    ASSERT_TRUE(doc.addNote(clip, makeNote(0.0, 72)).isValid());
+    ASSERT_TRUE(doc.addNote(clip, makeNote(0.0, 64)).isValid());
+    ASSERT_TRUE(doc.addNote(clip, makeNote(1.0, 61)).isValid());
 
     const auto& notes = doc.getClip(clip)->notes;
     ASSERT_EQ(notes.size(), 4u);
@@ -259,16 +259,16 @@ TEST_F(TimelineDocTest, InvalidNotesAreRejectedWithoutMutating) {
     const auto revisionBefore = doc.getRevision();
     const auto callsBefore = listener.calls;
 
-    EXPECT_FALSE(doc.addNote(clip, makeNote(0.0, 60, 0.0)));      // zero length
-    EXPECT_FALSE(doc.addNote(clip, makeNote(0.0, 60, -1.0)));     // negative length
-    EXPECT_FALSE(doc.addNote(clip, makeNote(0.0, -1)));           // pitch below range
-    EXPECT_FALSE(doc.addNote(clip, makeNote(0.0, 128)));          // pitch above range
-    EXPECT_FALSE(doc.addNote(clip, makeNote(0.0, 60, 1.0, 0)));   // velocity 0 is a note-off
-    EXPECT_FALSE(doc.addNote(clip, makeNote(0.0, 60, 1.0, 128))); // velocity above range
-    EXPECT_FALSE(doc.addNote(clip, makeNote(0.0, 60, 1.0, 100, 0)));
-    EXPECT_FALSE(doc.addNote(clip, makeNote(0.0, 60, 1.0, 100, 17)));
-    EXPECT_FALSE(doc.addNote(clip, makeNote(-1.0, 60))); // before the clip start
-    EXPECT_FALSE(doc.addNote(ClipId{999}, makeNote(0.0, 60)));
+    EXPECT_FALSE(doc.addNote(clip, makeNote(0.0, 60, 0.0)).isValid());      // zero length
+    EXPECT_FALSE(doc.addNote(clip, makeNote(0.0, 60, -1.0)).isValid());     // negative length
+    EXPECT_FALSE(doc.addNote(clip, makeNote(0.0, -1)).isValid());           // pitch below range
+    EXPECT_FALSE(doc.addNote(clip, makeNote(0.0, 128)).isValid());          // pitch above range
+    EXPECT_FALSE(doc.addNote(clip, makeNote(0.0, 60, 1.0, 0)).isValid());   // velocity 0 is a note-off
+    EXPECT_FALSE(doc.addNote(clip, makeNote(0.0, 60, 1.0, 128)).isValid()); // velocity above range
+    EXPECT_FALSE(doc.addNote(clip, makeNote(0.0, 60, 1.0, 100, 0)).isValid());
+    EXPECT_FALSE(doc.addNote(clip, makeNote(0.0, 60, 1.0, 100, 17)).isValid());
+    EXPECT_FALSE(doc.addNote(clip, makeNote(-1.0, 60)).isValid()); // before the clip start
+    EXPECT_FALSE(doc.addNote(ClipId{999}, makeNote(0.0, 60)).isValid());
 
     EXPECT_TRUE(doc.getClip(clip)->notes.empty());
     EXPECT_EQ(doc.getRevision(), revisionBefore);
@@ -278,7 +278,7 @@ TEST_F(TimelineDocTest, InvalidNotesAreRejectedWithoutMutating) {
 TEST_F(TimelineDocTest, ClearNotesIsANoOpOnAnEmptyClip) {
     const auto track = doc.addTrack(TrackKind::Midi, "T");
     const auto clip = doc.addClip(track, 0.0, 4.0, "c");
-    ASSERT_TRUE(doc.addNote(clip, makeNote(0.0, 60)));
+    ASSERT_TRUE(doc.addNote(clip, makeNote(0.0, 60)).isValid());
     const auto revisionAfterNote = doc.getRevision();
 
     ASSERT_TRUE(doc.clearNotes(clip));
@@ -401,7 +401,7 @@ TEST_F(TimelineDocTest, ListenerFiresExactlyOncePerEffectiveMutation) {
     EXPECT_EQ(listener.calls, 1);
     const auto clip = doc.addClip(track, 0.0, 4.0, "c");
     EXPECT_EQ(listener.calls, 2);
-    ASSERT_TRUE(doc.addNote(clip, makeNote(0.0, 60)));
+    ASSERT_TRUE(doc.addNote(clip, makeNote(0.0, 60)).isValid());
     EXPECT_EQ(listener.calls, 3);
     const auto lane = doc.addLane(track, "uuid", "cutoff", makeRange(0.0f, 1.0f, 0.0f));
     EXPECT_EQ(listener.calls, 4);
@@ -414,7 +414,7 @@ TEST_F(TimelineDocTest, ListenerFiresExactlyOncePerEffectiveMutation) {
     EXPECT_TRUE(doc.moveClip(clip, 0.0));         // already there
     EXPECT_TRUE(doc.resizeClip(clip, 4.0));
     EXPECT_EQ(doc.addLane(track, "uuid", "cutoff", makeRange(0.0f, 1.0f, 0.0f)), lane);
-    EXPECT_FALSE(doc.addNote(clip, makeNote(0.0, 200)));
+    EXPECT_FALSE(doc.addNote(clip, makeNote(0.0, 200)).isValid());
     EXPECT_FALSE(doc.setTrackName(TrackId{999}, "ghost"));
     doc.clear();
     EXPECT_EQ(listener.calls, 6); // only the clear() did anything
@@ -457,8 +457,8 @@ TEST_F(TimelineDocTest, ClipNoteLaneAndBreakpointCapsAreEnforced) {
 
     const auto clip = doc.addClip(track, 0.0, 1.0, "c");
     for (int i = 0; i < TimelineDoc::kMaxNotesPerClip; ++i)
-        ASSERT_TRUE(doc.addNote(clip, makeNote(static_cast<double>(i), 60))) << "note " << i;
-    EXPECT_FALSE(doc.addNote(clip, makeNote(1e9, 60)));
+        ASSERT_TRUE(doc.addNote(clip, makeNote(static_cast<double>(i), 60)).isValid()) << "note " << i;
+    EXPECT_FALSE(doc.addNote(clip, makeNote(1e9, 60)).isValid());
     EXPECT_EQ(static_cast<int>(doc.getClip(clip)->notes.size()), TimelineDoc::kMaxNotesPerClip);
 
     for (int i = 1; i < TimelineDoc::kMaxClipsPerTrack; ++i)
@@ -654,9 +654,9 @@ TEST_F(TimelineDocTest, FromVarReSortsMisOrderedFileContent) {
             "clips": [
                 { "id": 2, "name": "late", "startBeat": 8.0, "lengthBeats": 4.0, "notes": [] },
                 { "id": 1, "name": "early", "startBeat": 0.0, "lengthBeats": 4.0, "notes": [
-                    { "startBeat": 3.0, "lengthBeats": 1.0, "pitch": 60, "velocity": 100, "channel": 1 },
-                    { "startBeat": 1.0, "lengthBeats": 1.0, "pitch": 64, "velocity": 100, "channel": 1 },
-                    { "startBeat": 1.0, "lengthBeats": 1.0, "pitch": 62, "velocity": 100, "channel": 1 }
+                    { "id": 1, "startBeat": 3.0, "lengthBeats": 1.0, "pitch": 60, "velocity": 100, "channel": 1 },
+                    { "id": 2, "startBeat": 1.0, "lengthBeats": 1.0, "pitch": 64, "velocity": 100, "channel": 1 },
+                    { "id": 3, "startBeat": 1.0, "lengthBeats": 1.0, "pitch": 62, "velocity": 100, "channel": 1 }
                 ]}
             ],
             "lanes": [{

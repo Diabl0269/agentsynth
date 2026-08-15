@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <limits>
 #include <set>
 
@@ -22,7 +23,9 @@ bool clipLess(const Clip& a, const Clip& b) {
 bool noteLess(const MidiNote& a, const MidiNote& b) {
     if (a.startBeat != b.startBeat)
         return a.startBeat < b.startBeat;
-    return a.pitch < b.pitch;
+    if (a.pitch != b.pitch)
+        return a.pitch < b.pitch;
+    return a.id.value < b.id.value;
 }
 
 // -- validation ---------------------------------------------------------------
@@ -209,6 +212,23 @@ Clip* TimelineDoc::findClip(ClipId id, Track** ownerOut) {
     return nullptr;
 }
 
+MidiNote* TimelineDoc::findNote(NoteId id, Clip** ownerOut) {
+    if (!id.isValid())
+        return nullptr;
+    for (auto& track : tracks) {
+        for (auto& clip : track.clips) {
+            for (auto& note : clip.notes) {
+                if (note.id == id) {
+                    if (ownerOut != nullptr)
+                        *ownerOut = &clip;
+                    return &note;
+                }
+            }
+        }
+    }
+    return nullptr;
+}
+
 AutomationLane* TimelineDoc::findLane(LaneId id, Track** ownerOut) {
     if (!id.isValid())
         return nullptr;
@@ -239,6 +259,15 @@ const Clip* TimelineDoc::getClip(ClipId id) const { return const_cast<TimelineDo
 const Track* TimelineDoc::getTrackForClip(ClipId id) const {
     Track* owner = nullptr;
     if (const_cast<TimelineDoc*>(this)->findClip(id, &owner) == nullptr)
+        return nullptr;
+    return owner;
+}
+
+const MidiNote* TimelineDoc::getNote(NoteId id) const { return const_cast<TimelineDoc*>(this)->findNote(id); }
+
+const Clip* TimelineDoc::getClipForNote(NoteId id) const {
+    Clip* owner = nullptr;
+    if (const_cast<TimelineDoc*>(this)->findNote(id, &owner) == nullptr)
         return nullptr;
     return owner;
 }
@@ -435,19 +464,159 @@ bool TimelineDoc::resizeClip(ClipId id, double newLengthBeats) {
     });
 }
 
-// ---------------------------------------------------------------------- notes --
+std::pair<ClipId, ClipId> TimelineDoc::splitClip(ClipId id, double atBeat) {
+    Track* owner = nullptr;
+    auto* clip = findClip(id, &owner);
+    if (clip == nullptr)
+        return {};
+    if (!std::isfinite(atBeat) || atBeat <= 0.0 || atBeat >= clip->lengthBeats)
+        return {};
+    if (static_cast<int>(owner->clips.size()) >= kMaxClipsPerTrack)
+        return {};
 
-bool TimelineDoc::addNote(ClipId clipId, const MidiNote& note) {
-    auto* clip = findClip(clipId);
-    if (clip == nullptr || !isValidNote(note))
+    return applyMutation([&]() -> std::pair<ClipId, ClipId> {
+        const double rightStart = clip->startBeat + atBeat;
+        const double rightLength = clip->lengthBeats - atBeat;
+        const juce::String rightName = clip->name;
+
+        // Partition the existing (sorted) notes into the two halves. A note straddling the
+        // boundary is split in two: the left half keeps the original note's id, the right half
+        // gets a fresh one. Re-based/truncated notes stay individually sorted by the transform
+        // (a uniform shift or a length change never reorders a run), but the two halves have to
+        // be re-sorted against EACH OTHER once combined: a straddling note's right half lands at
+        // beat 0 alongside any entirely-right note that also started exactly at the boundary,
+        // and pitch/id must still break the tie correctly.
+        std::vector<MidiNote> leftNotes;
+        std::vector<MidiNote> rightNotes;
+        leftNotes.reserve(clip->notes.size());
+        rightNotes.reserve(clip->notes.size());
+
+        for (const auto& note : clip->notes) {
+            const double noteEnd = note.startBeat + note.lengthBeats;
+            if (noteEnd <= atBeat) {
+                leftNotes.push_back(note);
+            } else if (note.startBeat >= atBeat) {
+                MidiNote moved = note;
+                moved.startBeat -= atBeat;
+                rightNotes.push_back(moved);
+            } else {
+                MidiNote left = note;
+                left.lengthBeats = atBeat - note.startBeat;
+                leftNotes.push_back(left);
+
+                MidiNote right = note;
+                right.id = NoteId{nextNoteId++};
+                right.startBeat = 0.0;
+                right.lengthBeats = noteEnd - atBeat;
+                rightNotes.push_back(right);
+            }
+        }
+        std::stable_sort(leftNotes.begin(), leftNotes.end(), noteLess);
+        std::stable_sort(rightNotes.begin(), rightNotes.end(), noteLess);
+
+        clip->notes = std::move(leftNotes);
+        clip->lengthBeats = atBeat;
+
+        Clip right;
+        right.id = ClipId{nextClipId++};
+        right.name = rightName;
+        right.startBeat = rightStart;
+        right.lengthBeats = rightLength;
+        right.notes = std::move(rightNotes);
+
+        // `clip` (and therefore `id`, the original/left id) stays valid; only insert may
+        // reallocate, and we don't dereference `clip` again after this point.
+        const auto pos = std::lower_bound(owner->clips.begin(), owner->clips.end(), right, clipLess);
+        const auto insertedIt = owner->clips.insert(pos, std::move(right));
+        return std::make_pair(id, insertedIt->id);
+    });
+}
+
+bool TimelineDoc::joinClips(ClipId a, ClipId b) {
+    if (a == b)
         return false;
-    if (static_cast<int>(clip->notes.size()) >= kMaxNotesPerClip)
+    Track* ownerA = nullptr;
+    Track* ownerB = nullptr;
+    auto* clipA = findClip(a, &ownerA);
+    auto* clipB = findClip(b, &ownerB);
+    if (clipA == nullptr || clipB == nullptr)
+        return false;
+    if (ownerA != ownerB)
+        return false;
+    if (!(clipA->startBeat < clipB->startBeat))
+        return false;
+    if (clipB->startBeat < clipA->startBeat + clipA->lengthBeats) // overlap
+        return false;
+    if (clipA->notes.size() + clipB->notes.size() > static_cast<size_t>(kMaxNotesPerClip))
         return false;
 
     return applyMutation([&] {
-        const auto pos = std::lower_bound(clip->notes.begin(), clip->notes.end(), note, noteLess);
-        clip->notes.insert(pos, note);
+        const double rebase = clipB->startBeat - clipA->startBeat;
+        const double newEnd = clipB->startBeat + clipB->lengthBeats;
+
+        std::vector<MidiNote> rebasedB;
+        rebasedB.reserve(clipB->notes.size());
+        for (const auto& note : clipB->notes) {
+            MidiNote moved = note;
+            moved.startBeat += rebase;
+            rebasedB.push_back(moved);
+        }
+
+        std::vector<MidiNote> merged;
+        merged.reserve(clipA->notes.size() + rebasedB.size());
+        std::merge(clipA->notes.begin(), clipA->notes.end(), rebasedB.begin(), rebasedB.end(),
+                   std::back_inserter(merged), noteLess);
+        clipA->notes = std::move(merged);
+        clipA->lengthBeats = newEnd - clipA->startBeat;
+
+        // Erase b last: clipA and clipB alias the same vector, but nothing above dereferences
+        // clipA or clipB again after this.
+        ownerA->clips.erase(ownerA->clips.begin() + (clipB - ownerA->clips.data()));
         return true;
+    });
+}
+
+ClipId TimelineDoc::duplicateClip(ClipId id) {
+    Track* owner = nullptr;
+    auto* clip = findClip(id, &owner);
+    if (clip == nullptr)
+        return {};
+    if (static_cast<int>(owner->clips.size()) >= kMaxClipsPerTrack)
+        return {};
+
+    return applyMutation([&] {
+        Clip dup;
+        dup.id = ClipId{nextClipId++};
+        dup.name = clip->name;
+        dup.startBeat = clip->startBeat + clip->lengthBeats;
+        dup.lengthBeats = clip->lengthBeats;
+        dup.notes.reserve(clip->notes.size());
+        for (const auto& note : clip->notes) {
+            MidiNote copy = note;
+            copy.id = NoteId{nextNoteId++};
+            dup.notes.push_back(copy);
+        }
+        // Ids are assigned in the same relative order as the source's already-sorted notes, so
+        // the copy is sorted too — no re-sort needed.
+        const auto pos = std::lower_bound(owner->clips.begin(), owner->clips.end(), dup, clipLess);
+        return owner->clips.insert(pos, std::move(dup))->id;
+    });
+}
+
+// ---------------------------------------------------------------------- notes --
+
+NoteId TimelineDoc::addNote(ClipId clipId, const MidiNote& note) {
+    auto* clip = findClip(clipId);
+    if (clip == nullptr || !isValidNote(note))
+        return {};
+    if (static_cast<int>(clip->notes.size()) >= kMaxNotesPerClip)
+        return {};
+
+    return applyMutation([&] {
+        MidiNote toInsert = note;
+        toInsert.id = NoteId{nextNoteId++}; // ids are doc-assigned, never taken from the caller
+        const auto pos = std::lower_bound(clip->notes.begin(), clip->notes.end(), toInsert, noteLess);
+        return clip->notes.insert(pos, toInsert)->id;
     });
 }
 
@@ -460,6 +629,107 @@ bool TimelineDoc::clearNotes(ClipId clipId) {
 
     return applyMutation([&] {
         clip->notes.clear();
+        return true;
+    });
+}
+
+bool TimelineDoc::removeNote(NoteId id) {
+    Clip* owner = nullptr;
+    auto* note = findNote(id, &owner);
+    if (note == nullptr)
+        return false;
+
+    return applyMutation([&] {
+        owner->notes.erase(owner->notes.begin() + (note - owner->notes.data()));
+        return true;
+    });
+}
+
+bool TimelineDoc::moveNote(NoteId id, double newStartBeat, int newPitch) {
+    if (!isFiniteAtOrAfterZero(newStartBeat) || newPitch < 0 || newPitch > 127)
+        return false;
+    Clip* owner = nullptr;
+    auto* note = findNote(id, &owner);
+    if (note == nullptr)
+        return false;
+    if (note->startBeat == newStartBeat && note->pitch == newPitch)
+        return true;
+
+    return applyMutation([&] {
+        // Lift the note out and re-insert it at its new sorted position, rather than re-sorting
+        // the whole clip.
+        const auto index = note - owner->notes.data();
+        MidiNote moved = std::move(*note);
+        moved.startBeat = newStartBeat;
+        moved.pitch = newPitch;
+        owner->notes.erase(owner->notes.begin() + index);
+        const auto pos = std::lower_bound(owner->notes.begin(), owner->notes.end(), moved, noteLess);
+        owner->notes.insert(pos, std::move(moved));
+        return true;
+    });
+}
+
+bool TimelineDoc::resizeNote(NoteId id, double newLengthBeats) {
+    if (!isFinitePositive(newLengthBeats))
+        return false;
+    auto* note = findNote(id);
+    if (note == nullptr)
+        return false;
+    if (note->lengthBeats == newLengthBeats)
+        return true;
+
+    return applyMutation([&] {
+        note->lengthBeats = newLengthBeats; // length doesn't participate in note ordering
+        return true;
+    });
+}
+
+bool TimelineDoc::setNoteVelocity(NoteId id, int velocity) {
+    if (velocity < 1 || velocity > 127)
+        return false;
+    auto* note = findNote(id);
+    if (note == nullptr)
+        return false;
+    if (note->velocity == velocity)
+        return true;
+
+    return applyMutation([&] {
+        note->velocity = velocity;
+        return true;
+    });
+}
+
+bool TimelineDoc::quantiseNotes(ClipId clipId, double gridBeats, double strength) {
+    auto* clip = findClip(clipId);
+    if (clip == nullptr)
+        return false;
+    if (!std::isfinite(gridBeats) || gridBeats <= 0.0)
+        return false;
+    if (!std::isfinite(strength))
+        return false;
+
+    const double clampedStrength = juce::jlimit(0.0, 1.0, strength);
+
+    std::vector<double> newStarts(clip->notes.size());
+    bool anyMoved = false;
+    for (size_t i = 0; i < clip->notes.size(); ++i) {
+        const double start = clip->notes[i].startBeat;
+        const double nearestGrid = std::round(start / gridBeats) * gridBeats;
+        double newStart = start + clampedStrength * (nearestGrid - start);
+        newStart = std::max(0.0, newStart);
+        newStarts[i] = newStart;
+        if (newStart != start)
+            anyMoved = true;
+    }
+    if (!anyMoved)
+        return true; // nothing actually moves: no-op, no revision bump
+
+    return applyMutation([&] {
+        for (size_t i = 0; i < clip->notes.size(); ++i)
+            clip->notes[i].startBeat = newStarts[i];
+        // Lengths are untouched and every note moved independently, so the list needs a single
+        // re-sort at the end rather than a re-position per note.
+        std::stable_sort(clip->notes.begin(), clip->notes.end(), noteLess);
         return true;
     });
 }
@@ -554,6 +824,7 @@ juce::var TimelineDoc::toVar() const {
     root->setProperty("nextTrackId", nextTrackId);
     root->setProperty("nextClipId", nextClipId);
     root->setProperty("nextLaneId", nextLaneId);
+    root->setProperty("nextNoteId", nextNoteId);
 
     juce::Array<juce::var> trackVars;
     for (const auto& track : tracks) {
@@ -578,6 +849,7 @@ juce::var TimelineDoc::toVar() const {
             juce::Array<juce::var> noteVars;
             for (const auto& note : clip.notes) {
                 juce::DynamicObject::Ptr n = new juce::DynamicObject();
+                n->setProperty("id", note.id.value);
                 n->setProperty("startBeat", note.startBeat);
                 n->setProperty("lengthBeats", note.lengthBeats);
                 n->setProperty("pitch", note.pitch);
@@ -636,9 +908,11 @@ bool TimelineDoc::fromVar(const juce::var& state) {
     std::int64_t parsedNextTrackId = 1;
     std::int64_t parsedNextClipId = 1;
     std::int64_t parsedNextLaneId = 1;
+    std::int64_t parsedNextNoteId = 1;
     if (!readOptionalCounter(rootObj->getProperty("nextTrackId"), parsedNextTrackId) ||
         !readOptionalCounter(rootObj->getProperty("nextClipId"), parsedNextClipId) ||
-        !readOptionalCounter(rootObj->getProperty("nextLaneId"), parsedNextLaneId))
+        !readOptionalCounter(rootObj->getProperty("nextLaneId"), parsedNextLaneId) ||
+        !readOptionalCounter(rootObj->getProperty("nextNoteId"), parsedNextNoteId))
         return false;
 
     const juce::Array<juce::var>* trackList = nullptr;
@@ -651,6 +925,7 @@ bool TimelineDoc::fromVar(const juce::var& state) {
     std::set<std::int64_t> seenTrackIds;
     std::set<std::int64_t> seenClipIds;
     std::set<std::int64_t> seenLaneIds;
+    std::set<std::int64_t> seenNoteIds;
     std::set<std::pair<juce::String, juce::String>> seenLaneParams;
 
     if (trackList != nullptr) {
@@ -729,6 +1004,13 @@ bool TimelineDoc::fromVar(const juce::var& state) {
                             if (nObj == nullptr)
                                 return false;
                             MidiNote note;
+                            std::int64_t noteIdValue = 0;
+                            // Required, not optional: the dialect never shipped without note ids,
+                            // so a file missing one is malformed, not old-format.
+                            if (!readId(nObj->getProperty("id"), noteIdValue) ||
+                                !seenNoteIds.insert(noteIdValue).second)
+                                return false;
+                            note.id = NoteId{noteIdValue};
                             if (!readOptionalDouble(nObj->getProperty("startBeat"), note.startBeat) ||
                                 !readOptionalDouble(nObj->getProperty("lengthBeats"), note.lengthBeats) ||
                                 !readOptionalInt(nObj->getProperty("pitch"), note.pitch) ||
@@ -841,8 +1123,11 @@ bool TimelineDoc::fromVar(const juce::var& state) {
     // lowers a counter must not be able to make the doc hand out an id it's already using.
     for (const auto& track : parsed) {
         parsedNextTrackId = std::max(parsedNextTrackId, track.id.value + 1);
-        for (const auto& clip : track.clips)
+        for (const auto& clip : track.clips) {
             parsedNextClipId = std::max(parsedNextClipId, clip.id.value + 1);
+            for (const auto& note : clip.notes)
+                parsedNextNoteId = std::max(parsedNextNoteId, note.id.value + 1);
+        }
         for (const auto& lane : track.lanes)
             parsedNextLaneId = std::max(parsedNextLaneId, lane.id.value + 1);
     }
@@ -852,6 +1137,7 @@ bool TimelineDoc::fromVar(const juce::var& state) {
         nextTrackId = parsedNextTrackId;
         nextClipId = parsedNextClipId;
         nextLaneId = parsedNextLaneId;
+        nextNoteId = parsedNextNoteId;
         return true;
     });
 }

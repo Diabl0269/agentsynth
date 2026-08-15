@@ -33,12 +33,14 @@ struct TimelineId {
 struct TrackIdTag {};
 struct ClipIdTag {};
 struct LaneIdTag {};
+struct NoteIdTag {};
 
 } // namespace detail
 
 using TrackId = detail::TimelineId<detail::TrackIdTag>;
 using ClipId = detail::TimelineId<detail::ClipIdTag>;
 using LaneId = detail::TimelineId<detail::LaneIdTag>;
+using NoteId = detail::TimelineId<detail::NoteIdTag>;
 
 // Serialised as an int, so these numbers are format. Values 3..15 are reserved for future
 // kinds; a file carrying one is rejected by fromVar rather than coerced into a kind this
@@ -70,8 +72,11 @@ static_assert(static_cast<int>(BreakpointCurve::Bezier) == 2,
               "BreakpointCurve is serialised as an int — renumbering breaks files");
 
 // One note inside a clip. startBeat is CLIP-RELATIVE (offset from the clip's own startBeat),
-// so moving a clip moves its notes with it and never rewrites them.
+// so moving a clip moves its notes with it and never rewrites them. `id` is a stable,
+// doc-assigned handle (TL2-3) — never reused, and it survives a toVar/fromVar round trip the
+// same way Track/Clip/Lane ids do.
 struct MidiNote {
+    NoteId id;
     double startBeat = 0.0;
     double lengthBeats = 1.0;
     int pitch = 60;
@@ -79,9 +84,10 @@ struct MidiNote {
     int channel = 1;
 };
 
-// Notes within a clip stay sorted by (startBeat, pitch) — that invariant is what makes the
-// audio-thread snapshot build (TL2-2) a flatten instead of a sort. TimelineDoc's mutation API
-// maintains it on every path and fromVar re-establishes it defensively.
+// Notes within a clip stay sorted by (startBeat, pitch, id) — that invariant is what makes the
+// audio-thread snapshot build (TL2-2) a flatten instead of a sort. The id is only a tiebreaker
+// (startBeat/pitch collisions are legal — e.g. a chord). TimelineDoc's mutation API maintains
+// the order on every path and fromVar re-establishes it defensively.
 struct Clip {
     ClipId id;
     juce::String name;
@@ -213,12 +219,55 @@ public:
     const Clip* getClip(ClipId id) const;
     const Track* getTrackForClip(ClipId id) const;
 
+    // Splits the clip at atBeat (CLIP-RELATIVE, must land strictly inside (0, length), else
+    // rejected). The original id stays on the left part (selection stability); the right part
+    // gets a freshly-assigned id. Notes entirely before the split stay on the left clip
+    // untouched; notes entirely at/after it move to the right clip, re-based to its new start;
+    // a note straddling the boundary is itself split in two — the left half keeps the original
+    // note's id and is truncated to end exactly at the boundary, the right half gets a new id,
+    // starts at beat 0, and runs for the remainder, with the same pitch/velocity/channel. One
+    // mutation. Returns a pair of invalid ids if the clip doesn't exist, atBeat is out of range,
+    // or the track is already at kMaxClipsPerTrack.
+    std::pair<ClipId, ClipId> splitClip(ClipId id, double atBeat);
+    // Joins clip b into clip a: both must be on the same track, a must start strictly before b,
+    // and they must not overlap (a gap between them is legal and becomes silence) — overlapping
+    // clips are rejected so note re-basing stays unambiguous. On success, a is extended to span
+    // [a.start, b.end), b's notes are re-based by (b.start - a.start) and merged into a's note
+    // list (sorted merge), b is removed, and one mutation fires. Rejected if the merged note
+    // count would exceed kMaxNotesPerClip.
+    bool joinClips(ClipId a, ClipId b);
+    // Appends a copy of the clip immediately after it (new start = start + length), same name
+    // and length, with a fresh id for the clip and for every one of its (deep-copied) notes.
+    // Rejects if the track is already at kMaxClipsPerTrack.
+    ClipId duplicateClip(ClipId id);
+
     // -- Notes ----------------------------------------------------------------
-    // Minimal container ops; the real editing API (select/move/quantise/split) is TL2-3.
-    // Rejects a non-finite or negative startBeat, a non-positive length, pitch outside 0..127,
-    // velocity outside 1..127, channel outside 1..16, or a clip already at kMaxNotesPerClip.
-    bool addNote(ClipId clipId, const MidiNote& note);
+    // Assigns and returns a stable NoteId; an invalid id means the note was rejected — a
+    // non-finite or negative startBeat, a non-positive length, pitch outside 0..127, velocity
+    // outside 1..127, channel outside 1..16, or a clip already at kMaxNotesPerClip.
+    NoteId addNote(ClipId clipId, const MidiNote& note);
     bool clearNotes(ClipId clipId);
+
+    // Note editing API (TL2-3). Each validates first and only then mutates: a rejection or a
+    // no-op (the value asked for is what's already there) returns without bumping the revision
+    // or notifying listeners.
+    bool removeNote(NoteId id);
+    // newStartBeat is CLIP-RELATIVE. Rejects a non-finite/negative start or a pitch outside
+    // 0..127. Keeps the clip's note list sorted by re-positioning the moved note in place, not
+    // by re-sorting the whole vector.
+    bool moveNote(NoteId id, double newStartBeat, int newPitch);
+    bool resizeNote(NoteId id, double newLengthBeats); // rejects non-positive/non-finite
+    bool setNoteVelocity(NoteId id, int velocity);     // rejects outside 1..127
+
+    // Snaps every note in the clip toward the nearest multiple of gridBeats (rejected if <= 0 or
+    // non-finite): newStart = start + strength * (nearestGridMultiple(start) - start), with
+    // strength clamped to [0, 1] (0 = no movement, 1 = hard snap). Lengths are untouched; a
+    // result is clamped at 0. The whole clip re-sorts once at the end and the edit is one
+    // mutation, however many notes move. A call that moves nothing is a no-op.
+    bool quantiseNotes(ClipId clipId, double gridBeats, double strength);
+
+    const MidiNote* getNote(NoteId id) const;
+    const Clip* getClipForNote(NoteId id) const;
 
     // -- Automation lanes ------------------------------------------------------
     // One lane per bound parameter, doc-wide: if a lane for (nodeUuid, paramId) already exists
@@ -288,6 +337,7 @@ private:
     Track* findTrack(TrackId id);
     const Track* findTrack(TrackId id) const;
     Clip* findClip(ClipId id, Track** ownerOut = nullptr);
+    MidiNote* findNote(NoteId id, Clip** ownerOut = nullptr);
     AutomationLane* findLane(LaneId id, Track** ownerOut = nullptr);
     AutomationLane* findLaneForParam(const juce::String& nodeUuid, const juce::String& paramId);
 
@@ -296,6 +346,7 @@ private:
     std::int64_t nextTrackId = 1;
     std::int64_t nextClipId = 1;
     std::int64_t nextLaneId = 1;
+    std::int64_t nextNoteId = 1;
     std::int64_t revision = 0;
 
     juce::ListenerList<Listener> listeners;
