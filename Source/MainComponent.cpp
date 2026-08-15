@@ -409,6 +409,15 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     applyToolbarIcons();
     setCurrentPatchName("Default");
 
+    // Runtime timeline enable/disable (TL1-9): push the persisted preference onto the engine's
+    // transport toggle. No settings-UI toggle exists yet — that arrives with the timeline panel
+    // (TL5); until then this only ever reads the default. Guarded the same way the engine-lifecycle
+    // block below is: on the plugin path the processor owns the engine across editor open/close, so
+    // this app's local settings file doesn't apply to it yet either.
+    if (ownedAudioEngine != nullptr) {
+        audioEngine.setTransportEnabled(appProperties.getUserSettings()->getBoolValue("timelineEnabled", true));
+    }
+
     // Engine lifecycle is the owner's job. On the plugin path the processor already called
     // initialise() (and will call shutdown()), and its graph may already hold host-restored
     // state — re-initialising here would overwrite the user's session with the default patch.

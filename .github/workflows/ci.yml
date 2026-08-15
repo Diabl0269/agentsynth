@@ -225,6 +225,77 @@ jobs:
           default.profdata
           default.profraw
 
+  # TL1-9: proves the timeline feature's revertibility on every PR — a build with
+  # SYNTH_ENABLE_TIMELINE=OFF must reproduce today's app and still pass the full suite (the
+  # timeline-integration tests are compiled out with the flag; everything else must stay green).
+  # Cache posture: restores the shared FetchContent entry (same deps3 key) but NEVER saves it —
+  # this job must not participate in the deps-cache lifecycle. ccache lives in its own
+  # `-timeline-off-` namespace: the flipped compile definition invalidates most objects, so
+  # sharing the main namespace would only dilute its hit rate. No cache health check here —
+  # its warm-cache expectations are tuned for the main job.
+  build-and-test-timeline-off:
+    name: Build and Test (Timeline OFF)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v6
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build libasound2-dev libx11-dev libxinerama-dev libxext-dev libxcomposite-dev libxcursor-dev libxrandr-dev libxrender-dev libfontconfig1-dev libfreetype6-dev libglu1-mesa-dev libcurl4-openssl-dev libgtk-3-dev libjack-jackd2-dev freeglut3-dev pkg-config llvm clang ccache
+
+    - name: Restore FetchContent Dependencies (restore-only)
+      uses: actions/cache/restore@v5
+      with:
+        path: build/_deps
+        key: ${{ runner.os }}-deps3-${{ hashFiles('cmake/DependencyVersions.cmake') }}
+        restore-keys: |
+          ${{ runner.os }}-deps3-
+
+    - name: Restore ccache
+      id: ccache-cache
+      uses: actions/cache/restore@v5
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ runner.os }}-ccache-timeline-off-${{ github.ref_name }}-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-ccache-timeline-off-${{ github.ref_name }}-
+          ${{ runner.os }}-ccache-timeline-off-
+
+    - name: Configure ccache
+      run: |
+        ccache --set-config=max_size=2G
+        ccache --set-config=compiler_check=content
+        ccache --set-config=sloppiness=time_macros,include_file_mtime,include_file_ctime
+        ccache --zero-stats
+
+    - name: Configure CMake
+      run: |
+        export CC=clang
+        export CXX=clang++
+        cmake -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DENABLE_TESTS=ON \
+          -DSYNTH_ENABLE_TIMELINE=OFF \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+    - name: Build
+      run: cmake --build build --target Tests
+
+    - name: Save ccache
+      if: always()
+      uses: actions/cache/save@v5
+      with:
+        path: ${{ env.CCACHE_DIR }}
+        key: ${{ steps.ccache-cache.outputs.cache-primary-key }}
+
+    - name: Run Tests
+      timeout-minutes: 10
+      run: ./build/Tests/Tests
+
   build-and-test-asan:
     name: Build and Test (ASAN)
     if: contains(github.event.pull_request.labels.*.name, 'run-asan')

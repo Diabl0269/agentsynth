@@ -412,12 +412,13 @@ What this gives up: a post-merge run no longer catches two PRs that are each gre
 
 A `concurrency` group cancels superseded runs on the same PR (main is never cancelled, since those runs seed the cache).
 
-There are **five jobs**:
+There are **six jobs**:
 
 | Job | Runner | Config | Notes |
 |-----|--------|--------|-------|
 | **Lint** | `ubuntu-latest` | — | Installs the pinned `clang-format` PyPI wheel (version from `.clang-format-version`) via `pip install "clang-format==$(cat .clang-format-version)"` after `actions/setup-python`; runs `--dry-run --Werror` over `Source/` and `Tests/`. Fast (~30 s) — gives formatting feedback without waiting for a full build. |
 | **Build, Test, and Coverage** | `ubuntu-latest` | Debug + clang + `ENABLE_COVERAGE=ON` | Runs tests, then `bash scripts/coverage.sh --report-only` (skips re-build; only merges profdata and checks the 85% line-coverage threshold). |
+| **Build and Test (Timeline OFF)** | `ubuntu-latest` | Release + `SYNTH_ENABLE_TIMELINE=OFF` | PR-only. Asserts the timeline feature's revertibility: the flag-OFF build must reproduce today's app and pass the full suite (timeline-integration tests are compiled out with the flag). Restores the shared `deps3` FetchContent cache but **never saves it**, and keeps ccache in its own `-timeline-off-` key namespace so the flipped compile definition can't dilute the main job's hit rate. Deliberately runs no cache health check — the check's warm-cache expectations are tuned for the main job. |
 | **Build and Test (ASAN)** | `ubuntu-latest` | `RelWithDebInfo` + `-fsanitize=address` | **Label-gated** — only runs when the PR carries the `run-asan` label. `ASAN_OPTIONS=detect_leaks=0`. |
 | **Build and Test (macOS)** | `macos-latest` | Release | Catches UB/segfaults and cross-platform issues. |
 | **Build and Test (Windows)** | `windows-latest` | Release | Catches UB/segfaults and cross-platform issues. |

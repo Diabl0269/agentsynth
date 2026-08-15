@@ -86,17 +86,22 @@ public:
 
         juce::ignoreUnused(buffer);
 
+#if SYNTH_ENABLE_TIMELINE
         // Sync-to-Transport (TL1-8, opt-in, default off). Only taken when syncParam is on AND
         // getPlayHead() downcasts to our own TransportService — AudioEngine installs one on every
         // node on every render pass, but a foreign VST/AU host's playhead won't downcast, and
         // nothing else in this app installs an AudioPlayHead today. In that case we deliberately
         // fall through to the legacy free-running clock below instead of going silent.
+        // TL1-9: compiled out with the flag OFF — the syncToTransport parameter itself stays (param
+        // sets are golden-pinned and preset round-trip must not depend on the flag), it's simply
+        // inert: every patch runs the legacy free-running clock below regardless of its value.
         if (syncParam->get()) {
             if (auto* transport = dynamic_cast<synth::TransportService*>(getPlayHead())) {
                 processSynced(*transport, buffer, midiMessages);
                 return;
             }
         }
+#endif
 
         const bool running = *runParam;
         if (!running) {

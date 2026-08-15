@@ -54,6 +54,15 @@ option(ENABLE_AI_HARNESS "Build the AI patch validity/quality measurement harnes
 # in PR CI is what stops the shared UI/engine code from silently breaking the plugin wrapper.
 # Turn OFF for a faster local iteration loop when you're only working on the standalone app.
 option(ENABLE_PLUGIN "Build the VST3 (+ AU on macOS) audio-plugin targets" ON)
+# TL1-9: the timeline feature's revertibility switch. ON by default (today's normal build). OFF
+# compiles out only the *integration points* — playhead install, the engine's once-per-block
+# transport tick, and the sequencer/poly-sequencer sync dispatch — while the Core Transport classes
+# (TransportService, TempoMap, BlockTimeInfo, OfflineTransportDriver) stay compiled in, inert
+# without the integration. A `-DSYNTH_ENABLE_TIMELINE=OFF` build must reproduce today's app (the
+# transport never ticks, nothing timeline-related is reachable) and still pass the full test suite —
+# see the `build-and-test-timeline-off` CI job, which asserts exactly that on every PR.
+option(SYNTH_ENABLE_TIMELINE
+    "Compile the timeline/transport integration (engine tick, playhead install, sequencer sync). OFF must reproduce today's app and still pass the full suite." ON)
 
 # Product identity — the single place to override branding at configure time
 # (e.g. `cmake -S . -B build -DSYNTH_PRODUCT_NAME=MySynth`). Mirrored in C++ at
@@ -342,6 +351,12 @@ juce_add_binary_data(Assets SOURCES
 # (both link Core) compile the font path and resolve the BinaryData symbols.
 target_link_libraries(Core PUBLIC Assets)
 target_compile_definitions(Core PUBLIC HAS_FONT_ASSETS=1)
+
+# TL1-9: always defined (never left to #ifdef) so call sites use `#if SYNTH_ENABLE_TIMELINE` —
+# an accidental #ifdef would silently compile the integration back in even with the option OFF.
+# PUBLIC so AppUI, Tests, and the plugin (all of which link Core) see the same value; a mismatch
+# between Core and a consumer would ODR-violate on any type/inline function gated by the macro.
+target_compile_definitions(Core PUBLIC SYNTH_ENABLE_TIMELINE=$<IF:$<BOOL:${SYNTH_ENABLE_TIMELINE}>,1,0>)
 
 # The full editor UI (MainComponent + everything under Source/UI that isn't already in Core).
 # Split out of the AgentSynth app target so the standalone app AND the audio-plugin wrapper build

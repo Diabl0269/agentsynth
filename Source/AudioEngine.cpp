@@ -19,12 +19,14 @@
 
 AudioEngine::AudioEngine(HostMode mode)
     : hostMode_(mode) {
+#if SYNTH_ENABLE_TIMELINE
     // Install the transport as the graph's playhead exactly once, here. JUCE's
     // AudioProcessorGraph re-applies graph.getPlayHead() to every node processor on every render
     // pass, so every module — including nodes re-created later by a preset load or an undo restore
     // — sees it through the standard getPlayHead() API. No per-node injection, and nothing to
     // re-wire when the graph's node set changes.
     mainProcessorGraph.setPlayHead(&transport);
+#endif
 }
 
 AudioEngine::~AudioEngine() { shutdown(); }
@@ -454,6 +456,12 @@ void AudioEngine::setMasterMute(bool muted) noexcept { masterMuted_.store(muted,
 
 bool AudioEngine::isMasterMuted() const noexcept { return masterMuted_.load(std::memory_order_relaxed); }
 
+void AudioEngine::setTransportEnabled(bool enabled) noexcept {
+    transportEnabled_.store(enabled, std::memory_order_relaxed);
+}
+
+bool AudioEngine::isTransportEnabled() const noexcept { return transportEnabled_.load(std::memory_order_relaxed); }
+
 void AudioEngine::createDefaultPatch() {
     mainProcessorGraph.clear();
     using AudioGraphIOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
@@ -559,10 +567,14 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
 }
 
 void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
+#if SYNTH_ENABLE_TIMELINE
     // The one clock site: both the standalone device callback and the hosted processBlock funnel
     // through here, so the transport advances exactly once per block in either mode. Must run
-    // before the graph so every node renders against this block's position.
-    transport.tick(buffer.getNumSamples());
+    // before the graph so every node renders against this block's position. Gated on the runtime
+    // setting too (TL1-9): disabling it mid-session simply freezes the transport in place.
+    if (transportEnabled_.load(std::memory_order_relaxed))
+        transport.tick(buffer.getNumSamples());
+#endif
 
     mainProcessorGraph.processBlock(buffer, midiMessages);
 

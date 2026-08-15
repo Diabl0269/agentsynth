@@ -52,6 +52,9 @@ int nodesMissingPlayHead(AudioEngine& engine) {
 // The one clock: tick() happens exactly once per rendered block
 // ============================================================================
 
+// TL1-9: asserts the timeline integration (tick advances the transport); compiled out with the
+// flag so the flag-OFF CI job stays green.
+#if SYNTH_ENABLE_TIMELINE
 TEST(AudioEngineTransportTest, HostedEngineTicksTransportOncePerBlock) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
     engine.initialise();
@@ -82,7 +85,10 @@ TEST(AudioEngineTransportTest, HostedEngineTicksTransportOncePerBlock) {
     engine.releaseFromHost();
     engine.shutdown();
 }
+#endif // SYNTH_ENABLE_TIMELINE
 
+// Not gated: prepare() (unlike tick()) always runs regardless of SYNTH_ENABLE_TIMELINE, so this
+// test's assertion holds in both flag states.
 TEST(AudioEngineTransportTest, PrepareForHostPreparesTransport) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
     engine.initialise();
@@ -99,6 +105,9 @@ TEST(AudioEngineTransportTest, PrepareForHostPreparesTransport) {
 // ============================================================================
 // Playhead installation — once on the graph, re-applied by JUCE to every node
 // ============================================================================
+// TL1-9: asserts the timeline integration (the playhead is only installed when the flag is on);
+// compiled out with the flag so the flag-OFF CI job stays green.
+#if SYNTH_ENABLE_TIMELINE
 
 TEST(AudioEngineTransportTest, PlayHeadInstalledOnEveryNode) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
@@ -180,10 +189,13 @@ TEST(AudioEngineTransportTest, NodeSeesTransportPositionThroughPlayHead) {
     engine.releaseFromHost();
     engine.shutdown();
 }
+#endif // SYNTH_ENABLE_TIMELINE
 
 // ============================================================================
 // Latency is reported, never compensated by us
 // ============================================================================
+// Not gated: getGraphLatencySamples() is a pass-through of the graph's own aggregate latency
+// reporting, which has nothing to do with the transport tick or playhead installation.
 
 TEST(AudioEngineTransportTest, GraphLatencyIsReportedNotCompensated) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
@@ -198,3 +210,66 @@ TEST(AudioEngineTransportTest, GraphLatencyIsReportedNotCompensated) {
     engine.releaseFromHost();
     engine.shutdown();
 }
+
+// ============================================================================
+// Runtime setTransportEnabled() (TL1-9) — freeze/resume without a rebuild
+// ============================================================================
+// Not gated: always on, since it exercises the runtime companion to the compile-time flag, which
+// only does anything when the flag is compiled in.
+#if SYNTH_ENABLE_TIMELINE
+
+TEST(AudioEngineTransportTest, SetTransportEnabledFreezesAndResumesPosition) {
+    AudioEngine engine(AudioEngine::HostMode::Hosted);
+    engine.initialise();
+    engine.prepareForHost(kSampleRate, kBlockSize, 0, 2);
+
+    ASSERT_TRUE(engine.getTransport().play());
+    ASSERT_TRUE(engine.isTransportEnabled()) << "default must be enabled, or every existing build's "
+                                                "transport would silently stop ticking";
+
+    processHostBlocks(engine, 2);
+    const auto positionBeforeDisable = samplePositionOf(engine);
+    ASSERT_GT(positionBeforeDisable, 0) << "sanity: the transport must have actually advanced first";
+
+    engine.setTransportEnabled(false);
+    EXPECT_FALSE(engine.isTransportEnabled());
+    processHostBlocks(engine, 4);
+    EXPECT_EQ(samplePositionOf(engine), positionBeforeDisable)
+        << "disabling the runtime setting mid-session must freeze the transport in place";
+
+    engine.setTransportEnabled(true);
+    EXPECT_TRUE(engine.isTransportEnabled());
+    processHostBlocks(engine, 1);
+    EXPECT_EQ(samplePositionOf(engine), positionBeforeDisable + kBlockSize)
+        << "re-enabling must resume ticking from exactly where it was frozen";
+
+    engine.releaseFromHost();
+    engine.shutdown();
+}
+#endif // SYNTH_ENABLE_TIMELINE
+
+// ============================================================================
+// Flag OFF pins "OFF really means off" (TL1-9)
+// ============================================================================
+// Compiled only when the flag is OFF: with it on, the transport ticks and this would (correctly)
+// fail, which is exactly why it must not build in the normal (flag-ON) configuration.
+#if !SYNTH_ENABLE_TIMELINE
+
+TEST(AudioEngineTransportTest, FlagOffTransportNeverAdvances) {
+    AudioEngine engine(AudioEngine::HostMode::Hosted);
+    engine.initialise();
+    engine.prepareForHost(kSampleRate, kBlockSize, 0, 2);
+
+    ASSERT_TRUE(engine.getTransport().play());
+    processHostBlocks(engine, 5);
+
+    EXPECT_EQ(samplePositionOf(engine), 0)
+        << "SYNTH_ENABLE_TIMELINE=OFF must compile out the tick — the transport must never advance "
+           "no matter how many blocks render";
+    EXPECT_EQ(engine.getGraph().getPlayHead(), nullptr)
+        << "the playhead must never be installed on the graph when the flag is off";
+
+    engine.releaseFromHost();
+    engine.shutdown();
+}
+#endif // !SYNTH_ENABLE_TIMELINE

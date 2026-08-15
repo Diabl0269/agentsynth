@@ -50,6 +50,12 @@ public:
     void setMasterMute(bool muted) noexcept;
     bool isMasterMuted() const noexcept;
 
+    // TL1-9 runtime companion to SYNTH_ENABLE_TIMELINE: lets the transport be frozen/resumed without
+    // a rebuild. Only meaningful when the flag is compiled in — see renderNextBlock(). Default true
+    // (today's ticking behaviour) so a build that never touches this setting is unaffected.
+    void setTransportEnabled(bool enabled) noexcept;
+    bool isTransportEnabled() const noexcept;
+
     void audioDeviceIOCallbackWithContext(const float* const* inputChannelData, int numInputChannels,
                                           float* const* outputChannelData, int numOutputChannels, int numSamples,
                                           const juce::AudioIODeviceCallbackContext& context) override;
@@ -140,6 +146,7 @@ private:
     juce::AudioProcessorPlayer processorPlayer;
 
     std::atomic<bool> masterMuted_{false};
+    std::atomic<bool> transportEnabled_{true};
 
     void createDefaultPatch();
 

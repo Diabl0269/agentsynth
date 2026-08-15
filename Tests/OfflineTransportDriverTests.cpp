@@ -65,6 +65,9 @@ double endPpqOf(const AudioEngine& engine) { return engine.getTransport().getCur
 // ============================================================================
 // Block accounting
 // ============================================================================
+// TL1-9: asserts the timeline integration (the transport must actually tick for these positions to
+// advance); compiled out with the flag so the flag-OFF CI job stays green.
+#if SYNTH_ENABLE_TIMELINE
 
 TEST(OfflineTransportDriverTest, RendersExactlyNBlocks) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
@@ -118,7 +121,10 @@ TEST(OfflineTransportDriverTest, RenderToBeatCoversTheBeat) {
     engine.releaseFromHost();
     engine.shutdown();
 }
+#endif // SYNTH_ENABLE_TIMELINE
 
+// Not gated: the driver never calls play(), so this test's "never advances" expectations hold
+// whether or not the flag (and thus tick()) is compiled in.
 TEST(OfflineTransportDriverTest, RenderToBeatWhileStoppedReturnsEmpty) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
     engine.initialise();
@@ -135,6 +141,10 @@ TEST(OfflineTransportDriverTest, RenderToBeatWhileStoppedReturnsEmpty) {
     engine.releaseFromHost();
     engine.shutdown();
 }
+
+// TL1-9: asserts the timeline integration (locateBeat/tick must actually move the position);
+// compiled out with the flag so the flag-OFF CI job stays green.
+#if SYNTH_ENABLE_TIMELINE
 
 TEST(OfflineTransportDriverTest, RenderToBeatBehindPositionReturnsEmpty) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
@@ -161,6 +171,8 @@ TEST(OfflineTransportDriverTest, RenderToBeatBehindPositionReturnsEmpty) {
 // ============================================================================
 // The per-block observer seam (what bounce/export streams from)
 // ============================================================================
+// TL1-9: asserts the timeline integration (BlockTimeInfo only advances when the transport ticks);
+// compiled out with the flag so the flag-OFF CI job stays green.
 
 TEST(OfflineTransportDriverTest, BlockCallbackSeesConsecutiveBlockTimeInfo) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
@@ -193,10 +205,13 @@ TEST(OfflineTransportDriverTest, BlockCallbackSeesConsecutiveBlockTimeInfo) {
     engine.releaseFromHost();
     engine.shutdown();
 }
+#endif // SYNTH_ENABLE_TIMELINE
 
 // ============================================================================
 // Audio actually flows through the graph
 // ============================================================================
+// Not gated: these prove audio flows through the graph regardless of the transport ticking — the
+// oscillator is free-running and needs no MIDI or transport position to produce sound.
 
 TEST(OfflineTransportDriverTest, RenderedAudioIsFiniteAndGraphAudioFlows) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);

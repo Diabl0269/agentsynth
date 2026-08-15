@@ -384,6 +384,11 @@ TEST_F(SequencerModuleTest, LegacyScheduleIsByteIdenticalWithSyncOff) {
     }
 }
 
+// TL1-9: asserts the timeline integration (the Synced* dispatch); compiled out with the flag so
+// the flag-OFF CI job stays green. The legacy (sync-off) golden tests above stay always-on — they
+// are the whole point of the OFF state.
+#if SYNTH_ENABLE_TIMELINE
+
 TEST_F(SequencerModuleTest, SyncedStepsFollowTransportBeats) {
     synth::TransportService transport;
     transport.prepare(48000.0, 512);
@@ -614,3 +619,4 @@ TEST_F(SequencerModuleTest, SyncedLoopWrapFiresLoopStartStep) {
                            << " but step 0 did not fire there";
     }
 }
+#endif // SYNTH_ENABLE_TIMELINE
