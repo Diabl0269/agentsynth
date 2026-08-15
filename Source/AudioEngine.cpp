@@ -581,14 +581,15 @@ void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
     if (transportEnabled_.load(std::memory_order_relaxed))
         transport.tick(buffer.getNumSamples());
 
-    // Open this block's timeline snapshot (TL2-2), once per callback exactly like the tick. The
-    // returned reference is deliberately dropped here — nothing consumes it until TL3's Track In
-    // modules fetch it through getTimelineSnapshots() — but the call is not a no-op: it is what
-    // advances the reclamation epoch, so the message thread can free superseded snapshots.
+    // Open this block's timeline snapshot (TL2-2), once per callback exactly like the tick, and
+    // park it on the transport so every node can reach it through the playhead it already has
+    // (TL3-1 — see TransportService::setCurrentTimelineSnapshot). Exactly one beginAudioBlock()
+    // per callback is the epoch-reclamation contract; the borrowed reference must not outlive
+    // this block, which is why the transport's copy is overwritten at the top of the next one.
     // Deliberately NOT gated on transportEnabled_: freezing the transport is a musical decision,
     // and stalling reclamation with it would let retired snapshots pile up for as long as the
     // setting is off.
-    (void)timelineSnapshots.beginAudioBlock();
+    transport.setCurrentTimelineSnapshot(&timelineSnapshots.beginAudioBlock());
 #endif
 
     mainProcessorGraph.processBlock(buffer, midiMessages);

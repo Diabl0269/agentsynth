@@ -9,6 +9,8 @@
 
 namespace synth {
 
+struct TimelineSnapshot;
+
 // The one clock (TL1). Owns play state, sample position, BPM, time signature and
 // loop bounds (in beats). The message thread posts commands through a lock-free
 // SPSC FIFO; the audio thread drains them at the top of every callback via tick(),
@@ -55,6 +57,25 @@ public:
 
     // The BlockTimeInfo published by the most recent tick(). Audio thread only.
     const BlockTimeInfo& getCurrentBlockInfo() const noexcept { return currentBlock; }
+
+    // -- This block's timeline snapshot (TL3-1) ------------------------------
+    // The playhead is the ONLY thing every module already has a pointer to, so it is also how a
+    // module reaches the timeline: AudioEngine::renderNextBlock opens the block's snapshot
+    // (TimelineSnapshotExchange::beginAudioBlock(), exactly once per callback — the epoch
+    // reclamation contract) and parks the borrowed pointer here, right after tick(). A module then
+    // downcasts getPlayHead() to TransportService and reads getCurrentBlockInfo() and
+    // getCurrentTimelineSnapshot() together, from the same object.
+    //
+    // Threading: written and read on the AUDIO THREAD ONLY, in that order, within one callback —
+    // hence a plain pointer and not an atomic. No other thread may touch it.
+    //
+    // Lifetime: the pointee is owned by the exchange and is valid for the CURRENT BLOCK ONLY.
+    // Caching it in a module member and reading it next block is a use-after-free (the exchange
+    // frees a superseded snapshot two callbacks after it retires it). It is also legitimately
+    // null — nothing has been published yet, a build with the timeline compiled out, or a module
+    // driven by a bare TransportService in a unit test — so every reader must null-check.
+    void setCurrentTimelineSnapshot(const TimelineSnapshot* snapshot) noexcept { currentTimelineSnapshot = snapshot; }
+    const TimelineSnapshot* getCurrentTimelineSnapshot() const noexcept { return currentTimelineSnapshot; }
 
     // -- Any-thread reads ----------------------------------------------------
     struct PositionSnapshot {
@@ -112,6 +133,9 @@ private:
     int timeSigNumerator = 4;
     int timeSigDenominator = 4;
     BlockTimeInfo currentBlock;
+
+    // Borrowed, never owned; valid for the current block only. See setCurrentTimelineSnapshot.
+    const TimelineSnapshot* currentTimelineSnapshot = nullptr;
 
     // -- Command FIFO (message thread -> audio thread) ------------------------
     static constexpr int kFifoCapacity = 256;

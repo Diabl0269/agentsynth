@@ -96,6 +96,12 @@ struct TimelineSnapshot {
     std::vector<LaneInfo> lanes;  // per-track runs
     std::vector<Point> points;    // per-lane runs, sorted by beat
 
+    // True when at least one MIDI track has soloed set. Solo is a document-wide predicate ("is
+    // anything soloed?" decides whether a non-soloed track is silent), so it is computed ONCE in
+    // buildFrom rather than rescanned per track per block by every consumer. Audio tracks are not
+    // counted: nothing renders them yet, and a soloed one must not silence the MIDI tracks.
+    bool anySoloed = false;
+
     // The doc revision this was built from — consumers use it to tell "same content" from "new
     // content" without diffing.
     std::int64_t revision = 0;

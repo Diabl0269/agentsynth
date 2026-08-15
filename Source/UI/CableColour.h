@@ -131,6 +131,7 @@ inline ModuleCategory categoryFor(ModuleType t) noexcept {
     case ModuleType::MidiKeyboard:
     case ModuleType::PolyMidi:
     case ModuleType::ExternalMidi:
+    case ModuleType::TimelineMidiSource:
         return ModuleCategory::Sequencing;
 
     case ModuleType::ADSR:

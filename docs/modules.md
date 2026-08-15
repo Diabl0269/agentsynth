@@ -367,6 +367,25 @@ Changing `Knobs` resizes the module in place, anchored at its top-left, at `Layo
 
 ---
 
+## Track In Module (Timeline MIDI Source, Hidden)
+
+`Source/Modules/TimelineMidiSourceModule.h` — TL3-1. One node per timeline MIDI track: it turns that track's notes into MIDI events, so everything downstream (Poly MIDI → oscillators → FX) is an ordinary patch that neither knows nor cares that a timeline exists.
+
+- **Ports**: none. 0 audio in, 0 audio out, MIDI **out** only (`acceptsMidi() == false`, `producesMidi() == true`). It **replaces** the graph-supplied `midiMessages` buffer rather than appending to it — the `ExternalMidiModule` contract for a source.
+- **Parameters**: none beyond the inherited `bypassed`. There is nothing to tune: what it plays is the timeline's business.
+- **Pull, not push.** Nothing schedules events into it. Every block it downcasts `getPlayHead()` to `synth::TransportService`, reads `getCurrentBlockInfo()` and `getCurrentTimelineSnapshot()` (see [docs/architecture.md §2/§4](architecture.md)), and emits the note edges falling inside this block's beat range. There is no per-module state to keep in sync with the document, so a locate, a tempo change or an edit to the notes takes effect on the very next block with no invalidation step.
+- **Binding is by node uuid.** It finds "its" track by scanning the snapshot for the first **MIDI** track whose `bindingUuid` `strcmp`s equal to `ModuleBase::getNodeUuid()` (the audio-safe mirror of the graph node's `"uuid"` property — see architecture.md §6). A module with **no** uuid matches nothing: an unsaved node has no identity yet, and `""` would otherwise adopt every unbound track in the document.
+- **Mute/solo**: the track is silent when `muted`, or when `snapshot.anySoloed && !track.soloed`. `anySoloed` is precomputed by `TimelineSnapshot::buildFrom` so this costs one branch, not a rescan.
+- **Sample-accurate offsets**: a note edge at absolute beat `b` lands at `jlimit(0, numSamples-1, llround((b - startPpq) / info.beatsPerSample()))`. At 48 kHz / 512 / 120 BPM one beat is 24000 samples, so beat 1.0 is offset 448 of block 46 — pinned exactly by `Tests/TimelineMidiSourceTests.cpp`.
+- **Held-note hygiene — a note-on is a promise to emit the matching note-off.** Anything that could break that promise releases **every** held note as note-offs at **sample 0** of the block it happened in, before anything else: the transport stopping, a block-start discontinuity (`info.blockStartSample != expectedNextBlockStart` — a locate, a loop wrap, a host repositioning us), the module being bypassed, the bound track disappearing or being unbound, and mute/solo suppression turning on. Continuity is only tracked *while playing*, since a stopped transport republishes the same start sample every block.
+- **Bypass** is the two-branch contract for a pure source with no dry audio path: the **first** bypassed block still emits the pending note-offs, then clears and returns; subsequent bypassed blocks just clear and return.
+- **No allocation on the audio path.** Held notes live in a fixed `kMaxActiveNotes = 128` array of `{pitch, channel, endBeat}`. On overflow the **note-on is dropped** — never a resize, and never a note-off for something already sounding.
+- **Internal-only.** Not in the module library, not in the replace-with menu, not AI-authorable: it is in `kNonAuthorableModuleTypes`, and `validatePatch` on the untrusted path rejects it outright with `PatchValidationError::InternalModuleNotAllowed` (see [docs/AI_Engine.md](AI_Engine.md)). It **is** in the factory, gated on `SYNTH_ENABLE_TIMELINE`, purely so our own saves round-trip it. The timeline's add-track flow (TL5-3) is the only thing that creates one.
+- **TODO(TL3-2)**: only the block's *primary* beat range is emitted — a block that wraps stops at `loopEndPpq` and the post-wrap remainder is dropped (nothing hangs, because the wrap is itself a discontinuity and flushes). TL3-2 adds the second range plus boundary fuzz.
+- **Downstream**: see [Poly note contract](#poly-note-contract-machine-midi) above — machine-generated MIDI repeats pitches inside an envelope's attack constantly, and that contract is what makes each repeat produce a real gate edge.
+
+---
+
 ## Attenuverter Module (Hidden)
 - **Purpose**: Invisible gain/polarity stage automatically inserted on every mono CV connection routed via the mod matrix.
 - **Parameters**: `Amount` — ranges from -1.0 (full inversion) to +1.0 (full depth), **constructor default 0.0**.

@@ -326,7 +326,13 @@ std::vector<SnippetManager::NodeID> SnippetManager::insertSnippet(const juce::va
     // normalised and rescaled. Snippet values come from graphToJSON and are already denormalised,
     // so that heuristic would silently corrupt any legitimate small value (a 0.5 Hz LFO rate
     // would land as several Hz). Validate strictly, apply faithfully.
-    auto validation = AIStateMapper::validatePatch(prepared, graph, /*clearExisting=*/false, /*trusted=*/false);
+    //
+    // allowInternalModuleTypes: a snippet is our own graphToJSON output, so it may name internal
+    // module types the AI is barred from authoring. That restriction guards against a MODEL
+    // reaching for them; it is not a property of app-authored files, and applying it here would
+    // reject legitimate snippets.
+    auto validation = AIStateMapper::validatePatch(prepared, graph, /*clearExisting=*/false, /*trusted=*/false,
+                                                   /*allowInternalModuleTypes=*/true);
     if (!validation.ok) {
         juce::Logger::writeToLog("SnippetManager::insertSnippet: snippet rejected — " + validation.message);
         return {};

@@ -116,6 +116,11 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         return {280, 313};
     if (typeName == "External MIDI")
         return {280, 138};
+    if (typeName == "Track In")
+        // Param-less card (only the inherited bypass, which lives in the header), no jacks: the
+        // 100 px floor in updateLayout is what sets the height. Not in the library — the timeline's
+        // add-track flow places it — so this only ever feeds a programmatic size query.
+        return {280, 100};
     return {280, 360};
 }
 

@@ -76,7 +76,11 @@ ProjectLoadResult ProjectBundle::load(const juce::File& bundleDir, juce::AudioPr
 
     // Step 1: the untrusted gate. project.json is a file on disk, hand-editable exactly like a
     // preset or a snippet — a malformed patch is rejected whole, never partially applied.
-    auto validation = AIStateMapper::validatePatch(json, graph, /*clearExisting=*/true, /*trusted=*/false);
+    // allowInternalModuleTypes: a bundle we wrote contains internal nodes by construction (an
+    // Attenuverter per mod routing, a Track In per timeline track), and this gate is about
+    // structural tampering, not about who was allowed to author the patch.
+    auto validation = AIStateMapper::validatePatch(json, graph, /*clearExisting=*/true, /*trusted=*/false,
+                                                   /*allowInternalModuleTypes=*/true);
     if (!validation.ok)
         return {false, "patch validation failed: " + validation.message};
 

@@ -28,6 +28,7 @@
 #include "../Modules/SampleHoldModule.h"
 #include "../Modules/SamplerModule.h"
 #include "../Modules/SequencerModule.h"
+#include "../Modules/TimelineMidiSourceModule.h"
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
 #include "../Modules/WavetableOscillatorModule.h"
@@ -83,7 +84,16 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Sample & Hold", []() { return std::make_unique<SampleHoldModule>(); }},
     {"Sampler", []() { return std::make_unique<SamplerModule>(); }},
     {"Wavetable", []() { return std::make_unique<WavetableOscillatorModule>(); }},
-    {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }}};
+    {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }},
+#if SYNTH_ENABLE_TIMELINE
+    // TL3-1. The class itself compiles unconditionally (like every other Timeline source); only
+    // this INTEGRATION POINT is gated, so a -DSYNTH_ENABLE_TIMELINE=OFF build cannot create a
+    // Track In node at all — not from a preset, not from undo, not from a patch. It is in the
+    // factory (rather than constructed ad hoc by the add-track flow) purely so our own saves
+    // round-trip it; kNonAuthorableModuleTypes below keeps it away from the model.
+    {"Track In", []() { return std::make_unique<TimelineMidiSourceModule>(); }},
+#endif
+};
 
 namespace {
 
@@ -103,6 +113,11 @@ const std::set<juce::String> kNonAuthorableModuleTypes = {
     "Attenuverter",
     // The same AttenuverterModule, registered under the name the modulation UI uses for it.
     "Mod Slot",
+    // The timeline feed (TL3-1). A Track In node's only meaningful state is the identity of the
+    // timeline track bound to it, which lives OUTSIDE the patch — so a model authoring one either
+    // creates a node that plays nothing, or (worse) one that latches onto a track the user owns.
+    // The timeline's own add-track flow is the only thing that may create these.
+    "Track In",
 };
 
 bool isInternalOnlyModule(const juce::String& typeName) { return kNonAuthorableModuleTypes.count(typeName) > 0; }
@@ -147,6 +162,17 @@ bool isValidPatchPort(int port) {
     return port >= 0 && port <= AIStateMapper::kMaxPortIndex;
 }
 
+// Mirrors a node's "uuid" property into the processor itself (ModuleBase::setNodeUuid), so the
+// AUDIO thread can read it without touching a juce::NamedValueSet or a juce::String. Called at
+// every one of the three sites that writes the property — keep them paired, or a Track In node
+// silently stops matching its timeline track. See the invariant on ModuleBase::setNodeUuid.
+void mirrorUuidIntoProcessor(juce::AudioProcessorGraph::Node* node, const juce::String& uuid) {
+    if (node == nullptr)
+        return;
+    if (auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor()))
+        mb->setNodeUuid(uuid);
+}
+
 // Adopts a patch node's "uuid" onto the live node — trusted callers only. Untrusted input never
 // dictates identity: a model could otherwise hand two nodes the same uuid, or claim the uuid of a
 // node that automation lanes and track bindings already point at. Nodes created from untrusted
@@ -155,8 +181,10 @@ void adoptUuidIfTrusted(juce::AudioProcessorGraph::Node* node, const juce::Dynam
     if (!trusted || node == nullptr || !nObj->hasProperty("uuid"))
         return;
     const juce::var uuidVar = nObj->getProperty("uuid");
-    if (uuidVar.isString() && uuidVar.toString().isNotEmpty())
+    if (uuidVar.isString() && uuidVar.toString().isNotEmpty()) {
         node->properties.set("uuid", uuidVar.toString());
+        mirrorUuidIntoProcessor(node, uuidVar.toString());
+    }
 }
 
 // Renders whatever the model put in an id field, so the rejection names the offending value even
@@ -250,6 +278,8 @@ juce::String patchValidationErrorName(PatchValidationError error) {
         return "RemoveModulationEntryInvalid";
     case PatchValidationError::TimelineNotAllowed:
         return "TimelineNotAllowed";
+    case PatchValidationError::InternalModuleNotAllowed:
+        return "InternalModuleNotAllowed";
     }
     return "Unknown";
 }
@@ -297,7 +327,7 @@ PatchValidationResult AIStateMapper::validateNodeParams(juce::AudioProcessor* pr
 }
 
 PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const juce::AudioProcessorGraph& graph,
-                                                   bool clearExisting, bool trusted) {
+                                                   bool clearExisting, bool trusted, bool allowInternalModuleTypes) {
     if (!json.isObject())
         return {false, PatchValidationError::NotAnObject, "Root is not an object."};
     auto* rootObj = json.getDynamicObject();
@@ -433,6 +463,20 @@ PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const 
                 return {false, PatchValidationError::DuplicateNodeId,
                         "Duplicate node id " + juce::String(nodeId) + " within patch."};
             patchNodeIds.insert(nodeId);
+
+            // Internal-only types are refused here, on the validator itself, rather than being
+            // left to the schema's `type` enum. The schema is a hint the backend enforces as a
+            // grammar for OUR provider; a patch can also arrive from a local model, or from any
+            // future caller that never saw the schema — and "non-authorable" has to mean
+            // untrusted-unreachable, not merely un-suggested. (TL7-4's mechanism, landed early
+            // because Track In needs it.) The trusted path is untouched — our own saves must
+            // round-trip a Track In node — and a caller gating app-authored data it is about to
+            // apply trusted opts out via allowInternalModuleTypes (see AIStateMapper.h).
+            if (!allowInternalModuleTypes && isInternalOnlyModule(type))
+                return {false, PatchValidationError::InternalModuleNotAllowed,
+                        "Module type \"" + type +
+                            "\" is internal to the app and cannot be created from a patch. Use one of the module "
+                            "types listed in the schema."};
 
             // Resolve the type via the real factory up front, rather than discovering an
             // unknown type mid-apply after other nodes may already have been created.
@@ -667,6 +711,8 @@ juce::String AIStateMapper::getFactoryTypeName(juce::AudioProcessor* processor) 
             return "Sample & Hold";
         case ModuleType::ExternalMidi:
             return "External MIDI";
+        case ModuleType::TimelineMidiSource:
+            return "Track In";
         }
     }
 
@@ -700,6 +746,7 @@ juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
             if (uuid.isEmpty()) {
                 uuid = juce::Uuid().toDashedString();
                 node->properties.set("uuid", uuid);
+                mirrorUuidIntoProcessor(node, uuid);
             }
             n->setProperty("uuid", uuid);
 
@@ -1600,6 +1647,7 @@ bool AIStateMapper::applySnapshotPreservingNodes(const juce::var& snapshot, juce
         t.hasLiveId = true;
         t.liveId = node->nodeID;
         node->properties.set("uuid", t.uuid);
+        mirrorUuidIntoProcessor(node.get(), t.uuid);
         applyPositionToNode(node.get(), t.obj);
     }
 

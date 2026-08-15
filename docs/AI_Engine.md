@@ -230,6 +230,19 @@ against:
       module goes into `kNonAuthorableModuleTypes` (AIStateMapper.cpp) when it is registered.
       `AIStateMapperTest.AuthorableModuleTypesGolden` pins the exact resulting list, so either kind
       of addition fails the build until the choice is made deliberately.
+
+      **The deny set is enforced by the validator, not just by the schema** (TL7-4's mechanism,
+      landed early with TL3-1's Track In node). `validatePatch(..., trusted=false)` rejects any node
+      whose type is in `kNonAuthorableModuleTypes` with `PatchValidationError::InternalModuleNotAllowed`.
+      Leaving it to the schema enum alone would have made "non-authorable" mean *un-suggested*
+      rather than *unreachable*: the schema is only a grammar for backends that compile it, and a
+      patch can also arrive from a local model or any future caller that never saw it. The **trusted**
+      path is untouched — our own saves must round-trip an Attenuverter or a Track In. Callers that
+      gate app-authored data with `trusted=false` before applying it trusted (session state,
+      `.agsproj`, snippet files — the docs/layout.md §12.5 pairing) pass
+      `allowInternalModuleTypes=true`: they are gating structure, ids, ranges and tampering, not
+      authorship, and our own files legitimately contain internal nodes. The parameter defaults to
+      `false`, so a new model-facing caller gets the restriction without knowing it exists.
     - `node.params` enumerates every **choice** parameter's real options, so a model physically
       cannot emit `"waveform": "White Noise"`. `additionalProperties` stays `true` so numeric
       parameters remain expressible — a grammar restricted to the listed keys would make `cutoff`

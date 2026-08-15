@@ -48,6 +48,9 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
         info.armed = track.armed;
         copyFixedString(info.bindingUuid, track.bindingUuid);
 
+        if (track.kind == TrackKind::Midi && track.soloed)
+            snapshot->anySoloed = true;
+
         // -- notes: flatten every clip into one sorted run -----------------------
         info.firstNote = static_cast<int>(snapshot->notes.size());
 

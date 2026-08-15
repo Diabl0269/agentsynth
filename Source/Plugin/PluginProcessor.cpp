@@ -130,7 +130,13 @@ void AgentSynthAudioProcessor::setStateInformation(const void* data, int sizeInB
     // values themselves are our own graphToJSON output: applying them untrusted would run the
     // [0,1] rescale heuristic meant for sloppy model output and silently corrupt exact values
     // (a 0.5 Hz LFO rate on a 0.01–20 Hz range reloads as ~10 Hz). Trusted apply preserves them.
-    if (!AIStateMapper::validatePatch(patch, engine.getGraph(), /*clearExisting=*/true, /*trusted=*/false).ok) {
+    //
+    // allowInternalModuleTypes: the model-authorship restriction does not apply to our OWN saved
+    // graph, which legitimately contains internal nodes (every mod routing is an Attenuverter, and
+    // a timeline patch has a Track In per track). Everything else the gate checks still runs.
+    if (!AIStateMapper::validatePatch(patch, engine.getGraph(), /*clearExisting=*/true, /*trusted=*/false,
+                                      /*allowInternalModuleTypes=*/true)
+             .ok) {
         if (editor != nullptr)
             editor->refreshAfterGraphReplacement();
         return;
