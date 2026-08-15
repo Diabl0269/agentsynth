@@ -1317,3 +1317,55 @@ A toolbar toggle (`ToggleMinimap`, right-hand group, before `ToggleModMatrix`) a
 shortcut (action id `toggleMinimap`; see [`shortcuts.md`](shortcuts.md)) both call
 `GraphEditor::toggleMinimapVisibility()`. Visibility persists under the `minimapVisible` key in
 `juce::ApplicationProperties`, default `true`.
+
+## 16. Timeline panel (TL5-1)
+
+`Source/UI/TimelinePanelComponent.h/.cpp` — `synth::ui::TimelinePanelComponent`, a bottom-docked
+panel owned by `MainComponent`.
+
+### What it is
+
+For TL5-1 this is only the SHELL later tasks (TL5-2+) build content into: a themed background
+(`theme.colors.bg0`-family, same fallback pattern as the toolbar/status-bar/sidebar panels), a
+thin top border separating it from the graph editor above, and three placeholder child regions
+already laid out in `resized()`:
+
+- **Transport bar** (top strip, `Metrics::timelineTransportBarHeight`)
+- **Track-header column** (left, `Metrics::timelineTrackHeaderWidth`)
+- **Lanes/ruler area** (remainder) — the only region that currently paints anything, a centred
+  "Timeline" placeholder
+
+All three are exposed as public rect getters (`getTransportBarBounds()`, `getTrackHeaderBounds()`,
+`getLanesBounds()`) so later tasks and tests build on the same arithmetic instead of re-deriving
+it. The component owns no timer and no animation of its own.
+
+### Docking, toggle, shortcut
+
+`MainComponent` carves the panel full-width, directly above the status bar: `resized()` and its
+pure-geometry twin `computePanelBounds()` (§ see `PanelBoundsResult::timelineBounds`) remove it
+from the bottom AFTER the status bar and BEFORE the AI-panel/library removals, so it spans the
+whole window width regardless of which side panels are open.
+
+A toolbar toggle (`ToolbarComponent::Slot::ToggleTimeline`, right-hand group, immediately before
+`ToggleTheme`) and the **Cmd+T** shortcut (action id `toggleTimelinePanel`; see
+[`shortcuts.md`](shortcuts.md)) both flip `MainComponent::isTimelineVisible`. Visibility persists
+under the `timelinePanelVisible` key in `juce::ApplicationProperties`, default `false`.
+
+### Animation
+
+The slide in/out reuses the **same** coordinated `AnimationDriver` that already animates the
+library and AI panels (`MainComponent::animatePanelTransition()`, ~190 ms ease-in-out-cubic, one
+shared `VBlankAnimatorUpdater`) — no new animator or timer was added. The transition lambda was
+extended to also lerp the timeline panel's bounds; showing the panel starts it from a zero-height
+rect pinned at its final bottom edge (so it grows upward into place), and hiding it calls
+`setVisible(false)` in `onComplete`, same as the sibling panels.
+
+### Build flag
+
+Everything past the always-present `TimelinePanelComponent` member and `PanelBoundsResult`/
+`computePanelBounds()` plumbing — the toolbar button, the `toggleTimelinePanel` command, and the
+carve itself — is gated `#if SYNTH_ENABLE_TIMELINE`, so a `-DSYNTH_ENABLE_TIMELINE=OFF` build has
+no button, no shortcut effect, and never carves the panel into the layout (see the CMake option's
+own comment in the root `CMakeLists.txt`).
+
+Contents (transport controls, tracks, clips, ruler) arrive in TL5-2 and later tasks.

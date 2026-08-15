@@ -659,6 +659,9 @@ TEST(ThemeMetricsTest, MetricsCodeOnlyFieldsHaveExpectedDefaults) {
     EXPECT_EQ(m.librarySidebarWidth, 200);
     EXPECT_EQ(m.aiPanelWidth, 300);
     EXPECT_EQ(m.iconSize, 16);
+    EXPECT_EQ(m.timelinePanelHeight, 220);
+    EXPECT_EQ(m.timelineTrackHeaderWidth, 160);
+    EXPECT_EQ(m.timelineTransportBarHeight, 28);
 }
 
 // ---------------------------------------------------------------------------
@@ -679,6 +682,9 @@ TEST(ThemeLoaderTest, MetricsCodeOnlyFieldsNotInJSON) {
     EXPECT_FALSE(jsonStr.contains("librarySidebarWidth"));
     EXPECT_FALSE(jsonStr.contains("aiPanelWidth"));
     EXPECT_FALSE(jsonStr.contains("iconSize"));
+    EXPECT_FALSE(jsonStr.contains("timelinePanelHeight"));
+    EXPECT_FALSE(jsonStr.contains("timelineTrackHeaderWidth"));
+    EXPECT_FALSE(jsonStr.contains("timelineTransportBarHeight"));
 }
 
 // ---------------------------------------------------------------------------

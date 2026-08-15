@@ -15,6 +15,7 @@ Shortcuts are configurable in **Settings → Keyboard Shortcuts** tab (renamed f
 | Cmd+A | Toggle AI Panel |
 | Cmd+L | Auto Arrange |
 | Cmd+B | Toggle Module Library Sidebar |
+| Cmd+T | Toggle Timeline Panel (`SYNTH_ENABLE_TIMELINE` builds only — see [`layout.md §16`](layout.md)) |
 | Cmd+Shift+A | Select All Modules |
 | Cmd+Shift+S | Save Selection as Snippet |
 | Cmd+C | Copy Selected Modules |

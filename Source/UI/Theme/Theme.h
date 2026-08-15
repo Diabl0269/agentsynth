@@ -97,6 +97,11 @@ struct Metrics {
     int librarySidebarWidth{200}; // code-only; not parsed from user JSON
     int aiPanelWidth{300};        // code-only; not parsed from user JSON
     int iconSize{16};             // code-only; not parsed from user JSON
+
+    // Timeline panel (TL5-1; bottom-docked, toggled via the toolbar / Cmd+T).
+    int timelinePanelHeight{220};       // code-only; not parsed from user JSON
+    int timelineTrackHeaderWidth{160};  // code-only; not parsed from user JSON
+    int timelineTransportBarHeight{28}; // code-only; not parsed from user JSON
 };
 
 // Font family NAMES (resolved to embedded typefaces by the LnF) + a type scale (pt).

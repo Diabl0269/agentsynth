@@ -114,6 +114,7 @@ add_executable(Tests
     MultiSelectTests.cpp
     ClipboardTests.cpp
     PanelAnimationAndLoadingTests.cpp
+    TimelinePanelTests.cpp
     MinimapComponentTests.cpp
     PluginProcessorTests.cpp
     AudioEngineTransportTests.cpp
@@ -123,6 +124,7 @@ add_executable(Tests
     PatchDocumentTests.cpp
     ProjectBundleTests.cpp
     ../Source/MainComponent.cpp
+    ../Source/UI/TimelinePanelComponent.cpp
     ../Source/Plugin/PluginProcessor.cpp
     ../Source/Plugin/PluginEditor.cpp
     ../Source/UI/GraphEditor.cpp

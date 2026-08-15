@@ -392,6 +392,8 @@ target_compile_definitions(Core PUBLIC SYNTH_ENABLE_TIMELINE=$<IF:$<BOOL:${SYNTH
 add_library(AppUI STATIC
     Source/MainComponent.cpp
     Source/MainComponent.h
+    Source/UI/TimelinePanelComponent.h
+    Source/UI/TimelinePanelComponent.cpp
     Source/UI/AIChatComponent.cpp
     Source/UI/AccountRow.cpp
     Source/UI/AccountRow.h

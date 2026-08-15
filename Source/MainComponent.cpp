@@ -100,6 +100,12 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // initialisers (isLibraryVisible{true}, isAiPanelVisible=false).
     isLibraryVisible = appProperties.getUserSettings()->getBoolValue("librarySidebarVisible", true);
     isAiPanelVisible = appProperties.getUserSettings()->getBoolValue("aiPanelVisible", false);
+#if SYNTH_ENABLE_TIMELINE
+    // TL5-1: gated with the button/command/carve below — reading this in a flag-OFF build would
+    // let a value persisted by an earlier flag-ON run silently dock the panel with no button or
+    // shortcut left to hide it again.
+    isTimelineVisible = appProperties.getUserSettings()->getBoolValue("timelinePanelVisible", false);
+#endif
     graphEditor.setAlignmentGuidesEnabled(
         appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true));
 
@@ -229,6 +235,11 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     addAndMakeVisible(aiChatComponent);
     aiChatComponent.setVisible(isAiPanelVisible);
     moduleLibrary.setVisible(isLibraryVisible);
+    // TL5-1: added unconditionally — isTimelineVisible stays false forever in a flag-OFF build
+    // (the only code that ever flips it, the toggle button's onClick, is gated below), so this is
+    // an inert invisible child there, same as any other never-shown component.
+    addAndMakeVisible(timelinePanel);
+    timelinePanel.setVisible(isTimelineVisible);
     graphEditor.getModMatrix().setVisible(graphEditor.isModMatrixVisible());
 
     // Z-ORDER CONSTRAINT: add the toolbar strip + status bar BEFORE the toolbar buttons.
@@ -320,7 +331,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         appProperties.getUserSettings()->saveIfNeeded();
         applyToolbarIcons();
 
-        auto fromResult = computePanelBounds(isLibraryVisible, !newVisible); // previous layout
+        auto fromResult = computePanelBounds(isLibraryVisible, !newVisible, isTimelineVisible); // previous layout
         if (newVisible) {
             // Showing: make visible before animating in.
             aiChatComponent.setVisible(true);
@@ -332,12 +343,49 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         // Apply the FINAL layout immediately so headless tests (no VBlank) see correct bounds.
         // The animation below is cosmetic only — it starts from fromResult and converges to the
         // same toResult that resized() already applied.
-        auto toResult = computePanelBounds(isLibraryVisible, newVisible);
+        auto toResult = computePanelBounds(isLibraryVisible, newVisible, isTimelineVisible);
         resized();
         if (!newVisible)
             aiChatComponent.setVisible(false);
-        animatePanelTransition(fromResult, toResult, /*hideLib=*/false, /*hideAi=*/!newVisible);
+        animatePanelTransition(fromResult, toResult, /*hideLib=*/false, /*hideAi=*/!newVisible, /*hideTimeline=*/false);
     };
+
+#if SYNTH_ENABLE_TIMELINE
+    // TL5-1: bottom-docked timeline panel toggle. Mirrors the AI-panel handler above exactly
+    // (flip + persist BEFORE animating, applyToolbarIcons, from/to computePanelBounds, synchronous
+    // resized() for headless tests, then the shared animated transition) — only the axis differs
+    // (bottom slide instead of a side panel).
+    addAndMakeVisible(toggleTimelineButton);
+    toggleTimelineButton.setComponentID("toggleTimeline");
+    toggleTimelineButton.onClick = [this] {
+        const bool newVisible = !isTimelineVisible;
+        isTimelineVisible = newVisible;
+        // Persist BEFORE animation so a crash during layout doesn't lose the user's choice.
+        appProperties.getUserSettings()->setValue("timelinePanelVisible", isTimelineVisible ? "1" : "0");
+        appProperties.getUserSettings()->saveIfNeeded();
+        applyToolbarIcons();
+
+        auto fromResult = computePanelBounds(isLibraryVisible, isAiPanelVisible, !newVisible); // previous layout
+        if (newVisible) {
+            // Showing: make visible before animating in, sliding up from a zero-height rect
+            // pinned at the panel's final y (bottom edge fixed, height 0 -> timelinePanelHeight).
+            timelinePanel.setVisible(true);
+            if (fromResult.timelineBounds.isEmpty()) {
+                auto finalBounds = computePanelBounds(isLibraryVisible, isAiPanelVisible, true).timelineBounds;
+                fromResult.timelineBounds =
+                    juce::Rectangle<int>(finalBounds.getX(), finalBounds.getBottom(), finalBounds.getWidth(), 0);
+            }
+        }
+        // Apply the FINAL layout immediately so headless tests (no VBlank) see correct bounds.
+        // The animation below is cosmetic only — it starts from fromResult and converges to the
+        // same toResult that resized() already applied.
+        auto toResult = computePanelBounds(isLibraryVisible, isAiPanelVisible, newVisible);
+        resized();
+        if (!newVisible)
+            timelinePanel.setVisible(false);
+        animatePanelTransition(fromResult, toResult, /*hideLib=*/false, /*hideAi=*/false, /*hideTimeline=*/!newVisible);
+    };
+#endif
 
     addAndMakeVisible(toggleMinimapButton);
     toggleMinimapButton.setComponentID("toggleMinimap");
@@ -392,7 +440,13 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // Calling setSize() before setButtons() leaves all buttons with zero bounds on first launch.
     toolbar.setButtons({&toggleLibraryButton, &newButton, &saveButton, &loadButton, &settingsButton, &undoButton,
                         &redoButton, &autoArrangeButton, &toggleMinimapButton, &toggleModMatrixButton,
-                        &toggleAiPanelButton, &themeToggleButton});
+                        &toggleAiPanelButton,
+#if SYNTH_ENABLE_TIMELINE
+                        &toggleTimelineButton,
+#else
+                        nullptr, // ToggleTimeline slot: no button in a flag-OFF build
+#endif
+                        &themeToggleButton});
 
     // Now that buttons are registered, trigger the first layout pass. resized() calls
     // toolbar.layoutButtons() which positions the buttons using their registered pointers.
@@ -531,6 +585,9 @@ void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
                        AppCommands::toggleMinimap, AppCommands::toggleAiPanel, AppCommands::autoArrange,
                        AppCommands::toggleLibrary, AppCommands::selectAllModules, AppCommands::saveSnippet,
                        AppCommands::copySelection, AppCommands::pasteSelection, AppCommands::duplicateSelection});
+#if SYNTH_ENABLE_TIMELINE
+    commands.add(AppCommands::toggleTimelinePanel);
+#endif
 #if JUCE_MAC
     commands.add(AppCommands::checkForUpdates);
 #endif
@@ -638,6 +695,14 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
+#if SYNTH_ENABLE_TIMELINE
+    case AppCommands::toggleTimelinePanel: {
+        result.setInfo("Toggle Timeline Panel", "Toggle the bottom-docked timeline panel", "View", 0);
+        auto kp = shortcutManager.getBinding("toggleTimelinePanel");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+#endif
 #if JUCE_MAC
     case AppCommands::checkForUpdates: {
         result.setInfo("Check for Updates…", "Check for a newer version of the app", "Help", 0);
@@ -725,6 +790,11 @@ bool MainComponent::perform(const InvocationInfo& info) {
             statusBar.showMessage("Nothing to duplicate - select one or more modules first");
         return true;
     }
+#if SYNTH_ENABLE_TIMELINE
+    case AppCommands::toggleTimelinePanel:
+        toggleTimelineButton.triggerClick();
+        return true;
+#endif
 #if JUCE_MAC
     case AppCommands::checkForUpdates:
         updateManager.checkForUpdates();
@@ -837,6 +907,17 @@ void MainComponent::resized() {
 
     statusBar.setBounds(bounds.removeFromBottom(sbH));
 
+#if SYNTH_ENABLE_TIMELINE
+    // TL5-1: full-width panel carved AFTER the status bar and BEFORE the AI/library removals, so
+    // it sits directly above the status bar spanning the whole window width.
+    if (isTimelineVisible) {
+        int timelineH = 220;
+        if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+            timelineH = lf->getTheme().metrics.timelinePanelHeight;
+        timelinePanel.setBounds(bounds.removeFromBottom(timelineH));
+    }
+#endif
+
     // Skip removeFromLeft/Right when hidden so we never setBounds to a zero-width rect.
     if (isAiPanelVisible)
         aiChatComponent.setBounds(bounds.removeFromRight(aiW));
@@ -875,6 +956,11 @@ void MainComponent::applyToolbarIcons() {
     setIcon(toggleModMatrixButton, Icon::ToggleMatrix);
     setIcon(toggleMinimapButton, Icon::ToggleMinimap);
     setIcon(toggleAiPanelButton, Icon::ToggleAI);
+#if SYNTH_ENABLE_TIMELINE
+    // TL5-1: no dedicated timeline glyph exists yet — reuse TransportPlay, otherwise unused this
+    // phase ("scaffolding only — no DrawableButton wired"; see IconLibrary.h).
+    setIcon(toggleTimelineButton, Icon::TransportPlay);
+#endif
     setIcon(themeToggleButton, Icon::ThemeToggle);
 
     // Master-mute uses the transport-stop glyph (no real play/stop transport this phase).
@@ -895,6 +981,9 @@ void MainComponent::applyToolbarIcons() {
     toggleMinimapButton.setButtonText(iconOnly ? ""
                                                : (graphEditor.isMinimapVisible() ? "Hide Minimap" : "Show Minimap"));
     toggleAiPanelButton.setButtonText(iconOnly ? "" : (isAiPanelVisible ? "Hide AI" : "Show AI"));
+#if SYNTH_ENABLE_TIMELINE
+    toggleTimelineButton.setButtonText(iconOnly ? "" : (isTimelineVisible ? "Hide Timeline" : "Show Timeline"));
+#endif
     toggleLibraryButton.setButtonText(iconOnly ? "" : (isLibraryVisible ? "Hide Library" : "Show Library"));
     themeToggleButton.setButtonText(
         iconOnly ? ""
@@ -928,12 +1017,18 @@ void MainComponent::applyToolbarIcons() {
     const juce::String aiBase = isAiPanelVisible ? "Hide AI Panel" : "Show AI Panel";
     toggleAiPanelButton.setTooltip(hint(aiBase, "toggleAiPanel"));
 
+#if SYNTH_ENABLE_TIMELINE
+    const juce::String timelineBase = isTimelineVisible ? "Hide Timeline" : "Show Timeline";
+    toggleTimelineButton.setTooltip(hint(timelineBase, "toggleTimelinePanel"));
+#endif
+
     const juce::String libBase = isLibraryVisible ? "Hide Library" : "Show Library";
     toggleLibraryButton.setTooltip(hint(libBase, "toggleLibrary"));
 }
 
 // ---- Pure panel-bounds geometry helper ----
-MainComponent::PanelBoundsResult MainComponent::computePanelBounds(bool libVisible, bool aiVisible) const {
+MainComponent::PanelBoundsResult MainComponent::computePanelBounds(bool libVisible, bool aiVisible,
+                                                                   bool timelineVisible) const {
     int tbH = 36, sbH = 24;
     int libW = libVisible ? 200 : 0;
     int aiW = aiVisible ? 300 : 0;
@@ -950,6 +1045,18 @@ MainComponent::PanelBoundsResult MainComponent::computePanelBounds(bool libVisib
     bounds.removeFromBottom(sbH); // status bar
 
     PanelBoundsResult result;
+#if SYNTH_ENABLE_TIMELINE
+    // Carved AFTER the status bar and BEFORE the AI/library removals — full-width, directly
+    // above the status bar (see resized(), which carves in the same order).
+    if (timelineVisible) {
+        int timelineH = 220;
+        if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+            timelineH = lf->getTheme().metrics.timelinePanelHeight;
+        result.timelineBounds = bounds.removeFromBottom(timelineH);
+    }
+#else
+    (void)timelineVisible;
+#endif
     if (aiVisible)
         result.aiPanelBounds = bounds.removeFromRight(aiW);
     if (libVisible)
@@ -960,14 +1067,20 @@ MainComponent::PanelBoundsResult MainComponent::computePanelBounds(bool libVisib
 
 // ---- Animated panel transition ----
 void MainComponent::animatePanelTransition(const PanelBoundsResult& fromResult, const PanelBoundsResult& toResult,
-                                           bool hideLibraryOnComplete, bool hideAiPanelOnComplete) {
+                                           bool hideLibraryOnComplete, bool hideAiPanelOnComplete,
+                                           bool hideTimelineOnComplete) {
     // Snapshot from-bounds for the lambdas.
     libraryAnimFrom = fromResult.libraryBounds.isEmpty() ? toResult.libraryBounds : fromResult.libraryBounds;
     aiPanelAnimFrom = fromResult.aiPanelBounds.isEmpty() ? toResult.aiPanelBounds : fromResult.aiPanelBounds;
+    // TL5-1: timelineBounds stays the default-constructed empty rect in a flag-OFF build (the
+    // carve that would populate it is gated in computePanelBounds()), so this — and every other
+    // timeline-specific line below — is inert there rather than needing its own #if.
+    timelineAnimFrom = fromResult.timelineBounds.isEmpty() ? toResult.timelineBounds : fromResult.timelineBounds;
     graphEditorAnimFrom = fromResult.graphEditorBounds;
 
     const auto libTo = toResult.libraryBounds.isEmpty() ? libraryAnimFrom : toResult.libraryBounds;
     const auto aiTo = toResult.aiPanelBounds.isEmpty() ? aiPanelAnimFrom : toResult.aiPanelBounds;
+    const auto timelineTo = toResult.timelineBounds.isEmpty() ? timelineAnimFrom : toResult.timelineBounds;
     const auto graphTo = toResult.graphEditorBounds;
 
     // Stop both animators first — we're doing a single coordinated anim on aiPanelAnim,
@@ -978,31 +1091,39 @@ void MainComponent::animatePanelTransition(const PanelBoundsResult& fromResult, 
     // Capture for lambdas.
     auto libFrom = libraryAnimFrom;
     auto aipFrom = aiPanelAnimFrom;
+    auto tlFrom = timelineAnimFrom;
     auto graphFrom = graphEditorAnimFrom;
 
-    // Single animator drives all three panels.
+    // Single animator drives all four panels.
     aiPanelAnim.start(
         vblankUpdater,
         190.0, // ~190 ms — within the 160–220 ms spec
         synth::ui::easeInOutCubic,
-        [this, libFrom, libTo, aipFrom, aiTo, graphFrom, graphTo](float t) {
+        [this, libFrom, libTo, aipFrom, aiTo, tlFrom, timelineTo, graphFrom, graphTo](float t) {
             if (!libFrom.isEmpty() || !libTo.isEmpty())
                 moduleLibrary.setBounds(synth::ui::AnimationDriver::lerpBounds(libFrom, libTo, t));
             if (!aipFrom.isEmpty() || !aiTo.isEmpty())
                 aiChatComponent.setBounds(synth::ui::AnimationDriver::lerpBounds(aipFrom, aiTo, t));
+            if (!tlFrom.isEmpty() || !timelineTo.isEmpty())
+                timelinePanel.setBounds(synth::ui::AnimationDriver::lerpBounds(tlFrom, timelineTo, t));
             graphEditor.setBounds(synth::ui::AnimationDriver::lerpBounds(graphFrom, graphTo, t));
         },
-        [this, hideLibraryOnComplete, hideAiPanelOnComplete, libTo, aiTo, graphTo]() {
+        [this, hideLibraryOnComplete, hideAiPanelOnComplete, hideTimelineOnComplete, libTo, aiTo, timelineTo,
+         graphTo]() {
             // Snap to exact final bounds and apply visibility.
             if (!libTo.isEmpty())
                 moduleLibrary.setBounds(libTo);
             if (!aiTo.isEmpty())
                 aiChatComponent.setBounds(aiTo);
+            if (!timelineTo.isEmpty())
+                timelinePanel.setBounds(timelineTo);
             graphEditor.setBounds(graphTo);
             if (hideLibraryOnComplete)
                 moduleLibrary.setVisible(false);
             if (hideAiPanelOnComplete)
                 aiChatComponent.setVisible(false);
+            if (hideTimelineOnComplete)
+                timelinePanel.setVisible(false);
         });
 }
 
@@ -1019,7 +1140,7 @@ void MainComponent::setLibraryVisible(bool v) {
         ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding("toggleLibrary"))));
 
     // Compute from/to layouts.
-    auto fromResult = computePanelBounds(!v, isAiPanelVisible); // previous layout
+    auto fromResult = computePanelBounds(!v, isAiPanelVisible, isTimelineVisible); // previous layout
     if (v) {
         // Showing: make visible at the from-position before animating.
         moduleLibrary.setVisible(true);
@@ -1028,7 +1149,7 @@ void MainComponent::setLibraryVisible(bool v) {
                 juce::Rectangle<int>(fromResult.graphEditorBounds.getX(), fromResult.graphEditorBounds.getY(), 0,
                                      fromResult.graphEditorBounds.getHeight());
     }
-    auto toResult = computePanelBounds(v, isAiPanelVisible);
+    auto toResult = computePanelBounds(v, isAiPanelVisible, isTimelineVisible);
 
     // Apply the FINAL layout immediately so headless tests (no VBlank) see correct bounds.
     // The animation below is cosmetic only — it starts from fromResult and converges to the
@@ -1037,7 +1158,7 @@ void MainComponent::setLibraryVisible(bool v) {
     if (!v)
         moduleLibrary.setVisible(false);
 
-    animatePanelTransition(fromResult, toResult, /*hideLib=*/!v, /*hideAi=*/false);
+    animatePanelTransition(fromResult, toResult, /*hideLib=*/!v, /*hideAi=*/false, /*hideTimeline=*/false);
 }
 
 // ---- Alignment guides toggle (UI Phase 7 - Item 4) ----

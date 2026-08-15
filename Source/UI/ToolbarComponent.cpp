@@ -24,6 +24,7 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
         108.0f, // ToggleMinimap ("Hide Minimap"/"Show Minimap")
         104.0f, // ToggleModMatrix
         92.0f,  // ToggleAiPanel
+        112.0f, // ToggleTimeline ("Hide Timeline"/"Show Timeline")
         110.0f  // ToggleTheme
     };
 

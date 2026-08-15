@@ -15,6 +15,7 @@
 #include "UI/StatusBarComponent.h"
 #include "UI/Theme/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
+#include "UI/TimelinePanelComponent.h"
 #include "UI/ToolbarComponent.h"
 #include "UI/UIAnimation.h"
 #include "Update/UpdateManager.h"
@@ -98,6 +99,14 @@ public:
         if (toggleLibraryButton.onClick)
             toggleLibraryButton.onClick();
     }
+#if SYNTH_ENABLE_TIMELINE
+    void simulateToggleTimelineClick() {
+        if (toggleTimelineButton.onClick)
+            toggleTimelineButton.onClick();
+    }
+#endif
+    bool isTimelineConfiguredVisible() const { return isTimelineVisible; }
+    synth::ui::TimelinePanelComponent& getTimelinePanel() { return timelinePanel; }
     GraphEditor& getGraphEditor() { return graphEditor; }
     ToolbarComponent& getToolbar() { return toolbar; }
     StatusBarComponent& getStatusBar() { return statusBar; }
@@ -160,11 +169,15 @@ private:
     // Compute the target bounds for the library and AI panel in the current layout.
     // Pure geometry — no side effects; used by animation and tests.
     struct PanelBoundsResult {
-        juce::Rectangle<int> libraryBounds; // empty rect when hidden
-        juce::Rectangle<int> aiPanelBounds; // empty rect when hidden
+        juce::Rectangle<int> libraryBounds;  // empty rect when hidden
+        juce::Rectangle<int> aiPanelBounds;  // empty rect when hidden
+        juce::Rectangle<int> timelineBounds; // empty rect when hidden (TL5-1)
         juce::Rectangle<int> graphEditorBounds;
     };
-    PanelBoundsResult computePanelBounds(bool libVisible, bool aiVisible) const;
+    // timelineVisible is always accepted (even in a SYNTH_ENABLE_TIMELINE=OFF build, callers pass
+    // the always-false isTimelineVisible member) so every call site has one uniform signature;
+    // the carve driven by it is what's actually gated, inside the .cpp.
+    PanelBoundsResult computePanelBounds(bool libVisible, bool aiVisible, bool timelineVisible) const;
 
     // Update the displayed patch name (status bar). Immediate repaint, no timer delay.
     void setCurrentPatchName(const juce::String& name);
@@ -209,6 +222,11 @@ private:
     juce::DrawableButton toggleMinimapButton{"toggleMinimap", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton autoArrangeButton{"autoArrange", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton toggleLibraryButton{"toggleLibrary", juce::DrawableButton::ImageAboveTextLabel};
+#if SYNTH_ENABLE_TIMELINE
+    // TL5-1: timeline panel toggle. Gated so a -DSYNTH_ENABLE_TIMELINE=OFF build has no button,
+    // no toolbar slot wiring, and no command — see ToolbarComponent::Slot::ToggleTimeline.
+    juce::DrawableButton toggleTimelineButton{"toggleTimeline", juce::DrawableButton::ImageAboveTextLabel};
+#endif
     juce::DrawableButton themeToggleButton{"toggleTheme", juce::DrawableButton::ImageAboveTextLabel};
 
     std::unique_ptr<juce::FileChooser> fileChooser;
@@ -225,6 +243,12 @@ private:
     bool isAiPanelVisible = false;
     bool isLibraryVisible{true};
     bool isAlignmentGuidesEnabled{true}; // NEW: default TRUE for backward compatibility
+
+    // TL5-1: bottom-docked timeline panel shell. The member exists unconditionally (harmless
+    // when SYNTH_ENABLE_TIMELINE is OFF — never made visible, never carved into the layout);
+    // only the toolbar button/command/carve that could ever flip isTimelineVisible are gated.
+    synth::ui::TimelinePanelComponent timelinePanel;
+    bool isTimelineVisible = false;
 
     // Cached narrow-mode state — applyToolbarIcons() re-clones icons ONLY on the transition.
     bool toolbarNarrowMode_{false};
@@ -256,12 +280,13 @@ private:
     // During animation, track the "from" bounds so lerpBounds() can interpolate.
     juce::Rectangle<int> libraryAnimFrom;
     juce::Rectangle<int> aiPanelAnimFrom;
+    juce::Rectangle<int> timelineAnimFrom; // TL5-1; unused (always empty) when the flag is OFF
     juce::Rectangle<int> graphEditorAnimFrom;
 
-    // Start a coordinated bounds animation for library + AI panel + graph editor.
+    // Start a coordinated bounds animation for library + AI panel + timeline panel + graph editor.
     // fromResult is the current layout; toResult is the target layout.
     void animatePanelTransition(const PanelBoundsResult& fromResult, const PanelBoundsResult& toResult,
-                                bool hideLibraryOnComplete, bool hideAiPanelOnComplete);
+                                bool hideLibraryOnComplete, bool hideAiPanelOnComplete, bool hideTimelineOnComplete);
 
     // Alignment guides toggle (UI Phase 7 - Item 4)
     void setAlignmentGuidesEnabled(bool enabled);
