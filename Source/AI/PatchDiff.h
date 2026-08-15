@@ -73,11 +73,14 @@ struct PatchChange {
  *
  * Replace-mode patches (clearExisting=true) have NO stable node identity between snapshots —
  * applyJSONToGraph only preserves id/uuid on the trusted path, and a replace-mode apply is always
- * untrusted — so a replace-mode diff will show the entire prior graph removed and the entire new
- * patch added, even where a node is conceptually unchanged. This matches what actually happens to
- * the running graph (every processor really is destroyed and recreated) and in practice replace
- * mode is reserved for from-scratch patches (see AIChatComponent's merge-vs-replace inference),
- * so this is not the common single-edit case.
+ * untrusted — so computeDiff() over a replace-mode before/after pair reports the entire prior
+ * graph removed and the entire new patch added, even where a node is conceptually unchanged. That
+ * is technically correct (every processor really is destroyed and recreated) but not useful to a
+ * user reviewing a brand-new patch, which is why the chat UI never feeds a replace-mode PatchCard
+ * through computeDiff() for display — see summarizePatch() below, which it uses instead to
+ * describe what the new patch contains rather than what changed relative to the old graph.
+ * computeDiff() itself stays mode-agnostic and correct for any snapshot pair; this is a note about
+ * how the UI uses it, not a limitation of the function.
  *
  * Attenuverter nodes/connections (the implementation detail behind the "modulations" array) are
  * excluded from the node/connection diff and reported exclusively via ModulationAdded/Removed.
@@ -87,5 +90,37 @@ struct PatchChange {
  * malformed patch.
  */
 std::vector<PatchChange> computeDiff(const juce::var& before, const juce::var& after);
+
+/**
+ * @brief Summarizes a single AIStateMapper::graphToJSON() snapshot's contents — node types (in
+ * snapshot node order) plus a connection count — for rendering a plain "what's in this patch"
+ * description.
+ *
+ * This is what the chat UI's PatchCard shows for a replace-mode (clearExisting=true) patch,
+ * instead of computeDiff()'s output — see computeDiff()'s doc comment above for why a replace-mode
+ * diff is technically correct but not useful. summarizePatch() reads only `after`.
+ *
+ * Attenuverter nodes (a modulation implementation detail) are excluded from `nodeTypes`, and their
+ * connections from `connectionCount`, matching computeDiff()'s treatment.
+ */
+struct PatchSummary {
+    std::vector<juce::String> nodeTypes; // display type per node, in graphToJSON node order
+    int connectionCount = 0;             // non-attenuverter connections only
+};
+
+PatchSummary summarizePatch(const juce::var& after);
+
+/**
+ * @brief Stable-groups `changes` by PatchChange::Kind so the UI can render adds, removes,
+ * param changes, connection changes, and modulation changes as separate blocks instead of
+ * interleaved in computeDiff()'s natural (node-then-connection-then-modulation, but add/remove
+ * intermixed within each) order.
+ *
+ * Grouping follows Kind's declaration order (NodeAdded/NodeRemoved, then ParamChanged, then
+ * ConnectionAdded/ConnectionRemoved, then ModulationAdded/ModulationRemoved) via a stable sort, so
+ * changes that share a Kind keep computeDiff()'s original relative order. Pure function over
+ * `changes` — does not call computeDiff() or re-derive anything from a snapshot.
+ */
+std::vector<PatchChange> groupChangesByKind(const std::vector<PatchChange>& changes);
 
 } // namespace synth

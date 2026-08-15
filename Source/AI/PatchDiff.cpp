@@ -404,4 +404,36 @@ std::vector<PatchChange> computeDiff(const juce::var& before, const juce::var& a
     return changes;
 }
 
+PatchSummary summarizePatch(const juce::var& after) {
+    PatchSummary summary;
+
+    auto* root = after.getDynamicObject();
+    if (root == nullptr)
+        return summary;
+
+    if (auto* nodes = root->getProperty("nodes").getArray()) {
+        for (const auto& nVar : *nodes) {
+            auto* nObj = nVar.getDynamicObject();
+            if (nObj == nullptr)
+                continue;
+            juce::String type = nObj->getProperty("type").toString();
+            if (isAttenuverterType(type))
+                continue;
+            summary.nodeTypes.push_back(type);
+        }
+    }
+
+    SnapshotIndex idx = indexSnapshot(after);
+    summary.connectionCount = (int)collectConnections(after, idx).size();
+    return summary;
+}
+
+std::vector<PatchChange> groupChangesByKind(const std::vector<PatchChange>& changes) {
+    std::vector<PatchChange> grouped = changes;
+    std::stable_sort(grouped.begin(), grouped.end(), [](const PatchChange& a, const PatchChange& b) {
+        return static_cast<int>(a.kind) < static_cast<int>(b.kind);
+    });
+    return grouped;
+}
+
 } // namespace synth

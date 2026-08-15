@@ -210,9 +210,16 @@ private:
         // created, not on every updateChatDisplay() re-render — see that method's doc comment.
         // patchIsMerge also pins which mode Apply/Merge will actually use, so it can't drift if
         // the live graph changes while this message is still on screen.
+        //
+        // Only one of patchDiff/patchSummary is ever populated: merge-mode patches get patchDiff
+        // (synth::computeDiff() against the live graph, since a merge has stable node identity to
+        // diff against); replace-mode patches get patchSummary (synth::summarizePatch() of just
+        // the new patch's contents, since replace mode has no stable node identity to diff against
+        // — see PatchDiff.h). Both are empty when patchDiffAvailable is false.
         bool patchIsMerge = false;
         bool patchDiffAvailable = false;
         std::vector<PatchChange> patchDiff;
+        PatchSummary patchSummary;
     };
     std::vector<MessageData> messages;
 

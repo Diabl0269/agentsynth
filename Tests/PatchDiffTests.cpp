@@ -244,6 +244,115 @@ TEST(PatchDiffTest, DescribeRendersHumanReadableLines) {
 }
 
 //==============================================================================
+// summarizePatch() — what replace-mode PatchCards render instead of a computeDiff() diff (see
+// PatchDiff.h's doc comment for why a replace-mode diff, while technically correct, isn't useful).
+
+TEST(PatchDiffTest, SummarizePatchListsNodeTypesInSnapshotOrderAndCountsConnections) {
+    // Hand-built graphToJSON-shaped snapshot (like PatchDiffTest.ConnectionRemoved above) rather
+    // than routed through applyJSONToGraph: summarizePatch() is a pure function over the JSON
+    // shape, and going through the real graph would tie this test to per-module channel-layout
+    // behaviour (e.g. whether a given src/dst port pair is actually connectable) that has nothing
+    // to do with what's under test here.
+    const char* afterJson = R"({
+        "nodes": [
+            {"id": 1, "uuid": "osc-1", "type": "Oscillator", "params": {}},
+            {"id": 2, "uuid": "filt-1", "type": "Filter", "params": {}},
+            {"id": 3, "uuid": "out-1", "type": "Audio Output", "params": {}}
+        ],
+        "connections": [
+            {"src": 1, "srcPort": 0, "dst": 2, "dstPort": 0, "isMidi": false},
+            {"src": 2, "srcPort": 0, "dst": 3, "dstPort": 0, "isMidi": false}
+        ],
+        "modulations": []
+    })";
+    juce::var after = juce::JSON::parse(juce::String(afterJson));
+
+    auto summary = summarizePatch(after);
+    ASSERT_EQ(summary.nodeTypes.size(), 3u);
+    EXPECT_EQ(summary.nodeTypes[0], "Oscillator");
+    EXPECT_EQ(summary.nodeTypes[1], "Filter");
+    EXPECT_EQ(summary.nodeTypes[2], "Audio Output");
+    EXPECT_EQ(summary.connectionCount, 2);
+}
+
+TEST(PatchDiffTest, SummarizePatchExcludesAttenuverterNodesAndTheirConnections) {
+    juce::AudioProcessorGraph graph;
+    applyStep(graph, R"({"nodes":[{"id":1,"type":"LFO"},{"id":2,"type":"Filter"}],"connections":[]})",
+              /*clearExisting=*/true);
+    applyStep(graph,
+              R"({"nodes":[],"connections":[],
+                 "modulations":[{"source":1,"sourcePort":0,"dest":2,"destPort":1,"amount":0.5}]})",
+              /*clearExisting=*/false);
+    juce::var after = AIStateMapper::graphToJSON(graph);
+
+    auto summary = summarizePatch(after);
+    for (const auto& t : summary.nodeTypes)
+        EXPECT_NE(t, "Attenuverter");
+}
+
+TEST(PatchDiffTest, SummarizePatchOnEmptyGraphIsEmpty) {
+    juce::var after = snapshotOf(R"({"nodes":[],"connections":[]})");
+    auto summary = summarizePatch(after);
+    EXPECT_TRUE(summary.nodeTypes.empty());
+    EXPECT_EQ(summary.connectionCount, 0);
+}
+
+//==============================================================================
+// groupChangesByKind() — used only for merge-mode PatchCard rendering; must not touch
+// computeDiff()'s own output order (its tests assert on that directly).
+
+TEST(PatchDiffTest, GroupChangesByKindGroupsWithoutReordering) {
+    std::vector<PatchChange> changes;
+    auto add = [&](Kind k, juce::String tag) {
+        PatchChange c;
+        c.kind = k;
+        c.nodeType = tag; // reused as a tag to check relative order within a kind
+        changes.push_back(c);
+    };
+    // Deliberately interleaved input order.
+    add(Kind::ParamChanged, "p1");
+    add(Kind::NodeAdded, "a1");
+    add(Kind::ModulationRemoved, "mr1");
+    add(Kind::NodeRemoved, "r1");
+    add(Kind::NodeAdded, "a2");
+    add(Kind::ConnectionAdded, "ca1");
+    add(Kind::ModulationAdded, "ma1");
+    add(Kind::ParamChanged, "p2");
+
+    auto grouped = groupChangesByKind(changes);
+    ASSERT_EQ(grouped.size(), changes.size());
+
+    // Kind order follows PatchChange::Kind's declaration order (NodeAdded/NodeRemoved, then
+    // ParamChanged, then ConnectionAdded/ConnectionRemoved, then ModulationAdded/Removed): after
+    // grouping, kinds must be non-decreasing by declaration order.
+    for (size_t i = 0; i + 1 < grouped.size(); ++i)
+        EXPECT_LE(static_cast<int>(grouped[i].kind), static_cast<int>(grouped[i + 1].kind))
+            << "kinds must be non-decreasing after grouping (index " << i << ")";
+
+    // Within the NodeAdded group, original relative order ("a1" before "a2") is preserved.
+    std::vector<juce::String> nodeAddedTags;
+    for (const auto& c : grouped)
+        if (c.kind == Kind::NodeAdded)
+            nodeAddedTags.push_back(c.nodeType);
+    ASSERT_EQ(nodeAddedTags.size(), 2u);
+    EXPECT_EQ(nodeAddedTags[0], "a1");
+    EXPECT_EQ(nodeAddedTags[1], "a2");
+}
+
+TEST(PatchDiffTest, GroupChangesByKindDoesNotMutateInput) {
+    std::vector<PatchChange> changes;
+    PatchChange c;
+    c.kind = Kind::NodeRemoved;
+    c.nodeType = "Delay";
+    changes.push_back(c);
+
+    auto grouped = groupChangesByKind(changes);
+    ASSERT_EQ(changes.size(), 1u);
+    EXPECT_EQ(changes[0].kind, Kind::NodeRemoved);
+    ASSERT_EQ(grouped.size(), 1u);
+}
+
+//==============================================================================
 // Integration-level regression tests: the whole reason to diff snapshots instead of the raw
 // patch JSON is that applyJSONToGraph does things the patch itself never states.
 
