@@ -99,7 +99,9 @@ it, neither corrupts the other's data.
 (`PatchValidationError::TimelineNotAllowed`). The validator lets unknown keys through, so a future
 build that starts honouring timeline data would otherwise silently begin executing provider-authored
 automation against patches accepted today. Refusing now means that door can only be opened by a
-commit that deliberately deletes the check. The trusted path (preset/undo replay) accepts it.
+commit that deliberately deletes the check. The trusted path (preset/undo replay) accepts it. That
+refusal is permanent even now that AI *can* author timeline data: it arrives through a separate,
+separately-gated door — see [§5c, `validateTimeline`](#5c-untrusted-timeline-data-validatetimeline-tl8-1).
 
 `graphToJSON` writes a root `"schemaVersion": 1` (`AIStateMapper::kSchemaVersion`). **Readers treat
 an absent version as 1 and gate no behaviour on it** — the field exists so a genuinely breaking
@@ -373,6 +375,95 @@ connection errors.
 per-request cost, not a rounding error; it is justified here by `gemma4:e4b-mlx`'s +40pp jump but is a
 genuine net negative for `llama3.2:1b`, which should factor into any future decision to widen this
 example set further or to gate it per-model.
+
+## 5c. Untrusted Timeline Data: `validateTimeline` (TL8-1)
+
+`synth::validateTimeline` (`Source/Timeline/TimelineValidator.h/.cpp`) is the untrusted gate for
+AI/tool-supplied **timeline** JSON — tracks, clips, notes and automation lanes in the dialect
+`TimelineDoc::toVar` writes. It is a separate function from `validatePatch`, with its own error
+enum (`TimelineValidationError`) and its own name table (`timelineValidationErrorName`, same idiom
+as `patchValidationErrorName`).
+
+### The two-door model
+
+There are two ways timeline data could reach the app, and exactly one of them is open:
+
+| Door | Status | Rule |
+| --- | --- | --- |
+| The **patch grammar** — a `"timeline"` key inside a patch suggestion | **Closed, permanently** | `validatePatch(trusted=false)` refuses it (`TimelineNotAllowed`, §"Patch format forward-compatibility"). A patch is applied to the graph; a timeline is not part of a graph. |
+| The **tools** — TL8-4's discrete app-side timeline tools (add-track, place-clips, write-lane) | **Open, guarded** | Each payload goes through `validateTimeline` before it touches `TimelineDoc`. |
+
+TL8-1 is the "deliberate commit that opens the door TL0-4 closed" — through its own guarded
+entrance, *not* by relaxing the patch path. Pinned by
+`TimelineValidatorTest.PatchGrammarStillRefusesTimelineData`, which takes a document this validator
+accepts, smuggles it into a patch, and asserts `validatePatch` still refuses it.
+
+### Contract
+
+-   **Validates strictly, mutates nothing** — not the doc, not the graph, not the input `var`.
+-   The caller applies via `TimelineDoc::fromVar` (all-or-nothing) **only** after this passes.
+-   **A pass means the apply cannot fail.** The last thing the function does is load the document
+    into a throwaway `TimelineDoc` to prove it. A var that satisfies every named check and is still
+    refused by the loader yields `InternalError` — the validator and `fromVar` have drifted, and the
+    caller applies nothing either way. (The one reachable case today is a malformed
+    `nextTrackId`/`nextClipId`/`nextLaneId`/`nextNoteId` counter — the document's own bookkeeping,
+    which a tool payload has no reason to carry.)
+-   **Rejects where the trusted paths repair.** `fromVar` clamps a breakpoint's tension into
+    `[-1, 1]` and its value into the lane's range snapshot, and repairs a broken sort order. None of
+    that happens for untrusted data: a value we would have to correct is a value the sender did not
+    mean, so it is refused with a message that says which one and why.
+-   Only the **first** problem is reported, like `validatePatch` — fixing one class can unmask the
+    next. Every message names the offending track/clip/note/lane so it can be handed back as a
+    correction rather than a complaint.
+
+### The checks
+
+1.  **Structural** — root is an object of the `TimelineDoc` dialect; `version` present, integer, and
+    no newer than `TimelineDoc::kFormatVersion`; `tracks` (if present) an array; ids present,
+    positive and unique per kind; one lane per `(nodeUuid, paramId)` doc-wide.
+    **Unknown top-level keys are refused**, where `PatchDocument` deliberately *preserves* the ones
+    it does not understand. That asymmetry is the point: forward-compatibility is a property a
+    document format needs and an untrusted payload does not, and an ignored key is exactly how a
+    later build starts honouring a field today's gate never inspected.
+2.  **Caps** — the per-container limits are `TimelineDoc`'s own constants, referenced and never
+    duplicated: `kMaxTracks` (256), `kMaxClipsPerTrack` (4096), `kMaxNotesPerClip` (16384),
+    `kMaxLanesPerTrack` (512), `kMaxBreakpointsPerLane` (16384). Two more exist only on this path,
+    because they bound the whole payload rather than one container:
+    `kMaxTotalNotesUntrusted = 65536` (notes summed across every clip) and
+    `kMaxPpqUntrusted = 100000.0` (the largest beat position or length in beats — ~14 hours at
+    120 BPM).
+3.  **Beats** — every `startBeat`, `lengthBeats`, fade and breakpoint beat must be finite, `>= 0`
+    and `<= kMaxPpqUntrusted`; lengths must be `> 0` (`BeatOutOfBounds`).
+4.  **Notes** — pitch `0..127`, velocity `1..127`, channel `1..16`, **rejected** rather than
+    clamped (`NoteOutOfRange`).
+5.  **Lanes** — every `(nodeUuid, paramId)` must resolve against the **live graph**: a node carrying
+    that `uuid` property, holding a `RangedAudioParameter` with that `paramID`. Unresolvable is
+    `UnresolvableBinding` — an orphaned binding is a state the app *recovers from* when a node
+    disappears under an existing lane (TL2-6), not one untrusted input may author from nothing. The
+    same rule applies to a track's non-empty `bindingUuid` (empty is legal: an unbound track).
+    Every breakpoint value must sit inside the **resolved parameter's real range** — *not* the
+    lane's own `RangeSnapshot`, which is data the sender wrote and therefore cannot be the authority
+    on what the parameter accepts. `tension` must be in `[-1, 1]`, `curve` in `0..2`.
+6.  **Assets** — any clip with a non-empty `assetRef` is refused (`AssetNotAllowed`). Stricter than
+    `TimelineDoc::isValidAssetRef`, which only stops a path escaping the bundle: untrusted input may
+    not name an asset **at all**, however well-formed.
+7.  **Record modes** — a lane may only ask for `Read` (1) or `Off` (0). `Touch`/`Latch`/`Write` arm
+    the lane to capture the user's own gestures, which is the user's decision
+    (`RecordModeNotAllowed`).
+8.  **Track kinds** — `Midi` (0), `Audio` (1) and `Automation` (2); reserved kinds 3..15 are refused
+    (`ReservedKindNotAllowed`). An audio *track* is a legal shape — what makes it unauthorable in
+    practice is check 6, since an audio track with no asset-bearing clip is just an empty row.
+
+### Trusted-only forever
+
+Audio assets and the clips that reference them, plugin state blobs, a node's `"state"` object
+(`ModuleBase::setExtraState`), and lane record arming. Each is a capability that reaches outside the
+document — the filesystem, opaque third-party state, or the user's own playing — and none of them
+has an untrusted form. Widening `validateTimeline` to admit one is the same class of mistake as
+relaxing `validatePatch` to raise the AI pass rate.
+
+Tests: `Tests/TimelineValidatorTests.cpp` (table-driven, one deliberate defect per case, every
+`TimelineValidationError` value covered).
 
 ## 5. AIChatComponent and Logging
 

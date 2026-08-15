@@ -147,6 +147,8 @@ add_library(Core STATIC
     Source/Timeline/TimelineSnapshot.cpp
     Source/Timeline/TimelineSnapshot.h
     Source/Timeline/TimelineSnapshotExchange.h
+    Source/Timeline/TimelineValidator.cpp
+    Source/Timeline/TimelineValidator.h
     # Modules
     Source/Modules/ModuleBase.h
     Source/Modules/AudioInputModule.h
