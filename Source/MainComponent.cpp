@@ -668,6 +668,11 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         }
 
         audioEngine.onDeviceStateChanged = [this](std::unique_ptr<juce::XmlElement> state) {
+            // TL6-2, and BEFORE the null check below: a device change that JUCE does not consider
+            // an explicit setup still changes how many input channels exist, and the Audio Input
+            // card's jacks (plus any cable on a jack that just vanished) have to follow it.
+            graphEditor.refreshIoModulesAfterDeviceChange();
+
             // Null until the user has explicitly chosen a device setup — see the declaration of
             // onDeviceStateChanged. Persisting nothing then is the point: the absent key is what
             // keeps the next launch on the inputs-off defaults.

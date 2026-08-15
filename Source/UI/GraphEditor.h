@@ -144,6 +144,16 @@ public:
     // Drops any routing left on an output jack that is no longer visible, then pushes overlapping
     // neighbours clear. The resized module itself never moves.
     void handleModuleResized(ModuleComponent* moduleComp);
+
+    /** Removes every connection leaving an output jack this node no longer shows. The other half of
+     *  the max-channel/visible-port pattern (docs/modules.md): the module silences its hidden
+     *  channels, and the owner unplugs them — a jack you cannot see is a jack you cannot unplug. */
+    void dropRoutingsOnHiddenJacks(juce::AudioProcessorGraph::NodeID nodeId);
+
+    /** MESSAGE THREAD (TL6-2). The audio device changed: re-point every Audio Input module at the
+     *  engine's new input channel count, drop cables left on jacks that just disappeared, and
+     *  re-measure the affected cards. Called from the owner's device-state-changed callback. */
+    void refreshIoModulesAfterDeviceChange();
     void finalizeModuleDrag(ModuleComponent* module);
     void autoArrange();
 

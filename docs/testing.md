@@ -66,7 +66,7 @@ The timeline's clock and the headless render harness built on it. No audio devic
 
 ### Audio input / device state tests (11 tests)
 
-`Tests/AudioInputTests.cpp` — TL6-1. The first tests in the repo that drive `AudioEngine`'s **device-callback** half (before them, no test did — see the apology in `StatusBarTests.cpp`'s `MasterMute_ZeroesOutput`).
+`Tests/AudioInputTests.cpp` — TL6-1. The first tests in the repo that drive `AudioEngine`'s **device-callback** half (before them, no test did — see the apology in `StatusBarTests.cpp`'s `MasterMute_ZeroesOutput`). The fake device itself lives in `Tests/FakeAudioIODevice.h` so TL6-2's suite drives the same one.
 
 **The `FakeAudioIODevice` pattern.** A test-local `juce::AudioIODevice` subclass that opens nothing, **starts no thread** (`start()` ignores the callback it is handed) and reports fixed numbers — name "Fake", type "Test", 48000 Hz / 512 samples, settable active input/output channel `BigInteger`s, latency 64 in / 128 out. The test then calls `engine.audioDeviceAboutToStart(&fake)` and `engine.audioDeviceIOCallbackWithContext(...)` **by hand**, in the order a real device would, with synthetic input arrays it can assert against — so there is exactly one thread and every block lands where the test put it. Extend this fake rather than writing a second one. The engine is `HostMode::Standalone` here (that is the mode with a device callback) but `initialise()` is **never** called on it — that is still the rule; the two tests that do exercise `initialise()` subclass the engine and override the `initialiseDevices` seam, which is the only part of it that touches hardware.
 
@@ -81,6 +81,24 @@ The timeline's clock and the headless render harness built on it. No audio devic
 | `SavedDeviceStateSelectsTheRestorePath` | through the `initialiseDevices` seam: no saved state ⇒ legacy defaults path, saved state ⇒ restore path, Hosted ⇒ no device acquisition at all, and the seam leaves the engine unattached |
 | `InputLatencyAccessor` | the fake's 64 samples after `audioDeviceAboutToStart`, back to 0 after `audioDeviceStopped`, 0 in Hosted mode |
 | `MainComponentDeviceStateTest` (3) | the owner half: the persist callback writes `"audioDeviceState"` (and a null payload writes nothing), and a stored string is parsed and handed to the engine before `initialise()`. Uses the AppProperties isolation pattern below, snapshotting and restoring that one key so a developer's real device choice survives a test run |
+
+### Audio Input module tests (11 tests)
+
+`Tests/AudioInputModuleTests.cpp` — TL6-2, the module that replaced the graph's raw `audioInputNode`. Two layers: **module-level** tests drive an `AudioInputModule` directly with a bare `synth::TransportService` on its playhead (exactly what the engine does per block, minus the engine), and **engine-level** tests drive the whole path. The engine-level three are `#if SYNTH_ENABLE_TIMELINE`-gated because the playhead itself is — see the flag-OFF caveat in [`architecture.md § AudioEngine`](architecture.md#1-audioengine).
+
+| What it covers | |
+|-------|-------|
+| `VisiblePortsFollowDevice` | 0 device channels ⇒ 1 jack (the floor), 2 ⇒ 2, more than `kMaxChannels` ⇒ clamped to 8, and shrinking back shrinks the jack count; the raw **channel** count stays 8 throughout |
+| `HiddenChannelsCleared` | a 2-in device leaves channels 2..7 silent every block, and channels 0/1 carry their own input (each channel a differently scaled ramp, so a swap is visible in the value) |
+| `BypassClears` | the pure-source exception — bypass clears instead of passing dry through — plus "there is no `muted` parameter by design" |
+| `NoTransportRendersSilence` | no playhead (a foreign host, a bare unit test, a flag-OFF build) ⇒ silence and a one-jack card, never the buffer's previous contents |
+| `DeviceInputFlowsThroughModule` | standalone, by-hand device callback: input ch1 → output ch0 **crossed**, so the assertion cannot pass on the callback's own channel-for-channel copy-in; one block also teaches the module the device's width |
+| `HostedInputFlows` | hosted `processHostBlock` on one in/out buffer: the module emits the host's ORIGINAL input even though the graph renders over that buffer — the input-snapshot pin |
+| `DefaultPatchUsesTheModule` | the default patch's "Audio Input" node is an `AudioInputModule`, not an `AudioGraphIOProcessor` |
+| `FactoryBuildsTheModule` | factory key, display name, `getFactoryTypeName` and the numbered-suffix fallback all still resolve to "Audio Input" |
+| `LegacyPatchLoads` | a patch JSON shaped like a pre-TL6-2 save (same type string, connections on channels 0/1) loads onto the module with both wires intact and `graphToJSON` round-trips the same name |
+| `SingletonRuleStillHolds` | `isSingletonIOModule` / `graphHasModuleNamed` still recognise it, a second drop is a no-op, and `extractSnippet` refuses to capture it |
+| `DeviceShrinkDropsHiddenRoutings` | 8-in device ⇒ 8 jacks and a cable on ch3 survives; switch to a 2-in device + `refreshIoModulesAfterDeviceChange()` ⇒ ch3's routing is dropped, ch0/ch1 keep theirs, and the card gets shorter |
 
 ### Integration Tests (~38 tests)
 

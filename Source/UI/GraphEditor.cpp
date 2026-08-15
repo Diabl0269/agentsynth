@@ -2,6 +2,7 @@
 #include "../AI/AIStateMapper.h"
 #include "../Modules/ADSRModule.h"
 #include "../Modules/AttenuverterModule.h"
+#include "../Modules/AudioInputModule.h"
 #include "../Modules/ExternalMidiModule.h"
 #include "../Modules/FX/ChorusModule.h"
 #include "../Modules/FX/CompressorModule.h"
@@ -73,8 +74,15 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         return {280, 269}; // +1 knob row: the Level knob took it from 3 sliders to 4 (issue #122)
     if (typeName == "Reverb")
         return {280, 269};
-    if (typeName == "AudioInput" || typeName == "AudioOutput" || typeName == "Audio Input" ||
-        typeName == "Audio Output")
+    if (typeName == "AudioInput" || typeName == "Audio Input")
+        // Height tracks the DEVICE's input channel count at runtime (one jack per channel, up to
+        // AudioInputModule::kMaxChannels — eight jacks measure 217px, pinned by
+        // AudioInputModuleTest.DeviceShrinkDropsHiddenRoutings), exactly like the Macro bank tracks
+        // its knob count. The drop estimate uses the resting card, which the 100px floor in
+        // updateLayout sets for anything up to two jacks; finalizeNewDrop re-resolves the placement
+        // against the real component size anyway.
+        return {280, 100};
+    if (typeName == "AudioOutput" || typeName == "Audio Output")
         return {280, 100};
     if (typeName == "Attenuverter")
         return {synth::LayoutUtil::kNarrowWidth, synth::LayoutUtil::kNarrowWidth};
@@ -2633,6 +2641,74 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
     }
 }
 
+void GraphEditor::dropRoutingsOnHiddenJacks(juce::AudioProcessorGraph::NodeID nodeId) {
+    // Jacks that just disappeared take their cables with them. Leaving them connected would mean a
+    // routing that still shows in the mod matrix, still costs a node, and no longer carries
+    // anything (the module silences hidden channels) — with no jack to unplug it from.
+    //
+    // No undo transaction is opened here: the gesture that changed the count (a parameter move, or
+    // a device change, which is not undoable at all) owns the surrounding snapshot.
+    auto& graph = audioEngine.getGraph();
+    auto* node = graph.getNodeForId(nodeId);
+    if (node == nullptr)
+        return;
+
+    auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor());
+    if (mb == nullptr)
+        return;
+
+    const int visible = mb->getVisibleOutputPortCount();
+    std::vector<juce::AudioProcessorGraph::Connection> toRemove;
+
+    for (const auto& c : graph.getConnections()) {
+        if (c.source.nodeID != nodeId || c.source.isMIDI() || c.source.channelIndex < visible)
+            continue;
+
+        if (auto* dstNode = graph.getNodeForId(c.destination.nodeID)) {
+            if (dynamic_cast<AttenuverterModule*>(dstNode->getProcessor()) != nullptr) {
+                audioEngine.removeModRouting(dstNode->nodeID); // drops both legs of the cable
+                continue;
+            }
+        }
+        toRemove.push_back(c);
+    }
+
+    for (const auto& c : toRemove)
+        graph.removeConnection(c);
+}
+
+void GraphEditor::refreshIoModulesAfterDeviceChange() {
+    // TL6-2, MESSAGE THREAD: the audio device changed under us, so every Audio Input card's jack
+    // count may have changed with it. Pushing the engine's prepared channel count into the module
+    // here (rather than waiting for the audio thread to publish it from the next block) is what
+    // makes the resize immediate — and what makes it testable without a device.
+    //
+    // Minimal on purpose: TL6-9 owns the full device-change story. This is the part that must not
+    // wait, because a shrunk device leaves cables on jacks that no longer exist.
+    auto& graph = audioEngine.getGraph();
+    const int deviceChannels = audioEngine.getDeviceInputChannelCount();
+    bool sawInputModule = false;
+
+    for (auto* node : graph.getNodes()) {
+        if (node == nullptr)
+            continue;
+        auto* input = dynamic_cast<AudioInputModule*>(node->getProcessor());
+        if (input == nullptr)
+            continue;
+
+        input->setDeviceChannelCount(deviceChannels);
+        dropRoutingsOnHiddenJacks(node->nodeID);
+        sawInputModule = true;
+
+        for (auto* comp : content.getModules())
+            if (comp != nullptr && comp->getNodeId() == node->nodeID)
+                comp->refreshPortLayout();
+    }
+
+    if (sawInputModule)
+        content.repaint();
+}
+
 void GraphEditor::handleModuleResized(ModuleComponent* moduleComp) {
     if (moduleComp == nullptr || moduleComp->getModule() == nullptr)
         return;
@@ -2642,31 +2718,8 @@ void GraphEditor::handleModuleResized(ModuleComponent* moduleComp) {
     if (graph.getNodeForId(nodeId) == nullptr)
         return;
 
-    // 1. Jacks that just disappeared take their cables with them. Leaving them connected would
-    //    mean a routing that still shows in the mod matrix, still costs a node, and no longer
-    //    carries anything (the module silences hidden channels) — with no jack to unplug it from.
-    //    No undo transaction is opened here: the parameter gesture that changed the count already
-    //    snapshots the whole graph before and after, so this is part of that single undo step.
-    if (auto* mb = dynamic_cast<ModuleBase*>(moduleComp->getModule())) {
-        const int visible = mb->getVisibleOutputPortCount();
-        std::vector<juce::AudioProcessorGraph::Connection> toRemove;
-
-        for (const auto& c : graph.getConnections()) {
-            if (c.source.nodeID != nodeId || c.source.isMIDI() || c.source.channelIndex < visible)
-                continue;
-
-            if (auto* dstNode = graph.getNodeForId(c.destination.nodeID)) {
-                if (dynamic_cast<AttenuverterModule*>(dstNode->getProcessor()) != nullptr) {
-                    audioEngine.removeModRouting(dstNode->nodeID); // drops both legs of the cable
-                    continue;
-                }
-            }
-            toRemove.push_back(c);
-        }
-
-        for (const auto& c : toRemove)
-            graph.removeConnection(c);
-    }
+    // 1. Cables left on jacks the resize hid.
+    dropRoutingsOnHiddenJacks(nodeId);
 
     // 2. Nudge neighbours clear of the new footprint. The resized module stays put.
     std::vector<synth::LayoutUtil::Box> boxes;

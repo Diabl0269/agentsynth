@@ -77,6 +77,43 @@ public:
     void setCurrentTimelineSnapshot(const TimelineSnapshot* snapshot) noexcept { currentTimelineSnapshot = snapshot; }
     const TimelineSnapshot* getCurrentTimelineSnapshot() const noexcept { return currentTimelineSnapshot; }
 
+    // -- This block's DEVICE INPUT (TL6-2) -----------------------------------
+    // The same carrier idea as the timeline snapshot above, for a different payload and for a
+    // reason that has nothing to do with the timeline: the playhead is the only handle every module
+    // already has, so it is also how AudioInputModule reaches the audio the device (or the host)
+    // delivered for this block. Deliberately NOT gated on SYNTH_ENABLE_TIMELINE — device input is
+    // not a timeline feature.
+    //
+    // The pointers are into the engine's own preallocated INPUT SNAPSHOT, taken before the graph
+    // runs — never into the render buffer. The graph renders IN PLACE over that buffer, so a module
+    // reading it mid-graph would see partially-rendered output where the input used to be.
+    //
+    // Threading and lifetime: written and read on the AUDIO THREAD ONLY, within one render pass
+    // (AudioEngine::renderPass sets it before the graph and clears it after), hence plain members
+    // and no atomics. Legitimately absent — no device input channels, a build whose engine never
+    // installs the playhead, or a bare TransportService in a unit test — so every reader must cope
+    // with getNumDeviceInputChannels() == 0.
+    static constexpr int kMaxDeviceInputChannels = 8;
+
+    void setDeviceInputForBlock(const float* const* channels, int numChannels, int numSamples) noexcept {
+        numDeviceInputChannels = juce::jlimit(0, kMaxDeviceInputChannels, channels != nullptr ? numChannels : 0);
+        numDeviceInputSamples = numDeviceInputChannels > 0 ? juce::jmax(0, numSamples) : 0;
+        for (int i = 0; i < numDeviceInputChannels; ++i)
+            deviceInputChannels[(std::size_t)i] = channels[i];
+        for (int i = numDeviceInputChannels; i < kMaxDeviceInputChannels; ++i)
+            deviceInputChannels[(std::size_t)i] = nullptr;
+    }
+
+    /** This block's samples for one device input channel, or null when that channel is absent. */
+    const float* getDeviceInputChannel(int index) const noexcept {
+        return (index >= 0 && index < numDeviceInputChannels) ? deviceInputChannels[(std::size_t)index] : nullptr;
+    }
+
+    int getNumDeviceInputChannels() const noexcept { return numDeviceInputChannels; }
+
+    /** How many samples of each channel above are valid — the current render pass's length. */
+    int getNumDeviceInputSamples() const noexcept { return numDeviceInputSamples; }
+
     // -- Any-thread reads ----------------------------------------------------
     struct PositionSnapshot {
         double ppq = 0.0;
@@ -136,6 +173,12 @@ private:
 
     // Borrowed, never owned; valid for the current block only. See setCurrentTimelineSnapshot.
     const TimelineSnapshot* currentTimelineSnapshot = nullptr;
+
+    // TL6-2. Borrowed, never owned; valid for the current render pass only. See
+    // setDeviceInputForBlock.
+    std::array<const float*, kMaxDeviceInputChannels> deviceInputChannels{};
+    int numDeviceInputChannels = 0;
+    int numDeviceInputSamples = 0;
 
     // -- Command FIFO (message thread -> audio thread) ------------------------
     static constexpr int kFifoCapacity = 256;

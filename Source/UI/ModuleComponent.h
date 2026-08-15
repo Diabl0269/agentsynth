@@ -47,6 +47,11 @@ public:
     // Removes listeners, destroys attachments, stops timer, nulls module pointer.
     void detachFromProcessor();
 
+    /** Re-measures the card after its VISIBLE PORT COUNT changed for a reason that is not a
+     *  parameter gesture — today only Audio Input, whose jacks follow the audio device (TL6-2).
+     *  Same three steps applyMacroCountChange takes for the Macro bank's "Knobs" parameter. */
+    void refreshPortLayout();
+
     // Interaction Logic
     struct Port {
         juce::Rectangle<int> area;

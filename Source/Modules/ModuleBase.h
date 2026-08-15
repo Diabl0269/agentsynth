@@ -57,6 +57,9 @@ enum class ModuleType {
     MacroControl,
     SampleHold,
     EnvelopeFollower,
+    // TL6-2: the device-input tap. A singleton in the patch (GraphEditor::isSingletonIOModule),
+    // paired with the "Audio Output" node, which is still a juce::AudioGraphIOProcessor.
+    AudioInput,
     // Internal-only (TL3-1): the timeline's "Track In" node. Created by the add-track flow, never
     // offered by the library and never authorable by a model.
     TimelineMidiSource

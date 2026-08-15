@@ -6,6 +6,7 @@
 #include "Timeline/TimelineSnapshotExchange.h"
 #include "Transport/Metronome.h"
 #include "Transport/TransportService.h"
+#include <array>
 #include <atomic>
 #include <functional>
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -272,6 +273,18 @@ public:
                 deviceScratch_.getNumSamples()};
     }
 
+    // TL6-2: how many INPUT channels the graph is currently prepared for — the device's active
+    // input count in Standalone mode, the host's declared input count in Hosted mode, and 0 before
+    // either prepare path has run (every headless test, and any install whose user has not opted
+    // into an input device). Cached at prepare time on whichever thread prepares, read from the
+    // message thread, so it is atomic exactly like getInputLatencySamples()'s cache.
+    //
+    // The audio thread does NOT consult this — it publishes the real per-block channel count
+    // through the playhead (TransportService::setDeviceInputForBlock). This is the message-thread
+    // half: it is what lets the UI resize an Audio Input card the moment the device changes,
+    // instead of waiting for the audio thread to render a block with the new layout.
+    int getDeviceInputChannelCount() const noexcept { return deviceInputChannelCount_.load(std::memory_order_relaxed); }
+
     struct ModRoutingInfo {
         juce::AudioProcessorGraph::NodeID attenuverterNodeID;
         juce::AudioProcessorGraph::NodeID sourceNodeID;
@@ -393,7 +406,11 @@ private:
     // automation apply, then the graph. With slicing off this runs once per callback over the whole
     // buffer; with slicing on it runs once per 64-sample slice. Everything the "once per callback"
     // contracts used to say is really "once per render pass" — that is what this function is.
-    void renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages);
+    //
+    // `inputSampleOffset` is where this pass starts inside the callback's captured device input
+    // (0 unless slicing is on), so an Audio Input module reads THIS slice's samples rather than
+    // replaying the first slice for the whole block.
+    void renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages, int inputSampleOffset = 0);
 
     // TL4-2 stage 2: renderPass() per kAutomationSliceSamples-sample slice, over views into
     // `buffer` and per-slice MIDI re-based to slice-relative sample positions. Allocation-free —
@@ -428,6 +445,33 @@ private:
     // Sizes the device-callback scratch above. Called from audioDeviceAboutToStart only — the
     // hosted path renders into the host's own buffer and needs none of this.
     void prepareDeviceScratch(int numInputChannels, int numOutputChannels, int blockSize);
+
+    // ---- TL6-2: the block's device-input snapshot ----
+    // The device's (or host's) input, copied ONCE per callback into storage the graph never
+    // touches, and handed to the modules through the playhead. It cannot be the render buffer:
+    // the graph renders in place over exactly those channels, so a module reading them mid-graph
+    // would see partly-rendered output. Both host modes take the same copy, so "Audio Input"
+    // behaves identically standalone and in a plugin.
+    //
+    // Sized in both prepare paths, never from the audio thread. A block longer than the snapshot
+    // (a device or host exceeding the block size it declared) publishes NO input for that block
+    // rather than allocating — the module then renders silence, which is the same degraded-but-safe
+    // posture as the device scratch above.
+    juce::AudioBuffer<float> deviceInputSnapshot_;
+    // Refilled per render pass (offset into the snapshot when slicing is on) and handed to the
+    // transport. Fixed size, so publishing allocates nothing.
+    std::array<const float*, synth::TransportService::kMaxDeviceInputChannels> deviceInputPointers_{};
+    // Audio thread only: how many snapshot channels this callback actually captured.
+    int deviceInputChannelsThisBlock_ = 0;
+    // Message-thread mirror of the prepared input channel count. See getDeviceInputChannelCount().
+    std::atomic<int> deviceInputChannelCount_{0};
+
+    void prepareDeviceInputSnapshot(int numInputChannels, int blockSize);
+    // AUDIO THREAD, once per callback, BEFORE the graph runs. Copies the caller's input channels
+    // into deviceInputSnapshot_ and records how many landed there.
+    void captureDeviceInput(const float* const* inputChannelData, int numInputChannels, int numSamples) noexcept;
+    // AUDIO THREAD, once per render pass. Points the transport at this pass's slice of the capture.
+    void publishDeviceInputForPass(int sampleOffset, int numSamples) noexcept;
 
     // Preallocated slicing scratch. `sliceChannelPointers_` backs the juce::AudioBuffer view
     // constructed per slice (the channel-pointer ctor takes no ownership and allocates nothing);

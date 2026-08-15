@@ -1061,7 +1061,9 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"ADSR", "attack, bypassed, decay, muted, poly, release, sustain"},
         {"Amp Env", "attack, bypassed, decay, muted, poly, release, sustain"},
         {"Attenuverter", "amount, bypassed"},
-        {"Audio Input", ""},
+        // TL6-2: Audio Input is a ModuleBase now, so it has ModuleBase's bypass parameter. Audio
+        // Output is still the graph's raw IO node and still has none.
+        {"Audio Input", "bypassed"},
         {"Audio Output", ""},
         {"Bitcrusher", "bypassed, depth, dither, mix, muted, outputLevel, rate"},
         {"Chorus", "bypassed, centreDelay, depth, feedback, mix, muted, outputLevel, rate"},

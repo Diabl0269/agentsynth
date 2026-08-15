@@ -164,6 +164,10 @@ inline ModuleCategory categoryFor(ModuleType t) noexcept {
     case ModuleType::VoiceMixer:
     case ModuleType::Math:
     case ModuleType::Attenuverter:
+    // Audio Input sits under the library's "I/O" header, which has no cable-colour bucket of its
+    // own (its partner, Audio Output, is not even a ModuleBase). Utility is the bucket that means
+    // "plumbing", which is exactly what a device tap is.
+    case ModuleType::AudioInput:
         return ModuleCategory::Utility;
     }
     return ModuleCategory::Utility;

@@ -1,6 +1,7 @@
 #include "AudioEngine.h"
 #include "Modules/ADSRModule.h"
 #include "Modules/AttenuverterModule.h"
+#include "Modules/AudioInputModule.h"
 #include "Modules/ExternalMidiModule.h"
 #include "Modules/FX/DelayModule.h"
 #include "Modules/FX/DistortionModule.h"
@@ -585,8 +586,10 @@ bool AudioEngine::isAutomationSlicingEnabled() const noexcept {
 void AudioEngine::createDefaultPatch() {
     mainProcessorGraph.clear();
     using AudioGraphIOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
-    auto inputNode =
-        mainProcessorGraph.addNode(std::make_unique<AudioGraphIOProcessor>(AudioGraphIOProcessor::audioInputNode));
+    // TL6-2: the input side is a real module (max channels fixed, visible jacks following the
+    // device) reading the block's captured input off the playhead; the OUTPUT side stays a JUCE IO
+    // node, because the graph's output channel count is tied to it.
+    auto inputNode = mainProcessorGraph.addNode(std::make_unique<AudioInputModule>());
     auto outputNode =
         mainProcessorGraph.addNode(std::make_unique<AudioGraphIOProcessor>(AudioGraphIOProcessor::audioOutputNode));
 
@@ -725,6 +728,12 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
         if (outputChannelData != nullptr && outputChannelData[channel] != nullptr)
             std::fill(outputChannelData[channel], outputChannelData[channel] + numSamples, 0.0f);
 
+    // TL6-2: a SECOND copy of the input, into storage the graph never renders over, taken before
+    // the graph runs. The copy above put the input into the render buffer for the "Audio Input" IO
+    // node's benefit; the graph then overwrites those very channels with its result, so a module
+    // that reads them mid-graph sees output, not input. See captureDeviceInput.
+    captureDeviceInput(inputChannelData, numInputChannels, numSamples);
+
     juce::AudioBuffer<float> buffer(deviceChannelPointers_.data(), totalChannels, numSamples);
     juce::MidiBuffer midiMessages;
     midiMessageCollector.removeNextBlockOfMessages(midiMessages, numSamples);
@@ -765,7 +774,7 @@ void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
         buffer.clear();
 }
 
-void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
+void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages, int inputSampleOffset) {
 #if SYNTH_ENABLE_TIMELINE
     // The one clock site: both the standalone device callback and the hosted processBlock funnel
     // through here, so the transport advances exactly once per render pass in either mode. Must run
@@ -809,7 +818,14 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
                                   automationRecordState_.load(std::memory_order_relaxed), &automationUiFeed_);
 #endif
 
+    // TL6-2, and deliberately OUTSIDE the timeline flag: device input is not a timeline feature.
+    // Point the playhead at this pass's slice of the captured input before the graph runs, and
+    // take it away immediately after — nothing outside a render pass may read those pointers.
+    publishDeviceInputForPass(inputSampleOffset, buffer.getNumSamples());
+
     mainProcessorGraph.processBlock(buffer, midiMessages);
+
+    transport.setDeviceInputForBlock(nullptr, 0, 0);
 
 #if SYNTH_ENABLE_TIMELINE
     // TL5-6: the metronome click, generated from the transport and summed POST-graph — after the
@@ -844,7 +860,7 @@ void AudioEngine::renderSliced(juce::AudioBuffer<float>& buffer, juce::MidiBuffe
                 sliceMidi_.addEvent(metadata.data, metadata.numBytes, metadata.samplePosition - offset);
         }
 
-        renderPass(sliceView, sliceMidi_);
+        renderPass(sliceView, sliceMidi_, offset);
     }
 }
 
@@ -878,6 +894,7 @@ void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device) {
         // the device scratch, force an allocation in the callback).
         prepareDeviceScratch(numInputChannels, numOutputChannels, blockSize);
         prepareSliceScratch(std::max(numInputChannels, numOutputChannels), blockSize);
+        prepareDeviceInputSnapshot(numInputChannels, blockSize);
         deviceInputLatencySamples_.store(device->getInputLatencyInSamples(), std::memory_order_relaxed);
         mainProcessorGraph.prepareToPlay(sampleRate, blockSize);
     }
@@ -897,8 +914,65 @@ void AudioEngine::prepareDeviceScratch(int numInputChannels, int numOutputChanne
     deviceScratch_.clear();
 }
 
+void AudioEngine::prepareDeviceInputSnapshot(int numInputChannels, int blockSize) {
+    // Message thread (both prepare paths) — never the callback. Always the full channel width, so
+    // a device change that ADDS inputs never has to resize anything from the audio thread; only
+    // the per-block "how many did we capture" count varies. Two blocks' worth of length is the same
+    // headroom the other scratches keep, for a device or host that overruns what it declared.
+    deviceInputSnapshot_.setSize(synth::TransportService::kMaxDeviceInputChannels, std::max(blockSize, 1) * 2,
+                                 /*keepExistingContent*/ false, /*clearExtraSpace*/ true,
+                                 /*avoidReallocating*/ false);
+    deviceInputSnapshot_.clear();
+    deviceInputChannelsThisBlock_ = 0;
+    deviceInputPointers_.fill(nullptr);
+    deviceInputChannelCount_.store(std::max(0, numInputChannels), std::memory_order_relaxed);
+}
+
+void AudioEngine::captureDeviceInput(const float* const* inputChannelData, int numInputChannels,
+                                     int numSamples) noexcept {
+    deviceInputChannelsThisBlock_ = 0;
+
+    if (inputChannelData == nullptr || numInputChannels <= 0 || numSamples <= 0)
+        return;
+
+    // Longer than the snapshot was sized for: publish nothing rather than allocate or copy a
+    // truncated block that would make the module render this block's tail as silence.
+    if (numSamples > deviceInputSnapshot_.getNumSamples())
+        return;
+
+    const int channels =
+        std::min({numInputChannels, deviceInputSnapshot_.getNumChannels(), (int)deviceInputPointers_.size()});
+
+    for (int channel = 0; channel < channels; ++channel) {
+        const float* src = inputChannelData[channel];
+        float* dest = deviceInputSnapshot_.getWritePointer(channel);
+        if (src != nullptr)
+            std::copy(src, src + numSamples, dest);
+        else
+            std::fill(dest, dest + numSamples, 0.0f);
+    }
+
+    deviceInputChannelsThisBlock_ = channels;
+}
+
+void AudioEngine::publishDeviceInputForPass(int sampleOffset, int numSamples) noexcept {
+    const int offset = std::max(0, sampleOffset);
+    if (deviceInputChannelsThisBlock_ <= 0 || numSamples <= 0 ||
+        offset + numSamples > deviceInputSnapshot_.getNumSamples()) {
+        transport.setDeviceInputForBlock(nullptr, 0, 0);
+        return;
+    }
+
+    for (int channel = 0; channel < deviceInputChannelsThisBlock_; ++channel)
+        deviceInputPointers_[(std::size_t)channel] = deviceInputSnapshot_.getReadPointer(channel) + offset;
+
+    transport.setDeviceInputForBlock(deviceInputPointers_.data(), deviceInputChannelsThisBlock_, numSamples);
+}
+
 void AudioEngine::audioDeviceStopped() {
     deviceInputLatencySamples_.store(0, std::memory_order_relaxed);
+    deviceInputChannelCount_.store(0, std::memory_order_relaxed);
+    deviceInputChannelsThisBlock_ = 0;
     mainProcessorGraph.releaseResources();
 }
 
@@ -912,10 +986,23 @@ void AudioEngine::prepareForHost(double sampleRate, int blockSize, int numInputC
     // preserved across the rate change, the sample position is re-derived.
     transport.prepare(sampleRate, blockSize);
     prepareSliceScratch(std::max(numInputChannels, numOutputChannels), blockSize);
+    // TL6-2: hosted mode takes the same input snapshot as the device callback. The host's buffer is
+    // one in/out buffer the graph renders over in place, so the input has to be copied out of it
+    // before the graph runs or "Audio Input" would tap the mix instead of the input.
+    prepareDeviceInputSnapshot(numInputChannels, blockSize);
     mainProcessorGraph.prepareToPlay(sampleRate, blockSize);
 }
 
 void AudioEngine::processHostBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
+    // The host's input lives in the low channels of the same buffer it wants the output in, so the
+    // capture has to happen HERE, before the graph gets a chance to overwrite them.
+    const int hostInputChannels =
+        std::min(deviceInputChannelCount_.load(std::memory_order_relaxed), buffer.getNumChannels());
+    if (hostInputChannels > 0)
+        captureDeviceInput(buffer.getArrayOfReadPointers(), hostInputChannels, buffer.getNumSamples());
+    else
+        captureDeviceInput(nullptr, 0, 0);
+
     renderNextBlock(buffer, midiMessages);
 }
 

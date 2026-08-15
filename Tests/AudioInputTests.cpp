@@ -1,11 +1,9 @@
 // TL6-1: audio device INPUT reaching the graph, and the device setup that survives a restart.
 //
-// This file introduces the repo's first FakeAudioIODevice, which is the pattern for driving
-// AudioEngine's juce::AudioIODeviceCallback half headlessly: it implements juce::AudioIODevice with
-// fixed, made-up numbers and never starts a thread, so a test calls audioDeviceAboutToStart() and
-// audioDeviceIOCallbackWithContext() BY HAND, in the same order a real device would, with synthetic
-// input arrays it can then assert against. Before it, no test drove the device callback at all (see
-// the apology in StatusBarTests.cpp's MasterMute_ZeroesOutput).
+// This file introduced the repo's FakeAudioIODevice, which is the pattern for driving AudioEngine's
+// juce::AudioIODeviceCallback half headlessly — see Tests/FakeAudioIODevice.h, where it now lives
+// so TL6-2's tests can drive the same device. Before it, no test drove the device callback at all
+// (see the apology in StatusBarTests.cpp's MasterMute_ZeroesOutput).
 //
 // Headless/deterministic house rules (docs/testing.md, and the header of AudioEngineTransportTests):
 // no real audio device, no network, no sleeps. A HostMode::Standalone engine must never have
@@ -17,6 +15,7 @@
 #include "../Source/AI/AIProviderRegistry.h"
 #include "../Source/AudioEngine.h"
 #include "../Source/Modules/OscillatorModule.h"
+#include "FakeAudioIODevice.h"
 #include "MainComponent.h"
 #include <gtest/gtest.h>
 #include <juce_audio_devices/juce_audio_devices.h>
@@ -25,65 +24,13 @@
 
 namespace {
 
-constexpr double kSampleRate = 48000.0;
-constexpr int kBlockSize = 512;
-constexpr int kFakeInputLatency = 64;
-constexpr int kFakeOutputLatency = 128;
+using synth::test::FakeAudioIODevice;
+
+constexpr double kSampleRate = synth::test::kFakeDeviceSampleRate;
+constexpr int kBlockSize = synth::test::kFakeDeviceBlockSize;
+constexpr int kFakeInputLatency = synth::test::kFakeDeviceInputLatency;
 
 using IOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
-
-/** A juce::AudioIODevice that opens nothing, starts no thread and reports fixed numbers.
- *
- *  It exists so a test can hand AudioEngine a device to prepare against and then clock the engine
- *  by calling its callbacks directly — `start()` deliberately ignores the callback it is given, so
- *  there is exactly one thread (the test's) and every block is where the test put it. Extend this
- *  rather than writing a second fake: everything about it is settable through the constructor.
- */
-class FakeAudioIODevice : public juce::AudioIODevice {
-public:
-    FakeAudioIODevice(int numInputChannels, int numOutputChannels)
-        : juce::AudioIODevice("Fake", "Test") {
-        if (numInputChannels > 0)
-            activeInputs.setRange(0, numInputChannels, true);
-        if (numOutputChannels > 0)
-            activeOutputs.setRange(0, numOutputChannels, true);
-    }
-
-    juce::StringArray getOutputChannelNames() override { return channelNames("Out", activeOutputs); }
-    juce::StringArray getInputChannelNames() override { return channelNames("In", activeInputs); }
-
-    juce::Array<double> getAvailableSampleRates() override { return {kSampleRate}; }
-    juce::Array<int> getAvailableBufferSizes() override { return {kBlockSize}; }
-    int getDefaultBufferSize() override { return kBlockSize; }
-
-    juce::String open(const juce::BigInteger&, const juce::BigInteger&, double, int) override { return {}; }
-    void close() override {}
-    bool isOpen() override { return true; }
-    void start(juce::AudioIODeviceCallback*) override {}
-    void stop() override {}
-    bool isPlaying() override { return false; }
-    juce::String getLastError() override { return {}; }
-
-    int getCurrentBufferSizeSamples() override { return kBlockSize; }
-    double getCurrentSampleRate() override { return kSampleRate; }
-    int getCurrentBitDepth() override { return 32; }
-
-    juce::BigInteger getActiveOutputChannels() const override { return activeOutputs; }
-    juce::BigInteger getActiveInputChannels() const override { return activeInputs; }
-
-    int getOutputLatencyInSamples() override { return kFakeOutputLatency; }
-    int getInputLatencyInSamples() override { return kFakeInputLatency; }
-
-private:
-    static juce::StringArray channelNames(const juce::String& prefix, const juce::BigInteger& active) {
-        juce::StringArray names;
-        for (int i = 0; i < active.countNumberOfSetBits(); ++i)
-            names.add(prefix + " " + juce::String(i + 1));
-        return names;
-    }
-
-    juce::BigInteger activeInputs, activeOutputs;
-};
 
 /** AudioEngine with the one hardware-touching step of initialise() intercepted, so a test can
  *  assert WHICH branch the saved-state decision took without opening a device or grabbing a MIDI

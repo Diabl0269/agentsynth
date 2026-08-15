@@ -284,7 +284,7 @@ public:
         if (moduleName.equalsIgnoreCase("Math"))
             return "Dual-input math/logic utility - Sum, Difference, Min, Max and Product of A and B.";
         if (moduleName.equalsIgnoreCase("Audio Input"))
-            return "Audio from the input device. Only one per patch.";
+            return "Audio from the input device — one jack per input channel. Only one per patch.";
         if (moduleName.equalsIgnoreCase("Audio Output"))
             return "Sends the patch to the output device. Only one per patch.";
         // Generic fallback for any unrecognised module name.

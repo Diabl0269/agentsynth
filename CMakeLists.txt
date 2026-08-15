@@ -149,6 +149,7 @@ add_library(Core STATIC
     Source/Timeline/TimelineSnapshotExchange.h
     # Modules
     Source/Modules/ModuleBase.h
+    Source/Modules/AudioInputModule.h
     Source/Modules/OscillatorModule.h
     Source/Modules/ADSRModule.h
     Source/Modules/FilterModule.h

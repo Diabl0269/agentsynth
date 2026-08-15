@@ -2216,6 +2216,15 @@ void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) 
     }
 }
 
+void ModuleComponent::refreshPortLayout() {
+    if (module == nullptr)
+        return;
+
+    updateLayout();
+    owner.handleModuleResized(this);
+    repaint();
+}
+
 void ModuleComponent::applyMacroCountChange() {
     if (module == nullptr || dynamic_cast<MacroControlModule*>(module) == nullptr)
         return;
@@ -2397,8 +2406,11 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                 m.addSeparator();
             }
 
-            // "Replace with..." submenu (only for actual modules, not AudioGraphIOProcessor)
-            if (dynamic_cast<ModuleBase*>(module) != nullptr) {
+            // "Replace with..." submenu (only for actual modules, not AudioGraphIOProcessor).
+            // Audio Input is a ModuleBase since TL6-2 but is still a singleton I/O node: replacing
+            // it with an Oscillator would silently leave the patch with no way to get the device's
+            // input in, and the library row it came from greyed out.
+            if (dynamic_cast<ModuleBase*>(module) != nullptr && !GraphEditor::isSingletonIOModule(module->getName())) {
                 juce::PopupMenu replaceMenu;
                 auto currentType = getType(module);
 

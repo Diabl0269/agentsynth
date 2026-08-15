@@ -2,6 +2,7 @@
 #include "AI/AIStateMapper.h"
 #include "Branding.h"
 #include "Modules/AttenuverterModule.h"
+#include "Modules/AudioInputModule.h"
 #include <limits>
 #include <map>
 #include <set>
@@ -21,6 +22,11 @@ bool isSnippetEligible(juce::AudioProcessor* processor) {
     if (processor == nullptr)
         return false;
     if (dynamic_cast<IOProcessor*>(processor) != nullptr)
+        return false;
+    // TL6-2: Audio Input is a ModuleBase now, so the IO-processor test above no longer catches it —
+    // but it is still a singleton, and a snippet carrying one would insert a second Audio Input
+    // node into any patch it lands in.
+    if (dynamic_cast<AudioInputModule*>(processor) != nullptr)
         return false;
     if (dynamic_cast<AttenuverterModule*>(processor) != nullptr)
         return false;

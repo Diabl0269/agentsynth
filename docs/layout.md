@@ -88,8 +88,9 @@ drag so a module does not collide with its own pre-drag position.
 ### 4.1 Algorithm
 
 **Step 1 — Collect arrangeable nodes.**
-All graph nodes whose processor is a `ModuleBase` subclass, plus the two
-`AudioGraphIOProcessor` IO nodes. `AttenuverterModule` nodes are skipped entirely — they are
+All graph nodes whose processor is a `ModuleBase` subclass (which since TL6-2 includes *Audio
+Input*), plus the `AudioGraphIOProcessor` IO nodes — *Audio Output* and, in any patch still
+holding one, a raw `audioInputNode`. `AttenuverterModule` nodes are skipped entirely — they are
 implementation details of the modulation graph and do not appear as visible module cards.
 
 **Step 2 — Build directed edges.**

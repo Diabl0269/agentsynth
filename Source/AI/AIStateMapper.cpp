@@ -1,6 +1,7 @@
 #include "AIStateMapper.h"
 #include "../Modules/ADSRModule.h"
 #include "../Modules/AttenuverterModule.h"
+#include "../Modules/AudioInputModule.h"
 #include "../Modules/ExternalMidiModule.h"
 #include "../Modules/FX/ChorusModule.h"
 
@@ -49,7 +50,11 @@ using ModuleFactoryFunc = std::function<std::unique_ptr<juce::AudioProcessor>()>
 
 // Factory map for module creation
 static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory = {
-    {"Audio Input", []() { return std::make_unique<AudioGraphIOProcessor>(AudioGraphIOProcessor::audioInputNode); }},
+    // TL6-2: a real module, not the graph's audioInputNode — same factory key and same display
+    // name, so every patch already saved with an "Audio Input" node (and every connection out of
+    // its channels 0/1) loads onto the module unchanged. Not gated on SYNTH_ENABLE_TIMELINE: device
+    // input is independent of the timeline feature.
+    {"Audio Input", []() { return std::make_unique<AudioInputModule>(); }},
     {"Audio Output", []() { return std::make_unique<AudioGraphIOProcessor>(AudioGraphIOProcessor::audioOutputNode); }},
     {"Midi Input", []() { return std::make_unique<AudioGraphIOProcessor>(AudioGraphIOProcessor::midiInputNode); }},
     {"Oscillator", []() { return std::make_unique<OscillatorModule>(); }},
@@ -713,6 +718,10 @@ juce::String AIStateMapper::getFactoryTypeName(juce::AudioProcessor* processor) 
             return "External MIDI";
         case ModuleType::TimelineMidiSource:
             return "Track In";
+        case ModuleType::AudioInput:
+            // Deliberately the same string JUCE's audioInputNode reported (and therefore the same
+            // string every pre-TL6-2 save wrote), so the two are interchangeable on disk.
+            return "Audio Input";
         }
     }
 
