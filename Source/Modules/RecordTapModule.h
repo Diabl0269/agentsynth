@@ -37,6 +37,10 @@
  * Ring: one interleaved SPSC ring of `kDefaultRingCapacityFrames` frames (~2.7s at 48kHz), sized so
  * the writer thread can be descheduled for seconds without dropping a sample.
  *
+ * A take never spans a sample-rate change: the WAV header is written at startCapture()'s rate, so
+ * `prepareToPlay` at any other rate halts the push at that boundary (see `captureHalted_`) and the
+ * message thread commits the short take through its ordinary path.
+ *
  * Peaks sidecar (".agpk"): format and accumulation live in `synth::PeaksFile`
  * (`Source/Timeline/PeaksFile.h/.cpp`); this module owns a `PeaksFile::Accumulator` (writer thread
  * appends under `peaksLock_`) and calls `PeaksFile::write` at `stopCapture()`.
@@ -141,6 +145,12 @@ public:
     /** Any thread. True if the ring has filled at any point since the last startCapture(). */
     bool hadOverrun() const noexcept { return overrun_.load(std::memory_order_relaxed); }
 
+    /** Any thread. True once the prepared sample rate stopped matching the rate the take was armed
+     *  at: the audio thread stopped pushing at that exact boundary, so the file holds only samples
+     *  recorded at its own header rate. `isCapturing()` stays true — the take is still the message
+     *  thread's to commit (see prepareToPlay). Cleared by the next startCapture(). */
+    bool wasCaptureHaltedByFormatChange() const noexcept { return captureHalted_.load(std::memory_order_acquire); }
+
     /** Any thread. The take's frame-0 anchor as described on TakeResult — available WHILE the
      *  take is still rolling (the live recording strip wants it), not only at stopCapture(). Returns
      *  false, leaving `timelineSample` untouched, until the first block has actually been captured. */
@@ -224,6 +234,16 @@ private:
     // Written by startCapture() BEFORE capturing_ goes true and never touched again until the next
     // startCapture(), so the audio thread always sees the value belonging to the take it is in.
     std::atomic<int> captureChannels_{kNumChannels};
+
+    // The rate the take was ARMED at, stored by startCapture() on the same before-arming rule as
+    // captureChannels_. The WAV header carries it for the whole file, which is what makes it the
+    // only rate whose samples may go in.
+    std::atomic<double> captureSampleRate_{0.0};
+    // Latched by prepareToPlay() the moment the prepared rate stops matching captureSampleRate_,
+    // and the one thing processBlock checks to stop pushing. Deliberately NOT `capturing_`: the
+    // take still has to be finalised by the message thread's normal commit path, which goes through
+    // stopCapture() and would no-op on a disarmed tap.
+    std::atomic<bool> captureHalted_{false};
 
     // The take's frame-0 anchor. Cleared by startCapture() BEFORE arming; written exactly
     // once per take by the audio thread, on the first block it pushes, sample-then-flag with a

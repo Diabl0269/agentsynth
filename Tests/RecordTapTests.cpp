@@ -361,6 +361,77 @@ TEST(RecordTapTest, BypassPassesDryAndStopsCapturePushes) {
 }
 
 // ============================================================================
+// 4b. A take never spans a sample-rate change
+// ============================================================================
+
+TEST(RecordTapTest, PrepareAtANewRateStopsCaptureAtTheBoundary) {
+    ScopedTempFile wav("agentsynth_rectap_ratechange.wav");
+    ScopedTempFile peaks("agentsynth_rectap_ratechange.agpk");
+
+    RecordTapModule tap;
+    tap.prepareToPlay(kSampleRate, kBlockSize);
+    ASSERT_TRUE(tap.startCapture(wav.file, peaks.file, kSampleRate, 2));
+
+    juce::AudioBuffer<float> buffer(2, kBlockSize);
+    juce::AudioBuffer<float> expected(2, kBlockSize);
+    juce::MidiBuffer midi;
+
+    constexpr int kBlocksBeforeChange = 3;
+    for (int block = 0; block < kBlocksBeforeChange; ++block) {
+        fillWithRamp(buffer, (juce::int64)block * kBlockSize);
+        tap.processBlock(buffer, midi);
+    }
+    // A re-prepare at the SAME rate is just a graph rebuild (a node added, a connection changed) and
+    // must not touch the take.
+    tap.prepareToPlay(kSampleRate, kBlockSize);
+    EXPECT_FALSE(tap.wasCaptureHaltedByFormatChange());
+    ASSERT_EQ(tap.getCapturedSamples(), (juce::int64)kBlocksBeforeChange * kBlockSize);
+
+    // THE CHANGE: the device switches to 96 kHz mid-take. The WAV header already says 48 kHz.
+    tap.prepareToPlay(96000.0, kBlockSize);
+    EXPECT_TRUE(tap.wasCaptureHaltedByFormatChange());
+    EXPECT_TRUE(tap.isCapturing()) << "the take is still the message thread's to commit — only the "
+                                      "PUSH stops at the boundary";
+
+    for (int block = kBlocksBeforeChange; block < kBlocksBeforeChange + 5; ++block) {
+        fillWithRamp(buffer, (juce::int64)block * kBlockSize);
+        expected.makeCopyOf(buffer);
+        tap.processBlock(buffer, midi);
+        // Halted or not, a tap is transparent: the audio flowing through is untouched.
+        for (int channel = 0; channel < 2; ++channel)
+            for (int i = 0; i < kBlockSize; ++i)
+                ASSERT_EQ(buffer.getReadPointer(channel)[i], expected.getReadPointer(channel)[i]);
+    }
+    EXPECT_EQ(tap.getCapturedSamples(), (juce::int64)kBlocksBeforeChange * kBlockSize)
+        << "not one block rendered at the new rate may be pushed into a take armed at the old one";
+
+    const auto take = tap.stopCapture();
+    EXPECT_TRUE(take.ok) << "the ordinary commit path must still finalise the short take";
+    EXPECT_EQ(take.lengthSamples, (juce::int64)kBlocksBeforeChange * kBlockSize);
+
+    const auto contents = readWav(wav.file);
+    ASSERT_TRUE(contents.ok);
+    EXPECT_DOUBLE_EQ(contents.sampleRate, kSampleRate);
+    EXPECT_EQ(contents.lengthInSamples, (juce::int64)kBlocksBeforeChange * kBlockSize);
+    // Every frame in the file is a pre-change one, in order: the ramp continues past this point, so
+    // a post-change block landing in the file would show up as a value that is out of range for it.
+    for (int channel = 0; channel < 2; ++channel)
+        for (int i = 0; i < (int)contents.lengthInSamples; ++i)
+            ASSERT_EQ(contents.audio.getReadPointer(channel)[i], rampSample(i, channel))
+                << "channel " << channel << ", frame " << i;
+
+    // Re-arming clears the latch: the next take is a fresh one at the new rate.
+    ScopedTempFile wav2("agentsynth_rectap_ratechange2.wav");
+    ScopedTempFile peaks2("agentsynth_rectap_ratechange2.agpk");
+    ASSERT_TRUE(tap.startCapture(wav2.file, peaks2.file, 96000.0, 2));
+    EXPECT_FALSE(tap.wasCaptureHaltedByFormatChange());
+    fillWithRamp(buffer, 0);
+    tap.processBlock(buffer, midi);
+    EXPECT_EQ(tap.getCapturedSamples(), (juce::int64)kBlockSize);
+    tap.stopCapture();
+}
+
+// ============================================================================
 // 5. Lifecycle
 // ============================================================================
 

@@ -447,6 +447,7 @@ target_compile_definitions(Core PUBLIC SYNTH_ENABLE_TIMELINE=$<IF:$<BOOL:${SYNTH
 add_library(AppUI STATIC
     Source/MainComponent.cpp
     Source/MainComponent.h
+    Source/UserSettings.h
     Source/UI/TimelinePanelComponent.h
     Source/UI/TimelinePanelComponent.cpp
     Source/UI/TimelineRulerComponent.h

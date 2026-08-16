@@ -23,6 +23,11 @@ void MidiRecorder::captureBlock(const juce::MidiBuffer& midi, const BlockTimeInf
     const double punchInBeat = punchInBeat_.load(std::memory_order_relaxed);
 
     for (const auto metadata : midi) {
+        // Filter on the raw byte count BEFORE constructing a juce::MidiMessage: construction
+        // heap-allocates for anything longer than the 8-byte inline buffer (SysEx, MTC full
+        // frame), and this runs on the audio thread. Note on/off is always 3 bytes.
+        if (metadata.numBytes > 3)
+            continue;
         const auto message = metadata.getMessage();
         const bool isOn = message.isNoteOn();
         const bool isOff = message.isNoteOff();

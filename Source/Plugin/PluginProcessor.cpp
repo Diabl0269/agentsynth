@@ -2,6 +2,7 @@
 #include "AI/AIStateMapper.h"
 #include "Branding.h"
 #include "PluginEditor.h"
+#include "UserSettings.h"
 
 namespace synth {
 
@@ -24,12 +25,39 @@ AgentSynthAudioProcessor::AgentSynthAudioProcessor()
     // the properties file, which restores the user's persisted theme over this default.
     lookAndFeel.applyTheme(themeManager.getActiveTheme());
 
+    // The identity resolver, installed before anything in the graph can ask for a plugin. This is
+    // the processor's job and not the editor's: setStateInformation runs whether or not the host
+    // ever opens our window, and an identity that cannot resolve leaves a Hosted Plugin node a
+    // placeholder for the rest of the session. The list is whatever the standalone app persisted
+    // after its last scan — nothing here scans (see startPluginScan).
+    appProperties.setStorageParameters(userSettingsOptions());
+    if (auto savedScanList = juce::parseXML(appProperties.getUserSettings()->getValue(kPluginScanListSettingKey)))
+        pluginScanService.loadFromXml(*savedScanList);
+    if (auto* backend = dynamic_cast<DefaultHostedPluginBackend*>(&HostedPluginBackend::getDefault()))
+        backend->setScanService(&pluginScanService);
+
     // Builds the default patch. In HostMode::Hosted this touches no audio device and opens no
     // MIDI input — see AudioEngine::initialise().
     engine.initialise();
 }
 
-AgentSynthAudioProcessor::~AgentSynthAudioProcessor() { engine.shutdown(); }
+AgentSynthAudioProcessor::~AgentSynthAudioProcessor() {
+    // Unhook before the graph goes: the backend holds a bare pointer, and a hosted-plugin node
+    // resolving an identity after this point would read freed memory. Guarded on "still ours" for
+    // the same reason MainComponent's destructor is — a second plugin instance in the same process
+    // will have installed its own service over this one.
+    if (auto* backend = dynamic_cast<DefaultHostedPluginBackend*>(&HostedPluginBackend::getDefault()))
+        if (backend->getScanService() == &pluginScanService)
+            backend->setScanService(nullptr);
+
+    engine.shutdown();
+}
+
+void AgentSynthAudioProcessor::ensureScanServiceInstalled() {
+    if (auto* backend = dynamic_cast<DefaultHostedPluginBackend*>(&HostedPluginBackend::getDefault()))
+        if (backend->getScanService() == nullptr)
+            backend->setScanService(&pluginScanService);
+}
 
 const juce::String AgentSynthAudioProcessor::getName() const { return synth::branding::kProductName; }
 
@@ -127,6 +155,10 @@ void AgentSynthAudioProcessor::setStateInformation(const void* data, int sizeInB
 
     if (!patch.isObject())
         return;
+
+    // Before anything can apply a Hosted Plugin node's identity — see the helper for the one case
+    // this covers that the constructor cannot.
+    ensureScanServiceInstalled();
 
     // Tear down module components BEFORE the graph is cleared, so no ScopeComponent timer can
     // fire against a freed VisualBuffer. Same ordering contract as GraphEditor::loadPreset and

@@ -24,6 +24,18 @@ void RecordTapModule::prepareToPlay(double sampleRate, int samplesPerBlock) {
     juce::ignoreUnused(samplesPerBlock);
     if (sampleRate > 0.0)
         preparedSampleRate_ = sampleRate;
+
+    // A take's WAV header is fixed at startCapture()'s rate, so a block rendered at any OTHER rate
+    // cannot honestly go into it — it would put two real rates in one file under a single declared
+    // one. This is the boundary: the graph re-prepares every node on a device/sample-rate change
+    // (AudioEngine::handleStreamFormatChange's callers), so latching here stops the push before the
+    // first new-rate block, rather than whenever the message thread's poll gets round to
+    // committing. The commit itself is unchanged and still the message thread's — capturing_ stays
+    // true so stopCapture() finalises the take exactly as it does for any other stop.
+    const double captureRate = captureSampleRate_.load(std::memory_order_relaxed);
+    if (sampleRate > 0.0 && captureRate > 0.0 && sampleRate != captureRate &&
+        capturing_.load(std::memory_order_acquire))
+        captureHalted_.store(true, std::memory_order_release);
 }
 
 void RecordTapModule::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
@@ -43,7 +55,11 @@ void RecordTapModule::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     // the output in, so the samples are already where they belong. Everything below only READS
     // them.
 
-    if (numSamples > 0 && capturing_.load(std::memory_order_acquire)) {
+    // The halt check rides with the armed check, and for the same reason it is read once: a take
+    // stops at a sample-rate boundary, mid-take, and not one block of the new rate may be pushed
+    // (see prepareToPlay). Pass-through above is untouched by it — the tap stays transparent.
+    if (numSamples > 0 && capturing_.load(std::memory_order_acquire) &&
+        !captureHalted_.load(std::memory_order_acquire)) {
         const int captureChannels = juce::jlimit(1, kNumChannels, captureChannels_.load(std::memory_order_relaxed));
         const int availableChannels = juce::jmin(captureChannels, buffer.getNumChannels());
 
@@ -130,6 +146,10 @@ bool RecordTapModule::startCapture(const juce::File& wavFile, const juce::File& 
     captureStartValid_.store(false, std::memory_order_relaxed);
     captureStartTimelineSample_.store(0, std::memory_order_relaxed);
     captureStartBlockOffset_.store(0, std::memory_order_relaxed);
+    // The rate this take is pinned to for its whole life, and the boundary latch cleared against
+    // it — both before arming, so the audio thread can only ever see this take's pair.
+    captureSampleRate_.store(sampleRate, std::memory_order_relaxed);
+    captureHalted_.store(false, std::memory_order_relaxed);
     {
         // Replaces the accumulator wholesale rather than reset()-ing the old one in place: a mono
         // take following a stereo one (or vice versa) needs a different numChannels, which reset()

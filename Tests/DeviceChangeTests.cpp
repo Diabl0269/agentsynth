@@ -8,7 +8,8 @@
 //   3. invalidates the audio-clip streamer's rings (self-healing on a miss is not enough — a
 //      coincidental hit on stale content would be WRONG audio, not silence)
 //   4. flags any in-flight take (audio or MIDI) so the next 10 Hz poll finalizes it — a take must
-//      never span a format change.
+//      never span a format change. The poll is what COMMITS; the audio side stops at the boundary
+//      itself (RecordTapModule::prepareToPlay), so no new-rate block reaches the old-rate WAV.
 //
 // Groups, each gated the same way its engine/timeline dependencies require (mirrors
 // MetronomeTests.cpp / LatencyAlignmentTests.cpp's own mixed gating within one file):
@@ -368,6 +369,16 @@ void driveSilentBlock(AudioEngine& engine) {
     engine.audioDeviceIOCallbackWithContext(inputs, 2, outputs, 2, kBlockSize, {});
 }
 
+/** driveSilentBlock's counterpart for the take-content tests: both input channels carry `value` for
+ *  the whole block, so a committed take's samples say which rate era they were captured in. */
+void driveBlockWithInput(AudioEngine& engine, float value) {
+    std::vector<float> left((std::size_t)kBlockSize, value), right((std::size_t)kBlockSize, value);
+    std::vector<float> outLeft((std::size_t)kBlockSize, 0.0f), outRight((std::size_t)kBlockSize, 0.0f);
+    const float* inputs[] = {left.data(), right.data()};
+    float* outputs[] = {outLeft.data(), outRight.data()};
+    engine.audioDeviceIOCallbackWithContext(inputs, 2, outputs, 2, kBlockSize, {});
+}
+
 RecordTapModule* findRecordTap(juce::AudioProcessorGraph& graph) {
     for (auto* node : graph.getNodes())
         if (node != nullptr)
@@ -380,6 +391,7 @@ struct WavInfo {
     bool ok = false;
     juce::int64 lengthInSamples = 0;
     double sampleRate = 0.0;
+    juce::AudioBuffer<float> audio;
 };
 
 WavInfo readWavInfo(const juce::File& file) {
@@ -395,6 +407,10 @@ WavInfo readWavInfo(const juce::File& file) {
     out.ok = true;
     out.lengthInSamples = reader->lengthInSamples;
     out.sampleRate = reader->sampleRate;
+    out.audio.setSize((int)reader->numChannels, (int)std::max<juce::int64>(reader->lengthInSamples, 1));
+    out.audio.clear();
+    if (reader->lengthInSamples > 0)
+        reader->read(&out.audio, 0, (int)reader->lengthInSamples, 0, true, true);
     return out;
 }
 
@@ -503,6 +519,86 @@ TEST_F(DeviceChangeFlowTest, AudioTakeCommittedAtFormatChange) {
     ASSERT_TRUE(expectedPlacement.hasContent);
     EXPECT_DOUBLE_EQ(clip.startBeat, expectedPlacement.clipStartBeat);
     EXPECT_DOUBLE_EQ(clip.sourceStartSeconds, expectedPlacement.sourceStartSeconds);
+
+    takeFile.deleteFile();
+    takeFile.withFileExtension("agpk").deleteFile();
+    engine.audioDeviceStopped();
+}
+
+TEST_F(DeviceChangeFlowTest, AudioTakeCapturesNothingAfterTheRateBoundary) {
+    // The commit is a 10 Hz POLL, so blocks keep being rendered between the format change and the
+    // finalize. Those blocks are at the NEW rate while the take's WAV header says the OLD one, so
+    // the tap has to stop pushing at the boundary itself — not when the poll gets round to it.
+    MainComponent mc(std::make_unique<MinimalProviderDC>());
+    mc.setSize(1600, 900);
+    quiesceEngine(mc);
+    buildInputPatch(mc);
+
+    auto& engine = mc.getAudioEngine();
+    auto& doc = mc.getTimelineDoc();
+    auto& bar = mc.getTimelinePanel().getTransportBar();
+
+    auto fake48 = makeFakeAt(kSampleRate);
+    engine.audioDeviceAboutToStart(&fake48);
+
+    const auto track = doc.addTrack(synth::TrackKind::Audio, "Audio 1");
+    ASSERT_TRUE(doc.setTrackArmed(track, true));
+    mc.timerCallback(); // arms input monitoring so the input reaches the tap
+
+    bar.getRecordButton().onClick();
+    ASSERT_TRUE(bar.isRecordingForTest());
+    auto* tap = findRecordTap(engine.getGraph());
+    ASSERT_NE(tap, nullptr);
+    ASSERT_TRUE(tap->isCapturing());
+
+    // Positive before the change, negative after: a single negative sample in the committed file is
+    // a block that was recorded at 96 kHz into a 48 kHz take.
+    constexpr int kBlocksBeforeChange = 8;
+    constexpr int kBlocksAfterChange = 8;
+    constexpr float kOldRateInput = 0.25f;  // well under the feedback guard's threshold
+    constexpr float kNewRateInput = -0.75f; // ditto, and unmistakably from the other era
+    for (int block = 0; block < kBlocksBeforeChange; ++block)
+        driveBlockWithInput(engine, kOldRateInput);
+    ASSERT_EQ(tap->getCapturedSamples(), (juce::int64)kBlocksBeforeChange * kBlockSize);
+
+    // THE CHANGE, with the poll deliberately NOT run yet — this is the window under test.
+    auto fake96 = makeFakeAt(kNewSampleRate);
+    engine.audioDeviceAboutToStart(&fake96);
+    EXPECT_TRUE(tap->wasCaptureHaltedByFormatChange());
+    ASSERT_TRUE(tap->isCapturing()) << "the halt must leave the commit to the message thread";
+
+    for (int block = 0; block < kBlocksAfterChange; ++block)
+        driveBlockWithInput(engine, kNewRateInput);
+    EXPECT_EQ(tap->getCapturedSamples(), (juce::int64)kBlocksBeforeChange * kBlockSize)
+        << "blocks rendered at the new rate must never reach a take armed at the old one";
+
+    // The existing early-commit flow, unchanged.
+    mc.timerCallback();
+    EXPECT_FALSE(tap->isCapturing());
+    ASSERT_NE(doc.getTrack(track), nullptr);
+    ASSERT_EQ(doc.getTrack(track)->clips.size(), 1u);
+
+    const auto& clip = doc.getTrack(track)->clips[0];
+    const auto takeFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                              .getChildFile("Agent Synth")
+                              .getChildFile("Recordings")
+                              .getChildFile(clip.assetRef.fromLastOccurrenceOf("/", false, false));
+    const auto wav = readWavInfo(takeFile);
+    ASSERT_TRUE(wav.ok);
+    EXPECT_DOUBLE_EQ(wav.sampleRate, kSampleRate);
+    EXPECT_EQ(wav.lengthInSamples, (juce::int64)kBlocksBeforeChange * kBlockSize)
+        << "the file must end at the format change, not at the poll that committed it";
+
+    bool anyNonZero = false;
+    for (int channel = 0; channel < wav.audio.getNumChannels(); ++channel) {
+        const float* data = wav.audio.getReadPointer(channel);
+        for (int i = 0; i < (int)wav.lengthInSamples; ++i) {
+            ASSERT_GE(data[i], 0.0f) << "a post-change sample landed in the take: channel " << channel << ", frame "
+                                     << i;
+            anyNonZero = anyNonZero || data[i] != 0.0f;
+        }
+    }
+    EXPECT_TRUE(anyNonZero) << "the input never reached the tap, so the sample check proved nothing";
 
     takeFile.deleteFile();
     takeFile.withFileExtension("agpk").deleteFile();

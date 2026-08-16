@@ -105,6 +105,40 @@ TEST(MidiRecorderTest, CapturesTimestampedTake) {
     EXPECT_EQ(clip.notes[0].channel, 3);
 }
 
+// A capture buffer can carry SysEx or other long messages (the collector forwards everything the
+// device sends). captureBlock filters on the raw byte count BEFORE constructing a juce::MidiMessage
+// — construction heap-allocates past the 8-byte inline buffer, and this runs on the audio thread —
+// so long messages must be ignored without disturbing the notes around them.
+TEST(MidiRecorderTest, SysExIsIgnoredWithoutDisturbingNotes) {
+    Harness h;
+    TimelineDoc doc;
+    AppUndoManager undo;
+    const auto track = doc.addTrack(TrackKind::Midi, "Track 1");
+
+    ASSERT_TRUE(h.transport.play());
+    h.recorder.startRecording(track, 0.0);
+
+    const std::vector<juce::uint8> sysexPayload(256, 0x42);
+    for (int block = 0; block < 11; ++block) {
+        juce::MidiBuffer midi;
+        if (block == 5) {
+            midi.addEvent(juce::MidiMessage::createSysExMessage(sysexPayload.data(), (int)sysexPayload.size()), 50);
+            midi.addEvent(juce::MidiMessage::noteOn(1, 60, (juce::uint8)100), 100);
+            midi.addEvent(juce::MidiMessage::noteOff(1, 60), 300);
+        }
+        h.renderBlock(midi);
+    }
+
+    ASSERT_TRUE(h.recorder.stopAndCommit(doc, undo));
+    EXPECT_FALSE(h.recorder.hadOverrun());
+
+    const auto* trackPtr = doc.getTrack(track);
+    ASSERT_NE(trackPtr, nullptr);
+    ASSERT_EQ(trackPtr->clips.size(), 1u);
+    ASSERT_EQ(trackPtr->clips[0].notes.size(), 1u) << "the note beside the SysEx must record; the SysEx must not";
+    EXPECT_EQ(trackPtr->clips[0].notes[0].pitch, 60);
+}
+
 // ============================================================================
 // 2. OneUndoStep
 // ============================================================================

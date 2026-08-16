@@ -23,6 +23,31 @@
 #include <map>
 #include <set>
 
+namespace {
+
+/** Counts a render pass in and out for the whole of renderNextBlock — the audio half of the
+ *  teardown handshake in AudioEngine::drainAudioCallbacks(). Allocation-free and lock-free; the
+ *  cost is two atomic RMWs per pass.
+ *
+ *  Two monotonic counters rather than one in-flight count, because a plugin's audio thread renders
+ *  back-to-back: a drain polling "is anything in flight?" can miss the microscopic gap between one
+ *  block and the next forever, where "have the passes that were already running finished?" always
+ *  completes within one block. */
+struct ScopedRenderPass {
+    ScopedRenderPass(std::atomic<std::uint64_t>& started, std::atomic<std::uint64_t>& finished) noexcept
+        : finished_(finished) {
+        // seq_cst, not acq_rel: this increment must not be reordered after the borrowed-pointer
+        // reads it protects, and a message thread that has already published a new pointer must
+        // then see this pass. Anything weaker leaves the Dekker-style store/load pair open.
+        started.fetch_add(1, std::memory_order_seq_cst);
+    }
+    ~ScopedRenderPass() { finished_.fetch_add(1, std::memory_order_release); }
+
+    std::atomic<std::uint64_t>& finished_;
+};
+
+} // namespace
+
 AudioEngine::AudioEngine(HostMode mode)
     : hostMode_(mode) {
 #if SYNTH_ENABLE_TIMELINE
@@ -786,7 +811,44 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     renderNextBlock(buffer, midiMessages);
 }
 
+void AudioEngine::drainAudioCallbacks() noexcept {
+    // MESSAGE THREAD. The other half of ScopedRenderPass's handshake. The caller has already
+    // published its new pointer with a seq_cst store, so every pass that STARTS from here on reads
+    // the new value; this only has to outlast the passes that had already started, which is exactly
+    // what waiting for the finished count to catch up with the started count says. It does NOT wait
+    // for the audio thread to go idle — an engine inside a host never does.
+    //
+    // Bounded on purpose. A device thread wedged inside a callback (or a host that never returns
+    // from processBlock) would otherwise hang the message thread during teardown; giving up after
+    // the timeout is strictly better than a deadlock. Returns immediately whenever nothing is
+    // clocking the graph — a suspended device callback, a headless test, a hosted engine between
+    // blocks.
+    static constexpr int kDrainTimeoutMs = 2000;
+    const auto deadline = juce::Time::getMillisecondCounter() + (juce::uint32)kDrainTimeoutMs;
+    const auto target = renderPassesStarted_.load(std::memory_order_seq_cst);
+
+    int spins = 0;
+    while (renderPassesFinished_.load(std::memory_order_acquire) < target) {
+        if (juce::Time::getMillisecondCounter() > deadline) {
+            jassertfalse; // a render pass outlasted the drain: something is holding the audio thread
+            return;
+        }
+        // A block is milliseconds at most, so spinning wins the common case; fall back to sleeping
+        // rather than burning a core if the pass really is long (a huge buffer, a stalled host).
+        if (++spins < 1000)
+            juce::Thread::yield();
+        else
+            juce::Thread::sleep(1);
+    }
+}
+
 void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
+    // The one place a render pass is declared in flight. Both entry points (the standalone device
+    // callback and the hosted processBlock) funnel through here, so this single guard covers every
+    // read of the borrowed midiCaptureSink_ / automationRecordState_ pointers below — see
+    // drainAudioCallbacks(), which is what an owner destroying either of them waits on.
+    const ScopedRenderPass renderPassGuard(renderPassesStarted_, renderPassesFinished_);
+
 #if SYNTH_ENABLE_TIMELINE
     // Off by default, in which case this is one pass over the whole buffer and the
     // behaviour is byte-identical to what it was before slicing existed. The scratch check is a
@@ -844,7 +906,10 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // handleIncomingMidiMessage also makes (those flow only inside that module's own processing,
     // never through this buffer) — recording from both paths would double-record any note whose
     // source also has an ExternalMidi node bound to it.
-    if (auto* recorder = midiCaptureSink_.load(std::memory_order_relaxed))
+    // Loaded ONCE into a local, here, and used only within this pass — the pointer is borrowed, and
+    // the in-flight guard in renderNextBlock is what makes that borrow safe against an owner
+    // destroying the recorder (acquire pairs with the setter's publish).
+    if (auto* recorder = midiCaptureSink_.load(std::memory_order_acquire))
         recorder->captureBlock(midiMessages, transport.getCurrentBlockInfo());
 
     // Push this pass's automation values into their bound parameters, after the tick (so the
@@ -856,7 +921,7 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // notifying write. Always passed (see getAutomationUiFeed()) — nothing drains it without a
     // GraphEditor around to do so, so a headless render pass just fills a ring nobody reads.
     automationApplier_.applyBlock(automationBindings_.beginAudioBlock(), transport.getCurrentBlockInfo(),
-                                  automationRecordState_.load(std::memory_order_relaxed), &automationUiFeed_);
+                                  automationRecordState_.load(std::memory_order_acquire), &automationUiFeed_);
 #endif
 
     // Deliberately OUTSIDE the timeline flag: device input is not a timeline feature.

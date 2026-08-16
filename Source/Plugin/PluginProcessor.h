@@ -1,9 +1,11 @@
 #pragma once
 
 #include "AudioEngine.h"
+#include "Plugin/Hosting/PluginScanService.h"
 #include "UI/Theme/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_data_structures/juce_data_structures.h>
 
 namespace synth {
 
@@ -18,6 +20,13 @@ namespace synth {
     create and destroy the editor many times over a session (every time the plugin window is
     closed and reopened), and the LookAndFeel must outlive every Component that points at it —
     the same shutdown-order guard Main.cpp relies on for the standalone app.
+
+    The hosted-plugin scan list is here for the same reason, one step further: a DAW restoring a
+    session never has to open our window at all, so an identity resolver that only existed while the
+    editor did would leave every Hosted Plugin node in the restored patch an unresolved placeholder
+    until the user happened to look at it. This processor restores the list the standalone app
+    persisted and installs it on the process-wide backend itself. It never SCANS — inside a host the
+    host owns plugin discovery (MainComponent::startPluginScan refuses outright).
 */
 class AgentSynthAudioProcessor : public juce::AudioProcessor {
 public:
@@ -53,14 +62,30 @@ public:
     theme::ThemeManager& getThemeManager() noexcept { return themeManager; }
     theme::AppLookAndFeel& getLookAndFeel() noexcept { return lookAndFeel; }
 
+    /** The session's identity resolver: restored from the persisted scan list in the constructor and
+     *  installed on the process-wide backend for as long as this processor lives. An editor built on
+     *  this engine adopts it rather than installing one of its own. */
+    PluginScanService& getPluginScanService() noexcept { return pluginScanService; }
+
     // Editor size, persisted in the plugin state so a reopened window keeps the user's layout.
     juce::Point<int> getSavedEditorSize() const noexcept { return savedEditorSize; }
     void setSavedEditorSize(juce::Point<int> size) noexcept { savedEditorSize = size; }
 
 private:
-    // Declaration order is the shutdown-order guard: themeManager and lookAndFeel are declared
-    // BEFORE engine so they are destroyed AFTER it (and after any editor, which the base class
-    // tears down first). Mirrors AppApplication's member ordering in Main.cpp.
+    /** Installs our scan service on the process-wide backend if that slot is currently empty.
+     *  Covers the one case the constructor cannot: a sibling plugin instance in the same host
+     *  installed its service over ours and has since been deleted, which vacates the slot. A
+     *  sibling's service that is still installed is left alone — it was restored from the same
+     *  settings file, so it resolves the same identities. */
+    void ensureScanServiceInstalled();
+
+    // Declaration order is the shutdown-order guard: everything here is declared BEFORE engine so it
+    // is destroyed AFTER it (and after any editor, which the base class tears down first). Mirrors
+    // AppApplication's member ordering in Main.cpp. The scan service in particular must outlive the
+    // graph: a hosted-plugin node resolves its identity through it.
+    juce::ApplicationProperties appProperties;
+    PluginScanService pluginScanService;
+
     theme::ThemeManager themeManager;
     theme::AppLookAndFeel lookAndFeel;
 

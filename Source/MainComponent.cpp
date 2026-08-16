@@ -117,12 +117,9 @@ MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLo
     , aiChatComponent(aiService, appProperties)
     , themeManager(&tm)
     , lookAndFeel(&lf) {
-    // Setup ApplicationProperties
-    propertiesOptions.applicationName = synth::branding::kProductName;
-    propertiesOptions.folderName = synth::branding::kSettingsFolderName;
-    propertiesOptions.filenameSuffix = "settings";
-    propertiesOptions.osxLibrarySubFolder = "Application Support";
-    propertiesOptions.storageFormat = juce::PropertiesFile::storeAsXML;
+    // Setup ApplicationProperties — the shared location, never a local copy of the fields (the
+    // plugin processor opens the same file for the scan list; see synth::userSettingsOptions()).
+    propertiesOptions = synth::userSettingsOptions();
     appProperties.setStorageParameters(propertiesOptions);
     shortcutManager.loadFromProperties(appProperties);
 
@@ -147,11 +144,7 @@ MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLo
     , aiChatComponent(aiService, appProperties)
     , themeManager(&tm)
     , lookAndFeel(&lf) {
-    propertiesOptions.applicationName = synth::branding::kProductName;
-    propertiesOptions.folderName = synth::branding::kSettingsFolderName;
-    propertiesOptions.filenameSuffix = "settings";
-    propertiesOptions.osxLibrarySubFolder = "Application Support";
-    propertiesOptions.storageFormat = juce::PropertiesFile::storeAsXML;
+    propertiesOptions = synth::userSettingsOptions();
     appProperties.setStorageParameters(propertiesOptions);
     shortcutManager.loadFromProperties(appProperties);
 
@@ -177,11 +170,7 @@ MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider, synth:
     lookAndFeel = ownedLookAndFeel.get();
 
     // Setup ApplicationProperties (same as primary ctor)
-    propertiesOptions.applicationName = synth::branding::kProductName;
-    propertiesOptions.folderName = synth::branding::kSettingsFolderName;
-    propertiesOptions.filenameSuffix = "settings";
-    propertiesOptions.osxLibrarySubFolder = "Application Support";
-    propertiesOptions.storageFormat = juce::PropertiesFile::storeAsXML;
+    propertiesOptions = synth::userSettingsOptions();
     appProperties.setStorageParameters(propertiesOptions);
     shortcutManager.loadFromProperties(appProperties);
 
@@ -354,12 +343,21 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // Restore the saved scan list, install it as the process-wide identity resolver, and wire the
     // two sidebar callbacks. Nothing here starts a scan: scanning launches child processes and is
     // only ever done because the user asked (and never at all in a hosted build — see
-    // startPluginScan). The list IS loaded in a hosted build, because a DAW session that hosts a
+    // startPluginScan). The list IS needed in a hosted build, because a DAW session that hosts a
     // plugin still has to resolve its identity to something.
-    if (auto savedScanList = juce::parseXML(appProperties.getUserSettings()->getValue(kPluginScanListKey)))
-        pluginScanService.loadFromXml(*savedScanList);
-    if (auto* backend = dynamic_cast<synth::DefaultHostedPluginBackend*>(&synth::HostedPluginBackend::getDefault()))
-        backend->setScanService(&pluginScanService);
+    auto* pluginBackend = dynamic_cast<synth::DefaultHostedPluginBackend*>(&synth::HostedPluginBackend::getDefault());
+    if (ownedAudioEngine == nullptr && pluginBackend != nullptr && pluginBackend->getScanService() != nullptr) {
+        // The plugin path with a resolver already installed: it is AgentSynthAudioProcessor's, and
+        // it outlives this editor (a host closes and reopens the window freely). Adopt it instead of
+        // installing ours over it — replacing it would leave the session with a resolver that dies
+        // with the window, which is the bug this branch exists to prevent.
+        activeScanService = pluginBackend->getScanService();
+    } else {
+        if (auto savedScanList = juce::parseXML(appProperties.getUserSettings()->getValue(kPluginScanListKey)))
+            pluginScanService.loadFromXml(*savedScanList);
+        if (pluginBackend != nullptr)
+            pluginBackend->setScanService(&pluginScanService);
+    }
     moduleLibrary.onScanPluginsRequested = [this] { startPluginScan(); };
     moduleLibrary.onPluginActivated = [this](const synth::PluginIdentity& identity) {
         graphEditor.addHostedPluginAtCanvasPosition(identity, graphEditor.getViewportCentreInCanvasSpace());
@@ -895,7 +893,8 @@ MainComponent::~MainComponent() {
     // The process-wide backend holds a bare pointer to our scan service, so unhook it before
     // anything else that could resolve an identity — a hosted-plugin restore after this point would
     // otherwise go through freed memory. Guarded on "still ours" because a second MainComponent
-    // (tests construct several) will have replaced it.
+    // (tests construct several) will have replaced it — and because on the plugin path the installed
+    // service is the PROCESSOR's, adopted rather than owned, and must survive this editor closing.
     if (auto* backend = dynamic_cast<synth::DefaultHostedPluginBackend*>(&synth::HostedPluginBackend::getDefault()))
         if (backend->getScanService() == &pluginScanService)
             backend->setScanService(nullptr);
@@ -1228,21 +1227,32 @@ bool MainComponent::openFromFile(const juce::File& file) {
         // GraphEditor::loadPreset uses, and for the same reason (a live ScopeComponent timer would
         // otherwise read a freed VisualBuffer).
         graphEditor.detachAllModuleComponents();
+
+        // The roots move to the new bundle BEFORE the load, not after it. ProjectBundle::load moves
+        // the timeline into the live doc, and that fires timelineChanged synchronously — publishing
+        // to the engine and the clip streamer while the load is still running. With the old roots
+        // still installed, that publish resolves this bundle's clip refs against the PREVIOUS
+        // bundle's Audio/ folder: the wrong file, or silence. Takes recorded from here on belong to
+        // this bundle for the same reason.
+        const juce::File previousBundleDir = currentBundleDir_;
+        currentBundleDir_ = file;
+        refreshAssetRoots();
+
         const auto result =
             synth::ProjectBundle::load(file, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument());
         // Reconcile the view whatever happened: on failure the load left the graph exactly as it
         // was, and the components still have to come back after the detach above.
         graphEditor.updateComponents();
         if (!result.ok) {
+            // load() is all-or-nothing, so a failure has to leave the previous project intact —
+            // roots included, or the still-open document would start resolving its clips against a
+            // bundle it was never part of.
+            currentBundleDir_ = previousBundleDir;
+            refreshAssetRoots();
             statusBar.showMessage("Load failed: " + result.message);
             return false;
         }
 
-        // Takes recorded from here on belong to THIS bundle.
-        currentBundleDir_ = file;
-        // BEFORE the republish below, so the streamer's syncToSnapshot resolves this
-        // bundle's refs rather than the previous document's roots.
-        refreshAssetRoots();
         // ProjectBundle::load already reconciled once; this republishes the freshly loaded document
         // (and rebinds the recorder) against the graph as it now stands.
         reconcileTimelineAfterGraphChange();
@@ -1634,10 +1644,12 @@ void MainComponent::updateCommandShortcuts() {
 
 // ---- Hosted plugins ----
 
-void MainComponent::refreshPluginLibrary() { moduleLibrary.setPlugins(pluginScanService.getKnownPluginIdentities()); }
+void MainComponent::refreshPluginLibrary() {
+    moduleLibrary.setPlugins(getPluginScanService().getKnownPluginIdentities());
+}
 
 void MainComponent::savePluginScanList() {
-    if (auto xml = pluginScanService.toXml()) {
+    if (auto xml = getPluginScanService().toXml()) {
         appProperties.getUserSettings()->setValue(kPluginScanListKey, xml->toString());
         appProperties.saveIfNeeded();
     }
@@ -1654,7 +1666,7 @@ void MainComponent::startPluginScan() {
         return;
     }
 
-    if (pluginScanService.isScanning()) {
+    if (getPluginScanService().isScanning()) {
         statusBar.showMessage("Already scanning for plugins...");
         return;
     }
@@ -1665,7 +1677,7 @@ void MainComponent::startPluginScan() {
     // status bar and the sidebar from here is safe. Progress is one message per plugin, not per
     // frame — a scan is seconds-per-plugin, so this is nowhere near the high-frequency logging /
     // repaint traps.
-    pluginScanService.scanAsync(
+    getPluginScanService().scanAsync(
         synth::hostedPluginFormatNames(),
         [this](const juce::String& fileOrIdentifier, int scanned, int total) {
             // Trailing segment, not File::getFileName(): an AudioUnit's identifier is not a path.
@@ -1681,8 +1693,8 @@ void MainComponent::startPluginScan() {
                 return;
             }
 
-            juce::String message = "Found " + juce::String(pluginScanService.getNumKnownPlugins()) + " plugin" +
-                                   (pluginScanService.getNumKnownPlugins() == 1 ? "" : "s");
+            const int found = getPluginScanService().getNumKnownPlugins();
+            juce::String message = "Found " + juce::String(found) + " plugin" + (found == 1 ? "" : "s");
             if (result.added > 0)
                 message += " (" + juce::String(result.added) + " new)";
             if (result.failed > 0)
@@ -2791,10 +2803,14 @@ void MainComponent::addMidiTrack() {
     // ONE compound undo step: the Track In node, its auto-wire, the track, its binding and its
     // colour are a single gesture, so a single Cmd+Z removes all of it.
     const bool pushed = undoManager.recordCombinedChange(audioEngine.getGraph(), timelineDoc, [this, index] {
-        const juce::String uuid = createTrackInNode();
+        // Doc side FIRST. addTrack refuses at kMaxTracks, and a node created before that refusal
+        // stays in the graph with no track to feed — recordCombinedChange RECORDS the mutation, it
+        // does not undo it. A track with no binding yet is never flagged orphaned, so the order
+        // costs nothing.
         const auto trackId = timelineDoc.addTrack(synth::TrackKind::Midi, "Track " + juce::String(index + 1));
         if (!trackId.isValid())
-            return; // at kMaxTracks: the node is rolled back with the rest of the step
+            return; // at kMaxTracks: nothing added, and no node created
+        const juce::String uuid = createTrackInNode();
         if (uuid.isNotEmpty())
             timelineDoc.setTrackBinding(trackId, uuid);
         timelineDoc.setTrackColour(trackId, synth::ui::trackPaletteColour(index).getARGB());
@@ -2813,10 +2829,12 @@ void MainComponent::addAudioTrack() {
     // auto-wire into the master bus, the track, its binding and its colour, so a single Cmd+Z
     // removes all of it.
     const bool pushed = undoManager.recordCombinedChange(audioEngine.getGraph(), timelineDoc, [this, index] {
-        const juce::String uuid = createTrackAudioNode();
+        // Doc side FIRST, for the reason addMidiTrack() spells out: a node created before the
+        // kMaxTracks refusal would be left orphaned in the graph.
         const auto trackId = timelineDoc.addTrack(synth::TrackKind::Audio, "Audio " + juce::String(index + 1));
         if (!trackId.isValid())
-            return; // at kMaxTracks: the node is rolled back with the rest of the step
+            return; // at kMaxTracks: nothing added, and no node created
+        const juce::String uuid = createTrackAudioNode();
         if (uuid.isNotEmpty())
             timelineDoc.setTrackBinding(trackId, uuid);
         timelineDoc.setTrackColour(trackId, synth::ui::trackPaletteColour(index).getARGB());

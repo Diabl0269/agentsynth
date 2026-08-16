@@ -27,6 +27,7 @@
 #include "UI/ToolbarComponent.h"
 #include "UI/UIAnimation.h"
 #include "Update/UpdateManager.h"
+#include "UserSettings.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -223,11 +224,17 @@ public:
 
     // ---- Hosted plugins ----
     //
-    // MainComponent owns the scan list because Core must not read or write settings and because the
-    // scan is a standalone-app affair: the plugin build of ourselves never constructs a
-    // MainComponent-owned service, so a DAW session can never trigger a nested plugin scan.
+    // MainComponent owns a scan list because Core must not read or write settings, and scanning is a
+    // standalone-app affair: a scan is refused outright when the engine is Hosted, so a DAW session
+    // can never trigger a nested plugin scan.
+    //
+    // It is not always the list in use. On the plugin path AgentSynthAudioProcessor restores and
+    // installs its OWN service before any editor exists (a host restores a session without ever
+    // opening our window), and that service outlives every editor — so an editor started on an
+    // external engine ADOPTS whatever is already installed instead of replacing it. Everything below
+    // therefore goes through getPluginScanService(), never the member directly.
 
-    synth::PluginScanService& getPluginScanService() noexcept { return pluginScanService; }
+    synth::PluginScanService& getPluginScanService() noexcept { return *activeScanService; }
 
     /** Starts a background scan of every format this build can host, reporting through the status
      *  bar and refreshing the library's Plugins section (and the saved list) when it finishes.
@@ -241,8 +248,9 @@ public:
     /** Pushes the scan list into the library sidebar's Plugins section. */
     void refreshPluginLibrary();
 
-    /** The settings key the scan list round-trips through. */
-    static constexpr const char* kPluginScanListKey = "pluginScanList";
+    /** The settings key the scan list round-trips through — shared with the plugin processor, which
+     *  restores the same list. */
+    static constexpr const char* kPluginScanListKey = synth::kPluginScanListSettingKey;
 
     /** Rebuilds the graph's render sequence so JUCE re-derives its parallel-path delay
      *  compensation from the nodes' CURRENT latencies, then refreshes the status bar's round-trip
@@ -605,6 +613,11 @@ private:
     // uninstalled by the destructor, so a HostedPluginModule restoring a patch can resolve its
     // identity without anything having to plumb a backend down through applyJSONToGraph.
     synth::PluginScanService pluginScanService;
+
+    // The service actually in use — ours, or the one already installed on the backend when this
+    // editor was built on an external engine (the plugin path: it belongs to the processor, which
+    // outlives every editor). Never null.
+    synth::PluginScanService* activeScanService = &pluginScanService;
 
     ShortcutManager shortcutManager;
     juce::ApplicationCommandManager commandManager;

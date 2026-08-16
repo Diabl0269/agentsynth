@@ -598,6 +598,38 @@ TEST_F(TimelineAppWiringTest, AddMidiTrackFlowCompoundUndo) {
     EXPECT_FALSE(doc.getTracks()[0].orphaned) << "the post-restore reconcile re-derived this";
 }
 
+TEST_F(TimelineAppWiringTest, AddTrackAtTheCapAddsNoNode) {
+    // The doc refuses a track past kMaxTracks. The node has to be created AFTER that refusal is
+    // known, or the graph keeps a Track In / Track Audio node no track will ever play through —
+    // recordCombinedChange records the mutation, it does not roll one back.
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    mc.setSize(1600, 900);
+    quiesceEngine(mc);
+    prepareCanvas(mc, 1);
+
+    auto& doc = mc.getTimelineDoc();
+    auto& graph = mc.getAudioEngine().getGraph();
+    while ((int)doc.getTracks().size() < synth::TimelineDoc::kMaxTracks)
+        ASSERT_TRUE(doc.addTrack(TrackKind::Midi, "Filler").isValid());
+
+    const int nodesBefore = graph.getNumNodes();
+
+    mc.simulateAddMidiTrackClick();
+    EXPECT_EQ((int)doc.getTracks().size(), synth::TimelineDoc::kMaxTracks);
+    EXPECT_EQ(countNodesOfType(graph, ModuleType::TimelineMidiSource), 0)
+        << "a refused MIDI track must leave no orphan Track In node";
+    EXPECT_EQ(graph.getNumNodes(), nodesBefore);
+
+    mc.simulateAddAudioTrackClick();
+    EXPECT_EQ((int)doc.getTracks().size(), synth::TimelineDoc::kMaxTracks);
+    EXPECT_EQ(countNodesOfType(graph, ModuleType::TimelineAudioSource), 0)
+        << "a refused audio track must leave no orphan Track Audio node";
+    EXPECT_EQ(graph.getNumNodes(), nodesBefore);
+
+    // Nothing changed in either domain, so there is no undo step to take back either.
+    EXPECT_FALSE(mc.getUndoManager().canUndo());
+}
+
 // ---- 3. Auto-wire only when the target is unambiguous ----
 
 TEST_F(TimelineAppWiringTest, AmbiguousTargetNoAutoWire) {
@@ -796,6 +828,103 @@ TEST_F(TimelineAppWiringTest, AgsprojRoundTripThroughMainComponent) {
         ASSERT_EQ(doc.getTracks().size(), 2u);
         ASSERT_TRUE(mc.openProjectForTest(preset));
         EXPECT_EQ(doc.getTracks().size(), 2u) << "a .json preset carries no timeline, so it clears none";
+    }
+
+    scratch.deleteRecursively();
+}
+
+namespace {
+
+/** Records the clip streamer's asset root at every doc notification. The one that matters fires
+ *  from INSIDE ProjectBundle::load (fromVar moves the timeline into the live doc, which publishes
+ *  synchronously) — long before the load returns. */
+class AssetRootWatcher : public synth::TimelineDoc::Listener {
+public:
+    AssetRootWatcher(synth::TimelineDoc& doc, AudioEngine& engine)
+        : doc_(doc)
+        , engine_(engine) {
+        doc_.addListener(this);
+    }
+    ~AssetRootWatcher() override { doc_.removeListener(this); }
+
+    void timelineChanged(const synth::TimelineDoc&) override {
+        if (notifications++ == 0)
+            firstRoot = engine_.getAudioClipStreamer().getBundleRoot();
+        lastRoot = engine_.getAudioClipStreamer().getBundleRoot();
+    }
+
+    juce::File firstRoot;
+    juce::File lastRoot;
+    int notifications = 0;
+
+private:
+    synth::TimelineDoc& doc_;
+    AudioEngine& engine_;
+};
+
+/** A bundle with one audio track whose clip names `assetName`, and that file physically present in
+ *  its Audio/ folder. Content is irrelevant — nothing here decodes it. */
+void writeBundleWithClip(MainComponent& mc, const juce::File& bundleDir, const juce::String& assetName) {
+    auto& doc = mc.getTimelineDoc();
+    doc.clear();
+    const auto trackId = doc.addTrack(TrackKind::Audio, "Audio 1");
+    ASSERT_TRUE(trackId.isValid());
+    const auto clipId = doc.addClip(trackId, 0.0, 4.0, assetName);
+    ASSERT_TRUE(clipId.isValid());
+    ASSERT_TRUE(doc.setClipAsset(clipId, "Audio/" + assetName, 0.0));
+
+    mc.saveProjectForTest(bundleDir);
+    ASSERT_TRUE(synth::ProjectBundle::isBundle(bundleDir));
+    bundleDir.getChildFile(synth::ProjectBundle::kAudioSubdirName)
+        .getChildFile(assetName)
+        .replaceWithText("not really audio");
+}
+
+} // namespace
+
+TEST_F(TimelineAppWiringTest, OpeningABundlePublishesAgainstItsOwnAssetRoots) {
+    const juce::File scratch = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                                   .getChildFile("agentsynth-bundle-roots-" + juce::Uuid().toDashedString());
+    ASSERT_TRUE(scratch.createDirectory());
+
+    const juce::File bundleA = scratch.getChildFile("A.agsproj");
+    const juce::File bundleB = scratch.getChildFile("B.agsproj");
+
+    {
+        MainComponent mc(std::make_unique<MockProviderTL>());
+        mc.setSize(1600, 900);
+        quiesceEngine(mc);
+        prepareCanvas(mc, 0);
+
+        writeBundleWithClip(mc, bundleA, "a.wav");
+        writeBundleWithClip(mc, bundleB, "b.wav");
+
+        auto& engine = mc.getAudioEngine();
+        ASSERT_TRUE(mc.openProjectForTest(bundleA));
+        ASSERT_EQ(engine.getAudioClipStreamer().getBundleRoot(), bundleA);
+
+        // Opening B: the publish that fires from inside the load must already see B's root. With
+        // the roots still on A, B's "Audio/b.wav" resolves inside A — the wrong file, or silence.
+        {
+            AssetRootWatcher watcher(mc.getTimelineDoc(), engine);
+            ASSERT_TRUE(mc.openProjectForTest(bundleB));
+            ASSERT_GT(watcher.notifications, 0) << "the load never notified, so this proves nothing";
+            EXPECT_EQ(watcher.firstRoot, bundleB) << "the load published against the PREVIOUS bundle's roots";
+        }
+        EXPECT_EQ(engine.getAudioClipStreamer().getBundleRoot(), bundleB);
+        EXPECT_EQ(engine.getAudioClipStreamer().resolveAssetRef("Audio/b.wav"),
+                  bundleB.getChildFile("Audio").getChildFile("b.wav"));
+
+        // A failed load is all-or-nothing, roots included: the still-open project stays on B.
+        const juce::File corrupt = scratch.getChildFile("Corrupt.agsproj");
+        ASSERT_TRUE(corrupt.createDirectory());
+        corrupt.getChildFile(synth::ProjectBundle::kProjectFileName).replaceWithText("{ not json at all");
+
+        const auto tracksBefore = mc.getTimelineDoc().getTracks().size();
+        EXPECT_FALSE(mc.openProjectForTest(corrupt));
+        EXPECT_EQ(engine.getAudioClipStreamer().getBundleRoot(), bundleB)
+            << "a refused load must leave the previous project's asset roots in place";
+        EXPECT_EQ(mc.getTimelineDoc().getTracks().size(), tracksBefore);
     }
 
     scratch.deleteRecursively();

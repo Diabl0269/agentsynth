@@ -9,6 +9,7 @@
 #include "Transport/TransportService.h"
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <functional>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_devices/juce_audio_devices.h>
@@ -244,24 +245,46 @@ public:
     void setAutomationSlicingEnabled(bool enabled) noexcept;
     bool isAutomationSlicingEnabled() const noexcept;
 
+    // MESSAGE THREAD. Returns once every render pass that had already started has finished — the
+    // handshake an owner needs before destroying anything the audio thread borrows. Both
+    // borrowed-pointer setters below call it, so once a setter has returned, no audio callback can
+    // still be inside code that read the OLD pointer. That matters most on the plugin path, where
+    // the engine (owned by the processor) keeps rendering after the editor and its MainComponent —
+    // which own the recorder and the capture sink — have been destroyed. It deliberately does NOT
+    // wait for the audio thread to go idle: inside a host it never is.
+    //
+    // Bounded (see the implementation's timeout): a device thread that never returns must degrade
+    // into "carry on" rather than hang teardown. A no-op when nothing is rendering, which is every
+    // headless test and the standalone teardown path (its device callback is already detached).
+    // Never call it from the audio thread — it would wait on itself.
+    void drainAudioCallbacks() noexcept;
+
     // Registers the sink that records external MIDI into timeline clips. Null by default —
     // capture is then a no-op. The recorder is called from exactly one site, renderNextBlock's
     // SYNTH_ENABLE_TIMELINE block, against the SAME buffer the graph itself renders — the collector-
     // drained (standalone) or host-delivered (hosted) stream, never the ExternalMidiModule push-path
     // copies handleIncomingMidiMessage also makes. See docs/architecture.md's "MIDI recording" note.
+    //
+    // Publishes the new pointer FIRST and then drains, so this returns with the audio thread
+    // provably done with the old one — see drainAudioCallbacks(). seq_cst rather than relaxed
+    // because this store and the drain's load of the pass counter are one half of a Dekker-style
+    // handshake with renderNextBlock's own increment.
     void setMidiCaptureSink(synth::MidiRecorder* sink) noexcept {
-        midiCaptureSink_.store(sink, std::memory_order_relaxed);
+        midiCaptureSink_.store(sink, std::memory_order_seq_cst);
+        drainAudioCallbacks();
     }
 
     // Registers the automation recorder whose gesture claims and global record arm the
     // applier consults each block (see AutomationApplier::applyBlock). Borrowed, never owned — the
-    // same contract as setMidiCaptureSink: the owner must null this before destroying the recorder.
-    // Null by default, in which case every lane plays back by its mode alone with no claims to
-    // yield to. Only the AUDIO-VISIBLE half of the recorder is stored, so the audio thread can
-    // never reach its doc, its undo manager or its capture buffers.
+    // same contract as setMidiCaptureSink, including the publish-then-drain handshake: the owner
+    // must null this before destroying the recorder, and this call is what makes "before" true for
+    // the audio thread too. Null by default, in which case every lane plays back by its mode alone
+    // with no claims to yield to. Only the AUDIO-VISIBLE half of the recorder is stored, so the
+    // audio thread can never reach its doc, its undo manager or its capture buffers.
     void setAutomationRecorder(synth::AutomationRecorder* recorder) noexcept {
         automationRecordState_.store(recorder != nullptr ? &recorder->getAudioState() : nullptr,
-                                     std::memory_order_relaxed);
+                                     std::memory_order_seq_cst);
+        drainAudioCallbacks();
     }
 
     // Total latency the graph reports for itself, in samples. This is report-only latency
@@ -491,6 +514,12 @@ private:
     // Borrowed, never owned. Set by setAutomationRecorder(); read once per render pass and
     // handed straight to the applier. Null default means "no recorder", not "no automation".
     std::atomic<const synth::AutomationRecordState*> automationRecordState_{nullptr};
+    // Render passes entered / left, bumped on the way into and out of renderNextBlock so the gap
+    // between them is exactly the window in which the two borrowed pointers above are read and
+    // used. Monotonic rather than an in-flight count because an engine inside a host renders
+    // back-to-back and is never observably idle — see drainAudioCallbacks(), their only consumer.
+    std::atomic<std::uint64_t> renderPassesStarted_{0};
+    std::atomic<std::uint64_t> renderPassesFinished_{0};
 
     void createDefaultPatch();
 

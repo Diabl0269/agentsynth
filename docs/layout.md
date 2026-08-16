@@ -1566,23 +1566,27 @@ binding and context menus use, since a `juce::PopupMenu` never runs in the test 
 timeline in a single transaction, so one Cmd+Z removes all of it and redo restores it with the same
 node uuid):
 
-1. create a `Track In` node through `AIStateMapper::createModule` (so it round-trips through
+1. add a `Midi` track named `Track N` — **the doc side goes first**. `TimelineDoc::addTrack` refuses
+   past `kMaxTracks`, and a node created before that refusal is known stays in the graph with no
+   track to play through: `recordCombinedChange` *records* a mutation, it does not roll one back. A
+   track with no binding yet is never flagged orphaned, so the intermediate state is inert;
+2. create a `Track In` node through `AIStateMapper::createModule` (so it round-trips through
    `graphToJSON`/`applyJSONToGraph` — that is how undo, redo and `.agsproj` reproduce it), assign a
    fresh uuid and mirror it into the processor with `ModuleBase::setNodeUuid`, and place it at the
    canvas' left edge below every existing module (`GraphEditor::findLeftEdgeSlotBelowModules`);
-2. **auto-wire only when unambiguous** — if the patch contains **exactly one** MIDI-driven
+3. **auto-wire only when unambiguous** — if the patch contains **exactly one** MIDI-driven
    instrument (module type `Poly MIDI`, `Oscillator`, `Wavetable`, `Sampler`, `Sequencer` or
    `Poly Sequencer`; MIDI *sources* — `Track In`, `External MIDI`, `MIDI Keyboard` — are excluded),
    connect `Track In -> that node` on the MIDI channel. With none or several, no wire is drawn: a
    chip that reads "bound" over an unwired node is fine, the cable is the user's to draw, whereas
    guessing wrong plays the track through the wrong instrument. Note `acceptsMidi()` cannot be the
    rule — `ModuleBase` returns `true` for every module in the app;
-3. add a `Midi` track named `Track N`, bind it to the new node's uuid, and give it the palette
-   colour for its index.
+4. bind the track to the new node's uuid and give it the palette colour for its index.
 
-**The Audio entry** mirrors it exactly (one compound step, factory-created node, uuid minted and
-mirrored, placed at the left edge, an `Audio` track named `Audio N` bound to it with its palette
-colour), with one difference in step 2: the auto-wire target is never ambiguous, because the master
+**The Audio entry** mirrors it exactly (one compound step, track added first, factory-created node,
+uuid minted and mirrored, placed at the left edge, an `Audio` track named `Audio N` bound to it with
+its palette colour), with one difference in step 3: the auto-wire target is never ambiguous,
+because the master
 bus is a singleton — but there are **two** possible sinks and the order matters. If TL6-3's
 `Rec Tap` has already been spliced in front of Audio Output, wiring straight to the output would
 route the track **around** the tap and quietly leave it out of every subsequent take, so

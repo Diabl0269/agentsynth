@@ -5,6 +5,7 @@
 #include "ShortcutManager.h"
 #include "UI/Theme/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
+#include "UserSettings.h"
 #include <JuceHeader.h>
 #include <iostream>
 
@@ -86,12 +87,7 @@ private:
     // (MainComponent's constructor does this) — otherwise JUCE creates an empty current-name
     // folder first, and migrateUserData's "already exists" guard skips the real migration.
     static void migrateLegacyUserData() {
-        juce::PropertiesFile::Options options;
-        options.applicationName = synth::branding::kProductName;
-        options.folderName = synth::branding::kSettingsFolderName;
-        options.filenameSuffix = "settings";
-        options.osxLibrarySubFolder = "Application Support";
-        options.storageFormat = juce::PropertiesFile::storeAsXML;
+        const auto options = synth::userSettingsOptions();
 
         // getDefaultFile() resolves the platform-specific settings file inside the
         // folderName directory; its grandparent is the directory that contains every
