@@ -1075,6 +1075,9 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Filter", "bypassed, cutoff, drive, filterType, muted, outputLevel, poly, resonance"},
         {"Filter Env", "attack, bypassed, decay, muted, poly, release, sustain"},
         {"Flanger", "bypassed, centreDelay, depth, feedback, mix, muted, outputLevel, rate"},
+        // TL7-2. The host module has no parameters of its own beyond bypass/mute — the hosted
+        // plugin's parameters are its own, and exposing them to the graph is TL7-6.
+        {"Hosted Plugin", "bypassed, muted"},
         {"LFO", "bipolar, bypassed, glide, level, mode, muted, rateHz, rateSync, retrig, shape"},
         {"Limiter", "bypassed, inputGain, muted, release, threshold"},
         {"MIDI Keyboard", "bypassed, octave"},
@@ -1205,6 +1208,12 @@ TEST(AIStateMapperTest, AuthorableModuleTypesGolden) {
     // TL6-4: the audio-track player. Same reasoning from the other direction — it plays whatever
     // clips the track bound to it names, so authoring one is choosing what gets read off disk.
     EXPECT_FALSE(actual.contains("Track Audio"));
+    // TL7-2: a hosted third-party plugin. The strongest exclusion on this list — the node's
+    // "state" is an opaque byte blob fed straight to AudioPluginInstance::setStateInformation, and
+    // its identity selects which binary the host loads. This EXPECT_FALSE is what makes TL7-4's
+    // mechanism cover hosting: the type is refused by validatePatch on the untrusted path, not
+    // merely omitted from the schema.
+    EXPECT_FALSE(actual.contains("Hosted Plugin"));
 
     // The schema hands the model exactly this list.
     const juce::var schema = synth::AIStateMapper::getPatchSchema(); // held: the chain below points into it
@@ -1225,7 +1234,9 @@ TEST(AIStateMapperTest, AuthorableModuleTypesGolden) {
 TEST(AIStateMapperTest, UntrustedPatchRejectsInternalOnlyModuleTypes) {
     juce::AudioProcessorGraph graph;
 
-    juce::StringArray internalTypes = {"Attenuverter", "Mod Slot"};
+    // "Hosted Plugin" is NOT inside the SYNTH_ENABLE_TIMELINE guard below: hosting is independent
+    // of the timeline, so the type is registered — and must therefore be refused — in every build.
+    juce::StringArray internalTypes = {"Attenuverter", "Mod Slot", "Hosted Plugin"};
 #if SYNTH_ENABLE_TIMELINE
     internalTypes.add("Track In");
     internalTypes.add("Rec Tap");     // TL6-3

@@ -197,6 +197,13 @@ add_library(Core STATIC
     Source/Modules/FX/PitchShifterModule.h
     Source/Modules/FX/ParametricEQModule.h
     Source/Modules/NoiseModule.h
+    # Plugin hosting (TL7-2) — third-party VST3/AU plugins as graph modules. In Core, not in the
+    # AgentSynthPlugin target: this is the app HOSTING plugins, which the headless Tests target
+    # exercises against a stub backend (Tests/StubPluginInstance.h).
+    Source/Plugin/Hosting/HostedPluginBackend.cpp
+    Source/Plugin/Hosting/HostedPluginBackend.h
+    Source/Plugin/Hosting/HostedPluginModule.cpp
+    Source/Plugin/Hosting/HostedPluginModule.h
     # AI
     Source/AI/AIProvider.h
     Source/AI/OllamaProvider.h
@@ -264,6 +271,19 @@ target_link_libraries(Core PUBLIC
 )
 
 target_compile_definitions(Core PUBLIC JUCE_WEB_BROWSER=0)
+
+# TL7-1/TL7-2: host third-party plugins. JUCE's built-in hosting only — no new dependency pins, and
+# therefore no new licences to clear (the VST3 and AU host code ships inside juce_audio_processors,
+# which we already link). CLAP is deliberately deferred: it would mean vendoring clap-juce-extensions
+# or the CLAP headers, i.e. exactly the new dependency this decision avoids.
+#
+# PUBLIC, on Core, beside the other JUCE defines: HostedPluginBackend is compiled into Core, and
+# every consumer (AppUI, Tests, the plugin wrapper) must agree on these values or the format list in
+# DefaultHostedPluginBackend's constructor differs between translation units.
+target_compile_definitions(Core PUBLIC JUCE_PLUGINHOST_VST3=1)
+if(APPLE)
+    target_compile_definitions(Core PUBLIC JUCE_PLUGINHOST_AU=1)
+endif()
 
 if(UNIX AND NOT APPLE)
     find_package(PkgConfig REQUIRED)

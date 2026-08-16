@@ -176,6 +176,13 @@ inline ModuleCategory categoryFor(ModuleType t) noexcept {
     // Rec Tap (TL6-3) is plumbing in the purest sense: a transparent stereo pass-through that
     // exists only so a take has somewhere to be copied out of. Same bucket as the device tap.
     case ModuleType::RecordTap:
+    // Hosted Plugin (TL7-2). Every other entry in this switch names a module with ONE DSP role;
+    // this one names a host, and what it hosts is a third-party instrument or a third-party effect
+    // of any kind — unknowable here, since categoryFor() sees a ModuleType and not the loaded
+    // instance. Utility is the neutral bucket rather than a guess that would be wrong about half
+    // the time (and the library has no section for it either — it is hidden until TL7-3). TL7-5 can
+    // split it on the instance's isInstrument flag once the card can ask.
+    case ModuleType::HostedPlugin:
         return ModuleCategory::Utility;
     }
     return ModuleCategory::Utility;

@@ -35,6 +35,7 @@
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
 #include "../Modules/WavetableOscillatorModule.h"
+#include "../Plugin/Hosting/HostedPluginModule.h"
 #include <cmath>
 #include <functional> // For std::function
 #include <limits>
@@ -92,6 +93,12 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Sampler", []() { return std::make_unique<SamplerModule>(); }},
     {"Wavetable", []() { return std::make_unique<WavetableOscillatorModule>(); }},
     {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }},
+    // TL7-2: a third-party VST3/AU plugin as a module. Deliberately NOT gated on
+    // SYNTH_ENABLE_TIMELINE — hosting is independent of the timeline feature, and a
+    // -DSYNTH_ENABLE_TIMELINE=OFF build must still round-trip a patch that hosts a plugin. In the
+    // factory so our own saves reload it (the node comes back as a placeholder and re-loads its
+    // plugin asynchronously); kNonAuthorableModuleTypes below keeps it away from the model.
+    {"Hosted Plugin", []() { return std::make_unique<HostedPluginModule>(); }},
 #if SYNTH_ENABLE_TIMELINE
     // TL3-1. The class itself compiles unconditionally (like every other Timeline source); only
     // this INTEGRATION POINT is gated, so a -DSYNTH_ENABLE_TIMELINE=OFF build cannot create a
@@ -144,6 +151,14 @@ const std::set<juce::String> kNonAuthorableModuleTypes = {
     // and latching it onto a track would be choosing what gets read off disk and rendered. The
     // timeline's own add-track flow is the only thing that may create these.
     "Track Audio",
+    // A hosted third-party plugin (TL7-2). The strongest case on this list: the node's `"state"`
+    // carries the plugin's own opaque byte blob, which is handed verbatim to
+    // AudioPluginInstance::setStateInformation — i.e. straight into third-party code that will
+    // parse it however it likes. Its identity also selects WHICH binary the host loads. Neither may
+    // ever be chosen by a model, so the type is refused outright on the untrusted path
+    // (PatchValidationError::InternalModuleNotAllowed) rather than sanitised. Only the app's own
+    // load UX (TL7-3) may create one.
+    "Hosted Plugin",
 };
 
 bool isInternalOnlyModule(const juce::String& typeName) { return kNonAuthorableModuleTypes.count(typeName) > 0; }
@@ -747,6 +762,10 @@ juce::String AIStateMapper::getFactoryTypeName(juce::AudioProcessor* processor) 
             // Deliberately the same string JUCE's audioInputNode reported (and therefore the same
             // string every pre-TL6-2 save wrote), so the two are interchangeable on disk.
             return "Audio Input";
+        case ModuleType::HostedPlugin:
+            // The factory key, NOT the hosted plugin's own name: the type identifies the host
+            // module, and which plugin it hosts is carried by the node's "state" (TL7-2).
+            return "Hosted Plugin";
         }
     }
 

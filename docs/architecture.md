@@ -558,6 +558,40 @@ Filling never goes past `wantedFrame + kPrefetchAheadFrames` (3/4 of the ring), 
 
 Restore always calls `applyJSONToGraph(..., trusted=false)`: a host session file travels between machines and users, so it goes through the full `validatePatch` boundary (see [`docs/AI_Engine.md`](AI_Engine.md)) and is rejected whole — never partially applied — if it doesn't check out. Around the load, an open editor detaches its module components first (`prepareForGraphReplacement`) and rebuilds them after (`refreshAfterGraphReplacement`) — the same detach-before-clear ordering `GraphEditor::loadPreset` and `MainComponent::aiPatchAboutToApply` use to avoid a `ScopeComponent` timer firing against a freed `VisualBuffer`.
 
+### Plugin hosting (TL7-2) — third-party VST3/AU *inside* our graph
+
+The mirror image of the section above: `Source/Plugin/Hosting/` is the app **hosting** other people's plugins, not being hosted. It lives in **Core** (not in the `AgentSynthPlugin` target), so the headless Tests target exercises it.
+
+**The licensing decision (TL7-1):** JUCE's built-in hosting only — VST3 everywhere, AU additionally on macOS. No new dependency pins, and therefore no new licences to clear. **CLAP is deferred**: it would require vendoring the CLAP headers or `clap-juce-extensions`. The two formats are enabled as Core `PUBLIC` compile definitions in the root `CMakeLists.txt` (`JUCE_PLUGINHOST_VST3=1`, and `JUCE_PLUGINHOST_AU=1` under `if(APPLE)`) — `PUBLIC` because `DefaultHostedPluginBackend`'s format list is compiled from them and every consumer must agree on the values.
+
+#### `synth::HostedPluginBackend` — the seam
+
+`Source/Plugin/Hosting/HostedPluginBackend.h`. An abstract "identity or description in, `juce::AudioPluginInstance` out, asynchronously" interface. It exists for two reasons:
+
+1. **Format-agnosticism** — `HostedPluginModule` never mentions VST3 or AudioUnit, so adding CLAP later is a change to the backend, not to the module.
+2. **Testability without third-party binaries** — there is no plugin we can check into this repo and load in CI. `Tests/StubPluginInstance.h` provides a `juce::AudioPluginInstance` subclass and a `StubBackend` that resolves any identity to it, and it deliberately matches the real threading: `createInstanceAsync` is called on the message thread and its callback fires on the message thread **later**, never re-entrantly (JUCE's own `AudioPluginFormat::createPluginInstanceAsync` contract). Tests therefore pump the message loop exactly as they would with a real plugin.
+
+`HostedPluginBackend::getDefault()` is the process-wide backend (`DefaultHostedPluginBackend`, owning a `juce::AudioPluginFormatManager`). **This is the seam `HostedPluginModule::setExtraState` needs**: state restore happens deep inside `AIStateMapper::applyJSONToGraph`, which has no backend to plumb down, so the module reaches for the default. `HostedPluginBackend::ScopedDefault` is an RAII override tests install for the duration of a scope, restoring the previous backend on destruction so a failing test cannot leak a dangling stub into the next one.
+
+`PluginIdentity` (format + `uniqueId` + name, **never a path**) is the serialized form; a full `juce::PluginDescription` is the other entry point. Identity → description resolution walks `DefaultHostedPluginBackend`'s known-plugins list, which is **empty in TL7-2** — so a serialized identity fails to resolve with "not installed on this machine" and the module stays a valid placeholder. **TL7-3** fills that list from a real scan.
+
+#### The async publish pattern
+
+The [Sampler](modules.md#sampler-module)'s retained-instance discipline, applied to a whole `AudioProcessor`:
+
+1. Message thread starts an async load, bumping a generation counter so a callback from a superseded load cannot clobber a newer one. The module holds a `juce::WeakReference` to itself, so a callback arriving after the module dies is a no-op.
+2. On callback (message thread): refuse anything wider than 16 in or out; otherwise `setPlayConfigDetails` + `prepareToPlay` to **our** rate and block, then apply any pending state blob — both **before** publication, so the audio thread never sees an unprepared instance or one block of the plugin's factory default.
+3. Retire the previous instance into a message-thread-only list, then `store(release)` the new pointer. The audio thread `load(acquire)`s it **once per block and never caches it across blocks**.
+4. Reap on the message thread only. A block counter, bumped on *every* path out of `processBlock` (including bypass, so reaping still progresses in a bypassed patch), tells the message thread when the audio thread has demonstrably moved on; retired instances are freed two blocks after retirement. **Nothing is ever deleted on the audio thread** — pinned by `HostedPluginTest.AudioThreadNeverFrees`, which renders on a second thread while the message thread swaps instances and asserts every destructor ran on the message thread.
+
+#### Known limitation: a hosted plugin does not survive *our* plugin's session state
+
+`AgentSynthAudioProcessor::setStateInformation` restores with `trusted=false` (see [Plugin state format](#plugin-state-format) above) — deliberately, because a host session file travels between machines. "Hosted Plugin" is in `kNonAuthorableModuleTypes`, so `validatePatch` refuses it on that path and the **whole** patch is rejected. A patch that hosts a plugin therefore round-trips fine through presets, undo/redo and `.agsproj` bundles (all trusted), but **not** through a DAW session when AgentSynth is itself running as a plugin. Fixing that needs a distinct "our own state, from a possibly-foreign file" path rather than relaxing the untrusted boundary — see [`docs/AI_Engine.md`](AI_Engine.md) on why `validatePatch` is never loosened. Tracked for TL7-3+.
+
+#### Forward pointers
+
+TL7-3 plugin scanning, the scan-list persistence and the load UX (the module is absent from the library and the *Replace with…* menu until then); TL7-5/6 plugin editor windows and parameter exposure; TL7-7 latency compensation beyond the `setLatencySamples()` republication done here.
+
 ---
 
 ## Supporting Components
