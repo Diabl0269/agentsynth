@@ -5,7 +5,7 @@ This guide provides practical instructions and tips for effectively using the AI
 ## 1. Getting Started with the AI Sound Designer
 
 1.  **Open the AI Chat Panel**: In the Agent Synth application, locate and open the AI chat panel. This is typically accessible via a dedicated button or menu option.
-2.  **Choose Hosted or Local**: By default, a new install uses **Hosted** mode — no setup required, but your prompt and current patch are sent to Agent Synth's servers for processing (a notice next to the model picker says so whenever hosted mode is active; see Settings → AI for the toggle and the same disclosure on hover). Switch to **Ollama (local)** in Settings → AI to keep everything on this machine instead; that requires your own Ollama server running and accessible.
+2.  **Choose Hosted or Local**: By default, a new install uses **Hosted** mode — no setup required, but your prompt, current patch, and (if you have a timeline arrangement open) a compact summary of its tracks/clips/lanes are sent to Agent Synth's servers for processing (a notice next to the model picker says so whenever hosted mode is active; see Settings → AI for the toggle and the same disclosure on hover). Switch to **Ollama (local)** in Settings → AI to keep everything on this machine instead; that requires your own Ollama server running and accessible.
 3.  **Select an AI Model**: In local (Ollama) mode, use the model picker dropdown to choose an available AI model (e.g., `qwen3-coder-next:latest`). In hosted mode the picker shows "Model chosen automatically" — the service selects its own model server-side, so there's nothing to pick.
 4.  **Start Chatting**: Type your requests or descriptions in the input field and press "Send" or Enter.
 

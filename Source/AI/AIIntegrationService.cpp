@@ -87,15 +87,39 @@ void AIIntegrationService::cancelRequest(AIProvider::RequestId requestId) {
 
 juce::String AIIntegrationService::buildPatchAugmentedContent(const juce::String& text) {
     juce::var graphJson = AIStateMapper::graphToJSON(audioGraph);
+    juce::String patchSection;
     if (auto* obj = graphJson.getDynamicObject()) {
         if (auto* nodeArr = obj->getProperty("nodes").getArray()) {
             if (!nodeArr->isEmpty()) {
-                return "Current patch state:\n```json\n" + juce::JSON::toString(graphJson) +
-                       "\n```\n\nUser request: " + text;
+                patchSection = "Current patch state:\n```json\n" + juce::JSON::toString(graphJson) + "\n```";
             }
         }
     }
-    return text;
+
+    // TL8-3: the timeline sibling of the patch section above, added only when there is an
+    // arrangement to report — same "say nothing rather than say empty" rule the patch section
+    // already follows. See ArrangementContext::summarize() (Source/Timeline/ArrangementContext.h)
+    // for the security model (read-path only; name-only file references; no plugin identifiers).
+    juce::String arrangementSection;
+#if SYNTH_ENABLE_TIMELINE
+    if (timelineDoc != nullptr && transportService != nullptr && !timelineDoc->isEmpty()) {
+        const juce::String summary =
+            ArrangementContext::summarize(*timelineDoc, audioGraph, transportService->getPositionSnapshot());
+        if (summary.isNotEmpty())
+            arrangementSection = "## Arrangement\n" + summary;
+    }
+#endif
+
+    if (patchSection.isEmpty() && arrangementSection.isEmpty())
+        return text;
+
+    juce::String content;
+    if (patchSection.isNotEmpty())
+        content << patchSection << "\n\n";
+    if (arrangementSection.isNotEmpty())
+        content << arrangementSection << "\n\n";
+    content << "User request: " << text;
+    return content;
 }
 
 void AIIntegrationService::trimHistory() {

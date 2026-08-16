@@ -8,6 +8,11 @@
 #include <memory>
 #include <vector>
 
+#if SYNTH_ENABLE_TIMELINE
+#include "../Timeline/ArrangementContext.h"
+#include "../Transport/TransportService.h"
+#endif
+
 class AppUndoManager; // Forward declaration — the service only holds a non-owning pointer.
 
 namespace synth {
@@ -42,6 +47,21 @@ public:
      * installs the real provider, so a value set first must not be lost.
      */
     void setAuthToken(const juce::String& token);
+
+#if SYNTH_ENABLE_TIMELINE
+    /**
+     * @brief Installs (or clears) the timeline/transport this service reads for arrangement
+     *        context (TL8-3). Non-owning — MainComponent owns both for the app's lifetime.
+     *
+     * Mirrors setProvider()/setUndoManager(): a plain pointer setter, safe to call with either
+     * argument null (arrangement context is then simply omitted from the outgoing request, same
+     * as an empty TimelineDoc would produce).
+     */
+    void setTimelineContext(const TimelineDoc* doc, const TransportService* transport) {
+        timelineDoc = doc;
+        transportService = transport;
+    }
+#endif
 
     /**
      * @class Listener
@@ -196,6 +216,14 @@ private:
     PatchValidationError lastPatchErrorCode = PatchValidationError::None;
     bool lastPatchModeRepaired = false;
     juce::ListenerList<Listener> listeners;
+
+#if SYNTH_ENABLE_TIMELINE
+    // TL8-3: non-owning, installed post-construction via setTimelineContext() — see its doc
+    // comment. Either or both may be null (a SYNTH_ENABLE_TIMELINE=OFF build never declares these
+    // members at all, and buildPatchAugmentedContent()'s arrangement section is #if-gated out).
+    const TimelineDoc* timelineDoc = nullptr;
+    const TransportService* transportService = nullptr;
+#endif
 
     void initSystemPrompt();
 

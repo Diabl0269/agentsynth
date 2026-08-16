@@ -130,6 +130,8 @@ add_library(Core STATIC
     Source/Transport/TransportService.cpp
     Source/Transport/TransportService.h
     # Timeline
+    Source/Timeline/ArrangementContext.cpp
+    Source/Timeline/ArrangementContext.h
     Source/Timeline/AudioClipStreamer.cpp
     Source/Timeline/AudioClipStreamer.h
     Source/Timeline/AutomationApplier.cpp

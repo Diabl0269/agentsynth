@@ -283,6 +283,14 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // Regression: see #96 / f7cba4a.
     aiChatComponent.refreshModels();
 
+#if SYNTH_ENABLE_TIMELINE
+    // TL8-3: gives AIIntegrationService's outgoing-request context builder a way to read the
+    // app's one live TimelineDoc/TransportService — see AIIntegrationService::setTimelineContext().
+    // Both outlive aiService (declaration order: timelineDoc, then audioEngine's referent, then
+    // aiService), so this pointer never dangles for aiService's lifetime.
+    aiService.setTimelineContext(&timelineDoc, &audioEngine.getTransport());
+#endif
+
     // Wire the account row/dialog up BEFORE attemptSilentSignIn() so the wiring is live for any
     // state changes that arrive from it (P3-2: sign-in surface for the AI panel).
     aiChatComponent.setAccountService(&accountService);
