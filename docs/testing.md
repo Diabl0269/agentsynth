@@ -142,6 +142,24 @@ The timeline's clock and the headless render harness built on it. No audio devic
 | `AddAudioTrackFlowTest.AddAudioTrackFlow` | the "+ Track" menu's Audio entry: **one** undo step creating a uuid'd `Track Audio` node wired `0→0`/`1→1` into Audio Output plus an Audio-kind track bound to it; undo removes both |
 | `AddAudioTrackFlowTest.AddMidiTrackFromTheSameMenuIsUnchanged` | the MIDI entry still does exactly what it did before the menu existed |
 
+### Hosted plugin tests (15 tests)
+
+`Tests/HostedPluginTests.cpp` — TL7-2. Not gated: hosting is independent of the timeline. **No third-party binary is involved.** `Tests/StubPluginInstance.h` supplies a `juce::AudioPluginInstance` subclass (constructor-set channel counts, a ×0.5 gain marker, a round-trippable state blob, a settable latency, and a record of the thread its destructor ran on) plus a `StubBackend` that resolves any identity to it. The stub matches the real formats' threading — `MessageManager::callAsync`, never re-entrant — so every test pumps the message loop with the bounded-poll idiom from `AccountServiceTests`.
+
+| What it covers | |
+|-------|-------|
+| `PassThroughUntilReady` / `BareModuleShowsOneJackASide` | with no instance the output **is** the input, on all 16 channels; bypass takes the same dry branch (it must not clear) and mute does clear; a bare module shows one jack a side over 16 real channels |
+| `AsyncLoadPublishesAndProcesses` | the callback does not fire re-entrantly; after pumping, the ×0.5 marker is on channels 0–1, the visible ports are the instance's **real** 2/2 while `getTotalNumOutputChannels()` stays 16, the instance was prepared to **our** rate/block, and every hidden channel is silent |
+| `InstrumentWithNoInputsGetsItsOutputChannelsCleared` | a 0-in/2-out instrument reports 0 input jacks, and its output-only channels arrive cleared so upstream audio cannot leak through as if bypassed |
+| `OverMaxRefusedWithMessage` | a 32-channel instance is **refused, not truncated**: no instance, a status message naming both 32 and 16, and the dry path still intact |
+| `UnresolvedIdentityStaysAPlaceholderThatRemembersItsPlugin` | "not installed on this machine": the identity survives, the message names the plugin, and `getExtraState` still serializes it so re-saving does not destroy it (the TL7-3 placeholder's foundation) |
+| `StateRoundTrip` | load → set a blob → `graphToJSON` → **trusted** `applyJSONToGraph` into a fresh graph with a `ScopedDefault` stub backend → the instance is restored with the same blob. Also asserts the serialized patch contains **no path** — the stub deliberately reports a `fileOrIdentifier`, so this tests something |
+| `UntrustedCannotAuthorIt` / `UntrustedApplyNeverReachesSetExtraStateOnAnExistingNode` | TL7-4's pin: `validatePatch(trusted=false)` rejects the type with `InternalModuleNotAllowed`, with or without a state blob attached, and apply refuses the whole patch; a merge patch aimed at a **live** hosted node cannot repoint it either |
+| `AudioThreadNeverFrees` | two instance swaps and an unload while a second thread renders continuously: retired instances are reaped, every destructor ran on the message thread, and none ran on the render thread |
+| `PrepareToPlayPropagates` / `LatencyIsPublishedToTheGraph` | a rate/block change re-prepares the **live** instance in place without retiring it, and a plugin loaded afterwards gets the new format; the instance's latency becomes the module's, and unload returns it to 0 |
+| `RegisteredButInternalOnly` / `AbsentFromTheLibraryWithAPinnedSizeEstimate` | the internal-only checklist: factory key, module type, **16/16** channels, `getFactoryTypeName`, non-authorable, Utility cable colour, void `getExtraState` when bare; absent from the library, with `estimateModuleSize("Hosted Plugin")` measured against the real card |
+| `IdentitySerializationCarriesNoPath` | `PluginIdentity` round-trips through `var`, carries no path, and matches uid-first — a rename still matches, a different format does not |
+
 ### Integration Tests (~38 tests)
 
 Test module interactions within the audio graph and cross-system integrations.

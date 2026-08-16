@@ -71,7 +71,13 @@ enum class ModuleType {
     // an audio track. Created by the add-track flow, same three exclusions as Track In and Rec Tap
     // (a model that could author one could point playback at a clip, and therefore a file, it
     // chose).
-    TimelineAudioSource
+    TimelineAudioSource,
+    // Internal-only (TL7-2): a third-party VST3/AU plugin hosted as a module
+    // (synth::HostedPluginModule). Not offered by the library or the replace menu until TL7-3 ships
+    // the scan list and the load UX, and never authorable by a model — its "state" carries an opaque
+    // byte blob handed straight to third-party code, which is the last thing that should arrive from
+    // a model (TL7-4).
+    HostedPlugin
 };
 
 class ModuleBase : public juce::AudioProcessor {

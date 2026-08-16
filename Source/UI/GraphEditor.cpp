@@ -141,6 +141,14 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         // (TL6-4). Measured against the real card by
         // AudioClipPlaybackTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
         return {280, 123};
+    if (typeName == "Hosted Plugin")
+        // No body controls (bypass and mute live in the header), and one jack a side while empty —
+        // so the 100 px floor in updateLayout sets the height, exactly as it does for Track In. The
+        // card grows with the loaded plugin's real port count, like the Macro bank and Audio Input;
+        // the estimate is the resting size, and finalizeNewDrop re-resolves against the real
+        // component anyway. Library-less until TL7-3 ships the scan list and the load UX. Measured
+        // against the real card by HostedPluginTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
+        return {280, 100};
     return {280, 360};
 }
 
