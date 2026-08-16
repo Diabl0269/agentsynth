@@ -179,13 +179,18 @@ public:
     juce::Button& getAutomationCloseButton() noexcept { return automationCloseButton_; }
     juce::Rectangle<int> getAutomationStripBounds() const noexcept { return automationStripBounds_; }
 
-    /** One entry in the lane picker: a doc lane labelled "NodeName \xC2\xB7 paramId" (resolved via
-     *  TrackHeaderHost::getNodeDisplayName; falls back to the uuid's first 8 characters when the
-     *  node doesn't resolve). In track order then lane order — index i is menu id i + 1, the same
-     *  convention TimelineTrackHeaderComponent::collectBindingOptions() uses. */
+    /** One entry in the lane picker: either an EXISTING doc lane labelled "NodeName \xC2\xB7 paramId"
+     *  (resolved via TrackHeaderHost::getNodeDisplayName; falls back to the uuid's first 8
+     *  characters when the node doesn't resolve), or (TL7-6) an "Add lane..." entry for a hosted
+     *  plugin instance parameter that has none yet — `isAddEntry` distinguishes the two, `id` is
+     *  only meaningful when it's false. In track order then lane order, existing lanes first, then
+     *  add-lane entries — index i is menu id i + 1, the same convention
+     *  TimelineTrackHeaderComponent::collectBindingOptions() uses. */
     struct AutomationLaneOption {
         synth::LaneId id;
         juce::String label;
+        bool isAddEntry = false;
+        synth::ui::TrackHeaderHost::PluginLaneOption addOption; // populated only when isAddEntry
     };
     std::vector<AutomationLaneOption> collectAutomationLaneOptions() const;
 

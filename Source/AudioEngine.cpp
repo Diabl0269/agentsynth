@@ -15,6 +15,7 @@
 #include "Modules/SequencerModule.h"
 #include "Modules/VCAModule.h"
 #include "PresetManager.h"
+#include "Timeline/AutomationBinding.h"
 #include "Timeline/MidiRecorder.h"
 #include "Timeline/TimelineDoc.h"
 #include <algorithm>
@@ -175,14 +176,21 @@ void AudioEngine::publishTimeline(const synth::TimelineDoc& doc) {
             if (found == nodesByUuid.end())
                 continue; // orphaned: the lane is retained in the doc (TL2-6) but automates nothing
 
-            auto* param = findParameterByID(found->second->getProcessor(), juce::String(lane.paramId));
-            if (param == nullptr)
-                continue; // the node exists but no longer has that parameter
+            // TL7-6: the shared resolver — exact id match on a hosted plugin's LIVE instance
+            // parameter, a narrow legacy index fallback, or (for every non-plugin node) exactly the
+            // findParameterByID this replaced. `resolved.orphaned` is the doc's business (surfaced by
+            // TimelineReconciler, not decided here); the binding build only cares whether something
+            // came back to write into.
+            const auto resolved = synth::resolveLaneParameter(found->second->getProcessor(), juce::String(lane.paramId),
+                                                              lane.paramIndexHint);
+            if (!resolved.resolved())
+                continue; // the node exists but no longer has a safely-resolvable parameter
 
             synth::AutomationBindingTable::Binding binding;
             binding.laneIndex = static_cast<int>(laneIndex);
             binding.node = found->second; // refcounted — see AutomationApplier.h
-            binding.param = param;
+            binding.param = resolved.rangedParam;
+            binding.hostedParam = resolved.hostedParam;
             binding.nodeID = found->second->nodeID; // TL4-5: identity for the UI feed's events
             table->bindings.push_back(std::move(binding));
         }

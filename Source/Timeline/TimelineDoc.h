@@ -186,6 +186,16 @@ struct AutomationLane {
     std::vector<Breakpoint> points; // sorted by beat; beats are unique (a second insert at the
                                     // same beat replaces the existing point)
 
+    // TL7-6: the target parameter's index within its processor's getParameters(), captured ONCE at
+    // lane-creation time (never re-derived afterwards). -1 means "no hint" — every lane created
+    // before TL7-6, and every lane on a non-plugin module (the resolver only ever consults this for
+    // a HostedPluginModule node; see Source/Timeline/AutomationBinding.h). It exists to let a lane
+    // whose hosted plugin has no stable parameter ids at all (a legacy format) still re-bind after a
+    // reload, WITHOUT ever letting an index match paper over a plugin update that moved a DIFFERENT,
+    // still-stably-identified parameter into that slot — that case orphans instead. Additive field:
+    // absent in a file loads as -1.
+    int paramIndexHint = -1;
+
     // TL4-4: a LaneRecordMode value, stored as an int because it is serialised as one. Read is the
     // default and what a file that predates the field loads as. Written through
     // TimelineDoc::setLaneRecordMode, which validates the range — a raw int outside 0..4 must never
@@ -379,8 +389,10 @@ public:
     // One lane per bound parameter, doc-wide: if a lane for (nodeUuid, paramId) already exists
     // ANYWHERE in the doc, its id is returned and nothing is mutated (no revision bump, no
     // notification) — even if the existing lane sits on a different track.
+    // `paramIndexHint` is TL7-6's hosted-plugin fallback capture (-1 = none; see
+    // AutomationLane::paramIndexHint). Every non-plugin caller omits it.
     LaneId addLane(TrackId trackId, const juce::String& nodeUuid, const juce::String& paramId,
-                   const AutomationLane::RangeSnapshot& range);
+                   const AutomationLane::RangeSnapshot& range, int paramIndexHint = -1);
     bool removeLane(LaneId id);
     // Sorted insert. A point at the exact same beat REPLACES the existing one. `value` is
     // denormalised and clamped into the lane's range snapshot; `tension` is clamped to [-1, 1];
@@ -441,7 +453,17 @@ public:
     // NOT a user edit: reconciliation derives runtime state from the current graph, it doesn't
     // record an intent a user should be able to undo. Callers must never wrap this in
     // AppUndoManager::recordTimelineChange (or recordCombinedChange) — see docs/architecture.md.
-    bool reconcileBindings(const std::function<bool(const juce::String& uuid)>& uuidResolves);
+    //
+    // `laneResolves` (TL7-6) is an OPTIONAL richer predicate for lane orphaning specifically: a lane
+    // whose node resolves may still need to orphan when that node is a HostedPluginModule and its
+    // parameter set no longer safely matches (see Source/Timeline/AutomationBinding.h). Left unset
+    // (the graph-agnostic overload every headless TimelineDoc test uses), a lane's orphan status
+    // falls back to `uuidResolves(nodeUuid)` alone — exactly TL2-6's pre-TL7-6 behaviour. Track
+    // bindings are never affected: a track binds to a node, not a parameter, so `uuidResolves` alone
+    // decides `Track::orphaned` either way.
+    bool reconcileBindings(const std::function<bool(const juce::String& uuid)>& uuidResolves,
+                           const std::function<bool(const juce::String& uuid, const juce::String& paramId,
+                                                    int paramIndexHint)>& laneResolves = {});
 
     // The one-click "re-bind" gesture's model half: retargets an orphaned (or any) lane's
     // nodeUuid. Rejected — no mutation — if newNodeUuid is empty, if `id` doesn't resolve to a

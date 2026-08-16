@@ -58,6 +58,13 @@ struct AutomationBindingTable {
         int laneIndex = -1;                        // into snapshot->lanes
         juce::AudioProcessorGraph::Node::Ptr node; // refcounted: keeps `param`'s owner alive (above)
         juce::RangedAudioParameter* param = nullptr;
+        // TL7-6: populated INSTEAD of `param` for a hosted-plugin instance parameter with no
+        // NormalisableRange (see Source/Timeline/AutomationBinding.h) — exactly one of the two is
+        // ever non-null on a real binding. Kept as a separate field rather than widening `param`'s
+        // type so every existing call site that only ever set `.param` (every test that predates
+        // TL7-6) keeps compiling and behaving identically; a binding resolved through the shared
+        // resolver populates whichever field applies.
+        juce::AudioProcessorParameter* hostedParam = nullptr;
         // TL4-5: the node's id, captured alongside `node` at build time (AudioEngine::publishTimeline)
         // rather than re-read from `node->nodeID` at push time — this is the identity the UI feed's
         // events carry, and a binding built by a hand-rolled test table (no real Node::Ptr) can still
@@ -122,6 +129,15 @@ public:
     //     against a wider range (or a build that later narrowed one) therefore pins at the endpoint
     //     instead of wrapping or asserting. A non-finite value is skipped outright rather than
     //     handed to JUCE, which would trip a debug assertion inside NormalisableRange.
+    //   - **TL7-6: a `hostedParam` binding (a hosted plugin's own parameter) has no
+    //     NormalisableRange to convert through** — juce::HostedAudioProcessorParameter is a sibling
+    //     hierarchy to RangedAudioParameter, not a subtype (see HostedPluginModule.h and
+    //     Source/Timeline/AutomationBinding.h). Its lane's RangeSnapshot IS the denorm -> 0..1 map
+    //     instead (a hosted parameter's native domain is always 0..1, so that snapshot is {0, 1,
+    //     default} by construction): `(denormalised - lane.minValue) / (lane.maxValue -
+    //     lane.minValue)`, clamped into [0, 1] the same defensive way convertTo0to1 clamps. Every
+    //     other rule above — playing-only, record modes, plain setValue, UI reflection — applies
+    //     identically to both kinds of binding.
     //   - **TL4-5 UI reflection rides `uiFeed`, not a notification.** After the plain store above,
     //     if this write's normalised value differs from the binding's `lastPushedNormalized` (or
     //     that field is still NaN — never pushed), push `{nodeID, param, newNormalised}` to

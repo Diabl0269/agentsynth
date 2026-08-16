@@ -588,9 +588,32 @@ The [Sampler](modules.md#sampler-module)'s retained-instance discipline, applied
 
 `AgentSynthAudioProcessor::setStateInformation` validates with `trusted=false` **and `allowInternalModuleTypes=true`** (see [Plugin state format](#plugin-state-format)) — the authorship restriction exists to stop *model output* naming internal types, and a host session file is our own saved graph, so the gate accepts "Hosted Plugin" nodes there while still rejecting a tampered file whole. The subsequent apply is trusted, which is what carries the plugin identity and its state blob. So a patch hosting a plugin round-trips through presets, undo/redo, `.agsproj` bundles **and** a DAW session with AgentSynth running as a plugin — pinned end-to-end by `HostedPluginTest.HostedPluginSurvivesDawSessionStateRoundTrip`.
 
+#### Automation lanes on hosted-plugin parameters (TL7-6)
+
+A hosted plugin's own parameters live on the *inner* `juce::AudioPluginInstance`, never on `HostedPluginModule`'s own `getParameters()` (which carries only `muted`). `HostedPluginModule` exposes them for lane resolution, message thread only, all reading the live instance atomically:
+
+- `findInstanceParameter(paramId)` — exact `juce::HostedAudioProcessorParameter::getParameterID()` match.
+- `findInstanceParameterByIndex(index)` — the parameter currently at a raw index.
+- `getInstanceParamIndexFallback(paramId)` — the CURRENT index for `paramId`, captured into a lane's `paramIndexHint` at creation time and never re-derived afterwards.
+- `getInstanceParameters()` — every live parameter, for the automation strip's lane-picker "Add lane…" entries; a parameter with no stable id gets a synthetic `"legacy:<index>"` key so it still has a non-empty, lane-identity-usable `paramId`.
+
+**Why a hosted parameter needs different handling than one of our own modules'.** `juce::AudioPluginInstance::addParameter` is deliberately hidden `private` — every hosted parameter must be a `juce::HostedAudioProcessorParameter`, a sibling interface to `RangedAudioParameter` (not a subtype of it) with no `NormalisableRange`. A format that has a persistent string identity implements `getParameterID()`; one that doesn't (or has none for a specific parameter) either skips the interface's id contract entirely or implements it returning an empty string (JUCE's own VST2 wrapper does the latter) — both count as "no stable id" here. Since there is no `NormalisableRange`, a lane targeting a hosted parameter carries a `RangeSnapshot` of exactly `{0, 1, default}` (a hosted parameter's native domain is always 0..1 — JUCE's own host contract), and that snapshot **is** the denormalised ↔ 0..1 map `AutomationApplier` uses in place of `RangedAudioParameter::convertTo0to1`/`convertFrom0to1`. `AutomationBindingTable::Binding` and `AutomationRecorder`'s own binding carry this as a second, mutually-exclusive field (`hostedParam`) alongside the existing `RangedAudioParameter* param`, so every pre-TL7-6 call site that only ever touched `param` keeps compiling and behaving identically.
+
+**The shared resolver.** Every lane-resolution call site — the audio-thread binding build (`AudioEngine::publishTimeline`), `TimelineReconciler`, the AI-tool `writeLane` path (`TimelineOps::runWriteLane` / `TimelineValidator::validateLane`), and `AutomationRecorder`'s rebind (`MainComponent::publishTimelineAndRebindRecorder`) — funnels through one function, `synth::resolveLaneParameter` (`Source/Timeline/AutomationBinding.h/.cpp`), so "does this lane resolve, and does it orphan" cannot drift between paths:
+
+1. Exact `paramId` match on the live instance always wins.
+2. Failing that, `paramIndexHint` is tried, but **only** as a rescue for a parameter with no stable id at all (the legacy-format case). A hinted index that instead names a *different*, still-identified parameter never binds — that is a version change having moved the parameter set under us, and the lane must **orphan**.
+3. Anything else — no live instance (still loading, unloaded, refused, or never installed), or a hint that names nothing — also orphans. A `HostedPluginModule` node with no instance cannot currently vouch for *any* parameter.
+
+Non-plugin nodes are the unchanged path: an exact `paramID` match via the global `findParameterByID`, and a miss is merely unbound, never orphaned — `paramIndexHint` is never consulted for them. `TimelineDoc::reconcileBindings` grew an optional second predicate (`laneResolves`, richer than the original uuid-only `uuidResolves`) precisely so `TimelineReconciler` can supply this per-parameter check for a `HostedPluginModule` node while every graph-agnostic `TimelineDoc` test keeps passing a single uuid predicate unchanged.
+
+`AutomationLane::paramIndexHint` (`-1` = none) is an additive serialised field, captured once at lane-creation time (from `resolveLaneParameter`'s exact-match result, or `synth::captureParamIndexHint`) and never re-derived afterwards.
+
+**Known gap:** nothing currently re-triggers `TimelineReconciler::reconcile` when an async plugin load *completes* — there is no publish → reconcile hook on `HostedPluginModule`. A freshly opened project's hosted-plugin lanes can therefore briefly read orphaned until an unrelated graph change (any of the TL5-3 hooks below) happens to trigger the next reconcile pass. Every existing reconcile call site still re-derives the correct flag whenever it does run; this is a UI-freshness gap, not a correctness one.
+
 #### Forward pointers
 
-TL7-3 plugin scanning, the scan-list persistence and the load UX (the module is absent from the library and the *Replace with…* menu until then); TL7-5/6 plugin editor windows and parameter exposure; TL7-7 latency compensation beyond the `setLatencySamples()` republication done here.
+TL7-3 plugin scanning, the scan-list persistence and the load UX (the module is absent from the library and the *Replace with…* menu until then); TL7-5 plugin editor windows; TL7-7 latency compensation beyond the `setLatencySamples()` republication done here.
 
 ---
 

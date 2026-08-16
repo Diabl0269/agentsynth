@@ -3,8 +3,10 @@
 #include "AI/AIStateMapper.h"
 #include "Branding.h"
 #include "Modules/TimelineAudioSourceModule.h"
+#include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
 #include "Timeline/AssetManager.h"
+#include "Timeline/AutomationBinding.h"
 #include "Timeline/TakePlacement.h"
 #include "Timeline/TimelineReconciler.h"
 #include "UI/SettingsWindow.h"
@@ -1943,7 +1945,11 @@ void MainComponent::publishTimelineAndRebindRecorder() {
             const auto found = nodesByUuid.find(lane.nodeUuid);
             if (found == nodesByUuid.end())
                 continue;
-            if (auto* param = findParameterByID(found->second->getProcessor(), lane.paramId))
+            // TL7-6: the shared resolver, exactly like the applier's own binding build — a lane the
+            // audio thread can play back is exactly a lane the recorder must be able to capture into.
+            const auto resolved =
+                synth::resolveLaneParameter(found->second->getProcessor(), lane.paramId, lane.paramIndexHint);
+            if (auto* param = resolved.liveParameter())
                 automationRecorder.bindLane(lane.id, param, found->second);
         }
     }
@@ -2656,5 +2662,95 @@ void MainComponent::addAudioTrack() {
 
     reconcileTimelineAfterGraphChange();
     statusBar.showMessage(pushed ? "Added Audio " + juce::String(index + 1) : "Could not add a track");
+#endif
+}
+
+// TL7-6: the automation strip lane picker's "Add lane..." entries — the minimal creation surface
+// for a hosted plugin's own parameters, which have no ModuleComponent knob to right-click (the
+// plugin has its own editor; see docs/modulation.md's Hosted Plugin table). Every live
+// HostedPluginModule with a published instance offers every parameter that doesn't already have a
+// lane; a bare or still-loading one offers nothing, same as it renders nothing elsewhere in the UI.
+std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> MainComponent::getAvailablePluginLaneOptions() const {
+    std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> options;
+#if SYNTH_ENABLE_TIMELINE
+    for (auto* node : audioEngine.getGraph().getNodes()) {
+        if (node == nullptr)
+            continue;
+        auto* hosted = dynamic_cast<synth::HostedPluginModule*>(node->getProcessor());
+        if (hosted == nullptr || !hosted->hasInstance())
+            continue;
+
+        const juce::String uuid = node->properties["uuid"].toString();
+        if (uuid.isEmpty())
+            continue; // ensure-uuid runs at automate time, same as automateParameter() — nothing to offer yet
+
+        const juce::String moduleLabel = describeNodeForBinding(node);
+        for (const auto& param : hosted->getInstanceParameters()) {
+            if (timelineDoc.getLaneForParam(uuid, param.paramId) != nullptr)
+                continue; // already automated
+            synth::ui::TrackHeaderHost::PluginLaneOption option;
+            option.nodeUuid = uuid;
+            option.paramId = param.paramId;
+            option.paramIndex = param.index;
+            option.label = moduleLabel + " \xC2\xB7 " + param.displayName;
+            options.push_back(std::move(option));
+        }
+    }
+#endif
+    return options;
+}
+
+synth::LaneId MainComponent::addPluginAutomationLane(const synth::ui::TrackHeaderHost::PluginLaneOption& option) {
+#if SYNTH_ENABLE_TIMELINE
+    if (option.nodeUuid.isEmpty() || option.paramId.isEmpty())
+        return {};
+
+    auto* node = findNodeByUuid(option.nodeUuid);
+    auto* hosted = node != nullptr ? dynamic_cast<synth::HostedPluginModule*>(node->getProcessor()) : nullptr;
+    if (hosted == nullptr)
+        return {}; // the node disappeared (or stopped being a plugin) between offering and choosing
+
+    // Hosted-plugin parameters are always normalised (TL7-6: a hosted AudioProcessorParameter has no
+    // NormalisableRange, and JUCE's own host contract is 0..1 regardless of format) — the lane's
+    // RangeSnapshot IS {0, 1, default}, never something read off a live NormalisableRange.
+    const auto resolved = synth::resolveLaneParameter(hosted, option.paramId, option.paramIndex);
+    if (!resolved.resolved())
+        return {}; // the parameter vanished between offering and choosing
+
+    synth::LaneId laneId;
+    const juce::String uuidCopy = option.nodeUuid;
+    const juce::String paramIdCopy = option.paramId;
+    const int paramIndexCopy = option.paramIndex;
+    auto mutate = [this, &laneId, uuidCopy, paramIdCopy, paramIndexCopy, &resolved] {
+        synth::TrackId trackId;
+        for (const auto& track : timelineDoc.getTracks()) {
+            if (track.kind == synth::TrackKind::Automation) {
+                trackId = track.id;
+                break;
+            }
+        }
+        if (!trackId.isValid())
+            trackId = timelineDoc.addTrack(synth::TrackKind::Automation, "Automation");
+        if (!trackId.isValid())
+            return;
+
+        synth::AutomationLane::RangeSnapshot range;
+        const auto bounds = synth::laneValueBoundsFor(resolved);
+        range.minValue = static_cast<float>(bounds.minValue);
+        range.maxValue = static_cast<float>(bounds.maxValue);
+        range.defaultValue = static_cast<float>(synth::laneDefaultValueFor(resolved));
+        laneId = timelineDoc.addLane(trackId, uuidCopy, paramIdCopy, range, paramIndexCopy);
+    };
+    undoManager.recordTimelineChange(timelineDoc, mutate);
+    if (!laneId.isValid())
+        return {};
+
+    if (!isTimelineVisible && toggleTimelineButton.onClick)
+        toggleTimelineButton.onClick();
+    timelinePanel.showAutomationLane(laneId);
+    return laneId;
+#else
+    juce::ignoreUnused(option);
+    return {};
 #endif
 }

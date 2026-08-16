@@ -16,10 +16,22 @@ constexpr int kWrite = static_cast<int>(LaneRecordMode::Write);
 
 bool capturesGestures(int mode) noexcept { return mode == kTouch || mode == kLatch || mode == kWrite; }
 
-double denormalisedValueOf(const juce::RangedAudioParameter* param) noexcept {
+// TL7-6: `param` may be a hosted plugin's own parameter, which has no NormalisableRange (a
+// juce::HostedAudioProcessorParameter is a sibling hierarchy to RangedAudioParameter — see
+// HostedPluginModule.h). Message thread only, so the dynamic_cast here is cheap and not worth
+// caching.
+double denormalisedValueOf(const juce::AudioProcessorParameter* param, float normalised) noexcept {
     if (param == nullptr)
         return 0.0;
-    return static_cast<double>(param->convertFrom0to1(param->getValue()));
+    if (const auto* ranged = dynamic_cast<const juce::RangedAudioParameter*>(param))
+        return static_cast<double>(ranged->convertFrom0to1(normalised));
+    // A hosted parameter's native domain is always 0..1 (JUCE's own host contract), which is exactly
+    // what such a lane's RangeSnapshot is {0, 1, default} to match — see AutomationBinding.h.
+    return static_cast<double>(normalised);
+}
+
+double denormalisedValueOf(const juce::AudioProcessorParameter* param) noexcept {
+    return param != nullptr ? denormalisedValueOf(param, param->getValue()) : 0.0;
 }
 
 } // namespace
@@ -72,7 +84,7 @@ void AutomationRecorder::detach() {
     transport = nullptr;
 }
 
-void AutomationRecorder::bindLane(LaneId laneId, juce::RangedAudioParameter* param,
+void AutomationRecorder::bindLane(LaneId laneId, juce::AudioProcessorParameter* param,
                                   juce::AudioProcessorGraph::Node::Ptr node) {
     purgeGraveyard();
 
@@ -295,7 +307,7 @@ void AutomationRecorder::handleValueChanged(std::int64_t laneId, float normalise
     if (binding == nullptr || binding->param == nullptr)
         return;
 
-    const double value = static_cast<double>(binding->param->convertFrom0to1(normalised));
+    const double value = denormalisedValueOf(binding->param, normalised);
 
     auto* span = findSpan(laneId);
     if (span == nullptr) {

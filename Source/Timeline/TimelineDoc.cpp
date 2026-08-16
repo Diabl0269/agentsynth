@@ -853,7 +853,7 @@ bool TimelineDoc::quantiseNotes(ClipId clipId, double gridBeats, double strength
 // ---------------------------------------------------------------------- lanes --
 
 LaneId TimelineDoc::addLane(TrackId trackId, const juce::String& nodeUuid, const juce::String& paramId,
-                            const AutomationLane::RangeSnapshot& range) {
+                            const AutomationLane::RangeSnapshot& range, int paramIndexHint) {
     // Identity check first, and doc-wide: one lane per bound parameter, whichever track it
     // happens to sit on. Returning the existing id is a lookup, not a mutation.
     if (auto* existing = findLaneForParam(nodeUuid, paramId))
@@ -873,6 +873,7 @@ LaneId TimelineDoc::addLane(TrackId trackId, const juce::String& nodeUuid, const
         lane.nodeUuid = nodeUuid;
         lane.paramId = paramId;
         lane.range = range;
+        lane.paramIndexHint = paramIndexHint;
         track->lanes.push_back(std::move(lane));
         return track->lanes.back().id;
     });
@@ -971,7 +972,9 @@ bool TimelineDoc::setLaneRecordMode(LaneId id, int mode) {
 
 // -------------------------------------------------------- bindings / TL2-6 --
 
-bool TimelineDoc::reconcileBindings(const std::function<bool(const juce::String& uuid)>& uuidResolves) {
+bool TimelineDoc::reconcileBindings(const std::function<bool(const juce::String& uuid)>& uuidResolves,
+                                    const std::function<bool(const juce::String& uuid, const juce::String& paramId,
+                                                             int paramIndexHint)>& laneResolves) {
     // Plan first, exactly like splitClip/applySnapshotPreservingNodes: compute what every flag
     // SHOULD be without touching anything, so a reconcile that changes nothing never enters
     // applyMutation (no bump, no notification) and uuidResolves is called exactly once per
@@ -987,13 +990,19 @@ bool TimelineDoc::reconcileBindings(const std::function<bool(const juce::String&
 
     for (auto& track : tracks) {
         TrackPlan plan;
+        // A track binds to a node, never a parameter — uuidResolves alone is always the whole story.
         plan.orphaned = track.bindingUuid.isNotEmpty() && !uuidResolves(track.bindingUuid);
         if (plan.orphaned != track.orphaned)
             anyChanged = true;
 
         plan.laneOrphaned.reserve(track.lanes.size());
         for (auto& lane : track.lanes) {
-            const bool laneOrphaned = lane.nodeUuid.isNotEmpty() && !uuidResolves(lane.nodeUuid);
+            // TL7-6: laneResolves (when the caller supplied one) is the richer predicate that also
+            // accounts for a HostedPluginModule's parameter set having changed shape; unset, this is
+            // exactly the pre-TL7-6 uuid-only check.
+            const bool resolved = laneResolves ? laneResolves(lane.nodeUuid, lane.paramId, lane.paramIndexHint)
+                                               : uuidResolves(lane.nodeUuid);
+            const bool laneOrphaned = lane.nodeUuid.isNotEmpty() && !resolved;
             plan.laneOrphaned.push_back(laneOrphaned);
             if (laneOrphaned != lane.orphaned)
                 anyChanged = true;
@@ -1108,6 +1117,7 @@ juce::var TimelineDoc::toVar() const {
             l->setProperty("nodeUuid", lane.nodeUuid);
             l->setProperty("paramId", lane.paramId);
             l->setProperty("recordMode", lane.recordMode);
+            l->setProperty("paramIndexHint", lane.paramIndexHint); // TL7-6, additive
 
             juce::DynamicObject::Ptr r = new juce::DynamicObject();
             r->setProperty("minValue", static_cast<double>(lane.range.minValue));
@@ -1333,6 +1343,14 @@ bool TimelineDoc::fromVar(const juce::var& state) {
                     if (!readOptionalInt(lObj->getProperty("recordMode"), lane.recordMode))
                         return false;
                     if (!isValidRecordMode(lane.recordMode))
+                        return false;
+
+                    // TL7-6, additive: absent (every file written before this field existed) keeps
+                    // the -1 default already on `lane`. No range check beyond "must be an integer if
+                    // present" — resolveLaneParameter treats anything < 0 as "no hint" and bounds-
+                    // checks a non-negative one defensively, so there is nothing here that can turn a
+                    // malformed value into an out-of-bounds read downstream.
+                    if (!readOptionalInt(lObj->getProperty("paramIndexHint"), lane.paramIndexHint))
                         return false;
 
                     const juce::Array<juce::var>* pointList = nullptr;

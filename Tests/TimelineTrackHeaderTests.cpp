@@ -58,6 +58,11 @@ public:
     void addMidiTrack() override { ++addTrackCalls; }
     void addAudioTrack() override { ++addAudioTrackCalls; } // TL6-4
 
+    // TL7-6: not exercised by this file (it tests the track-header column, not the automation
+    // strip's lane picker) — empty/no-op is the correct stub behaviour.
+    std::vector<PluginLaneOption> getAvailablePluginLaneOptions() const override { return {}; }
+    synth::LaneId addPluginAutomationLane(const PluginLaneOption&) override { return {}; }
+
     std::vector<BindingOption> options;
     std::map<juce::String, juce::String> names;
     juce::String lastBoundUuid;

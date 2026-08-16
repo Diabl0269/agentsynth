@@ -1,6 +1,7 @@
 #include "TimelineOps.h"
 
 #include "../AppUndoManager.h"
+#include "AutomationBinding.h"
 #include "MidiClipFile.h"
 #include "TimelineValidator.h"
 
@@ -125,15 +126,11 @@ juce::AudioProcessor* findProcessorByUuid(const juce::AudioProcessorGraph& graph
     return nullptr;
 }
 
-juce::RangedAudioParameter* findParameter(juce::AudioProcessor* processor, const juce::String& paramId) {
-    if (processor == nullptr)
-        return nullptr;
-    for (auto* param : processor->getParameters())
-        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param))
-            if (ranged->paramID == paramId)
-                return ranged;
-    return nullptr;
-}
+// TL7-6: parameter resolution itself (exact id match, or the narrow hosted-plugin index fallback)
+// is factored into synth::resolveLaneParameter (AutomationBinding.h) — the ONE resolver this file,
+// TimelineValidator, AudioEngine::publishTimeline's binding build and the recorder's rebind all
+// share, so "does this lane's parameter resolve" cannot drift between the AI-tool path and the
+// audio path.
 
 // -- name check -------------------------------------------------------------------------------
 
@@ -520,8 +517,14 @@ TimelineOpsResult runWriteLane(const juce::String& where, juce::DynamicObject& o
     if (processor == nullptr)
         return fail(where + "writes to node uuid \"" + nodeUuid +
                     "\", which no module in the current patch has. Automate a module that exists.");
-    auto* parameter = findParameter(processor, paramId);
-    if (parameter == nullptr)
+
+    const AutomationLane* existing = doc.getLaneForParam(nodeUuid, paramId);
+    // TL7-6: resolved through the SAME shared resolver the audio path and TimelineReconciler use —
+    // an exact id match, or (for a hosted plugin with no stable ids at all) the existing lane's
+    // stored paramIndexHint. A brand-new lane has no hint yet, so this is exact-match-only until it
+    // exists.
+    const auto resolved = resolveLaneParameter(processor, paramId, existing != nullptr ? existing->paramIndexHint : -1);
+    if (!resolved.resolved())
         return fail(where + "writes parameter \"" + paramId + "\", which module \"" + processor->getName() +
                     "\" does not have. Use one of that module's parameter ids.");
 
@@ -538,11 +541,12 @@ TimelineOpsResult runWriteLane(const juce::String& where, juce::DynamicObject& o
     // The value bounds. The live parameter's range is the authority (never a range a sender
     // supplied), and where an EXISTING lane's snapshot is narrower it narrows them further: not for
     // security, but because editBreakpoints would CLAMP a value into that snapshot, and a value we
-    // would have to correct is a value the sender did not mean.
-    const auto& liveRange = parameter->getNormalisableRange();
-    double minAllowed = static_cast<double>(liveRange.start);
-    double maxAllowed = static_cast<double>(liveRange.end);
-    const AutomationLane* existing = doc.getLaneForParam(nodeUuid, paramId);
+    // would have to correct is a value the sender did not mean. TL7-6: a hosted-plugin parameter has
+    // no NormalisableRange, so its bounds are exactly [0, 1] (laneValueBoundsFor — see
+    // AutomationBinding.h) rather than something read off the parameter.
+    const auto liveBounds = laneValueBoundsFor(resolved);
+    double minAllowed = liveBounds.minValue;
+    double maxAllowed = liveBounds.maxValue;
     if (existing != nullptr) {
         minAllowed = std::max(minAllowed, static_cast<double>(existing->range.minValue));
         maxAllowed = std::min(maxAllowed, static_cast<double>(existing->range.maxValue));
@@ -631,10 +635,12 @@ TimelineOpsResult runWriteLane(const juce::String& where, juce::DynamicObject& o
                         " automation lanes on one track.");
 
         AutomationLane::RangeSnapshot range;
-        range.minValue = liveRange.start;
-        range.maxValue = liveRange.end;
-        range.defaultValue = parameter->convertFrom0to1(parameter->getDefaultValue());
-        laneId = doc.addLane(automationTrack, nodeUuid, paramId, range);
+        range.minValue = static_cast<float>(liveBounds.minValue);
+        range.maxValue = static_cast<float>(liveBounds.maxValue);
+        range.defaultValue = static_cast<float>(laneDefaultValueFor(resolved));
+        // TL7-6: captured once, at creation, from the resolver's own exact-match result — never
+        // re-derived afterwards. -1 for a non-plugin target, exactly like every lane before TL7-6.
+        laneId = doc.addLane(automationTrack, nodeUuid, paramId, range, captureParamIndexHint(processor, paramId));
         if (!laneId.isValid())
             return fail(where + "could not create the automation lane for \"" + paramId + "\".");
     }

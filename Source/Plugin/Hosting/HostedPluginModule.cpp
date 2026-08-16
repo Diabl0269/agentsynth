@@ -307,6 +307,65 @@ LogicalPort HostedPluginModule::mapOutputChannel(int rawChannel) const {
 }
 
 //==============================================================================
+// Instance parameters (TL7-6)
+//==============================================================================
+
+juce::AudioProcessorParameter* HostedPluginModule::findInstanceParameter(const juce::String& paramId) const noexcept {
+    auto* instance = activeInstance_.load(std::memory_order_acquire);
+    if (instance == nullptr || paramId.isEmpty())
+        return nullptr;
+
+    for (auto* param : instance->getParameters()) {
+        if (auto* hosted = dynamic_cast<juce::HostedAudioProcessorParameter*>(param))
+            if (hosted->getParameterID() == paramId)
+                return param;
+    }
+    return nullptr;
+}
+
+juce::AudioProcessorParameter* HostedPluginModule::findInstanceParameterByIndex(int index) const noexcept {
+    auto* instance = activeInstance_.load(std::memory_order_acquire);
+    if (instance == nullptr || index < 0)
+        return nullptr;
+
+    const auto& params = instance->getParameters();
+    if (index >= params.size())
+        return nullptr;
+    return params[index];
+}
+
+int HostedPluginModule::getInstanceParamIndexFallback(const juce::String& paramId) const noexcept {
+    auto* param = findInstanceParameter(paramId);
+    return param != nullptr ? param->getParameterIndex() : -1;
+}
+
+std::vector<HostedPluginModule::InstanceParameterInfo> HostedPluginModule::getInstanceParameters() const {
+    std::vector<InstanceParameterInfo> result;
+
+    auto* instance = activeInstance_.load(std::memory_order_acquire);
+    if (instance == nullptr)
+        return result;
+
+    const auto& params = instance->getParameters();
+    result.reserve(static_cast<std::size_t>(params.size()));
+    for (int i = 0; i < params.size(); ++i) {
+        auto* param = params[i];
+        if (param == nullptr)
+            continue;
+
+        InstanceParameterInfo info;
+        info.index = i;
+        if (auto* hosted = dynamic_cast<juce::HostedAudioProcessorParameter*>(param))
+            info.paramId = hosted->getParameterID();
+        if (info.paramId.isEmpty())
+            info.paramId = "legacy:" + juce::String(i); // no stable id at all: see the struct comment
+        info.displayName = param->getName(256);
+        result.push_back(std::move(info));
+    }
+    return result;
+}
+
+//==============================================================================
 // Non-parameter state — trusted path ONLY
 //==============================================================================
 

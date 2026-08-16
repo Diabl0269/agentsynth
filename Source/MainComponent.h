@@ -336,6 +336,8 @@ private:
     void performTrackEdit(const std::function<void()>& mutation) override;
     void addMidiTrack() override;
     void addAudioTrack() override;
+    std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> getAvailablePluginLaneOptions() const override;
+    synth::LaneId addPluginAutomationLane(const synth::ui::TrackHeaderHost::PluginLaneOption& option) override;
 
     // Creates a "Track In" node with a fresh uuid at the canvas' left edge, wires it to the single
     // MIDI instrument in the patch when there is exactly one, and returns its uuid (empty on

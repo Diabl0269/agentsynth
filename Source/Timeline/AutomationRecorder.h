@@ -124,10 +124,17 @@ public:
     // whole table after every AudioEngine::publishTimeline, exactly the way the applier's binding
     // table is rebuilt, because a lane's parameter is only resolvable against the current graph.
     //
+    // `param` is the base AudioProcessorParameter type (TL7-6), not RangedAudioParameter — a hosted
+    // plugin's own parameter has no NormalisableRange (see HostedPluginModule.h /
+    // Source/Timeline/AutomationBinding.h). Every method here that needs a denormalised value
+    // (denormalisedValueOf) already branches on whether `param` is ALSO a RangedAudioParameter, so
+    // one code path serves both kinds; this is all message-thread work, so that branch is a cheap
+    // dynamic_cast, not something worth caching.
+    //
     // `node` is held as a refcounted Node::Ptr for the same reason AutomationBindingTable does:
     // removeListener() in unbindAll()/the destructor must never touch a processor the graph has
     // already destroyed.
-    void bindLane(LaneId laneId, juce::RangedAudioParameter* param, juce::AudioProcessorGraph::Node::Ptr node);
+    void bindLane(LaneId laneId, juce::AudioProcessorParameter* param, juce::AudioProcessorGraph::Node::Ptr node);
     void unbindAll();
     int getNumBindings() const noexcept { return static_cast<int>(bindings.size()); }
 
@@ -210,7 +217,7 @@ private:
 
     struct Binding {
         std::int64_t laneId = 0;
-        juce::RangedAudioParameter* param = nullptr;
+        juce::AudioProcessorParameter* param = nullptr; // TL7-6: widened from RangedAudioParameter*
         juce::AudioProcessorGraph::Node::Ptr node;
         std::unique_ptr<ParamListener> listener;
     };
