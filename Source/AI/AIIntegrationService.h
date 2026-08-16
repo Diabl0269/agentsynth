@@ -10,6 +10,7 @@
 
 #if SYNTH_ENABLE_TIMELINE
 #include "../Timeline/ArrangementContext.h"
+#include "../Timeline/TimelineOps.h"
 #include "../Transport/TransportService.h"
 #endif
 
@@ -61,6 +62,52 @@ public:
         timelineDoc = doc;
         transportService = transport;
     }
+
+    // -- Timeline operations (TL8-4) -------------------------------------------------------
+    // The write half of the timeline seam, and a deliberate mirror of the patch card's flow:
+    // extract -> validate (untrusted) -> preview to the user -> the user clicks Apply -> apply.
+    // A timelineOps envelope is a SIBLING of a patch suggestion, never nested inside one — a
+    // "timeline" key inside patch JSON stays refused by validatePatch forever (TL0-4). A single
+    // response may legitimately carry both, and each half gets its own gate and its own button.
+
+    /**
+     * @brief The timelineOps envelope carried by a model response, or a void var if it has none.
+     *
+     * Runs exactly the same extraction applyPatch() does (extractJsonFromResponse: fenced block,
+     * bare braces, or the whole body), then hands back the parsed ROOT — envelope and patch share
+     * one JSON object when the model sends both, so this is the same var the patch path parses.
+     * Static and public for the same reason extractJsonFromResponse is: a harness or a test can
+     * reproduce the real extraction rather than approximate it.
+     */
+    static juce::var extractTimelineOps(const juce::String& response);
+
+    /** True once MainComponent has wired the live timeline in (setTimelineContext). Without it
+     *  there is nothing to validate against, and timeline suggestions are not offered at all. */
+    bool hasTimelineContext() const { return timelineDoc != nullptr; }
+
+    /**
+     * @brief Validates an envelope against the live timeline + graph WITHOUT applying it.
+     *
+     * The preview step: on success the result's previewText is what the chat card shows the user
+     * before they agree to anything. Fails (applying nothing, as always) when no timeline context
+     * is installed.
+     */
+    TimelineOpsResult previewTimelineOps(const juce::var& envelope) const;
+
+    /**
+     * @brief Installed by the app-level owner (MainComponent) to route an Apply back to
+     *        `TimelineOps::apply` with the real doc, graph and undo manager.
+     *
+     * The service holds the timeline only as a CONST pointer (it is a context reader, TL8-3), and
+     * it owns no undo manager for the timeline — so the host supplies the write path, exactly as
+     * AIChatComponent supplies its own urlOpener. With no callback installed, applyTimelineOps()
+     * reports that it cannot apply rather than silently doing nothing.
+     */
+    using TimelineOpsApplyCallback = std::function<TimelineOpsResult(const juce::var& envelope)>;
+    void setTimelineOpsApplyCallback(TimelineOpsApplyCallback callback) { timelineOpsApply = std::move(callback); }
+
+    /** @brief Applies a previously previewed envelope through the host callback. One undo step. */
+    TimelineOpsResult applyTimelineOps(const juce::var& envelope);
 #endif
 
     /**
@@ -223,6 +270,9 @@ private:
     // members at all, and buildPatchAugmentedContent()'s arrangement section is #if-gated out).
     const TimelineDoc* timelineDoc = nullptr;
     const TransportService* transportService = nullptr;
+
+    // TL8-4: the host's write path, installed by MainComponent — see setTimelineOpsApplyCallback().
+    TimelineOpsApplyCallback timelineOpsApply;
 #endif
 
     void initSystemPrompt();

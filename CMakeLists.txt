@@ -152,6 +152,8 @@ add_library(Core STATIC
     Source/Timeline/TakePlacement.h
     Source/Timeline/TimelineDoc.cpp
     Source/Timeline/TimelineDoc.h
+    Source/Timeline/TimelineOps.cpp
+    Source/Timeline/TimelineOps.h
     Source/Timeline/TimelineReconciler.cpp
     Source/Timeline/TimelineReconciler.h
     Source/Timeline/TimelineSnapshot.cpp
@@ -684,10 +686,14 @@ if(ENABLE_TESTS)
     add_subdirectory(Tests)
 endif()
 
-# Measurement harnesses for AI patch validity and quality. Both need a live Ollama, so neither
-# is ever part of the default build or CI — see their READMEs under Tools/.
+# Measurement harnesses for AI patch/timeline validity and quality. AIPatchHarness/AIEvalHarness
+# need a live Ollama; TimelineOpsHarness replays recorded fixtures instead and needs none, but is
+# gated the same way for consistency (it is a measurement instrument, not something CI gates on —
+# see Tests/TimelineOpsFixtureTests.cpp for the CI-enforced twin). None of the three is ever part
+# of the default build or CI — see their READMEs under Tools/.
 if(ENABLE_AI_HARNESS)
     add_subdirectory(Tools/AIPatchHarness)
     add_subdirectory(Tools/AIEvalHarness)
+    add_subdirectory(Tools/TimelineOpsHarness)
 endif()
 

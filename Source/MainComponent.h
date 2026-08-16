@@ -13,6 +13,7 @@
 #include "Timeline/AutomationRecorder.h"
 #include "Timeline/MidiRecorder.h"
 #include "Timeline/TimelineDoc.h"
+#include "Timeline/TimelineOps.h"
 #include "UI/AIChatComponent.h"
 #include "UI/GraphEditor.h"
 #include "UI/ModuleLibraryComponent.h"

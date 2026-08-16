@@ -44,6 +44,8 @@ add_executable(Tests
     TimelineUndoTests.cpp
     TimelineReconciliationTests.cpp
     TimelineValidatorTests.cpp
+    TimelineOpsTests.cpp
+    TimelineOpsFixtureTests.cpp
     ArrangementContextTests.cpp
     TimelineMidiSourceTests.cpp
     MidiRecorderTests.cpp
@@ -198,6 +200,9 @@ target_include_directories(Tests PRIVATE
 target_compile_definitions(Tests PRIVATE
     JUCE_MODAL_LOOPS_PERMITTED=1
     THEMES_DIR="${CMAKE_SOURCE_DIR}/themes"
+    # Same fixture files TimelineOpsHarness replays (TL8-5) — one recorded set, asserted here as
+    # fast gtest cases so CI covers them without building the harness target.
+    TIMELINE_OPS_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/Tools/TimelineOpsHarness/Fixtures"
 )
 
 # Link JUCE specifics if needed
