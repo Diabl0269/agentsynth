@@ -832,6 +832,9 @@ TEST(AIStateMapperTest, RejectsGenericUnknownParameterKey) {
     auto validation = synth::AIStateMapper::validatePatch(json, graph, /*clearExisting=*/true, /*trusted=*/false);
     EXPECT_FALSE(validation.ok);
     EXPECT_EQ(validation.error, synth::PatchValidationError::UnknownParameterKey);
+    // The message must name a real parameter ID, not just report that one was wrong — pinned so a
+    // future edit can't quietly drop the list the retry loop needs to converge.
+    EXPECT_TRUE(validation.message.contains("detune")) << validation.message;
 
     EXPECT_FALSE(synth::AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/false));
     EXPECT_EQ(graph.getNumNodes(), 0);
