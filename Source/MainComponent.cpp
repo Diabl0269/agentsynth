@@ -4,6 +4,7 @@
 #include "Branding.h"
 #include "Modules/TimelineAudioSourceModule.h"
 #include "ProjectBundle.h"
+#include "Timeline/AssetManager.h"
 #include "Timeline/TakePlacement.h"
 #include "Timeline/TimelineReconciler.h"
 #include "UI/SettingsWindow.h"
@@ -521,6 +522,14 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     timelinePanel.getClipLaneArea().setPeaksResolver([this](const juce::String& assetRef) -> juce::File {
         return audioEngine.getAudioClipStreamer().resolveAssetRef(peaksRefForAssetRef(assetRef));
     });
+    // TL6-6: same resolution playback uses, answering existence rather than handing back a File —
+    // what paints the missing-asset placeholder instead of an (impossible) waveform.
+    timelinePanel.getClipLaneArea().setAssetExistsResolver([this](const juce::String& assetRef) -> bool {
+        return audioEngine.getAudioClipStreamer().resolveAssetRef(assetRef) != juce::File();
+    });
+    // TL6-6: "Relink audio…" bubbles up here rather than being handled inside the lane area itself
+    // — it needs a host FileChooser and synth::AssetManager import, neither of which that class has.
+    timelinePanel.getClipLaneArea().onRelinkAudioRequested = [this](synth::ClipId id) { promptRelinkClipAsset(id); };
     // TL6-4: BEFORE the first publish below — publishTimeline() syncs the clip streamer, and it can
     // only resolve an asset ref once it knows the roots.
     refreshAssetRoots();
@@ -1035,6 +1044,17 @@ void MainComponent::saveToFile(const juce::File& file) {
 
 #if SYNTH_ENABLE_TIMELINE
     if (file.getFileExtension() == synth::ProjectBundle::kBundleExtension) {
+        // TL6-6: adopt any Recordings/-convention takes (recorded before this project had ever
+        // been saved) into THIS bundle's own Audio/ BEFORE serialising below, so project.json is
+        // written with the post-adoption refs — the reserved Recordings/ prefix must never end up
+        // inside a saved bundle. A plain, direct doc mutation: saving must never create undo
+        // history (see synth::AssetManager::adoptRecordingsAssets's own comment). Safe to call
+        // every save, including a resave with nothing left to adopt (a no-op — see that method).
+        const auto recordingsRoot = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                        .getChildFile(synth::branding::kSettingsFolderName)
+                                        .getChildFile(kRecordingsFolderName);
+        synth::AssetManager::adoptRecordingsAssets(timelineDoc, recordingsRoot, file);
+
         // The bundle carries the graph AND the timeline; PatchDocument comes from the graph editor
         // so the unknown-top-level-key stash a plain preset load filled is re-merged here too.
         const auto result =
@@ -2042,12 +2062,14 @@ bool MainComponent::chooseTakeFiles(AudioTake& take) const {
         peaksDir = currentBundleDir_.getChildFile(synth::ProjectBundle::kPeaksSubdirName);
         refPrefix = juce::String(synth::ProjectBundle::kAudioSubdirName) + "/";
     } else {
-        // TODO(TL6-6): an UNSAVED project has no bundle to write into, so takes land in app data
-        // and the clip's assetRef carries the reserved "Recordings/" prefix, which resolves against
-        // <app data>/<settings folder> rather than a bundle root. TL6-6's import/adopt pass moves
-        // these into the bundle on the first save and rewrites the refs to "Audio/...". Until then
-        // the ref is still bundle-RELATIVE in form (isValidAssetRef accepts it), which is what
-        // keeps the one path rule — no absolute paths, ever — true for both cases.
+        // An UNSAVED project has no bundle to write into, so takes land in app data and the clip's
+        // assetRef carries the reserved "Recordings/" prefix, which resolves against
+        // <app data>/<settings folder> rather than a bundle root. saveToFile() runs
+        // synth::AssetManager::adoptRecordingsAssets BEFORE ProjectBundle::save (TL6-6), which
+        // moves these into the bundle on the first save and rewrites the refs to "Audio/..." — a
+        // project.json never carries a "Recordings/" ref. Until saved, the ref is still
+        // bundle-RELATIVE in form (isValidAssetRef accepts it), which is what keeps the one path
+        // rule — no absolute paths, ever — true for both cases.
         auto root = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
                         .getChildFile(synth::branding::kSettingsFolderName)
                         .getChildFile(kRecordingsFolderName);
@@ -2282,6 +2304,87 @@ void MainComponent::refreshAssetRoots() {
                                           .getChildFile(kRecordingsFolderName);
 
     audioEngine.getAudioClipStreamer().setAssetRoots(bundleRoot, recordingsRoot);
+#endif
+}
+
+void MainComponent::promptRelinkClipAsset(synth::ClipId id) {
+#if SYNTH_ENABLE_TIMELINE
+    fileChooser = std::make_unique<juce::FileChooser>(
+        "Relink Audio", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),
+        "*.wav;*.aiff;*.aif;*.flac;*.ogg");
+    fileChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                             [this, id](const juce::FileChooser& fc) {
+                                 auto file = fc.getResult();
+                                 if (file != juce::File{})
+                                     relinkClipAsset(id, file);
+                             });
+#else
+    juce::ignoreUnused(id);
+#endif
+}
+
+void MainComponent::relinkClipAsset(synth::ClipId id, const juce::File& chosenFile) {
+#if SYNTH_ENABLE_TIMELINE
+    const auto* clip = timelineDoc.getClip(id);
+    if (clip == nullptr || clip->assetRef.isEmpty())
+        return;
+    const juce::String oldRef = clip->assetRef;
+
+    juce::String error;
+    juce::String newRef;
+    if (currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_)) {
+        newRef = synth::AssetManager::importAudioFile(chosenFile, currentBundleDir_, &error);
+    } else {
+        // TL6-6: no bundle yet (unsaved project) — the SAME app-data Recordings/ convention
+        // chooseTakeFiles() uses for a take recorded before the first save.
+        const auto recordingsRoot = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                        .getChildFile(synth::branding::kSettingsFolderName)
+                                        .getChildFile(kRecordingsFolderName);
+        const auto name = synth::AssetManager::importAudioFileToDirectory(chosenFile, recordingsRoot, &error);
+        if (name.isNotEmpty())
+            newRef = juce::String(kRecordingsFolderName) + "/" + name;
+    }
+
+    if (newRef.isEmpty()) {
+        statusBar.showMessage("Relink failed: " + error);
+        return;
+    }
+
+    // Snapshot every clip sharing the OLD ref BEFORE mutating anything — a TimelineDoc reference
+    // does not survive a mutation (see TimelineDoc::getClip's own contract), so the ids and each
+    // clip's OWN sourceStartSeconds are captured first rather than iterating getTracks() while
+    // calling setClipAsset on it.
+    struct Target {
+        synth::ClipId id;
+        double sourceStartSeconds;
+    };
+    std::vector<Target> targets;
+    for (const auto& track : timelineDoc.getTracks())
+        for (const auto& c : track.clips)
+            if (c.assetRef == oldRef)
+                targets.push_back({c.id, c.sourceStartSeconds});
+
+    // Every sharing clip moves to the new ref together, as ONE undo step — the whole point of a
+    // relink is that duplicated/copy-pasted clips naming the same asset get fixed as a unit, never
+    // half-relinked. The old file is never touched, let alone deleted.
+    undoManager.recordTimelineChange(timelineDoc, [&] {
+        for (const auto& target : targets)
+            timelineDoc.setClipAsset(target.id, newRef, target.sourceStartSeconds);
+    });
+
+    statusBar.showMessage("Relinked to " + newRef);
+#else
+    juce::ignoreUnused(id, chosenFile);
+#endif
+}
+
+int MainComponent::cleanUnusedAssets() {
+#if SYNTH_ENABLE_TIMELINE
+    if (currentBundleDir_ == juce::File() || !synth::ProjectBundle::isBundle(currentBundleDir_))
+        return 0; // nothing to sweep outside a saved bundle
+    return synth::AssetManager::cleanUnusedAssets(timelineDoc, currentBundleDir_);
+#else
+    return 0;
 #endif
 }
 

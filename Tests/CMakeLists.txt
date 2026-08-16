@@ -141,6 +141,7 @@ add_executable(Tests
     TimelineE2ETests.cpp
     PatchDocumentTests.cpp
     ProjectBundleTests.cpp
+    AssetManagerTests.cpp
     ../Source/MainComponent.cpp
     ../Source/UI/TimelinePanelComponent.cpp
     ../Source/UI/TimelineRulerComponent.cpp

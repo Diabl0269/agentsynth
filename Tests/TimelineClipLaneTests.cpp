@@ -3,7 +3,7 @@
 // TL5-7: clip lanes — drag/trim/split/duplicate + marquee selection, backed by
 // synth::ui::ClipSelectionModel.
 //
-// Five groups:
+// Six groups:
 //   1. synth::ui::ClipSelectionModel — mirrors SelectionModelTests.cpp's coverage of
 //      SelectionModel, just keyed on synth::ClipId.
 //   2. synth::ui::clipHitTestMarquee — mirrors SelectionModelTests.cpp's hitTestMarquee coverage.
@@ -15,6 +15,9 @@
 //      TimelineTrackHeaderComponent (only MainComponent's use of it is gated).
 //   5. TL6-5: waveform painting from synth::PeaksFile, the peaks cache and its invalidation, the
 //      live-recording strip's repaint-on-arrival rule, and the pure bucketRangeForClip() helper.
+//   6. TL6-6: the missing-asset placeholder — setAssetExistsResolver, its cache (no repeated
+//      filesystem stats), and that its painted result differs from both the waveform case and the
+//      no-asset (MIDI) case.
 
 #include "../Source/AppUndoManager.h"
 #include "../Source/Modules/RecordTapModule.h"
@@ -796,4 +799,86 @@ TEST(TimelineClipLaneWaveformTest, SourceOffsetShiftsWaveform) {
     empty.numChannels = 1;
     const auto emptyRange = TimelineClipLaneArea::bucketRangeForClip(empty, kLengthBeats, 0.0, kBpm, kSampleRate);
     EXPECT_EQ(emptyRange.bucketCount, 0);
+}
+
+// ============================================================================
+// 6. TL6-6: missing-asset placeholder
+// ============================================================================
+
+TEST(TimelineClipLaneWaveformTest, MissingAssetPaintsPlaceholder) {
+    int missingResolverCalls = 0;
+
+    const juce::Image missingImage = [&] {
+        ClipLaneFixture f;
+        const auto trackId = f.doc.addTrack(TrackKind::Audio, "Audio 1");
+        const auto clipId = f.doc.addClip(trackId, 0.0, 20.0, "Missing");
+        // EXPECT rather than ASSERT: this lambda returns a value, and ASSERT_* expands to a bare
+        // `return;` on failure, which cannot coexist with a non-void return type.
+        EXPECT_TRUE(clipId.isValid());
+        EXPECT_TRUE(f.doc.setClipAsset(clipId, "Audio/ghost.wav", 0.0));
+        f.lane.setAssetExistsResolver([&](const juce::String&) {
+            ++missingResolverCalls;
+            return false;
+        });
+        f.lane.setSize(1000, 200);
+
+        // Paint TWICE — the existence answer must be cached per assetRef, not re-queried every
+        // paint (the same contract the peaks cache already has).
+        const auto first = f.lane.createComponentSnapshot(f.lane.getLocalBounds());
+        const auto second = f.lane.createComponentSnapshot(f.lane.getLocalBounds());
+        EXPECT_TRUE(imagesIdentical(first, second));
+        return second;
+    }();
+    EXPECT_EQ(missingResolverCalls, 1) << "the existence check must be cached per assetRef";
+
+    const juce::Image presentImage = [] {
+        ClipLaneFixture f;
+        const auto trackId = f.doc.addTrack(TrackKind::Audio, "Audio 1");
+        const auto clipId = f.doc.addClip(trackId, 0.0, 20.0, "Present");
+        EXPECT_TRUE(clipId.isValid());
+        EXPECT_TRUE(f.doc.setClipAsset(clipId, "Audio/real.wav", 0.0));
+
+        ScopedPeaksFile peaksFile("agentsynth_clipslane_missing_placeholder.agpk");
+        EXPECT_TRUE(synth::PeaksFile::write(peaksFile.file, makeWaveformData(400, 0.8f)));
+        const juce::File resolved = peaksFile.file;
+        f.lane.setPeaksResolver([resolved](const juce::String&) { return resolved; });
+        f.lane.setAssetExistsResolver([](const juce::String&) { return true; });
+        f.lane.setSize(1000, 200);
+        return f.lane.createComponentSnapshot(f.lane.getLocalBounds());
+    }();
+
+    const juce::Image midiImage = [] {
+        ClipLaneFixture f;
+        const auto trackId = f.doc.addTrack(TrackKind::Midi, "Midi 1");
+        const auto clipId = f.doc.addClip(trackId, 0.0, 20.0, "Notes");
+        EXPECT_TRUE(clipId.isValid());
+        f.doc.addNote(clipId, makeNote(0.0, 60));
+        f.lane.setSize(1000, 200);
+        return f.lane.createComponentSnapshot(f.lane.getLocalBounds());
+    }();
+
+    ASSERT_FALSE(missingImage.isNull());
+    ASSERT_FALSE(presentImage.isNull());
+    ASSERT_FALSE(midiImage.isNull());
+    EXPECT_FALSE(imagesIdentical(missingImage, presentImage))
+        << "the placeholder must not look like a normal waveform clip";
+    EXPECT_FALSE(imagesIdentical(missingImage, midiImage))
+        << "the placeholder must not look like a plain MIDI (no-asset) clip";
+}
+
+TEST(TimelineClipLaneWaveformTest, NoResolverInstalledAssumesAssetExists) {
+    // Degrade-gracefully contract: without setAssetExistsResolver ever being called, paint() must
+    // NOT draw a placeholder — existing callers (and existing snapshot tests) that never wire this
+    // resolver must see byte-identical output to before TL6-6.
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 20.0, "Take");
+    ASSERT_TRUE(clipId.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(clipId, "Audio/take-1.wav", 0.0));
+    f.lane.setSize(1000, 200);
+
+    EXPECT_TRUE(f.lane.getClipRect(clipId).getWidth() > 24) << "sanity: the clip must be wide enough to paint into";
+    // No crash, no assertion failure — the absence of a resolver is itself the thing under test.
+    const auto snapshot = f.lane.createComponentSnapshot(f.lane.getLocalBounds());
+    EXPECT_FALSE(snapshot.isNull());
 }

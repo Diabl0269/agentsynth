@@ -62,6 +62,8 @@ void TimelineClipLaneArea::refreshFromDoc() {
     // files are small, so the next paint's re-resolve+re-read is cheap; the alternative (per-ref
     // dirty tracking against a mutation we don't otherwise inspect) is not worth building yet.
     peaksCache_.clear();
+    // TL6-6: same policy, same reasoning, for the asset-existence cache.
+    assetExistsCache_.clear();
     repaint();
 }
 
@@ -72,7 +74,15 @@ void TimelineClipLaneArea::setPeaksResolver(std::function<juce::File(const juce:
 
 void TimelineClipLaneArea::invalidatePeaksCache() {
     peaksCache_.clear();
+    // TL6-6: cleared alongside — see setAssetExistsResolver's comment for why the two caches share
+    // every clear point.
+    assetExistsCache_.clear();
     repaint();
+}
+
+void TimelineClipLaneArea::setAssetExistsResolver(std::function<bool(const juce::String&)> resolver) {
+    assetExistsResolver_ = std::move(resolver);
+    invalidatePeaksCache(); // a different resolver may answer an already-cached ref differently
 }
 
 int TimelineClipLaneArea::getRowHeight() const {
@@ -238,9 +248,13 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
     // TL6-5: assetRef is the MIDI-vs-audio discriminator (see synth::Clip's own comment) — an
     // audio clip gets a waveform instead of the note preview below (its notes vector is empty in
     // every case this build produces, but the branch is on assetRef, not on emptiness, so intent
-    // stays explicit even if that ever changes).
+    // stays explicit even if that ever changes). TL6-6: an audio clip whose asset does not
+    // currently resolve gets the missing-asset placeholder instead of an (impossible) waveform.
     if (!clip.assetRef.isEmpty()) {
-        paintWaveform(g, clip, rect);
+        if (assetExists(clip.assetRef))
+            paintWaveform(g, clip, rect);
+        else
+            paintMissingAssetPlaceholder(g, clip, rect);
     } else if (rect.getWidth() > kMinWidthForNotePreview) {
         g.setColour(juce::Colours::white.withAlpha(0.55f));
         for (const auto& note : clip.notes) {
@@ -318,6 +332,55 @@ void TimelineClipLaneArea::paintWaveform(juce::Graphics& g, const synth::Clip& c
     const auto range = bucketRangeForClip(*data, clip.lengthBeats, clip.sourceStartSeconds, bpm, sampleRate);
     g.setColour(juce::Colours::black.withAlpha(0.4f));
     paintWaveformColumns(g, rect, data->buckets, data->numChannels, range.firstBucket, range.bucketCount);
+}
+
+bool TimelineClipLaneArea::assetExists(const juce::String& assetRef) {
+    if (!assetExistsResolver_)
+        return true; // no resolver installed: assume it exists — no placeholder without one
+
+    auto it = assetExistsCache_.find(assetRef);
+    if (it == assetExistsCache_.end())
+        it = assetExistsCache_.emplace(assetRef, assetExistsResolver_(assetRef)).first;
+    return it->second;
+}
+
+void TimelineClipLaneArea::paintMissingAssetPlaceholder(juce::Graphics& g, const synth::Clip& clip,
+                                                        juce::Rectangle<int> rect) {
+    const auto bounds = rect.reduced(1);
+    if (bounds.getWidth() <= 0 || bounds.getHeight() <= 0)
+        return;
+
+    // Theme-token colours via the same dynamic_cast<AppLookAndFeel*> pattern getRowHeight() uses;
+    // a hardcoded fallback (Theme::Colors::error's own default) when headless.
+    juce::Colour hatchColour(0xffE5484D);
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        hatchColour = lf->getTheme().colors.error;
+
+    // Dimmed fill first, so a missing clip visually recedes rather than reading as "just another
+    // audio clip" — paintClip's own base fill/border are already drawn beneath this.
+    g.setColour(juce::Colours::black.withAlpha(0.35f));
+    g.fillRect(bounds);
+
+    // Diagonal hatch, evenly spaced, clipped to the clip's own rect so the unbounded line family
+    // never paints into neighbouring rows.
+    {
+        juce::Graphics::ScopedSaveState clipGuard(g);
+        g.reduceClipRegion(bounds);
+        g.setColour(hatchColour.withAlpha(0.55f));
+        constexpr float kHatchSpacing = 8.0f;
+        const float maxOffset = (float)(bounds.getWidth() + bounds.getHeight());
+        for (float offset = -(float)bounds.getHeight(); offset < maxOffset; offset += kHatchSpacing) {
+            const float x0 = (float)bounds.getX() + offset;
+            g.drawLine(x0, (float)bounds.getBottom(), x0 + (float)bounds.getHeight(), (float)bounds.getY(), 1.0f);
+        }
+    }
+
+    if (rect.getWidth() > kMinWidthForName) {
+        const juce::String fileName = clip.assetRef.fromLastOccurrenceOf("/", false, false);
+        g.setColour(juce::Colours::white.withAlpha(0.9f));
+        g.setFont(juce::Font(10.0f));
+        g.drawText("missing: " + fileName, rect.reduced(4, 2), juce::Justification::bottomLeft, true);
+    }
 }
 
 void TimelineClipLaneArea::paintWaveformColumns(juce::Graphics& g, juce::Rectangle<int> rect,
@@ -733,6 +796,16 @@ void TimelineClipLaneArea::showClipContextMenu(synth::ClipId id, juce::Point<int
     menu.addItem(split);
     menu.addItem("Duplicate", [this, id] { applyClipContextChoice(id, ClipContextChoice::Duplicate, 0.0); });
     menu.addItem("Delete", [this, id] { applyClipContextChoice(id, ClipContextChoice::Delete, 0.0); });
+
+    // TL6-6: offered for any audio clip (non-empty assetRef) regardless of whether the asset
+    // currently resolves — relinking a PRESENT asset (pointing it at a different file) is just as
+    // legitimate as fixing a missing one. A callback rather than a ClipContextChoice: relinking
+    // needs a host FileChooser + AssetManager import this class doesn't have (see
+    // onRelinkAudioRequested's own comment).
+    if (clip->assetRef.isNotEmpty() && onRelinkAudioRequested) {
+        menu.addSeparator();
+        menu.addItem("Relink audio…", [this, id] { onRelinkAudioRequested(id); });
+    }
 
     menu.showMenuAsync(juce::PopupMenu::Options());
 }

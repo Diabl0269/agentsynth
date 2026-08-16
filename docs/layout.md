@@ -1821,7 +1821,7 @@ view-state changes (zoom/scroll/snap), and interactions — never a timer.
 | Drag a clip's body | Moves it (and every other selected clip, same-track only) by one Snap-quantised delta shared across the whole selection, computed from the clip that was grabbed and clamped so no clip's start goes below 0 |
 | Drag within 6 px of the right edge | Resizes (trims) the clip's length, Snap-quantised, floored at 1/16 beat |
 | Drag within 6 px of the left edge | Moves the start and shrinks/grows the length so the **end** stays fixed; the clip's notes (clip-relative) travel with it — a deliberate divergence from per-note-anchored trimming, deferred to a later task |
-| Right-click a clip | `PopupMenu`: **Split at pointer** (enabled only when the Snap-quantised pointer lands strictly inside the clip), **Duplicate**, **Delete** — preserves the existing selection, the same rule `GraphEditor`'s cable/canvas menus follow |
+| Right-click a clip | `PopupMenu`: **Split at pointer** (enabled only when the Snap-quantised pointer lands strictly inside the clip), **Duplicate**, **Delete**, and — for an audio clip only (non-empty `assetRef`), below a separator — **Relink audio…** (TL6-6) — preserves the existing selection, the same rule `GraphEditor`'s cable/canvas menus follow |
 | Delete / Backspace | Deletes every selected clip as ONE undo step; returns `false` (key falls through) when the selection is empty |
 | Escape | Clears the selection; returns `false` when it is already empty |
 
@@ -1830,10 +1830,22 @@ back by `paint()` through `effectiveGeometryFor()`) and commits to the doc exact
 mouse-up, through `AppUndoManager::recordTimelineChange` — a multi-clip move or a multi-clip Delete
 is one `recordTimelineChange` call however many clips it touches, mirroring
 `GraphEditor::dragSelectionBy()`/`finalizeSelectionDrag()` and `deleteSelection()`'s one-transaction
-contract for modules. `showMenuAsync` never runs headlessly, so the context menu's three actions are
-exercised in tests through `applyClipContextChoice(ClipId, choice, pointerBeat)` — the same
-menu-without-the-menu idiom `TimelineTrackHeaderComponent::applyBindingMenuChoice`/
+contract for modules. `showMenuAsync` never runs headlessly, so the context menu's Split/Duplicate/
+Delete actions are exercised in tests through `applyClipContextChoice(ClipId, choice, pointerBeat)`
+— the same menu-without-the-menu idiom `TimelineTrackHeaderComponent::applyBindingMenuChoice`/
 `applyContextMenuChoice` already establish (TL5-3).
+
+**Relink audio… (TL6-6).** Offered whenever the clicked clip's `assetRef` is non-empty, whether the
+asset currently resolves (a plain re-point) or is missing (see `docs/architecture.md`'s
+asset-management section for the missing-asset placeholder this same field drives). Unlike the
+three actions above, this is a plain callback (`onRelinkAudioRequested`) rather than a
+`ClipContextChoice` — it needs a host `juce::FileChooser` and a `synth::AssetManager` import,
+neither of which `TimelineClipLaneArea` has. `MainComponent::promptRelinkClipAsset` opens the
+dialog and calls `relinkClipAsset(id, chosenFile)`; the headless path,
+`MainComponent::relinkClipAssetForTest(id, chosenFile)`, calls the same function directly and
+never goes through the menu (or `showMenuAsync`) at all. The import lands in the current bundle's
+`Audio/`, or — with no bundle yet — the app-data `Recordings/` convention TL6-3 takes use; every
+other clip that shared the OLD ref is rewritten alongside the clicked one, as ONE undo step.
 
 **Panel-scoped Delete key.** The lane area grabs keyboard focus on `mouseDown` (same as
 `GraphEditor::mouseDown`), so pressing Delete right after a click lands on `TimelineClipLaneArea::

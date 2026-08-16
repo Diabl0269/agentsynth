@@ -95,6 +95,16 @@ public:
     // PianoRollComponent::openClip via its own openPianoRoll(ClipId).
     std::function<void(synth::ClipId)> onClipDoubleClicked;
 
+    // TL6-6: fired when the user picks "Relink audio…" from an audio clip's context menu (visible
+    // whenever assetRef is non-empty, whether the current asset is missing or present). Non-owning;
+    // may be unset, in which case the menu item is simply never offered (see showClipContextMenu) —
+    // relinking needs a host FileChooser and AssetManager import, neither of which this class has,
+    // so unlike Split/Duplicate/Delete this is a callback rather than a ClipContextChoice: the
+    // production path is MainComponent opening an async FileChooser and then calling its own
+    // relinkClipAsset(); the headless path is MainComponent::relinkClipAssetForTest(), which never
+    // goes through this callback (or a menu) at all.
+    std::function<void(synth::ClipId)> onRelinkAudioRequested;
+
     // Panel-scoped Delete/Escape (see GraphEditor's identical idiom). Grabs focus on mouseDown, so
     // pressing Delete right after a click lands here rather than on whichever panel had focus
     // before. Returns false when there is nothing to act on so the key falls through — TL5-10
@@ -136,6 +146,18 @@ public:
     // that knows only a peaks FILE changed underneath an unchanged assetRef (the resolver's target
     // moved, not the doc) can still force a re-read without waiting for a doc mutation.
     void invalidatePeaksCache();
+
+    // ---- TL6-6: missing-asset placeholder ----
+
+    // Non-owning; may be unset (paint() then assumes every non-empty assetRef resolves — no
+    // placeholder is ever drawn without a resolver installed, the same degrade-gracefully contract
+    // every other host seam here has). MainComponent wires this to
+    // `AudioClipStreamer::resolveAssetRef(assetRef) != juce::File()` — the SAME resolution
+    // playback and the peaks resolver (above) use, just answering "does it exist" instead of
+    // handing back a File. The answer is cached per assetRef right alongside peaksCache_ so a
+    // repeated paint of the same (still missing) clip never re-stats the filesystem; installing a
+    // new resolver invalidates both caches, same as setPeaksResolver.
+    void setAssetExistsResolver(std::function<bool(const juce::String& assetRef)> resolver);
 
     // ---- TL6-5: the live-recording strip ----
 
@@ -270,6 +292,16 @@ private:
     // a default-constructed, structurally-invalid Data) so a repeated paint of a still-missing
     // asset never re-touches disk; only invalidatePeaksCache()/refreshFromDoc() forget that.
     const synth::PeaksFile::Data* findPeaksData(const juce::String& assetRef);
+    // TL6-6: cache lookup/lazy-resolve for one assetRef's existence, mirroring findPeaksData's
+    // cache shape exactly (a miss is cached too, so a still-missing clip never re-triggers the
+    // resolver on the next paint). No resolver installed -> true (see setAssetExistsResolver).
+    bool assetExists(const juce::String& assetRef);
+    // TL6-6: the diagonal-hatch / dimmed-fill treatment for a clip whose assetRef does not
+    // resolve, plus a "missing: <name>" label when the clip is wide enough (same threshold
+    // paintClip's own name label uses). Theme-token colours via the same
+    // dynamic_cast<AppLookAndFeel*> pattern getRowHeight() uses, with a hardcoded fallback when
+    // headless.
+    void paintMissingAssetPlaceholder(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect);
     void paintLiveRecordingStrip(juce::Graphics& g);
     // Shared by updateLiveRecording()'s "nothing recording (any more)" branch and its
     // track-vanished branch: one repaint over wherever the strip used to be, then a clean reset.
@@ -308,6 +340,10 @@ private:
     // ---- TL6-5: waveform peaks cache ----
     std::function<juce::File(const juce::String& assetRef)> peaksResolver_;
     std::map<juce::String, synth::PeaksFile::Data> peaksCache_;
+
+    // ---- TL6-6: asset-existence cache (see setAssetExistsResolver) ----
+    std::function<bool(const juce::String& assetRef)> assetExistsResolver_;
+    std::map<juce::String, bool> assetExistsCache_;
 
     // ---- TL6-5: the live-recording strip ----
     LiveRecordingInfo liveRecording_;

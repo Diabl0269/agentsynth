@@ -171,6 +171,14 @@ public:
     /** Exactly what the Open dialog's callback runs: an `.agsproj` bundle directory loads graph +
      *  timeline, anything else loads a plain `.json` preset. */
     bool openProjectForTest(const juce::File& file) { return openFromFile(file); }
+    /** TL6-6: exactly what the production "Relink audio…" FileChooser callback runs once the user
+     *  has picked a file — bypasses the async dialog itself, same idiom as saveProjectForTest. */
+    void relinkClipAssetForTest(synth::ClipId id, const juce::File& chosenFile) { relinkClipAsset(id, chosenFile); }
+    /** TL6-6: sweeps `<bundle>/Audio/` (+ `Peaks/`) for files no clip in the live timeline
+     *  references and deletes exactly those — see synth::AssetManager::cleanUnusedAssets. A no-op
+     *  (returns 0) outside a saved bundle. Not wired to any menu/shortcut yet — see
+     *  docs/architecture.md's asset-management subsection for why. */
+    int cleanUnusedAssetsForTest() { return cleanUnusedAssets(); }
     GraphEditor& getGraphEditor() { return graphEditor; }
     ToolbarComponent& getToolbar() { return toolbar; }
     StatusBarComponent& getStatusBar() { return statusBar; }
@@ -330,6 +338,26 @@ private:
     // bundle directory (invalid when the project has never been saved) plus the app-data Recordings
     // folder TL6-3 writes unsaved-project takes into. Called wherever `currentBundleDir_` changes.
     void refreshAssetRoots();
+
+    // ---- TL6-6: asset management (import/relink/collect-clean/adopt-on-save) ----
+
+    // Production entry point for the clip-lane area's "Relink audio…" menu item: opens an async
+    // FileChooser and, on a choice, calls relinkClipAsset(id, file). A no-op if `id` no longer
+    // resolves to a clip by the time the dialog returns.
+    void promptRelinkClipAsset(synth::ClipId id);
+    // The actual relink: imports `chosenFile` (via synth::AssetManager::importAudioFile into the
+    // current bundle, or into the app-data Recordings/ convention when the project has never been
+    // saved) and rewrites assetRef on `id` AND every other clip that shared its OLD ref, as ONE
+    // undo step (a single AppUndoManager::recordTimelineChange batching every
+    // TimelineDoc::setClipAsset call, each preserving its own clip's sourceStartSeconds). Never
+    // deletes the old file. A no-op (with a status-bar message) if `id` doesn't resolve, the asset
+    // has no ref to relink, or the import fails.
+    void relinkClipAsset(synth::ClipId id, const juce::File& chosenFile);
+
+    // synth::AssetManager::cleanUnusedAssets against the current bundle + live timeline doc. 0
+    // outside a saved bundle (nothing to sweep). See cleanUnusedAssetsForTest()'s comment for why
+    // this has no menu/shortcut wiring yet.
+    int cleanUnusedAssets();
 
     // The graph node carrying this uuid, or nullptr.
     juce::AudioProcessorGraph::Node* findNodeByUuid(const juce::String& uuid) const;

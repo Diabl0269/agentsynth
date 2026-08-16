@@ -132,6 +132,8 @@ add_library(Core STATIC
     # Timeline
     Source/Timeline/ArrangementContext.cpp
     Source/Timeline/ArrangementContext.h
+    Source/Timeline/AssetManager.cpp
+    Source/Timeline/AssetManager.h
     Source/Timeline/AudioClipStreamer.cpp
     Source/Timeline/AudioClipStreamer.h
     Source/Timeline/AutomationApplier.cpp

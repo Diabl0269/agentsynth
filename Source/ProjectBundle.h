@@ -40,17 +40,20 @@ struct ProjectLoadResult {
  *    enforced in `TimelineDoc::isValidAssetRef`, by BOTH `setClipAsset` and `fromVar`, so a
  *    hand-edited `project.json` is not a way around it.
  *
- *    **The unsaved-project case (TL6-3, temporary).** A take can be recorded before the project has
- *    ever been saved, when there is no bundle to write into. Those takes go to
- *    `<user app data>/<settings folder>/Recordings/` and their clips carry the reserved prefix
+ *    **The unsaved-project case (TL6-3, adopted on save since TL6-6).** A take can be recorded
+ *    before the project has ever been saved, when there is no bundle to write into. Those takes go
+ *    to `<user app data>/<settings folder>/Recordings/` and their clips carry the reserved prefix
  *    `Recordings/take-<n>.wav` — still relative in form (so the one path rule above holds), but
- *    resolved against app data rather than against a bundle root. **TODO(TL6-6):** the import/adopt
- *    pass moves those files into `Audio/` on the first save and rewrites the refs to `Audio/...`,
- *    after which `Recordings/` is never seen inside a bundle. `Recordings/` is therefore reserved:
- *    do not use it as a real subdirectory name inside a bundle.
+ *    resolved against app data rather than against a bundle root. `MainComponent::saveToFile` runs
+ *    `synth::AssetManager::adoptRecordingsAssets` BEFORE this class' own `save()`: it imports those
+ *    files into `Audio/` (+ their `.agpk` sidecars into `Peaks/`) and rewrites every affected clip's
+ *    ref to `Audio/...`, so a saved bundle's `project.json` never carries a `Recordings/` ref.
+ *    `Recordings/` is therefore reserved: do not use it as a real subdirectory name inside a bundle.
  *
  *    Nothing is ever auto-deleted from these directories — undoing a take removes the clip, not the
- *    recording. Reaping files no clip references is TL6-6's clean pass.
+ *    recording, and the adoption pass above copies rather than moves. Reaping files no clip
+ *    references is `synth::AssetManager::cleanUnusedAssets`'s job (TL6-6), and its scope is
+ *    bundle-internal only: it never looks at `Recordings/` at all.
  *
  * `"timeline"` is otherwise a **reserved** top-level key everywhere else in the codebase: a plain
  * `.json` preset that happens to carry one only ever stashes it inertly (`PatchDocument`), and
