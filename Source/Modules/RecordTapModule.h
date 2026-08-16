@@ -12,68 +12,37 @@
 #include <vector>
 
 /**
- * @brief "Rec Tap" — the graph-side end of an audio take (TL6-3).
+ * @brief "Rec Tap" — the graph-side end of an audio take.
  *
  * A stereo PASS-THROUGH that copies whatever is written into it, verbatim, to its output — while
- * ALSO shipping a copy of those samples to a WAV file on a background thread. Recording a take is
- * therefore audibly free: the node is transparent whether it is armed or not, and a patch with a
- * tap in it sounds exactly like the same patch without one.
+ * ALSO shipping a copy of those samples to a WAV file on a background thread. The node is
+ * transparent whether armed or not, so recording is audibly free.
  *
- * The module is INTERNAL-ONLY, the same way "Track In" is: not in the module library, not offered
- * as a replacement type, and explicitly non-authorable by the AI (`kNonAuthorableModuleTypes` —
- * a model that could author one could point a recording at a file path of its choosing).
+ * INTERNAL-ONLY, the same way "Track In" is: not in the module library, not offered as a
+ * replacement type, and non-authorable by the AI (`kNonAuthorableModuleTypes` — a model that could
+ * author one could point a recording at a file path of its choosing).
  *
- * -- The three threads --------------------------------------------------------------------------
- *
- *   AUDIO THREAD   `processBlock` — passes the block through, and (when armed) pushes a copy of it
- *                  into a pre-allocated SPSC ring. No allocation, no locks, no logging, ever. A
- *                  full ring DROPS samples and sets an overrun flag rather than blocking; the take
- *                  still commits, just short (see TakeResult::overran).
- *
+ * Three threads:
+ *   AUDIO THREAD   `processBlock` passes the block through and, when armed, pushes a copy into a
+ *                  pre-allocated SPSC ring. No allocation, no locks, no logging. A full ring DROPS
+ *                  samples and sets an overrun flag rather than blocking (see TakeResult::overran).
  *   WRITER THREAD  a `juce::TimeSliceThread` this module owns, started on the first startCapture()
- *                  and left running (idle) until the module is destroyed. Its one client drains the
- *                  ring straight into a plain `juce::AudioFormatWriter` and accumulates peaks as it
- *                  goes.
+ *                  and left running (idle) until destruction. Its one client drains the ring into a
+ *                  plain `juce::AudioFormatWriter` and accumulates peaks as it goes.
+ *   MESSAGE THREAD `startCapture`/`stopCapture`/`isCapturing`. stopCapture() detaches the writer
+ *                  client (blocking until any in-flight drain finishes), drains what is left,
+ *                  finalises the WAV and writes the peaks sidecar. The writer thread is never
+ *                  joined — it stays alive, idle, for the next take.
  *
- *                  Deliberately NOT `AudioFormatWriter::ThreadedWriter`: that class is its own ring
- *                  plus its own time-slice client, so stacking it on top of ours would mean two
- *                  buffers, two overrun policies and two answers to "how many samples are in the
- *                  file so far". One ring, one writer, one counter.
+ * Ring: one interleaved SPSC ring of `kDefaultRingCapacityFrames` frames (~2.7s at 48kHz), sized so
+ * the writer thread can be descheduled for seconds without dropping a sample.
  *
- *   MESSAGE THREAD `startCapture` / `stopCapture` / `isCapturing`. stopCapture() detaches the
- *                  writer client (which blocks until any in-flight drain has finished), drains
- *                  whatever is left itself, finalises the WAV and writes the peaks sidecar. The
- *                  thread itself is never joined there — it stays alive, idle, ready for the next
- *                  take.
- *
- * -- Ring sizing --------------------------------------------------------------------------------
- *
- * One INTERLEAVED ring of `kDefaultRingCapacityFrames` frames (a frame = one sample per channel),
- * so a block is one contiguous copy per FIFO region rather than one per channel, and a "frame" is
- * the same unit the sample counter and the WAV length are measured in.
- *
- * 1 << 17 = 131072 frames is 2.7 s at 48 kHz and 1 MiB of float storage for the stereo case — well
- * over the ~1 s of slack the brief asks for, and a power of two so the FIFO's wrap arithmetic stays
- * trivial. The cost is fixed and paid once at construction; the benefit is that the writer thread
- * can be descheduled for seconds (a spinning disk, a busy machine) without dropping a sample.
- *
- * -- Peaks sidecar: the ".agpk" format ----------------------------------------------------------
- *
- * Accumulated during the drain, so the file is ready the moment the take stops and nothing has to
- * re-read the WAV to draw it (TL6-5 renders the clip waveform straight from this).
- *
- * The format itself — and the bucket-accumulation math below — now lives in ONE place,
- * `synth::PeaksFile` (`Source/Timeline/PeaksFile.h/.cpp`): this module owns a `PeaksFile::
- * Accumulator` (writer thread appends, guarded by `peaksLock_` below) and calls `PeaksFile::write`
- * at `stopCapture()`. See that class's comment for the exact byte layout; nothing here duplicates
- * it any more. `kPeaksMagic`/`kPeaksVersion` alias `PeaksFile::kMagic`/`kVersion` so existing call
- * sites (and every file this build has ever written) are unaffected.
- *
- * TL6-5 also adds `copyLivePeaks()`: a MESSAGE-THREAD, thread-safe snapshot of the buckets
- * accumulated so far, for a clip-lane strip that grows while the take is still rolling. Guarded by
- * the same `peaksLock_` the writer thread's appends use — a light `juce::CriticalSection` held
- * only for the copy/append, never touched by the audio thread (which never sees the accumulator at
- * all; only the writer thread and, after `stopCapture()` detaches it, the message thread do).
+ * Peaks sidecar (".agpk"): format and accumulation live in `synth::PeaksFile`
+ * (`Source/Timeline/PeaksFile.h/.cpp`); this module owns a `PeaksFile::Accumulator` (writer thread
+ * appends under `peaksLock_`) and calls `PeaksFile::write` at `stopCapture()`.
+ * `copyLivePeaks()` is a MESSAGE-THREAD, thread-safe snapshot of the buckets accumulated so far
+ * (same `peaksLock_`), for a clip-lane strip that grows while the take is still rolling — never
+ * touched by the audio thread.
  */
 class RecordTapModule : public ModuleBase {
 public:
@@ -129,15 +98,14 @@ public:
      *  @param captureStartValid          whether the two fields below mean anything (see below)
      *  @param captureStartTimelineSample the TRANSPORT sample position at which the take's frame 0
      *                       was captured — `BlockTimeInfo::blockStartSample` of the first block this
-     *                       tap pushed, read on the AUDIO thread (TL6-8). This is the sample-honest
-     *                       anchor the commit places the clip from; without it a take can only be
-     *                       placed at whatever beat the message thread happened to observe, which is
-     *                       what made TL6-3's punch start slop by up to a poll interval.
+     *                       tap pushed, read on the AUDIO thread. This is the sample-honest anchor
+     *                       the commit places the clip from; without it a take can only be placed
+     *                       at whatever beat the message thread happened to observe.
      *
      *                       Invalid (`captureStartValid == false`) when no block was ever captured,
      *                       or when the tap is not running under a synth::TransportService playhead
      *                       (a bare unit test, a foreign host) — the commit then falls back to the
-     *                       punch beat, i.e. exactly the pre-TL6-8 placement.
+     *                       punch beat.
      *  @param captureStartBlockOffset frames of that first block that were NOT captured. Always 0
      *                       today: `capturing_` is read once at the top of processBlock, so a take
      *                       always begins at sample 0 of a block. It is reported rather than assumed
@@ -173,7 +141,7 @@ public:
     /** Any thread. True if the ring has filled at any point since the last startCapture(). */
     bool hadOverrun() const noexcept { return overrun_.load(std::memory_order_relaxed); }
 
-    /** Any thread, TL6-8. The take's frame-0 anchor as described on TakeResult — available WHILE the
+    /** Any thread. The take's frame-0 anchor as described on TakeResult — available WHILE the
      *  take is still rolling (the live recording strip wants it), not only at stopCapture(). Returns
      *  false, leaving `timelineSample` untouched, until the first block has actually been captured. */
     bool getCaptureStartTimelineSample(juce::int64& timelineSample) const noexcept {
@@ -257,7 +225,7 @@ private:
     // startCapture(), so the audio thread always sees the value belonging to the take it is in.
     std::atomic<int> captureChannels_{kNumChannels};
 
-    // TL6-8, the take's frame-0 anchor. Cleared by startCapture() BEFORE arming; written exactly
+    // The take's frame-0 anchor. Cleared by startCapture() BEFORE arming; written exactly
     // once per take by the audio thread, on the first block it pushes, sample-then-flag with a
     // release so a message-thread reader that sees the flag also sees the sample. Read by
     // getCaptureStartTimelineSample() / stopCapture(). See TakeResult for what it means.

@@ -239,14 +239,14 @@ TEST_F(PolySequencerModuleTest, StopDuringGap) {
     EXPECT_EQ(noteOffCount, 0);
 }
 
-// TL1-8: syncToTransport defaults to false, so every preset saved before this parameter existed
+// syncToTransport defaults to false, so every preset saved before this parameter existed
 // loads with the sync path off (the legacy free-running clock).
 TEST_F(PolySequencerModuleTest, SyncOffByDefault) { EXPECT_FALSE(polySeqBoolParam(*seq, "syncToTransport")->get()); }
 
 // Golden: the exact legacy (sync-off) event schedule, re-derived independently here from a careful
 // reading of PolySequencerModule::processBlock's un-synced body (NOT by calling into it), so a
 // change to that body has to reproduce the same sample-accurate math by coincidence to keep this
-// green. Must pass both before and after TL1-8, since sync-off runs it completely unchanged.
+// green. Must pass both before and after this parameter was added, since sync-off runs it completely unchanged.
 // Default chord type is "Unison" (index 0) for every step, so each step plays exactly one note
 // (its root) — no randomness from the "Random" chord case is exercised here.
 TEST_F(PolySequencerModuleTest, LegacyScheduleIsByteIdenticalWithSyncOff) {
@@ -321,7 +321,7 @@ TEST_F(PolySequencerModuleTest, LegacyScheduleIsByteIdenticalWithSyncOff) {
     }
 }
 
-// TL1-9: asserts the timeline integration (the Synced* dispatch); compiled out with the flag so
+// Asserts the timeline integration (the Synced* dispatch); compiled out with the flag so
 // the flag-OFF CI job stays green. The legacy (sync-off) golden tests above stay always-on — they
 // are the whole point of the OFF state.
 #if SYNTH_ENABLE_TIMELINE

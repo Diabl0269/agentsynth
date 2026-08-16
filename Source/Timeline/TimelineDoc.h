@@ -48,7 +48,7 @@ using NoteId = detail::TimelineId<detail::NoteIdTag>;
 // build understands.
 enum class TrackKind : int {
     Midi = 0,
-    Audio = 1,      // reserved until TL6 — the model accepts it, nothing renders it yet
+    Audio = 1,      // reserved — the model accepts it, nothing renders it yet
     Automation = 2, // reserved: lanes may live on their own track row later
 };
 
@@ -72,13 +72,13 @@ static_assert(static_cast<int>(BreakpointCurve::Linear) == 1,
 static_assert(static_cast<int>(BreakpointCurve::Bezier) == 2,
               "BreakpointCurve is serialised as an int — renumbering breaks files");
 
-// TL4-4: per-lane automation record mode. Serialised as an int (same contract as TrackKind and
+// Per-lane automation record mode. Serialised as an int (same contract as TrackKind and
 // BreakpointCurve: the numbers are format), and flattened into TimelineSnapshot::LaneInfo so the
 // audio thread's applier can honour it without touching the doc.
 //
 // Semantics (the applier implements the audio half, synth::AutomationRecorder the capture half):
 //   Off   — the lane is inert. Automation never plays back and nothing is ever recorded into it.
-//   Read  — playback only. The default, and what every lane authored before TL4-4 loads as.
+//   Read  — playback only. The default, and what a lane with no stored mode loads as.
 //   Touch — plays back, but the user's hand wins WHILE a parameter gesture is in flight: the
 //           applier skips a claimed parameter, and the gesture is captured and committed when the
 //           user lets go. Let go and playback resumes immediately.
@@ -108,7 +108,7 @@ static_assert(static_cast<int>(LaneRecordMode::Write) == 4,
 
 // One note inside a clip. startBeat is CLIP-RELATIVE (offset from the clip's own startBeat),
 // so moving a clip moves its notes with it and never rewrites them. `id` is a stable,
-// doc-assigned handle (TL2-3) — never reused, and it survives a toVar/fromVar round trip the
+// doc-assigned handle — never reused, and it survives a toVar/fromVar round trip the
 // same way Track/Clip/Lane ids do.
 struct MidiNote {
     NoteId id;
@@ -120,11 +120,11 @@ struct MidiNote {
 };
 
 // Notes within a clip stay sorted by (startBeat, pitch, id) — that invariant is what makes the
-// audio-thread snapshot build (TL2-2) a flatten instead of a sort. The id is only a tiebreaker
+// audio-thread snapshot build a flatten instead of a sort. The id is only a tiebreaker
 // (startBeat/pitch collisions are legal — e.g. a chord). TimelineDoc's mutation API maintains
 // the order on every path and fromVar re-establishes it defensively.
 //
-// TL6-3 adds the AUDIO half of the struct. One Clip type covers both kinds: a MIDI clip is one
+// One Clip type covers both MIDI and audio: a MIDI clip is one
 // whose `assetRef` is empty and whose notes carry the music; an audio clip is one that names a
 // rendered asset instead. Nothing forbids a clip from carrying both — the model is deliberately
 // permissive, and it is the track's TrackKind that says which half a player reads. Every audio
@@ -136,7 +136,7 @@ struct Clip {
     double lengthBeats = 4.0;
     std::vector<MidiNote> notes;
 
-    // TL6-3. The clip's audio asset, as a path RELATIVE TO THE BUNDLE ROOT ("Audio/take-1.wav").
+    // The clip's audio asset, as a path RELATIVE TO THE BUNDLE ROOT ("Audio/take-1.wav").
     // EMPTY for a MIDI clip. The relative-only rule is a security boundary, not a convenience:
     // a bundle can be handed to someone else, and an absolute (or `..`-escaping) path baked into
     // one would read whatever happens to sit at that path on their machine — the same reasoning
@@ -186,9 +186,9 @@ struct AutomationLane {
     std::vector<Breakpoint> points; // sorted by beat; beats are unique (a second insert at the
                                     // same beat replaces the existing point)
 
-    // TL7-6: the target parameter's index within its processor's getParameters(), captured ONCE at
-    // lane-creation time (never re-derived afterwards). -1 means "no hint" — every lane created
-    // before TL7-6, and every lane on a non-plugin module (the resolver only ever consults this for
+    // The target parameter's index within its processor's getParameters(), captured ONCE at
+    // lane-creation time (never re-derived afterwards). -1 means "no hint" — every lane on a
+    // non-plugin module (the resolver only ever consults this for
     // a HostedPluginModule node; see Source/Timeline/AutomationBinding.h). It exists to let a lane
     // whose hosted plugin has no stable parameter ids at all (a legacy format) still re-bind after a
     // reload, WITHOUT ever letting an index match paper over a plugin update that moved a DIFFERENT,
@@ -196,13 +196,13 @@ struct AutomationLane {
     // absent in a file loads as -1.
     int paramIndexHint = -1;
 
-    // TL4-4: a LaneRecordMode value, stored as an int because it is serialised as one. Read is the
+    // A LaneRecordMode value, stored as an int because it is serialised as one. Read is the
     // default and what a file that predates the field loads as. Written through
     // TimelineDoc::setLaneRecordMode, which validates the range — a raw int outside 0..4 must never
     // reach the snapshot, where the applier switches on it.
     int recordMode = static_cast<int>(LaneRecordMode::Read);
 
-    // RUNTIME-ONLY (TL2-6): true when nodeUuid is non-empty but does not resolve to any live
+    // RUNTIME-ONLY: true when nodeUuid is non-empty but does not resolve to any live
     // graph node's "uuid" property. Never set directly by a caller — TimelineDoc::reconcileBindings
     // is the only writer, driven by synth::TimelineReconciler against a real graph. NOT written by
     // toVar and always reset to false by fromVar (a freshly-loaded doc has no graph to check
@@ -211,7 +211,7 @@ struct AutomationLane {
     //
     // Distinct from "unbound": an EMPTY nodeUuid never was bound to anything and is merely
     // unbound, not orphaned. Orphaned means it WAS bound and no longer resolves — a deleted
-    // module, a rejected restore — and per TL2-6 policy the lane is retained regardless: an
+    // module, a rejected restore — and the lane is retained regardless: an
     // orphaned binding is surfaced for the user to re-bind (see rebindLane), never auto-deleted.
     bool orphaned = false;
 };
@@ -226,18 +226,18 @@ struct Track {
     bool muted = false;
     bool soloed = false;
     bool armed = false;
-    juce::String bindingUuid; // MIDI tracks: uuid of the Track In node this track feeds (TL3).
+    juce::String bindingUuid; // MIDI tracks: uuid of the Track In node this track feeds.
                               // May be empty — an unbound track is legal, it just plays nowhere.
     std::vector<Clip> clips;
     std::vector<AutomationLane> lanes;
 
-    // RUNTIME-ONLY (TL2-6): same contract as AutomationLane::orphaned, but for bindingUuid — see
+    // RUNTIME-ONLY: same contract as AutomationLane::orphaned, but for bindingUuid — see
     // that field's comment for the full unbound-vs-orphaned distinction. Never written by toVar,
     // always false after fromVar, and the only writer is TimelineDoc::reconcileBindings.
     bool orphaned = false;
 };
 
-// The timeline's message-thread document model (TL2-1): tracks, clips, notes and automation
+// The timeline's message-thread document model: tracks, clips, notes and automation
 // lanes, in beats. Mutable and serialisable, with no GUI or editor dependency.
 //
 // Beats are canonical — nothing here stores samples, and tempo/time signature deliberately
@@ -247,13 +247,13 @@ struct Track {
 // Single mutation choke point: every public mutator validates its arguments, then funnels the
 // actual edit through the private applyMutation(), which bumps the revision counter and fires
 // one change notification. Everything downstream hangs off that one seam — the audio-thread
-// snapshot republish (TL2-2), undo capture (TL2-5) and dirty-marking for .agsproj save (TL2-4).
+// snapshot republish, undo capture and dirty-marking for .agsproj save.
 // A call that changes nothing (a rejected note, addLane finding an existing lane, a setter
 // given the value already stored) returns without entering applyMutation, so it neither bumps
 // the revision nor notifies.
 //
 // Threading: message thread only. It is not safe to read this doc from the audio thread; that
-// is what the immutable snapshot in TL2-2 exists for. Listeners must treat the doc as const
+// is what the immutable snapshot exists for. Listeners must treat the doc as const
 // for the duration of timelineChanged().
 class TimelineDoc {
 public:
@@ -271,7 +271,7 @@ public:
     void removeListener(Listener* listener);
 
     // -- Hard caps ------------------------------------------------------------
-    // The model is bounded before validateTimeline (TL8-1) ever sees untrusted input: both the
+    // The model is bounded before validateTimeline ever sees untrusted input: both the
     // mutation API and fromVar REJECT anything that would exceed a cap rather than clamping or
     // truncating, so a doc in memory can never be larger than these allow. Sized well above
     // anything a human would author by hand.
@@ -337,7 +337,7 @@ public:
     // Rejects if the track is already at kMaxClipsPerTrack.
     ClipId duplicateClip(ClipId id);
 
-    // -- Audio clips (TL6-3) ---------------------------------------------------
+    // -- Audio clips ------------------------------------------------------------
     // Points the clip at an audio asset. `assetRef` MUST be bundle-root-relative — an absolute
     // path, a Windows drive letter, a leading '/' or '\', or any `..` segment is REJECTED outright
     // (no mutation, returns false), because a bundle is a document that gets handed to other
@@ -364,7 +364,7 @@ public:
     NoteId addNote(ClipId clipId, const MidiNote& note);
     bool clearNotes(ClipId clipId);
 
-    // Note editing API (TL2-3). Each validates first and only then mutates: a rejection or a
+    // Note editing API. Each validates first and only then mutates: a rejection or a
     // no-op (the value asked for is what's already there) returns without bumping the revision
     // or notifying listeners.
     bool removeNote(NoteId id);
@@ -389,7 +389,7 @@ public:
     // One lane per bound parameter, doc-wide: if a lane for (nodeUuid, paramId) already exists
     // ANYWHERE in the doc, its id is returned and nothing is mutated (no revision bump, no
     // notification) — even if the existing lane sits on a different track.
-    // `paramIndexHint` is TL7-6's hosted-plugin fallback capture (-1 = none; see
+    // `paramIndexHint` is a hosted-plugin fallback capture (-1 = none; see
     // AutomationLane::paramIndexHint). Every non-plugin caller omits it.
     LaneId addLane(TrackId trackId, const juce::String& nodeUuid, const juce::String& paramId,
                    const AutomationLane::RangeSnapshot& range, int paramIndexHint = -1);
@@ -401,7 +401,7 @@ public:
                        int curve = static_cast<int>(BreakpointCurve::Linear));
     bool removeBreakpoint(LaneId laneId, double beat);
 
-    // TL5-9: the automation lane editor's ONE batched commit primitive. A single user gesture
+    // The automation lane editor's ONE batched commit primitive. A single user gesture
     // (a pencil stroke, a straight line, a dragged handle, an eraser sweep) can touch several
     // points at once, and each such gesture must cost exactly one revision bump / one
     // Listener::timelineChanged call — never one per point moved, or every downstream republish
@@ -421,7 +421,7 @@ public:
     bool editBreakpoints(LaneId laneId, const std::vector<double>& removeBeats,
                          const std::vector<AutomationLane::Breakpoint>& addPoints);
 
-    // TL4-4: sets the lane's record mode. `mode` must be a LaneRecordMode value (0..4) — anything
+    // Sets the lane's record mode. `mode` must be a LaneRecordMode value (0..4) — anything
     // else is rejected outright rather than clamped, so an out-of-range int can never reach the
     // snapshot the audio thread switches on. Setting the mode the lane already has is a no-op (no
     // revision bump, no notification), like every other setter here.
@@ -438,7 +438,7 @@ public:
     // dedupes against.
     const AutomationLane* getLaneForParam(const juce::String& nodeUuid, const juce::String& paramId) const;
 
-    // -- Bindings / reconciliation (TL2-6) --------------------------------------
+    // -- Bindings / reconciliation -----------------------------------------------
     // Recomputes EVERY track's and lane's `orphaned` flag: orphaned = binding is non-empty AND
     // uuidResolves(binding) returns false. This doc never sees an AudioProcessorGraph itself —
     // synth::TimelineReconciler is the bridge that builds `uuidResolves` from a real graph's live
@@ -454,11 +454,11 @@ public:
     // record an intent a user should be able to undo. Callers must never wrap this in
     // AppUndoManager::recordTimelineChange (or recordCombinedChange) — see docs/architecture.md.
     //
-    // `laneResolves` (TL7-6) is an OPTIONAL richer predicate for lane orphaning specifically: a lane
+    // `laneResolves` is an OPTIONAL richer predicate for lane orphaning specifically: a lane
     // whose node resolves may still need to orphan when that node is a HostedPluginModule and its
     // parameter set no longer safely matches (see Source/Timeline/AutomationBinding.h). Left unset
     // (the graph-agnostic overload every headless TimelineDoc test uses), a lane's orphan status
-    // falls back to `uuidResolves(nodeUuid)` alone — exactly TL2-6's pre-TL7-6 behaviour. Track
+    // falls back to `uuidResolves(nodeUuid)` alone. Track
     // bindings are never affected: a track binds to a node, not a parameter, so `uuidResolves` alone
     // decides `Track::orphaned` either way.
     bool reconcileBindings(const std::function<bool(const juce::String& uuid)>& uuidResolves,
@@ -489,10 +489,10 @@ public:
     std::int64_t getRevision() const noexcept { return revision; }
 
     // -- Serialisation ---------------------------------------------------------
-    // The dialect PatchDocument/TL2-4 embeds under the reserved top-level "timeline" key.
+    // The dialect PatchDocument embeds under the reserved top-level "timeline" key.
     // Field names are lowerCamelCase; the next-id counters ride along so ids stay stable
     // across save/load. Track::orphaned / AutomationLane::orphaned are NOT written — they are
-    // runtime-derived (TL2-6), not part of the document's persistent identity.
+    // runtime-derived, not part of the document's persistent identity.
     juce::var toVar() const;
 
     // All-or-nothing: on ANY malformed field (wrong type, out-of-range value, duplicate id,

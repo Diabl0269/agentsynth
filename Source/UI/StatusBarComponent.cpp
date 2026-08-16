@@ -106,7 +106,7 @@ void StatusBarComponent::paint(juce::Graphics& g) {
         g.setColour(cpuPct_ > 80.0f ? warningColour : textMuted);
         g.drawText(cpuStr, 170, textY, 60, textH, juce::Justification::centredLeft, true);
 
-        // TL6-8 round trip — after CPU, and only while it actually fits before the voice count's
+        // Round trip — after CPU, and only while it actually fits before the voice count's
         // own slot. A cramped window drops this segment rather than overlapping two readings.
         const int roundTripX = 236;
         const int roundTripW = 90;

@@ -27,7 +27,7 @@ constexpr const char* kPatchFileFilter = "*.json";
 #endif
 
 #if SYNTH_ENABLE_TIMELINE
-// TL6-3: where an UNSAVED project's takes go, under <app data>/<settings folder>. Also the reserved
+// Where an UNSAVED project's takes go, under <app data>/<settings folder>. Also the reserved
 // prefix such a take's clip assetRef carries — see chooseTakeFiles and ProjectBundle's asset policy.
 constexpr const char* kRecordingsFolderName = "Recordings";
 
@@ -40,7 +40,7 @@ constexpr int kMaxTakeNumber = 10000;
 // reasoning as synth::MidiRecorder::kMinNoteLengthBeats.
 constexpr double kMinAudioClipLengthBeats = 1.0 / 32.0;
 
-// TL6-5: a clip's assetRef always names the .wav asset — chooseTakeFiles() is what establishes the
+// A clip's assetRef always names the .wav asset — chooseTakeFiles() is what establishes the
 // pairing with its .agpk peaks sidecar: same stem, and either a sibling "Peaks/" directory (a saved
 // bundle: "Audio/take-n.wav" <-> "Peaks/take-n.agpk") or the SAME "Recordings/" directory (an
 // unsaved project, where chooseTakeFiles points audioDir and peaksDir at the same root). Returns
@@ -85,7 +85,7 @@ bool isMidiInstrumentNode(juce::AudioProcessor* processor) {
         return false;
     }
 }
-// TL5-10: true when `candidate` IS `ancestor` or sits anywhere inside its component subtree. The
+// True when `candidate` IS `ancestor` or sits anywhere inside its component subtree. The
 // "click grabs focus" idiom (GraphEditor::mouseDown and every timeline sub-component that copies
 // it) means the currently-focused component is always either a surface's root component itself or
 // one of its rare children, never a cousin — checking both keeps resolveEditSurface() correct even
@@ -205,7 +205,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     isLibraryVisible = appProperties.getUserSettings()->getBoolValue("librarySidebarVisible", true);
     isAiPanelVisible = appProperties.getUserSettings()->getBoolValue("aiPanelVisible", false);
 #if SYNTH_ENABLE_TIMELINE
-    // TL5-1: gated with the button/command/carve below — reading this in a flag-OFF build would
+    // Gated with the button/command/carve below — reading this in a flag-OFF build would
     // let a value persisted by an earlier flag-ON run silently dock the panel with no button or
     // shortcut left to hide it again.
     isTimelineVisible = appProperties.getUserSettings()->getBoolValue("timelinePanelVisible", false);
@@ -288,13 +288,13 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     aiChatComponent.refreshModels();
 
 #if SYNTH_ENABLE_TIMELINE
-    // TL8-3: gives AIIntegrationService's outgoing-request context builder a way to read the
+    // Gives AIIntegrationService's outgoing-request context builder a way to read the
     // app's one live TimelineDoc/TransportService — see AIIntegrationService::setTimelineContext().
     // Both outlive aiService (declaration order: timelineDoc, then audioEngine's referent, then
     // aiService), so this pointer never dangles for aiService's lifetime.
     aiService.setTimelineContext(&timelineDoc, &audioEngine.getTransport());
 
-    // TL8-4: the WRITE half. The service only ever holds the doc as const (it is a context reader),
+    // The WRITE half. The service only ever holds the doc as const (it is a context reader),
     // and it owns no undo manager for the timeline, so the host supplies the apply path — the same
     // objects every other timeline edit in this class goes through, which is what puts an AI-applied
     // batch on the one shared undo stack alongside the user's own edits. `this` is safe to capture:
@@ -317,14 +317,14 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // GraphEditor owns no file dialogs and the sidebar owns no filesystem access, so
     // MainComponent brokers between them.
     graphEditor.onSaveSnippetRequested = [this] { promptSaveSnippet(); };
-    // TL5-9: right-click-any-knob -> the automation lane editor. Mirrors onSaveSnippetRequested's
+    // Right-click-any-knob -> the automation lane editor. Mirrors onSaveSnippetRequested's
     // shape exactly — GraphEditor owns no TimelineDoc, so it hands the (nodeId, paramId) pair back
     // to the one component that owns both the doc and the graph.
     graphEditor.onAutomateParameterRequested = [this](juce::AudioProcessorGraph::NodeID nodeId,
                                                       const juce::String& paramId) {
         automateParameter(nodeId, paramId);
     };
-    // TL7-5: a hosted-plugin card's "Open Editor" button. Mirrors onAutomateParameterRequested's
+    // A hosted-plugin card's "Open Editor" button. Mirrors onAutomateParameterRequested's
     // shape — GraphEditor owns neither the module lookup nor the window manager.
     graphEditor.onOpenPluginEditorRequested = [this](juce::AudioProcessorGraph::NodeID nodeId) {
         if (auto* node = audioEngine.getGraph().getNodeForId(nodeId))
@@ -350,7 +350,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         appProperties.getUserSettings()->getValue("libraryCollapsedSections", juce::String())));
     refreshSnippetLibrary();
 
-    // ---- Hosted plugins (TL7-3) -----------------------------------------------------------
+    // ---- Hosted plugins -----------------------------------------------------------
     // Restore the saved scan list, install it as the process-wide identity resolver, and wire the
     // two sidebar callbacks. Nothing here starts a scan: scanning launches child processes and is
     // only ever done because the user asked (and never at all in a hosted build — see
@@ -384,16 +384,16 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     };
     graphEditor.onGraphStructureChanged = [this] {
         moduleLibrary.repaint();
-        // TL7-5: close-on-node-delete. A pure NodeID -> graph lookup — see
+        // Close-on-node-delete. A pure NodeID -> graph lookup — see
         // HostedPluginWindowManager::pruneClosedNodes for why it must never dereference the module a
         // removed node used to carry.
         pluginWindowManager.pruneClosedNodes(audioEngine.getGraph());
-        // TL7-7: the same catch-all, for the other hosted-plugin observer pair. A node that has just
+        // The same catch-all, for the other hosted-plugin observer pair. A node that has just
         // appeared (a library drop, a preset load, an undo restore) needs MainComponent's latency /
         // publish callbacks installed on it, and this is the one hook every path that adds a node
         // already runs through. Idempotent — re-assigning the same two slots costs nothing.
         installHostedPluginObservers();
-        // TL5-3 safety net for graph changes with no explicit post-apply site of their own — the
+        // Safety net for graph changes with no explicit post-apply site of their own — the
         // canonical one being "the user deleted the Track In node from the canvas", which goes
         // through recordStructuralChange (a RECORD, not a restore, so the undo hooks don't fire).
         //
@@ -407,7 +407,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     addAndMakeVisible(aiChatComponent);
     aiChatComponent.setVisible(isAiPanelVisible);
     moduleLibrary.setVisible(isLibraryVisible);
-    // TL5-1: added unconditionally — isTimelineVisible stays false forever in a flag-OFF build
+    // Added unconditionally — isTimelineVisible stays false forever in a flag-OFF build
     // (the only code that ever flips it, the toggle button's onClick, is gated below), so this is
     // an inert invisible child there, same as any other never-shown component.
     addAndMakeVisible(timelinePanel);
@@ -520,20 +520,20 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     };
 
 #if SYNTH_ENABLE_TIMELINE
-    // TL5-1: bottom-docked timeline panel toggle. Mirrors the AI-panel handler above exactly
+    // Bottom-docked timeline panel toggle. Mirrors the AI-panel handler above exactly
     // (flip + persist BEFORE animating, applyToolbarIcons, from/to computePanelBounds, synchronous
     // resized() for headless tests, then the shared animated transition) — only the axis differs
     // (bottom slide instead of a side panel).
-    // TL5-2: wire the panel to the real transport + persisted settings. Gated with the rest of
+    // Wire the panel to the real transport + persisted settings. Gated with the rest of
     // this block — a SYNTH_ENABLE_TIMELINE=OFF build never shows/carves the panel, so it has no
     // need of either.
     timelinePanel.setTransport(&audioEngine.getTransport());
     timelinePanel.setMetronome(&audioEngine.getMetronome());
     timelinePanel.setApplicationProperties(&appProperties);
 
-    // TL5-3: this component owns the app's one live TimelineDoc, so it owns the four hooks that
+    // This component owns the app's one live TimelineDoc, so it owns the four hooks that
     // keep the rest of the system in step with it. The full inventory is in docs/architecture.md
-    // ("App wiring (TL5-3)") — keep the two in sync.
+    // ("App wiring") — keep the two in sync.
     //
     //  1. PUBLISH-ON-CHANGE: every effective doc mutation notifies us, and we republish the
     //     snapshot to the audio thread and rebuild the recorder's lane bindings.
@@ -555,32 +555,32 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         });
     timelinePanel.setTrackHeaderHost(this);
     timelinePanel.setTimelineDoc(&timelineDoc);
-    // TL5-7: same undo stack every graph/timeline mutation already shares — a clip drag/trim/
+    // Same undo stack every graph/timeline mutation already shares — a clip drag/trim/
     // split/duplicate/delete is one more AppUndoManager::recordTimelineChange call, same as every
     // other timeline-only edit.
     timelinePanel.setUndoManager(&undoManager);
-    // TL6-5: the SAME resolution the audio streamer uses (AudioClipStreamer::resolveAssetRef),
+    // The SAME resolution the audio streamer uses (AudioClipStreamer::resolveAssetRef),
     // re-targeted at the peaks sidecar via peaksRefForAssetRef() — see that function's comment.
     // One shared resolver: the clip-lane area never re-derives bundle-vs-Recordings root logic.
     timelinePanel.getClipLaneArea().setPeaksResolver([this](const juce::String& assetRef) -> juce::File {
         return audioEngine.getAudioClipStreamer().resolveAssetRef(peaksRefForAssetRef(assetRef));
     });
-    // TL6-6: same resolution playback uses, answering existence rather than handing back a File —
+    // Same resolution playback uses, answering existence rather than handing back a File —
     // what paints the missing-asset placeholder instead of an (impossible) waveform.
     timelinePanel.getClipLaneArea().setAssetExistsResolver([this](const juce::String& assetRef) -> bool {
         return audioEngine.getAudioClipStreamer().resolveAssetRef(assetRef) != juce::File();
     });
-    // TL6-6: "Relink audio…" bubbles up here rather than being handled inside the lane area itself
+    // "Relink audio…" bubbles up here rather than being handled inside the lane area itself
     // — it needs a host FileChooser and synth::AssetManager import, neither of which that class has.
     timelinePanel.getClipLaneArea().onRelinkAudioRequested = [this](synth::ClipId id) { promptRelinkClipAsset(id); };
-    // TL6-4: BEFORE the first publish below — publishTimeline() syncs the clip streamer, and it can
+    // BEFORE the first publish below — publishTimeline() syncs the clip streamer, and it can
     // only resolve an asset ref once it knows the roots.
     refreshAssetRoots();
     // One publish before anything else happens, so the audio thread starts from this document
     // rather than from the exchange's never-published empty fallback.
     publishTimelineAndRebindRecorder();
 
-    // TL5-5: MidiRecorder is now app-wired (docs/architecture.md's TL5-3 hook inventory gains a
+    // MidiRecorder is now app-wired (docs/architecture.md's hook inventory gains a
     // fifth entry) — this component owns the one live MidiRecorder, since it is the only thing
     // that can see both the armed tracks (timelineDoc) and the transport bar's record button.
     audioEngine.setMidiCaptureSink(&midiRecorder);
@@ -596,7 +596,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         // Fail fast on no armed track, BEFORE touching the transport — a rejected request must not
         // have the side effect of starting playback.
         //
-        // TL6-3: the lookup considers Audio tracks too, and FIRST-ARMED WINS. With one armed track
+        // The lookup considers Audio tracks too, and FIRST-ARMED WINS. With one armed track
         // of each kind the one earlier in the document decides which kind of take this is; there is
         // deliberately no "record both at once" (two takes, two commits, two undo steps for one
         // gesture). Automation-kind tracks are not recordable and are skipped.
@@ -615,7 +615,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
             return;
         }
 
-        // TL6-3: an audio take's tap and its destination files are resolved BEFORE the transport
+        // An audio take's tap and its destination files are resolved BEFORE the transport
         // moves, for the same reason the armed-track check is — a request that cannot be honoured
         // must not leave the transport rolling.
         const bool isAudioTake = (armedKind == synth::TrackKind::Audio);
@@ -644,7 +644,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         const auto snap = transport.getPositionSnapshot();
         const int countInBars = timelinePanel.getTransportBar().getCountInBars();
 
-        // TL5-6: count-in pre-roll, only from a full stop — a record engaged while already playing
+        // Count-in pre-roll, only from a full stop — a record engaged while already playing
         // gets no pre-roll (the user is already mid-performance) and no forced click, matching
         // today's plain "record implies roll" behaviour exactly.
         double punchInBeat = snap.ppq;
@@ -665,7 +665,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         }
 
         if (isAudioTake) {
-            // TL6-8: the capture starts HERE, at record-on — not on the 10 Hz poll, which is what
+            // The capture starts HERE, at record-on — not on the 10 Hz poll, which is what
             // used to cost a take up to ~100 ms of head. The count-in's pre-roll is therefore
             // RECORDED, and excluded from the committed clip by a trim (see commitAudioRecording);
             // the tap itself reports the exact transport sample its frame 0 landed on, so the clip's
@@ -687,13 +687,13 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
             }
             take.punchInBeat = punchInBeat;
             take.capturing = true;
-            // TL6-9: frozen NOW, not re-read at commit time — see the AudioTake field comments.
+            // Frozen NOW, not re-read at commit time — see the AudioTake field comments.
             take.captureSampleRate = rate;
             take.captureBpm = snap.bpm > 0.0 ? snap.bpm : 120.0;
             take.captureRecordingLatencySamples = audioEngine.getRecordingLatencySamples();
             audioTake_ = take;
         } else {
-            // punchInBeat is BOTH the recorder's own bookkeeping and (TL5-6) the audio-thread filter
+            // punchInBeat is BOTH the recorder's own bookkeeping and the audio-thread filter
             // threshold — captureBlock() drops everything before it, so the pre-roll bars the
             // performer plays along with the click are heard but never committed.
             midiRecorder.startRecording(armedTrack, punchInBeat);
@@ -810,16 +810,16 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     applyToolbarIcons();
     setCurrentPatchName("Default");
 
-    // Runtime timeline enable/disable (TL1-9): push the persisted preference onto the engine's
-    // transport toggle. No settings-UI toggle exists yet — that arrives with the timeline panel
-    // (TL5); until then this only ever reads the default. Guarded the same way the engine-lifecycle
+    // Runtime timeline enable/disable: push the persisted preference onto the engine's
+    // transport toggle. No settings-UI toggle exists yet, so this only ever reads the default.
+    // Guarded the same way the engine-lifecycle
     // block below is: on the plugin path the processor owns the engine across editor open/close, so
     // this app's local settings file doesn't apply to it yet either.
     if (ownedAudioEngine != nullptr) {
         audioEngine.setTransportEnabled(appProperties.getUserSettings()->getBoolValue("timelineEnabled", true));
     }
 
-    // Audio device state (TL6-1). Guarded like the block above: on the plugin path the host owns
+    // Audio device state. Guarded like the block above: on the plugin path the host owns
     // the device (there is not even an Audio tab), so this app's settings file has no say over it.
     //
     // ORDERING CONTRACT: both halves must be in place BEFORE audioEngine.initialise() below — the
@@ -835,7 +835,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         }
 
         audioEngine.onDeviceStateChanged = [this](std::unique_ptr<juce::XmlElement> state) {
-            // TL6-2, and BEFORE the null check below: a device change that JUCE does not consider
+            // BEFORE the null check below: a device change that JUCE does not consider
             // an explicit setup still changes how many input channels exist, and the Audio Input
             // card's jacks (plus any cable on a jack that just vanished) have to follow it.
             graphEditor.refreshIoModulesAfterDeviceChange();
@@ -874,12 +874,12 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
 }
 
 MainComponent::~MainComponent() {
-    // TL7-5: every plugin editor window must die before the graph/engine below do — see
+    // Every plugin editor window must die before the graph/engine below do — see
     // HostedPluginWindowManager's class comment (this explicit call is one of two independent
     // safeguards; declaration order is the other).
     pluginWindowManager.closeAll();
 
-    // TL7-7: uninstall what installHostedPluginObservers() installed. Both callbacks capture
+    // Uninstall what installHostedPluginObservers() installed. Both callbacks capture
     // `this`, and on the plugin path the engine — and every hosted module in its graph — OUTLIVES
     // this editor-owned component (hosts close and reopen editors freely), so a latency change or
     // publish after this destructor would otherwise call through freed memory inside the host.
@@ -892,7 +892,7 @@ MainComponent::~MainComponent() {
         }
     }
 
-    // TL7-3: the process-wide backend holds a bare pointer to our scan service, so unhook it before
+    // The process-wide backend holds a bare pointer to our scan service, so unhook it before
     // anything else that could resolve an identity — a hosted-plugin restore after this point would
     // otherwise go through freed memory. Guarded on "still ours" because a second MainComponent
     // (tests construct several) will have replaced it.
@@ -924,7 +924,7 @@ MainComponent::~MainComponent() {
     // Only tear down an engine we own. On the plugin path the processor's engine must survive
     // the editor being closed and reopened.
     if (ownedAudioEngine != nullptr) {
-        // TL6-1: drop the device-state callback first — it captures `this`, and shutdown() is the
+        // Drop the device-state callback first — it captures `this`, and shutdown() is the
         // call that unsubscribes the engine from its device manager.
         audioEngine.onDeviceStateChanged = nullptr;
         audioEngine.shutdown();
@@ -948,12 +948,12 @@ void MainComponent::timerCallback() {
     redoButton.setEnabled(undoManager.canRedo());
 
 #if SYNTH_ENABLE_TIMELINE
-    // TL4-4's message-thread driver, on the timer we already run: drains the gesture ring and polls
+    // Message-thread driver, on the timer we already run: drains the gesture ring and polls
     // the transport (Write spans open on play; every open span commits on stop). Allocation-free
     // and — like everything else in this callback — completely silent.
     automationRecorder.update();
 
-    // TL5-5: mirrors AutomationRecorder's own playing->stopped edge detection (see its update()) —
+    // Mirrors AutomationRecorder's own playing->stopped edge detection (see its update()) —
     // a MIDI take still open when the transport stops (the user hit Space/Stop rather than the
     // record button itself) commits exactly the same way an explicit Record-off click does. Read
     // unconditionally (cheap, lock-free) rather than only when the panel is visible: recording must
@@ -962,18 +962,14 @@ void MainComponent::timerCallback() {
     if (wasTransportPlaying_ && !position.playing && midiRecorder.isRecording())
         commitMidiRecording();
 
-    // TL6-3: the audio half of the same rule — COMMIT ON STOP, mirroring the MIDI one above: a take
+    // The audio half of the same rule — COMMIT ON STOP, mirroring the MIDI one above: a take
     // still open when the transport stops (the user hit Space rather than the record button) commits
-    // down the same path.
-    //
-    // TL6-8 removed this poll's OTHER audio job. The capture used to be started here, on the first
-    // tick at or after the punch, which cost a take up to one poll interval (~100 ms) of head; it now
-    // starts at the Record-on click and the pre-roll is trimmed at commit time from the tap's own
-    // sample-accurate anchor. Nothing about recording is decided on this timer any more.
+    // down the same path. Capture itself starts at the Record-on click, not here; the pre-roll is
+    // trimmed at commit time from the tap's own sample-accurate anchor.
     if (wasTransportPlaying_ && !position.playing && audioTake_.capturing)
         commitAudioRecording();
 
-    // TL6-9: a device/sample-rate change strands whatever take was rolling — unlike the two commit-
+    // A device/sample-rate change strands whatever take was rolling — unlike the two commit-
     // on-stop checks above, the transport typically keeps PLAYING right through a format change (see
     // TransportService::prepare), so neither of those edge-triggered checks would ever fire. Consumed
     // once here (exchange-back-to-false, same contract as consumeFeedbackGuardTripped) and routed
@@ -991,21 +987,21 @@ void MainComponent::timerCallback() {
 
     wasTransportPlaying_ = position.playing;
 
-    // TL5-6: clears the count-in pre-roll's forced-on click once the transport reaches the punch-in
+    // Clears the count-in pre-roll's forced-on click once the transport reaches the punch-in
     // point. Gated on isRecording() so this never fires outside an actual take; idempotent
     // otherwise (setForcedOn(false) on an already-off metronome is a no-op), so polling it every
-    // tick while recording costs nothing once the pre-roll has already ended.
-    // TL6-3 rides the same rule: an audio take's pre-roll ends at its own punch-in beat.
+    // tick while recording costs nothing once the pre-roll has already ended. An audio take's
+    // pre-roll rides the same rule, ending at its own punch-in beat.
     if ((midiRecorder.isRecording() && position.ppq >= midiRecorder.getPunchInBeat()) ||
         (audioTake_.capturing && position.ppq >= audioTake_.punchInBeat))
         audioEngine.getMetronome().setForcedOn(false);
 
-    // TL6-7: the input-monitoring gate's poll-side half. Any Audio-kind track armed -> monitoring
+    // The input-monitoring gate's poll-side half. Any Audio-kind track armed -> monitoring
     // should be on; none armed -> off. A guard trip (audioEngine.consumeFeedbackGuardTripped(),
     // consumed exactly once here) latches monitoring off for as long as the SAME arm state
     // persists — disarming every Audio track and re-arming one is the explicit reset gesture, and
     // that is exactly the false->true edge of "is any Audio track armed" below. See
-    // docs/architecture.md's "Input monitoring & feedback guard (TL6-7)".
+    // docs/architecture.md's "Input monitoring & feedback guard".
     bool anyAudioTrackArmed = false;
     for (const auto& track : timelineDoc.getTracks()) {
         if (track.kind == synth::TrackKind::Audio && track.armed) {
@@ -1024,9 +1020,9 @@ void MainComponent::timerCallback() {
 
     audioEngine.setInputMonitoringEnabled(anyAudioTrackArmed && !feedbackGuardLatched_);
 
-    // TL5-4: the timeline panel's low-rate transport poll, on the same existing timer — no new
+    // The timeline panel's low-rate transport poll, on the same existing timer — no new
     // timer, and nothing at all when the panel is hidden (a collapsed timeline must cost exactly
-    // what it did before TL5-4). This is what starts/stops the playhead's playing-only 30 Hz strip
+    // what it did before). This is what starts/stops the playhead's playing-only 30 Hz strip
     // repaint; see docs/layout.md §11.
     if (timelinePanel.isVisible()) {
         // Device-buffer latency only. The graph's own reported latency is deliberately left out:
@@ -1036,7 +1032,7 @@ void MainComponent::timerCallback() {
         const double outputLatencySeconds = (double)audioEngine.getOutputLatencySamples() / sampleRate;
         timelinePanel.updateFromTransport(position, outputLatencySeconds);
 
-        // TL6-5: the clip lane's growing recording strip, on the same poll. Cheap and a no-op when
+        // The clip lane's growing recording strip, on the same poll. Cheap and a no-op when
         // nothing is capturing — synth::ui::TimelineClipLaneArea::updateLiveRecording() internally
         // repaints only when new peak buckets actually arrived (see its own comment), never merely
         // because the transport tick moved.
@@ -1063,14 +1059,14 @@ void MainComponent::timerCallback() {
         const float cpu = audioEngine.isHosted() ? 0.0f : (float)(audioEngine.getDeviceManager().getCpuUsage() * 100.0);
         statusBar.update(cpu, audioEngine.getDisplayVoiceCount(), currentPatchName_);
 
-        // TL6-8: the round-trip readout, on the same 5 Hz tick.
+        // The round-trip readout, on the same 5 Hz tick.
         updateRoundTripLatencyReadout();
     }
 }
 
 void MainComponent::updateRoundTripLatencyReadout() {
-    // TL6-8's readout, gated by its own string diff inside StatusBarComponent — so calling it more
-    // often than the 5 Hz poll (TL7-7 does, on a hosted plugin's latency change) costs nothing when
+    // Gated by its own string diff inside StatusBarComponent — so calling it more
+    // often than the 5 Hz poll (a hosted plugin's latency change does) costs nothing when
     // the number has not moved. Hosted mode has no device of ours to report a round trip for (the
     // host owns both ends), so it shows the placeholder rather than a made-up 0.0 ms.
     const double statusRate = audioEngine.getTransport().getPositionSnapshot().sampleRate;
@@ -1079,7 +1075,7 @@ void MainComponent::updateRoundTripLatencyReadout() {
     statusBar.updateRoundTripLatency(roundTripMs, !audioEngine.isHosted());
 }
 
-// ---- TL7-7: hosted-plugin latency compensation ----
+// ---- Hosted-plugin latency compensation ----
 
 void MainComponent::installHostedPluginObservers() {
     for (auto* node : audioEngine.getGraph().getNodes()) {
@@ -1090,14 +1086,13 @@ void MainComponent::installHostedPluginObservers() {
             continue;
 
         // Two SEPARATE slots, neither of them onInstanceChanged — that one belongs to
-        // HostedPluginEditorWindow (TL7-5) and reassigning it here would close the user's plugin
+        // HostedPluginEditorWindow and reassigning it here would close the user's plugin
         // window on the next graph change.
         hosted->onLatencyChanged = [this] { rebuildGraphForLatencyChange(); };
         hosted->onInstancePublished = [this] {
-            // The TL7-6 known gap, closed: a lane bound to a hosted-plugin parameter cannot resolve
-            // until the instance exists, and until now nothing re-ran the reconcile when an async
-            // load finally completed — the lane sat orphaned until some unrelated graph edit
-            // happened to trigger the next pass.
+            // A lane bound to a hosted-plugin parameter cannot resolve until the instance exists,
+            // so re-run the reconcile when an async load completes — otherwise the lane sits
+            // orphaned until some unrelated graph edit happens to trigger the next pass.
             reconcileTimelineBindingsOnly();
             // ...and a publish takes the node's latency 0 -> N, so the graph's compensation delays
             // are stale for exactly the same reason a runtime change leaves them stale.
@@ -1107,7 +1102,7 @@ void MainComponent::installHostedPluginObservers() {
 }
 
 void MainComponent::rebuildGraphForLatencyChange() {
-    // THE point of TL7-7. juce::AudioProcessorGraph bakes {bus layout, latencySamples} per node into
+    // juce::AudioProcessorGraph bakes {bus layout, latencySamples} per node into
     // its render sequence and only re-derives the parallel-path compensation delays when that
     // sequence is rebuilt — so without this, a plugin reporting 512 samples of lookahead is simply
     // uncompensated and its branch of the patch drifts against every parallel one. rebuild() is
@@ -1183,7 +1178,7 @@ void MainComponent::saveToFile(const juce::File& file) {
 
 #if SYNTH_ENABLE_TIMELINE
     if (file.getFileExtension() == synth::ProjectBundle::kBundleExtension) {
-        // TL6-6: adopt any Recordings/-convention takes (recorded before this project had ever
+        // Adopt any Recordings/-convention takes (recorded before this project had ever
         // been saved) into THIS bundle's own Audio/ BEFORE serialising below, so project.json is
         // written with the post-adoption refs — the reserved Recordings/ prefix must never end up
         // inside a saved bundle. A plain, direct doc mutation: saving must never create undo
@@ -1202,10 +1197,10 @@ void MainComponent::saveToFile(const juce::File& file) {
             statusBar.showMessage("Save failed: " + result.message);
             return;
         }
-        // TL6-3: from here on this document IS a bundle, so the next take is written into it
+        // From here on this document IS a bundle, so the next take is written into it
         // (Audio/ + Peaks/) rather than into app data.
         currentBundleDir_ = file;
-        refreshAssetRoots(); // TL6-4: clip playback resolves against the bundle we just became
+        refreshAssetRoots(); // Clip playback resolves against the bundle we just became
         setCurrentPatchName(file.getFileNameWithoutExtension());
         statusBar.showMessage("Saved: " + file.getFileNameWithoutExtension());
         return;
@@ -1243,9 +1238,9 @@ bool MainComponent::openFromFile(const juce::File& file) {
             return false;
         }
 
-        // TL6-3: takes recorded from here on belong to THIS bundle.
+        // Takes recorded from here on belong to THIS bundle.
         currentBundleDir_ = file;
-        // TL6-4: BEFORE the republish below, so the streamer's syncToSnapshot resolves this
+        // BEFORE the republish below, so the streamer's syncToSnapshot resolves this
         // bundle's refs rather than the previous document's roots.
         refreshAssetRoots();
         // ProjectBundle::load already reconciled once; this republishes the freshly loaded document
@@ -1278,7 +1273,7 @@ void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
                        AppCommands::toggleMinimap, AppCommands::toggleAiPanel, AppCommands::autoArrange,
                        AppCommands::toggleLibrary, AppCommands::selectAllModules, AppCommands::saveSnippet,
                        AppCommands::copySelection, AppCommands::pasteSelection, AppCommands::duplicateSelection,
-                       // TL5-10: registered unconditionally (like every command above) so a
+                       // Registered unconditionally (like every command above) so a
                        // SYNTH_ENABLE_TIMELINE=OFF build still reports it — inactive — rather than
                        // dropping it from the Settings shortcut list entirely.
                        AppCommands::togglePlayback});
@@ -1373,7 +1368,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
     }
     case AppCommands::copySelection: {
         result.setInfo("Copy", "Copy the selected modules", "Edit", 0);
-        // TL5-10: routed by resolveEditSurface() — Graph's own behaviour (below) is unchanged; the
+        // Routed by resolveEditSurface() — Graph's own behaviour (below) is unchanged; the
         // timeline surfaces gate on the clip-clipboard's own selection/piano-roll-is-inactive rule.
 #if SYNTH_ENABLE_TIMELINE
         switch (resolveEditSurface()) {
@@ -1438,7 +1433,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
     }
     case AppCommands::togglePlayback: {
         result.setInfo("Toggle Playback", "Play or stop the timeline transport", "Transport", 0);
-        // TL5-10: Space is GLOBAL — no resolveEditSurface() branch, unlike C/V/D above. Inactive
+        // Space is GLOBAL — no resolveEditSurface() branch, unlike C/V/D above. Inactive
         // outright in a SYNTH_ENABLE_TIMELINE=OFF build, where there is no transport to toggle.
 #if SYNTH_ENABLE_TIMELINE
         result.setActive(true);
@@ -1492,10 +1487,10 @@ bool MainComponent::perform(const InvocationInfo& info) {
         clearTimelineForNewPatch();
         graphEditor.newPatch();
 #if SYNTH_ENABLE_TIMELINE
-        // TL6-3: a new document is not the old bundle, so the next take goes to app data rather
+        // A new document is not the old bundle, so the next take goes to app data rather
         // than into a bundle this patch no longer belongs to.
         currentBundleDir_ = juce::File();
-        refreshAssetRoots(); // TL6-4: no bundle any more, so no bundle-relative ref resolves
+        refreshAssetRoots(); // No bundle any more, so no bundle-relative ref resolves
 #endif
         reconcileTimelineAfterGraphChange();
         setCurrentPatchName("Untitled");
@@ -1538,7 +1533,7 @@ bool MainComponent::perform(const InvocationInfo& info) {
     // command outright, so the menu row greys out and the key never gets this far.
     case AppCommands::copySelection: {
 #if SYNTH_ENABLE_TIMELINE
-        // TL5-10: routed by the SAME resolveEditSurface() getCommandInfo just consulted — the
+        // Routed by the SAME resolveEditSurface() getCommandInfo just consulted — the
         // command manager already refused an inactive PianoRoll invocation (see
         // ApplicationCommandTarget::tryToInvoke), so the PianoRoll case below is belt-and-suspenders
         // for a caller that invokes perform() directly.
@@ -1637,7 +1632,7 @@ void MainComponent::updateCommandShortcuts() {
     applyToolbarIcons();
 }
 
-// ---- Hosted plugins (TL7-3) ----
+// ---- Hosted plugins ----
 
 void MainComponent::refreshPluginLibrary() { moduleLibrary.setPlugins(pluginScanService.getKnownPluginIdentities()); }
 
@@ -1751,7 +1746,7 @@ void MainComponent::promptSaveSnippet() {
                             false);
 }
 
-// ---- TL5-10: keyboard/focus arbitration ----
+// ---- Keyboard/focus arbitration ----
 MainComponent::EditSurface MainComponent::resolveEditSurface() const {
     if (editSurfaceOverrideForTest_.has_value())
         return *editSurfaceOverrideForTest_;
@@ -1811,7 +1806,7 @@ void MainComponent::resized() {
     statusBar.setBounds(bounds.removeFromBottom(sbH));
 
 #if SYNTH_ENABLE_TIMELINE
-    // TL5-1: full-width panel carved AFTER the status bar and BEFORE the AI/library removals, so
+    // Full-width panel carved AFTER the status bar and BEFORE the AI/library removals, so
     // it sits directly above the status bar spanning the whole window width.
     if (isTimelineVisible) {
         int timelineH = 220;
@@ -1860,7 +1855,7 @@ void MainComponent::applyToolbarIcons() {
     setIcon(toggleMinimapButton, Icon::ToggleMinimap);
     setIcon(toggleAiPanelButton, Icon::ToggleAI);
 #if SYNTH_ENABLE_TIMELINE
-    // TL5-1: no dedicated timeline glyph exists yet — reuse TransportPlay, otherwise unused this
+    // No dedicated timeline glyph exists yet — reuse TransportPlay, otherwise unused this
     // phase ("scaffolding only — no DrawableButton wired"; see IconLibrary.h).
     setIcon(toggleTimelineButton, Icon::TransportPlay);
 #endif
@@ -1975,7 +1970,7 @@ void MainComponent::animatePanelTransition(const PanelBoundsResult& fromResult, 
     // Snapshot from-bounds for the lambdas.
     libraryAnimFrom = fromResult.libraryBounds.isEmpty() ? toResult.libraryBounds : fromResult.libraryBounds;
     aiPanelAnimFrom = fromResult.aiPanelBounds.isEmpty() ? toResult.aiPanelBounds : fromResult.aiPanelBounds;
-    // TL5-1: timelineBounds stays the default-constructed empty rect in a flag-OFF build (the
+    // timelineBounds stays the default-constructed empty rect in a flag-OFF build (the
     // carve that would populate it is gated in computePanelBounds()), so this — and every other
     // timeline-specific line below — is inert there rather than needing its own #if.
     timelineAnimFrom = fromResult.timelineBounds.isEmpty() ? toResult.timelineBounds : fromResult.timelineBounds;
@@ -2077,7 +2072,7 @@ void MainComponent::setCurrentPatchName(const juce::String& name) {
 }
 
 // =============================================================================
-// Timeline app wiring (TL5-3)
+// Timeline app wiring
 //
 // Every body below is gated INSIDE, so a SYNTH_ENABLE_TIMELINE=OFF build compiles them as no-ops
 // and no call site in this file needs an #if of its own.
@@ -2112,7 +2107,7 @@ void MainComponent::publishTimelineAndRebindRecorder() {
             const auto found = nodesByUuid.find(lane.nodeUuid);
             if (found == nodesByUuid.end())
                 continue;
-            // TL7-6: the shared resolver, exactly like the applier's own binding build — a lane the
+            // The shared resolver, exactly like the applier's own binding build — a lane the
             // audio thread can play back is exactly a lane the recorder must be able to capture into.
             const auto resolved =
                 synth::resolveLaneParameter(found->second->getProcessor(), lane.paramId, lane.paramIndexHint);
@@ -2149,14 +2144,14 @@ void MainComponent::commitMidiRecording() {
     if (midiRecorder.hadOverrun())
         statusBar.showMessage("Dropped MIDI events during recording");
     timelinePanel.getTransportBar().setRecordingState(false);
-    // TL5-6: every stop (explicit or auto-committed) ends any in-flight count-in pre-roll —
+    // Every stop (explicit or auto-committed) ends any in-flight count-in pre-roll —
     // unconditional and idempotent, so a take that was never in a pre-roll to begin with just
     // clears an already-false flag.
     audioEngine.getMetronome().setForcedOn(false);
 #endif
 }
 
-// ---- TL6-3: audio recording ----
+// ---- Audio recording ----
 
 juce::AudioProcessorGraph::Node* MainComponent::ensureMasterRecordTap() {
 #if SYNTH_ENABLE_TIMELINE
@@ -2169,7 +2164,7 @@ juce::AudioProcessorGraph::Node* MainComponent::ensureMasterRecordTap() {
             return node;
 
     // The node the tap goes in FRONT of. Still a bare juce::AudioGraphIOProcessor (unlike Audio
-    // Input since TL6-2), so it is identified by name exactly like every other lookup in the app.
+    // Input), so it is identified by name exactly like every other lookup in the app.
     juce::AudioProcessorGraph::Node* outputNode = nullptr;
     for (auto* node : graph.getNodes())
         if (node != nullptr && node->getProcessor() != nullptr && node->getProcessor()->getName() == "Audio Output")
@@ -2267,7 +2262,7 @@ bool MainComponent::chooseTakeFiles(AudioTake& take) const {
         // An UNSAVED project has no bundle to write into, so takes land in app data and the clip's
         // assetRef carries the reserved "Recordings/" prefix, which resolves against
         // <app data>/<settings folder> rather than a bundle root. saveToFile() runs
-        // synth::AssetManager::adoptRecordingsAssets BEFORE ProjectBundle::save (TL6-6), which
+        // synth::AssetManager::adoptRecordingsAssets BEFORE ProjectBundle::save, which
         // moves these into the bundle on the first save and rewrites the refs to "Audio/..." — a
         // project.json never carries a "Recordings/" ref. Until saved, the ref is still
         // bundle-RELATIVE in form (isValidAssetRef accepts it), which is what keeps the one path
@@ -2329,7 +2324,7 @@ void MainComponent::commitAudioRecording() {
     if (!result.ok || result.lengthSamples <= 0)
         return;
 
-    // TL6-8: where the take lands. Samples -> beats through the transport's tempo. TL6-9: the rate,
+    // Where the take lands. Samples -> beats through the transport's tempo. The rate,
     // bpm and round-trip latency used here are the ones FROZEN at record-on (take.captureSampleRate /
     // captureBpm / captureRecordingLatencySamples), not read live off the transport/engine — a
     // device/sample-rate change mid-take forces an early commit (see
@@ -2472,7 +2467,7 @@ juce::String MainComponent::createTrackAudioNode() {
 
     // Auto-wire into the MASTER BUS. Unlike Track In's "exactly one MIDI instrument" rule this is
     // never ambiguous — the master bus is a singleton — but there are two possible sinks and the
-    // order matters: if TL6-3's Rec Tap has already been spliced in front of Audio Output, wiring
+    // order matters: if a Rec Tap has already been spliced in front of Audio Output, wiring
     // straight to the output would route this track AROUND the tap and quietly leave it out of every
     // subsequent take. Preferring the tap when one exists makes the two orderings compose: an audio
     // track added before the first take is re-spliced by ensureMasterRecordTap(), and one added
@@ -2543,7 +2538,7 @@ void MainComponent::relinkClipAsset(synth::ClipId id, const juce::File& chosenFi
     if (currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_)) {
         newRef = synth::AssetManager::importAudioFile(chosenFile, currentBundleDir_, &error);
     } else {
-        // TL6-6: no bundle yet (unsaved project) — the SAME app-data Recordings/ convention
+        // No bundle yet (unsaved project) — the SAME app-data Recordings/ convention
         // chooseTakeFiles() uses for a take recorded before the first save.
         const auto recordingsRoot = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
                                         .getChildFile(synth::branding::kSettingsFolderName)
@@ -2682,7 +2677,7 @@ MainComponent::getAvailableTrackInNodes(synth::TrackId forTrack) {
         if (!(track.id == forTrack) && track.bindingUuid.isNotEmpty())
             claimedByOtherTracks.insert(track.bindingUuid);
 
-    // TL6-4: which NODE TYPE can feed this track depends on the track's kind — a MIDI track wants a
+    // Which NODE TYPE can feed this track depends on the track's kind — a MIDI track wants a
     // Track In, an audio track wants a Track Audio. Offering the wrong one would let a user bind a
     // track to a node that structurally cannot play it (the modules match on kind as well as uuid,
     // so the result would be a track that silently plays nothing).
@@ -2731,7 +2726,7 @@ void MainComponent::bindTrackTo(synth::TrackId track, const juce::String& uuid) 
 
 void MainComponent::createAndBindTrackInNode(synth::TrackId track) {
 #if SYNTH_ENABLE_TIMELINE
-    // TL6-4: kind-aware for the same reason getAvailableTrackInNodes() is — the chip's "new node"
+    // Kind-aware for the same reason getAvailableTrackInNodes() is — the chip's "new node"
     // entry must create the node type the track can actually be fed by.
     const auto* existing = timelineDoc.getTrack(track);
     const bool wantsAudio = existing != nullptr && existing->kind == synth::TrackKind::Audio;
@@ -2832,7 +2827,7 @@ void MainComponent::addAudioTrack() {
 #endif
 }
 
-// TL7-6: the automation strip lane picker's "Add lane..." entries — the minimal creation surface
+// The automation strip lane picker's "Add lane..." entries — the minimal creation surface
 // for a hosted plugin's own parameters, which have no ModuleComponent knob to right-click (the
 // plugin has its own editor; see docs/modulation.md's Hosted Plugin table). Every live
 // HostedPluginModule with a published instance offers every parameter that doesn't already have a
@@ -2877,7 +2872,7 @@ synth::LaneId MainComponent::addPluginAutomationLane(const synth::ui::TrackHeade
     if (hosted == nullptr)
         return {}; // the node disappeared (or stopped being a plugin) between offering and choosing
 
-    // Hosted-plugin parameters are always normalised (TL7-6: a hosted AudioProcessorParameter has no
+    // Hosted-plugin parameters are always normalised (a hosted AudioProcessorParameter has no
     // NormalisableRange, and JUCE's own host contract is 0..1 regardless of format) — the lane's
     // RangeSnapshot IS {0, 1, default}, never something read off a live NormalisableRange.
     const auto resolved = synth::resolveLaneParameter(hosted, option.paramId, option.paramIndex);

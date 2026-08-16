@@ -7,7 +7,7 @@
 
 namespace synth {
 
-// TL4-1: the audio thread's evaluator for ONE automation lane.
+// The audio thread's evaluator for ONE automation lane.
 //
 // Input is a lane's contiguous breakpoint run — `snapshot.points.data() + lane.firstPoint`,
 // `lane.numPoints` — sorted by beat, exactly as TimelineSnapshot::buildFrom flattened it. Output is
@@ -15,34 +15,23 @@ namespace synth {
 //
 // Audio-thread rules, all load-bearing: header-only and `noexcept`, no allocation, no locks, no
 // juce::String / juce::var / exceptions, and no branch on anything the message thread can mutate.
-// The kernel never reads the doc and never touches the snapshot beyond the run it is handed, so it
-// composes with the snapshot exchange's borrowed-for-this-block-only contract without adding rules
-// of its own. TL4-2's applier is the consumer: it walks a snapshot's lanes, calls this once per
-// lane per block, and pushes the result at the bound parameter.
+// The kernel never reads the doc and never touches the snapshot beyond the run it is handed.
 //
 // Semantics (contract — pinned by Tests/AutomationKernelTests.cpp):
 //   - numPoints == 0 (or a null run) -> `fallbackValue`. Callers pass the lane's range default.
 //   - beat before the first point -> the first point's value; at or after the last -> the last
-//     point's value. There is no extrapolation, ever: a lane is flat outside its own span.
-//     A NaN beat takes the "before the first point" branch rather than producing a NaN.
-//   - A segment's shape comes from its LEFT point (BreakpointCurve's own definition: a breakpoint
-//     describes the interpolation from itself to the next one).
-//   - Hold (curve 0) -> the left value for the whole segment. The value exactly AT a breakpoint's
-//     beat is always that breakpoint's own value, because the beat lands at the start of the
-//     segment the breakpoint opens.
+//     point's value. There is no extrapolation: a lane is flat outside its own span. A NaN beat
+//     takes the "before the first point" branch rather than producing a NaN.
+//   - A segment's shape comes from its LEFT point (a breakpoint describes the interpolation from
+//     itself to the next one). Hold (curve 0) -> the left value for the whole segment.
 //   - Linear (curve 1) -> lerp shaped by tension: value = a + (b - a) * x^gamma, where
-//     x = (beat - aBeat) / (bBeat - aBeat) and gamma = exp2(2 * tension). tension -1 -> gamma 0.25
-//     (fast start), 0 -> gamma 1 (a plain lerp), +1 -> gamma 4 (slow start). Tension is clamped to
-//     [-1, 1] (TimelineDoc clamps on the way in; the kernel re-clamps so a hand-built run can't
-//     reach std::pow with a wild exponent). Endpoints stay exact for every tension: 0^g == 0 and
-//     1^g == 1.
-//   - Any OTHER curve value — Bezier (2), or a number from a future build — evaluates as Linear.
-//     Forward compatibility is deliberate: an old build opening a newer file plays a sane
-//     approximation instead of a silent or discontinuous lane.
+//     x = (beat - aBeat) / (bBeat - aBeat) and gamma = exp2(2 * tension), clamped to [-1, 1] so a
+//     hand-built run can't reach std::pow with a wild exponent.
+//   - Any OTHER curve value (Bezier, or a future addition) evaluates as Linear, so an old build
+//     opening a newer file plays a sane approximation instead of a silent or discontinuous lane.
 //
-// Cost: one std::pow per call inside a tension-shaped segment, a plain lerp when tension == 0
-// (branch on the precomputed gamma), and nothing else. gamma is computed ONCE per segment when the
-// segment is cached, never per call.
+// Cost: one std::pow per call inside a tension-shaped segment, a plain lerp when tension == 0;
+// gamma is computed once per segment when it is cached, never per call.
 struct AutomationCursor {
     // The run this cursor's cached segment belongs to. evaluate() compares it against the `points`
     // it is handed and re-searches on a mismatch, so a cursor left over from a PREVIOUS snapshot

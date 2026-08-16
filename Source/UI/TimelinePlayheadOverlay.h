@@ -4,7 +4,7 @@
 #include "TimelineViewState.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// TimelinePlayheadOverlay — TL5-4: the vertical position line drawn over the timeline panel's
+// TimelinePlayheadOverlay — the vertical position line drawn over the timeline panel's
 // ruler + lanes region.
 //
 // This is the SECOND (and, with the AI thinking spinner, the only other) documented exception to

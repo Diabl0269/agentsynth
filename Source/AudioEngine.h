@@ -44,7 +44,7 @@ public:
     void initialise();
     void shutdown();
 
-    // ---- Persisted device state (TL6-1, Standalone only) ----
+    // ---- Persisted device state (Standalone only) ----
     // MESSAGE THREAD, before initialise(). Hands the engine the device setup an earlier session
     // persisted (a juce::AudioDeviceManager "DEVICESETUP" element, as produced by
     // getDeviceManager().createStateXml() and handed to the owner through onDeviceStateChanged
@@ -120,12 +120,12 @@ public:
     void setMasterMute(bool muted) noexcept;
     bool isMasterMuted() const noexcept;
 
-    // ---- Input monitoring gate + feedback guard (TL6-7) ----
+    // ---- Input monitoring gate + feedback guard ----
     // ANY THREAD (message-thread writes from MainComponent's poll; the audio thread also writes it,
     // on a guard trip). Published to the transport carrier once per render pass — see
     // TransportService::setInputMonitoringEnabledForBlock — which is what AudioInputModule actually
     // reads; nothing downstream of the graph ever reads this atomic directly. See
-    // docs/architecture.md's "Input monitoring & feedback guard (TL6-7)".
+    // docs/architecture.md's "Input monitoring & feedback guard".
     void setInputMonitoringEnabled(bool enabled) noexcept;
     bool isInputMonitoringEnabled() const noexcept;
 
@@ -135,7 +135,7 @@ public:
     // reads it.
     bool consumeFeedbackGuardTripped() noexcept;
 
-    // TL6-9: the one-shot report that a device/sample-rate change happened while a take (audio or
+    // The one-shot report that a device/sample-rate change happened while a take (audio or
     // MIDI) was rolling — same exchange-back-to-false contract as consumeFeedbackGuardTripped(), so
     // MainComponent's 10 Hz poll consumes it exactly once and finalizes whatever take was in flight
     // through the SAME commit choke points a manual Record-off or a transport stop already use (a
@@ -153,7 +153,7 @@ public:
     static constexpr float kFeedbackPeakThreshold = 0.97f;
     static constexpr double kFeedbackSustainSeconds = 0.25;
 
-    // TL1-9 runtime companion to SYNTH_ENABLE_TIMELINE: lets the transport be frozen/resumed without
+    // Runtime companion to SYNTH_ENABLE_TIMELINE: lets the transport be frozen/resumed without
     // a rebuild. Only meaningful when the flag is compiled in — see renderNextBlock(). Default true
     // (today's ticking behaviour) so a build that never touches this setting is unaffected.
     void setTransportEnabled(bool enabled) noexcept;
@@ -177,28 +177,28 @@ public:
     synth::TransportService& getTransport() noexcept { return transport; }
     const synth::TransportService& getTransport() const noexcept { return transport; }
 
-    // TL5-6: the click generator, summed POST-graph in renderPass (see the class comment there and
+    // The click generator, summed POST-graph in renderPass (see the class comment there and
     // docs/architecture.md's Metronome subsection). Message-thread callers use setEnabled/
     // setForcedOn/isEnabled/isForcedOn; the audio thread only ever calls renderClicks(), from inside
     // renderPass.
     synth::Metronome& getMetronome() noexcept { return metronome_; }
     const synth::Metronome& getMetronome() const noexcept { return metronome_; }
 
-    // The timeline's message-thread -> audio-thread hand-off (TL2-2). The message thread publishes
+    // The timeline's message-thread -> audio-thread hand-off. The message thread publishes
     // snapshots here (and may reap on a timer); the engine opens exactly one audio block on it per
     // callback, alongside the transport tick, so the reclamation epoch advances in lockstep with
-    // the clock. TL3's Track In modules read the published snapshot through this accessor.
+    // the clock. Track In modules read the published snapshot through this accessor.
     synth::TimelineSnapshotExchange& getTimelineSnapshots() noexcept { return timelineSnapshots; }
     const synth::TimelineSnapshotExchange& getTimelineSnapshots() const noexcept { return timelineSnapshots; }
 
-    // TL6-4: the disk-streaming service behind "Track Audio" clip playback. Owned by the engine (it
+    // The disk-streaming service behind "Track Audio" clip playback. Owned by the engine (it
     // outlives any one snapshot, unlike the exchange's payloads), kept in step with the published
     // timeline by publishTimeline(), and handed to the modules through the playhead in renderPass.
     // Exposed mainly so MainComponent can set its asset roots and tests can drive its pump.
     synth::AudioClipStreamer& getAudioClipStreamer() noexcept { return clipStreamer_; }
     const synth::AudioClipStreamer& getAudioClipStreamer() const noexcept { return clipStreamer_; }
 
-    // TL4-2: the automation binding table's hand-off — the resolved "lane -> live parameter" list
+    // The automation binding table's hand-off — the resolved "lane -> live parameter" list
     // the applier walks each block. Published by publishTimeline() below; exposed mainly so tests
     // can inspect what resolved.
     synth::EpochExchange<synth::AutomationBindingTable>& getAutomationBindings() noexcept {
@@ -208,7 +208,7 @@ public:
         return automationBindings_;
     }
 
-    // TL4-5: the audio -> UI reflection ring. AutomationApplier::applyBlock (renderPass, audio
+    // The audio -> UI reflection ring. AutomationApplier::applyBlock (renderPass, audio
     // thread) pushes into it; GraphEditor's 30 Hz timer drains it on the message thread to move
     // sliders without looping back through a parameter write. Always present (even in a
     // SYNTH_ENABLE_TIMELINE=0 build) so callers never need to null-check it — nothing pushes to it
@@ -216,7 +216,7 @@ public:
     synth::AutomationUiFeed& getAutomationUiFeed() noexcept { return automationUiFeed_; }
     const synth::AutomationUiFeed& getAutomationUiFeed() const noexcept { return automationUiFeed_; }
 
-    // TL4-2, MESSAGE THREAD: the one call that hands a TimelineDoc to the audio thread. Builds the
+    // MESSAGE THREAD: the one call that hands a TimelineDoc to the audio thread. Builds the
     // snapshot, resolves every automation lane against the CURRENT graph, and publishes the
     // snapshot FIRST and the binding table SECOND — that order is what makes a table's snapshot
     // pointer at most one publish behind the snapshot exchange (see AutomationApplier.h's lifetime
@@ -231,7 +231,7 @@ public:
     // A no-op in a SYNTH_ENABLE_TIMELINE=0 build.
     void publishTimeline(const synth::TimelineDoc& doc);
 
-    // TL4-2 stage 2: run the whole per-block sequence (transport tick, snapshot open, MIDI capture,
+    // Run the whole per-block sequence (transport tick, snapshot open, MIDI capture,
     // automation apply, graph render) once per 64-sample slice instead of once per callback, so
     // block-rate automation becomes control-rate automation.
     //
@@ -244,7 +244,7 @@ public:
     void setAutomationSlicingEnabled(bool enabled) noexcept;
     bool isAutomationSlicingEnabled() const noexcept;
 
-    // TL3-3: registers the sink that records external MIDI into timeline clips. Null by default —
+    // Registers the sink that records external MIDI into timeline clips. Null by default —
     // capture is then a no-op. The recorder is called from exactly one site, renderNextBlock's
     // SYNTH_ENABLE_TIMELINE block, against the SAME buffer the graph itself renders — the collector-
     // drained (standalone) or host-delivered (hosted) stream, never the ExternalMidiModule push-path
@@ -253,7 +253,7 @@ public:
         midiCaptureSink_.store(sink, std::memory_order_relaxed);
     }
 
-    // TL4-4: registers the automation recorder whose gesture claims and global record arm the
+    // Registers the automation recorder whose gesture claims and global record arm the
     // applier consults each block (see AutomationApplier::applyBlock). Borrowed, never owned — the
     // same contract as setMidiCaptureSink: the owner must null this before destroying the recorder.
     // Null by default, in which case every lane plays back by its mode alone with no claims to
@@ -271,11 +271,11 @@ public:
 
     // The OUTPUT DEVICE's latency, in samples — the buffering between the graph writing a block and
     // that block leaving the speakers. Report-only, exactly like getGraphLatencySamples above: we
-    // never compensate for it, we only surface it (TL5-4 offsets the drawn playhead by it so the
-    // line matches what is being HEARD).
+    // never compensate for it, we only surface it (the drawn playhead is offset by it so the line
+    // matches what is being HEARD).
     //
-    // Like getInputLatencySamples() below, this reads a value CACHED at audioDeviceAboutToStart
-    // (TL6-8 made the two symmetric): it is the latency of the stream that is actually RUNNING —
+    // Like getInputLatencySamples() below, this reads a value CACHED at audioDeviceAboutToStart:
+    // it is the latency of the stream that is actually RUNNING —
     // an engine whose callback is detached is not being clocked by any device, so reporting the
     // device manager's idle number would be a lie — and caching is what makes it assertable
     // headlessly against a fake device.
@@ -289,8 +289,8 @@ public:
     }
 
     // The INPUT DEVICE's latency, in samples — the buffering between a sample arriving at the
-    // hardware input and the graph seeing it. Report-only, exactly like the two above; TL6-8
-    // consumes it when aligning recorded input against the timeline.
+    // hardware input and the graph seeing it. Report-only, exactly like the two above; consumed
+    // when aligning recorded input against the timeline.
     //
     // Cached at audioDeviceAboutToStart, cleared at audioDeviceStopped — see the output sibling
     // above for the argument. 0 in Hosted mode and 0 whenever no device has started.
@@ -300,7 +300,7 @@ public:
         return deviceInputLatencySamples_.load(std::memory_order_relaxed);
     }
 
-    // TL6-8: the ROUND-TRIP latency an audio take has to be shifted back by, in samples —
+    // The ROUND-TRIP latency an audio take has to be shifted back by, in samples —
     //
     //     input device + graph + output device
     //
@@ -317,14 +317,14 @@ public:
     //
     // Report-only aggregation, like each of its three terms: nothing here compensates anything. The
     // one consumer is the take-commit math (synth::computeTakePlacement), plus the status bar's
-    // "RT" readout. Note that this is deliberately NOT what TL5-4's drawn playhead uses — that one
+    // "RT" readout. Note that this is deliberately NOT what the drawn playhead uses — that one
     // offsets by the OUTPUT latency alone, because it answers a different question ("where is the
     // audio the user is hearing right now?"). See docs/architecture.md.
     int getRecordingLatencySamples() const noexcept {
         return getInputLatencySamples() + getGraphLatencySamples() + getOutputLatencySamples();
     }
 
-    // TL6-1 introspection for tests: the dimensions audioDeviceAboutToStart sized the device
+    // Introspection for tests: the dimensions audioDeviceAboutToStart sized the device
     // callback's scratch to. The callback must never allocate, so the scratch has to cover the
     // widest/longest block the device can deliver BEFORE the first one arrives — see
     // Tests/AudioInputTests.cpp.
@@ -338,7 +338,7 @@ public:
                 deviceScratch_.getNumSamples()};
     }
 
-    // TL6-2: how many INPUT channels the graph is currently prepared for — the device's active
+    // How many INPUT channels the graph is currently prepared for — the device's active
     // input count in Standalone mode, the host's declared input count in Hosted mode, and 0 before
     // either prepare path has run (every headless test, and any install whose user has not opted
     // into an input device). Cached at prepare time on whichever thread prepares, read from the
@@ -407,7 +407,7 @@ public:
     void ensureMidiDeviceOpen(const juce::String& deviceName);
 
 protected:
-    // TL6-1 TEST SEAM, and the ONE place initialise() touches real hardware in Standalone mode:
+    // TEST SEAM, and the ONE place initialise() touches real hardware in Standalone mode:
     // it opens the audio device (from `savedDeviceState` when there is one, from JUCE's defaults
     // when there isn't), attaches this engine as the device callback, subscribes to device-state
     // changes and opens every available MIDI input. A test subclass overrides it to assert WHICH
@@ -416,7 +416,7 @@ protected:
     // false), which is precisely the state a headless test wants.
     virtual void initialiseDevices(const juce::XmlElement* savedDeviceState);
 
-    // TL6-9 TEST SEAM: called once per step inside handleStreamFormatChange(), in the order those
+    // TEST SEAM: called once per step inside handleStreamFormatChange(), in the order those
     // steps actually run (1 = after transport.prepare(), 2 = after metronome_.resetVoices(), 3 =
     // after clipStreamer_.invalidateAllStreams(), 4 = after the in-flight-take check). A no-op in
     // production — nothing calls it, so the optimizer removes it entirely — a test subclass
@@ -432,27 +432,27 @@ private:
     // Declared before the graph on purpose: the graph holds a raw AudioPlayHead pointer to the
     // transport, and members are destroyed in reverse declaration order, so the graph goes first.
     synth::TransportService transport;
-    // TL5-6: the click generator. Independent of the graph (it only reads a BlockTimeInfo and writes
+    // The click generator. Independent of the graph (it only reads a BlockTimeInfo and writes
     // into the caller's buffer), so its declaration order relative to the graph carries no lifetime
     // constraint — placed here because it is conceptually paired with the transport it clicks from.
     synth::Metronome metronome_;
-    // Declared before the graph for the same reason as the transport: TL3's timeline modules read
+    // Declared before the graph for the same reason as the transport: timeline modules read
     // the exchange from the engine, and reverse-order destruction must take the graph's nodes down
     // first. Its own destructor reclaims everything published.
     synth::TimelineSnapshotExchange timelineSnapshots;
-    // TL4-2. Declared before the graph for the same reverse-destruction-order reason, and with one
+    // Declared before the graph for the same reverse-destruction-order reason, and with one
     // extra consequence worth naming: a published binding table holds refcounted Node::Ptrs, so a
     // table outliving the graph would keep those nodes' processors alive until it is freed. That is
     // safe (a juce::AudioProcessorGraph::Node references nothing back), and shutdown() reclaims the
     // exchange explicitly anyway, so it never happens in practice.
     synth::EpochExchange<synth::AutomationBindingTable> automationBindings_;
-    // TL6-4. Declared before the graph for the same reverse-destruction-order reason as the
+    // Declared before the graph for the same reverse-destruction-order reason as the
     // transport and the exchanges: nodes read it through the playhead while they render, so the
     // graph's nodes must be gone before it is. Its own destructor stops the prefetch thread and
     // frees every reader.
     synth::AudioClipStreamer clipStreamer_;
     synth::AutomationApplier automationApplier_;
-    // TL4-5. Pre-allocated at construction (see AutomationUiFeed::kCapacity) — never grows, never
+    // Pre-allocated at construction (see AutomationUiFeed::kCapacity) — never grows, never
     // allocates from the audio thread.
     synth::AutomationUiFeed automationUiFeed_;
     juce::AudioProcessorGraph mainProcessorGraph;
@@ -465,38 +465,38 @@ private:
 
     std::atomic<bool> masterMuted_{false};
     std::atomic<bool> transportEnabled_{true};
-    // TL6-7. Message-thread writes (MainComponent's poll) and audio-thread writes (the guard, on a
+    // Message-thread writes (MainComponent's poll) and audio-thread writes (the guard, on a
     // trip); read on the audio thread each render pass to publish to the transport carrier, and on
     // the message thread by isInputMonitoringEnabled(). Default false: with nothing ever calling
     // setInputMonitoringEnabled(true) — a SYNTH_ENABLE_TIMELINE=OFF build, or a build with the flag
     // on but nothing armed — this is exactly today's silent-input behaviour.
     std::atomic<bool> inputMonitoringEnabled_{false};
-    // TL6-7. Set true by the guard (audio thread) on a trip; consumed (and reset) by
+    // Set true by the guard (audio thread) on a trip; consumed (and reset) by
     // consumeFeedbackGuardTripped() (message thread poll).
     std::atomic<bool> feedbackGuardTripped_{false};
-    // TL6-9. Set true by handleStreamFormatChange() (the prepare path) when a take was capturing at
+    // Set true by handleStreamFormatChange() (the prepare path) when a take was capturing at
     // the moment of the change; consumed (and reset) by consumeFormatChangedDuringCapture() (message
     // thread poll).
     std::atomic<bool> formatChangedDuringCapture_{false};
-    // TL6-7, AUDIO THREAD ONLY: the guard's running "how many consecutive samples has the block
+    // AUDIO THREAD ONLY: the guard's running "how many consecutive samples has the block
     // peak stayed >= kFeedbackPeakThreshold" counter, in samples so its timing is block-size-
     // agnostic. Reset to 0 whenever a block falls under the threshold, monitoring is disabled, or
     // the guard trips.
     std::int64_t feedbackGuardConsecutiveSamples_ = 0;
-    // TL4-2 stage 2. Off by default — see setAutomationSlicingEnabled().
+    // Off by default — see setAutomationSlicingEnabled().
     std::atomic<bool> automationSlicingEnabled_{false};
-    // TL3-3: borrowed, never owned. Set by setMidiCaptureSink(); read once per callback in
+    // Borrowed, never owned. Set by setMidiCaptureSink(); read once per callback in
     // renderNextBlock. Null default means capture is a no-op with no caller having to check.
     std::atomic<synth::MidiRecorder*> midiCaptureSink_{nullptr};
-    // TL4-4: borrowed, never owned. Set by setAutomationRecorder(); read once per render pass and
+    // Borrowed, never owned. Set by setAutomationRecorder(); read once per render pass and
     // handed straight to the applier. Null default means "no recorder", not "no automation".
     std::atomic<const synth::AutomationRecordState*> automationRecordState_{nullptr};
 
     void createDefaultPatch();
 
-    // TL6-9: the one consolidated prepare-path hook, called from BOTH audioDeviceAboutToStart and
+    // The one consolidated prepare-path hook, called from BOTH audioDeviceAboutToStart and
     // prepareForHost whenever the engine's sample rate or block size changes. See
-    // docs/architecture.md's "Device & sample-rate changes (TL6-9)" for the full order argument;
+    // docs/architecture.md's "Device & sample-rate changes" for the full order argument;
     // summary: transport FIRST (every other consumer, and every module's next processBlock, must
     // see the new rate consistently), then the metronome's voice pool, then the clip streamer's
     // ring invalidation, then the in-flight-take check that sets formatChangedDuringCapture_. Does
@@ -520,7 +520,7 @@ private:
     // replaying the first slice for the whole block.
     void renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages, int inputSampleOffset = 0);
 
-    // TL4-2 stage 2: renderPass() per kAutomationSliceSamples-sample slice, over views into
+    // renderPass() per kAutomationSliceSamples-sample slice, over views into
     // `buffer` and per-slice MIDI re-based to slice-relative sample positions. Allocation-free —
     // the channel-pointer array and the MIDI scratch are sized in prepare (see prepareSliceScratch).
     void renderSliced(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages);
@@ -533,11 +533,11 @@ private:
     // and coarse enough that the per-slice graph-traversal overhead stays bounded.
     static constexpr int kAutomationSliceSamples = 64;
 
-    // TL6-1: the device setup restored by initialise(), or null for "use JUCE's defaults, inputs
+    // The device setup restored by initialise(), or null for "use JUCE's defaults, inputs
     // off". Message thread only (setSavedDeviceState / initialise).
     std::unique_ptr<juce::XmlElement> savedDeviceState_;
 
-    // TL6-1 device-callback scratch, both sized in audioDeviceAboutToStart and never resized from
+    // Device-callback scratch, both sized in audioDeviceAboutToStart and never resized from
     // the audio thread. `deviceChannelPointers_` backs the juce::AudioBuffer the callback renders
     // through (max(in, out) channels — see audioDeviceIOCallbackWithContext for why that buffer is
     // not simply the device's output pointers); `deviceScratch_` provides writable storage for the
@@ -545,11 +545,11 @@ private:
     std::vector<float*> deviceChannelPointers_;
     juce::AudioBuffer<float> deviceScratch_;
 
-    // TL6-1: cached at audioDeviceAboutToStart, cleared at audioDeviceStopped. Written from
+    // Cached at audioDeviceAboutToStart, cleared at audioDeviceStopped. Written from
     // whichever thread JUCE prepares the device on, read by anyone — hence atomic. See
     // getInputLatencySamples().
     std::atomic<int> deviceInputLatencySamples_{0};
-    // TL6-8: the output sibling of the above, cached at the same two sites for the same reasons.
+    // The output sibling of the above, cached at the same two sites for the same reasons.
     // See getOutputLatencySamples().
     std::atomic<int> deviceOutputLatencySamples_{0};
 
@@ -557,7 +557,7 @@ private:
     // hosted path renders into the host's own buffer and needs none of this.
     void prepareDeviceScratch(int numInputChannels, int numOutputChannels, int blockSize);
 
-    // ---- TL6-2: the block's device-input snapshot ----
+    // ---- The block's device-input snapshot ----
     // The device's (or host's) input, copied ONCE per callback into storage the graph never
     // touches, and handed to the modules through the playhead. It cannot be the render buffer:
     // the graph renders in place over exactly those channels, so a module reading them mid-graph
@@ -584,7 +584,7 @@ private:
     // AUDIO THREAD, once per render pass. Points the transport at this pass's slice of the capture.
     void publishDeviceInputForPass(int sampleOffset, int numSamples) noexcept;
 
-    // TL6-7: the feedback guard itself. Called from renderPass, post-graph and pre-master-mute
+    // The feedback guard itself. Called from renderPass, post-graph and pre-master-mute
     // (beside the metronome), ungated like the monitoring flag — an input-path safety feature, not a
     // timeline one. `monitoringEnabledThisPass` is the SAME value renderPass just published to the
     // transport, so the guard and the module it's gating agree within one render pass.

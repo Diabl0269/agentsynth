@@ -11,7 +11,7 @@ namespace synth {
 
 // Runs an AudioEngine's graph at a fixed sample rate / block size with no audio device: the
 // headless render harness the timeline's engine-level tests are written against, and the render
-// loop the user-facing bounce/export (TL4-6) is built on. Message-thread / test-thread code —
+// loop the user-facing bounce/export is built on. Message-thread / test-thread code —
 // nothing here is audio-thread safe, and nothing here needs to be, because *this* is the thread
 // that clocks the graph.
 //

@@ -1,4 +1,4 @@
-// TL8-5 — the recorded fixtures under Tools/TimelineOpsHarness/Fixtures/, asserted here as fast
+// The recorded fixtures under Tools/TimelineOpsHarness/Fixtures/, asserted here as fast
 // gtest cases so CI covers them without building TimelineOpsHarness (which needs no live model,
 // but is gated behind -DENABLE_AI_HARNESS=ON like its siblings and so is never part of the
 // default build). This file and the harness read the EXACT SAME fixture directory — one recorded

@@ -21,8 +21,8 @@ public:
         Header,   // category title — clicking it collapses/expands the section
         Module,   // draggable module name
         Snippet,  // draggable saved group (issue #156)
-        Plugin,   // draggable scanned third-party plugin (TL7-3)
-        Action,   // clickable command row, e.g. "Scan for plugins…" (TL7-3)
+        Plugin,   // draggable scanned third-party plugin
+        Action,   // clickable command row, e.g. "Scan for plugins…"
         EmptyHint // non-interactive placeholder, e.g. "No snippets yet"
     };
 
@@ -92,7 +92,7 @@ public:
     std::function<void(const juce::String&)> onSnippetDeleteRequested;
 
     // -------------------------------------------------------------------------
-    // Plugins (TL7-3)
+    // Plugins
     //
     // The sidebar knows nothing about scanning: it is handed a list of identities and hands back
     // two callbacks. That keeps PluginScanService (Core, background threads, child processes) out of

@@ -1,4 +1,4 @@
-// Tests for TL3-4: MidiClipFile — Standard MIDI File (SMF) import/export for timeline clips.
+// Tests for MidiClipFile — Standard MIDI File (SMF) import/export for timeline clips.
 //
 // Most of these hand-build a juce::MidiFile/MidiMessageSequence directly (the same house style
 // juce's own MidiFile unit tests use) rather than going through MidiClipFile::exportClip, so each

@@ -91,7 +91,7 @@ private:
 
     class MessageBubble;
     class PatchCard;
-    // TL8-4's sibling of PatchCard — same card conventions, one payload type over.
+    // Sibling of PatchCard — same card conventions, one payload type over.
     class TimelineCard;
 
     // ---- Spinner component -----------------------------------------------
@@ -207,7 +207,7 @@ private:
         // transient UI state (mirrors how Cancel-button/spinner state is session-only).
         bool showUpgradeAction = false;
 
-        // TL8-4: the TIMELINE half of a suggestion, independent of jsonPatch — a response may carry
+        // The TIMELINE half of a suggestion, independent of jsonPatch — a response may carry
         // a patch, a timelineOps envelope, or both, and each gets its own card and its own Apply.
         // `timelineOpsJson` is the raw envelope, re-parsed on Apply; EMPTY when there is nothing
         // appliable, including when the envelope arrived but was rejected by validation (the

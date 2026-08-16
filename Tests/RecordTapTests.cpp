@@ -1,6 +1,6 @@
 // RecordTapTests.cpp
 //
-// TL6-3: the "Rec Tap" module — a transparent stereo pass-through that copies what flows through it
+// The "Rec Tap" module — a transparent stereo pass-through that copies what flows through it
 // into a WAV plus a peaks sidecar, on a background thread.
 //
 // Two groups:
@@ -12,8 +12,8 @@
 //      factory entry is (the class itself always compiles).
 //
 //   3. The record-to-clip FLOW through MainComponent — arming an Audio track, the auto-spliced
-//      master tap, the committed clip and its assetRef, and the MIDI path staying exactly as TL5-5
-//      left it. Gated too, for the same reason.
+//      master tap, the committed clip and its assetRef, and the MIDI path staying unaffected.
+//      Gated too, for the same reason.
 
 #include "../Source/AI/AIProvider.h"
 #include "../Source/AI/AIStateMapper.h"
@@ -633,7 +633,7 @@ TEST_F(RecordFlowTest, RecordFlowCreatesAudioClip) {
     EXPECT_TRUE(mc.getUndoManager().canUndo());
 
     // ---- Roll ----
-    // TL6-8: the capture is armed AT THE CLICK, not on a later poll tick — that poll was what cost
+    // The capture is armed AT THE CLICK, not on a later poll tick — a poll could cost
     // a take up to ~100 ms of head. Where the take lands is decided at commit time instead, from the
     // tap's own sample anchor (see Tests/LatencyAlignmentTests.cpp for the placement arithmetic;
     // this tap is driven by hand, outside the graph, so it has no transport to anchor against and
@@ -699,11 +699,11 @@ TEST_F(RecordFlowTest, RecordFlowCreatesAudioClip) {
     ASSERT_NE(doc.getTrack(track), nullptr);
     EXPECT_EQ(doc.getTrack(track)->clips.size(), 1u);
     EXPECT_TRUE(bundleDir.getChildFile("Audio").getChildFile("take-2.wav").existsAsFile())
-        << "undo removes the clip, not the recording — TL6-6's clean pass owns orphaned files";
+        << "undo removes the clip, not the recording — a separate clean pass owns orphaned files";
 }
 
 // ============================================================================
-// 8. The MIDI path is exactly what TL5-5 left it
+// 8. The MIDI path is unaffected
 // ============================================================================
 
 TEST_F(RecordFlowTest, MidiArmedPathUnchanged) {

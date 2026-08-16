@@ -1,4 +1,4 @@
-// TL4-6: synth::BounceExporter — offline bounce/export of a beat range to a WAV file, rendered
+// synth::BounceExporter — offline bounce/export of a beat range to a WAV file, rendered
 // faster than realtime through the same graph the app plays through.
 //
 // Everything here asserts on the FILE, not on anything inside the exporter: it is opened with

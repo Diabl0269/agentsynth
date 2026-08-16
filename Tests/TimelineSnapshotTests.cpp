@@ -1,4 +1,4 @@
-// Tests for TL2-2: the flattened audio-thread TimelineSnapshot and the single-atomic-pointer
+// Tests for the flattened audio-thread TimelineSnapshot and the single-atomic-pointer
 // exchange that publishes it with epoch-based reclamation.
 //
 // Two things are being pinned here. First the flatten policy (absolute beats, notes clipped to

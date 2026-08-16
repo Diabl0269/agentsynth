@@ -1,9 +1,9 @@
-// Tests for TL3-1: the "Track In" module (TimelineMidiSourceModule) — the graph-side end of a
+// Tests for the "Track In" module (TimelineMidiSourceModule) — the graph-side end of a
 // timeline MIDI track.
 //
 // The module is a PULL consumer: nothing schedules events into it, so every test here drives it
 // the same way the real audio callback does — tick the transport, park the block's snapshot on it
-// (TransportService::setCurrentTimelineSnapshot, the TL3-1 handoff), call processBlock, read the
+// (TransportService::setCurrentTimelineSnapshot), call processBlock, read the
 // MIDI buffer. Most of the file needs no engine and no graph at all, which is what keeps the
 // timing assertions exact.
 //
@@ -50,7 +50,7 @@ struct Event {
     int pitch = 0;
     int velocity = 0;
     int channel = 0;
-    // TL3-2: the module's contract is "note-ons and note-offs, nothing else" — in particular never a
+    // The module's contract is "note-ons and note-offs, nothing else" — in particular never a
     // blanket all-notes-off (CC 123), which would silence other sources sharing the MIDI cable.
     bool isNoteOff = false;
     bool isOther = false;
@@ -146,7 +146,7 @@ struct Doc {
     std::unique_ptr<TimelineSnapshot> snapshot() const { return TimelineSnapshot::buildFrom(doc); }
 };
 
-// ---- TL3-2 helpers ---------------------------------------------------------------------------
+// ---- helpers ----------------------------------------------------------------------------------
 
 // One emitted event plus the block it came out of. A wrapping block splits into two beat ranges, so
 // "which block, and where was that block on the transport" is what turns an offset into a musical
@@ -596,7 +596,7 @@ TEST(TimelineMidiSourceTest, ReplacesIncomingMidiBuffer) {
 }
 
 // ============================================================================
-// TL3-2: loop wrap
+// Loop wrap
 //
 // Loop [0, 2) is sample 48000, which falls in block 93 (93 * 512 = 47616) at offset 384. Loop
 // [0, 1) is sample 24000: block 46 at offset 448.
@@ -893,7 +893,7 @@ TEST(TimelineMidiSourceTest, TransportFuzz1000OpsNoStuckNotes) {
 }
 
 // ============================================================================
-// Engine integration: the whole TL3-1 chain, through a real graph
+// Engine integration: the whole Track In chain, through a real graph
 // ============================================================================
 
 #if SYNTH_ENABLE_TIMELINE

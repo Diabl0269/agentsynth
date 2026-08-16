@@ -23,7 +23,7 @@ public:
     // Gated: only repaints if any value changed by a visible amount.
     void update(float cpuPct, int voices, const juce::String& patch);
 
-    // TL6-8: the round-trip latency readout ("RT 4.0 ms") — input device + graph + output device at
+    // The round-trip latency readout ("RT 4.0 ms") — input device + graph + output device at
     // the current sample rate, i.e. AudioEngine::getRecordingLatencySamples(), which is the amount a
     // recorded take is shifted back by. Fed from the same 5 Hz poll as update() above, and gated the
     // same way but INDEPENDENTLY: its own string diff, so a moving CPU figure never repaints on
@@ -46,7 +46,7 @@ public:
     // code never reads this back — showMessage() is fire-and-forget.
     const juce::String& getTransientMessageForTest() const noexcept { return transientMessage_; }
 
-    // Test-only (TL6-8): the round-trip segment's rendered string, and how many times it has asked
+    // Test-only: the round-trip segment's rendered string, and how many times it has asked
     // for a repaint. The counter is the same seam TimelineClipLaneArea's live strip uses to prove
     // its own gating — two updates with the same value must cost exactly one repaint.
     const juce::String& getRoundTripTextForTest() const noexcept { return roundTripText_; }
@@ -80,7 +80,7 @@ private:
     int voices_{0};
     juce::String patchName_{"Default"};
 
-    // TL6-8: the round-trip segment. The STRING is the gate — the diff is on what would actually be
+    // The round-trip segment. The STRING is the gate — the diff is on what would actually be
     // drawn, so a latency that moves by less than the printed resolution costs no repaint at all.
     // Empty until the first updateRoundTripLatency(), and drawn as nothing while it is.
     juce::String roundTripText_;

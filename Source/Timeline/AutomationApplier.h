@@ -3,7 +3,7 @@
 #include "../Transport/BlockTimeInfo.h"
 #include "AutomationKernel.h"
 #include "AutomationRecorder.h" // GestureClaims / AutomationRecordState — the audio-visible half
-#include "AutomationUiFeed.h"   // TL4-5: the audio -> UI reflection ring
+#include "AutomationUiFeed.h"   // the audio -> UI reflection ring
 #include "EpochExchange.h"
 #include "TimelineSnapshot.h"
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -12,72 +12,46 @@
 
 namespace synth {
 
-// TL4-2: the resolved "which lane drives which live parameter" table, built on the message thread
-// and published to the audio thread through EpochExchange<AutomationBindingTable>.
+// The resolved "which lane drives which live parameter" table, built on the message thread and
+// published to the audio thread through EpochExchange<AutomationBindingTable>.
 //
 // Resolution (AudioEngine::publishTimeline) is a message-thread-only walk: for each lane, find the
 // graph node whose `properties["uuid"]` equals the lane's nodeUuid, then the RangedAudioParameter
 // on that node's processor whose paramID equals the lane's paramId. A lane that resolves to
-// neither simply produces no binding — orphaned lanes are retained in the document (TL2-6 policy)
-// but silently automate nothing.
+// neither produces no binding — orphaned lanes stay in the document but silently automate nothing.
 //
-// -- Why the node pointer is refcounted ---------------------------------------------------------
-//
-// `node` is a juce::AudioProcessorGraph::Node::Ptr, not a NodeID and not a raw pointer. A Node owns
-// its processor, and holding a Ptr keeps that processor alive even after the node is removed from
-// the graph — so `param` can never dangle, whatever happens to the graph between two publishes.
-// Writing automation into a parameter of a node the graph no longer renders is harmless: nothing
-// reads it, and the next publish drops the binding. The alternative (a NodeID re-looked-up per
-// block) would mean walking the graph's node list on the audio thread, which is neither
-// allocation-free nor lock-free.
-//
-// -- Why the table carries its own snapshot pointer ---------------------------------------------
+// `node` is a juce::AudioProcessorGraph::Node::Ptr, not a raw pointer or NodeID: a Node owns its
+// processor, so holding the Ptr keeps `param` alive even after the node leaves the graph. Writing
+// into a parameter of a node the graph no longer renders is harmless — nothing reads it, and the
+// next publish drops the binding.
 //
 // `laneIndex` indexes into `snapshot->lanes`, so a table is only meaningful against the exact
-// snapshot it was resolved from. Rather than have the applier read the CURRENT snapshot out of the
-// snapshot exchange (which could be a different one — see below), the table carries the pointer,
-// and the applier reads lanes and points through it. Applier and bindings are therefore always
-// coherent by construction.
-//
-// Lifetime argument for that raw pointer: the engine always publishes snapshot-then-bindings,
-// back to back, on the message thread. So a published binding table's snapshot pointer is at most
-// one publish behind the snapshot exchange's current value, and the snapshot exchange frees a
-// retiree only once the audio epoch has advanced two blocks past the publish that retired it.
-// Inside that window the audio thread has already loaded the NEWER bindings table (both exchanges
-// are opened in the same render pass, bindings after the snapshot), so no live table can still be
-// pointing at a freed snapshot. AudioEngine::shutdown() reclaims both exchanges after the audio
-// callback is gone, bindings first is not required — reclaimAllUnsafe frees the tables and the
-// snapshots without either reading the other.
-//
-// Split-brain of exactly one render pass is possible — Track In reading snapshot N+1 through the
-// transport while the applier still holds table N pointing at snapshot N — and is harmless: both
-// are valid published states, one block apart, and a block is the granularity everything else here
-// already works at.
+// snapshot it was resolved from — the table therefore carries that snapshot's pointer rather than
+// having the applier read whatever the snapshot exchange currently holds, which could differ. The
+// engine always publishes snapshot-then-bindings back to back on the message thread, and the
+// snapshot exchange frees a retiree only two audio blocks after the publish that retired it, so a
+// live table can never end up pointing at a freed snapshot. A one-render-pass split brain (Track In
+// reading snapshot N+1 while the applier still holds table N -> snapshot N) is possible and
+// harmless: both are valid published states one block apart.
 struct AutomationBindingTable {
     struct Binding {
         int laneIndex = -1;                        // into snapshot->lanes
         juce::AudioProcessorGraph::Node::Ptr node; // refcounted: keeps `param`'s owner alive (above)
         juce::RangedAudioParameter* param = nullptr;
-        // TL7-6: populated INSTEAD of `param` for a hosted-plugin instance parameter with no
-        // NormalisableRange (see Source/Timeline/AutomationBinding.h) — exactly one of the two is
-        // ever non-null on a real binding. Kept as a separate field rather than widening `param`'s
-        // type so every existing call site that only ever set `.param` (every test that predates
-        // TL7-6) keeps compiling and behaving identically; a binding resolved through the shared
-        // resolver populates whichever field applies.
+        // Populated INSTEAD of `param` for a hosted-plugin instance parameter with no
+        // NormalisableRange (see AutomationBinding.h) — exactly one of the two is ever non-null on
+        // a real binding.
         juce::AudioProcessorParameter* hostedParam = nullptr;
-        // TL4-5: the node's id, captured alongside `node` at build time (AudioEngine::publishTimeline)
-        // rather than re-read from `node->nodeID` at push time — this is the identity the UI feed's
-        // events carry, and a binding built by a hand-rolled test table (no real Node::Ptr) can still
-        // populate it directly.
+        // The node's id, captured alongside `node` at build time rather than re-read from
+        // `node->nodeID` at push time — this is the identity the UI feed's events carry.
         juce::AudioProcessorGraph::NodeID nodeID;
         // Audio-thread-only evaluation state, owned by the table (which outlives every block it is
         // published for). `mutable` because the applier receives the table by const reference — the
         // exchange hands out a borrowed const view, and the cursor is the one part of it the audio
         // thread is allowed to write.
         mutable AutomationCursor cursor;
-        // TL4-5 dedupe: the last normalised value pushed to the UI feed for this binding, so a static
-        // lane pushes once rather than once per block. NaN means "never pushed" — NaN != NaN is
-        // always true, so the very first write always pushes regardless of what value it carries.
+        // Dedupe: the last normalised value pushed to the UI feed for this binding, so a static
+        // lane pushes once rather than once per block. NaN means "never pushed".
         mutable float lastPushedNormalized = std::numeric_limits<float>::quiet_NaN();
     };
 
@@ -86,7 +60,7 @@ struct AutomationBindingTable {
     const TimelineSnapshot* snapshot = nullptr;
 };
 
-// TL4-2: pushes one block's worth of automation into live parameters. Audio thread only.
+// Pushes one block's worth of automation into live parameters. Audio thread only.
 //
 // Stateless by design — everything that has to persist between blocks (the per-lane segment
 // cursors) lives in the published table, so swapping tables swaps the cursors with them and there
@@ -103,49 +77,38 @@ public:
     // Semantics, all deliberate:
     //   - **Not playing => nothing is written.** A stopped transport leaves every knob free for the
     //     user to turn; automation only takes the wheel while the timeline is moving.
-    //   - **TL4-4 per-lane record modes** (`TimelineSnapshot::LaneInfo::recordMode`), on top of that:
+    //   - **Per-lane record modes** (`TimelineSnapshot::LaneInfo::recordMode`), on top of that:
     //       Off          — never written. The lane is inert in both directions.
-    //       Read         — always written. The pre-TL4-4 behaviour, and the default.
+    //       Read         — always written (the default).
     //       Touch/Latch  — written UNLESS the bound parameter is CLAIMED, i.e. a user gesture on it
     //                      is in flight. The hand wins for as long as it is on the knob; the instant
-    //                      the claim is released, playback resumes from the lane. This is a
-    //                      per-parameter pointer scan of eight atomic slots, not a search.
+    //                      the claim is released, playback resumes from the lane.
     //       Write        — never written while global record is armed. Recording overwrites the
     //                      span, and playing stale data back into the same parameter would fight the
-    //                      hand that is writing it. With global record OFF, Write reads like Read —
-    //                      an armed-but-not-recording lane still has to play back.
-    //     A recordMode outside 0..4 cannot occur (TimelineDoc::setLaneRecordMode and fromVar both
-    //     reject one), and would fall through to the Read branch if it somehow did.
-    //   - **setValue, never setValueNotifyingHost.** This is a plain store of the normalised value.
-    //     Notifying would fire parameter listeners from the audio thread — the host's automation
-    //     lane and our own UI both — for every automated parameter on every block. UI reflection of
-    //     automation is TL4-5's job and belongs on a message-thread timer reading the parameter.
-    //     Since TL4-4 this is also a correctness rule, not only a performance one: notifying here
-    //     would feed the player's own output straight back into AutomationRecorder's parameter
-    //     listener, and every playback pass would re-record itself. Pinned by
+    //                      hand that is writing it. With global record OFF, Write reads like Read.
+    //     An out-of-range recordMode cannot occur (TimelineDoc rejects one) and falls through to Read.
+    //   - **setValue, never setValueNotifyingHost.** Notifying would fire parameter listeners from
+    //     the audio thread — the host's automation lane and our own UI both — for every automated
+    //     parameter on every block. It would also feed the player's own output straight back into
+    //     AutomationRecorder's parameter listener, making every playback pass re-record itself. UI
+    //     reflection goes through `uiFeed` instead. Pinned by
     //     AutomationRecordTest.RecorderNeverHearsTheApplier.
     //   - **Values clamp into the parameter's CURRENT range**, via
-    //     RangedAudioParameter::convertTo0to1, which clamps to [0, 1] internally. A lane authored
-    //     against a wider range (or a build that later narrowed one) therefore pins at the endpoint
-    //     instead of wrapping or asserting. A non-finite value is skipped outright rather than
-    //     handed to JUCE, which would trip a debug assertion inside NormalisableRange.
-    //   - **TL7-6: a `hostedParam` binding (a hosted plugin's own parameter) has no
-    //     NormalisableRange to convert through** — juce::HostedAudioProcessorParameter is a sibling
-    //     hierarchy to RangedAudioParameter, not a subtype (see HostedPluginModule.h and
-    //     Source/Timeline/AutomationBinding.h). Its lane's RangeSnapshot IS the denorm -> 0..1 map
-    //     instead (a hosted parameter's native domain is always 0..1, so that snapshot is {0, 1,
-    //     default} by construction): `(denormalised - lane.minValue) / (lane.maxValue -
-    //     lane.minValue)`, clamped into [0, 1] the same defensive way convertTo0to1 clamps. Every
-    //     other rule above — playing-only, record modes, plain setValue, UI reflection — applies
-    //     identically to both kinds of binding.
-    //   - **TL4-5 UI reflection rides `uiFeed`, not a notification.** After the plain store above,
-    //     if this write's normalised value differs from the binding's `lastPushedNormalized` (or
-    //     that field is still NaN — never pushed), push `{nodeID, param, newNormalised}` to
-    //     `uiFeed` and update `lastPushedNormalized`. This is the ONLY place that dedupe check
-    //     happens, so a lane holding still for a thousand blocks pushes exactly once, and a ramping
-    //     one pushes roughly once per block (whenever its value actually moves). `uiFeed` is null in
-    //     every build/test that doesn't care (default argument), in which case this is skipped
-    //     entirely — a null feed is not an error, it just means nothing is listening.
+    //     RangedAudioParameter::convertTo0to1, which clamps to [0, 1] internally. A non-finite value
+    //     is skipped outright rather than handed to JUCE, which would trip a debug assertion.
+    //   - **A `hostedParam` binding (a hosted plugin's own parameter) has no NormalisableRange to
+    //     convert through** — juce::HostedAudioProcessorParameter is a sibling hierarchy to
+    //     RangedAudioParameter, not a subtype (see HostedPluginModule.h and AutomationBinding.h).
+    //     Its lane's RangeSnapshot IS the denorm -> 0..1 map instead: `(denormalised -
+    //     lane.minValue) / (lane.maxValue - lane.minValue)`, clamped into [0, 1]. Every other rule
+    //     above — playing-only, record modes, plain setValue, UI reflection — applies identically
+    //     to both kinds of binding.
+    //   - **UI reflection rides `uiFeed`, not a notification.** After the plain store above, if this
+    //     write's normalised value differs from the binding's `lastPushedNormalized` (or that field
+    //     is still NaN), push `{nodeID, param, newNormalised}` to `uiFeed` and update
+    //     `lastPushedNormalized` — the only dedupe check, so a held lane pushes once and a ramping
+    //     one pushes roughly once per block. `uiFeed` is null in builds/tests that don't care, in
+    //     which case this is skipped entirely.
     //
     // No allocation, no locks, no logging, no juce::String. `noexcept`.
     void applyBlock(const AutomationBindingTable& table, const BlockTimeInfo& info,

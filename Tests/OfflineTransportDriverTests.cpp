@@ -1,7 +1,6 @@
-// Tests for synth::OfflineTransportDriver — the headless render harness (TL1-4). It clocks an
+// Tests for synth::OfflineTransportDriver — the headless render harness. It clocks an
 // AudioEngine's graph at a fixed sample rate / block size with no audio device, which is how every
-// timeline engine test (TL2-TL6) renders, and is the loop the user-facing bounce/export (TL4-6)
-// will be built on.
+// timeline engine test renders, and is the loop the user-facing bounce/export is built on.
 //
 // Headless/deterministic constraints (see docs/testing.md and AudioEngineTransportTests.cpp): no
 // real audio device, no network, no sleeps. Every engine here is HostMode::Hosted — the driver
@@ -65,7 +64,7 @@ double endPpqOf(const AudioEngine& engine) { return engine.getTransport().getCur
 // ============================================================================
 // Block accounting
 // ============================================================================
-// TL1-9: asserts the timeline integration (the transport must actually tick for these positions to
+// Asserts the timeline integration (the transport must actually tick for these positions to
 // advance); compiled out with the flag so the flag-OFF CI job stays green.
 #if SYNTH_ENABLE_TIMELINE
 
@@ -142,7 +141,7 @@ TEST(OfflineTransportDriverTest, RenderToBeatWhileStoppedReturnsEmpty) {
     engine.shutdown();
 }
 
-// TL1-9: asserts the timeline integration (locateBeat/tick must actually move the position);
+// Asserts the timeline integration (locateBeat/tick must actually move the position);
 // compiled out with the flag so the flag-OFF CI job stays green.
 #if SYNTH_ENABLE_TIMELINE
 
@@ -171,7 +170,7 @@ TEST(OfflineTransportDriverTest, RenderToBeatBehindPositionReturnsEmpty) {
 // ============================================================================
 // The per-block observer seam (what bounce/export streams from)
 // ============================================================================
-// TL1-9: asserts the timeline integration (BlockTimeInfo only advances when the transport ticks);
+// Asserts the timeline integration (BlockTimeInfo only advances when the transport ticks);
 // compiled out with the flag so the flag-OFF CI job stays green.
 
 TEST(OfflineTransportDriverTest, BlockCallbackSeesConsecutiveBlockTimeInfo) {
@@ -237,7 +236,7 @@ TEST(OfflineTransportDriverTest, RenderedAudioIsFiniteAndGraphAudioFlows) {
     engine.shutdown();
 
     // Non-silence needs a source that runs without MIDI: a free-running oscillator patched to the
-    // audio output. This is the shape every TL2+ engine test uses to hear its patch.
+    // audio output. This is the shape every engine test uses to hear its patch.
     AudioEngine oscEngine(AudioEngine::HostMode::Hosted);
     oscEngine.initialise();
     ASSERT_TRUE(wireOscillatorToAudioOutput(oscEngine));

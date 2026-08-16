@@ -1,6 +1,6 @@
 // HostedPluginLatencyTests.cpp
 //
-// TL7-7: a hosted plugin's latency, detected when it MOVES and compensated once the graph is told.
+// A hosted plugin's latency, detected when it MOVES and compensated once the graph is told.
 //
 // Two separate facts have to hold, and the file is organised around them:
 //
@@ -12,14 +12,13 @@
 //
 //   2. THE GRAPH ACTUALLY COMPENSATES. juce::AudioProcessorGraph bakes each node's
 //      {bus layout, latencySamples} into its render sequence and re-derives the parallel-path delay
-//      compensation only when that sequence is REBUILT. So `setLatencySamples` on its own changes
-//      nothing audible: the acceptance test drives a real AudioEngine graph with an impulse split
-//      down a dry path and a hosted-plugin path and asserts both copies land on the SAME output
-//      sample — off-by-zero, at two different latencies, across a rebuild.
+//      compensation only when that sequence is REBUILT. The acceptance test drives a real
+//      AudioEngine graph with an impulse split down a dry path and a hosted-plugin path and asserts
+//      both copies land on the SAME output sample — off-by-zero, at two different latencies, across
+//      a rebuild.
 //
-// The stub plugin (Tests/StubPluginInstance.h) really delays its audio by the latency it reports.
-// Without that the PDC test would prove nothing: JUCE would delay the dry path while the "latent"
-// path stayed instantaneous, and the misalignment compensation exists to fix would never appear.
+// The stub plugin (Tests/StubPluginInstance.h) really delays its audio by the latency it reports,
+// so the PDC test actually exercises the compensation rather than an unmoving "latent" path.
 //
 // Groups:
 //   1. The module's own contract — publish, runtime change, thread hop, unload, retired-instance
@@ -27,7 +26,7 @@
 //   2. PDC — parallel paths realigned by a rebuild, and the graph's reported latency following only
 //      after one.
 //   3. Flow — MainComponent's owner wiring: a completed async load rebuilds the graph, refreshes the
-//      status bar, and reconciles the timeline (the TL7-6 known gap, closed).
+//      status bar, and reconciles the timeline.
 
 #include "../Source/AudioEngine.h"
 #include "../Source/Modules/AudioInputModule.h"
@@ -257,7 +256,7 @@ namespace {
  *  plugin. That fan-out is the whole point — parallel-path compensation has nothing to compensate in
  *  a single chain.
  *
- *  The source is the bare `audioInputNode` IO processor rather than TL6-2's `AudioInputModule`,
+ *  The source is the bare `audioInputNode` IO processor rather than `AudioInputModule`,
  *  deliberately: the module reads the device input off the transport playhead, which the engine only
  *  installs in a `SYNTH_ENABLE_TIMELINE` build, and none of this has anything to do with the
  *  timeline. The IO node reads the render buffer's own input channels, so these tests run in both
@@ -327,7 +326,7 @@ std::vector<float> renderImpulse(AudioEngine& engine, juce::int64 impulseSample,
 // An impulse split down two parallel paths — one dry, one through a plugin that reports N samples of
 // latency and really delays its audio by N — must come out of Audio Output as ONE sample, not two N
 // apart. JUCE achieves that by delaying the dry path by N when it builds the render sequence, which
-// it only does on a rebuild; the point of TL7-7 is that something calls that rebuild.
+// it only does on a rebuild; the point of this test is that something calls that rebuild.
 TEST(HostedPluginLatencyTest, ParallelPathsStayAlignedAcrossALatencyChange) {
     constexpr int kFirstLatency = 128;
     constexpr int kSecondLatency = 320;
@@ -385,8 +384,8 @@ TEST(HostedPluginLatencyTest, ParallelPathsStayAlignedAcrossALatencyChange) {
 }
 
 // The negative control for the test above: WITHOUT the rebuild, the graph is still compensating for
-// the old latency, so the two copies separate. This is the bug TL7-7 fixes, pinned so a future
-// "rebuild() looks redundant" cleanup fails loudly.
+// the old latency, so the two copies separate. Pinned so a future "rebuild() looks redundant"
+// cleanup fails loudly.
 TEST(HostedPluginLatencyTest, WithoutARebuildTheParallelPathsDrift) {
     constexpr int kFirstLatency = 128;
     constexpr int kSecondLatency = 320;
@@ -420,7 +419,7 @@ TEST(HostedPluginLatencyTest, WithoutARebuildTheParallelPathsDrift) {
     fixture.engine.audioDeviceStopped();
 }
 
-// Status-bar honesty (TL6-8's readout is a sum whose graph term is this): the number the user sees
+// Status-bar honesty (the readout is a sum whose graph term is this): the number the user sees
 // only becomes true after the rebuild, which is why the owner refreshes it there.
 TEST(HostedPluginLatencyTest, ReportedGraphLatencyFollowsOnlyAfterARebuild) {
     constexpr int kLatency = 4800; // 100 ms at 48 kHz — a real lookahead limiter's order of magnitude
@@ -588,10 +587,10 @@ protected:
     }
 };
 
-// THE TL7-6 GAP, CLOSED. A project opens with a lane bound to a hosted plugin's parameter; the
-// plugin load is async, so at reconcile time there is no instance and the lane orphans — correctly.
-// Before TL7-7 nothing re-ran the reconcile when the load finally completed, so the lane stayed
-// orphaned (and unplayable) until some unrelated graph edit happened to trigger the next pass.
+// A project opens with a lane bound to a hosted plugin's parameter; the plugin load is async, so at
+// reconcile time there is no instance and the lane orphans — correctly. The load completing must
+// re-run the reconcile, or the lane stays orphaned (and unplayable) until some unrelated graph edit
+// happens to trigger the next pass.
 TEST_F(HostedPluginLatencyFlowTest, CompletedAsyncLoadRebindsLanesWithNoOtherGraphChange) {
     MainComponent mc(std::make_unique<MinimalProviderHPL>());
     mc.setSize(1600, 900);
@@ -624,7 +623,7 @@ TEST_F(HostedPluginLatencyFlowTest, CompletedAsyncLoadRebindsLanesWithNoOtherGra
 
     ASSERT_TRUE(pumpUntil([&] { return hosted->hasInstance(); }));
     ASSERT_TRUE(pumpUntil([&] { return !doc.getLane(laneId)->orphaned; }))
-        << "a completed async load must reconcile the timeline: this is the TL7-6 known gap";
+        << "a completed async load must reconcile the timeline";
 }
 
 // The other half of the owner wiring: the publish rebuilds the graph (so PDC is live immediately,

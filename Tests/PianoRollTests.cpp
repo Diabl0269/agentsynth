@@ -1,6 +1,6 @@
 // PianoRollTests.cpp
 //
-// TL5-8: minimal piano-roll editor inside the timeline panel — draw/move/resize/delete, velocity
+// Minimal piano-roll editor inside the timeline panel — draw/move/resize/delete, velocity
 // scrub, quantise. Mirrors TimelineClipLaneTests.cpp's structure and harness style:
 //   1. synth::ui::NoteSelectionModel — mirrors ClipSelectionModelTests.cpp's coverage, keyed on
 //      synth::NoteId.

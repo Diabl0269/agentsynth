@@ -1,6 +1,6 @@
 // AudioClipPlaybackTests.cpp
 //
-// TL6-4: disk-streaming audio clip playback — synth::AudioClipStreamer plus the "Track Audio"
+// Disk-streaming audio clip playback — synth::AudioClipStreamer plus the "Track Audio"
 // module that pulls from it.
 //
 // Everything here renders through synth::OfflineTransportDriver the way a host would and asserts on
@@ -320,7 +320,7 @@ TEST(AudioClipSnapshotTest, ASoloedAudioTrackCountsTowardsAnySoloed) {
 
     auto snapshot = TimelineSnapshot::buildFrom(doc);
     ASSERT_NE(snapshot, nullptr);
-    // TL6-4 changed this: audio tracks now render, so solo has to mean solo for them too.
+    // Audio tracks render, so solo has to mean solo for them too.
     EXPECT_TRUE(snapshot->anySoloed);
 }
 
@@ -365,7 +365,7 @@ TEST(AudioClipStreamerTest, RecordingsRefResolvesAgainstTheRecordingsRoot) {
     streamer.setPrefetchPausedForTest(true);
     streamer.setAssetRoots(juce::File(), recordings);
 
-    // Exactly the form MainComponent::chooseTakeFiles stores for an unsaved project (TL6-3): the
+    // Exactly the form MainComponent::chooseTakeFiles stores for an unsaved project: the
     // ref INCLUDES the "Recordings/" segment and resolves against the folder containing it.
     EXPECT_EQ(streamer.resolveAssetRef("Recordings/take-1.wav"), take);
     // With no bundle root, a bundle-relative ref resolves to nothing rather than falling back.

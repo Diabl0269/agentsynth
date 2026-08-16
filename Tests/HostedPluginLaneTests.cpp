@@ -1,6 +1,6 @@
 // HostedPluginLaneTests.cpp
 //
-// TL7-6: hosted plugin parameters as automation lanes — keyed on the plugin's paramID string with
+// Hosted plugin parameters as automation lanes — keyed on the plugin's paramID string with
 // index fallback, orphaning on mismatch, never silently automating the wrong parameter.
 //
 // Everything here runs against Tests/StubPluginInstance.h (StubHostedParameter / StubLegacyParameter
@@ -491,7 +491,7 @@ TEST(HostedPluginLaneTest, SerializationAdditive) {
     ASSERT_NE(reloaded.getLane(laneId), nullptr);
     EXPECT_EQ(reloaded.getLane(laneId)->paramIndexHint, 3) << "round-trips through toVar/fromVar";
 
-    // A file predating TL7-6 simply has no "paramIndexHint" key — simulate by stripping it.
+    // An older file simply has no "paramIndexHint" key — simulate by stripping it.
     auto* rootObj = saved.getDynamicObject();
     ASSERT_NE(rootObj, nullptr);
     auto* tracksArr = rootObj->getProperty("tracks").getArray();

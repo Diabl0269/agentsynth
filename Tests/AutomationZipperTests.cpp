@@ -1,6 +1,6 @@
-// Zipper-noise enforcement for timeline automation (TL4-3).
+// Zipper-noise enforcement for timeline automation.
 //
-// TL4-2's applier writes a parameter's BASE value straight through
+// The applier writes a parameter's BASE value straight through
 // `param->setValue(param->convertTo0to1(v))`, once per block (or per control-rate slice). Any
 // float parameter that reaches a DSP coefficient raw — no SmoothedValue between `param->get()`
 // and the sample loop — therefore steps at block rate, and a stepped gain / delay time / filter

@@ -138,8 +138,8 @@ public:
     juce::Point<int> resolvePlacement(juce::Point<int> desired, int w, int h, juce::AudioProcessorGraph::NodeID selfId);
 
     /** A free canvas slot at the LEFT edge, below every module currently on the canvas — where the
-     *  timeline's add-track flow drops the "Track In" node it creates (TL5-3). Falls back to the
-     *  canvas origin on an empty canvas. Anti-overlapped through resolvePlacement like any drop. */
+     *  timeline's add-track flow drops the "Track In" node it creates. Falls back to the canvas
+     *  origin on an empty canvas. Anti-overlapped through resolvePlacement like any drop. */
     juce::Point<int> findLeftEdgeSlotBelowModules(int w, int h);
     // A module changed footprint in place (the Macro bank, when its "Knobs" count changes).
     // Drops any routing left on an output jack that is no longer visible, then pushes overlapping
@@ -151,7 +151,7 @@ public:
      *  channels, and the owner unplugs them — a jack you cannot see is a jack you cannot unplug. */
     void dropRoutingsOnHiddenJacks(juce::AudioProcessorGraph::NodeID nodeId);
 
-    /** MESSAGE THREAD (TL6-2). The audio device changed: re-point every Audio Input module at the
+    /** MESSAGE THREAD. The audio device changed: re-point every Audio Input module at the
      *  engine's new input channel count, drop cables left on jacks that just disappeared, and
      *  re-measure the affected cards. Called from the owner's device-state-changed callback. */
     void refreshIoModulesAfterDeviceChange();
@@ -226,17 +226,17 @@ public:
     /** Set by the owner to resolve a snippet name (from a library drag payload) to its JSON. */
     std::function<juce::var(const juce::String&)> snippetProvider;
 
-    /** TL5-9: right-click-any-knob -> "Automate '<Param>'" (ModuleComponent's generic auto-UI
-     *  slider branch). Set by the owner (MainComponent::automateParameter) to resolve the node's
-     *  uuid, find-or-create the doc's Automation track, bind a lane and open the automation strip
-     *  — GraphEditor deliberately owns no TimelineDoc, mirroring onSaveSnippetRequested above. */
+    /** right-click-any-knob -> "Automate '<Param>'" (ModuleComponent's generic auto-UI slider
+     *  branch). Set by the owner (MainComponent::automateParameter) to resolve the node's uuid,
+     *  find-or-create the doc's Automation track, bind a lane and open the automation strip —
+     *  GraphEditor deliberately owns no TimelineDoc, mirroring onSaveSnippetRequested above. */
     std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onAutomateParameterRequested;
 
-    /** TL7-5: a hosted-plugin card's "Open Editor" button (ModuleComponent's HostedPluginModule
-     *  branch). Set by the owner (MainComponent) to resolve `nodeId` to its live HostedPluginModule
-     *  and hand it to HostedPluginWindowManager::openEditorFor — mirrors
-     *  onAutomateParameterRequested's shape exactly, for the same reason: GraphEditor owns neither
-     *  the module lookup nor the window manager. */
+    /** A hosted-plugin card's "Open Editor" button (ModuleComponent's HostedPluginModule branch).
+     *  Set by the owner (MainComponent) to resolve `nodeId` to its live HostedPluginModule and hand
+     *  it to HostedPluginWindowManager::openEditorFor — mirrors onAutomateParameterRequested's
+     *  shape exactly, for the same reason: GraphEditor owns neither the module lookup nor the
+     *  window manager. */
     std::function<void(juce::AudioProcessorGraph::NodeID)> onOpenPluginEditorRequested;
 
     // ---- Copy / paste / duplicate -------------------------------------------------------
@@ -333,7 +333,7 @@ public:
     void addModuleAtCanvasPosition(const juce::String& name, juce::Point<int> dropPos,
                                    const std::function<void(juce::AudioProcessor&)>& configure);
 
-    /** Creates a Hosted Plugin node already pointed at `identity` (TL7-3).
+    /** Creates a Hosted Plugin node already pointed at `identity`.
      *
      *  Deliberately a thin wrapper over addModuleAtCanvasPosition rather than a second add path: the
      *  identity is set through the same `configure` hook the Sampler's dropped file uses, so it is in

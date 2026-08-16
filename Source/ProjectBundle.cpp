@@ -106,10 +106,8 @@ ProjectLoadResult ProjectBundle::load(const juce::File& bundleDir, juce::AudioPr
     else
         timeline.clear();
 
-    // Step 6 (TL2-6): a track's bindingUuid or a lane's nodeUuid that no longer resolves to any
-    // live node's "uuid" property is retained untouched — reconcileBindings never deletes, it
-    // only flags. This is what makes that fact visible immediately as correct `orphaned` flags,
-    // rather than leaving it latent until whatever next happens to call reconcile.
+    // A track's bindingUuid or a lane's nodeUuid that no longer resolves to any live node's
+    // "uuid" is retained and flagged `orphaned`, never deleted.
     TimelineReconciler::reconcile(timeline, graph);
 
     return {true, {}};

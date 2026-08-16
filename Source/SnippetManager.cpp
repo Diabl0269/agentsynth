@@ -23,7 +23,7 @@ bool isSnippetEligible(juce::AudioProcessor* processor) {
         return false;
     if (dynamic_cast<IOProcessor*>(processor) != nullptr)
         return false;
-    // TL6-2: Audio Input is a ModuleBase now, so the IO-processor test above no longer catches it —
+    // Audio Input is a ModuleBase now, so the IO-processor test above no longer catches it —
     // but it is still a singleton, and a snippet carrying one would insert a second Audio Input
     // node into any patch it lands in.
     if (dynamic_cast<AudioInputModule*>(processor) != nullptr)

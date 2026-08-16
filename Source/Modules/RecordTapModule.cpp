@@ -47,7 +47,7 @@ void RecordTapModule::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
         const int captureChannels = juce::jlimit(1, kNumChannels, captureChannels_.load(std::memory_order_relaxed));
         const int availableChannels = juce::jmin(captureChannels, buffer.getNumChannels());
 
-        // TL6-8's anchor, taken BEFORE the push and only on the first captured block of the take:
+        // This anchor, taken BEFORE the push and only on the first captured block of the take:
         // this block's frame 0 IS the take's frame 0 (the armed flag is read once, above, so a take
         // can never begin mid-block), so the transport's block-start sample is exactly where the
         // take sits on the timeline. Everything the commit needs to place the clip honestly comes
@@ -125,7 +125,7 @@ bool RecordTapModule::startCapture(const juce::File& wavFile, const juce::File& 
     overrun_.store(false, std::memory_order_relaxed);
     capturedFrames_.store(0, std::memory_order_relaxed);
     writtenFrames_.store(0, std::memory_order_relaxed);
-    // TL6-8: invalidated before arming, so the anchor the audio thread writes below can only ever
+    // Invalidated before arming, so the anchor the audio thread writes below can only ever
     // belong to the take that is about to start.
     captureStartValid_.store(false, std::memory_order_relaxed);
     captureStartTimelineSample_.store(0, std::memory_order_relaxed);
@@ -181,7 +181,7 @@ RecordTapModule::TakeResult RecordTapModule::stopCapture() {
     // turns this number straight into a clip length.
     result.lengthSamples = writtenFrames_.load(std::memory_order_relaxed);
     result.overran = overrun_.load(std::memory_order_relaxed);
-    // TL6-8: the anchor as the audio thread left it. Acquire-paired with the release in processBlock.
+    // The anchor as the audio thread left it. Acquire-paired with the release in processBlock.
     result.captureStartValid = captureStartValid_.load(std::memory_order_acquire);
     result.captureStartTimelineSample = captureStartTimelineSample_.load(std::memory_order_relaxed);
     result.captureStartBlockOffset = captureStartBlockOffset_.load(std::memory_order_relaxed);

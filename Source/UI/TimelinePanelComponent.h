@@ -21,28 +21,28 @@ class TransportService;
 class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 } // namespace synth
 
-// TimelinePanelComponent — TL5-1: bottom-docked timeline panel SHELL; TL5-2 fills in the ruler,
-// grid, zoom/scroll, snap selector and click-to-seek/drag-to-loop.
+// Bottom-docked timeline panel: ruler, grid, zoom/scroll, snap selector, click-to-seek/
+// drag-to-loop.
 //
 // MainComponent docks this full-width, above the status bar, toggled via the toolbar button /
 // Cmd+T shortcut and slid in/out through the same coordinated AnimationDriver that already
 // animates the library/AI panels (see MainComponent::animatePanelTransition()). This class owns
-// none of that: it is layout + paint, with no timer and no animation of its own — TL5-4's
-// updateFromTransport() is driven by MainComponent's EXISTING 10 Hz timer, and the only timer
-// anywhere under this panel is the playhead overlay's, which runs only while the transport plays
-// (see TimelinePlayheadOverlay.h and docs/layout.md §11).
+// none of that: it is layout + paint, with no timer and no animation of its own — updateFromTransport()
+// is driven by MainComponent's EXISTING 10 Hz timer, and the only timer anywhere under this panel
+// is the playhead overlay's, which runs only while the transport plays (see
+// TimelinePlayheadOverlay.h and docs/layout.md §11).
 //
-// resized() lays out three regions every task shares the same arithmetic for:
+// resized() lays out three regions:
 //   - transport bar strip   (top,    Metrics::timelineTransportBarHeight) — houses the snap
-//     selector (TL5-2, right-hand side) and TL5-5's synth::ui::TimelineTransportBar (play/stop/
-//     record/loop + BPM/time-sig editors + the bar:beat readout), left-aligned in the rest.
+//     selector and synth::ui::TimelineTransportBar (play/stop/record/loop + BPM/time-sig editors
+//     + the bar:beat readout), left-aligned in the rest.
 //   - track-header column   (left,   Metrics::timelineTrackHeaderWidth)
 //   - lanes/ruler area      (remainder) — TimelineRulerComponent (Metrics::timelineRulerHeight)
 //     docked at its top, a bar/beat grid painted directly by this component below it.
 //
 // The single synth::ui::TimelineViewState (beat<->pixel mapping — zoom, scroll, snap) is owned
-// here and shared by reference with the ruler; getViewState() exposes it for later tasks (track
-// content, playhead) so every consumer maps beats to pixels identically.
+// here and shared by reference with the ruler; getViewState() exposes it so every consumer maps
+// beats to pixels identically.
 //
 // Headless-safe: paint()/resized() dynamic_cast<AppLookAndFeel*> and fall back to literal
 // values/colours when the themed LnF is absent (test runner has no themed LnF installed).
@@ -66,14 +66,14 @@ public:
 
     // Non-owning; may be null (tests, or before MainComponent finishes wiring). Forwarded to the
     // ruler and the playhead overlay — the two sub-components that talk to the transport directly
-    // — and, TL5-7, to the clip-lane area (it only reads the time signature, for Snap::Bar).
+    // — and to the clip-lane area (it only reads the time signature, for Snap::Bar).
     void setTransport(synth::TransportService* transport);
 
-    // TL5-6: forwarded straight to the transport bar's own metronome toggle — see
+    // Forwarded straight to the transport bar's own metronome toggle — see
     // TimelineTransportBar::setMetronome. Non-owning; may be null.
     void setMetronome(synth::Metronome* metronome);
 
-    // TL5-4: THE low-rate transport poll, called from MainComponent's EXISTING 10 Hz timer (gated
+    // THE low-rate transport poll, called from MainComponent's EXISTING 10 Hz timer (gated
     // #if SYNTH_ENABLE_TIMELINE, and only while this panel is visible). It adds no timer of its own.
     // Two jobs:
     //   - hand the snapshot to the playhead overlay, which owns its 30 Hz playing-only timer from
@@ -86,15 +86,15 @@ public:
 
     // Non-owning. Restores/persists the snap-selector choice under the "timelineSnap" key, same
     // pattern as AIChatComponent::setAccountService()'s non-owning setter. Also forwarded to the
-    // transport bar (TL5-6), which restores/persists ITS OWN two keys ("timelineMetronomeEnabled",
+    // transport bar, which restores/persists ITS OWN two keys ("timelineMetronomeEnabled",
     // "timelineCountInBars") — this panel has no other reason to know either setting exists, so it
     // is a pure forward, not a third copy of the restore/persist idiom.
     void setApplicationProperties(juce::ApplicationProperties* props);
 
-    // TL5-3. Non-owning; may be null (a SYNTH_ENABLE_TIMELINE=OFF build never sets one, and the
+    // Non-owning; may be null (a SYNTH_ENABLE_TIMELINE=OFF build never sets one, and the
     // panel is then an inert shell with an empty header column). The panel listens to the doc and
     // rebuilds/refreshes the track headers on every notification — that is the ONLY thing that
-    // updates them: no timer, no polling. TL5-7: also forwarded to the clip-lane area, which runs
+    // updates them: no timer, no polling. Also forwarded to the clip-lane area, which runs
     // the same "set doc, refresh once" seam (TimelineClipLaneArea::setTimelineDoc).
     void setTimelineDoc(synth::TimelineDoc* doc);
     synth::TimelineDoc* getTimelineDoc() const noexcept { return doc_; }
@@ -104,21 +104,21 @@ public:
     // (or at the same time as) setTimelineDoc for the first build to be fully wired.
     void setTrackHeaderHost(TrackHeaderHost* host);
 
-    // TL5-7: forwarded to the clip-lane area — MainComponent's existing AppUndoManager is what
+    // Forwarded to the clip-lane area — MainComponent's existing AppUndoManager is what
     // makes every clip drag/trim/split/duplicate/delete ONE undo step. Non-owning; may be null
     // (mutations then apply directly, off the undo stack — same degrade-gracefully contract every
     // other non-owning setter here has).
     void setUndoManager(AppUndoManager* undoManager);
 
-    // The clip lane area and the selection model behind it (TL5-7). The panel owns the selection
+    // The clip lane area and the selection model behind it. The panel owns the selection
     // model; the lane area only holds a reference to it (see TimelineClipLaneArea's ctor).
     synth::ui::ClipSelectionModel& getClipSelection() noexcept { return clipSelection_; }
     synth::ui::TimelineClipLaneArea& getClipLaneArea() noexcept { return clipLaneArea_; }
-    // const overload: MainComponent::resolveEditSurface() (TL5-10) is itself const and only needs
+    // const overload: MainComponent::resolveEditSurface() is itself const and only needs
     // to compare addresses / walk the component tree, never to mutate either sub-component.
     const synth::ui::TimelineClipLaneArea& getClipLaneArea() const noexcept { return clipLaneArea_; }
 
-    // ---- Clip clipboard (TL5-10: Cmd+C/V/D on the TimelineClips surface) ----
+    // ---- Clip clipboard (Cmd+C/V/D on the TimelineClips surface) ----
     // This panel owns the clipboard because it already owns the selection it copies from — see
     // MainComponent::resolveEditSurface()/perform(), which delegate here exactly the way
     // GraphEditor owns its own module clipboard.
@@ -143,7 +143,7 @@ public:
     // there's no doc.
     bool duplicateSelectedClips();
 
-    // ---- Piano roll (TL5-8) ----
+    // ---- Piano roll ----
     // Swaps the lanes region (gridLanesBounds_ — the same rect the clip-lane area occupies) to
     // synth::ui::PianoRollComponent, editing `id`. A no-op if `id` does not resolve to a live
     // clip (PianoRollComponent::openClip's own contract). Double-clicking a clip in the lane area
@@ -156,10 +156,10 @@ public:
     bool isPianoRollOpen() const noexcept { return pianoRoll_.isOpen(); }
     synth::ui::PianoRollComponent& getPianoRoll() noexcept { return pianoRoll_; }
     // const overload — see getClipLaneArea()'s twin above for why (MainComponent::
-    // resolveEditSurface(), TL5-10).
+    // resolveEditSurface()).
     const synth::ui::PianoRollComponent& getPianoRoll() const noexcept { return pianoRoll_; }
 
-    // ---- Automation strip (TL5-9) ----
+    // ---- Automation strip ----
     // Docked at the BOTTOM of the lanes region (gridLanesBounds_), toggled by lane selection: the
     // clip-lane area (and the piano roll, sharing the same rect) shrink by exactly
     // Metrics::timelineAutomationStripHeight while the strip is open. Right-click-any-knob
@@ -181,7 +181,7 @@ public:
 
     /** One entry in the lane picker: either an EXISTING doc lane labelled "NodeName \xC2\xB7 paramId"
      *  (resolved via TrackHeaderHost::getNodeDisplayName; falls back to the uuid's first 8
-     *  characters when the node doesn't resolve), or (TL7-6) an "Add lane..." entry for a hosted
+     *  characters when the node doesn't resolve), or an "Add lane..." entry for a hosted
      *  plugin instance parameter that has none yet — `isAddEntry` distinguishes the two, `id` is
      *  only meaningful when it's false. In track order then lane order, existing lanes first, then
      *  add-lane entries — index i is menu id i + 1, the same convention
@@ -216,15 +216,15 @@ public:
     TimelineRulerComponent& getRuler() noexcept { return ruler_; }
     TimelinePlayheadOverlay& getPlayhead() noexcept { return playhead_; }
     juce::ComboBox& getSnapCombo() noexcept { return snapCombo_; }
-    // TL5-5: play/stop/record/loop + BPM/time-sig editors + the bar:beat readout.
+    // play/stop/record/loop + BPM/time-sig editors + the bar:beat readout.
     TimelineTransportBar& getTransportBar() noexcept { return transportBar_; }
 
     /** How many times updateFromTransport() has been called. Test hook: it is what proves the
      *  10 Hz poll never reaches a hidden panel. */
     int getTransportUpdateCountForTest() const noexcept { return transportUpdateCount_; }
 
-    // ---- Track headers (TL5-3) ----
-    // Menu ids for the "+ Track" button's two-item menu (TL6-4). Numbered from 1 because
+    // ---- Track headers ----
+    // Menu ids for the "+ Track" button's two-item menu. Numbered from 1 because
     // juce::PopupMenu reserves 0 for "dismissed".
     static constexpr int kAddMidiTrackMenuId = 1;
     static constexpr int kAddAudioTrackMenuId = 2;
@@ -245,7 +245,7 @@ public:
     }
 
 private:
-    // TimelineDoc::Listener — the single trigger for a header rebuild/refresh, AND (TL5-7) the
+    // TimelineDoc::Listener — the single trigger for a header rebuild/refresh, AND the
     // clip-lane area's refresh (prunes the clip selection of anything the mutation removed).
     void timelineChanged(const synth::TimelineDoc& doc) override;
 
@@ -255,7 +255,7 @@ private:
     void syncTrackHeaders();
     void layoutTrackHeaders();
 
-    // ---- Automation strip (TL5-9) ----
+    // ---- Automation strip ----
     // Repopulates the lane picker from the doc, preserving the current selection when it still
     // resolves. Called whenever the doc notifies while the strip is open, and by showAutomationLane().
     void syncAutomationLaneCombo();
@@ -263,7 +263,7 @@ private:
     // of doc state, not an edit).
     void syncAutomationRecordModeCombo();
 
-    // ---- Clip clipboard (TL5-10) ----
+    // ---- Clip clipboard ----
     // One captured clip, relative to the earliest selected clip's start at copy time (see
     // copySelectedClips()). Notes are already clip-relative in the doc, so they need no rebasing;
     // addNote() reassigns their ids on paste regardless of what's stored here.
@@ -286,7 +286,7 @@ private:
     };
 
     TimelineViewState viewState_;
-    // TL5-7: the panel owns the clip selection; the lane area only holds a reference to it (same
+    // The panel owns the clip selection; the lane area only holds a reference to it (same
     // relationship it has with viewState_ below).
     synth::ui::ClipSelectionModel clipSelection_;
     TimelineRulerComponent ruler_{viewState_};
@@ -295,7 +295,7 @@ private:
     // paint() always precedes children) and BEFORE playhead_ (added last, below), so z-order reads
     // grid -> clips -> playhead with no second place ever painting the grid.
     synth::ui::TimelineClipLaneArea clipLaneArea_{viewState_, clipSelection_};
-    // TL5-8: occupies the exact same rect as clipLaneArea_ (gridLanesBounds_), added right after
+    // Occupies the exact same rect as clipLaneArea_ (gridLanesBounds_), added right after
     // it (addChildComponent — not addAndMakeVisible, so it starts invisible) so z-order still
     // reads grid -> clips/piano-roll -> playhead. Only one of clipLaneArea_/pianoRoll_ is visible
     // at a time; openPianoRoll()/closePianoRoll() toggle it. See PianoRollComponent's class
@@ -306,7 +306,7 @@ private:
     // roll; spans ruler + lanes and intercepts no mouse clicks (see TimelinePlayheadOverlay's ctor).
     TimelinePlayheadOverlay playhead_{viewState_};
     juce::ComboBox snapCombo_;
-    // TL5-5: left-aligned in the transport-bar strip, the snap combo stays right of it.
+    // Left-aligned in the transport-bar strip, the snap combo stays right of it.
     TimelineTransportBar transportBar_;
 
     // The slice of transport state the RULER paints, diffed by updateFromTransport. `hasRulerState_`
@@ -331,22 +331,21 @@ private:
     juce::ApplicationProperties* appProperties_ = nullptr;
     synth::TimelineDoc* doc_ = nullptr;
     TrackHeaderHost* trackHeaderHost_ = nullptr;
-    // TL5-10: non-owning, set by setTransport() alongside the sub-component forwards it already
+    // Non-owning, set by setTransport() alongside the sub-component forwards it already
     // does. Every other consumer of the transport reads it from its OWN copy (ruler_/playhead_/
     // transportBar_/clipLaneArea_/pianoRoll_/automationEditor_); this is the one operation the
     // panel itself performs directly against it — reading the CURRENT position/time-signature at
     // paste time (see pasteClipsAtPlayhead()).
     synth::TransportService* transport_ = nullptr;
 
-    // TL6-4: was "+ MIDI Track"; the button now opens a MIDI/Audio menu instead of adding a MIDI
-    // track outright.
+    // The button opens a MIDI/Audio menu rather than adding a MIDI track outright.
     juce::TextButton addTrackButton_{"+ Track"};
 
     void showAddTrackMenu();
     juce::Viewport trackHeaderViewport_;
     TrackHeaderList trackHeaderList_;
 
-    // TL5-9: the strip's own copy of the undo manager (record-mode/lane-picker edits made directly
+    // The strip's own copy of the undo manager (record-mode/lane-picker edits made directly
     // by this panel, as opposed to automationEditor_'s edits, which it holds its own copy for).
     AppUndoManager* undoManager_ = nullptr;
 

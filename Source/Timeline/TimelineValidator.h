@@ -67,11 +67,11 @@ inline constexpr double kMaxPpqUntrusted = 100000.0;
  *
  * ### The two-door model
  *
- * TL0-4 made `AIStateMapper::validatePatch(trusted=false)` REFUSE a `"timeline"` key in a patch
+ * `AIStateMapper::validatePatch(trusted=false)` REFUSES a `"timeline"` key in a patch
  * suggestion, and that refusal is permanent: AI timeline data will never ride the patch grammar,
  * because a patch is applied to the graph and a timeline is not part of a graph. This function is
- * the OTHER door — the deliberate commit that opens what TL0-4 closed, through its own guarded
- * entrance rather than the patch path. TL8-4's discrete app-side timeline tools (add-track,
+ * the OTHER door — the deliberate commit that opens what that refusal closed, through its own guarded
+ * entrance rather than the patch path. The discrete app-side timeline tools (add-track,
  * place-clips, write-lane) validate their payloads here before any of them touches the doc.
  * Neither door weakens the other: the patch-grammar refusal stays exactly as it is.
  *
@@ -100,7 +100,7 @@ inline constexpr double kMaxPpqUntrusted = 100000.0;
  *    never arm a lane to capture the user's gestures.
  *  - Orphans by authoring. Every non-empty binding (a track's `bindingUuid`, a lane's
  *    (nodeUuid, paramId) pair) must resolve against the LIVE graph. An orphaned binding is a state
- *    the app recovers from when a node disappears under it (TL2-6); it is not a state untrusted
+ *    the app recovers from when a node disappears under it; it is not a state untrusted
  *    input gets to author from nothing.
  *  - Unknown top-level keys. See the note on PatchDocument in the .cpp: the trusted document path
  *    PRESERVES keys it does not understand so a newer file survives an older build; here they are

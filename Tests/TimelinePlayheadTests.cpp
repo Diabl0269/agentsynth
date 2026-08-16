@@ -1,6 +1,6 @@
 // TimelinePlayheadTests.cpp
 //
-// TL5-4: the timeline playhead — the SECOND documented exception to the app's
+// The timeline playhead — the SECOND documented exception to the app's
 // no-unconditional-per-tick-repaint rule (the AI thinking spinner is the first). The exception is
 // granted under a confinement contract (playing-only, strip-only, explicit stop), and this file is
 // what holds the contract to account.
@@ -358,7 +358,7 @@ TEST_F(TimelinePlayheadPollTest, TenHzPollOnlyReachesAVisiblePanel) {
 
     for (int i = 0; i < 10; ++i)
         mc.timerCallback();
-    EXPECT_EQ(panel.getTransportUpdateCountForTest(), 0) << "a hidden timeline costs exactly what it did pre-TL5-4";
+    EXPECT_EQ(panel.getTransportUpdateCountForTest(), 0) << "a hidden timeline costs exactly what it did before";
     EXPECT_FALSE(panel.getPlayhead().isPlayheadTimerRunning());
 
     mc.simulateToggleTimelineClick();

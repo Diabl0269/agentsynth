@@ -14,7 +14,7 @@ namespace synth {
 
 /**
  * The scan list: what third-party plugins this machine has, and the out-of-process scan that finds
- * them (TL7-3).
+ * them.
  *
  * -- Why a child process ------------------------------------------------------------------------
  *
@@ -45,7 +45,7 @@ namespace synth {
  * -- Ownership and persistence -------------------------------------------------------------------
  *
  * The service never touches settings: Core does not know about juce::ApplicationProperties (house
- * rule, same as the audio device state in TL6-1). The OWNER — MainComponent on the standalone path —
+ * rule, same as the audio device state). The OWNER — MainComponent on the standalone path —
  * calls toXml() after a scan and stashes the string under "pluginScanList", and calls loadFromXml()
  * on startup. A plugin build of ourselves installs no service at all: inside a host, the host owns
  * plugin discovery, and a nested scan would fork the DAW.
@@ -234,7 +234,7 @@ private:
 //==============================================================================
 
 /**
- * The `--scan-plugin <format> <fileOrIdentifier>` half of the out-of-process scan (TL7-3).
+ * The `--scan-plugin <format> <fileOrIdentifier>` half of the out-of-process scan.
  *
  * Returns nullopt when `args` is an ordinary app launch — the caller then proceeds to start the
  * application normally. Otherwise this IS the whole process: it scans exactly one plugin, writes the

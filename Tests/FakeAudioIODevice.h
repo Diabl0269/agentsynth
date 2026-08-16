@@ -1,6 +1,6 @@
 #pragma once
 
-// The repo's one fake audio device (TL6-1), shared so there is never a second one.
+// The repo's one fake audio device, shared so there is never a second one.
 //
 // It is the pattern for driving AudioEngine's juce::AudioIODeviceCallback half headlessly: it
 // implements juce::AudioIODevice with fixed, made-up numbers and never starts a thread, so a test
@@ -10,7 +10,7 @@
 // every block is where the test put it.
 //
 // Extend this rather than writing a second fake: everything about it is settable through the
-// constructor. Users: Tests/AudioInputTests.cpp (TL6-1), Tests/AudioInputModuleTests.cpp (TL6-2).
+// constructor. Users: Tests/AudioInputTests.cpp, Tests/AudioInputModuleTests.cpp.
 
 #include <juce_audio_devices/juce_audio_devices.h>
 
@@ -24,11 +24,11 @@ inline constexpr int kFakeDeviceOutputLatency = 128;
 class FakeAudioIODevice : public juce::AudioIODevice {
 public:
     /** @param inputLatency  what getInputLatencyInSamples() reports — the default is the shared
-     *         kFakeDeviceInputLatency every pre-TL6-8 user already asserts against.
-     *  @param outputLatency ditto for getOutputLatencyInSamples(). TL6-8's alignment tests pass
+     *         kFakeDeviceInputLatency every existing user already asserts against.
+     *  @param outputLatency ditto for getOutputLatencyInSamples(). The alignment tests pass
      *         0/0 to prove "zero-latency devices shift nothing", so both are settable rather than
      *         fixed constants.
-     *  @param sampleRate what getCurrentSampleRate() reports — TL6-9's device-change tests construct
+     *  @param sampleRate what getCurrentSampleRate() reports — the device-change tests construct
      *         a SECOND fake at a different rate to simulate a mid-session device switch (the same
      *         instance can't change rate: a real device restart is exactly "stop this one, start a
      *         different juce::AudioIODevice", which is what audioDeviceAboutToStart(&anotherFake)

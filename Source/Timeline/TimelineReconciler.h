@@ -6,7 +6,7 @@
 namespace synth {
 
 /**
- * @brief Bridges TimelineDoc to a real graph (TL2-6).
+ * @brief Bridges TimelineDoc to a real graph.
  *
  * TimelineDoc::reconcileBindings() is deliberately graph-agnostic — it takes a plain
  * `uuid -> bool` callback so the document model stays headless and testable without a live
@@ -24,9 +24,9 @@ namespace synth {
  * ProjectBundle::load calls this right after the trusted applyJSONToGraph and the timeline's own
  * fromVar, so a freshly opened project shows correct orphan flags before the user touches anything.
  *
- * TL5-3 wired up the rest: MainComponent owns the running app's live TimelineDoc and calls this
+ * MainComponent owns the running app's live TimelineDoc and calls this
  * from every place a node can appear or disappear, because each of those is a place a binding can
- * start or stop resolving. The definitive list lives in docs/architecture.md ("App wiring (TL5-3)")
+ * start or stop resolving. The definitive list lives in docs/architecture.md ("App wiring")
  * — keep the two in step. In outline:
  *  - MainComponent::reconcileTimelineAfterGraphChange(), from preset load, factory-preset load, New
  *    Patch, .agsproj open and AIIntegrationService's post-apply notification (which also covers

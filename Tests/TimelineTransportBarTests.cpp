@@ -1,6 +1,6 @@
 // TimelineTransportBarTests.cpp
 //
-// TL5-5: the timeline panel's transport bar — play/stop/record/loop + BPM/time-signature editors +
+// The timeline panel's transport bar — play/stop/record/loop + BPM/time-signature editors +
 // the bar:beat readout — and the app-level MidiRecorder wiring the record button needs.
 //
 // Two groups of coverage, the same split TimelinePanelTests.cpp/TimelinePlayheadTests.cpp use:

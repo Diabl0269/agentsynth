@@ -1,6 +1,6 @@
 // HostedPluginTests.cpp
 //
-// TL7-2: synth::HostedPluginBackend + synth::HostedPluginModule — third-party VST3/AU plugins as
+// synth::HostedPluginBackend + synth::HostedPluginModule — third-party VST3/AU plugins as
 // graph modules.
 //
 // Everything here runs against Tests/StubPluginInstance.h rather than a real plugin: there is no
@@ -15,7 +15,7 @@
 //   3. Refusal — an instance wider than kMaxPluginChannels, and an identity that does not resolve.
 //   4. State — the trusted round-trip through graphToJSON/applyJSONToGraph, and the assertion that
 //      no path is ever serialized.
-//   5. Trust — the untrusted path cannot author the type at all (TL7-4's mechanism).
+//   5. Trust — the untrusted path cannot author the type at all.
 //   6. Instance lifetime — the audio thread never frees.
 //   7. Stream format — prepareToPlay propagates to the live instance.
 //   8. Registration — the internal-only checklist Track In / Rec Tap / Track Audio established.
@@ -229,7 +229,7 @@ TEST(HostedPluginTest, OverMaxRefusedWithMessage) {
 }
 
 TEST(HostedPluginTest, UnresolvedIdentityStaysAPlaceholderThatRemembersItsPlugin) {
-    // The "plugin not installed on this machine" case — the state TL7-3's placeholder card renders.
+    // The "plugin not installed on this machine" case — the state the placeholder card renders.
     StubBackend backend;
     backend.resolves = false;
 
@@ -385,7 +385,7 @@ TEST(HostedPluginTest, HostedPluginSurvivesDawSessionStateRoundTrip) {
 }
 
 // ============================================================================
-// 5. Trust — TL7-4's mechanism
+// 5. Trust
 // ============================================================================
 
 TEST(HostedPluginTest, UntrustedCannotAuthorIt) {
@@ -548,8 +548,7 @@ TEST(HostedPluginTest, LatencyIsPublishedToTheGraph) {
 
     module.loadPlugin(stubDescription(), backend);
     ASSERT_TRUE(pumpUntil([&] { return module.hasInstance(); }));
-    EXPECT_EQ(module.getLatencySamples(), 128) << "the host module must report the plugin's latency (TL7-7 builds on "
-                                                  "this)";
+    EXPECT_EQ(module.getLatencySamples(), 128) << "the host module must report the plugin's latency";
 
     module.unloadPlugin();
     EXPECT_EQ(module.getLatencySamples(), 0);
@@ -584,9 +583,9 @@ TEST(HostedPluginTest, RegisteredButInternalOnly) {
 
 TEST(HostedPluginTest, AbsentFromTheLibraryWithAPinnedSizeEstimate) {
     ModuleLibraryComponent library;
-    // Still not a module type the library offers: TL7-3 added a Plugins section whose rows are
-    // scanned PLUGINS (RowKind::Plugin, carrying an identity), not the bare "Hosted Plugin" type —
-    // which, added on its own, would host nothing and have no way to become anything.
+    // Still not a module type the library offers: the Plugins section's rows are scanned PLUGINS
+    // (RowKind::Plugin, carrying an identity), not the bare "Hosted Plugin" type — which, added on
+    // its own, would host nothing and have no way to become anything.
     EXPECT_FALSE(library.getDraggableModuleNames().contains("Hosted Plugin"))
         << "Hosted Plugin is added by picking a scanned plugin, never as a bare module type";
 

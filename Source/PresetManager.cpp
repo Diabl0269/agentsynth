@@ -50,7 +50,7 @@ juce::String PresetManager::getPresetJSON(int index) {
     //   Amp Env / Filter Env / ADSR: 280 x 180
     //   Attenuverter:  40 x 40   (not a ModuleComponent; excluded from overlap check)
     //   Sequencer:   560 x 406   ← DOUBLE-wide (kDoubleWidth = 2 × kSingleWidth = 560); +26 for the
-    //                              TL1-8 Sync to Transport toggle row (was 380)
+    //                              Sync to Transport toggle row (was 380)
     //   MIDI Keyboard: 560 x 150 ← DOUBLE-wide
     //   Poly MIDI:   280 x 171   ← +48 (one combo row) from the issue #198 Voice Steal selector
     //   Distortion:  280 x 355
@@ -80,9 +80,9 @@ juce::String PresetManager::getPresetJSON(int index) {
     // Row y-positions:
     //   Signal row:      y = 10   — Osc bottom = 540, Filter bottom = 580
     //   Sequencer row:   y = 560  — top of Seq; gap from Osc bottom (540+12/2=546) → 560-6=554 > 546 ✓
-    //                              Seq bottom = 966 (TL1-8: was 940 before the Sync to Transport row)
+    //                              Seq bottom = 966 (was 940 before the Sync to Transport row)
     //   Modulator row:   y = 600  — gap from Filter bottom (580+6=586) → 600-6=594 > 586 ✓
-    //   Keyboard row:    y = 990  — gap from Seq bottom (966+6=972) → 990-6=984 > 972 ✓ (TL1-8: rebaked
+    //   Keyboard row:    y = 990  — gap from Seq bottom (966+6=972) → 990-6=984 > 972 ✓ (rebaked
     //                              from 960 to clear the taller Sequencer card)
     //
     // FX chain stacking (col 4, x = 1250), starting y = 10:

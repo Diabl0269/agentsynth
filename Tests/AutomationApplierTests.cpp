@@ -1,4 +1,4 @@
-// TL4-2 stage 1: the engine-level net for automation actually reaching a live parameter.
+// The engine-level net for automation actually reaching a live parameter.
 //
 // AutomationKernelTests pins the evaluator; this file pins everything between a TimelineDoc lane
 // and a juce::RangedAudioParameter on a node in a running graph: binding resolution against node

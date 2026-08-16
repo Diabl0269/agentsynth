@@ -1,4 +1,4 @@
-// TL4-5: automated parameter changes reflected in the UI, without a feedback loop.
+// Automated parameter changes reflected in the UI, without a feedback loop.
 //
 // AutomationApplier::applyBlock writes into live parameters with a plain, non-notifying setValue()
 // (see AutomationApplier.h) — attachments never hear it, which is exactly what stops the applier's

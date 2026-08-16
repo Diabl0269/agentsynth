@@ -10,7 +10,7 @@
 #include <map>
 #include <set>
 
-// TL2-4 — ProjectBundle (.agsproj): project.json = patch dialect + "timeline" key, Audio/ and
+// ProjectBundle (.agsproj): project.json = patch dialect + "timeline" key, Audio/ and
 // Peaks/ asset subdirectories. See docs/architecture.md §5 for the fixed load order this pins.
 
 using synth::AutomationLane;

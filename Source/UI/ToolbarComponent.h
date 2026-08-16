@@ -31,11 +31,11 @@ public:
         Redo,
         AutoArrange,
         // ToggleMinimap sits before ToggleModMatrix so the right-hand group reads
-        // minimap -> mod matrix -> AI panel -> timeline -> theme (issue #159, TL5-1).
+        // minimap -> mod matrix -> AI panel -> timeline -> theme (issue #159).
         ToggleMinimap,
         ToggleModMatrix,
         ToggleAiPanel,
-        // TL5-1: timeline panel toggle, right before the theme toggle. Present unconditionally
+        // Timeline panel toggle, right before the theme toggle. Present unconditionally
         // here even when SYNTH_ENABLE_TIMELINE is OFF — MainComponent simply leaves this slot's
         // button pointer null in that build, and layoutButtons() already skips null slots.
         ToggleTimeline,

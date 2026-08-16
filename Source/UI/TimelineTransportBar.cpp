@@ -14,7 +14,7 @@ constexpr int kTimeSigLabelWidth = 40;
 constexpr int kReadoutWidth = 92;
 constexpr int kCountInComboWidth = 64;
 
-// TL5-6 persistence keys — restored/persisted in setApplicationProperties(), the same idiom
+// Persistence keys — restored/persisted in setApplicationProperties(), the same idiom
 // TimelinePanelComponent uses for its own "timelineSnap" key.
 constexpr const char* kMetronomeEnabledKey = "timelineMetronomeEnabled";
 constexpr const char* kCountInBarsKey = "timelineCountInBars";

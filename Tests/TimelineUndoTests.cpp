@@ -6,7 +6,7 @@
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
-// TL2-5: timeline undo lives on the SAME juce::UndoManager as the graph's own undo (AppUndoManager),
+// Timeline undo lives on the SAME juce::UndoManager as the graph's own undo (AppUndoManager),
 // through a separate TimelineSnapshotAction rather than being folded into the graph's SnapshotAction —
 // see AppUndoManager::recordTimelineChange / recordCombinedChange for why. These tests check three
 // things: a timeline-only edit round-trips exactly and never touches the graph; a graph-only edit

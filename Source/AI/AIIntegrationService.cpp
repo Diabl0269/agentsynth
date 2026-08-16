@@ -96,10 +96,10 @@ juce::String AIIntegrationService::buildPatchAugmentedContent(const juce::String
         }
     }
 
-    // TL8-3: the timeline sibling of the patch section above, added only when there is an
-    // arrangement to report — same "say nothing rather than say empty" rule the patch section
-    // already follows. See ArrangementContext::summarize() (Source/Timeline/ArrangementContext.h)
-    // for the security model (read-path only; name-only file references; no plugin identifiers).
+    // The timeline sibling of the patch section above, added only when there is an arrangement to
+    // report — same "say nothing rather than say empty" rule the patch section already follows.
+    // See ArrangementContext::summarize() (Source/Timeline/ArrangementContext.h) for the security
+    // model (read-path only; name-only file references; no plugin identifiers).
     juce::String arrangementSection;
 #if SYNTH_ENABLE_TIMELINE
     if (timelineDoc != nullptr && transportService != nullptr && !timelineDoc->isEmpty()) {

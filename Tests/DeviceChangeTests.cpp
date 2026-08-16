@@ -1,9 +1,9 @@
 // DeviceChangeTests.cpp
 //
-// TL6-9: audio device / sample-rate change while a project is open. AudioEngine::
+// Audio device / sample-rate change while a project is open. AudioEngine::
 // handleStreamFormatChange is the one consolidated prepare-path hook (called from BOTH
 // audioDeviceAboutToStart and prepareForHost) that:
-//   1. re-prepares the transport (musical position preserved — TL1, already true, just verified here)
+//   1. re-prepares the transport (musical position preserved, verified here)
 //   2. resets the metronome's voice pool (a ringing click was computed for the OLD rate)
 //   3. invalidates the audio-clip streamer's rings (self-healing on a miss is not enough — a
 //      coincidental hit on stale content would be WRONG audio, not silence)
@@ -483,7 +483,7 @@ TEST_F(DeviceChangeFlowTest, AudioTakeCommittedAtFormatChange) {
                               .getChildFile(clip.assetRef.fromLastOccurrenceOf("/", false, false));
     const auto wav = readWavInfo(takeFile);
     ASSERT_TRUE(wav.ok);
-    // The WAV keeps its OWN (pre-change) rate — it was recorded at it, and TL6-9 does not touch it.
+    // The WAV keeps its OWN (pre-change) rate — it was recorded at it, and a format change does not touch it.
     EXPECT_DOUBLE_EQ(wav.sampleRate, kSampleRate);
 
     // The commit's placement math must be exactly what computeTakePlacement gives from the FROZEN
@@ -640,7 +640,7 @@ TEST(DeviceChangeTest, MetronomeVoicesResetOnRateChange) {
 
 namespace {
 
-/** TL6-9 TEST SEAM user: records the step sequence handleStreamFormatChange() runs, and what the
+/** TEST SEAM user: records the step sequence handleStreamFormatChange() runs, and what the
  *  transport's sample rate reads at each one — see AudioEngine::onFormatChangeStepForTest(). */
 class OrderSeamEngine : public AudioEngine {
 public:

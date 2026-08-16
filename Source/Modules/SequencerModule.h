@@ -57,7 +57,7 @@ public:
             addParameter(filterEnvParams[i] = new juce::AudioParameterFloat(name, name, 0.0f, 1.0f, 0.5f));
         }
 
-        // Opt-in transport sync (TL1-8). Default OFF: added last so every existing positional
+        // Opt-in transport sync. Default OFF: added last so every existing positional
         // getParameters()[n] lookup (including this file's own tests) keeps resolving to the same
         // parameter, and every preset that predates this parameter loads with sync off.
         addParameter(syncParam = new juce::AudioParameterBool("syncToTransport", "Sync to Transport", false));
@@ -87,12 +87,12 @@ public:
         juce::ignoreUnused(buffer);
 
 #if SYNTH_ENABLE_TIMELINE
-        // Sync-to-Transport (TL1-8, opt-in, default off). Only taken when syncParam is on AND
+        // Sync-to-Transport (opt-in, default off). Only taken when syncParam is on AND
         // getPlayHead() downcasts to our own TransportService — AudioEngine installs one on every
         // node on every render pass, but a foreign VST/AU host's playhead won't downcast, and
         // nothing else in this app installs an AudioPlayHead today. In that case we deliberately
         // fall through to the legacy free-running clock below instead of going silent.
-        // TL1-9: compiled out with the flag OFF — the syncToTransport parameter itself stays (param
+        // Compiled out with the flag OFF — the syncToTransport parameter itself stays (param
         // sets are golden-pinned and preset round-trip must not depend on the flag), it's simply
         // inert: every patch runs the legacy free-running clock below regardless of its value.
         if (syncParam->get()) {

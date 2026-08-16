@@ -1,4 +1,4 @@
-// TL3-5: the headless end-to-end regression net for the whole timeline scheduling path — a MIDI
+// The headless end-to-end regression net for the whole timeline scheduling path — a MIDI
 // clip on a track, through Track In, through Poly MIDI, into an audible chain, out of the graph's
 // Audio Output node. Every later scheduling change (loop wrap, tempo change, clip editing, …) has
 // to keep tripping this file's assertions, so it renders through synth::OfflineTransportDriver

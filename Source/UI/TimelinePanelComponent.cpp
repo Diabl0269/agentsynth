@@ -23,11 +23,11 @@ constexpr double kScrollPixelsPerWheelUnit = 200.0;
 constexpr int kSnapComboWidth = 90;
 constexpr const char* kTimelineSnapPropertyKey = "timelineSnap";
 
-// TL5-3: the "+ Track" strip at the top of the track-header column. Fixed height — the headers
+// the "+ Track" strip at the top of the track-header column. Fixed height — the headers
 // below it scroll, the button never does.
 constexpr int kAddTrackButtonHeight = 22;
 
-// TL5-9: automation strip chrome geometry. Code-only (mirrors the rest of this file's literal
+// Automation strip chrome geometry. Code-only (mirrors the rest of this file's literal
 // fallbacks); the strip's own height comes from the themed Metrics::timelineAutomationStripHeight.
 constexpr int kAutomationStripHeaderHeight = 24;
 constexpr int kAutomationToolButtonWidth = 24;
@@ -49,7 +49,7 @@ TimelinePanelComponent::TimelinePanelComponent() {
     trackHeaderViewport_.setScrollBarsShown(true, false);
     trackHeaderViewport_.setViewedComponent(&trackHeaderList_, false);
 
-    // TL5-5: added before the snap combo so it sits left of it in z-order too (they never overlap,
+    // Added before the snap combo so it sits left of it in z-order too (they never overlap,
     // but this keeps tab-order/z-order matching visual left-to-right order).
     addAndMakeVisible(transportBar_);
     transportBar_.setComponentID("timelineTransportBar");
@@ -70,20 +70,20 @@ TimelinePanelComponent::TimelinePanelComponent() {
         ruler_.repaint();
     };
 
-    // TL5-7: added after everything else but BEFORE the playhead below, so clips draw above the
+    // Added after everything else but BEFORE the playhead below, so clips draw above the
     // grid (painted by this component's own paint(), which — as a parent — always paints before
     // its children) and below the playhead.
     addAndMakeVisible(clipLaneArea_);
     clipLaneArea_.onClipDoubleClicked = [this](synth::ClipId id) { openPianoRoll(id); };
 
-    // TL5-8: same slot as clipLaneArea_ (added right after it, before the playhead), but starts
+    // Same slot as clipLaneArea_ (added right after it, before the playhead), but starts
     // invisible — addChildComponent (not addAndMakeVisible) keeps it hidden until openPianoRoll()
     // shows it.
     addChildComponent(pianoRoll_);
     pianoRoll_.setComponentID("timelinePianoRoll");
     pianoRoll_.onCloseRequested = [this] { closePianoRoll(); };
 
-    // TL5-9: automation strip. All start invisible — resized()/showAutomationLane()/
+    // Automation strip. All start invisible — resized()/showAutomationLane()/
     // closeAutomationStrip() are the only things that flip visibility, driven by
     // automationStripVisible_.
     addChildComponent(automationEditor_);
@@ -126,7 +126,7 @@ TimelinePanelComponent::TimelinePanelComponent() {
     automationCloseButton_.setButtonText(juce::String::fromUTF8("\xE2\x9C\x95"));
     automationCloseButton_.onClick = [this] { closeAutomationStrip(); };
 
-    // TL5-4: added LAST so it is topmost — it draws over the ruler, the lanes grid AND the clips.
+    // Added LAST so it is topmost — it draws over the ruler, the lanes grid AND the clips.
     addAndMakeVisible(playhead_);
     playhead_.setComponentID("timelinePlayhead");
 }
@@ -138,7 +138,7 @@ TimelinePanelComponent::~TimelinePanelComponent() {
 
 //==============================================================================
 void TimelinePanelComponent::setTransport(synth::TransportService* transport) {
-    transport_ = transport; // TL5-10: this panel's own copy — see the member's comment
+    transport_ = transport; // this panel's own copy — see the member's comment
     ruler_.setTransport(transport);
     playhead_.setTransport(transport);
     transportBar_.setTransport(transport);
@@ -156,7 +156,7 @@ void TimelinePanelComponent::updateFromTransport(const synth::TransportService::
     transportBar_.updateFromTransport(snapshot);
 
     // Nothing else repaints the ruler when the time signature or the loop range changes from
-    // OUTSIDE its own mouse gestures (a preset/bundle load, a host tempo map, TL5-5's transport
+    // OUTSIDE its own mouse gestures (a preset/bundle load, a host tempo map, the transport
     // controls), so this poll is where that is noticed. Diffed, not unconditional: an idle poll
     // repaints nothing.
     const RulerTransportState state{snapshot.timeSigNumerator, snapshot.timeSigDenominator, snapshot.looping,
@@ -191,7 +191,7 @@ void TimelinePanelComponent::setTimelineDoc(synth::TimelineDoc* doc) {
     clipLaneArea_.setTimelineDoc(doc_);
     pianoRoll_.setTimelineDoc(doc_);
     automationEditor_.setTimelineDoc(doc_);
-    // TL5-9: a lane id selected against the OLD doc can't mean anything against a new one (a fresh
+    // A lane id selected against the OLD doc can't mean anything against a new one (a fresh
     // preset/bundle load, or the flag-OFF null-doc case) — close outright rather than trying to
     // re-resolve it.
     automationStripVisible_ = false;
@@ -224,7 +224,7 @@ void TimelinePanelComponent::closePianoRoll() {
 }
 
 //==============================================================================
-// ---- Automation strip (TL5-9) ----
+// ---- Automation strip ----
 
 void TimelinePanelComponent::showAutomationLane(synth::LaneId id) {
     if (doc_ == nullptr || doc_->getLane(id) == nullptr)
@@ -258,12 +258,12 @@ std::vector<TimelinePanelComponent::AutomationLaneOption> TimelinePanelComponent
             juce::String nodeLabel =
                 trackHeaderHost_ != nullptr ? trackHeaderHost_->getNodeDisplayName(lane.nodeUuid) : juce::String();
             if (nodeLabel.isEmpty())
-                nodeLabel = lane.nodeUuid.substring(0, 8); // uuid-head fallback (TL5-9 design)
+                nodeLabel = lane.nodeUuid.substring(0, 8); // uuid-head fallback
             options.push_back({lane.id, nodeLabel + " \xC2\xB7 " + lane.paramId, false, {}});
         }
     }
 
-    // TL7-6: "Add lane..." entries for hosted-plugin instance parameters that have none yet, listed
+    // "Add lane..." entries for hosted-plugin instance parameters that have none yet, listed
     // after every existing lane.
     if (trackHeaderHost_ != nullptr) {
         for (auto& addOption : trackHeaderHost_->getAvailablePluginLaneOptions()) {
@@ -302,7 +302,7 @@ void TimelinePanelComponent::applyAutomationLaneMenuChoice(int selectedId) {
         return;
     const auto& chosen = options[(size_t)(selectedId - 1)];
     if (chosen.isAddEntry) {
-        // TL7-6: creates (find-or-create) the lane, then shows it — same shape as choosing an
+        // Creates (find-or-create) the lane, then shows it — same shape as choosing an
         // existing entry, just with one extra step first.
         if (trackHeaderHost_ == nullptr)
             return;
@@ -327,7 +327,7 @@ void TimelinePanelComponent::applyAutomationRecordModeChoice(int selectedId) {
 }
 
 //==============================================================================
-// ---- Clip clipboard (TL5-10) ----
+// ---- Clip clipboard ----
 
 double TimelinePanelComponent::currentBeatsPerBarForPaste() const {
     double beatsPerBar = 4.0;
@@ -505,12 +505,12 @@ void TimelinePanelComponent::showAddTrackMenu() {
 void TimelinePanelComponent::timelineChanged(const synth::TimelineDoc&) {
     syncTrackHeaders();
     clipLaneArea_.refreshFromDoc();
-    // TL5-8: if the roll is open on a clip this mutation just removed, refreshFromDoc() closes it
+    // If the roll is open on a clip this mutation just removed, refreshFromDoc() closes it
     // itself and fires onCloseRequested -> closePianoRoll() (wired in the constructor), which is
     // what swaps clipLaneArea_ back into view.
     pianoRoll_.refreshFromDoc();
 
-    // TL5-9: if the strip is open, re-derive it from the doc — the SAME "refresh, don't poll"
+    // If the strip is open, re-derive it from the doc — the SAME "refresh, don't poll"
     // discipline every other timeline sub-component follows. A mutation that removed the selected
     // lane closes the strip outright (there is nothing left to show); anything else just repaints
     // the curve and re-syncs the two pickers (a lane could have been added/removed elsewhere, or
@@ -566,7 +566,7 @@ void TimelinePanelComponent::syncTrackHeaders() {
 }
 
 void TimelinePanelComponent::layoutTrackHeaders() {
-    // TL5-7: themed with a literal fallback, same pattern as resized() above — and the SAME token
+    // Themed with a literal fallback, same pattern as resized() above — and the SAME token
     // synth::ui::TimelineClipLaneArea reads for its own row height, so header rows and clip rows
     // never drift apart.
     int rowHeight = TimelineTrackHeaderComponent::kRowHeight;
@@ -591,7 +591,7 @@ void TimelinePanelComponent::setApplicationProperties(juce::ApplicationPropertie
     viewState_.snap = (TimelineViewState::Snap)saved;
     snapCombo_.setSelectedId(saved + 1, juce::dontSendNotification);
 
-    // TL5-6: a pure forward — the transport bar owns and persists its own two keys. See this
+    // A pure forward — the transport bar owns and persists its own two keys. See this
     // method's header comment.
     transportBar_.setApplicationProperties(props);
 }
@@ -644,7 +644,7 @@ void TimelinePanelComponent::resized() {
     trackHeaderBounds_ = bounds.removeFromLeft(trackHeaderWidth);
     lanesBounds_ = bounds; // remainder
 
-    // TL5-3: "+ MIDI Track" pinned at the top of the header column, the scrolling header list
+    // The "+ MIDI Track" strip is pinned at the top of the header column, the scrolling header list
     // below it. Both live INSIDE trackHeaderBounds_, so the panel's three regions still tile.
     auto headerColumn = trackHeaderBounds_;
     addTrackButton_.setBounds(headerColumn.removeFromTop(kAddTrackButtonHeight).reduced(2, 1));
@@ -655,7 +655,7 @@ void TimelinePanelComponent::resized() {
     ruler_.setBounds(lanes.removeFromTop(rulerHeight));
     gridLanesBounds_ = lanes;
 
-    // TL5-9: the automation strip is carved from the BOTTOM of gridLanesBounds_ (which is what
+    // The automation strip is carved from the BOTTOM of gridLanesBounds_ (which is what
     // shrinks the clip-lane area/piano roll below), leaving the ruler untouched above.
     if (automationStripVisible_ && gridLanesBounds_.getHeight() > automationStripHeight) {
         automationStripBounds_ = gridLanesBounds_.removeFromBottom(automationStripHeight);
@@ -663,10 +663,10 @@ void TimelinePanelComponent::resized() {
         automationStripBounds_ = {};
     }
 
-    // TL5-7: the clip-lane area fills EXACTLY the rect the grid below is painted into (paint()'s
+    // The clip-lane area fills EXACTLY the rect the grid below is painted into (paint()'s
     // gridLanesBounds_ loop, unchanged) — so clips line up with the bar/beat grid pixel-for-pixel.
     clipLaneArea_.setBounds(gridLanesBounds_);
-    // TL5-8: the piano roll occupies the SAME rect, unconditionally (whichever of the two is
+    // The piano roll occupies the SAME rect, unconditionally (whichever of the two is
     // invisible just doesn't paint) — this is also what keeps its beatToX(beat) mapping identical
     // to the clip lanes' and the playhead's (see PianoRollComponent's class comment).
     pianoRoll_.setBounds(gridLanesBounds_);
@@ -674,12 +674,12 @@ void TimelinePanelComponent::resized() {
     // The playhead spans the WHOLE lanes region, ruler included, so the line reads as one stroke
     // from the ruler down through the tracks. Its local x == 0 is lanesBounds_.getX(), which is
     // also the ruler's — i.e. exactly TimelineViewState's origin, so no offset arithmetic is
-    // needed anywhere in the overlay. TL5-9: trimmed by the strip height too, so the line never
+    // needed anywhere in the overlay. Trimmed by the strip height too, so the line never
     // draws underneath the strip's own chrome.
     playhead_.setBounds(!automationStripBounds_.isEmpty() ? lanesBounds_.withTrimmedBottom(automationStripHeight)
                                                           : lanesBounds_);
 
-    // TL5-9: strip header row (tool buttons, lane/record-mode pickers, close) above the curve
+    // Strip header row (tool buttons, lane/record-mode pickers, close) above the curve
     // canvas. Visibility follows automationStripVisible_ exactly — nothing else flips it.
     const bool stripOpen = !automationStripBounds_.isEmpty();
     automationEditor_.setVisible(stripOpen);
@@ -703,7 +703,7 @@ void TimelinePanelComponent::resized() {
         automationEditor_.setBounds(strip);
     }
 
-    // Snap selector: right-hand side of the transport bar. TL5-5's transport controls (play/stop/
+    // Snap selector: right-hand side of the transport bar. The transport controls (play/stop/
     // record/loop + BPM/time-sig + readout) fill the rest, left-aligned.
     auto transportBar = transportBarBounds_;
     snapCombo_.setBounds(transportBar.removeFromRight(kSnapComboWidth).reduced(2));

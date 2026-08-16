@@ -13,7 +13,7 @@ namespace synth {
 
 class TransportService; // Forward declaration (Source/Transport/TransportService.h)
 
-// TL4-4: the set of parameters a user's hand is currently on, published to the audio thread.
+// The set of parameters a user's hand is currently on, published to the audio thread.
 //
 // Fixed slots and nothing but atomics, because AutomationApplier::applyBlock reads this on every
 // block: a claimed parameter is one the applier must NOT write, so the knob the user is turning
@@ -52,47 +52,38 @@ struct AutomationRecordState {
 };
 
 /**
- * @brief TL4-4: captures parameter gestures into automation lanes. MESSAGE THREAD ONLY.
+ * @brief Captures parameter gestures into automation lanes. MESSAGE THREAD ONLY.
  *
  * The sibling of synth::MidiRecorder — same shape (arm, capture into a fixed ring, commit as one
- * undo step), different source: where MidiRecorder reads the audio thread's MIDI buffer, this reads
- * juce::AudioProcessorParameter::Listener callbacks, which is where a UI slider attachment's
- * beginChangeGesture / setValueNotifyingHost / endChangeGesture trio lands.
+ * undo step), different source: this reads juce::AudioProcessorParameter::Listener callbacks,
+ * where a UI slider attachment's beginChangeGesture / setValueNotifyingHost / endChangeGesture
+ * trio lands.
  *
- * -- The programmatic-write guard --------------------------------------------------------------
- *
+ * -- The programmatic-write guard --
  * A preset load, an AI patch apply and an undo all push values into parameters with
  * setValueNotifyingHost, exactly like a knob drag does. If the recorder captured those, arming
- * record and loading a preset would silently overwrite every armed lane with the preset's values.
+ * record and loading a preset would silently overwrite every armed lane. So the primary guard is:
+ * **a value change is only captured while a capture SPAN is open, and a span only ever opens from
+ * a real gesture (Touch/Latch) or from the transport starting to play on a Write lane.** Nothing
+ * that merely calls setValueNotifyingHost can open one.
  *
- * So the primary guard is: **a value change is only captured while a capture SPAN is open, and a
- * span only ever opens from a real gesture (Touch/Latch) or from the transport starting to play on
- * a Write lane.** Nothing that merely calls setValueNotifyingHost can open one. That single rule
- * covers every programmatic writer we have without any of them having to know this class exists.
+ * ScopedProgrammaticApply is the belt-and-braces second guard, for a writer that wraps its own
+ * writes in gestures: while one is alive, even gestured events are dropped. MainComponent opens
+ * one (via its ProgrammaticApplyScope) around preset load, New Patch, project open, the AI apply
+ * span, and every undo/redo restore — see docs/architecture.md's "App wiring" section.
  *
- * ScopedProgrammaticApply is the belt-and-braces second guard, for a future path that wraps its
- * writes in gestures (a UI control being driven programmatically, a macro-recall animating knobs):
- * while one is alive, even gestured events are dropped. TL5-3 wired it in at the app level, where
- * MainComponent opens one (via its ProgrammaticApplyScope) around preset load, factory-preset load,
- * New Patch, .agsproj open, the AI apply span, and every AppUndoManager undo/redo restore — see
- * docs/architecture.md's "App wiring (TL5-3)" for the definitive list.
+ * -- Re-entrancy --
+ * A commit mutates the TimelineDoc, whose listeners drive AudioEngine::publishTimeline, whose
+ * owner re-runs unbindAll() + bindLane() — all from INSIDE one of this class's own
+ * parameter-listener callbacks. Two rules make that safe, and both are load-bearing:
+ *   1. Capture state lives in `spans`, keyed by LaneId, NOT in `bindings`. Every commit path takes
+ *      the pending commits out of the way BEFORE touching the doc, so a re-entrant
+ *      unbindAll()/bindLane() finds nothing in flight to corrupt.
+ *   2. unbindAll() moves detached listener objects to a graveyard drained only when no callback is
+ *      on the stack. Destroying the listener whose method is currently executing is otherwise a
+ *      use-after-free.
  *
- * -- Re-entrancy -----------------------------------------------------------------------------------
- *
- * A commit mutates the TimelineDoc, whose listeners drive AudioEngine::publishTimeline, whose owner
- * re-runs unbindAll() + bindLane(). All of that can therefore run INSIDE one of this class's own
- * parameter-listener callbacks. Two design rules make that safe, and both are load-bearing:
- *
- *   1. Capture state lives in `spans`, keyed by LaneId, NOT in `bindings`. Every commit path resets
- *      the span state and then *takes* the pending commits out of the way BEFORE touching the doc,
- *      so a re-entrant unbindAll()/bindLane() finds nothing in flight to corrupt — and an open
- *      Latch/Write span survives a rebind instead of being silently dropped by an unrelated publish.
- *   2. unbindAll() does not destroy the per-parameter listener objects it just detached; it moves
- *      them to a graveyard that is only drained when no callback is on the stack. Destroying the
- *      listener whose method is currently executing is otherwise a use-after-free.
- *
- * -- No logging ------------------------------------------------------------------------------------
- *
+ * -- No logging --
  * Not one line, anywhere in this file or its .cpp. A parameter drag produces a value change per
  * mouse move; the AIChatComponent Logger sink turns per-gesture logging into a multi-second UI
  * freeze (see CLAUDE.md).
@@ -124,7 +115,7 @@ public:
     // whole table after every AudioEngine::publishTimeline, exactly the way the applier's binding
     // table is rebuilt, because a lane's parameter is only resolvable against the current graph.
     //
-    // `param` is the base AudioProcessorParameter type (TL7-6), not RangedAudioParameter — a hosted
+    // `param` is the base AudioProcessorParameter type, not RangedAudioParameter — a hosted
     // plugin's own parameter has no NormalisableRange (see HostedPluginModule.h /
     // Source/Timeline/AutomationBinding.h). Every method here that needs a denormalised value
     // (denormalisedValueOf) already branches on whether `param` is ALSO a RangedAudioParameter, so
@@ -217,7 +208,7 @@ private:
 
     struct Binding {
         std::int64_t laneId = 0;
-        juce::AudioProcessorParameter* param = nullptr; // TL7-6: widened from RangedAudioParameter*
+        juce::AudioProcessorParameter* param = nullptr; // widened from RangedAudioParameter*
         juce::AudioProcessorGraph::Node::Ptr node;
         std::unique_ptr<ParamListener> listener;
     };

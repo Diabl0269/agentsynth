@@ -1,6 +1,6 @@
 // TimelineTrackHeaderTests.cpp
 //
-// TL5-3, part 1: the track header ROW and the track colour resolver, in isolation.
+// The track header ROW and the track colour resolver, in isolation.
 //
 // Nothing here touches MainComponent, an AudioEngine or a juce::AudioProcessorGraph: the header
 // talks to the app exclusively through synth::ui::TrackHeaderHost, so a stub host is enough to
@@ -56,9 +56,9 @@ public:
     }
 
     void addMidiTrack() override { ++addTrackCalls; }
-    void addAudioTrack() override { ++addAudioTrackCalls; } // TL6-4
+    void addAudioTrack() override { ++addAudioTrackCalls; }
 
-    // TL7-6: not exercised by this file (it tests the track-header column, not the automation
+    // Not exercised by this file (it tests the track-header column, not the automation
     // strip's lane picker) — empty/no-op is the correct stub behaviour.
     std::vector<PluginLaneOption> getAvailablePluginLaneOptions() const override { return {}; }
     synth::LaneId addPluginAutomationLane(const PluginLaneOption&) override { return {}; }
@@ -234,7 +234,7 @@ TEST(TimelineTrackHeaderTest, MuteSoloArmWriteThroughToTheDoc) {
     f.header->getArmButton().onClick();
     f.header->refreshFromDoc();
     EXPECT_TRUE(f.track()->soloed);
-    EXPECT_TRUE(f.track()->armed) << "arming flips document state only — recording starts in TL5-5";
+    EXPECT_TRUE(f.track()->armed) << "arming flips document state only — recording starts elsewhere";
 
     // Every one of those went through the host, i.e. onto the undo stack in the real app.
     EXPECT_EQ(f.host->editCalls, 3);

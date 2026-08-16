@@ -63,7 +63,7 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
         info.armed = track.armed;
         copyFixedString(info.bindingUuid, track.bindingUuid);
 
-        // TL6-4: audio tracks render now (TimelineAudioSourceModule), so a soloed one is part of the
+        // Audio tracks render now (TimelineAudioSourceModule), so a soloed one is part of the
         // same document-wide predicate a soloed MIDI track is — solo would otherwise mean "solo,
         // except audio", which is not what any DAW's solo button does. Automation tracks stay out:
         // nothing plays them.
@@ -71,7 +71,7 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
             snapshot->anySoloed = true;
 
         // -- notes: flatten every clip into one sorted run -----------------------
-        // MIDI tracks only (TL6-4). One Clip type covers both kinds in the doc, so the track's kind
+        // MIDI tracks only. One Clip type covers both kinds in the doc, so the track's kind
         // is what decides which half of a clip is flattened; a note left on an audio track is inert
         // rather than half-played, and the same clip's assetRef is inert on a MIDI track.
         info.firstNote = static_cast<int>(snapshot->notes.size());
@@ -109,7 +109,7 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
 
         info.numNotes = static_cast<int>(snapshot->notes.size()) - info.firstNote;
 
-        // -- audio clips (TL6-4) --------------------------------------------------
+        // -- audio clips -----------------------------------------------------------
         // Audio tracks only, and no merge step: the doc keeps a track's clips sorted by
         // (startBeat, id) already, so copying them in order yields a run sorted by startBeat.
         // Overlapping clips are legal (they SUM at playback — see TimelineAudioSourceModule), which

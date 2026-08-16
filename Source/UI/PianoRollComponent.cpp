@@ -12,11 +12,9 @@ namespace synth::ui {
 namespace {
 // Wheel tuning for this component's OWN non-Cmd behaviour (deltaX -> time scroll, deltaY -> pitch
 // scroll). kScrollPixelsPerWheelUnit intentionally mirrors TimelinePanelComponent::mouseWheelMove's
-// constant of the same value rather than sharing it (that one is a private anonymous-namespace
-// constant in a different translation unit) — the same one-line-cosmetic-constant duplication
-// TimelinePanelComponent.cpp's own kMinBeatLinePixelsPerBeat comment already accepts. Cmd+wheel
-// does NOT get a constant here: it is forwarded verbatim to the panel's zoom handling (see
-// mouseWheelMove below), so the actual zoom math is never duplicated.
+// constant rather than sharing it (that one is private to a different translation unit). Cmd+wheel
+// does NOT get a constant here: it is forwarded verbatim to the panel's zoom handling, so the
+// actual zoom math is never duplicated.
 constexpr double kScrollPixelsPerWheelUnit = 200.0;
 constexpr double kPitchScrollSemitonesPerWheelUnit = 3.0;
 
@@ -98,7 +96,7 @@ void PianoRollComponent::refreshFromDoc() {
         return;
     const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
     if (clip == nullptr) {
-        requestClose(); // the edited clip is gone — the roll closes itself (TL5-8 design)
+        requestClose(); // the edited clip is gone — the roll closes itself
         return;
     }
 
@@ -260,7 +258,7 @@ void PianoRollComponent::paintGrid(juce::Graphics& g) {
         return;
 
     // Dim the part of the grid outside [clipStart, clipEnd) — notes can only exist inside the
-    // clip (TL5-8 design), so anything outside it is never editable.
+    // clip, so anything outside it is never editable.
     const float top = (float)kHeaderHeight;
     const float bottom = (float)height;
     const float startX = (float)viewState_.beatToX(clip->startBeat);
@@ -531,8 +529,8 @@ void PianoRollComponent::performQuantise() {
     const auto selectedIds = selection_.getSelected();
     if (selectedIds.empty()) {
         // Nothing selected: quantise every note in the clip. quantiseNotes has no note-subset
-        // overload (TL5-8 design note), so this is the only case it can serve directly. strength
-        // 1.0 = hard snap, matching what "Q" implies.
+        // overload, so this is the only case it can serve directly. strength 1.0 = hard snap,
+        // matching what "Q" implies.
         auto mutate = [this, grid] { doc_->quantiseNotes(clipId_, grid, 1.0); };
         if (undoManager_)
             undoManager_->recordTimelineChange(*doc_, mutate);
@@ -608,10 +606,9 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
         return;
     }
 
-    // Empty grid. Pencil-by-default (TL5-8 design): a plain drag from empty grid ALWAYS draws a
-    // note, so — unlike TimelineClipLaneArea's deferred-empty-click trick, which exists to
-    // disambiguate "deselect" from "marquee" — no deferred state is needed here at all: the choice
-    // between draw and marquee is fully decided by whether Shift is down at mouseDown.
+    // Empty grid. Pencil-by-default: a plain drag from empty grid ALWAYS draws a note (unlike
+    // TimelineClipLaneArea's deferred-empty-click trick for disambiguating deselect vs. marquee),
+    // so the choice between draw and marquee is fully decided by whether Shift is down at mouseDown.
     if (e.mods.isShiftDown()) {
         beginMarquee(pos, e.mods.isCommandDown() || e.mods.isCtrlDown());
         return;
@@ -806,7 +803,7 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
         // Forward verbatim to the panel's existing zoom-around-cursor handling — Component's base
         // implementation walks up to the nearest enabled ancestor, which is exactly what
         // TimelineRulerComponent relies on by simply not overriding this at all. Do not duplicate
-        // the zoom math here (TL5-8 design).
+        // the zoom math here.
         juce::Component::mouseWheelMove(e, wheel);
         return;
     }

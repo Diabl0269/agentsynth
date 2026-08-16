@@ -13,39 +13,27 @@ namespace synth {
 class TransportService; // Forward declaration (Source/Transport/TransportService.h)
 }
 
-// AutomationLaneEditor — TL5-9: the automation strip's curve canvas, editing ONE
-// synth::AutomationLane at a time.
+// AutomationLaneEditor — the automation strip's curve canvas, editing ONE synth::AutomationLane
+// at a time.
 //
 // X is the SHARED TimelineViewState (absolute beats) — the exact same beatToX/xToBeat the clip
 // lanes and the piano roll use, so the canvas lines up with the playhead pixel-for-pixel. Y maps
 // the lane's own RangeSnapshot [min..max] linearly onto the component's height, top = max
 // (valueToY/yToValue).
 //
-// Reuses the timeline sub-component idioms rather than inventing new ones (see
-// TimelineClipLaneArea's and PianoRollComponent's class comments, which this one mirrors):
-//   - Non-owning TimelineDoc* / AppUndoManager* / TransportService* setters, null-safe.
-//   - Every gesture previews locally (a handful of `preview*_` members, read back in paint()) and
-//     commits to the doc exactly ONCE on mouse-up, through AppUndoManager::recordTimelineChange —
-//     never during mouseDrag. That is the load-bearing publish-discipline rule for this task: one
-//     gesture, one doc mutation, one listener fire, one republish.
-//   - Panel-scoped Escape: clears in-flight tool-drag state and returns true; returns false when
-//     idle so the key falls through to TimelinePanelComponent, which closes the strip.
+// Non-owning TimelineDoc* / AppUndoManager* / TransportService* setters, null-safe. Every gesture
+// previews locally (a handful of `preview*_` members, read back in paint()) and commits to the doc
+// exactly ONCE on mouse-up, through AppUndoManager::recordTimelineChange — never during mouseDrag:
+// one gesture, one doc mutation, one listener fire, one republish. Panel-scoped Escape: clears
+// in-flight tool-drag state and returns true; returns false when idle so the key falls through to
+// TimelinePanelComponent, which closes the strip.
 //
-// Four tools (member `tool_`, set by the strip's header buttons):
-//   Pointer — drag a HANDLE moves it (beat snapped, value clamped); drag a SEGMENT (not a handle)
-//             scrubs the segment's LEFT point's tension, +/-0.01 per vertical pixel; double-click
-//             empty space adds a point.
-//   Pencil  — freehand drag; on mouse-up the samples are thinned (synth::AutomationRecorder's own
-//             RDP helper, reused rather than duplicated) and replace whatever existed inside the
-//             dragged beat span.
-//   Line    — drag previews a straight line from press to release; mouse-up replaces the dragged
-//             span with exactly the two (snapped) endpoints.
-//   Eraser  — drag removes every handle it touches, collected during the drag and deleted in one
-//             mutation on mouse-up.
-//
-// Right-click a SEGMENT shows Hold/Linear (toggling the left point's curve via the headless
-// applySegmentCurveChoice() hook, since juce::PopupMenu::showMenuAsync never runs in a test).
-// Right-click a HANDLE shows {Delete point}.
+// Four tools (member `tool_`): Pointer (drag a handle to move it; drag a segment to scrub its
+// left point's tension; double-click empty space adds a point), Pencil (freehand drag, thinned via
+// synth::AutomationRecorder's RDP helper on mouse-up), Line (drag previews a straight line, commits
+// as its two snapped endpoints), Eraser (drag deletes every handle touched, in one mutation).
+// Right-click a segment shows Hold/Linear via the headless applySegmentCurveChoice() hook (menus
+// don't run in tests); right-click a handle shows Delete point.
 namespace synth::ui {
 
 class AutomationLaneEditor : public juce::Component {
@@ -83,8 +71,7 @@ public:
     void setTool(Tool tool) noexcept { tool_ = tool; }
     Tool getTool() const noexcept { return tool_; }
 
-    // ---- Headless hooks (juce::PopupMenu::showMenuAsync doesn't run headlessly — TL5-3's idiom)
-    // ----
+    // ---- Headless hooks (juce::PopupMenu::showMenuAsync doesn't run headlessly) ----
 
     // Toggles the segment whose LEFT point sits at `leftBeat` to `curve` (a BreakpointCurve value).
     // One recordTimelineChange mutation preserving the point's beat/value/tension. A no-op if

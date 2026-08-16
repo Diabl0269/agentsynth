@@ -7,7 +7,7 @@
 #include <thread>
 #include <vector>
 
-// A fake third-party plugin, and a HostedPluginBackend that hands it out (TL7-2).
+// A fake third-party plugin, and a HostedPluginBackend that hands it out.
 //
 // There is no plugin binary we can check into this repo and load in CI — a real VST3 would be a
 // platform-specific blob, a licence question, and a scan step. So everything worth pinning about
@@ -21,7 +21,7 @@
 
 namespace synth::test {
 
-/** A trivial, resizable dummy editor for StubPluginInstance (TL7-5). Exists purely so
+/** A trivial, resizable dummy editor for StubPluginInstance. Exists purely so
  *  HostedPluginEditorWindowTests has a real, non-generic juce::AudioProcessorEditor to open and
  *  resize — it draws nothing meaningful and is never actually shown on screen. */
 class StubPluginEditor : public juce::AudioProcessorEditor {
@@ -40,7 +40,7 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StubPluginEditor)
 };
 
-/** A stable-id (VST3/AU/LV2-style) stub parameter — TL7-6. Implements
+/** A stable-id (VST3/AU/LV2-style) stub parameter. Implements
  *  juce::HostedAudioProcessorParameter, the real hierarchy hosted plugin parameters use (NOT
  *  RangedAudioParameter — see HostedPluginModule.h), so tests exercise the exact type the resolver
  *  branches on. */
@@ -69,8 +69,8 @@ private:
 };
 
 /** A LEGACY stub parameter with NO stable id — the same shape JUCE's own VST2 wrapper produces for
- *  a plugin with no persistent parameter identity (TL7-6's "plugins without WithID parameters"
- *  case; see juce_VSTPluginFormat.cpp's own parameter class, whose getParameterID() likewise always
+ *  a plugin with no persistent parameter identity ("plugins without WithID parameters" case; see
+ *  juce_VSTPluginFormat.cpp's own parameter class, whose getParameterID() likewise always
  *  returns an empty string). It still has to implement juce::HostedAudioProcessorParameter —
  *  juce::AudioPluginInstance's own addParameter is deliberately hidden private, and
  *  addHostedParameter refuses anything that is not one — so "no stable id" is expressed by
@@ -109,7 +109,7 @@ struct StubParamSpec {
  *
  *  - processBlock multiplies every output channel by `kGainMarker` — a value no other module in the
  *    graph produces, so "did the hosted instance actually render?" is a single sample comparison.
- *  - ...and then DELAYS it by exactly the latency it reports (TL7-7). A plugin that claims 256
+ *  - ...and then DELAYS it by exactly the latency it reports. A plugin that claims 256
  *    samples of lookahead but renders in place would make a PDC test pass while proving nothing:
  *    the dry parallel path would be delayed by 256 and the "compensated" one would not be, and the
  *    misalignment the compensation exists to fix would never appear. So the stub is honest — the
@@ -137,11 +137,11 @@ public:
         destructionCount().store(0);
     }
 
-    // reportsEditor (TL7-5): when true, hasEditor() and createEditor() report and build a real
+    // reportsEditor: when true, hasEditor() and createEditor() report and build a real
     // StubPluginEditor instead of the base default (no editor) — HostedPluginEditorWindowTests uses
     // this to exercise both the custom-editor and the GenericAudioProcessorEditor-fallback paths.
     //
-    // initialLatency (TL7-7) is deliberately LAST: every existing call site names its arguments
+    // initialLatency is deliberately LAST: every existing call site names its arguments
     // positionally, so a new parameter anywhere else would have to touch all of them.
     StubPluginInstance(int numInputs, int numOutputs, juce::String pluginName = "Stub Plugin", int uid = 0x5754424,
                        juce::String format = "VST3", std::vector<StubParamSpec> params = {}, bool reportsEditor = false,
@@ -155,7 +155,7 @@ public:
         , format_(std::move(format))
         , uid_(uid)
         , reportsEditor_(reportsEditor) {
-        // TL7-6: a stable id builds the VST3/AU-style stub, an empty one the no-id legacy stub.
+        // A stable id builds the VST3/AU-style stub, an empty one the no-id legacy stub.
         // addHostedParameter (not addParameter, which AudioPluginInstance hides private — every
         // hosted parameter must be a HostedAudioProcessorParameter) takes ownership, exactly like
         // juce::AudioProcessor::addParameter does for our own modules' parameters.
@@ -210,8 +210,7 @@ public:
         const int numSamples = buffer.getNumSamples();
         const int latency = getLatencySamples();
 
-        // No reported latency (or a line we were never prepared for): the pre-TL7-7 behaviour,
-        // byte for byte.
+        // No reported latency (or a line we were never prepared for): apply gain only, no delay.
         if (latency <= 0 || delayLine.getNumSamples() < latency) {
             for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
                 buffer.applyGain(channel, 0, numSamples, kGainMarker);
@@ -272,7 +271,7 @@ public:
 
     using juce::AudioPluginInstance::setLatencySamples;
 
-    /** TL7-7 — "the user flipped a lookahead mode in the plugin's own editor", message thread.
+    /** "The user flipped a lookahead mode in the plugin's own editor", message thread.
      *  juce::AudioProcessor::setLatencySamples is what fires audioProcessorChanged(...
      *  withLatencyChanged(true)) on every listener, so this IS the notification path under test; the
      *  delay line is resized to match so the instance stays honest about what it reports.

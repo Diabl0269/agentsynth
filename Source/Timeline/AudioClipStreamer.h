@@ -11,54 +11,44 @@
 namespace synth {
 
 /**
- * @brief TL6-4: the engine-owned DISK-STREAMING service behind "Track Audio" clip playback.
+ * @brief The engine-owned DISK-STREAMING service behind "Track Audio" clip playback.
  *
  * One shared prefetch thread keeps a per-clip ring filled ahead of the playhead; the audio thread
  * only ever copies out of those rings. Nothing here ever holds a whole file: a ten-minute take
- * costs ONE ring — `kRingFrames` stereo frames, 1 MiB — not 100 MB. That is the entire reason this
- * class exists and is the opposite of `SamplerModule`'s deliberate whole-file-in-RAM model (which
- * is right for a one-shot a voice retriggers from arbitrary offsets, and wrong for a timeline that
- * may hold hours of takes).
+ * costs ONE ring — `kRingFrames` stereo frames, 1 MiB — not 100 MB. That is the opposite of
+ * `SamplerModule`'s deliberate whole-file-in-RAM model (right for a one-shot a voice retriggers
+ * from arbitrary offsets, wrong for a timeline that may hold hours of takes).
  *
- * -- The three threads ---------------------------------------------------------------------------
- *
+ * -- The three threads --
  *   AUDIO THREAD    `acquire()` + `readFrames()`, and nothing else. Both are lock-free, allocation-
  *                   free and file-I/O-free; the ring is the ONLY memory they touch, and every miss
- *                   (no stream, not filled yet, seeked away) is answered with SILENCE, never with a
- *                   block and never with stale bytes. `readFrames` also stores the frame it wanted
- *                   into the stream's `wantedFrame`, which is the prefetch thread's only steering
- *                   signal — there is no "seek" call, the reader simply notices where playback went.
- *
- *   PREFETCH THREAD one `juce::TimeSliceThread` client for the WHOLE service (not one per clip:
- *                   32 clips must not mean 32 threads). It owns every `juce::AudioFormatReader`
- *                   exclusively — opening, reading and closing all happen here — tops each ring up
- *                   towards `kPrefetchAheadFrames` ahead of `wantedFrame`, and repositions a reader
- *                   when playback jumped somewhere the ring cannot serve.
- *
+ *                   (no stream, not filled yet, seeked away) is answered with SILENCE, never a
+ *                   block and never stale bytes. `readFrames` also stores the frame it wanted into
+ *                   the stream's `wantedFrame`, the prefetch thread's only steering signal — there
+ *                   is no "seek" call, the reader simply notices where playback went.
+ *   PREFETCH THREAD one `juce::TimeSliceThread` client for the WHOLE service (not one per clip). It
+ *                   owns every `juce::AudioFormatReader` exclusively — opening, reading and closing
+ *                   all happen here — tops each ring up towards `kPrefetchAheadFrames` ahead of
+ *                   `wantedFrame`, and repositions a reader when playback jumped somewhere the ring
+ *                   cannot serve.
  *   MESSAGE THREAD  `setAssetRoots()` and `syncToSnapshot()`. Neither touches a reader, a ring or a
  *                   window atomic: `syncToSnapshot` writes an ASSIGNMENT TABLE (which clip belongs
  *                   in which pool slot, and the already-resolved `juce::File` for it) under a plain
- *                   lock, and the prefetch thread picks the change up on its next slice. That is
+ *                   lock, and the prefetch thread picks the change up on its next slice — which is
  *                   what makes "never delete a reader the prefetch thread may be using" true by
- *                   construction instead of by a retire list: the message thread never owns one.
+ *                   construction, since the message thread never owns one.
  *
- * -- The ring: a sliding window, not a FIFO ------------------------------------------------------
- *
+ * -- The ring: a sliding window, not a FIFO --
  * A clip's ring is `kRingFrames` INTERLEAVED stereo frames, and the slot for source frame `f` is
  * fixed at `f & (kRingFrames - 1)`. Two atomics describe what is currently readable:
- *
  *     ringStartSourceFrame   first source frame the ring can serve
  *     ringEndSourceFrame     one past the last source frame the ring can serve
- *
- * A FIFO (`juce::AbstractFifo`, the house style elsewhere — `RecordTapModule`, `MidiRecorder`) is
- * deliberately NOT used here, and the reason is the seek: a FIFO's read cursor is owned by the
- * consumer, so repositioning after a locate would need BOTH threads to mutate the same cursor, and
- * every scheme for that ends in a handshake the audio thread has to participate in. With a fixed
- * slot mapping the prefetch thread is the sole writer of both window atomics and the audio thread
+ * A FIFO is deliberately NOT used here: a FIFO's read cursor is owned by the consumer, so
+ * repositioning after a locate would need BOTH threads to mutate the same cursor. With a fixed slot
+ * mapping the prefetch thread is the sole writer of both window atomics and the audio thread
  * mutates nothing at all, so a seek is two ordinary release stores.
  *
  * **Fill ordering (the load-bearing part).** To append frames `[end, end + k)` the prefetch thread:
- *
  *   1. computes `newStart = max(start, end + k - kRingFrames)` — the oldest frame that will still
  *      be intact once those `k` slots are overwritten;
  *   2. `ringStartSourceFrame.store(newStart, release)` — **the window shrinks BEFORE a single byte
@@ -66,44 +56,34 @@ namespace synth {
  *   3. writes the slots;
  *   4. `ringEndSourceFrame.store(end + k, release)` — **frames are marked valid LAST**, so a reader
  *      that has seen the new end has, by release/acquire, also seen the samples.
- *
  * A REPOSITION (seek) is the same shape with the window collapsed first: `ringEnd` is stored at the
- * new position (which empties the window, because readability is gated on `end`), then `ringStart`,
- * and only then does filling begin. Invalidate, reposition, fill — in that order, always.
+ * new position (which empties the window), then `ringStart`, and only then does filling begin.
+ * Invalidate, reposition, fill — in that order, always.
  *
- * The prefetch thread never fills past `wantedFrame + kPrefetchAheadFrames`, and
- * `kPrefetchAheadFrames` is 3/4 of the ring, so step 1 can never move `newStart` past
- * `wanted - kRingFrames/4`: the quarter-ring of history behind the playhead is structurally safe.
- * `readFrames` still re-reads both window atomics AFTER copying and zeroes its output if the window
- * moved under it — one extra pair of loads to make "silence, never garbage" a proof rather than an
- * argument about timing.
+ * The prefetch thread never fills past `wantedFrame + kPrefetchAheadFrames` (3/4 of the ring), so
+ * step 1 can never move `newStart` past `wanted - kRingFrames/4`: the quarter-ring of history
+ * behind the playhead is structurally safe. `readFrames` still re-reads both window atomics AFTER
+ * copying and zeroes its output if the window moved under it, so "silence, never garbage" holds
+ * even against timing.
  *
- * -- Sample rate: the v1 honest simplification ---------------------------------------------------
- *
+ * -- Sample rate: the v1 honest simplification --
  * Source frames are FILE frames, and this build does **not** resample. A file whose header rate
- * differs from the engine's is played at the ENGINE's rate, i.e. transposed (a 44.1 kHz file in a
- * 48 kHz session plays ~8.8% sharp and short). Record-taps are written at the session rate so they
- * are always correct; an imported file may not be. This is stated loudly rather than papered over
- * with a nearest-frame hack that would alias. TODO(resample): a proper SRC belongs in the prefetch
- * thread's fill step, where it costs nothing on the audio thread.
+ * differs from the engine's is played at the ENGINE's rate, i.e. transposed. Record-taps are
+ * written at the session rate so they are always correct; an imported file may not be.
  * `getStreamFileSampleRate()` exposes what a stream actually opened, for a UI warning later.
+ * TODO(resample): a proper SRC belongs in the prefetch thread's fill step.
  *
- * -- Pool cap policy -----------------------------------------------------------------------------
- *
+ * -- Pool cap policy --
  * `kMaxStreams` clips can stream at once. Beyond that, `syncToSnapshot` keeps clips that ALREADY
  * have a stream and fills whatever slots are left in DOCUMENT ORDER (track order, then clip start
- * order); the remainder simply get no stream and therefore render silence. v1 is deliberately not
- * playhead-aware — a "furthest from the playhead loses" policy needs a position the message thread
- * does not have at publish time, and would make which clip is silent depend on when the user last
- * edited the document. It is silent, not logged: this runs on every doc edit, and a log here would
- * be the per-edit spam CLAUDE.md forbids.
+ * order); the remainder get no stream and render silence. Not playhead-aware — that needs a
+ * position the message thread does not have at publish time. Silent, not logged: this runs on
+ * every doc edit, and a log here would be the per-edit spam CLAUDE.md forbids.
  *
- * -- Determinism for tests -----------------------------------------------------------------------
- *
+ * -- Determinism for tests --
  * `setPrefetchPausedForTest(true)` stops the service from ever starting its thread, and
  * `pumpForTest()` then runs slices synchronously on the calling thread until every stream is fully
- * caught up. Tests therefore have NO sleeps and no waits: publish, pump, render, assert. Called on
- * a paused streamer, `pumpForTest()` is the prefetch thread — the same code, on the test's thread.
+ * caught up. Tests therefore have NO sleeps and no waits: publish, pump, render, assert.
  */
 class AudioClipStreamer {
 public:
@@ -133,9 +113,9 @@ public:
     /** The "this slot is free" clip id. Doc ids start at 1, so 0 is never a real clip. */
     static constexpr std::int64_t kNoClip = 0;
 
-    /** The reserved asset-ref prefix TL6-3 gives takes recorded before a project has ever been
-     *  saved. See `synth::ProjectBundle`'s asset policy — such a ref resolves against app data
-     *  rather than a bundle root, and is the one case `bundleRoot` does not cover. */
+    /** The reserved asset-ref prefix given to takes recorded before a project has ever been saved.
+     *  See `synth::ProjectBundle`'s asset policy — such a ref resolves against app data rather
+     *  than a bundle root, and is the one case `bundleRoot` does not cover. */
     static constexpr const char* kRecordingsRefPrefix = "Recordings/";
 
     /**
@@ -177,10 +157,10 @@ public:
     // ---- Message thread ----
 
     /** Where asset refs resolve. Either file may be invalid, which simply makes the refs that would
-     *  have resolved against it unresolvable (and therefore silent — TL6-6 owns the "missing media"
-     *  placeholder). `bundleRoot` is the `.agsproj` directory; `recordingsRoot` is the
-     *  `<app data>/<settings folder>/Recordings` directory TL6-3 writes unsaved-project takes into.
-     *  Safe to call at any time; it affects the NEXT `syncToSnapshot`. */
+     *  have resolved against it unresolvable (and therefore silent — a separate "missing media"
+     *  placeholder owns the UI for that). `bundleRoot` is the `.agsproj` directory; `recordingsRoot`
+     *  is the `<app data>/<settings folder>/Recordings` directory unsaved-project takes are written
+     *  into. Safe to call at any time; it affects the NEXT `syncToSnapshot`. */
     void setAssetRoots(const juce::File& bundleRoot, const juce::File& recordingsRoot);
 
     juce::File getBundleRoot() const;
@@ -200,7 +180,7 @@ public:
      *  be rendering. Idempotent. */
     void releaseAll();
 
-    // ---- Prepare-path (TL6-9), NOT the audio thread and NOT the prefetch thread ----
+    // ---- Prepare-path, NOT the audio thread and NOT the prefetch thread ----
 
     /** Called from `AudioEngine::handleStreamFormatChange` (`audioDeviceAboutToStart` /
      *  `prepareForHost`) whenever the engine's sample rate or block size changes. Every ring's
@@ -343,7 +323,7 @@ private:
 
     std::atomic<bool> prefetchPaused_{false};
 
-    // TL6-9: set by invalidateAllStreams() (release), any non-audio/non-prefetch thread. Cleared by
+    // Set by invalidateAllStreams() (release), any non-audio/non-prefetch thread. Cleared by
     // the prefetch thread (runOneSlice()) only after it has collapsed every open stream's window —
     // see invalidateAllStreams()'s comment. Also gates readFrames() directly so the silence
     // guarantee holds even in the gap before the prefetch thread has run.

@@ -9,38 +9,24 @@
 namespace synth {
 
 /**
- * HostedPluginWindowManager — owns every open HostedPluginEditorWindow, one per graph node
- * (TL7-5).
+ * HostedPluginWindowManager — owns every open HostedPluginEditorWindow, one per graph node.
  *
  * Owned by MainComponent (AppUI), never by GraphEditor: this keeps every plugin editor window
- * entirely outside GraphEditor's paint() / 30 Hz animation timer, matching the rest of TL7-5's
- * "windows are top-level, not canvas content" rule. MainComponent wires the one new seam this needs
- * — `GraphEditor::onOpenPluginEditorRequested`, fired by ModuleComponent's "Open Editor" button —
- * straight to openEditorFor() after resolving the NodeID to its live HostedPluginModule*.
+ * entirely outside GraphEditor's paint() / 30 Hz animation timer.
  *
- * -- Close-on-node-delete ---------------------------------------------------------------------
- *
- * `pruneClosedNodes()` is meant to be called from the EXISTING `GraphEditor::onGraphStructureChanged`
- * hook MainComponent already listens to (no GraphEditor changes needed for TL7-5). It is a pure
+ * `pruneClosedNodes()`, wired to `GraphEditor::onGraphStructureChanged`, is a pure
  * `AudioProcessorGraph::getNodeForId()` lookup — it never dereferences the HostedPluginModule behind
- * a node that no longer exists, because `graph.removeNode()` (which GraphEditor's delete path calls
- * BEFORE onGraphStructureChanged ever fires) has usually already destroyed it. Erasing the map entry
- * destroys the corresponding HostedPluginEditorWindow, whose own destructor is safe in that state too
- * (see its class comment — it holds the module through a juce::WeakReference, never a plain
- * reference, for exactly this reason).
- *
- * -- Shutdown / member order -------------------------------------------------------------------
+ * a node that no longer exists, since `graph.removeNode()` has usually already destroyed it before
+ * this fires. Erasing the map entry destroys the corresponding HostedPluginEditorWindow, whose own
+ * destructor is safe in that state too (it holds the module through a juce::WeakReference).
  *
  * `closeAll()` destroys every open window. MainComponent calls it as the FIRST line of its own
  * destructor — before `graphEditor.detachAllModuleComponents()` and `audioEngine.shutdown()` — so
- * every editor is torn down (and, with it, every reference an editor might hold into a live
- * juce::AudioPluginInstance) while the graph and its nodes are still fully alive. As a second,
+ * every editor is torn down while the graph and its nodes are still fully alive. As a second,
  * independent line of defence, MainComponent declares its HostedPluginWindowManager member AFTER
  * `audioEngine`/`ownedAudioEngine` and `graphEditor`: members are destroyed in REVERSE declaration
- * order, so even if some future edit ever removed the explicit closeAll() call above, the manager
- * (and every window it owns) would still be torn down before the engine/graph members that are
- * declared earlier in the class. Both mechanisms exist because losing either one silently is exactly
- * the kind of bug that would only show up as an intermittent crash on app close.
+ * order, so the manager is torn down before the engine/graph members even without the explicit call.
+ * Losing either mechanism silently would only show up as an intermittent crash on app close.
  */
 class HostedPluginWindowManager {
 public:

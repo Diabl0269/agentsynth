@@ -285,7 +285,7 @@ TEST_F(PolyMidiModuleTest, RenderChunk) {
 TEST_F(PolyMidiModuleTest, HasSixteenOutputChannels) { EXPECT_EQ(module->getTotalNumOutputChannels(), 16); }
 
 // ===========================================================================
-// Poly note contract (TL1-7) — machine-generated MIDI re-articulates.
+// Poly note contract — machine-generated MIDI re-articulates.
 //
 // Every path that (re)starts a note on a voice whose gate is still up — same-pitch retrigger, voice
 // steal, and reuse of a just-released voice — must produce a gate edge a downstream envelope can
@@ -466,7 +466,7 @@ float endOfBlock(const std::vector<float>& env, int block) { return env[(size_t)
 // §"Edge detection at start of block"). So PolyMidi's 1 ms gap re-articulates the envelope only
 // when it covers a block boundary; a retrigger in the middle of a block is invisible to that ADSR,
 // because the gate is back up before the next block starts. This is why the contract pins the gap
-// in absolute samples rather than trusting the smoothed shape, and it is what TL3's Track In node
+// in absolute samples rather than trusting the smoothed shape, and it is what the Track In node
 // must schedule against.
 //
 // The second half of this test pins a limitation, not a desired behaviour: if ADSRModule ever gains

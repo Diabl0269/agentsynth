@@ -4,7 +4,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
 
-// TimelineTrackHeaderComponent — TL5-3: one row in the timeline panel's track-header column.
+// TimelineTrackHeaderComponent — one row in the timeline panel's track-header column.
 //
 // Owns no timeline state: the TimelineDoc is the truth for every value it shows (name, colour,
 // mute/solo/arm, binding), and every edit it makes goes back through the doc via its host so it
@@ -63,12 +63,12 @@ struct TrackHeaderHost {
      *  so the whole header column talks to the app through one seam. */
     virtual void addMidiTrack() = 0;
 
-    /** The "+ Track" button's Audio entry (TL6-4): a "Track Audio" node wired into the master bus,
+    /** The "+ Track" button's Audio entry: a "Track Audio" node wired into the master bus,
      *  plus an Audio-kind track bound to it, as ONE compound undo step — the exact mirror of
      *  addMidiTrack(). */
     virtual void addAudioTrack() = 0;
 
-    /** TL7-6: one hosted-plugin instance parameter with no automation lane yet — the automation
+    /** One hosted-plugin instance parameter with no automation lane yet — the automation
      *  strip's lane picker "Add lane..." entries. `paramId` is the value a created lane would carry
      *  (a real stable id, or the synthetic "legacy:<index>" form — see
      *  HostedPluginModule::InstanceParameterInfo); `paramIndex` is what becomes the lane's
@@ -96,7 +96,7 @@ public:
     // Fixed row height. The header column scrolls (juce::Viewport in TimelinePanelComponent) rather
     // than compressing rows, so this stays constant however many tracks there are.
     //
-    // TL5-7: the themed source of truth is Theme::Metrics::timelineTrackRowHeight — TimelinePanelComponent::
+    // The themed source of truth is Theme::Metrics::timelineTrackRowHeight — TimelinePanelComponent::
     // layoutTrackHeaders() reads that (falling back to this literal when no themed LookAndFeel is
     // installed, e.g. headless tests), and TimelineClipLaneArea reads the SAME token so a track's
     // header row and its clip-lane row always land at the same y. Kept equal to the themed default

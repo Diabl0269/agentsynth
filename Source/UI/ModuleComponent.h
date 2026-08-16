@@ -48,8 +48,8 @@ public:
     void detachFromProcessor();
 
     /** Re-measures the card after its VISIBLE PORT COUNT changed for a reason that is not a
-     *  parameter gesture — today only Audio Input, whose jacks follow the audio device (TL6-2).
-     *  Same three steps applyMacroCountChange takes for the Macro bank's "Knobs" parameter. */
+     *  parameter gesture — today only Audio Input, whose jacks follow the audio device. Same three
+     *  steps applyMacroCountChange takes for the Macro bank's "Knobs" parameter. */
     void refreshPortLayout();
 
     // Interaction Logic
@@ -95,7 +95,7 @@ public:
      *  rule can be tested without a themed LookAndFeel and a live modulation routing. */
     int getModRingSliderIndex(const juce::String& paramName) const;
 
-    /** TL4-5: applies an automation-driven value to whichever slider/combo was built for `param`,
+    /** Applies an automation-driven value to whichever slider/combo was built for `param`,
      *  denormalised via that parameter's own range, via setValue(..., dontSendNotification) — never
      *  touches the parameter, never fires the attachment, so there is no write-back loop and
      *  AutomationRecorder (a parameter listener) hears nothing. A `param` this component never built
@@ -115,7 +115,7 @@ private:
     juce::OwnedArray<juce::Label> comboLabels;
     juce::OwnedArray<juce::ToggleButton> toggles;
 
-    // TL4-5: param -> control mapping for reflectParameterValue(), index-parallel to `sliders` /
+    // Param -> control mapping for reflectParameterValue(), index-parallel to `sliders` /
     // `comboBoxes` respectively. Populated only in createControls()'s generic auto-UI branch (the
     // float/int slider and choice-combo cases) — a control built by bespoke chrome, or the
     // ExternalMidiModule device/channel combos (which don't go through ComboBoxParameterAttachment),
@@ -138,7 +138,7 @@ private:
     // must close it in detachFromProcessor() — it references the module by reference.
     std::unique_ptr<juce::TextButton> eqPopOutButton;
     juce::Component::SafePointer<juce::DialogWindow> eqWindow;
-    // Hosted Plugin only (TL7-5): fires owner.onOpenPluginEditorRequested, routed to MainComponent's
+    // Hosted Plugin only: fires owner.onOpenPluginEditorRequested, routed to MainComponent's
     // HostedPluginWindowManager. Enabled only while the module reports hasInstance() — refreshed
     // each timerCallback() tick, since an async load can flip that at any moment.
     std::unique_ptr<juce::TextButton> openPluginEditorButton;
@@ -199,7 +199,7 @@ private:
     void createControls();
     void updateLayout();
 
-    /** TL5-9: right-click-any-knob entry point into the automation lane editor. Attached as a
+    /** Right-click-any-knob entry point into the automation lane editor. Attached as a
      *  MouseListener on every generic auto-UI slider (createControls()'s float/int branches) via
      *  addMouseListener(this, false) — mouseDown() dispatches here first when e.eventComponent
      *  isn't this component's own body (checked by identity against `sliders`, index-parallel to

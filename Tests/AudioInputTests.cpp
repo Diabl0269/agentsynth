@@ -1,9 +1,8 @@
-// TL6-1: audio device INPUT reaching the graph, and the device setup that survives a restart.
+// Audio device INPUT reaching the graph, and the device setup that survives a restart.
 //
 // This file introduced the repo's FakeAudioIODevice, which is the pattern for driving AudioEngine's
 // juce::AudioIODeviceCallback half headlessly — see Tests/FakeAudioIODevice.h, where it now lives
-// so TL6-2's tests can drive the same device. Before it, no test drove the device callback at all
-// (see the apology in StatusBarTests.cpp's MasterMute_ZeroesOutput).
+// so other tests can drive the same device.
 //
 // Headless/deterministic house rules (docs/testing.md, and the header of AudioEngineTransportTests):
 // no real audio device, no network, no sleeps. A HostMode::Standalone engine must never have
@@ -34,7 +33,7 @@ using IOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
 
 /** AudioEngine with the one hardware-touching step of initialise() intercepted, so a test can
  *  assert WHICH branch the saved-state decision took without opening a device or grabbing a MIDI
- *  input. This is the seam TL6-1 added for exactly this purpose. */
+ *  input. This is the seam added for exactly this purpose. */
 class SeamEngine : public AudioEngine {
 public:
     using AudioEngine::AudioEngine;
@@ -167,7 +166,7 @@ TEST(AudioInputTest, InputReachesTheGraph) {
 }
 
 // ============================================================================
-// 2. Zero inputs — byte-identical to the pre-TL6-1 callback
+// 2. Zero inputs — byte-identical to the legacy callback
 // ============================================================================
 
 TEST(AudioInputTest, InputCountZeroBehavesAsToday) {
@@ -452,7 +451,7 @@ TEST_F(MainComponentDeviceStateTest, MainComponentRestoresStoredDeviceState) {
     // A device that cannot resolve, on purpose: MainComponent's job here is to parse the stored
     // string and hand it to the engine, and juce::AudioDeviceManager's documented fallback for an
     // unopenable saved device is the default device with the input count the engine asked for —
-    // which TL6-1 pins at 0, so this test can never turn a real microphone on.
+    // which is pinned at 0, so this test can never turn a real microphone on.
     setStoredState(R"(<DEVICESETUP deviceType="NoSuchType" audioOutputDeviceName="AgentSynth Test No Such Device" )"
                    R"(audioInputDeviceName=""/>)");
 

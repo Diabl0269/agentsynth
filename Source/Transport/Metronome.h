@@ -7,63 +7,29 @@
 namespace synth {
 
 /**
- * @brief TL5-6: the metronome click generator — audio-thread synth, summed POST-graph.
+ * @brief The metronome click generator — audio-thread synth, summed POST-graph.
  *
- * -- Why post-graph, and why that is the whole safety argument -------------------------------
+ * `renderClicks()` runs from `AudioEngine::renderPass` AFTER the graph's processBlock and BEFORE
+ * master-mute's zero-fill, so the click is never seen by anything inside the graph — no module can
+ * tap it, no in-graph recording tap can capture it. `BounceExporter::bounce()` captures exactly that
+ * post-graph buffer though, so it forces this class off for the render's duration instead of relying
+ * on anything structural (see `BounceExporter.cpp`). Master mute still clears the whole buffer after
+ * this call, killing the click along with everything else — deliberate (see `AudioEngine::renderPass`).
  *
- * `renderClicks()` is called from `AudioEngine::renderPass`, AFTER `mainProcessorGraph.processBlock`
- * has already run and BEFORE `renderNextBlock`'s master-mute zero-fill. The click is therefore never
- * seen by anything INSIDE the graph — no module can tap it, no in-graph recording tap (TL6) can
- * capture it, and a `BounceExporter::bounce()` render (which captures exactly the graph's own output
- * buffer) would otherwise pick it up too, which is why the bounce path forces this class off for the
- * duration of a render (see `BounceExporter.cpp`) rather than relying on anything structural to keep
- * it out. Master mute clears the WHOLE buffer after this call runs, so it kills the click along with
- * everything else — deliberate, not an oversight (see `AudioEngine::renderPass`).
+ * Beat-crossing scan mirrors `TimelineMidiSourceModule`'s loop-wrap-aware scan: a block that wraps
+ * the loop is split into two ranges so no beat is double-counted or missed across the wrap. A beat
+ * is a downbeat when it lands on a bar start (`beatsPerBar = timeSigNumerator * 4 / timeSigDenominator`);
+ * signatures where that never divides evenly (e.g. 5/8) just get plain, unaccented clicks.
  *
- * -- Beat-crossing scan -----------------------------------------------------------------------
+ * Clicks are short decaying sine bursts spanning block boundaries: `kNumVoices` (4) persistent
+ * voices continue every call rather than resetting per block. Voice stealing takes the one with the
+ * fewest samples remaining. Zero allocation, zero locks, zero logging (see CLAUDE.md's
+ * no-high-frequency-logging rule).
  *
- * Mirrors `TimelineMidiSourceModule`'s loop-wrap-aware scan: a block that does not wrap the loop is
- * one beat range `[startPpq, endPpq)`; a block that does is TWO — the primary range
- * `[startPpq, loopEndPpq)` at offsets `[0, loopWrapSample)`, then the wrapped range starting at
- * `loopStartPpq` for the remaining offsets. Every INTEGER beat inside a range starts one click:
- * `beat == floor-or-above(rangeStart)`, `beat < rangeEnd`, stepping by 1.0 — so a beat that lands
- * exactly on a range's start (transport start, or a wrap landing on an integer beat) still clicks,
- * and no beat is ever double-counted across two blocks that tile exactly.
- *
- * A beat is a downbeat (bar start) when `fmod(beat, beatsPerBar) == 0` (epsilon-tolerant), with
- * `beatsPerBar = timeSigNumerator * 4 / timeSigDenominator` — the same "a beat is always a quarter
- * note" convention `TimelineTransportBar`/`TransportService::getPosition()` use. NOTE: for a time
- * signature whose denominator does not divide `timeSigNumerator * 4` evenly (e.g. 5/8), no integer
- * beat ever lands exactly on a bar start, so every click in that signature is a plain (non-accented)
- * beat — a graceful degradation, not a crash, and not a signature this class was asked to accent.
- *
- * -- Click synthesis and the 4-voice pool -----------------------------------------------------
- *
- * A click is a short exponentially-decaying sine burst: 1600 Hz / amplitude 0.35 on a downbeat,
- * 1050 Hz / amplitude 0.25 otherwise, decaying to -60 dB over `kDecaySeconds` (~4 ms). Clicks SPAN
- * block boundaries — `kNumVoices` (4) persistent voices `{samplesRemaining, phase, phaseInc, amp,
- * decayMul}` are continued every call, not reset per block, so a click that starts 5 samples before
- * a block ends keeps ringing into the next call with no phase or amplitude discontinuity. On
- * overflow (a 5th click while all 4 are still ringing) the OLDEST voice — the one with the fewest
- * `samplesRemaining` left, since every click starts with the same countdown — is stolen; there is no
- * silent voice for the metronome to run out of at any tempo this decay length is audible at.
- *
- * `renderClicks()` first continues whatever was ringing from the previous call (from sample 0),
- * THEN scans for new crossings in this block — so a voice a new crossing steals still gets to finish
- * whatever fraction of its own decay this call has room for before being overwritten.
- *
- * Zero allocation, zero locks, zero logging (see the "No high-frequency logging" rule in CLAUDE.md)
- * — every voice lives in a fixed array, and the scan does only arithmetic and buffer writes.
- *
- * -- Enabled vs. forced-on ---------------------------------------------------------------------
- *
- * `setEnabled`/`isEnabled` is the user-facing toggle (message thread only writes it; the audio
- * thread only reads). `setForcedOn`/`isForcedOn` is OR'd with it: TL5-6's count-in pre-roll forces
- * the click audible for the pre-roll bars even when the user's toggle is off, so the performer can
- * hear the count regardless of whether they'd normally want a click during playback. When NEITHER is
- * set, `renderClicks()` is a complete no-op — it does not touch the buffer and does not advance any
- * voice state (see `DisabledMetronomeIsSilentAndFree` in `Tests/MetronomeTests.cpp`), so a disabled
- * metronome costs nothing beyond the two atomic loads that prove it is disabled.
+ * `setEnabled`/`isEnabled` is the user-facing toggle (message thread writes, audio thread reads).
+ * `setForcedOn`/`isForcedOn` is OR'd with it so a count-in pre-roll can force the click audible
+ * regardless of the user toggle. With neither set, `renderClicks()` is a complete no-op (see
+ * `DisabledMetronomeIsSilentAndFree` in `Tests/MetronomeTests.cpp`).
  */
 class Metronome {
 public:
@@ -79,11 +45,11 @@ public:
     void setEnabled(bool enabled) noexcept { enabled_.store(enabled, std::memory_order_relaxed); }
     bool isEnabled() const noexcept { return enabled_.load(std::memory_order_relaxed); }
 
-    // TL5-6 count-in: forces the click audible through the pre-roll regardless of the user toggle.
+    // Count-in: forces the click audible through the pre-roll regardless of the user toggle.
     void setForcedOn(bool forced) noexcept { forcedOn_.store(forced, std::memory_order_relaxed); }
     bool isForcedOn() const noexcept { return forcedOn_.load(std::memory_order_relaxed); }
 
-    // TL6-9: called from AudioEngine::handleStreamFormatChange when the engine's sample rate
+    // Called from AudioEngine::handleStreamFormatChange when the engine's sample rate
     // changes. A voice ringing across the boundary carries a `phaseInc`/`decayMul` computed for the
     // OLD rate (see startClick) — continuing to render it against the NEW rate's sample clock would
     // make it audibly the wrong pitch AND the wrong length. Silencing it outright is simpler (and no

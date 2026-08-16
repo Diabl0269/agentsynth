@@ -1,10 +1,10 @@
-// TL8-1 — validateTimeline, the untrusted gate for AI/tool-supplied timeline data.
+// validateTimeline, the untrusted gate for AI/tool-supplied timeline data.
 //
 // Every case starts from a REAL document's toVar() output and breaks exactly one thing, so a
 // failure means the validator classified the intended defect rather than something incidental
 // (the same idiom as Tests/AIPatchValidationTests.cpp). Asserting the exact enumerator is the
-// point: TL8-4's tools feed the message back to the model and branch on the code, so a rejection
-// landing in the wrong bucket would send the wrong correction.
+// point: the timeline tools feed the message back to the model and branch on the code, so a
+// rejection landing in the wrong bucket would send the wrong correction.
 
 #include "../Source/AI/AIStateMapper.h"
 #include "../Source/Modules/FilterModule.h"
@@ -452,7 +452,8 @@ TEST_F(TimelineValidatorTest, AutomationTrackKindIsAccepted) {
 // 5. The two-door model: this gate opening does not open the patch grammar
 // =============================================================================
 
-// TL0-4's refusal is permanent. A timeline this very validator accepts must STILL be refused when
+// The "timeline" key's refusal on the patch grammar is permanent. A timeline this very validator
+// accepts must STILL be refused when
 // it is smuggled in as a patch property — the doors are separate, and only one of them is open.
 TEST_F(TimelineValidatorTest, PatchGrammarStillRefusesTimelineData) {
     const juce::var document = validDocument();

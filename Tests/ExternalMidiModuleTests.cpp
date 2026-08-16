@@ -59,7 +59,7 @@ TEST_F(ExternalMidiModuleTest, FiltersByChannel) {
 }
 
 // ===========================================================================
-// MidiMessageCollector-based timestamping (TL1-6)
+// MidiMessageCollector-based timestamping
 // ===========================================================================
 
 TEST_F(ExternalMidiModuleTest, UntimestampedMessagesLandAtSampleZero) {

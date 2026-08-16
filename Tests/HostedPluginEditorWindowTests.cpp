@@ -1,6 +1,6 @@
 // HostedPluginEditorWindowTests.cpp
 //
-// TL7-5: native plugin editor windows for hosted plugins — synth::HostedPluginEditorWindow and
+// Native plugin editor windows for hosted plugins — synth::HostedPluginEditorWindow and
 // synth::HostedPluginWindowManager, plus the ModuleComponent "Open Editor" affordance that opens
 // them.
 //

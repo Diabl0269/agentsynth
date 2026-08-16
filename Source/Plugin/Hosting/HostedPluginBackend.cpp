@@ -116,7 +116,7 @@ void HostedPluginBackend::createInstanceAsync(const PluginIdentity& identity, do
     if (!resolveIdentity(identity, description)) {
         // Not an error the user can fix by retrying: the plugin is not in the scan list. The module
         // deliberately keeps the identity and stays a placeholder, so re-saving the patch does not
-        // silently drop a plugin the author has merely not installed on THIS machine (TL7-3).
+        // silently drop a plugin the author has merely not installed on THIS machine.
         failAsync(std::move(callback), identity.name + " (" + identity.format + ") is not installed on this machine.");
         return;
     }

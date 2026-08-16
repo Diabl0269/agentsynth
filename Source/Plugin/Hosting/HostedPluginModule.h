@@ -12,105 +12,43 @@
 namespace synth {
 
 /**
- * Hosted Plugin — a third-party VST3 (or, on macOS, AU) instrument or effect as a graph module
- * (TL7-2).
+ * Hosted Plugin — a third-party VST3 (or, on macOS, AU) instrument or effect as a graph module.
  *
- * -- The 16/16 invariant ------------------------------------------------------------------------
+ * Fixed at kMaxPluginChannels (16) in/out for the module's entire lifetime. JUCE settles a node's
+ * bus layout in the ModuleBase constructor, and renegotiating it later would drop every existing
+ * graph connection — but a plugin's real channel count isn't known until an async load completes,
+ * necessarily after the node is already wired. getVisibleInput/OutputPortCount report the instance's
+ * real counts; hidden channels are cleared every block, and the owner drops routings left on a jack
+ * that disappeared (GraphEditor::dropRoutingsOnHiddenJacks — an invisible jack cannot be unplugged).
+ * An instance wanting MORE than 16 in or out is REFUSED (getStatusMessage()), never truncated.
  *
- * `ModuleBase("Hosted Plugin", kMaxPluginChannels, kMaxPluginChannels)`, with
- * kMaxPluginChannels = 16, ALWAYS — regardless of the plugin eventually loaded, and regardless of
- * whether one is ever loaded at all.
+ * Passes audio through unmodified until an instance is published — loading is async, and a patch
+ * naming a plugin this machine doesn't have never publishes one — so a chain never goes silent for
+ * one loading link, and bypass/"no instance" are the same code path.
  *
- * This is forced, not chosen. JUCE settles a node's bus layout in the ModuleBase constructor, and
- * renegotiating it afterwards would drop every graph connection the node already has. A hosted
- * plugin's channel count is not known until an async load completes, which is necessarily AFTER the
- * node exists and is already wired — so the node has to be able to carry the widest plugin we are
- * willing to host from the moment it is created. Same pattern as the Macro bank's knob count and
- * Audio Input's device channels: fixed maximum, varying VISIBLE port count
- * (getVisibleInput/OutputPortCount return the instance's real counts), hidden channels cleared every
- * block, and the owner drops routings left on a jack that disappeared —
- * GraphEditor::dropRoutingsOnHiddenJacks; an invisible jack cannot be unplugged.
+ * Instance lifetime: `activeInstance_` is an atomic pointer the audio thread acquire-loads once per
+ * block. Replacing it (load/reload/unload) retires the old instance into `retired_` on the message
+ * thread; nothing is ever deleted on the audio thread, and a retired instance is freed only once the
+ * audio thread has demonstrably started two later blocks (`blockCounter_`).
  *
- * The other half of the invariant: an instance wanting MORE than 16 in or out is REFUSED rather
- * than truncated. Truncating would silently drop a surround plugin's channels with no way for the
- * user to tell; refusing sets getStatusMessage() and leaves the module passing audio through.
+ * State/trust: getExtraState() carries the identity (format + uniqueId + name, never a path) plus
+ * the plugin's own opaque state blob, base64'd. "Hosted Plugin" is in AIStateMapper's
+ * kNonAuthorableModuleTypes, so untrusted apply never calls setExtraState — a plugin state blob is
+ * opaque bytes handed to third-party code and must never arrive from a model. A module holding an
+ * identity with no instance is a valid state (a patch opened where the plugin isn't installed).
  *
- * -- Pass-through until ready -------------------------------------------------------------------
+ * `loadPlugin(PluginIdentity)` resolves through HostedPluginBackend::getDefault() and its
+ * PluginScanService, which is the only place a plugin PATH ever lives.
  *
- * Loading is asynchronous (JUCE's own contract, and a plugin scan/load can take seconds). Until an
- * instance is published — and forever, if the patch names a plugin this machine does not have — the
- * module passes audio through unmodified. A chain does not go silent because one link is still
- * loading, and a patch opened without a plugin installed still plays the rest of itself. That dry
- * path is also what makes the bypass branch trivial: bypass and "no instance" are the same code.
+ * `onInstanceChanged` fires on every edge of hasInstance(): once with the instance already gone
+ * (before it can be reaped) and once with a freshly published instance live — see
+ * retireActiveInstance() for why a listener holding an editor needs that ordering. `onLatencyChanged`
+ * / `onInstancePublished` exist because juce::AudioProcessorGraph only re-derives compensation
+ * delays on graph.rebuild(); this class detects a latency change (which can arrive from ANY thread,
+ * hence the AsyncUpdater hop) but the owner (MainComponent) decides when to actually rebuild.
  *
- * -- Instance lifetime: the audio thread never frees ---------------------------------------------
- *
- * The Sampler's retained-instance discipline. `activeInstance_` is a raw atomic pointer the audio
- * thread acquire-loads once per block. Replacing it (a load, a reload, an unload) RETIRES the old
- * instance into `retired_` on the message thread; nothing is ever deleted on the audio thread, and a
- * retired instance is only actually freed once the audio thread has demonstrably started two later
- * blocks (`blockCounter_`), so it cannot still be inside the old processBlock. Publication happens
- * only after prepareToPlay has run on the new instance, so the audio thread never sees an
- * unprepared one.
- *
- * -- State and trust (TL7-4) --------------------------------------------------------------------
- *
- * getExtraState() carries the identity (format + uniqueId + name, never a path) plus the plugin's
- * own opaque state blob, base64'd. It therefore rides the EXISTING trusted-only setExtraState path:
- * "Hosted Plugin" is in AIStateMapper's kNonAuthorableModuleTypes, so validatePatch(trusted=false)
- * rejects the type outright, and untrusted apply never calls setExtraState at all. A plugin state
- * blob is an opaque byte string handed straight to third-party code — the one thing that must never
- * arrive from a model.
- *
- * Restoring is async and may fail: a module holding an identity with no instance is a VALID state,
- * not an error. It is what a patch opened on a machine without the plugin leaves behind, and
- * getExtraState keeps re-serializing the identity and the last known blob so re-saving the patch
- * there does not destroy it.
- *
- * -- Where an identity becomes a plugin (TL7-3) --------------------------------------------------
- *
- * loadPlugin(PluginIdentity) asks HostedPluginBackend::getDefault() to resolve it, and the default
- * backend asks the PluginScanService the app installed on it. So "which binary is this?" is answered
- * exclusively by the scan list — a local, rebuildable index that is the only place a plugin PATH
- * ever lives. See PluginScanService for the resolution precedence and the out-of-process scan.
- *
- * -- Editor windows and instance-change notification (TL7-5) ------------------------------------
- *
- * `onInstanceChanged` is the listener seam `synth::HostedPluginEditorWindow` observes: fired on the
- * message thread on every edge of hasInstance() — once with the instance already gone (from
- * retireActiveInstance(), BEFORE the retired instance can be reaped) and once more with a freshly
- * published instance live (from the end of publishInstance()). The "gone" edge fires before any
- * reap so a listener holding an editor built from `getActiveInstanceForEditor()` has a chance to
- * drop it while the instance behind it is still guaranteed alive — see retireActiveInstance()'s
- * comment for exactly why that ordering matters. A reload therefore fires the callback twice in the
- * same call stack (old instance gone, new instance live); a plain unload fires it once. See
- * `docs/architecture.md`'s Hosting section for the window manager side of this contract.
- *
- * -- Latency, and why it needs a listener (TL7-7) -----------------------------------------------
- *
- * setLatencySamples() alone changes nothing downstream. juce::AudioProcessorGraph bakes each node's
- * {bus layout, latencySamples} into its render sequence and only re-derives the parallel-path
- * compensation delays when that sequence is REBUILT — so a node whose latency moves after the
- * sequence was baked is silently uncompensated until someone calls graph.rebuild(). That is the
- * owner's job, not this class's (a module does not know which graph it is in, and MainComponent
- * already owns every other graph-wide reaction), which is what onLatencyChanged/onInstancePublished
- * below exist for.
- *
- * Detecting the change is this class's job, though, and a plugin can move its own latency at ANY
- * time — flipping a lookahead mode in its own editor is the everyday case. juce::AudioProcessor
- * reports that by firing audioProcessorChanged(..., ChangeDetails::withLatencyChanged(true)) on its
- * listeners, from whatever thread the plugin happened to be on: commonly its audio thread. So the
- * listener installed on the instance does exactly one thing — trigger a juce::AsyncUpdater, which
- * allocates nothing (its message object is built once, in the constructor) and coalesces — and all
- * the real work happens on the message thread in the callback.
- *
- * -- Forward pointers ---------------------------------------------------------------------------
- *
- * This module is absent from the library's module catalogue and from the replace menu: it is
- * added by dragging or clicking a row in the library's Plugins section (TL7-3), which supplies the
- * identity (a bare "Hosted Plugin" hosting nothing would have no way to become anything). Editor
- * windows are TL7-5 (see HostedPluginEditorWindow); TL7-6 parameter exposure; TL7-7 latency
- * compensation.
+ * Added via the library's Plugins section (drag/click), not the module catalogue — a bare instance
+ * has no identity and no way to become anything.
  */
 class HostedPluginModule : public ModuleBase {
 public:
@@ -154,7 +92,7 @@ public:
     const juce::String& getStatusMessage() const noexcept { return statusMessage_; }
 
     /** The live juce::AudioPluginInstance backing this module, or nullptr — message-thread
-     *  convenience for TL7-5's HostedPluginEditorWindow to build an editor from. This is NOT the
+     *  convenience for HostedPluginEditorWindow to build an editor from. This is NOT the
      *  audio thread's path (processBlock has its own acquire-load; see the class comment) and the
      *  returned pointer must not be retained past the next onInstanceChanged callback: that is
      *  exactly the signal that it may be about to be retired. */
@@ -169,7 +107,7 @@ public:
      *  needs to observe this today. */
     std::function<void()> onInstanceChanged;
 
-    /** TL7-7. Fired on the MESSAGE thread whenever this module's reported latency actually CHANGED
+    /** Fired on the MESSAGE thread whenever this module's reported latency actually CHANGED
      *  — a runtime change inside the plugin (hopped off whatever thread reported it; see the class
      *  comment) and an unload's drop back to 0. Deliberately not fired for a publish, which
      *  onInstancePublished below already covers, nor from prepareToPlay: the graph prepares its
@@ -181,17 +119,16 @@ public:
      *  deliberately a SEPARATE slot from onInstanceChanged, which HostedPluginEditorWindow owns. */
     std::function<void()> onLatencyChanged;
 
-    /** TL7-7. Fired on the message thread at the very end of publishInstance(), i.e. once per
+    /** Fired on the message thread at the very end of publishInstance(), i.e. once per
      *  completed async load, with the new instance already live. Two things need it: a publish
      *  takes the node's latency 0 -> N, so the graph's compensation is stale until it rebuilds; and
-     *  a hosted-plugin automation lane cannot resolve until the instance exists, so this is the
-     *  reconcile trigger a completed load used to lack (the TL7-6 known gap).
+     *  a hosted-plugin automation lane cannot resolve until the instance exists.
      *
      *  Owned by MainComponent, separately from onInstanceChanged. */
     std::function<void()> onInstancePublished;
 
     //==============================================================================
-    // Instance parameters (TL7-6) — automation-lane resolution seam, message thread only
+    // Instance parameters — automation-lane resolution seam, message thread only
     //==============================================================================
     //
     // A hosted plugin's OWN parameters live on the inner juce::AudioPluginInstance, never on this
@@ -232,7 +169,7 @@ public:
     int getInstanceParamIndexFallback(const juce::String& paramId) const noexcept;
 
     /** One entry in the live instance's parameter list, message-thread snapshot for the automation
-     *  lane picker's "Add lane..." entries (TL7-6). */
+     *  lane picker's "Add lane..." entries. */
     struct InstanceParameterInfo {
         int index = -1;
         // The stable id from HostedAudioProcessorParameter::getParameterID(), or, when the plugin
@@ -274,7 +211,7 @@ public:
     ModuleType getModuleType() const override { return ModuleType::HostedPlugin; }
 
     //==============================================================================
-    // Non-parameter state — trusted path ONLY (see the class comment / TL7-4)
+    // Non-parameter state — trusted path ONLY (see the class comment)
     //==============================================================================
 
     juce::var getExtraState() const override;
@@ -304,8 +241,8 @@ private:
      *  it had already queued — the generation guard for a retired instance's in-flight callback. */
     void detachInstanceListener();
 
-    /** TL7-7's thread hop. See the class comment: audioProcessorChanged can arrive on ANY thread,
-     *  so the only thing it may do is trigger the (allocation-free, coalescing) AsyncUpdater. */
+    /** The thread hop for latency-change notification: audioProcessorChanged can arrive on ANY
+     *  thread, so the only thing it may do is trigger the (allocation-free, coalescing) AsyncUpdater. */
     class InstanceListener final
         : public juce::AudioProcessorListener
         , private juce::AsyncUpdater {

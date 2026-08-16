@@ -23,43 +23,20 @@ struct TimelineOpsResult {
 };
 
 /**
- * @brief The app-side timeline tools (TL8-4): discrete, validated, previewable operations a model
- *        may ask for, applied as ONE undo step.
+ * @brief The app-side timeline tools: discrete, validated, previewable operations a model
+ *        may ask for (addTrack, placeClips, writeLane, placeMidiClip), applied as ONE undo step.
  *
- * ### The envelope
- *
- * @code
- * { "timelineOps": [
- *     { "op": "addTrack",   "kind": "midi", "name": "Bass" },
- *     { "op": "placeClips", "track": "Bass",           // or { "index": 0 }
- *       "clips": [ { "startBeat": 0, "lengthBeats": 4, "name": "A",
- *                    "notes": [ { "startBeat": 0, "lengthBeats": 1,
- *                                 "pitch": 36, "velocity": 100, "channel": 1 } ] } ] },
- *     { "op": "writeLane",  "nodeUuid": "…", "paramId": "cutoff",
- *       "points": [ { "beat": 0, "value": 800, "tension": 0, "curve": 1 } ] },
- *     { "op": "placeMidiClip", "track": "Bass", "startBeat": 0,
- *       "midBase64": "<base64-encoded Standard MIDI File>" }
- * ] }
- * @endcode
- *
- * ### `placeMidiClip` — the .mid blob surface (TL8-5)
- *
- * A `.mid` blob is the intentionally narrow AI note surface: `MidiClipFile::importFromStream`
- * (TL3-4) can only ever produce notes — no file paths, no plugin identifiers, no code — which is
- * why it is the one place this envelope accepts an opaque binary payload at all. `midBase64` is
- * bounded by `kMaxMidBlobBytes`, checked against the STILL-ENCODED string BEFORE decoding, so an
- * oversized blob is rejected without ever allocating a decode buffer for it. The decoded bytes go
- * through the exact same strict importer a user's own "Import MIDI…" menu item uses: SMPTE files,
- * unparseable bytes, and a per-track note count over `TimelineDoc::kMaxNotesPerClip` all reject the
- * WHOLE batch, never just that clip. Every imported track becomes one clip at the op's `startBeat`
- * (clip length is `ceil` of its last note's end, floored at 1 beat — `MidiClipFile::importIntoTrack`'s
- * own rule, reused rather than restated), and every note it contains counts toward
+ * `placeMidiClip`'s `.mid` blob is the intentionally narrow AI note surface:
+ * `MidiClipFile::importFromStream` can only ever produce notes — no file paths, no plugin
+ * identifiers, no code — which is why it is the one place this envelope accepts an opaque binary
+ * payload at all. `midBase64` is bounded by `kMaxMidBlobBytes`, checked against the
+ * STILL-ENCODED string BEFORE decoding. The decoded bytes go through the exact same strict
+ * importer a user's own "Import MIDI…" menu item uses, and every note it contains counts toward
  * `kMaxTotalNotesUntrusted` exactly like a `placeClips` note does.
  *
- * This is the CLIENT half of the TL8-2 platform capabilities: the model emits this shape through
- * its own capability schema, and it is a **sibling** of a patch suggestion, never nested inside
- * one. `AIStateMapper::validatePatch(trusted=false)` still refuses a `"timeline"` key inside patch
- * JSON and always will (TL0-4, docs/AI_Engine.md §5c "the two-door model") — timeline data reaches
+ * This is a **sibling** of a patch suggestion, never nested inside one.
+ * `AIStateMapper::validatePatch(trusted=false)` still refuses a `"timeline"` key inside patch
+ * JSON and always will (see docs/AI_Engine.md §5c "the two-door model") — timeline data reaches
  * the app through this door or not at all. Because `"timelineOps"` is a different key from
  * `"timeline"`, a response may legitimately carry a patch and an ops envelope side by side; each is
  * validated and applied by its own gate, with its own Apply affordance.
@@ -72,21 +49,14 @@ struct TimelineOpsResult {
  *
  * ### The per-op checks are `validateTimeline`'s, reused rather than restated
  *
- * Same caps (`TimelineDoc::kMaxTracks`/`kMaxClipsPerTrack`/`kMaxNotesPerClip`/`kMaxLanesPerTrack`/
- * `kMaxBreakpointsPerLane`, `kMaxTotalNotesUntrusted`, `kMaxPpqUntrusted`), same bounds, and the
- * same rule that untrusted input is **REJECTED where a trusted path would clamp or repair**: pitch
- * 128 is refused, not rewritten to 127, and a breakpoint value outside the parameter's range is
- * refused rather than pulled inside it. Lane values are checked against the LIVE parameter's range,
- * never against a range snapshot the sender supplied.
+ * Same caps, same bounds, and the same rule that untrusted input is **REJECTED where a trusted
+ * path would clamp or repair**. Lane values are checked against the LIVE parameter's range, never
+ * against a range snapshot the sender supplied.
  *
- * Deliberately absent from the grammar, which is how assets and record arming stay unreachable
- * (rather than being refused field-by-field): an op has no `assetRef`, no `recordMode`, no
- * `bindingUuid`, and no track kind beyond `midi`/`automation`. A `.mid` blob is not an exception to
- * this — it can only ever decode to notes, never a path or an id, which is exactly why it is the
- * one binary payload this grammar accepts. **Unknown fields inside an op are REJECTED**, so a
- * future field cannot be smuggled past a gate that never inspected it — the same reasoning behind
- * `validateTimeline`'s unknown-top-level-key refusal. Unknown keys at the ENVELOPE root are
- * ignored, because that is where the sibling patch's own keys live.
+ * Deliberately absent from the grammar, which is how assets and record arming stay unreachable:
+ * an op has no `assetRef`, no `recordMode`, no `bindingUuid`, and no track kind beyond
+ * `midi`/`automation`. **Unknown fields inside an op are REJECTED**; unknown keys at the ENVELOPE
+ * root are ignored, because that is where the sibling patch's own keys live.
  *
  * ### All-or-nothing
  *
@@ -150,8 +120,9 @@ struct TimelineOps {
      *  - **placeClips** targets a MIDI track by exact name or by `{"index": N}`. A name matching no
      *    track, or more than one, rejects the whole batch rather than guessing.
      *  - **writeLane** find-or-creates the lane for `(nodeUuid, paramId)` on the document's
-     *    Automation track, creating that track too if the document has none (the TL5-9
-     *    find-or-create rule, exactly as `MainComponent::automateParameter` does it), then REPLACES
+     *    Automation track, creating that track too if the document has none (the same
+     *    find-or-create rule `MainComponent::automateParameter` uses for the user's own gesture),
+     *    then REPLACES
      *    every existing point inside the written span — min..max beat of the payload, inclusive —
      *    in one `editBreakpoints` mutation.
      *  - **placeMidiClip** decodes `midBase64`, parses it via `MidiClipFile::importFromStream`, and

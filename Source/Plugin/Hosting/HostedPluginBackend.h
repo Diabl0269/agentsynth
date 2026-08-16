@@ -11,7 +11,7 @@ class PluginScanService;
 
 /**
  * The formats this app hosts, added to `manager` in scan order: VST3 everywhere, AudioUnit
- * additionally on macOS (TL7-1's licensing call — JUCE's built-in hosting only, no new dependency
+ * additionally on macOS (a licensing call — JUCE's built-in hosting only, no new dependency
  * pins, CLAP deferred).
  *
  * One function rather than addDefaultFormats() at three call sites, because *hosting* and *scanning*
@@ -26,23 +26,23 @@ void addHostedPluginFormats(juce::AudioPluginFormatManager& manager);
 juce::StringArray hostedPluginFormatNames();
 
 /**
- * The serialized identity of a third-party plugin (TL7-2).
+ * The serialized identity of a third-party plugin.
  *
  * Format + uniqueId + name, and DELIBERATELY never a path. A patch that named
  * `/Users/someone/Library/Audio/Plug-Ins/VST3/Foo.vst3` would (a) leak the author's disk layout into
  * a file meant to be shared, (b) not survive moving the plugin or opening the patch on another
  * machine, and (c) hand anything that can write a patch a lever on which file the host opens. The
  * path lives only in the scan list, which is local, rebuilt by scanning, and never serialized into a
- * patch. TL7-3 formalizes that list and the migration of an identity that no longer resolves.
+ * patch, and which also handles migrating an identity that no longer resolves.
  *
  * Matching is uid-first: `uniqueId` is stable across machines for both VST3 (derived from the FUID)
  * and AU (the component subtype). `name` is only a fallback for plugins whose uid is 0, and is
  * always carried so an unresolved identity can still be SHOWN to the user ("Foo (VST3) not
  * installed") rather than rendered as an opaque number.
  *
- * TL7-3 built the other end of this: PluginScanService owns the scan list that turns an identity
- * back into a description (and is therefore the one place a fileOrIdentifier is stored), and
- * documents the uid-then-name resolution precedence PluginIdentity::matches() sketches here.
+ * PluginScanService owns the scan list that turns an identity back into a description (and is
+ * therefore the one place a fileOrIdentifier is stored), and documents the uid-then-name
+ * resolution precedence PluginIdentity::matches() sketches here.
  */
 struct PluginIdentity {
     juce::String format; ///< juce::PluginDescription::pluginFormatName, e.g. "VST3" / "AudioUnit".
@@ -68,7 +68,7 @@ struct PluginIdentity {
     static PluginIdentity fromVar(const juce::var& state);
 
     //==============================================================================
-    // Drag-and-drop payload (TL7-3)
+    // Drag-and-drop payload
     //
     // The module library and the canvas talk over juce::DragAndDropContainer, whose payload is a
     // single juce::var — so a plugin row travels as a prefixed string on the SAME channel as module
@@ -93,7 +93,7 @@ struct PluginIdentity {
  * Two jobs:
  *
  * 1. **Format-agnosticism.** HostedPluginModule never mentions VST3 or AudioUnit; adding CLAP later
- *    (deferred in TL7-1) is a change to the default backend, not to the module.
+ *    is a change to the default backend, not to the module.
  *
  * 2. **Testability without third-party binaries.** There is no plugin we can check into this repo
  *    and load in CI, so every behaviour worth pinning — publish, refusal, state round-trip, the
@@ -127,7 +127,7 @@ public:
                                      InstanceCallback callback) = 0;
 
     /** Identity -> description. Base returns false ("nothing known"); the default backend consults
-     *  its known-plugins list, which TL7-3's scanner fills. */
+     *  its known-plugins list, which the scanner fills. */
     virtual bool resolveIdentity(const PluginIdentity& identity, juce::PluginDescription& out) const;
 
     /** The process-wide backend. Real formats unless a ScopedDefault override is installed.
@@ -160,18 +160,18 @@ protected:
 };
 
 /**
- * The real backend: VST3 everywhere, AudioUnit additionally on macOS (TL7-1's licensing call —
+ * The real backend: VST3 everywhere, AudioUnit additionally on macOS (a licensing call —
  * JUCE's built-in hosting only, no new dependency pins, CLAP deferred).
  *
  * The formats are added explicitly (addHostedPluginFormats) rather than via addDefaultFormats() so
  * the set of things this app will load is a decision in source, not a by-product of which
  * JUCE_PLUGINHOST_* flags happen to be set. (Both are in fact set, in the root CMakeLists on Core.)
  *
- * TL7-3 fills the identity->description direction from a PluginScanService the OWNER installs
+ * A PluginScanService the OWNER installs fills the identity->description direction
  * (MainComponent, on the standalone path only — a plugin build of ourselves never scans, because
  * inside a host the host owns plugin discovery). With no service installed the backend falls back to
  * `knownPlugins_`, which is empty by default: resolving a serialized identity then fails with "not
- * installed" and the module stays a placeholder, exactly as in TL7-2.
+ * installed" and the module stays a placeholder.
  */
 class DefaultHostedPluginBackend : public HostedPluginBackend {
 public:
@@ -186,7 +186,7 @@ public:
     /** Scan service first (the live list), then the explicitly-set `knownPlugins_` vector. */
     bool resolveIdentity(const PluginIdentity& identity, juce::PluginDescription& out) const override;
 
-    /** Message thread. Owner-installed; nullptr (the default) restores the TL7-2 behaviour of an
+    /** Message thread. Owner-installed; nullptr (the default) restores the behaviour of an
      *  empty list. The service is NOT owned — the owner must clear this before destroying it. */
     void setScanService(PluginScanService* service) noexcept { scanService_ = service; }
     PluginScanService* getScanService() const noexcept { return scanService_; }

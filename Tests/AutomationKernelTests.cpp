@@ -1,7 +1,7 @@
-// Tests for TL4-1: the audio-thread automation evaluation kernel.
+// Tests for the audio-thread automation evaluation kernel.
 //
 // Two separate things are pinned here. First the CONTRACT — endpoint clamping, Hold vs
-// tension-shaped Linear, the reserved-curve fallback — because TL4-2's applier and everything after
+// tension-shaped Linear, the reserved-curve fallback — because the applier and everything after
 // it read a lane's value through this function and nothing else. Second the CURSOR, which is pure
 // optimisation and therefore pure risk: a cache that drifts from the truth is a wrong parameter
 // value with no visible symptom. MonotonicSweepMatchesRandomAccess is the tripwire for that — every

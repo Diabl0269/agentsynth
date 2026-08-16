@@ -23,11 +23,11 @@ constexpr double kMinClipLengthBeats = 0.0625;
 constexpr int kMinWidthForName = 40;
 constexpr int kMinWidthForNotePreview = 24;
 
-// TL6-5: same numeric threshold as kMinWidthForNotePreview (a named twin rather than a shared
+// Same numeric threshold as kMinWidthForNotePreview (a named twin rather than a shared
 // constant — a note preview and a waveform are unrelated concepts that happen to agree today).
 constexpr int kMinWidthForWaveform = 24;
 
-// TL6-5: bpm/sampleRate fallbacks when there is no live transport (a headless test, or a
+// bpm/sampleRate fallbacks when there is no live transport (a headless test, or a
 // TimelineClipLaneArea built with setTransport() never called) — the same "no transport, assume
 // 120 bpm" convention currentBeatsPerBar() uses for beatsPerBar, and the same 44.1 kHz fallback
 // MainComponent's own audio-take code uses when a snapshot's sampleRate is not yet known.
@@ -57,12 +57,12 @@ void TimelineClipLaneArea::refreshFromDoc() {
                 alive.push_back(clip.id);
     }
     selection_.retainOnly(alive);
-    // TL6-5: simplest-correct cache policy (see the class comment) — ANY doc change clears every
+    // Simplest-correct cache policy (see the class comment) — ANY doc change clears every
     // cached synth::PeaksFile::Data rather than diffing which assetRefs actually moved. Peaks
     // files are small, so the next paint's re-resolve+re-read is cheap; the alternative (per-ref
     // dirty tracking against a mutation we don't otherwise inspect) is not worth building yet.
     peaksCache_.clear();
-    // TL6-6: same policy, same reasoning, for the asset-existence cache.
+    // Same policy, same reasoning, for the asset-existence cache.
     assetExistsCache_.clear();
     repaint();
 }
@@ -74,7 +74,7 @@ void TimelineClipLaneArea::setPeaksResolver(std::function<juce::File(const juce:
 
 void TimelineClipLaneArea::invalidatePeaksCache() {
     peaksCache_.clear();
-    // TL6-6: cleared alongside — see setAssetExistsResolver's comment for why the two caches share
+    // Cleared alongside — see setAssetExistsResolver's comment for why the two caches share
     // every clear point.
     assetExistsCache_.clear();
     repaint();
@@ -245,10 +245,10 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
     g.setColour(selected ? base.brighter(0.6f) : base.darker(0.3f));
     g.drawRoundedRectangle(bodyBounds, 3.0f, selected ? 2.0f : 1.0f);
 
-    // TL6-5: assetRef is the MIDI-vs-audio discriminator (see synth::Clip's own comment) — an
+    // assetRef is the MIDI-vs-audio discriminator (see synth::Clip's own comment) — an
     // audio clip gets a waveform instead of the note preview below (its notes vector is empty in
     // every case this build produces, but the branch is on assetRef, not on emptiness, so intent
-    // stays explicit even if that ever changes). TL6-6: an audio clip whose asset does not
+    // stays explicit even if that ever changes). An audio clip whose asset does not
     // currently resolve gets the missing-asset placeholder instead of an (impossible) waveform.
     if (!clip.assetRef.isEmpty()) {
         if (assetExists(clip.assetRef))
@@ -289,7 +289,7 @@ void TimelineClipLaneArea::paintMarquee(juce::Graphics& g) {
 }
 
 //==============================================================================
-// TL6-5: waveform painting (committed clips) and the live-recording strip.
+// Waveform painting (committed clips) and the live-recording strip.
 //==============================================================================
 
 const synth::PeaksFile::Data* TimelineClipLaneArea::findPeaksData(const juce::String& assetRef) {
@@ -581,7 +581,7 @@ void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
 void TimelineClipLaneArea::mouseDrag(const juce::MouseEvent& e) {
     if (pendingEmptyClick_) {
         // A plain press on empty space that becomes a drag turns into a (non-additive) marquee —
-        // there is no drag-to-pan gesture here (scrolling is wheel-only, TL5-2).
+        // there is no drag-to-pan gesture here (scrolling is wheel-only).
         pendingEmptyClick_ = false;
         beginMarquee(mouseDownPos_, false);
     }
@@ -675,7 +675,7 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
             const double newLength = previewLength_;
             // Two doc calls, ONE undo step: the left edge moves the clip's start (its
             // clip-relative notes travel with it — a divergence from per-note-anchored trimming,
-            // deferred; see the class-level TL5-7 note) and resizes it so the end stays fixed.
+            // deferred) and resizes it so the end stays fixed.
             auto mutate = [this, id, newStart, newLength] {
                 doc_->moveClip(id, newStart);
                 doc_->resizeClip(id, newLength);
@@ -797,7 +797,7 @@ void TimelineClipLaneArea::showClipContextMenu(synth::ClipId id, juce::Point<int
     menu.addItem("Duplicate", [this, id] { applyClipContextChoice(id, ClipContextChoice::Duplicate, 0.0); });
     menu.addItem("Delete", [this, id] { applyClipContextChoice(id, ClipContextChoice::Delete, 0.0); });
 
-    // TL6-6: offered for any audio clip (non-empty assetRef) regardless of whether the asset
+    // Offered for any audio clip (non-empty assetRef) regardless of whether the asset
     // currently resolves — relinking a PRESENT asset (pointing it at a different file) is just as
     // legitimate as fixing a missing one. A callback rather than a ClipContextChoice: relinking
     // needs a host FileChooser + AssetManager import this class doesn't have (see

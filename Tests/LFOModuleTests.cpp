@@ -203,7 +203,7 @@ TEST_F(LFOModuleTest, LevelParameter) {
     EXPECT_NEAR(minVal0_5, -0.5f, 0.05f);
 
     // Test with level 0.0.
-    // Level is smoothed over 10 ms (TL4-3) so that timeline automation cannot step the emitted
+    // Level is smoothed over 10 ms so that timeline automation cannot step the emitted
     // CV, which means the drop from 0.5 to 0 ramps instead of snapping. The ramp itself must stay
     // inside the level it is leaving; silence is asserted once it has finished.
     constexpr int kLevelRampSamples = (int)(0.010 * 44100.0) + 2;

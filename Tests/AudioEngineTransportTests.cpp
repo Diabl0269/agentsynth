@@ -1,4 +1,4 @@
-// Tests for TL1's transport wiring inside AudioEngine: the once-per-block tick in renderNextBlock,
+// Tests for the transport wiring inside AudioEngine: the once-per-block tick in renderNextBlock,
 // the TransportService installed as the graph's juce::AudioPlayHead, and report-only latency.
 //
 // Headless/deterministic constraints (see docs/testing.md and house style in
@@ -52,7 +52,7 @@ int nodesMissingPlayHead(AudioEngine& engine) {
 // The one clock: tick() happens exactly once per rendered block
 // ============================================================================
 
-// TL1-9: asserts the timeline integration (tick advances the transport); compiled out with the
+// Asserts the timeline integration (tick advances the transport); compiled out with the
 // flag so the flag-OFF CI job stays green.
 #if SYNTH_ENABLE_TIMELINE
 TEST(AudioEngineTransportTest, HostedEngineTicksTransportOncePerBlock) {
@@ -105,7 +105,7 @@ TEST(AudioEngineTransportTest, PrepareForHostPreparesTransport) {
 // ============================================================================
 // Playhead installation — once on the graph, re-applied by JUCE to every node
 // ============================================================================
-// TL1-9: asserts the timeline integration (the playhead is only installed when the flag is on);
+// Asserts the timeline integration (the playhead is only installed when the flag is on);
 // compiled out with the flag so the flag-OFF CI job stays green.
 #if SYNTH_ENABLE_TIMELINE
 
@@ -212,7 +212,7 @@ TEST(AudioEngineTransportTest, GraphLatencyIsReportedNotCompensated) {
 }
 
 // ============================================================================
-// Runtime setTransportEnabled() (TL1-9) — freeze/resume without a rebuild
+// Runtime setTransportEnabled() — freeze/resume without a rebuild
 // ============================================================================
 // Not gated: always on, since it exercises the runtime companion to the compile-time flag, which
 // only does anything when the flag is compiled in.
@@ -249,7 +249,7 @@ TEST(AudioEngineTransportTest, SetTransportEnabledFreezesAndResumesPosition) {
 #endif // SYNTH_ENABLE_TIMELINE
 
 // ============================================================================
-// Flag OFF pins "OFF really means off" (TL1-9)
+// Flag OFF pins "OFF really means off"
 // ============================================================================
 // Compiled only when the flag is OFF: with it on, the transport ticks and this would (correctly)
 // fail, which is exactly why it must not build in the normal (flag-ON) configuration.

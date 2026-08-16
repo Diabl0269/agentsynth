@@ -9,71 +9,33 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 
 /**
- * @brief "Track In" — the graph-side end of a timeline MIDI track (TL3-1).
+ * @brief "Track In" — the graph-side end of a timeline MIDI track.
  *
- * One node per MIDI track. The timeline's add-track flow creates it and binds the track to it by
- * the node's uuid; from then on the module turns that track's notes into MIDI events, and the
- * patch downstream of it (Poly MIDI -> oscillators -> FX) is an ordinary patch that neither knows
- * nor cares that a timeline exists.
+ * One node per MIDI track, bound by uuid at creation. Nothing schedules events into it: every
+ * block it reads the transport's BlockTimeInfo and TimelineSnapshot off the playhead
+ * (TransportService::setCurrentTimelineSnapshot), finds the track whose bindingUuid matches its
+ * own node uuid, and emits the notes whose start or end falls inside the block's beat range —
+ * a pure function of (block position, snapshot, currently-held notes), so a locate/tempo/edit
+ * takes effect next block with no invalidation step.
  *
- * -- Pull, not push ---------------------------------------------------------------------------
+ * INTERNAL-ONLY: not in the module library, not offered by the replace menu, and explicitly
+ * non-authorable by the AI (kNonAuthorableModuleTypes) — a model could otherwise wire itself to a
+ * track it did not create.
  *
- * Nothing schedules events into this module. Every block it reads the transport's BlockTimeInfo
- * and the block's TimelineSnapshot — both off the playhead AudioEngine installs on every node
- * (see TransportService::setCurrentTimelineSnapshot) — finds the track whose bindingUuid equals
- * its own node uuid, and emits the notes whose start or end falls inside this block's beat range.
- * There is no per-module state to keep in sync with the document, so a locate, a tempo change or
- * an edit to the notes takes effect on the very next block with no invalidation step: the module
- * is a pure function of (block position, snapshot) plus the set of notes it currently holds down.
+ * Held-note hygiene: a note-on emitted here is a promise to emit the matching note-off. Anything
+ * that could break that promise (stop, locate, bypass, track deleted/muted/soloed away) flushes
+ * every held note as note-offs at sample 0 first. Always PER-NOTE, never a blanket CC 123 — a MIDI
+ * cable can carry several sources downstream.
  *
- * The module is INTERNAL-ONLY: it is not in the module library, not offered by the replace menu,
- * and explicitly non-authorable by the AI (kNonAuthorableModuleTypes / validatePatch's untrusted
- * path reject it), because a model could otherwise wire itself to a track it did not create.
+ * Loop wrap: a block crossing the loop end is TWO beat ranges (see BlockTimeInfo); every held note
+ * is released exactly at the wrap, then the wrapped range starts fresh, so a note can legitimately
+ * end and restart in the same block. BlockTimeInfo reports only the FIRST wrap per block, so a
+ * loop shorter than the block drops whole intermediate passes (never leaks a note — the
+ * release-at-wrap still runs).
  *
- * -- Held-note hygiene ------------------------------------------------------------------------
- *
- * A note-on this module emits is a promise to emit the matching note-off. Anything that could
- * break that promise flushes every held note — as note-offs at sample 0 of the block where it
- * happened — before doing anything else: the transport stopping, a locate (seen as a block whose
- * start sample is not where the last block ended), the module being bypassed, the bound track
- * disappearing or being muted/soloed away. Without that, one stop mid-chord leaves an envelope
- * open forever.
- *
- * The release is always PER-NOTE, never a blanket all-notes-off (CC 123). One MIDI cable can carry
- * several sources downstream, and a CC 123 would silence notes this module never started. The
- * module emits nothing but note-ons and note-offs, ever.
- *
- * -- Loop wrap (TL3-2) -------------------------------------------------------------------------
- *
- * A block that crosses the loop end is TWO beat ranges, not one (see BlockTimeInfo): the primary
- * range [startPpq, loopEndPpq) at offsets [0, loopWrapSample), then the wrapped range starting at
- * loopStartPpq at offsets from loopWrapSample on. Between them, at exactly loopWrapSample, every
- * note still held is released: crossing the boundary ends this pass, and the wrapped range then
- * starts the next one fresh. So one block can legitimately end a note and start the same note
- * again — each loop pass re-articulates, which is what a looping sequencer sounds like.
- *
- * The wrapped range ends where the transport ACTUALLY lands (predictNextBlockStart, which mirrors
- * TransportService::tick), not at some derived beat — that is what makes the emitted ranges tile
- * the timeline exactly, with no beat emitted twice and none skipped, across the wrap.
- *
- * MULTI-WRAP BOUND: BlockTimeInfo reports only the FIRST wrap in a block. If the loop is shorter
- * than the block (possible — the minimum loop is TransportService::kMinLoopLengthBeats = 1/16 beat,
- * 1500 samples at 48 kHz / 120 BPM, against a block that may be 2048 or more), the repetitions
- * BETWEEN the first wrap and the block's end are not emitted: this module plays the primary range
- * and the final partial pass, and drops the whole passes in the middle. What it does NOT do is
- * leak a note: the release-at-wrap above runs regardless, so a pathologically short loop degrades
- * to "some repeats are missing", never to "an envelope is stuck open".
- *
- * -- Ordering: offs before ons -----------------------------------------------------------------
- *
- * Where a note-off and a note-on land on the SAME sample offset, the off is always inserted first,
- * because juce::MidiBuffer keeps insertion order among events sharing a sample position. Three
- * places enforce it: the hygiene flushes run before any emission in the block; each range emits
- * the note-offs of already-held notes in a pass of their own before any note-on; and the wrap
- * release runs before the wrapped range's note-ons. Within one range, notes are visited in
- * start-beat order, so a note's own end-of-block off is inserted before any later-starting note's
- * on at that offset. Downstream this is what Poly MIDI's same-pitch retrigger contract needs (see
- * docs/modules.md): a release, then the retrigger, never the other way round.
+ * Ordering: where a note-off and note-on land on the same sample offset, the off is always
+ * inserted first (juce::MidiBuffer preserves insertion order at equal positions) — required by
+ * Poly MIDI's same-pitch retrigger contract (docs/modules.md).
  */
 class TimelineMidiSourceModule : public ModuleBase {
 public:

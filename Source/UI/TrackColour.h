@@ -3,7 +3,7 @@
 #include <array>
 #include <juce_graphics/juce_graphics.h>
 
-// Track colour resolution (TL5-3) — the single source of truth for what colour a timeline track's
+// Track colour resolution — the single source of truth for what colour a timeline track's
 // header, and later its clips, are drawn in.
 //
 // Everything here is a pure function over (stored colour, track index, muted): no GUI state, no

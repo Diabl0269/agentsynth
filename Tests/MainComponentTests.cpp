@@ -193,7 +193,7 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
     // toggleTimelinePanel keeps its shortcut-table row in every build (rebindable defaults are
     // compile-independent) but registers no command when the flag is off — the panel it drives is
     // compiled out, so the fires-silently risk this invariant guards doesn't apply. togglePlayback
-    // stays registered-but-inactive in OFF builds by deliberate TL5-10 choice, so it stays here.
+    // stays registered-but-inactive in OFF builds by deliberate choice, so it stays here.
     expectedActions.removeString("toggleTimelinePanel");
 #endif
     auto expectedCommandCount = expectedActions.size();

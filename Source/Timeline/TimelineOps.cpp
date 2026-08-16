@@ -126,7 +126,7 @@ juce::AudioProcessor* findProcessorByUuid(const juce::AudioProcessorGraph& graph
     return nullptr;
 }
 
-// TL7-6: parameter resolution itself (exact id match, or the narrow hosted-plugin index fallback)
+// Parameter resolution itself (exact id match, or the narrow hosted-plugin index fallback)
 // is factored into synth::resolveLaneParameter (AutomationBinding.h) — the ONE resolver this file,
 // TimelineValidator, AudioEngine::publishTimeline's binding build and the recorder's rebind all
 // share, so "does this lane's parameter resolve" cannot drift between the AI-tool path and the
@@ -409,7 +409,7 @@ TimelineOpsResult runPlaceClips(const juce::String& where, juce::DynamicObject& 
 }
 
 // -- placeMidiClip ------------------------------------------------------------------------------
-// The .mid blob surface (TL8-5): a base64-encoded Standard MIDI File is the one binary payload
+// The .mid blob surface: a base64-encoded Standard MIDI File is the one binary payload
 // this grammar accepts, because MidiClipFile::importFromStream can only ever decode it to notes —
 // no path, no plugin id, no code. Bounds-checking-strict end to end, matching that class's own
 // stated design (see MidiClipFile.h's class comment).
@@ -512,14 +512,14 @@ TimelineOpsResult runWriteLane(const juce::String& where, juce::DynamicObject& o
 
     // The binding must resolve against the LIVE graph, exactly as validateTimeline requires: an
     // orphaned binding is a state the app RECOVERS from when a module disappears under an existing
-    // lane (TL2-6), not one untrusted input gets to author from nothing.
+    // lane, not one untrusted input gets to author from nothing.
     auto* processor = findProcessorByUuid(graph, nodeUuid);
     if (processor == nullptr)
         return fail(where + "writes to node uuid \"" + nodeUuid +
                     "\", which no module in the current patch has. Automate a module that exists.");
 
     const AutomationLane* existing = doc.getLaneForParam(nodeUuid, paramId);
-    // TL7-6: resolved through the SAME shared resolver the audio path and TimelineReconciler use —
+    // Resolved through the SAME shared resolver the audio path and TimelineReconciler use —
     // an exact id match, or (for a hosted plugin with no stable ids at all) the existing lane's
     // stored paramIndexHint. A brand-new lane has no hint yet, so this is exact-match-only until it
     // exists.
@@ -541,7 +541,7 @@ TimelineOpsResult runWriteLane(const juce::String& where, juce::DynamicObject& o
     // The value bounds. The live parameter's range is the authority (never a range a sender
     // supplied), and where an EXISTING lane's snapshot is narrower it narrows them further: not for
     // security, but because editBreakpoints would CLAMP a value into that snapshot, and a value we
-    // would have to correct is a value the sender did not mean. TL7-6: a hosted-plugin parameter has
+    // would have to correct is a value the sender did not mean. A hosted-plugin parameter has
     // no NormalisableRange, so its bounds are exactly [0, 1] (laneValueBoundsFor — see
     // AutomationBinding.h) rather than something read off the parameter.
     const auto liveBounds = laneValueBoundsFor(resolved);
@@ -605,7 +605,7 @@ TimelineOpsResult runWriteLane(const juce::String& where, juce::DynamicObject& o
         points.push_back(point);
     }
 
-    // find-or-create, the TL5-9 rule MainComponent::automateParameter implements for the user's own
+    // find-or-create, the rule MainComponent::automateParameter implements for the user's own
     // "Automate this parameter" gesture: the lane if one already exists for this parameter
     // (anywhere in the doc — lane identity is doc-wide), otherwise a new lane on the document's ONE
     // Automation track, creating that track too when there is none yet.
@@ -638,8 +638,8 @@ TimelineOpsResult runWriteLane(const juce::String& where, juce::DynamicObject& o
         range.minValue = static_cast<float>(liveBounds.minValue);
         range.maxValue = static_cast<float>(liveBounds.maxValue);
         range.defaultValue = static_cast<float>(laneDefaultValueFor(resolved));
-        // TL7-6: captured once, at creation, from the resolver's own exact-match result — never
-        // re-derived afterwards. -1 for a non-plugin target, exactly like every lane before TL7-6.
+        // Captured once, at creation, from the resolver's own exact-match result — never
+        // re-derived afterwards. -1 for a non-plugin target.
         laneId = doc.addLane(automationTrack, nodeUuid, paramId, range, captureParamIndexHint(processor, paramId));
         if (!laneId.isValid())
             return fail(where + "could not create the automation lane for \"" + paramId + "\".");
@@ -647,8 +647,8 @@ TimelineOpsResult runWriteLane(const juce::String& where, juce::DynamicObject& o
 
     // REPLACE the written span: every existing point from the payload's first beat to its last,
     // inclusive, goes; the payload's points take their place. One editBreakpoints call, so however
-    // many points move it is ONE revision bump and one snapshot republish (TL5-9's batched-commit
-    // contract), not one per point.
+    // many points move it is ONE revision bump and one snapshot republish (the batched-commit
+    // contract editBreakpoints provides), not one per point.
     std::vector<double> removeBeats;
     if (const auto* lane = doc.getLane(laneId)) {
         for (const auto& point : lane->points)

@@ -1,27 +1,8 @@
-// FocusArbitrationTests.cpp — TL5-10: one focus-ownership rule (MainComponent::resolveEditSurface)
-// for Cmd+C/V/D, Space play/stop, and per-surface Delete.
+// One focus-ownership rule (MainComponent::resolveEditSurface) for Cmd+C/V/D, Space play/stop, and
+// per-surface Delete — one test per verb x surface (see MainComponent.h's
+// EditSurface/resolveEditSurface comment and docs/shortcuts.md for the production rule this pins).
 //
-// One test per verb x surface (see MainComponent.h's EditSurface/resolveEditSurface comment and
-// docs/shortcuts.md for the production rule this pins):
-//   1. CopyPasteDuplicateOnGraphUnchanged  — Graph override: existing GraphEditor clipboard
-//      behaviour, untouched.
-//   2. CopyPasteClipsRebasedAtPlayhead     — TimelineClips: copy 2 clips on 2 tracks, locate the
-//      transport, paste -> original tracks, earliest clip at the snapped playhead, relative
-//      offsets preserved, one undo step, pasted clips selected.
-//   3. PasteWithMissingTrackFallsBack      — a clip whose original track is gone lands on the
-//      first remaining MIDI track, or is skipped when there is none.
-//   4. DuplicateClipsOneStep               — doc.duplicateClip per selected clip, one undo step.
-//   5. PianoRollSurfaceCVDInactive         — v1 deliberate gap: getCommandInfo reports inactive,
-//      and invoking does nothing (no doc mutation).
-//   6. SpaceTogglesPlayback                — surface-independent; inactive when the timeline
-//      integration is compiled out.
-//   7. DeletePerSurface                    — already-implemented panel-local Delete handlers,
-//      pinned: only the acted-on surface's data changes, and an empty selection falls through.
-//   8. SurfaceResolverRealFocus            — see its own comment: no native peer is created here
-//      (untested, CI-risky territory), so this asserts the override path and the
-//      panel-visibility fallback instead.
-//
-// Headless/deterministic constraints for the two tests that read live transport state (2, 6):
+// Headless/deterministic constraints for the tests that read live transport state:
 // AudioEngine::HostMode::Hosted, driven only through prepareForHost/processHostBlock — same house
 // rule PluginProcessorTests.cpp/TimelineE2ETests.cpp already follow. Every other test uses
 // MainComponent's plain delegating ctor, the same pattern MainComponentTests.cpp uses throughout.

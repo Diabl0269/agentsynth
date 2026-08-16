@@ -67,7 +67,7 @@ TEST(CableColourCategoryTest, EveryLibraryModuleMapsToItsLibrarySection) {
 
         // The library's "I/O" section has no cable-colour category to match against: Audio Output
         // is a juce::AudioGraphIOProcessor with no ModuleType at all, and Audio Input (a module
-        // since TL6-2) is deliberately filed under Utility rather than a bucket of its own. Both
+        // now) is deliberately filed under Utility rather than a bucket of its own. Both
         // carry plain audio and are drawn with the Direct cable colour.
         if (GraphEditor::isSingletonIOModule(name))
             continue;

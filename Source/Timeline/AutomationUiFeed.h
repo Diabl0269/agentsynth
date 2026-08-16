@@ -6,7 +6,7 @@
 
 namespace synth {
 
-// TL4-5: one automation-driven parameter write, carried from the audio thread (AutomationApplier)
+// One automation-driven parameter write, carried from the audio thread (AutomationApplier)
 // to the message thread (GraphEditor's drain) purely so the UI can reflect it. POD and small on
 // purpose — this rides a lock-free ring at up to one entry per bound parameter per block.
 //
@@ -22,7 +22,7 @@ struct AutomationUiEvent {
     float newNormalized = 0.0f;
 };
 
-// TL4-5: lock-free SPSC ring of AutomationUiEvent. AutomationApplier::applyBlock (audio thread)
+// Lock-free SPSC ring of AutomationUiEvent. AutomationApplier::applyBlock (audio thread)
 // pushes; GraphEditor's 30 Hz drain (message thread) reads. Pre-allocated at construction — push()
 // never allocates and never blocks; a full ring drops the newest event silently, because UI
 // reflection is best-effort and must never be allowed to add latency or a lock to the audio thread.

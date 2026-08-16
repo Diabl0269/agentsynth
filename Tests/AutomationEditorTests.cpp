@@ -1,6 +1,6 @@
 // AutomationEditorTests.cpp
 //
-// TL5-9: the automation lane editor — pointer/pencil/line/eraser tools, tension drag, per-segment
+// The automation lane editor — pointer/pencil/line/eraser tools, tension drag, per-segment
 // curve toggle, lane record-mode selector, right-click-any-knob "Show automation lane".
 //
 // Three groups:
@@ -387,7 +387,7 @@ TEST(TimelinePanelAutomationStripTest, RecordModeSelectorWritesDoc) {
     const auto laneId = doc.addLane(trackId, "node-uuid-3", "resonance", range);
     panel.showAutomationLane(laneId);
 
-    EXPECT_EQ(doc.getLane(laneId)->recordMode, static_cast<int>(synth::LaneRecordMode::Read)) << "TL4-4 default";
+    EXPECT_EQ(doc.getLane(laneId)->recordMode, static_cast<int>(synth::LaneRecordMode::Read)) << "default";
 
     panel.applyAutomationRecordModeChoice(4); // 1-based combo id 4 -> LaneRecordMode::Latch (3)
     EXPECT_EQ(doc.getLane(laneId)->recordMode, static_cast<int>(synth::LaneRecordMode::Latch));

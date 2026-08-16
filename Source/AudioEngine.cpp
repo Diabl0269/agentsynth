@@ -64,7 +64,7 @@ void AudioEngine::setSavedDeviceState(std::unique_ptr<juce::XmlElement> state) {
 
 void AudioEngine::initialiseDevices(const juce::XmlElement* savedDeviceState) {
     if (savedDeviceState != nullptr) {
-        // TL6-1: restore the user's own device setup — which is the only way audio INPUT ever gets
+        // Restore the user's own device setup — which is the only way audio INPUT ever gets
         // enabled, since the Audio tab writes the channel mask into this XML the moment the user
         // ticks an input channel (juce::AudioDeviceSelectorComponent sets useDefaultInputChannels
         // = false, and juce::AudioDeviceManager then persists "audioDeviceInChans").
@@ -80,7 +80,7 @@ void AudioEngine::initialiseDevices(const juce::XmlElement* savedDeviceState) {
     } else {
         // No saved state — a fresh install, or an existing user who has never touched the Audio
         // tab. This is byte-identical to what initialise() has always done (output only, input
-        // hard-off), which is what makes TL6-1 need no migration step: absence of state IS the
+        // hard-off), which is what makes this need no migration step: absence of state IS the
         // legacy behaviour, and inputs stay opt-in.
         deviceManager.initialiseWithDefaultDevices(0, 2);
     }
@@ -88,7 +88,7 @@ void AudioEngine::initialiseDevices(const juce::XmlElement* savedDeviceState) {
     deviceManager.addAudioCallback(this);
     deviceCallbackAttached_ = true;
 
-    // Persist-on-change (TL6-1): every device/rate/channel change the user makes broadcasts here,
+    // Persist-on-change: every device/rate/channel change the user makes broadcasts here,
     // and changeListenerCallback hands the new state to whoever installed onDeviceStateChanged.
     deviceManager.addChangeListener(this);
 
@@ -137,7 +137,7 @@ void AudioEngine::shutdown() {
     // no reason.
     timelineSnapshots.reclaimAllUnsafe();
     automationBindings_.reclaimAllUnsafe();
-    // TL6-4, same precondition and same place: nothing can render any more, so the streamer's
+    // Same precondition and same place: nothing can render any more, so the streamer's
     // prefetch thread can be stopped and every open reader closed.
     clipStreamer_.releaseAll();
 }
@@ -174,9 +174,9 @@ void AudioEngine::publishTimeline(const synth::TimelineDoc& doc) {
 
             const auto found = nodesByUuid.find(juce::String(lane.nodeUuid));
             if (found == nodesByUuid.end())
-                continue; // orphaned: the lane is retained in the doc (TL2-6) but automates nothing
+                continue; // orphaned: the lane is retained in the doc but automates nothing
 
-            // TL7-6: the shared resolver — exact id match on a hosted plugin's LIVE instance
+            // The shared resolver — exact id match on a hosted plugin's LIVE instance
             // parameter, a narrow legacy index fallback, or (for every non-plugin node) exactly the
             // findParameterByID this replaced. `resolved.orphaned` is the doc's business (surfaced by
             // TimelineReconciler, not decided here); the binding build only cares whether something
@@ -191,12 +191,12 @@ void AudioEngine::publishTimeline(const synth::TimelineDoc& doc) {
             binding.node = found->second; // refcounted — see AutomationApplier.h
             binding.param = resolved.rangedParam;
             binding.hostedParam = resolved.hostedParam;
-            binding.nodeID = found->second->nodeID; // TL4-5: identity for the UI feed's events
+            binding.nodeID = found->second->nodeID; // identity for the UI feed's events
             table->bindings.push_back(std::move(binding));
         }
     }
 
-    // TL6-4: the streamer is brought to THIS snapshot before it is published, so a clip the audio
+    // The streamer is brought to THIS snapshot before it is published, so a clip the audio
     // thread is about to see either has a stream already opening or is one the streamer deliberately
     // declined (unresolvable, or past its pool cap) — never one it has not been told about. Runs on
     // the message thread and opens no files itself: it resolves refs and hands the resulting paths
@@ -618,7 +618,7 @@ bool AudioEngine::isAutomationSlicingEnabled() const noexcept {
 void AudioEngine::createDefaultPatch() {
     mainProcessorGraph.clear();
     using AudioGraphIOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
-    // TL6-2: the input side is a real module (max channels fixed, visible jacks following the
+    // The input side is a real module (max channels fixed, visible jacks following the
     // device) reading the block's captured input off the playhead; the OUTPUT side stays a JUCE IO
     // node, because the graph's output channel count is tied to it.
     auto inputNode = mainProcessorGraph.addNode(std::make_unique<AudioInputModule>());
@@ -702,7 +702,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
                                                    int numSamples, const juce::AudioIODeviceCallbackContext& context) {
     juce::ignoreUnused(context);
 
-    // TL6-1 — the channel-aliasing subtlety, which is why this is not simply a buffer wrapped
+    // The channel-aliasing subtlety, which is why this is not simply a buffer wrapped
     // around outputChannelData:
     //
     // juce::AudioProcessor renders IN PLACE over ONE buffer of max(numIn, numOut) channels.
@@ -741,14 +741,14 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
         const float* src =
             (channel < numInputChannels && inputChannelData != nullptr) ? inputChannelData[channel] : nullptr;
 
-        // TL6-7: this copy stays unconditional — it is the CAPTURE path (it feeds the render
+        // This copy stays unconditional — it is the CAPTURE path (it feeds the render
         // buffer's now-vestigial IO-node channels and, below, captureDeviceInput's snapshot), and
         // the engine always captures input, armed or monitored or not. What actually gates the mic
         // -> speaker loop lives downstream of here: AudioInputModule::processBlock silences its own
         // graph output while monitoring is disabled (TransportService::isInputMonitoringEnabledForBlock),
         // and AudioEngine::runFeedbackGuard (called from renderPass, post-graph) disables monitoring
         // and zeroes the block outright if the output stays near-clip too long. See
-        // docs/architecture.md's "Input monitoring & feedback guard (TL6-7)".
+        // docs/architecture.md's "Input monitoring & feedback guard".
         if (src != nullptr)
             std::copy(src, src + numSamples, dest);
         else
@@ -764,7 +764,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
         if (outputChannelData != nullptr && outputChannelData[channel] != nullptr)
             std::fill(outputChannelData[channel], outputChannelData[channel] + numSamples, 0.0f);
 
-    // TL6-2: a SECOND copy of the input, into storage the graph never renders over, taken before
+    // A SECOND copy of the input, into storage the graph never renders over, taken before
     // the graph runs. The copy above put the input into the render buffer for the "Audio Input" IO
     // node's benefit; the graph then overwrites those very channels with its result, so a module
     // that reads them mid-graph sees output, not input. See captureDeviceInput.
@@ -788,7 +788,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
 
 void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
 #if SYNTH_ENABLE_TIMELINE
-    // TL4-2 stage 2. Off by default, in which case this is one pass over the whole buffer and the
+    // Off by default, in which case this is one pass over the whole buffer and the
     // behaviour is byte-identical to what it was before slicing existed. The scratch check is a
     // belt-and-braces fallback: a callback arriving with more channels than prepare() sized for
     // would otherwise have to allocate, and allocating here is not allowed.
@@ -815,12 +815,12 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // The one clock site: both the standalone device callback and the hosted processBlock funnel
     // through here, so the transport advances exactly once per render pass in either mode. Must run
     // before the graph so every node renders against this pass's position. Gated on the runtime
-    // setting too (TL1-9): disabling it mid-session simply freezes the transport in place.
+    // setting too: disabling it mid-session simply freezes the transport in place.
     if (transportEnabled_.load(std::memory_order_relaxed))
         transport.tick(buffer.getNumSamples());
 
-    // Open this pass's timeline snapshot (TL2-2), exactly like the tick, and park it on the
-    // transport so every node can reach it through the playhead it already has (TL3-1 — see
+    // Open this pass's timeline snapshot, exactly like the tick, and park it on the
+    // transport so every node can reach it through the playhead it already has (see
     // TransportService::setCurrentTimelineSnapshot). Exactly one beginAudioBlock() per RENDER PASS
     // is the epoch-reclamation contract (it used to read "per callback"; with slicing on, a
     // callback is several passes — the contract is unchanged, only the unit is named more
@@ -831,12 +831,12 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // the setting is off.
     transport.setCurrentTimelineSnapshot(&timelineSnapshots.beginAudioBlock());
 
-    // TL6-4: the second passenger on the same carrier. Unlike the snapshot this pointer is not
+    // The second passenger on the same carrier. Unlike the snapshot this pointer is not
     // per-block — the streamer lives as long as the engine does — but it is installed here, beside
     // the snapshot, so the two always arrive together and a node never sees one without the other.
     transport.setAudioClipStreamer(&clipStreamer_);
 
-    // TL3-3: the single MIDI-recording capture point. `midiMessages` here is already the buffer
+    // The single MIDI-recording capture point. `midiMessages` here is already the buffer
     // that BOTH standalone (collector drain, see audioDeviceIOCallbackWithContext) and hosted
     // (delivered directly by the host into processHostBlock) modes converge on before the graph
     // ever sees it — the one place every external MIDI message is guaranteed to appear exactly
@@ -847,24 +847,24 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     if (auto* recorder = midiCaptureSink_.load(std::memory_order_relaxed))
         recorder->captureBlock(midiMessages, transport.getCurrentBlockInfo());
 
-    // TL4-2: push this pass's automation values into their bound parameters, after the tick (so the
+    // Push this pass's automation values into their bound parameters, after the tick (so the
     // beat position is this pass's) and before the graph (so every node reads the automated value
     // in the same pass it was written).
-    // TL4-4: the recorder's audio-visible half rides along so per-lane record modes and in-flight
+    // The recorder's audio-visible half rides along so per-lane record modes and in-flight
     // gesture claims are honoured. Null unless an owner installed a recorder.
-    // TL4-5: the UI reflection feed rides along too, so a slider can follow automation without a
+    // The UI reflection feed rides along too, so a slider can follow automation without a
     // notifying write. Always passed (see getAutomationUiFeed()) — nothing drains it without a
     // GraphEditor around to do so, so a headless render pass just fills a ring nobody reads.
     automationApplier_.applyBlock(automationBindings_.beginAudioBlock(), transport.getCurrentBlockInfo(),
                                   automationRecordState_.load(std::memory_order_relaxed), &automationUiFeed_);
 #endif
 
-    // TL6-2, and deliberately OUTSIDE the timeline flag: device input is not a timeline feature.
+    // Deliberately OUTSIDE the timeline flag: device input is not a timeline feature.
     // Point the playhead at this pass's slice of the captured input before the graph runs, and
     // take it away immediately after — nothing outside a render pass may read those pointers.
     publishDeviceInputForPass(inputSampleOffset, buffer.getNumSamples());
 
-    // TL6-7, and deliberately OUTSIDE the timeline flag for the same reason as the device-input
+    // Deliberately OUTSIDE the timeline flag for the same reason as the device-input
     // publish above: whether Audio Input's graph output is gated is an input-path property, not a
     // timeline one. Read once per render pass and handed to the carrier BEFORE the graph runs, so
     // every module — and the feedback guard below — agree on the same answer this pass.
@@ -876,7 +876,7 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     transport.setDeviceInputForBlock(nullptr, 0, 0);
 
 #if SYNTH_ENABLE_TIMELINE
-    // TL5-6: the metronome click, generated from the transport and summed POST-graph — after the
+    // The metronome click, generated from the transport and summed POST-graph — after the
     // graph has produced its own output (so the click can never appear in anything the graph itself
     // taps or that a bounce renders from inside the graph — see BounceExporter's force-off guard)
     // and BEFORE renderNextBlock's master-mute zero-fill, which runs after renderPass/renderSliced
@@ -885,7 +885,7 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     metronome_.renderClicks(buffer, transport.getCurrentBlockInfo());
 #endif
 
-    // TL6-7: the feedback guard. Post-graph (so it sees exactly what would reach the speakers,
+    // The feedback guard. Post-graph (so it sees exactly what would reach the speakers,
     // metronome click included) and pre-master-mute (renderNextBlock's zero-fill runs after this
     // returns) — ungated, like the monitoring flag above.
     runFeedbackGuard(buffer, monitoringEnabledThisPass);
@@ -980,11 +980,11 @@ void AudioEngine::prepareSliceScratch(int numChannels, int blockSize) {
 }
 
 void AudioEngine::handleStreamFormatChange(double newRate, int newBlockSize) {
-    // TL6-9. Order matters — see docs/architecture.md's "Device & sample-rate changes (TL6-9)".
+    // Order matters — see docs/architecture.md's "Device & sample-rate changes".
     //
     // 1. TRANSPORT FIRST: every other consumer below, and every module's NEXT processBlock, must see
     //    the new rate consistently once this call returns. TransportService::prepare() keeps the
-    //    beat (not the sample) canonical — TL1 — so the musical position survives untouched; only
+    //    beat (not the sample) canonical, so the musical position survives untouched; only
     //    the sample-domain mirror of it moves.
     transport.prepare(newRate, newBlockSize);
     onFormatChangeStepForTest(1);
@@ -1037,10 +1037,10 @@ void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device) {
 
         mainProcessorGraph.setPlayConfigDetails(numInputChannels, numOutputChannels, sampleRate, blockSize);
         // Before the graph: nodes read the playhead from their first prepared block onwards, so the
-        // transport must already be on the device's sample rate when they do. TL6-9: this also
+        // transport must already be on the device's sample rate when they do. This also
         // resets the metronome, invalidates the clip streamer and flags any in-flight take.
         handleStreamFormatChange(sampleRate, blockSize);
-        // TL6-1: both scratches are sized against max(in, out) — that is the channel count the
+        // Both scratches are sized against max(in, out) — that is the channel count the
         // render buffer has once the device's input is copied into it, so sizing either on the
         // output count alone would make a 2-in/1-out device fall out of the sliced path (and, for
         // the device scratch, force an allocation in the callback).
@@ -1137,11 +1137,11 @@ void AudioEngine::prepareForHost(double sampleRate, int blockSize, int numInputC
     midiMessageCollector.reset(sampleRate);
     mainProcessorGraph.setPlayConfigDetails(numInputChannels, numOutputChannels, sampleRate, blockSize);
     // Before the graph, for the same reason as audioDeviceAboutToStart: the musical position is
-    // preserved across the rate change, the sample position is re-derived. TL6-9: this also resets
+    // preserved across the rate change, the sample position is re-derived. This also resets
     // the metronome, invalidates the clip streamer and flags any in-flight take.
     handleStreamFormatChange(sampleRate, blockSize);
     prepareSliceScratch(std::max(numInputChannels, numOutputChannels), blockSize);
-    // TL6-2: hosted mode takes the same input snapshot as the device callback. The host's buffer is
+    // Hosted mode takes the same input snapshot as the device callback. The host's buffer is
     // one in/out buffer the graph renders over in place, so the input has to be copied out of it
     // before the graph runs or "Audio Input" would tap the mix instead of the input.
     prepareDeviceInputSnapshot(numInputChannels, blockSize);

@@ -1,4 +1,4 @@
-// TL4-2 stage 2: control-rate slicing (AudioEngine::setAutomationSlicingEnabled).
+// Control-rate slicing (AudioEngine::setAutomationSlicingEnabled).
 //
 // With the flag on, renderNextBlock runs the WHOLE per-block sequence — transport tick, timeline
 // snapshot open, MIDI capture, automation apply, graph render — once per 64-sample slice instead of

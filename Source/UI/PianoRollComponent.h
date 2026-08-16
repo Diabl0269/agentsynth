@@ -15,57 +15,37 @@ namespace synth {
 class TransportService; // Forward declaration (Source/Transport/TransportService.h)
 }
 
-// PianoRollComponent — TL5-8: the minimal piano-roll editor for ONE clip, shown INSIDE the
-// timeline panel's lanes region (no separate window). TimelinePanelComponent swaps this in for
+// PianoRollComponent — the minimal piano-roll editor for ONE clip, shown INSIDE the timeline
+// panel's lanes region (no separate window). TimelinePanelComponent swaps this in for
 // synth::ui::TimelineClipLaneArea (same rect, same z-order slot, below the playhead overlay)
 // when a clip is double-clicked, and swaps back on the back button, Escape-with-nothing-selected,
 // or the edited clip disappearing from the doc.
 //
-// Reuses TimelineClipLaneArea's idioms rather than inventing new ones (see that class's header
-// comment, which this one mirrors):
-//   - Non-owning refs/pointers with the same null-safety contract: TimelineViewState& (shared with
-//     the ruler/lanes/playhead so beat<->pixel mapping never drifts), TimelineDoc* / AppUndoManager*
-//     / TransportService* setters that may be null and degrade to "read but don't mutate".
-//   - Every edit previews locally (a member offset/length/velocity delta, read back in paint()
-//     through effectiveXFor() helpers) and commits to the doc exactly once on mouse-up, through
-//     AppUndoManager::recordTimelineChange — so a multi-note move/resize/velocity-scrub/delete is
-//     ONE undo step however many notes it touches.
-//   - Panel-scoped Delete/Escape (grabs focus on mouseDown), returning false when there is nothing
-//     to act on so the key falls through.
+// Non-owning refs/pointers (TimelineViewState&, TimelineDoc* / AppUndoManager* / TransportService*)
+// may be null and degrade to "read but don't mutate". Every edit previews locally and commits to
+// the doc exactly once on mouse-up via AppUndoManager::recordTimelineChange, so a multi-note
+// move/resize/velocity-scrub/delete is ONE undo step however many notes it touches.
 //
-// Coordinate system — the ONE piece of this class that is NOT a straight copy of the clip-lane
-// idiom, and worth reading closely: note x positions are computed with viewState_.beatToX(beat)
-// UNMODIFIED — the exact same call TimelineClipLaneArea makes for a clip, in the exact same
-// component-local coordinate frame (this component occupies exactly the rect TimelineClipLaneArea
-// did). That is what makes "the playhead lines up": TimelinePlayheadOverlay is untouched by this
-// task — same bounds, same beatToX(beat) call — so a note at a given absolute beat and the
-// playhead line at that same beat land on the same pixel. The 44 px "keys column" is therefore NOT
-// a reserved left margin that shifts the grid's origin (a conventional piano roll's keys column
-// would); it is a fixed opaque strip painted OVER the leftmost 44 px of that same coordinate frame
-// (mouseDown/mouseDrag ignore x < kKeysColumnWidth, ceding that sliver to the keys column). The
-// trade-off: whatever beat currently sits at the scrolled-to x==0 is visually covered by the keys
-// column rather than pushed rightward. Documented here and in docs/layout.md §16 as a deliberate
-// v1 choice, not an oversight.
+// Coordinate system: note x positions use viewState_.beatToX(beat) UNMODIFIED — the same call
+// TimelineClipLaneArea makes for a clip, in the same component-local coordinate frame — so a note
+// at a given absolute beat and the playhead line at that beat land on the same pixel. The 44 px
+// keys column is NOT a margin that shifts the grid's origin; it is an opaque strip painted OVER
+// the leftmost 44 px of that same frame (mouseDown/mouseDrag ignore x < kKeysColumnWidth). See
+// docs/layout.md §16.
 //
 // Notes are clip-relative in the doc (MidiNote::startBeat); every doc read/write here converts to
-// absolute beats via clip->startBeat and back, exactly like TimelineClipLaneArea::paintClip's note
-// preview does.
+// absolute beats via clip->startBeat and back.
 namespace synth::ui {
 
 class PianoRollComponent : public juce::Component {
 public:
-    // Fixed geometry (TL5-8 design: "reuse existing tokens; add none unless needed" — these are
-    // new, piano-roll-only constants, not reused from anywhere, so they stay local rather than
-    // joining Theme::Metrics).
+    // Piano-roll-only constants; not shared with Theme::Metrics.
     static constexpr int kKeysColumnWidth = 44;
     static constexpr int kHeaderHeight = 20;
     static constexpr double kPixelsPerSemitone = 10.0;
-    // The floor under a drawn/resized note's length when Snap is Off — TimelineClipLaneArea's
-    // kMinClipLengthBeats reasoning, reused: TimelineViewState's own finest grid unit.
+    // Floor under a drawn/resized note's length when Snap is Off: TimelineViewState's finest grid unit.
     static constexpr double kMinNoteLengthBeats = 0.0625;
-    // Resize handle width at a note's right edge, in px — TimelineClipLaneArea's kEdgeZonePx is a
-    // 6 px BAND either side of an edge shared by move+resize; the piano-roll spec calls for a
-    // plain "<= 5 px from the right edge" zone (no left-edge resize in v1).
+    // Resize handle zone at a note's right edge, in px (no left-edge resize in v1).
     static constexpr int kResizeZonePx = 5;
 
     explicit PianoRollComponent(TimelineViewState& viewState);
@@ -166,9 +146,9 @@ private:
     double currentBeatsPerBar() const;
     double currentGridBeats() const; // viewState_.divisionBeats(currentBeatsPerBar())
     double snappedBeatAt(double rawBeat) const;
-    // Clamps a clip-relative [start, start+length) span into [0, clip->lengthBeats) — "notes can
-    // only exist inside the clip" (TL5-8 design). TimelineDoc itself has no upper clamp (only
-    // startBeat >= 0), so this is the editor's own policy, applied before every doc write.
+    // Clamps a clip-relative [start, start+length) span into [0, clip->lengthBeats) — notes can
+    // only exist inside the clip. TimelineDoc itself has no upper clamp (only startBeat >= 0), so
+    // this is the editor's own policy, applied before every doc write.
     void clampToClipWindow(double& start, double& length) const;
 
     // Effective (possibly mid-drag) clip-relative geometry / velocity for one note — read by

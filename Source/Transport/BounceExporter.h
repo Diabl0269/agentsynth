@@ -7,7 +7,7 @@ class AudioEngine;
 
 namespace synth {
 
-// Offline bounce/export (TL4-6): renders a beat range of the CURRENT patch to a WAV file, faster
+// Offline bounce/export: renders a beat range of the CURRENT patch to a WAV file, faster
 // than realtime, through exactly the same graph the app plays through.
 //
 // "The same graph" is the whole point — there is no second, offline-only signal path to keep in
@@ -51,52 +51,32 @@ public:
 
     // MESSAGE THREAD, BLOCKING. Renders [startBeat, endBeat] + tail and streams every block
     // straight into the WAV writer, so peak memory is one block regardless of how long the take is.
+    // A live device callback is detached for the duration; the transport is unlooped (a live loop
+    // would make "render until endBeat" unreachable), located to startBeat, played until endBeat,
+    // then stopped for the tail. Afterwards loop state and playhead are restored and left STOPPED,
+    // and the engine's prepare state (device rate or prior hosted format) is restored too.
     //
-    // Choreography, in order:
-    //   1. If the engine is Standalone with a live device, its audio callback is DETACHED for the
-    //      duration (AudioEngine::suspendDeviceCallback) — playback stops, and nothing else clocks
-    //      the graph while the render owns it. A Hosted engine is used as-is; its host is expected
-    //      to be quiescent, and there is no portable way for us to make it so.
-    //   2. The engine is re-prepared at the render format (OfflineTransportDriver's constructor).
-    //   3. The transport is stopped, UNLOOPED (a bounce renders the range linearly — a live loop
-    //      would make "render until endBeat" unreachable), located to startBeat and played.
-    //   4. Blocks are rendered and written until the transport's end position reaches endBeat,
-    //      then the transport is stopped and the tail is rendered and written.
-    //   5. The transport is put back: loop state restored, playhead located to where it was, and
-    //      left STOPPED — bouncing from a playing transport leaves you stopped at the prior
-    //      position, which is what every DAW does and what makes the position restore observable.
-    //      The engine's prepare state is restored too (the device's rate on re-attach, or the
-    //      previous hosted format).
+    // Atomicity: written to a sibling temp file, moved into place only on success — a failed or
+    // cancelled bounce never leaves a truncated file and never touches a pre-existing one.
     //
-    // Atomicity: the render is written to a sibling temp file and moved into place only on success,
-    // so a failed or cancelled bounce never leaves a truncated file — and never touches a file that
-    // was already there.
+    // Determinism: two bounces of the same project produce byte-identical files (no wall-clock
+    // reads, deterministic voice allocation, block boundaries a pure function of the options). Not
+    // true across two bounces from one live engine without a reload — prepareToPlay resets rates
+    // and ramps but not phase, so DSP state carries over from the first render.
     //
-    // Determinism: two bounces of the same project produce byte-identical files. Nothing on the
-    // render path reads the wall clock (that was the point of driving the graph from the transport
-    // rather than from a device), voice allocation is deterministic, and the block boundaries are a
-    // function of the options alone. The qualifier is "the same project", not "the same session":
-    // bouncing twice in a row from one live engine starts the second render from whatever DSP state
-    // the first left behind (free-running oscillator phase, un-decayed reverb), because
-    // prepareToPlay resets rates and ramps but not phase. Reload the project and the bytes match.
+    // Non-render-safe modules: every offline block gets an EMPTY juce::MidiBuffer and the engine's
+    // MIDI collector is never drained offline, so live-input modules contribute silence by
+    // definition. Exception: ExternalMidiModule keeps its own collector fed straight from
+    // AudioEngine::handleIncomingMidiMessage, so a note played on a physical keyboard during a
+    // bounce can still land in the file. Don't play while you bounce.
     //
-    // Non-render-safe modules: every offline block is handed an EMPTY juce::MidiBuffer, and the
-    // engine's MIDI collector is never drained offline (no device callback is running to drain it).
-    // Live-input modules therefore contribute silence to a bounce by definition, not by accident —
-    // External MIDI, and any future hardware-input module, have nothing to emit. The one hole worth
-    // naming: ExternalMidiModule keeps its own collector, fed straight from
-    // AudioEngine::handleIncomingMidiMessage, so a note physically played on a MIDI keyboard while
-    // a bounce is running can still land in the file. Don't play while you bounce.
-    //
-    // The metronome (TL5-6) is summed AFTER the graph in AudioEngine::renderPass, which is what
-    // keeps it out of any in-graph tap by construction — but a bounce captures exactly that
-    // post-graph buffer, so post-graph summing alone does NOT keep it out of a bounce. bounce()
-    // therefore forces it off explicitly (both the user toggle and the count-in forced-on flag) for
-    // the duration of the render and restores it afterwards via an RAII guard — see
+    // The metronome is summed AFTER the graph in AudioEngine::renderPass, so a bounce captures it
+    // in the post-graph buffer it renders. bounce() forces it off explicitly (user toggle and
+    // count-in forced-on flag) for the duration and restores it via an RAII guard — see
     // MetronomeForceOffGuard in BounceExporter.cpp.
     //
     // In a SYNTH_ENABLE_TIMELINE=0 build the transport never ticks, so a bounce renders one block
-    // plus the tail and stops — the feature has no meaning without the timeline compiled in.
+    // plus the tail and stops.
     static BounceResult bounce(AudioEngine& engine, const juce::File& outFile, const BounceOptions& options,
                                const ProgressCallback& progress = {});
 

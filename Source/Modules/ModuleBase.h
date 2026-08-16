@@ -57,26 +57,26 @@ enum class ModuleType {
     MacroControl,
     SampleHold,
     EnvelopeFollower,
-    // TL6-2: the device-input tap. A singleton in the patch (GraphEditor::isSingletonIOModule),
+    // The device-input tap. A singleton in the patch (GraphEditor::isSingletonIOModule),
     // paired with the "Audio Output" node, which is still a juce::AudioGraphIOProcessor.
     AudioInput,
-    // Internal-only (TL3-1): the timeline's "Track In" node. Created by the add-track flow, never
+    // Internal-only: the timeline's "Track In" node. Created by the add-track flow, never
     // offered by the library and never authorable by a model.
     TimelineMidiSource,
-    // Internal-only (TL6-3): the "Rec Tap" node an audio take records through. Auto-spliced in
+    // Internal-only: the "Rec Tap" node an audio take records through. Auto-spliced in
     // front of Audio Output by the record flow; same three exclusions as Track In (no library row,
     // no replace-menu entry, never authorable — it names a file path on disk).
     RecordTap,
-    // Internal-only (TL6-4): the timeline's "Track Audio" node — the disk-streaming playback end of
+    // Internal-only: the timeline's "Track Audio" node — the disk-streaming playback end of
     // an audio track. Created by the add-track flow, same three exclusions as Track In and Rec Tap
     // (a model that could author one could point playback at a clip, and therefore a file, it
     // chose).
     TimelineAudioSource,
-    // Internal-only (TL7-2): a third-party VST3/AU plugin hosted as a module
-    // (synth::HostedPluginModule). Not offered by the library or the replace menu until TL7-3 ships
-    // the scan list and the load UX, and never authorable by a model — its "state" carries an opaque
-    // byte blob handed straight to third-party code, which is the last thing that should arrive from
-    // a model (TL7-4).
+    // Internal-only: a third-party VST3/AU plugin hosted as a module
+    // (synth::HostedPluginModule). Not offered by the library or the replace menu until the scan
+    // list and load UX ship, and never authorable by a model — its "state" carries an opaque
+    // byte blob handed straight to third-party code, which is the last thing that should arrive
+    // from a model.
     HostedPlugin
 };
 
@@ -178,7 +178,7 @@ public:
 
     void setModuleName(const juce::String& name) { moduleName = name; }
 
-    // -- Node identity, readable from the audio thread (TL3-1) ---------------------------------
+    // -- Node identity, readable from the audio thread ---------------------------------------
     //
     // The graph node's "uuid" property is the app's long-lived node identity (see
     // AIStateMapper::graphToJSON): timeline track bindings and automation lanes key on it. It

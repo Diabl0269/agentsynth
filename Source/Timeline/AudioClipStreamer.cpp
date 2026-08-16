@@ -56,7 +56,7 @@ juce::File AudioClipStreamer::resolveAssetRef(const juce::String& ref) const {
     juce::File resolved;
 
     if (ref.startsWith(kRecordingsRefPrefix)) {
-        // TL6-3's unsaved-project case: the ref INCLUDES the "Recordings/" segment and is resolved
+        // The unsaved-project case: the ref INCLUDES the "Recordings/" segment and is resolved
         // against the directory that CONTAINS the Recordings folder — i.e. exactly the path
         // MainComponent::chooseTakeFiles built it from (`<app data>/<settings folder>` +
         // "Recordings/take-n.wav"). Containment is then checked against the Recordings folder
@@ -249,7 +249,7 @@ int AudioClipStreamer::readFrames(const StreamHandle* handle, std::int64_t sourc
     // when the prefetch thread most needs to know where playback went.
     handle->wantedFrame.store(sourceFrame, std::memory_order_release);
 
-    // TL6-9: a format change is in flight. Force silence rather than risk a coincidental hit on ring
+    // A format change is in flight. Force silence rather than risk a coincidental hit on ring
     // content filled under the OLD sample-rate-to-source-frame mapping — see invalidateAllStreams().
     // This is checked BEFORE the window, so it holds even in the gap before the prefetch thread has
     // had a chance to collapse anything.
@@ -369,7 +369,7 @@ int AudioClipStreamer::PrefetchClient::useTimeSlice() {
 bool AudioClipStreamer::runOneSlice() {
     applyPendingAssignments();
 
-    // TL6-9: collapse every open stream's window to wherever it was last asked to read (its
+    // Collapse every open stream's window to wherever it was last asked to read (its
     // wantedFrame — the steering signal readFrames() publishes on every call, hit or miss), THEN
     // clear the flag. Ordering matters: the flag must not be cleared (and readFrames()'s silence
     // gate lifted) until every stream has actually been collapsed, or a stream that hasn't been

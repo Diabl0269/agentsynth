@@ -42,7 +42,7 @@ public:
         juce::ignoreUnused(commandLine);
 
 #if !SYNTH_HAS_ARGV_MAIN
-        // Windows GUI fallback for the out-of-process plugin scan (TL7-3). Everywhere else main()
+        // Windows GUI fallback for the out-of-process plugin scan. Everywhere else main()
         // below short-circuits before the app object is ever constructed; here JUCE owns WinMain and
         // this is the earliest hook there is, so the child pays for an app spin-up. It still creates
         // no window, no engine and no settings file — this runs before all of that.
@@ -196,7 +196,7 @@ private:
 //==============================================================================
 // Entry point.
 //
-// Hand-rolled rather than START_JUCE_APPLICATION so the out-of-process plugin scan (TL7-3) can be
+// Hand-rolled rather than START_JUCE_APPLICATION so the out-of-process plugin scan can be
 // intercepted BEFORE the app object exists. A scan launches this binary once per candidate plugin;
 // if each of those spun up a JUCEApplication first, macOS would bounce a Dock icon per plugin and
 // every child would pay for an NSApplication it never uses. The macro's two halves are used

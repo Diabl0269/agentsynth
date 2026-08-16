@@ -16,7 +16,7 @@ constexpr int kWrite = static_cast<int>(LaneRecordMode::Write);
 
 bool capturesGestures(int mode) noexcept { return mode == kTouch || mode == kLatch || mode == kWrite; }
 
-// TL7-6: `param` may be a hosted plugin's own parameter, which has no NormalisableRange (a
+// `param` may be a hosted plugin's own parameter, which has no NormalisableRange (a
 // juce::HostedAudioProcessorParameter is a sibling hierarchy to RangedAudioParameter — see
 // HostedPluginModule.h). Message thread only, so the dynamic_cast here is cheap and not worth
 // caching.

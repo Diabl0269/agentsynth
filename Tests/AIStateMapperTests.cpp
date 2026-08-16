@@ -944,7 +944,7 @@ TEST(AIStateMapperTest, MergeSkipsAutoConnectWhenTheCallerOptsOut) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// TL0 — patch format: type-name fidelity, paramID stability, schemaVersion + node uuid,
+// Patch format: type-name fidelity, paramID stability, schemaVersion + node uuid,
 // the authorable-module allowlist, and the reserved "timeline" key.
 // ---------------------------------------------------------------------------------------------
 
@@ -1061,7 +1061,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"ADSR", "attack, bypassed, decay, muted, poly, release, sustain"},
         {"Amp Env", "attack, bypassed, decay, muted, poly, release, sustain"},
         {"Attenuverter", "amount, bypassed"},
-        // TL6-2: Audio Input is a ModuleBase now, so it has ModuleBase's bypass parameter. Audio
+        // Audio Input is a ModuleBase, so it has ModuleBase's bypass parameter. Audio
         // Output is still the graph's raw IO node and still has none.
         {"Audio Input", "bypassed"},
         {"Audio Output", ""},
@@ -1075,8 +1075,8 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Filter", "bypassed, cutoff, drive, filterType, muted, outputLevel, poly, resonance"},
         {"Filter Env", "attack, bypassed, decay, muted, poly, release, sustain"},
         {"Flanger", "bypassed, centreDelay, depth, feedback, mix, muted, outputLevel, rate"},
-        // TL7-2. The host module has no parameters of its own beyond bypass/mute — the hosted
-        // plugin's parameters are its own, and exposing them to the graph is TL7-6.
+        // The host module has no parameters of its own beyond bypass/mute — the hosted
+        // plugin's own parameters are exposed to the graph separately, as automation lanes.
         {"Hosted Plugin", "bypassed, muted"},
         {"LFO", "bipolar, bypassed, glide, level, mode, muted, rateHz, rateSync, retrig, shape"},
         {"Limiter", "bypassed, inputGain, muted, release, threshold"},
@@ -1095,7 +1095,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Pitch Shifter", "bypassed, feedback, fine, mix, muted, outputLevel, pitch, shiftHz, shiftMode, window"},
         {"Poly MIDI", "bypassed, velToGate, voiceSteal"},
 #if SYNTH_ENABLE_TIMELINE
-        // TL6-3. Gated with its factory entry, like Track In below. A pass-through has nothing to
+        // Gated with its factory entry, like Track In below. A pass-through has nothing to
         // tweak: the inherited bypass is the whole parameter set (and there is deliberately no
         // mute — muting a tap would silence the patch, which is not what a recorder is for).
         {"Rec Tap", "bypassed"},
@@ -1111,12 +1111,12 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
                       "Gate 3, Gate 4, Gate 5, Gate 6, Gate 7, Gate 8, Pitch 1, Pitch 2, Pitch 3, Pitch 4, Pitch 5, "
                       "Pitch 6, Pitch 7, Pitch 8, bpm, bypassed, run, syncToTransport"},
 #if SYNTH_ENABLE_TIMELINE
-        // TL6-4. Gated with its factory entry, like the two above. Every playback value it needs
+        // Gated with its factory entry, like the two above. Every playback value it needs
         // (gain, fades, trim) lives on the CLIP, not on the node, so the inherited bypass is the
         // whole parameter set — and there is deliberately no mute, since a muted track is a document
         // state the module already honours.
         {"Track Audio", "bypassed"},
-        // TL3-1. Gated on the timeline flag, so the row is gated too.
+        // Gated on the timeline flag, so the row is gated too.
         {"Track In", "bypassed"},
 #endif
         {"VCA", "bypassed, gain, muted, poly"},
@@ -1197,22 +1197,22 @@ TEST(AIStateMapperTest, AuthorableModuleTypesGolden) {
     // The deliberate exclusions, stated positively so a silent removal of the deny set fails.
     EXPECT_FALSE(actual.contains("Attenuverter"));
     EXPECT_FALSE(actual.contains("Mod Slot"));
-    // TL3-1: the timeline feed. Registered in the factory (our own saves round-trip it) but never
-    // offered to a model — and, since TL7-4's mechanism landed with it, refused outright by
-    // validatePatch on the untrusted path rather than merely omitted from the schema.
+    // The timeline feed. Registered in the factory (our own saves round-trip it) but never
+    // offered to a model — and refused outright by validatePatch on the untrusted path rather than
+    // merely omitted from the schema.
     EXPECT_FALSE(actual.contains("Track In"));
-    // TL6-3: the audio-take tap. Registered in the factory (a patch with one has to round-trip)
+    // The audio-take tap. Registered in the factory (a patch with one has to round-trip)
     // but never offered to a model, and refused outright by validatePatch on the untrusted path —
     // it names a file path on disk, so authoring one is authoring a write target.
     EXPECT_FALSE(actual.contains("Rec Tap"));
-    // TL6-4: the audio-track player. Same reasoning from the other direction — it plays whatever
+    // The audio-track player. Same reasoning from the other direction — it plays whatever
     // clips the track bound to it names, so authoring one is choosing what gets read off disk.
     EXPECT_FALSE(actual.contains("Track Audio"));
-    // TL7-2: a hosted third-party plugin. The strongest exclusion on this list — the node's
+    // A hosted third-party plugin. The strongest exclusion on this list — the node's
     // "state" is an opaque byte blob fed straight to AudioPluginInstance::setStateInformation, and
-    // its identity selects which binary the host loads. This EXPECT_FALSE is what makes TL7-4's
-    // mechanism cover hosting: the type is refused by validatePatch on the untrusted path, not
-    // merely omitted from the schema.
+    // its identity selects which binary the host loads. This EXPECT_FALSE is what makes the
+    // untrusted-unreachable mechanism cover hosting: the type is refused by validatePatch on the
+    // untrusted path, not merely omitted from the schema.
     EXPECT_FALSE(actual.contains("Hosted Plugin"));
 
     // The schema hands the model exactly this list.
@@ -1227,7 +1227,7 @@ TEST(AIStateMapperTest, AuthorableModuleTypesGolden) {
     EXPECT_EQ(fromSchema.joinIntoString(", "), actual.joinIntoString(", "));
 }
 
-// TL3-1 / TL7-4: "non-authorable" must mean UNTRUSTED-UNREACHABLE, not just "absent from the
+// "Non-authorable" must mean UNTRUSTED-UNREACHABLE, not just "absent from the
 // schema". The schema enum is a hint our own backend enforces as a grammar; a patch can also come
 // from a local model, a hand-edited file loaded untrusted, or any future caller that never saw the
 // schema — so validatePatch refuses internal-only types itself.
@@ -1239,8 +1239,8 @@ TEST(AIStateMapperTest, UntrustedPatchRejectsInternalOnlyModuleTypes) {
     juce::StringArray internalTypes = {"Attenuverter", "Mod Slot", "Hosted Plugin"};
 #if SYNTH_ENABLE_TIMELINE
     internalTypes.add("Track In");
-    internalTypes.add("Rec Tap");     // TL6-3
-    internalTypes.add("Track Audio"); // TL6-4
+    internalTypes.add("Rec Tap");
+    internalTypes.add("Track Audio");
 #endif
 
     for (const auto& type : internalTypes) {

@@ -20,7 +20,7 @@ enum CommandIDs {
     copySelection,
     pasteSelection,
     duplicateSelection,
-    // TL5-10: Space play/stop. Always registered (even in a SYNTH_ENABLE_TIMELINE=OFF build,
+    // Space play/stop. Always registered (even in a SYNTH_ENABLE_TIMELINE=OFF build,
     // where getCommandInfo reports it inactive) so ShortcutManager's tripwire tests (unique
     // default, description, command mapping) cover it unconditionally.
     togglePlayback,
@@ -156,14 +156,14 @@ public:
         bindings["copySelection"] = juce::KeyPress('c', juce::ModifierKeys::commandModifier, 0);
         bindings["pasteSelection"] = juce::KeyPress('v', juce::ModifierKeys::commandModifier, 0);
         bindings["duplicateSelection"] = juce::KeyPress('d', juce::ModifierKeys::commandModifier, 0);
-        // TL5-10: bare spacebar, no modifiers — the platform DAW convention for play/stop. Safe to
+        // Bare spacebar, no modifiers — the platform DAW convention for play/stop. Safe to
         // claim app-wide for the same reason Cmd+C/V is: a focused juce::TextEditor consumes the
         // spacebar itself (types a space character) before it ever reaches MainComponent::
         // keyPressed, the sole dispatch point — see docs/shortcuts.md.
         bindings["togglePlayback"] = juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys::noModifiers, 0);
         // 't' with plain Cmd is unused by any other binding (Cmd+, / S / O / N / Z / Shift+Z / M /
         // K / A / L / B, Shift+A, Shift+S, C / V / D) — safe to claim for the timeline panel
-        // toggle (TL5-1).
+        // toggle.
         bindings["toggleTimelinePanel"] = juce::KeyPress('t', juce::ModifierKeys::commandModifier, 0);
     }
 

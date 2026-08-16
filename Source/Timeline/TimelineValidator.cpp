@@ -128,7 +128,7 @@ std::map<juce::String, juce::AudioProcessor*> indexGraphByUuid(const juce::Audio
     return byUuid;
 }
 
-// TL7-6: parameter resolution is factored into synth::resolveLaneParameter (AutomationBinding.h) —
+// Parameter resolution is factored into synth::resolveLaneParameter (AutomationBinding.h) —
 // the one resolver this file, TimelineOps, AudioEngine::publishTimeline's binding build and the
 // recorder's rebind all share.
 
@@ -307,21 +307,21 @@ TimelineValidationResult validateLane(const juce::var& laneVar, const juce::Stri
                                               "\", which another lane already automates. There is at most one lane "
                                               "per parameter in the whole timeline.");
 
-    // TL7-6, additive: absent (every file predating this field) is "no hint" — the sentinel
+    // Additive: absent (every file predating this field) is "no hint" — the sentinel
     // resolveLaneParameter already treats as "never try the hosted-plugin index fallback".
     int paramIndexHint = -1;
     if (!readOptionalInt(lObj->getProperty("paramIndexHint"), paramIndexHint))
         return fail(Error::MalformedRoot, laneText + " has a non-integer \"paramIndexHint\".");
 
     // The binding must resolve against the LIVE graph. An orphaned binding is a state the app
-    // RECOVERS from when a node disappears under an existing lane (TL2-6); it is not a state
+    // RECOVERS from when a node disappears under an existing lane; it is not a state
     // untrusted input may author from nothing.
     const auto found = graphByUuid.find(nodeUuid);
     if (found == graphByUuid.end())
         return fail(Error::UnresolvableBinding, laneText + " is bound to node uuid \"" + nodeUuid +
                                                     "\", which no module in the current patch has. Bind the lane to a "
                                                     "module that exists.");
-    // TL7-6: the shared resolver — exact id match, or (only for a hosted plugin with no stable ids
+    // The shared resolver — exact id match, or (only for a hosted plugin with no stable ids
     // at all) the hint above. A forged hint can never redirect to a genuinely different, still-
     // stably-identified parameter: that case is exactly what the resolver treats as unresolved.
     const auto resolved = resolveLaneParameter(found->second, paramId, paramIndexHint);
@@ -371,7 +371,7 @@ TimelineValidationResult validateLane(const juce::var& laneVar, const juce::Stri
                                                    " breakpoints, exceeding the limit of " +
                                                    juce::String(TimelineDoc::kMaxBreakpointsPerLane) + " per lane.");
 
-    // TL7-6: a hosted-plugin parameter has no NormalisableRange, so its bounds are exactly [0, 1]
+    // A hosted-plugin parameter has no NormalisableRange, so its bounds are exactly [0, 1]
     // (laneValueBoundsFor — see AutomationBinding.h) rather than something read off the parameter.
     const auto liveBounds = laneValueBoundsFor(resolved);
     const double liveMin = liveBounds.minValue;
@@ -573,7 +573,7 @@ TimelineValidationResult validateTimeline(const juce::var& timelineVar, const ju
     // does not understand (so a project saved by a newer build survives a round trip through an
     // older one). That asymmetry is the point: forward-compatibility is a property a document
     // format needs and an untrusted payload does not. An ignored key is precisely how a later
-    // build starts honouring a field that today's gate never inspected — the failure TL0-4's
+    // build starts honouring a field that today's gate never inspected — the failure the
     // "timeline" refusal exists to prevent, one level down.
     for (int i = 0; i < rootObj->getProperties().size(); ++i) {
         const juce::String key = rootObj->getProperties().getName(i).toString();

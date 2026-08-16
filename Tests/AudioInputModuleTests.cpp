@@ -1,4 +1,4 @@
-// TL6-2: "Audio Input" as a real module — the device's input reaching the patch through the
+// "Audio Input" as a real module — the device's input reaching the patch through the
 // playhead, the jack count following the device, and every compatibility promise the swap made.
 //
 // Two layers, deliberately:
@@ -73,7 +73,7 @@ struct ModuleRig {
     ModuleRig() {
         module.setPlayHead(&transport);
         module.prepareToPlay(kSampleRate, kBlockSize);
-        // TL6-7: this harness exists to pin the module's own copy/clear/clamp/bypass contract, which
+        // This harness exists to pin the module's own copy/clear/clamp/bypass contract, which
         // is orthogonal to the monitoring gate — enable monitoring unconditionally so every existing
         // assertion here keeps meaning what it always meant. The gate itself is Tests/FeedbackGuardTests.cpp's job.
         transport.setInputMonitoringEnabledForBlock(true);
@@ -219,7 +219,7 @@ TEST(AudioInputModuleTest, DeviceInputFlowsThroughModule) {
 
     FakeAudioIODevice fake(2, 2);
     engine.audioDeviceAboutToStart(&fake);
-    // TL6-7: this test is about the copy path (crossed wiring, snapshot vs. render buffer), which is
+    // This test is about the copy path (crossed wiring, snapshot vs. render buffer), which is
     // orthogonal to the monitoring gate — enable it so the module's output isn't gated here too. The
     // gate itself is Tests/FeedbackGuardTests.cpp's job.
     engine.setInputMonitoringEnabled(true);
@@ -263,7 +263,7 @@ TEST(AudioInputModuleTest, HostedInputFlows) {
 
     engine.prepareForHost(kSampleRate, kBlockSize, 2, 2);
     EXPECT_EQ(engine.getDeviceInputChannelCount(), 2);
-    // TL6-7: orthogonal to what this test pins (the snapshot survives the host's in-place render) —
+    // Orthogonal to what this test pins (the snapshot survives the host's in-place render) —
     // see the comment on DeviceInputFlowsThroughModule above.
     engine.setInputMonitoringEnabled(true);
 
@@ -319,7 +319,7 @@ TEST(AudioInputModuleTest, FactoryBuildsTheModule) {
 }
 
 TEST(AudioInputModuleTest, LegacyPatchLoads) {
-    // Shaped exactly like a patch saved BEFORE TL6-2, when "Audio Input" was the graph's raw
+    // Shaped exactly like a patch saved when "Audio Input" was the graph's raw
     // audioInputNode: same type string, same channel indices on the connection. It must load onto
     // the module with the wire intact — that is the entire compatibility story.
     const juce::String legacy = R"({

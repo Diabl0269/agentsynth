@@ -93,7 +93,7 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
         performEdit([this, next] { doc_.setTrackSoloed(trackId_, next); });
     });
     // Arm flips document state only. Arming is not recording: the record button (and the
-    // MidiRecorder::startRecording call behind it) arrives with the transport bar in TL5-5.
+    // MidiRecorder::startRecording call behind it) lives on the transport bar.
     setUpToggle(armButton_, "trackArmButton", [this] {
         const auto* t = track();
         if (t == nullptr)

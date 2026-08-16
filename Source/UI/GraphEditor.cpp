@@ -57,17 +57,17 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "ADSR" || typeName == "Amp Env" || typeName == "Filter Env")
         return {280, 220}; // sliders + the Poly toggle row — see the ADSR branch of updateLayout
     if (typeName.containsIgnoreCase("Sequencer") && !typeName.containsIgnoreCase("Poly"))
-        // +26 (one toggle row) for the TL1-8 Sync to Transport switch, appended below the step grid.
+        // +26 (one toggle row) for the Sync to Transport switch, appended below the step grid.
         return {synth::LayoutUtil::kDoubleWidth, 406};
     if (typeName.containsIgnoreCase("Poly") && typeName.containsIgnoreCase("Sequencer"))
-        // +26 (one toggle row) for the TL1-8 Sync to Transport switch, appended below the step grid.
+        // +26 (one toggle row) for the Sync to Transport switch, appended below the step grid.
         return {synth::LayoutUtil::kDoubleWidth, 406};
     if (typeName.containsIgnoreCase("MidiKeyboard") || typeName.containsIgnoreCase("Midi Keyboard") ||
         typeName.containsIgnoreCase("MIDI Keyboard"))
         return {synth::LayoutUtil::kDoubleWidth, 150};
     if (typeName == "Poly MIDI" || typeName == "PolyMidi")
         // +48 (one combo row) from the issue #198 Voice Steal selector, then +26 (one toggle row)
-        // for the TL1-7 Vel → Gate switch.
+        // for the Vel → Gate switch.
         return {280, 197};
     if (typeName == "Distortion")
         return {280, 355};
@@ -133,21 +133,21 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Rec Tap")
         // Like Track In it has no body controls (only the inherited bypass, which lives in the
         // header), but it has two jacks a side, so the port gutter — not the 100 px floor — sets
-        // the height. Also library-less: the record flow places it (TL6-3). Measured against the
-        // real card by RecordTapTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
+        // the height. Also library-less: the record flow places it. Measured against the real card
+        // by RecordTapTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
         return {280, 123};
     if (typeName == "Track Audio")
         // Same shape as Rec Tap — no body controls, jacks setting the height — but with outputs
-        // only. Library-less like the other two internal nodes: the add-track flow places it
-        // (TL6-4). Measured against the real card by
+        // only. Library-less like the other two internal nodes: the add-track flow places it.
+        // Measured against the real card by
         // AudioClipPlaybackTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
         return {280, 123};
     if (typeName == "Hosted Plugin")
-        // Bypass and mute live in the header; the only body content is the TL7-5 "Open Editor"
-        // button, one jack a side while empty. The card grows with the loaded plugin's real port
-        // count, like the Macro bank and Audio Input; the estimate is the resting size, and
-        // finalizeNewDrop re-resolves against the real component anyway. Library-less until TL7-3
-        // ships the scan list and the load UX. Measured against the real card by
+        // Bypass and mute live in the header; the only body content is the "Open Editor" button,
+        // one jack a side while empty. The card grows with the loaded plugin's real port count,
+        // like the Macro bank and Audio Input; the estimate is the resting size, and
+        // finalizeNewDrop re-resolves against the real component anyway. Library-less until the
+        // scan list and load UX ship. Measured against the real card by
         // HostedPluginTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
         return {280, 123};
     return {280, 360};
@@ -2302,8 +2302,8 @@ void GraphEditor::timerCallback() {
         minimap.setModel(buildMinimapModel());
 
 #if SYNTH_ENABLE_TIMELINE
-    // TL4-5: drain the audio thread's UI reflection ring on the same 30 Hz cadence as everything
-    // else in this callback — no separate free-running timer. A drain against an empty ring is just
+    // Drain the audio thread's UI reflection ring on the same 30 Hz cadence as everything else in
+    // this callback — no separate free-running timer. A drain against an empty ring is just
     // one prepareToRead() call, so this is effectively free on every tick that has nothing queued.
     // Reflection never calls anything that repaints on its own: setValue(..., dontSendNotification)
     // marks the slider dirty and it rides the existing buffered-image repaint, same as any other
@@ -2548,7 +2548,7 @@ void GraphEditor::itemDropped(const SourceDetails& dragSourceDetails) {
         return;
     }
 
-    // A scanned plugin (TL7-3) — same channel again, told apart by its "plugin:" prefix.
+    // A scanned plugin — same channel again, told apart by its "plugin:" prefix.
     if (synth::PluginIdentity::isDragPayload(name)) {
         addHostedPluginAtCanvasPosition(synth::PluginIdentity::fromDragPayload(name), dropPos);
         endDragPreview();
@@ -2725,13 +2725,13 @@ void GraphEditor::dropRoutingsOnHiddenJacks(juce::AudioProcessorGraph::NodeID no
 }
 
 void GraphEditor::refreshIoModulesAfterDeviceChange() {
-    // TL6-2, MESSAGE THREAD: the audio device changed under us, so every Audio Input card's jack
-    // count may have changed with it. Pushing the engine's prepared channel count into the module
-    // here (rather than waiting for the audio thread to publish it from the next block) is what
-    // makes the resize immediate — and what makes it testable without a device.
+    // MESSAGE THREAD: the audio device changed under us, so every Audio Input card's jack count
+    // may have changed with it. Pushing the engine's prepared channel count into the module here
+    // (rather than waiting for the audio thread to publish it from the next block) is what makes
+    // the resize immediate — and what makes it testable without a device.
     //
-    // Minimal on purpose: TL6-9 owns the full device-change story. This is the part that must not
-    // wait, because a shrunk device leaves cables on jacks that no longer exist.
+    // Minimal on purpose: this is only the part that must not wait, because a shrunk device leaves
+    // cables on jacks that no longer exist.
     auto& graph = audioEngine.getGraph();
     const int deviceChannels = audioEngine.getDeviceInputChannelCount();
     bool sawInputModule = false;

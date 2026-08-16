@@ -1,9 +1,8 @@
 // TimelinePanelTests.cpp
 //
-// TL5-1: bottom-docked timeline panel shell + toolbar toggle + rebindable shortcut + slide
-// animation.
+// Bottom-docked timeline panel shell + toolbar toggle + rebindable shortcut + slide animation.
 //
-// Two groups of coverage:
+// Four groups of coverage:
 //   1. synth::ui::TimelinePanelComponent in isolation — pure layout/paint, no MainComponent, no
 //      SYNTH_ENABLE_TIMELINE gating (the component itself always compiles; only MainComponent's
 //      use of it is gated).
@@ -12,13 +11,9 @@
 //      when the flag is OFF (see MainComponent.h/.cpp). HiddenByDefaultAndCarvesNothing is the
 //      exception: it asserts the flag-OFF invariant too (nothing timeline-related visible or
 //      carved), so it is deliberately NOT gated.
-//
-// TL5-2 adds a third group at the bottom of this file:
 //   3. Ruler/grid/zoom/scroll/snap/loop-brace — synth::ui::TimelineRulerComponent and the panel's
 //      wheel handling and snap combo, driven with a raw synth::TransportService (never through
 //      MainComponent/AudioEngine), so — same reasoning as group 1 — none of it is gated either.
-
-// TL5-3 adds a fourth group:
 //   4. Track headers + the app-level timeline wiring MainComponent owns (publish-on-mutation, the
 //      compound add-track flow, reconciliation after an undo/redo restore, .agsproj round trips,
 //      recorder wiring). The panel-level header tests are ungated like groups 1–3; everything that
@@ -210,7 +205,7 @@ TEST_F(TimelinePanelIntegrationTest, VisibilityPersists) {
 #endif // SYNTH_ENABLE_TIMELINE
 
 // ============================================================================
-// 3. TL5-2: ruler/grid/zoom/scroll/snap/loop-brace.
+// 3. Ruler/grid/zoom/scroll/snap/loop-brace.
 // ============================================================================
 
 namespace {
@@ -397,7 +392,7 @@ TEST(TimelinePanelSnapComboTest, SnapChoicePersists) {
 }
 
 // ============================================================================
-// 4. TL5-3: track headers + the app-level timeline wiring.
+// 4. Track headers + the app-level timeline wiring.
 // ============================================================================
 
 namespace {

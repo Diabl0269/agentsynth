@@ -11,73 +11,38 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 
 /**
- * @brief "Track Audio" — the graph-side end of a timeline AUDIO track (TL6-4).
+ * @brief "Track Audio" — the graph-side end of a timeline AUDIO track.
  *
- * One node per audio track, created by the add-track flow and bound to the track by the node's
- * uuid, exactly like "Track In" is for a MIDI track. Downstream of it the patch is an ordinary
- * patch: a stereo signal arrives from somewhere and neither knows nor cares that a timeline exists.
+ * One node per audio track, bound to the track by the node's uuid, exactly like "Track In" is for
+ * a MIDI track. Nothing schedules audio into it: every block it reads the transport's
+ * BlockTimeInfo, TimelineSnapshot and synth::AudioClipStreamer off the playhead, finds the track
+ * whose bindingUuid matches its own uuid, and renders whichever clips overlap the block's beat
+ * range — no per-clip state held, so a locate/tempo/edit takes effect next block.
  *
- * -- Pull, not push -----------------------------------------------------------------------------
+ * INTERNAL-ONLY like "Track In"/"Rec Tap": not in the library, not offered by the replace menu,
+ * non-authorable by the AI (`kNonAuthorableModuleTypes`) — a model that could author one could
+ * point playback at a file of its choosing.
  *
- * Nothing schedules audio into this module. Every block it reads the transport's BlockTimeInfo, the
- * block's TimelineSnapshot and the engine's synth::AudioClipStreamer — all three off the playhead
- * the AudioEngine installs on every node — finds the Audio-kind track whose bindingUuid equals its
- * own node uuid, and renders whichever of that track's clips overlap this block's beat range. A
- * locate, a tempo change or a clip edit therefore takes effect on the very next block with no
- * invalidation step: the module holds no per-clip state at all.
+ * THE RAM CONTRACT: never holds more than the rings (one `AudioClipStreamer::kRingFrames` ring,
+ * ~1 MiB, regardless of file/clip length) — unlike `SamplerModule`'s whole-file-in-RAM model,
+ * which is wrong for an arrangement. Nothing here calls a file API. A clip with no stream yet
+ * (just added/seeked, or past `kMaxStreams`) renders SILENCE, never stale audio or a stall.
  *
- * The module is INTERNAL-ONLY, the same way "Track In" and "Rec Tap" are: not in the module library,
- * not offered by the replace menu, and explicitly non-authorable by the AI
- * (`kNonAuthorableModuleTypes`, and `validatePatch`'s untrusted path rejects it) — a model that
- * could author one could point playback at a clip, and therefore a file, it chose.
+ * SAMPLE RATE (v1 policy): source positions are computed in file frames using the ENGINE's sample
+ * rate — no resampling. A file whose header rate differs from the session's plays transposed.
+ * Record-taps are written at session rate so they're always correct; imported files may not be.
+ * `AudioClipStreamer::getStreamFileSampleRate()` is what a UI warning would read.
  *
- * -- Streaming, not loading ---------------------------------------------------------------------
+ * Loop wrap: a block crossing the loop end is TWO beat ranges (same decomposition as Track In,
+ * same multi-wrap bound); each range renders independently and the results SUM.
  *
- * **THE RAM CONTRACT.** This module and the streamer behind it never hold more than the rings. A
- * ten-minute take costs ONE `AudioClipStreamer::kRingFrames` ring — 1 MiB — not 100 MB, however
- * long the file is and however long the clip sits on the timeline. That is the whole reason this is
- * a separate module from `SamplerModule`, whose whole-file-in-RAM model is right for a one-shot a
- * voice retriggers and wrong for an arrangement. Nothing here ever calls a file API: `readFrames`
- * copies out of a ring the prefetch thread filled, or hands back silence.
+ * Hard cuts: a stop/locate/wrap renders exactly what the new position says, so a clip cut
+ * mid-waveform clicks — no hidden declick ramp. A position the ring cannot serve is silence, never
+ * a mix of two file positions.
  *
- * A clip that has no stream yet (just added, just seeked to, or past
- * `AudioClipStreamer::kMaxStreams`) renders SILENCE — never stale audio, never a stall.
- *
- * -- Sample rate: the v1 policy, stated loudly --------------------------------------------------
- *
- * Source positions are computed in FILE FRAMES using the ENGINE's sample rate, and no resampling
- * happens anywhere. **A file whose header rate differs from the session's plays transposed** (a
- * 44.1 kHz file in a 48 kHz session is ~8.8% sharp and correspondingly short). Record-taps are
- * written at the session rate, so takes recorded in the app are always correct; an imported file
- * may not be. The alternative for v1 — nearest-frame mapping at fill time — would alias audibly on
- * anything with high-frequency content, which is worse than a documented, uniform pitch offset.
- * TODO(resample): a real SRC belongs in the prefetch thread's fill step, where it costs the audio
- * thread nothing. `AudioClipStreamer::getStreamFileSampleRate()` is what a UI warning would read.
- *
- * -- Loop wrap ----------------------------------------------------------------------------------
- *
- * A block that crosses the loop end is TWO beat ranges, not one — the same decomposition Track In
- * makes, from the same BlockTimeInfo fields, with the same multi-wrap bound (only the FIRST wrap in
- * a block is reported, so a loop shorter than one block drops the whole passes in between). Each
- * range is rendered independently and the results SUM, which is what makes a clip straddling the
- * loop boundary end one pass and begin the next inside a single block.
- *
- * -- Hard cuts ----------------------------------------------------------------------------------
- *
- * A stop, a locate or a loop wrap CUTS: the module renders exactly what the new position says and
- * nothing else, so a clip cut off mid-waveform clicks. That is deliberate for TL6-4 — declick ramps
- * (and the crossfade at a loop boundary) are TL6-8's polish, and putting a hidden fade in here now
- * would make the sample-exactness the tests pin unassertable. The one thing that is NEVER heard is
- * garbage: a position the ring cannot serve is silence, never a mix of two places in the file.
- *
- * -- Summing and fades --------------------------------------------------------------------------
- *
- * Overlapping clips SUM (they are legal in the model, and crossfading them is an editor decision,
- * not a playback one). Each clip is multiplied by its own `gainLinear` (converted from dB once, at
- * flatten time) and by a per-sample LINEAR fade envelope derived from `fadeInBeats` / `fadeOutBeats`
- * measured from the clip's own edges. Fades are not clamped against the clip length — a fade longer
- * than the clip simply never reaches unity, which is what the document says and what a later resize
- * must not silently rewrite.
+ * Summing and fades: overlapping clips SUM. Each clip is scaled by its own `gainLinear` and a
+ * per-sample LINEAR fade from `fadeInBeats`/`fadeOutBeats` measured from the clip's own edges,
+ * unclamped against clip length (a fade longer than the clip never reaches unity).
  */
 class TimelineAudioSourceModule : public ModuleBase {
 public:

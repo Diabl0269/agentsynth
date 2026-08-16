@@ -22,7 +22,7 @@ TakePlacement computeTakePlacement(const TakePlacementInput& input) noexcept {
 
     if (!input.captureStartValid) {
         // No anchor: the tap never captured a block under a transport playhead. Fall back to the
-        // pre-TL6-8 placement — the punch beat, untrimmed — which is the best answer available
+        // legacy placement — the punch beat, untrimmed — which is the best answer available
         // without knowing where frame 0 actually sits.
         out.hasContent = true;
         out.clipStartSample = punchSample;

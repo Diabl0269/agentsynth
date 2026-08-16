@@ -9,7 +9,7 @@
 namespace synth {
 
 /**
- * @brief TL6-5: the ONE place that knows the ".agpk" waveform-peaks sidecar format.
+ * @brief The ONE place that knows the ".agpk" waveform-peaks sidecar format.
  *
  * `RecordTapModule` (`Source/Modules/RecordTapModule.h/.cpp`) originated this format and wrote it
  * inline; this class is that logic factored out so a second consumer — `TimelineClipLaneArea`'s

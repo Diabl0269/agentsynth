@@ -41,7 +41,7 @@ bool isValidNote(const MidiNote& note) noexcept {
            note.pitch <= 127 && note.velocity >= 1 && note.velocity <= 127 && note.channel >= 1 && note.channel <= 16;
 }
 
-// TL6-3: the asset-reference rule, in one place because setClipAsset and fromVar must agree
+// The asset-reference rule, in one place because setClipAsset and fromVar must agree
 // EXACTLY — a path the mutation API refuses must not be loadable from a file, or a hand-edited
 // bundle becomes the way around the check. See Clip::assetRef for the threat.
 //
@@ -564,13 +564,13 @@ std::pair<ClipId, ClipId> TimelineDoc::splitClip(ClipId id, double atBeat) {
         right.startBeat = rightStart;
         right.lengthBeats = rightLength;
         right.notes = std::move(rightNotes);
-        // TL6-3 audio fields: the halves keep pointing at the same asset with the same gain, and
+        // The halves keep pointing at the same asset with the same gain, and
         // each keeps the fade at the edge it still owns (the left half's fade-out and the right
         // half's fade-in are at the cut, where there is nothing to fade). `sourceStartSeconds` is
         // deliberately COPIED UNCHANGED rather than advanced by the split offset: converting
         // `atBeat` to seconds needs a tempo map, and this document has none by design (see the
-        // class comment). Splitting an audio clip is TL6-4's work and re-seating the right half's
-        // source offset belongs there, with the tempo map in hand.
+        // class comment). Re-seating the right half's source offset needs that tempo map, so it
+        // is left for later work.
         right.assetRef = clip->assetRef;
         right.gainDb = clip->gainDb;
         right.fadeOutBeats = clip->fadeOutBeats;
@@ -621,7 +621,7 @@ bool TimelineDoc::joinClips(ClipId a, ClipId b) {
                    std::back_inserter(merged), noteLess);
         clipA->notes = std::move(merged);
         clipA->lengthBeats = newEnd - clipA->startBeat;
-        // TL6-3: `a` keeps its OWN asset, gain, source offset and fade-in; `b`'s are dropped along
+        // `a` keeps its OWN asset, gain, source offset and fade-in; `b`'s are dropped along
         // with `b`. Two audio clips naming different assets cannot become one clip naming both, so
         // "the survivor's asset wins" is the only answer that doesn't invent a crossfade. `a` does
         // inherit b's fade-OUT, because that edge is now a's.
@@ -648,7 +648,7 @@ ClipId TimelineDoc::duplicateClip(ClipId id) {
         dup.name = clip->name;
         dup.startBeat = clip->startBeat + clip->lengthBeats;
         dup.lengthBeats = clip->lengthBeats;
-        // TL6-3: a duplicate plays the same asset, from the same offset, with the same gain and
+        // A duplicate plays the same asset, from the same offset, with the same gain and
         // fades. Nothing here needs a tempo map (unlike splitClip), so the copy is exact.
         dup.assetRef = clip->assetRef;
         dup.gainDb = clip->gainDb;
@@ -970,7 +970,7 @@ bool TimelineDoc::setLaneRecordMode(LaneId id, int mode) {
     });
 }
 
-// -------------------------------------------------------- bindings / TL2-6 --
+// -------------------------------------------------------- bindings --
 
 bool TimelineDoc::reconcileBindings(const std::function<bool(const juce::String& uuid)>& uuidResolves,
                                     const std::function<bool(const juce::String& uuid, const juce::String& paramId,
@@ -997,9 +997,9 @@ bool TimelineDoc::reconcileBindings(const std::function<bool(const juce::String&
 
         plan.laneOrphaned.reserve(track.lanes.size());
         for (auto& lane : track.lanes) {
-            // TL7-6: laneResolves (when the caller supplied one) is the richer predicate that also
+            // laneResolves (when the caller supplied one) is the richer predicate that also
             // accounts for a HostedPluginModule's parameter set having changed shape; unset, this is
-            // exactly the pre-TL7-6 uuid-only check.
+            // just the uuid-only check.
             const bool resolved = laneResolves ? laneResolves(lane.nodeUuid, lane.paramId, lane.paramIndexHint)
                                                : uuidResolves(lane.nodeUuid);
             const bool laneOrphaned = lane.nodeUuid.isNotEmpty() && !resolved;
@@ -1085,7 +1085,7 @@ juce::var TimelineDoc::toVar() const {
             c->setProperty("name", clip.name);
             c->setProperty("startBeat", clip.startBeat);
             c->setProperty("lengthBeats", clip.lengthBeats);
-            // TL6-3 audio fields, written ALWAYS (not only when non-default): a reader that
+            // Audio fields, written ALWAYS (not only when non-default): a reader that
             // predates them ignores unknown keys, and a reader that has them gets one shape to
             // parse rather than two. Additive — kFormatVersion stays 1.
             c->setProperty("assetRef", clip.assetRef);
@@ -1117,7 +1117,7 @@ juce::var TimelineDoc::toVar() const {
             l->setProperty("nodeUuid", lane.nodeUuid);
             l->setProperty("paramId", lane.paramId);
             l->setProperty("recordMode", lane.recordMode);
-            l->setProperty("paramIndexHint", lane.paramIndexHint); // TL7-6, additive
+            l->setProperty("paramIndexHint", lane.paramIndexHint); // additive
 
             juce::DynamicObject::Ptr r = new juce::DynamicObject();
             r->setProperty("minValue", static_cast<double>(lane.range.minValue));
@@ -1241,8 +1241,8 @@ bool TimelineDoc::fromVar(const juce::var& state) {
                     if (!isFiniteAtOrAfterZero(clip.startBeat) || !isFinitePositive(clip.lengthBeats))
                         return false;
 
-                    // TL6-3 audio fields. All optional — absent means the struct default, which is
-                    // exactly what every clip written before TL6-3 loads as. A PRESENT but illegal
+                    // Audio fields. All optional — absent means the struct default, which is
+                    // what an older clip with no audio fields loads as. A PRESENT but illegal
                     // value is malformed, not something to clamp: `assetRef` is the security rule
                     // (see isValidAssetRefString — a hand-edited bundle must not be the way around
                     // setClipAsset's check), and a NaN fade would poison the renderer downstream.
@@ -1337,7 +1337,7 @@ bool TimelineDoc::fromVar(const juce::var& state) {
                     if (!isValidRange(lane.range))
                         return false;
 
-                    // TL4-4. Absent (a file written before record modes existed) => the default
+                    // Absent (a file written before record modes existed) => the default
                     // already on `lane`, which is Read. Present but out of range is malformed, not
                     // something to clamp: the value ends up in the snapshot the applier switches on.
                     if (!readOptionalInt(lObj->getProperty("recordMode"), lane.recordMode))
@@ -1345,7 +1345,7 @@ bool TimelineDoc::fromVar(const juce::var& state) {
                     if (!isValidRecordMode(lane.recordMode))
                         return false;
 
-                    // TL7-6, additive: absent (every file written before this field existed) keeps
+                    // Additive: absent (every file written before this field existed) keeps
                     // the -1 default already on `lane`. No range check beyond "must be an integer if
                     // present" — resolveLaneParameter treats anything < 0 as "no hint" and bounds-
                     // checks a non-negative one defensively, so there is nothing here that can turn a

@@ -7,56 +7,38 @@ namespace synth {
 
 /**
  * @class AssetManager
- * @brief TL6-6: the asset-lifecycle half of the audio-clip model — import-into-bundle,
- *        collect/clean of files no clip references, and the "adopt on save" sweep that moves an
- *        unsaved project's `Recordings/`-convention takes into a bundle's own `Audio/` the first
- *        time it is saved.
+ * @brief The asset-lifecycle half of the audio-clip model — import-into-bundle, collect/clean of
+ *        files no clip references, and the "adopt on save" sweep that moves an unsaved project's
+ *        `Recordings/`-convention takes into a bundle's own `Audio/` the first time it is saved.
  *
  * Headless, message-thread-only (file I/O; never called from the audio thread), and stateless — a
- * bag of static functions over a `TimelineDoc` and a `juce::File` root, exactly like
- * `synth::PeaksFile` and `synth::TimelineReconciler`. See `docs/architecture.md`'s asset-management
- * subsection for the policy this class exists to enforce; the one invariant every function here
- * shares is **never a silent delete**: nothing is removed except the exact files
- * `cleanUnusedAssets` names, and a clip whose asset is simply MISSING (unresolvable, not "unused")
- * never causes anything to be deleted.
+ * bag of static functions over a `TimelineDoc` and a `juce::File` root, like `synth::PeaksFile` and
+ * `synth::TimelineReconciler`. See `docs/architecture.md`'s asset-management subsection for the
+ * policy this class enforces; the one invariant every function here shares is **never a silent
+ * delete**: nothing is removed except the exact files `cleanUnusedAssets` names, and a clip whose
+ * asset is simply MISSING (unresolvable, not "unused") never causes anything to be deleted.
  *
- * ### Import + dedupe
+ * `importAudioFile` sniffs the source with a `juce::AudioFormatManager` and copies it into
+ * `<bundleRoot>/Audio/` under a collision-free name, reusing an already-present same-named file
+ * when its content is IDENTICAL (size, then a whole-file FNV-1a hash — dedupe bookkeeping, not a
+ * security boundary, so a cryptographic hash would be the wrong tool). The source is never moved
+ * or deleted.
  *
- * `importAudioFile` sniffs the source with a `juce::AudioFormatManager` (rejecting anything that
- * isn't a readable audio file) and copies it into `<bundleRoot>/Audio/` under a collision-free name
- * — `name.wav`, `name-2.wav`, ... — reusing an already-present same-named file instead of writing a
- * second copy when its content is IDENTICAL (same size, then a whole-file FNV-1a hash — cheap and
- * sufficient to catch an accidental clash; this is dedupe bookkeeping, not a security boundary, so
- * a cryptographic hash would be the wrong tool). The source is never moved or deleted.
+ * `collectUnusedAssets`/`cleanUnusedAssets` walk `<bundleRoot>/Audio/` for files no clip
+ * references, alongside each one's `<bundleRoot>/Peaks/<stem>.agpk` sidecar. A clip whose assetRef
+ * names a file that isn't actually there is simply skipped (nothing to enumerate), and the scan
+ * never reaches outside `bundleRoot`.
  *
- * ### Missing-asset painting
+ * `adoptRecordingsAssets` imports every clip whose assetRef carries the reserved `Recordings/`
+ * prefix (a take recorded before the project had ever been saved) into the SAVE TARGET bundle's
+ * `Audio/`, rewriting every clip sharing that same old ref together so a duplicated take never
+ * ends up split across two files. `MainComponent::saveToFile` calls this immediately before
+ * `ProjectBundle::save`, as a plain, direct doc mutation — deliberately NOT wrapped in
+ * `AppUndoManager::recordTimelineChange`, because saving must never create undo history. The
+ * original `Recordings/` file is left in place; cleaning it up is `cleanUnusedAssets`'s job, which
+ * never looks at `Recordings/` at all.
  *
- * This class does not paint anything — `synth::ui::TimelineClipLaneArea` does, via a host-supplied
- * `assetExistsResolver` (see that class's header) that MainComponent wires to
- * `AudioClipStreamer::resolveAssetRef(ref) != juce::File()`. AssetManager's contribution is only
- * that every function here treats "the file named by this ref is missing" as a normal, silent
- * condition, never a reason to remove the ref or the clip.
- *
- * ### Collect / clean (bundle-internal only)
- *
- * `collectUnusedAssets` walks `<bundleRoot>/Audio/` and reports every file (as a bundle-relative
- * ref) that NO clip in `doc` references, alongside its `<bundleRoot>/Peaks/<stem>.agpk` sidecar (if
- * one exists). `cleanUnusedAssets` deletes exactly that set and returns how many it removed. A
- * clip whose assetRef names a file that ISN'T actually there is simply skipped by the scan (the
- * file doesn't exist to enumerate) — it can never cause something else to be misclassified as
- * unused, and the scan never reaches outside `bundleRoot` to begin with.
- *
- * ### Recordings/ adoption on save
- *
- * `adoptRecordingsAssets` is the TL6-6 half of the TL6-3 TODO on `ProjectBundle`: every clip whose
- * assetRef carries the reserved `Recordings/` prefix (a take recorded before the project had ever
- * been saved) is imported into the SAVE TARGET bundle's `Audio/` and every clip sharing that same
- * old ref is rewritten together, so a duplicated take never ends up split across two files after
- * one save. `MainComponent::saveToFile` calls this immediately before `ProjectBundle::save`, as a
- * plain, direct doc mutation — deliberately NOT wrapped in `AppUndoManager::recordTimelineChange`,
- * because saving must never create undo history. The original `Recordings/` file is left in place;
- * cleaning it up (if ever) is `cleanUnusedAssets`'s job, and that function's scope is bundle-
- * internal only — it never looks at `Recordings/` at all.
+ * Missing-asset painting itself lives in `synth::ui::TimelineClipLaneArea`, not here.
  */
 class AssetManager {
 public:
@@ -92,8 +74,8 @@ public:
      *  `Recordings/` or anything outside `bundleRoot`. */
     static int cleanUnusedAssets(const TimelineDoc& doc, const juce::File& bundleRoot);
 
-    /** TL6-6's resolution of the TL6-3 TODO on `ProjectBundle`: imports every clip's `Recordings/`-
-     *  convention asset (see the class comment) into `bundleRoot`'s own `Audio/`, copies its
+    /** Imports every clip's `Recordings/`-convention asset (see the class comment) into
+     *  `bundleRoot`'s own `Audio/`, copies its
      *  `.agpk` peaks sidecar alongside when one exists, and rewrites `assetRef` on every clip that
      *  shared the same old ref — as a PLAIN, direct `TimelineDoc::setClipAsset` mutation on each,
      *  never wrapped in `AppUndoManager::recordTimelineChange` (saving must not create undo

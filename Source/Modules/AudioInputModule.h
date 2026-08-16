@@ -7,44 +7,25 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 
 /**
- * Audio Input — the patch's tap on the audio device's (or the host's) input (TL6-2).
+ * Audio Input — the patch's tap on the audio device's (or the host's) input.
  *
- * It replaces the bare juce::AudioGraphIOProcessor(audioInputNode) this node used to be. That node
- * only ever worked in Standalone mode and only for the channels the render buffer happened to
- * have; this one is an ordinary ModuleBase, so it has a bypass, a port model, a module type, a
- * cable colour and a card the editor can lay out — and it behaves identically in a plugin.
- *
- * -- Where the audio comes from -----------------------------------------------------------------
- *
- * Not from an input bus: the graph feeds a node's inputs from other nodes, and the device's input
- * is not a node. Every block AudioEngine copies the input into a snapshot buffer of its own and
- * parks pointers to it on the transport (TransportService::setDeviceInputForBlock); this module
- * downcasts getPlayHead() and copies from there — the same "the playhead is the one handle every
- * module already has" route Track In uses for the timeline snapshot. The snapshot copy is what
- * makes reading the input safe mid-graph: the graph renders IN PLACE over the buffer that carried
- * the input in, so by the time a node in the middle of the chain runs, those channels hold
+ * The device's input is not a graph node, so the audio does not arrive via a bus: AudioEngine
+ * copies it into a snapshot buffer each block and parks pointers on the transport
+ * (TransportService::setDeviceInputForBlock); this module downcasts getPlayHead() and copies from
+ * there. Those pointers are valid for the CURRENT RENDER PASS ONLY and must never be cached in a
+ * member — the graph renders in place, so by the time a downstream node runs, those channels hold
  * partly-rendered output.
  *
- * The pointers are valid for the CURRENT RENDER PASS ONLY and are never cached in a member.
+ * Channel layout: JUCE settles a node's bus layout in the ModuleBase constructor and renegotiating
+ * it would drop existing connections, so the module always has kMaxChannels output channels;
+ * only the number of VISIBLE jacks follows the device. Channels at or above the visible count are
+ * cleared every block, and the owner drops any routing left on a jack that disappeared
+ * (GraphEditor::dropRoutingsOnHiddenJacks) — an invisible jack cannot be unplugged. At least one
+ * jack stays visible even with no input device.
  *
- * -- Channel layout: fixed maximum, varying visible count ---------------------------------------
- *
- * JUCE settles a node's bus layout in the ModuleBase constructor and renegotiating it would drop
- * every connection the node already has — so the module always has kMaxChannels output channels,
- * whatever the device offers, and only the number of VISIBLE jacks follows the device (the same
- * pattern as the Macro bank's knob count; see docs/modules.md). Channels at or above the visible
- * count are cleared every block, and the owner drops any routing left on a jack that disappeared
- * (GraphEditor::dropRoutingsOnHiddenJacks) — an invisible jack cannot be unplugged.
- *
- * At least one jack is always visible: a patch with no input device still has to show where the
- * input would arrive, and a zero-jack card is not something the editor can draw a cable to.
- *
- * -- Bypass -------------------------------------------------------------------------------------
- *
- * A pure source with no audio INPUT of its own, so bypass has no dry signal to pass through and
- * clears exactly like mute would — the documented exception to the two-branch bypass/mute contract
- * (Oscillator, LFO, Noise, Poly MIDI take the same branch). It has no mute parameter at all: there
- * is nothing to mute that bypass does not already silence.
+ * Bypass: a pure source with no audio input of its own, so bypass clears rather than passing a
+ * dry signal through — the documented exception to the two-branch bypass/mute contract. No mute
+ * parameter: there is nothing to mute that bypass does not already silence.
  */
 class AudioInputModule : public ModuleBase {
 public:
@@ -79,13 +60,10 @@ public:
             const int deviceChannels = transport->getNumDeviceInputChannels();
             visibleChannels_.store(visibleFor(deviceChannels), std::memory_order_relaxed);
 
-            // TL6-7: the monitoring gate. Recording taps the GRAPH, so this is the record path for
-            // input chains — an idle rack (nothing armed, nothing wired downstream of this node's
-            // own output) keeps the mic out of the speakers. Gating here, rather than upstream, only
-            // silences what THIS module hands the rest of the patch: the engine's device-input
-            // capture (AudioEngine::captureDeviceInput) is unconditional, so the port count above
-            // still tracks the device and a recorder tapping this same block still sees it. The card
-            // still updates its jack count even while gated — that is a UI concern, not a safety one.
+            // The monitoring gate: an idle rack (nothing armed, nothing wired downstream) keeps the
+            // mic out of the speakers. Gating here only silences what THIS module hands downstream —
+            // AudioEngine::captureDeviceInput stays unconditional, so a recorder tapping this block
+            // still sees it, and the jack count above still tracks the device even while gated.
             if (!transport->isInputMonitoringEnabledForBlock()) {
                 buffer.clear();
                 return;

@@ -9,43 +9,29 @@ namespace synth {
 class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 } // namespace synth
 
-// TimelineTransportBar — TL5-5: play/stop/record/loop + BPM/time-signature editors + the
-// bar:beat readout, hosted at the LEFT of the timeline panel's transport-bar strip (the snap
-// combo stays at the right — see TimelinePanelComponent::resized()).
+// TimelineTransportBar — play/stop/record/loop + BPM/time-signature editors + the bar:beat
+// readout, hosted at the LEFT of the timeline panel's transport-bar strip (the snap combo stays
+// at the right — see TimelinePanelComponent::resized()).
 //
 // Owns no transport state of its own: a non-owning synth::TransportService* is the only thing it
-// ever talks to for play/stop/loop/bpm/time-sig commands, read fresh at the moment of each click
-// or edit rather than cached — a loop toggle re-posts whatever [start, end) the transport is
-// CURRENTLY reporting (which is TransportService's own [0, 4) default the very first time, and
-// preserves anything set since), and an invalid time-signature edit reverts the label to the
-// transport's current (not a remembered) value. The panel's EXISTING 10 Hz poll
-// (TimelinePanelComponent::updateFromTransport, itself driven by MainComponent's timer — see
-// docs/layout.md §11) is the only thing that ever calls this bar's own updateFromTransport(): no
-// timer here, no per-frame repaint. It resyncs the play/loop button VISUALS and the BPM/time-sig
-// LABEL TEXT from the snapshot (so a Space-bar play triggered elsewhere is reflected within one
-// tick), and refreshes the bar:beat readout, string-diffed so an unchanged tick repaints nothing.
+// talks to for play/stop/loop/bpm/time-sig commands, read fresh at the moment of each click or
+// edit rather than cached. The panel's EXISTING 10 Hz poll
+// (TimelinePanelComponent::updateFromTransport) is the only thing that ever calls this bar's own
+// updateFromTransport(): no timer here, no per-frame repaint. It resyncs button visuals and
+// BPM/time-sig label text from the snapshot, and refreshes the bar:beat readout, string-diffed so
+// an unchanged tick repaints nothing.
 //
 // Recording is the one control this bar is NOT authoritative over: starting a take requires an
-// armed MIDI track, which only MainComponent can see (it owns the TimelineDoc). onRecordToggled
-// reports the user's INTENT; the owner decides whether it actually happens and calls
-// setRecordingState() with the real outcome — see docs/architecture.md's MidiRecorder wiring entry
-// and MainComponent's SYNTH_ENABLE_TIMELINE wiring block.
+// armed MIDI track, which only MainComponent can see. onRecordToggled reports the user's INTENT;
+// the owner decides whether it actually happens and calls setRecordingState() with the real
+// outcome — see docs/architecture.md's MidiRecorder wiring entry.
 //
 // No SVG assets: the four transport glyphs (play/stop, record, loop, metronome) are drawn as plain
-// juce::Path/juce::Rectangle shapes in GlyphButton::paintButton — see the CLAUDE.md invariant on
-// themes never swapping typefaces; this is the equivalent "draw it, don't asset it" rule for a
-// handful of one-off shapes that would otherwise need new icon assets for a single caller.
+// juce::Path/juce::Rectangle shapes in GlyphButton::paintButton.
 //
-// Headless-safe: paint() dynamic_cast<AppLookAndFeel*>s and falls back to plain colours, same
-// pattern as every other timeline-panel component.
-//
-// TL5-6: metronome + count-in. `metronomeButton_` is a direct on/off toggle (unlike record: there is
-// no owner-side veto, so the click itself flips both the button's visual state and the metronome —
-// no onMetronomeToggled intent/outcome split is needed). `countInCombo_` ("Off"/"1 bar"/"2 bars") is
-// read by MainComponent's record flow at the moment Record is clicked, never cached elsewhere. Both
-// controls persist themselves (`setApplicationProperties`, same restore/apply-on-change idiom
-// TimelinePanelComponent's snap combo uses) rather than routing through the panel, since the panel
-// has no other reason to know either setting exists.
+// Metronome + count-in: `metronomeButton_` is a direct on/off toggle (no owner-side veto, unlike
+// record). `countInCombo_` ("Off"/"1 bar"/"2 bars") is read by MainComponent's record flow at the
+// moment Record is clicked. Both persist themselves via setApplicationProperties.
 namespace synth::ui {
 
 class TimelineTransportBar : public juce::Component {
@@ -76,7 +62,7 @@ public:
     void setRecordingState(bool recording) noexcept;
     bool isRecordingForTest() const noexcept { return recordButton_.getToggleState(); }
 
-    // TL5-6: metronome + count-in. Non-owning; may be null (tests, or before MainComponent finishes
+    // Metronome + count-in. Non-owning; may be null (tests, or before MainComponent finishes
     // wiring) — the button click is then inert, matching setTransport's null contract. Whichever of
     // setMetronome()/setApplicationProperties() runs SECOND is what makes the persisted enabled
     // state real: each applies the currently-known enabled value to `metronome` if the other has
@@ -90,7 +76,7 @@ public:
     void setApplicationProperties(juce::ApplicationProperties* props);
 
     // 0 = off, 1 = one bar, 2 = two bars. Read by MainComponent's record flow at the moment Record
-    // is clicked (TL5-6) — never cached by the caller.
+    // is clicked — never cached by the caller.
     int getCountInBars() const noexcept { return countInBars_; }
 
     // ---- test accessors ----
@@ -169,7 +155,7 @@ private:
     int readoutRepaintCount_ = 0;
     juce::Rectangle<int> readoutBounds_;
 
-    // TL5-6. See setMetronome()/setApplicationProperties(): `pendingMetronomeEnabled_` is the
+    // See setMetronome()/setApplicationProperties(): `pendingMetronomeEnabled_` is the
     // last-known-enabled value regardless of which of the two setters supplied it, applied to
     // `metronome_` whichever runs second.
     synth::Metronome* metronome_ = nullptr;

@@ -1,7 +1,5 @@
-// TL2-3: note identity + the note-editing/clip-operations API on TimelineDoc. Split out from
-// TimelineDocTests.cpp to keep that file to the container-level model; this one covers
-// removeNote/moveNote/resizeNote/setNoteVelocity/quantiseNotes and splitClip/joinClips/
-// duplicateClip.
+// Note identity + the note-editing/clip-operations API on TimelineDoc: removeNote/moveNote/
+// resizeNote/setNoteVelocity/quantiseNotes and splitClip/joinClips/duplicateClip.
 #include "Timeline/TimelineDoc.h"
 #include <algorithm>
 #include <gtest/gtest.h>

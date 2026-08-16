@@ -1,4 +1,4 @@
-// TL4-4: automation record modes, gesture capture, the programmatic-write guard and RDP thinning.
+// Automation record modes, gesture capture, the programmatic-write guard and RDP thinning.
 //
 // Most of this file needs no engine and no graph: a bare synth::TransportService is ticked exactly
 // the way AudioEngine::renderNextBlock ticks it, and a standalone FilterModule supplies a real
@@ -578,7 +578,7 @@ TEST(AutomationRecordTest, RecordModeRoundTripsAndDefaultsToRead) {
     ASSERT_NE(reloaded.getLane(laneId), nullptr);
     EXPECT_EQ(reloaded.getLane(laneId)->recordMode, mode(LaneRecordMode::Latch));
 
-    // A file written before TL4-4 has no recordMode at all and must load as Read.
+    // An older file with no recordMode at all must load as Read.
     auto* root = state.getDynamicObject();
     ASSERT_NE(root, nullptr);
     auto* track = root->getProperty("tracks")[0].getDynamicObject();

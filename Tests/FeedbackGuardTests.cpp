@@ -1,4 +1,4 @@
-// TL6-7: the input monitoring gate + feedback guard.
+// The input monitoring gate + feedback guard.
 //
 // Three layers:
 //   * MODULE/ENGINE layer — an AudioEngine driving a passthrough patch (AudioInputModule -> Audio

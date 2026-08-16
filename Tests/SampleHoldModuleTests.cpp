@@ -554,7 +554,7 @@ TEST_F(SampleHoldModuleTest, LevelScalesHeldValue) {
     gate(b, 10, 50);
     process(b);
 
-    // Level is smoothed over 10 ms (TL4-3), and this knob move lands after prepareToPlay, so the
+    // Level is smoothed over 10 ms, and this knob move lands after prepareToPlay, so the
     // first ~441 samples are the ramp down from the default 1.0. The held value is latched at
     // sample 10 and never changes again, so probing past the ramp reads the same step.
     EXPECT_NEAR(b.getSample(0, 500), 0.4f, 1e-4f);

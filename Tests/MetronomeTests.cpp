@@ -1,4 +1,4 @@
-// Tests for TL5-6: synth::Metronome — the click generator summed POST-graph — plus its engine
+// Tests for synth::Metronome — the click generator summed POST-graph — plus its engine
 // wiring (AudioEngine::renderPass, BounceExporter's force-off guard) and the count-in pre-roll's
 // MainComponent-level choreography (MidiRecorder's punch-in filter, the forced-on click).
 //

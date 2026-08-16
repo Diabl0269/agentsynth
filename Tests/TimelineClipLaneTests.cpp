@@ -1,6 +1,6 @@
 // TimelineClipLaneTests.cpp
 //
-// TL5-7: clip lanes — drag/trim/split/duplicate + marquee selection, backed by
+// Clip lanes — drag/trim/split/duplicate + marquee selection, backed by
 // synth::ui::ClipSelectionModel.
 //
 // Six groups:
@@ -13,9 +13,9 @@
 //      and a snapshot smoke test. None of this is #if SYNTH_ENABLE_TIMELINE-gated: the component
 //      compiles and runs unconditionally, exactly like TimelinePanelComponent/
 //      TimelineTrackHeaderComponent (only MainComponent's use of it is gated).
-//   5. TL6-5: waveform painting from synth::PeaksFile, the peaks cache and its invalidation, the
+//   5. Waveform painting from synth::PeaksFile, the peaks cache and its invalidation, the
 //      live-recording strip's repaint-on-arrival rule, and the pure bucketRangeForClip() helper.
-//   6. TL6-6: the missing-asset placeholder — setAssetExistsResolver, its cache (no repeated
+//   6. The missing-asset placeholder — setAssetExistsResolver, its cache (no repeated
 //      filesystem stats), and that its painted result differs from both the waveform case and the
 //      no-asset (MIDI) case.
 
@@ -614,7 +614,7 @@ TEST(TimelineClipLaneInteractionTest, SnapshotSmoke) {
 }
 
 // ============================================================================
-// 5. TL6-5: waveform peaks, cache invalidation, and the live-recording strip
+// 5. Waveform peaks, cache invalidation, and the live-recording strip
 // ============================================================================
 
 namespace {
@@ -802,7 +802,7 @@ TEST(TimelineClipLaneWaveformTest, SourceOffsetShiftsWaveform) {
 }
 
 // ============================================================================
-// 6. TL6-6: missing-asset placeholder
+// 6. Missing-asset placeholder
 // ============================================================================
 
 TEST(TimelineClipLaneWaveformTest, MissingAssetPaintsPlaceholder) {
@@ -869,7 +869,7 @@ TEST(TimelineClipLaneWaveformTest, MissingAssetPaintsPlaceholder) {
 TEST(TimelineClipLaneWaveformTest, NoResolverInstalledAssumesAssetExists) {
     // Degrade-gracefully contract: without setAssetExistsResolver ever being called, paint() must
     // NOT draw a placeholder — existing callers (and existing snapshot tests) that never wire this
-    // resolver must see byte-identical output to before TL6-6.
+    // resolver must see byte-identical output.
     ClipLaneFixture f;
     const auto trackId = f.doc.addTrack(TrackKind::Audio, "Audio 1");
     const auto clipId = f.doc.addClip(trackId, 0.0, 20.0, "Take");

@@ -1,4 +1,4 @@
-// TL8-4 — TimelineOps, the app-side timeline tools: validate (untrusted) -> preview -> the user
+// TimelineOps, the app-side timeline tools: validate (untrusted) -> preview -> the user
 // clicks Apply -> apply, as ONE undo step.
 //
 // The two properties every case here is really defending: the preview cannot describe an apply
@@ -182,7 +182,7 @@ TEST_F(TimelineOpsTest, WriteLaneFindOrCreatesTheLaneOnTheAutomationTrack) {
 
     ASSERT_TRUE(apply(envelope).ok);
 
-    // The TL5-9 find-or-create rule, exactly as MainComponent::automateParameter does it: the doc
+    // The find-or-create rule, exactly as MainComponent::automateParameter does it: the doc
     // had no Automation track, so one was created to hold the lane.
     ASSERT_EQ(doc.getTracks().size(), 1u);
     EXPECT_EQ(doc.getTracks()[0].kind, TrackKind::Automation);

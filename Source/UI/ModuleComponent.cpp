@@ -290,8 +290,8 @@ void ModuleComponent::timerCallback() {
     if (module == nullptr)
         return;
 
-    // TL7-5: an async plugin load can flip hasInstance() at any moment, well after the button was
-    // built — polled at the card's existing 15 Hz rate rather than adding a second timer.
+    // An async plugin load can flip hasInstance() at any moment, well after the button was built —
+    // polled at the card's existing 15 Hz rate rather than adding a second timer.
     if (openPluginEditorButton != nullptr) {
         if (auto* hostedPlugin = dynamic_cast<synth::HostedPluginModule*>(module))
             openPluginEditorButton->setEnabled(hostedPlugin->hasInstance());
@@ -409,7 +409,7 @@ void ModuleComponent::createControls() {
             deviceCombo->addItem(info.name, i++);
         }
         deviceCombo->setSelectedId(1, juce::dontSendNotification);
-        comboParams.add(nullptr); // TL4-5: not ComboBoxParameterAttachment-driven — see the header
+        comboParams.add(nullptr); // not ComboBoxParameterAttachment-driven — see the header
 
         deviceCombo->onChange = [extMidi, deviceCombo, devices, this]() {
             int selectedId = deviceCombo->getSelectedId();
@@ -432,7 +432,7 @@ void ModuleComponent::createControls() {
             channelCombo->addItem("Channel " + juce::String(c), c + 1);
         }
         channelCombo->setSelectedId(1, juce::dontSendNotification);
-        comboParams.add(nullptr); // TL4-5: not ComboBoxParameterAttachment-driven — see the header
+        comboParams.add(nullptr); // not ComboBoxParameterAttachment-driven — see the header
 
         channelCombo->onChange = [extMidi, channelCombo]() {
             int selectedId = channelCombo->getSelectedId();
@@ -451,8 +451,8 @@ void ModuleComponent::createControls() {
         comboLabels.add(new juce::Label("Channel", "Channel"));
         addAndMakeVisible(comboLabels.getLast());
     } else if (auto* hostedPlugin = dynamic_cast<synth::HostedPluginModule*>(module)) {
-        // TL7-5: the only body content a Hosted Plugin card has (bypass/mute/delete already live in
-        // the header, and the module exposes no parameters of its own — see the class comment).
+        // The only body content a Hosted Plugin card has (bypass/mute/delete already live in the
+        // header, and the module exposes no parameters of its own — see the class comment).
         openPluginEditorButton = std::make_unique<juce::TextButton>("Open Editor");
         openPluginEditorButton->setComponentID("openPluginEditor");
         openPluginEditorButton->setTooltip("Open this plugin's editor window");
@@ -494,7 +494,7 @@ void ModuleComponent::createControls() {
                 addAndMakeVisible(combo);
 
                 auto* attach = comboAttachments.add(new juce::ComboBoxParameterAttachment(*choiceParam, *combo));
-                comboParams.add(choiceParam); // TL4-5: param -> control mapping for reflection
+                comboParams.add(choiceParam); // param -> control mapping for reflection
 
                 auto* label = comboLabels.add(new juce::Label(param->getName(100), param->getName(100)));
                 addAndMakeVisible(label);
@@ -509,14 +509,14 @@ void ModuleComponent::createControls() {
                     slider->setTextBoxStyle(juce::Slider::TextBoxBelow, false, 50, 20);
                 }
                 addAndMakeVisible(slider);
-                // TL5-9: right-click-any-knob. `this` outlives every child slider (sliders is a
-                // member OwnedArray, destroyed as part of this component's own teardown before the
-                // outer object finishes destructing), so attaching `this` as the listener rather
-                // than a separately-owned object has no dangling-pointer window to reason about.
+                // Right-click-any-knob. `this` outlives every child slider (sliders is a member
+                // OwnedArray, destroyed as part of this component's own teardown before the outer
+                // object finishes destructing), so attaching `this` as the listener rather than a
+                // separately-owned object has no dangling-pointer window to reason about.
                 slider->addMouseListener(this, false);
 
                 auto* attach = sliderAttachments.add(new juce::SliderParameterAttachment(*floatParam, *slider));
-                sliderParams.add(floatParam); // TL4-5: param -> control mapping for reflection
+                sliderParams.add(floatParam); // param -> control mapping for reflection
 
                 auto* label = sliderLabels.add(new juce::Label(param->getName(100), param->getName(100)));
                 label->setJustificationType(juce::Justification::centred);
@@ -529,10 +529,10 @@ void ModuleComponent::createControls() {
                 // slider->setRange(intParam->getRange().start,
                 // intParam->getRange().end, 1.0); // Attachment handles range
                 addAndMakeVisible(slider);
-                slider->addMouseListener(this, false); // TL5-9: right-click-any-knob, see above
+                slider->addMouseListener(this, false); // right-click-any-knob, see above
 
                 auto* attach = sliderAttachments.add(new juce::SliderParameterAttachment(*intParam, *slider));
-                sliderParams.add(intParam); // TL4-5: param -> control mapping for reflection
+                sliderParams.add(intParam); // param -> control mapping for reflection
 
                 auto* label = sliderLabels.add(new juce::Label(param->getName(100), param->getName(100)));
                 label->setJustificationType(juce::Justification::centred);
@@ -582,7 +582,7 @@ void ModuleComponent::createControls() {
 
     // Auto-resize
     if (getType(module) == ModuleType::Sequencer || getType(module) == ModuleType::PolySequencer) {
-        // 8 cols * 60 + margins, 3 rows, +26 for the TL1-8 Sync to Transport toggle row.
+        // 8 cols * 60 + margins, 3 rows, +26 for the Sync to Transport toggle row.
         setSize(synth::LayoutUtil::kDoubleWidth, 406);
         return;
     }
@@ -639,7 +639,7 @@ juce::ToggleButton* ModuleComponent::findToggleByName(const juce::String& name) 
     return nullptr;
 }
 
-// TL4-5: automation -> UI reflection. `sliderParams`/`comboParams` are index-parallel to
+// Automation -> UI reflection. `sliderParams`/`comboParams` are index-parallel to
 // `sliders`/`comboBoxes` (see the header), so this is a straight linear scan for pointer identity —
 // no name matching, no ambiguity between two params that happen to share a display name. A `param`
 // nobody built a control for (nullptr entries included) simply matches nothing and returns.
@@ -670,7 +670,7 @@ void ModuleComponent::reflectParameterValue(const juce::AudioProcessorParameter*
     }
 }
 
-// TL5-9: right-click-any-knob -> "Automate '<Param>'". `param` may be null (a control this
+// Right-click-any-knob -> "Automate '<Param>'". `param` may be null (a control this
 // component built without a real RangedAudioParameter behind it, e.g. the ExternalMidiModule
 // device/channel combos — never true for anything reaching here through `sliders`, but checked
 // anyway since sliderParams can hold a null entry per its own header comment).
@@ -1420,7 +1420,7 @@ void ModuleComponent::updateLayout() {
     }
 
     if (getType(module) == ModuleType::Sequencer || getType(module) == ModuleType::PolySequencer) {
-        // +26 for the TL1-8 Sync to Transport toggle row — see the ADSR comment above for the pattern.
+        // +26 for the Sync to Transport toggle row — see the ADSR comment above for the pattern.
         setSize(synth::LayoutUtil::kDoubleWidth, 406);
         return;
     }
@@ -1502,7 +1502,7 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
 
     int y = getContentTopY();
 
-    // --- Hosted Plugin chrome: the "Open Editor" button, the card's only body content (TL7-5) ---
+    // --- Hosted Plugin chrome: the "Open Editor" button, the card's only body content ---
     if (openPluginEditorButton) {
         if (apply)
             openPluginEditorButton->setBounds(narrowX, y, narrowW, kRowHeight);
@@ -2097,7 +2097,7 @@ void ModuleComponent::resized() {
             layoutSequencerStepColumn(step, colX, startY);
         }
 
-        // Sync to Transport toggle (TL1-8): a 26px row appended below the step grid.
+        // Sync to Transport toggle: a 26px row appended below the step grid.
         for (auto* toggle : toggles) {
             if (toggle->getComponentID().equalsIgnoreCase("Sync to Transport"))
                 toggle->setBounds(startX, 380, 200, 24);
@@ -2138,7 +2138,7 @@ void ModuleComponent::resized() {
             layoutSequencerStepColumn(step, colX, startY);
         }
 
-        // Sync to Transport toggle (TL1-8): a 26px row appended below the step grid.
+        // Sync to Transport toggle: a 26px row appended below the step grid.
         for (auto* toggle : toggles) {
             if (toggle->getComponentID().equalsIgnoreCase("Sync to Transport"))
                 toggle->setBounds(startX, 380, 200, 24);
@@ -2349,7 +2349,7 @@ void ModuleComponent::parameterGestureChanged(int parameterIndex, bool gestureIs
 }
 
 void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
-    // TL5-9: a click that landed on a CHILD control this component attached itself to as a
+    // A click that landed on a CHILD control this component attached itself to as a
     // MouseListener (currently just the generic auto-UI sliders — see createControls()) rather
     // than on this component's own body. e.getPosition() below is in THAT CHILD's local space, not
     // this one's, so none of the body-click geometry further down may run against it — checked
@@ -2435,9 +2435,9 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
             }
 
             // "Replace with..." submenu (only for actual modules, not AudioGraphIOProcessor).
-            // Audio Input is a ModuleBase since TL6-2 but is still a singleton I/O node: replacing
-            // it with an Oscillator would silently leave the patch with no way to get the device's
-            // input in, and the library row it came from greyed out.
+            // Audio Input is a ModuleBase but is still a singleton I/O node: replacing it with an
+            // Oscillator would silently leave the patch with no way to get the device's input in,
+            // and the library row it came from greyed out.
             if (dynamic_cast<ModuleBase*>(module) != nullptr && !GraphEditor::isSingletonIOModule(module->getName())) {
                 juce::PopupMenu replaceMenu;
                 auto currentType = getType(module);

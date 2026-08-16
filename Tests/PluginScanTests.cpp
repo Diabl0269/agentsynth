@@ -1,6 +1,6 @@
 // PluginScanTests.cpp
 //
-// TL7-3: synth::PluginScanService — the out-of-process plugin scan, the scan list, and the load UX
+// synth::PluginScanService — the out-of-process plugin scan, the scan list, and the load UX
 // that hangs off it.
 //
 // There is no third-party plugin binary in this repo and CI machines have none installed, so every
@@ -18,7 +18,7 @@
 //   3. Timeouts — indistinguishable from a crash, deliberately.
 //   4. Resolution — the documented uid-then-name precedence.
 //   5. Backend integration — a HostedPluginModule placeholder becomes real once the service learns
-//      about the plugin, with no re-plumbing (TL7-2's placeholder test, continued).
+//      about the plugin, with no re-plumbing (the placeholder test, continued).
 //   6. Child mode — argv parsing and exit-code semantics of `--scan-plugin`.
 //   7. Library UX — the Plugins section: rows, empty state, the scan row, and the drag payload.
 //   8. Persistence via the owner — MainComponent stores the list under "pluginScanList".
@@ -423,7 +423,7 @@ TEST(PluginScanTest, DragPayloadRoundTripsTheIdentityAndCarriesNoPath) {
 // ============================================================================
 
 TEST(PluginScanTest, BackendResolvesThroughService) {
-    // TL7-2's placeholder test, continued: the same module goes from "not installed" to loaded with
+    // The placeholder test, continued: the same module goes from "not installed" to loaded with
     // no re-plumbing, purely because the scan service learned about the plugin.
     ScanningStubBackend backend;
     HostedPluginBackend::ScopedDefault installed(&backend);

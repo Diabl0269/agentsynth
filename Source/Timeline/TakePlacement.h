@@ -5,20 +5,17 @@
 namespace synth {
 
 /**
- * @brief Where a finished audio take lands on the timeline (TL6-8).
+ * @brief Where a finished audio take lands on the timeline.
  *
  * The whole of the record-commit's arithmetic, as a pure function, for two reasons: it is the one
  * piece of the recording pipeline that has to be EXACT (a sample of error is an audible flam), and
  * it is unreachable from a headless test as long as it lives inside MainComponent::commit.
  *
- * -- The two corrections ------------------------------------------------------------------------
- *
+ * -- The two corrections --
  * 1. WHERE THE TAKE ACTUALLY STARTED. `RecordTapModule` reports the transport sample its frame 0
  *    was captured at (`TakeResult::captureStartTimelineSample`, read on the audio thread from the
- *    block's BlockTimeInfo). Before TL6-8 the commit had no such anchor: the capture was started by
- *    a 10 Hz poll and the clip was simply placed at the punch beat, so a take could be missing up to
- *    ~100 ms of head and still claim to start at the punch.
- *
+ *    block's BlockTimeInfo) — without this anchor a take could be missing up to ~100 ms of head
+ *    while still claiming to start at the punch.
  * 2. ROUND-TRIP LATENCY. A musician plays against what they HEAR. Grid position G leaves the
  *    speakers `outputLatency` samples after the graph rendered it; the note they play in response
  *    arrives back at our callback `inputLatency` (+ the graph's own reported latency) later still.
@@ -26,8 +23,7 @@ namespace synth {
  *    `AudioEngine::getRecordingLatencySamples()`, and shifting the take back by it is what makes a
  *    take land where it was played rather than a round trip late.
  *
- * -- What comes out -----------------------------------------------------------------------------
- *
+ * -- What comes out --
  * Take frame 0 sits at PLAYED timeline sample `S0 = captureStart - recordingLatency`. The clip must
  * not start before the punch (that is what a count-in's pre-roll is: heard, played over, but not
  * part of the take), so:
@@ -49,7 +45,7 @@ struct TakePlacementInput {
     std::int64_t takeLengthSamples = 0;
 
     /** `TakeResult::captureStartValid`. False (no block captured, or no transport playhead behind
-     *  the tap) falls back to the pre-TL6-8 placement: the clip starts at the punch, untrimmed. */
+     *  the tap) falls back to the simple placement: the clip starts at the punch, untrimmed. */
     bool captureStartValid = false;
     /** `TakeResult::captureStartTimelineSample`. */
     std::int64_t captureStartTimelineSample = 0;

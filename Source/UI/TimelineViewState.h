@@ -3,11 +3,11 @@
 #include <algorithm>
 #include <cmath>
 
-// TimelineViewState — TL5-2: pure, headless-testable beat<->pixel mapping shared by the timeline
-// ruler and the lanes grid (and, later, track content). No JUCE dependency and no component
-// lifetime: TimelinePanelComponent owns the single instance and hands a reference to
-// TimelineRulerComponent (getViewState() exposes it for later tasks), so every consumer maps
-// beats to pixels identically and there is exactly one place zoom/scroll/snap state lives.
+// Pure, headless-testable beat<->pixel mapping shared by the timeline ruler and the lanes grid
+// (and, later, track content). No JUCE dependency and no component lifetime: TimelinePanelComponent
+// owns the single instance and hands a reference to TimelineRulerComponent (getViewState() exposes
+// it), so every consumer maps beats to pixels identically and there is exactly one place
+// zoom/scroll/snap state lives.
 namespace synth::ui {
 
 struct TimelineViewState {
@@ -46,9 +46,9 @@ struct TimelineViewState {
 
     // The current snap division, expressed as a fraction of one beat (0.0 for Snap::Off, meaning
     // "no grid"). beatsPerBar is only consulted for Snap::Bar (pass TransportService's
-    // tsNum * 4 / tsDen). Factored out of snapBeat() (TL5-8) so a caller that needs the raw grid
-    // size — PianoRollComponent::performQuantise, which feeds TimelineDoc::quantiseNotes a
-    // gridBeats value rather than snapping a single beat — doesn't duplicate this switch.
+    // tsNum * 4 / tsDen). Factored out of snapBeat() so a caller that needs the raw grid size —
+    // PianoRollComponent::performQuantise, which feeds TimelineDoc::quantiseNotes a gridBeats
+    // value rather than snapping a single beat — doesn't duplicate this switch.
     double divisionBeats(double beatsPerBar) const noexcept {
         switch (snap) {
         case Snap::Off:

@@ -18,62 +18,37 @@ namespace synth {
 class TransportService; // Forward declaration (Source/Transport/TransportService.h)
 }
 
-// TimelineClipLaneArea — TL5-7: the clip-lane region of the timeline panel (below the ruler,
-// filling TimelinePanelComponent::getLanesBounds() minus the ruler strip), with drag/trim/split/
-// duplicate and marquee selection.
+// TimelineClipLaneArea — the clip-lane region of the timeline panel (below the ruler, filling
+// TimelinePanelComponent::getLanesBounds() minus the ruler strip), with drag/trim/split/duplicate
+// and marquee selection.
 //
 // Deliberately NOT a TimelineDoc::Listener itself: TimelinePanelComponent is already the doc's one
-// listener (TL5-3), and its timelineChanged() routes a refreshFromDoc() call in here — the same
-// "one listener, several owners react" shape the header column uses. setTimelineDoc() only stores
-// the pointer and runs that same refresh once, so constructing this directly against a doc (as the
-// tests below do, with no panel at all) is also fully functional.
+// listener, and its timelineChanged() routes a refreshFromDoc() call in here. setTimelineDoc()
+// only stores the pointer and runs that same refresh once, so constructing this directly against
+// a doc (as tests do, with no panel at all) is also fully functional.
 //
 // Non-owning refs/pointers, same null-safety contract as every other timeline sub-component:
-//   - TimelineViewState& — owned by TimelinePanelComponent (or a test), shared by reference so
-//     beat<->pixel mapping agrees with the ruler and the grid.
-//   - ClipSelectionModel& — owned by TimelinePanelComponent (getClipSelection()), same reasoning.
-//   - TimelineDoc* / AppUndoManager* / TransportService* — setters, may be null (a
-//     SYNTH_ENABLE_TIMELINE=OFF build, or before MainComponent finishes wiring); every interaction
-//     that needs one degrades to "read but don't mutate" or "mutate without an undo step" rather
-//     than crashing.
+// TimelineViewState&/ClipSelectionModel& are owned by TimelinePanelComponent and shared by
+// reference; TimelineDoc*/AppUndoManager*/TransportService* are setters that may be null, and every
+// interaction that needs one degrades to "read but don't mutate" rather than crashing.
 //
-// Rendering, one paint() pass per repaint (never a per-tick timer — see CLAUDE.md): every track in
-// doc order gets one row (Metrics::timelineTrackRowHeight, shared with TimelineTrackHeaderComponent
-// so header rows and clip rows never drift apart — see that header's kRowHeight comment), each clip
-// on it a rounded rect in its track's resolved colour, a name when wide enough, and a thin
-// pitch-mapped note preview when wider still. The panel paints the bar/beat grid directly
-// (TimelinePanelComponent::paint(), unchanged) and adds this component as a child positioned over
-// exactly that same rect — JUCE paints a parent before its children, so clips land above the grid
-// for free; playhead_ is added AFTER this component in the panel's constructor, so it stays
-// topmost. That is the ONE relocation this task makes: no second place ever paints the grid.
+// Positioned as a child directly over the rect TimelinePanelComponent::paint() paints the bar/beat
+// grid into — JUCE paints a parent before its children, so clips land above the grid for free;
+// playhead_ is added AFTER this component, so it stays topmost. No second place ever paints the
+// grid.
 //
-// Interactions mirror two existing idioms rather than inventing new ones:
-//   - The deferred-empty-click trick (GraphEditor.cpp's pendingEmptyCanvasClick, see the comment
-//     above GraphEditor::mouseDown/mouseUp) for "click empty lane space deselects, but a press that
-//     turns into a drag must not" — here a plain (non-Shift) drag-from-empty becomes a marquee
-//     (there is no drag-to-pan in the lane area; scrolling is wheel-only per TL5-2).
-//   - Every edit previews locally (a member offset/length, read back in paint() via
-//     effectiveGeometryFor()) and commits to the doc exactly once on mouseUp, through
-//     AppUndoManager::recordTimelineChange — so a multi-clip move or a multi-clip Delete is ONE
-//     undo step however many clips it touches, the same contract GraphEditor::deleteSelection()
-//     and dragSelectionBy()/finalizeSelectionDrag() keep for modules.
+// Every edit previews locally (a member offset/length, read back in paint() via
+// effectiveGeometryFor()) and commits to the doc exactly once on mouseUp, through
+// AppUndoManager::recordTimelineChange — so a multi-clip move or Delete is ONE undo step however
+// many clips it touches (same contract GraphEditor::deleteSelection()/dragSelectionBy() keep for
+// modules). A plain (non-Shift) drag-from-empty becomes a marquee, using the same
+// deferred-empty-click trick as GraphEditor.cpp's pendingEmptyCanvasClick.
 //
-// TL6-5 adds two more paint concerns, both driven off assetRef (the MIDI-vs-audio discriminator —
-// see synth::Clip's own comment):
-//   - A COMMITTED audio clip (non-empty assetRef, wide enough — see kMinWidthForWaveform) paints a
-//     min/max waveform from its `synth::PeaksFile::Data`, lazily resolved and cached by assetRef
-//     (`peaksCache_`) via a host-supplied `peaksResolver_` — MainComponent wires this to the SAME
-//     resolution `AudioClipStreamer::resolveAssetRef` uses for playback, just re-targeted at the
-//     Peaks/ sidecar rather than the Audio/ file. The cache is intentionally coarse: ANY doc change
-//     clears the whole thing (refreshFromDoc()) rather than diffing which assetRefs actually moved
-//     — peaks files are small, and the alternative (per-ref dirty tracking) is not worth it yet.
-//   - A LIVE take in flight (see updateLiveRecording()/LiveRecordingInfo below) paints a growing
-//     translucent strip from the punch beat to the transport's current position, sourced from
-//     RecordTapModule::copyLivePeaks() — a message-thread-safe snapshot of the SAME accumulator the
-//     writer thread is still appending to. Repaints only when new buckets actually arrived (a
-//     bucket-count diff), never merely because the transport tick moved — see updateLiveRecording's
-//     own comment for why that is the correct "repaint on data arrival" reading of CLAUDE.md's rule
-//     here (the strip's rect still grows every poll; only the REPAINT is gated).
+// Waveform/live-recording painting is driven off assetRef (the MIDI-vs-audio discriminator — see
+// synth::Clip). A committed audio clip's waveform is lazily resolved and cached by assetRef
+// (peaksCache_) via a host-supplied peaksResolver_; the cache is cleared wholesale on any doc
+// change rather than diffed. A live take paints a growing strip sourced from
+// RecordTapModule::copyLivePeaks(), repainted only when new buckets actually arrived.
 namespace synth::ui {
 
 class TimelineClipLaneArea : public juce::Component {
@@ -87,7 +62,7 @@ public:
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
     void mouseMove(const juce::MouseEvent& e) override;
-    // TL5-8: double-clicking a clip opens the piano roll for it. Fires onClipDoubleClicked (if
+    // Double-clicking a clip opens the piano roll for it. Fires onClipDoubleClicked (if
     // set) with the hit clip's id; a double-click on empty lane space is a no-op.
     void mouseDoubleClick(const juce::MouseEvent& e) override;
 
@@ -95,7 +70,7 @@ public:
     // PianoRollComponent::openClip via its own openPianoRoll(ClipId).
     std::function<void(synth::ClipId)> onClipDoubleClicked;
 
-    // TL6-6: fired when the user picks "Relink audio…" from an audio clip's context menu (visible
+    // Fired when the user picks "Relink audio…" from an audio clip's context menu (visible
     // whenever assetRef is non-empty, whether the current asset is missing or present). Non-owning;
     // may be unset, in which case the menu item is simply never offered (see showClipContextMenu) —
     // relinking needs a host FileChooser and AssetManager import, neither of which this class has,
@@ -107,8 +82,8 @@ public:
 
     // Panel-scoped Delete/Escape (see GraphEditor's identical idiom). Grabs focus on mouseDown, so
     // pressing Delete right after a click lands here rather than on whichever panel had focus
-    // before. Returns false when there is nothing to act on so the key falls through — TL5-10
-    // formalises cross-panel key arbitration; this is only the local half of it.
+    // before. Returns false when there is nothing to act on so the key falls through — this is
+    // only the local half of cross-panel key arbitration.
     bool keyPressed(const juce::KeyPress& key) override;
 
     // Non-owning; may be null. Runs one refresh (see class comment) — the same thing
@@ -132,7 +107,7 @@ public:
     // effective doc mutation. No timer anywhere in this class.
     void refreshFromDoc();
 
-    // ---- TL6-5: waveform peaks (committed clips) ----
+    // ---- Waveform peaks (committed clips) ----
 
     // Non-owning; may be unset (paint() then simply never draws a waveform — same degrade-
     // gracefully contract every other host seam here has). MainComponent supplies this from the
@@ -147,7 +122,7 @@ public:
     // moved, not the doc) can still force a re-read without waiting for a doc mutation.
     void invalidatePeaksCache();
 
-    // ---- TL6-6: missing-asset placeholder ----
+    // ---- Missing-asset placeholder ----
 
     // Non-owning; may be unset (paint() then assumes every non-empty assetRef resolves — no
     // placeholder is ever drawn without a resolver installed, the same degrade-gracefully contract
@@ -159,7 +134,7 @@ public:
     // new resolver invalidates both caches, same as setPeaksResolver.
     void setAssetExistsResolver(std::function<bool(const juce::String& assetRef)> resolver);
 
-    // ---- TL6-5: the live-recording strip ----
+    // ---- The live-recording strip ----
 
     // What updateLiveRecording() needs to know about an in-flight audio take. A default-
     // constructed (or `active == false`) value means "nothing recording" — the strip (if any) is
@@ -187,7 +162,7 @@ public:
     // being called) — the same idiom TimelineTransportBar::getReadoutRepaintCountForTest() uses.
     int getLiveStripRepaintCountForTest() const noexcept { return liveStripRepaintCount_; }
 
-    // ---- Context-menu hook (TL5-3's "showMenuAsync doesn't run headless" idiom) ----
+    // ---- Context-menu hook ("showMenuAsync doesn't run headless" idiom) ----
     enum class ClipContextChoice { SplitAtPointer, Duplicate, Delete };
 
     // Applies one context-menu choice. `pointerBeat` is in absolute (doc) beats, UNSNAPPED — the
@@ -203,7 +178,7 @@ public:
     static juce::Rectangle<int> computeClipRect(const TimelineViewState& viewState, int trackIndex, double startBeat,
                                                 double lengthBeats, int rowHeight);
 
-    // ---- TL6-5: waveform bucket geometry — pure, no doc/component/LookAndFeel state ----
+    // ---- Waveform bucket geometry — pure, no doc/component/LookAndFeel state ----
     // A half-open [firstBucket, firstBucket + bucketCount) range into `peaks.buckets` (bucket
     // INDICES, not raw pair indices — multiply by peaks.numChannels to reach a `buckets[]` slot).
     // Both fields are 0 when nothing in `peaks` overlaps the clip's span at all.
@@ -274,7 +249,7 @@ private:
                    int rowHeight);
     void paintMarquee(juce::Graphics& g);
 
-    // ---- TL6-5: waveform + live-recording-strip painting ----
+    // ---- Waveform + live-recording-strip painting ----
     // Resolves (lazily loading + caching via peaksResolver_/peaksCache_) and paints a committed
     // audio clip's waveform inside `rect`. A no-op below kMinWidthForWaveform or when nothing
     // resolves (no resolver set, unresolvable ref, or an unreadable/absent peaks file).
@@ -292,11 +267,11 @@ private:
     // a default-constructed, structurally-invalid Data) so a repeated paint of a still-missing
     // asset never re-touches disk; only invalidatePeaksCache()/refreshFromDoc() forget that.
     const synth::PeaksFile::Data* findPeaksData(const juce::String& assetRef);
-    // TL6-6: cache lookup/lazy-resolve for one assetRef's existence, mirroring findPeaksData's
+    // Cache lookup/lazy-resolve for one assetRef's existence, mirroring findPeaksData's
     // cache shape exactly (a miss is cached too, so a still-missing clip never re-triggers the
     // resolver on the next paint). No resolver installed -> true (see setAssetExistsResolver).
     bool assetExists(const juce::String& assetRef);
-    // TL6-6: the diagonal-hatch / dimmed-fill treatment for a clip whose assetRef does not
+    // The diagonal-hatch / dimmed-fill treatment for a clip whose assetRef does not
     // resolve, plus a "missing: <name>" label when the clip is wide enough (same threshold
     // paintClip's own name label uses). Theme-token colours via the same
     // dynamic_cast<AppLookAndFeel*> pattern getRowHeight() uses, with a hardcoded fallback when
@@ -337,15 +312,15 @@ private:
     bool marqueeAdditive_ = false;
     std::vector<synth::ClipId> marqueeBaseSelection_;
 
-    // ---- TL6-5: waveform peaks cache ----
+    // ---- Waveform peaks cache ----
     std::function<juce::File(const juce::String& assetRef)> peaksResolver_;
     std::map<juce::String, synth::PeaksFile::Data> peaksCache_;
 
-    // ---- TL6-6: asset-existence cache (see setAssetExistsResolver) ----
+    // ---- Asset-existence cache (see setAssetExistsResolver) ----
     std::function<bool(const juce::String& assetRef)> assetExistsResolver_;
     std::map<juce::String, bool> assetExistsCache_;
 
-    // ---- TL6-5: the live-recording strip ----
+    // ---- The live-recording strip ----
     LiveRecordingInfo liveRecording_;
     std::vector<std::pair<float, float>> livePeaks_;
     juce::Rectangle<int> liveStripRect_;

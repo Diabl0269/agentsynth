@@ -12,7 +12,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <tuple>
 
-// TL2-6 — lane/track binding reconciliation. The rule under test throughout: an unresolvable
+// Lane/track binding reconciliation. The rule under test throughout: an unresolvable
 // uuid-keyed binding (Track::bindingUuid, AutomationLane::nodeUuid) becomes ORPHANED — retained,
 // flagged, re-bindable — and is never auto-deleted. See docs/architecture.md's TimelineDoc /
 // ProjectBundle sections for the full policy and the AI-merge-renumbering rationale.

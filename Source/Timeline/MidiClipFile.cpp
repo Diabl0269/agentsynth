@@ -9,7 +9,7 @@ namespace synth {
 namespace {
 
 // A note-on awaiting its matching note-off, FIFO per (pitch, channel) — identical convention to
-// MidiRecorder::stopAndCommit (TL3-3).
+// MidiRecorder::stopAndCommit.
 struct OpenNoteOn {
     double startBeat;
     int velocity;

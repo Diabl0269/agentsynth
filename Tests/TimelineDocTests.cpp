@@ -709,7 +709,7 @@ TEST_F(TimelineDocTest, FromVarClampsBreakpointValuesToTheRangeSnapshot) {
     EXPECT_DOUBLE_EQ(points[1].value, 100.0);
 }
 
-// ------------------------------------------------ 13. audio clip fields (TL6-3) --
+// ------------------------------------------------ 13. audio clip fields --
 //
 // The audio half of Clip: an asset reference that must stay inside the bundle, a gain, two fades
 // and a source offset. Everything here is ADDITIVE — kFormatVersion stays 1, an absent field loads
@@ -827,7 +827,7 @@ TEST_F(TimelineDocTest, AudioClipFieldsSurviveRoundTrip) {
 }
 
 TEST_F(TimelineDocTest, FromVarDefaultsAudioFieldsWhenAbsent) {
-    // Exactly what a file written before TL6-3 looks like: no audio keys at all, version still 1.
+    // Exactly what an older file with no audio keys at all looks like, version still 1.
     const auto* text = R"({"version":1,"tracks":[{"id":1,"kind":1,"name":"A",
         "clips":[{"id":1,"name":"c","startBeat":0.0,"lengthBeats":4.0,"notes":[]}]}]})";
     ASSERT_TRUE(doc.fromVar(juce::JSON::parse(text)));
@@ -877,7 +877,7 @@ TEST_F(TimelineDocTest, DuplicateAndSplitCarryAudioFields) {
 
     // Split: both halves keep the asset and gain, each keeps the fade at the edge it still owns,
     // and the right half's sourceStartSeconds is deliberately NOT advanced (no tempo map here —
-    // see splitClip's comment; TL6-4 owns that).
+    // see splitClip's comment).
     const auto halves = doc.splitClip(clip, 4.0);
     ASSERT_TRUE(halves.first.isValid());
     ASSERT_TRUE(halves.second.isValid());

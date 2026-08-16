@@ -1,4 +1,4 @@
-// Tests for TL3-3: MidiRecorder — records external MIDI into a new timeline clip, as one undo step.
+// Tests for MidiRecorder — records external MIDI into a new timeline clip, as one undo step.
 //
 // Most of this file needs no engine and no graph: it drives a bare synth::TransportService exactly
 // the way AudioEngine::renderNextBlock does (tick(), then captureBlock() against the published
@@ -9,7 +9,7 @@
 //
 // The last test (DoublePathRegression) is the one place a real, hosted AudioEngine is exercised —
 // it proves the recorder captures the single collector-merged/host-delivered buffer and never the
-// ExternalMidiModule push-path copies, which is the whole point of TL3-3's "single source" design.
+// ExternalMidiModule push-path copies, which is the whole point of the "single source" design.
 
 #include "../Source/AppUndoManager.h"
 #include "../Source/Timeline/MidiRecorder.h"
@@ -245,7 +245,7 @@ TEST(MidiRecorderTest, WrapAwareBeatMath) {
 }
 
 // ============================================================================
-// 5b. PunchInFiltersPreRoll (TL5-6)
+// 5b. PunchInFiltersPreRoll
 // ============================================================================
 
 // startRecording(track, punchInBeat) is also the audio-thread filter threshold: captureBlock()

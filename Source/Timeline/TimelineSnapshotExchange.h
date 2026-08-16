@@ -5,10 +5,10 @@
 
 namespace synth {
 
-// The timeline's message-thread -> audio-thread hand-off (TL2-2). All of the machinery — the single
+// The timeline's message-thread -> audio-thread hand-off. All of the machinery — the single
 // atomic pointer, the epoch reclamation protocol, the never-null empty fallback and the threading
 // contract — lives in EpochExchange<T> (see EpochExchange.h, which is where the correctness argument
-// is written down); TL4-2 lifted it out of here verbatim so the automation binding table could be
+// is written down); it was lifted out of here verbatim so the automation binding table could be
 // published through the same protocol.
 //
 // This subclass exists purely to keep the spelling every caller already uses: `emptySnapshot()`

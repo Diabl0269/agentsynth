@@ -52,9 +52,8 @@ void AgentSynthAudioProcessor::changeProgramName(int index, const juce::String& 
 void AgentSynthAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
     engine.prepareForHost(sampleRate, samplesPerBlock, getTotalNumInputChannels(), getTotalNumOutputChannels());
 
-    // TL7-7: the inner graph's latency (a hosted plugin's lookahead, compensated INSIDE the graph
-    // by TL7-7's rebuild) is invisible to the DAW unless this wrapper reports it as its own.
-    // prepareForHost just prepared the graph, so the figure is current here.
+    // The inner graph's latency (a hosted plugin's lookahead, compensated inside the graph) is
+    // invisible to the DAW unless this wrapper reports it as its own.
     setLatencySamples(engine.getGraphLatencySamples());
 }
 
@@ -84,10 +83,9 @@ void AgentSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     // stream driving the internal oscillators) must not escape to the host.
     midiMessages.clear();
 
-    // TL7-7, runtime half: a hosted plugin flipping its lookahead mid-session re-derives the inner
-    // graph's latency on the message thread (MainComponent's rebuild); this int compare is how the
-    // new figure reaches the DAW without waiting for the next prepareToPlay. setLatencySamples is
-    // allocation-free and JUCE's wrappers defer the actual host notification off this thread.
+    // A hosted plugin flipping its lookahead mid-session re-derives the inner graph's latency on
+    // the message thread; this compare is how the new figure reaches the DAW without waiting for
+    // the next prepareToPlay. setLatencySamples is allocation-free.
     const int graphLatency = engine.getGraphLatencySamples();
     if (graphLatency != getLatencySamples())
         setLatencySamples(graphLatency);

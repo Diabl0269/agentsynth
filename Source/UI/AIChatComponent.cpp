@@ -93,7 +93,7 @@ private:
 };
 
 //==============================================================================
-// TL8-4. PatchCard's sibling, kept to its conventions (header label + a coloured apply button on
+// PatchCard's sibling, kept to its conventions (header label + a coloured apply button on
 // the header row) with the one honest difference: a timeline suggestion has a validated PREVIEW to
 // show — "Adds midi track "Bass"; places 1 clip (8 notes) at 0-4 on "Bass"" — rather than raw JSON
 // to expand, so the body is that sentence instead of a JSON dump.
@@ -175,7 +175,7 @@ public:
             addAndMakeVisible(*patchCard);
         }
 
-        // TL8-4. Independent of the patch card above: a response carrying both gets both cards, and
+        // Independent of the patch card above: a response carrying both gets both cards, and
         // the user applies each on its own terms. No apply callback when the envelope is empty —
         // that is the rejected case, where the preview holds the reason instead of a summary.
         if (data.timelineOpsPreview.isNotEmpty()) {
@@ -685,7 +685,7 @@ void AIChatComponent::sendButtonClicked() {
                         }
                     }
 
-                    // TL8-4: the timeline half of the SAME response, extracted independently of the
+                    // The timeline half of the SAME response, extracted independently of the
                     // patch half — a model may send a patch, a timelineOps envelope, or both, and
                     // "timelineOps" is a sibling key, never nested inside the patch. Offered only
                     // when a live timeline is wired in, and under the identical posture the patch
@@ -839,7 +839,7 @@ void AIChatComponent::updateChatDisplay() {
                     });
             },
             isMerge, urlOpener,
-            // TL8-4's Apply. Deliberately NOT a retry loop like the patch path's: a rejected
+            // Timeline Apply. Deliberately NOT a retry loop like the patch path's: a rejected
             // envelope never reaches this button (the card offers no button at all in that case),
             // so the only failures left here are the ones the live doc/graph moved under — worth
             // reporting, not worth re-asking the model about.

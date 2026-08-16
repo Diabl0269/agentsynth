@@ -52,7 +52,7 @@ public:
 #if SYNTH_ENABLE_TIMELINE
     /**
      * @brief Installs (or clears) the timeline/transport this service reads for arrangement
-     *        context (TL8-3). Non-owning — MainComponent owns both for the app's lifetime.
+     *        context. Non-owning — MainComponent owns both for the app's lifetime.
      *
      * Mirrors setProvider()/setUndoManager(): a plain pointer setter, safe to call with either
      * argument null (arrangement context is then simply omitted from the outgoing request, same
@@ -63,12 +63,12 @@ public:
         transportService = transport;
     }
 
-    // -- Timeline operations (TL8-4) -------------------------------------------------------
+    // -- Timeline operations -----------------------------------------------------------------
     // The write half of the timeline seam, and a deliberate mirror of the patch card's flow:
     // extract -> validate (untrusted) -> preview to the user -> the user clicks Apply -> apply.
     // A timelineOps envelope is a SIBLING of a patch suggestion, never nested inside one — a
-    // "timeline" key inside patch JSON stays refused by validatePatch forever (TL0-4). A single
-    // response may legitimately carry both, and each half gets its own gate and its own button.
+    // "timeline" key inside patch JSON stays refused by validatePatch forever. A single response
+    // may legitimately carry both, and each half gets its own gate and its own button.
 
     /**
      * @brief The timelineOps envelope carried by a model response, or a void var if it has none.
@@ -98,7 +98,7 @@ public:
      * @brief Installed by the app-level owner (MainComponent) to route an Apply back to
      *        `TimelineOps::apply` with the real doc, graph and undo manager.
      *
-     * The service holds the timeline only as a CONST pointer (it is a context reader, TL8-3), and
+     * The service holds the timeline only as a CONST pointer (it is a context reader), and
      * it owns no undo manager for the timeline — so the host supplies the write path, exactly as
      * AIChatComponent supplies its own urlOpener. With no callback installed, applyTimelineOps()
      * reports that it cannot apply rather than silently doing nothing.
@@ -265,13 +265,13 @@ private:
     juce::ListenerList<Listener> listeners;
 
 #if SYNTH_ENABLE_TIMELINE
-    // TL8-3: non-owning, installed post-construction via setTimelineContext() — see its doc
-    // comment. Either or both may be null (a SYNTH_ENABLE_TIMELINE=OFF build never declares these
-    // members at all, and buildPatchAugmentedContent()'s arrangement section is #if-gated out).
+    // Non-owning, installed post-construction via setTimelineContext() — see its doc comment.
+    // Either or both may be null (a SYNTH_ENABLE_TIMELINE=OFF build never declares these members
+    // at all, and buildPatchAugmentedContent()'s arrangement section is #if-gated out).
     const TimelineDoc* timelineDoc = nullptr;
     const TransportService* transportService = nullptr;
 
-    // TL8-4: the host's write path, installed by MainComponent — see setTimelineOpsApplyCallback().
+    // The host's write path, installed by MainComponent — see setTimelineOpsApplyCallback().
     TimelineOpsApplyCallback timelineOpsApply;
 #endif
 

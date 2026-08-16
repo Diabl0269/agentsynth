@@ -8,40 +8,29 @@
 namespace synth {
 
 /**
- * @brief TL3-4: Standard MIDI File (SMF) import/export for timeline clips.
+ * @brief Standard MIDI File (SMF) import/export for timeline clips.
  *
  * The escape hatch while the piano roll stays minimal, the standard interchange format for the
- * arrangement pillar, and — per TL8-5 — the intended future AI patching surface for note data: a
- * .mid blob carries no file paths and no plugin identifiers, unlike almost anything else a model
- * could hand back. That last point is why every design choice below leans bounds-checking-strict
- * rather than permissive.
+ * arrangement pillar, and the intended future AI patching surface for note data: a .mid blob
+ * carries no file paths and no plugin identifiers, unlike almost anything else a model could hand
+ * back. That is why every design choice below leans bounds-checking-strict rather than permissive.
  *
- * -- What this does NOT do -------------------------------------------------------------------
+ * TimelineDoc has no tempo map (tempo lives on TransportService, not the document), so tempo,
+ * time-signature and every other meta event in an imported file are read but IGNORED for anything
+ * except a track's name. Exported files carry no tempo event either. SMPTE time format is rejected
+ * outright — beats-per-quarter-note (PPQ) is the only time format this class understands.
  *
- * TimelineDoc deliberately has no tempo map (see docs/architecture.md §3 — tempo lives on
- * TransportService, not the document), so tempo, time-signature and every other meta event in an
- * imported file are read but IGNORED for anything except a track's name. Exported files carry no
- * tempo event either. SMPTE time format is rejected outright — beats-per-quarter-note (PPQ) is the
- * only time format this class understands, matching the beats-only document it feeds.
+ * Note pairing: FIFO per (pitch, channel) — the earliest still-open note-on for that key is closed
+ * by the next note-off for the same key, so overlapping same-pitch retriggers pair up in the order
+ * they were struck (same convention as MidiRecorder). A note-on with velocity 0 is treated as a
+ * note-off. A dangling note-on, or a paired note that resolves to a non-positive length, is floored
+ * to kMinNoteLengthBeats rather than dropped or rejected.
  *
- * -- Note pairing -----------------------------------------------------------------------------
- *
- * Identical convention to MidiRecorder (TL3-3): FIFO per (pitch, channel) — the earliest still-open
- * note-on for that key is closed by the next note-off for the same key, so overlapping same-pitch
- * retriggers pair up in the order they were struck. A note-on with velocity 0 is treated as a
- * note-off (the SMF convention `juce::MidiMessage::isNoteOn()`/`isNoteOff()` already implement with
- * their default arguments). A dangling note-on — never closed anywhere later in its track — and any
- * paired note that resolves to a non-positive length (an on/off landing on the same tick) both get
- * floored to kMinNoteLengthBeats rather than dropped or rejected.
- *
- * -- Bounds ------------------------------------------------------------------------------------
- *
- * A track whose note count would exceed TimelineDoc::kMaxNotesPerClip rejects the WHOLE import
- * (ok=false) rather than truncating: this is a future untrusted surface (TL8-5 feeds AI-authored
- * .mid blobs through exactly this code), so silently truncating would let a hostile or buggy file
- * degrade rather than fail loudly. Every field pairTrack produces (pitch 0..127, velocity 1..127,
- * channel 1..16) is structurally guaranteed valid by juce::MidiMessage's own 7-bit/nibble encoding,
- * so no separate clamp-or-reject step is needed beyond the length floor above.
+ * Bounds: a track whose note count would exceed TimelineDoc::kMaxNotesPerClip rejects the WHOLE
+ * import (ok=false) rather than truncating — this is a future untrusted surface (AI-authored .mid
+ * blobs feed through this code), so silently truncating would let a hostile or buggy file degrade
+ * rather than fail loudly. Every field pairTrack produces (pitch 0..127, velocity 1..127, channel
+ * 1..16) is structurally guaranteed valid by juce::MidiMessage's own encoding.
  */
 class MidiClipFile {
 public:
@@ -53,7 +42,7 @@ public:
 
     // Floor applied to a note whose computed length is non-positive: a dangling note-on with no
     // matching note-off anywhere later in its track, or an on/off pair landing on the exact same
-    // tick. Same value and rationale as MidiRecorder::kMinNoteLengthBeats (TL3-3).
+    // tick. Same value and rationale as MidiRecorder::kMinNoteLengthBeats.
     static constexpr double kMinNoteLengthBeats = 1.0 / 32.0;
 
     // One track's worth of notes read from an SMF. Reuses TimelineDoc::MidiNote as-is — `id` is
@@ -74,7 +63,7 @@ public:
     };
 
     // Parses a Standard MIDI File (type 0 or 1) from a stream — NOT only from a File, so a future
-    // caller (TL8-5) can feed an in-memory .mid blob straight from a model response. See the class
+    // caller can feed an in-memory .mid blob straight from a model response. See the class
     // comment for the pairing/tempo/bounds contract. Rejects (ok=false):
     //  - a stream that isn't a valid SMF (bad header, truncated) — message is generic, no crash;
     //  - a file using SMPTE time format — message mentions "SMPTE";

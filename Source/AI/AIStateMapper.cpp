@@ -53,10 +53,9 @@ using ModuleFactoryFunc = std::function<std::unique_ptr<juce::AudioProcessor>()>
 
 // Factory map for module creation
 static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory = {
-    // TL6-2: a real module, not the graph's audioInputNode — same factory key and same display
-    // name, so every patch already saved with an "Audio Input" node (and every connection out of
-    // its channels 0/1) loads onto the module unchanged. Not gated on SYNTH_ENABLE_TIMELINE: device
-    // input is independent of the timeline feature.
+    // A real module, not the graph's audioInputNode — same factory key and same display name, so
+    // every patch already saved with an "Audio Input" node loads onto the module unchanged. Not
+    // gated on SYNTH_ENABLE_TIMELINE: device input is independent of the timeline feature.
     {"Audio Input", []() { return std::make_unique<AudioInputModule>(); }},
     {"Audio Output", []() { return std::make_unique<AudioGraphIOProcessor>(AudioGraphIOProcessor::audioOutputNode); }},
     {"Midi Input", []() { return std::make_unique<AudioGraphIOProcessor>(AudioGraphIOProcessor::midiInputNode); }},
@@ -93,26 +92,26 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Sampler", []() { return std::make_unique<SamplerModule>(); }},
     {"Wavetable", []() { return std::make_unique<WavetableOscillatorModule>(); }},
     {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }},
-    // TL7-2: a third-party VST3/AU plugin as a module. Deliberately NOT gated on
-    // SYNTH_ENABLE_TIMELINE — hosting is independent of the timeline feature, and a
-    // -DSYNTH_ENABLE_TIMELINE=OFF build must still round-trip a patch that hosts a plugin. In the
-    // factory so our own saves reload it (the node comes back as a placeholder and re-loads its
-    // plugin asynchronously); kNonAuthorableModuleTypes below keeps it away from the model.
+    // A third-party VST3/AU plugin as a module. Deliberately NOT gated on SYNTH_ENABLE_TIMELINE —
+    // hosting is independent of the timeline feature, and a -DSYNTH_ENABLE_TIMELINE=OFF build must
+    // still round-trip a patch that hosts a plugin. In the factory so our own saves reload it (the
+    // node comes back as a placeholder and re-loads its plugin asynchronously);
+    // kNonAuthorableModuleTypes below keeps it away from the model.
     {"Hosted Plugin", []() { return std::make_unique<HostedPluginModule>(); }},
 #if SYNTH_ENABLE_TIMELINE
-    // TL3-1. The class itself compiles unconditionally (like every other Timeline source); only
-    // this INTEGRATION POINT is gated, so a -DSYNTH_ENABLE_TIMELINE=OFF build cannot create a
-    // Track In node at all — not from a preset, not from undo, not from a patch. It is in the
-    // factory (rather than constructed ad hoc by the add-track flow) purely so our own saves
-    // round-trip it; kNonAuthorableModuleTypes below keeps it away from the model.
+    // The class itself compiles unconditionally (like every other Timeline source); only this
+    // INTEGRATION POINT is gated, so a -DSYNTH_ENABLE_TIMELINE=OFF build cannot create a Track In
+    // node at all — not from a preset, not from undo, not from a patch. It is in the factory
+    // (rather than constructed ad hoc by the add-track flow) purely so our own saves round-trip
+    // it; kNonAuthorableModuleTypes below keeps it away from the model.
     {"Track In", []() { return std::make_unique<TimelineMidiSourceModule>(); }},
-    // TL6-3, gated for exactly the same reason as Track In above: the class compiles
-    // unconditionally, but only a timeline build can create the node — from a preset, from undo or
-    // from the record flow. In the factory so our own saves round-trip a patch that has one;
+    // Gated for exactly the same reason as Track In above: the class compiles unconditionally, but
+    // only a timeline build can create the node — from a preset, from undo or from the record
+    // flow. In the factory so our own saves round-trip a patch that has one;
     // kNonAuthorableModuleTypes below keeps it away from the model.
     {"Rec Tap", []() { return std::make_unique<RecordTapModule>(); }},
-    // TL6-4, gated for exactly the same reason as the two above: the class compiles unconditionally,
-    // but only a timeline build can create the node. In the factory so our own saves round-trip a
+    // Gated for exactly the same reason as the two above: the class compiles unconditionally, but
+    // only a timeline build can create the node. In the factory so our own saves round-trip a
     // patch that has one; kNonAuthorableModuleTypes below keeps it away from the model.
     {"Track Audio", []() { return std::make_unique<TimelineAudioSourceModule>(); }},
 #endif
@@ -136,28 +135,28 @@ const std::set<juce::String> kNonAuthorableModuleTypes = {
     "Attenuverter",
     // The same AttenuverterModule, registered under the name the modulation UI uses for it.
     "Mod Slot",
-    // The timeline feed (TL3-1). A Track In node's only meaningful state is the identity of the
-    // timeline track bound to it, which lives OUTSIDE the patch — so a model authoring one either
-    // creates a node that plays nothing, or (worse) one that latches onto a track the user owns.
-    // The timeline's own add-track flow is the only thing that may create these.
+    // The timeline feed. A Track In node's only meaningful state is the identity of the timeline
+    // track bound to it, which lives OUTSIDE the patch — so a model authoring one either creates a
+    // node that plays nothing, or (worse) one that latches onto a track the user owns. The
+    // timeline's own add-track flow is the only thing that may create these.
     "Track In",
-    // The audio-take tap (TL6-3). It names a FILE PATH on disk — a model that could author one
-    // could aim a recording anywhere the app can write, which is the same class of authority the
-    // Sampler's `"state"` file path is denied on the untrusted path. The record flow is the only
-    // thing that may create these.
+    // The audio-take tap. It names a FILE PATH on disk — a model that could author one could aim
+    // a recording anywhere the app can write, which is the same class of authority the Sampler's
+    // `"state"` file path is denied on the untrusted path. The record flow is the only thing that
+    // may create these.
     "Rec Tap",
-    // The audio-track player (TL6-4). Same authority argument as Rec Tap from the other direction:
-    // a Track Audio node plays whatever clips the track bound to it names, so a model authoring one
-    // and latching it onto a track would be choosing what gets read off disk and rendered. The
+    // The audio-track player. Same authority argument as Rec Tap from the other direction: a Track
+    // Audio node plays whatever clips the track bound to it names, so a model authoring one and
+    // latching it onto a track would be choosing what gets read off disk and rendered. The
     // timeline's own add-track flow is the only thing that may create these.
     "Track Audio",
-    // A hosted third-party plugin (TL7-2). The strongest case on this list: the node's `"state"`
-    // carries the plugin's own opaque byte blob, which is handed verbatim to
+    // A hosted third-party plugin. The strongest case on this list: the node's `"state"` carries
+    // the plugin's own opaque byte blob, which is handed verbatim to
     // AudioPluginInstance::setStateInformation — i.e. straight into third-party code that will
     // parse it however it likes. Its identity also selects WHICH binary the host loads. Neither may
     // ever be chosen by a model, so the type is refused outright on the untrusted path
     // (PatchValidationError::InternalModuleNotAllowed) rather than sanitised. Only the app's own
-    // load UX (TL7-3) may create one.
+    // load UX may create one.
     "Hosted Plugin",
 };
 
@@ -509,10 +508,9 @@ PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const 
             // left to the schema's `type` enum. The schema is a hint the backend enforces as a
             // grammar for OUR provider; a patch can also arrive from a local model, or from any
             // future caller that never saw the schema — and "non-authorable" has to mean
-            // untrusted-unreachable, not merely un-suggested. (TL7-4's mechanism, landed early
-            // because Track In needs it.) The trusted path is untouched — our own saves must
-            // round-trip a Track In node — and a caller gating app-authored data it is about to
-            // apply trusted opts out via allowInternalModuleTypes (see AIStateMapper.h).
+            // untrusted-unreachable, not merely un-suggested. The trusted path is untouched — our
+            // own saves must round-trip a Track In node — and a caller gating app-authored data it
+            // is about to apply trusted opts out via allowInternalModuleTypes (see AIStateMapper.h).
             if (!allowInternalModuleTypes && isInternalOnlyModule(type))
                 return {false, PatchValidationError::InternalModuleNotAllowed,
                         "Module type \"" + type +
@@ -759,12 +757,12 @@ juce::String AIStateMapper::getFactoryTypeName(juce::AudioProcessor* processor) 
         case ModuleType::TimelineAudioSource:
             return "Track Audio";
         case ModuleType::AudioInput:
-            // Deliberately the same string JUCE's audioInputNode reported (and therefore the same
-            // string every pre-TL6-2 save wrote), so the two are interchangeable on disk.
+            // Deliberately the same string JUCE's audioInputNode reported, so old and new saves
+            // are interchangeable on disk.
             return "Audio Input";
         case ModuleType::HostedPlugin:
             // The factory key, NOT the hosted plugin's own name: the type identifies the host
-            // module, and which plugin it hosts is carried by the node's "state" (TL7-2).
+            // module, and which plugin it hosts is carried by the node's "state".
             return "Hosted Plugin";
         }
     }

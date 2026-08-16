@@ -207,7 +207,7 @@ target_include_directories(Tests PRIVATE
 target_compile_definitions(Tests PRIVATE
     JUCE_MODAL_LOOPS_PERMITTED=1
     THEMES_DIR="${CMAKE_SOURCE_DIR}/themes"
-    # Same fixture files TimelineOpsHarness replays (TL8-5) — one recorded set, asserted here as
+    # Same fixture files TimelineOpsHarness replays — one recorded set, asserted here as
     # fast gtest cases so CI covers them without building the harness target.
     TIMELINE_OPS_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/Tools/TimelineOpsHarness/Fixtures"
 )

@@ -98,21 +98,21 @@ struct Metrics {
     int aiPanelWidth{300};        // code-only; not parsed from user JSON
     int iconSize{16};             // code-only; not parsed from user JSON
 
-    // Timeline panel (TL5-1; bottom-docked, toggled via the toolbar / Cmd+T).
+    // Timeline panel (bottom-docked, toggled via the toolbar / Cmd+T).
     int timelinePanelHeight{220};       // code-only; not parsed from user JSON
     int timelineTrackHeaderWidth{160};  // code-only; not parsed from user JSON
     int timelineTransportBarHeight{28}; // code-only; not parsed from user JSON
-    int timelineRulerHeight{24};        // code-only; not parsed from user JSON (TL5-2)
-    // TL5-7: the row height BOTH the track-header column and the clip-lane area lay their rows
+    int timelineRulerHeight{24};        // code-only; not parsed from user JSON
+    // The row height BOTH the track-header column and the clip-lane area lay their rows
     // out at — the single source that keeps header rows and clip rows aligned. Replaces what used
     // to be TimelineTrackHeaderComponent::kRowHeight's exclusive say in the matter; that constant
     // now only serves as the headless literal fallback and is kept equal to this default.
-    int timelineTrackRowHeight{56}; // code-only; not parsed from user JSON (TL5-7)
+    int timelineTrackRowHeight{56}; // code-only; not parsed from user JSON
 
-    // TL5-9: the automation strip docked at the BOTTOM of the panel's lanes region (header row of
+    // The automation strip docked at the BOTTOM of the panel's lanes region (header row of
     // tool buttons + lane/record-mode pickers, above the AutomationLaneEditor curve canvas). The
     // clip-lane area (and the piano roll) shrink by exactly this much while the strip is open.
-    int timelineAutomationStripHeight{72}; // code-only; not parsed from user JSON (TL5-9)
+    int timelineAutomationStripHeight{72}; // code-only; not parsed from user JSON
 };
 
 // Font family NAMES (resolved to embedded typefaces by the LnF) + a type scale (pt).

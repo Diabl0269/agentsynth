@@ -24,7 +24,7 @@ void AutomationApplier::applyBlock(const AutomationBindingTable& table, const Bl
     const bool recordArmed = recordState != nullptr && recordState->globalRecordEnable.load(std::memory_order_relaxed);
 
     for (const auto& binding : table.bindings) {
-        // TL7-6: exactly one of these two is populated on a real binding — see the header.
+        // Exactly one of these two is populated on a real binding — see the header.
         juce::AudioProcessorParameter* liveParam =
             binding.param != nullptr ? static_cast<juce::AudioProcessorParameter*>(binding.param) : binding.hostedParam;
         if (liveParam == nullptr || binding.laneIndex < 0)
@@ -39,7 +39,7 @@ void AutomationApplier::applyBlock(const AutomationBindingTable& table, const Bl
             static_cast<std::size_t>(lane.firstPoint) + static_cast<std::size_t>(lane.numPoints) > numPoints)
             continue;
 
-        // TL4-4 record modes — the full table is in the header. Everything here is a compare or a
+        // Record modes — the full table is in the header. Everything here is a compare or a
         // scan of eight relaxed atomic loads; no branch reaches memory the message thread can move.
         if (lane.recordMode == static_cast<int>(LaneRecordMode::Off))
             continue;
@@ -68,9 +68,9 @@ void AutomationApplier::applyBlock(const AutomationBindingTable& table, const Bl
 
         // convertTo0to1 clamps into [0, 1] itself, so a lane authored against a wider range pins at
         // the parameter's endpoint. setValue and NOT setValueNotifyingHost: a plain store, no
-        // listener notification from the audio thread (see the header). TL7-6: a `hostedParam`
-        // binding has no NormalisableRange, so the lane's own range IS the denorm -> 0..1 map (see
-        // the header) — the same defensive [0, 1] clamp convertTo0to1 does internally.
+        // listener notification from the audio thread (see the header). A `hostedParam` binding has
+        // no NormalisableRange, so the lane's own range IS the denorm -> 0..1 map (see the header) —
+        // the same defensive [0, 1] clamp convertTo0to1 does internally.
         float newNormalized;
         if (binding.param != nullptr) {
             newNormalized = binding.param->convertTo0to1(denormalised);
@@ -85,7 +85,7 @@ void AutomationApplier::applyBlock(const AutomationBindingTable& table, const Bl
         }
         liveParam->setValue(newNormalized);
 
-        // TL4-5: reflect into the UI feed, deduped per binding. NaN != NaN is always true, so a
+        // Reflect into the UI feed, deduped per binding. NaN != NaN is always true, so a
         // binding's very first write always pushes; every write after that only pushes when the
         // value actually moved.
         if (uiFeed != nullptr && newNormalized != binding.lastPushedNormalized) {

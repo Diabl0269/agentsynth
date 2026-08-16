@@ -1,8 +1,8 @@
 // AssetManagerTests.cpp
 //
-// TL6-6: synth::AssetManager — import-into-bundle + dedupe, the relink flow (MainComponent's half),
+// synth::AssetManager — import-into-bundle + dedupe, the relink flow (MainComponent's half),
 // collect/clean of unused Audio/ + Peaks/ files, and the Recordings/-convention adoption pass that
-// runs immediately before ProjectBundle::save. The missing-asset placeholder half of TL6-6 lives in
+// runs immediately before ProjectBundle::save. The missing-asset placeholder half lives in
 // Tests/TimelineClipLaneTests.cpp (group 6) alongside the rest of TimelineClipLaneArea's paint
 // tests, since it's a lane-area concern rather than an AssetManager one.
 //

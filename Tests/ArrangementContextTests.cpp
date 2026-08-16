@@ -1,4 +1,4 @@
-// TL8-3 — ArrangementContext::summarize, the read-path arrangement summary folded into the AI
+// ArrangementContext::summarize, the read-path arrangement summary folded into the AI
 // request context beside the existing patch-JSON injection.
 
 #include "AI/AIIntegrationService.h"

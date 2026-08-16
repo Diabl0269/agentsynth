@@ -243,7 +243,7 @@ TEST_F(ModuleComponentTest, EstimatedModuleSizesMatchTheRealComponents) {
 }
 
 #if SYNTH_ENABLE_TIMELINE
-// Track In (TL3-1) is deliberately absent from the library, so the loop above cannot cover it —
+// Track In is deliberately absent from the library, so the loop above cannot cover it —
 // but estimateModuleSize is still queried for it programmatically (the timeline's add-track flow
 // places the node), and a stale estimate there misplaces the card. Same assertion, one type.
 TEST_F(ModuleComponentTest, TrackInEstimatedSizeMatchesTheRealComponent) {

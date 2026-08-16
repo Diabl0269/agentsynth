@@ -16,7 +16,7 @@ void MidiRecorder::captureBlock(const juce::MidiBuffer& midi, const BlockTimeInf
     if (!(beatsPerSample > 0.0))
         return;
 
-    // TL5-6: a count-in's pre-roll bars are live through the transport (and this flag) but must
+    // A count-in's pre-roll bars are live through the transport (and this flag) but must
     // never land in the committed take — startRecording() sets this to the punch-in point, and
     // "record while already playing" / "count-in off" both pass the CURRENT position, making the
     // filter a no-op for every take that isn't a count-in pre-roll.

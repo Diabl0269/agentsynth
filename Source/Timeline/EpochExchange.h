@@ -8,8 +8,8 @@
 
 namespace synth {
 
-// Hands an immutable, message-thread-built object to the audio thread (TL2-2, generalised in
-// TL4-2): one atomic pointer for publication, an epoch counter for reclamation. No shared_ptr, no
+// Hands an immutable, message-thread-built object to the audio thread: one atomic pointer for
+// publication, an epoch counter for reclamation. No shared_ptr, no
 // atomic<shared_ptr>, no locks, and no allocation or deallocation on the audio path — the whole
 // read side is two atomic operations and a branch.
 //
@@ -20,7 +20,7 @@ namespace synth {
 //
 // Two instantiations exist today: EpochExchange<TimelineSnapshot> (aliased as
 // TimelineSnapshotExchange — the timeline the audio thread reads) and
-// EpochExchange<AutomationBindingTable> (TL4-2 — the resolved lane -> parameter bindings the
+// EpochExchange<AutomationBindingTable> (the resolved lane -> parameter bindings the
 // automation applier walks).
 //
 // Why not atomic<shared_ptr>: on every implementation we care about it is either lock-based or a
@@ -41,7 +41,7 @@ namespace synth {
 // instance that lives for the process's lifetime.
 //
 // "Once per render pass" rather than "once per callback": with AudioEngine's control-rate slicing
-// enabled (TL4-2, off by default) one device callback runs the whole per-block sequence — transport
+// enabled (off by default) one device callback runs the whole per-block sequence — transport
 // tick, snapshot open, automation apply, graph render — once per 64-sample slice, so a callback
 // opens several blocks on this exchange. That is still correct: the reclamation argument below only
 // needs "starting a block is a promise the previous block's reference was dropped", which holds per

@@ -4,7 +4,7 @@
 
 namespace synth {
 
-// TL7-6: the ONE place a lane's (nodeUuid, paramId, paramIndexHint) identity is turned into a live
+// The ONE place a lane's (nodeUuid, paramId, paramIndexHint) identity is turned into a live
 // parameter, once the caller has already resolved nodeUuid to a live juce::AudioProcessor (node
 // resolution itself stays wherever each call site already does it — a uuid->processor map, a
 // linear scan — this is only about the PARAMETER half). Every resolution call site is meant to
@@ -42,8 +42,8 @@ namespace synth {
 //      the correct flag whenever it does run.
 //
 // Non-plugin nodes are the UNCHANGED path: exact paramID match via the global findParameterByID
-// (Source/Modules/ModuleBase.h), and a miss there is "unbound", never "orphaned" — exactly the
-// behaviour that predates TL7-6. paramIndexHint is never consulted for a non-plugin node.
+// (Source/Modules/ModuleBase.h), and a miss there is "unbound", never "orphaned". paramIndexHint
+// is never consulted for a non-plugin node.
 struct LaneParamResolution {
     // Exactly one of these two is non-null on a successful resolution. `rangedParam` covers every
     // one of our own modules' parameters, and the (currently theoretical) case of a hosted

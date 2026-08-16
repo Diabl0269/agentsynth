@@ -12,46 +12,31 @@ class AppUndoManager; // Forward declaration (Source/AppUndoManager.h)
 namespace synth {
 
 /**
- * @brief TL3-3: records external MIDI into a new timeline clip, as one undo step.
- *
- * -- Why the collector-drained buffer is the only correct capture point ------------------------
+ * @brief Records external MIDI into a new timeline clip, as one undo step.
  *
  * External MIDI reaches the graph by TWO paths out of AudioEngine::handleIncomingMidiMessage: a
- * direct `pushMidiMessage()` copy into any ExternalMidiModule node bound to the same device, AND
- * `midiMessageCollector.addMessageToQueue()`, which is drained once per callback (in
- * `audioDeviceIOCallbackWithContext`, or supplied directly by the host in hosted mode) into the
- * buffer `AudioEngine::renderNextBlock` hands the graph. `captureBlock()` is called from exactly
- * that one site — see AudioEngine::setMidiCaptureSink / renderNextBlock — and reads ONLY that
- * buffer. It never sees the ExternalMidiModule push-path copies, which stay internal to that
- * module's own processing and never reach the top-level buffer this class is handed. Since every
- * message handleIncomingMidiMessage receives goes into the collector regardless of whether an
- * ExternalMidiModule also received a copy, recording from the collector-merged buffer alone
- * captures every external note exactly once — recording from both paths would double-record any
- * note whose source also has an ExternalMidi node bound to it.
+ * direct `pushMidiMessage()` copy into any ExternalMidiModule node, and
+ * `midiMessageCollector.addMessageToQueue()`, drained once per callback into the buffer
+ * `AudioEngine::renderNextBlock` hands the graph. `captureBlock()` reads ONLY that collector-merged
+ * buffer (see AudioEngine::setMidiCaptureSink / renderNextBlock) — never the ExternalMidiModule
+ * push-path copies — so every external note is captured exactly once; recording from both paths
+ * would double-record any note whose source also has an ExternalMidi node bound to it.
  *
- * -- Threading contract -------------------------------------------------------------------------
- *
+ * -- Threading contract --
  * captureBlock() — AUDIO THREAD ONLY, called once per callback. Lock-free, no allocation, no
  * logging (see the "No high-frequency logging" rule in CLAUDE.md).
- *
  * startRecording() / stopAndCommit() — MESSAGE THREAD ONLY.
+ * The armed-and-recording flag and the punch-in beat are plain relaxed atomics, written once by
+ * startRecording() before `recording` flips true and never mutated again until the next
+ * startRecording() — captureBlock() can never observe a punch-in value from a different take. The
+ * only data crossing threads besides that is the SPSC ring.
  *
- * The state captureBlock() reads that the message thread writes is the armed-and-recording flag and
- * (TL5-6) the punch-in beat — both plain relaxed atomics, written once by startRecording() before
- * `recording` flips true and never mutated again until the next startRecording(), so captureBlock()
- * never observes a punch-in value from a DIFFERENT take than the one it is currently capturing. The
- * only data that crosses from the audio thread to the message thread is the SPSC ring. Nothing else
- * is shared between the two sides.
- *
- * -- What a "take" is -----------------------------------------------------------------------------
- *
+ * -- What a "take" is --
  * stopAndCommit() pairs NoteOn/NoteOff events by (pitch, channel) into notes, then creates ONE new
  * clip on the armed track spanning the captured notes, named "Take". A note still held down when
- * recording stops is closed at the last event beat seen (the best proxy for "now" this class has,
- * since it deliberately shares no timing state with the audio thread beyond the ring itself), with
- * a floor of 1/32 beat so a note is never emitted with zero or negative length. A stray NoteOff
- * with no matching NoteOn is ignored. An empty take (no events captured) commits nothing and
- * returns false — no clip, no undo step.
+ * recording stops is closed at the last event beat seen, with a floor of 1/32 beat so it is never
+ * emitted with zero or negative length. A stray NoteOff with no matching NoteOn is ignored. An
+ * empty take commits nothing and returns false.
  */
 class MidiRecorder {
 public:
@@ -71,7 +56,7 @@ public:
     // Called once per callback (see AudioEngine::renderNextBlock). A no-op unless armed-and-
     // recording AND the transport is playing. For every NoteOn/NoteOff in `midi`, computes its
     // absolute beat from `info` (wrap-aware: a sample at or after info.loopWrapSample uses the
-    // post-wrap range); an event whose beat is BEFORE `punchInBeat` (TL5-6: a count-in pre-roll) is
+    // post-wrap range); an event whose beat is BEFORE `punchInBeat` (a count-in pre-roll) is
     // dropped rather than pushed — the pre-roll bars a performer plays along with the click must
     // never land in the committed take. Never allocates, never blocks, never logs.
     void captureBlock(const juce::MidiBuffer& midi, const BlockTimeInfo& info) noexcept;
@@ -79,7 +64,7 @@ public:
     // -- Message thread --------------------------------------------------------
     // Clears the ring and any prior take's state, arms recording onto `armedTrack`. `punchInBeat` is
     // BOTH the caller's own bookkeeping value (e.g. UI punch-in display) AND the audio thread's
-    // filter threshold (TL5-6): captureBlock() drops any event before it, which is what makes a
+    // filter threshold: captureBlock() drops any event before it, which is what makes a
     // count-in's pre-roll bars silent in the committed take even though the transport (and the
     // recorder's armed-and-recording flag) are already live through them. Pass the CURRENT position
     // for "no pre-roll" (record engaged while already playing, or count-in off) — nothing before
@@ -102,7 +87,7 @@ public:
     // just truncated. Surfaced by the caller as a dropped-take warning.
     bool hadOverrun() const noexcept { return overrunFlag.load(std::memory_order_relaxed); }
 
-    // TL5-5: message-thread probe for "is a take currently armed?" — MainComponent's 10 Hz poll
+    // Message-thread probe for "is a take currently armed?" — MainComponent's 10 Hz poll
     // uses this to detect a transport stop happening WHILE recording (Space/Stop rather than the
     // record button itself) and route it through the same stopAndCommit path. Safe from the
     // message thread: it only ever reads its own atomic, which the message thread itself writes
@@ -130,7 +115,7 @@ private:
     // touched by the audio thread.
     TrackId armedTrack;
 
-    // TL5-6: written by startRecording() (message thread), read by BOTH stopAndCommit() (message
+    // Written by startRecording() (message thread), read by BOTH stopAndCommit() (message
     // thread, informational) and captureBlock() (audio thread, the actual pre-roll filter) — a
     // relaxed atomic double, the same cross-thread-signal-value convention TransportService's
     // simpler settings (masterMuted_, transportEnabled_) use, rather than the full seqlock its own

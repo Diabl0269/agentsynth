@@ -12,7 +12,7 @@ namespace synth {
 struct TimelineSnapshot;
 class AudioClipStreamer;
 
-// The one clock (TL1). Owns play state, sample position, BPM, time signature and
+// The one clock. Owns play state, sample position, BPM, time signature and
 // loop bounds (in beats). The message thread posts commands through a lock-free
 // SPSC FIFO; the audio thread drains them at the top of every callback via tick(),
 // which also publishes the block's BlockTimeInfo. No locks, no allocation on the
@@ -59,7 +59,7 @@ public:
     // The BlockTimeInfo published by the most recent tick(). Audio thread only.
     const BlockTimeInfo& getCurrentBlockInfo() const noexcept { return currentBlock; }
 
-    // -- This block's timeline snapshot (TL3-1) ------------------------------
+    // -- This block's timeline snapshot ---------------------------------------
     // The playhead is the ONLY thing every module already has a pointer to, so it is also how a
     // module reaches the timeline: AudioEngine::renderNextBlock opens the block's snapshot
     // (TimelineSnapshotExchange::beginAudioBlock(), exactly once per callback — the epoch
@@ -78,7 +78,7 @@ public:
     void setCurrentTimelineSnapshot(const TimelineSnapshot* snapshot) noexcept { currentTimelineSnapshot = snapshot; }
     const TimelineSnapshot* getCurrentTimelineSnapshot() const noexcept { return currentTimelineSnapshot; }
 
-    // -- The audio-clip streamer (TL6-4) -------------------------------------
+    // -- The audio-clip streamer ----------------------------------------------
     // The second passenger on the same carrier, and for the same reason: TimelineAudioSourceModule
     // needs the engine's synth::AudioClipStreamer, and the playhead is the only handle it already
     // has. Unlike the snapshot above this pointer is NOT per-block — the streamer is owned by the
@@ -91,7 +91,7 @@ public:
     void setAudioClipStreamer(AudioClipStreamer* streamer) noexcept { audioClipStreamer = streamer; }
     AudioClipStreamer* getAudioClipStreamer() const noexcept { return audioClipStreamer; }
 
-    // -- This block's DEVICE INPUT (TL6-2) -----------------------------------
+    // -- This block's DEVICE INPUT ---------------------------------------------
     // The same carrier idea as the timeline snapshot above, for a different payload and for a
     // reason that has nothing to do with the timeline: the playhead is the only handle every module
     // already has, so it is also how AudioInputModule reaches the audio the device (or the host)
@@ -128,7 +128,7 @@ public:
     /** How many samples of each channel above are valid — the current render pass's length. */
     int getNumDeviceInputSamples() const noexcept { return numDeviceInputSamples; }
 
-    // -- This block's INPUT MONITORING flag (TL6-7) --------------------------
+    // -- This block's INPUT MONITORING flag -------------------------------------
     // The same carrier idea as the device input above, for a different reason: AudioEngine decides,
     // once per render pass, whether AudioInputModule's graph output should be gated (recording taps
     // the graph, so "monitoring enabled" IS the record path for input chains — this is what keeps an
@@ -207,17 +207,17 @@ private:
     // Borrowed, never owned; valid for the current block only. See setCurrentTimelineSnapshot.
     const TimelineSnapshot* currentTimelineSnapshot = nullptr;
 
-    // TL6-4. Borrowed, never owned; owned by the engine and valid until its shutdown. See
+    // Borrowed, never owned; owned by the engine and valid until its shutdown. See
     // setAudioClipStreamer.
     AudioClipStreamer* audioClipStreamer = nullptr;
 
-    // TL6-2. Borrowed, never owned; valid for the current render pass only. See
+    // Borrowed, never owned; valid for the current render pass only. See
     // setDeviceInputForBlock.
     std::array<const float*, kMaxDeviceInputChannels> deviceInputChannels{};
     int numDeviceInputChannels = 0;
     int numDeviceInputSamples = 0;
 
-    // TL6-7. Audio thread only; see setInputMonitoringEnabledForBlock.
+    // Audio thread only; see setInputMonitoringEnabledForBlock.
     bool inputMonitoringEnabledForBlock = false;
 
     // -- Command FIFO (message thread -> audio thread) ------------------------

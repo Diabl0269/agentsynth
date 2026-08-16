@@ -9,7 +9,7 @@
 
 namespace synth {
 
-// The audio thread's view of the timeline (TL2-2): a flat, immutable, allocation-free-to-read
+// The audio thread's view of the timeline: a flat, immutable, allocation-free-to-read
 // projection of TimelineDoc.
 //
 // The doc is a tree of juce::Strings and nested std::vectors that the message thread mutates in
@@ -33,7 +33,7 @@ namespace synth {
 //     NUL-terminated. uuids are 36 chars and paramIds are short, so this never bites in practice;
 //     the audio thread does strcmp against a char array and never touches a juce::String (whose
 //     copy is refcounted and therefore not audio-safe).
-//   - TL6-4: an AUDIO track contributes an audioClips run and NO notes; a MIDI track contributes
+//   - An AUDIO track contributes an audioClips run and NO notes; a MIDI track contributes
 //     notes and NO audio clips. One Clip type covers both kinds in the doc (see synth::Clip), and
 //     the track's TrackKind is what decides which half is flattened — so a stray note on an audio
 //     track, or a stray assetRef on a MIDI clip, is inert rather than half-played.
@@ -41,7 +41,7 @@ struct TimelineSnapshot {
     // Fixed string capacity, including the NUL. 63 usable bytes: a uuid is 36.
     static constexpr int kMaxStringBytes = 64;
 
-    // TL6-4: capacity of an audio clip's asset reference, including the NUL. Deliberately much
+    // Capacity of an audio clip's asset reference, including the NUL. Deliberately much
     // larger than kMaxStringBytes — an assetRef is a bundle-relative PATH ("Audio/take-12.wav"),
     // not an identifier, and truncating one silently would point the streamer at a different file
     // (or at nothing) rather than merely at a name that fails to match.
@@ -58,7 +58,7 @@ struct TimelineSnapshot {
         int numNotes = 0;
         int firstLane = 0; // range into lanes[]
         int numLanes = 0;
-        int firstAudioClip = 0; // TL6-4: range into audioClips[]
+        int firstAudioClip = 0; // range into audioClips[]
         int numAudioClips = 0;
     };
 
@@ -79,11 +79,11 @@ struct TimelineSnapshot {
         float minValue = 0.0f;
         float maxValue = 1.0f;
         float defaultValue = 0.0f;
-        // TL4-4: a synth::LaneRecordMode value, copied verbatim from the lane. The applier reads it
+        // A synth::LaneRecordMode value, copied verbatim from the lane. The applier reads it
         // per block to decide whether this lane may write at all (Off / Write-while-recording) or
         // must yield to a hand on the knob (Touch / Latch) — see AutomationApplier::applyBlock.
         int recordMode = static_cast<int>(LaneRecordMode::Read);
-        // TL7-6, copied verbatim from AutomationLane::paramIndexHint (-1 = none). Message-thread-only
+        // Copied verbatim from AutomationLane::paramIndexHint (-1 = none). Message-thread-only
         // consumers (AudioEngine::publishTimeline's binding build) read this straight off the
         // snapshot rather than cross-referencing the doc, so the flattened lane and its hint always
         // travel together.
@@ -99,7 +99,7 @@ struct TimelineSnapshot {
         int curve = 0; // a synth::BreakpointCurve value
     };
 
-    // TL6-4: one audio clip on an Audio-kind track, in the form the audio thread needs it.
+    // One audio clip on an Audio-kind track, in the form the audio thread needs it.
     //
     // `clipId` is the doc's own ClipId value and is the IDENTITY synth::AudioClipStreamer keys its
     // stream pool on — it is stable for the clip's lifetime and never reused, so a stream stays
@@ -137,7 +137,7 @@ struct TimelineSnapshot {
     std::vector<NoteEvent> notes; // per-track runs, absolute beats, each run sorted by startBeat
     std::vector<LaneInfo> lanes;  // per-track runs
     std::vector<Point> points;    // per-lane runs, sorted by beat
-    // TL6-4: per-track runs, sorted by startBeat. Only Audio-kind tracks contribute.
+    // Per-track runs, sorted by startBeat. Only Audio-kind tracks contribute.
     std::vector<AudioClipInfo> audioClips;
 
     // True when at least one MIDI track has soloed set. Solo is a document-wide predicate ("is

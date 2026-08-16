@@ -1,31 +1,23 @@
-// LatencyAlignmentTests.cpp
-//
-// TL6-8: a recorded take lands where it was PLAYED.
+// A recorded take lands where it was PLAYED.
 //
 // Two corrections meet here, and the tests are organised around them:
 //
 //   1. A SAMPLE-HONEST CAPTURE START. `RecordTapModule` records the transport sample its frame 0
-//      was captured at, on the audio thread, from the block's BlockTimeInfo. TL6-3 had no such
-//      anchor — the capture was started by a 10 Hz poll and the clip was placed at the punch beat
-//      regardless — so a take could be missing up to ~100 ms of head and still claim to start at
-//      the punch. The tests here assert the error is ZERO, not "small".
+//      was captured at, on the audio thread, from the block's BlockTimeInfo — not from a later poll
+//      tick, which could miss up to ~100 ms of head. The tests here assert the error is ZERO.
 //
 //   2. ROUND-TRIP LATENCY COMPENSATION. A musician plays against what they HEAR, so audio captured
 //      at timeline sample T was played at T - (input + graph + output). The acceptance test is
-//      RecordedImpulseLandsWherePlayed: a single-sample impulse injected at exactly the callback
-//      sample a note played on the grid would arrive at must come back out of the committed clip
-//      at exactly the grid sample — off-by-zero.
+//      RecordedImpulseLandsWherePlayed: an impulse injected at exactly the callback sample a note
+//      played on the grid would arrive at must come back out of the committed clip at exactly the
+//      grid sample — off-by-zero.
 //
-// Three layers, mirroring FeedbackGuardTests.cpp's structure:
-//   * PLACEMENT layer  — synth::computeTakePlacement in isolation. No engine, no device, no files.
-//   * ENGINE layer     — a real AudioEngine driving Audio Input -> Rec Tap -> Audio Output through
-//                        FakeAudioIODevice, block by block, by hand. This is the only layer that can
-//                        prove the anchor, because the tap only sees a transport playhead when the
-//                        GRAPH renders it (juce::AudioProcessorGraph installs the playhead per node
-//                        per render pass). Gated #if SYNTH_ENABLE_TIMELINE, like every engine-level
-//                        transport test.
-//   * FLOW layer       — MainComponent's record-on / commit choreography with a count-in, against
-//                        the same fake device. Gated for the same reason.
+// Three layers: PLACEMENT (synth::computeTakePlacement in isolation, no engine/device/files);
+// ENGINE (a real AudioEngine driving Audio Input -> Rec Tap -> Audio Output through
+// FakeAudioIODevice by hand — the only layer that sees a real transport playhead on the tap, since
+// juce::AudioProcessorGraph installs it per node per render pass); FLOW (MainComponent's
+// record-on/commit choreography with a count-in, same fake device). Engine and Flow layers are
+// gated #if SYNTH_ENABLE_TIMELINE.
 //
 // Headless house rules as everywhere else: no real audio device, no sleeps.
 
@@ -56,7 +48,7 @@ constexpr double kSampleRate = synth::test::kFakeDeviceSampleRate; // 48000
 constexpr int kBlockSize = synth::test::kFakeDeviceBlockSize;      // 512
 constexpr int kInLatency = synth::test::kFakeDeviceInputLatency;   // 64
 constexpr int kOutLatency = synth::test::kFakeDeviceOutputLatency; // 128
-// What TL6-8 compensates by: input device + graph (0 for this patch) + output device.
+// What the compensation covers: input device + graph (0 for this patch) + output device.
 constexpr int kRoundTrip = kInLatency + kOutLatency; // 192 samples = 4.0 ms at 48 kHz
 
 struct ScopedTempFile {
@@ -183,7 +175,7 @@ TEST(TakePlacementTest, PreRollIsTrimmedNotRewritten) {
 
 TEST(TakePlacementTest, NoAnchorFallsBackToThePunch) {
     // No transport behind the tap (a bare unit test, a foreign host): there is no honest anchor, so
-    // the placement is exactly what TL6-3 always did — punch, untrimmed.
+    // the placement falls back to the punch beat, untrimmed.
     synth::TakePlacementInput in;
     in.takeLengthSamples = 4096;
     in.captureStartValid = false;
@@ -370,7 +362,7 @@ TEST(LatencyAlignmentTest, CaptureStartIsSampleHonest) {
     ASSERT_TRUE(take.ok);
     ASSERT_TRUE(take.captureStartValid);
     EXPECT_EQ(take.captureStartTimelineSample - engagementSample, 0)
-        << "the anchor error must be ZERO — the pre-TL6-8 poll could be a whole 10 Hz tick (~4800 "
+        << "the anchor error must be ZERO — the legacy poll could be a whole 10 Hz tick (~4800 "
            "samples at 48 kHz) late";
 
     engine.audioDeviceStopped();
@@ -540,7 +532,7 @@ TEST_F(LatencyFlowTest, CountInPunchTrimsViaSourceStart) {
         return nullptr;
     }();
     ASSERT_NE(tap, nullptr);
-    EXPECT_TRUE(tap->isCapturing()) << "TL6-8: the capture starts at the click, pre-roll included";
+    EXPECT_TRUE(tap->isCapturing()) << "the capture starts at the click, pre-roll included";
 
     // Roll through the pre-roll bar (24000 samples) and a little past the punch.
     constexpr int kBlocks = 56; // 28672 samples > 24000
@@ -585,7 +577,7 @@ TEST_F(LatencyFlowTest, CountInPunchTrimsViaSourceStart) {
 
 // The drawn playhead answers a DIFFERENT question from the recording alignment, and must keep
 // answering it: "where is the audio the user is hearing right now?" — which is the OUTPUT latency
-// alone (TL5-4). This pins MainComponent's wiring, not the overlay's arithmetic (TimelinePlayhead
+// alone. This pins MainComponent's wiring, not the overlay's arithmetic (TimelinePlayhead
 // Tests.cpp's LatencyOffsetShiftsTheLine already owns that): a fake device with musically large,
 // UNEQUAL latencies makes "output only" and "input + graph + output" land on different pixels.
 TEST_F(LatencyFlowTest, PlayheadUsesOutputLatencyOnlyNotTheRecordingSum) {

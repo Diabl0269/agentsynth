@@ -1,16 +1,13 @@
-// PeaksFileTests.cpp
-//
-// TL6-5: synth::PeaksFile — the single place that knows the ".agpk" waveform-peaks sidecar format
-// (factored out of RecordTapModule, which now delegates to it — see RecordTapModule.h's updated
-// class comment). Three groups:
+// synth::PeaksFile — the single place that knows the ".agpk" waveform-peaks sidecar format
+// (RecordTapModule delegates to it — see RecordTapModule.h's class comment). Three groups:
 //
 //   1. Format round-trip and rejection — write()/read() agree on shape and values; a missing,
 //      too-short, bad-magic/version, or structurally-truncated file is rejected outright.
 //   2. Accumulator — the incremental bucket math (addSamples/flushPartial/reset), including the
 //      short-final-bucket rule, exercised directly and independent of any writer thread.
-//   3. RecordTapModule still writes byte-identical files after the refactor: a real capture's
-//      .agpk, read back through PeaksFile::read(), matches the same ramp math
-//      Tests/RecordTapTests.cpp already pins against the raw bytes.
+//   3. RecordTapModule writes byte-identical files: a real capture's .agpk, read back through
+//      PeaksFile::read(), matches the same ramp math Tests/RecordTapTests.cpp pins against the
+//      raw bytes.
 
 #include "../Source/Modules/RecordTapModule.h"
 #include "../Source/Timeline/PeaksFile.h"

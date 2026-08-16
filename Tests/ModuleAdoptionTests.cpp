@@ -75,7 +75,7 @@ const std::vector<ModuleLevelPolicy>& levelPolicies() {
         {"Poly MIDI", LevelPolicy::NoLevelByDesign, nullptr, "Pitch/gate CV output — scaling pitch CV detunes."},
         {"External MIDI", LevelPolicy::NoLevelByDesign, nullptr, "MIDI output."},
         {"Audio Input", LevelPolicy::NoLevelByDesign, nullptr,
-         "A tap on the device's input (TL6-2) — trimming what the interface delivers belongs on the "
+         "A tap on the device's input — trimming what the interface delivers belongs on the "
          "interface, and a level here would silently rescale a signal the user is monitoring."},
         {"Audio Output", LevelPolicy::NoLevelByDesign, nullptr, "Graph I/O node, not a ModuleBase."},
         {"Midi Input", LevelPolicy::NoLevelByDesign, nullptr, "Graph I/O node, not a ModuleBase."},

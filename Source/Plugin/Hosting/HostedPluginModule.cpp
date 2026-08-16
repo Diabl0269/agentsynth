@@ -20,7 +20,7 @@ HostedPluginModule::HostedPluginModule()
 
 HostedPluginModule::~HostedPluginModule() {
     // Stop listening BEFORE anything else: a queued latency update delivered into a half-destroyed
-    // module would be a use-after-free of everything below it (TL7-7).
+    // module would be a use-after-free of everything below it.
     detachInstanceListener();
 
     // The node is off the graph by now, so nothing can be mid-processBlock. Drop the audio-visible
@@ -85,7 +85,7 @@ void HostedPluginModule::loadPlugin(const PluginIdentity& identity, HostedPlugin
 
             if (instance == nullptr) {
                 // The identity is deliberately KEPT: a placeholder that still
-                // names its plugin is a valid state (TL7-3).
+                // names its plugin is a valid state.
                 module->statusMessage_ = error.isNotEmpty() ? error : juce::String("Plugin failed to load.");
                 return;
             }
@@ -101,13 +101,13 @@ void HostedPluginModule::unloadPlugin() {
     identity_ = {};
     pendingBlob_.reset();
     statusMessage_.clear();
-    // TL7-7: notified, unlike the publish edge — an unload takes the node's latency N -> 0 and the
+    // Notified, unlike the publish edge — an unload takes the node's latency N -> 0 and the
     // graph is still compensating the parallel paths for a plugin that is no longer there.
     setLatencyAndNotify(0);
 }
 
 //==============================================================================
-// Latency (TL7-7)
+// Latency
 //==============================================================================
 
 void HostedPluginModule::setLatencyAndNotify(int newLatency) {
@@ -154,7 +154,7 @@ void HostedPluginModule::publishInstance(std::unique_ptr<juce::AudioPluginInstan
 
     // Take whatever bus layout the instance reports as its default — we ask it what it is rather
     // than imposing one, because a plugin's preferred layout is the one it is guaranteed to render
-    // correctly. TL7-5 exposes layout choice to the user.
+    // correctly. A future feature could expose layout choice to the user.
     const int instanceInputs = instance->getTotalNumInputChannels();
     const int instanceOutputs = instance->getTotalNumOutputChannels();
 
@@ -190,7 +190,7 @@ void HostedPluginModule::publishInstance(std::unique_ptr<juce::AudioPluginInstan
     // and a publish that happens to keep the latency the same still needs that reconcile.
     setLatencySamples(raw->getLatencySamples());
 
-    // TL7-7: start listening BEFORE the instance goes live, so a plugin that moves its latency in
+    // Start listening BEFORE the instance goes live, so a plugin that moves its latency in
     // the very next instant cannot slip through the gap. A callback that lands before the store
     // below is harmless — it only ever triggers the AsyncUpdater, and the message-thread handler
     // re-reads whatever is live by the time it runs.
@@ -203,12 +203,12 @@ void HostedPluginModule::publishInstance(std::unique_ptr<juce::AudioPluginInstan
 
     statusMessage_.clear();
 
-    // TL7-5: the "new instance live" edge. Fires AFTER the instance is fully published, so a
+    // The "new instance live" edge. Fires AFTER the instance is fully published, so a
     // listener's getActiveInstanceForEditor() call sees it immediately.
     if (onInstanceChanged)
         onInstanceChanged();
 
-    // TL7-7: the completed-load edge, fired last and separately from the one above — the editor
+    // The completed-load edge, fired last and separately from the one above — the editor
     // window's observer and the owner's are different objects with different jobs. Synchronous on
     // purpose: publishInstance always runs from the backend's own posted callback, i.e. at
     // message-loop top level with this module fully consistent, so an owner that reconciles its
@@ -219,13 +219,13 @@ void HostedPluginModule::publishInstance(std::unique_ptr<juce::AudioPluginInstan
 }
 
 void HostedPluginModule::retireActiveInstance() {
-    // TL7-7: stop listening to the instance on its way out, and drop anything it had already
+    // Stop listening to the instance on its way out, and drop anything it had already
     // queued. Done first, so nothing can arrive from an instance we are in the middle of retiring.
     detachInstanceListener();
 
     activeInstance_.store(nullptr, std::memory_order_release);
 
-    // TL7-5: the "instance gone" edge — fired here, BEFORE the retired instance is moved into
+    // The "instance gone" edge — fired here, BEFORE the retired instance is moved into
     // retired_/reapRetired() below, which may free it SYNCHRONOUSLY if the module isn't currently
     // prepared (reapRetired()'s idle path). A listener (HostedPluginEditorWindow) holding an editor
     // built from getActiveInstanceForEditor() reacts to this synchronously and drops that editor
@@ -281,7 +281,7 @@ void HostedPluginModule::prepareToPlay(double sampleRate, int samplesPerBlock) {
     // callback stopped, so re-preparing in place is safe and keeps the published pointer valid.
     if (auto* instance = activeInstance_.load(std::memory_order_acquire)) {
         prepareInstance(*instance);
-        // Plain, NOT setLatencyAndNotify — and that is load-bearing, not an oversight (TL7-7).
+        // Plain, NOT setLatencyAndNotify — and that is load-bearing, not an oversight.
         // juce::AudioProcessorGraph prepares its nodes from INSIDE its own render-sequence rebuild
         // and reads every node's latency immediately afterwards, so the new value is already picked
         // up; asking the owner to rebuild from here would re-enter a rebuild that is in progress.
@@ -393,7 +393,7 @@ LogicalPort HostedPluginModule::mapOutputChannel(int rawChannel) const {
 }
 
 //==============================================================================
-// Instance parameters (TL7-6)
+// Instance parameters
 //==============================================================================
 
 juce::AudioProcessorParameter* HostedPluginModule::findInstanceParameter(const juce::String& paramId) const noexcept {

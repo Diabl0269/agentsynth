@@ -11,12 +11,11 @@ namespace synth {
 
 namespace {
 
-// TL5-6: the metronome is summed POST-graph, so a bounce — which captures exactly the graph's own
-// output buffer — would otherwise pick the click up (post-graph summing only keeps it out of
-// in-graph taps by construction; the bounce IS the post-graph output, so nothing structural saves it
-// here). Force BOTH the user toggle and the count-in forced-on flag off for the render and restore
-// them afterwards, on every exit path — including cancellation and every early return below — which
-// is exactly what an RAII guard is for.
+// The metronome is summed POST-graph, so a bounce — which captures exactly the graph's own output
+// buffer — would otherwise pick the click up (post-graph summing only keeps it out of in-graph
+// taps by construction; the bounce IS the post-graph output). Force BOTH the user toggle and the
+// count-in forced-on flag off for the render and restore them afterwards, on every exit path —
+// which is exactly what an RAII guard is for.
 struct MetronomeForceOffGuard {
     explicit MetronomeForceOffGuard(Metronome& metronomeIn) noexcept
         : metronome(metronomeIn)
