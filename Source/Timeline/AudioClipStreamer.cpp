@@ -174,6 +174,19 @@ void AudioClipStreamer::releaseAll() {
         retireStream(stream);
 }
 
+void AudioClipStreamer::invalidateAllStreams() {
+    // Release-paired with runOneSlice()'s acquire-check below and readFrames()'s acquire-load: by
+    // the time either sees this true, this store has already happened.
+    forceInvalidate_.store(true, std::memory_order_release);
+
+    // Wake the prefetch thread immediately rather than let it discover the flag on its next
+    // scheduled nap (up to 5 ms — see PrefetchClient::useTimeSlice). A no-op if it isn't running
+    // (paused for a test, or nothing has ever synced a snapshot) — pumpForTest()/the next real slice
+    // picks the flag up regardless.
+    if (!prefetchPaused_.load(std::memory_order_relaxed))
+        prefetchThread_.moveToFrontOfQueue(&prefetchClient_);
+}
+
 void AudioClipStreamer::startPrefetchThreadIfNeeded() {
     if (prefetchPaused_.load(std::memory_order_relaxed))
         return;
@@ -235,6 +248,15 @@ int AudioClipStreamer::readFrames(const StreamHandle* handle, std::int64_t sourc
     // The steering signal, published unconditionally — even on a miss, because a miss is precisely
     // when the prefetch thread most needs to know where playback went.
     handle->wantedFrame.store(sourceFrame, std::memory_order_release);
+
+    // TL6-9: a format change is in flight. Force silence rather than risk a coincidental hit on ring
+    // content filled under the OLD sample-rate-to-source-frame mapping — see invalidateAllStreams().
+    // This is checked BEFORE the window, so it holds even in the gap before the prefetch thread has
+    // had a chance to collapse anything.
+    if (forceInvalidate_.load(std::memory_order_acquire)) {
+        zeroAll();
+        return 0;
+    }
 
     float* ring = handle->ringData.load(std::memory_order_acquire);
     if (ring == nullptr || !handle->ready.load(std::memory_order_acquire)) {
@@ -346,6 +368,18 @@ int AudioClipStreamer::PrefetchClient::useTimeSlice() {
 
 bool AudioClipStreamer::runOneSlice() {
     applyPendingAssignments();
+
+    // TL6-9: collapse every open stream's window to wherever it was last asked to read (its
+    // wantedFrame — the steering signal readFrames() publishes on every call, hit or miss), THEN
+    // clear the flag. Ordering matters: the flag must not be cleared (and readFrames()'s silence
+    // gate lifted) until every stream has actually been collapsed, or a stream that hasn't been
+    // serviced yet this pass could still be read against its stale, pre-invalidate window.
+    if (forceInvalidate_.load(std::memory_order_acquire)) {
+        for (auto& stream : streams_)
+            if (stream.reader != nullptr)
+                collapseWindow(stream, stream.handle.wantedFrame.load(std::memory_order_acquire));
+        forceInvalidate_.store(false, std::memory_order_release);
+    }
 
     bool didWork = false;
     for (auto& stream : streams_)

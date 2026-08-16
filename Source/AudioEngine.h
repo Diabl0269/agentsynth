@@ -135,6 +135,15 @@ public:
     // reads it.
     bool consumeFeedbackGuardTripped() noexcept;
 
+    // TL6-9: the one-shot report that a device/sample-rate change happened while a take (audio or
+    // MIDI) was rolling — same exchange-back-to-false contract as consumeFeedbackGuardTripped(), so
+    // MainComponent's 10 Hz poll consumes it exactly once and finalizes whatever take was in flight
+    // through the SAME commit choke points a manual Record-off or a transport stop already use (a
+    // take must never span a format change — see handleStreamFormatChange()).
+    bool consumeFormatChangedDuringCapture() noexcept {
+        return formatChangedDuringCapture_.exchange(false, std::memory_order_relaxed);
+    }
+
     // Thresholds the feedback guard trips on. A block's peak sample magnitude (over the graph's
     // OUTPUT channels only, post-graph) staying at or above kFeedbackPeakThreshold for a running
     // total of kFeedbackSustainSeconds — measured in elapsed SAMPLES, not block count, so the timing
@@ -407,6 +416,15 @@ protected:
     // false), which is precisely the state a headless test wants.
     virtual void initialiseDevices(const juce::XmlElement* savedDeviceState);
 
+    // TL6-9 TEST SEAM: called once per step inside handleStreamFormatChange(), in the order those
+    // steps actually run (1 = after transport.prepare(), 2 = after metronome_.resetVoices(), 3 =
+    // after clipStreamer_.invalidateAllStreams(), 4 = after the in-flight-take check). A no-op in
+    // production — nothing calls it, so the optimizer removes it entirely — a test subclass
+    // overrides it to record what it observes (e.g. the transport's rate) at each step, which is
+    // what pins the ORDER those steps run in without instrumenting the production logic itself. See
+    // Tests/DeviceChangeTests.cpp's HookOrderPinned.
+    virtual void onFormatChangeStepForTest(int step) { juce::ignoreUnused(step); }
+
 private:
     const HostMode hostMode_;
 
@@ -456,6 +474,10 @@ private:
     // TL6-7. Set true by the guard (audio thread) on a trip; consumed (and reset) by
     // consumeFeedbackGuardTripped() (message thread poll).
     std::atomic<bool> feedbackGuardTripped_{false};
+    // TL6-9. Set true by handleStreamFormatChange() (the prepare path) when a take was capturing at
+    // the moment of the change; consumed (and reset) by consumeFormatChangedDuringCapture() (message
+    // thread poll).
+    std::atomic<bool> formatChangedDuringCapture_{false};
     // TL6-7, AUDIO THREAD ONLY: the guard's running "how many consecutive samples has the block
     // peak stayed >= kFeedbackPeakThreshold" counter, in samples so its timing is block-size-
     // agnostic. Reset to 0 whenever a block falls under the threshold, monitoring is disabled, or
@@ -471,6 +493,17 @@ private:
     std::atomic<const synth::AutomationRecordState*> automationRecordState_{nullptr};
 
     void createDefaultPatch();
+
+    // TL6-9: the one consolidated prepare-path hook, called from BOTH audioDeviceAboutToStart and
+    // prepareForHost whenever the engine's sample rate or block size changes. See
+    // docs/architecture.md's "Device & sample-rate changes (TL6-9)" for the full order argument;
+    // summary: transport FIRST (every other consumer, and every module's next processBlock, must
+    // see the new rate consistently), then the metronome's voice pool, then the clip streamer's
+    // ring invalidation, then the in-flight-take check that sets formatChangedDuringCapture_. Does
+    // NOT touch the channel-count-dependent scratch/latency-cache/input-snapshot prep — those stay
+    // separate calls in each of the two call sites because their sizes come from arguments this
+    // function does not take (numInputChannels/numOutputChannels).
+    void handleStreamFormatChange(double newRate, int newBlockSize);
 
     // The one place the graph is actually clocked. Both the standalone device callback and the
     // hosted processBlock funnel through here so master-mute semantics (zero-fill AFTER the graph

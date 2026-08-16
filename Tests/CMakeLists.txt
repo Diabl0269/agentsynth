@@ -140,6 +140,7 @@ add_executable(Tests
     OfflineTransportDriverTests.cpp
     BounceExporterTests.cpp
     MetronomeTests.cpp
+    DeviceChangeTests.cpp
     TimelineE2ETests.cpp
     PatchDocumentTests.cpp
     ProjectBundleTests.cpp

@@ -11,6 +11,7 @@
 #include "Modules/MidiKeyboardModule.h"
 #include "Modules/OscillatorModule.h"
 #include "Modules/PolyMidiModule.h"
+#include "Modules/RecordTapModule.h"
 #include "Modules/SequencerModule.h"
 #include "Modules/VCAModule.h"
 #include "PresetManager.h"
@@ -970,6 +971,55 @@ void AudioEngine::prepareSliceScratch(int numChannels, int blockSize) {
     sliceMidi_.ensureSize(static_cast<std::size_t>(std::max(blockSize, kAutomationSliceSamples)) * 16u);
 }
 
+void AudioEngine::handleStreamFormatChange(double newRate, int newBlockSize) {
+    // TL6-9. Order matters — see docs/architecture.md's "Device & sample-rate changes (TL6-9)".
+    //
+    // 1. TRANSPORT FIRST: every other consumer below, and every module's NEXT processBlock, must see
+    //    the new rate consistently once this call returns. TransportService::prepare() keeps the
+    //    beat (not the sample) canonical — TL1 — so the musical position survives untouched; only
+    //    the sample-domain mirror of it moves.
+    transport.prepare(newRate, newBlockSize);
+    onFormatChangeStepForTest(1);
+
+    // 2. METRONOME: a voice ringing across the boundary was computed for the OLD rate (see
+    //    Metronome::startClick) and would otherwise continue at the wrong pitch and the wrong
+    //    length. See Metronome::resetVoices().
+    metronome_.resetVoices();
+    onFormatChangeStepForTest(2);
+
+    // 3. STREAMER: force every Track Audio ring to miss until the prefetch thread has refilled it at
+    //    the NEW mapping, rather than risk a coincidental hit on content filled under the OLD one.
+    //    See AudioClipStreamer::invalidateAllStreams().
+    clipStreamer_.invalidateAllStreams();
+    onFormatChangeStepForTest(3);
+
+    // 4. IN-FLIGHT TAKES: neither an audio take's WAV (fixed header rate, written at whatever rate
+    //    was active at startCapture()) nor a MIDI take's beat-domain events can honestly span a
+    //    format change — an audio take that kept recording across the boundary would mix two actual
+    //    sample rates under one header, and there is no clean way to splice that. Rather than try,
+    //    flag it here (at the exact moment of the change) so MainComponent's 10 Hz poll finalizes it
+    //    through the SAME commit choke points a manual Record-off or a transport stop already use —
+    //    see consumeFormatChangedDuringCapture().
+    bool anyCapturing = false;
+    for (auto* node : mainProcessorGraph.getNodes()) {
+        if (node == nullptr)
+            continue;
+        if (auto* tap = dynamic_cast<RecordTapModule*>(node->getProcessor())) {
+            if (tap->isCapturing()) {
+                anyCapturing = true;
+                break;
+            }
+        }
+    }
+    if (!anyCapturing) {
+        if (auto* recorder = midiCaptureSink_.load(std::memory_order_relaxed))
+            anyCapturing = recorder->isRecording();
+    }
+    if (anyCapturing)
+        formatChangedDuringCapture_.store(true, std::memory_order_relaxed);
+    onFormatChangeStepForTest(4);
+}
+
 void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device) {
     if (device) {
         const int numInputChannels = device->getActiveInputChannels().countNumberOfSetBits();
@@ -979,8 +1029,9 @@ void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device) {
 
         mainProcessorGraph.setPlayConfigDetails(numInputChannels, numOutputChannels, sampleRate, blockSize);
         // Before the graph: nodes read the playhead from their first prepared block onwards, so the
-        // transport must already be on the device's sample rate when they do.
-        transport.prepare(sampleRate, blockSize);
+        // transport must already be on the device's sample rate when they do. TL6-9: this also
+        // resets the metronome, invalidates the clip streamer and flags any in-flight take.
+        handleStreamFormatChange(sampleRate, blockSize);
         // TL6-1: both scratches are sized against max(in, out) — that is the channel count the
         // render buffer has once the device's input is copied into it, so sizing either on the
         // output count alone would make a 2-in/1-out device fall out of the sliced path (and, for
@@ -1078,8 +1129,9 @@ void AudioEngine::prepareForHost(double sampleRate, int blockSize, int numInputC
     midiMessageCollector.reset(sampleRate);
     mainProcessorGraph.setPlayConfigDetails(numInputChannels, numOutputChannels, sampleRate, blockSize);
     // Before the graph, for the same reason as audioDeviceAboutToStart: the musical position is
-    // preserved across the rate change, the sample position is re-derived.
-    transport.prepare(sampleRate, blockSize);
+    // preserved across the rate change, the sample position is re-derived. TL6-9: this also resets
+    // the metronome, invalidates the clip streamer and flags any in-flight take.
+    handleStreamFormatChange(sampleRate, blockSize);
     prepareSliceScratch(std::max(numInputChannels, numOutputChannels), blockSize);
     // TL6-2: hosted mode takes the same input snapshot as the device callback. The host's buffer is
     // one in/out buffer the graph renders over in place, so the input has to be copied out of it

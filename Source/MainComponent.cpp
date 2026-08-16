@@ -653,6 +653,10 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
             }
             take.punchInBeat = punchInBeat;
             take.capturing = true;
+            // TL6-9: frozen NOW, not re-read at commit time — see the AudioTake field comments.
+            take.captureSampleRate = rate;
+            take.captureBpm = snap.bpm > 0.0 ? snap.bpm : 120.0;
+            take.captureRecordingLatencySamples = audioEngine.getRecordingLatencySamples();
             audioTake_ = take;
         } else {
             // punchInBeat is BOTH the recorder's own bookkeeping and (TL5-6) the audio-thread filter
@@ -907,6 +911,22 @@ void MainComponent::timerCallback() {
     // sample-accurate anchor. Nothing about recording is decided on this timer any more.
     if (wasTransportPlaying_ && !position.playing && audioTake_.capturing)
         commitAudioRecording();
+
+    // TL6-9: a device/sample-rate change strands whatever take was rolling — unlike the two commit-
+    // on-stop checks above, the transport typically keeps PLAYING right through a format change (see
+    // TransportService::prepare), so neither of those edge-triggered checks would ever fire. Consumed
+    // once here (exchange-back-to-false, same contract as consumeFeedbackGuardTripped) and routed
+    // through the SAME commit choke points a manual Record-off or a transport stop already use — see
+    // AudioEngine::handleStreamFormatChange, which is what actually sets the flag, at the moment of
+    // the change. At most one of the two checks below ever fires: recording never runs both an audio
+    // and a MIDI take at once (first-armed-wins — see onRecordToggled).
+    if (audioEngine.consumeFormatChangedDuringCapture()) {
+        if (audioTake_.capturing)
+            commitAudioRecording();
+        if (midiRecorder.isRecording())
+            commitMidiRecording();
+        statusBar.showMessage("Recording stopped: audio device changed");
+    }
 
     wasTransportPlaying_ = position.playing;
 
@@ -2136,21 +2156,27 @@ void MainComponent::commitAudioRecording() {
     if (!result.ok || result.lengthSamples <= 0)
         return;
 
-    // TL6-8: where the take lands. Samples -> beats through the transport's own tempo (a take is
-    // bounded by the transport it was recorded against, so its rate/bpm are the right conversion
-    // even if the device changed since — which would have stopped the take anyway), and the whole
-    // of the arithmetic lives in synth::computeTakePlacement so it can be asserted to the sample
-    // without going through this component. See Source/Timeline/TakePlacement.h.
-    const auto snap = audioEngine.getTransport().getPositionSnapshot();
+    // TL6-8: where the take lands. Samples -> beats through the transport's tempo. TL6-9: the rate,
+    // bpm and round-trip latency used here are the ones FROZEN at record-on (take.captureSampleRate /
+    // captureBpm / captureRecordingLatencySamples), not read live off the transport/engine — a
+    // device/sample-rate change mid-take forces an early commit (see
+    // AudioEngine::handleStreamFormatChange), and by the time that commit reaches here the engine may
+    // already be on the NEW rate while every anchor field above (captureStartTimelineSample, the WAV
+    // itself) is still in the OLD one. Reading live values would silently convert an OLD-rate sample
+    // count with a NEW-rate samples-per-beat, which is wrong by exactly the rate ratio. The frozen
+    // fields make this correct unconditionally: for the ordinary take (no rate change), they equal
+    // the live values anyway. The whole of the arithmetic lives in synth::computeTakePlacement so it
+    // can be asserted to the sample without going through this component. See
+    // Source/Timeline/TakePlacement.h.
     synth::TakePlacementInput placementInput;
     placementInput.takeLengthSamples = result.lengthSamples;
     placementInput.captureStartValid = result.captureStartValid;
     placementInput.captureStartTimelineSample = result.captureStartTimelineSample;
     placementInput.captureStartBlockOffset = result.captureStartBlockOffset;
     placementInput.punchInBeat = take.punchInBeat;
-    placementInput.recordingLatencySamples = audioEngine.getRecordingLatencySamples();
-    placementInput.sampleRate = snap.sampleRate > 0.0 ? snap.sampleRate : 44100.0;
-    placementInput.bpm = snap.bpm > 0.0 ? snap.bpm : 120.0;
+    placementInput.recordingLatencySamples = take.captureRecordingLatencySamples;
+    placementInput.sampleRate = take.captureSampleRate > 0.0 ? take.captureSampleRate : 44100.0;
+    placementInput.bpm = take.captureBpm > 0.0 ? take.captureBpm : 120.0;
     placementInput.minClipLengthBeats = kMinAudioClipLengthBeats;
 
     const auto placement = synth::computeTakePlacement(placementInput);

@@ -200,6 +200,27 @@ public:
      *  be rendering. Idempotent. */
     void releaseAll();
 
+    // ---- Prepare-path (TL6-9), NOT the audio thread and NOT the prefetch thread ----
+
+    /** Called from `AudioEngine::handleStreamFormatChange` (`audioDeviceAboutToStart` /
+     *  `prepareForHost`) whenever the engine's sample rate or block size changes. Every ring's
+     *  content was filled to serve the OLD sample-rate-to-source-frame mapping
+     *  (`TimelineAudioSourceModule::renderClip` recomputes `sourceFrame` from the engine's CURRENT
+     *  sample rate every block, so a rate change is a discontinuity in that mapping, not a gentle
+     *  drift). A miss self-heals already (see the class comment), but a miss is not guaranteed: the
+     *  new mapping could coincidentally land inside the OLD window's still-valid range, which would
+     *  read back real PCM samples at the WRONG position — wrong content, not silence. This call
+     *  forces every read to be a miss (silence) until the prefetch thread has collapsed and refilled
+     *  each ring at the new mapping, and wakes the prefetch thread immediately (rather than waiting
+     *  for its next scheduled nap) so that refill starts as soon as possible.
+     *
+     *  Thread-safe to call from any non-audio, non-prefetch thread: it only sets an atomic flag the
+     *  prefetch thread consumes on its own next slice (never touches ringData/windowStart/windowEnd
+     *  directly, which are prefetch-thread-private) and the audio thread gates `readFrames` on
+     *  directly (so the silence guarantee holds even before the prefetch thread has caught up). Safe
+     *  (and a no-op the next slice) to call with no streams open. */
+    void invalidateAllStreams();
+
     // ---- Audio thread (lock-free, allocation-free, never blocks) ----
 
     /** The slot currently serving `clipId`, or null. 32 acquire-loads; no allocation, no locks. */
@@ -321,6 +342,12 @@ private:
     juce::AudioFormatManager formatManager_;
 
     std::atomic<bool> prefetchPaused_{false};
+
+    // TL6-9: set by invalidateAllStreams() (release), any non-audio/non-prefetch thread. Cleared by
+    // the prefetch thread (runOneSlice()) only after it has collapsed every open stream's window —
+    // see invalidateAllStreams()'s comment. Also gates readFrames() directly so the silence
+    // guarantee holds even in the gap before the prefetch thread has run.
+    std::atomic<bool> forceInvalidate_{false};
 
     // De-interleaving scratch for the fill, sized once in the constructor. Prefetch thread only.
     juce::AudioBuffer<float> fillScratch_;

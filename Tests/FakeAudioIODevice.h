@@ -27,12 +27,21 @@ public:
      *         kFakeDeviceInputLatency every pre-TL6-8 user already asserts against.
      *  @param outputLatency ditto for getOutputLatencyInSamples(). TL6-8's alignment tests pass
      *         0/0 to prove "zero-latency devices shift nothing", so both are settable rather than
-     *         fixed constants. */
+     *         fixed constants.
+     *  @param sampleRate what getCurrentSampleRate() reports — TL6-9's device-change tests construct
+     *         a SECOND fake at a different rate to simulate a mid-session device switch (the same
+     *         instance can't change rate: a real device restart is exactly "stop this one, start a
+     *         different juce::AudioIODevice", which is what audioDeviceAboutToStart(&anotherFake)
+     *         models). Defaults to kFakeDeviceSampleRate so every existing caller is unaffected.
+     *  @param blockSize   ditto for getCurrentBufferSizeSamples() / getDefaultBufferSize(). */
     FakeAudioIODevice(int numInputChannels, int numOutputChannels, int inputLatency = kFakeDeviceInputLatency,
-                      int outputLatency = kFakeDeviceOutputLatency)
+                      int outputLatency = kFakeDeviceOutputLatency, double sampleRate = kFakeDeviceSampleRate,
+                      int blockSize = kFakeDeviceBlockSize)
         : juce::AudioIODevice("Fake", "Test")
         , inputLatency_(inputLatency)
-        , outputLatency_(outputLatency) {
+        , outputLatency_(outputLatency)
+        , sampleRate_(sampleRate)
+        , blockSize_(blockSize) {
         if (numInputChannels > 0)
             activeInputs.setRange(0, numInputChannels, true);
         if (numOutputChannels > 0)
@@ -42,9 +51,9 @@ public:
     juce::StringArray getOutputChannelNames() override { return channelNames("Out", activeOutputs); }
     juce::StringArray getInputChannelNames() override { return channelNames("In", activeInputs); }
 
-    juce::Array<double> getAvailableSampleRates() override { return {kFakeDeviceSampleRate}; }
-    juce::Array<int> getAvailableBufferSizes() override { return {kFakeDeviceBlockSize}; }
-    int getDefaultBufferSize() override { return kFakeDeviceBlockSize; }
+    juce::Array<double> getAvailableSampleRates() override { return {sampleRate_}; }
+    juce::Array<int> getAvailableBufferSizes() override { return {blockSize_}; }
+    int getDefaultBufferSize() override { return blockSize_; }
 
     juce::String open(const juce::BigInteger&, const juce::BigInteger&, double, int) override { return {}; }
     void close() override {}
@@ -54,8 +63,8 @@ public:
     bool isPlaying() override { return false; }
     juce::String getLastError() override { return {}; }
 
-    int getCurrentBufferSizeSamples() override { return kFakeDeviceBlockSize; }
-    double getCurrentSampleRate() override { return kFakeDeviceSampleRate; }
+    int getCurrentBufferSizeSamples() override { return blockSize_; }
+    double getCurrentSampleRate() override { return sampleRate_; }
     int getCurrentBitDepth() override { return 32; }
 
     juce::BigInteger getActiveOutputChannels() const override { return activeOutputs; }
@@ -74,6 +83,8 @@ private:
 
     const int inputLatency_;
     const int outputLatency_;
+    const double sampleRate_;
+    const int blockSize_;
     juce::BigInteger activeInputs, activeOutputs;
 };
 

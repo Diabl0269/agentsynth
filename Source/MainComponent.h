@@ -271,6 +271,20 @@ private:
         juce::File peaksFile;     // its .agpk sidecar
         juce::String assetRef;    // what the committed clip stores (see synth::Clip::assetRef)
         juce::AudioProcessorGraph::NodeID tapNode;
+
+        // TL6-9: the transport's rate/tempo and the engine's round-trip latency, frozen at the
+        // moment the capture started — NOT re-read at commit time. Recording anchors
+        // (captureStartTimelineSample, the WAV itself) are all in THIS rate's sample domain; a
+        // device/sample-rate change mid-take (which forces an early commit — see
+        // AudioEngine::handleStreamFormatChange) would otherwise leave commitAudioRecording() reading
+        // the engine's CURRENT (post-change) sampleRate/bpm/latency to convert an anchor that was
+        // captured under the OLD ones, silently mixing two rates into one beat conversion. Freezing
+        // these here makes the commit rate-independent unconditionally — a no-op for the (overwhelmingly
+        // common) case where the rate never changes during a take, since these values never differ
+        // from the live ones then.
+        double captureSampleRate = 44100.0;
+        double captureBpm = 120.0;
+        int captureRecordingLatencySamples = 0;
     };
 
     // The master tap, found or created: a "Rec Tap" node spliced IN FRONT OF the Audio Output node,

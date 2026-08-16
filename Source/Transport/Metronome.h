@@ -83,6 +83,18 @@ public:
     void setForcedOn(bool forced) noexcept { forcedOn_.store(forced, std::memory_order_relaxed); }
     bool isForcedOn() const noexcept { return forcedOn_.load(std::memory_order_relaxed); }
 
+    // TL6-9: called from AudioEngine::handleStreamFormatChange when the engine's sample rate
+    // changes. A voice ringing across the boundary carries a `phaseInc`/`decayMul` computed for the
+    // OLD rate (see startClick) — continuing to render it against the NEW rate's sample clock would
+    // make it audibly the wrong pitch AND the wrong length. Silencing it outright is simpler (and no
+    // more audible a discontinuity) than rescaling in place: the next beat crossing starts a fresh
+    // voice at the new rate exactly as normal. Same "audio thread, no allocation" contract as
+    // renderClicks() — called from the prepare path, which never overlaps a render pass.
+    void resetVoices() noexcept {
+        for (auto& voice : voices_)
+            voice.samplesRemaining = 0;
+    }
+
     // Diagnostics / tests only — not part of the audio contract. Counts voices still ringing.
     int getActiveVoiceCountForTest() const noexcept {
         int count = 0;
