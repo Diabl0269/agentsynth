@@ -289,6 +289,15 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // Both outlive aiService (declaration order: timelineDoc, then audioEngine's referent, then
     // aiService), so this pointer never dangles for aiService's lifetime.
     aiService.setTimelineContext(&timelineDoc, &audioEngine.getTransport());
+
+    // TL8-4: the WRITE half. The service only ever holds the doc as const (it is a context reader),
+    // and it owns no undo manager for the timeline, so the host supplies the apply path — the same
+    // objects every other timeline edit in this class goes through, which is what puts an AI-applied
+    // batch on the one shared undo stack alongside the user's own edits. `this` is safe to capture:
+    // aiService is a member destroyed with us, and it clears the callback with it.
+    aiService.setTimelineOpsApplyCallback([this](const juce::var& envelope) {
+        return synth::TimelineOps::apply(envelope, timelineDoc, audioEngine.getGraph(), undoManager);
+    });
 #endif
 
     // Wire the account row/dialog up BEFORE attemptSilentSignIn() so the wiring is live for any

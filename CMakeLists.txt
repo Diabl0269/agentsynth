@@ -148,6 +148,8 @@ add_library(Core STATIC
     Source/Timeline/PeaksFile.h
     Source/Timeline/TimelineDoc.cpp
     Source/Timeline/TimelineDoc.h
+    Source/Timeline/TimelineOps.cpp
+    Source/Timeline/TimelineOps.h
     Source/Timeline/TimelineReconciler.cpp
     Source/Timeline/TimelineReconciler.h
     Source/Timeline/TimelineSnapshot.cpp

@@ -91,6 +91,8 @@ private:
 
     class MessageBubble;
     class PatchCard;
+    // TL8-4's sibling of PatchCard — same card conventions, one payload type over.
+    class TimelineCard;
 
     // ---- Spinner component -----------------------------------------------
     // A tiny 8×8 dot that pulses (alpha 0.3→1.0→0.3) via AnimationDriver.
@@ -204,6 +206,15 @@ private:
         // constructor, so a New Chat or app restart drops it along with the rest of that turn's
         // transient UI state (mirrors how Cancel-button/spinner state is session-only).
         bool showUpgradeAction = false;
+
+        // TL8-4: the TIMELINE half of a suggestion, independent of jsonPatch — a response may carry
+        // a patch, a timelineOps envelope, or both, and each gets its own card and its own Apply.
+        // `timelineOpsJson` is the raw envelope, re-parsed on Apply; EMPTY when there is nothing
+        // appliable, including when the envelope arrived but was rejected by validation (the
+        // rejection is still shown, in timelineOpsPreview, rather than dropped). `timelineOpsPreview`
+        // is what the card displays: the validated summary, or the reason it was refused.
+        juce::String timelineOpsJson;
+        juce::String timelineOpsPreview;
     };
     std::vector<MessageData> messages;
 

@@ -51,7 +51,22 @@ Here are some examples of effective prompts you can use:
 *   "Give me a sequence that plays C3, E3, G3, C4 in a loop."
 *   "I want a percussive sound, similar to a wood block. Use a short decay."
 
-## 4. Troubleshooting
+## 4. Timeline Changes
+
+The AI can also arrange, not just patch. Ask it to add a track, place clips, or draw automation
+("add a bass track and put a four-bar riff at the top", "automate the filter cutoff opening across
+the first 8 bars") and it answers with a **Timeline Changes** card instead of — or alongside — the
+usual patch card. The card shows a plain-English summary of exactly what it would do ("Adds midi
+track "Bass" (unbound - bind it in the timeline panel); places 1 clip (8 notes) at 0-4 on "Bass""),
+and nothing touches your arrangement until you press **Apply timeline changes**. The whole batch
+lands as a single edit, so one Cmd+Z takes all of it back. Two things it deliberately leaves to
+you: a new track arrives **unbound** — pick the module it should play through in the timeline
+panel's track header — and it never imports or records audio, so it only ever writes MIDI clips and
+automation, never audio clips. If a suggestion can't be applied (it names a track you don't have,
+or a value outside a parameter's range), the card says so and offers no button rather than failing
+silently.
+
+## 5. Troubleshooting
 
 *   **"Error: No AI provider selected."**: In local (Ollama) mode, ensure you have selected an AI model from the dropdown. If no models appear, check if your Ollama server is running and accessible at `http://localhost:11434`. (In hosted mode the picker shows "Model chosen automatically" instead — that's expected, not an error.)
 *   **"Error fetching models"**: This only appears in local (Ollama) mode, and means Agent Synth couldn't connect to the Ollama server. Verify the server is running and there are no firewall issues. Check the application logs for "AI Discovery Error" messages.

@@ -93,10 +93,74 @@ private:
 };
 
 //==============================================================================
+// TL8-4. PatchCard's sibling, kept to its conventions (header label + a coloured apply button on
+// the header row) with the one honest difference: a timeline suggestion has a validated PREVIEW to
+// show — "Adds midi track "Bass"; places 1 clip (8 notes) at 0-4 on "Bass"" — rather than raw JSON
+// to expand, so the body is that sentence instead of a JSON dump.
+//
+// The apply callback is EMPTY when the envelope failed validation; the card then shows the reason
+// and offers no button, because a suggestion that cannot be applied must still say why (the same
+// rule that stops applyPatch swallowing a rejection) but must not look clickable.
+class AIChatComponent::TimelineCard : public juce::Component {
+public:
+    TimelineCard(const juce::String& preview, std::function<void()> applyCallback)
+        : previewText(preview) {
+
+        addAndMakeVisible(headerLabel);
+        headerLabel.setText("Timeline Changes", juce::dontSendNotification);
+        headerLabel.setFont(juce::Font(14.0f, juce::Font::bold));
+        headerLabel.setColour(juce::Label::textColourId, juce::Colours::lightskyblue);
+
+        if (applyCallback) {
+            applyButton = std::make_unique<juce::TextButton>();
+            applyButton->setButtonText("Apply timeline changes");
+            applyButton->setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF1F4E63));
+            applyButton->onClick = std::move(applyCallback);
+            addAndMakeVisible(*applyButton);
+        }
+
+        addAndMakeVisible(previewLabel);
+        previewLabel.setText(previewText, juce::dontSendNotification);
+        previewLabel.setFont(juce::Font(12.0f));
+        previewLabel.setMinimumHorizontalScale(1.0f);
+        previewLabel.setJustificationType(juce::Justification::topLeft);
+        previewLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.8f));
+    }
+
+    void resized() override {
+        auto b = getLocalBounds().reduced(5);
+        auto header = b.removeFromTop(kHeaderHeight);
+        if (applyButton)
+            applyButton->setBounds(header.removeFromRight(kApplyButtonWidth).reduced(2));
+        headerLabel.setBounds(header);
+        previewLabel.setBounds(b);
+    }
+
+    // Measured against the width the card will actually be laid out at, so the sentence never
+    // renders clipped — the same GlyphArrangement measurement MessageBubble does for its own text.
+    int getRequiredHeight(int width) const {
+        juce::GlyphArrangement ga;
+        ga.addJustifiedText(previewLabel.getFont(), previewText, 0.0f, 0.0f,
+                            static_cast<float>(juce::jmax(40, width - 10)), juce::Justification::left);
+        return kHeaderHeight + juce::jmax(16, static_cast<int>(ga.getBoundingBox(0, -1, true).getHeight())) + 10;
+    }
+
+private:
+    static constexpr int kHeaderHeight = 25;
+    static constexpr int kApplyButtonWidth = 160;
+
+    juce::String previewText;
+    juce::Label headerLabel;
+    juce::Label previewLabel;
+    std::unique_ptr<juce::TextButton> applyButton;
+};
+
+//==============================================================================
 class AIChatComponent::MessageBubble : public juce::Component {
 public:
     MessageBubble(const MessageData& data, std::function<void(const juce::String&)> applyPatch, bool isMerge,
-                  std::function<void(const juce::URL&)> urlOpener) {
+                  std::function<void(const juce::URL&)> urlOpener,
+                  std::function<void(const juce::String&)> applyTimelineOps) {
         role = data.role;
         text = data.text;
 
@@ -109,6 +173,17 @@ public:
             patchCard = std::make_unique<PatchCard>(
                 data.jsonPatch, [applyPatch, json = data.jsonPatch]() { applyPatch(json); }, isMerge);
             addAndMakeVisible(*patchCard);
+        }
+
+        // TL8-4. Independent of the patch card above: a response carrying both gets both cards, and
+        // the user applies each on its own terms. No apply callback when the envelope is empty —
+        // that is the rejected case, where the preview holds the reason instead of a summary.
+        if (data.timelineOpsPreview.isNotEmpty()) {
+            std::function<void()> onApply;
+            if (data.timelineOpsJson.isNotEmpty() && applyTimelineOps)
+                onApply = [applyTimelineOps, envelope = data.timelineOpsJson] { applyTimelineOps(envelope); };
+            timelineCard = std::make_unique<TimelineCard>(data.timelineOpsPreview, std::move(onApply));
+            addAndMakeVisible(*timelineCard);
         }
 
         if (data.showUpgradeAction) {
@@ -148,6 +223,11 @@ public:
             b.removeFromBottom(5);
         }
 
+        if (timelineCard) {
+            timelineCard->setBounds(b.removeFromBottom(timelineCard->getRequiredHeight(b.getWidth())));
+            b.removeFromBottom(5);
+        }
+
         if (upgradeButton) {
             upgradeButton->setBounds(b.removeFromBottom(kUpgradeButtonHeight));
             b.removeFromBottom(5);
@@ -170,6 +250,10 @@ public:
             height += 10 + patchCard->getRequiredHeight();
         }
 
+        if (timelineCard) {
+            height += 5 + timelineCard->getRequiredHeight(contentWidth);
+        }
+
         if (upgradeButton) {
             height += 5 + kUpgradeButtonHeight;
         }
@@ -184,6 +268,7 @@ private:
     juce::String text;
     juce::Label textLabel;
     std::unique_ptr<PatchCard> patchCard;
+    std::unique_ptr<TimelineCard> timelineCard;
     std::unique_ptr<juce::TextButton> upgradeButton;
 };
 
@@ -600,7 +685,34 @@ void AIChatComponent::sendButtonClicked() {
                         }
                     }
 
-                    self->messages.push_back({"assistant", cleanText.trim(), json});
+                    // TL8-4: the timeline half of the SAME response, extracted independently of the
+                    // patch half — a model may send a patch, a timelineOps envelope, or both, and
+                    // "timelineOps" is a sibling key, never nested inside the patch. Offered only
+                    // when a live timeline is wired in, and under the identical posture the patch
+                    // card is under: validate NOW so the user reads a checked summary, apply only
+                    // when they click.
+                    juce::String timelineOpsJson;
+                    juce::String timelineOpsPreview;
+#if SYNTH_ENABLE_TIMELINE
+                    if (self->aiService.hasTimelineContext()) {
+                        const juce::var envelope = AIIntegrationService::extractTimelineOps(response);
+                        if (!envelope.isVoid()) {
+                            const auto preview = self->aiService.previewTimelineOps(envelope);
+                            if (preview.ok) {
+                                timelineOpsJson = juce::JSON::toString(envelope);
+                                timelineOpsPreview = preview.previewText;
+                            } else {
+                                // Shown, never swallowed — but with no Apply button, since there is
+                                // nothing valid to apply.
+                                timelineOpsPreview =
+                                    "These timeline changes were rejected and were NOT applied: " + preview.message;
+                            }
+                        }
+                    }
+#endif
+
+                    self->messages.push_back({"assistant", cleanText.trim(), json, /*isExpanded=*/false,
+                                              /*showUpgradeAction=*/false, timelineOpsJson, timelineOpsPreview});
                 } else if (aiResponse.error.kind == AIProvider::AIErrorKind::Quota) {
                     // The server's message is already a complete, user-facing sentence — no
                     // "Error: " prefix, same precedent as TrialExhausted/ServiceCapacityExceeded.
@@ -726,7 +838,32 @@ void AIChatComponent::updateChatDisplay() {
                         refreshLater();
                     });
             },
-            isMerge, urlOpener);
+            isMerge, urlOpener,
+            // TL8-4's Apply. Deliberately NOT a retry loop like the patch path's: a rejected
+            // envelope never reaches this button (the card offers no button at all in that case),
+            // so the only failures left here are the ones the live doc/graph moved under — worth
+            // reporting, not worth re-asking the model about.
+            [this](const juce::String& envelopeJson) {
+#if SYNTH_ENABLE_TIMELINE
+                juce::Component::SafePointer<AIChatComponent> safeThis(this);
+                const auto result = aiService.applyTimelineOps(juce::JSON::parse(envelopeJson));
+                if (result.ok)
+                    return;
+
+                // Same rule as a rejected patch: an Apply that does nothing and says nothing is
+                // indistinguishable from a broken button.
+                messages.push_back({"assistant",
+                                    "Could not apply these timeline changes: " +
+                                        (result.message.isNotEmpty() ? result.message : juce::String("unknown error")),
+                                    ""});
+                juce::MessageManager::callAsync([safeThis] {
+                    if (auto* self = safeThis.getComponent())
+                        self->updateChatDisplay();
+                });
+#else
+                juce::ignoreUnused(envelopeJson);
+#endif
+            });
         messageList.addAndMakeVisible(bubble);
     }
 

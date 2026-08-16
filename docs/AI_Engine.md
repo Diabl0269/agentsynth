@@ -516,6 +516,98 @@ orphaned states, track-granularity truncation, the empty-doc case, and the file-
 plus a seam-level test that the injected request gains an "## Arrangement" section exactly when
 `buildPatchAugmentedContent` should add one).
 
+## 5e. Timeline operations (TL8-4)
+
+`synth::TimelineOps` (`Source/Timeline/TimelineOps.h/.cpp`) is the **write** half of the timeline
+seam: discrete, validated, previewable operations a model may ask for, applied to `TimelineDoc` as
+one undo step. §5c is the gate they go through; §5d is the read-only context that lets a model know
+what to ask for in the first place.
+
+### The envelope
+
+```json
+{ "timelineOps": [
+  { "op": "addTrack",   "kind": "midi", "name": "Bass" },
+  { "op": "placeClips", "track": "Bass",
+    "clips": [ { "startBeat": 0, "lengthBeats": 4, "name": "A",
+                 "notes": [ { "startBeat": 0, "lengthBeats": 1,
+                              "pitch": 36, "velocity": 100, "channel": 1 } ] } ] },
+  { "op": "writeLane",  "nodeUuid": "…", "paramId": "cutoff",
+    "points": [ { "beat": 0, "value": 800, "tension": 0, "curve": 1 } ] }
+] }
+```
+
+This is the **client** half of the capability. TL8-2 (platform) owns the **server** half — the
+capability schema the model actually emits against, the counterpart of `getPatchSchema` for
+patches. Nothing here trusts that schema: an envelope is re-validated locally whatever produced it.
+
+| Op | What it does | What it deliberately does not do |
+| --- | --- | --- |
+| `addTrack` | Creates the **doc** track. `kind` is `"midi"` or `"automation"`. | No graph node, no Track In wiring — binding a track to a module is a routing decision about the user's own patch, so it stays a user/host gesture. The new track is unbound and the preview says so. `"audio"` is not offered: an audio track needs an asset, and assets are trusted-only. |
+| `placeClips` | Places clips (and their clip-relative notes) on a MIDI track, targeted by exact name or `{"index": N}`. | A name matching no track — or more than one — rejects the whole batch rather than guessing. |
+| `writeLane` | Find-or-creates the lane for `(nodeUuid, paramId)` on the document's Automation track (creating that track if there is none — the TL5-9 rule, exactly as `MainComponent::automateParameter` does it), then REPLACES every point in the written span (min..max beat of the payload, inclusive) in one `editBreakpoints` call. | Never sets a record mode; never widens a range. |
+
+### Sibling, never nested
+
+`timelineOps` sits **beside** a patch, never inside one. `validatePatch(trusted=false)` still refuses
+a `"timeline"` key in patch JSON and always will (§5c's two-door model) — `"timelineOps"` is a
+different key, so a single structured response may legitimately carry a patch and an ops envelope
+on the same object, and each is validated and applied by its own gate with its own Apply button.
+Pinned by `TimelineOpsTest.PatchGrammarStillClosed`: the document dialect smuggled in under
+`"timeline"` is refused, while the same intent as a sibling `timelineOps` key is accepted by both
+halves.
+
+### Trust posture — identical to the patch card
+
+`validate()` → preview → the user clicks Apply → `apply()`. Nothing is applied because a model asked
+for it; a person agrees to it first, having read a summary of what it does.
+
+-   `validate()` mutates nothing and returns `previewText`, a deterministic sentence —
+    `Adds midi track "Bass" (unbound - bind it in the timeline panel); places 1 clip (8 notes) at
+    0-4 on "Bass"; writes 12 points to Filter cutoff over beats 0-11`. A bound module is named by
+    its **display name**, never its uuid (§5d's rule, on the write path).
+-   The per-op checks are `validateTimeline`'s, **reused rather than re-stated**: the same caps
+    (`TimelineDoc::kMax*`, `kMaxTotalNotesUntrusted`, `kMaxPpqUntrusted`), the same bounds, and the
+    same rule that untrusted input is **rejected where a trusted path would clamp** — pitch 200 is
+    refused, not rewritten to 127; a breakpoint outside the **live** parameter's range is refused,
+    not pulled inside it. Two more caps bound the batch itself: `kMaxOps` (64) and `kMaxNameChars`
+    (128).
+-   **Capabilities are absent from the grammar, not refused field by field.** An op has no
+    `assetRef`, no `recordMode`, no `bindingUuid`, and no kind beyond `midi`/`automation`. Unknown
+    fields *inside* an op are **rejected**, so a future field cannot be smuggled past a gate that
+    never inspected it — the same reasoning as `validateTimeline`'s unknown-top-level-key refusal.
+    Unknown keys at the *envelope root* are ignored, because that is where the sibling patch's own
+    `nodes`/`connections`/`mode` live.
+-   **All-or-nothing, and the preview cannot lie.** `validate()` runs the batch against a throwaway
+    copy of the document (`fromVar(doc.toVar())` — replaying our own serialisation is trusted by
+    definition) and `apply()` runs the *same code* against the real one, so every op sees the effect
+    of the ones before it and no preview can describe an apply that then fails. A rejection means the
+    live doc was never touched at all.
+-   **One undo step.** The whole batch runs inside a single `AppUndoManager::recordTimelineChange`,
+    so however many tracks, clips, notes and breakpoints it touches, one Cmd+Z reverts all of it —
+    the contract `MidiRecorder::stopAndCommit` already relies on for a take's clip plus its notes.
+
+### The chat seam
+
+`AIIntegrationService` (gated `#if SYNTH_ENABLE_TIMELINE`, and only once
+`setTimelineContext()` has wired the live timeline in) gains:
+`extractTimelineOps()` — the same extraction `applyPatch` performs, returning the parsed root when
+it carries a `timelineOps` key (**presence**, not well-formedness, so a malformed envelope is
+surfaced as a visible rejection instead of being silently dropped); `previewTimelineOps()` — the
+validate step; and `applyTimelineOps()`, which routes through a `TimelineOpsApplyCallback` that
+`MainComponent::initialiseCommon` installs. The service holds the doc only as a `const` pointer and
+owns no undo manager for it, so the **host** supplies the write path — which is what puts an
+AI-applied batch on the same shared undo stack as the user's own edits.
+
+`AIChatComponent` renders `TimelineCard` beside `PatchCard`, to the same conventions, with an
+"Apply timeline changes" button. A response carrying both gets both cards; a rejected envelope gets
+the card with the reason and **no button**, because a suggestion that cannot be applied must still
+say why but must not look clickable.
+
+Tests: `Tests/TimelineOpsTests.cpp` (per-op apply, one-step undo, all-or-nothing with the failing
+op named by index, caps/bounds, the ungrammatical capabilities, pinned preview strings, the
+patch-grammar pin, and the service seam end to end).
+
 ## 5. AIChatComponent and Logging
 
 `AIChatComponent` (`Source/UI/AIChatComponent.cpp`) is the chat UI for AI-assisted patching. It wires user prompts to `AIIntegrationService` and displays the conversation history with optional JSON patch previews.
