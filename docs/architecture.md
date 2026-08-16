@@ -558,11 +558,13 @@ Filling never goes past `wantedFrame + kPrefetchAheadFrames` (3/4 of the ring), 
 
 Restore always calls `applyJSONToGraph(..., trusted=false)`: a host session file travels between machines and users, so it goes through the full `validatePatch` boundary (see [`docs/AI_Engine.md`](AI_Engine.md)) and is rejected whole — never partially applied — if it doesn't check out. Around the load, an open editor detaches its module components first (`prepareForGraphReplacement`) and rebuilds them after (`refreshAfterGraphReplacement`) — the same detach-before-clear ordering `GraphEditor::loadPreset` and `MainComponent::aiPatchAboutToApply` use to avoid a `ScopeComponent` timer firing against a freed `VisualBuffer`.
 
-### Plugin hosting (TL7-2) — third-party VST3/AU *inside* our graph
+### Plugin hosting (TL7-2/3) — third-party VST3/AU *inside* our graph
 
 The mirror image of the section above: `Source/Plugin/Hosting/` is the app **hosting** other people's plugins, not being hosted. It lives in **Core** (not in the `AgentSynthPlugin` target), so the headless Tests target exercises it.
 
-**The licensing decision (TL7-1):** JUCE's built-in hosting only — VST3 everywhere, AU additionally on macOS. No new dependency pins, and therefore no new licences to clear. **CLAP is deferred**: it would require vendoring the CLAP headers or `clap-juce-extensions`. The two formats are enabled as Core `PUBLIC` compile definitions in the root `CMakeLists.txt` (`JUCE_PLUGINHOST_VST3=1`, and `JUCE_PLUGINHOST_AU=1` under `if(APPLE)`) — `PUBLIC` because `DefaultHostedPluginBackend`'s format list is compiled from them and every consumer must agree on the values.
+**The licensing decision (TL7-1):** JUCE's built-in hosting only — VST3 everywhere, AU additionally on macOS. No new dependency pins, and therefore no new licences to clear. **CLAP is deferred**: it would require vendoring the CLAP headers or `clap-juce-extensions`. The two formats are enabled as Core `PUBLIC` compile definitions in the root `CMakeLists.txt` (`JUCE_PLUGINHOST_VST3=1`, and `JUCE_PLUGINHOST_AU=1` under `if(APPLE)`) — `PUBLIC` because the format list is compiled from them and every consumer must agree on the values.
+
+The format set itself is declared **once**, in `synth::addHostedPluginFormats()` (with `hostedPluginFormatNames()` reading the names back off the format objects). `DefaultHostedPluginBackend`, the scanner's default candidate source and the `--scan-plugin` child process all go through it, because hosting and scanning must agree: a format the scanner walks but the backend cannot instantiate produces a library row that always fails to load, and the reverse produces a plugin the user can never find.
 
 #### `synth::HostedPluginBackend` — the seam
 
@@ -573,7 +575,7 @@ The mirror image of the section above: `Source/Plugin/Hosting/` is the app **hos
 
 `HostedPluginBackend::getDefault()` is the process-wide backend (`DefaultHostedPluginBackend`, owning a `juce::AudioPluginFormatManager`). **This is the seam `HostedPluginModule::setExtraState` needs**: state restore happens deep inside `AIStateMapper::applyJSONToGraph`, which has no backend to plumb down, so the module reaches for the default. `HostedPluginBackend::ScopedDefault` is an RAII override tests install for the duration of a scope, restoring the previous backend on destruction so a failing test cannot leak a dangling stub into the next one.
 
-`PluginIdentity` (format + `uniqueId` + name, **never a path**) is the serialized form; a full `juce::PluginDescription` is the other entry point. Identity → description resolution walks `DefaultHostedPluginBackend`'s known-plugins list, which is **empty in TL7-2** — so a serialized identity fails to resolve with "not installed on this machine" and the module stays a valid placeholder. **TL7-3** fills that list from a real scan.
+`PluginIdentity` (format + `uniqueId` + name, **never a path**) is the serialized form; a full `juce::PluginDescription` is the other entry point. Identity → description resolution goes to the `PluginScanService` the owner installed via `setScanService()` (below); with none installed it falls back to an explicitly-set `knownPlugins_` vector, empty by default — so a serialized identity fails to resolve with "not installed on this machine" and the module stays a valid placeholder. The owner must clear the pointer before destroying the service; `MainComponent`'s destructor does, guarded on the installed service still being its own.
 
 #### The async publish pattern
 
@@ -588,9 +590,28 @@ The [Sampler](modules.md#sampler-module)'s retained-instance discipline, applied
 
 `AgentSynthAudioProcessor::setStateInformation` validates with `trusted=false` **and `allowInternalModuleTypes=true`** (see [Plugin state format](#plugin-state-format)) — the authorship restriction exists to stop *model output* naming internal types, and a host session file is our own saved graph, so the gate accepts "Hosted Plugin" nodes there while still rejecting a tampered file whole. The subsequent apply is trusted, which is what carries the plugin identity and its state blob. So a patch hosting a plugin round-trips through presets, undo/redo, `.agsproj` bundles **and** a DAW session with AgentSynth running as a plugin — pinned end-to-end by `HostedPluginTest.HostedPluginSurvivesDawSessionStateRoundTrip`.
 
+#### Plugin scanning (TL7-3) — a crash must kill a child, not the app
+
+`Source/Plugin/Hosting/PluginScanService.h`. Owns the `juce::KnownPluginList` + blacklist that answers "which binary is this identity?" — and is therefore the only place a plugin path is stored (see [`modules.md § Hosted Plugin`](modules.md#hosted-plugin-module-third-party-vst3--au-hidden) for the resolution precedence and the load UX).
+
+**The child-process design.** Scanning means loading a stranger's binary and calling into it, and plugins that crash, hang, or pop a modal window on probe are common enough that in-process scanning turns one bad plugin into an unrecoverable crash-on-launch. So:
+
+1. The scan thread re-launches **our own executable** (`File::getSpecialLocation(currentExecutableFile)`) with `--scan-plugin <format> <fileOrIdentifier>`, capturing stdout only — a plugin's stderr chatter stays on ours instead of interleaving into the document.
+2. The child runs `synth::runPluginScanChildMode()` **before the application object exists**: it scans that one plugin into a throwaway `KnownPluginList`, prints `createXml()` between `<<<AGENTSYNTH-SCAN-BEGIN>>>` / `<<<AGENTSYNTH-SCAN-END>>>` sentinels (so a plugin that prints its own banner cannot corrupt the parse), and exits 0/1. No window, no engine, **no settings file** — a child touching the settings file would race the parent that spawned it.
+3. `readAllProcessOutput()` blocks until the pipe closes, which is the hang we are guarding against, so a **watchdog thread** kills the child on the deadline (default 15 s — generous on purpose: a cold-cache VST3 can honestly take ten seconds, and killing a slow-but-honest plugin blacklists it for good). Reading on the scanning thread rather than the watchdog keeps the pipe drained, so a chatty plugin cannot deadlock by filling the buffer.
+4. A crash, a timeout, a non-zero exit and "described nothing" are indistinguishable from here and all get the same response: **blacklist the candidate and continue** with the next one.
+
+**The entry point.** `Source/Main.cpp` hand-rolls `main()` rather than using `START_JUCE_APPLICATION`, so the intercept happens before a `JUCEApplication` is ever constructed — otherwise a scan of 50 plugins bounces 50 Dock icons and each child pays for an `NSApplication` it never uses. Windows GUI builds have no `argv` at their entry point, so they keep JUCE's `WinMain` and intercept as the first statement of `initialise()` instead (JUCE's own AudioPluginHost does the same); both call the same Core function. **Plugin builds of ourselves never scan**, so there is no entry point to intercept there.
+
+**The three injectable seams**, which is what makes any of this testable with no plugin binaries in the repo: `CandidateSource` (what to scan — the default asks each format for its own search paths, which is machine-dependent), `ChildLauncher` (how to scan one — a test returns canned XML for a "good" plugin and `false` for a "crashing" one), and `setScanTimeoutMs`. `Tests/PluginScanTests.cpp` drives everything above them through those three.
+
+**Threading and ownership.** `scanAsync()` runs the whole scan on one background thread and posts progress/completion to the message thread; every read of the list is mutex-guarded, so the UI can query mid-scan. The destructor cancels and joins, and posted callbacks carry a shared liveness flag. Persistence is the **owner's** job — Core never touches `juce::ApplicationProperties`: `MainComponent` loads the list from the `"pluginScanList"` user setting, installs the service on the default backend, and saves `toXml()` (list **and** blacklist) after each scan. Same owner-drives-persistence shape as the audio device state in TL6-1.
+
+**Never inside a host.** The plugin editor wraps the same `MainComponent`, so the scan list is loaded and installed there too — a DAW session hosting a plugin still has to resolve its identity. But `MainComponent::startPluginScan()` refuses when `AudioEngine::isHosted()`: `currentExecutableFile` inside a VST3/AU is the *host's* binary, so a scan there would launch a copy of the DAW per candidate plugin.
+
 #### Forward pointers
 
-TL7-3 plugin scanning, the scan-list persistence and the load UX (the module is absent from the library and the *Replace with…* menu until then); TL7-5/6 plugin editor windows and parameter exposure; TL7-7 latency compensation beyond the `setLatencySamples()` republication done here.
+TL7-5/6 plugin editor windows and parameter exposure; TL7-7 latency compensation beyond the `setLatencySamples()` republication done here.
 
 ---
 

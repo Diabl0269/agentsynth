@@ -3,6 +3,7 @@
 #include "../AppUndoManager.h"
 #include "../AudioEngine.h"
 #include "../PatchDocument.h"
+#include "../Plugin/Hosting/HostedPluginBackend.h"
 #include "CableColour.h"
 #include "LayoutUtil.h"
 #include "ModuleClipboard.h"
@@ -324,6 +325,21 @@ public:
      *  sets is captured by the undo snapshot. */
     void addModuleAtCanvasPosition(const juce::String& name, juce::Point<int> dropPos,
                                    const std::function<void(juce::AudioProcessor&)>& configure);
+
+    /** Creates a Hosted Plugin node already pointed at `identity` (TL7-3).
+     *
+     *  Deliberately a thin wrapper over addModuleAtCanvasPosition rather than a second add path: the
+     *  identity is set through the same `configure` hook the Sampler's dropped file uses, so it is in
+     *  place before the node joins the graph and is therefore inside the undo snapshot — undo/redo of
+     *  a plugin add behaves exactly like undo/redo of any other module add, including remembering
+     *  WHICH plugin on redo. The actual load is asynchronous and resolves through the default
+     *  backend's scan service, so a canvas with no service installed adds a placeholder rather than
+     *  failing the add. */
+    void addHostedPluginAtCanvasPosition(const synth::PluginIdentity& identity, juce::Point<int> dropPos);
+
+    /** Canvas coordinates of the middle of the current view — where a clicked (rather than dragged)
+     *  library row lands. */
+    juce::Point<int> getViewportCentreInCanvasSpace() const;
 
     // Mouse Overrides
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;

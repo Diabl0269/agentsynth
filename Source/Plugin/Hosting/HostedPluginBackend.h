@@ -7,6 +7,24 @@
 
 namespace synth {
 
+class PluginScanService;
+
+/**
+ * The formats this app hosts, added to `manager` in scan order: VST3 everywhere, AudioUnit
+ * additionally on macOS (TL7-1's licensing call — JUCE's built-in hosting only, no new dependency
+ * pins, CLAP deferred).
+ *
+ * One function rather than addDefaultFormats() at three call sites, because *hosting* and *scanning*
+ * must agree: a format the scanner enumerates but the backend cannot instantiate produces a library
+ * row that always fails to load, and a format the backend can load but the scanner never walks
+ * produces a plugin the user can never find. DefaultHostedPluginBackend, PluginScanService's default
+ * candidate source, and the `--scan-plugin` child process all come through here.
+ */
+void addHostedPluginFormats(juce::AudioPluginFormatManager& manager);
+
+/** The names of those formats ("VST3", and "AudioUnit" on macOS) — what scanAsync() takes. */
+juce::StringArray hostedPluginFormatNames();
+
 /**
  * The serialized identity of a third-party plugin (TL7-2).
  *
@@ -21,6 +39,10 @@ namespace synth {
  * and AU (the component subtype). `name` is only a fallback for plugins whose uid is 0, and is
  * always carried so an unresolved identity can still be SHOWN to the user ("Foo (VST3) not
  * installed") rather than rendered as an opaque number.
+ *
+ * TL7-3 built the other end of this: PluginScanService owns the scan list that turns an identity
+ * back into a description (and is therefore the one place a fileOrIdentifier is stored), and
+ * documents the uid-then-name resolution precedence PluginIdentity::matches() sketches here.
  */
 struct PluginIdentity {
     juce::String format; ///< juce::PluginDescription::pluginFormatName, e.g. "VST3" / "AudioUnit".
@@ -44,6 +66,25 @@ struct PluginIdentity {
      *  — HostedPluginTests asserts that over the serialized patch. */
     juce::var toVar() const;
     static PluginIdentity fromVar(const juce::var& state);
+
+    //==============================================================================
+    // Drag-and-drop payload (TL7-3)
+    //
+    // The module library and the canvas talk over juce::DragAndDropContainer, whose payload is a
+    // single juce::var — so a plugin row travels as a prefixed string on the SAME channel as module
+    // names and snippet payloads, distinguished by its prefix (the SnippetManager pattern). The
+    // payload is the identity, never a path: the library row already knows the description, but
+    // putting a fileOrIdentifier on a drag channel any component can read would recreate exactly the
+    // leak PluginIdentity exists to prevent.
+    //==============================================================================
+
+    static constexpr const char* kDragPayloadPrefix = "plugin:";
+
+    /** "plugin:<format>|<uid>|<name>". Name goes last so it may legally contain '|'. */
+    juce::String toDragPayload() const;
+    static bool isDragPayload(const juce::String& payload);
+    /** Inverse of toDragPayload(). Returns an invalid identity for anything else. */
+    static PluginIdentity fromDragPayload(const juce::String& payload);
 };
 
 /**
@@ -122,12 +163,15 @@ protected:
  * The real backend: VST3 everywhere, AudioUnit additionally on macOS (TL7-1's licensing call —
  * JUCE's built-in hosting only, no new dependency pins, CLAP deferred).
  *
- * The formats are added explicitly rather than via addDefaultFormats() so the set of things this
- * app will load is a decision in source, not a by-product of which JUCE_PLUGINHOST_* flags happen to
- * be set. (Both are in fact set, in the root CMakeLists on Core.)
+ * The formats are added explicitly (addHostedPluginFormats) rather than via addDefaultFormats() so
+ * the set of things this app will load is a decision in source, not a by-product of which
+ * JUCE_PLUGINHOST_* flags happen to be set. (Both are in fact set, in the root CMakeLists on Core.)
  *
- * TL7-2 knows no plugins: `knownPlugins_` starts empty, so resolving a serialized identity fails
- * with "not installed" and the module stays a placeholder. TL7-3 fills the list from a real scan.
+ * TL7-3 fills the identity->description direction from a PluginScanService the OWNER installs
+ * (MainComponent, on the standalone path only — a plugin build of ourselves never scans, because
+ * inside a host the host owns plugin discovery). With no service installed the backend falls back to
+ * `knownPlugins_`, which is empty by default: resolving a serialized identity then fails with "not
+ * installed" and the module stays a placeholder, exactly as in TL7-2.
  */
 class DefaultHostedPluginBackend : public HostedPluginBackend {
 public:
@@ -139,9 +183,16 @@ public:
     void createInstanceAsync(const juce::PluginDescription& description, double sampleRate, int blockSize,
                              InstanceCallback callback) override;
 
+    /** Scan service first (the live list), then the explicitly-set `knownPlugins_` vector. */
     bool resolveIdentity(const PluginIdentity& identity, juce::PluginDescription& out) const override;
 
-    /** Message thread. The descriptions a scan produced; replaces whatever was there (TL7-3). */
+    /** Message thread. Owner-installed; nullptr (the default) restores the TL7-2 behaviour of an
+     *  empty list. The service is NOT owned — the owner must clear this before destroying it. */
+    void setScanService(PluginScanService* service) noexcept { scanService_ = service; }
+    PluginScanService* getScanService() const noexcept { return scanService_; }
+
+    /** Message thread. A description list set directly, without a scan — the seam a test or a
+     *  file-chooser-driven load uses. Consulted only after the scan service. */
     void setKnownPlugins(std::vector<juce::PluginDescription> plugins);
     const std::vector<juce::PluginDescription>& getKnownPlugins() const noexcept { return knownPlugins_; }
 
@@ -150,6 +201,7 @@ public:
 private:
     juce::AudioPluginFormatManager formatManager_;
     std::vector<juce::PluginDescription> knownPlugins_;
+    PluginScanService* scanService_ = nullptr;
 };
 
 } // namespace synth

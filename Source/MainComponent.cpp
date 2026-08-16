@@ -340,6 +340,22 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     moduleLibrary.setCollapsedSections(juce::StringArray::fromLines(
         appProperties.getUserSettings()->getValue("libraryCollapsedSections", juce::String())));
     refreshSnippetLibrary();
+
+    // ---- Hosted plugins (TL7-3) -----------------------------------------------------------
+    // Restore the saved scan list, install it as the process-wide identity resolver, and wire the
+    // two sidebar callbacks. Nothing here starts a scan: scanning launches child processes and is
+    // only ever done because the user asked (and never at all in a hosted build — see
+    // startPluginScan). The list IS loaded in a hosted build, because a DAW session that hosts a
+    // plugin still has to resolve its identity to something.
+    if (auto savedScanList = juce::parseXML(appProperties.getUserSettings()->getValue(kPluginScanListKey)))
+        pluginScanService.loadFromXml(*savedScanList);
+    if (auto* backend = dynamic_cast<synth::DefaultHostedPluginBackend*>(&synth::HostedPluginBackend::getDefault()))
+        backend->setScanService(&pluginScanService);
+    moduleLibrary.onScanPluginsRequested = [this] { startPluginScan(); };
+    moduleLibrary.onPluginActivated = [this](const synth::PluginIdentity& identity) {
+        graphEditor.addHostedPluginAtCanvasPosition(identity, graphEditor.getViewportCentreInCanvasSpace());
+    };
+    refreshPluginLibrary();
     // Register commands for the macOS native menu bar (Edit→Undo shows Cmd+Z).
     // Do NOT add commandManager.getKeyMappings() as a KeyListener — it intercepts
     // keys like Cmd+Shift+Z and silently fails to invoke the command, preventing
@@ -840,6 +856,15 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
 }
 
 MainComponent::~MainComponent() {
+    // TL7-3: the process-wide backend holds a bare pointer to our scan service, so unhook it before
+    // anything else — a hosted-plugin restore that happened after this point would otherwise resolve
+    // through freed memory. Guarded on "still ours" because a second MainComponent (tests construct
+    // several) will have replaced it.
+    if (auto* backend = dynamic_cast<synth::DefaultHostedPluginBackend*>(&synth::HostedPluginBackend::getDefault()))
+        if (backend->getScanService() == &pluginScanService)
+            backend->setScanService(nullptr);
+    pluginScanService.cancelScan();
+
     // Unsubscribe before the manager (or our owned copy) is torn down.
     if (themeManager != nullptr)
         themeManager->removeChangeListener(this);
@@ -1525,6 +1550,65 @@ void MainComponent::updateCommandShortcuts() {
     // every toolbar hint — and the minimap's — keeps advertising the old binding until some
     // unrelated toggle happens to refresh it.
     applyToolbarIcons();
+}
+
+// ---- Hosted plugins (TL7-3) ----
+
+void MainComponent::refreshPluginLibrary() { moduleLibrary.setPlugins(pluginScanService.getKnownPluginIdentities()); }
+
+void MainComponent::savePluginScanList() {
+    if (auto xml = pluginScanService.toXml()) {
+        appProperties.getUserSettings()->setValue(kPluginScanListKey, xml->toString());
+        appProperties.saveIfNeeded();
+    }
+}
+
+void MainComponent::startPluginScan() {
+    // Never inside a host. The scan re-launches `currentExecutableFile`, which in a VST3/AU build is
+    // the HOST's binary — one extra copy of the DAW per candidate plugin. The host owns plugin
+    // discovery in that world anyway. The scan LIST is still loaded and installed in hosted mode
+    // (see the constructor): a session that hosts a plugin has to be able to resolve its identity,
+    // it just cannot rebuild the list from here.
+    if (audioEngine.isHosted()) {
+        statusBar.showMessage("Plugin scanning is only available in the standalone app");
+        return;
+    }
+
+    if (pluginScanService.isScanning()) {
+        statusBar.showMessage("Already scanning for plugins...");
+        return;
+    }
+
+    statusBar.showMessage("Scanning for plugins...");
+
+    // Both callbacks arrive on the message thread (PluginScanService posts them), so touching the
+    // status bar and the sidebar from here is safe. Progress is one message per plugin, not per
+    // frame — a scan is seconds-per-plugin, so this is nowhere near the high-frequency logging /
+    // repaint traps.
+    pluginScanService.scanAsync(
+        synth::hostedPluginFormatNames(),
+        [this](const juce::String& fileOrIdentifier, int scanned, int total) {
+            // Trailing segment, not File::getFileName(): an AudioUnit's identifier is not a path.
+            statusBar.showMessage("Scanning plugins " + juce::String(scanned) + "/" + juce::String(total) + ": " +
+                                  fileOrIdentifier.fromLastOccurrenceOf("/", false, false));
+        },
+        [this](const synth::PluginScanService::Result& result) {
+            savePluginScanList();
+            refreshPluginLibrary();
+
+            if (result.cancelled) {
+                statusBar.showMessage("Plugin scan cancelled");
+                return;
+            }
+
+            juce::String message = "Found " + juce::String(pluginScanService.getNumKnownPlugins()) + " plugin" +
+                                   (pluginScanService.getNumKnownPlugins() == 1 ? "" : "s");
+            if (result.added > 0)
+                message += " (" + juce::String(result.added) + " new)";
+            if (result.failed > 0)
+                message += "; " + juce::String(result.failed) + " could not be loaded and were skipped";
+            statusBar.showMessage(message);
+        });
 }
 
 // ---- Snippets (issue #156) ----

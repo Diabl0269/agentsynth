@@ -62,15 +62,24 @@ namespace synth {
  * arrive from a model.
  *
  * Restoring is async and may fail: a module holding an identity with no instance is a VALID state,
- * not an error. TL7-3's "plugin not installed" placeholder card builds directly on it, and
- * getExtraState keeps re-serializing the identity and the last known blob so re-saving the patch on
- * a machine without the plugin does not destroy it.
+ * not an error. It is what a patch opened on a machine without the plugin leaves behind, and
+ * getExtraState keeps re-serializing the identity and the last known blob so re-saving the patch
+ * there does not destroy it.
+ *
+ * -- Where an identity becomes a plugin (TL7-3) --------------------------------------------------
+ *
+ * loadPlugin(PluginIdentity) asks HostedPluginBackend::getDefault() to resolve it, and the default
+ * backend asks the PluginScanService the app installed on it. So "which binary is this?" is answered
+ * exclusively by the scan list — a local, rebuildable index that is the only place a plugin PATH
+ * ever lives. See PluginScanService for the resolution precedence and the out-of-process scan.
  *
  * -- Forward pointers ---------------------------------------------------------------------------
  *
- * TL7-3 plugin scanning + the load UX (this module is deliberately absent from the library and
- * replace menus until then); TL7-5/6 plugin editor windows and parameter exposure; TL7-7 latency
- * compensation beyond the setLatencySamples() call made here.
+ * This module is still absent from the library's module catalogue and from the replace menu: it is
+ * added by dragging or clicking a row in the library's Plugins section, which supplies the identity
+ * (a bare "Hosted Plugin" hosting nothing would have no way to become anything). TL7-5/6 plugin
+ * editor windows and parameter exposure; TL7-7 latency compensation beyond the setLatencySamples()
+ * call made here.
  */
 class HostedPluginModule : public ModuleBase {
 public:

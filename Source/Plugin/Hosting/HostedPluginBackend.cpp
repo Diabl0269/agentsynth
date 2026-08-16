@@ -1,6 +1,34 @@
 #include "HostedPluginBackend.h"
+#include "PluginScanService.h"
 
 namespace synth {
+
+//==============================================================================
+// Hosted format set — the single declaration of what this app loads and scans
+//==============================================================================
+
+void addHostedPluginFormats(juce::AudioPluginFormatManager& manager) {
+#if JUCE_PLUGINHOST_VST3
+    manager.addFormat(new juce::VST3PluginFormat());
+#endif
+#if JUCE_PLUGINHOST_AU && JUCE_MAC
+    manager.addFormat(new juce::AudioUnitPluginFormat());
+#endif
+    juce::ignoreUnused(manager);
+}
+
+juce::StringArray hostedPluginFormatNames() {
+    // Asked of the format objects rather than spelled out, so the names a scan is driven with are by
+    // construction the names PluginDescription::pluginFormatName will carry back.
+    juce::AudioPluginFormatManager manager;
+    addHostedPluginFormats(manager);
+
+    juce::StringArray names;
+    for (auto* format : manager.getFormats())
+        if (format != nullptr)
+            names.add(format->getName());
+    return names;
+}
 
 //==============================================================================
 // PluginIdentity
@@ -38,6 +66,27 @@ PluginIdentity PluginIdentity::fromVar(const juce::var& state) {
         identity.name = object->getProperty("pluginName").toString();
         identity.uid = static_cast<int>(object->getProperty("pluginUid"));
     }
+    return identity;
+}
+
+juce::String PluginIdentity::toDragPayload() const {
+    return juce::String(kDragPayloadPrefix) + format + "|" + juce::String(uid) + "|" + name;
+}
+
+bool PluginIdentity::isDragPayload(const juce::String& payload) { return payload.startsWith(kDragPayloadPrefix); }
+
+PluginIdentity PluginIdentity::fromDragPayload(const juce::String& payload) {
+    PluginIdentity identity;
+    if (!isDragPayload(payload))
+        return identity;
+
+    const auto body = payload.fromFirstOccurrenceOf(kDragPayloadPrefix, false, false);
+    identity.format = body.upToFirstOccurrenceOf("|", false, false);
+
+    const auto afterFormat = body.fromFirstOccurrenceOf("|", false, false);
+    identity.uid = afterFormat.upToFirstOccurrenceOf("|", false, false).getIntValue();
+    // Name last and unsplit: a plugin called "Sub | Bass" must survive the round trip.
+    identity.name = afterFormat.fromFirstOccurrenceOf("|", false, false);
     return identity;
 }
 
@@ -107,16 +156,7 @@ HostedPluginBackend& HostedPluginBackend::getDefault() {
 // DefaultHostedPluginBackend
 //==============================================================================
 
-DefaultHostedPluginBackend::DefaultHostedPluginBackend() {
-    // TL7-1: JUCE's built-in hosting only. VST3 everywhere, AU additionally on macOS; CLAP deferred.
-    // Explicit rather than addDefaultFormats() so the hosted set is a decision in source.
-#if JUCE_PLUGINHOST_VST3
-    formatManager_.addFormat(new juce::VST3PluginFormat());
-#endif
-#if JUCE_PLUGINHOST_AU && JUCE_MAC
-    formatManager_.addFormat(new juce::AudioUnitPluginFormat());
-#endif
-}
+DefaultHostedPluginBackend::DefaultHostedPluginBackend() { addHostedPluginFormats(formatManager_); }
 
 DefaultHostedPluginBackend::~DefaultHostedPluginBackend() = default;
 
@@ -134,6 +174,16 @@ void DefaultHostedPluginBackend::createInstanceAsync(const juce::PluginDescripti
 }
 
 bool DefaultHostedPluginBackend::resolveIdentity(const PluginIdentity& identity, juce::PluginDescription& out) const {
+    // Scan list first — it is the live picture of what is installed, and it applies the documented
+    // uid-then-name precedence (PluginScanService::resolve). knownPlugins_ is the fallback for a
+    // backend nobody installed a service on.
+    if (scanService_ != nullptr) {
+        if (const auto resolved = scanService_->resolve(identity)) {
+            out = *resolved;
+            return true;
+        }
+    }
+
     for (const auto& candidate : knownPlugins_) {
         if (identity.matches(candidate)) {
             out = candidate;

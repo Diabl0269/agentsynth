@@ -204,6 +204,8 @@ add_library(Core STATIC
     Source/Plugin/Hosting/HostedPluginBackend.h
     Source/Plugin/Hosting/HostedPluginModule.cpp
     Source/Plugin/Hosting/HostedPluginModule.h
+    Source/Plugin/Hosting/PluginScanService.cpp
+    Source/Plugin/Hosting/PluginScanService.h
     # AI
     Source/AI/AIProvider.h
     Source/AI/OllamaProvider.h

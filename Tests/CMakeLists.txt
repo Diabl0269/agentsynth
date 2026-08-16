@@ -55,6 +55,7 @@ add_executable(Tests
     LatencyAlignmentTests.cpp
     AudioClipPlaybackTests.cpp
     HostedPluginTests.cpp
+    PluginScanTests.cpp
     AIStateMapperTests.cpp
     AIPatchValidationTests.cpp
     AIPatchRetryTests.cpp

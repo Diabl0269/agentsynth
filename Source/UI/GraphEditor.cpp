@@ -26,6 +26,7 @@
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
 #include "../Modules/WavetableOscillatorModule.h"
+#include "../Plugin/Hosting/HostedPluginModule.h"
 #include "../PresetManager.h"
 #include "../SnippetManager.h"
 #include "LayoutUtil.h"
@@ -2496,6 +2497,8 @@ void GraphEditor::itemDragEnter(const SourceDetails& dragSourceDetails) {
     juce::Point<int> estSize;
     if (synth::SnippetManager::isSnippetPayload(name)) {
         estSize = estimateSnippetSize(name);
+    } else if (synth::PluginIdentity::isDragPayload(name)) {
+        estSize = estimateModuleSize("Hosted Plugin");
     } else {
         estSize = estimateModuleSize(name);
     }
@@ -2545,6 +2548,13 @@ void GraphEditor::itemDropped(const SourceDetails& dragSourceDetails) {
         return;
     }
 
+    // A scanned plugin (TL7-3) — same channel again, told apart by its "plugin:" prefix.
+    if (synth::PluginIdentity::isDragPayload(name)) {
+        addHostedPluginAtCanvasPosition(synth::PluginIdentity::fromDragPayload(name), dropPos);
+        endDragPreview();
+        return;
+    }
+
     addModuleAtCanvasPosition(name, dropPos, {});
     endDragPreview();
 }
@@ -2583,6 +2593,23 @@ void GraphEditor::filesDropped(const juce::StringArray& files, int x, int y) {
     }
 
     endDragPreview();
+}
+
+void GraphEditor::addHostedPluginAtCanvasPosition(const synth::PluginIdentity& identity, juce::Point<int> dropPos) {
+    if (!identity.isValid())
+        return;
+
+    // Same configure hook the dropped-sample path uses, and for the same reason: the identity has to
+    // be on the processor BEFORE recordStructuralChange snapshots the graph, or Cmd+Z / redo would
+    // bring back a bare Hosted Plugin that has forgotten which plugin it was.
+    addModuleAtCanvasPosition("Hosted Plugin", dropPos, [identity](juce::AudioProcessor& processor) {
+        if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(&processor))
+            hosted->loadPlugin(identity);
+    });
+}
+
+juce::Point<int> GraphEditor::getViewportCentreInCanvasSpace() const {
+    return getVisibleCanvasRect().getCentre().roundToInt();
 }
 
 void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Point<int> dropPos,

@@ -7,6 +7,7 @@
 #include "AudioEngine.h"
 #include "Branding.h"
 #include "Modules/RecordTapModule.h"
+#include "Plugin/Hosting/PluginScanService.h"
 #include "PresetManager.h"
 #include "ShortcutManager.h"
 #include "SnippetManager.h"
@@ -218,6 +219,29 @@ public:
     void promptSaveSnippet();
 
     ModuleLibraryComponent& getModuleLibrary() { return moduleLibrary; }
+
+    // ---- Hosted plugins (TL7-3) ----
+    //
+    // MainComponent owns the scan list because Core must not read or write settings and because the
+    // scan is a standalone-app affair: the plugin build of ourselves never constructs a
+    // MainComponent-owned service, so a DAW session can never trigger a nested plugin scan.
+
+    synth::PluginScanService& getPluginScanService() noexcept { return pluginScanService; }
+
+    /** Starts a background scan of every format this build can host, reporting through the status
+     *  bar and refreshing the library's Plugins section (and the saved list) when it finishes.
+     *  Ignored while a scan is already running, and refused outright when the engine is Hosted —
+     *  the scan re-launches `currentExecutableFile`, which inside a VST3/AU is the HOST's binary. */
+    void startPluginScan();
+
+    /** Writes the scan list into appProperties under "pluginScanList". */
+    void savePluginScanList();
+
+    /** Pushes the scan list into the library sidebar's Plugins section. */
+    void refreshPluginLibrary();
+
+    /** The settings key the scan list round-trips through. */
+    static constexpr const char* kPluginScanListKey = "pluginScanList";
 
 private:
     // AIIntegrationService::Listener
@@ -547,6 +571,12 @@ private:
 
     juce::ApplicationProperties appProperties;
     juce::PropertiesFile::Options propertiesOptions;
+
+    // TL7-3. Declared here (not in AudioEngine or Core) because it is settings-backed and
+    // UI-driven; installed into the process-wide DefaultHostedPluginBackend by the constructor and
+    // uninstalled by the destructor, so a HostedPluginModule restoring a patch can resolve its
+    // identity without anything having to plumb a backend down through applyJSONToGraph.
+    synth::PluginScanService pluginScanService;
 
     ShortcutManager shortcutManager;
     juce::ApplicationCommandManager commandManager;

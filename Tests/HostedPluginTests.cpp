@@ -584,8 +584,11 @@ TEST(HostedPluginTest, RegisteredButInternalOnly) {
 
 TEST(HostedPluginTest, AbsentFromTheLibraryWithAPinnedSizeEstimate) {
     ModuleLibraryComponent library;
+    // Still not a module type the library offers: TL7-3 added a Plugins section whose rows are
+    // scanned PLUGINS (RowKind::Plugin, carrying an identity), not the bare "Hosted Plugin" type —
+    // which, added on its own, would host nothing and have no way to become anything.
     EXPECT_FALSE(library.getDraggableModuleNames().contains("Hosted Plugin"))
-        << "Hosted Plugin is internal-only until TL7-3 ships the scan list and the load UX";
+        << "Hosted Plugin is added by picking a scanned plugin, never as a bare module type";
 
     auto processor = synth::AIStateMapper::createModule("Hosted Plugin");
     ASSERT_NE(processor, nullptr);
