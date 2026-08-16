@@ -513,6 +513,10 @@ Assistant bubbles that end an in-flight wait (successful reply, provider error, 
 on `MessageData::responseMs`. History-restored turns and patch-retry / apply-failure bubbles leave
 `responseMs` at `-1` and omit the marker. Format helper: `AIChatComponent::formatResponseTime`.
 
+While a request is in flight, the `"AI is thinking…"` status line shows the same formatted elapsed
+time and refreshes on a 500 ms `juce::Timer` tick (label text only — not a full chat redraw). That
+timer also enforces the 120 s timeout.
+
 ### Debug Logger Registration (Debug builds only)
 
 In **Debug builds only**, `AIChatComponent` registers itself as the global `juce::Logger` by calling `juce::Logger::setCurrentLogger(this)` inside the `#else` branch of an `#ifdef NDEBUG` guard in the constructor. The debug console (`TextEditor`) and the "Debug" toggle button are also created and wired there. The destructor unregisters under `#ifndef NDEBUG`:

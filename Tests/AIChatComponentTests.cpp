@@ -947,3 +947,53 @@ TEST_F(AIChatComponentTest, CancelledResponseRecordsElapsedMs) {
     EXPECT_GE(chatComponent.getLastAssistantResponseMs(), 0);
     juce::ignoreUnused(provider);
 }
+
+TEST_F(AIChatComponentTest, ThinkingStatusShowsLiveElapsedTime) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    auto ownedProvider = std::make_unique<DeferredPromptProvider>();
+    auto* provider = ownedProvider.get();
+    service.setProvider(std::move(ownedProvider));
+
+    juce::ApplicationProperties props;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Test";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(options);
+
+    synth::AIChatComponent chatComponent(service, props);
+    chatComponent.setSize(400, 600);
+
+    juce::TextEditor* inputField = nullptr;
+    for (auto* child : chatComponent.getChildren()) {
+        if (auto* editor = dynamic_cast<juce::TextEditor*>(child))
+            inputField = editor;
+    }
+    ASSERT_NE(inputField, nullptr);
+
+    inputField->setText("hello");
+    chatComponent.triggerSend();
+    ASSERT_TRUE(chatComponent.isWaiting());
+
+    const auto initial = chatComponent.getWaitingStatusText();
+    EXPECT_TRUE(initial.contains("thinking"));
+    EXPECT_TRUE(initial.contains("ms") || initial.contains("s"));
+
+    // Let the 500 ms waiting-status timer tick at least once.
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(700);
+
+    ASSERT_TRUE(chatComponent.isWaiting());
+    const auto updated = chatComponent.getWaitingStatusText();
+    EXPECT_TRUE(updated.contains("thinking"));
+    EXPECT_NE(updated, juce::String());
+
+    synth::AIProvider::AIResponse response;
+    response.success = true;
+    response.content = "done";
+    provider->resolvePrompt(response);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+
+    EXPECT_FALSE(chatComponent.isWaiting());
+    EXPECT_TRUE(chatComponent.getWaitingStatusText().isEmpty());
+}

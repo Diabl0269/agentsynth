@@ -575,13 +575,29 @@ void AIChatComponent::setAccountService(AccountService* service) {
 }
 
 void AIChatComponent::timerCallback() {
-    // The 120 s timer fired — request has timed out.
+    if (!isWaitingForResponse)
+        return;
+
     const int elapsed = (int)(juce::Time::getMillisecondCounter() - requestStartMs);
+    if (elapsed < kRequestTimeoutMs) {
+        refreshWaitingStatusLabel();
+        return;
+    }
+
+    // Request has timed out.
     cancelRequest();
     messages.push_back({"assistant", "Error: Request timed out after 2 minutes.", ""});
     messages.back().responseMs = elapsed;
     updateChatDisplay();
     inputField.grabKeyboardFocus();
+}
+
+void AIChatComponent::refreshWaitingStatusLabel() {
+    if (waitingStatusLabel == nullptr || !isWaitingForResponse)
+        return;
+
+    const int elapsed = (int)(juce::Time::getMillisecondCounter() - requestStartMs);
+    waitingStatusLabel->setText("AI is thinking… " + formatResponseTime(elapsed), juce::dontSendNotification);
 }
 
 bool AIChatComponent::keyPressed(const juce::KeyPress& key) {
@@ -615,7 +631,7 @@ void AIChatComponent::cancelRequest() {
     if (cancelling.value != 0)
         aiService.cancelRequest(cancelling);
 
-    // Stop the timeout timer.
+    // Stop the live thinking-status / timeout timer.
     stopTimer();
 
     // Stop the pulse animation and hide the spinner.
@@ -627,6 +643,7 @@ void AIChatComponent::cancelRequest() {
     sendButton.setEnabled(true);
     inputField.setReadOnly(false);
     isWaitingForResponse = false;
+    waitingStatusLabel = nullptr;
 }
 
 void AIChatComponent::resized() {
@@ -787,8 +804,8 @@ void AIChatComponent::sendButtonClicked() {
     spinnerDot.setVisible(true);
     spinnerDot.startPulse(vblankUpdater);
 
-    // Start timeout timer (120 seconds)
-    startTimer(120000);
+    // Live thinking-status timer (also enforces the 120 s timeout).
+    startTimer(kWaitingStatusIntervalMs);
 
     const auto requestId = aiService.sendMessage(
         text,
@@ -934,6 +951,7 @@ void AIChatComponent::attachPatchPreview(MessageData& data) {
 }
 
 void AIChatComponent::updateChatDisplay() {
+    waitingStatusLabel = nullptr;
     messageList.deleteAllChildren();
 
     for (size_t i = 0; i < messages.size(); ++i) {
@@ -1014,10 +1032,10 @@ void AIChatComponent::updateChatDisplay() {
     }
 
     if (isWaitingForResponse) {
-        auto* loading = new juce::Label();
-        messageList.addAndMakeVisible(loading);
-        loading->setText("AI is thinking...", juce::dontSendNotification);
-        loading->setColour(juce::Label::textColourId, juce::Colours::grey);
+        waitingStatusLabel = new juce::Label();
+        messageList.addAndMakeVisible(waitingStatusLabel);
+        waitingStatusLabel->setColour(juce::Label::textColourId, juce::Colours::grey);
+        refreshWaitingStatusLabel();
     }
 
     resized();
@@ -1050,6 +1068,10 @@ int AIChatComponent::getLastAssistantResponseMs() const {
             return it->responseMs;
     }
     return -1;
+}
+
+juce::String AIChatComponent::getWaitingStatusText() const {
+    return waitingStatusLabel != nullptr ? waitingStatusLabel->getText() : juce::String();
 }
 
 void AIChatComponent::refreshModels() {
