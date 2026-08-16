@@ -23,8 +23,16 @@ inline constexpr int kFakeDeviceOutputLatency = 128;
 
 class FakeAudioIODevice : public juce::AudioIODevice {
 public:
-    FakeAudioIODevice(int numInputChannels, int numOutputChannels)
-        : juce::AudioIODevice("Fake", "Test") {
+    /** @param inputLatency  what getInputLatencyInSamples() reports — the default is the shared
+     *         kFakeDeviceInputLatency every pre-TL6-8 user already asserts against.
+     *  @param outputLatency ditto for getOutputLatencyInSamples(). TL6-8's alignment tests pass
+     *         0/0 to prove "zero-latency devices shift nothing", so both are settable rather than
+     *         fixed constants. */
+    FakeAudioIODevice(int numInputChannels, int numOutputChannels, int inputLatency = kFakeDeviceInputLatency,
+                      int outputLatency = kFakeDeviceOutputLatency)
+        : juce::AudioIODevice("Fake", "Test")
+        , inputLatency_(inputLatency)
+        , outputLatency_(outputLatency) {
         if (numInputChannels > 0)
             activeInputs.setRange(0, numInputChannels, true);
         if (numOutputChannels > 0)
@@ -53,8 +61,8 @@ public:
     juce::BigInteger getActiveOutputChannels() const override { return activeOutputs; }
     juce::BigInteger getActiveInputChannels() const override { return activeInputs; }
 
-    int getOutputLatencyInSamples() override { return kFakeDeviceOutputLatency; }
-    int getInputLatencyInSamples() override { return kFakeDeviceInputLatency; }
+    int getOutputLatencyInSamples() override { return outputLatency_; }
+    int getInputLatencyInSamples() override { return inputLatency_; }
 
 private:
     static juce::StringArray channelNames(const juce::String& prefix, const juce::BigInteger& active) {
@@ -64,6 +72,8 @@ private:
         return names;
     }
 
+    const int inputLatency_;
+    const int outputLatency_;
     juce::BigInteger activeInputs, activeOutputs;
 };
 

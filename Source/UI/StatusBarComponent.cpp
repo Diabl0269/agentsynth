@@ -21,6 +21,17 @@ void StatusBarComponent::update(float cpuPct, int voices, const juce::String& pa
 }
 
 // ---------------------------------------------------------------------------
+void StatusBarComponent::updateRoundTripLatency(double milliseconds, bool available) {
+    const juce::String text = formatRoundTrip(milliseconds, available);
+    if (text == roundTripText_)
+        return; // nothing a repaint would change
+
+    roundTripText_ = text;
+    ++roundTripRepaintCount_;
+    repaint();
+}
+
+// ---------------------------------------------------------------------------
 void StatusBarComponent::showMessage(const juce::String& msg) {
     transientMessage_ = msg;
     repaint();
@@ -95,6 +106,15 @@ void StatusBarComponent::paint(juce::Graphics& g) {
         g.setColour(cpuPct_ > 80.0f ? warningColour : textMuted);
         g.drawText(cpuStr, 170, textY, 60, textH, juce::Justification::centredLeft, true);
 
+        // TL6-8 round trip — after CPU, and only while it actually fits before the voice count's
+        // own slot. A cramped window drops this segment rather than overlapping two readings.
+        const int roundTripX = 236;
+        const int roundTripW = 90;
+        if (roundTripText_.isNotEmpty() && roundTripX + roundTripW <= rightEdge - 80 - padH) {
+            g.setColour(textMuted);
+            g.drawText(roundTripText_, roundTripX, textY, roundTripW, textH, juce::Justification::centredLeft, true);
+        }
+
         // Voice count — right-aligned before mute button
         const juce::String voiceStr = formatVoices(voices_);
         g.setColour(textMuted);
@@ -127,4 +147,11 @@ juce::String StatusBarComponent::formatPatch(const juce::String& s) {
     if (s.trim().isEmpty())
         return "Untitled";
     return s;
+}
+
+// ---------------------------------------------------------------------------
+juce::String StatusBarComponent::formatRoundTrip(double milliseconds, bool available) {
+    if (!available)
+        return juce::String::fromUTF8("RT \xe2\x80\x94"); // em dash: "there is no round trip of ours"
+    return "RT " + juce::String(std::max(0.0, milliseconds), 1) + " ms";
 }

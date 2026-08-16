@@ -50,6 +50,7 @@ add_executable(Tests
     MidiClipFileTests.cpp
     PeaksFileTests.cpp
     RecordTapTests.cpp
+    LatencyAlignmentTests.cpp
     AudioClipPlaybackTests.cpp
     AIStateMapperTests.cpp
     AIPatchValidationTests.cpp

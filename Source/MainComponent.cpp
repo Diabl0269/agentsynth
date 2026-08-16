@@ -4,6 +4,7 @@
 #include "Branding.h"
 #include "Modules/TimelineAudioSourceModule.h"
 #include "ProjectBundle.h"
+#include "Timeline/TakePlacement.h"
 #include "Timeline/TimelineReconciler.h"
 #include "UI/SettingsWindow.h"
 #include "UI/TrackColour.h"
@@ -567,9 +568,11 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         // must not leave the transport rolling.
         const bool isAudioTake = (armedKind == synth::TrackKind::Audio);
         AudioTake take;
+        RecordTapModule* tapModule = nullptr;
         if (isAudioTake) {
             auto* tapNode = ensureMasterRecordTap();
-            if (tapNode == nullptr) {
+            tapModule = tapNode != nullptr ? dynamic_cast<RecordTapModule*>(tapNode->getProcessor()) : nullptr;
+            if (tapModule == nullptr) {
                 timelinePanel.getTransportBar().setRecordingState(false);
                 statusBar.showMessage("Can't record audio: no Audio Output in the patch");
                 return;
@@ -610,12 +613,28 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         }
 
         if (isAudioTake) {
-            // The capture itself starts on the 10 Hz poll, when the transport actually reaches the
-            // punch — NOT here. See the "punch-start slop" note in docs/architecture.md: it costs
-            // up to one poll tick (~100 ms) of head trim in v1, and TL6-8's alignment work replaces
-            // it with a sample-accurate start.
+            // TL6-8: the capture starts HERE, at record-on — not on the 10 Hz poll, which is what
+            // used to cost a take up to ~100 ms of head. The count-in's pre-roll is therefore
+            // RECORDED, and excluded from the committed clip by a trim (see commitAudioRecording);
+            // the tap itself reports the exact transport sample its frame 0 landed on, so the clip's
+            // placement is sample arithmetic rather than a poll observation.
+            //
+            // Deliberately AFTER the locate/play posted above, not before: those are transport
+            // commands that take effect at the top of a block, and a frame captured before a locate
+            // belongs to the OLD position — which would break the one thing the anchor promises,
+            // that take frame `f` sits at `captureStart + f`. Starting after them can cost at most
+            // the one block that may already be in flight (~10 ms at 512/48k), and that block is
+            // pre-roll, honestly accounted for either way.
+            const double rate = snap.sampleRate > 0.0 ? snap.sampleRate : 44100.0;
+            if (!tapModule->startCapture(take.wavFile, take.peaksFile, rate, RecordTapModule::kNumChannels)) {
+                // The tap vanished, or the file could not be opened. Nothing to salvage.
+                timelinePanel.getTransportBar().setRecordingState(false);
+                audioEngine.getMetronome().setForcedOn(false);
+                statusBar.showMessage("Can't record audio: the take file could not be opened");
+                return;
+            }
             take.punchInBeat = punchInBeat;
-            take.pending = true;
+            take.capturing = true;
             audioTake_ = take;
         } else {
             // punchInBeat is BOTH the recorder's own bookkeeping and (TL5-6) the audio-thread filter
@@ -860,32 +879,15 @@ void MainComponent::timerCallback() {
     if (wasTransportPlaying_ && !position.playing && midiRecorder.isRecording())
         commitMidiRecording();
 
-    // TL6-3: the audio half of the same two rules.
+    // TL6-3: the audio half of the same rule — COMMIT ON STOP, mirroring the MIDI one above: a take
+    // still open when the transport stops (the user hit Space rather than the record button) commits
+    // down the same path.
     //
-    //  1. THE PUNCH. The capture starts here — on this poll — the first tick at or after the
-    //     punch-in beat, not at the Record-on click. That is what makes a count-in's pre-roll bars
-    //     absent from the take instead of merely inaudible, and it is why a v1 take can be missing
-    //     up to one poll interval (~100 ms) of head. Documented as a known limit in
-    //     docs/architecture.md; TL6-8's alignment work replaces it with a sample-accurate start.
-    //  2. COMMIT ON STOP, mirroring the MIDI rule above: a take still open when the transport stops
-    //     (the user hit Space rather than the record button) commits down the same path.
-    if (audioTake_.pending && position.playing && position.ppq >= audioTake_.punchInBeat) {
-        auto* tap = findMasterRecordTap();
-        const double rate = position.sampleRate > 0.0 ? position.sampleRate : 44100.0;
-        if (tap != nullptr &&
-            tap->startCapture(audioTake_.wavFile, audioTake_.peaksFile, rate, RecordTapModule::kNumChannels)) {
-            audioTake_.pending = false;
-            audioTake_.capturing = true;
-        } else {
-            // The tap vanished, or the file could not be opened. Abandon rather than retry every
-            // tick: whatever failed is not going to un-fail on its own.
-            audioTake_ = {};
-            timelinePanel.getTransportBar().setRecordingState(false);
-            audioEngine.getMetronome().setForcedOn(false);
-            statusBar.showMessage("Can't record audio: the take file could not be opened");
-        }
-    }
-    if (wasTransportPlaying_ && !position.playing && (audioTake_.pending || audioTake_.capturing))
+    // TL6-8 removed this poll's OTHER audio job. The capture used to be started here, on the first
+    // tick at or after the punch, which cost a take up to one poll interval (~100 ms) of head; it now
+    // starts at the Record-on click and the pre-roll is trimmed at commit time from the tap's own
+    // sample-accurate anchor. Nothing about recording is decided on this timer any more.
+    if (wasTransportPlaying_ && !position.playing && audioTake_.capturing)
         commitAudioRecording();
 
     wasTransportPlaying_ = position.playing;
@@ -961,6 +963,14 @@ void MainComponent::timerCallback() {
         // getCpuUsage() would report a constant 0. Show 0 rather than a misleading reading.
         const float cpu = audioEngine.isHosted() ? 0.0f : (float)(audioEngine.getDeviceManager().getCpuUsage() * 100.0);
         statusBar.update(cpu, audioEngine.getDisplayVoiceCount(), currentPatchName_);
+
+        // TL6-8: the round-trip readout, on the same 5 Hz tick and gated by its own string diff.
+        // Hosted mode has no device of ours to report a round trip for (the host owns both ends), so
+        // it shows the placeholder rather than a made-up 0.0 ms.
+        const double statusRate = audioEngine.getTransport().getPositionSnapshot().sampleRate;
+        const double roundTripMs =
+            statusRate > 0.0 ? 1000.0 * (double)audioEngine.getRecordingLatencySamples() / statusRate : 0.0;
+        statusBar.updateRoundTripLatency(roundTripMs, !audioEngine.isHosted());
     }
 }
 
@@ -2073,7 +2083,7 @@ bool MainComponent::chooseTakeFiles(AudioTake& take) const {
 
 void MainComponent::commitAudioRecording() {
 #if SYNTH_ENABLE_TIMELINE
-    if (!audioTake_.pending && !audioTake_.capturing)
+    if (!audioTake_.capturing)
         return;
 
     // Cleared FIRST: every path out of here means the take is over, and leaving the state set would
@@ -2095,22 +2105,38 @@ void MainComponent::commitAudioRecording() {
     if (!result.ok || result.lengthSamples <= 0)
         return;
 
-    // Samples -> beats through the transport's tempo. A take is bounded by the transport it was
-    // recorded against, so its own rate/bpm are the right conversion even if the device changed
-    // since (which would have stopped the take anyway).
+    // TL6-8: where the take lands. Samples -> beats through the transport's own tempo (a take is
+    // bounded by the transport it was recorded against, so its rate/bpm are the right conversion
+    // even if the device changed since — which would have stopped the take anyway), and the whole
+    // of the arithmetic lives in synth::computeTakePlacement so it can be asserted to the sample
+    // without going through this component. See Source/Timeline/TakePlacement.h.
     const auto snap = audioEngine.getTransport().getPositionSnapshot();
-    const double sampleRate = snap.sampleRate > 0.0 ? snap.sampleRate : 44100.0;
-    const double bpm = snap.bpm > 0.0 ? snap.bpm : 120.0;
-    const double lengthBeats =
-        std::max((double)result.lengthSamples * bpm / (60.0 * sampleRate), kMinAudioClipLengthBeats);
+    synth::TakePlacementInput placementInput;
+    placementInput.takeLengthSamples = result.lengthSamples;
+    placementInput.captureStartValid = result.captureStartValid;
+    placementInput.captureStartTimelineSample = result.captureStartTimelineSample;
+    placementInput.captureStartBlockOffset = result.captureStartBlockOffset;
+    placementInput.punchInBeat = take.punchInBeat;
+    placementInput.recordingLatencySamples = audioEngine.getRecordingLatencySamples();
+    placementInput.sampleRate = snap.sampleRate > 0.0 ? snap.sampleRate : 44100.0;
+    placementInput.bpm = snap.bpm > 0.0 ? snap.bpm : 120.0;
+    placementInput.minClipLengthBeats = kMinAudioClipLengthBeats;
+
+    const auto placement = synth::computeTakePlacement(placementInput);
+    // Everything recorded sits before the punch (record disengaged during the count-in): the file
+    // stays, the clip is not created — the same "an empty take commits nothing" rule as above.
+    if (!placement.hasContent)
+        return;
 
     // ONE undo step for the clip AND its asset binding: recordTimelineChange snapshots the doc
     // before and after the whole lambda, so the two mutations inside are a single entry.
     undoManager.recordTimelineChange(timelineDoc, [&] {
-        const auto clip = timelineDoc.addClip(take.track, take.punchInBeat, lengthBeats, "Take");
+        const auto clip = timelineDoc.addClip(take.track, placement.clipStartBeat, placement.clipLengthBeats, "Take");
         if (!clip.isValid())
             return; // the track went away, or it is at kMaxClipsPerTrack: a no-op commit
-        timelineDoc.setClipAsset(clip, take.assetRef, 0.0);
+        // The pre-roll (and the latency shift's overhang at timeline 0) is excluded by the WINDOW,
+        // not by rewriting the WAV: the file keeps every frame that was captured.
+        timelineDoc.setClipAsset(clip, take.assetRef, placement.sourceStartSeconds);
     });
 
     if (result.overran)

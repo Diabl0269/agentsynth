@@ -633,10 +633,14 @@ TEST_F(RecordFlowTest, RecordFlowCreatesAudioClip) {
     EXPECT_TRUE(mc.getUndoManager().canUndo());
 
     // ---- Roll ----
-    // The capture starts on the poll, at the punch — not at the click. See the v1 slop note.
+    // TL6-8: the capture is armed AT THE CLICK, not on a later poll tick — that poll was what cost
+    // a take up to ~100 ms of head. Where the take lands is decided at commit time instead, from the
+    // tap's own sample anchor (see Tests/LatencyAlignmentTests.cpp for the placement arithmetic;
+    // this tap is driven by hand, outside the graph, so it has no transport to anchor against and
+    // the commit falls back to the punch — which is what the clip assertions below expect).
+    EXPECT_TRUE(tap->isCapturing()) << "capture must start at Record-on";
     transport.tick(512); // drains the play() posted by "record implies roll"
     ASSERT_TRUE(transport.getPositionSnapshot().playing);
-    EXPECT_FALSE(tap->isCapturing()) << "capture must not start before the poll sees the punch";
     mc.timerCallback();
     ASSERT_TRUE(tap->isCapturing());
 

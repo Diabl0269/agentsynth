@@ -1,4 +1,5 @@
 #include "RecordTapModule.h"
+#include "../Transport/TransportService.h"
 
 RecordTapModule::RecordTapModule(int ringCapacityFrames)
     : ModuleBase("Rec Tap", kNumChannels, kNumChannels)
@@ -45,6 +46,21 @@ void RecordTapModule::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiB
     if (numSamples > 0 && capturing_.load(std::memory_order_acquire)) {
         const int captureChannels = juce::jlimit(1, kNumChannels, captureChannels_.load(std::memory_order_relaxed));
         const int availableChannels = juce::jmin(captureChannels, buffer.getNumChannels());
+
+        // TL6-8's anchor, taken BEFORE the push and only on the first captured block of the take:
+        // this block's frame 0 IS the take's frame 0 (the armed flag is read once, above, so a take
+        // can never begin mid-block), so the transport's block-start sample is exactly where the
+        // take sits on the timeline. Everything the commit needs to place the clip honestly comes
+        // from here — see the argument on TakeResult. A downcast that fails (no transport playhead:
+        // a bare unit test, a foreign host) simply leaves the anchor invalid.
+        if (!captureStartValid_.load(std::memory_order_relaxed)) {
+            if (auto* transport = dynamic_cast<synth::TransportService*>(getPlayHead())) {
+                captureStartTimelineSample_.store(transport->getCurrentBlockInfo().blockStartSample,
+                                                  std::memory_order_relaxed);
+                captureStartBlockOffset_.store(0, std::memory_order_relaxed);
+                captureStartValid_.store(true, std::memory_order_release);
+            }
+        }
 
         int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
         ring_.prepareToWrite(numSamples, start1, size1, start2, size2);
@@ -109,6 +125,11 @@ bool RecordTapModule::startCapture(const juce::File& wavFile, const juce::File& 
     overrun_.store(false, std::memory_order_relaxed);
     capturedFrames_.store(0, std::memory_order_relaxed);
     writtenFrames_.store(0, std::memory_order_relaxed);
+    // TL6-8: invalidated before arming, so the anchor the audio thread writes below can only ever
+    // belong to the take that is about to start.
+    captureStartValid_.store(false, std::memory_order_relaxed);
+    captureStartTimelineSample_.store(0, std::memory_order_relaxed);
+    captureStartBlockOffset_.store(0, std::memory_order_relaxed);
     {
         // Replaces the accumulator wholesale rather than reset()-ing the old one in place: a mono
         // take following a stereo one (or vice versa) needs a different numChannels, which reset()
@@ -160,6 +181,10 @@ RecordTapModule::TakeResult RecordTapModule::stopCapture() {
     // turns this number straight into a clip length.
     result.lengthSamples = writtenFrames_.load(std::memory_order_relaxed);
     result.overran = overrun_.load(std::memory_order_relaxed);
+    // TL6-8: the anchor as the audio thread left it. Acquire-paired with the release in processBlock.
+    result.captureStartValid = captureStartValid_.load(std::memory_order_acquire);
+    result.captureStartTimelineSample = captureStartTimelineSample_.load(std::memory_order_relaxed);
+    result.captureStartBlockOffset = captureStartBlockOffset_.load(std::memory_order_relaxed);
     result.ok = writePeaksFile();
     return result;
 }

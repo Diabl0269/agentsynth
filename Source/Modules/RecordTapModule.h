@@ -125,11 +125,30 @@ public:
      *  @param ok            a capture was running and both files were finalised
      *  @param lengthSamples frames actually written per channel — exactly the WAV's length
      *  @param overran       the ring filled at some point, so `lengthSamples` is short of what was
-     *                       played. The take is still committed; the caller warns. */
+     *                       played. The take is still committed; the caller warns.
+     *  @param captureStartValid          whether the two fields below mean anything (see below)
+     *  @param captureStartTimelineSample the TRANSPORT sample position at which the take's frame 0
+     *                       was captured — `BlockTimeInfo::blockStartSample` of the first block this
+     *                       tap pushed, read on the AUDIO thread (TL6-8). This is the sample-honest
+     *                       anchor the commit places the clip from; without it a take can only be
+     *                       placed at whatever beat the message thread happened to observe, which is
+     *                       what made TL6-3's punch start slop by up to a poll interval.
+     *
+     *                       Invalid (`captureStartValid == false`) when no block was ever captured,
+     *                       or when the tap is not running under a synth::TransportService playhead
+     *                       (a bare unit test, a foreign host) — the commit then falls back to the
+     *                       punch beat, i.e. exactly the pre-TL6-8 placement.
+     *  @param captureStartBlockOffset frames of that first block that were NOT captured. Always 0
+     *                       today: `capturing_` is read once at the top of processBlock, so a take
+     *                       always begins at sample 0 of a block. It is reported rather than assumed
+     *                       so the commit's arithmetic states its anchor in full. */
     struct TakeResult {
         bool ok = false;
         juce::int64 lengthSamples = 0;
         bool overran = false;
+        bool captureStartValid = false;
+        juce::int64 captureStartTimelineSample = 0;
+        int captureStartBlockOffset = 0;
     };
 
     /** MESSAGE THREAD. Opens `wavFile` (32-bit IEEE-float WAV at `sampleRate`) and arms the audio
@@ -153,6 +172,16 @@ public:
 
     /** Any thread. True if the ring has filled at any point since the last startCapture(). */
     bool hadOverrun() const noexcept { return overrun_.load(std::memory_order_relaxed); }
+
+    /** Any thread, TL6-8. The take's frame-0 anchor as described on TakeResult — available WHILE the
+     *  take is still rolling (the live recording strip wants it), not only at stopCapture(). Returns
+     *  false, leaving `timelineSample` untouched, until the first block has actually been captured. */
+    bool getCaptureStartTimelineSample(juce::int64& timelineSample) const noexcept {
+        if (!captureStartValid_.load(std::memory_order_acquire))
+            return false;
+        timelineSample = captureStartTimelineSample_.load(std::memory_order_relaxed);
+        return true;
+    }
 
     /** MESSAGE THREAD, after stopCapture(). The peaks exactly as they were written to the sidecar,
      *  flattened to `2 * numChannels` floats per bucket (min, max per channel) — the shape
@@ -227,6 +256,14 @@ private:
     // Written by startCapture() BEFORE capturing_ goes true and never touched again until the next
     // startCapture(), so the audio thread always sees the value belonging to the take it is in.
     std::atomic<int> captureChannels_{kNumChannels};
+
+    // TL6-8, the take's frame-0 anchor. Cleared by startCapture() BEFORE arming; written exactly
+    // once per take by the audio thread, on the first block it pushes, sample-then-flag with a
+    // release so a message-thread reader that sees the flag also sees the sample. Read by
+    // getCaptureStartTimelineSample() / stopCapture(). See TakeResult for what it means.
+    std::atomic<bool> captureStartValid_{false};
+    std::atomic<juce::int64> captureStartTimelineSample_{0};
+    std::atomic<int> captureStartBlockOffset_{0};
 
     // Message-thread-only bookkeeping.
     double preparedSampleRate_ = 44100.0;

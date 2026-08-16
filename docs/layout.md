@@ -167,7 +167,7 @@ The application chrome is carved out of `MainComponent::resized()` — the singl
 │ (200 px) │    Graph canvas      │
 │          │                      │  ← AI panel clips right (width: Metrics::aiPanelWidth = 300 px, or 0 when hidden)
 ├──────────┴──────────────────────┤
-│  [Patch Name]  CPU  Voices  [🔇] │  ← status bar  (height: Metrics::statusBarHeight = 24 px)
+│  [Patch Name]  CPU  RT  Voices  [🔇] │  ← status bar  (height: Metrics::statusBarHeight = 24 px)
 └─────────────────────────────────┘
 ```
 
@@ -225,11 +225,14 @@ The status bar (`Source/UI/StatusBarComponent.h/.cpp`) is a 24 px high strip ren
 **Layout:**
 - Patch name: left-aligned (padded 6 px from left edge)
 - CPU %: centre section, drawn in `theme.colors.warning` when above 80 %, otherwise `textMuted`
+- **Round trip (TL6-8)**: `RT <n> ms`, immediately after the CPU figure (`x = 236`, 90 px wide), `textMuted`. Drawn only while it *fits* before the voice-count slot — a cramped window drops the segment rather than overlapping two readings — and only once a first reading has arrived
 - Voice count: right-aligned before the mute button slot
 - `masterMuteButton_` (`DrawableButton`): positioned in `resized()` at `(w-28, 2, 20, h-4)`
 
 **Update contract:**
 `update(float cpuPct, int voices, const juce::String& patch)` is gated — it only calls `repaint()` when any value changes by a visible amount (cpu delta > 0.5 %, voice count changed, or patch name changed). It contains **zero `writeToLog` calls**.
+
+`updateRoundTripLatency(double milliseconds, bool available)` is a **sibling** setter with its own gate, so a moving CPU figure never repaints on account of an unchanged latency or vice versa. Its diff is on the **rendered string**, which means a latency drifting below the printed resolution costs no repaint at all. It shows `AudioEngine::getRecordingLatencySamples()` (input device + graph + output device — the amount a recorded take is shifted back by; see [`architecture.md`](architecture.md)'s "Latency alignment (TL6-8)"), fed from the same 5 Hz poll. `available == false` — Hosted mode, where the host owns both ends — draws `RT —` rather than a made-up number.
 
 **Polling rate:**
 The status bar polls at 5 Hz, driven by `MainComponent`'s 10 Hz timer via an every-other-tick guard (`statusBarTickCount_`).
@@ -238,6 +241,7 @@ The status bar polls at 5 Hz, driven by `MainComponent`'s 10 Hz timer via an eve
 - `formatCpu(float fraction)` — fraction is 0..1; `0.756f → "75.6%"`
 - `formatVoices(int n)` — `0 → "0 voices"`, `1 → "1 voice"`, `8 → "8 voices"`
 - `formatPatch(const juce::String& s)` — empty or whitespace-only → `"Untitled"`
+- `formatRoundTrip(double ms, bool available)` — `(12.34, true) → "RT 12.3 ms"`; `(anything, false) → "RT —"`; negative input clamps to `0.0`
 
 ### ModuleLibraryComponent section headers
 

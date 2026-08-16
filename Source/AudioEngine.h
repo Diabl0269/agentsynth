@@ -265,30 +265,54 @@ public:
     // never compensate for it, we only surface it (TL5-4 offsets the drawn playhead by it so the
     // line matches what is being HEARD).
     //
-    // 0 in Hosted mode (the host owns the device; asking our own idle AudioDeviceManager would be a
-    // lie) and 0 whenever no device is open — e.g. every headless test.
+    // Like getInputLatencySamples() below, this reads a value CACHED at audioDeviceAboutToStart
+    // (TL6-8 made the two symmetric): it is the latency of the stream that is actually RUNNING —
+    // an engine whose callback is detached is not being clocked by any device, so reporting the
+    // device manager's idle number would be a lie — and caching is what makes it assertable
+    // headlessly against a fake device.
+    //
+    // 0 in Hosted mode (the host owns the device) and 0 whenever no device has started — e.g. every
+    // headless test that never calls audioDeviceAboutToStart.
     int getOutputLatencySamples() const noexcept {
         if (isHosted())
             return 0;
-        if (auto* device = deviceManager.getCurrentAudioDevice())
-            return device->getOutputLatencyInSamples();
-        return 0;
+        return deviceOutputLatencySamples_.load(std::memory_order_relaxed);
     }
 
     // The INPUT DEVICE's latency, in samples — the buffering between a sample arriving at the
     // hardware input and the graph seeing it. Report-only, exactly like the two above; TL6-8
     // consumes it when aligning recorded input against the timeline.
     //
-    // Unlike getOutputLatencySamples() this reads a value CACHED at audioDeviceAboutToStart rather
-    // than asking the device manager: it is the latency of the stream that is actually running
-    // (JUCE re-runs audioDeviceAboutToStart on every device change or restart, so the cache can't
-    // go stale while a callback is attached), and caching is what makes it assertable headlessly
-    // against a fake device. 0 in Hosted mode and 0 whenever no device has started — the same two
-    // "there is nothing to report" cases.
+    // Cached at audioDeviceAboutToStart, cleared at audioDeviceStopped — see the output sibling
+    // above for the argument. 0 in Hosted mode and 0 whenever no device has started.
     int getInputLatencySamples() const noexcept {
         if (isHosted())
             return 0;
         return deviceInputLatencySamples_.load(std::memory_order_relaxed);
+    }
+
+    // TL6-8: the ROUND-TRIP latency an audio take has to be shifted back by, in samples —
+    //
+    //     input device + graph + output device
+    //
+    // and the reason it is that sum rather than just the input's, which is the whole argument
+    // behind recording alignment:
+    //
+    //   a musician plays against what they HEAR. A click (or a backing track) sitting at timeline
+    //   sample G leaves the speakers `output` samples after the graph rendered it, so the performer
+    //   hears grid-position G at wall-clock G + output and plays their note THEN. That note travels
+    //   back through the input device and reaches our callback a further `input` samples later, plus
+    //   whatever latency the graph itself reports between the input node and the tap. So a note
+    //   MEANT for timeline sample G is captured at timeline sample G + input + graph + output, and
+    //   the take must be shifted back by exactly that to land where it was played.
+    //
+    // Report-only aggregation, like each of its three terms: nothing here compensates anything. The
+    // one consumer is the take-commit math (synth::computeTakePlacement), plus the status bar's
+    // "RT" readout. Note that this is deliberately NOT what TL5-4's drawn playhead uses — that one
+    // offsets by the OUTPUT latency alone, because it answers a different question ("where is the
+    // audio the user is hearing right now?"). See docs/architecture.md.
+    int getRecordingLatencySamples() const noexcept {
+        return getInputLatencySamples() + getGraphLatencySamples() + getOutputLatencySamples();
     }
 
     // TL6-1 introspection for tests: the dimensions audioDeviceAboutToStart sized the device
@@ -492,6 +516,9 @@ private:
     // whichever thread JUCE prepares the device on, read by anyone — hence atomic. See
     // getInputLatencySamples().
     std::atomic<int> deviceInputLatencySamples_{0};
+    // TL6-8: the output sibling of the above, cached at the same two sites for the same reasons.
+    // See getOutputLatencySamples().
+    std::atomic<int> deviceOutputLatencySamples_{0};
 
     // Sizes the device-callback scratch above. Called from audioDeviceAboutToStart only — the
     // hosted path renders into the host's own buffer and needs none of this.

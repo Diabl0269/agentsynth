@@ -248,13 +248,16 @@ private:
     // ---- TL6-3: audio recording ----
 
     // Everything an armed-Audio-track take needs between the Record-on click and the commit. All
-    // message-thread state; `pending` vs `capturing` is what lets the 10 Hz poll tell "waiting for
-    // the punch" from "rolling" from "nothing going on".
+    // message-thread state.
+    //
+    // TL6-8 removed the earlier `pending` state ("record engaged, waiting for the transport to reach
+    // the punch"): the capture now starts at the click, so a take is either rolling or not. The
+    // punch survives as the earliest beat the COMMITTED CLIP may start at — pre-roll frames are
+    // recorded and then trimmed out of the clip window.
     struct AudioTake {
-        bool pending = false;     // record engaged, waiting for the transport to reach punchInBeat
         bool capturing = false;   // the tap is writing
         synth::TrackId track;     // the armed Audio track the clip lands on
-        double punchInBeat = 0.0; // where the committed clip starts
+        double punchInBeat = 0.0; // earliest beat the committed clip may start at (see above)
         juce::File wavFile;       // absolute path being written
         juce::File peaksFile;     // its .agpk sidecar
         juce::String assetRef;    // what the committed clip stores (see synth::Clip::assetRef)

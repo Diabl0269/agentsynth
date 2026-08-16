@@ -989,6 +989,7 @@ void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device) {
         prepareSliceScratch(std::max(numInputChannels, numOutputChannels), blockSize);
         prepareDeviceInputSnapshot(numInputChannels, blockSize);
         deviceInputLatencySamples_.store(device->getInputLatencyInSamples(), std::memory_order_relaxed);
+        deviceOutputLatencySamples_.store(device->getOutputLatencyInSamples(), std::memory_order_relaxed);
         mainProcessorGraph.prepareToPlay(sampleRate, blockSize);
     }
 }
@@ -1064,6 +1065,7 @@ void AudioEngine::publishDeviceInputForPass(int sampleOffset, int numSamples) no
 
 void AudioEngine::audioDeviceStopped() {
     deviceInputLatencySamples_.store(0, std::memory_order_relaxed);
+    deviceOutputLatencySamples_.store(0, std::memory_order_relaxed);
     deviceInputChannelCount_.store(0, std::memory_order_relaxed);
     deviceInputChannelsThisBlock_ = 0;
     mainProcessorGraph.releaseResources();
