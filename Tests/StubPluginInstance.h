@@ -20,6 +20,25 @@
 
 namespace synth::test {
 
+/** A trivial, resizable dummy editor for StubPluginInstance (TL7-5). Exists purely so
+ *  HostedPluginEditorWindowTests has a real, non-generic juce::AudioProcessorEditor to open and
+ *  resize — it draws nothing meaningful and is never actually shown on screen. */
+class StubPluginEditor : public juce::AudioProcessorEditor {
+public:
+    explicit StubPluginEditor(juce::AudioProcessor& proc)
+        : juce::AudioProcessorEditor(proc) {
+        setResizable(true, true);
+        setSize(320, 240);
+    }
+    ~StubPluginEditor() override = default;
+
+    void paint(juce::Graphics& g) override { g.fillAll(juce::Colours::black); }
+    void resized() override {}
+
+private:
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StubPluginEditor)
+};
+
 /** A juce::AudioPluginInstance that marks the audio it touches and round-trips a state blob.
  *
  *  - processBlock multiplies every output channel by `kGainMarker` — a value no other module in the
@@ -47,8 +66,11 @@ public:
         destructionCount().store(0);
     }
 
+    // reportsEditor (TL7-5): when true, hasEditor() and createEditor() report and build a real
+    // StubPluginEditor instead of the base default (no editor) — HostedPluginEditorWindowTests uses
+    // this to exercise both the custom-editor and the GenericAudioProcessorEditor-fallback paths.
     StubPluginInstance(int numInputs, int numOutputs, juce::String pluginName = "Stub Plugin", int uid = 0x5754424,
-                       juce::String format = "VST3")
+                       juce::String format = "VST3", bool reportsEditor = false)
         : juce::AudioPluginInstance(
               BusesProperties()
                   .withInput("Input", juce::AudioChannelSet::discreteChannels(juce::jmax(1, numInputs)), numInputs > 0)
@@ -56,7 +78,8 @@ public:
                               numOutputs > 0))
         , name_(std::move(pluginName))
         , format_(std::move(format))
-        , uid_(uid) {}
+        , uid_(uid)
+        , reportsEditor_(reportsEditor) {}
 
     ~StubPluginInstance() override {
         lastDestructionThread().store(std::this_thread::get_id());
@@ -102,8 +125,10 @@ public:
     double getTailLengthSeconds() const override { return 0.0; }
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
-    bool hasEditor() const override { return false; }
-    juce::AudioProcessorEditor* createEditor() override { return nullptr; }
+    bool hasEditor() const override { return reportsEditor_; }
+    juce::AudioProcessorEditor* createEditor() override {
+        return reportsEditor_ ? new StubPluginEditor(*this) : nullptr;
+    }
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
@@ -133,6 +158,7 @@ private:
     juce::String name_;
     juce::String format_;
     int uid_ = 0;
+    bool reportsEditor_ = false;
 };
 
 /** A backend that resolves ANY identity to a StubPluginInstance built by a factory the test owns.

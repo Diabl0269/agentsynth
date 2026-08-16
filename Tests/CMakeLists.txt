@@ -56,6 +56,7 @@ add_executable(Tests
     AudioClipPlaybackTests.cpp
     HostedPluginTests.cpp
     PluginScanTests.cpp
+    HostedPluginEditorWindowTests.cpp
     AIStateMapperTests.cpp
     AIPatchValidationTests.cpp
     AIPatchRetryTests.cpp
@@ -165,6 +166,7 @@ add_executable(Tests
     ../Source/UI/PlanBadge.cpp
     ../Source/UI/SignInDialog.cpp
     ../Source/UI/ModuleComponent.cpp
+    ../Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
     ../Source/UI/SettingsWindow.cpp
     ../Source/UI/AppearanceSettingsTab.cpp
     ../Source/UI/ShortcutsSettingsTab.cpp

@@ -151,10 +151,28 @@ void HostedPluginModule::publishInstance(std::unique_ptr<juce::AudioPluginInstan
     activeInstance_.store(raw, std::memory_order_release);
 
     statusMessage_.clear();
+
+    // TL7-5: the "new instance live" edge. Fires AFTER the instance is fully published, so a
+    // listener's getActiveInstanceForEditor() call sees it immediately.
+    if (onInstanceChanged)
+        onInstanceChanged();
 }
 
 void HostedPluginModule::retireActiveInstance() {
     activeInstance_.store(nullptr, std::memory_order_release);
+
+    // TL7-5: the "instance gone" edge — fired here, BEFORE the retired instance is moved into
+    // retired_/reapRetired() below, which may free it SYNCHRONOUSLY if the module isn't currently
+    // prepared (reapRetired()'s idle path). A listener (HostedPluginEditorWindow) holding an editor
+    // built from getActiveInstanceForEditor() reacts to this synchronously and drops that editor
+    // before returning control here — so by the time reapRetired() can free the instance, nothing
+    // still references it. Called from both a standalone unloadPlugin() (nothing follows: the
+    // listener's deferred "is it still gone?" recheck later closes the window) and from inside
+    // publishInstance() when swapping in a replacement (publishInstance() fires onInstanceChanged
+    // again, synchronously, once the new instance is live — before that deferred recheck ever
+    // runs — so a swap rebuilds rather than closes).
+    if (onInstanceChanged)
+        onInstanceChanged();
 
     if (ownedInstance_ != nullptr)
         retired_.push_back({std::move(ownedInstance_), blockCounter_.load(std::memory_order_acquire)});

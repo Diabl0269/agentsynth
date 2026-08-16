@@ -322,6 +322,13 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
                                                       const juce::String& paramId) {
         automateParameter(nodeId, paramId);
     };
+    // TL7-5: a hosted-plugin card's "Open Editor" button. Mirrors onAutomateParameterRequested's
+    // shape — GraphEditor owns neither the module lookup nor the window manager.
+    graphEditor.onOpenPluginEditorRequested = [this](juce::AudioProcessorGraph::NodeID nodeId) {
+        if (auto* node = audioEngine.getGraph().getNodeForId(nodeId))
+            if (auto* hostedPlugin = dynamic_cast<synth::HostedPluginModule*>(node->getProcessor()))
+                pluginWindowManager.openEditorFor(hostedPlugin, nodeId);
+    };
     graphEditor.snippetProvider = [this](const juce::String& name) -> juce::var {
         return synth::SnippetManager::loadSnippet(
             synth::SnippetManager::fileForName(synth::SnippetManager::getDefaultSnippetsDirectory(), name));
@@ -375,6 +382,10 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     };
     graphEditor.onGraphStructureChanged = [this] {
         moduleLibrary.repaint();
+        // TL7-5: close-on-node-delete. A pure NodeID -> graph lookup — see
+        // HostedPluginWindowManager::pruneClosedNodes for why it must never dereference the module a
+        // removed node used to carry.
+        pluginWindowManager.pruneClosedNodes(audioEngine.getGraph());
         // TL5-3 safety net for graph changes with no explicit post-apply site of their own — the
         // canonical one being "the user deleted the Track In node from the canvas", which goes
         // through recordStructuralChange (a RECORD, not a restore, so the undo hooks don't fire).
@@ -856,10 +867,15 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
 }
 
 MainComponent::~MainComponent() {
+    // TL7-5: every plugin editor window must die before the graph/engine below do — see
+    // HostedPluginWindowManager's class comment (this explicit call is one of two independent
+    // safeguards; declaration order is the other).
+    pluginWindowManager.closeAll();
+
     // TL7-3: the process-wide backend holds a bare pointer to our scan service, so unhook it before
-    // anything else — a hosted-plugin restore that happened after this point would otherwise resolve
-    // through freed memory. Guarded on "still ours" because a second MainComponent (tests construct
-    // several) will have replaced it.
+    // anything else that could resolve an identity — a hosted-plugin restore after this point would
+    // otherwise go through freed memory. Guarded on "still ours" because a second MainComponent
+    // (tests construct several) will have replaced it.
     if (auto* backend = dynamic_cast<synth::DefaultHostedPluginBackend*>(&synth::HostedPluginBackend::getDefault()))
         if (backend->getScanService() == &pluginScanService)
             backend->setScanService(nullptr);

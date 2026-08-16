@@ -4,6 +4,7 @@
 #include "HostedPluginBackend.h"
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <memory>
 #include <vector>
@@ -73,13 +74,25 @@ namespace synth {
  * exclusively by the scan list — a local, rebuildable index that is the only place a plugin PATH
  * ever lives. See PluginScanService for the resolution precedence and the out-of-process scan.
  *
+ * -- Editor windows and instance-change notification (TL7-5) ------------------------------------
+ *
+ * `onInstanceChanged` is the listener seam `synth::HostedPluginEditorWindow` observes: fired on the
+ * message thread on every edge of hasInstance() — once with the instance already gone (from
+ * retireActiveInstance(), BEFORE the retired instance can be reaped) and once more with a freshly
+ * published instance live (from the end of publishInstance()). The "gone" edge fires before any
+ * reap so a listener holding an editor built from `getActiveInstanceForEditor()` has a chance to
+ * drop it while the instance behind it is still guaranteed alive — see retireActiveInstance()'s
+ * comment for exactly why that ordering matters. A reload therefore fires the callback twice in the
+ * same call stack (old instance gone, new instance live); a plain unload fires it once. See
+ * `docs/architecture.md`'s Hosting section for the window manager side of this contract.
+ *
  * -- Forward pointers ---------------------------------------------------------------------------
  *
- * This module is still absent from the library's module catalogue and from the replace menu: it is
- * added by dragging or clicking a row in the library's Plugins section, which supplies the identity
- * (a bare "Hosted Plugin" hosting nothing would have no way to become anything). TL7-5/6 plugin
- * editor windows and parameter exposure; TL7-7 latency compensation beyond the setLatencySamples()
- * call made here.
+ * This module is absent from the library's module catalogue and from the replace menu: it is
+ * added by dragging or clicking a row in the library's Plugins section (TL7-3), which supplies the
+ * identity (a bare "Hosted Plugin" hosting nothing would have no way to become anything). Editor
+ * windows are TL7-5 (see HostedPluginEditorWindow); TL7-6 parameter exposure; TL7-7 latency
+ * compensation beyond the setLatencySamples() call made here.
  */
 class HostedPluginModule : public ModuleBase {
 public:
@@ -121,6 +134,22 @@ public:
     /** Message thread. Why the module is not currently hosting anything — an over-max refusal, a
      *  format error, "not installed" — or empty when there is nothing to say. Polled by the UI. */
     const juce::String& getStatusMessage() const noexcept { return statusMessage_; }
+
+    /** The live juce::AudioPluginInstance backing this module, or nullptr — message-thread
+     *  convenience for TL7-5's HostedPluginEditorWindow to build an editor from. This is NOT the
+     *  audio thread's path (processBlock has its own acquire-load; see the class comment) and the
+     *  returned pointer must not be retained past the next onInstanceChanged callback: that is
+     *  exactly the signal that it may be about to be retired. */
+    juce::AudioPluginInstance* getActiveInstanceForEditor() const noexcept {
+        return activeInstance_.load(std::memory_order_acquire);
+    }
+
+    /** Fired on the message thread on every edge of hasInstance() — see the class comment's
+     *  "Editor windows and instance-change notification" section for the exact ordering guarantee.
+     *  A single slot (not a listener list): only one HostedPluginEditorWindow can ever be open for
+     *  a given module (HostedPluginWindowManager enforces one window per node), so nothing else
+     *  needs to observe this today. */
+    std::function<void()> onInstanceChanged;
 
     //==============================================================================
     // AudioProcessor

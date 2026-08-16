@@ -138,6 +138,10 @@ private:
     // must close it in detachFromProcessor() — it references the module by reference.
     std::unique_ptr<juce::TextButton> eqPopOutButton;
     juce::Component::SafePointer<juce::DialogWindow> eqWindow;
+    // Hosted Plugin only (TL7-5): fires owner.onOpenPluginEditorRequested, routed to MainComponent's
+    // HostedPluginWindowManager. Enabled only while the module reports hasInstance() — refreshed
+    // each timerCallback() tick, since an async load can flip that at any moment.
+    std::unique_ptr<juce::TextButton> openPluginEditorButton;
     std::unique_ptr<juce::MidiKeyboardComponent> keyboardComponent;
     std::unique_ptr<TriggerMeterComponent> triggerMeter;
     std::unique_ptr<WavetableDisplayComponent> wavetableDisplay;

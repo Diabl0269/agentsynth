@@ -5,6 +5,7 @@
 #include "../Modules/PolySequencerModule.h"
 #include "../Modules/SamplerModule.h"
 #include "../Modules/SequencerModule.h"
+#include "../Plugin/Hosting/HostedPluginModule.h"
 #include "GraphEditor.h"
 #include "LayoutUtil.h"
 #include "Theme/AppLookAndFeel.h"
@@ -141,6 +142,7 @@ void ModuleComponent::detachFromProcessor() {
     freqResponseComponent.reset();
     spectrumToggle.reset();
     eqPopOutButton.reset();
+    openPluginEditorButton.reset();
     keyboardComponent.reset();
     // Same reasoning: the trigger meter times itself and holds a reference to the module.
     triggerMeter.reset();
@@ -287,6 +289,13 @@ void ModuleComponent::lookAndFeelChanged() {
 void ModuleComponent::timerCallback() {
     if (module == nullptr)
         return;
+
+    // TL7-5: an async plugin load can flip hasInstance() at any moment, well after the button was
+    // built — polled at the card's existing 15 Hz rate rather than adding a second timer.
+    if (openPluginEditorButton != nullptr) {
+        if (auto* hostedPlugin = dynamic_cast<synth::HostedPluginModule*>(module))
+            openPluginEditorButton->setEnabled(hostedPlugin->hasInstance());
+    }
 
     if (auto* modBase = dynamic_cast<ModuleBase*>(module)) {
         if (auto* vb = modBase->getVisualBuffer()) {
@@ -441,6 +450,18 @@ void ModuleComponent::createControls() {
         addAndMakeVisible(channelCombo);
         comboLabels.add(new juce::Label("Channel", "Channel"));
         addAndMakeVisible(comboLabels.getLast());
+    } else if (auto* hostedPlugin = dynamic_cast<synth::HostedPluginModule*>(module)) {
+        // TL7-5: the only body content a Hosted Plugin card has (bypass/mute/delete already live in
+        // the header, and the module exposes no parameters of its own — see the class comment).
+        openPluginEditorButton = std::make_unique<juce::TextButton>("Open Editor");
+        openPluginEditorButton->setComponentID("openPluginEditor");
+        openPluginEditorButton->setTooltip("Open this plugin's editor window");
+        openPluginEditorButton->setEnabled(hostedPlugin->hasInstance());
+        openPluginEditorButton->onClick = [this] {
+            if (owner.onOpenPluginEditorRequested)
+                owner.onOpenPluginEditorRequested(nodeId);
+        };
+        addAndMakeVisible(openPluginEditorButton.get());
     } else {
         const auto& params = module->getParameters();
 
@@ -1480,6 +1501,13 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
     const int narrowX = contentX + (contentW - narrowW) / 2;
 
     int y = getContentTopY();
+
+    // --- Hosted Plugin chrome: the "Open Editor" button, the card's only body content (TL7-5) ---
+    if (openPluginEditorButton) {
+        if (apply)
+            openPluginEditorButton->setBounds(narrowX, y, narrowW, kRowHeight);
+        y += kRowHeight + 2;
+    }
 
     // --- Sampler chrome: waveform overview, then the load button + file-name row ---
     if (sampleWaveform) {
