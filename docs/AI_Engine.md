@@ -317,6 +317,23 @@ trusted=false)` — which returns a typed `PatchValidationError` plus a message.
 security boundary and is never relaxed to raise the pass rate; everything below works on the
 *generation* side instead.
 
+Each node's `params` keys are checked against that module's real `paramID`s
+(`PatchValidationError::UnknownParameterKey`), not merely type/range-checked when present. A key
+that matches nothing is rejected rather than silently ignored — `applyParamsToProcessor` only ever
+looks a key up *by name* among the real parameters, so an unmatched key (e.g. a corrupted or
+typo'd key from a decoding artifact) was previously dropped on the floor, leaving that parameter at
+its default while the patch still reported success. Rejecting it surfaces the failure so the
+bounded retry/repair loop below actually engages.
+
+One consequence worth calling out: the schema's choice-parameter `properties` are a union across
+*all* module types (see `SchemaChoiceParamIdsAreUnambiguous`), so the grammar cannot express "only
+this node type's params" and `params` itself stays `additionalProperties: true` so numeric params
+remain emittable (see `SchemaStillAllowsNonChoiceParameters`). A key that is real on some other
+module — `"waveform"` sent for a Filter node, say — used to be silently ignored and is now a hard
+`UnknownParameterKey` rejection of the whole patch. This is an intentional tightening, not measured
+against live traffic (`Tools/AIPatchHarness` needs a live Ollama and is excluded from CI), so watch
+for `UnknownParameterKey` becoming a new significant rejection class in a harness run.
+
 ### Measuring first
 
 `Tools/AIPatchHarness` replays a fixed set of realistic prompts through the exact production path

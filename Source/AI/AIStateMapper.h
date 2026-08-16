@@ -32,6 +32,7 @@ enum class PatchValidationError {
     NodeIdTypeMismatch,
     InvalidParameterValue,
     InvalidChoiceValue,
+    UnknownParameterKey,
     ConnectionEntryInvalid,
     ConnectionUnknownNode,
     ConnectionInvalidPort,

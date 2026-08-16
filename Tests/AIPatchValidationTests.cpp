@@ -147,6 +147,12 @@ std::vector<Case> makeCases() {
                  R"({"nodes":[{"id":1,"type":"Oscillator","params":{"waveform":"Zigzag"}}],"connections":[]})");
          }},
 
+        {PatchValidationError::UnknownParameterKey, "params has a key that matches no real parameter",
+         [] {
+             return juce::JSON::parse(
+                 R"({"nodes":[{"id":1,"type":"Oscillator","params":{"waveform":"Saw","bogusKey":1.0}}],"connections":[]})");
+         }},
+
         {PatchValidationError::ConnectionEntryInvalid, "a connection entry is a bare integer",
          [] { return juce::JSON::parse(R"({"nodes":[],"connections":[7]})"); }},
 
