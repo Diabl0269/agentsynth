@@ -155,6 +155,32 @@ public:
     bool applyPatch(const juce::String& jsonString, bool mergeMode = false);
 
     /**
+     * @brief Computes the before/after graph snapshots a proposed patch would produce, WITHOUT
+     *        applying anything to the live graph — the basis for the chat UI's diff preview.
+     *
+     * `before` is always the live graph's current AIStateMapper::graphToJSON(). `after` is
+     * graphToJSON() of a scratch graph the patch was actually applied to (merge mode first
+     * trusted-replays the live graph into that scratch, exactly like applyPatch()'s own
+     * PatchEval regression check, so pre-existing nodes keep their live id/uuid). Diffing these
+     * two snapshots — never the raw patch JSON — is what makes the preview correct: it is the
+     * only way to see merge mode's auto-wiring of new nodes, replace mode's implicit deletion of
+     * everything the patch doesn't restate, and the untrusted-apply [0,1] rescale heuristic. See
+     * PatchDiff.h.
+     *
+     * Mirrors applyPatch()'s mode-less-patch repair (a replace that only validates as a merge is
+     * applied as a merge) so the previewed diff matches what Apply/Merge will actually do.
+     *
+     * @return true if the patch applied cleanly to the scratch graph (matching what applyPatch()
+     *         would report on a fresh live graph); false if it failed validation or application —
+     *         `before`/`after` are still populated (after reflects the unapplied, pre-patch
+     *         state) so a caller can still show "preview unavailable" using the same values.
+     *         Does NOT touch getLastPatchError()/getLastPatchErrorCode()/didLastPatchRepairMode()
+     *         — this never mutates the graph the user is looking at, so it must not clobber the
+     *         error state from a previous real Apply attempt.
+     */
+    bool computePatchPreview(const juce::String& jsonString, bool mergeMode, juce::var& before, juce::var& after);
+
+    /**
      * @brief How many correction round-trips applyPatchWithRetry() may make after the first
      *        rejected patch. Total attempts are kMaxPatchRetries + 1.
      *
@@ -322,6 +348,15 @@ private:
      *        that the mode repair in applyPatch() must not override.
      */
     static bool hasExplicitMode(const juce::var& json);
+
+    /**
+     * @brief Trusted-replays the live graph's current AIStateMapper::graphToJSON() into `scratch`
+     *        (clearExisting=true, trusted=true) — the shared first step for building a scratch
+     *        graph that starts as an exact copy of the live one, used by both applyPatch()'s
+     *        PatchEval regression check and computePatchPreview(). Only meaningful for merge mode:
+     *        a replace-mode candidate patch has no "before" to build on top of.
+     */
+    void replayLiveGraphTrusted(juce::AudioProcessorGraph& scratch) const;
 
     JUCE_DECLARE_WEAK_REFERENCEABLE(AIIntegrationService)
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AIIntegrationService)

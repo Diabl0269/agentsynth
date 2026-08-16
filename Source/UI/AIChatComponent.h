@@ -2,6 +2,8 @@
 
 #include "../AI/AIIntegrationService.h"
 #include "../AI/AccountService.h"
+#include "../AI/PatchDiff.h"
+#include "../AI/PatchFeedbackStore.h"
 #include "AccountRow.h"
 #include "PlanBadge.h"
 #include "Theme/AppLookAndFeel.h"
@@ -46,6 +48,14 @@ public:
     void sendButtonClicked();
     void triggerSend() { sendButtonClicked(); }
 
+    // Decides whether an outgoing message should carry the live patch JSON + structured-output
+    // schema (see AIIntegrationService::sendMessage). Pure and free-standing (no UI state) so it
+    // can be unit-tested directly: any message naming a real module/effect type, or using a
+    // generic edit-intent verb, is treated as patch-related. `moduleTypeNames` is normally
+    // AIStateMapper::moduleFactoryTypeNames() — passed in explicitly so a test can supply a
+    // synthetic registry without touching the real module factory.
+    static bool shouldUseStructuredOutput(const juce::String& text, const juce::StringArray& moduleTypeNames);
+
     /**
      * @brief Attaches (or detaches, with nullptr) the account UI to `service`.
      *
@@ -77,6 +87,10 @@ public:
     // Testing hook: replaces the real "open in default browser" action a Quota error's Upgrade
     // button invokes, so tests can assert on the URL without ever launching a real browser.
     void setUrlOpenerForTesting(std::function<void(const juce::URL&)> opener) { urlOpener = std::move(opener); }
+
+    // Testing hook: redirects the local feedback log to a caller-supplied file so tests never
+    // touch the real per-user app-data location. Mirrors setUrlOpenerForTesting.
+    void setPatchFeedbackFileForTesting(const juce::File& file) { patchFeedbackStore = PatchFeedbackStore(file); }
 
 private:
     void timerCallback() override;
@@ -187,6 +201,10 @@ private:
     // setUrlOpenerForTesting() so no test ever launches a real browser.
     std::function<void(const juce::URL&)> urlOpener = [](const juce::URL& u) { u.launchInDefaultBrowser(); };
 
+    // P6-3: local, append-only feedback log — see PatchFeedbackStore's doc comment for why this
+    // is client-only for now (no server endpoint exists yet to sync to).
+    PatchFeedbackStore patchFeedbackStore;
+
     void updateChatDisplay();
     void scrollToBottom();
 
@@ -195,6 +213,10 @@ private:
     // for the async model fetch) from refreshModels() — the same post-setProvider() resync point
     // documented for model discovery (see CLAUDE.md "AI model discovery ordering").
     void updateHostedModeNotice();
+
+    // P6-3: thumbs up/down on a patch card. `None` is the UI's un-rated default and is never
+    // itself written to PatchFeedbackStore — only Up/Down get persisted.
+    enum class PatchRatingUiState { None, Up, Down };
 
     struct MessageData {
         juce::String role;
@@ -215,8 +237,41 @@ private:
         // is what the card displays: the validated summary, or the reason it was refused.
         juce::String timelineOpsJson;
         juce::String timelineOpsPreview;
+
+        // P6-3: session-scoped UI rating state, same "not reconstructed on replay" precedent as
+        // showUpgradeAction just above — the durable record lives in patchFeedbackStore, not here.
+        PatchRatingUiState ratingState = PatchRatingUiState::None;
+        juce::String ratingComment;
+
+        // Patch diff preview, computed ONCE (attachPatchPreview()) at the point this message is
+        // created, not on every updateChatDisplay() re-render — see that method's doc comment.
+        // patchIsMerge also pins which mode Apply/Merge will actually use, so it can't drift if
+        // the live graph changes while this message is still on screen.
+        //
+        // Only one of patchDiff/patchSummary is ever populated: merge-mode patches get patchDiff
+        // (synth::computeDiff() against the live graph, since a merge has stable node identity to
+        // diff against); replace-mode patches get patchSummary (synth::summarizePatch() of just
+        // the new patch's contents, since replace mode has no stable node identity to diff against
+        // — see PatchDiff.h). Both are empty when patchDiffAvailable is false.
+        bool patchIsMerge = false;
+        bool patchDiffAvailable = false;
+        std::vector<PatchChange> patchDiff;
+        PatchSummary patchSummary;
     };
     std::vector<MessageData> messages;
+
+    // Computes and caches data.patchIsMerge/patchDiff/patchDiffAvailable ONCE, at the point a
+    // message carrying a patch is created (every messages.push_back() site that can set
+    // jsonPatch) — NOT in updateChatDisplay(), which reruns on every redraw (message arrival,
+    // apply result, retry announcement) and would otherwise rebuild a scratch graph per
+    // patch-bearing message on every single one of those redraws. See docs/AI_Engine.md
+    // "Patch Diff Preview". Also more correct, not just faster: the diff is a snapshot of the
+    // graph at proposal time and must not silently change if the live graph is edited later
+    // (e.g. an earlier patch in the same conversation gets applied) while this message is still
+    // on screen. No-op when data.jsonPatch is empty. Reads `messages` (must already contain every
+    // turn up to and including `data`, for the merge-vs-replace user-intent heuristic) and
+    // `aiService`, so it must be called after data is appended to `messages`.
+    void attachPatchPreview(MessageData& data);
 
 #ifndef NDEBUG
     juce::TextEditor debugConsole;

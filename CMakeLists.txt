@@ -222,10 +222,14 @@ add_library(Core STATIC
     Source/AI/AIProviderRegistry.cpp
     Source/AI/PatchEval.h
     Source/AI/PatchEval.cpp
+    Source/AI/PatchDiff.h
+    Source/AI/PatchDiff.cpp
     Source/AI/AuthClient.h
     Source/AI/AuthClient.cpp
     Source/AI/AccountService.h
     Source/AI/AccountService.cpp
+    Source/AI/PatchFeedbackStore.h
+    Source/AI/PatchFeedbackStore.cpp
     # Auth (device-code sign-in: token storage, no UI)
     Source/Auth/TokenStore.h
     Source/Auth/InMemoryTokenStore.h

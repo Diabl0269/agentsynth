@@ -138,6 +138,36 @@ private:
     juce::String currentModel;
 };
 
+// Returns an assistant response containing a single fenced ```json patch, so tests can exercise
+// AIChatComponent's PatchCard (and its P6-3 thumbs feedback) without a real provider.
+class MockPatchProvider : public synth::AIProvider {
+public:
+    juce::String getProviderName() const override { return "MockPatchProvider"; }
+
+    void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
+        callback({"MockModel"}, true);
+    }
+
+    RequestId sendPrompt(const std::vector<synth::AIProvider::Message>&, CompletionCallback callback,
+                         const juce::var& = juce::var(), std::function<void(const juce::String&)> = {}) override {
+        AIResponse response;
+        response.success = true;
+        response.content = "```json\n"
+                           R"({"nodes":[{"id":1,"type":"Oscillator"},{"id":2,"type":"Audio Output"}],)"
+                           R"("connections":[{"src":1,"srcPort":0,"dst":2,"dstPort":0}]})"
+                           "\n```";
+        callback(response);
+        return {};
+    }
+
+    void cancel(RequestId) override {}
+    void setModel(const juce::String& name) override { currentModel = name; }
+    juce::String getCurrentModel() const override { return currentModel; }
+
+private:
+    juce::String currentModel;
+};
+
 // Finds the juce::Viewport AIChatComponent adds as a direct child and returns its viewed
 // component (messageList) — the parent of every rendered MessageBubble. MessageBubble itself is a
 // private nested type, but its base juce::Component* children (labels, buttons) are inspectable
@@ -243,6 +273,57 @@ TEST_F(AIChatComponentTest, SendMessageUpdatesUIAndHistory) {
 
     // The AI response should now also be in the history because MockChatProvider is synchronous
     EXPECT_GT(service.getHistory().size(), initialHistorySize + 1);
+}
+
+// AIChatComponent::shouldUseStructuredOutput() classifies whether a user message should carry
+// live patch JSON + the structured-output schema. Regression coverage for the bug where a
+// hand-picked keyword list (patch/create/modify/oscillator/filter/vca/adsr/sound/preset) silently
+// missed real module names like "Chorus", "Distortion", and "Delay" — the classifier under test
+// derives its module-name match set from the real module factory registry instead.
+TEST(AIChatComponentClassifierTest, ExactBugReportStringIsRecognizedAsPatchRelated) {
+    // The reported failing message: matched none of the 4 hardcoded module names in the old
+    // classifier (oscillator/filter/vca/adsr), even though it names three real modules
+    // (Chorus, Distortion, Delay) plus the edit-intent word "between".
+    EXPECT_TRUE(synth::AIChatComponent::shouldUseStructuredOutput("Add a chorus between the distortion to the delay",
+                                                                  synth::AIStateMapper::moduleFactoryTypeNames()));
+}
+
+TEST(AIChatComponentClassifierTest, AnyRealModuleTypeNameTriggersStructuredOutput) {
+    // A synthetic registry, independent of the real module list, proves the classifier walks
+    // whatever names it is given rather than a hardcoded subset.
+    // Neither sentence below contains any of the classifier's generic edit-intent words, so a true
+    // result can only come from matching the registry entry itself.
+    juce::StringArray registry{"Widget", "Gizmo"};
+    EXPECT_TRUE(
+        synth::AIChatComponent::shouldUseStructuredOutput("I really like the tone of a Widget lately.", registry));
+    EXPECT_FALSE(synth::AIChatComponent::shouldUseStructuredOutput("What is a gadget?", registry));
+}
+
+// These two are close calls between "conversational" and "patch-related" — see the bias-toward-
+// inclusion rule in AIChatComponent.cpp: attaching unnecessary context costs ~1.5k tokens, while
+// missing a real edit request reproduces this exact bug. Both strings happen to contain a real
+// word from the classifier's match set ("filter" is a module type name; "sound" is a generic
+// edit-intent word carried over from the original list), so the classifier intentionally treats
+// them as patch-related even though a human reading them in isolation might call them "just
+// conversation". That is the correct tradeoff: a user asking "what does a low-pass filter do" is
+// one clarifying follow-up away from "now add one to my patch", and the live graph context is
+// harmless to include either way.
+TEST(AIChatComponentClassifierTest, FilterQuestionIsTreatedAsPatchRelated) {
+    EXPECT_TRUE(synth::AIChatComponent::shouldUseStructuredOutput("What does a low-pass filter do conceptually?",
+                                                                  synth::AIStateMapper::moduleFactoryTypeNames()));
+}
+
+TEST(AIChatComponentClassifierTest, BassSoundTipsIsTreatedAsPatchRelated) {
+    EXPECT_TRUE(synth::AIChatComponent::shouldUseStructuredOutput("Any tips for a fat bass sound?",
+                                                                  synth::AIStateMapper::moduleFactoryTypeNames()));
+}
+
+// A genuinely keyword-free conversational message — no module type name, no edit-intent verb —
+// stays conversational. This is the counterpart to the two tests above: it proves the classifier
+// doesn't degenerate into "always true" once module names are folded in.
+TEST(AIChatComponentClassifierTest, KeywordFreeMusicTheoryQuestionStaysConversational) {
+    EXPECT_FALSE(synth::AIChatComponent::shouldUseStructuredOutput(
+        "How does subtractive synthesis differ from FM synthesis?", synth::AIStateMapper::moduleFactoryTypeNames()));
 }
 
 // REGRESSION LOCK: reproduces MainComponent's member-init ordering, where AIChatComponent is
@@ -651,4 +732,87 @@ TEST_F(AIChatComponentTest, UpgradeButtonDoesNotSurviveNewChat) {
 
     EXPECT_EQ(findDescendantWithText<juce::TextButton>(findMessageList(chatComponent), "Upgrade to Pro"), nullptr)
         << "New Chat must not resurrect the upgrade button";
+}
+
+TEST_F(AIChatComponentTest, PatchCardShowsThumbsButtons) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<MockPatchProvider>());
+
+    juce::ApplicationProperties props;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Test";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(options);
+
+    synth::AIChatComponent chatComponent(service, props);
+    chatComponent.setSize(400, 600);
+
+    juce::TextEditor* inputField = nullptr;
+    for (auto* child : chatComponent.getChildren()) {
+        if (auto* editor = dynamic_cast<juce::TextEditor*>(child))
+            inputField = editor;
+    }
+    ASSERT_NE(inputField, nullptr);
+    inputField->setText("give me a patch");
+    chatComponent.triggerSend();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+
+    auto* messageList = findMessageList(chatComponent);
+    ASSERT_NE(messageList, nullptr);
+    EXPECT_NE(findDescendantWithText<juce::TextButton>(messageList, juce::String::fromUTF8("\xF0\x9F\x91\x8D")),
+              nullptr);
+    EXPECT_NE(findDescendantWithText<juce::TextButton>(messageList, juce::String::fromUTF8("\xF0\x9F\x91\x8E")),
+              nullptr);
+}
+
+TEST_F(AIChatComponentTest, ClickingThumbsUpRecordsFeedbackLocally) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<MockPatchProvider>());
+
+    juce::ApplicationProperties props;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Test";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(options);
+
+    synth::AIChatComponent chatComponent(service, props);
+    chatComponent.setSize(400, 600);
+
+    auto feedbackFile = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                            .getChildFile("AIChatComponentTest_" + juce::Uuid().toString())
+                            .getChildFile("patch_feedback.jsonl");
+    chatComponent.setPatchFeedbackFileForTesting(feedbackFile);
+
+    juce::TextEditor* inputField = nullptr;
+    for (auto* child : chatComponent.getChildren()) {
+        if (auto* editor = dynamic_cast<juce::TextEditor*>(child))
+            inputField = editor;
+    }
+    ASSERT_NE(inputField, nullptr);
+    inputField->setText("give me a patch");
+    chatComponent.triggerSend();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+
+    auto* messageList = findMessageList(chatComponent);
+    auto* goodButton =
+        findDescendantWithText<juce::TextButton>(messageList, juce::String::fromUTF8("\xF0\x9F\x91\x8D"));
+    ASSERT_NE(goodButton, nullptr);
+    // triggerClick() posts an async command message (Button::triggerClick() ->
+    // postCommandMessage); call onClick() directly for synchronous test behaviour, same as
+    // newChatButton->onClick() above.
+    goodButton->onClick();
+
+    ASSERT_TRUE(feedbackFile.existsAsFile());
+    // Parse rather than substring-match: JSON::toString's allOnOneLine mode still spaces after
+    // colons ("rating": "up"), so a naive `contains("\"rating\":\"up\"")` undercounts.
+    auto recordVar = juce::JSON::parse(feedbackFile.loadFileAsString());
+    auto* record = recordVar.getDynamicObject();
+    ASSERT_NE(record, nullptr);
+    EXPECT_EQ(record->getProperty("rating").toString(), "up");
+
+    feedbackFile.getParentDirectory().deleteRecursively();
 }

@@ -63,6 +63,7 @@ add_executable(Tests
     AIPatchValidationTests.cpp
     AIPatchRetryTests.cpp
     PatchEvalTests.cpp
+    PatchDiffTests.cpp
     AIProviderRegistryTests.cpp
     OllamaProviderTests.cpp
     RemoteProviderTests.cpp
@@ -70,6 +71,7 @@ add_executable(Tests
     AccountServiceTests.cpp
     KeychainTokenStoreTests.cpp
     DeviceIdStoreTests.cpp
+    PatchFeedbackStoreTests.cpp
     MainComponentTests.cpp
     GraphEditorTests.cpp
     ModuleComponentTests.cpp
