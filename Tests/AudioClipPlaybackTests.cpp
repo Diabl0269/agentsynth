@@ -298,7 +298,9 @@ TEST(AudioClipSnapshotTest, AudioTracksCarryClipRunsAndNoNotes) {
     EXPECT_FLOAT_EQ(second.gainLinear, 1.0f);
 }
 
-TEST(AudioClipSnapshotTest, LongAssetRefIsTruncatedAndStillNulTerminated) {
+TEST(AudioClipSnapshotTest, LongAssetRefIsDroppedNotTruncated) {
+    // A truncated assetRef would be a real-looking but WRONG bundle-relative path; the snapshot
+    // drops it instead, leaving the clip inert exactly like a clip with no asset at all.
     TimelineDoc doc;
     const auto track = doc.addTrack(TrackKind::Audio, "A");
     const auto clip = doc.addClip(track, 0.0, 1.0, "c");
@@ -309,7 +311,7 @@ TEST(AudioClipSnapshotTest, LongAssetRefIsTruncatedAndStillNulTerminated) {
     ASSERT_NE(snapshot, nullptr);
     EXPECT_TRUE(snapshot->selfCheck());
     const auto& info = snapshot->audioClips[0];
-    EXPECT_EQ(std::strlen(info.assetRef), (std::size_t)TimelineSnapshot::kMaxAssetRefBytes - 1);
+    EXPECT_EQ(std::strlen(info.assetRef), 0u);
     EXPECT_EQ(info.assetRef[TimelineSnapshot::kMaxAssetRefBytes - 1], '\0');
 }
 

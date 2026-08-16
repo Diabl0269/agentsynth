@@ -152,6 +152,37 @@ TEST(HostedPluginWindowManagerTest, CloseOnNodeDelete) {
     EXPECT_EQ(manager.getOpenWindowCountForTest(), 0);
 }
 
+TEST(HostedPluginWindowManagerTest, NodeDeleteDropsTheEditorBeforeTheInstanceDies) {
+    StubBackend backend([] {
+        return std::make_unique<StubPluginInstance>(2, 2, "Deletable", 0x4444, "VST3",
+                                                    std::vector<synth::test::StubParamSpec>{}, /*reportsEditor*/ true);
+    });
+    AudioEngine engine;
+
+    auto module = std::make_unique<HostedPluginModule>();
+    auto* modulePtr = module.get();
+    const auto nodeId = engine.getGraph().addNode(std::move(module))->nodeID;
+    modulePtr->prepareToPlay(kSampleRate, kBlockSize);
+    loadAndWait(*modulePtr, backend, "Deletable", 0x4444);
+
+    HostedPluginWindowManager manager;
+    manager.openEditorFor(modulePtr, nodeId);
+    auto* window = manager.getWindowForTest(nodeId);
+    ASSERT_NE(window, nullptr);
+    ASSERT_NE(dynamic_cast<StubPluginEditor*>(window->getEditorContentForTest()), nullptr);
+
+    // The delete path: removeNode destroys the module AND its plugin instance, and nothing has
+    // pruned the window yet. The editor was built on that instance, so it must already be gone.
+    engine.getGraph().removeNode(nodeId);
+
+    ASSERT_TRUE(manager.hasWindowForTest(nodeId)) << "the prune has not run yet — that is the point";
+    EXPECT_TRUE(window->isShowingPlaceholderForTest())
+        << "the window still holds an editor built on a destroyed plugin instance";
+
+    manager.pruneClosedNodes(engine.getGraph());
+    EXPECT_FALSE(manager.hasWindowForTest(nodeId));
+}
+
 TEST(HostedPluginWindowManagerTest, ManagerShutdownClosesAll) {
     StubBackend backend;
 

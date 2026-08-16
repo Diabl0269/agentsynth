@@ -590,6 +590,10 @@ TEST_F(TimelineDocTest, FromVarLeavesTheDocUntouchedOnMalformedInput) {
         R"({"version":1,"tracks":[{"id":1,"clips":[{"id":1,"startBeat":0.0,"lengthBeats":0.0}]}]})",
         // an id of zero (the invalid sentinel)
         R"({"version":1,"tracks":[{"id":0}]})",
+        // an id above kMaxIdValue: the next allocation off it (id + 1) must never signed-overflow
+        R"({"version":1,"tracks":[{"id":2000000000000000}]})",
+        // a next-id counter above kMaxIdValue, same overflow reason
+        R"({"version":1,"nextTrackId":2000000000000000,"tracks":[]})",
         // a breakpoint curve beyond Bezier
         R"({"version":1,"tracks":[{"id":1,"lanes":[{"id":1,"nodeUuid":"u","paramId":"p",
             "points":[{"beat":0.0,"value":0.5,"curve":9}]}]}]})",

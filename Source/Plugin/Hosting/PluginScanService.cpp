@@ -299,13 +299,34 @@ PluginScanService::XmlFold PluginScanService::addTypesFromXml(const juce::String
 // The default seams
 //==============================================================================
 
-juce::String PluginScanService::extractChildXml(const juce::String& processOutput) {
-    const int begin = processOutput.indexOf(kChildXmlBegin);
+bool PluginScanService::isValidScanToken(const juce::String& token) {
+    return token.isNotEmpty() && token.containsOnly("0123456789abcdefABCDEF");
+}
+
+juce::String PluginScanService::childXmlBeginMarker(const juce::String& token) {
+    return isValidScanToken(token) ? juce::String(kChildXmlBeginPrefix) + token + ">>>" : juce::String();
+}
+
+juce::String PluginScanService::childXmlEndMarker(const juce::String& token) {
+    return isValidScanToken(token) ? juce::String(kChildXmlEndPrefix) + token + ">>>" : juce::String();
+}
+
+juce::String PluginScanService::makeScanToken() { return juce::Uuid().toString(); }
+
+juce::String PluginScanService::extractChildXml(const juce::String& processOutput, const juce::String& token) {
+    const juce::String beginMarker = childXmlBeginMarker(token);
+    const juce::String endMarker = childXmlEndMarker(token);
+    if (beginMarker.isEmpty() || endMarker.isEmpty())
+        return {};
+
+    // LAST block, not the first: the plugin being scanned runs inside that child, so anything it
+    // printed while loading came BEFORE the document the child prints on its way out.
+    const int begin = processOutput.lastIndexOf(beginMarker);
     if (begin < 0)
         return {};
 
-    const int bodyStart = begin + (int)juce::String(kChildXmlBegin).length();
-    const int end = processOutput.indexOf(bodyStart, kChildXmlEnd);
+    const int bodyStart = begin + beginMarker.length();
+    const int end = processOutput.indexOf(bodyStart, endMarker);
     if (end < 0)
         return {};
 
@@ -334,11 +355,15 @@ bool PluginScanService::launchScanChildProcess(const juce::String& formatName, c
     if (!executable.existsAsFile())
         return false;
 
+    // Fresh per launch: the output we accept back has to be stamped with THIS token.
+    const juce::String token = makeScanToken();
+
     juce::StringArray command;
     command.add(executable.getFullPathName());
     command.add(PluginScanService::kScanArgvFlag);
     command.add(formatName);
     command.add(fileOrIdentifier);
+    command.add(token);
 
     juce::ChildProcess child;
     // stdout only: a plugin's own stderr chatter stays on our stderr instead of being interleaved
@@ -375,7 +400,7 @@ bool PluginScanService::launchScanChildProcess(const juce::String& formatName, c
     if (child.getExitCode() != 0)
         return false;
 
-    const auto xml = extractChildXml(output);
+    const auto xml = extractChildXml(output, token);
     if (xml.isEmpty())
         return false;
 
@@ -393,13 +418,16 @@ std::optional<int> runPluginScanChildMode(const juce::StringArray& args, juce::S
         return std::nullopt; // an ordinary app launch — the caller starts the application
 
     // From here on this process IS the scanner, so every exit path returns a code.
-    if (flagIndex + 2 >= args.size())
-        return 1; // needs both a format and a file/identifier
+    if (flagIndex + 3 >= args.size())
+        return 1; // needs a format, a file/identifier and the parent's token
 
     const auto formatName = args[flagIndex + 1];
     const auto fileOrIdentifier = args[flagIndex + 2];
+    const auto token = args[flagIndex + 3];
     if (formatName.isEmpty() || fileOrIdentifier.isEmpty())
         return 1;
+    if (!PluginScanService::isValidScanToken(token))
+        return 1; // no token, no way to stamp output the parent will accept
 
     // GUI initialisation before touching a format: AudioUnit needs a run loop to enumerate
     // components, and several VST3s assume a message thread exists during instantiation. This is
@@ -428,8 +456,8 @@ std::optional<int> runPluginScanChildMode(const juce::StringArray& args, juce::S
         return 1; // not a plugin we can host; the parent blacklists it
 
     if (auto xml = list.createXml())
-        xmlOut = juce::String(PluginScanService::kChildXmlBegin) + "\n" + xml->toString() + "\n" +
-                 PluginScanService::kChildXmlEnd;
+        xmlOut = PluginScanService::childXmlBeginMarker(token) + "\n" + xml->toString() + "\n" +
+                 PluginScanService::childXmlEndMarker(token);
 
     return xmlOut.isEmpty() ? 1 : 0;
 }

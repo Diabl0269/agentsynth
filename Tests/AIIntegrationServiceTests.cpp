@@ -1,7 +1,9 @@
 #include "AI/AIIntegrationService.h"
 #include "AI/PatchEval.h"
 #include "Modules/OscillatorModule.h"
+#include "Modules/SamplerModule.h"
 #include <gtest/gtest.h>
+#include <juce_audio_formats/juce_audio_formats.h>
 
 namespace synth {
 
@@ -440,6 +442,45 @@ TEST_F(AIIntegrationServiceTest, OutgoingRequestOnEmptyGraphStatesPatchIsEmpty) 
     EXPECT_TRUE(content.contains("Create a fat bass patch"));
     // Must not claim a patch state block that doesn't exist.
     EXPECT_FALSE(content.contains("Current patch state"));
+}
+
+// Regression: buildPatchAugmentedContent() used to embed graphToJSON() verbatim, including each
+// node's "state" object. For a Sampler that is an absolute disk path; for a Hosted Plugin it would
+// be the third-party plugin's opaque state blob. Neither is something the model can author (the
+// trusted-only rule in AIStateMapper), so it must never leave the machine in the request payload.
+TEST_F(AIIntegrationServiceTest, OutgoingRequestStripsNodeStateFromPatchContext) {
+    auto file = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("ai-context-146.wav");
+    file.deleteFile();
+    {
+        juce::AudioBuffer<float> buffer(1, 512);
+        buffer.clear();
+        juce::WavAudioFormat wavFormat;
+        std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
+        ASSERT_NE(stream, nullptr);
+        std::unique_ptr<juce::AudioFormatWriter> writer(wavFormat.createWriterFor(stream.get(), 44100.0, 1, 32, {}, 0));
+        ASSERT_NE(writer, nullptr);
+        stream.release(); // writer owns the stream now
+        writer->writeFromAudioSampleBuffer(buffer, 0, 512);
+    }
+
+    auto* sampler = graph->addNode(std::make_unique<SamplerModule>())->getProcessor();
+    ASSERT_TRUE(dynamic_cast<SamplerModule*>(sampler)->loadSampleFile(file));
+
+    auto provider = std::make_unique<MockAIProvider>();
+    auto* rawProvider = provider.get();
+    service->setProvider(std::move(provider));
+
+    service->sendMessage("Add a filter", nullptr, true);
+
+    ASSERT_FALSE(rawProvider->lastConversation.empty());
+    const auto& content = rawProvider->lastConversation.back().content;
+    EXPECT_TRUE(content.contains("Current patch state"));
+    EXPECT_TRUE(content.contains("\"Sampler\""));
+    EXPECT_FALSE(content.contains("\"state\""));
+    EXPECT_FALSE(content.contains(file.getFullPathName()));
+    EXPECT_FALSE(content.contains("ai-context-146.wav"));
+
+    file.deleteFile();
 }
 
 TEST_F(AIIntegrationServiceTest, HistoryIsTrimmedToCap) {

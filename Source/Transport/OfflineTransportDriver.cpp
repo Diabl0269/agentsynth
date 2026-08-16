@@ -51,9 +51,12 @@ void OfflineTransportDriver::copyBlockInto(juce::AudioBuffer<float>& destination
         destination.copyFrom(ch, destStartSample, scratch, ch, 0, blockSize);
 }
 
-int OfflineTransportDriver::streamBlocks(int numBlocks, const BlockCallback& perBlock) {
+int OfflineTransportDriver::streamBlocks(int numBlocks, const BlockCallback& perBlock, const BlockGate& beforeBlock) {
     int blocksRendered = 0;
     for (int b = 0; b < numBlocks; ++b) {
+        if (beforeBlock && !beforeBlock())
+            break;
+
         const auto& info = renderOneBlock();
         ++blocksRendered;
         if (perBlock)
@@ -62,7 +65,8 @@ int OfflineTransportDriver::streamBlocks(int numBlocks, const BlockCallback& per
     return blocksRendered;
 }
 
-int OfflineTransportDriver::streamToBeat(double beat, const BlockCallback& perBlock, int maxBlocks) {
+int OfflineTransportDriver::streamToBeat(double beat, const BlockCallback& perBlock, int maxBlocks,
+                                         const BlockGate& beforeBlock) {
     // Read the position before rendering anything: a target that is not ahead of us can never be
     // reached by rendering forwards, so there is nothing to do and nothing to spin on.
     const auto snapshot = getTransport().getPositionSnapshot();
@@ -72,12 +76,17 @@ int OfflineTransportDriver::streamToBeat(double beat, const BlockCallback& perBl
     int blocksRendered = 0;
     bool hitSafetyCap = true; // cleared by every non-cap exit below
     for (int b = 0; b < maxBlocks; ++b) {
+        // The gate ends the render before this block costs anything; a consumer that only notices
+        // mid-block posts transport.stop() instead and arrives at the check below one block later.
+        if (beforeBlock && !beforeBlock()) {
+            hitSafetyCap = false;
+            break;
+        }
+
         const auto& info = renderOneBlock();
 
         // A stopped transport never reaches any beat. Drop the block that discovered it (so a
-        // transport that was never started yields nothing) and stop. A consumer that wants OUT of
-        // this loop early — a cancelled bounce, say — posts transport.stop() from its callback and
-        // arrives here one block later; there is deliberately no second way to break the loop.
+        // transport that was never started yields nothing) and stop.
         if (!info.playing) {
             hitSafetyCap = false;
             break;

@@ -8,6 +8,10 @@ namespace {
  *  re-reads activeInstance_ at the top of every block and never caches it, so one completed block
  *  after the swap already proves it let go; two is the cheap margin. */
 constexpr std::uint64_t kBlocksBeforeReap = 2;
+
+/** How long after a retire the message thread comes back to try the reap again. Long enough for the
+ *  audio thread to have started kBlocksBeforeReap blocks at any sane rate and block size. */
+constexpr int kReapRetryDelayMs = 250;
 } // namespace
 
 HostedPluginModule::HostedPluginModule()
@@ -26,6 +30,14 @@ HostedPluginModule::~HostedPluginModule() {
     // The node is off the graph by now, so nothing can be mid-processBlock. Drop the audio-visible
     // pointer first anyway, then free on this (message) thread.
     activeInstance_.store(nullptr, std::memory_order_release);
+
+    // The "instance gone" edge, fired while the instance is still ALIVE — same ordering guarantee as
+    // retireActiveInstance(). A node delete destroys this module before anything prunes the editor
+    // window that owns an editor built on our instance, so the window has to be given the chance to
+    // drop that editor synchronously, here, before the lines below free what it was built on.
+    if (onInstanceChanged)
+        onInstanceChanged();
+
     if (ownedInstance_ != nullptr)
         ownedInstance_->releaseResources();
     ownedInstance_.reset();
@@ -37,6 +49,10 @@ HostedPluginModule::~HostedPluginModule() {
 //==============================================================================
 
 void HostedPluginModule::loadPlugin(const juce::PluginDescription& description, HostedPluginBackend& backend) {
+    // Nothing but a state restore may carry a blob into a load: the blob belongs to the plugin it was
+    // saved from, and applying it to a DIFFERENT plugin hands third-party code someone else's bytes.
+    pendingBlob_.reset();
+
     identity_ = PluginIdentity::fromDescription(description);
     statusMessage_.clear();
     loading_ = true;
@@ -65,6 +81,11 @@ void HostedPluginModule::loadPlugin(const juce::PluginDescription& description, 
 }
 
 void HostedPluginModule::loadPlugin(const PluginIdentity& identity, HostedPluginBackend& backend) {
+    pendingBlob_.reset(); // see the description overload
+    startIdentityLoad(identity, backend);
+}
+
+void HostedPluginModule::startIdentityLoad(const PluginIdentity& identity, HostedPluginBackend& backend) {
     identity_ = identity;
     statusMessage_.clear();
     loading_ = true;
@@ -245,6 +266,21 @@ void HostedPluginModule::retireActiveInstance() {
     visibleOutputs_.store(1, std::memory_order_relaxed);
 
     reapRetired();
+    scheduleReapRetry();
+}
+
+void HostedPluginModule::scheduleReapRetry() {
+    // The instance retired a moment ago can never be reapable yet — the audio thread has not started
+    // kBlocksBeforeReap blocks since. Without this, nothing would free it until the NEXT
+    // load/unload/release, so a single swap leaves a whole plugin instance resident indefinitely.
+    if (retired_.empty() || !prepared_)
+        return;
+
+    juce::WeakReference<HostedPluginModule> self(this);
+    juce::Timer::callAfterDelay(kReapRetryDelayMs, [self]() mutable {
+        if (auto* module = self.get())
+            module->reapRetired();
+    });
 }
 
 void HostedPluginModule::reapRetired() {
@@ -502,10 +538,13 @@ void HostedPluginModule::setExtraState(const juce::var& state) {
         return;
     }
 
+    // The one load that KEEPS pendingBlob_ (hence startIdentityLoad, not loadPlugin): this identity
+    // and this blob were saved together.
+    //
     // The backend seam: state restore happens deep inside AIStateMapper::applyJSONToGraph, which has
     // no backend to pass down, so we reach for the process-wide default. Tests install a stub for
     // the duration of a scope via HostedPluginBackend::ScopedDefault.
-    loadPlugin(identity, HostedPluginBackend::getDefault());
+    startIdentityLoad(identity, HostedPluginBackend::getDefault());
 }
 
 } // namespace synth

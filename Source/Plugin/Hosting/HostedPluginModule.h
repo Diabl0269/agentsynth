@@ -42,7 +42,9 @@ namespace synth {
  *
  * `onInstanceChanged` fires on every edge of hasInstance(): once with the instance already gone
  * (before it can be reaped) and once with a freshly published instance live — see
- * retireActiveInstance() for why a listener holding an editor needs that ordering. `onLatencyChanged`
+ * retireActiveInstance() for why a listener holding an editor needs that ordering. The DESTRUCTOR
+ * fires the gone edge too, before it frees the instance — a node delete destroys this module with an
+ * editor window still open on it, and the window has to drop its editor first. `onLatencyChanged`
  * / `onInstancePublished` exist because juce::AudioProcessorGraph only re-derives compensation
  * delays on graph.rebuild(); this class detects a latency change (which can arrive from ANY thread,
  * hence the AsyncUpdater hop) but the owner (MainComponent) decides when to actually rebuild.
@@ -218,6 +220,10 @@ public:
     void setExtraState(const juce::var& state) override;
 
 private:
+    /** Message thread. The identity half of loadPlugin(), WITHOUT clearing pendingBlob_ — the state
+     *  restore in setExtraState() is the only caller allowed to carry a blob into a load. */
+    void startIdentityLoad(const PluginIdentity& identity, HostedPluginBackend& backend);
+
     /** Message thread. Prepares, validates and publishes `instance`, or refuses it with a reason. */
     void publishInstance(std::unique_ptr<juce::AudioPluginInstance> instance);
 
@@ -226,6 +232,10 @@ private:
 
     /** Message thread. Frees retired instances the audio thread has provably let go of. */
     void reapRetired();
+
+    /** Message thread. Comes back later to reap what a just-completed retire could not: at retire
+     *  time the audio thread has not moved on yet, so the entry is never reapable in that pass. */
+    void scheduleReapRetry();
 
     /** Message thread. prepareToPlay/setPlayConfigDetails the instance to OUR rate and block. */
     void prepareInstance(juce::AudioPluginInstance& instance) const;
@@ -301,7 +311,9 @@ private:
     InstanceListener instanceListener_{*this};
 
     PluginIdentity identity_;
-    juce::MemoryBlock pendingBlob_; // last known plugin state; applied when an instance arrives
+    // Last known plugin state, applied when an instance arrives. Set ONLY by a state restore, and
+    // cleared by every other load: it belongs to the plugin it was saved from.
+    juce::MemoryBlock pendingBlob_;
     juce::String statusMessage_;
     bool loading_ = false;
 

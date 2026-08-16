@@ -446,6 +446,13 @@ TEST_F(TimelineOpsTest, CapsAndBoundsRejected) {
                                          "midBase64": ")") +
                                      kValidMidBase64 + "\"}]"))
                      .ok);
+    // startBeat alone is in bounds, but the blob's own note positions push the derived clip end
+    // (startBeat + ceil(last note end)) past kMaxPpqUntrusted — must not escape the cap every
+    // other op enforces just because the notes' own beats were never checked.
+    EXPECT_FALSE(
+        validate(envelopeOf(juce::String(R"([{"op": "placeMidiClip", "track": "Bass", "startBeat": )") +
+                            juce::String(synth::kMaxPpqUntrusted) + R"(, "midBase64": ")" + kValidMidBase64 + "\"}]"))
+            .ok);
 
     EXPECT_TRUE(doc.getTracks()[0].clips.empty()) << "not one rejected case may have mutated the document";
 }

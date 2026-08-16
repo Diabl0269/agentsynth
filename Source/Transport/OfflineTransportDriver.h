@@ -43,6 +43,13 @@ public:
     // only, so a consumer that needs to keep it must copy or write it out.
     using BlockCallback = std::function<void(const juce::AudioBuffer<float>&, const BlockTimeInfo&)>;
 
+    // Optional pre-block gate for the stream* loops: called immediately BEFORE each block, it ends
+    // the render without rendering that block when it returns false. Two jobs, both of which have to
+    // happen before the work rather than after it — stopping a cancelled render (rendering a tail
+    // nobody is writing is pure waste) and giving a consumer somewhere to block, which is how the
+    // bounce waits for AudioClipStreamer's prefetch thread.
+    using BlockGate = std::function<bool()>;
+
     // Renders exactly numBlocks blocks and returns the concatenated audio
     // (numChannels x numBlocks * blockSize). Non-positive counts render nothing.
     juce::AudioBuffer<float> renderBlocks(int numBlocks, const BlockCallback& perBlock = {});
@@ -69,8 +76,12 @@ public:
     // This is what bounce/export uses. renderToBeat would hand it a single contiguous buffer of the
     // whole take — ~230 MB for ten minutes of 48 kHz stereo — for no reason, since every block is
     // written to disk and never looked at again.
-    int streamBlocks(int numBlocks, const BlockCallback& perBlock);
-    int streamToBeat(double beat, const BlockCallback& perBlock, int maxBlocks = 1 << 18);
+    //
+    // `beforeBlock` is the only way out of either loop that does not cost a rendered block; see
+    // BlockGate.
+    int streamBlocks(int numBlocks, const BlockCallback& perBlock, const BlockGate& beforeBlock = {});
+    int streamToBeat(double beat, const BlockCallback& perBlock, int maxBlocks = 1 << 18,
+                     const BlockGate& beforeBlock = {});
 
     TransportService& getTransport();
 

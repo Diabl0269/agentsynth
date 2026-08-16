@@ -328,6 +328,57 @@ TEST(HostedPluginTest, StateRoundTrip) {
     EXPECT_EQ(juce::String::fromUTF8((const char*)afterBlob.getData(), (int)afterBlob.getSize()), payload);
 }
 
+TEST(HostedPluginTest, ARestoredBlobNeverReachesTheNextPluginLoaded) {
+    StubBackend backend;
+    HostedPluginBackend::ScopedDefault installed(&backend);
+
+    const juce::String payload = "plugin-a-state";
+
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+    module.loadPlugin(stubDescription("A", 0xAA), backend);
+    ASSERT_TRUE(pumpUntil([&] { return module.hasInstance(); }));
+
+    // --- A state restore: the one load allowed to carry a blob -----------------------------------
+    juce::var state = module.getExtraState();
+    auto* object = state.getDynamicObject();
+    ASSERT_NE(object, nullptr);
+    juce::MemoryBlock blob;
+    blob.append(payload.toRawUTF8(), payload.getNumBytesAsUTF8());
+    object->setProperty("pluginState", blob.toBase64Encoding());
+
+    // The instance POINTER is what says the swap happened: hasInstance() is already true from the
+    // old one, and the identity is set synchronously.
+    auto* beforeRestore = module.getActiveInstanceForEditor();
+    module.setExtraState(state);
+    ASSERT_TRUE(
+        pumpUntil([&] { return module.hasInstance() && module.getActiveInstanceForEditor() != beforeRestore; }));
+    auto* restored = dynamic_cast<StubPluginInstance*>(module.getActiveInstanceForEditor());
+    ASSERT_NE(restored, nullptr);
+    EXPECT_EQ(restored->payload, payload) << "the restore path must still apply its own blob";
+
+    // --- ...and the next ordinary load must start clean -------------------------------------------
+    auto* beforeB = module.getActiveInstanceForEditor();
+    module.loadPlugin(stubDescription("B", 0xBB), backend);
+    ASSERT_TRUE(pumpUntil([&] { return module.hasInstance() && module.getActiveInstanceForEditor() != beforeB; }));
+    auto* loadedB = dynamic_cast<StubPluginInstance*>(module.getActiveInstanceForEditor());
+    ASSERT_NE(loadedB, nullptr);
+    EXPECT_TRUE(loadedB->payload.isEmpty()) << "plugin A's opaque state must never be handed to plugin B";
+
+    // The identity overload (a library drop) is the same rule.
+    PluginIdentity identityC;
+    identityC.format = "VST3";
+    identityC.name = "C";
+    identityC.uid = 0xCC;
+
+    auto* beforeC = module.getActiveInstanceForEditor();
+    module.loadPlugin(identityC);
+    ASSERT_TRUE(pumpUntil([&] { return module.hasInstance() && module.getActiveInstanceForEditor() != beforeC; }));
+    auto* loadedC = dynamic_cast<StubPluginInstance*>(module.getActiveInstanceForEditor());
+    ASSERT_NE(loadedC, nullptr);
+    EXPECT_TRUE(loadedC->payload.isEmpty()) << "plugin A's opaque state must never be handed to plugin C";
+}
+
 // AgentSynthAudioProcessor::setStateInformation validates untrusted WITH
 // allowInternalModuleTypes=true and then applies TRUSTED, so a patch hosting a plugin DOES
 // survive a DAW session reload: the internal-only type passes the authorship gate (it is our
@@ -496,6 +547,33 @@ TEST(HostedPluginTest, AudioThreadNeverFrees) {
     EXPECT_FALSE(renderThreadFreedSomething.load()) << "an instance was destroyed on the render thread";
     EXPECT_EQ(StubPluginInstance::lastDestructionThread().load(), messageThreadId)
         << "every instance must be freed on the message thread";
+}
+
+TEST(HostedPluginTest, TheLastRetiredInstanceIsReapedWithoutAnotherLoad) {
+    StubPluginInstance::clearDestructionRecord();
+
+    StubBackend backend;
+    HostedPluginModule module;
+    module.prepareToPlay(kSampleRate, kBlockSize);
+
+    module.loadPlugin(stubDescription("Only"), backend);
+    ASSERT_TRUE(pumpUntil([&] { return module.hasInstance(); }));
+
+    module.unloadPlugin();
+    EXPECT_EQ(StubPluginInstance::destructionCount().load(), 0)
+        << "not reapable yet — the audio thread has not started a block since the retire";
+
+    // The audio thread moves on. Nothing else will ever ask for a reap: no further load, no unload,
+    // no releaseResources — which is exactly the case a retire-time-only reap leaked.
+    juce::AudioBuffer<float> buffer(HostedPluginModule::kMaxPluginChannels, kBlockSize);
+    juce::MidiBuffer midi;
+    for (int block = 0; block < 4; ++block) {
+        fillRamp(buffer);
+        module.processBlock(buffer, midi);
+    }
+
+    EXPECT_TRUE(pumpUntil([&] { return StubPluginInstance::destructionCount().load() >= 1; }, 3000))
+        << "the last retired instance was never freed";
 }
 
 // ============================================================================

@@ -53,12 +53,18 @@ public:
     static constexpr std::uint32_t kMagic = 0x4b475041u; // 'A','G','P','K' little-endian
     static constexpr std::uint32_t kVersion = 1;
 
+    /** Hard cap on a .agpk file's size, checked BEFORE the file is loaded into memory. A sidecar
+     *  this large cannot be a real peaks file for any take this app would ever record (256 source
+     *  samples/bucket * 2 floats * N channels), so it is rejected as cheaply as a bad magic rather
+     *  than allocated first and discovered to be garbage afterwards. */
+    static constexpr std::int64_t kMaxFileBytes = 64 * 1024 * 1024;
+
     /** Parses an .agpk file into `out`. Returns false — and leaves `out` untouched — on: a
-     *  missing/unopenable file, a bad magic or an unsupported version, a zero bucketSize or
-     *  numChannels, or a payload whose byte count isn't a whole number of (min,max) pairs forming
-     *  whole buckets (garbage/truncated). Tolerant of a short FINAL bucket in the musical sense
-     *  (see the class comment) — that is not a structural defect, so it is never a rejection
-     *  reason. */
+     *  missing/unopenable file, a file over `kMaxFileBytes`, a bad magic or an unsupported version,
+     *  a zero bucketSize or numChannels, or a payload whose byte count isn't a whole number of
+     *  (min,max) pairs forming whole buckets (garbage/truncated). Tolerant of a short FINAL bucket
+     *  in the musical sense (see the class comment) — that is not a structural defect, so it is
+     *  never a rejection reason. */
     static bool read(const juce::File& file, Data& out);
 
     /** Writes a complete .agpk file in one shot: the header, then `data.buckets` verbatim in

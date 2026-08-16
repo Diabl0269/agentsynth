@@ -181,14 +181,18 @@ bool readOptionalFloat(const juce::var& v, float& out) {
     return true;
 }
 
-// A required, strictly positive id.
-bool readId(const juce::var& v, std::int64_t& out) { return readInt64(v, out) && out > 0; }
+// A required, strictly positive id, bounded above so the next `id + 1` allocation can never
+// signed-overflow.
+bool readId(const juce::var& v, std::int64_t& out) {
+    return readInt64(v, out) && out > 0 && out <= TimelineDoc::kMaxIdValue;
+}
 
-// An optional next-id counter: absent leaves the caller's default, present must be >= 1.
+// An optional next-id counter: absent leaves the caller's default, present must be in
+// [1, kMaxIdValue] for the same overflow reason as readId.
 bool readOptionalCounter(const juce::var& v, std::int64_t& out) {
     if (v.isVoid())
         return true;
-    return readInt64(v, out) && out >= 1;
+    return readInt64(v, out) && out >= 1 && out <= TimelineDoc::kMaxIdValue;
 }
 
 // Absent -> empty list; present must be an array.

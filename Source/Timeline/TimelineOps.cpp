@@ -471,9 +471,22 @@ TimelineOpsResult runPlaceMidiClip(const juce::String& where, juce::DynamicObjec
                     " clips on track \"" + trackName + "\", exceeding the limit of " +
                     juce::String(TimelineDoc::kMaxClipsPerTrack) + " per track.");
 
+    // A .mid blob's own beat positions are untrusted too: bound each track's derived clip end
+    // (startBeat + ceil(last note end)) exactly as MidiClipFile::importIntoTrack computes it, so a
+    // blob with huge tick values can't place a clip or note beyond kMaxPpqUntrusted merely because
+    // startBeat itself was in range. Bounding the clip end bounds every note's end within it too,
+    // since lengthBeats is always positive.
     int noteCount = 0;
-    for (const auto& importedTrack : imported.tracks)
+    for (const auto& importedTrack : imported.tracks) {
+        double lastEnd = 0.0;
+        for (const auto& note : importedTrack.notes)
+            lastEnd = std::max(lastEnd, note.startBeat + note.lengthBeats);
+        const double clipLength = std::max(std::ceil(lastEnd), 1.0);
+        if (!isLengthInBounds(clipLength) || !isBeatInBounds(startBeat + clipLength))
+            return fail(where + "carries a .mid blob whose notes end at beat " + juce::String(startBeat + clipLength) +
+                        ", which is beyond " + beatRangeText() + " once \"startBeat\" is added.");
         noteCount += static_cast<int>(importedTrack.notes.size());
+    }
     totalNotes += noteCount;
     if (totalNotes > kMaxTotalNotesUntrusted)
         return fail(where + "takes the batch past " + juce::String(kMaxTotalNotesUntrusted) +

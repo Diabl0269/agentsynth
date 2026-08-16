@@ -2,6 +2,7 @@
 
 #include "TimelineDoc.h"
 #include <atomic>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <type_traits>
@@ -163,5 +164,16 @@ struct TimelineSnapshot {
     // invisible growth of audio-thread-visible memory.
     static std::atomic<int>& liveInstanceCount() noexcept;
 };
+
+// Timeline beat -> FILE FRAME for one audio clip. The ONE mapping playback and offline stream
+// priming share: frames are file frames advanced at the ENGINE's rate (this build does not
+// resample), and the clip's trim is in seconds because it indexes a recording, which does not move
+// when the tempo map does. Never negative — a beat before the clip starts reads its first frame.
+inline std::int64_t sourceFrameForClipBeat(double clipStartBeat, double sourceStartSeconds, double beat, double bpm,
+                                           double sampleRate) noexcept {
+    const double secondsPerBeat = (bpm > 0.0) ? (60.0 / bpm) : 0.5;
+    const double frames = ((beat - clipStartBeat) * secondsPerBeat + sourceStartSeconds) * sampleRate;
+    return frames > 0.0 ? (std::int64_t)std::llround(frames) : 0;
+}
 
 } // namespace synth

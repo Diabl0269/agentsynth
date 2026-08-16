@@ -146,6 +146,11 @@ public:
         // then renders silence exactly like an unassigned one.
         std::atomic<bool> ready{false};
 
+        // The open file's length in frames (0 when nothing is open). Published by the prefetch
+        // thread before `clipId`; read by waitUntilPrimed(), which must not wait for frames that do
+        // not exist. Nothing on the audio path reads it.
+        std::atomic<std::int64_t> fileLengthFrames{0};
+
         // The opened file's header sample rate (0 until open). Diagnostics only — see the class
         // comment's sample-rate note; nothing in the playback path reads it.
         std::atomic<double> fileSampleRate{0.0};
@@ -200,6 +205,26 @@ public:
      *  directly (so the silence guarantee holds even before the prefetch thread has caught up). Safe
      *  (and a no-op the next slice) to call with no streams open. */
     void invalidateAllStreams();
+
+    // ---- Offline render, message thread, BLOCKING ----
+
+    /** Blocks until every open stream can serve the frames its clip will be asked for at `beat`,
+     *  and returns true; returns false when `timeoutMs` ran out first — a dropout the caller counts
+     *  and reports (see `synth::BounceResult::streamDropouts`) rather than shipping as silence.
+     *
+     *  A faster-than-realtime render is the one consumer with no natural handshake here: it can
+     *  render a block a millisecond after `invalidateAllStreams()`, long before the prefetch thread
+     *  has refilled anything, and every such block is silence. Calling this before each rendered
+     *  block turns that into a wait. Cheap once primed — it checks and returns.
+     *
+     *  Each call also STEERS every stream (publishes the frame that clip will want, per the shared
+     *  `sourceFrameForClipBeat` mapping), which is how the prefetch thread learns where an offline
+     *  render is about to read BEFORE it reads there. That write is `wantedFrame`, which belongs to
+     *  the audio thread during playback: OFFLINE ONLY — nothing may be rendering.
+     *
+     *  With the prefetch thread paused for a test this fills synchronously on the calling thread,
+     *  exactly like `pumpForTest()`, so an offline render stays deterministic and sleep-free. */
+    bool waitUntilPrimed(double beat, double bpm, double sampleRate, int framesAhead, int timeoutMs = 2000);
 
     // ---- Audio thread (lock-free, allocation-free, never blocks) ----
 
@@ -284,6 +309,11 @@ private:
         std::int64_t clipId = kNoClip;
         juce::File file;
         double sourceStartSeconds = 0.0;
+        // Where this clip sits on the timeline. Seeds nothing on the playback path — it is what
+        // waitUntilPrimed() turns a beat into a file frame with. Like the trim, refreshed on every
+        // sync and deliberately outside the "has this slot changed?" comparison.
+        double startBeat = 0.0;
+        double lengthBeats = 0.0;
     };
 
     struct PrefetchClient : public juce::TimeSliceClient {
@@ -310,6 +340,19 @@ private:
 
     int indexOfClip(std::int64_t clipId) const noexcept;
 
+    // ---- waitUntilPrimed's half ----
+
+    // What one slot must have ready. kNoClip == nothing assigned to this slot.
+    struct PrimeTarget {
+        std::int64_t clipId = kNoClip;
+        std::int64_t frame = 0;
+    };
+    using PrimeTargets = std::array<PrimeTarget, kMaxStreams>;
+
+    PrimeTargets primeTargetsForBeat(double beat, double bpm, double sampleRate) const;
+    void publishWantedFrames(const PrimeTargets& targets);
+    bool isPrimed(const PrimeTargets& targets, int framesAhead) const;
+
     std::array<ClipStream, kMaxStreams> streams_;
 
     juce::CriticalSection assignmentLock_;
@@ -331,6 +374,10 @@ private:
 
     // De-interleaving scratch for the fill, sized once in the constructor. Prefetch thread only.
     juce::AudioBuffer<float> fillScratch_;
+
+    // Signalled by the prefetch thread at the end of every slice; waited on by waitUntilPrimed() so
+    // an offline render sees a refilled ring as soon as it exists rather than on a polling interval.
+    juce::WaitableEvent sliceCompleted_;
 
     juce::TimeSliceThread prefetchThread_{"Audio Clip Prefetch"};
     PrefetchClient prefetchClient_{*this};

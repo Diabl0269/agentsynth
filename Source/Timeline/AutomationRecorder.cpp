@@ -19,19 +19,15 @@ bool capturesGestures(int mode) noexcept { return mode == kTouch || mode == kLat
 // `param` may be a hosted plugin's own parameter, which has no NormalisableRange (a
 // juce::HostedAudioProcessorParameter is a sibling hierarchy to RangedAudioParameter — see
 // HostedPluginModule.h). Message thread only, so the dynamic_cast here is cheap and not worth
-// caching.
-double denormalisedValueOf(const juce::AudioProcessorParameter* param, float normalised) noexcept {
+// caching; the listener callbacks use ParamListener::denormalise, which caches it at bind time.
+double denormalisedValueOf(const juce::AudioProcessorParameter* param) noexcept {
     if (param == nullptr)
         return 0.0;
     if (const auto* ranged = dynamic_cast<const juce::RangedAudioParameter*>(param))
-        return static_cast<double>(ranged->convertFrom0to1(normalised));
+        return static_cast<double>(ranged->convertFrom0to1(param->getValue()));
     // A hosted parameter's native domain is always 0..1 (JUCE's own host contract), which is exactly
     // what such a lane's RangeSnapshot is {0, 1, default} to match — see AutomationBinding.h.
-    return static_cast<double>(normalised);
-}
-
-double denormalisedValueOf(const juce::AudioProcessorParameter* param) noexcept {
-    return param != nullptr ? denormalisedValueOf(param, param->getValue()) : 0.0;
+    return static_cast<double>(param->getValue());
 }
 
 } // namespace
@@ -39,15 +35,103 @@ double denormalisedValueOf(const juce::AudioProcessorParameter* param) noexcept 
 // Balances the re-entrancy depth counter that keeps unbindAll() from destroying the very listener
 // object whose callback is currently on the stack.
 struct AutomationRecorder::CallbackScope {
-    explicit CallbackScope(int& depth) noexcept
+    explicit CallbackScope(std::atomic<int>& depth) noexcept
         : d(depth) {
-        ++d;
+        d.fetch_add(1, std::memory_order_acq_rel);
     }
-    ~CallbackScope() noexcept { --d; }
-    int& d;
+    ~CallbackScope() noexcept { d.fetch_sub(1, std::memory_order_acq_rel); }
+    std::atomic<int>& d;
 };
 
-AutomationRecorder::AutomationRecorder() { ringSlots.resize(static_cast<std::size_t>(kRingCapacity)); }
+// ------------------------------------------------------------------ param listener --
+
+AutomationRecorder::ParamListener::ParamListener(AutomationRecorder& r, std::int64_t lane,
+                                                 juce::AudioProcessorParameter* p) noexcept
+    : recorder(r)
+    , laneId(lane)
+    , param(p)
+    , ranged(dynamic_cast<const juce::RangedAudioParameter*>(p)) {}
+
+double AutomationRecorder::ParamListener::denormalise(float normalised) const noexcept {
+    return ranged != nullptr ? static_cast<double>(ranged->convertFrom0to1(normalised))
+                             : static_cast<double>(normalised);
+}
+
+void AutomationRecorder::ParamListener::parameterValueChanged(int, float newValue) {
+    CallbackScope scope(recorder.callbackDepth);
+
+    // THE programmatic-write guard, and it has to be evaluated HERE rather than at drain time: a
+    // ScopedProgrammaticApply around a preset load is long gone by the time the drain runs.
+    if (recorder.isSuspended() || !recorder.isGlobalRecordEnabled())
+        return;
+
+    auto* t = recorder.transport.load(std::memory_order_relaxed);
+    if (t == nullptr)
+        return;
+    const auto position = t->getPositionSnapshot();
+    if (!position.playing)
+        return;
+
+    Event event;
+    event.kind = EventKind::Value;
+    event.laneId = laneId;
+    event.beat = position.ppq;
+    event.value = denormalise(newValue);
+    recorder.postEvent(event);
+}
+
+void AutomationRecorder::ParamListener::parameterGestureChanged(int, bool starting) {
+    CallbackScope scope(recorder.callbackDepth);
+
+    auto* t = recorder.transport.load(std::memory_order_relaxed);
+    const auto position = t != nullptr ? t->getPositionSnapshot() : TransportService::PositionSnapshot{};
+
+    if (starting) {
+        if (recorder.isSuspended() || !recorder.isGlobalRecordEnabled() || !position.playing)
+            return; // a knob turned against a stopped transport records nothing: no span to put it on
+    }
+    // A gesture END is always posted, suspended or not: it closes whatever span an earlier start
+    // opened, and a start that was suppressed leaves nothing for it to find.
+
+    Event event;
+    event.kind = starting ? EventKind::GestureStart : EventKind::GestureEnd;
+    event.laneId = laneId;
+    event.beat = position.ppq;
+    event.value = starting && param != nullptr ? denormalise(param->getValue()) : 0.0;
+    recorder.postEvent(event);
+
+    // A gesture edge decides a claim and, for Touch, a commit — both want to happen NOW so the
+    // applier stops fighting the hand on the very next block. Only the owner's thread may do that
+    // work; a foreign-thread edge waits for the next update().
+    if (recorder.isOwnerThread())
+        recorder.drainEvents();
+}
+
+// ----------------------------------------------------------------------- ring --
+
+AutomationRecorder::EventRing::EventRing(int capacity)
+    : fifo(capacity)
+    , slots(static_cast<std::size_t>(capacity)) {}
+
+bool AutomationRecorder::EventRing::push(const Event& event, int reserved) noexcept {
+    const juce::SpinLock::ScopedTryLockType producer(producerLock);
+    if (!producer.isLocked())
+        return false; // another producer is mid-push; dropping beats blocking a possible audio thread
+
+    if (fifo.getFreeSpace() <= reserved)
+        return false;
+
+    int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
+    fifo.prepareToWrite(1, start1, size1, start2, size2);
+    if (size1 + size2 < 1)
+        return false; // full: drop rather than allocate or block
+
+    slots[static_cast<std::size_t>(start1)] = event;
+    fifo.finishedWrite(1);
+    return true;
+}
+
+AutomationRecorder::AutomationRecorder() = default;
 
 AutomationRecorder::~AutomationRecorder() {
     // Deliberately NOT detach(): a destructor must not commit into a TimelineDoc / AppUndoManager
@@ -70,18 +154,21 @@ AutomationRecorder::~AutomationRecorder() {
 void AutomationRecorder::attachTo(TimelineDoc& docIn, AppUndoManager& undoIn, TransportService& transportIn) {
     doc = &docIn;
     undo = &undoIn;
-    transport = &transportIn;
-    lastPlaying = transport->getPositionSnapshot().playing;
+    transport.store(&transportIn, std::memory_order_relaxed);
+    ownerThreadId.store(juce::Thread::getCurrentThreadId(), std::memory_order_relaxed);
+    lastPlaying = transportIn.getPositionSnapshot().playing;
 }
 
 void AutomationRecorder::detach() {
     audioState.globalRecordEnable.store(false, std::memory_order_relaxed);
-    drainRing();
-    commitAll(currentPpq());
+    // Bindings first: once every listener is gone nothing can post another event, so the drain and
+    // the commit below see a settled ring.
     unbindAll();
+    drainEvents();
+    commitAll(currentPpq());
     doc = nullptr;
     undo = nullptr;
-    transport = nullptr;
+    transport.store(nullptr, std::memory_order_relaxed);
 }
 
 void AutomationRecorder::bindLane(LaneId laneId, juce::AudioProcessorParameter* param,
@@ -97,7 +184,7 @@ void AutomationRecorder::bindLane(LaneId laneId, juce::AudioProcessorParameter* 
     binding.laneId = laneId.value;
     binding.param = param;
     binding.node = std::move(node);
-    binding.listener = std::make_unique<ParamListener>(*this, laneId.value);
+    binding.listener = std::make_unique<ParamListener>(*this, laneId.value, param);
     param->addListener(binding.listener.get());
     bindings.push_back(std::move(binding));
 
@@ -120,15 +207,19 @@ void AutomationRecorder::unbindAll() {
     // Claims name a raw juce::AudioProcessorParameter*. Once the binding that vouched for that
     // pointer is gone, the applier must not keep skipping a parameter on its word — the spans
     // themselves survive (an open Latch/Write take is not the business of an unrelated republish),
-    // they just stop claiming until bindLane() re-establishes them.
-    for (auto& span : spans)
+    // they just stop claiming until bindLane() re-establishes them. The index MUST be cleared with
+    // the slot: a stale one would later release whatever OTHER parameter has since taken that slot,
+    // and it is also what tells bindLane() this span still needs to re-claim.
+    for (auto& span : spans) {
         releaseSlot(span.claimSlot);
+        span.claimSlot = -1;
+    }
 
     purgeGraveyard();
 }
 
 void AutomationRecorder::purgeGraveyard() {
-    if (callbackDepth == 0)
+    if (callbackDepth.load(std::memory_order_acquire) == 0)
         graveyard.clear();
 }
 
@@ -141,7 +232,7 @@ void AutomationRecorder::setGlobalRecordEnable(bool enabled) {
     if (!enabled) {
         // Flag down FIRST so nothing a re-entrant publish triggers can re-open a span behind us.
         audioState.globalRecordEnable.store(false, std::memory_order_relaxed);
-        drainRing();
+        drainEvents();
         commitAll(currentPpq());
         return;
     }
@@ -150,7 +241,8 @@ void AutomationRecorder::setGlobalRecordEnable(bool enabled) {
     for (auto& span : spans)
         releaseSlot(span.claimSlot);
     spans.clear();
-    ring.reset();
+    messageEvents.reset();
+    foreignEvents.reset();
     overrunFlag.store(false, std::memory_order_relaxed);
     audioState.globalRecordEnable.store(true, std::memory_order_relaxed);
 
@@ -162,16 +254,18 @@ void AutomationRecorder::setGlobalRecordEnable(bool enabled) {
 // --------------------------------------------------------------------- driving --
 
 void AutomationRecorder::update() {
+    ownerThreadId.store(juce::Thread::getCurrentThreadId(), std::memory_order_relaxed);
     purgeGraveyard();
-    drainRing();
+    drainEvents();
     pollTransport();
 }
 
 void AutomationRecorder::pollTransport() {
-    if (transport == nullptr)
+    auto* t = transport.load(std::memory_order_relaxed);
+    if (t == nullptr)
         return;
 
-    const auto position = transport->getPositionSnapshot();
+    const auto position = t->getPositionSnapshot();
     const bool playing = position.playing;
     const bool wasPlaying = lastPlaying;
     lastPlaying = playing;
@@ -193,7 +287,7 @@ void AutomationRecorder::pollTransport() {
     // of a document — dropping the mode after the commit would bake "was Write" into the undo step,
     // so undoing the take would silently re-arm the lane. Doing it first makes the mode identical on
     // both sides of the step, which is what "a mode flip is not undoable" has to mean here.
-    drainRing();
+    drainEvents();
     std::vector<PendingCommit> commits;
     takeSpans(position.ppq, [](const Span&) { return true; }, commits);
     autoDropWriteLanes();
@@ -234,143 +328,147 @@ void AutomationRecorder::autoDropWriteLanes() {
 
 // -------------------------------------------------------------- parameter events --
 
-void AutomationRecorder::handleGesture(std::int64_t laneId, bool starting) {
-    CallbackScope scope(callbackDepth);
+bool AutomationRecorder::isOwnerThread() const noexcept {
+    const auto owner = ownerThreadId.load(std::memory_order_relaxed);
+    return owner != nullptr && owner == juce::Thread::getCurrentThreadId();
+}
 
-    if (!starting) {
-        auto* span = findSpan(laneId);
-        if (span == nullptr)
-            return;
+void AutomationRecorder::postEvent(const Event& event) noexcept {
+    auto& ring = isOwnerThread() ? messageEvents : foreignEvents;
+    const int reserved = event.kind == EventKind::Value ? kGestureHeadroom : 0;
+    if (!ring.push(event, reserved))
+        overrunFlag.store(true, std::memory_order_relaxed);
+}
 
-        span->gestureActive = false;
-        releaseSlot(span->claimSlot);
-        span->claimSlot = -1;
+void AutomationRecorder::drainEvents() {
+    if (draining)
+        return; // a commit re-entered us; the loop we are already inside will pick the rest up
+    draining = true;
 
-        // Touch commits the moment the hand leaves the knob; Latch and Write hold the span open
-        // until the transport stops (or the global arm goes down).
-        if (span->mode != kTouch)
-            return;
-
-        drainRing();
-        std::vector<PendingCommit> commits;
-        takeSpans(currentPpq(), [laneId](const Span& s) { return s.laneId == laneId; }, commits);
-        applyCommits(commits);
-        return;
+    // Both rings, because either can be the one a commit's re-entrant republish filled.
+    for (;;) {
+        const bool hadMessage = messageEvents.fifo.getNumReady() > 0;
+        const bool hadForeign = foreignEvents.fifo.getNumReady() > 0;
+        if (!hadMessage && !hadForeign)
+            break;
+        drainOneRing(messageEvents);
+        drainOneRing(foreignEvents);
     }
 
-    // -- gesture start -------------------------------------------------------
-    if (isSuspended() || !isGlobalRecordEnabled() || doc == nullptr)
-        return;
+    draining = false;
+}
 
-    pollTransport();
-    if (transport == nullptr || !transport->getPositionSnapshot().playing)
-        return; // a knob turned against a stopped transport records nothing — there is no span to put it on
+void AutomationRecorder::drainOneRing(EventRing& ring) {
+    for (;;) {
+        const int numReady = ring.fifo.getNumReady();
+        if (numReady <= 0)
+            break;
 
-    const auto* binding = findBinding(laneId);
-    if (binding == nullptr || binding->param == nullptr)
-        return;
+        int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
+        ring.fifo.prepareToRead(numReady, start1, size1, start2, size2);
 
-    const int mode = laneRecordMode(laneId);
+        // Copied out, and the read closed, before anything is applied: applyEvent commits, which
+        // mutates the doc, which re-enters this class — the fifo must not be mid-read across that.
+        // `drainScratch` is a member so a long take costs no allocation; the re-entrancy guard in
+        // drainEvents() is what makes reusing it safe.
+        drainScratch.clear();
+        drainScratch.reserve(static_cast<std::size_t>(size1 + size2));
+        for (int i = 0; i < size1; ++i)
+            drainScratch.push_back(ring.slots[static_cast<std::size_t>(start1 + i)]);
+        for (int i = 0; i < size2; ++i)
+            drainScratch.push_back(ring.slots[static_cast<std::size_t>(start2 + i)]);
+        ring.fifo.finishedRead(size1 + size2);
+
+        for (const auto& event : drainScratch)
+            applyEvent(event);
+    }
+}
+
+void AutomationRecorder::applyEvent(const Event& event) {
+    switch (event.kind) {
+    case EventKind::GestureStart:
+        openGestureSpan(event);
+        break;
+    case EventKind::GestureEnd:
+        closeGestureSpan(event);
+        break;
+    case EventKind::Value:
+        appendValue(event);
+        break;
+    }
+}
+
+void AutomationRecorder::openGestureSpan(const Event& event) {
+    const int mode = laneRecordMode(event.laneId);
     if (!capturesGestures(mode))
         return;
 
-    auto* span = findSpan(laneId);
+    // Only for the claim, and re-read here rather than carried in the event: a republish between the
+    // push and this drain hands the lane a new parameter pointer, and the applier matches by pointer.
+    const auto* binding = findBinding(event.laneId);
+    if (binding == nullptr || binding->param == nullptr)
+        return;
+    auto* param = binding->param;
+
+    auto* span = findSpan(event.laneId);
     if (span == nullptr) {
         Span fresh;
-        fresh.laneId = laneId;
+        fresh.laneId = event.laneId;
         fresh.mode = mode;
-        fresh.startBeat = currentPpq();
-        fresh.entryValue = denormalisedValueOf(binding->param);
+        fresh.startBeat = event.beat;
+        fresh.entryValue = event.value;
         spans.push_back(std::move(fresh));
         span = &spans.back();
     }
 
     span->gestureActive = true;
     if (span->claimSlot < 0)
-        span->claimSlot = claimSlotFor(binding->param);
+        span->claimSlot = claimSlotFor(param);
 }
 
-void AutomationRecorder::handleValueChanged(std::int64_t laneId, float normalised) {
-    CallbackScope scope(callbackDepth);
-
-    // THE programmatic-write guard. Everything that pushes values through setValueNotifyingHost
-    // without a gesture — preset load, AI patch apply, undo restore — lands here with no span open
-    // for the lane, and is dropped. (The applier writes with setValue and never reaches this at all.)
-    if (isSuspended() || !isGlobalRecordEnabled() || transport == nullptr)
+void AutomationRecorder::closeGestureSpan(const Event& event) {
+    auto* span = findSpan(event.laneId);
+    if (span == nullptr)
         return;
 
-    const auto position = transport->getPositionSnapshot();
-    if (!position.playing)
+    span->gestureActive = false;
+    releaseSlot(span->claimSlot);
+    span->claimSlot = -1;
+
+    // Touch commits the moment the hand leaves the knob; Latch and Write hold the span open until
+    // the transport stops (or the global arm goes down).
+    if (span->mode != kTouch)
         return;
 
-    const auto* binding = findBinding(laneId);
-    if (binding == nullptr || binding->param == nullptr)
-        return;
+    const std::int64_t laneId = event.laneId;
+    std::vector<PendingCommit> commits;
+    takeSpans(event.beat, [laneId](const Span& s) { return s.laneId == laneId; }, commits);
+    applyCommits(commits);
+}
 
-    const double value = denormalisedValueOf(binding->param, normalised);
-
-    auto* span = findSpan(laneId);
+void AutomationRecorder::appendValue(const Event& event) {
+    auto* span = findSpan(event.laneId);
     if (span == nullptr) {
-        // Only Write opens a span without a gesture — that is the whole difference between Write
-        // and Latch. Anything else without a span is a programmatic write and is ignored.
-        if (laneRecordMode(laneId) != kWrite)
+        // Only Write opens a span without a gesture — that is the whole difference between Write and
+        // Latch. Anything else with no span open is a programmatic write, or a take that committed
+        // between the push and this drain; either way it is dropped.
+        if (laneRecordMode(event.laneId) != kWrite)
             return;
 
         Span fresh;
-        fresh.laneId = laneId;
+        fresh.laneId = event.laneId;
         fresh.mode = kWrite;
-        fresh.startBeat = position.ppq;
-        fresh.entryValue = value;
+        fresh.startBeat = event.beat;
+        fresh.entryValue = event.value;
         spans.push_back(std::move(fresh));
         span = &spans.back();
     }
 
-    Event event;
-    event.laneId = laneId;
-    event.beat = position.ppq;
-    event.value = value;
-    pushEvent(event);
-}
-
-void AutomationRecorder::pushEvent(const Event& event) noexcept {
-    int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
-    ring.prepareToWrite(1, start1, size1, start2, size2);
-    if (size1 + size2 < 1) {
-        // Full: drop rather than allocate or block. The take still commits, just thinner.
+    if (static_cast<int>(span->captured.size()) >= kRingCapacity) {
         overrunFlag.store(true, std::memory_order_relaxed);
-        return;
+        return; // a span cannot grow without bound however long it stays open
     }
-    ringSlots[static_cast<std::size_t>(start1)] = event;
-    ring.finishedWrite(1);
-}
-
-void AutomationRecorder::drainRing() {
-    for (;;) {
-        const int numReady = ring.getNumReady();
-        if (numReady <= 0)
-            break;
-
-        int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
-        ring.prepareToRead(numReady, start1, size1, start2, size2);
-
-        const auto append = [this](const Event& event) {
-            auto* span = findSpan(event.laneId);
-            if (span == nullptr)
-                return; // the span committed between the push and this drain
-            if (static_cast<int>(span->captured.size()) >= kRingCapacity) {
-                overrunFlag.store(true, std::memory_order_relaxed);
-                return; // a span cannot grow without bound however long it stays open
-            }
-            span->captured.push_back({event.beat, event.value});
-        };
-
-        for (int i = 0; i < size1; ++i)
-            append(ringSlots[static_cast<std::size_t>(start1 + i)]);
-        for (int i = 0; i < size2; ++i)
-            append(ringSlots[static_cast<std::size_t>(start2 + i)]);
-
-        ring.finishedRead(size1 + size2);
-    }
+    span->captured.push_back({event.beat, event.value});
 }
 
 // ------------------------------------------------------------------- committing --
@@ -592,7 +690,8 @@ int AutomationRecorder::laneRecordMode(std::int64_t laneId) const {
 }
 
 double AutomationRecorder::currentPpq() const noexcept {
-    return transport != nullptr ? transport->getPositionSnapshot().ppq : 0.0;
+    auto* t = transport.load(std::memory_order_relaxed);
+    return t != nullptr ? t->getPositionSnapshot().ppq : 0.0;
 }
 
 } // namespace synth

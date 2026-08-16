@@ -44,8 +44,15 @@ float readLittleEndianFloat(const juce::uint8* bytes) {
 
 //==============================================================================
 bool PeaksFile::read(const juce::File& file, Data& out) {
+    if (!file.existsAsFile())
+        return false;
+    // Checked against the file's size on disk, before a single byte is loaded: an oversized
+    // sidecar is rejected without ever allocating a buffer for it.
+    if (file.getSize() > kMaxFileBytes)
+        return false;
+
     juce::MemoryBlock block;
-    if (!file.existsAsFile() || !file.loadFileAsData(block))
+    if (!file.loadFileAsData(block))
         return false;
     if (block.getSize() < kHeaderBytes)
         return false;

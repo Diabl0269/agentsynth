@@ -42,6 +42,11 @@ struct MetronomeForceOffGuard {
 // 2^18-block backstop.
 constexpr juce::int64 kMaxRangeBlocks = 1 << 20;
 
+// How long one block may wait for AudioClipStreamer's prefetch thread before the block is counted
+// as a dropout and rendered anyway. Generous: a ring that has not filled in two seconds means the
+// disk is in trouble, and stalling the whole bounce on it would be worse than reporting it.
+constexpr int kPrimeTimeoutMs = 2000;
+
 BounceResult failure(juce::String message) {
     BounceResult result;
     result.ok = false;
@@ -152,10 +157,21 @@ BounceResult BounceExporter::bounce(AudioEngine& engine, const juce::File& outFi
     juce::int64 samplesWritten = 0;
     bool cancelled = false;
     bool writeFailed = false;
+    int streamDropouts = 0;
+
+    // Where the NEXT block starts. Kept from each block's own BlockTimeInfo rather than read back
+    // from the transport, because the cross-thread position snapshot lags a block behind and the
+    // clip streamer has to be primed for the block that is about to be rendered, not the last one.
+    double nextBlockBeat = options.startBeat;
+    double nextBlockBpm = bpm;
 
     // The one place audio leaves the render. `block` is the driver's scratch — valid for this call
     // only, which is exactly as long as writeFromAudioSampleBuffer needs it.
-    const auto streamToWriter = [&](const juce::AudioBuffer<float>& block, const BlockTimeInfo&) {
+    const auto streamToWriter = [&](const juce::AudioBuffer<float>& block, const BlockTimeInfo& info) {
+        if (info.bpm > 0.0)
+            nextBlockBpm = info.bpm;
+        nextBlockBeat = info.endPpq;
+
         if (cancelled || writeFailed)
             return;
 
@@ -180,6 +196,25 @@ BounceResult BounceExporter::bounce(AudioEngine& engine, const juce::File& outFi
         }
     };
 
+    // ---- The pre-block gates ----
+    // A bounce outruns the clip streamer's prefetch thread by orders of magnitude, and constructing
+    // the driver invalidated every ring, so the first block would otherwise read silence and later
+    // ones would drop out at the disk's whim. Waiting HERE — before the block exists — is the only
+    // point where the wait costs nothing but time; once primed the call just checks and returns.
+    const auto renderRangeBlock = [&] {
+        if (cancelled || writeFailed)
+            return false;
+        if (!engine.getAudioClipStreamer().waitUntilPrimed(nextBlockBeat, nextBlockBpm, options.sampleRate,
+                                                           options.blockSize, kPrimeTimeoutMs))
+            ++streamDropouts;
+        return true;
+    };
+
+    // The tail renders with the transport stopped, so no clip is playing and there is nothing to
+    // prime — this gate exists only so a cancelled or failed bounce stops rendering a tail nobody
+    // is writing.
+    const auto renderTailBlock = [&] { return !cancelled && !writeFailed; };
+
     // ---- Choreography ----
     // All four commands drain, in this order, at the top of the first tick below: stop whatever was
     // playing, drop the loop for the duration, locate to the range start, play.
@@ -193,11 +228,11 @@ BounceResult BounceExporter::bounce(AudioEngine& engine, const juce::File& outFi
     // reached yet — bouncing bars 1-2 while the playhead sits at bar 40 would otherwise bail out
     // instantly with an empty file. This block is not a throwaway: a command takes effect at sample
     // 0 of the block that drains it, so this IS the first block of the range.
-    driver.streamBlocks(1, streamToWriter);
+    driver.streamBlocks(1, streamToWriter, renderRangeBlock);
 
     if (!cancelled && !writeFailed) {
         const int maxBlocks = (int)juce::jlimit<juce::int64>(1, kMaxRangeBlocks, expectedRangeBlocks * 2 + 64);
-        driver.streamToBeat(options.endBeat, streamToWriter, maxBlocks);
+        driver.streamToBeat(options.endBeat, streamToWriter, maxBlocks, renderRangeBlock);
     }
 
     // ---- Tail ----
@@ -205,7 +240,7 @@ BounceResult BounceExporter::bounce(AudioEngine& engine, const juce::File& outFi
     // out. That is the difference between a tail and just bouncing a longer range.
     if (!cancelled && !writeFailed && tailBlocks > 0) {
         transport.stop();
-        driver.streamBlocks((int)juce::jmin<juce::int64>(tailBlocks, kMaxRangeBlocks), streamToWriter);
+        driver.streamBlocks((int)juce::jmin<juce::int64>(tailBlocks, kMaxRangeBlocks), streamToWriter, renderTailBlock);
     }
 
     // Flush and close before the file is moved or inspected.
@@ -215,6 +250,7 @@ BounceResult BounceExporter::bounce(AudioEngine& engine, const juce::File& outFi
 
     BounceResult result;
     result.samplesWritten = samplesWritten;
+    result.streamDropouts = streamDropouts;
 
     if (cancelled) {
         // The temp file dies with `temporary`; the target was never touched, so a cancelled
@@ -238,6 +274,9 @@ BounceResult BounceExporter::bounce(AudioEngine& engine, const juce::File& outFi
 
     result.ok = true;
     result.message = "Bounced " + juce::String(samplesWritten) + " samples to \"" + outFile.getFileName() + "\".";
+    if (streamDropouts > 0)
+        result.message +=
+            " " + juce::String(streamDropouts) + " block(s) played silence while waiting for audio clips.";
     return result;
 }
 

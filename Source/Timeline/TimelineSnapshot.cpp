@@ -122,7 +122,12 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
                 clipInfo.clipId = clip.id.value;
                 clipInfo.startBeat = clip.startBeat;
                 clipInfo.lengthBeats = clip.lengthBeats;
-                copyFixedString(clipInfo.assetRef, clip.assetRef, (std::size_t)kMaxAssetRefBytes);
+                // Checked BEFORE copying: silently truncating an over-long assetRef would point
+                // the streamer at a different, wrong path rather than merely failing to match, so
+                // an over-long one is dropped instead — the clip becomes inert, same as an empty
+                // assetRef on a MIDI clip.
+                if (clip.assetRef.getNumBytesAsUTF8() < (std::size_t)kMaxAssetRefBytes)
+                    copyFixedString(clipInfo.assetRef, clip.assetRef, (std::size_t)kMaxAssetRefBytes);
                 clipInfo.gainLinear = gainFromDecibels(clip.gainDb);
                 clipInfo.fadeInBeats = clip.fadeInBeats;
                 clipInfo.fadeOutBeats = clip.fadeOutBeats;

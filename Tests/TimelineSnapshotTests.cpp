@@ -206,6 +206,26 @@ TEST(TimelineSnapshotTest, OverlongStringsAreTruncatedAndTerminated) {
     EXPECT_TRUE(snapshot->selfCheck());
 }
 
+TEST(TimelineSnapshotTest, OverlongAssetRefIsDroppedNotTruncated) {
+    // A truncated assetRef would point the streamer at a different, wrong bundle-relative path
+    // rather than merely failing to match — so an assetRef too long to fit is dropped entirely
+    // (the clip becomes inert, same contract as an empty assetRef) rather than silently cut down
+    // to kMaxAssetRefBytes - 1 bytes.
+    const juce::String longAssetRef =
+        "Audio/" + juce::String::repeatedString("a", (size_t)TimelineSnapshot::kMaxAssetRefBytes) + ".wav";
+    ASSERT_GE(longAssetRef.getNumBytesAsUTF8(), (size_t)TimelineSnapshot::kMaxAssetRefBytes);
+
+    TimelineDoc doc;
+    const auto track = doc.addTrack(TrackKind::Audio, "A");
+    const auto clip = doc.addClip(track, 0.0, 4.0, "clip");
+    ASSERT_TRUE(doc.setClipAsset(clip, longAssetRef, 0.0));
+
+    const auto snapshot = TimelineSnapshot::buildFrom(doc);
+    ASSERT_EQ(snapshot->audioClips.size(), 1u);
+    EXPECT_STREQ(snapshot->audioClips[0].assetRef, "") << "over-long assetRef must be dropped, not truncated";
+    EXPECT_TRUE(snapshot->selfCheck());
+}
+
 // ============================================================================
 // Exchange: publication
 // ============================================================================

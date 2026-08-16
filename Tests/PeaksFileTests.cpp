@@ -228,6 +228,35 @@ TEST(PeaksFileTest, ReadRejectsTruncatedPayload) {
     EXPECT_FALSE(PeaksFile::read(file.file, data));
 }
 
+TEST(PeaksFileTest, ReadRejectsFileOverSizeCap) {
+    // A file structurally VALID in every other respect (real magic/version, whole (min,max)
+    // buckets of zeros) but one bucket over PeaksFile::kMaxFileBytes: read() must reject it on
+    // size alone, before ever loading or parsing the payload. Grown via setPosition/truncate
+    // rather than written byte-by-byte so the test stays fast (a sparse file on disk).
+    ScopedTempFile file("agentsynth_peaksfile_oversize.agpk");
+    {
+        std::unique_ptr<juce::FileOutputStream> stream(file.file.createOutputStream());
+        ASSERT_NE(stream, nullptr);
+        stream->writeInt((int)PeaksFile::kMagic);
+        stream->writeInt((int)PeaksFile::kVersion);
+        stream->writeInt(256);
+        stream->writeInt(2); // numChannels == 2: a bucket is 16 bytes
+        stream->flush();
+    }
+    {
+        // kMaxFileBytes plus one extra whole bucket (16 bytes), which is itself a multiple of 16 —
+        // so the only thing wrong with this file is its size.
+        std::unique_ptr<juce::FileOutputStream> stream(file.file.createOutputStream());
+        ASSERT_NE(stream, nullptr);
+        stream->setPosition(PeaksFile::kMaxFileBytes + 16);
+        stream->truncate();
+    }
+    ASSERT_GT(file.file.getSize(), PeaksFile::kMaxFileBytes);
+
+    PeaksFile::Data data;
+    EXPECT_FALSE(PeaksFile::read(file.file, data));
+}
+
 TEST(PeaksFileTest, WriteRejectsInvalidShape) {
     ScopedTempFile file("agentsynth_peaksfile_write_invalid.agpk");
     PeaksFile::Data data;

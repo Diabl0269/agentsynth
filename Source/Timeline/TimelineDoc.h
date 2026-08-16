@@ -281,6 +281,11 @@ public:
     static constexpr int kMaxLanesPerTrack = 512;
     static constexpr int kMaxBreakpointsPerLane = 16384;
 
+    // Upper bound on any id or next-id counter fromVar() accepts, so `id + 1` on the next
+    // allocation can never signed-overflow. Generous relative to anything kMaxTracks etc. could
+    // ever assign, but far below INT64_MAX.
+    static constexpr std::int64_t kMaxIdValue = 1'000'000'000'000'000; // 1e15
+
     // Written as the "version" field of toVar() and required (exactly) by fromVar(). Bump only
     // for a genuinely breaking change — adding a field is additive and must not bump it.
     static constexpr int kFormatVersion = 1;

@@ -218,13 +218,11 @@ private:
         if (frames <= 0)
             return;
 
-        // Beat -> FILE FRAME. The engine's sample rate is used deliberately as if it were the file's
-        // — see the class comment's sample-rate policy. The clip's own trim (`sourceStartSeconds`)
-        // is measured in seconds because it indexes a recording, whose samples do not move when the
-        // tempo map does.
-        const double secondsPerBeat = (info.bpm > 0.0) ? (60.0 / info.bpm) : 0.5;
-        const std::int64_t sourceFrame = (std::int64_t)std::llround(
-            ((overlapStart - clip.startBeat) * secondsPerBeat + clip.sourceStartSeconds) * info.sampleRate);
+        // Beat -> FILE FRAME, through the shared mapping the streamer's offline priming also uses:
+        // the two must agree on which frame a beat reads, or a primed ring is primed at the wrong
+        // place. See synth::sourceFrameForClipBeat.
+        const std::int64_t sourceFrame = synth::sourceFrameForClipBeat(clip.startBeat, clip.sourceStartSeconds,
+                                                                       overlapStart, info.bpm, info.sampleRate);
 
         const auto* handle = streamer.acquire(clip.clipId);
 

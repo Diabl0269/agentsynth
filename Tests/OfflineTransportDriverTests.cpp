@@ -204,7 +204,51 @@ TEST(OfflineTransportDriverTest, BlockCallbackSeesConsecutiveBlockTimeInfo) {
     engine.releaseFromHost();
     engine.shutdown();
 }
+
+TEST(OfflineTransportDriverTest, BeforeBlockGateEndsStreamToBeatWithoutRenderingTheBlock) {
+    AudioEngine engine(AudioEngine::HostMode::Hosted);
+    engine.initialise();
+
+    synth::OfflineTransportDriver driver(engine, kSampleRate, kBlockSize, kNumChannels);
+    ASSERT_TRUE(driver.getTransport().play());
+
+    // The target beat is far away: the gate, not the target, is what ends this render.
+    int rendered = 0;
+    const int returned = driver.streamToBeat(
+        64.0, [&](const juce::AudioBuffer<float>&, const synth::BlockTimeInfo&) { ++rendered; }, 1 << 16,
+        [&] { return rendered < 3; });
+
+    EXPECT_EQ(returned, 3);
+    EXPECT_EQ(rendered, 3) << "a false gate must stop the loop, not just stop the observer";
+    EXPECT_NEAR(endPpqOf(engine), 3.0 * kBeatsPerBlock, 1e-12) << "the refused block must never have been rendered";
+
+    engine.releaseFromHost();
+    engine.shutdown();
+}
 #endif // SYNTH_ENABLE_TIMELINE
+
+TEST(OfflineTransportDriverTest, BeforeBlockGateStopsStreamBlocksEarly) {
+    AudioEngine engine(AudioEngine::HostMode::Hosted);
+    engine.initialise();
+
+    synth::OfflineTransportDriver driver(engine, kSampleRate, kBlockSize, kNumChannels);
+
+    int rendered = 0;
+    const int returned = driver.streamBlocks(
+        64, [&](const juce::AudioBuffer<float>&, const synth::BlockTimeInfo&) { ++rendered; },
+        [&] { return rendered < 4; });
+
+    EXPECT_EQ(returned, 4) << "the count returned is the count actually rendered";
+    EXPECT_EQ(rendered, 4);
+
+    // …and with no gate, every requested block is rendered.
+    int all = 0;
+    EXPECT_EQ(driver.streamBlocks(3, [&](const juce::AudioBuffer<float>&, const synth::BlockTimeInfo&) { ++all; }), 3);
+    EXPECT_EQ(all, 3);
+
+    engine.releaseFromHost();
+    engine.shutdown();
+}
 
 // ============================================================================
 // Audio actually flows through the graph

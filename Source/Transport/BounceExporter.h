@@ -40,6 +40,12 @@ struct BounceResult {
     bool ok = false;
     juce::String message; // always set: the reason on failure, a one-line summary on success
     juce::int64 samplesWritten = 0;
+
+    // Blocks rendered before a Track Audio clip's ring could serve them, i.e. blocks where a
+    // streamed clip contributed silence it should not have. Zero on a healthy machine — a bounce
+    // waits for the prefetch thread rather than racing it — and non-zero only when that wait timed
+    // out. Reported rather than swallowed: a short bounce is visible, a dropped clip is not.
+    int streamDropouts = 0;
 };
 
 class BounceExporter {
@@ -69,6 +75,13 @@ public:
     // definition. Exception: ExternalMidiModule keeps its own collector fed straight from
     // AudioEngine::handleIncomingMidiMessage, so a note played on a physical keyboard during a
     // bounce can still land in the file. Don't play while you bounce.
+    //
+    // Streamed audio clips: a bounce renders as fast as the CPU allows, which is far faster than
+    // AudioClipStreamer's prefetch thread refills a ring — and re-preparing the engine at the render
+    // format invalidates every ring first, so without a handshake the head of every Track Audio clip
+    // is silence. Each block therefore waits on AudioClipStreamer::waitUntilPrimed before it is
+    // rendered; a wait that times out is counted in BounceResult::streamDropouts and never passes
+    // silently.
     //
     // The metronome is summed AFTER the graph in AudioEngine::renderPass, so a bounce captures it
     // in the post-graph buffer it renders. bounce() forces it off explicitly (user toggle and

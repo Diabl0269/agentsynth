@@ -24,10 +24,14 @@ namespace synth {
  * and there is nothing they can do about it short of deleting the plugin.
  *
  * So each candidate is scanned by a SEPARATE process: we re-launch our own executable with
- * `--scan-plugin <format> <fileOrIdentifier>`, that process loads exactly one plugin, prints its
- * juce::PluginDescription as XML, and exits. A crash kills the child; a hang is killed by us on a
- * timeout. Either way the parent records the failure, blacklists the candidate so the next scan does
- * not step on the same mine, and moves on to the next one.
+ * `--scan-plugin <format> <fileOrIdentifier> <token>`, that process loads exactly one plugin, prints
+ * its juce::PluginDescription as XML wrapped in sentinels stamped with `token`, and exits. The token
+ * is fresh per launch and the parent accepts only the last block carrying its own — a plugin that
+ * prints a forged description while it loads must not be able to write the parent's plugin list.
+ *
+ * A crash kills the child; a hang is killed by us on a timeout. Either way the parent records the
+ * failure, blacklists the candidate so the next scan does not step on the same mine, and moves on to
+ * the next one.
  *
  * -- The three seams ----------------------------------------------------------------------------
  *
@@ -186,17 +190,33 @@ public:
     /** The default CandidateSource: the format's own default locations, searched recursively. */
     static juce::StringArray defaultCandidatesForFormat(const juce::String& formatName);
 
-    /** Sentinels the child wraps its XML in, so a plugin that prints its own banner to stdout during
-     *  a scan cannot corrupt the document we parse. */
-    static constexpr const char* kChildXmlBegin = "<<<AGENTSYNTH-SCAN-BEGIN>>>";
-    static constexpr const char* kChildXmlEnd = "<<<AGENTSYNTH-SCAN-END>>>";
+    /** Sentinel prefixes the child wraps its XML in, so a plugin that prints its own banner to stdout
+     *  during a scan cannot corrupt the document we parse. A complete sentinel is prefix + the
+     *  launch's token + ">>>" — see childXmlBeginMarker(). */
+    static constexpr const char* kChildXmlBeginPrefix = "<<<AGENTSYNTH-SCAN-BEGIN:";
+    static constexpr const char* kChildXmlEndPrefix = "<<<AGENTSYNTH-SCAN-END:";
+
+    /** The sentinels for one launch's token. */
+    static juce::String childXmlBeginMarker(const juce::String& token);
+    static juce::String childXmlEndMarker(const juce::String& token);
+
+    /** A fresh token for one child launch: the parent generates it, passes it as the third
+     *  `--scan-plugin` operand, and accepts only output stamped with it. Plain hex — see
+     *  isValidScanToken(), which both halves apply before the token reaches a sentinel. */
+    static juce::String makeScanToken();
+
+    /** Non-empty and hex only. A token that fails this never gets as far as building a sentinel, on
+     *  either side of the protocol. */
+    static bool isValidScanToken(const juce::String& token);
 
     /** Pulls the description document back out of a child's raw stdout, discarding anything printed
-     *  outside the sentinels; empty when the child never emitted a complete pair. Public because it
-     *  is the only part of launchScanChildProcess() with logic of its own — the rest is
+     *  outside the sentinels; empty when the child never emitted a complete pair stamped with
+     *  `token`. The LAST such block wins: the scanned plugin runs inside that child and can print
+     *  whatever it likes while it loads, but the real document is printed on the way out. Public
+     *  because it is the only part of launchScanChildProcess() with logic of its own — the rest is
      *  juce::ChildProcess plumbing, which needs a real child (and therefore the real app binary) to
      *  exercise. */
-    static juce::String extractChildXml(const juce::String& processOutput);
+    static juce::String extractChildXml(const juce::String& processOutput, const juce::String& token);
 
 private:
     struct XmlFold {
@@ -234,13 +254,13 @@ private:
 //==============================================================================
 
 /**
- * The `--scan-plugin <format> <fileOrIdentifier>` half of the out-of-process scan.
+ * The `--scan-plugin <format> <fileOrIdentifier> <token>` half of the out-of-process scan.
  *
  * Returns nullopt when `args` is an ordinary app launch — the caller then proceeds to start the
  * application normally. Otherwise this IS the whole process: it scans exactly one plugin, writes the
- * description document (sentinel-wrapped) into `xmlOut` for the caller to print, and returns the
- * process exit code — 0 when at least one plugin type was found, 1 for bad arguments, an unknown
- * format, or a file that yielded nothing.
+ * description document (wrapped in the sentinels for `token`) into `xmlOut` for the caller to print,
+ * and returns the process exit code — 0 when at least one plugin type was found, 1 for bad arguments
+ * (a missing or malformed token included), an unknown format, or a file that yielded nothing.
  *
  * No GUI, no AudioEngine, no settings file: a scan child that touched the settings file would race
  * the parent that spawned it, and one that built an engine would open an audio device the user is

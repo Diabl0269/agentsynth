@@ -108,7 +108,7 @@ void AudioClipStreamer::syncToSnapshot(const TimelineSnapshot& snapshot) {
             if (file == juce::File())
                 continue;
 
-            desired.push_back({clip.clipId, file, clip.sourceStartSeconds});
+            desired.push_back({clip.clipId, file, clip.sourceStartSeconds, clip.startBeat, clip.lengthBeats});
         }
     }
 
@@ -211,6 +211,109 @@ int AudioClipStreamer::pumpForTest() {
     while (slices < kMaxPumpSlices && runOneSlice())
         ++slices;
     return slices;
+}
+
+//==============================================================================
+// Offline render (message thread, blocking)
+//==============================================================================
+
+AudioClipStreamer::PrimeTargets AudioClipStreamer::primeTargetsForBeat(double beat, double bpm,
+                                                                       double sampleRate) const {
+    PrimeTargets targets{};
+
+    const juce::ScopedLock lock(assignmentLock_);
+    for (int slot = 0; slot < kMaxStreams; ++slot) {
+        const auto& assignment = assignments_[(std::size_t)slot];
+        if (assignment.clipId == kNoClip)
+            continue;
+
+        // Clamped into the clip's own span: a clip that has not started yet is primed at its trim
+        // point (which is where playback WILL enter it), not at a frame before the file begins.
+        const double clipEnd = assignment.startBeat + juce::jmax(0.0, assignment.lengthBeats);
+        const double clipBeat = juce::jlimit(assignment.startBeat, juce::jmax(assignment.startBeat, clipEnd), beat);
+
+        targets[(std::size_t)slot] = {
+            assignment.clipId,
+            sourceFrameForClipBeat(assignment.startBeat, assignment.sourceStartSeconds, clipBeat, bpm, sampleRate)};
+    }
+
+    return targets;
+}
+
+void AudioClipStreamer::publishWantedFrames(const PrimeTargets& targets) {
+    for (int slot = 0; slot < kMaxStreams; ++slot) {
+        const auto& target = targets[(std::size_t)slot];
+        auto& handle = streams_[(std::size_t)slot].handle;
+        if (target.clipId != kNoClip && handle.clipId.load(std::memory_order_acquire) == target.clipId)
+            handle.wantedFrame.store(target.frame, std::memory_order_release);
+    }
+}
+
+bool AudioClipStreamer::isPrimed(const PrimeTargets& targets, int framesAhead) const {
+    // Nothing is readable at all while a format change is in flight — readFrames() forces silence
+    // until the prefetch thread has collapsed every window. See invalidateAllStreams().
+    if (forceInvalidate_.load(std::memory_order_acquire))
+        return false;
+
+    for (int slot = 0; slot < kMaxStreams; ++slot) {
+        const auto& target = targets[(std::size_t)slot];
+        if (target.clipId == kNoClip)
+            continue;
+
+        const auto& handle = streams_[(std::size_t)slot].handle;
+        if (handle.clipId.load(std::memory_order_acquire) != target.clipId)
+            return false; // the prefetch thread has not applied this assignment yet
+
+        if (!handle.ready.load(std::memory_order_acquire))
+            continue; // assigned but unplayable: silence by design, never something to wait for
+
+        const std::int64_t fileLength = handle.fileLengthFrames.load(std::memory_order_acquire);
+        if (fileLength <= 0 || target.frame >= fileLength)
+            continue; // past the end of the take — silence is the correct content
+
+        const std::int64_t need = std::min(target.frame + (std::int64_t)framesAhead, fileLength);
+        if (handle.ringStartSourceFrame.load(std::memory_order_acquire) > target.frame)
+            return false;
+        if (handle.ringEndSourceFrame.load(std::memory_order_acquire) < need)
+            return false;
+    }
+
+    return true;
+}
+
+bool AudioClipStreamer::waitUntilPrimed(double beat, double bpm, double sampleRate, int framesAhead, int timeoutMs) {
+    if (!(sampleRate > 0.0))
+        return true;
+
+    const int ahead = juce::jmax(0, framesAhead);
+    const auto targets = primeTargetsForBeat(beat, bpm, sampleRate);
+
+    // Steer BEFORE checking: the prefetch thread cannot reposition a ring it has not been told
+    // about, and the very first block of an offline render is exactly the case where it has not.
+    publishWantedFrames(targets);
+
+    if (prefetchPaused_.load(std::memory_order_relaxed)) {
+        // Paused means this thread is the only filler there is — the same synchronous pump tests
+        // drive the service with, so an offline render never waits on a thread that cannot run.
+        pumpForTest();
+        return isPrimed(targets, ahead);
+    }
+
+    startPrefetchThreadIfNeeded();
+
+    const auto deadline = juce::Time::getMillisecondCounter() + (juce::uint32)juce::jmax(0, timeoutMs);
+    for (;;) {
+        if (isPrimed(targets, ahead))
+            return true;
+
+        prefetchThread_.moveToFrontOfQueue(&prefetchClient_);
+
+        const auto now = juce::Time::getMillisecondCounter();
+        if (now >= deadline)
+            return isPrimed(targets, ahead);
+
+        sliceCompleted_.wait((int)juce::jmin<juce::uint32>(5, deadline - now));
+    }
 }
 
 //==============================================================================
@@ -385,6 +488,10 @@ bool AudioClipStreamer::runOneSlice() {
     for (auto& stream : streams_)
         didWork = serviceStream(stream) || didWork;
 
+    // Whatever this pass achieved is visible now: wake anyone blocked in waitUntilPrimed() rather
+    // than make an offline render discover it on a polling interval.
+    sliceCompleted_.signal();
+
     return didWork;
 }
 
@@ -419,6 +526,7 @@ void AudioClipStreamer::retireStream(ClipStream& stream) {
     stream.handle.clipId.store(kNoClip, std::memory_order_release);
     stream.handle.ready.store(false, std::memory_order_release);
     stream.handle.fileSampleRate.store(0.0, std::memory_order_release);
+    stream.handle.fileLengthFrames.store(0, std::memory_order_release);
     collapseWindow(stream, 0);
 
     // The reader is prefetch-thread-owned, so destroying it here needs no hand-off. (releaseAll()
@@ -450,6 +558,7 @@ void AudioClipStreamer::openStream(ClipStream& stream, const Assignment& assignm
     }
 
     stream.fileLengthFrames = stream.reader->lengthInSamples;
+    stream.handle.fileLengthFrames.store(stream.fileLengthFrames, std::memory_order_release);
 
     // Allocate this slot's ring on FIRST use only, and never free or move it afterwards — that is
     // what makes the pointer safe to publish once and read forever. An engine whose session has no

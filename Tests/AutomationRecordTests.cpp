@@ -21,9 +21,11 @@
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/Timeline/TimelineSnapshot.h"
 #include "../Source/Transport/TransportService.h"
+#include <atomic>
 #include <cmath>
 #include <gtest/gtest.h>
 #include <memory>
+#include <thread>
 #include <vector>
 
 #if SYNTH_ENABLE_TIMELINE
@@ -44,6 +46,7 @@ constexpr int kBlock = 512;
 constexpr int kSamplesPerBeat = 24000; // 120 BPM at 48 kHz — TransportService's default BPM
 
 constexpr const char* kNodeUuid = "b0440000-0000-0000-0000-000000000001";
+constexpr const char* kSecondNodeUuid = "b0440000-0000-0000-0000-00000000000a";
 
 constexpr float kCutoffMin = 20.0f;
 constexpr float kCutoffMax = 20000.0f;
@@ -448,6 +451,127 @@ TEST(AutomationRecordTest, OverflowSetsFlagAndSurvives) {
     ASSERT_NE(h.lane(), nullptr);
     EXPECT_FALSE(h.lane()->points.empty()) << "an overrun truncates the take, it does not cancel it";
     EXPECT_TRUE(h.undo.canUndo());
+}
+
+// ============================================================================
+// 8b. Rebinding must not leave a span holding someone else's claim slot
+// ============================================================================
+
+TEST(AutomationRecordTest, UnbindAllLeavesNoStaleClaimSlot) {
+    Harness h;
+    h.setMode(LaneRecordMode::Latch); // Latch, so the span outlives the gesture that opened it
+
+    // A second lane on a second module's parameter — the victim of a stale slot index.
+    FilterModule otherFilter;
+    auto* otherParam = findParameterByID(&otherFilter, "cutoff");
+    ASSERT_NE(otherParam, nullptr);
+    const auto otherLaneId = h.doc.addLane(h.trackId, kSecondNodeUuid, "cutoff", cutoffRange());
+    ASSERT_TRUE(otherLaneId.isValid());
+    ASSERT_TRUE(h.doc.setLaneRecordMode(otherLaneId, mode(LaneRecordMode::Latch)));
+
+    h.recorder.setGlobalRecordEnable(true);
+    h.startPlaying();
+
+    const auto& claims = h.recorder.getAudioState().claims;
+
+    h.cutoff()->beginChangeGesture();
+    EXPECT_TRUE(claims.isClaimed(h.cutoff()));
+
+    // What a republish does: drop every binding, then rebuild it. The span stays open with the hand
+    // still on the knob, so bindLane has to re-claim — which it can only tell to do if unbindAll
+    // cleared the span's slot index along with the slot itself.
+    h.recorder.unbindAll();
+    h.recorder.bindLane(h.laneId, h.cutoff(), {});
+    h.recorder.bindLane(otherLaneId, otherParam, {});
+    EXPECT_TRUE(claims.isClaimed(h.cutoff())) << "a rebind with the hand still down must re-claim";
+
+    // A second hand lands. With a stale index left behind it takes the slot the first span still
+    // believes it owns.
+    otherParam->beginChangeGesture();
+    h.recorder.update();
+    EXPECT_TRUE(claims.isClaimed(otherParam));
+
+    // Releasing the FIRST knob must release the FIRST knob's slot and nothing else.
+    h.cutoff()->endChangeGesture();
+    EXPECT_FALSE(claims.isClaimed(h.cutoff()));
+    EXPECT_TRUE(claims.isClaimed(otherParam)) << "a stale slot index released someone else's claim";
+
+    otherParam->endChangeGesture();
+    h.recorder.update();
+    EXPECT_FALSE(claims.isClaimed(otherParam));
+}
+
+// ============================================================================
+// 8c. A parameter listener may fire on a foreign thread
+// ============================================================================
+
+// A host automating a hosted plugin's parameter calls parameterValueChanged / parameterGestureChanged
+// straight from its own audio thread. This hammers that path — gestures and values from a worker
+// thread while the message thread polls, commits and republishes the binding table — and asserts the
+// document survives it intact. Under TSan/ASan it is also the race and use-after-free probe.
+TEST(AutomationRecordTest, ForeignThreadCallbacksNeverCorruptTheTake) {
+    Harness h;
+    h.setMode(LaneRecordMode::Touch);
+    h.recorder.setGlobalRecordEnable(true);
+    h.startPlaying();
+
+    constexpr int kGestures = 300;
+    constexpr int kValuesPerGesture = 16;
+
+    std::atomic<bool> writerDone{false};
+    std::atomic<int> gesturesFired{0};
+
+    std::thread writer([&] {
+        auto* param = h.cutoff();
+        for (int g = 0; g < kGestures; ++g) {
+            param->beginChangeGesture();
+            for (int i = 0; i < kValuesPerGesture; ++i)
+                param->setValueNotifyingHost(
+                    param->convertTo0to1(static_cast<float>(1000.0 + 500.0 * ((g * kValuesPerGesture + i) % 20))));
+            param->endChangeGesture();
+            gesturesFired.fetch_add(1, std::memory_order_relaxed);
+        }
+        writerDone.store(true, std::memory_order_release);
+    });
+
+    // The message thread does everything it normally would while that runs, republishing the binding
+    // table often enough that unbindAll()/bindLane() really do race the worker's callbacks.
+    int polls = 0;
+    while (!writerDone.load(std::memory_order_acquire)) {
+        h.recorder.update();
+        h.advanceBeat(0.05);
+        if (++polls % 8 == 0) {
+            h.recorder.unbindAll();
+            h.recorder.bindLane(h.laneId, h.cutoff(), {});
+        }
+    }
+    writer.join();
+
+    h.recorder.update();
+    h.stopPlaying();
+
+    EXPECT_EQ(gesturesFired.load(), kGestures);
+    EXPECT_EQ(h.recorder.getNumBindings(), 1) << "the binding table must survive the rebind race";
+
+    const auto* lane = h.lane();
+    ASSERT_NE(lane, nullptr);
+    EXPECT_FALSE(lane->points.empty()) << "a foreign-thread gesture is still a performance";
+
+    // Whatever landed has to be a well-formed lane: sorted, unique, in range, inside the take.
+    const double finalPpq = h.transport.getPositionSnapshot().ppq;
+    double previousBeat = -1.0;
+    for (const auto& point : lane->points) {
+        EXPECT_GT(point.beat, previousBeat) << "breakpoints must stay sorted and unique";
+        previousBeat = point.beat;
+        EXPECT_GE(point.beat, 0.0);
+        EXPECT_LE(point.beat, finalPpq + 1e-9);
+        EXPECT_GE(point.value, static_cast<double>(kCutoffMin) - 1.0);
+        EXPECT_LE(point.value, static_cast<double>(kCutoffMax) + 1.0);
+    }
+
+    // No claim may be left behind: every gesture the worker opened, it also closed.
+    const auto& claims = h.recorder.getAudioState().claims;
+    EXPECT_FALSE(claims.isClaimed(h.cutoff()));
 }
 
 // ============================================================================

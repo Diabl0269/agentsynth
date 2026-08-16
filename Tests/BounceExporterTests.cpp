@@ -164,6 +164,145 @@ struct Fixture {
     }
 };
 
+// ---------------------------------------------------------------------------
+// The streamed-clip rig. A bounce renders orders of magnitude faster than AudioClipStreamer's
+// prefetch thread refills a ring — and constructing the exporter's driver re-prepares the engine,
+// which invalidates every ring first — so this is the fixture that pins "a bounced clip is whole,
+// from its very first frame".
+//
+// The asset is 32-bit float carrying exactly-representable values (n / 65536), the same trick
+// AudioClipPlaybackTests uses, so a bounce written at bitDepth 32 is a bit-exact copy of it and
+// every assertion below is plain equality rather than an RMS window.
+// ---------------------------------------------------------------------------
+constexpr const char* kTrackAudioUuid = "c0000000-0000-0000-0000-000000000001";
+constexpr const char* kClipAssetRef = "Audio/clip.wav";
+constexpr int kSourcePeriod = 65536;
+
+float sourceSample(juce::int64 frame, int channel) {
+    const float value = (float)(frame % kSourcePeriod) / (float)kSourcePeriod;
+    return channel == 0 ? value : -value;
+}
+
+struct ScopedTempDir {
+    explicit ScopedTempDir(const juce::String& name)
+        : dir(juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(name)) {
+        dir.deleteRecursively();
+        dir.createDirectory();
+    }
+    ~ScopedTempDir() { dir.deleteRecursively(); }
+
+    juce::File dir;
+};
+
+/** Writes the stereo 32-bit float asset, in chunks, so even a long take costs one small buffer. */
+bool writeSourceWav(const juce::File& file, juce::int64 numFrames) {
+    file.getParentDirectory().createDirectory();
+    file.deleteFile();
+
+    std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
+    if (stream == nullptr || stream->failedToOpen())
+        return false;
+
+    juce::WavAudioFormat wavFormat;
+    std::unique_ptr<juce::AudioFormatWriter> writer(wavFormat.createWriterFor(stream.get(), kSampleRate, 2, 32, {}, 0));
+    if (writer == nullptr)
+        return false;
+    stream.release();
+
+    constexpr int kChunk = 8192;
+    juce::AudioBuffer<float> chunk(2, kChunk);
+    juce::int64 written = 0;
+    while (written < numFrames) {
+        const int n = (int)juce::jmin<juce::int64>(kChunk, numFrames - written);
+        for (int channel = 0; channel < 2; ++channel)
+            for (int i = 0; i < n; ++i)
+                chunk.getWritePointer(channel)[i] = sourceSample(written + i, channel);
+        if (!writer->writeFromAudioSampleBuffer(chunk, 0, n))
+            return false;
+        written += n;
+    }
+    return true;
+}
+
+juce::String buildAudioClipPatchJson() {
+    return juce::String(R"({
+        "nodes": [
+            {"id": 1, "type": "Track Audio",  "uuid": ")") +
+           kTrackAudioUuid + R"("},
+            {"id": 2, "type": "Audio Output", "uuid": "c0000000-0000-0000-0000-000000000002"}
+        ],
+        "connections": [
+            {"src": 1, "srcPort": 0, "dst": 2, "dstPort": 0},
+            {"src": 1, "srcPort": 1, "dst": 2, "dstPort": 1}
+        ]
+    })";
+}
+
+struct AudioClipFixture {
+    ScopedTempDir bundle{"agentsynth_bounce_clip"};
+    AudioEngine engine{AudioEngine::HostMode::Hosted};
+    std::unique_ptr<synth::OfflineTransportDriver> driver;
+    TimelineDoc doc;
+    synth::ClipId clipId;
+
+    /** @param pausePrefetch  true == the bounce's own priming call is the only thing that ever
+     *                        fills a ring, which makes the render deterministic and sleep-free;
+     *                        false == the real background thread, i.e. the shipping path. */
+    bool build(bool pausePrefetch, double clipStartBeat, double clipLengthBeats, juce::int64 sourceFrames) {
+        if (pausePrefetch)
+            engine.getAudioClipStreamer().setPrefetchPausedForTest(true);
+
+        if (!writeSourceWav(bundle.dir.getChildFile(kClipAssetRef), sourceFrames))
+            return false;
+
+        engine.initialise();
+
+        const juce::var patch = juce::JSON::parse(buildAudioClipPatchJson());
+        if (!patch.isObject())
+            return false;
+        if (!synth::AIStateMapper::applyJSONToGraph(patch, engine.getGraph(), /*clearExisting=*/true,
+                                                    /*trusted=*/true))
+            return false;
+
+        driver = std::make_unique<synth::OfflineTransportDriver>(engine, kSampleRate, kBlockSize, kNumChannels);
+        engine.getAudioClipStreamer().setAssetRoots(bundle.dir, juce::File());
+
+        const auto trackId = doc.addTrack(TrackKind::Audio, "Audio 1");
+        if (!doc.setTrackBinding(trackId, kTrackAudioUuid))
+            return false;
+        clipId = doc.addClip(trackId, clipStartBeat, clipLengthBeats, "Clip");
+        if (!clipId.isValid())
+            return false;
+        if (!doc.setClipAsset(clipId, kClipAssetRef, 0.0))
+            return false;
+
+        engine.publishTimeline(doc); // also syncs the streamer to this snapshot
+        return true;
+    }
+
+    ~AudioClipFixture() {
+        if (driver) {
+            engine.releaseFromHost();
+            engine.shutdown();
+        }
+    }
+};
+
+/** Samples of `channel` in [0, count) that differ from the asset frame `sourceOffset + i`. */
+int countClipMismatches(const juce::AudioBuffer<float>& audio, int channel, juce::int64 sourceOffset, int count,
+                        int* firstBadIndex) {
+    int bad = 0;
+    const float* data = audio.getReadPointer(channel);
+    for (int i = 0; i < count && i < audio.getNumSamples(); ++i) {
+        if (data[i] != sourceSample(sourceOffset + i, channel)) {
+            if (bad == 0 && firstBadIndex != nullptr)
+                *firstBadIndex = i;
+            ++bad;
+        }
+    }
+    return bad;
+}
+
 /** A file in the temp directory that is gone before and after the test that owns it. */
 struct ScopedTempFile {
     explicit ScopedTempFile(const juce::String& name)
@@ -556,6 +695,99 @@ TEST(BounceExporterTest, ProgressReachesOne) {
 
     // 8 beats (375 blocks) + 0.5 s of tail (ceil(24000/512) == 47 blocks).
     EXPECT_EQ(result.samplesWritten, (juce::int64)(kEightBeatBlocks + 47) * kBlockSize);
+}
+
+// ============================================================================
+// 9. Streamed audio clips survive a faster-than-realtime render
+// ============================================================================
+
+TEST(BounceExporterTest, BouncedAudioClipIsWholeFromItsFirstFrame) {
+    AudioClipFixture f;
+    // Prefetch paused: nothing but the bounce's own priming call can fill a ring, so a bounce that
+    // does not handshake with the streamer renders pure silence here.
+    ASSERT_TRUE(f.build(/*pausePrefetch=*/true, /*clipStartBeat=*/0.0, /*clipLengthBeats=*/2.0,
+                        /*sourceFrames=*/4 * (juce::int64)kBeatSamples));
+
+    ScopedTempFile out("agentsynth_bounce_clip_head.wav");
+
+    auto options = defaultOptions();
+    options.endBeat = 2.0;
+    options.bitDepth = 32; // float in, float out: the file is a bit-exact copy of the asset
+
+    const auto result = BounceExporter::bounce(f.engine, out.file, options);
+    ASSERT_TRUE(result.ok) << result.message;
+    EXPECT_EQ(result.streamDropouts, 0) << result.message;
+
+    const auto wav = readWav(out.file);
+    ASSERT_TRUE(wav.ok);
+
+    constexpr int kClipSamples = 2 * kBeatSamples;
+    ASSERT_GE(wav.lengthInSamples, (juce::int64)kClipSamples);
+
+    for (int channel = 0; channel < kNumChannels; ++channel) {
+        int firstBad = -1;
+        const int bad = countClipMismatches(wav.audio, channel, /*sourceOffset=*/0, kClipSamples, &firstBad);
+        EXPECT_EQ(bad, 0) << "channel " << channel << ": first mismatch at sample " << firstBad
+                          << " — the head of a bounced clip must not be silence";
+    }
+}
+
+TEST(BounceExporterTest, BounceStartingMidClipWaitsForTheRealPrefetchThread) {
+    AudioClipFixture f;
+    // The shipping path: the real background thread, and a range that starts two beats INTO the
+    // clip, so the frame the first block needs is one no seed could have guessed.
+    ASSERT_TRUE(f.build(/*pausePrefetch=*/false, /*clipStartBeat=*/0.0, /*clipLengthBeats=*/4.0,
+                        /*sourceFrames=*/8 * (juce::int64)kBeatSamples));
+
+    ScopedTempFile out("agentsynth_bounce_clip_midway.wav");
+
+    auto options = defaultOptions();
+    options.startBeat = 2.0;
+    options.endBeat = 3.0;
+    options.bitDepth = 32;
+
+    const auto result = BounceExporter::bounce(f.engine, out.file, options);
+    ASSERT_TRUE(result.ok) << result.message;
+    EXPECT_EQ(result.streamDropouts, 0) << result.message;
+
+    const auto wav = readWav(out.file);
+    ASSERT_TRUE(wav.ok);
+    ASSERT_GE(wav.lengthInSamples, (juce::int64)kBeatSamples);
+
+    for (int channel = 0; channel < kNumChannels; ++channel) {
+        int firstBad = -1;
+        const int bad = countClipMismatches(wav.audio, channel, /*sourceOffset=*/2 * (juce::int64)kBeatSamples,
+                                            kBeatSamples, &firstBad);
+        EXPECT_EQ(bad, 0) << "channel " << channel << ": first mismatch at sample " << firstBad;
+    }
+}
+
+TEST(BounceExporterTest, CancellingDuringTheTailStopsTheRender) {
+    Fixture f;
+    ASSERT_TRUE(f.build(/*withDelayTail=*/true));
+    ASSERT_TRUE(f.addStandardNotes());
+    f.publish();
+
+    ScopedTempFile out("agentsynth_bounce_cancel_tail.wav");
+
+    auto options = defaultOptions();
+    options.tailSeconds = 4.0; // 375 blocks of tail behind the 375-block range
+
+    // Cancel on the FIRST tail block: the range is written in full, the tail is abandoned.
+    int written = 0;
+    const auto result = BounceExporter::bounce(f.engine, out.file, options, [&written](double) {
+        ++written;
+        return written <= kEightBeatBlocks;
+    });
+
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(result.message.containsIgnoreCase("cancel")) << result.message;
+    EXPECT_EQ(written, kEightBeatBlocks + 1) << "the cancelling block is the last one written";
+    EXPECT_EQ(result.samplesWritten, (juce::int64)(kEightBeatBlocks + 1) * kBlockSize);
+    EXPECT_FALSE(out.file.existsAsFile());
+
+    const auto after = f.engine.getTransport().getPositionSnapshot();
+    EXPECT_FALSE(after.playing);
 }
 
 #endif // SYNTH_ENABLE_TIMELINE

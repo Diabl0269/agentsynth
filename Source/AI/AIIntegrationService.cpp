@@ -86,10 +86,18 @@ void AIIntegrationService::cancelRequest(AIProvider::RequestId requestId) {
 }
 
 juce::String AIIntegrationService::buildPatchAugmentedContent(const juce::String& text) {
+    // graphToJSON builds a fresh DynamicObject tree on every call (not shared with the live graph
+    // or any other caller), so stripping "state" from these nodes in place cannot mutate anything
+    // else. "state" is trusted-path-only (a Hosted Plugin's opaque blob, a Sampler's disk path) —
+    // the model can never author it, so it is pure leakage and token waste over the wire.
     juce::var graphJson = AIStateMapper::graphToJSON(audioGraph);
     juce::String patchSection;
     if (auto* obj = graphJson.getDynamicObject()) {
         if (auto* nodeArr = obj->getProperty("nodes").getArray()) {
+            for (auto& nodeVar : *nodeArr) {
+                if (auto* nodeObj = nodeVar.getDynamicObject())
+                    nodeObj->removeProperty("state");
+            }
             if (!nodeArr->isEmpty()) {
                 patchSection = "Current patch state:\n```json\n" + juce::JSON::toString(graphJson) + "\n```";
             }

@@ -3,6 +3,7 @@
 #include "TimelineDoc.h"
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <memory>
 #include <vector>
@@ -52,7 +53,8 @@ struct AutomationRecordState {
 };
 
 /**
- * @brief Captures parameter gestures into automation lanes. MESSAGE THREAD ONLY.
+ * @brief Captures parameter gestures into automation lanes. Every method here is MESSAGE THREAD
+ *        ONLY; the parameter-listener callbacks are the one exception and run on any thread.
  *
  * The sibling of synth::MidiRecorder — same shape (arm, capture into a fixed ring, commit as one
  * undo step), different source: this reads juce::AudioProcessorParameter::Listener callbacks,
@@ -72,10 +74,24 @@ struct AutomationRecordState {
  * one (via its ProgrammaticApplyScope) around preset load, New Patch, project open, the AI apply
  * span, and every undo/redo restore — see docs/architecture.md's "App wiring" section.
  *
+ * -- Thread affinity --
+ * A parameter listener is called on whatever thread wrote the parameter. Our own UI writes on the
+ * message thread, but a host automating a HOSTED plugin's parameter calls straight from its AUDIO
+ * thread (juce::AudioProcessorParameter::sendValueChangedMessageToListeners dispatches inline). So
+ * ParamListener's two callbacks do nothing but read atomics, take the transport's seqlock snapshot,
+ * denormalise through a pointer resolved at bind time, and push a POD Event into a ring. Nothing
+ * else — no doc, no bindings, no spans, no allocation. All of that happens in drainEvents(), which
+ * only update(), pollTransport() and the arming/detach paths call, on the message thread.
+ *
+ * Two rings, because juce::AbstractFifo is single-producer: one the message thread fills, one every
+ * other thread fills (its pushes are serialised by a try-lock that never blocks). One consumer
+ * drains both. A message-thread GESTURE edge drains inline, so a knob claims and commits with no
+ * latency; value changes accumulate until the next drain, which is what bounds the ring.
+ *
  * -- Re-entrancy --
  * A commit mutates the TimelineDoc, whose listeners drive AudioEngine::publishTimeline, whose
- * owner re-runs unbindAll() + bindLane() — all from INSIDE one of this class's own
- * parameter-listener callbacks. Two rules make that safe, and both are load-bearing:
+ * owner re-runs unbindAll() + bindLane() — all from INSIDE an inline drain, i.e. inside one of this
+ * class's own parameter-listener callbacks. Two rules make that safe, and both are load-bearing:
  *   1. Capture state lives in `spans`, keyed by LaneId, NOT in `bindings`. Every commit path takes
  *      the pending commits out of the way BEFORE touching the doc, so a re-entrant
  *      unbindAll()/bindLane() finds nothing in flight to corrupt.
@@ -93,10 +109,10 @@ public:
     AutomationRecorder();
     ~AutomationRecorder();
 
-    // Capacity of the {binding, beat, value} event ring. Parameter listeners are called on whatever
-    // thread wrote the parameter — the message thread for our own UI, but a host is free to
-    // automate from its audio thread — so the callback must be allocation-free, which is what the
-    // fixed ring buys. Overflow drops the event and raises hadOverrun(); the take still commits.
+    // Capacity of each event ring. Parameter listeners are called on whatever thread wrote the
+    // parameter — the message thread for our own UI, but a host is free to automate from its audio
+    // thread — so the callback must be allocation-free, which is what the fixed ring buys. Overflow
+    // drops the event and raises hadOverrun(); the take still commits, just thinner.
     static constexpr int kRingCapacity = 16384;
 
     // RDP thinning tolerance, as a fraction of the lane's range span. 0.2% of a 20 Hz..20 kHz
@@ -194,16 +210,22 @@ private:
     // One parameter listener per binding. NOT the recorder itself: juce hands the callback only the
     // parameter's index WITHIN ITS OWN PROCESSOR, so two lanes bound to index 3 on two different
     // modules would be indistinguishable. A per-binding forwarder carries the identity instead.
+    //
+    // ANY THREAD. Both callbacks are allocation-free and lock-free and touch nothing but atomics,
+    // the transport snapshot and one ring — see the thread-affinity note above. `ranged` is the
+    // dynamic_cast done once here at bind time, so denormalising in the callback costs a branch.
     struct ParamListener : juce::AudioProcessorParameter::Listener {
-        ParamListener(AutomationRecorder& r, std::int64_t lane) noexcept
-            : recorder(r)
-            , laneId(lane) {}
+        ParamListener(AutomationRecorder& r, std::int64_t lane, juce::AudioProcessorParameter* p) noexcept;
 
-        void parameterValueChanged(int, float newValue) override { recorder.handleValueChanged(laneId, newValue); }
-        void parameterGestureChanged(int, bool starting) override { recorder.handleGesture(laneId, starting); }
+        void parameterValueChanged(int, float newValue) override;
+        void parameterGestureChanged(int, bool starting) override;
+
+        double denormalise(float normalised) const noexcept;
 
         AutomationRecorder& recorder;
-        std::int64_t laneId;
+        std::int64_t laneId = 0;
+        juce::AudioProcessorParameter* param = nullptr;
+        const juce::RangedAudioParameter* ranged = nullptr;
     };
 
     struct Binding {
@@ -238,19 +260,39 @@ private:
         std::vector<CapturedPoint> captured;
     };
 
-    // Denormalised at push time, not at drain time: the lane stores denormalised values, and doing
-    // the conversion in the callback means the ring never has to be interpreted against a binding
-    // table that may have been rebuilt since.
+    enum class EventKind : std::uint8_t { GestureStart, GestureEnd, Value };
+
+    // What a listener callback pushes. Beat-stamped and denormalised at push time, not at drain
+    // time: the lane stores denormalised values, and stamping in the callback means the ring never
+    // has to be interpreted against a transport position or a binding table that moved since.
+    // For a gesture start, `value` is the parameter's value as the hand landed on it.
     struct Event {
         std::int64_t laneId = 0;
         double beat = 0.0;
         double value = 0.0;
+        EventKind kind = EventKind::Value;
     };
 
-    // Called by ParamListener. Never mutate `bindings` from inside these without going through the
-    // graveyard — see the class comment.
-    void handleGesture(std::int64_t laneId, bool starting);
-    void handleValueChanged(std::int64_t laneId, float normalised);
+    // Slots a value event refuses to eat into, so a gesture edge always fits. A dropped value only
+    // thins the take; a dropped gesture END would lose it entirely, because nothing else closes a
+    // Touch span. Far more than the eight simultaneous gestures GestureClaims allows for.
+    static constexpr int kGestureHeadroom = 64;
+
+    // Fixed-capacity ring: one producer at a time plus one consumer, which is exactly what
+    // juce::AbstractFifo requires. `producerLock` is only ever TRY-locked, so a push never blocks a
+    // caller that may be an audio thread; a contended push drops the event like a full ring does.
+    struct EventRing {
+        explicit EventRing(int capacity);
+
+        // ANY THREAD. Allocation-free, never blocks. False means dropped (full or contended).
+        // `reserved` is the free space the push refuses to consume — see kGestureHeadroom.
+        bool push(const Event& event, int reserved) noexcept;
+        void reset() noexcept { fifo.reset(); }
+
+        juce::AbstractFifo fifo;
+        std::vector<Event> slots;
+        juce::SpinLock producerLock;
+    };
 
     const Binding* findBinding(std::int64_t laneId) const noexcept;
     Span* findSpan(std::int64_t laneId) noexcept;
@@ -268,8 +310,22 @@ private:
     void commitAll(double endBeat);
     void autoDropWriteLanes();
 
-    void drainRing();
-    void pushEvent(const Event& event) noexcept;
+    // ANY THREAD. Routes to the ring owned by the calling thread's class.
+    void postEvent(const Event& event) noexcept;
+    // ANY THREAD. A plain id compare — juce::MessageManager::existsAndIsCurrentThread() takes a
+    // mutex, and nothing on this path may block a caller that might be an audio thread.
+    bool isOwnerThread() const noexcept;
+
+    // MESSAGE THREAD. The whole capture state machine lives here: opening and closing spans,
+    // reading record modes off the doc, and committing. Re-entrant calls are dropped — an inline
+    // drain's own commit can reach setGlobalRecordEnable/detach, and a nested reader would corrupt
+    // the fifo; the outer loop picks up whatever is left.
+    void drainEvents();
+    void drainOneRing(EventRing& ring);
+    void applyEvent(const Event& event);
+    void openGestureSpan(const Event& event);
+    void closeGestureSpan(const Event& event);
+    void appendValue(const Event& event);
 
     int claimSlotFor(const juce::AudioProcessorParameter* param) noexcept;
     void releaseSlot(int slot) noexcept;
@@ -278,24 +334,36 @@ private:
 
     TimelineDoc* doc = nullptr;
     AppUndoManager* undo = nullptr;
-    TransportService* transport = nullptr;
+    // Atomic because a listener callback on a foreign thread beat-stamps its events from the
+    // transport's seqlock snapshot; every other read is message-thread.
+    std::atomic<TransportService*> transport{nullptr};
 
     std::vector<Binding> bindings;
     std::vector<Span> spans;
-    // Detached-but-not-yet-destroyed ParamListeners; drained only when callbackDepth == 0.
+    // Detached-but-not-yet-destroyed ParamListeners; drained only when callbackDepth == 0. Atomic
+    // because a callback on a foreign thread bumps it; a graveyard entry has already been through
+    // removeListener(), which juce serialises against dispatch, so a nonzero depth can only mean a
+    // re-entrant callback on this thread — and skipping the purge for it is the whole point.
     std::vector<std::unique_ptr<ParamListener>> graveyard;
-    int callbackDepth = 0;
+    std::atomic<int> callbackDepth{0};
 
     bool lastPlaying = false;
+    bool draining = false;
+
+    // Stamped by the message-thread entry points (attachTo/update), so a callback can tell which of
+    // the two rings it owns without asking JUCE. Null until attachTo(), which runs long before any
+    // binding exists to call back.
+    std::atomic<juce::Thread::ThreadID> ownerThreadId{nullptr};
 
     AutomationRecordState audioState;
     std::atomic<int> suspendCount{0};
     std::atomic<bool> overrunFlag{false};
 
-    // Fixed-capacity SPSC ring, same shape as MidiRecorder's: the listener callback writes, the
-    // message thread drains. Sized for a long take at mouse-move rate.
-    juce::AbstractFifo ring{kRingCapacity};
-    std::vector<Event> ringSlots;
+    // Same shape as MidiRecorder's ring: the listener callback writes, the message thread drains.
+    // Split in two so each keeps a single producer — see the thread-affinity note above.
+    EventRing messageEvents{kRingCapacity};
+    EventRing foreignEvents{kRingCapacity};
+    std::vector<Event> drainScratch;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AutomationRecorder)
 };
