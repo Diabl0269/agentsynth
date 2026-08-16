@@ -761,8 +761,10 @@ TEST_F(AIChatComponentTest, PatchCardShowsThumbsButtons) {
 
     auto* messageList = findMessageList(chatComponent);
     ASSERT_NE(messageList, nullptr);
-    EXPECT_NE(findDescendantWithText<juce::TextButton>(messageList, "Good"), nullptr);
-    EXPECT_NE(findDescendantWithText<juce::TextButton>(messageList, "Bad"), nullptr);
+    EXPECT_NE(findDescendantWithText<juce::TextButton>(messageList, juce::String::fromUTF8("\xF0\x9F\x91\x8D")),
+              nullptr);
+    EXPECT_NE(findDescendantWithText<juce::TextButton>(messageList, juce::String::fromUTF8("\xF0\x9F\x91\x8E")),
+              nullptr);
 }
 
 TEST_F(AIChatComponentTest, ClickingThumbsUpRecordsFeedbackLocally) {
@@ -796,7 +798,8 @@ TEST_F(AIChatComponentTest, ClickingThumbsUpRecordsFeedbackLocally) {
     juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
 
     auto* messageList = findMessageList(chatComponent);
-    auto* goodButton = findDescendantWithText<juce::TextButton>(messageList, "Good");
+    auto* goodButton =
+        findDescendantWithText<juce::TextButton>(messageList, juce::String::fromUTF8("\xF0\x9F\x91\x8D"));
     ASSERT_NE(goodButton, nullptr);
     // triggerClick() posts an async command message (Button::triggerClick() ->
     // postCommandMessage); call onClick() directly for synchronous test behaviour, same as

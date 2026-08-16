@@ -107,24 +107,24 @@ public:
         applyButton.onClick = onApply;
 
         addAndMakeVisible(thumbsUpButton);
-        thumbsUpButton.setButtonText("Good");
+        thumbsUpButton.setButtonText(juce::String::fromUTF8("\xF0\x9F\x91\x8D"));
         thumbsUpButton.setTooltip("This patch was helpful");
         thumbsUpButton.onClick = [this]() { setRating(AIChatComponent::PatchRatingUiState::Up); };
 
         addAndMakeVisible(thumbsDownButton);
-        thumbsDownButton.setButtonText("Bad");
+        thumbsDownButton.setButtonText(juce::String::fromUTF8("\xF0\x9F\x91\x8E"));
         thumbsDownButton.setTooltip("This patch missed the mark");
         thumbsDownButton.onClick = [this]() { setRating(AIChatComponent::PatchRatingUiState::Down); };
 
         addAndMakeVisible(commentField);
         commentField.setComponentID("patchFeedbackComment");
         commentField.setText(initialComment, juce::dontSendNotification);
-        commentField.setTextToShowWhenEmpty("Optional: why? (Enter to save)", juce::Colours::grey);
+        commentField.setTextToShowWhenEmpty("Optional: why? (Enter to send)", juce::Colours::grey);
         commentField.onReturnKey = [this]() { notifyRate(); };
 
         addAndMakeVisible(commentSaveButton);
-        commentSaveButton.setButtonText("Save");
-        commentSaveButton.setTooltip("Save your comment with the rating");
+        commentSaveButton.setButtonText("Send");
+        commentSaveButton.setTooltip("Send your feedback comment");
         commentSaveButton.onClick = [this]() { notifyRate(); };
 
         updateThumbColours();
@@ -190,19 +190,22 @@ public:
 
         b.removeFromTop(5);
 
-        // Feedback row: thumbs are always visible on a patch card; the comment field/save button
+        // Feedback rows: thumbs are always visible on a patch card, on their own row now that
+        // they're single glyphs rather than "Good"/"Bad" labels. The comment field/send button
         // only appear once a rating has been picked, so a patch nobody has judged yet doesn't
-        // invite a comment with nothing to attach it to.
-        auto feedbackRow = b.removeFromTop(kFeedbackRowHeight);
-        thumbsUpButton.setBounds(feedbackRow.removeFromLeft(50).reduced(2));
-        thumbsDownButton.setBounds(feedbackRow.removeFromLeft(50).reduced(2));
+        // invite a comment with nothing to attach it to — that second row lives below the thumbs
+        // rather than sharing their row, so the comment field has full card width to work with.
+        auto thumbsRow = b.removeFromTop(kFeedbackRowHeight);
+        thumbsUpButton.setBounds(thumbsRow.removeFromLeft(40).reduced(2));
+        thumbsDownButton.setBounds(thumbsRow.removeFromLeft(40).reduced(2));
         bool showComment = currentRating != AIChatComponent::PatchRatingUiState::None;
         commentSaveButton.setVisible(showComment);
         commentField.setVisible(showComment);
         if (showComment) {
-            feedbackRow.removeFromLeft(5);
-            commentSaveButton.setBounds(feedbackRow.removeFromRight(55).reduced(2));
-            commentField.setBounds(feedbackRow.reduced(2));
+            b.removeFromTop(4);
+            auto commentRow = b.removeFromTop(kFeedbackRowHeight);
+            commentSaveButton.setBounds(commentRow.removeFromRight(55).reduced(2));
+            commentField.setBounds(commentRow.reduced(2));
         }
         b.removeFromTop(5);
 
@@ -218,7 +221,8 @@ public:
     }
 
     int getRequiredHeight() const {
-        int height = 35 + kFeedbackRowHeight + 5 + diffAreaHeight();
+        bool showComment = currentRating != AIChatComponent::PatchRatingUiState::None;
+        int height = 35 + kFeedbackRowHeight + (showComment ? 4 + kFeedbackRowHeight : 0) + 5 + diffAreaHeight();
         if (isExpanded)
             height += 5 + kRawJsonHeight;
         return height;
@@ -227,7 +231,17 @@ public:
     void setRating(AIChatComponent::PatchRatingUiState rating) {
         currentRating = rating;
         updateThumbColours();
-        resized();
+        // A rating being set changes the card's total height (the comment row appears below the
+        // thumbs row rather than repurposing it). MessageBubble::resized() repositions this card
+        // within its own bounds but doesn't own that bounds' size — AIChatComponent::resized() is
+        // what computes each bubble's height via bubble->getRequiredHeight(width) and lays out the
+        // whole message list, so that's the level that must relayout, not just the immediate
+        // parent. Fall back to resizing this card directly when there's no such ancestor yet (e.g.
+        // a unit test constructing PatchCard standalone).
+        if (auto* chat = findParentComponentOfClass<AIChatComponent>())
+            chat->resized();
+        else
+            resized();
         notifyRate();
     }
 
