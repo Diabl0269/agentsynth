@@ -659,6 +659,32 @@ per-fixture expected-vs-actual table and a summary match rate — gated behind
 to build or run. `Tests/TimelineOpsFixtureTests.cpp` asserts the identical fixture files as fast
 gtest cases, which is what CI actually gates on.
 
+## 5f. The Agentic Timeline Security Model (TL8-6)
+
+The single statement the per-feature sections above implement. When extending the AI's reach into
+the timeline, this table is the contract to preserve — every row exists because the mechanism next
+to it enforces it, not because a prompt asks nicely.
+
+**What AI output may author:**
+
+| Surface | Mechanism | Bound |
+|---|---|---|
+| MIDI notes | `placeClips` note lists, or `.mid` blobs via `placeMidiClip` (§5e) | note caps, pitch/velocity/channel ranges REJECTED not clamped; blob ≤ 256 KiB, PPQ-only SMF parsed by `MidiClipFile` (a format that structurally cannot carry a path, a plugin id, or code) |
+| Automation lanes | `writeLane` (§5e) | values validated against the **live** parameter's range intersected with the lane snapshot; (nodeUuid, paramId) must resolve against the live graph — untrusted input can never author an orphan |
+| Doc-only tracks | `addTrack` (kinds `midi`/`automation` only) | unbound — wiring a Track In/Track Audio node stays a user gesture |
+
+**What AI output may never touch, and why:**
+
+| Never | Why | Enforced by |
+|---|---|---|
+| Asset references / file paths | an assetRef is a file **read**; honoring one from a model turns a chat reply into arbitrary file access | `AssetNotAllowed` in `validateTimeline` (§5c); unknown-field rejection makes `assetRef` unreachable by grammar in ops (§5e) |
+| Plugin identifiers / state blobs | a plugin blob is a code-execution surface, not a parameter | node `state` is trusted-path-only (`applyExtraStateToProcessor`); internal-only module types rejected untrusted (`InternalModuleNotAllowed`); hosted-plugin types join that list in TL7-4 |
+| Record arming / record modes | untrusted input must not start capturing the user's audio | `RecordModeNotAllowed` (§5c); ops carry no such field by grammar |
+| The patch grammar's `timeline` key | timeline data rides its own validated door, never the patch schema — every property in `getPatchSchema` invites the model to emit it on every request | `TimelineNotAllowed` (permanent, §5c); pinned in both directions by tests and a harness fixture |
+
+Read-path symmetry: what the model *sees* (§5d) follows the same rule — arrangement summaries carry
+bare file names only, never paths or directories.
+
 ## 5. AIChatComponent and Logging
 
 `AIChatComponent` (`Source/UI/AIChatComponent.cpp`) is the chat UI for AI-assisted patching. It wires user prompts to `AIIntegrationService` and displays the conversation history with optional JSON patch previews.
