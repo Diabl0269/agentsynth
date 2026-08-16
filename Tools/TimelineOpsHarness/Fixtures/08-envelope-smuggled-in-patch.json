@@ -1,0 +1,17 @@
+{
+  "name": "envelope-smuggled-in-patch",
+  "description": "The two-door pin: a timelineOps-shaped payload placed under a patch's reserved \"timeline\" key must be refused by validatePatch outright, never inspected for a legitimate-looking timelineOps shape inside it.",
+  "kind": "patchSmuggle",
+  "expectedValid": false,
+  "expectedErrorName": "TimelineNotAllowed",
+  "expectedMessageContains": "must not contain a \"timeline\" property",
+  "payload": {
+    "nodes": [],
+    "connections": [],
+    "timeline": {
+      "timelineOps": [
+        { "op": "addTrack", "kind": "midi", "name": "Bass" }
+      ]
+    }
+  }
+}

@@ -64,7 +64,8 @@ you: a new track arrives **unbound** — pick the module it should play through 
 panel's track header — and it never imports or records audio, so it only ever writes MIDI clips and
 automation, never audio clips. If a suggestion can't be applied (it names a track you don't have,
 or a value outside a parameter's range), the card says so and offers no button rather than failing
-silently.
+silently. It can also place a ready-made MIDI clip in one step by attaching a `.mid` file's notes to
+its answer — the safest note data the AI can hand back, since a `.mid` blob can only ever carry notes.
 
 ## 5. Troubleshooting
 

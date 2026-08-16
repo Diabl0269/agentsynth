@@ -36,9 +36,25 @@ struct TimelineOpsResult {
  *                    "notes": [ { "startBeat": 0, "lengthBeats": 1,
  *                                 "pitch": 36, "velocity": 100, "channel": 1 } ] } ] },
  *     { "op": "writeLane",  "nodeUuid": "…", "paramId": "cutoff",
- *       "points": [ { "beat": 0, "value": 800, "tension": 0, "curve": 1 } ] }
+ *       "points": [ { "beat": 0, "value": 800, "tension": 0, "curve": 1 } ] },
+ *     { "op": "placeMidiClip", "track": "Bass", "startBeat": 0,
+ *       "midBase64": "<base64-encoded Standard MIDI File>" }
  * ] }
  * @endcode
+ *
+ * ### `placeMidiClip` — the .mid blob surface (TL8-5)
+ *
+ * A `.mid` blob is the intentionally narrow AI note surface: `MidiClipFile::importFromStream`
+ * (TL3-4) can only ever produce notes — no file paths, no plugin identifiers, no code — which is
+ * why it is the one place this envelope accepts an opaque binary payload at all. `midBase64` is
+ * bounded by `kMaxMidBlobBytes`, checked against the STILL-ENCODED string BEFORE decoding, so an
+ * oversized blob is rejected without ever allocating a decode buffer for it. The decoded bytes go
+ * through the exact same strict importer a user's own "Import MIDI…" menu item uses: SMPTE files,
+ * unparseable bytes, and a per-track note count over `TimelineDoc::kMaxNotesPerClip` all reject the
+ * WHOLE batch, never just that clip. Every imported track becomes one clip at the op's `startBeat`
+ * (clip length is `ceil` of its last note's end, floored at 1 beat — `MidiClipFile::importIntoTrack`'s
+ * own rule, reused rather than restated), and every note it contains counts toward
+ * `kMaxTotalNotesUntrusted` exactly like a `placeClips` note does.
  *
  * This is the CLIENT half of the TL8-2 platform capabilities: the model emits this shape through
  * its own capability schema, and it is a **sibling** of a patch suggestion, never nested inside
@@ -65,10 +81,12 @@ struct TimelineOpsResult {
  *
  * Deliberately absent from the grammar, which is how assets and record arming stay unreachable
  * (rather than being refused field-by-field): an op has no `assetRef`, no `recordMode`, no
- * `bindingUuid`, and no track kind beyond `midi`/`automation`. **Unknown fields inside an op are
- * REJECTED**, so a future field cannot be smuggled past a gate that never inspected it — the same
- * reasoning behind `validateTimeline`'s unknown-top-level-key refusal. Unknown keys at the
- * ENVELOPE root are ignored, because that is where the sibling patch's own keys live.
+ * `bindingUuid`, and no track kind beyond `midi`/`automation`. A `.mid` blob is not an exception to
+ * this — it can only ever decode to notes, never a path or an id, which is exactly why it is the
+ * one binary payload this grammar accepts. **Unknown fields inside an op are REJECTED**, so a
+ * future field cannot be smuggled past a gate that never inspected it — the same reasoning behind
+ * `validateTimeline`'s unknown-top-level-key refusal. Unknown keys at the ENVELOPE root are
+ * ignored, because that is where the sibling patch's own keys live.
  *
  * ### All-or-nothing
  *
@@ -85,6 +103,12 @@ struct TimelineOps {
     /** Longest track/clip name an op may supply. Keeps `previewText` — which is rendered into a
      *  chat card — bounded by the grammar rather than by the sender's restraint. */
     static constexpr int kMaxNameChars = 128;
+
+    /** Largest `"midBase64"` STRING a `placeMidiClip` op may supply, checked against the
+     *  still-encoded string BEFORE decoding — cheap enough (a length check) to reject an oversized
+     *  blob without ever allocating a buffer for it. 256 KiB of base64 is already a generously large
+     *  MIDI file; a bigger one is not a note surface any more. */
+    static constexpr int kMaxMidBlobBytes = 262144;
 
     /**
      * @brief True if `payload` carries a `"timelineOps"` key at all.
@@ -130,6 +154,11 @@ struct TimelineOps {
      *    find-or-create rule, exactly as `MainComponent::automateParameter` does it), then REPLACES
      *    every existing point inside the written span — min..max beat of the payload, inclusive —
      *    in one `editBreakpoints` mutation.
+     *  - **placeMidiClip** decodes `midBase64`, parses it via `MidiClipFile::importFromStream`, and
+     *    places one clip per non-empty imported track on the target MIDI track at `startBeat` — the
+     *    same `MidiClipFile::importIntoTrack` behaviour a user's own MIDI-file import uses. Any
+     *    import failure (bad base64, not a readable SMF, SMPTE time format, a track over
+     *    `TimelineDoc::kMaxNotesPerClip`) or an empty result rejects the whole batch.
      *
      * @return `ok == false` with the doc completely untouched if anything about the envelope is
      *         invalid. `ok == true` when the batch applied; `message` says whether an undo step was

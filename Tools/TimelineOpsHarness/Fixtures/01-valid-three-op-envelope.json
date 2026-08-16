@@ -1,0 +1,18 @@
+{
+  "name": "valid-three-op-envelope",
+  "description": "A well-formed addTrack + placeClips + writeLane batch — the shape docs/AI_Engine.md §5e's example envelope uses.",
+  "kind": "timelineOps",
+  "expectedValid": true,
+  "expectedMessageContains": "",
+  "expectedPreviewContains": "places 1 clip (1 note) at 0-4 on \"Bass\"",
+  "payload": {
+    "timelineOps": [
+      { "op": "addTrack", "kind": "midi", "name": "Bass" },
+      { "op": "placeClips", "track": "Bass", "clips": [
+          { "startBeat": 0, "lengthBeats": 4, "name": "A",
+            "notes": [ { "startBeat": 0, "lengthBeats": 1, "pitch": 36, "velocity": 100, "channel": 1 } ] } ] },
+      { "op": "writeLane", "nodeUuid": "filter-uuid", "paramId": "cutoff",
+        "points": [ { "beat": 0, "value": 800, "tension": 0, "curve": 1 } ] }
+    ]
+  }
+}

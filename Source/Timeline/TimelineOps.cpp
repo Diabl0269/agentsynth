@@ -1,6 +1,7 @@
 #include "TimelineOps.h"
 
 #include "../AppUndoManager.h"
+#include "MidiClipFile.h"
 #include "TimelineValidator.h"
 
 #include <algorithm>
@@ -410,6 +411,89 @@ TimelineOpsResult runPlaceClips(const juce::String& where, juce::DynamicObject& 
     return {};
 }
 
+// -- placeMidiClip ------------------------------------------------------------------------------
+// The .mid blob surface (TL8-5): a base64-encoded Standard MIDI File is the one binary payload
+// this grammar accepts, because MidiClipFile::importFromStream can only ever decode it to notes —
+// no path, no plugin id, no code. Bounds-checking-strict end to end, matching that class's own
+// stated design (see MidiClipFile.h's class comment).
+
+TimelineOpsResult runPlaceMidiClip(const juce::String& where, juce::DynamicObject& op, TimelineDoc& doc,
+                                   juce::StringArray& parts, std::int64_t& totalNotes) {
+    if (const auto bad = unknownKey(op, {"op", "track", "startBeat", "midBase64"}); bad.isNotEmpty())
+        return fail(where + "has an unknown field \"" + bad +
+                    "\". A placeMidiClip op accepts only \"track\", \"startBeat\" and \"midBase64\".");
+
+    TrackId trackId;
+    juce::String trackName;
+    if (const auto result = resolveTrack(where, op.getProperty("track"), doc, trackId, trackName); !result.ok)
+        return result;
+
+    const Track* track = doc.getTrack(trackId);
+    if (track == nullptr)
+        return fail(where + "could not resolve its target track.");
+    if (track->kind != TrackKind::Midi)
+        return fail(where + "targets track \"" + trackName +
+                    "\", which is not a MIDI track. A .mid blob's notes belong on a MIDI track.");
+
+    double startBeat = 0.0;
+    if (!readOptionalDouble(op.getProperty("startBeat"), startBeat))
+        return fail(where + "has a non-numeric \"startBeat\".");
+    if (!isBeatInBounds(startBeat))
+        return fail(where + "starts at beat " + juce::String(startBeat) + ", which is not a finite beat between " +
+                    beatRangeText() + ".");
+
+    const juce::var midBase64Var = op.getProperty("midBase64");
+    if (!midBase64Var.isString())
+        return fail(where + "needs a string \"midBase64\" carrying a base64-encoded Standard MIDI File.");
+    const juce::String midBase64 = midBase64Var.toString();
+    if (midBase64.isEmpty())
+        return fail(where + "has an empty \"midBase64\" - there is nothing to import.");
+
+    // Checked against the STILL-ENCODED string before a single byte is decoded, so an oversized
+    // blob is rejected as cheaply as any other length check - never by allocating a buffer for it
+    // first and discovering it afterwards.
+    if (midBase64.length() > TimelineOps::kMaxMidBlobBytes)
+        return fail(where + "carries a \"midBase64\" of " + juce::String(midBase64.length()) +
+                    " characters, exceeding the limit of " + juce::String(TimelineOps::kMaxMidBlobBytes) +
+                    " - a .mid blob this large is not a note surface any more.");
+
+    juce::MemoryOutputStream decoded;
+    if (!juce::Base64::convertFromBase64(decoded, midBase64))
+        return fail(where + "has a \"midBase64\" that is not valid base64.");
+
+    juce::MemoryInputStream midiStream(decoded.getData(), decoded.getDataSize(), false);
+    const auto imported = MidiClipFile::importFromStream(midiStream);
+    if (!imported.ok)
+        return fail(where + "carries a .mid blob that could not be imported: " + imported.message + ".");
+    if (imported.tracks.empty())
+        return fail(where + "carries a .mid blob with no notes in it - there is nothing to place.");
+
+    const int existingClips = static_cast<int>(track->clips.size());
+    if (existingClips + static_cast<int>(imported.tracks.size()) > TimelineDoc::kMaxClipsPerTrack)
+        return fail(where + "would put " + juce::String(existingClips + static_cast<int>(imported.tracks.size())) +
+                    " clips on track \"" + trackName + "\", exceeding the limit of " +
+                    juce::String(TimelineDoc::kMaxClipsPerTrack) + " per track.");
+
+    int noteCount = 0;
+    for (const auto& importedTrack : imported.tracks)
+        noteCount += static_cast<int>(importedTrack.notes.size());
+    totalNotes += noteCount;
+    if (totalNotes > kMaxTotalNotesUntrusted)
+        return fail(where + "takes the batch past " + juce::String(kMaxTotalNotesUntrusted) +
+                    " notes in total, which is the most one set of timeline operations may author.");
+
+    // MidiClipFile::importIntoTrack is the same one-mutation-per-clip/note shape every other op
+    // here uses (no batching, no undo of its own) - reused rather than restated, and everything
+    // above already proved it has room to succeed.
+    if (!MidiClipFile::importIntoTrack(doc, trackId, startBeat, imported))
+        return fail(where + "could not place the MIDI clip(s) on track \"" + trackName + "\".");
+
+    parts.add("places " + countText(static_cast<int>(imported.tracks.size()), "MIDI clip", "MIDI clips") + " (" +
+              countText(noteCount, "note", "notes") + ") from a .mid blob at beat " + beatText(startBeat) + " on \"" +
+              trackName + "\"");
+    return {};
+}
+
 // -- writeLane --------------------------------------------------------------------------------
 
 TimelineOpsResult runWriteLane(const juce::String& where, juce::DynamicObject& op, TimelineDoc& doc,
@@ -627,9 +711,11 @@ TimelineOpsResult runBatch(const juce::var& envelope, TimelineDoc& doc, const ju
             result = runPlaceClips(where, *opObj, doc, parts, totalNotes);
         else if (opName == "writeLane")
             result = runWriteLane(where, *opObj, doc, graph, parts);
+        else if (opName == "placeMidiClip")
+            result = runPlaceMidiClip(where, *opObj, doc, parts, totalNotes);
         else
             result = fail(index + " asks for unknown operation \"" + opName +
-                          "\". The operations are \"addTrack\", \"placeClips\" and \"writeLane\".");
+                          "\". The operations are \"addTrack\", \"placeClips\", \"writeLane\" and \"placeMidiClip\".");
 
         if (!result.ok)
             return result;

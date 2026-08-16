@@ -72,6 +72,19 @@ const synth::Track* findTrackByName(const TimelineDoc& doc, const juce::String& 
     return nullptr;
 }
 
+// A real base64-encoded Standard MIDI File, type 1, PPQ, two tracks of 17 notes each (34 total) -
+// generated once with MidiClipFile::exportClip and embedded, the same bytes
+// Tools/TimelineOpsHarness/Fixtures/02-valid-place-midi-clip.json pins.
+constexpr const char* kValidMidBase64 =
+    "TVRoZAAAAAYAAQACA8BNVHJrAAAAnQCQJGSDYIAkAACQJWSDYIAlAACQJmSDYIAmAACQJ2SDYIAnAACQKGSDYIAoAACQ"
+    "KWSDYIApAACQKmSDYIAqAACQK2SDYIArAACQLGSDYIAsAACQLWSDYIAtAACQLmSDYIAuAACQL2SDYIAvAACQJGSDYIAk"
+    "AACQJWSDYIAlAACQJmSDYIAmAACQJ2SDYIAnAACQKGSDYIAoAAD/LwBNVHJrAAAAnQCQPGSDYIA8AACQPWSDYIA9AACQ"
+    "PmSDYIA+AACQP2SDYIA/AACQQGSDYIBAAACQQWSDYIBBAACQQmSDYIBCAACQQ2SDYIBDAACQRGSDYIBEAACQRWSDYIBF"
+    "AACQRmSDYIBGAACQR2SDYIBHAACQPGSDYIA8AACQPWSDYIA9AACQPmSDYIA+AACQP2SDYIA/AACQQGSDYIBAAAD/LwA=";
+
+// The same file with an SMPTE (25fps/40 subframes) time format instead of PPQ.
+constexpr const char* kSmpteMidBase64 = "TVRoZAAAAAYAAQAB5yhNVHJrAAAADACQPGRkgDwAAP8vAA==";
+
 } // namespace
 
 class TimelineOpsTest : public ::testing::Test {
@@ -218,6 +231,36 @@ TEST_F(TimelineOpsTest, WriteLaneReplacesOnlyThePointsInsideTheWrittenSpan) {
     EXPECT_DOUBLE_EQ(lane->points[4].value, 400.0);
 }
 
+TEST_F(TimelineOpsTest, PlaceMidiClipDecodesAndPlacesExactlyWhatTheBlobContains) {
+    const auto envelope = envelopeOf(juce::String(R"([
+        {"op": "addTrack", "kind": "midi", "name": "Bass"},
+        {"op": "placeMidiClip", "track": "Bass", "startBeat": 8, "midBase64": ")") +
+                                     kValidMidBase64 + "\"}]");
+
+    const auto preview = validate(envelope);
+    ASSERT_TRUE(preview.ok) << preview.message;
+    EXPECT_TRUE(doc.isEmpty()) << "validate() must not touch the document";
+    EXPECT_EQ(preview.previewText, "Adds midi track \"Bass\" (unbound - bind it in the timeline panel); "
+                                   "places 2 MIDI clips (34 notes) from a .mid blob at beat 8 on \"Bass\"");
+
+    ASSERT_TRUE(apply(envelope).ok);
+
+    const auto* track = findTrackByName(doc, "Bass");
+    ASSERT_NE(track, nullptr);
+    ASSERT_EQ(track->clips.size(), 2u);
+    for (const auto& clip : track->clips) {
+        EXPECT_DOUBLE_EQ(clip.startBeat, 8.0) << "both clips land at the op's startBeat, stacked";
+        ASSERT_EQ(clip.notes.size(), 17u);
+        // Clip-relative, unchanged from the blob's own beat zero.
+        EXPECT_DOUBLE_EQ(clip.notes[0].startBeat, 0.0);
+    }
+
+    // One undo step for the whole batch, same as every other op.
+    ASSERT_TRUE(undoManager.canUndo());
+    ASSERT_TRUE(undoManager.undo());
+    EXPECT_TRUE(doc.isEmpty());
+}
+
 // =============================================================================
 // 2. The whole batch is ONE undo step
 // =============================================================================
@@ -266,6 +309,9 @@ TEST_F(TimelineOpsTest, AllOrNothing) {
              "points": [{"beat": 0, "value": 999999}]})"},
         {"a track name nothing in the document carries",
          R"({"op": "placeClips", "track": "Nowhere", "clips": [{"startBeat": 0, "lengthBeats": 4}]})"},
+        {"a placeMidiClip blob using SMPTE time format",
+         R"({"op": "placeMidiClip", "track": "Bass", "startBeat": 0,
+             "midBase64": "TVRoZAAAAAYAAQAB5yhNVHJrAAAADACQPGRkgDwAAP8vAA=="})"},
     };
 
     for (const auto& testCase : cases) {
@@ -374,6 +420,33 @@ TEST_F(TimelineOpsTest, CapsAndBoundsRejected) {
         tooManyOps.add(R"({"op": "addTrack", "kind": "midi", "name": "T)" + juce::String(i) + "\"}");
     EXPECT_FALSE(validate(envelopeOf("[" + tooManyOps.joinIntoString(", ") + "]")).ok);
 
+    // placeMidiClip's own bounds.
+    // The size cap, checked on the STILL-ENCODED string before any decode: one character past
+    // kMaxMidBlobBytes is enough, and the content need not even be valid base64.
+    const juce::String oversized = juce::String::repeatedString("A", TimelineOps::kMaxMidBlobBytes + 1);
+    EXPECT_FALSE(validate(envelopeOf("[{\"op\": \"placeMidiClip\", \"track\": \"Bass\", \"startBeat\": 0, "
+                                     "\"midBase64\": \"" +
+                                     oversized + "\"}]"))
+                     .ok);
+    // Invalid base64.
+    EXPECT_FALSE(validate(envelopeOf(R"([{"op": "placeMidiClip", "track": "Bass", "startBeat": 0,
+                                         "midBase64": "not valid base64!!!"}])"))
+                     .ok);
+    // Valid base64, but the decoded bytes are not a Standard MIDI File at all.
+    EXPECT_FALSE(validate(envelopeOf(R"([{"op": "placeMidiClip", "track": "Bass", "startBeat": 0,
+                                         "midBase64": "QUJDREVGRw=="}])"))
+                     .ok);
+    // An empty blob: nothing to decode, nothing to place.
+    EXPECT_FALSE(validate(envelopeOf(R"([{"op": "placeMidiClip", "track": "Bass", "startBeat": 0,
+                                         "midBase64": ""}])"))
+                     .ok);
+    // A non-MIDI target track, same restriction placeClips has.
+    doc.addTrack(TrackKind::Automation, "Auto");
+    EXPECT_FALSE(validate(envelopeOf(juce::String(R"([{"op": "placeMidiClip", "track": "Auto", "startBeat": 0,
+                                         "midBase64": ")") +
+                                     kValidMidBase64 + "\"}]"))
+                     .ok);
+
     EXPECT_TRUE(doc.getTracks()[0].clips.empty()) << "not one rejected case may have mutated the document";
 }
 
@@ -404,6 +477,8 @@ TEST_F(TimelineOpsTest, AssetsAndRecordModesUnreachable) {
         {"an unknown field inside a point",
          R"([{"op": "writeLane", "nodeUuid": "filter-uuid", "paramId": "cutoff",
               "points": [{"beat": 0, "value": 800, "shape": "log"}]}])"},
+        {"an unknown field inside placeMidiClip",
+         R"([{"op": "placeMidiClip", "track": "Bass", "startBeat": 0, "midBase64": "abcd", "assetRef": "x"}])"},
         {"an unknown op", R"([{"op": "deleteEverything"}])"},
     };
 

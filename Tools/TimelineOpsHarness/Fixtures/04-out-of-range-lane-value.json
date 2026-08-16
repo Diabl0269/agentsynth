@@ -1,0 +1,14 @@
+{
+  "name": "out-of-range-lane-value",
+  "description": "A writeLane point whose value is outside the LIVE Filter cutoff parameter's range (20..20000 Hz) - rejected, never clamped.",
+  "kind": "timelineOps",
+  "expectedValid": false,
+  "expectedMessageContains": "outside the range",
+  "expectedPreviewContains": "",
+  "payload": {
+    "timelineOps": [
+      { "op": "writeLane", "nodeUuid": "filter-uuid", "paramId": "cutoff",
+        "points": [ { "beat": 0, "value": 999999 } ] }
+    ]
+  }
+}
