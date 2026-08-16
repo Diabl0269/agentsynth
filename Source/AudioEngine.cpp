@@ -586,6 +586,18 @@ void AudioEngine::setTransportEnabled(bool enabled) noexcept {
 
 bool AudioEngine::isTransportEnabled() const noexcept { return transportEnabled_.load(std::memory_order_relaxed); }
 
+void AudioEngine::setInputMonitoringEnabled(bool enabled) noexcept {
+    inputMonitoringEnabled_.store(enabled, std::memory_order_relaxed);
+}
+
+bool AudioEngine::isInputMonitoringEnabled() const noexcept {
+    return inputMonitoringEnabled_.load(std::memory_order_relaxed);
+}
+
+bool AudioEngine::consumeFeedbackGuardTripped() noexcept {
+    return feedbackGuardTripped_.exchange(false, std::memory_order_relaxed);
+}
+
 void AudioEngine::setAutomationSlicingEnabled(bool enabled) noexcept {
     automationSlicingEnabled_.store(enabled, std::memory_order_relaxed);
 }
@@ -720,10 +732,14 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
         const float* src =
             (channel < numInputChannels && inputChannelData != nullptr) ? inputChannelData[channel] : nullptr;
 
-        // TODO(TL6-7): the monitoring / feedback guard hangs off exactly this copy. Live input
-        // reaching the graph makes a mic -> speaker loop possible, but only once the user PATCHES
-        // the Audio Input node onward — the default patch leaves it unconnected, so nothing is
-        // audible until they wire it up.
+        // TL6-7: this copy stays unconditional — it is the CAPTURE path (it feeds the render
+        // buffer's now-vestigial IO-node channels and, below, captureDeviceInput's snapshot), and
+        // the engine always captures input, armed or monitored or not. What actually gates the mic
+        // -> speaker loop lives downstream of here: AudioInputModule::processBlock silences its own
+        // graph output while monitoring is disabled (TransportService::isInputMonitoringEnabledForBlock),
+        // and AudioEngine::runFeedbackGuard (called from renderPass, post-graph) disables monitoring
+        // and zeroes the block outright if the output stays near-clip too long. See
+        // docs/architecture.md's "Input monitoring & feedback guard (TL6-7)".
         if (src != nullptr)
             std::copy(src, src + numSamples, dest);
         else
@@ -839,6 +855,13 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // take it away immediately after — nothing outside a render pass may read those pointers.
     publishDeviceInputForPass(inputSampleOffset, buffer.getNumSamples());
 
+    // TL6-7, and deliberately OUTSIDE the timeline flag for the same reason as the device-input
+    // publish above: whether Audio Input's graph output is gated is an input-path property, not a
+    // timeline one. Read once per render pass and handed to the carrier BEFORE the graph runs, so
+    // every module — and the feedback guard below — agree on the same answer this pass.
+    const bool monitoringEnabledThisPass = inputMonitoringEnabled_.load(std::memory_order_relaxed);
+    transport.setInputMonitoringEnabledForBlock(monitoringEnabledThisPass);
+
     mainProcessorGraph.processBlock(buffer, midiMessages);
 
     transport.setDeviceInputForBlock(nullptr, 0, 0);
@@ -852,6 +875,60 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // click along with everything else the engine produces, exactly as it silences the graph.
     metronome_.renderClicks(buffer, transport.getCurrentBlockInfo());
 #endif
+
+    // TL6-7: the feedback guard. Post-graph (so it sees exactly what would reach the speakers,
+    // metronome click included) and pre-master-mute (renderNextBlock's zero-fill runs after this
+    // returns) — ungated, like the monitoring flag above.
+    runFeedbackGuard(buffer, monitoringEnabledThisPass);
+}
+
+void AudioEngine::runFeedbackGuard(juce::AudioBuffer<float>& buffer, bool monitoringEnabledThisPass) noexcept {
+    // Never evaluates while monitoring is disabled — a loud synth alone can never trip it. Reset the
+    // run rather than merely skipping: a run that was building up before monitoring was switched off
+    // must not survive into whenever it's switched back on.
+    if (!monitoringEnabledThisPass) {
+        feedbackGuardConsecutiveSamples_ = 0;
+        return;
+    }
+
+    // Scope the peak scan to the graph's OUTPUT channels (mainProcessorGraph.getTotalNumOutputChannels(),
+    // set by setPlayConfigDetails in both host modes) rather than every channel `buffer` carries: a
+    // device with more inputs than outputs parks the extra input channels past the output count in
+    // this same render buffer (see audioDeviceIOCallbackWithContext), and a hot mic sitting there
+    // unconnected to anything is not feedback — it never reaches the speakers.
+    const int numChannels = std::min(buffer.getNumChannels(), mainProcessorGraph.getTotalNumOutputChannels());
+    const int numSamples = buffer.getNumSamples();
+    if (numChannels <= 0 || numSamples <= 0) {
+        feedbackGuardConsecutiveSamples_ = 0;
+        return;
+    }
+
+    float peak = 0.0f;
+    for (int channel = 0; channel < numChannels; ++channel)
+        peak = std::max(peak, buffer.getMagnitude(channel, 0, numSamples));
+
+    if (peak < kFeedbackPeakThreshold) {
+        feedbackGuardConsecutiveSamples_ = 0;
+        return;
+    }
+
+    feedbackGuardConsecutiveSamples_ += numSamples;
+
+    const double sampleRate = transport.getSampleRate();
+    const double consecutiveSeconds = sampleRate > 0.0 ? (double)feedbackGuardConsecutiveSamples_ / sampleRate : 0.0;
+    if (consecutiveSeconds < kFeedbackSustainSeconds)
+        return;
+
+    // Tripped. Disable monitoring — the SAME flag AudioInputModule reads next render pass and the
+    // one MainComponent's poll will see and stop re-enabling — latch the one-shot report for the UI,
+    // and zero THIS block's output immediately rather than waiting for the disabled flag to take
+    // effect next render pass (which could be a full device block away). The whole block, not just
+    // from some in-block sample: the peak was measured over the whole block, so there is no single
+    // sample position to call "the" trip point.
+    inputMonitoringEnabled_.store(false, std::memory_order_relaxed);
+    feedbackGuardTripped_.store(true, std::memory_order_relaxed);
+    buffer.clear();
+    feedbackGuardConsecutiveSamples_ = 0;
 }
 
 void AudioEngine::renderSliced(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {

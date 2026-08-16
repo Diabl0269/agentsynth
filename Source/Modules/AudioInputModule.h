@@ -79,6 +79,18 @@ public:
             const int deviceChannels = transport->getNumDeviceInputChannels();
             visibleChannels_.store(visibleFor(deviceChannels), std::memory_order_relaxed);
 
+            // TL6-7: the monitoring gate. Recording taps the GRAPH, so this is the record path for
+            // input chains — an idle rack (nothing armed, nothing wired downstream of this node's
+            // own output) keeps the mic out of the speakers. Gating here, rather than upstream, only
+            // silences what THIS module hands the rest of the patch: the engine's device-input
+            // capture (AudioEngine::captureDeviceInput) is unconditional, so the port count above
+            // still tracks the device and a recorder tapping this same block still sees it. The card
+            // still updates its jack count even while gated — that is a UI concern, not a safety one.
+            if (!transport->isInputMonitoringEnabledForBlock()) {
+                buffer.clear();
+                return;
+            }
+
             const int available = std::min({deviceChannels, kMaxChannels, numChannels});
             const int samples = std::min(numSamples, transport->getNumDeviceInputSamples());
 
