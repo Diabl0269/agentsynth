@@ -388,6 +388,11 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         // HostedPluginWindowManager::pruneClosedNodes for why it must never dereference the module a
         // removed node used to carry.
         pluginWindowManager.pruneClosedNodes(audioEngine.getGraph());
+        // TL7-7: the same catch-all, for the other hosted-plugin observer pair. A node that has just
+        // appeared (a library drop, a preset load, an undo restore) needs MainComponent's latency /
+        // publish callbacks installed on it, and this is the one hook every path that adds a node
+        // already runs through. Idempotent — re-assigning the same two slots costs nothing.
+        installHostedPluginObservers();
         // TL5-3 safety net for graph changes with no explicit post-apply site of their own — the
         // canonical one being "the user deleted the Track In node from the canvas", which goes
         // through recordStructuralChange (a RECORD, not a restore, so the undo hooks don't fire).
@@ -1045,14 +1050,63 @@ void MainComponent::timerCallback() {
         const float cpu = audioEngine.isHosted() ? 0.0f : (float)(audioEngine.getDeviceManager().getCpuUsage() * 100.0);
         statusBar.update(cpu, audioEngine.getDisplayVoiceCount(), currentPatchName_);
 
-        // TL6-8: the round-trip readout, on the same 5 Hz tick and gated by its own string diff.
-        // Hosted mode has no device of ours to report a round trip for (the host owns both ends), so
-        // it shows the placeholder rather than a made-up 0.0 ms.
-        const double statusRate = audioEngine.getTransport().getPositionSnapshot().sampleRate;
-        const double roundTripMs =
-            statusRate > 0.0 ? 1000.0 * (double)audioEngine.getRecordingLatencySamples() / statusRate : 0.0;
-        statusBar.updateRoundTripLatency(roundTripMs, !audioEngine.isHosted());
+        // TL6-8: the round-trip readout, on the same 5 Hz tick.
+        updateRoundTripLatencyReadout();
     }
+}
+
+void MainComponent::updateRoundTripLatencyReadout() {
+    // TL6-8's readout, gated by its own string diff inside StatusBarComponent — so calling it more
+    // often than the 5 Hz poll (TL7-7 does, on a hosted plugin's latency change) costs nothing when
+    // the number has not moved. Hosted mode has no device of ours to report a round trip for (the
+    // host owns both ends), so it shows the placeholder rather than a made-up 0.0 ms.
+    const double statusRate = audioEngine.getTransport().getPositionSnapshot().sampleRate;
+    const double roundTripMs =
+        statusRate > 0.0 ? 1000.0 * (double)audioEngine.getRecordingLatencySamples() / statusRate : 0.0;
+    statusBar.updateRoundTripLatency(roundTripMs, !audioEngine.isHosted());
+}
+
+// ---- TL7-7: hosted-plugin latency compensation ----
+
+void MainComponent::installHostedPluginObservers() {
+    for (auto* node : audioEngine.getGraph().getNodes()) {
+        if (node == nullptr)
+            continue;
+        auto* hosted = dynamic_cast<synth::HostedPluginModule*>(node->getProcessor());
+        if (hosted == nullptr)
+            continue;
+
+        // Two SEPARATE slots, neither of them onInstanceChanged — that one belongs to
+        // HostedPluginEditorWindow (TL7-5) and reassigning it here would close the user's plugin
+        // window on the next graph change.
+        hosted->onLatencyChanged = [this] { rebuildGraphForLatencyChange(); };
+        hosted->onInstancePublished = [this] {
+            // The TL7-6 known gap, closed: a lane bound to a hosted-plugin parameter cannot resolve
+            // until the instance exists, and until now nothing re-ran the reconcile when an async
+            // load finally completed — the lane sat orphaned until some unrelated graph edit
+            // happened to trigger the next pass.
+            reconcileTimelineBindingsOnly();
+            // ...and a publish takes the node's latency 0 -> N, so the graph's compensation delays
+            // are stale for exactly the same reason a runtime change leaves them stale.
+            rebuildGraphForLatencyChange();
+        };
+    }
+}
+
+void MainComponent::rebuildGraphForLatencyChange() {
+    // THE point of TL7-7. juce::AudioProcessorGraph bakes {bus layout, latencySamples} per node into
+    // its render sequence and only re-derives the parallel-path compensation delays when that
+    // sequence is rebuilt — so without this, a plugin reporting 512 samples of lookahead is simply
+    // uncompensated and its branch of the patch drifts against every parallel one. rebuild() is
+    // public, message-thread-safe (it dispatches to the message thread if called from anywhere
+    // else) and a no-op when nothing about the sequence actually changed.
+    //
+    // Host-agnostic: in a plugin build this is our own INNER graph, which we own in both modes.
+    audioEngine.getGraph().rebuild();
+
+    // The graph term of AudioEngine::getRecordingLatencySamples() just moved, so the status bar's
+    // number is wrong until its next poll. Same feed as that poll, not a second one.
+    updateRoundTripLatencyReadout();
 }
 
 void MainComponent::aiPatchAboutToApply() {

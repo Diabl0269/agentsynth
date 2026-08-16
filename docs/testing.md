@@ -160,6 +160,8 @@ The timeline's clock and the headless render harness built on it. No audio devic
 | `RegisteredButInternalOnly` / `AbsentFromTheLibraryWithAPinnedSizeEstimate` | the internal-only checklist: factory key, module type, **16/16** channels, `getFactoryTypeName`, non-authorable, Utility cable colour, void `getExtraState` when bare; absent from the library, with `estimateModuleSize("Hosted Plugin")` measured against the real card |
 | `IdentitySerializationCarriesNoPath` | `PluginIdentity` round-trips through `var`, carries no path, and matches uid-first — a rename still matches, a different format does not |
 
+Three sibling files share `StubPluginInstance.h` and the same message-pump idiom: `HostedPluginEditorWindowTests.cpp` (TL7-5 — editor windows, headless, state not pixels), `HostedPluginLaneTests.cpp` (TL7-6 — a hosted parameter as an automation lane; gated on `SYNTH_ENABLE_TIMELINE`), and `HostedPluginLatencyTests.cpp` (TL7-7). The last one's acceptance test is worth knowing about: it splits an impulse down a **dry** path and a **hosted-plugin** path into Audio Output on a real `AudioEngine` graph, and asserts both copies land on the same output sample — off-by-zero, at two different latencies, across a `rebuild()`. That only tests anything because the stub genuinely delays its audio by the latency it reports; `WithoutARebuildTheParallelPathsDrift` is the negative control that fails if the rebuild is ever removed.
+
 ### Integration Tests (~38 tests)
 
 Test module interactions within the audio graph and cross-system integrations.

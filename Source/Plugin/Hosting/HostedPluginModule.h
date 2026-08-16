@@ -86,13 +86,31 @@ namespace synth {
  * same call stack (old instance gone, new instance live); a plain unload fires it once. See
  * `docs/architecture.md`'s Hosting section for the window manager side of this contract.
  *
+ * -- Latency, and why it needs a listener (TL7-7) -----------------------------------------------
+ *
+ * setLatencySamples() alone changes nothing downstream. juce::AudioProcessorGraph bakes each node's
+ * {bus layout, latencySamples} into its render sequence and only re-derives the parallel-path
+ * compensation delays when that sequence is REBUILT — so a node whose latency moves after the
+ * sequence was baked is silently uncompensated until someone calls graph.rebuild(). That is the
+ * owner's job, not this class's (a module does not know which graph it is in, and MainComponent
+ * already owns every other graph-wide reaction), which is what onLatencyChanged/onInstancePublished
+ * below exist for.
+ *
+ * Detecting the change is this class's job, though, and a plugin can move its own latency at ANY
+ * time — flipping a lookahead mode in its own editor is the everyday case. juce::AudioProcessor
+ * reports that by firing audioProcessorChanged(..., ChangeDetails::withLatencyChanged(true)) on its
+ * listeners, from whatever thread the plugin happened to be on: commonly its audio thread. So the
+ * listener installed on the instance does exactly one thing — trigger a juce::AsyncUpdater, which
+ * allocates nothing (its message object is built once, in the constructor) and coalesces — and all
+ * the real work happens on the message thread in the callback.
+ *
  * -- Forward pointers ---------------------------------------------------------------------------
  *
  * This module is absent from the library's module catalogue and from the replace menu: it is
  * added by dragging or clicking a row in the library's Plugins section (TL7-3), which supplies the
  * identity (a bare "Hosted Plugin" hosting nothing would have no way to become anything). Editor
  * windows are TL7-5 (see HostedPluginEditorWindow); TL7-6 parameter exposure; TL7-7 latency
- * compensation beyond the setLatencySamples() call made here.
+ * compensation.
  */
 class HostedPluginModule : public ModuleBase {
 public:
@@ -150,6 +168,27 @@ public:
      *  a given module (HostedPluginWindowManager enforces one window per node), so nothing else
      *  needs to observe this today. */
     std::function<void()> onInstanceChanged;
+
+    /** TL7-7. Fired on the MESSAGE thread whenever this module's reported latency actually CHANGED
+     *  — a runtime change inside the plugin (hopped off whatever thread reported it; see the class
+     *  comment) and an unload's drop back to 0. Deliberately not fired for a publish, which
+     *  onInstancePublished below already covers, nor from prepareToPlay: the graph prepares its
+     *  nodes from inside its own rebuild and re-reads every node's latency immediately afterwards,
+     *  so asking the owner to rebuild from there would re-enter a rebuild already in progress to
+     *  redo work it was about to do anyway.
+     *
+     *  Owned by MainComponent (graph.rebuild() + the status bar's round-trip readout), and
+     *  deliberately a SEPARATE slot from onInstanceChanged, which HostedPluginEditorWindow owns. */
+    std::function<void()> onLatencyChanged;
+
+    /** TL7-7. Fired on the message thread at the very end of publishInstance(), i.e. once per
+     *  completed async load, with the new instance already live. Two things need it: a publish
+     *  takes the node's latency 0 -> N, so the graph's compensation is stale until it rebuilds; and
+     *  a hosted-plugin automation lane cannot resolve until the instance exists, so this is the
+     *  reconcile trigger a completed load used to lack (the TL7-6 known gap).
+     *
+     *  Owned by MainComponent, separately from onInstanceChanged. */
+    std::function<void()> onInstancePublished;
 
     //==============================================================================
     // Instance parameters (TL7-6) — automation-lane resolution seam, message thread only
@@ -254,6 +293,46 @@ private:
     /** Message thread. prepareToPlay/setPlayConfigDetails the instance to OUR rate and block. */
     void prepareInstance(juce::AudioPluginInstance& instance) const;
 
+    /** Message thread. setLatencySamples(), then onLatencyChanged — but only when the value really
+     *  moved, so an owner never rebuilds its graph for a latency that did not change. */
+    void setLatencyAndNotify(int newLatency);
+
+    /** Message thread, from the AsyncUpdater below. Re-mirrors the LIVE instance's latency. */
+    void handleInstanceLatencyChanged();
+
+    /** Message thread. Stops listening to whatever instance we currently own, and drops any update
+     *  it had already queued — the generation guard for a retired instance's in-flight callback. */
+    void detachInstanceListener();
+
+    /** TL7-7's thread hop. See the class comment: audioProcessorChanged can arrive on ANY thread,
+     *  so the only thing it may do is trigger the (allocation-free, coalescing) AsyncUpdater. */
+    class InstanceListener final
+        : public juce::AudioProcessorListener
+        , private juce::AsyncUpdater {
+    public:
+        explicit InstanceListener(HostedPluginModule& owner)
+            : owner_(owner) {}
+        ~InstanceListener() override { cancelPendingUpdate(); }
+
+        /** ANY thread, and by far the highest-frequency callback here: the automation applier writes
+         *  hosted parameters from the audio thread every block. It must stay empty. */
+        void audioProcessorParameterChanged(juce::AudioProcessor*, int, float) override {}
+
+        /** ANY thread. */
+        void audioProcessorChanged(juce::AudioProcessor*, const ChangeDetails& details) override {
+            if (details.latencyChanged)
+                triggerAsyncUpdate();
+        }
+
+        /** Message thread. Drops a queued update — see detachInstanceListener(). */
+        void cancelQueuedUpdate() noexcept { cancelPendingUpdate(); }
+
+    private:
+        void handleAsyncUpdate() override { owner_.handleInstanceLatencyChanged(); }
+
+        HostedPluginModule& owner_;
+    };
+
     struct RetiredInstance {
         std::unique_ptr<juce::AudioPluginInstance> instance;
         std::uint64_t retiredAtBlock = 0;
@@ -279,6 +358,10 @@ private:
     // --- Message-thread state --------------------------------------------------------------
     std::unique_ptr<juce::AudioPluginInstance> ownedInstance_; // owns whatever activeInstance_ points at
     std::vector<RetiredInstance> retired_;
+
+    // One listener for the module's whole life, moved from instance to instance — so a queued
+    // update can never outlive the object that would deliver it.
+    InstanceListener instanceListener_{*this};
 
     PluginIdentity identity_;
     juce::MemoryBlock pendingBlob_; // last known plugin state; applied when an instance arrives

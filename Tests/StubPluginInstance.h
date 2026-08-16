@@ -109,6 +109,11 @@ struct StubParamSpec {
  *
  *  - processBlock multiplies every output channel by `kGainMarker` — a value no other module in the
  *    graph produces, so "did the hosted instance actually render?" is a single sample comparison.
+ *  - ...and then DELAYS it by exactly the latency it reports (TL7-7). A plugin that claims 256
+ *    samples of lookahead but renders in place would make a PDC test pass while proving nothing:
+ *    the dry parallel path would be delayed by 256 and the "compensated" one would not be, and the
+ *    misalignment the compensation exists to fix would never appear. So the stub is honest — the
+ *    delay line is the thing under test as much as the graph's compensation is.
  *  - getStateInformation/setStateInformation round-trip an arbitrary juce::String payload.
  *  - The destructor records the thread it ran on, so a test can assert the audio thread never frees
  *    an instance. */
@@ -135,8 +140,12 @@ public:
     // reportsEditor (TL7-5): when true, hasEditor() and createEditor() report and build a real
     // StubPluginEditor instead of the base default (no editor) — HostedPluginEditorWindowTests uses
     // this to exercise both the custom-editor and the GenericAudioProcessorEditor-fallback paths.
+    //
+    // initialLatency (TL7-7) is deliberately LAST: every existing call site names its arguments
+    // positionally, so a new parameter anywhere else would have to touch all of them.
     StubPluginInstance(int numInputs, int numOutputs, juce::String pluginName = "Stub Plugin", int uid = 0x5754424,
-                       juce::String format = "VST3", std::vector<StubParamSpec> params = {}, bool reportsEditor = false)
+                       juce::String format = "VST3", std::vector<StubParamSpec> params = {}, bool reportsEditor = false,
+                       int initialLatency = 0)
         : juce::AudioPluginInstance(
               BusesProperties()
                   .withInput("Input", juce::AudioChannelSet::discreteChannels(juce::jmax(1, numInputs)), numInputs > 0)
@@ -156,6 +165,9 @@ public:
             else
                 addHostedParameter(std::make_unique<StubLegacyParameter>(spec.name, spec.defaultValue));
         }
+
+        if (initialLatency > 0)
+            setReportedLatency(initialLatency);
     }
 
     ~StubPluginInstance() override {
@@ -188,6 +200,7 @@ public:
         preparedSampleRate = sampleRate;
         preparedBlockSize = samplesPerBlock;
         ++prepareCount;
+        resizeDelayLine();
     }
 
     void releaseResources() override {}
@@ -195,8 +208,36 @@ public:
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi) override {
         juce::ignoreUnused(midi);
         const int numSamples = buffer.getNumSamples();
-        for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
-            buffer.applyGain(channel, 0, numSamples, kGainMarker);
+        const int latency = getLatencySamples();
+
+        // No reported latency (or a line we were never prepared for): the pre-TL7-7 behaviour,
+        // byte for byte.
+        if (latency <= 0 || delayLine.getNumSamples() < latency) {
+            for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+                buffer.applyGain(channel, 0, numSamples, kGainMarker);
+            return;
+        }
+
+        for (int channel = 0; channel < buffer.getNumChannels(); ++channel) {
+            if (channel >= delayLine.getNumChannels()) {
+                buffer.applyGain(channel, 0, numSamples, kGainMarker); // undelayed, but still marked
+                continue;
+            }
+
+            auto* line = delayLine.getWritePointer(channel);
+            auto* data = buffer.getWritePointer(channel);
+            int writeIndex = delayWritePos;
+
+            for (int sample = 0; sample < numSamples; ++sample) {
+                const float marked = data[sample] * kGainMarker;
+                data[sample] = line[writeIndex];
+                line[writeIndex] = marked;
+                if (++writeIndex >= latency)
+                    writeIndex = 0;
+            }
+        }
+
+        delayWritePos = (delayWritePos + numSamples) % latency;
     }
 
     double getTailLengthSeconds() const override { return 0.0; }
@@ -231,11 +272,39 @@ public:
 
     using juce::AudioPluginInstance::setLatencySamples;
 
+    /** TL7-7 — "the user flipped a lookahead mode in the plugin's own editor", message thread.
+     *  juce::AudioProcessor::setLatencySamples is what fires audioProcessorChanged(...
+     *  withLatencyChanged(true)) on every listener, so this IS the notification path under test; the
+     *  delay line is resized to match so the instance stays honest about what it reports.
+     *
+     *  Not thread-safe against a concurrent processBlock (it reallocates), which is fine for the
+     *  block-by-block, single-threaded harness these tests drive — a real plugin would swap a
+     *  pre-allocated line instead. */
+    void setReportedLatency(int samples) {
+        setLatencySamples(juce::jmax(0, samples));
+        resizeDelayLine();
+    }
+
 private:
+    /** Sizes (and clears) the delay line for the currently reported latency. */
+    void resizeDelayLine() {
+        const int latency = getLatencySamples();
+        const int channels = juce::jmax(1, getTotalNumInputChannels(), getTotalNumOutputChannels());
+        delayLine.setSize(channels, juce::jmax(1, latency), false, true, true);
+        delayLine.clear();
+        delayWritePos = 0;
+    }
+
     juce::String name_;
     juce::String format_;
     int uid_ = 0;
     bool reportsEditor_ = false;
+
+    // The honest-latency delay line — see the class comment. One slot per reported sample, per
+    // channel; the first getLatencySamples() samples out of a freshly sized line are silence,
+    // exactly like a real lookahead buffer's priming.
+    juce::AudioBuffer<float> delayLine;
+    int delayWritePos = 0;
 };
 
 /** A backend that resolves ANY identity to a StubPluginInstance built by a factory the test owns.

@@ -19,6 +19,10 @@ HostedPluginModule::HostedPluginModule()
 }
 
 HostedPluginModule::~HostedPluginModule() {
+    // Stop listening BEFORE anything else: a queued latency update delivered into a half-destroyed
+    // module would be a use-after-free of everything below it (TL7-7).
+    detachInstanceListener();
+
     // The node is off the graph by now, so nothing can be mid-processBlock. Drop the audio-visible
     // pointer first anyway, then free on this (message) thread.
     activeInstance_.store(nullptr, std::memory_order_release);
@@ -97,7 +101,45 @@ void HostedPluginModule::unloadPlugin() {
     identity_ = {};
     pendingBlob_.reset();
     statusMessage_.clear();
-    setLatencySamples(0);
+    // TL7-7: notified, unlike the publish edge — an unload takes the node's latency N -> 0 and the
+    // graph is still compensating the parallel paths for a plugin that is no longer there.
+    setLatencyAndNotify(0);
+}
+
+//==============================================================================
+// Latency (TL7-7)
+//==============================================================================
+
+void HostedPluginModule::setLatencyAndNotify(int newLatency) {
+    if (newLatency == getLatencySamples())
+        return; // nothing moved: an owner must not rebuild its graph for this
+
+    setLatencySamples(newLatency);
+
+    if (onLatencyChanged)
+        onLatencyChanged();
+}
+
+void HostedPluginModule::handleInstanceLatencyChanged() {
+    // Message thread (juce::AsyncUpdater), possibly several coalesced changes later.
+    //
+    // The guard against a RETIRED instance's in-flight callback is this: never trust the value the
+    // notification carried, re-read the live instance. detachInstanceListener() already dropped any
+    // queued update at retirement, so the only survivor is one that crossed from the plugin's own
+    // thread in the instant before that — and re-reading answers it correctly either way. With no
+    // instance at all (an unload), unloadPlugin() has already published the 0 and there is nothing
+    // here to say.
+    auto* instance = activeInstance_.load(std::memory_order_acquire);
+    if (instance == nullptr)
+        return;
+
+    setLatencyAndNotify(instance->getLatencySamples());
+}
+
+void HostedPluginModule::detachInstanceListener() {
+    if (ownedInstance_ != nullptr)
+        ownedInstance_->removeListener(&instanceListener_);
+    instanceListener_.cancelQueuedUpdate();
 }
 
 void HostedPluginModule::prepareInstance(juce::AudioPluginInstance& instance) const {
@@ -144,7 +186,16 @@ void HostedPluginModule::publishInstance(std::unique_ptr<juce::AudioPluginInstan
 
     visibleInputs_.store(instanceInputs, std::memory_order_relaxed);
     visibleOutputs_.store(instanceOutputs, std::memory_order_relaxed);
+    // Plain, NOT setLatencyAndNotify: onInstancePublished below already tells the owner to rebuild,
+    // and a publish that happens to keep the latency the same still needs that reconcile.
     setLatencySamples(raw->getLatencySamples());
+
+    // TL7-7: start listening BEFORE the instance goes live, so a plugin that moves its latency in
+    // the very next instant cannot slip through the gap. A callback that lands before the store
+    // below is harmless — it only ever triggers the AsyncUpdater, and the message-thread handler
+    // re-reads whatever is live by the time it runs.
+    instanceListener_.cancelQueuedUpdate();
+    raw->addListener(&instanceListener_);
 
     // Release: everything above (prepareToPlay, the state blob, the port counts) must be visible to
     // the audio thread's acquire-load before it can see the pointer.
@@ -156,9 +207,22 @@ void HostedPluginModule::publishInstance(std::unique_ptr<juce::AudioPluginInstan
     // listener's getActiveInstanceForEditor() call sees it immediately.
     if (onInstanceChanged)
         onInstanceChanged();
+
+    // TL7-7: the completed-load edge, fired last and separately from the one above — the editor
+    // window's observer and the owner's are different objects with different jobs. Synchronous on
+    // purpose: publishInstance always runs from the backend's own posted callback, i.e. at
+    // message-loop top level with this module fully consistent, so an owner that reconciles its
+    // timeline and rebuilds the graph from here cannot re-enter anything mid-flight. (The rebuild
+    // does not re-prepare an already-prepared node, so it cannot re-enter prepareToPlay either.)
+    if (onInstancePublished)
+        onInstancePublished();
 }
 
 void HostedPluginModule::retireActiveInstance() {
+    // TL7-7: stop listening to the instance on its way out, and drop anything it had already
+    // queued. Done first, so nothing can arrive from an instance we are in the middle of retiring.
+    detachInstanceListener();
+
     activeInstance_.store(nullptr, std::memory_order_release);
 
     // TL7-5: the "instance gone" edge — fired here, BEFORE the retired instance is moved into
@@ -217,6 +281,10 @@ void HostedPluginModule::prepareToPlay(double sampleRate, int samplesPerBlock) {
     // callback stopped, so re-preparing in place is safe and keeps the published pointer valid.
     if (auto* instance = activeInstance_.load(std::memory_order_acquire)) {
         prepareInstance(*instance);
+        // Plain, NOT setLatencyAndNotify — and that is load-bearing, not an oversight (TL7-7).
+        // juce::AudioProcessorGraph prepares its nodes from INSIDE its own render-sequence rebuild
+        // and reads every node's latency immediately afterwards, so the new value is already picked
+        // up; asking the owner to rebuild from here would re-enter a rebuild that is in progress.
         setLatencySamples(instance->getLatencySamples());
     }
 }

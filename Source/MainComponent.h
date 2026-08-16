@@ -244,6 +244,11 @@ public:
     /** The settings key the scan list round-trips through. */
     static constexpr const char* kPluginScanListKey = "pluginScanList";
 
+    /** TL7-7. Rebuilds the graph's render sequence so JUCE re-derives its parallel-path delay
+     *  compensation from the nodes' CURRENT latencies, then refreshes the status bar's round-trip
+     *  readout. Public so a test can drive the exact path a hosted plugin's callback drives. */
+    void rebuildGraphForLatencyChange();
+
 private:
     // AIIntegrationService::Listener
     void aiPatchAboutToApply() override;
@@ -272,6 +277,16 @@ private:
     // post-apply site (a module deleted from the canvas). See the call site for why publishing
     // there would be waste.
     void reconcileTimelineBindingsOnly();
+
+    // TL6-8's status-bar round-trip readout. Called from the 5 Hz poll and, since TL7-7, from any
+    // hosted-plugin latency change (which moves the graph term of the sum between polls).
+    void updateRoundTripLatencyReadout();
+
+    // TL7-7. Installs MainComponent's onLatencyChanged / onInstancePublished callbacks on every
+    // HostedPluginModule in the graph. Idempotent, run from GraphEditor::onGraphStructureChanged —
+    // the one hook every node-adding path already goes through. Never touches onInstanceChanged,
+    // which HostedPluginEditorWindow owns.
+    void installHostedPluginObservers();
 
     // TL5-5: the ONE place a MIDI take ever commits — the transport bar's Record-off click and the
     // 10 Hz poll's auto-commit-on-stop (playing -> stopped while still recording) both route

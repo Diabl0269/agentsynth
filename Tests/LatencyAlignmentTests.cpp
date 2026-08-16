@@ -583,8 +583,6 @@ TEST_F(LatencyFlowTest, CountInPunchTrimsViaSourceStart) {
     engine.audioDeviceStopped();
 }
 
-#endif // SYNTH_ENABLE_TIMELINE
-
 // The drawn playhead answers a DIFFERENT question from the recording alignment, and must keep
 // answering it: "where is the audio the user is hearing right now?" — which is the OUTPUT latency
 // alone (TL5-4). This pins MainComponent's wiring, not the overlay's arithmetic (TimelinePlayhead
@@ -625,6 +623,8 @@ TEST_F(LatencyFlowTest, PlayheadUsesOutputLatencyOnlyNotTheRecordingSum) {
     mc.simulateToggleTimelineClick();
     engine.audioDeviceStopped();
 }
+
+#endif // SYNTH_ENABLE_TIMELINE
 
 // ============================================================================
 // 4. The status bar's round-trip readout
