@@ -1,15 +1,18 @@
 #pragma once
 
+#include "../Timeline/PeaksFile.h"
 #include "../Timeline/TimelineDoc.h"
 #include "ClipSelectionModel.h"
 #include "TimelineViewState.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <optional>
 #include <utility>
 #include <vector>
 
-class AppUndoManager; // Forward declaration (Source/AppUndoManager.h)
+class AppUndoManager;  // Forward declaration (Source/AppUndoManager.h)
+class RecordTapModule; // Forward declaration (Source/Modules/RecordTapModule.h)
 
 namespace synth {
 class TransportService; // Forward declaration (Source/Transport/TransportService.h)
@@ -54,6 +57,23 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 //     AppUndoManager::recordTimelineChange — so a multi-clip move or a multi-clip Delete is ONE
 //     undo step however many clips it touches, the same contract GraphEditor::deleteSelection()
 //     and dragSelectionBy()/finalizeSelectionDrag() keep for modules.
+//
+// TL6-5 adds two more paint concerns, both driven off assetRef (the MIDI-vs-audio discriminator —
+// see synth::Clip's own comment):
+//   - A COMMITTED audio clip (non-empty assetRef, wide enough — see kMinWidthForWaveform) paints a
+//     min/max waveform from its `synth::PeaksFile::Data`, lazily resolved and cached by assetRef
+//     (`peaksCache_`) via a host-supplied `peaksResolver_` — MainComponent wires this to the SAME
+//     resolution `AudioClipStreamer::resolveAssetRef` uses for playback, just re-targeted at the
+//     Peaks/ sidecar rather than the Audio/ file. The cache is intentionally coarse: ANY doc change
+//     clears the whole thing (refreshFromDoc()) rather than diffing which assetRefs actually moved
+//     — peaks files are small, and the alternative (per-ref dirty tracking) is not worth it yet.
+//   - A LIVE take in flight (see updateLiveRecording()/LiveRecordingInfo below) paints a growing
+//     translucent strip from the punch beat to the transport's current position, sourced from
+//     RecordTapModule::copyLivePeaks() — a message-thread-safe snapshot of the SAME accumulator the
+//     writer thread is still appending to. Repaints only when new buckets actually arrived (a
+//     bucket-count diff), never merely because the transport tick moved — see updateLiveRecording's
+//     own comment for why that is the correct "repaint on data arrival" reading of CLAUDE.md's rule
+//     here (the strip's rect still grows every poll; only the REPAINT is gated).
 namespace synth::ui {
 
 class TimelineClipLaneArea : public juce::Component {
@@ -102,6 +122,49 @@ public:
     // effective doc mutation. No timer anywhere in this class.
     void refreshFromDoc();
 
+    // ---- TL6-5: waveform peaks (committed clips) ----
+
+    // Non-owning; may be unset (paint() then simply never draws a waveform — same degrade-
+    // gracefully contract every other host seam here has). MainComponent supplies this from the
+    // SAME resolution `AudioClipStreamer::resolveAssetRef` uses, re-pointed at the Peaks/ sidecar
+    // — see that method's comment and the class comment above. Installing a new resolver
+    // invalidates the cache (a different resolver may resolve the same ref differently).
+    void setPeaksResolver(std::function<juce::File(const juce::String& assetRef)> resolver);
+
+    // Drops every cached synth::PeaksFile::Data and repaints. Called automatically by
+    // refreshFromDoc() (the simplest-correct policy — see the class comment); public so a caller
+    // that knows only a peaks FILE changed underneath an unchanged assetRef (the resolver's target
+    // moved, not the doc) can still force a re-read without waiting for a doc mutation.
+    void invalidatePeaksCache();
+
+    // ---- TL6-5: the live-recording strip ----
+
+    // What updateLiveRecording() needs to know about an in-flight audio take. A default-
+    // constructed (or `active == false`) value means "nothing recording" — the strip (if any) is
+    // cleared. `tap` is non-owning and read for the DURATION OF THE CALL ONLY (copyLivePeaks() is
+    // called synchronously inside updateLiveRecording()); nothing here holds it across calls.
+    struct LiveRecordingInfo {
+        bool active = false;
+        synth::TrackId track;     // the armed track the strip paints on
+        double punchBeat = 0.0;   // the strip's fixed left edge
+        double currentBeat = 0.0; // the strip's growing right edge — the transport's current position
+        const RecordTapModule* tap = nullptr;
+    };
+
+    // THE 10 Hz update for an in-flight take (see LiveRecordingInfo) — MainComponent calls this
+    // every tick alongside the panel's other polled updates, whether or not anything is actually
+    // recording. Cheap when it isn't: `info.active == false` just clears any previous strip (one
+    // repaint, once, on the falling edge) and returns. When it is, copies the tap's live peaks
+    // (copyLivePeaks() — a lock held only for that copy, never on the audio thread) and repaints
+    // ONLY the strip's dirty rect, and ONLY when the bucket count actually grew since the last
+    // call — the repaint-on-data-arrival rule. The strip's rect itself is still updated every call
+    // (so a later arrival's dirty-rect union is correct), just not necessarily repainted.
+    void updateLiveRecording(const LiveRecordingInfo& info);
+
+    // Test hook: how many times updateLiveRecording() has actually issued a repaint (as opposed to
+    // being called) — the same idiom TimelineTransportBar::getReadoutRepaintCountForTest() uses.
+    int getLiveStripRepaintCountForTest() const noexcept { return liveStripRepaintCount_; }
+
     // ---- Context-menu hook (TL5-3's "showMenuAsync doesn't run headless" idiom) ----
     enum class ClipContextChoice { SplitAtPointer, Duplicate, Delete };
 
@@ -117,6 +180,27 @@ public:
     // rather than read from a theme so this stays callable with no LookAndFeel installed at all.
     static juce::Rectangle<int> computeClipRect(const TimelineViewState& viewState, int trackIndex, double startBeat,
                                                 double lengthBeats, int rowHeight);
+
+    // ---- TL6-5: waveform bucket geometry — pure, no doc/component/LookAndFeel state ----
+    // A half-open [firstBucket, firstBucket + bucketCount) range into `peaks.buckets` (bucket
+    // INDICES, not raw pair indices — multiply by peaks.numChannels to reach a `buckets[]` slot).
+    // Both fields are 0 when nothing in `peaks` overlaps the clip's span at all.
+    struct BucketRange {
+        int firstBucket = 0;
+        int bucketCount = 0;
+    };
+
+    // Which buckets of `peaks` cover this clip's visible span, given where inside the asset it
+    // starts reading (`sourceStartSeconds`, seconds — see synth::Clip::sourceStartSeconds) and the
+    // beats<->seconds conversion (`bpm`). `sampleRate` is the ASSUMED source sample rate — the
+    // peaks file itself does not carry one (see PeaksFile.h), so this is the same "engine rate,
+    // no resampling" honesty AudioClipStreamer already states for playback; a caller with a live
+    // transport passes its current sampleRate/bpm, exactly like currentBeatsPerBar() does for the
+    // snap grid. Clamped to `[0, totalBuckets]` — a clip whose span starts past the end of the
+    // peaks data (or `peaks` has no buckets at all) returns a zero-length range rather than an
+    // out-of-bounds one.
+    static BucketRange bucketRangeForClip(const synth::PeaksFile::Data& peaks, double lengthBeats,
+                                          double sourceStartSeconds, double bpm, double sampleRate);
 
     // The row height this instance currently lays out at: themed Metrics::timelineTrackRowHeight
     // with TimelineTrackHeaderComponent::kRowHeight as the headless fallback (see that constant's
@@ -168,6 +252,29 @@ private:
                    int rowHeight);
     void paintMarquee(juce::Graphics& g);
 
+    // ---- TL6-5: waveform + live-recording-strip painting ----
+    // Resolves (lazily loading + caching via peaksResolver_/peaksCache_) and paints a committed
+    // audio clip's waveform inside `rect`. A no-op below kMinWidthForWaveform or when nothing
+    // resolves (no resolver set, unresolvable ref, or an unreadable/absent peaks file).
+    void paintWaveform(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect);
+    // The cheap per-column line-pair loop shared by paintWaveform() (a committed clip's peaks) and
+    // paintLiveRecordingStrip() (the live accumulator's peaks) — one juce::Graphics::drawLine per
+    // x column, sampling `buckets[firstBucket + column's fraction of bucketCount]` across every
+    // channel (min of mins, max of maxes — a simple downmix; see the class comment's "keep it
+    // lean" note). Assumes the caller already set the colour.
+    static void paintWaveformColumns(juce::Graphics& g, juce::Rectangle<int> rect,
+                                     const std::vector<std::pair<float, float>>& buckets, int numChannels,
+                                     int firstBucket, int bucketCount);
+    // Cache lookup/lazy-load for one assetRef. Returns nullptr for an empty ref, no resolver, an
+    // unresolvable file, or a file that fails synth::PeaksFile::read() — a miss is cached too (as
+    // a default-constructed, structurally-invalid Data) so a repeated paint of a still-missing
+    // asset never re-touches disk; only invalidatePeaksCache()/refreshFromDoc() forget that.
+    const synth::PeaksFile::Data* findPeaksData(const juce::String& assetRef);
+    void paintLiveRecordingStrip(juce::Graphics& g);
+    // Shared by updateLiveRecording()'s "nothing recording (any more)" branch and its
+    // track-vanished branch: one repaint over wherever the strip used to be, then a clean reset.
+    void clearLiveRecording();
+
     TimelineViewState& viewState_;
     ClipSelectionModel& selection_;
     synth::TimelineDoc* doc_ = nullptr;
@@ -197,6 +304,16 @@ private:
     juce::Rectangle<int> marqueeRect_;
     bool marqueeAdditive_ = false;
     std::vector<synth::ClipId> marqueeBaseSelection_;
+
+    // ---- TL6-5: waveform peaks cache ----
+    std::function<juce::File(const juce::String& assetRef)> peaksResolver_;
+    std::map<juce::String, synth::PeaksFile::Data> peaksCache_;
+
+    // ---- TL6-5: the live-recording strip ----
+    LiveRecordingInfo liveRecording_;
+    std::vector<std::pair<float, float>> livePeaks_;
+    juce::Rectangle<int> liveStripRect_;
+    int liveStripRepaintCount_ = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelineClipLaneArea)
 };

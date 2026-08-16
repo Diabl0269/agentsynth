@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../Timeline/PeaksFile.h"
 #include "ModuleBase.h"
 #include <atomic>
 #include <cstdint>
@@ -7,6 +8,7 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_core/juce_core.h>
 #include <memory>
+#include <utility>
 #include <vector>
 
 /**
@@ -60,19 +62,18 @@
  * Accumulated during the drain, so the file is ready the moment the take stops and nothing has to
  * re-read the WAV to draw it (TL6-5 renders the clip waveform straight from this).
  *
- * Binary, LITTLE-ENDIAN throughout:
+ * The format itself — and the bucket-accumulation math below — now lives in ONE place,
+ * `synth::PeaksFile` (`Source/Timeline/PeaksFile.h/.cpp`): this module owns a `PeaksFile::
+ * Accumulator` (writer thread appends, guarded by `peaksLock_` below) and calls `PeaksFile::write`
+ * at `stopCapture()`. See that class's comment for the exact byte layout; nothing here duplicates
+ * it any more. `kPeaksMagic`/`kPeaksVersion` alias `PeaksFile::kMagic`/`kVersion` so existing call
+ * sites (and every file this build has ever written) are unaffected.
  *
- *     offset  size  field
- *     0       4     magic, the ASCII bytes 'A','G','P','K'
- *     4       4     uint32  version           (currently 1)
- *     8       4     uint32  bucketSize        (source samples per bucket, currently 256)
- *     12      4     uint32  numChannels
- *     16      ...   per bucket, per channel: float32 min, float32 max
- *
- * A bucket covers `bucketSize` SOURCE SAMPLES PER CHANNEL. The bucket count is
- * `ceil(lengthSamples / bucketSize)` — the final bucket is short rather than padded, and its
- * min/max cover only the samples that actually exist. A take of zero samples writes a header and
- * no buckets.
+ * TL6-5 also adds `copyLivePeaks()`: a MESSAGE-THREAD, thread-safe snapshot of the buckets
+ * accumulated so far, for a clip-lane strip that grows while the take is still rolling. Guarded by
+ * the same `peaksLock_` the writer thread's appends use — a light `juce::CriticalSection` held
+ * only for the copy/append, never touched by the audio thread (which never sees the accumulator at
+ * all; only the writer thread and, after `stopCapture()` detaches it, the message thread do).
  */
 class RecordTapModule : public ModuleBase {
 public:
@@ -87,9 +88,11 @@ public:
      *  file this build writes uses this value. */
     static constexpr int kPeakBucketSize = 256;
 
-    /** Peaks-file magic and version. Format; see the class comment. */
-    static constexpr std::uint32_t kPeaksMagic = 0x4b475041u; // 'A','G','P','K' little-endian
-    static constexpr std::uint32_t kPeaksVersion = 1;
+    /** Peaks-file magic and version. Format; see the class comment. Aliases of
+     *  `synth::PeaksFile::kMagic`/`kVersion` — that class is the one place the format is defined
+     *  now, but these stay so existing call sites (and `RecordTapTests.cpp`) need no changes. */
+    static constexpr std::uint32_t kPeaksMagic = synth::PeaksFile::kMagic;
+    static constexpr std::uint32_t kPeaksVersion = synth::PeaksFile::kVersion;
 
     /** Frames the writer thread moves per time slice. Bounds the scratch buffer and the time spent
      *  in one callback; the client simply comes straight back for more while the ring is non-empty. */
@@ -151,9 +154,21 @@ public:
     /** Any thread. True if the ring has filled at any point since the last startCapture(). */
     bool hadOverrun() const noexcept { return overrun_.load(std::memory_order_relaxed); }
 
-    /** MESSAGE THREAD, after stopCapture(). The peaks exactly as they were written to the sidecar:
-     *  `2 * numChannels` floats per bucket, ordered min, max per channel. Cleared by startCapture(). */
-    const std::vector<float>& getPeaksForTest() const noexcept { return peaks_; }
+    /** MESSAGE THREAD, after stopCapture(). The peaks exactly as they were written to the sidecar,
+     *  flattened to `2 * numChannels` floats per bucket (min, max per channel) — the shape
+     *  RecordTapTests.cpp's own byte-level parser expects. Derived from the same accumulator
+     *  copyLivePeaks() reads, under the same lock. Cleared by startCapture(). */
+    std::vector<float> getPeaksForTest() const;
+
+    /** MESSAGE THREAD. A guarded snapshot of the buckets accumulated so far THIS TAKE — safe to
+     *  call while `isCapturing()` is true, i.e. while the writer thread is concurrently appending
+     *  to the same accumulator. Channel-interleaved per bucket, exactly `synth::PeaksFile::
+     *  Data::buckets`' own layout (this IS that vector, copied). Only ever contains COMPLETE
+     *  buckets — the bucket currently being filled is not flushed until it reaches
+     *  `kPeakBucketSize` samples or the take stops, so a live strip updates in ~`kPeakBucketSize /
+     *  sampleRate` steps, not sample-by-sample. `out` is cleared and replaced (a plain copy, not
+     *  merged) whether or not anything has accumulated yet. */
+    void copyLivePeaks(std::vector<std::pair<float, float>>& out) const;
 
 private:
     // The TimeSliceThread's one client. A separate object rather than making the module itself a
@@ -181,7 +196,8 @@ private:
     bool drainOnce();
 
     // Peak accumulation over one de-interleaved chunk, and the flush of a partially-filled bucket
-    // at end-of-take. Writer/message thread only — never the audio thread.
+    // at end-of-take. Writer/message thread only — never the audio thread. Both just delegate to
+    // peaksAccumulator_ under peaksLock_ — see that member's comment for why the lock exists.
     void accumulatePeaks(const juce::AudioBuffer<float>& chunk, int numFrames);
     void flushPartialBucket();
 
@@ -217,11 +233,13 @@ private:
     juce::File peaksFile_;
     std::unique_ptr<juce::AudioFormatWriter> writer_;
 
-    // Peak accumulation state, carried across drains so a bucket may span two of them.
-    std::vector<float> peaks_;
-    int bucketFill_ = 0;
-    float bucketMin_[kNumChannels]{};
-    float bucketMax_[kNumChannels]{};
+    // Peak accumulation state, carried across drains so a bucket may span two of them. Guards
+    // BOTH the writer thread's appends (accumulatePeaks/flushPartialBucket) and the message
+    // thread's reads (copyLivePeaks(), mid-take; writePeaksFile(), only after stopCapture() has
+    // already detached the writer client, so uncontended there but locked anyway for one uniform
+    // rule) — never taken on the audio thread, which never touches either member.
+    mutable juce::CriticalSection peaksLock_;
+    synth::PeaksFile::Accumulator peaksAccumulator_{kPeakBucketSize, kNumChannels};
 
     juce::TimeSliceThread writerThread_{"Rec Tap Writer"};
     WriterClient writerClient_{*this};

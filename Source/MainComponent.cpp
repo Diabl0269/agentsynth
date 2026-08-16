@@ -36,6 +36,25 @@ constexpr int kMaxTakeNumber = 10000;
 // reasoning as synth::MidiRecorder::kMinNoteLengthBeats.
 constexpr double kMinAudioClipLengthBeats = 1.0 / 32.0;
 
+// TL6-5: a clip's assetRef always names the .wav asset — chooseTakeFiles() is what establishes the
+// pairing with its .agpk peaks sidecar: same stem, and either a sibling "Peaks/" directory (a saved
+// bundle: "Audio/take-n.wav" <-> "Peaks/take-n.agpk") or the SAME "Recordings/" directory (an
+// unsaved project, where chooseTakeFiles points audioDir and peaksDir at the same root). Returns
+// the peaks SIDECAR'S ref, in the same bundle/root-relative form the streamer's own
+// resolveAssetRef() understands — so that one function stays the single place a ref becomes a
+// juce::File, for both the audio and the peaks half. Empty in, empty out.
+juce::String peaksRefForAssetRef(const juce::String& assetRef) {
+    if (assetRef.isEmpty())
+        return {};
+
+    juce::String ref = assetRef;
+    const juce::String audioPrefix = juce::String(synth::ProjectBundle::kAudioSubdirName) + "/";
+    if (ref.startsWith(audioPrefix))
+        ref = juce::String(synth::ProjectBundle::kPeaksSubdirName) + "/" + ref.substring(audioPrefix.length());
+
+    return ref.upToLastOccurrenceOf(".", false, false) + ".agpk";
+}
+
 // The add-track flow's auto-wire target set: MIDI-DRIVEN INSTRUMENTS only.
 //
 // juce::AudioProcessor::acceptsMidi() cannot be the rule — ModuleBase overrides it to `true` for
@@ -487,6 +506,12 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // split/duplicate/delete is one more AppUndoManager::recordTimelineChange call, same as every
     // other timeline-only edit.
     timelinePanel.setUndoManager(&undoManager);
+    // TL6-5: the SAME resolution the audio streamer uses (AudioClipStreamer::resolveAssetRef),
+    // re-targeted at the peaks sidecar via peaksRefForAssetRef() — see that function's comment.
+    // One shared resolver: the clip-lane area never re-derives bundle-vs-Recordings root logic.
+    timelinePanel.getClipLaneArea().setPeaksResolver([this](const juce::String& assetRef) -> juce::File {
+        return audioEngine.getAudioClipStreamer().resolveAssetRef(peaksRefForAssetRef(assetRef));
+    });
     // TL6-4: BEFORE the first publish below — publishTimeline() syncs the clip streamer, and it can
     // only resolve an asset ref once it knows the roots.
     refreshAssetRoots();
@@ -877,6 +902,22 @@ void MainComponent::timerCallback() {
         const double sampleRate = position.sampleRate > 0.0 ? position.sampleRate : 44100.0;
         const double outputLatencySeconds = (double)audioEngine.getOutputLatencySamples() / sampleRate;
         timelinePanel.updateFromTransport(position, outputLatencySeconds);
+
+        // TL6-5: the clip lane's growing recording strip, on the same poll. Cheap and a no-op when
+        // nothing is capturing — synth::ui::TimelineClipLaneArea::updateLiveRecording() internally
+        // repaints only when new peak buckets actually arrived (see its own comment), never merely
+        // because the transport tick moved.
+        synth::ui::TimelineClipLaneArea::LiveRecordingInfo liveInfo;
+        if (audioTake_.capturing) {
+            if (auto* tap = findMasterRecordTap()) {
+                liveInfo.active = true;
+                liveInfo.track = audioTake_.track;
+                liveInfo.punchBeat = audioTake_.punchInBeat;
+                liveInfo.currentBeat = position.ppq;
+                liveInfo.tap = tap;
+            }
+        }
+        timelinePanel.getClipLaneArea().updateLiveRecording(liveInfo);
     }
 #endif
 

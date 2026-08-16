@@ -47,6 +47,7 @@ add_executable(Tests
     TimelineMidiSourceTests.cpp
     MidiRecorderTests.cpp
     MidiClipFileTests.cpp
+    PeaksFileTests.cpp
     RecordTapTests.cpp
     AudioClipPlaybackTests.cpp
     AIStateMapperTests.cpp

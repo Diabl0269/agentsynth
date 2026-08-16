@@ -3,7 +3,7 @@
 // TL5-7: clip lanes — drag/trim/split/duplicate + marquee selection, backed by
 // synth::ui::ClipSelectionModel.
 //
-// Four groups:
+// Five groups:
 //   1. synth::ui::ClipSelectionModel — mirrors SelectionModelTests.cpp's coverage of
 //      SelectionModel, just keyed on synth::ClipId.
 //   2. synth::ui::clipHitTestMarquee — mirrors SelectionModelTests.cpp's hitTestMarquee coverage.
@@ -13,8 +13,12 @@
 //      and a snapshot smoke test. None of this is #if SYNTH_ENABLE_TIMELINE-gated: the component
 //      compiles and runs unconditionally, exactly like TimelinePanelComponent/
 //      TimelineTrackHeaderComponent (only MainComponent's use of it is gated).
+//   5. TL6-5: waveform painting from synth::PeaksFile, the peaks cache and its invalidation, the
+//      live-recording strip's repaint-on-arrival rule, and the pure bucketRangeForClip() helper.
 
 #include "../Source/AppUndoManager.h"
+#include "../Source/Modules/RecordTapModule.h"
+#include "../Source/Timeline/PeaksFile.h"
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/UI/ClipSelectionModel.h"
 #include "../Source/UI/TimelineClipLaneArea.h"
@@ -604,4 +608,192 @@ TEST(TimelineClipLaneInteractionTest, SnapshotSmoke) {
     EXPECT_FALSE(img.isNull());
     EXPECT_EQ(img.getWidth(), 1000);
     EXPECT_EQ(img.getHeight(), 160);
+}
+
+// ============================================================================
+// 5. TL6-5: waveform peaks, cache invalidation, and the live-recording strip
+// ============================================================================
+
+namespace {
+
+bool imagesIdentical(const juce::Image& a, const juce::Image& b) {
+    if (a.getWidth() != b.getWidth() || a.getHeight() != b.getHeight())
+        return false;
+    for (int y = 0; y < a.getHeight(); ++y)
+        for (int x = 0; x < a.getWidth(); ++x)
+            if (a.getPixelAt(x, y) != b.getPixelAt(x, y))
+                return false;
+    return true;
+}
+
+struct ScopedPeaksFile {
+    explicit ScopedPeaksFile(const juce::String& name)
+        : file(juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile(name)) {
+        file.deleteFile();
+    }
+    ~ScopedPeaksFile() { file.deleteFile(); }
+    juce::File file;
+};
+
+synth::PeaksFile::Data makeWaveformData(int numBuckets, float amplitude) {
+    synth::PeaksFile::Data data;
+    data.bucketSize = 256;
+    data.numChannels = 1;
+    for (int i = 0; i < numBuckets; ++i)
+        data.buckets.emplace_back(-amplitude, amplitude);
+    return data;
+}
+
+// Polls RecordTapModule::copyLivePeaks() until it has at least `minPairs` entries, or gives up
+// after a generous bound. The writer thread drains asynchronously (TimeSliceThread — see
+// RecordTapModule's class comment), so growing its live peaks mid-capture is inherently a real
+// background-thread hand-off, not something this test can force synchronously; the bound is wide
+// enough that a slow CI box does not make this flaky in practice.
+bool waitForLivePeaks(const RecordTapModule& tap, size_t minPairs, std::vector<std::pair<float, float>>& out) {
+    constexpr int kMaxWaitMs = 2000;
+    constexpr int kStepMs = 5;
+    for (int waited = 0; waited <= kMaxWaitMs; waited += kStepMs) {
+        tap.copyLivePeaks(out);
+        if (out.size() >= minPairs)
+            return true;
+        juce::Thread::sleep(kStepMs);
+    }
+    return false;
+}
+
+} // namespace
+
+TEST(TimelineClipLaneWaveformTest, AudioClipPaintsWaveform) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 20.0, "Take"); // 20 beats * 40 px/beat = wide
+    ASSERT_TRUE(clipId.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(clipId, "Audio/take-1.wav", 0.0));
+    f.lane.setSize(1000, 200);
+
+    // Baseline: no resolver installed at all, so paintWaveform() has nothing to draw from.
+    const juce::Image withoutPeaks = f.lane.createComponentSnapshot(f.lane.getLocalBounds());
+
+    ScopedPeaksFile peaksFile("agentsynth_clipslane_waveform.agpk");
+    ASSERT_TRUE(synth::PeaksFile::write(peaksFile.file, makeWaveformData(400, 0.8f)));
+
+    // Resolves unconditionally to the synthetic file, regardless of the ref text it's handed.
+    const juce::File resolved = peaksFile.file;
+    f.lane.setPeaksResolver([resolved](const juce::String&) { return resolved; });
+    const juce::Image withPeaks = f.lane.createComponentSnapshot(f.lane.getLocalBounds());
+
+    ASSERT_FALSE(withoutPeaks.isNull());
+    ASSERT_FALSE(withPeaks.isNull());
+    EXPECT_FALSE(imagesIdentical(withoutPeaks, withPeaks))
+        << "installing a resolver with real peaks data must change the painted pixels";
+}
+
+TEST(TimelineClipLaneWaveformTest, CacheInvalidation) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 20.0, "Take");
+    ASSERT_TRUE(clipId.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(clipId, "Audio/take-1.wav", 0.0));
+    f.lane.setSize(1000, 200);
+
+    ScopedPeaksFile fileA("agentsynth_clipslane_cache_a.agpk");
+    ScopedPeaksFile fileB("agentsynth_clipslane_cache_b.agpk");
+    ASSERT_TRUE(synth::PeaksFile::write(fileA.file, makeWaveformData(50, 0.1f)));
+    ASSERT_TRUE(synth::PeaksFile::write(fileB.file, makeWaveformData(400, 0.9f)));
+
+    juce::File current = fileA.file;
+    f.lane.setPeaksResolver([&current](const juce::String&) { return current; });
+    const juce::Image first = f.lane.createComponentSnapshot(f.lane.getLocalBounds());
+
+    // Swap the file the resolver would now return, WITHOUT invalidating: paint() must keep
+    // serving the cached (stale) data.
+    current = fileB.file;
+    const juce::Image stillCached = f.lane.createComponentSnapshot(f.lane.getLocalBounds());
+    EXPECT_TRUE(imagesIdentical(first, stillCached)) << "the cache must not silently re-resolve every paint";
+
+    f.lane.invalidatePeaksCache();
+    const juce::Image afterInvalidate = f.lane.createComponentSnapshot(f.lane.getLocalBounds());
+    EXPECT_FALSE(imagesIdentical(first, afterInvalidate)) << "invalidation must force a fresh resolve + read";
+}
+
+TEST(TimelineClipLaneLiveRecordingTest, LiveStripGrowsOnNewBucketsOnly) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Audio, "Audio 1");
+    ASSERT_TRUE(f.doc.setTrackArmed(trackId, true));
+    f.lane.setSize(2000, 400);
+
+    const auto wavFile =
+        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth_clipslane_livestrip.wav");
+    const auto peaksFile =
+        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth_clipslane_livestrip.agpk");
+    wavFile.deleteFile();
+    peaksFile.deleteFile();
+
+    constexpr double kSampleRate = 48000.0;
+    RecordTapModule tap;
+    tap.prepareToPlay(kSampleRate, 256);
+    ASSERT_TRUE(tap.startCapture(wavFile, peaksFile, kSampleRate, 2));
+
+    synth::ui::TimelineClipLaneArea::LiveRecordingInfo info;
+    info.active = true;
+    info.track = trackId;
+    info.punchBeat = 0.0;
+    info.currentBeat = 4.0;
+    info.tap = &tap;
+
+    juce::AudioBuffer<float> buffer(2, 256); // exactly one peak bucket
+    juce::MidiBuffer midi;
+    buffer.clear();
+
+    tap.processBlock(buffer, midi);
+    std::vector<std::pair<float, float>> peaks;
+    ASSERT_TRUE(waitForLivePeaks(tap, 2, peaks)) << "one full bucket (both channels) must have flushed by now";
+
+    f.lane.updateLiveRecording(info); // first frame: always a repaint
+    const int afterFirst = f.lane.getLiveStripRepaintCountForTest();
+    EXPECT_GT(afterFirst, 0);
+
+    // Same info again, no new samples pushed: bucket count is unchanged -> no additional repaint.
+    f.lane.updateLiveRecording(info);
+    EXPECT_EQ(f.lane.getLiveStripRepaintCountForTest(), afterFirst)
+        << "an unchanged bucket count must not trigger a repaint";
+
+    // Push another full bucket and wait for it to flush -> a repaint.
+    tap.processBlock(buffer, midi);
+    ASSERT_TRUE(waitForLivePeaks(tap, 4, peaks));
+    f.lane.updateLiveRecording(info);
+    EXPECT_GT(f.lane.getLiveStripRepaintCountForTest(), afterFirst) << "new buckets must trigger a repaint";
+
+    tap.stopCapture();
+    wavFile.deleteFile();
+    peaksFile.deleteFile();
+}
+
+TEST(TimelineClipLaneWaveformTest, SourceOffsetShiftsWaveform) {
+    using synth::ui::TimelineClipLaneArea;
+
+    // sampleRate chosen so 1 second is an EXACT whole number of buckets (25600 / 256 = 100),
+    // which keeps the expected shift/length arithmetic exact rather than off-by-one from floor/
+    // ceil rounding at a non-bucket-aligned sample offset.
+    constexpr double kSampleRate = 25600.0;
+    constexpr double kBpm = 120.0;
+    constexpr double kLengthBeats = 4.0; // 2 seconds at 120 bpm
+
+    const auto data = makeWaveformData(400, 1.0f);
+
+    const auto atZero = TimelineClipLaneArea::bucketRangeForClip(data, kLengthBeats, 0.0, kBpm, kSampleRate);
+    const auto atOneSecond = TimelineClipLaneArea::bucketRangeForClip(data, kLengthBeats, 1.0, kBpm, kSampleRate);
+
+    ASSERT_GT(atZero.bucketCount, 0);
+    constexpr int kExpectedShiftBuckets = 100; // 1 second * 25600 Hz / 256 samples-per-bucket
+    EXPECT_EQ(atOneSecond.firstBucket, atZero.firstBucket + kExpectedShiftBuckets);
+    EXPECT_EQ(atOneSecond.bucketCount, atZero.bucketCount)
+        << "same clip length -> same bucket-window size, just shifted";
+
+    // Empty peaks data yields a zero-length range rather than an out-of-bounds one.
+    synth::PeaksFile::Data empty;
+    empty.bucketSize = 256;
+    empty.numChannels = 1;
+    const auto emptyRange = TimelineClipLaneArea::bucketRangeForClip(empty, kLengthBeats, 0.0, kBpm, kSampleRate);
+    EXPECT_EQ(emptyRange.bucketCount, 0);
 }

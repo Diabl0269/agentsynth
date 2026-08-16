@@ -142,6 +142,8 @@ add_library(Core STATIC
     Source/Timeline/MidiClipFile.h
     Source/Timeline/MidiRecorder.cpp
     Source/Timeline/MidiRecorder.h
+    Source/Timeline/PeaksFile.cpp
+    Source/Timeline/PeaksFile.h
     Source/Timeline/TimelineDoc.cpp
     Source/Timeline/TimelineDoc.h
     Source/Timeline/TimelineReconciler.cpp

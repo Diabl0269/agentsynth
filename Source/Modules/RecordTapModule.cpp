@@ -1,30 +1,5 @@
 #include "RecordTapModule.h"
 
-#include <algorithm>
-#include <cstring>
-#include <limits>
-
-namespace {
-
-// Little-endian writers for the .agpk sidecar. juce::FileOutputStream's writeInt/writeFloat are
-// already little-endian on every platform JUCE supports, but the format is specified as LE (see the
-// class comment), so the intent is spelled out here rather than inherited from a default.
-void writeLittleEndianUInt32(juce::OutputStream& stream, std::uint32_t value) {
-    stream.writeByte((char)(value & 0xffu));
-    stream.writeByte((char)((value >> 8) & 0xffu));
-    stream.writeByte((char)((value >> 16) & 0xffu));
-    stream.writeByte((char)((value >> 24) & 0xffu));
-}
-
-void writeLittleEndianFloat(juce::OutputStream& stream, float value) {
-    std::uint32_t bits = 0;
-    static_assert(sizeof(bits) == sizeof(value), "float is not 32 bits");
-    std::memcpy(&bits, &value, sizeof(bits));
-    writeLittleEndianUInt32(stream, bits);
-}
-
-} // namespace
-
 RecordTapModule::RecordTapModule(int ringCapacityFrames)
     : ModuleBase("Rec Tap", kNumChannels, kNumChannels)
     , ringCapacityFrames_(juce::jmax(1, ringCapacityFrames))
@@ -134,11 +109,16 @@ bool RecordTapModule::startCapture(const juce::File& wavFile, const juce::File& 
     overrun_.store(false, std::memory_order_relaxed);
     capturedFrames_.store(0, std::memory_order_relaxed);
     writtenFrames_.store(0, std::memory_order_relaxed);
-    peaks_.clear();
-    bucketFill_ = 0;
-    for (int channel = 0; channel < kNumChannels; ++channel) {
-        bucketMin_[channel] = std::numeric_limits<float>::max();
-        bucketMax_[channel] = std::numeric_limits<float>::lowest();
+    {
+        // Replaces the accumulator wholesale rather than reset()-ing the old one in place: a mono
+        // take following a stereo one (or vice versa) needs a different numChannels, which reset()
+        // deliberately does not change (see its own comment) — a fresh Accumulator is the simplest
+        // way to get both "cleared" and "right shape" in one step. Locked because the writer thread
+        // from a PREVIOUS take may still be idling with the client attached until the loop below
+        // runs; in practice it is always detached by stopCapture() before this point, but the lock
+        // costs nothing and removes the need to reason about it.
+        const juce::ScopedLock lock(peaksLock_);
+        peaksAccumulator_ = synth::PeaksFile::Accumulator(kPeakBucketSize, numChannels);
     }
 
     peaksFile_ = peaksFile;
@@ -232,52 +212,40 @@ bool RecordTapModule::drainOnce() {
 }
 
 void RecordTapModule::accumulatePeaks(const juce::AudioBuffer<float>& chunk, int numFrames) {
-    const int channels = juce::jlimit(1, kNumChannels, captureChannels_.load(std::memory_order_relaxed));
-
-    for (int frame = 0; frame < numFrames; ++frame) {
-        for (int channel = 0; channel < channels; ++channel) {
-            const float sample = chunk.getReadPointer(channel)[frame];
-            bucketMin_[channel] = std::min(bucketMin_[channel], sample);
-            bucketMax_[channel] = std::max(bucketMax_[channel], sample);
-        }
-        if (++bucketFill_ >= kPeakBucketSize)
-            flushPartialBucket();
-    }
+    const juce::ScopedLock lock(peaksLock_);
+    peaksAccumulator_.addSamples(chunk, numFrames);
 }
 
 void RecordTapModule::flushPartialBucket() {
-    if (bucketFill_ <= 0)
-        return; // nothing accumulated: never emit an empty bucket, the count is ceil(len/bucket)
-
-    const int channels = juce::jlimit(1, kNumChannels, captureChannels_.load(std::memory_order_relaxed));
-    for (int channel = 0; channel < channels; ++channel) {
-        peaks_.push_back(bucketMin_[channel]);
-        peaks_.push_back(bucketMax_[channel]);
-        bucketMin_[channel] = std::numeric_limits<float>::max();
-        bucketMax_[channel] = std::numeric_limits<float>::lowest();
-    }
-    bucketFill_ = 0;
+    const juce::ScopedLock lock(peaksLock_);
+    peaksAccumulator_.flushPartial();
 }
 
 bool RecordTapModule::writePeaksFile() const {
     if (peaksFile_ == juce::File())
         return false;
 
-    peaksFile_.getParentDirectory().createDirectory();
-    std::unique_ptr<juce::FileOutputStream> stream(peaksFile_.createOutputStream());
-    if (stream == nullptr || stream->failedToOpen())
-        return false;
-    stream->setPosition(0);
-    stream->truncate();
+    synth::PeaksFile::Data data;
+    {
+        const juce::ScopedLock lock(peaksLock_);
+        data = peaksAccumulator_.getData();
+    }
+    return synth::PeaksFile::write(peaksFile_, data);
+}
 
-    const std::uint32_t channels =
-        (std::uint32_t)juce::jlimit(1, kNumChannels, captureChannels_.load(std::memory_order_relaxed));
-    writeLittleEndianUInt32(*stream, kPeaksMagic);
-    writeLittleEndianUInt32(*stream, kPeaksVersion);
-    writeLittleEndianUInt32(*stream, (std::uint32_t)kPeakBucketSize);
-    writeLittleEndianUInt32(*stream, channels);
-    for (float value : peaks_)
-        writeLittleEndianFloat(*stream, value);
+void RecordTapModule::copyLivePeaks(std::vector<std::pair<float, float>>& out) const {
+    const juce::ScopedLock lock(peaksLock_);
+    out = peaksAccumulator_.getData().buckets;
+}
 
-    return stream->getStatus().wasOk();
+std::vector<float> RecordTapModule::getPeaksForTest() const {
+    std::vector<std::pair<float, float>> pairs;
+    copyLivePeaks(pairs);
+    std::vector<float> flat;
+    flat.reserve(pairs.size() * 2);
+    for (const auto& pair : pairs) {
+        flat.push_back(pair.first);
+        flat.push_back(pair.second);
+    }
+    return flat;
 }

@@ -1,5 +1,6 @@
 #include "TimelineClipLaneArea.h"
 #include "../AppUndoManager.h"
+#include "../Modules/RecordTapModule.h"
 #include "../Transport/TransportService.h"
 #include "Theme/AppLookAndFeel.h"
 #include "TimelineTrackHeaderComponent.h"
@@ -21,6 +22,17 @@ constexpr double kMinClipLengthBeats = 0.0625;
 
 constexpr int kMinWidthForName = 40;
 constexpr int kMinWidthForNotePreview = 24;
+
+// TL6-5: same numeric threshold as kMinWidthForNotePreview (a named twin rather than a shared
+// constant — a note preview and a waveform are unrelated concepts that happen to agree today).
+constexpr int kMinWidthForWaveform = 24;
+
+// TL6-5: bpm/sampleRate fallbacks when there is no live transport (a headless test, or a
+// TimelineClipLaneArea built with setTransport() never called) — the same "no transport, assume
+// 120 bpm" convention currentBeatsPerBar() uses for beatsPerBar, and the same 44.1 kHz fallback
+// MainComponent's own audio-take code uses when a snapshot's sampleRate is not yet known.
+constexpr double kFallbackBpm = 120.0;
+constexpr double kFallbackSampleRate = 44100.0;
 } // namespace
 
 //==============================================================================
@@ -45,6 +57,21 @@ void TimelineClipLaneArea::refreshFromDoc() {
                 alive.push_back(clip.id);
     }
     selection_.retainOnly(alive);
+    // TL6-5: simplest-correct cache policy (see the class comment) — ANY doc change clears every
+    // cached synth::PeaksFile::Data rather than diffing which assetRefs actually moved. Peaks
+    // files are small, so the next paint's re-resolve+re-read is cheap; the alternative (per-ref
+    // dirty tracking against a mutation we don't otherwise inspect) is not worth building yet.
+    peaksCache_.clear();
+    repaint();
+}
+
+void TimelineClipLaneArea::setPeaksResolver(std::function<juce::File(const juce::String&)> resolver) {
+    peaksResolver_ = std::move(resolver);
+    invalidatePeaksCache(); // a different resolver may resolve an already-cached ref differently
+}
+
+void TimelineClipLaneArea::invalidatePeaksCache() {
+    peaksCache_.clear();
     repaint();
 }
 
@@ -77,6 +104,36 @@ juce::Rectangle<int> TimelineClipLaneArea::computeClipRect(const TimelineViewSta
     const int left = (int)std::llround(x0);
     const int right = (int)std::llround(x1);
     return {left, trackIndex * rowHeight, std::max(right - left, 1), rowHeight};
+}
+
+TimelineClipLaneArea::BucketRange TimelineClipLaneArea::bucketRangeForClip(const synth::PeaksFile::Data& peaks,
+                                                                           double lengthBeats,
+                                                                           double sourceStartSeconds, double bpm,
+                                                                           double sampleRate) {
+    BucketRange range;
+    if (peaks.numChannels <= 0 || peaks.bucketSize <= 0 || sampleRate <= 0.0)
+        return range;
+
+    const int totalBuckets = (int)(peaks.buckets.size() / (std::size_t)peaks.numChannels);
+    if (totalBuckets <= 0)
+        return range;
+
+    const double secondsPerBeat = bpm > 0.0 ? 60.0 / bpm : 60.0 / kFallbackBpm;
+    const double startSeconds = std::max(0.0, sourceStartSeconds);
+    const double endSeconds = startSeconds + std::max(0.0, lengthBeats) * secondsPerBeat;
+
+    const double startSample = startSeconds * sampleRate;
+    const double endSample = endSeconds * sampleRate;
+
+    int firstBucket = (int)std::floor(startSample / (double)peaks.bucketSize);
+    int lastBucketExclusive = (int)std::ceil(endSample / (double)peaks.bucketSize);
+
+    firstBucket = juce::jlimit(0, totalBuckets, firstBucket);
+    lastBucketExclusive = juce::jlimit(firstBucket, totalBuckets, lastBucketExclusive);
+
+    range.firstBucket = firstBucket;
+    range.bucketCount = lastBucketExclusive - firstBucket;
+    return range;
 }
 
 juce::Rectangle<int> TimelineClipLaneArea::getClipRect(synth::ClipId id) const {
@@ -153,6 +210,9 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
             paintClip(g, clip, track, trackIndex, rowHeight);
     }
 
+    if (liveRecording_.active)
+        paintLiveRecordingStrip(g);
+
     if (dragMode_ == DragMode::Marquee)
         paintMarquee(g);
 }
@@ -175,7 +235,13 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
     g.setColour(selected ? base.brighter(0.6f) : base.darker(0.3f));
     g.drawRoundedRectangle(bodyBounds, 3.0f, selected ? 2.0f : 1.0f);
 
-    if (rect.getWidth() > kMinWidthForNotePreview) {
+    // TL6-5: assetRef is the MIDI-vs-audio discriminator (see synth::Clip's own comment) — an
+    // audio clip gets a waveform instead of the note preview below (its notes vector is empty in
+    // every case this build produces, but the branch is on assetRef, not on emptiness, so intent
+    // stays explicit even if that ever changes).
+    if (!clip.assetRef.isEmpty()) {
+        paintWaveform(g, clip, rect);
+    } else if (rect.getWidth() > kMinWidthForNotePreview) {
         g.setColour(juce::Colours::white.withAlpha(0.55f));
         for (const auto& note : clip.notes) {
             const double noteStartBeat = geometry.start + note.startBeat; // notes are clip-relative
@@ -206,6 +272,170 @@ void TimelineClipLaneArea::paintMarquee(juce::Graphics& g) {
     g.fillRect(marqueeRect_);
     g.setColour(juce::Colours::white.withAlpha(0.6f));
     g.drawRect(marqueeRect_, 1);
+}
+
+//==============================================================================
+// TL6-5: waveform painting (committed clips) and the live-recording strip.
+//==============================================================================
+
+const synth::PeaksFile::Data* TimelineClipLaneArea::findPeaksData(const juce::String& assetRef) {
+    if (assetRef.isEmpty() || !peaksResolver_)
+        return nullptr;
+
+    auto it = peaksCache_.find(assetRef);
+    if (it == peaksCache_.end()) {
+        // A default-constructed Data (bucketSize == 0) is what a miss caches — see this method's
+        // header comment for why that's deliberate rather than an oversight.
+        synth::PeaksFile::Data data;
+        const juce::File file = peaksResolver_(assetRef);
+        if (file != juce::File())
+            synth::PeaksFile::read(file, data);
+        it = peaksCache_.emplace(assetRef, std::move(data)).first;
+    }
+
+    if (it->second.bucketSize <= 0 || it->second.numChannels <= 0 || it->second.buckets.empty())
+        return nullptr;
+    return &it->second;
+}
+
+void TimelineClipLaneArea::paintWaveform(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect) {
+    if (rect.getWidth() <= kMinWidthForWaveform)
+        return;
+    const auto* data = findPeaksData(clip.assetRef);
+    if (data == nullptr)
+        return;
+
+    double bpm = kFallbackBpm;
+    double sampleRate = kFallbackSampleRate;
+    if (transport_ != nullptr) {
+        const auto snap = transport_->getPositionSnapshot();
+        if (snap.bpm > 0.0)
+            bpm = snap.bpm;
+        if (snap.sampleRate > 0.0)
+            sampleRate = snap.sampleRate;
+    }
+
+    const auto range = bucketRangeForClip(*data, clip.lengthBeats, clip.sourceStartSeconds, bpm, sampleRate);
+    g.setColour(juce::Colours::black.withAlpha(0.4f));
+    paintWaveformColumns(g, rect, data->buckets, data->numChannels, range.firstBucket, range.bucketCount);
+}
+
+void TimelineClipLaneArea::paintWaveformColumns(juce::Graphics& g, juce::Rectangle<int> rect,
+                                                const std::vector<std::pair<float, float>>& buckets, int numChannels,
+                                                int firstBucket, int bucketCount) {
+    if (bucketCount <= 0 || numChannels <= 0)
+        return;
+
+    const auto bounds = rect.reduced(1);
+    if (bounds.getWidth() <= 0 || bounds.getHeight() <= 0)
+        return;
+
+    const float midY = (float)bounds.getCentreY();
+    const float halfHeight = (float)bounds.getHeight() * 0.5f;
+    const int width = juce::jmax(1, bounds.getWidth());
+
+    for (int x = bounds.getX(); x < bounds.getRight(); ++x) {
+        const double frac = (double)(x - bounds.getX()) / (double)width;
+        const int bucket = firstBucket + juce::jlimit(0, bucketCount - 1, (int)(frac * bucketCount));
+
+        float minValue = 0.0f, maxValue = 0.0f;
+        bool any = false;
+        for (int channel = 0; channel < numChannels; ++channel) {
+            const std::size_t index = (std::size_t)bucket * (std::size_t)numChannels + (std::size_t)channel;
+            if (index >= buckets.size())
+                continue;
+            const auto& pair = buckets[index];
+            minValue = any ? std::min(minValue, pair.first) : pair.first;
+            maxValue = any ? std::max(maxValue, pair.second) : pair.second;
+            any = true;
+        }
+        if (!any)
+            continue;
+
+        const float y0 = midY - juce::jlimit(-1.0f, 1.0f, maxValue) * halfHeight;
+        const float y1 = midY - juce::jlimit(-1.0f, 1.0f, minValue) * halfHeight;
+        g.drawLine((float)x, y0, (float)x, juce::jmax(y1, y0 + 1.0f), 1.0f);
+    }
+}
+
+void TimelineClipLaneArea::clearLiveRecording() {
+    if (!liveRecording_.active)
+        return;
+    ++liveStripRepaintCount_;
+    repaint(liveStripRect_);
+    liveRecording_ = {};
+    livePeaks_.clear();
+    liveStripRect_ = {};
+}
+
+void TimelineClipLaneArea::updateLiveRecording(const LiveRecordingInfo& info) {
+    if (!info.active || info.tap == nullptr || doc_ == nullptr) {
+        clearLiveRecording();
+        return;
+    }
+
+    int trackIndex = -1;
+    const auto& tracks = doc_->getTracks();
+    for (int i = 0; i < (int)tracks.size(); ++i) {
+        if (tracks[(std::size_t)i].id == info.track) {
+            trackIndex = i;
+            break;
+        }
+    }
+    if (trackIndex < 0) {
+        // The armed track vanished mid-take (deleted, or an undo/redo rebuilt the doc): nothing
+        // sane to paint. Same handling as "nothing recording".
+        clearLiveRecording();
+        return;
+    }
+
+    std::vector<std::pair<float, float>> peaks;
+    info.tap->copyLivePeaks(peaks);
+
+    const bool wasActive = liveRecording_.active;
+    const std::size_t previousBucketCount = livePeaks_.size();
+    liveRecording_ = info;
+    livePeaks_ = std::move(peaks);
+
+    const int rowHeight = getRowHeight();
+    const auto newRect = computeClipRect(viewState_, trackIndex, info.punchBeat,
+                                         std::max(0.0, info.currentBeat - info.punchBeat), rowHeight);
+
+    // Repaint-on-arrival: only when new peak buckets actually landed (or this is the strip's very
+    // first frame) is a repaint issued — the transport tick alone (which moves the rect's right
+    // edge every poll) is not "data arrival". The rect is still kept current either way, so a
+    // LATER arrival's dirty-rect union covers however far the strip silently grew in between.
+    if (wasActive && livePeaks_.size() == previousBucketCount) {
+        liveStripRect_ = newRect;
+        return;
+    }
+
+    const auto dirty = liveStripRect_.getUnion(newRect);
+    liveStripRect_ = newRect;
+    ++liveStripRepaintCount_;
+    repaint(dirty);
+}
+
+void TimelineClipLaneArea::paintLiveRecordingStrip(juce::Graphics& g) {
+    if (liveStripRect_.isEmpty())
+        return;
+
+    const auto bodyBounds = liveStripRect_.toFloat().reduced(1.0f);
+    g.setColour(juce::Colours::white.withAlpha(0.12f)); // translucent — visibly "in progress",
+                                                        // distinct from a committed clip's fill
+    g.fillRoundedRectangle(bodyBounds, 3.0f);
+    g.setColour(juce::Colours::white.withAlpha(0.4f));
+    g.drawRoundedRectangle(bodyBounds, 3.0f, 1.0f);
+
+    if (liveStripRect_.getWidth() <= kMinWidthForWaveform || livePeaks_.empty())
+        return;
+
+    // The master tap is always stereo — see RecordTapModule::kNumChannels and every
+    // startCapture() call site in MainComponent — so this is not a guess specific to this class.
+    const int numChannels = RecordTapModule::kNumChannels;
+    const int bucketCount = (int)(livePeaks_.size() / (std::size_t)numChannels);
+    g.setColour(juce::Colours::white.withAlpha(0.7f));
+    paintWaveformColumns(g, liveStripRect_, livePeaks_, numChannels, 0, bucketCount);
 }
 
 //==============================================================================
