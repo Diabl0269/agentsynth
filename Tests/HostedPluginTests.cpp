@@ -24,6 +24,7 @@
 #include "../Source/AudioEngine.h"
 #include "../Source/Modules/ModuleBase.h"
 #include "../Source/Plugin/Hosting/HostedPluginModule.h"
+#include "../Source/Plugin/PluginProcessor.h"
 #include "../Source/UI/CableColour.h"
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/ModuleComponent.h"
@@ -320,6 +321,62 @@ TEST(HostedPluginTest, StateRoundTrip) {
     ASSERT_TRUE(pumpUntil([&] { return restoredModule->hasInstance(); })) << "the restore never resolved an instance";
 
     // ...and the plugin's own opaque blob came with it.
+    const juce::var afterState = restoredModule->getExtraState();
+    ASSERT_NE(afterState.getDynamicObject(), nullptr);
+    juce::MemoryBlock afterBlob;
+    afterBlob.fromBase64Encoding(afterState.getDynamicObject()->getProperty("pluginState").toString());
+    EXPECT_EQ(juce::String::fromUTF8((const char*)afterBlob.getData(), (int)afterBlob.getSize()), payload);
+}
+
+// AgentSynthAudioProcessor::setStateInformation validates untrusted WITH
+// allowInternalModuleTypes=true and then applies TRUSTED, so a patch hosting a plugin DOES
+// survive a DAW session reload: the internal-only type passes the authorship gate (it is our
+// own saved graph, not model output) and the trusted apply carries the identity + state blob.
+// This pin exists because the opposite was once wrongly documented as a limitation.
+TEST(HostedPluginTest, HostedPluginSurvivesDawSessionStateRoundTrip) {
+    StubBackend backend;
+    HostedPluginBackend::ScopedDefault installed(&backend);
+
+    constexpr int kUid = 0x51e55ed;
+    const juce::String payload = "daw-session-payload";
+
+    synth::AgentSynthAudioProcessor sourceProcessor;
+    sourceProcessor.prepareToPlay(kSampleRate, kBlockSize);
+
+    auto module = std::make_unique<HostedPluginModule>();
+    auto* modulePtr = module.get();
+    sourceProcessor.getAudioEngine().getGraph().addNode(std::move(module));
+    modulePtr->prepareToPlay(kSampleRate, kBlockSize);
+    modulePtr->loadPlugin(stubDescription("Session Plugin", kUid), backend);
+    ASSERT_TRUE(pumpUntil([&] { return modulePtr->hasInstance(); }));
+    {
+        const juce::var state = modulePtr->getExtraState();
+        auto* object = state.getDynamicObject();
+        ASSERT_NE(object, nullptr);
+        juce::MemoryBlock blob;
+        blob.append(payload.toRawUTF8(), payload.getNumBytesAsUTF8());
+        object->setProperty("pluginState", blob.toBase64Encoding());
+        modulePtr->setExtraState(state);
+        ASSERT_TRUE(pumpUntil([&] { return modulePtr->hasInstance() && !modulePtr->isLoading(); }));
+    }
+
+    juce::MemoryBlock sessionState;
+    sourceProcessor.getStateInformation(sessionState);
+    ASSERT_GT((int)sessionState.getSize(), 0);
+
+    synth::AgentSynthAudioProcessor restoredProcessor;
+    restoredProcessor.prepareToPlay(kSampleRate, kBlockSize);
+    restoredProcessor.setStateInformation(sessionState.getData(), (int)sessionState.getSize());
+
+    HostedPluginModule* restoredModule = nullptr;
+    for (auto* node : restoredProcessor.getAudioEngine().getGraph().getNodes())
+        if (auto* candidate = dynamic_cast<HostedPluginModule*>(node->getProcessor()))
+            restoredModule = candidate;
+    ASSERT_NE(restoredModule, nullptr)
+        << "the untrusted gate must accept our own saved graph (allowInternalModuleTypes)";
+    EXPECT_EQ(restoredModule->getIdentity().name, "Session Plugin");
+    EXPECT_EQ(restoredModule->getIdentity().uid, kUid);
+    ASSERT_TRUE(pumpUntil([&] { return restoredModule->hasInstance(); }));
     const juce::var afterState = restoredModule->getExtraState();
     ASSERT_NE(afterState.getDynamicObject(), nullptr);
     juce::MemoryBlock afterBlob;
