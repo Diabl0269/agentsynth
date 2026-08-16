@@ -481,6 +481,11 @@ add_library(AppUI STATIC
     Source/UI/ModMatrixComponent.h
     Source/UI/SettingsWindow.cpp
     Source/UI/SettingsWindow.h
+    # Plugin hosting UI (TL7-5) — native editor windows for hosted VST3/AU plugins. In AppUI (a
+    # window), not Core, mirroring HostedPluginModule/HostedPluginBackend's Core placement above.
+    Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
+    Source/Plugin/Hosting/HostedPluginEditorWindow.h
+    Source/Plugin/Hosting/HostedPluginWindowManager.h
     Source/UI/AppearanceSettingsTab.cpp
     Source/UI/AppearanceSettingsTab.h
     Source/UI/ShortcutsSettingsTab.cpp

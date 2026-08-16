@@ -231,6 +231,13 @@ public:
      *  — GraphEditor deliberately owns no TimelineDoc, mirroring onSaveSnippetRequested above. */
     std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onAutomateParameterRequested;
 
+    /** TL7-5: a hosted-plugin card's "Open Editor" button (ModuleComponent's HostedPluginModule
+     *  branch). Set by the owner (MainComponent) to resolve `nodeId` to its live HostedPluginModule
+     *  and hand it to HostedPluginWindowManager::openEditorFor — mirrors
+     *  onAutomateParameterRequested's shape exactly, for the same reason: GraphEditor owns neither
+     *  the module lookup nor the window manager. */
+    std::function<void(juce::AudioProcessorGraph::NodeID)> onOpenPluginEditorRequested;
+
     // ---- Copy / paste / duplicate -------------------------------------------------------
     //
     // All three run through the snippet pipeline rather than a parallel copy format, which is what

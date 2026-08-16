@@ -7,6 +7,7 @@
 #include "AudioEngine.h"
 #include "Branding.h"
 #include "Modules/RecordTapModule.h"
+#include "Plugin/Hosting/HostedPluginWindowManager.h"
 #include "PresetManager.h"
 #include "ShortcutManager.h"
 #include "SnippetManager.h"
@@ -455,6 +456,17 @@ private:
     AudioEngine& audioEngine;
 
     GraphEditor graphEditor;
+
+    // TL7-5: every open hosted-plugin editor window. Declared AFTER ownedAudioEngine/audioEngine
+    // (and graphEditor) so it is destroyed BEFORE them — members are torn down in REVERSE
+    // declaration order, and a window's content can hold a live juce::AudioPluginInstance editor
+    // that must not outlive the graph node it came from. ~MainComponent() ALSO calls
+    // pluginWindowManager.closeAll() explicitly, as its very first line — a second, independent
+    // line of defence against the same hazard; see HostedPluginWindowManager's class comment for
+    // why both exist. Declaration-order safety alone would still work if that explicit call were
+    // ever accidentally removed.
+    synth::HostedPluginWindowManager pluginWindowManager;
+
     ModuleLibraryComponent moduleLibrary;
 
     // Toolbar strip (paints the bg + lays out the 9 buttons below via FlexBox). The buttons
