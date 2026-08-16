@@ -83,6 +83,11 @@ struct TimelineSnapshot {
         // per block to decide whether this lane may write at all (Off / Write-while-recording) or
         // must yield to a hand on the knob (Touch / Latch) — see AutomationApplier::applyBlock.
         int recordMode = static_cast<int>(LaneRecordMode::Read);
+        // TL7-6, copied verbatim from AutomationLane::paramIndexHint (-1 = none). Message-thread-only
+        // consumers (AudioEngine::publishTimeline's binding build) read this straight off the
+        // snapshot rather than cross-referencing the doc, so the flattened lane and its hint always
+        // travel together.
+        int paramIndexHint = -1;
         int firstPoint = 0; // range into points[]
         int numPoints = 0;
     };

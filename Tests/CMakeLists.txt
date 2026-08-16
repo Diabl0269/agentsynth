@@ -57,6 +57,7 @@ add_executable(Tests
     HostedPluginTests.cpp
     PluginScanTests.cpp
     HostedPluginEditorWindowTests.cpp
+    HostedPluginLaneTests.cpp
     AIStateMapperTests.cpp
     AIPatchValidationTests.cpp
     AIPatchRetryTests.cpp

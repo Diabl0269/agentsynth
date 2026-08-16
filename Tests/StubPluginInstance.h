@@ -5,6 +5,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <memory>
 #include <thread>
+#include <vector>
 
 // A fake third-party plugin, and a HostedPluginBackend that hands it out (TL7-2).
 //
@@ -39,6 +40,71 @@ private:
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(StubPluginEditor)
 };
 
+/** A stable-id (VST3/AU/LV2-style) stub parameter — TL7-6. Implements
+ *  juce::HostedAudioProcessorParameter, the real hierarchy hosted plugin parameters use (NOT
+ *  RangedAudioParameter — see HostedPluginModule.h), so tests exercise the exact type the resolver
+ *  branches on. */
+class StubHostedParameter : public juce::HostedAudioProcessorParameter {
+public:
+    StubHostedParameter(juce::String paramId, juce::String name, float defaultValue = 0.0f)
+        : paramId_(std::move(paramId))
+        , name_(std::move(name))
+        , value_(defaultValue)
+        , defaultValue_(defaultValue) {}
+
+    juce::String getParameterID() const override { return paramId_; }
+
+    float getValue() const override { return value_; }
+    void setValue(float newValue) override { value_ = newValue; }
+    float getDefaultValue() const override { return defaultValue_; }
+    juce::String getName(int) const override { return name_; }
+    juce::String getLabel() const override { return {}; }
+    float getValueForText(const juce::String& text) const override { return text.getFloatValue(); }
+
+private:
+    juce::String paramId_;
+    juce::String name_;
+    float value_;
+    float defaultValue_;
+};
+
+/** A LEGACY stub parameter with NO stable id — the same shape JUCE's own VST2 wrapper produces for
+ *  a plugin with no persistent parameter identity (TL7-6's "plugins without WithID parameters"
+ *  case; see juce_VSTPluginFormat.cpp's own parameter class, whose getParameterID() likewise always
+ *  returns an empty string). It still has to implement juce::HostedAudioProcessorParameter —
+ *  juce::AudioPluginInstance's own addParameter is deliberately hidden private, and
+ *  addHostedParameter refuses anything that is not one — so "no stable id" is expressed by
+ *  returning an EMPTY string, not by opting out of the interface entirely. */
+class StubLegacyParameter : public juce::HostedAudioProcessorParameter {
+public:
+    explicit StubLegacyParameter(juce::String name, float defaultValue = 0.0f)
+        : name_(std::move(name))
+        , value_(defaultValue)
+        , defaultValue_(defaultValue) {}
+
+    juce::String getParameterID() const override { return {}; }
+
+    float getValue() const override { return value_; }
+    void setValue(float newValue) override { value_ = newValue; }
+    float getDefaultValue() const override { return defaultValue_; }
+    juce::String getName(int) const override { return name_; }
+    juce::String getLabel() const override { return {}; }
+    float getValueForText(const juce::String& text) const override { return text.getFloatValue(); }
+
+private:
+    juce::String name_;
+    float value_;
+    float defaultValue_;
+};
+
+/** One entry in the constructor's parameter list: a stable id + name builds a StubHostedParameter,
+ *  an empty id + name builds a StubLegacyParameter — see StubPluginInstance's ctor. */
+struct StubParamSpec {
+    juce::String paramId; // empty => legacy/no-id parameter
+    juce::String name;
+    float defaultValue = 0.0f;
+};
+
 /** A juce::AudioPluginInstance that marks the audio it touches and round-trips a state blob.
  *
  *  - processBlock multiplies every output channel by `kGainMarker` — a value no other module in the
@@ -70,7 +136,7 @@ public:
     // StubPluginEditor instead of the base default (no editor) — HostedPluginEditorWindowTests uses
     // this to exercise both the custom-editor and the GenericAudioProcessorEditor-fallback paths.
     StubPluginInstance(int numInputs, int numOutputs, juce::String pluginName = "Stub Plugin", int uid = 0x5754424,
-                       juce::String format = "VST3", bool reportsEditor = false)
+                       juce::String format = "VST3", std::vector<StubParamSpec> params = {}, bool reportsEditor = false)
         : juce::AudioPluginInstance(
               BusesProperties()
                   .withInput("Input", juce::AudioChannelSet::discreteChannels(juce::jmax(1, numInputs)), numInputs > 0)
@@ -79,7 +145,18 @@ public:
         , name_(std::move(pluginName))
         , format_(std::move(format))
         , uid_(uid)
-        , reportsEditor_(reportsEditor) {}
+        , reportsEditor_(reportsEditor) {
+        // TL7-6: a stable id builds the VST3/AU-style stub, an empty one the no-id legacy stub.
+        // addHostedParameter (not addParameter, which AudioPluginInstance hides private — every
+        // hosted parameter must be a HostedAudioProcessorParameter) takes ownership, exactly like
+        // juce::AudioProcessor::addParameter does for our own modules' parameters.
+        for (const auto& spec : params) {
+            if (spec.paramId.isNotEmpty())
+                addHostedParameter(std::make_unique<StubHostedParameter>(spec.paramId, spec.name, spec.defaultValue));
+            else
+                addHostedParameter(std::make_unique<StubLegacyParameter>(spec.name, spec.defaultValue));
+        }
+    }
 
     ~StubPluginInstance() override {
         lastDestructionThread().store(std::this_thread::get_id());

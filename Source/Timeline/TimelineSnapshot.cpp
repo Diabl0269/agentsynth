@@ -145,6 +145,7 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
             laneInfo.maxValue = lane.range.maxValue;
             laneInfo.defaultValue = lane.range.defaultValue;
             laneInfo.recordMode = lane.recordMode;
+            laneInfo.paramIndexHint = lane.paramIndexHint;
 
             laneInfo.firstPoint = static_cast<int>(snapshot->points.size());
             for (const auto& breakpoint : lane.points) {

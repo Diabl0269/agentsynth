@@ -259,7 +259,19 @@ std::vector<TimelinePanelComponent::AutomationLaneOption> TimelinePanelComponent
                 trackHeaderHost_ != nullptr ? trackHeaderHost_->getNodeDisplayName(lane.nodeUuid) : juce::String();
             if (nodeLabel.isEmpty())
                 nodeLabel = lane.nodeUuid.substring(0, 8); // uuid-head fallback (TL5-9 design)
-            options.push_back({lane.id, nodeLabel + " \xC2\xB7 " + lane.paramId});
+            options.push_back({lane.id, nodeLabel + " \xC2\xB7 " + lane.paramId, false, {}});
+        }
+    }
+
+    // TL7-6: "Add lane..." entries for hosted-plugin instance parameters that have none yet, listed
+    // after every existing lane.
+    if (trackHeaderHost_ != nullptr) {
+        for (auto& addOption : trackHeaderHost_->getAvailablePluginLaneOptions()) {
+            AutomationLaneOption option;
+            option.label = "Add: " + addOption.label;
+            option.isAddEntry = true;
+            option.addOption = addOption;
+            options.push_back(std::move(option));
         }
     }
     return options;
@@ -288,7 +300,18 @@ void TimelinePanelComponent::applyAutomationLaneMenuChoice(int selectedId) {
     const auto options = collectAutomationLaneOptions();
     if (selectedId < 1 || selectedId > (int)options.size())
         return;
-    showAutomationLane(options[(size_t)(selectedId - 1)].id);
+    const auto& chosen = options[(size_t)(selectedId - 1)];
+    if (chosen.isAddEntry) {
+        // TL7-6: creates (find-or-create) the lane, then shows it — same shape as choosing an
+        // existing entry, just with one extra step first.
+        if (trackHeaderHost_ == nullptr)
+            return;
+        const auto laneId = trackHeaderHost_->addPluginAutomationLane(chosen.addOption);
+        if (laneId.isValid())
+            showAutomationLane(laneId);
+        return;
+    }
+    showAutomationLane(chosen.id);
 }
 
 void TimelinePanelComponent::applyAutomationRecordModeChoice(int selectedId) {

@@ -1,5 +1,6 @@
 #include "TimelineValidator.h"
 
+#include "AutomationBinding.h"
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -127,15 +128,9 @@ std::map<juce::String, juce::AudioProcessor*> indexGraphByUuid(const juce::Audio
     return byUuid;
 }
 
-juce::RangedAudioParameter* findParameter(juce::AudioProcessor* processor, const juce::String& paramId) {
-    if (processor == nullptr)
-        return nullptr;
-    for (auto* param : processor->getParameters())
-        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(param))
-            if (ranged->paramID == paramId)
-                return ranged;
-    return nullptr;
-}
+// TL7-6: parameter resolution is factored into synth::resolveLaneParameter (AutomationBinding.h) —
+// the one resolver this file, TimelineOps, AudioEngine::publishTimeline's binding build and the
+// recorder's rebind all share.
 
 // -- per-container checks --------------------------------------------------------------------
 
@@ -312,6 +307,12 @@ TimelineValidationResult validateLane(const juce::var& laneVar, const juce::Stri
                                               "\", which another lane already automates. There is at most one lane "
                                               "per parameter in the whole timeline.");
 
+    // TL7-6, additive: absent (every file predating this field) is "no hint" — the sentinel
+    // resolveLaneParameter already treats as "never try the hosted-plugin index fallback".
+    int paramIndexHint = -1;
+    if (!readOptionalInt(lObj->getProperty("paramIndexHint"), paramIndexHint))
+        return fail(Error::MalformedRoot, laneText + " has a non-integer \"paramIndexHint\".");
+
     // The binding must resolve against the LIVE graph. An orphaned binding is a state the app
     // RECOVERS from when a node disappears under an existing lane (TL2-6); it is not a state
     // untrusted input may author from nothing.
@@ -320,8 +321,11 @@ TimelineValidationResult validateLane(const juce::var& laneVar, const juce::Stri
         return fail(Error::UnresolvableBinding, laneText + " is bound to node uuid \"" + nodeUuid +
                                                     "\", which no module in the current patch has. Bind the lane to a "
                                                     "module that exists.");
-    auto* parameter = findParameter(found->second, paramId);
-    if (parameter == nullptr)
+    // TL7-6: the shared resolver — exact id match, or (only for a hosted plugin with no stable ids
+    // at all) the hint above. A forged hint can never redirect to a genuinely different, still-
+    // stably-identified parameter: that case is exactly what the resolver treats as unresolved.
+    const auto resolved = resolveLaneParameter(found->second, paramId, paramIndexHint);
+    if (!resolved.resolved())
         return fail(Error::UnresolvableBinding, laneText + " automates parameter \"" + paramId + "\", which node \"" +
                                                     nodeUuid +
                                                     "\" does not have. Use one of that module's parameter "
@@ -367,9 +371,11 @@ TimelineValidationResult validateLane(const juce::var& laneVar, const juce::Stri
                                                    " breakpoints, exceeding the limit of " +
                                                    juce::String(TimelineDoc::kMaxBreakpointsPerLane) + " per lane.");
 
-    const auto& liveRange = parameter->getNormalisableRange();
-    const double liveMin = static_cast<double>(liveRange.start);
-    const double liveMax = static_cast<double>(liveRange.end);
+    // TL7-6: a hosted-plugin parameter has no NormalisableRange, so its bounds are exactly [0, 1]
+    // (laneValueBoundsFor — see AutomationBinding.h) rather than something read off the parameter.
+    const auto liveBounds = laneValueBoundsFor(resolved);
+    const double liveMin = liveBounds.minValue;
+    const double liveMax = liveBounds.maxValue;
 
     for (const auto& pointVar : *pointList) {
         auto* pObj = pointVar.getDynamicObject();

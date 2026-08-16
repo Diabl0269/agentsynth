@@ -152,6 +152,65 @@ public:
     std::function<void()> onInstanceChanged;
 
     //==============================================================================
+    // Instance parameters (TL7-6) — automation-lane resolution seam, message thread only
+    //==============================================================================
+    //
+    // A hosted plugin's OWN parameters live on the inner juce::AudioPluginInstance, never on this
+    // module's own getParameters() (that only ever holds "muted" — see the class comment). They are
+    // discovered at load and can change SHAPE between plugin versions, which is the whole reason
+    // this surface exists rather than a plain findParameterByID(this, ...): see
+    // Source/Timeline/AutomationBinding.h for the resolution/orphan rule that consumes it.
+    //
+    // A note on JUCE's own hierarchy, since it is easy to assume otherwise: a hosted instance's
+    // parameters are juce::AudioProcessorParameter, NOT juce::RangedAudioParameter — the type our
+    // own modules' parameters use. A format that gives a parameter a persistent string identity
+    // (VST3/AU/LV2) does so by implementing juce::HostedAudioProcessorParameter::getParameterID(),
+    // a sibling hierarchy with no NormalisableRange. That is why every lookup below returns a plain
+    // AudioProcessorParameter*, and why a lane bound to one needs its own RangeSnapshot to define
+    // the denormalised-to-0..1 mapping (AutomationApplier does this) rather than
+    // RangedAudioParameter::convertTo0to1, which such a parameter does not have.
+
+    /** Exact stable-id match against the LIVE instance's parameters: the first parameter whose
+     *  juce::HostedAudioProcessorParameter::getParameterID() equals `paramId`. A parameter that
+     *  does not implement HostedAudioProcessorParameter at all, or implements it returning an empty
+     *  string (both mean "this plugin format has no persistent id for this parameter"), never
+     *  matches here — see findInstanceParameterByIndex for the narrow legacy fallback that exists
+     *  for exactly that case. Returns nullptr when there is no live instance, `paramId` is empty, or
+     *  nothing matches. */
+    juce::AudioProcessorParameter* findInstanceParameter(const juce::String& paramId) const noexcept;
+
+    /** The live instance's parameter at raw index `index` (i.e. getParameters()[index]), or nullptr
+     *  when there is no live instance or the index is out of range. Used ONLY to check what a
+     *  lane's stored paramIndexHint currently points at — never to bind a lane by index directly;
+     *  see AutomationBinding.h's resolveLaneParameter for the one place that decides when an index
+     *  match is safe. */
+    juce::AudioProcessorParameter* findInstanceParameterByIndex(int index) const noexcept;
+
+    /** The live instance's CURRENT parameter index for `paramId` (via findInstanceParameter), or -1
+     *  when it does not resolve. This is what a lane's paramIndexHint is captured FROM at lane
+     *  creation time — never re-derived afterwards; the hint is a snapshot of "where this parameter
+     *  was when the lane was made", not a live query. */
+    int getInstanceParamIndexFallback(const juce::String& paramId) const noexcept;
+
+    /** One entry in the live instance's parameter list, message-thread snapshot for the automation
+     *  lane picker's "Add lane..." entries (TL7-6). */
+    struct InstanceParameterInfo {
+        int index = -1;
+        // The stable id from HostedAudioProcessorParameter::getParameterID(), or, when the plugin
+        // format has none, a synthetic "legacy:<index>" key — every instance parameter needs SOME
+        // non-empty, lane-identity-usable paramId, and a lane created against this key can only ever
+        // resolve back through the index-fallback branch (a literal "legacy:<index>" paramID never
+        // occurs on a real plugin), which is exactly the legacy behaviour it names.
+        juce::String paramId;
+        juce::String displayName;
+    };
+
+    /** Every live instance parameter. Empty when there is no live instance (still loading, refused,
+     *  or the plugin is not installed) — callers treat that exactly like "nothing to offer yet", the
+     *  same transient state HostedPluginModule already models elsewhere. */
+    std::vector<InstanceParameterInfo> getInstanceParameters() const;
+
+    //==============================================================================
     // AudioProcessor
     //==============================================================================
 

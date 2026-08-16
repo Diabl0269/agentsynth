@@ -483,7 +483,18 @@ A plugin row can be **dragged** onto the canvas or **clicked** to drop one in th
 
 `"Hosted Plugin"` itself is still **not** a library module row: added bare it would host nothing and have no way to become anything.
 
-- **Not yet**: TL7-5/6 plugin editor windows and parameter exposure, TL7-7 latency compensation.
+- **Instance parameters as automation lanes (TL7-6).** The inner plugin's own parameters — never `HostedPluginModule`'s own `getParameters()`, which only ever carries `muted` — are exposed for lane resolution via `findInstanceParameter(paramId)` / `findInstanceParameterByIndex(index)` / `getInstanceParamIndexFallback(paramId)` / `getInstanceParameters()`, all message-thread-only and all reading the live instance. A hosted parameter is `juce::AudioProcessorParameter`, **not** `juce::RangedAudioParameter` — a persistent string id, where the format has one, comes from `juce::HostedAudioProcessorParameter::getParameterID()`, a sibling interface with no `NormalisableRange`; its native domain is always `0..1` (JUCE's own host contract). A lane's `paramId` + `paramIndexHint` resolve against the live instance by this rule, enforced identically everywhere a lane resolves (`synth::resolveLaneParameter`, `Source/Timeline/AutomationBinding.h` — see [`architecture.md § Automation lanes on hosted-plugin parameters`](architecture.md#automation-lanes-on-hosted-plugin-parameters-tl7-6)):
+
+    | Situation | Outcome |
+    | --- | --- |
+    | `paramId` matches a live parameter's `getParameterID()` | **Binds** to it, whatever index it is now at. |
+    | No id match, but `paramIndexHint` names a parameter with **no stable id at all** (a legacy format) | **Binds by index** — the only case an index match is trusted. |
+    | No id match, and the hinted index names a **different, still-identified** parameter (a plugin update moved the parameter set) | **Orphans.** Never silently rebinds to whatever is there now. |
+    | No live instance (still loading, unloaded, or the plugin isn't installed) | **Orphans.** A `HostedPluginModule` node with nothing loaded cannot currently vouch for any parameter. |
+    | Hinted index no longer exists at all | **Orphans.** |
+
+  Orphaned lanes are retained and re-bindable (TL2-6 policy), never auto-deleted. The automation strip's lane picker offers "Add lane…" entries for not-yet-automated instance parameters; a created lane's `RangeSnapshot` is always `{0, 1, default}` and its `paramIndexHint` is captured from the parameter's index at that moment, never re-derived afterwards. **Known gap:** nothing currently re-triggers `TimelineReconciler::reconcile` when an async plugin load *completes* (there is no publish → reconcile hook), so a freshly opened project's hosted-plugin lanes can briefly read orphaned until an unrelated graph change triggers the next reconcile pass.
+- **Not yet**: TL7-7 latency compensation (latency-change graph rebuild + PDC verification).
 
 ---
 

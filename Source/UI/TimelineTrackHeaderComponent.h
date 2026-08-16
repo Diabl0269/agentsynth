@@ -67,6 +67,28 @@ struct TrackHeaderHost {
      *  plus an Audio-kind track bound to it, as ONE compound undo step — the exact mirror of
      *  addMidiTrack(). */
     virtual void addAudioTrack() = 0;
+
+    /** TL7-6: one hosted-plugin instance parameter with no automation lane yet — the automation
+     *  strip's lane picker "Add lane..." entries. `paramId` is the value a created lane would carry
+     *  (a real stable id, or the synthetic "legacy:<index>" form — see
+     *  HostedPluginModule::InstanceParameterInfo); `paramIndex` is what becomes the lane's
+     *  paramIndexHint. */
+    struct PluginLaneOption {
+        juce::String nodeUuid;
+        juce::String paramId;
+        int paramIndex = -1;
+        juce::String label; // "Module name \xC2\xB7 parameter name"
+    };
+
+    /** Every not-yet-automated hosted-plugin instance parameter across the live graph. Empty when
+     *  there is nothing to offer (no HostedPluginModule with a published instance, or every one of
+     *  its parameters is already automated). */
+    virtual std::vector<PluginLaneOption> getAvailablePluginLaneOptions() const = 0;
+
+    /** Creates (find-or-create — the doc-wide one-lane-per-parameter rule may mean it already
+     *  exists) the automation lane for `option` and returns its id. An invalid id means it could not
+     *  be created (kMaxTracks/kMaxLanesPerTrack reached, or the option's node no longer resolves). */
+    virtual synth::LaneId addPluginAutomationLane(const PluginLaneOption& option) = 0;
 };
 
 class TimelineTrackHeaderComponent : public juce::Component {

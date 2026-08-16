@@ -138,6 +138,8 @@ add_library(Core STATIC
     Source/Timeline/AudioClipStreamer.h
     Source/Timeline/AutomationApplier.cpp
     Source/Timeline/AutomationApplier.h
+    Source/Timeline/AutomationBinding.cpp
+    Source/Timeline/AutomationBinding.h
     Source/Timeline/AutomationKernel.h
     Source/Timeline/AutomationRecorder.cpp
     Source/Timeline/AutomationRecorder.h

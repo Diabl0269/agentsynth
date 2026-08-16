@@ -91,8 +91,10 @@ TEST(HostedPluginEditorWindowTest, OpensGenericEditorWhenPluginHasNone) {
 }
 
 TEST(HostedPluginEditorWindowTest, OpensCustomEditorWhenReported) {
-    StubBackend backend(
-        [] { return std::make_unique<StubPluginInstance>(2, 2, "Custom Editor Plugin", 0x1111, "VST3", true); });
+    StubBackend backend([] {
+        return std::make_unique<StubPluginInstance>(2, 2, "Custom Editor Plugin", 0x1111, "VST3",
+                                                    std::vector<synth::test::StubParamSpec>{}, /*reportsEditor*/ true);
+    });
     HostedPluginModule module;
     module.prepareToPlay(kSampleRate, kBlockSize);
     loadAndWait(module, backend, "Custom Editor Plugin", 0x1111);
@@ -200,8 +202,10 @@ TEST(HostedPluginEditorWindowTest, InstanceSwapRebuildsEditor) {
     // (not-yet-retired) instance on the very first pumpUntil check, before the swap has actually
     // happened. Comparing the instance POINTER instead is race-free.
     auto* oldInstance = module.getActiveInstanceForEditor();
-    backend.setFactory(
-        [] { return std::make_unique<StubPluginInstance>(2, 2, "Second", 0x2, "VST3", /*reportsEditor*/ true); });
+    backend.setFactory([] {
+        return std::make_unique<StubPluginInstance>(
+            2, 2, "Second", 0x2, "VST3", /*params*/ std::vector<synth::test::StubParamSpec>{}, /*reportsEditor*/ true);
+    });
     module.loadPlugin(stubDescription("Second", 0x2), backend);
     ASSERT_TRUE(pumpUntil([&] { return module.hasInstance() && module.getActiveInstanceForEditor() != oldInstance; }));
 
@@ -238,8 +242,10 @@ TEST(HostedPluginEditorWindowTest, UnloadClosesOrFallsBack) {
 // ============================================================================
 
 TEST(HostedPluginEditorWindowTest, ResizeRequestHonoured) {
-    StubBackend backend(
-        [] { return std::make_unique<StubPluginInstance>(2, 2, "Resizable Plugin", 0x3333, "VST3", true); });
+    StubBackend backend([] {
+        return std::make_unique<StubPluginInstance>(2, 2, "Resizable Plugin", 0x3333, "VST3",
+                                                    std::vector<synth::test::StubParamSpec>{}, /*reportsEditor*/ true);
+    });
     HostedPluginModule module;
     module.prepareToPlay(kSampleRate, kBlockSize);
     loadAndWait(module, backend, "Resizable Plugin", 0x3333);
