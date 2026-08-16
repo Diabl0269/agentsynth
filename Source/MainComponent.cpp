@@ -879,6 +879,19 @@ MainComponent::~MainComponent() {
     // safeguards; declaration order is the other).
     pluginWindowManager.closeAll();
 
+    // TL7-7: uninstall what installHostedPluginObservers() installed. Both callbacks capture
+    // `this`, and on the plugin path the engine — and every hosted module in its graph — OUTLIVES
+    // this editor-owned component (hosts close and reopen editors freely), so a latency change or
+    // publish after this destructor would otherwise call through freed memory inside the host.
+    for (auto* node : audioEngine.getGraph().getNodes()) {
+        if (node == nullptr)
+            continue;
+        if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(node->getProcessor())) {
+            hosted->onLatencyChanged = nullptr;
+            hosted->onInstancePublished = nullptr;
+        }
+    }
+
     // TL7-3: the process-wide backend holds a bare pointer to our scan service, so unhook it before
     // anything else that could resolve an identity — a hosted-plugin restore after this point would
     // otherwise go through freed memory. Guarded on "still ours" because a second MainComponent

@@ -32,6 +32,7 @@
 #include "../Source/AudioEngine.h"
 #include "../Source/Modules/AudioInputModule.h"
 #include "../Source/Plugin/Hosting/HostedPluginModule.h"
+#include "../Source/Plugin/PluginProcessor.h"
 #include "FakeAudioIODevice.h"
 #include "StubPluginInstance.h"
 #include <chrono>
@@ -451,6 +452,53 @@ TEST(HostedPluginLatencyTest, ReportedGraphLatencyFollowsOnlyAfterARebuild) {
     fixture.engine.audioDeviceStopped();
 }
 
+// The wrapper's half of PDC: a DAW hosting AgentSynth can only compensate for a plugin nested
+// INSIDE AgentSynth if AgentSynthAudioProcessor reports the inner graph's latency as its own. The
+// inner rebuild (above) fixes alignment BETWEEN the graph's parallel paths; this mirror is what
+// keeps AgentSynth's whole track aligned with every other track in the host.
+TEST(HostedPluginLatencyTest, InnerGraphLatencyIsMirroredToTheHost) {
+    constexpr int kLatencyA = 512;
+    constexpr int kLatencyB = 4800;
+
+    synth::AgentSynthAudioProcessor processor;
+    auto& graph = processor.getAudioEngine().getGraph();
+
+    // Replace the default patch with the minimal latent one: Hosted Plugin -> Audio Output.
+    graph.clear();
+    auto plugin = graph.addNode(std::make_unique<HostedPluginModule>());
+    auto out = graph.addNode(std::make_unique<IOProcessor>(IOProcessor::audioOutputNode));
+    for (int channel = 0; channel < 2; ++channel)
+        graph.addConnection({{plugin->nodeID, channel}, {out->nodeID, channel}});
+    auto* hosted = dynamic_cast<HostedPluginModule*>(plugin->getProcessor());
+    ASSERT_NE(hosted, nullptr);
+
+    StubFactory factory;
+    StubBackend backend(factory.make(kLatencyA));
+    hosted->prepareToPlay(kSampleRate, kBlockSize);
+    hosted->loadPlugin(stubDescription(), backend);
+    ASSERT_TRUE(pumpUntil([&] { return hosted->hasInstance(); }));
+
+    // prepareToPlay is the DAW's own prepare call: the graph is (re)prepared inside it, so the
+    // mirror must be current the moment it returns.
+    processor.prepareToPlay(kSampleRate, kBlockSize);
+    EXPECT_EQ(processor.getLatencySamples(), kLatencyA);
+
+    // Runtime change: the plugin flips its lookahead, the module follows on the message thread,
+    // and the owner rebuilds (MainComponent's reaction, simulated here). The new figure reaches
+    // the host on the next processBlock, not the next prepareToPlay.
+    ASSERT_NE(factory.live, nullptr);
+    factory.live->setReportedLatency(kLatencyB);
+    ASSERT_TRUE(pumpUntil([&] { return hosted->getLatencySamples() == kLatencyB; }));
+    graph.rebuild();
+
+    juce::AudioBuffer<float> buffer(2, kBlockSize);
+    juce::MidiBuffer midi;
+    processor.processBlock(buffer, midi);
+    EXPECT_EQ(processor.getLatencySamples(), kLatencyB);
+
+    processor.releaseResources();
+}
+
 // ============================================================================
 // 3. Flow — MainComponent's owner wiring
 // ============================================================================
@@ -620,6 +668,37 @@ TEST_F(HostedPluginLatencyFlowTest, CompletedAsyncLoadRebuildsPdcAndRefreshesThe
     EXPECT_EQ(mc.getStatusBar().getRoundTripTextForTest(), "RT 54.0 ms");
 
     engine.audioDeviceStopped();
+}
+
+// The observers MainComponent installs capture `this` — and on the plugin path the engine, and
+// every hosted module in its graph, OUTLIVES the editor-owned MainComponent (hosts close and
+// reopen editors freely). The destructor must uninstall them, or the next latency change/publish
+// after an editor close calls through freed memory inside the host.
+TEST_F(HostedPluginLatencyFlowTest, ClosingTheEditorUninstallsTheObservers) {
+    synth::theme::ThemeManager tm;
+    synth::theme::AppLookAndFeel lf;
+
+    // Mirrors AgentSynthAudioProcessor: Hosted mode, initialise() by the owner, never MainComponent.
+    AudioEngine engine(AudioEngine::HostMode::Hosted);
+    engine.initialise();
+
+    HostedPluginModule* hosted = nullptr;
+    {
+        MainComponent mc(tm, lf, engine, std::make_unique<MinimalProviderHPL>());
+        mc.setSize(1600, 900);
+
+        hosted = buildPluginPatch(mc);
+        ASSERT_NE(hosted, nullptr);
+        mc.getGraphEditor().updateComponents(); // the hook that installs the observers
+        ASSERT_TRUE(static_cast<bool>(hosted->onLatencyChanged));
+        ASSERT_TRUE(static_cast<bool>(hosted->onInstancePublished));
+    } // the editor closes; the engine — and `hosted` — live on
+
+    EXPECT_FALSE(static_cast<bool>(hosted->onLatencyChanged))
+        << "a destroyed MainComponent must not stay reachable from a hosted module";
+    EXPECT_FALSE(static_cast<bool>(hosted->onInstancePublished));
+
+    engine.shutdown();
 }
 
 #endif // SYNTH_ENABLE_TIMELINE
