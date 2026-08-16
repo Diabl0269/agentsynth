@@ -278,6 +278,27 @@ coverage, plus two regression tests (`MergeModeAutoWireAppearsInDiff`,
 `UntrustedRescaleShowsLandedValueNotRawPatchValue`) proving the snapshot-diff catches what a
 raw-patch-vs-live-graph diff would miss.
 
+### Patch Feedback (thumbs up/down, P6-3)
+
+`AIChatComponent::PatchCard` carries a "Good"/"Bad" pair next to the diff preview, plus an
+optional single-line comment revealed once a rating is picked. Clicking either commits
+immediately — thumbs are meant to be zero-friction, not a form — and reveals the comment field for
+anyone who wants to say why; submitting a comment later (Enter or "Save") writes a second record
+rather than mutating the first, since the underlying store is an append-only log, not a keyed
+table.
+
+**This is the client-only half of the roadmap's P6·3.** `Source/AI/PatchFeedbackStore` appends one
+JSON object per line to `<user app data>/Agent Synth/patch_feedback.jsonl` (`{timestamp, rating,
+comment?, patch}` — `patch` is the parsed patch JSON, falling back to a `patchRaw` string if it
+doesn't parse). There is currently nowhere on the server to send this: `packages/conversations`'
+`ConversationMessage` (synth-platform) has no rating field, and the client doesn't hold a
+conversation id to key a rating against until P6·8 ships. Syncing this log to the server is tracked
+separately (P6·9 in `synth-platform/roadmap.json`), gated on P6·8.
+
+The rating lives on `MessageData::ratingState`/`ratingComment` for the session (same
+"not reconstructed on replay" precedent as `showUpgradeAction`, just above) — the durable copy is
+the JSONL log, not the in-memory chat history.
+
 ### AI Patch Undo/Redo Contract
 
 `AIIntegrationService::applyPatch()` routes through `AppUndoManager::recordAIPatch()` whenever an

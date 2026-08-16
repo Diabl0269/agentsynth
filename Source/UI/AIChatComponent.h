@@ -3,6 +3,7 @@
 #include "../AI/AIIntegrationService.h"
 #include "../AI/AccountService.h"
 #include "../AI/PatchDiff.h"
+#include "../AI/PatchFeedbackStore.h"
 #include "AccountRow.h"
 #include "PlanBadge.h"
 #include "Theme/AppLookAndFeel.h"
@@ -86,6 +87,10 @@ public:
     // Testing hook: replaces the real "open in default browser" action a Quota error's Upgrade
     // button invokes, so tests can assert on the URL without ever launching a real browser.
     void setUrlOpenerForTesting(std::function<void(const juce::URL&)> opener) { urlOpener = std::move(opener); }
+
+    // Testing hook: redirects the local feedback log to a caller-supplied file so tests never
+    // touch the real per-user app-data location. Mirrors setUrlOpenerForTesting.
+    void setPatchFeedbackFileForTesting(const juce::File& file) { patchFeedbackStore = PatchFeedbackStore(file); }
 
 private:
     void timerCallback() override;
@@ -194,6 +199,10 @@ private:
     // setUrlOpenerForTesting() so no test ever launches a real browser.
     std::function<void(const juce::URL&)> urlOpener = [](const juce::URL& u) { u.launchInDefaultBrowser(); };
 
+    // P6-3: local, append-only feedback log — see PatchFeedbackStore's doc comment for why this
+    // is client-only for now (no server endpoint exists yet to sync to).
+    PatchFeedbackStore patchFeedbackStore;
+
     void updateChatDisplay();
     void scrollToBottom();
 
@@ -202,6 +211,10 @@ private:
     // for the async model fetch) from refreshModels() — the same post-setProvider() resync point
     // documented for model discovery (see CLAUDE.md "AI model discovery ordering").
     void updateHostedModeNotice();
+
+    // P6-3: thumbs up/down on a patch card. `None` is the UI's un-rated default and is never
+    // itself written to PatchFeedbackStore — only Up/Down get persisted.
+    enum class PatchRatingUiState { None, Up, Down };
 
     struct MessageData {
         juce::String role;
@@ -213,6 +226,11 @@ private:
         // constructor, so a New Chat or app restart drops it along with the rest of that turn's
         // transient UI state (mirrors how Cancel-button/spinner state is session-only).
         bool showUpgradeAction = false;
+
+        // P6-3: session-scoped UI rating state, same "not reconstructed on replay" precedent as
+        // showUpgradeAction just above — the durable record lives in patchFeedbackStore, not here.
+        PatchRatingUiState ratingState = PatchRatingUiState::None;
+        juce::String ratingComment;
 
         // Patch diff preview, computed ONCE (attachPatchPreview()) at the point this message is
         // created, not on every updateChatDisplay() re-render — see that method's doc comment.

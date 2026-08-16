@@ -76,9 +76,13 @@ public:
     // snapshots, so a diff would show the entire prior graph removed and the entire new patch
     // added — technically correct, useless to read. See PatchDiff.h.
     PatchCard(const juce::String& json, std::function<void()> applyCallback, bool isMerge,
-              const std::vector<PatchChange>& changes, bool diffAvailable, const PatchSummary& summary)
+              const std::vector<PatchChange>& changes, bool diffAvailable, const PatchSummary& summary,
+              AIChatComponent::PatchRatingUiState initialRating, const juce::String& initialComment,
+              std::function<void(AIChatComponent::PatchRatingUiState, const juce::String&)> onRateCallback)
         : patchJson(json)
-        , onApply(applyCallback) {
+        , onApply(applyCallback)
+        , onRate(std::move(onRateCallback))
+        , currentRating(initialRating) {
 
         addAndMakeVisible(headerLabel);
         headerLabel.setText(isMerge ? "Patch Update" : "New Patch", juce::dontSendNotification);
@@ -101,6 +105,29 @@ public:
         applyButton.setColour(juce::TextButton::buttonColourId,
                               isMerge ? juce::Colour(0xFF8B6914) : juce::Colours::darkgreen);
         applyButton.onClick = onApply;
+
+        addAndMakeVisible(thumbsUpButton);
+        thumbsUpButton.setButtonText(juce::String::fromUTF8("\xF0\x9F\x91\x8D"));
+        thumbsUpButton.setTooltip("This patch was helpful");
+        thumbsUpButton.onClick = [this]() { setRating(AIChatComponent::PatchRatingUiState::Up); };
+
+        addAndMakeVisible(thumbsDownButton);
+        thumbsDownButton.setButtonText(juce::String::fromUTF8("\xF0\x9F\x91\x8E"));
+        thumbsDownButton.setTooltip("This patch missed the mark");
+        thumbsDownButton.onClick = [this]() { setRating(AIChatComponent::PatchRatingUiState::Down); };
+
+        addAndMakeVisible(commentField);
+        commentField.setComponentID("patchFeedbackComment");
+        commentField.setText(initialComment, juce::dontSendNotification);
+        commentField.setTextToShowWhenEmpty("Optional: why? (Enter to send)", juce::Colours::grey);
+        commentField.onReturnKey = [this]() { notifyRate(); };
+
+        addAndMakeVisible(commentSaveButton);
+        commentSaveButton.setButtonText("Send");
+        commentSaveButton.setTooltip("Send your feedback comment");
+        commentSaveButton.onClick = [this]() { notifyRate(); };
+
+        updateThumbColours();
 
         addAndMakeVisible(diffDisplay);
         diffDisplay.setMultiLine(true);
@@ -162,6 +189,26 @@ public:
         expandButton.setBounds(buttons.removeFromRight(90).reduced(2));
 
         b.removeFromTop(5);
+
+        // Feedback rows: thumbs are always visible on a patch card, on their own row now that
+        // they're single glyphs rather than "Good"/"Bad" labels. The comment field/send button
+        // only appear once a rating has been picked, so a patch nobody has judged yet doesn't
+        // invite a comment with nothing to attach it to — that second row lives below the thumbs
+        // rather than sharing their row, so the comment field has full card width to work with.
+        auto thumbsRow = b.removeFromTop(kFeedbackRowHeight);
+        thumbsUpButton.setBounds(thumbsRow.removeFromLeft(40).reduced(2));
+        thumbsDownButton.setBounds(thumbsRow.removeFromLeft(40).reduced(2));
+        bool showComment = currentRating != AIChatComponent::PatchRatingUiState::None;
+        commentSaveButton.setVisible(showComment);
+        commentField.setVisible(showComment);
+        if (showComment) {
+            b.removeFromTop(4);
+            auto commentRow = b.removeFromTop(kFeedbackRowHeight);
+            commentSaveButton.setBounds(commentRow.removeFromRight(55).reduced(2));
+            commentField.setBounds(commentRow.reduced(2));
+        }
+        b.removeFromTop(5);
+
         if (isExpanded) {
             diffDisplay.setBounds(b.removeFromTop(diffAreaHeight()));
             b.removeFromTop(5);
@@ -174,10 +221,43 @@ public:
     }
 
     int getRequiredHeight() const {
-        int height = 35 + diffAreaHeight();
+        bool showComment = currentRating != AIChatComponent::PatchRatingUiState::None;
+        int height = 35 + kFeedbackRowHeight + (showComment ? 4 + kFeedbackRowHeight : 0) + 5 + diffAreaHeight();
         if (isExpanded)
             height += 5 + kRawJsonHeight;
         return height;
+    }
+
+    void setRating(AIChatComponent::PatchRatingUiState rating) {
+        currentRating = rating;
+        updateThumbColours();
+        // A rating being set changes the card's total height (the comment row appears below the
+        // thumbs row rather than repurposing it). MessageBubble::resized() repositions this card
+        // within its own bounds but doesn't own that bounds' size — AIChatComponent::resized() is
+        // what computes each bubble's height via bubble->getRequiredHeight(width) and lays out the
+        // whole message list, so that's the level that must relayout, not just the immediate
+        // parent. Fall back to resizing this card directly when there's no such ancestor yet (e.g.
+        // a unit test constructing PatchCard standalone).
+        if (auto* chat = findParentComponentOfClass<AIChatComponent>())
+            chat->resized();
+        else
+            resized();
+        notifyRate();
+    }
+
+    void notifyRate() {
+        if (onRate)
+            onRate(currentRating, commentField.getText());
+    }
+
+    void updateThumbColours() {
+        auto neutral = juce::Colours::darkgrey;
+        thumbsUpButton.setColour(juce::TextButton::buttonColourId,
+                                 currentRating == AIChatComponent::PatchRatingUiState::Up ? juce::Colours::darkgreen
+                                                                                          : neutral);
+        thumbsDownButton.setColour(juce::TextButton::buttonColourId,
+                                   currentRating == AIChatComponent::PatchRatingUiState::Down ? juce::Colour(0xFF8B3A3A)
+                                                                                              : neutral);
     }
 
 private:
@@ -190,8 +270,12 @@ private:
     // Grew from 160: pretty-printed (indented) JSON runs noticeably taller than the single
     // unbroken line this used to hold.
     static constexpr int kRawJsonHeight = 240;
+    static constexpr int kFeedbackRowHeight = 24;
 
     int diffAreaHeight() const { return juce::jlimit(kMinDiffHeight, kMaxDiffHeight, diffLineCount * kLineHeight + 8); }
+
+    std::function<void(AIChatComponent::PatchRatingUiState, const juce::String&)> onRate;
+    AIChatComponent::PatchRatingUiState currentRating = AIChatComponent::PatchRatingUiState::None;
 
     juce::String patchJson;
     std::function<void()> onApply;
@@ -201,6 +285,10 @@ private:
     juce::Label headerLabel;
     juce::TextButton expandButton;
     juce::TextButton applyButton;
+    juce::TextButton thumbsUpButton;
+    juce::TextButton thumbsDownButton;
+    juce::TextEditor commentField;
+    juce::TextButton commentSaveButton;
     juce::TextEditor diffDisplay;
     juce::TextEditor jsonDisplay;
 };
@@ -210,7 +298,8 @@ class AIChatComponent::MessageBubble : public juce::Component {
 public:
     MessageBubble(const MessageData& data, std::function<void(const juce::String&)> applyPatch, bool isMerge,
                   std::function<void(const juce::URL&)> urlOpener, const std::vector<PatchChange>& patchDiff,
-                  bool patchDiffAvailable, const PatchSummary& patchSummary) {
+                  bool patchDiffAvailable, const PatchSummary& patchSummary,
+                  std::function<void(AIChatComponent::PatchRatingUiState, const juce::String&)> onRate) {
         role = data.role;
         text = data.text;
 
@@ -222,7 +311,7 @@ public:
         if (data.jsonPatch.isNotEmpty()) {
             patchCard = std::make_unique<PatchCard>(
                 data.jsonPatch, [applyPatch, json = data.jsonPatch]() { applyPatch(json); }, isMerge, patchDiff,
-                patchDiffAvailable, patchSummary);
+                patchDiffAvailable, patchSummary, data.ratingState, data.ratingComment, onRate);
             addAndMakeVisible(*patchCard);
         }
 
@@ -890,7 +979,20 @@ void AIChatComponent::updateChatDisplay() {
                         refreshLater();
                     });
             },
-            isMerge, urlOpener, data.patchDiff, data.patchDiffAvailable, data.patchSummary);
+            isMerge, urlOpener, data.patchDiff, data.patchDiffAvailable, data.patchSummary,
+            [this, i](PatchRatingUiState newRating, const juce::String& comment) {
+                if (i >= messages.size())
+                    return;
+                auto& msg = messages[i];
+                msg.ratingState = newRating;
+                msg.ratingComment = comment;
+                if (newRating != PatchRatingUiState::None) {
+                    patchFeedbackStore.record(msg.jsonPatch,
+                                              newRating == PatchRatingUiState::Up ? PatchFeedbackStore::Rating::Up
+                                                                                  : PatchFeedbackStore::Rating::Down,
+                                              comment);
+                }
+            });
         messageList.addAndMakeVisible(bubble);
     }
 
