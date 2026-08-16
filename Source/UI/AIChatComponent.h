@@ -84,6 +84,12 @@ public:
     // Testing hook: returns the current isWaitingForResponse flag.
     bool isWaiting() const { return isWaitingForResponse; }
 
+    // Testing hook: responseMs of the most recent assistant message, or -1 if none / unmarked.
+    int getLastAssistantResponseMs() const;
+
+    // Compact wait-time label for the AI role row ("340ms", "1.2s", "1m 5s").
+    static juce::String formatResponseTime(int ms);
+
     // Testing hook: replaces the real "open in default browser" action a Quota error's Upgrade
     // button invokes, so tests can assert on the URL without ever launching a real browser.
     void setUrlOpenerForTesting(std::function<void(const juce::URL&)> opener) { urlOpener = std::move(opener); }
@@ -164,6 +170,10 @@ private:
     AIIntegrationService& aiService;
     juce::ApplicationProperties& appProperties;
     bool isWaitingForResponse = false;
+
+    // Wall-clock start of the in-flight wait (juce::Time::getMillisecondCounter).
+    // Meaningful only while isWaitingForResponse is true.
+    uint32_t requestStartMs = 0;
 
     // Non-owning; set (once, by MainComponent) via setAccountService(). Held only so the
     // destructor can clear the two callback slots it installs on the service — see
@@ -246,6 +256,10 @@ private:
         bool patchDiffAvailable = false;
         std::vector<PatchChange> patchDiff;
         PatchSummary patchSummary;
+
+        // Elapsed wait ms for bubbles that ended an in-flight request; -1 = no marker
+        // (history restore, patch-retry / apply-failure messages).
+        int responseMs = -1;
     };
     std::vector<MessageData> messages;
 

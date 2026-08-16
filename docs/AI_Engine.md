@@ -505,6 +505,14 @@ example set further or to gate it per-model.
 
 `AIChatComponent` (`Source/UI/AIChatComponent.cpp`) is the chat UI for AI-assisted patching. It wires user prompts to `AIIntegrationService` and displays the conversation history with optional JSON patch previews.
 
+### Response timing marker
+
+Assistant bubbles that end an in-flight wait (successful reply, provider error, cancel, or the
+120 s timeout) show a compact elapsed-time label right-aligned on the same role row as `"AI"`
+(e.g. `340ms`, `1.2s`, `1m 5s`). The value is wall-clock ms from send until the wait ends, stored
+on `MessageData::responseMs`. History-restored turns and patch-retry / apply-failure bubbles leave
+`responseMs` at `-1` and omit the marker. Format helper: `AIChatComponent::formatResponseTime`.
+
 ### Debug Logger Registration (Debug builds only)
 
 In **Debug builds only**, `AIChatComponent` registers itself as the global `juce::Logger` by calling `juce::Logger::setCurrentLogger(this)` inside the `#else` branch of an `#ifdef NDEBUG` guard in the constructor. The debug console (`TextEditor`) and the "Debug" toggle button are also created and wired there. The destructor unregisters under `#ifndef NDEBUG`:
