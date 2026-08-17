@@ -2419,9 +2419,8 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
             return;
         bodyDragActive = false;
 
-        // Clear ghost overlay before finalizing so the overlay is gone at the exact
-        // moment the module lands in its snapped position.
-        owner.endDragPreview();
+        // Finalize first so smart-connection suggestions (still held on the editor) can apply;
+        // then clear the ghost overlay.
         if (getPosition() != dragStartPosition) {
             // Snap to grid and resolve overlap BEFORE the undo snapshot so the
             // snapped/cleared final position is what gets captured in the diff.
@@ -2439,5 +2438,6 @@ void ModuleComponent::mouseUp(const juce::MouseEvent& e) {
             // Click without movement: drop the recorded origins without re-resolving positions.
             owner.cancelSelectionDrag();
         }
+        owner.endDragPreview();
     }
 }

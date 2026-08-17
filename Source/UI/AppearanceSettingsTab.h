@@ -11,7 +11,7 @@ class GraphEditor; // forward declaration for AppearanceSettingsTab
 // offers "Open Themes Folder" (File::revealToUser) and "Reload Themes"
 // (ThemeManager::loadUserThemesFromFolder). Highlights the active row; updates if the manager
 // broadcasts (it is a ChangeListener so external changes reflect here too).
-// Also contains a toggle for alignment guides visibility.
+// Also contains a toggle for alignment guides and a combo for smart-connection mode.
 class AppearanceSettingsTab
     : public juce::Component
     , private juce::ChangeListener {
@@ -76,6 +76,9 @@ private:
     juce::ComboBox defaultLightCombo;
 
     juce::ToggleButton alignmentGuideToggle{"Show Alignment Guides"};
+
+    juce::Label smartConnectionLabel;
+    juce::ComboBox smartConnectionCombo;
 
     // ---- Cable colour controls ----
     juce::Label cablesTitleLabel;
