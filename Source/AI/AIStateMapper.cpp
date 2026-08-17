@@ -296,6 +296,8 @@ juce::String patchValidationErrorName(PatchValidationError error) {
         return "InvalidParameterValue";
     case PatchValidationError::InvalidChoiceValue:
         return "InvalidChoiceValue";
+    case PatchValidationError::UnknownParameterKey:
+        return "UnknownParameterKey";
     case PatchValidationError::ConnectionEntryInvalid:
         return "ConnectionEntryInvalid";
     case PatchValidationError::ConnectionUnknownNode:
@@ -326,6 +328,34 @@ juce::String patchValidationErrorName(PatchValidationError error) {
 
 PatchValidationResult AIStateMapper::validateNodeParams(juce::AudioProcessor* processor,
                                                         const juce::DynamicObject* paramsObj) {
+    std::set<juce::String> knownParamIds;
+    for (auto* param : processor->getParameters()) {
+        if (auto* p = dynamic_cast<juce::RangedAudioParameter*>(param))
+            knownParamIds.insert(p->paramID);
+    }
+
+    // applyParamsToProcessor (see file) only ever walks the processor's real parameters and looks
+    // each one up BY NAME in this object — a key that doesn't match any real paramID is never
+    // visited there, so it is silently dropped and the parameter is left at its default instead of
+    // being rejected. Catch that here so the mismatch surfaces as a validation failure and the
+    // retry/repair loop actually engages, rather than reporting success on a patch that quietly did
+    // less than it claimed.
+    for (const auto& entry : paramsObj->getProperties()) {
+        const juce::String key = entry.name.toString();
+        if (knownParamIds.count(key) == 0) {
+            // Name the real parameter IDs, not just that one was wrong — same reasoning as
+            // describeKnownIds() above: a retry that can't see the valid options re-rolls blind.
+            juce::StringArray ids;
+            for (const auto& id : knownParamIds)
+                ids.add(id);
+            return {false, PatchValidationError::UnknownParameterKey,
+                    "Unknown parameter \"" + key +
+                        "\" — it doesn't match any real parameter on this module and would be silently ignored, "
+                        "leaving that value at its default. This module's actual parameter IDs are: " +
+                        ids.joinIntoString(", ") + "."};
+        }
+    }
+
     for (auto* param : processor->getParameters()) {
         auto* p = dynamic_cast<juce::RangedAudioParameter*>(param);
         if (!p || !paramsObj->hasProperty(p->paramID))

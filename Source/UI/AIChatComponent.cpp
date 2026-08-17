@@ -366,6 +366,7 @@ public:
                   std::function<void(const juce::String&)> applyTimelineOps) {
         role = data.role;
         text = data.text;
+        responseMs = data.responseMs;
 
         addAndMakeVisible(textLabel);
         textLabel.setText(text, juce::dontSendNotification);
@@ -413,10 +414,15 @@ public:
         g.setColour(juce::Colours::white.withAlpha(0.15f));
         g.drawRoundedRectangle(b, 10.0f, 1.0f);
 
-        // Role indicator
+        // Role indicator (+ optional elapsed-wait marker on assistant bubbles)
+        auto roleBand = b.removeFromTop(12).reduced(5, 0);
         g.setColour(isUser ? juce::Colours::lightblue : juce::Colours::grey);
         g.setFont(juce::Font(10.0f, juce::Font::italic));
-        g.drawText(isUser ? "YOU" : "AI", b.removeFromTop(12).reduced(5, 0), juce::Justification::left);
+        g.drawText(isUser ? "YOU" : "AI", roleBand, juce::Justification::left);
+
+        if (!isUser && responseMs >= 0) {
+            g.drawText(AIChatComponent::formatResponseTime(responseMs), roleBand, juce::Justification::right);
+        }
     }
 
     void resized() override {
@@ -470,6 +476,7 @@ private:
 
     juce::String role;
     juce::String text;
+    int responseMs = -1;
     juce::Label textLabel;
     std::unique_ptr<PatchCard> patchCard;
     std::unique_ptr<TimelineCard> timelineCard;
@@ -653,11 +660,29 @@ void AIChatComponent::setAccountService(AccountService* service) {
 }
 
 void AIChatComponent::timerCallback() {
-    // The 120 s timer fired — request has timed out.
+    if (!isWaitingForResponse)
+        return;
+
+    const int elapsed = (int)(juce::Time::getMillisecondCounter() - requestStartMs);
+    if (elapsed < kRequestTimeoutMs) {
+        refreshWaitingStatusLabel();
+        return;
+    }
+
+    // Request has timed out.
     cancelRequest();
     messages.push_back({"assistant", "Error: Request timed out after 2 minutes.", ""});
+    messages.back().responseMs = elapsed;
     updateChatDisplay();
     inputField.grabKeyboardFocus();
+}
+
+void AIChatComponent::refreshWaitingStatusLabel() {
+    if (waitingStatusLabel == nullptr || !isWaitingForResponse)
+        return;
+
+    const int elapsed = (int)(juce::Time::getMillisecondCounter() - requestStartMs);
+    waitingStatusLabel->setText("AI is thinking... " + formatResponseTime(elapsed), juce::dontSendNotification);
 }
 
 bool AIChatComponent::keyPressed(const juce::KeyPress& key) {
@@ -672,8 +697,10 @@ bool AIChatComponent::keyPressed(const juce::KeyPress& key) {
 }
 
 void AIChatComponent::handleUserCancel() {
+    const int elapsed = (int)(juce::Time::getMillisecondCounter() - requestStartMs);
     cancelRequest();
     messages.push_back({"assistant", "Cancelled.", ""});
+    messages.back().responseMs = elapsed;
     updateChatDisplay();
     inputField.grabKeyboardFocus();
 }
@@ -689,7 +716,7 @@ void AIChatComponent::cancelRequest() {
     if (cancelling.value != 0)
         aiService.cancelRequest(cancelling);
 
-    // Stop the timeout timer.
+    // Stop the live thinking-status / timeout timer.
     stopTimer();
 
     // Stop the pulse animation and hide the spinner.
@@ -701,6 +728,7 @@ void AIChatComponent::cancelRequest() {
     sendButton.setEnabled(true);
     inputField.setReadOnly(false);
     isWaitingForResponse = false;
+    waitingStatusLabel = nullptr;
 }
 
 void AIChatComponent::resized() {
@@ -850,6 +878,7 @@ void AIChatComponent::sendButtonClicked() {
     // Add user message to local state immediately
     messages.push_back({"user", text, ""});
     isWaitingForResponse = true;
+    requestStartMs = juce::Time::getMillisecondCounter();
     updateChatDisplay();
 
     sendButton.setEnabled(false);
@@ -860,8 +889,8 @@ void AIChatComponent::sendButtonClicked() {
     spinnerDot.setVisible(true);
     spinnerDot.startPulse(vblankUpdater);
 
-    // Start timeout timer (120 seconds)
-    startTimer(120000);
+    // Live thinking-status timer (also enforces the 120 s timeout).
+    startTimer(kWaitingStatusIntervalMs);
 
     const auto requestId = aiService.sendMessage(
         text,
@@ -886,6 +915,8 @@ void AIChatComponent::sendButtonClicked() {
                 // provider is just confirming. An error bubble here would contradict it.
                 if (aiResponse.error.kind == AIProvider::AIErrorKind::Cancelled)
                     return;
+
+                const int elapsed = (int)(juce::Time::getMillisecondCounter() - self->requestStartMs);
 
                 if (aiResponse.success) {
                     const juce::String& response = aiResponse.content;
@@ -942,6 +973,7 @@ void AIChatComponent::sendButtonClicked() {
 
                     self->messages.push_back({"assistant", cleanText.trim(), json, /*isExpanded=*/false,
                                               /*showUpgradeAction=*/false, timelineOpsJson, timelineOpsPreview});
+                    self->messages.back().responseMs = elapsed;
                     self->attachPatchPreview(self->messages.back());
                 } else if (aiResponse.error.kind == AIProvider::AIErrorKind::Quota) {
                     // The server's message is already a complete, user-facing sentence — no
@@ -949,12 +981,14 @@ void AIChatComponent::sendButtonClicked() {
                     // showUpgradeAction=true adds the Upgrade-to-Pro button (see MessageBubble).
                     self->messages.push_back({"assistant", aiResponse.error.message, "", false,
                                               /*showUpgradeAction=*/true});
+                    self->messages.back().responseMs = elapsed;
                     // The user may have just paid mid-session — check again so a retry right after
                     // upgrading reflects the new plan without restarting the app.
                     if (self->accountServicePtr != nullptr)
                         self->accountServicePtr->refreshEntitlement();
                 } else {
                     self->messages.push_back({"assistant", "Error: " + aiResponse.error.message, ""});
+                    self->messages.back().responseMs = elapsed;
                 }
 
                 self->updateChatDisplay();
@@ -1029,6 +1063,7 @@ void AIChatComponent::attachPatchPreview(MessageData& data) {
 }
 
 void AIChatComponent::updateChatDisplay() {
+    waitingStatusLabel = nullptr;
     messageList.deleteAllChildren();
 
     for (size_t i = 0; i < messages.size(); ++i) {
@@ -1134,10 +1169,10 @@ void AIChatComponent::updateChatDisplay() {
     }
 
     if (isWaitingForResponse) {
-        auto* loading = new juce::Label();
-        messageList.addAndMakeVisible(loading);
-        loading->setText("AI is thinking...", juce::dontSendNotification);
-        loading->setColour(juce::Label::textColourId, juce::Colours::grey);
+        waitingStatusLabel = new juce::Label();
+        messageList.addAndMakeVisible(waitingStatusLabel);
+        waitingStatusLabel->setColour(juce::Label::textColourId, juce::Colours::grey);
+        refreshWaitingStatusLabel();
     }
 
     resized();
@@ -1145,6 +1180,36 @@ void AIChatComponent::updateChatDisplay() {
 }
 
 void AIChatComponent::scrollToBottom() { viewport.setViewPosition(0, messageList.getHeight()); }
+
+juce::String AIChatComponent::formatResponseTime(int ms) {
+    if (ms < 0)
+        ms = 0;
+
+    if (ms < 1000)
+        return juce::String(ms) + "ms";
+
+    if (ms < 60000) {
+        const double seconds = (double)ms / 1000.0;
+        return juce::String(seconds, 1) + "s";
+    }
+
+    const int totalSeconds = ms / 1000;
+    const int minutes = totalSeconds / 60;
+    const int seconds = totalSeconds % 60;
+    return juce::String(minutes) + "m " + juce::String(seconds) + "s";
+}
+
+int AIChatComponent::getLastAssistantResponseMs() const {
+    for (auto it = messages.rbegin(); it != messages.rend(); ++it) {
+        if (it->role == "assistant")
+            return it->responseMs;
+    }
+    return -1;
+}
+
+juce::String AIChatComponent::getWaitingStatusText() const {
+    return waitingStatusLabel != nullptr ? waitingStatusLabel->getText() : juce::String();
+}
 
 void AIChatComponent::refreshModels() {
     // Provider identity (unlike its model list) is known synchronously right after

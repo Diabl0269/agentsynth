@@ -190,8 +190,11 @@ TEST(AIStateMapperTest, MergeMode_PrePopulatesIdMapForCrossConnections) {
     ASSERT_NE(vcaNode, nullptr);
     int existingVcaId = (int)vcaNode->nodeID.uid;
 
-    // Delta JSON: add an Oscillator and connect it to the existing VCA
-    juce::String jsonStr = "{\"nodes\":[{\"id\":9001,\"type\":\"Oscillator\",\"params\":{\"frequency\":440.0}}],"
+    // Delta JSON: add an Oscillator and connect it to the existing VCA. Uses a real paramID
+    // ("fine") — this used to say "frequency", which is not a real Oscillator parameter and was
+    // silently dropped by applyParamsToProcessor's by-name lookup, same failure mode as the bug
+    // this file's UnknownParameterKey tests cover; validateNodeParams now catches that.
+    juce::String jsonStr = "{\"nodes\":[{\"id\":9001,\"type\":\"Oscillator\",\"params\":{\"fine\":40.0}}],"
                            "\"connections\":[{\"src\":9001,\"srcPort\":0,\"dst\":" +
                            juce::String(existingVcaId) + ",\"dstPort\":0}]}";
     juce::var json = juce::JSON::parse(jsonStr);
@@ -234,9 +237,12 @@ TEST(AIStateMapperTest, MergeMode_UpdateExistingNodeParams) {
     ASSERT_NE(oscNode, nullptr);
     int oscId = (int)oscNode->nodeID.uid;
 
-    // Delta JSON: update frequency on existing oscillator (same ID, same type)
+    // Delta JSON: update an existing oscillator's parameter (same ID, same type). Uses a real
+    // paramID ("fine") — this used to say "frequency", which is not a real Oscillator parameter
+    // and was silently dropped by applyParamsToProcessor's by-name lookup (the loop below never
+    // found it either, so this assertion was a silent no-op before this fix).
     juce::String jsonStr = "{\"nodes\":[{\"id\":" + juce::String(oscId) +
-                           ",\"type\":\"Oscillator\",\"params\":{\"frequency\":880.0}}],\"connections\":[]}";
+                           ",\"type\":\"Oscillator\",\"params\":{\"fine\":75.0}}],\"connections\":[]}";
     juce::var json = juce::JSON::parse(jsonStr);
 
     bool success = synth::AIStateMapper::applyJSONToGraph(json, graph, false);
@@ -245,17 +251,20 @@ TEST(AIStateMapperTest, MergeMode_UpdateExistingNodeParams) {
 
     // Verify parameter was updated
     auto* processor = oscNode->getProcessor();
+    bool foundParam = false;
     for (auto* param : processor->getParameters()) {
         if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
-            if (p->paramID == "frequency") {
+            if (p->paramID == "fine") {
                 float denormalized =
                     dynamic_cast<juce::RangedAudioParameter*>(param)->getNormalisableRange().convertFrom0to1(
                         param->getValue());
-                ASSERT_NEAR(denormalized, 880.0f, 1.0f);
+                ASSERT_NEAR(denormalized, 75.0f, 1.0f);
+                foundParam = true;
                 break;
             }
         }
     }
+    EXPECT_TRUE(foundParam) << "\"fine\" parameter not found on Oscillator";
 }
 
 TEST(AIStateMapperTest, FactorySupportsAllModuleTypes) {
@@ -774,6 +783,76 @@ TEST(AIStateMapperTest, RejectsNaNAndInfinityParameterValues) {
         EXPECT_FALSE(success);
         EXPECT_EQ(graph.getNumNodes(), 0);
     }
+}
+
+// Regression for a real Ollama grammar-decoder failure: the model's structured-output decoder
+// corrupted the "waveform" key into the literal string `waveform": "Saw",` and mapped it to
+// itself, so the real "waveform" key never appeared in the JSON at all. Before this test's fix,
+// applyParamsToProcessor only ever looked up known paramIDs BY NAME, so the corrupted key was
+// silently ignored, the Oscillator stayed at its constructed default, and the patch was reported
+// as applied successfully. validateNodeParams must now catch the unmatched key and fail closed so
+// the existing bounded-retry loop (AIIntegrationService::applyPatchWithRetry) engages instead.
+TEST(AIStateMapperTest, RejectsUnknownParameterKeyFromGarbledOllamaOutput) {
+    juce::AudioProcessorGraph graph;
+    juce::DynamicObject::Ptr params = new juce::DynamicObject();
+    params->setProperty("bypassed", false);
+    params->setProperty(juce::Identifier("waveform\": \"Saw\","), juce::String("waveform\": \"Saw\","));
+    params->setProperty("octave", 0.0);
+    params->setProperty("coarse", 0.0);
+    params->setProperty("fine", 0.0);
+    params->setProperty("unison", 8.0);
+    params->setProperty("detune", 20.0);
+
+    juce::DynamicObject::Ptr node = new juce::DynamicObject();
+    node->setProperty("id", 1);
+    node->setProperty("type", "Oscillator");
+    node->setProperty("params", juce::var(params.get()));
+
+    juce::DynamicObject::Ptr root = new juce::DynamicObject();
+    root->setProperty("nodes", juce::Array<juce::var>({juce::var(node.get())}));
+    root->setProperty("connections", juce::Array<juce::var>());
+
+    auto validation =
+        synth::AIStateMapper::validatePatch(juce::var(root.get()), graph, /*clearExisting=*/true, /*trusted=*/false);
+    EXPECT_FALSE(validation.ok);
+    EXPECT_EQ(validation.error, synth::PatchValidationError::UnknownParameterKey);
+
+    EXPECT_FALSE(synth::AIStateMapper::applyJSONToGraph(juce::var(root.get()), graph, /*clearExisting=*/true,
+                                                        /*trusted=*/false));
+    EXPECT_EQ(graph.getNumNodes(), 0);
+}
+
+// Simpler unit case for the same rule: any params key that doesn't match a real paramID on the
+// module — not just the specific corrupted shape above — must be rejected.
+TEST(AIStateMapperTest, RejectsGenericUnknownParameterKey) {
+    juce::AudioProcessorGraph graph;
+    juce::var json = juce::JSON::parse(
+        R"({"nodes":[{"id":1,"type":"Oscillator","params":{"waveform":"Saw","bogusKey":1.0}}],"connections":[]})");
+
+    auto validation = synth::AIStateMapper::validatePatch(json, graph, /*clearExisting=*/true, /*trusted=*/false);
+    EXPECT_FALSE(validation.ok);
+    EXPECT_EQ(validation.error, synth::PatchValidationError::UnknownParameterKey);
+    // The message must name a real parameter ID, not just report that one was wrong — pinned so a
+    // future edit can't quietly drop the list the retry loop needs to converge.
+    EXPECT_TRUE(validation.message.contains("detune")) << validation.message;
+
+    EXPECT_FALSE(synth::AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/false));
+    EXPECT_EQ(graph.getNumNodes(), 0);
+}
+
+// Negative control: a params object containing only real paramIDs must still validate OK, so the
+// new check doesn't false-positive on legitimate patches.
+TEST(AIStateMapperTest, ValidParamsObjectStillPassesValidation) {
+    juce::AudioProcessorGraph graph;
+    juce::var json = juce::JSON::parse(
+        R"({"nodes":[{"id":1,"type":"Oscillator","params":{"waveform":"Saw","octave":0.0,"coarse":0.0,)"
+        R"("fine":0.0,"unison":8.0,"detune":20.0,"bypassed":false}}],"connections":[]})");
+
+    auto validation = synth::AIStateMapper::validatePatch(json, graph, /*clearExisting=*/true, /*trusted=*/false);
+    EXPECT_TRUE(validation.ok) << validation.message;
+
+    EXPECT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/false));
+    EXPECT_EQ(graph.getNumNodes(), 1);
 }
 
 TEST(AIStateMapperTest, RejectsNegativeAndOutOfRangePortIndices) {

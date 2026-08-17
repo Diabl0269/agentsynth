@@ -84,6 +84,15 @@ public:
     // Testing hook: returns the current isWaitingForResponse flag.
     bool isWaiting() const { return isWaitingForResponse; }
 
+    // Testing hook: responseMs of the most recent assistant message, or -1 if none / unmarked.
+    int getLastAssistantResponseMs() const;
+
+    // Compact wait-time label for the AI role row ("340ms", "1.2s", "1m 5s").
+    static juce::String formatResponseTime(int ms);
+
+    // Testing hook: text of the in-flight "AI is thinking..." status label, or empty when not waiting.
+    juce::String getWaitingStatusText() const;
+
     // Testing hook: replaces the real "open in default browser" action a Quota error's Upgrade
     // button invokes, so tests can assert on the URL without ever launching a real browser.
     void setUrlOpenerForTesting(std::function<void(const juce::URL&)> opener) { urlOpener = std::move(opener); }
@@ -94,6 +103,9 @@ public:
 
 private:
     void timerCallback() override;
+
+    // Refreshes the in-flight thinking label with the current elapsed wait (no full redraw).
+    void refreshWaitingStatusLabel();
 
     // Stops the in-flight request and resets all waiting state.
     // Called both by the cancel button and by the timeout path.
@@ -166,6 +178,19 @@ private:
     AIIntegrationService& aiService;
     juce::ApplicationProperties& appProperties;
     bool isWaitingForResponse = false;
+
+    // Wall-clock start of the in-flight wait (juce::Time::getMillisecondCounter).
+    // Meaningful only while isWaitingForResponse is true.
+    uint32_t requestStartMs = 0;
+
+    // Non-owning pointer to the "AI is thinking..." label in messageList (owned by messageList).
+    // Null whenever not waiting. Cleared before messageList.deleteAllChildren().
+    juce::Label* waitingStatusLabel = nullptr;
+
+    static constexpr int kRequestTimeoutMs = 120000;
+    // Tick rate for the live thinking timer — updates the status label only (not a full-panel
+    // repaint). Matches the AI-thinking spinner exception in the UI perf contract.
+    static constexpr int kWaitingStatusIntervalMs = 500;
 
     // Non-owning; set (once, by MainComponent) via setAccountService(). Held only so the
     // destructor can clear the two callback slots it installs on the service — see
@@ -257,6 +282,10 @@ private:
         bool patchDiffAvailable = false;
         std::vector<PatchChange> patchDiff;
         PatchSummary patchSummary;
+
+        // Elapsed wait ms for bubbles that ended an in-flight request; -1 = no marker
+        // (history restore, patch-retry / apply-failure messages).
+        int responseMs = -1;
     };
     std::vector<MessageData> messages;
 
