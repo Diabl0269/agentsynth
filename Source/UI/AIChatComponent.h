@@ -90,7 +90,7 @@ public:
     // Compact wait-time label for the AI role row ("340ms", "1.2s", "1m 5s").
     static juce::String formatResponseTime(int ms);
 
-    // Testing hook: text of the in-flight "AI is thinking…" status label, or empty when not waiting.
+    // Testing hook: text of the in-flight "AI is thinking..." status label, or empty when not waiting.
     juce::String getWaitingStatusText() const;
 
     // Testing hook: replaces the real "open in default browser" action a Quota error's Upgrade
@@ -181,7 +181,7 @@ private:
     // Meaningful only while isWaitingForResponse is true.
     uint32_t requestStartMs = 0;
 
-    // Non-owning pointer to the "AI is thinking…" label in messageList (owned by messageList).
+    // Non-owning pointer to the "AI is thinking..." label in messageList (owned by messageList).
     // Null whenever not waiting. Cleared before messageList.deleteAllChildren().
     juce::Label* waitingStatusLabel = nullptr;
 

@@ -597,7 +597,7 @@ void AIChatComponent::refreshWaitingStatusLabel() {
         return;
 
     const int elapsed = (int)(juce::Time::getMillisecondCounter() - requestStartMs);
-    waitingStatusLabel->setText("AI is thinking… " + formatResponseTime(elapsed), juce::dontSendNotification);
+    waitingStatusLabel->setText("AI is thinking... " + formatResponseTime(elapsed), juce::dontSendNotification);
 }
 
 bool AIChatComponent::keyPressed(const juce::KeyPress& key) {

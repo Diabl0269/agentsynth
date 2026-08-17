@@ -513,7 +513,7 @@ Assistant bubbles that end an in-flight wait (successful reply, provider error, 
 on `MessageData::responseMs`. History-restored turns and patch-retry / apply-failure bubbles leave
 `responseMs` at `-1` and omit the marker. Format helper: `AIChatComponent::formatResponseTime`.
 
-While a request is in flight, the `"AI is thinking…"` status line shows the same formatted elapsed
+While a request is in flight, the `"AI is thinking..."` status line shows the same formatted elapsed
 time and refreshes on a 500 ms `juce::Timer` tick (label text only — not a full chat redraw). That
 timer also enforces the 120 s timeout.
 
