@@ -874,6 +874,34 @@ When you change themes, alignment guides update to the new `textMuted` colour au
 
 ---
 
+## 6b. Smart Connections
+
+While placing a module, Agent Synth can **suggest logical cables** to nearby modules and auto-wire them on drop.
+
+### Modes (`Settings → Appearance → Smart connections`)
+
+Persisted as `smartConnectionMode` in `juce::ApplicationProperties`. Default: **New + unwired moves**.
+
+| Mode | Library drop | Reposition existing module |
+|---|---|---|
+| **Off** | Never | Never |
+| **New modules only** | Yes | Never |
+| **New + unwired moves** (default) | Yes | Only if the moved module has no cables yet |
+| **All module moves** | Yes | Yes (still only onto free destination jacks) |
+
+Group multi-select drags never smart-connect. Snippet drops are excluded.
+
+### Behaviour
+
+1. During `updateDragPreview()`, if the mode allows it, scan neighbors within **96 px** edge-to-edge of the landing ghost.
+2. Score compatible jack pairs (role match via `scoreJackPair`, free destination jacks, left→right bias). Cap at the best neighbor’s audio group (stereo L→L / R→R, or mono↔stereo fan of both legs) plus one MIDI suggestion. Mod-matrix / attenuverter destinations are skipped in v1. MIDI suggestions are limited to known MIDI sources/destinations (Sequencer, Poly MIDI, MIDI Keyboard, Oscillator, …) because `ModuleBase` defaults `producesMidi()`/`acceptsMidi()` to true for almost every card.
+3. Frosted preview cables are drawn in `paintOverChildren` (~40% alpha via `drawConnectionWire`).
+4. On drop / `finalizeModuleDrag`, pending suggestions are applied through `connectPorts` (same path as a manual cable drag: poly fans, MIDI, structural pitch/gate).
+
+Library drags cache a short-lived `AIStateMapper::createModule` probe for jack metadata before a real `ModuleComponent` exists.
+
+---
+
 ## 12. Multi-Select, Group Drag, Snippets & Clipboard (issue #156)
 
 ### 12.1 Why the gesture is modifier-gated
