@@ -481,6 +481,7 @@ protected:
      *  in front of the output, exactly as it would in a real session. */
     static void buildInputPatch(MainComponent& mc) {
         auto& graph = mc.getAudioEngine().getGraph();
+        mc.getGraphEditor().detachAllModuleComponents(); // UI lets go BEFORE the modules die
         graph.clear();
         graph.setPlayConfigDetails(2, 2, kSampleRate, kBlockSize);
         auto in = graph.addNode(std::make_unique<AudioInputModule>());

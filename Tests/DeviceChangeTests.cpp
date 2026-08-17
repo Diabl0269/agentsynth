@@ -351,6 +351,10 @@ private:
  *  it would in a real session — same shape as LatencyAlignmentTests.cpp's own buildInputPatch. */
 void buildInputPatch(MainComponent& mc) {
     auto& graph = mc.getAudioEngine().getGraph();
+    // UI first, modules second — the ordering contract every product path honours (see
+    // PluginProcessor::setStateInformation): a ModuleComponent detached AFTER its module died
+    // dereferences a destroyed processor (glibc hangs on the dead keyboard-state mutex).
+    mc.getGraphEditor().detachAllModuleComponents();
     graph.clear();
     graph.setPlayConfigDetails(2, 2, kSampleRate, kBlockSize);
     auto in = graph.addNode(std::make_unique<AudioInputModule>());
@@ -618,6 +622,7 @@ TEST_F(DeviceChangeFlowTest, MidiTakeCommittedAtFormatChange) {
     // MIDI recording needs nothing from the graph — clear it so handleIncomingMidiMessage(nullptr,
     // ...) below has no ExternalMidiModule to (safely, but needlessly) dereference the null source
     // against.
+    mc.getGraphEditor().detachAllModuleComponents(); // UI lets go BEFORE the modules die
     engine.getGraph().clear();
 
     auto fake48 = makeFakeAt(kSampleRate);

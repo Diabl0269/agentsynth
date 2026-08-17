@@ -352,6 +352,7 @@ protected:
     static void buildPassthroughPatch(MainComponent& mc) {
         auto& engine = mc.getAudioEngine();
         auto& graph = engine.getGraph();
+        mc.getGraphEditor().detachAllModuleComponents(); // UI lets go BEFORE the modules die
         graph.clear();
         graph.setPlayConfigDetails(2, 2, kSampleRate, kBlockSize);
         auto in = graph.addNode(std::make_unique<AudioInputModule>());
