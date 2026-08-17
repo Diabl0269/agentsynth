@@ -248,7 +248,7 @@ public:
 
     // ---- Smart connections --------------------------------------------------
     // Proximity-based cable suggestions while placing a module. One setting covers Off /
-    // library-only / library+unwired moves / all moves (see SmartConnectionMode).
+    // library-only / free-main-I/O moves / all moves (see SmartConnectionMode).
     enum class SmartConnectionMode { Off, NewOnly, NewAndUnwired, AllMoves };
 
     /** One suggested cable shown as a frosted preview during drag; applied on drop. */
@@ -507,6 +507,7 @@ private:
     static juce::Point<int> estimatePortCenter(juce::AudioProcessor* proc, juce::Rectangle<int> bounds, int jack,
                                                bool isInput, bool isMidi);
     bool isInputJackFree(juce::AudioProcessorGraph::NodeID nodeId, int jack, bool isMidi) const;
+    bool isOutputJackFree(juce::AudioProcessorGraph::NodeID nodeId, int jack, bool isMidi) const;
     bool areJacksAlreadyConnected(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
                                   juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi) const;
 
