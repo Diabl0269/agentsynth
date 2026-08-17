@@ -1377,7 +1377,7 @@ Region layout, low-rate transport poll aside (see TL5-4 below), everything here 
 layout-plus-paint with no timer or animation of its own — one region diagram for the whole panel:
 
 ```
-+--------------------------------------------------------------------+
++====================================================================+  <- resize grab strip
 | Transport bar strip  (play/stop/record/loop, BPM, time-sig, ruler   |  TL5-5 (+ TL5-2's
 | readout, metronome/count-in .......................... snap combo) |   snap selector)
 +---------------------+----------------------------------------------+
@@ -1424,6 +1424,37 @@ A toolbar toggle (`ToolbarComponent::Slot::ToggleTimeline`, right-hand group, im
 `ToggleTheme`) and the **Cmd+T** shortcut (action id `toggleTimelinePanel`; see
 [`shortcuts.md`](shortcuts.md)) both flip `MainComponent::isTimelineVisible`. Visibility persists
 under the `timelinePanelVisible` key in `juce::ApplicationProperties`, default `false`.
+
+### Height: user-resizable, persisted
+
+The panel's height is **not** fixed. `Metrics::timelinePanelHeight` (220) is the **default and the
+minimum**, no longer the law:
+
+- **`MainComponent` owns the value** (`timelinePanelHeight_`), and it is the only thing that lays
+  the panel out. `resized()`, `computePanelBounds()` and therefore **both ends of the show/hide
+  slide** all read the member, never the metric directly.
+- **Clamp rule**, applied in `MainComponent::clampTimelinePanelHeight()` on every layout pass, not
+  only when the user drags: `[Metrics::timelinePanelHeight, max(metric, 75% of the window height)]`.
+  Re-clamping per pass is what stops a height saved on a large window from swallowing a smaller
+  window's canvas; on a window so short that 75% falls under the metric, the floor wins. Before the
+  first layout (window height still 0) only the floor applies — otherwise construction would clamp a
+  persisted height away against a window that does not exist yet.
+- **Persistence**: the `timelinePanelHeight` int key (same name as the metric) in
+  `juce::ApplicationProperties`, absent by default — absence is what makes the metric the default.
+  Written **once per gesture**, on drag end, never per pixel.
+- **The grab strip** (`TimelinePanelComponent::kResizeHandleHeight = 5`, `MouseCursor::
+  UpDownResizeCursor`) spans the panel's full width along its top edge, *overlapping* the transport
+  bar strip: `getTransportBarBounds()` still starts at `y == 0` (the three regions tile exactly, as
+  before), but the transport controls inside it are laid out below the strip, so a resize grab never
+  lands on a transport button. Idle it paints exactly the hairline the panel already drew there;
+  hovered or dragging it brightens to the accent colour with a faint wash, and it repaints **only on
+  a hover-state change** (§10–11's repaint discipline).
+- **The panel never resizes itself.** Dragging reports the *desired* height — measured absolutely,
+  from the panel's pinned bottom edge in screen coordinates, so the owner moving the top edge under
+  the cursor can't make the gesture chase itself — through `onResizeHeight` (every drag step,
+  unclamped) and `onResizeHeightCommitted` (once, on mouse-up: the cue to persist). The owner clamps,
+  stores and re-runs its layout on each step, which is what makes the drag live. That is one
+  user-driven layout pass per mouse event, not a free-running animation.
 
 ### Animation
 
@@ -1482,18 +1513,36 @@ after one of its own interactions, or by the panel's 10 Hz poll when the time si
 changed from elsewhere (TL5-4, below). The moving position line is the separate
 `TimelinePlayheadOverlay` drawn over it.
 
-**Ruler interactions:**
+**Two interaction zones.** The strip is split horizontally at `height / 2`
+(`TimelineRulerComponent::Zone`): the **top** half owns the loop range, the **bottom** half owns the
+playhead. The boundary row belongs to the playhead (`y < height * 0.5` is the loop zone). Both
+gestures are therefore reachable with no modifier, which is the point — a plain drag anywhere in the
+bottom half scrubs the cursor, which is what people expect a ruler to do.
+
+The zone is decided **once**, from the `mouseDown` y, and latched in `gestureZone_` for the whole
+gesture. A drag routinely leaves the band it started in (and often the strip entirely), and a
+gesture must never change meaning mid-flight.
 
 | Gesture | Effect |
 |---|---|
-| Click (no drag) | `transport->locateBeat()` to the snapped beat under the cursor |
-| Press-drag-release | `transport->setLoop(min, max, true)` to the snapped `[start,end]` range (dragging leftwards normalises) |
-| Cmd+click (no drag) | Toggles looping off, keeping the existing bounds (v1 — no re-enable-from-click) |
+| Press in the bottom (playhead) zone | `transport->locateBeat()` to the snapped beat under the cursor — on **press**, not release |
+| Drag in the bottom zone | Keeps seeking as the pointer moves: the cursor follows the mouse (scrub) |
+| Press-drag-release in the top (loop) zone | `transport->setLoop(min, max, true)` to the snapped `[start,end]` range (dragging leftwards normalises) |
+| Click (no drag) in the top zone | **Nothing.** Deliberate: the loop range is all this half owns, so a stray click can't clear or collapse it |
+| Cmd+click (no drag), either zone | Toggles looping off, keeping the existing bounds (v1 — no re-enable-from-click) |
 
-During a drag, `setLoop()` is posted from `mouseDrag` whenever the snapped pair changes since the
-last post (not on every pixel of movement — `TransportService`'s command FIFO dedupes nothing);
-`mouseUp` reuses the same throttle, so it's a no-op if the last drag update already posted the
-final pair.
+Both drag paths share the same throttle discipline: a command is posted only when the snapped value
+changed since the last post, never once per pixel of movement (`TransportService`'s command FIFO
+dedupes nothing). `postSeekIfChanged` dedupes on the beat clamped to `>= 0` — the same clamp
+`locateBeat` applies — so dragging left of beat 0 can't re-post identical seeks; `postLoopIfChanged`
+dedupes on the `[start,end]` pair. `mouseUp` calls its zone's poster again, so it is a no-op when the
+last drag update already posted the final value.
+
+**Hover affordance.** `mouseEnter`/`mouseMove` set the hovered zone, `mouseExit` clears it. The
+cursor changes per zone (`PointingHandCursor` over the playhead half, `LeftRightResizeCursor` over
+the loop half) and `paint()` tints the hovered half with `accent` at 10% alpha, under the loop brace
+so the brace stays legible. `repaint()` fires only when the hovered zone actually **changes** — never
+per mouse-move pixel — and there is no timer or animation involved (§11).
 
 **Grid + wheel:** `TimelinePanelComponent::paint()` draws the same bar/beat lines directly into the
 lanes region below the ruler (bar lines at full `colors.border`, beat lines at 35% alpha — no
@@ -1537,9 +1586,15 @@ a theme-dependent value would mean a project opened under another theme came bac
 
 | Track state | Chip | Meaning |
 |---|---|---|
-| `bindingUuid` resolves | the node's display name (`"Track In #<id>"`) | plays through that node |
+| `bindingUuid` resolves | the node's plain display name (e.g. `"Track In"`) | plays through that node |
 | `bindingUuid` empty | `"Unbound"` (amber) | never pointed anywhere; the track plays nowhere |
 | `orphaned` | `"Missing"` (amber) | it WAS bound and the node is gone — retained, never auto-deleted |
+
+The chip always carries a tooltip explaining what it shows and, when amber, how to fix it; the
+`"#id"` suffix a bound name used to carry unconditionally is now added only in the re-bind menu, and
+only to an option whose display name collides with another live candidate
+(`MainComponent::getAvailableTrackInNodes`) — a lone node's name, on the chip or in the menu, always
+stays plain.
 
 Clicking the chip does two things: it **selects** the bound node in the GraphEditor's
 `SelectionModel` (a highlight only — no canvas scroll, no focus change) and opens a menu listing
@@ -1554,7 +1609,8 @@ Picking one calls `TimelineDoc::setTrackBinding` as one undoable step, then reco
 > stays orphaned until the user picks a node from that menu. Two nodes can carry the same display
 > name, and a silent re-bind would quietly play a track through someone else's instrument.
 
-**"+ Track"** (TL6-4; it read `"+ MIDI Track"` and added one outright until audio tracks existed)
+**"+ Track"** (TL6-4; it read `"+ MIDI Track"` and added one outright until audio tracks existed,
+and carries the tooltip *"Add a MIDI or Audio track"* so the two-item menu isn't a surprise)
 opens a two-item menu — **MIDI Track** / **Audio Track** — whose ids are
 `TimelinePanelComponent::kAddMidiTrackMenuId` / `kAddAudioTrackMenuId`. Both entries land on
 `TrackHeaderHost` (`addMidiTrack()` / `addAudioTrack()`), and
@@ -1826,6 +1882,9 @@ view-state changes (zoom/scroll/snap), and interactions — never a timer.
 | Drag within 6 px of the right edge | Resizes (trims) the clip's length, Snap-quantised, floored at 1/16 beat |
 | Drag within 6 px of the left edge | Moves the start and shrinks/grows the length so the **end** stays fixed; the clip's notes (clip-relative) travel with it — a deliberate divergence from per-note-anchored trimming, deferred to a later task |
 | Right-click a clip | `PopupMenu`: **Split at pointer** (enabled only when the Snap-quantised pointer lands strictly inside the clip), **Duplicate**, **Delete**, and — for an audio clip only (non-empty `assetRef`), below a separator — **Relink audio…** (TL6-6) — preserves the existing selection, the same rule `GraphEditor`'s cable/canvas menus follow |
+| Double-click a clip | Opens the piano roll on it (`onClipDoubleClicked` → `TimelinePanelComponent::openPianoRoll`) |
+| Double-click empty lane space | Authors content on the row under the pointer — see **Adding content** below (MIDI: a one-bar clip; audio: a file chooser; automation: nothing) |
+| Drop audio files from the OS | Imports the first readable one onto the audio row under the cursor — see **Adding content** |
 | Delete / Backspace | Deletes every selected clip as ONE undo step; returns `false` (key falls through) when the selection is empty |
 | Escape | Clears the selection; returns `false` when it is already empty |
 
@@ -1851,6 +1910,48 @@ never goes through the menu (or `showMenuAsync`) at all. The import lands in the
 `Audio/`, or — with no bundle yet — the app-data `Recordings/` convention TL6-3 takes use; every
 other clip that shared the OLD ref is rewritten alongside the clicked one, as ONE undo step.
 
+**Adding content.** Recording and the AI tools are not the only ways in: both gestures below author
+content directly, and each is ONE undo step.
+
+*Double-click empty lane space.* The row under the pointer decides what happens. A **Midi** row gets
+a new clip at `floorSnappedBeatAt(x)` — the snap grid line at or *before* the click, never after it,
+so the clip lands in the cell it was aimed at — one bar long (the transport's time signature, 4
+beats with no transport), auto-named `"Clip N"` from the row's clip count, selected, and then fired
+through the SAME `onClipDoubleClicked` hook a clip double-click uses, so the user lands straight in
+the piano roll ready to draw notes. An **Audio** row asks for a file through `audioFileChooser_` — a
+`std::function` seam defaulting to a real async `juce::FileChooser` filtered by
+`juce::AudioFormatManager::getWildcardForAllFormats()`, which a test replaces with a lambda that
+answers synchronously (`juce::FileChooser`, like `showMenuAsync`, never runs in a test process) — and
+reports the choice through `onAudioFileDropped`, exactly as a file drop does. An **Automation** row,
+and a double-click below the last row, do nothing.
+
+*OS file drag-and-drop.* `TimelineClipLaneArea` is a `juce::FileDragAndDropTarget`.
+`isInterestedInFileDrag` is EXTENSION-based (`AudioFormatManager::findFormatForFileExtension`) — no
+dragged file is ever opened — and true when at least one file qualifies. `fileDragMove` highlights
+the **audio** row under the cursor with an accent wash, repainting only the rows involved and only
+when the row actually changes (`fileDragExit`/`filesDropped` clear it); a MIDI row, an automation row
+and the space below the last row neither highlight nor accept a drop. `filesDropped` reports the
+FIRST readable audio file (a multi-file drop makes one clip, not N).
+
+*Who imports.* Neither gesture imports anything here: `onAudioFileDropped(TrackId, snappedBeat,
+File)` hands the decision outwards and `MainComponent::importAudioFileToClip` does the work, for the
+same reason **Relink audio…** does — the lane area owns no `AssetManager` and no bundle root. That
+method reuses `relinkClipAsset`'s policy verbatim: a saved project imports into the bundle's `Audio/`
+(`AssetManager::importAudioFile`), and an unsaved one into the app-data `Recordings/` convention
+`chooseTakeFiles()` writes takes into, so `saveToFile`'s existing `adoptRecordingsAssets` sweep moves
+it into the bundle on the first save. The clip's length is the file's own duration in beats
+(`audioFileLengthInBeats`, at the transport's current bpm), `sourceStartSeconds` is 0, and the clip +
+its asset binding are batched into ONE `recordTimelineChange`. A failed import (unreadable or
+non-audio) reports through the status bar and mutates the document not at all. Headless seam:
+`MainComponent::importAudioFileToClipForTest`.
+
+*Empty-row hint.* A row with no clips paints one dim line, centred, straight from doc state — no
+timer, no animation, `Theme::Colors::textMuted`: **"Double-click to add a clip — or arm (R) and
+record"** on a Midi row, **"Drop an audio file — or arm (R) and record"** on an Audio row, and
+nothing on an Automation row (its content is breakpoints, authored in the automation strip). The line
+is dropped rather than truncated when the row is shorter than 24 px or narrower than the text plus
+its padding.
+
 **Panel-scoped Delete key.** The lane area grabs keyboard focus on `mouseDown` (same as
 `GraphEditor::mouseDown`), so pressing Delete right after a click lands on `TimelineClipLaneArea::
 keyPressed` rather than whichever panel had focus before. This is the *local* half of Delete-key
@@ -1861,7 +1962,12 @@ belongs to in the first place.
 Tests: `Tests/TimelineClipLaneTests.cpp` — `ClipSelectionModel`/`clipHitTestMarquee` unit coverage,
 pure-geometry tests for `computeClipRect`, and interaction tests driven by hand-built
 `juce::MouseEvent`s (same pattern as TL5-2's ruler tests in `Tests/TimelinePanelTests.cpp`) against
-a bare `TimelineDoc` + `AppUndoManager` + `TimelineClipLaneArea`, no `MainComponent` needed.
+a bare `TimelineDoc` + `AppUndoManager` + `TimelineClipLaneArea`, no `MainComponent` needed. The
+authoring gestures are split across three files, each covering the half it owns: the lane area's
+(group 7 there — snapping, one-bar length, one undo step, the injected chooser, drag interest and the
+row highlight, the hint text and its paint), the panel's (`Tests/TimelinePanelTests.cpp` group 6 — a
+new clip really opens the piano roll), and the import's (`Tests/AssetManagerTests.cpp` group 2 —
+saved-bundle vs `Recordings/` destination, length from the file, failure mutating nothing).
 
 ### TL5-8: piano roll
 

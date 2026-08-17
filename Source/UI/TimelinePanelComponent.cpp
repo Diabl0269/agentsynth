@@ -42,6 +42,7 @@ TimelinePanelComponent::TimelinePanelComponent() {
 
     addAndMakeVisible(addTrackButton_);
     addTrackButton_.setComponentID("timelineAddTrackButton");
+    addTrackButton_.setTooltip("Add a MIDI or Audio track");
     addTrackButton_.onClick = [this] { showAddTrackMenu(); };
 
     addAndMakeVisible(trackHeaderViewport_);
@@ -129,6 +130,12 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // Added LAST so it is topmost — it draws over the ruler, the lanes grid AND the clips.
     addAndMakeVisible(playhead_);
     playhead_.setComponentID("timelinePlayhead");
+
+    // After the playhead, so the top few pixels always belong to the resize gesture rather than to
+    // the transport controls underneath. It never overlaps the playhead (which starts below the
+    // transport-bar strip).
+    addAndMakeVisible(resizeHandle_);
+    resizeHandle_.setComponentID("timelineResizeHandle");
 }
 
 TimelinePanelComponent::~TimelinePanelComponent() {
@@ -703,9 +710,14 @@ void TimelinePanelComponent::resized() {
         automationEditor_.setBounds(strip);
     }
 
+    // The grab strip runs the panel's full width along its top edge, OVERLAPPING the transport-bar
+    // strip — transportBarBounds_ stays the whole strip (the three regions still tile), but the
+    // controls inside it are laid out BELOW the handle so a resize grab never lands on a button.
+    resizeHandle_.setBounds(0, 0, getWidth(), kResizeHandleHeight);
+
     // Snap selector: right-hand side of the transport bar. The transport controls (play/stop/
     // record/loop + BPM/time-sig + readout) fill the rest, left-aligned.
-    auto transportBar = transportBarBounds_;
+    auto transportBar = transportBarBounds_.withTrimmedTop(kResizeHandleHeight);
     snapCombo_.setBounds(transportBar.removeFromRight(kSnapComboWidth).reduced(2));
     transportBar_.setBounds(transportBar);
 }
@@ -778,6 +790,84 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
             }
         }
     }
+}
+
+//==============================================================================
+// ---- Top-edge resize handle ----
+
+TimelinePanelComponent::ResizeHandle::ResizeHandle(TimelinePanelComponent& owner)
+    : owner_(owner) {
+    setMouseCursor(juce::MouseCursor::UpDownResizeCursor);
+}
+
+void TimelinePanelComponent::ResizeHandle::paint(juce::Graphics& g) {
+    juce::Colour line;
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
+        const auto& c = lf->getTheme().colors;
+        line = isHighlighted() ? c.accent : c.border;
+    } else {
+        line = isHighlighted() ? juce::Colours::white : juce::Colours::grey;
+    }
+
+    // Idle: exactly the hairline the panel already draws at y == 0, so nothing new is visible until
+    // the pointer arrives. Hovered/dragging: the hairline brightens and the strip picks up a faint
+    // wash, which is the whole affordance.
+    if (isHighlighted())
+        g.fillAll(line.withAlpha(0.18f));
+    g.setColour(line);
+    g.fillRect(0, 0, getWidth(), 1);
+}
+
+void TimelinePanelComponent::ResizeHandle::mouseEnter(const juce::MouseEvent&) {
+    if (hovered_)
+        return; // repaint only on a CHANGE
+    hovered_ = true;
+    repaint();
+}
+
+void TimelinePanelComponent::ResizeHandle::mouseExit(const juce::MouseEvent&) {
+    if (!hovered_)
+        return;
+    hovered_ = false;
+    if (!dragging_)
+        repaint();
+}
+
+int TimelinePanelComponent::ResizeHandle::desiredHeightFor(const juce::MouseEvent& e) const {
+    // Absolute, not a delta: the owner moves the panel's top edge (and this handle with it) on
+    // every callback, so only the panel's FIXED bottom edge is a stable reference.
+    const int topY = e.getScreenPosition().y - grabOffsetY_;
+    return owner_.getScreenBounds().getBottom() - topY;
+}
+
+void TimelinePanelComponent::ResizeHandle::mouseDown(const juce::MouseEvent& e) {
+    const bool wasHighlighted = isHighlighted();
+    dragging_ = true;
+    moved_ = false;
+    grabOffsetY_ = (int)e.getEventRelativeTo(&owner_).position.y;
+    lastDesiredHeight_ = desiredHeightFor(e);
+    if (!wasHighlighted)
+        repaint();
+}
+
+void TimelinePanelComponent::ResizeHandle::mouseDrag(const juce::MouseEvent& e) {
+    if (!dragging_)
+        return;
+    moved_ = true;
+    lastDesiredHeight_ = desiredHeightFor(e);
+    if (owner_.onResizeHeight)
+        owner_.onResizeHeight(lastDesiredHeight_);
+}
+
+void TimelinePanelComponent::ResizeHandle::mouseUp(const juce::MouseEvent&) {
+    if (!dragging_)
+        return;
+    dragging_ = false;
+    if (!hovered_)
+        repaint(); // the highlight only changes when the pointer has already left
+    // Persist point for the owner — and only for a real drag: a stray click must not write settings.
+    if (moved_ && owner_.onResizeHeightCommitted)
+        owner_.onResizeHeightCommitted(lastDesiredHeight_);
 }
 
 } // namespace synth::ui

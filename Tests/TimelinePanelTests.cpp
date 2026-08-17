@@ -20,6 +20,11 @@
 //      needs MainComponent's wiring is #if SYNTH_ENABLE_TIMELINE, since that wiring compiles out.
 //      The header ROW itself is covered separately, against a stub host, in
 //      TimelineTrackHeaderTests.cpp.
+//   5. The resizable panel height — the panel's top-edge grab strip (ungated, panel level) and
+//      MainComponent's ownership of the value: default from the theme metric, clamp, live relayout,
+//      persistence (gated, like the rest of group 2).
+//   6. Authoring gestures reaching the panel — a double-click on empty MIDI lane space creates a
+//      clip and opens the piano roll on it (ungated, panel level).
 
 #include "../Source/AI/AIProvider.h"
 #include "../Source/AI/AIStateMapper.h"
@@ -28,6 +33,7 @@
 #include "../Source/Transport/TransportService.h"
 #include "../Source/UI/TimelinePanelComponent.h"
 #include "../Source/UI/TrackColour.h"
+#include "../Source/UserSettings.h"
 #include "MainComponent.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -128,6 +134,8 @@ protected:
             s->setValue("aiPanelVisible", "0");        // default: hidden
             s->setValue("minimapVisible", "1");        // default: visible
             s->setValue("timelinePanelVisible", "0");  // default: hidden
+            // Removed, not defaulted: absent is what makes the theme metric the default height.
+            s->removeValue(MainComponent::kTimelinePanelHeightKey);
             s->saveIfNeeded();
         }
     }
@@ -232,11 +240,16 @@ juce::MouseEvent makeDragEvent(juce::Component& comp, juce::Point<float> positio
     return makeTimelineMouseEvent(comp, position, mods, true, anchorPos);
 }
 
+// The ruler is 24 px tall in every test below, so its zone split sits at y = 12: y < 12 is the loop
+// (top) zone, y >= 12 the playhead (bottom) zone.
+constexpr float kLoopZoneY = 5.0f;
+constexpr float kPlayheadZoneY = 18.0f;
+
 } // namespace
 
-// A plain click (mouseDown then mouseUp at the same position, no drag) seeks the transport to the
-// snapped beat under the click.
-TEST(TimelineRulerInteractionTest, ClickSeeksSnapped) {
+// A press in the playhead zone seeks immediately — before mouseUp, so the cursor lands under the
+// finger rather than waiting for the release.
+TEST(TimelineRulerInteractionTest, PressInPlayheadZoneSeeksSnapped) {
     synth::ui::TimelineViewState state;
     state.pixelsPerBeat = 40.0;
     state.firstVisibleBeat = 0.0;
@@ -250,43 +263,166 @@ TEST(TimelineRulerInteractionTest, ClickSeeksSnapped) {
     ruler.setSize(800, 24);
 
     // x = 180px -> beat 180/40 = 4.5 -> Beat-snapped (ties round up) to 5.0.
-    const juce::Point<float> pos(180.0f, 12.0f);
+    const juce::Point<float> pos(180.0f, kPlayheadZoneY);
     ruler.mouseDown(makeClickEvent(ruler, pos));
-    ruler.mouseUp(makeClickEvent(ruler, pos));
-
     transport.tick(512); // drains the posted locateBeat() command
 
     EXPECT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 5.0);
+    EXPECT_EQ(ruler.getSeekPostCountForTest(), 1);
+
+    // The release adds nothing new: same snapped beat, so the throttle suppresses a second post.
+    ruler.mouseUp(makeClickEvent(ruler, pos));
+    transport.tick(512);
+    EXPECT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 5.0);
+    EXPECT_EQ(ruler.getSeekPostCountForTest(), 1);
 }
 
-// Cmd+click (no drag) toggles looping off, keeping the prior bounds.
+// Dragging in the playhead zone scrubs: the position follows the pointer, and a locateBeat() is
+// posted only when the snapped beat actually changes.
+TEST(TimelineRulerInteractionTest, DragInPlayheadZoneScrubsAndThrottlesPosts) {
+    synth::ui::TimelineViewState state;
+    state.pixelsPerBeat = 40.0;
+    state.firstVisibleBeat = 0.0;
+    state.snap = synth::ui::TimelineViewState::Snap::Beat;
+
+    synth::TransportService transport;
+    transport.prepare(48000.0, 512);
+
+    synth::ui::TimelineRulerComponent ruler(state);
+    ruler.setTransport(&transport);
+    ruler.setSize(800, 24);
+
+    const juce::Point<float> pressPos(100.0f, kPlayheadZoneY); // beat 2.5 -> snapped 3.0
+    ruler.mouseDown(makeClickEvent(ruler, pressPos));
+    transport.tick(512);
+    EXPECT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 3.0);
+    EXPECT_EQ(ruler.getSeekPostCountForTest(), 1);
+
+    // Two moves that stay inside the same snapped beat (2.625 and 3.125 both snap to 3.0) post
+    // nothing at all.
+    ruler.mouseDrag(makeDragEvent(ruler, {105.0f, kPlayheadZoneY}, pressPos));
+    ruler.mouseDrag(makeDragEvent(ruler, {125.0f, kPlayheadZoneY}, pressPos));
+    transport.tick(512);
+    EXPECT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 3.0);
+    EXPECT_EQ(ruler.getSeekPostCountForTest(), 1);
+
+    ruler.mouseDrag(makeDragEvent(ruler, {140.0f, kPlayheadZoneY}, pressPos)); // beat 3.5 -> 4.0
+    transport.tick(512);
+    EXPECT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 4.0);
+    EXPECT_EQ(ruler.getSeekPostCountForTest(), 2);
+
+    ruler.mouseDrag(makeDragEvent(ruler, {180.0f, kPlayheadZoneY}, pressPos)); // beat 4.5 -> 5.0
+    ruler.mouseUp(makeDragEvent(ruler, {180.0f, kPlayheadZoneY}, pressPos));
+    transport.tick(512);
+    EXPECT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 5.0);
+    EXPECT_EQ(ruler.getSeekPostCountForTest(), 3);
+
+    // Scrubbing never touches the loop.
+    EXPECT_FALSE(transport.getPositionSnapshot().looping);
+}
+
+// The zone is latched at mouseDown: a scrub that wanders up into the loop zone keeps scrubbing and
+// never posts a loop.
+TEST(TimelineRulerInteractionTest, GestureZoneIsStickyForTheWholeDrag) {
+    synth::ui::TimelineViewState state;
+    state.pixelsPerBeat = 40.0;
+    state.firstVisibleBeat = 0.0;
+    state.snap = synth::ui::TimelineViewState::Snap::Beat;
+
+    synth::TransportService transport;
+    transport.prepare(48000.0, 512);
+    ASSERT_TRUE(transport.setLoop(2.0, 6.0, true));
+    transport.tick(512);
+
+    synth::ui::TimelineRulerComponent ruler(state);
+    ruler.setTransport(&transport);
+    ruler.setSize(800, 24);
+
+    const juce::Point<float> pressPos(100.0f, kPlayheadZoneY);
+    ruler.mouseDown(makeClickEvent(ruler, pressPos));
+    EXPECT_EQ(ruler.getGestureZoneForTest(), synth::ui::TimelineRulerComponent::Zone::Playhead);
+
+    // Same x travel, but the pointer has left the bottom band — and even the strip's top edge.
+    ruler.mouseDrag(makeDragEvent(ruler, {180.0f, kLoopZoneY}, pressPos));
+    ruler.mouseDrag(makeDragEvent(ruler, {180.0f, -20.0f}, pressPos));
+    ruler.mouseUp(makeDragEvent(ruler, {180.0f, -20.0f}, pressPos));
+    transport.tick(512);
+
+    const auto snap = transport.getPositionSnapshot();
+    EXPECT_DOUBLE_EQ(snap.ppq, 5.0);
+    EXPECT_EQ(ruler.getGestureZoneForTest(), synth::ui::TimelineRulerComponent::Zone::Playhead);
+    // Loop untouched.
+    EXPECT_TRUE(snap.looping);
+    EXPECT_DOUBLE_EQ(snap.loopStartPpq, 2.0);
+    EXPECT_DOUBLE_EQ(snap.loopEndPpq, 6.0);
+}
+
+// A click with no drag in the loop zone is inert: neither the loop nor the position moves. This is
+// the whole point of the split — a stray click on the brace must not clear it.
+TEST(TimelineRulerInteractionTest, ClickInLoopZoneChangesNothing) {
+    synth::ui::TimelineViewState state;
+    state.pixelsPerBeat = 40.0;
+    state.firstVisibleBeat = 0.0;
+    state.snap = synth::ui::TimelineViewState::Snap::Beat;
+
+    synth::TransportService transport;
+    transport.prepare(48000.0, 512);
+    ASSERT_TRUE(transport.setLoop(2.0, 6.0, true));
+    ASSERT_TRUE(transport.locateBeat(1.0));
+    transport.tick(512);
+
+    synth::ui::TimelineRulerComponent ruler(state);
+    ruler.setTransport(&transport);
+    ruler.setSize(800, 24);
+
+    const juce::Point<float> pos(300.0f, kLoopZoneY);
+    ruler.mouseDown(makeClickEvent(ruler, pos));
+    ruler.mouseUp(makeClickEvent(ruler, pos));
+    transport.tick(512);
+
+    const auto snap = transport.getPositionSnapshot();
+    EXPECT_EQ(ruler.getGestureZoneForTest(), synth::ui::TimelineRulerComponent::Zone::Loop);
+    EXPECT_EQ(ruler.getSeekPostCountForTest(), 0);
+    EXPECT_DOUBLE_EQ(snap.ppq, 1.0);
+    EXPECT_TRUE(snap.looping);
+    EXPECT_DOUBLE_EQ(snap.loopStartPpq, 2.0);
+    EXPECT_DOUBLE_EQ(snap.loopEndPpq, 6.0);
+}
+
+// Cmd+click (no drag) toggles looping off, keeping the prior bounds — from either zone.
 TEST(TimelineRulerInteractionTest, CommandClickTogglesLoopOffKeepingBounds) {
     synth::ui::TimelineViewState state;
     state.pixelsPerBeat = 40.0;
 
     synth::TransportService transport;
     transport.prepare(48000.0, 512);
-    ASSERT_TRUE(transport.setLoop(2.0, 6.0, true));
-    transport.tick(512);
-    ASSERT_TRUE(transport.getPositionSnapshot().looping);
 
     synth::ui::TimelineRulerComponent ruler(state);
     ruler.setTransport(&transport);
     ruler.setSize(800, 24);
 
-    const juce::Point<float> pos(100.0f, 12.0f);
-    ruler.mouseDown(makeClickEvent(ruler, pos, juce::ModifierKeys(juce::ModifierKeys::commandModifier)));
-    ruler.mouseUp(makeClickEvent(ruler, pos, juce::ModifierKeys(juce::ModifierKeys::commandModifier)));
-    transport.tick(512);
+    const juce::ModifierKeys cmd(juce::ModifierKeys::commandModifier);
+    for (const float y : {kLoopZoneY, kPlayheadZoneY}) {
+        ASSERT_TRUE(transport.setLoop(2.0, 6.0, true));
+        transport.tick(512);
+        ASSERT_TRUE(transport.getPositionSnapshot().looping);
 
-    const auto snap = transport.getPositionSnapshot();
-    EXPECT_FALSE(snap.looping);
-    EXPECT_DOUBLE_EQ(snap.loopStartPpq, 2.0);
-    EXPECT_DOUBLE_EQ(snap.loopEndPpq, 6.0);
+        const juce::Point<float> pos(100.0f, y);
+        ruler.mouseDown(makeClickEvent(ruler, pos, cmd));
+        ruler.mouseUp(makeClickEvent(ruler, pos, cmd));
+        transport.tick(512);
+
+        const auto snap = transport.getPositionSnapshot();
+        EXPECT_FALSE(snap.looping) << "y = " << y;
+        EXPECT_DOUBLE_EQ(snap.loopStartPpq, 2.0);
+        EXPECT_DOUBLE_EQ(snap.loopEndPpq, 6.0);
+    }
+    // Cmd never seeks, in either zone.
+    EXPECT_EQ(ruler.getSeekPostCountForTest(), 0);
 }
 
-// Press-drag-release sets the loop to the snapped [min,max] range; dragging leftwards (releasing
-// before the press point) must still normalise start < end.
+// Press-drag-release in the loop zone sets the loop to the snapped [min,max] range; dragging
+// leftwards (releasing before the press point) must still normalise start < end.
 TEST(TimelineRulerInteractionTest, DragSetsLoopNormalisingReversedDrag) {
     synth::ui::TimelineViewState state;
     state.pixelsPerBeat = 20.0;
@@ -300,8 +436,8 @@ TEST(TimelineRulerInteractionTest, DragSetsLoopNormalisingReversedDrag) {
     ruler.setSize(800, 24);
 
     // Press at x=170 (beat 8.5 -> bar-snapped 8), drag/release at x=50 (beat 2.5 -> bar-snapped 4).
-    const juce::Point<float> pressPos(170.0f, 12.0f);
-    const juce::Point<float> releasePos(50.0f, 12.0f);
+    const juce::Point<float> pressPos(170.0f, kLoopZoneY);
+    const juce::Point<float> releasePos(50.0f, kLoopZoneY);
 
     ruler.mouseDown(makeClickEvent(ruler, pressPos));
     ruler.mouseDrag(makeDragEvent(ruler, releasePos, pressPos));
@@ -313,6 +449,35 @@ TEST(TimelineRulerInteractionTest, DragSetsLoopNormalisingReversedDrag) {
     EXPECT_TRUE(snap.looping);
     EXPECT_DOUBLE_EQ(snap.loopStartPpq, 4.0);
     EXPECT_DOUBLE_EQ(snap.loopEndPpq, 8.0);
+    EXPECT_EQ(ruler.getSeekPostCountForTest(), 0); // a loop drag never moves the playhead
+}
+
+// Hover indicator: tracks the pointer's half, clears on exit. The boundary row (y == height/2)
+// belongs to the playhead zone.
+TEST(TimelineRulerInteractionTest, HoveredZoneFollowsPointerHalfAndClearsOnExit) {
+    using Zone = synth::ui::TimelineRulerComponent::Zone;
+
+    synth::ui::TimelineViewState state;
+    synth::ui::TimelineRulerComponent ruler(state); // no transport: hover is pure affordance
+    ruler.setSize(800, 24);
+
+    EXPECT_FALSE(ruler.getHoveredZoneForTest().has_value());
+
+    ruler.mouseEnter(makeClickEvent(ruler, {100.0f, kLoopZoneY}));
+    ASSERT_TRUE(ruler.getHoveredZoneForTest().has_value());
+    EXPECT_EQ(*ruler.getHoveredZoneForTest(), Zone::Loop);
+
+    ruler.mouseMove(makeClickEvent(ruler, {400.0f, kLoopZoneY})); // same zone, different x
+    EXPECT_EQ(*ruler.getHoveredZoneForTest(), Zone::Loop);
+
+    ruler.mouseMove(makeClickEvent(ruler, {400.0f, 12.0f})); // exactly on the split
+    EXPECT_EQ(*ruler.getHoveredZoneForTest(), Zone::Playhead);
+
+    ruler.mouseMove(makeClickEvent(ruler, {400.0f, kPlayheadZoneY}));
+    EXPECT_EQ(*ruler.getHoveredZoneForTest(), Zone::Playhead);
+
+    ruler.mouseExit(makeClickEvent(ruler, {400.0f, 40.0f}));
+    EXPECT_FALSE(ruler.getHoveredZoneForTest().has_value());
 }
 
 // Plain wheel scrolls (pixelsPerBeat untouched); Cmd+wheel zooms around the cursor, keeping the
@@ -1028,4 +1193,290 @@ TEST(TimelineRulerComponentTest, SnapshotSmokeAtTwoZoomsWithNullTransport) {
     EXPECT_FALSE(zoomedIn.isNull());
     EXPECT_EQ(zoomedIn.getWidth(), 800);
     EXPECT_EQ(zoomedIn.getHeight(), 24);
+}
+
+// ============================================================================
+// 5. Resizable panel height — the panel's top-edge grab strip (ungated) and MainComponent's
+//    ownership of the value (gated, like the rest of group 2).
+// ============================================================================
+
+TEST(TimelinePanelComponentTest, AddTrackButtonCarriesATooltip) {
+    synth::ui::TimelinePanelComponent panel;
+    EXPECT_EQ(panel.getAddTrackButton().getTooltip(), "Add a MIDI or Audio track");
+}
+
+TEST(TimelinePanelResizeTest, GrabStripCoversTheTopEdgeAndKeepsTheTransportControlsClear) {
+    using Panel = synth::ui::TimelinePanelComponent;
+    Panel panel;
+    panel.setSize(1200, 220);
+
+    auto& handle = panel.getResizeHandle();
+    EXPECT_EQ(handle.getBounds(), juce::Rectangle<int>(0, 0, 1200, Panel::kResizeHandleHeight));
+    EXPECT_TRUE(handle.getMouseCursor() == juce::MouseCursor::UpDownResizeCursor);
+
+    // The strip is chrome ON the transport strip, not a fourth region: transportBarBounds_ still
+    // starts at y == 0 (PanelRegionsTile's tiling holds), but the controls inside start below it,
+    // so a resize grab can never land on a transport button.
+    EXPECT_EQ(panel.getTransportBarBounds().getY(), 0);
+    EXPECT_GE(panel.getTransportBar().getY(), Panel::kResizeHandleHeight);
+    EXPECT_GE(panel.getSnapCombo().getY(), Panel::kResizeHandleHeight);
+}
+
+TEST(TimelinePanelResizeTest, HoverStateFlipsOnlyOnEnterAndExit) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 220);
+    auto& handle = panel.getResizeHandle();
+
+    EXPECT_FALSE(panel.isResizeHandleHovered());
+    handle.mouseEnter(makeClickEvent(handle, {10.0f, 2.0f}));
+    EXPECT_TRUE(panel.isResizeHandleHovered());
+    // A second enter is not a change — the strip repaints only when the state moves.
+    handle.mouseEnter(makeClickEvent(handle, {40.0f, 3.0f}));
+    EXPECT_TRUE(panel.isResizeHandleHovered());
+    handle.mouseExit(makeClickEvent(handle, {40.0f, 3.0f}));
+    EXPECT_FALSE(panel.isResizeHandleHovered());
+}
+
+// The panel reports a DESIRED height measured from its fixed bottom edge, unclamped — clamping and
+// layout belong to the owner. Persistence is signalled once, on mouse-up.
+TEST(TimelinePanelResizeTest, DraggingReportsTheHeightMeasuredFromTheFixedBottomEdge) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 220);
+
+    std::vector<int> live, committed;
+    panel.onResizeHeight = [&live](int h) { live.push_back(h); };
+    panel.onResizeHeightCommitted = [&committed](int h) { committed.push_back(h); };
+
+    auto& handle = panel.getResizeHandle();
+    // Grabbed 2 px into the strip, dragged 62 px UP: bottom edge pinned, so 220 + 62.
+    handle.mouseDown(makeClickEvent(handle, {10.0f, 2.0f}));
+    handle.mouseDrag(makeDragEvent(handle, {10.0f, -60.0f}, {10.0f, 2.0f}));
+    ASSERT_EQ(live.size(), 1u);
+    EXPECT_EQ(live.front(), 282);
+    EXPECT_TRUE(committed.empty()) << "nothing is committed mid-drag";
+
+    handle.mouseUp(makeClickEvent(handle, {10.0f, -60.0f}));
+    ASSERT_EQ(committed.size(), 1u);
+    EXPECT_EQ(committed.front(), 282);
+    EXPECT_EQ(live.size(), 1u) << "mouse-up adds no extra layout step";
+
+    // Downward drag shrinks it, and the reported value is NOT clamped to the panel's minimum.
+    live.clear();
+    committed.clear();
+    handle.mouseDown(makeClickEvent(handle, {10.0f, 2.0f}));
+    handle.mouseDrag(makeDragEvent(handle, {10.0f, 90.0f}, {10.0f, 2.0f}));
+    ASSERT_EQ(live.size(), 1u);
+    EXPECT_EQ(live.front(), 132); // 220 - 88
+    handle.mouseUp(makeClickEvent(handle, {10.0f, 90.0f}));
+
+    // A drag that never began on the strip reports nothing.
+    live.clear();
+    committed.clear();
+    handle.mouseDrag(makeDragEvent(handle, {10.0f, -300.0f}, {10.0f, 2.0f}));
+    handle.mouseUp(makeClickEvent(handle, {10.0f, -300.0f}));
+    EXPECT_TRUE(live.empty());
+    EXPECT_TRUE(committed.empty());
+
+    // A click that never dragged commits nothing either — no settings write on a stray click.
+    handle.mouseDown(makeClickEvent(handle, {10.0f, 2.0f}));
+    handle.mouseUp(makeClickEvent(handle, {10.0f, 2.0f}));
+    EXPECT_TRUE(live.empty());
+    EXPECT_TRUE(committed.empty());
+}
+
+// Nothing inside the panel assumes the default height: at 2x, every extra pixel goes to the lanes.
+TEST(TimelinePanelResizeTest, InternalLayoutHoldsAtDoubleHeight) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 220);
+    const int lanesAtDefault = panel.getLanesBounds().getHeight();
+
+    panel.setSize(1200, 440);
+    const auto transport = panel.getTransportBarBounds();
+    const auto trackHeader = panel.getTrackHeaderBounds();
+    const auto lanes = panel.getLanesBounds();
+    EXPECT_EQ(transport.getUnion(trackHeader).getUnion(lanes), panel.getLocalBounds());
+    EXPECT_EQ(transport.getHeight(), 28) << "the transport strip keeps its metric height";
+    EXPECT_EQ(lanes.getHeight(), lanesAtDefault + 220) << "the extra height all goes to the lanes";
+    EXPECT_EQ(panel.getResizeHandle().getWidth(), 1200);
+
+    // The clip lanes still fill the lanes region below the 24 px ruler — the rect the grid is
+    // painted into, so clips stay aligned with it at any height.
+    EXPECT_EQ(panel.getClipLaneArea().getBounds(), lanes.withTrimmedTop(24));
+    EXPECT_EQ(panel.getPianoRoll().getBounds(), lanes.withTrimmedTop(24));
+    // The header list fills the taller viewport even with no tracks (no gap under the last row).
+    ASSERT_NE(panel.getTrackHeaderViewport().getViewedComponent(), nullptr);
+    EXPECT_GE(panel.getTrackHeaderViewport().getViewedComponent()->getHeight(),
+              panel.getTrackHeaderViewport().getMaximumVisibleHeight());
+
+    const juce::Image img = panel.createComponentSnapshot(panel.getLocalBounds());
+    EXPECT_FALSE(img.isNull());
+    EXPECT_EQ(img.getHeight(), 440);
+}
+
+#if SYNTH_ENABLE_TIMELINE
+
+namespace {
+// Leaves a height in the shared settings file the way an earlier session would have — the same file
+// TimelinePanelIntegrationTest::resetPanelKeys() clears the key from.
+void persistTimelinePanelHeight(int height) {
+    juce::ApplicationProperties props;
+    props.setStorageParameters(synth::userSettingsOptions());
+    if (auto* s = props.getUserSettings()) {
+        s->setValue(MainComponent::kTimelinePanelHeightKey, height);
+        s->saveIfNeeded();
+    }
+}
+
+int readPersistedTimelinePanelHeight(MainComponent& mc) {
+    return mc.getAppPropertiesForTest().getUserSettings()->getIntValue(MainComponent::kTimelinePanelHeightKey, -1);
+}
+} // namespace
+
+TEST_F(TimelinePanelIntegrationTest, AbsentSettingFallsBackToTheThemeMetric) {
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    mc.setSize(1600, 900);
+    mc.simulateToggleTimelineClick();
+
+    EXPECT_EQ(mc.getTimelinePanelHeight(), 220); // Metrics::timelinePanelHeight literal default
+    EXPECT_EQ(mc.getTimelinePanel().getBounds().getHeight(), 220);
+    EXPECT_EQ(readPersistedTimelinePanelHeight(mc), -1) << "showing the panel writes no height";
+}
+
+TEST_F(TimelinePanelIntegrationTest, PersistedHeightIsHonouredAtStartup) {
+    persistTimelinePanelHeight(400);
+
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    mc.setSize(1600, 900);
+    mc.simulateToggleTimelineClick();
+    ASSERT_TRUE(mc.getTimelinePanel().isVisible());
+
+    const auto panelBounds = mc.getTimelinePanel().getBounds();
+    EXPECT_EQ(mc.getTimelinePanelHeight(), 400);
+    EXPECT_EQ(panelBounds.getHeight(), 400);
+    EXPECT_EQ(panelBounds.getBottom(), mc.getStatusBar().getBounds().getY());
+    EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(), panelBounds.getY());
+}
+
+TEST_F(TimelinePanelIntegrationTest, DraggingTheGrabStripResizesLiveAndPersistsOnDragEnd) {
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    mc.setSize(1600, 900);
+    mc.simulateToggleTimelineClick();
+
+    auto& panel = mc.getTimelinePanel();
+    ASSERT_EQ(panel.getBounds().getHeight(), 220);
+
+    auto& handle = panel.getResizeHandle();
+    handle.mouseDown(makeClickEvent(handle, {10.0f, 2.0f}));
+    // 142 px above the grab point, against a pinned bottom edge: 220 + 142.
+    handle.mouseDrag(makeDragEvent(handle, {10.0f, -140.0f}, {10.0f, 2.0f}));
+
+    // LIVE: the owner already re-laid out, before any mouse-up.
+    EXPECT_EQ(mc.getTimelinePanelHeight(), 362);
+    EXPECT_EQ(panel.getBounds().getHeight(), 362);
+    EXPECT_EQ(panel.getBounds().getBottom(), mc.getStatusBar().getBounds().getY());
+    EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(), panel.getBounds().getY());
+    EXPECT_EQ(readPersistedTimelinePanelHeight(mc), -1) << "not persisted per pixel";
+
+    handle.mouseUp(makeClickEvent(handle, {10.0f, -140.0f}));
+    EXPECT_EQ(readPersistedTimelinePanelHeight(mc), 362);
+
+    // A second component reads the same file back — and shows the panel at that height.
+    MainComponent mc2(std::make_unique<MockProviderTL>());
+    mc2.setSize(1600, 900);
+    EXPECT_EQ(mc2.getTimelinePanelHeight(), 362);
+}
+
+TEST_F(TimelinePanelIntegrationTest, HeightIsClampedToTheMetricFloorAndThreeQuartersOfTheWindow) {
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    mc.setSize(1600, 900);
+    mc.simulateToggleTimelineClick();
+
+    auto& panel = mc.getTimelinePanel();
+    ASSERT_TRUE(panel.onResizeHeight != nullptr);
+
+    panel.onResizeHeight(5000);
+    EXPECT_EQ(mc.getTimelinePanelHeight(), 675) << "75% of the 900 px window";
+    EXPECT_EQ(panel.getBounds().getHeight(), 675);
+    EXPECT_GT(mc.getGraphEditor().getBounds().getHeight(), 0);
+
+    panel.onResizeHeight(10);
+    EXPECT_EQ(mc.getTimelinePanelHeight(), 220) << "the theme metric is the floor";
+    EXPECT_EQ(panel.getBounds().getHeight(), 220);
+
+    EXPECT_EQ(readPersistedTimelinePanelHeight(mc), -1) << "only the drag-end callback persists";
+}
+
+TEST_F(TimelinePanelIntegrationTest, ASmallerWindowReclampsTheHeightSoTheCanvasSurvives) {
+    persistTimelinePanelHeight(600);
+
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    mc.setSize(1600, 900);
+    mc.simulateToggleTimelineClick();
+    ASSERT_EQ(mc.getTimelinePanelHeight(), 600); // within 75% of 900
+
+    mc.setSize(1000, 400);
+    EXPECT_EQ(mc.getTimelinePanelHeight(), 300) << "75% of the 400 px window";
+    EXPECT_EQ(mc.getTimelinePanel().getBounds().getHeight(), 300);
+    EXPECT_GT(mc.getGraphEditor().getBounds().getHeight(), 0);
+    EXPECT_EQ(mc.getTimelinePanel().getBounds().getBottom(), mc.getStatusBar().getBounds().getY());
+
+    // Shorter than 4/3 of the floor (below the enforced minWindowHeight, so a corner case only):
+    // the floor wins rather than the cap.
+    mc.setSize(1000, 280);
+    EXPECT_EQ(mc.getTimelinePanelHeight(), 220);
+}
+
+TEST_F(TimelinePanelIntegrationTest, HidingThePanelReturnsTheCanvasAndReshowingKeepsTheDraggedHeight) {
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    mc.setSize(1600, 900);
+    const auto canvasWithNoPanel = mc.getGraphEditor().getBounds();
+
+    mc.simulateToggleTimelineClick();
+    mc.getTimelinePanel().onResizeHeight(420);
+    ASSERT_EQ(mc.getTimelinePanel().getBounds().getHeight(), 420);
+
+    mc.simulateToggleTimelineClick(); // hide
+    EXPECT_FALSE(mc.getTimelinePanel().isVisible());
+    EXPECT_EQ(mc.getGraphEditor().getBounds(), canvasWithNoPanel) << "a hidden panel carves nothing, at any height";
+    EXPECT_EQ(mc.getTimelinePanelHeight(), 420) << "the height outlives a hide";
+
+    mc.simulateToggleTimelineClick(); // show again
+    EXPECT_EQ(mc.getTimelinePanel().getBounds().getHeight(), 420);
+    EXPECT_EQ(mc.getTimelinePanel().getBounds().getBottom(), mc.getStatusBar().getBounds().getY());
+}
+
+#endif // SYNTH_ENABLE_TIMELINE
+
+// ============================================================================
+// 6. Authoring gestures reaching the panel (ungated, like groups 1/3/4 — the panel itself always
+//    compiles). The lane-area half of the gesture (snapping, length, one undo step) lives in
+//    Tests/TimelineClipLaneTests.cpp group 7; the import half in Tests/AssetManagerTests.cpp.
+// ============================================================================
+
+// The panel's onClipDoubleClicked -> openPianoRoll wiring has to cover the clip a double-click on
+// EMPTY MIDI lane space just created, not only an existing one being reopened.
+TEST(TimelinePanelComponentTest, DoubleClickOnEmptyMidiLaneCreatesAClipAndOpensThePianoRoll) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 320);
+    panel.getViewState().pixelsPerBeat = 40.0;
+    panel.getViewState().firstVisibleBeat = 0.0;
+    panel.getViewState().snap = synth::ui::TimelineViewState::Snap::Bar;
+
+    const auto trackId = doc.addTrack(synth::TrackKind::Midi, "Track 1");
+    ASSERT_TRUE(trackId.isValid());
+    ASSERT_FALSE(panel.isPianoRollOpen());
+
+    auto& lane = panel.getClipLaneArea();
+    lane.mouseDoubleClick(makeClickEvent(lane, {200.0f, (float)(lane.getRowHeight() / 2)}));
+
+    ASSERT_NE(doc.getTrack(trackId), nullptr);
+    ASSERT_EQ(doc.getTrack(trackId)->clips.size(), 1u);
+    const auto& clip = doc.getTrack(trackId)->clips[0];
+    EXPECT_DOUBLE_EQ(clip.startBeat, 4.0) << "x = 200 px -> beat 5.0, floored onto the bar grid";
+    EXPECT_DOUBLE_EQ(clip.lengthBeats, 4.0);
+    ASSERT_TRUE(panel.isPianoRollOpen()) << "the user lands in the note editor, ready to draw";
+    EXPECT_EQ(panel.getPianoRoll().getClipId(), clip.id);
+    EXPECT_FALSE(lane.isVisible()) << "the piano roll replaced the lanes, same as reopening a clip";
 }

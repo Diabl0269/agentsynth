@@ -10,6 +10,7 @@
 #include "TimelineTrackHeaderComponent.h"
 #include "TimelineTransportBar.h"
 #include "TimelineViewState.h"
+#include <functional>
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
@@ -39,6 +40,10 @@ class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 //   - track-header column   (left,   Metrics::timelineTrackHeaderWidth)
 //   - lanes/ruler area      (remainder) — TimelineRulerComponent (Metrics::timelineRulerHeight)
 //     docked at its top, a bar/beat grid painted directly by this component below it.
+//
+// A kResizeHandleHeight grab strip sits on top of the transport-bar strip's first rows (the
+// transport controls are laid out below it): dragging it reports a desired panel HEIGHT through
+// onResizeHeight/onResizeHeightCommitted. The panel still never sets its own bounds.
 //
 // The single synth::ui::TimelineViewState (beat<->pixel mapping — zoom, scroll, snap) is owned
 // here and shared by reference with the ruler; getViewState() exposes it so every consumer maps
@@ -231,6 +236,33 @@ public:
 
     juce::TextButton& getAddTrackButton() noexcept { return addTrackButton_; }
 
+    // ---- Resizable height (top-edge grab strip) ----
+    //
+    // The panel does NOT own its height: it reports the height the user is dragging for and the
+    // OWNER (MainComponent) clamps it, lays the panel out and persists it. Everything here is the
+    // grab strip plus the two callbacks it reports through.
+
+    /** Height of the grab strip along the panel's top edge. It OVERLAPS the transport-bar strip
+     *  instead of owning layout height of its own — the transport controls are laid out below it —
+     *  so a resizable panel costs the rows beneath nothing. */
+    static constexpr int kResizeHandleHeight = 5;
+
+    /** Fired on every drag step with the height the user is asking for, measured from the panel's
+     *  FIXED bottom edge. UNCLAMPED: the owner clamps it and re-runs its own layout, which is what
+     *  makes the drag live. */
+    std::function<void(int desiredHeight)> onResizeHeight;
+
+    /** Fired once when a real drag ends, with the same desired height — the owner's cue to PERSIST.
+     *  The per-drag-step callback above deliberately writes no settings, and a click that never
+     *  dragged fires nothing at all. */
+    std::function<void(int desiredHeight)> onResizeHeightCommitted;
+
+    /** The grab strip itself. Exposed because a test has to drive mouse events through it — no OS
+     *  mouse source exists headlessly (same reason the ruler's gestures are tested that way). */
+    juce::Component& getResizeHandle() noexcept { return resizeHandle_; }
+    /** Whether the strip is painting its brighter hairline — it repaints only when this CHANGES. */
+    bool isResizeHandleHovered() const noexcept { return resizeHandle_.isHovered(); }
+
     /** Applies an "+ Track" menu choice. Exposed as the headless test seam for a menu that never
      *  runs in a test process — the same split TimelineTrackHeaderComponent's binding and context
      *  menus use (applyBindingMenuChoice / applyContextMenuChoice). Anything else is ignored. */
@@ -284,6 +316,44 @@ private:
     struct TrackHeaderList : juce::Component {
         juce::OwnedArray<TimelineTrackHeaderComponent> headers;
     };
+
+    // The top-edge grab strip (see kResizeHandleHeight). Added LAST in the constructor so it wins
+    // the hit test over the transport bar it overlaps, and carries the UpDownResizeCursor.
+    //
+    // The drag is measured in SCREEN coordinates against the panel's bottom edge, not as a delta:
+    // the owner moves the panel's top edge under the cursor on every callback, so a
+    // component-relative delta would chase itself. Both callbacks report the panel's DESIRED
+    // height; clamping belongs to the owner.
+    class ResizeHandle : public juce::Component {
+    public:
+        explicit ResizeHandle(TimelinePanelComponent& owner);
+        void paint(juce::Graphics& g) override;
+        void mouseEnter(const juce::MouseEvent& e) override;
+        void mouseExit(const juce::MouseEvent& e) override;
+        void mouseDown(const juce::MouseEvent& e) override;
+        void mouseDrag(const juce::MouseEvent& e) override;
+        void mouseUp(const juce::MouseEvent& e) override;
+        bool isHovered() const noexcept { return hovered_; }
+
+    private:
+        // Highlighted while hovered OR dragging, so the hairline doesn't dim mid-drag when the
+        // pointer leaves the strip (it does, the moment the panel grows under it).
+        bool isHighlighted() const noexcept { return hovered_ || dragging_; }
+        // The desired height for `e`, from the panel's fixed bottom edge and the grab offset.
+        int desiredHeightFor(const juce::MouseEvent& e) const;
+
+        TimelinePanelComponent& owner_;
+        bool hovered_ = false;
+        bool dragging_ = false;
+        // True once the gesture actually moved: a click that never dragged commits nothing, so a
+        // stray click on the strip never writes the height back to settings.
+        bool moved_ = false;
+        // Where inside the panel's top edge the drag was grabbed — keeps that pixel under the
+        // cursor for the whole gesture.
+        int grabOffsetY_ = 0;
+        int lastDesiredHeight_ = 0;
+    };
+    ResizeHandle resizeHandle_{*this};
 
     TimelineViewState viewState_;
     // The panel owns the clip selection; the lane area only holds a reference to it (same

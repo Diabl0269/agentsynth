@@ -155,6 +155,28 @@ TEST(TimelineTransportBarTest, SnapshotSmoke) {
     EXPECT_EQ(playingAndRecording.getHeight(), 28);
 }
 
+// ---- 6. EveryInteractiveChildHasATooltip ----
+
+// The founder-facing "more tooltips generally" ask, pinned structurally: every control on the bar
+// that implements juce::SettableTooltipClient must carry non-empty text, so a future control added
+// to the bar without one fails here instead of shipping silently.
+TEST(TimelineTransportBarTest, EveryInteractiveChildHasATooltip) {
+    synth::ui::TimelineTransportBar bar;
+    bar.setSize(500, 28);
+
+    int tooltipClientsChecked = 0;
+    for (int i = 0; i < bar.getNumChildComponents(); ++i) {
+        auto* child = bar.getChildComponent(i);
+        if (auto* tooltipClient = dynamic_cast<juce::SettableTooltipClient*>(child)) {
+            EXPECT_TRUE(tooltipClient->getTooltip().isNotEmpty())
+                << "component id " << child->getComponentID() << " has no tooltip";
+            ++tooltipClientsChecked;
+        }
+    }
+    // The 4 glyph buttons, the count-in combo, and the BPM/time-sig labels.
+    EXPECT_EQ(tooltipClientsChecked, 7);
+}
+
 // ============================================================================
 // 2. MainComponent's record wiring.
 // ============================================================================

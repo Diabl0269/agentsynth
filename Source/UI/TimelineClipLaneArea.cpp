@@ -33,6 +33,17 @@ constexpr int kMinWidthForWaveform = 24;
 // MainComponent's own audio-take code uses when a snapshot's sampleRate is not yet known.
 constexpr double kFallbackBpm = 120.0;
 constexpr double kFallbackSampleRate = 44100.0;
+
+// The empty-row hint (see TimelineClipLaneArea::emptyRowHintFor). Escaped UTF-8 for the em dash so
+// the source file stays plain ASCII, the same way the theme/label strings elsewhere spell one.
+constexpr const char* kMidiEmptyRowHint = "Double-click to add a clip \xE2\x80\x94 or arm (R) and record";
+constexpr const char* kAudioEmptyRowHint = "Drop an audio file \xE2\x80\x94 or arm (R) and record";
+
+// The hint is dropped rather than clipped or shrunk below these: a row shorter than this has no
+// room for an 11 px line, and one narrower than the text plus its padding would truncate mid-word.
+constexpr int kMinRowHeightForHint = 24;
+constexpr int kHintPaddingPx = 8;
+constexpr float kHintFontHeight = 11.0f;
 } // namespace
 
 //==============================================================================
@@ -41,6 +52,12 @@ TimelineClipLaneArea::TimelineClipLaneArea(TimelineViewState& viewState, ClipSel
     , selection_(selection) {
     setComponentID("timelineClipLaneArea");
     setInterceptsMouseClicks(true, false);
+    audioFormats_.registerBasicFormats();
+    // The production chooser, installed as the DEFAULT rather than called directly, so a test can
+    // replace it wholesale (see setAudioFileChooser).
+    audioFileChooser_ = [this](std::function<void(const juce::File&)> onChosen) {
+        launchAudioFileChooser(std::move(onChosen));
+    };
 }
 
 //==============================================================================
@@ -104,6 +121,29 @@ double TimelineClipLaneArea::currentBeatsPerBar() const {
 
 double TimelineClipLaneArea::snappedBeatAt(double rawBeat) const {
     return viewState_.snapBeat(rawBeat, currentBeatsPerBar());
+}
+
+double TimelineClipLaneArea::floorSnappedBeatAt(double rawBeat) const {
+    const double division = viewState_.divisionBeats(currentBeatsPerBar());
+    if (division <= 0.0)
+        return std::max(0.0, rawBeat); // Snap::Off — no grid to floor onto
+    return std::max(0.0, std::floor(rawBeat / division) * division);
+}
+
+std::optional<int> TimelineClipLaneArea::trackIndexAt(juce::Point<int> pos) const {
+    if (doc_ == nullptr || pos.y < 0)
+        return std::nullopt;
+    const int rowHeight = getRowHeight();
+    if (rowHeight <= 0)
+        return std::nullopt;
+    const int index = pos.y / rowHeight;
+    if (index >= (int)doc_->getTracks().size())
+        return std::nullopt; // below the last row: empty panel space, not a row
+    return index;
+}
+
+juce::Rectangle<int> TimelineClipLaneArea::rowBounds(int trackIndex, int rowHeight) const {
+    return {0, trackIndex * rowHeight, getWidth(), rowHeight};
 }
 
 //==============================================================================
@@ -216,6 +256,13 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
     const auto& tracks = doc_->getTracks();
     for (int trackIndex = 0; trackIndex < (int)tracks.size(); ++trackIndex) {
         const auto& track = tracks[(size_t)trackIndex];
+        const auto bounds = rowBounds(trackIndex, rowHeight);
+        // Both of these paint UNDER the row's clips (a drop highlight is a backdrop, and a hint
+        // only ever shows on a row that has none).
+        if (trackIndex == fileDropRow_)
+            paintFileDropHighlight(g, bounds);
+        if (track.clips.empty())
+            paintEmptyRowHint(g, track, bounds);
         for (const auto& clip : track.clips)
             paintClip(g, clip, track, trackIndex, rowHeight);
     }
@@ -277,6 +324,57 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
         g.setFont(juce::Font(11.0f));
         g.drawText(clip.name, rect.reduced(4, 2), juce::Justification::topLeft, true);
     }
+}
+
+juce::String TimelineClipLaneArea::emptyRowHintFor(synth::TrackKind kind) {
+    switch (kind) {
+    case synth::TrackKind::Midi:
+        return juce::String::fromUTF8(kMidiEmptyRowHint);
+    case synth::TrackKind::Audio:
+        return juce::String::fromUTF8(kAudioEmptyRowHint);
+    case synth::TrackKind::Automation:
+        break; // nothing to author on an automation row — its points come from a lane editor
+    }
+    return {};
+}
+
+juce::String TimelineClipLaneArea::getEmptyRowHintForTest(int trackIndex) const {
+    if (doc_ == nullptr || !juce::isPositiveAndBelow(trackIndex, (int)doc_->getTracks().size()))
+        return {};
+    const auto& track = doc_->getTracks()[(std::size_t)trackIndex];
+    return track.clips.empty() ? emptyRowHintFor(track.kind) : juce::String();
+}
+
+void TimelineClipLaneArea::paintEmptyRowHint(juce::Graphics& g, const synth::Track& track,
+                                             juce::Rectangle<int> bounds) {
+    const auto text = emptyRowHintFor(track.kind);
+    if (text.isEmpty() || bounds.getHeight() < kMinRowHeightForHint)
+        return;
+
+    const juce::Font font{juce::FontOptions(kHintFontHeight)};
+    if ((float)bounds.getWidth() < juce::GlyphArrangement::getStringWidth(font, text) + 2.0f * (float)kHintPaddingPx)
+        return; // too narrow to read — drop the line rather than truncate it
+
+    // Theme token via the same dynamic_cast<AppLookAndFeel*> pattern getRowHeight() uses, with
+    // Theme::Colors::textMuted's own default when headless.
+    juce::Colour colour(0xff8A93A0);
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        colour = lf->getTheme().colors.textMuted;
+
+    g.setColour(colour.withAlpha(0.75f));
+    g.setFont(font);
+    g.drawText(text, bounds.reduced(kHintPaddingPx, 0), juce::Justification::centred, false);
+}
+
+void TimelineClipLaneArea::paintFileDropHighlight(juce::Graphics& g, juce::Rectangle<int> bounds) {
+    juce::Colour accent(0xff00D1FF);
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        accent = lf->getTheme().colors.accent;
+
+    g.setColour(accent.withAlpha(0.15f));
+    g.fillRect(bounds);
+    g.setColour(accent.withAlpha(0.7f));
+    g.drawRect(bounds, 2);
 }
 
 void TimelineClipLaneArea::paintMarquee(juce::Graphics& g) {
@@ -694,9 +792,155 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
 }
 
 void TimelineClipLaneArea::mouseDoubleClick(const juce::MouseEvent& e) {
-    auto hit = hitTestClip(e.getPosition());
-    if (hit && onClipDoubleClicked)
-        onClipDoubleClicked(hit->id);
+    if (auto hit = hitTestClip(e.getPosition())) {
+        if (onClipDoubleClicked)
+            onClipDoubleClicked(hit->id);
+        return;
+    }
+
+    // Empty lane space: author content on the row under the pointer (see mouseDoubleClick's
+    // declaration for the per-kind contract).
+    if (doc_ == nullptr)
+        return;
+    const auto row = trackIndexAt(e.getPosition());
+    if (!row)
+        return;
+
+    const auto& track = doc_->getTracks()[(std::size_t)*row];
+    const double startBeat = floorSnappedBeatAt(viewState_.xToBeat((double)e.getPosition().x));
+
+    switch (track.kind) {
+    case synth::TrackKind::Midi:
+        createMidiClipAt(track.id, startBeat);
+        break;
+    case synth::TrackKind::Audio:
+        requestAudioFileFor(track.id, startBeat);
+        break;
+    case synth::TrackKind::Automation:
+        break; // no-op: an automation row's content is breakpoints, authored in the lane editor
+    }
+}
+
+void TimelineClipLaneArea::createMidiClipAt(synth::TrackId track, double startBeat) {
+    if (doc_ == nullptr)
+        return;
+    const auto* trackPtr = doc_->getTrack(track);
+    if (trackPtr == nullptr)
+        return;
+
+    // One bar at the transport's current time signature (4 beats with no transport) — the same
+    // beatsPerBar the Snap::Bar grid uses, so a bar-snapped clip fills exactly one grid cell.
+    const double lengthBeats = currentBeatsPerBar();
+    const juce::String name = "Clip " + juce::String((int)trackPtr->clips.size() + 1);
+
+    synth::ClipId newId;
+    auto mutate = [this, track, startBeat, lengthBeats, name, &newId] {
+        newId = doc_->addClip(track, startBeat, lengthBeats, name);
+    };
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+
+    if (!newId.isValid())
+        return; // rejected (the track is at kMaxClipsPerTrack): nothing to select or open
+
+    selection_.setSelection({newId});
+    repaint();
+    // Straight into the note editor — the whole point of the gesture is that the user does not have
+    // to find a second one to start drawing notes.
+    if (onClipDoubleClicked)
+        onClipDoubleClicked(newId);
+}
+
+void TimelineClipLaneArea::requestAudioFileFor(synth::TrackId track, double startBeat) {
+    if (!audioFileChooser_ || !onAudioFileDropped)
+        return;
+
+    // The real chooser is async, so the callback may outlive this component (a theme reload or a
+    // panel rebuild while the dialog is open) — SafePointer, not a raw `this`.
+    juce::Component::SafePointer<TimelineClipLaneArea> safe(this);
+    audioFileChooser_([safe, track, startBeat](const juce::File& file) {
+        if (safe == nullptr || file == juce::File())
+            return;
+        if (safe->onAudioFileDropped)
+            safe->onAudioFileDropped(track, startBeat, file);
+    });
+}
+
+void TimelineClipLaneArea::launchAudioFileChooser(std::function<void(const juce::File&)> onChosen) {
+    fileChooser_ = std::make_unique<juce::FileChooser>(
+        "Add Audio Clip", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),
+        audioFormats_.getWildcardForAllFormats());
+    fileChooser_->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                              [onChosen = std::move(onChosen)](const juce::FileChooser& fc) {
+                                  const auto file = fc.getResult();
+                                  if (file != juce::File() && onChosen)
+                                      onChosen(file);
+                              });
+}
+
+//==============================================================================
+bool TimelineClipLaneArea::isReadableAudioFile(const juce::File& file) const {
+    return audioFormats_.findFormatForFileExtension(file.getFileExtension()) != nullptr;
+}
+
+juce::File TimelineClipLaneArea::firstAudioFileIn(const juce::StringArray& files) const {
+    for (const auto& path : files) {
+        const juce::File file(path);
+        if (isReadableAudioFile(file))
+            return file;
+    }
+    return {};
+}
+
+int TimelineClipLaneArea::dropRowFor(const juce::StringArray& files, int x, int y) const {
+    if (doc_ == nullptr || firstAudioFileIn(files) == juce::File())
+        return -1;
+    const auto row = trackIndexAt({x, y});
+    if (!row)
+        return -1;
+    // Audio rows only: a MIDI/Automation row cannot hold an asset, so it neither highlights nor
+    // accepts a drop.
+    return doc_->getTracks()[(std::size_t)*row].kind == synth::TrackKind::Audio ? *row : -1;
+}
+
+void TimelineClipLaneArea::setFileDropRow(int row) {
+    if (row == fileDropRow_)
+        return; // repaint ONLY on a row change — a drag reports every pixel of movement
+    const int rowHeight = getRowHeight();
+    const int previous = fileDropRow_;
+    fileDropRow_ = row;
+    if (previous >= 0)
+        repaint(rowBounds(previous, rowHeight));
+    if (fileDropRow_ >= 0)
+        repaint(rowBounds(fileDropRow_, rowHeight));
+}
+
+bool TimelineClipLaneArea::isInterestedInFileDrag(const juce::StringArray& files) {
+    return firstAudioFileIn(files) != juce::File();
+}
+
+void TimelineClipLaneArea::fileDragMove(const juce::StringArray& files, int x, int y) {
+    setFileDropRow(dropRowFor(files, x, y));
+}
+
+void TimelineClipLaneArea::fileDragExit(const juce::StringArray& files) {
+    juce::ignoreUnused(files);
+    setFileDropRow(-1);
+}
+
+void TimelineClipLaneArea::filesDropped(const juce::StringArray& files, int x, int y) {
+    const int row = dropRowFor(files, x, y);
+    setFileDropRow(-1);
+    if (row < 0 || doc_ == nullptr || !onAudioFileDropped)
+        return;
+
+    const auto file = firstAudioFileIn(files);
+    if (file == juce::File())
+        return;
+
+    onAudioFileDropped(doc_->getTracks()[(std::size_t)row].id, floorSnappedBeatAt(viewState_.xToBeat((double)x)), file);
 }
 
 void TimelineClipLaneArea::mouseMove(const juce::MouseEvent& e) {

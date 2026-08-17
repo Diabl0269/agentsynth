@@ -16,7 +16,7 @@ constexpr double kMaxLineXMagnitude = 1.0e7;
 //==============================================================================
 TimelinePlayheadOverlay::TimelinePlayheadOverlay(TimelineViewState& viewState)
     : viewState_(viewState) {
-    // Purely decorative: the ruler underneath owns click-to-seek and drag-to-loop, and the lanes
+    // Purely decorative: the ruler underneath owns drag-to-scrub and drag-to-loop, and the lanes
     // below it own their own gestures. The overlay must never swallow either.
     setInterceptsMouseClicks(false, false);
 }

@@ -77,6 +77,26 @@ private:
     TimelineDoc& doc_;
 };
 
+// Mirrors the "#id" rule in MainComponent::getAvailableTrackInNodes (MainComponent.cpp, ~line
+// 2712): an option's display name gets " #<n>" appended ONLY when another option in the same list
+// carries the same plain name. Reimplemented here (rather than exercised through MainComponent,
+// which this file deliberately never touches — see the file comment) so the RULE itself has a
+// pinned regression test, independent of the real graph plumbing.
+std::vector<TrackHeaderHost::BindingOption>
+dedupedBindingOptions(const std::vector<std::pair<juce::String, juce::String>>& uuidsAndPlainNames) {
+    std::map<juce::String, int> nameOccurrences;
+    for (const auto& entry : uuidsAndPlainNames)
+        ++nameOccurrences[entry.second];
+
+    std::vector<TrackHeaderHost::BindingOption> options;
+    for (size_t i = 0; i < uuidsAndPlainNames.size(); ++i) {
+        const auto& [uuid, name] = uuidsAndPlainNames[i];
+        const juce::String display = nameOccurrences[name] > 1 ? name + " #" + juce::String((int)i + 1) : name;
+        options.push_back({uuid, display});
+    }
+    return options;
+}
+
 // A doc + one track + a header wired to a stub host — the shape every test below needs.
 struct HeaderFixture {
     HeaderFixture() {
@@ -135,6 +155,31 @@ TEST(TimelineTrackHeaderTest, ChipIsAmberAndSaysMissingWhenOrphaned) {
     EXPECT_EQ(f.header->getBindingChipText(), "Missing");
     EXPECT_TRUE(f.header->isBindingChipWarning());
     EXPECT_EQ(f.track()->bindingUuid, "uuid-a") << "an orphaned binding is retained, never cleared";
+}
+
+// =============================================================================
+// 1a. Plain names by default; "#id" only for a menu with a real name collision
+// =============================================================================
+
+TEST(TimelineTrackHeaderTest, ChipShowsThePlainNameWithNoIdSuffix) {
+    HeaderFixture f;
+    f.bindTo("uuid-a", "Track In"); // what MainComponent::getNodeDisplayName now returns by default
+
+    EXPECT_EQ(f.header->getBindingChipText(), "Track In");
+    EXPECT_FALSE(f.header->getBindingChipText().containsChar('#'))
+        << "the chip shows identity, not disambiguation — see MainComponent::describeNodeForBinding";
+}
+
+TEST(TimelineTrackHeaderTest, MenuOptionsGetIdSuffixOnlyWhenNamesCollide) {
+    HeaderFixture f;
+    f.host->options =
+        dedupedBindingOptions({{"uuid-a", "Track In"}, {"uuid-b", "Track In"}, {"uuid-c", "Track Audio"}});
+
+    const auto options = f.header->collectBindingOptions();
+    ASSERT_EQ(options.size(), 3u);
+    EXPECT_TRUE(options[0].displayName.containsChar('#')) << "two nodes share this name — it must disambiguate";
+    EXPECT_TRUE(options[1].displayName.containsChar('#'));
+    EXPECT_FALSE(options[2].displayName.containsChar('#')) << "a name nothing else shares stays plain";
 }
 
 // =============================================================================
@@ -333,6 +378,34 @@ TEST(TimelineTrackHeaderTest, SurvivesItsTrackDisappearing) {
     f.header->handleChipClick(false);
     EXPECT_EQ(f.host->editCalls, 0);
     EXPECT_TRUE(f.host->lastSelectedUuid.isEmpty());
+}
+
+// =============================================================================
+// 6a. Tooltips — the founder-facing "what does this do" text
+// =============================================================================
+
+TEST(TimelineTrackHeaderTest, MuteSoloArmTooltipsExplainTheControls) {
+    HeaderFixture f;
+    EXPECT_EQ(f.header->getMuteButton().getTooltip(), "Mute this track");
+    EXPECT_EQ(f.header->getSoloButton().getTooltip(), "Solo this track");
+    EXPECT_EQ(f.header->getArmButton().getTooltip(), "Arm this track for recording");
+}
+
+TEST(TimelineTrackHeaderTest, BindingChipTooltipExplainsTheBindingAndHowToChangeIt) {
+    HeaderFixture f;
+    f.bindTo("uuid-a", "Track In");
+
+    EXPECT_EQ(f.header->getBindingChip().getTooltip(),
+              "This track plays through the 'Track In' node in the graph. Click to choose a different node.");
+}
+
+TEST(TimelineTrackHeaderTest, OrphanedChipTooltipExplainsTheMissingNode) {
+    HeaderFixture f;
+    f.bindTo("uuid-a", "Track In");
+    ASSERT_TRUE(f.doc.reconcileBindings([](const juce::String&) { return false; }));
+    f.header->refreshFromDoc();
+
+    EXPECT_EQ(f.header->getBindingChip().getTooltip(), "The node this track was bound to is gone. Click to re-bind.");
 }
 
 // =============================================================================

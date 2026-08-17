@@ -3,7 +3,7 @@
 // Clip lanes — drag/trim/split/duplicate + marquee selection, backed by
 // synth::ui::ClipSelectionModel.
 //
-// Six groups:
+// Seven groups:
 //   1. synth::ui::ClipSelectionModel — mirrors SelectionModelTests.cpp's coverage of
 //      SelectionModel, just keyed on synth::ClipId.
 //   2. synth::ui::clipHitTestMarquee — mirrors SelectionModelTests.cpp's hitTestMarquee coverage.
@@ -18,6 +18,10 @@
 //   6. The missing-asset placeholder — setAssetExistsResolver, its cache (no repeated
 //      filesystem stats), and that its painted result differs from both the waveform case and the
 //      no-asset (MIDI) case.
+//   7. Authoring gestures — double-click empty lane space (a one-bar MIDI clip that opens the note
+//      editor; an audio row's injected file chooser), OS file drag/drop onto an audio row, and the
+//      empty-row hint line. The IMPORT half of the audio gestures is MainComponent's, and lives in
+//      Tests/AssetManagerTests.cpp beside the relink flow it mirrors.
 
 #include "../Source/AppUndoManager.h"
 #include "../Source/Modules/RecordTapModule.h"
@@ -881,4 +885,262 @@ TEST(TimelineClipLaneWaveformTest, NoResolverInstalledAssumesAssetExists) {
     // No crash, no assertion failure — the absence of a resolver is itself the thing under test.
     const auto snapshot = f.lane.createComponentSnapshot(f.lane.getLocalBounds());
     EXPECT_FALSE(snapshot.isNull());
+}
+
+// ============================================================================
+// 7. Authoring gestures — double-click empty space, OS file drop, empty-row hint
+// ============================================================================
+
+namespace {
+
+// The one y that lands on row `index` regardless of the themed/headless row height.
+float rowCentreY(const TimelineClipLaneArea& lane, int index) {
+    const int rowHeight = lane.getRowHeight();
+    return (float)(index * rowHeight + rowHeight / 2);
+}
+
+} // namespace
+
+TEST(TimelineClipLaneAuthoringTest, DoubleClickEmptyMidiRowCreatesOneBarClipAndOpensIt) {
+    ClipLaneFixture f;
+    f.state.snap = TimelineViewState::Snap::Bar; // 4 beats (no transport) = 160 px at 40 px/beat
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+
+    std::vector<ClipId> opened;
+    f.lane.onClipDoubleClicked = [&opened](ClipId id) { opened.push_back(id); };
+
+    // x = 200 px -> beat 5.0, which FLOORS to bar 2 (beat 4.0) rather than snapping forward to 8.
+    f.lane.mouseDoubleClick(leftClick(f.lane, {200.0f, rowCentreY(f.lane, 0)}));
+
+    const auto* track = f.doc.getTrack(trackId);
+    ASSERT_NE(track, nullptr);
+    ASSERT_EQ(track->clips.size(), 1u);
+    const auto& clip = track->clips[0];
+    EXPECT_DOUBLE_EQ(clip.startBeat, 4.0) << "the snap grid line at or BEFORE the click, never after it";
+    EXPECT_DOUBLE_EQ(clip.lengthBeats, 4.0) << "one bar at the default 4/4";
+    EXPECT_EQ(clip.name, juce::String("Clip 1"));
+    EXPECT_TRUE(clip.assetRef.isEmpty()) << "a MIDI clip carries notes, not an asset";
+    EXPECT_TRUE(f.selection.contains(clip.id)) << "the new clip is selected";
+    ASSERT_EQ(opened.size(), 1u) << "the same open-piano-roll path a clip double-click uses must fire";
+    EXPECT_EQ(opened[0], clip.id);
+
+    // ONE undo step, and undoing removes the clip entirely.
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_TRUE(f.doc.getTrack(trackId)->clips.empty());
+    EXPECT_FALSE(f.undo.canUndo()) << "creating a clip was ONE undo step";
+}
+
+TEST(TimelineClipLaneAuthoringTest, DoubleClickNamesClipsInSequenceAndSnapOffKeepsTheRawBeat) {
+    ClipLaneFixture f;
+    f.state.snap = TimelineViewState::Snap::Off;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+
+    f.lane.mouseDoubleClick(leftClick(f.lane, {80.0f, rowCentreY(f.lane, 0)}));  // beat 2.0
+    f.lane.mouseDoubleClick(leftClick(f.lane, {400.0f, rowCentreY(f.lane, 0)})); // beat 10.0
+
+    const auto* track = f.doc.getTrack(trackId);
+    ASSERT_NE(track, nullptr);
+    ASSERT_EQ(track->clips.size(), 2u);
+    EXPECT_DOUBLE_EQ(track->clips[0].startBeat, 2.0) << "Snap::Off passes the raw beat through";
+    EXPECT_DOUBLE_EQ(track->clips[1].startBeat, 10.0);
+    EXPECT_EQ(track->clips[1].name, juce::String("Clip 2")) << "the auto-name counts the row's clips";
+}
+
+TEST(TimelineClipLaneAuthoringTest, DoubleClickIgnoresAutomationRowsAndEmptyPanelSpace) {
+    ClipLaneFixture f;
+    const auto automationTrack = f.doc.addTrack(TrackKind::Automation, "Automation");
+    ASSERT_TRUE(automationTrack.isValid());
+
+    int opens = 0;
+    f.lane.onClipDoubleClicked = [&opens](ClipId) { ++opens; };
+
+    f.lane.mouseDoubleClick(leftClick(f.lane, {200.0f, rowCentreY(f.lane, 0)}));
+    EXPECT_TRUE(f.doc.getTrack(automationTrack)->clips.empty()) << "an automation row authors nothing";
+
+    // Below the last row: panel space, not a row.
+    f.lane.mouseDoubleClick(leftClick(f.lane, {200.0f, rowCentreY(f.lane, 4)}));
+    EXPECT_EQ(f.doc.getTrack(automationTrack)->clips.size(), 0u);
+
+    EXPECT_EQ(opens, 0);
+    EXPECT_FALSE(f.undo.canUndo()) << "neither gesture may create an undo step";
+}
+
+TEST(TimelineClipLaneAuthoringTest, DoubleClickEmptyAudioRowAsksForAFileAndReportsTheChoice) {
+    ClipLaneFixture f;
+    f.state.snap = TimelineViewState::Snap::Bar;
+    const auto midiTrack = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto audioTrack = f.doc.addTrack(TrackKind::Audio, "Audio 1");
+    ASSERT_TRUE(midiTrack.isValid());
+
+    const juce::File fixture =
+        juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("agentsynth_clipslane_chooser.wav");
+
+    // The injected chooser stands in for juce::FileChooser, which never runs in a test process —
+    // same idiom as applyClipContextChoice standing in for showMenuAsync.
+    int chooserCalls = 0;
+    f.lane.setAudioFileChooser([&](std::function<void(const juce::File&)> onChosen) {
+        ++chooserCalls;
+        onChosen(fixture);
+    });
+
+    struct Report {
+        synth::TrackId track;
+        double beat = 0.0;
+        juce::File file;
+    };
+    std::vector<Report> reports;
+    f.lane.onAudioFileDropped = [&reports](synth::TrackId track, double beat, juce::File file) {
+        reports.push_back({track, beat, file});
+    };
+
+    f.lane.mouseDoubleClick(leftClick(f.lane, {200.0f, rowCentreY(f.lane, 1)}));
+
+    EXPECT_EQ(chooserCalls, 1);
+    ASSERT_EQ(reports.size(), 1u) << "the lane area reports the choice; the OWNER imports it";
+    EXPECT_EQ(reports[0].track, audioTrack);
+    EXPECT_DOUBLE_EQ(reports[0].beat, 4.0) << "the same floor-snapped beat a MIDI clip would start on";
+    EXPECT_EQ(reports[0].file, fixture);
+    EXPECT_TRUE(f.doc.getTrack(audioTrack)->clips.empty()) << "the lane area never creates the audio clip itself";
+    EXPECT_FALSE(f.undo.canUndo());
+
+    // A cancelled dialog reports nothing.
+    f.lane.setAudioFileChooser([](std::function<void(const juce::File&)> onChosen) { onChosen(juce::File()); });
+    f.lane.mouseDoubleClick(leftClick(f.lane, {200.0f, rowCentreY(f.lane, 1)}));
+    EXPECT_EQ(reports.size(), 1u);
+
+    // A double-click on the MIDI row still creates a clip rather than asking for a file.
+    f.lane.mouseDoubleClick(leftClick(f.lane, {200.0f, rowCentreY(f.lane, 0)}));
+    EXPECT_EQ(chooserCalls, 1);
+    EXPECT_EQ(f.doc.getTrack(midiTrack)->clips.size(), 1u);
+}
+
+TEST(TimelineClipLaneAuthoringTest, FileDragInterestIsExtensionBased) {
+    ClipLaneFixture f;
+    EXPECT_TRUE(f.lane.isInterestedInFileDrag({"/tmp/loop.wav"}));
+    EXPECT_TRUE(f.lane.isInterestedInFileDrag({"/tmp/notes.txt", "/tmp/loop.aiff"}))
+        << "at least one readable audio file is enough";
+    EXPECT_FALSE(f.lane.isInterestedInFileDrag({"/tmp/notes.txt"}));
+    EXPECT_FALSE(f.lane.isInterestedInFileDrag({}));
+}
+
+TEST(TimelineClipLaneAuthoringTest, FileDragHighlightsAudioRowsOnly) {
+    ClipLaneFixture f;
+    f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto audioTrack = f.doc.addTrack(TrackKind::Audio, "Audio 1");
+    ASSERT_TRUE(audioTrack.isValid());
+    const juce::StringArray dragged{"/tmp/loop.wav"};
+
+    EXPECT_EQ(f.lane.getFileDropRowForTest(), -1);
+
+    f.lane.fileDragMove(dragged, 200, (int)rowCentreY(f.lane, 1));
+    EXPECT_EQ(f.lane.getFileDropRowForTest(), 1) << "the audio row under the cursor highlights";
+
+    f.lane.fileDragMove(dragged, 200, (int)rowCentreY(f.lane, 0));
+    EXPECT_EQ(f.lane.getFileDropRowForTest(), -1) << "a MIDI row never highlights";
+
+    f.lane.fileDragMove(dragged, 200, (int)rowCentreY(f.lane, 1));
+    f.lane.fileDragMove({"/tmp/notes.txt"}, 200, (int)rowCentreY(f.lane, 1));
+    EXPECT_EQ(f.lane.getFileDropRowForTest(), -1) << "nothing droppable, nothing highlighted";
+
+    f.lane.fileDragMove(dragged, 200, (int)rowCentreY(f.lane, 1));
+    f.lane.fileDragMove(dragged, 200, (int)rowCentreY(f.lane, 5)); // below the last row
+    EXPECT_EQ(f.lane.getFileDropRowForTest(), -1);
+
+    f.lane.fileDragMove(dragged, 200, (int)rowCentreY(f.lane, 1));
+    f.lane.fileDragExit(dragged);
+    EXPECT_EQ(f.lane.getFileDropRowForTest(), -1) << "leaving the component clears the highlight";
+}
+
+TEST(TimelineClipLaneAuthoringTest, FilesDroppedReportsTrackAndSnappedBeatForAudioRowsOnly) {
+    ClipLaneFixture f;
+    f.state.snap = TimelineViewState::Snap::Bar;
+    const auto midiTrack = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto audioTrack = f.doc.addTrack(TrackKind::Audio, "Audio 1");
+    ASSERT_TRUE(midiTrack.isValid());
+
+    struct Report {
+        synth::TrackId track;
+        double beat = 0.0;
+        juce::File file;
+    };
+    std::vector<Report> reports;
+    f.lane.onAudioFileDropped = [&reports](synth::TrackId track, double beat, juce::File file) {
+        reports.push_back({track, beat, file});
+    };
+
+    // Two files dropped together: the FIRST readable audio one wins, and the .txt is ignored.
+    f.lane.fileDragMove({"/tmp/loop.wav"}, 200, (int)rowCentreY(f.lane, 1));
+    f.lane.filesDropped({"/tmp/notes.txt", "/tmp/loop.wav", "/tmp/second.wav"}, 200, (int)rowCentreY(f.lane, 1));
+
+    ASSERT_EQ(reports.size(), 1u);
+    EXPECT_EQ(reports[0].track, audioTrack);
+    EXPECT_DOUBLE_EQ(reports[0].beat, 4.0) << "x = 200 px -> beat 5.0, floored onto the bar grid";
+    EXPECT_EQ(reports[0].file, juce::File("/tmp/loop.wav"));
+    EXPECT_EQ(f.lane.getFileDropRowForTest(), -1) << "the drop clears the highlight";
+
+    // A MIDI row, an automation row and empty panel space all refuse the drop.
+    f.lane.filesDropped({"/tmp/loop.wav"}, 200, (int)rowCentreY(f.lane, 0));
+    f.lane.filesDropped({"/tmp/loop.wav"}, 200, (int)rowCentreY(f.lane, 7));
+    EXPECT_EQ(reports.size(), 1u);
+    EXPECT_TRUE(f.doc.getTrack(midiTrack)->clips.empty());
+}
+
+TEST(TimelineClipLaneAuthoringTest, EmptyRowHintTextIsPerKindAndOnlyForEmptyRows) {
+    ClipLaneFixture f;
+    const auto midiTrack = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto audioTrack = f.doc.addTrack(TrackKind::Audio, "Audio 1");
+    f.doc.addTrack(TrackKind::Automation, "Automation");
+    ASSERT_TRUE(audioTrack.isValid());
+
+    EXPECT_EQ(f.lane.getEmptyRowHintForTest(0),
+              juce::String::fromUTF8("Double-click to add a clip \xE2\x80\x94 or arm (R) and record"));
+    EXPECT_EQ(f.lane.getEmptyRowHintForTest(1),
+              juce::String::fromUTF8("Drop an audio file \xE2\x80\x94 or arm (R) and record"));
+    EXPECT_TRUE(f.lane.getEmptyRowHintForTest(2).isEmpty()) << "an automation row has nothing to author";
+    EXPECT_TRUE(f.lane.getEmptyRowHintForTest(9).isEmpty()) << "no such row";
+
+    // A row with ANY clip on it stops hinting.
+    ASSERT_TRUE(f.doc.addClip(midiTrack, 0.0, 4.0, "Clip 1").isValid());
+    EXPECT_TRUE(f.lane.getEmptyRowHintForTest(0).isEmpty());
+    EXPECT_FALSE(f.lane.getEmptyRowHintForTest(1).isEmpty()) << "the audio row is still empty";
+}
+
+TEST(TimelineClipLaneAuthoringTest, EmptyRowHintIsPaintedAndDroppedWhenTooNarrow) {
+    // Both fixtures paint ONE empty row at the same size, differing only in track kind — so any
+    // pixel difference is the hint line itself (an automation row never hints).
+    const auto imageFor = [](TrackKind kind, int width) {
+        ClipLaneFixture f;
+        f.doc.addTrack(kind, "Row");
+        f.lane.setSize(width, f.lane.getRowHeight());
+        return f.lane.createComponentSnapshot(f.lane.getLocalBounds());
+    };
+
+    const auto wideMidi = imageFor(TrackKind::Midi, 1000);
+    const auto wideAutomation = imageFor(TrackKind::Automation, 1000);
+    ASSERT_FALSE(wideMidi.isNull());
+    EXPECT_FALSE(imagesIdentical(wideMidi, wideAutomation)) << "an empty MIDI row must paint its hint line";
+
+    // Too narrow for the line plus its padding: dropped entirely rather than truncated, so the row
+    // paints exactly like the (never-hinting) automation one.
+    const auto narrowMidi = imageFor(TrackKind::Midi, 90);
+    const auto narrowAutomation = imageFor(TrackKind::Automation, 90);
+    ASSERT_FALSE(narrowMidi.isNull());
+    EXPECT_TRUE(imagesIdentical(narrowMidi, narrowAutomation)) << "a row too narrow to read must not paint the hint";
+}
+
+TEST(TimelineClipLaneAuthoringTest, FileDropHighlightPaints) {
+    ClipLaneFixture f;
+    f.doc.addTrack(TrackKind::Audio, "Audio 1");
+    f.lane.setSize(1000, f.lane.getRowHeight());
+
+    const auto before = f.lane.createComponentSnapshot(f.lane.getLocalBounds());
+    f.lane.fileDragMove({"/tmp/loop.wav"}, 200, (int)rowCentreY(f.lane, 0));
+    ASSERT_EQ(f.lane.getFileDropRowForTest(), 0);
+    const auto during = f.lane.createComponentSnapshot(f.lane.getLocalBounds());
+    f.lane.fileDragExit({"/tmp/loop.wav"});
+    const auto after = f.lane.createComponentSnapshot(f.lane.getLocalBounds());
+
+    EXPECT_FALSE(imagesIdentical(before, during)) << "the hovered audio row must be visibly marked";
+    EXPECT_TRUE(imagesIdentical(before, after)) << "and the mark must be gone once the drag leaves";
 }

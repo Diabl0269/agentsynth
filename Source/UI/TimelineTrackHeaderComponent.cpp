@@ -54,6 +54,7 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
 
     addAndMakeVisible(colourSwatch_);
     colourSwatch_.setComponentID("trackColourSwatch");
+    colourSwatch_.setTooltip("Click to change this track's colour");
     colourSwatch_.onClick = [this] {
         const auto* t = track();
         if (t == nullptr)
@@ -64,6 +65,7 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
 
     addAndMakeVisible(nameLabel_);
     nameLabel_.setComponentID("trackNameLabel");
+    nameLabel_.setTooltip("Double-click to rename this track");
     // Double-click to rename — a single click must stay free for selecting the track row later.
     nameLabel_.setEditable(false, true, false);
     nameLabel_.onTextChange = [this] {
@@ -85,6 +87,7 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
         const bool next = !t->muted;
         performEdit([this, next] { doc_.setTrackMuted(trackId_, next); });
     });
+    muteButton_.setTooltip("Mute this track");
     setUpToggle(soloButton_, "trackSoloButton", [this] {
         const auto* t = track();
         if (t == nullptr)
@@ -92,6 +95,7 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
         const bool next = !t->soloed;
         performEdit([this, next] { doc_.setTrackSoloed(trackId_, next); });
     });
+    soloButton_.setTooltip("Solo this track");
     // Arm flips document state only. Arming is not recording: the record button (and the
     // MidiRecorder::startRecording call behind it) lives on the transport bar.
     setUpToggle(armButton_, "trackArmButton", [this] {
@@ -101,6 +105,7 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
         const bool next = !t->armed;
         performEdit([this, next] { doc_.setTrackArmed(trackId_, next); });
     });
+    armButton_.setTooltip("Arm this track for recording");
 
     addAndMakeVisible(bindingChip_);
     bindingChip_.setComponentID("trackBindingChip");
@@ -140,20 +145,23 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
     soloButton_.setToggleState(t->soloed, juce::dontSendNotification);
     armButton_.setToggleState(t->armed, juce::dontSendNotification);
 
-    // Chip text/state. Three cases, two of them amber:
-    //   bound + resolves -> the node's display name
-    //   orphaned         -> "Missing" (it WAS bound; the node is gone — re-bind is one click)
-    //   unbound          -> "Unbound" (never pointed anywhere; the track plays nowhere)
+    // Chip text/state/tooltip. Three cases, two of them amber. The tooltip is what carries the
+    // "this shows a binding, it does not add a module" explanation the button text has no room for.
     if (t->bindingUuid.isEmpty()) {
         bindingChip_.setButtonText("Unbound");
         chipWarning_ = true;
+        bindingChip_.setTooltip("This track has no bound node. Click to choose one.");
     } else if (t->orphaned) {
         bindingChip_.setButtonText("Missing");
         chipWarning_ = true;
+        bindingChip_.setTooltip("The node this track was bound to is gone. Click to re-bind.");
     } else {
         const juce::String name = host_ != nullptr ? host_->getNodeDisplayName(t->bindingUuid) : juce::String();
-        bindingChip_.setButtonText(name.isNotEmpty() ? name : juce::String("Track In"));
+        const juce::String displayName = name.isNotEmpty() ? name : juce::String("Track In");
+        bindingChip_.setButtonText(displayName);
         chipWarning_ = false;
+        bindingChip_.setTooltip("This track plays through the '" + displayName +
+                                "' node in the graph. Click to choose a different node.");
     }
 
     const auto colours = coloursFor(*this);

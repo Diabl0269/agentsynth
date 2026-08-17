@@ -5,8 +5,10 @@
 #include "ClipSelectionModel.h"
 #include "TimelineViewState.h"
 #include <functional>
+#include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+#include <memory>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -49,9 +51,16 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // (peaksCache_) via a host-supplied peaksResolver_; the cache is cleared wholesale on any doc
 // change rather than diffed. A live take paints a growing strip sourced from
 // RecordTapModule::copyLivePeaks(), repainted only when new buckets actually arrived.
+//
+// Authoring gestures (double-click empty space, OS file drop) create content directly: a MIDI row
+// gets a one-bar clip and opens the piano roll on it; an audio row asks for a file and hands it
+// OUTWARDS through onAudioFileDropped. This class never imports anything itself — it owns no
+// AssetManager and no bundle knowledge, exactly like onRelinkAudioRequested.
 namespace synth::ui {
 
-class TimelineClipLaneArea : public juce::Component {
+class TimelineClipLaneArea
+    : public juce::Component
+    , public juce::FileDragAndDropTarget {
 public:
     TimelineClipLaneArea(TimelineViewState& viewState, ClipSelectionModel& selection);
     ~TimelineClipLaneArea() override = default;
@@ -62,13 +71,61 @@ public:
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
     void mouseMove(const juce::MouseEvent& e) override;
-    // Double-clicking a clip opens the piano roll for it. Fires onClipDoubleClicked (if
-    // set) with the hit clip's id; a double-click on empty lane space is a no-op.
+    // Double-clicking a clip opens the piano roll for it (onClipDoubleClicked with the hit clip's
+    // id). Double-clicking EMPTY lane space authors content on the row under the pointer instead:
+    // a Midi track gets a one-bar clip at the floor-snapped beat, selected, and fires
+    // onClipDoubleClicked for it too (so "double-click empty space" lands straight in the note
+    // editor); an Audio track asks for a file through audioFileChooser_ and reports the choice as
+    // onAudioFileDropped, the same seam a file drop uses. An Automation row, and a double-click
+    // below the last row, do nothing.
     void mouseDoubleClick(const juce::MouseEvent& e) override;
 
     // Non-owning callback; may be unset. TimelinePanelComponent wires this to
     // PianoRollComponent::openClip via its own openPianoRoll(ClipId).
     std::function<void(synth::ClipId)> onClipDoubleClicked;
+
+    // ---- Authoring: audio files (double-click an audio row, or drop files on one) ----
+
+    // Fired with (audio track, floor-snapped start beat, the chosen/dropped file) — the OWNER
+    // imports it and creates the clip (MainComponent::importAudioFileToClip), because importing
+    // needs an AssetManager and the current bundle root, neither of which this class has (same
+    // division as onRelinkAudioRequested). Non-owning; may be unset, in which case both gestures
+    // are inert.
+    std::function<void(synth::TrackId, double startBeat, juce::File)> onAudioFileDropped;
+
+    // How a double-click on an empty AUDIO row asks for a file. Defaults to a real async
+    // juce::FileChooser filtered to the formats a juce::AudioFormatManager can read; a test injects
+    // a lambda that calls `onChosen` synchronously with a fixture file (juce::FileChooser, like
+    // juce::PopupMenu::showMenuAsync, never runs in a test process). `onChosen` must not be called
+    // for a cancelled dialog.
+    using AudioFileChooser = std::function<void(std::function<void(const juce::File&)> onChosen)>;
+    void setAudioFileChooser(AudioFileChooser chooser) { audioFileChooser_ = std::move(chooser); }
+
+    // ---- juce::FileDragAndDropTarget: dropping audio files from the OS ----
+    // Interested when at least one dragged file has an extension a juce::AudioFormatManager can
+    // read (extension only — nothing here opens a dragged file).
+    bool isInterestedInFileDrag(const juce::StringArray& files) override;
+    // Highlights the AUDIO row under the cursor, repainting ONLY on a row change (and only the two
+    // rows involved) — no row is highlighted over a Midi/Automation row or below the last row, and
+    // a drop there is refused.
+    void fileDragMove(const juce::StringArray& files, int x, int y) override;
+    void fileDragExit(const juce::StringArray& files) override;
+    // The FIRST readable audio file only, reported through onAudioFileDropped. Multi-file drops
+    // deliberately import one clip rather than fanning out.
+    void filesDropped(const juce::StringArray& files, int x, int y) override;
+
+    // The track row currently highlighted for a file drop, or -1. Test hook (the drop highlight is
+    // otherwise only observable as pixels).
+    int getFileDropRowForTest() const noexcept { return fileDropRow_; }
+
+    // ---- Empty-row hint ----
+    // The hint line an EMPTY row of this kind paints (empty String for Automation — nothing to
+    // author there). Pure: the exact strings paint() draws, so a test pins the text without
+    // decoding pixels.
+    static juce::String emptyRowHintFor(synth::TrackKind kind);
+    // Same, resolved against the doc: the hint the row at `trackIndex` paints, or an empty String
+    // when that row has clips (or does not exist).
+    juce::String getEmptyRowHintForTest(int trackIndex) const;
 
     // Fired when the user picks "Relink audio…" from an audio clip's context menu (visible
     // whenever assetRef is non-empty, whether the current asset is missing or present). Non-owning;
@@ -239,6 +296,32 @@ private:
     Geometry effectiveGeometryFor(const synth::Clip& clip) const;
     double currentBeatsPerBar() const;
     double snappedBeatAt(double rawBeat) const;
+    // The snap grid line at or BEFORE `rawBeat` (never after it), clamped to >= 0 — what a
+    // created clip starts on, so a double-click always lands inside the bar/beat cell it was
+    // aimed at rather than the next one. Same grid every drag uses (TimelineViewState::
+    // divisionBeats); Snap::Off passes the raw beat through.
+    double floorSnappedBeatAt(double rawBeat) const;
+
+    // The track row `pos.y` falls on, or nullopt when there is no doc or it is below the last row.
+    std::optional<int> trackIndexAt(juce::Point<int> pos) const;
+    // The row's full-width rect (the same y/height computeClipRect gives that row).
+    juce::Rectangle<int> rowBounds(int trackIndex, int rowHeight) const;
+
+    // ---- Authoring (double-click on empty lane space) ----
+    // One-bar clip on `track` at `startBeat`, as ONE recordTimelineChange, selected, then
+    // onClipDoubleClicked so the caller opens the piano roll on it.
+    void createMidiClipAt(synth::TrackId track, double startBeat);
+    // Asks audioFileChooser_ for a file and reports it through onAudioFileDropped.
+    void requestAudioFileFor(synth::TrackId track, double startBeat);
+    // The real async chooser audioFileChooser_ defaults to (see setAudioFileChooser).
+    void launchAudioFileChooser(std::function<void(const juce::File&)> onChosen);
+    // True when `file`'s EXTENSION is one audioFormats_ can read. No file is ever opened.
+    bool isReadableAudioFile(const juce::File& file) const;
+    // The first file in `files` isReadableAudioFile() accepts, or an invalid File.
+    juce::File firstAudioFileIn(const juce::StringArray& files) const;
+    // The audio row `x, y` would drop onto, or -1 (no audio row there, or nothing droppable).
+    int dropRowFor(const juce::StringArray& files, int x, int y) const;
+    void setFileDropRow(int row);
 
     void beginMarquee(juce::Point<int> anchor, bool additive);
     void updateMarquee(juce::Point<int> current);
@@ -278,6 +361,12 @@ private:
     // headless.
     void paintMissingAssetPlaceholder(juce::Graphics& g, const synth::Clip& clip, juce::Rectangle<int> rect);
     void paintLiveRecordingStrip(juce::Graphics& g);
+    // The dim "how do I put something here" line for a row with no clips (see emptyRowHintFor).
+    // Static paint straight from doc state — no timer, no animation. Skipped when the row is too
+    // short or too narrow to render the line legibly.
+    void paintEmptyRowHint(juce::Graphics& g, const synth::Track& track, juce::Rectangle<int> bounds);
+    // The accent wash marking the audio row an OS file drop would land on.
+    void paintFileDropHighlight(juce::Graphics& g, juce::Rectangle<int> bounds);
     // Shared by updateLiveRecording()'s "nothing recording (any more)" branch and its
     // track-vanished branch: one repaint over wherever the strip used to be, then a clean reset.
     void clearLiveRecording();
@@ -325,6 +414,14 @@ private:
     std::vector<std::pair<float, float>> livePeaks_;
     juce::Rectangle<int> liveStripRect_;
     int liveStripRepaintCount_ = 0;
+
+    // ---- Authoring / file drop ----
+    // Registered with the basic formats once, in the constructor: it answers "can this extension be
+    // read" for a drag and supplies the chooser's filter. Never used to open a file.
+    juce::AudioFormatManager audioFormats_;
+    AudioFileChooser audioFileChooser_;
+    std::unique_ptr<juce::FileChooser> fileChooser_; // kept alive for the duration of launchAsync
+    int fileDropRow_ = -1;                           // -1 = nothing highlighted
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelineClipLaneArea)
 };

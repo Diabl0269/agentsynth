@@ -143,6 +143,13 @@ public:
 #endif
     bool isTimelineConfiguredVisible() const { return isTimelineVisible; }
     synth::ui::TimelinePanelComponent& getTimelinePanel() { return timelinePanel; }
+
+    /** The settings key the user-dragged timeline height round-trips through. The theme metric
+     *  (Metrics::timelinePanelHeight) is only the DEFAULT — see clampTimelinePanelHeight(). */
+    static constexpr const char* kTimelinePanelHeightKey = "timelinePanelHeight";
+
+    /** The panel's current docked height in px, always clamped (see clampTimelinePanelHeight()). */
+    int getTimelinePanelHeight() const noexcept { return timelinePanelHeight_; }
     // Test hooks. The doc and the recorder are real app state (not test-only objects), so
     // these are plain accessors; the simulate*/…ForTest entry points below drive the same code
     // paths the buttons and file dialogs do, minus the dialogs.
@@ -178,6 +185,12 @@ public:
     /** Exactly what the production "Relink audio…" FileChooser callback runs once the user
      *  has picked a file — bypasses the async dialog itself, same idiom as saveProjectForTest. */
     void relinkClipAssetForTest(synth::ClipId id, const juce::File& chosenFile) { relinkClipAsset(id, chosenFile); }
+    /** Exactly what the clip lane area reports when the user drops an audio file on an audio row
+     *  (or picks one from the double-click chooser) — bypasses the OS drag/dialog, same idiom as
+     *  relinkClipAssetForTest. */
+    void importAudioFileToClipForTest(synth::TrackId track, double startBeat, const juce::File& sourceFile) {
+        importAudioFileToClip(track, startBeat, sourceFile);
+    }
     /** Sweeps `<bundle>/Audio/` (+ `Peaks/`) for files no clip in the live timeline
      *  references and deletes exactly those — see synth::AssetManager::cleanUnusedAssets. A no-op
      *  (returns 0) outside a saved bundle. Not wired to any menu/shortcut yet — see
@@ -418,6 +431,19 @@ private:
     // has no ref to relink, or the import fails.
     void relinkClipAsset(synth::ClipId id, const juce::File& chosenFile);
 
+    // What the clip lane area's authoring gestures (double-click an empty audio row, or drop files
+    // on one) report through TimelineClipLaneArea::onAudioFileDropped. Imports `sourceFile` under
+    // the SAME policy relinkClipAsset() uses (bundle Audio/, or the app-data Recordings/ convention
+    // when the project has never been saved) and then adds ONE clip at `startBeat`, as long as the
+    // file itself, bound to the new ref — the two doc calls batched into ONE undo step. A no-op with
+    // a status-bar message when `track` is not an Audio-kind track or the import fails; a failed
+    // import mutates nothing at all.
+    void importAudioFileToClip(synth::TrackId track, double startBeat, const juce::File& sourceFile);
+
+    // `file`'s duration in beats at the transport's CURRENT bpm (0.0 when it isn't readable audio).
+    // Beats, not seconds, because a clip's length is beats — see synth::Clip.
+    double audioFileLengthInBeats(const juce::File& file) const;
+
     // synth::AssetManager::cleanUnusedAssets against the current bundle + live timeline doc. 0
     // outside a saved bundle (nothing to sweep). See cleanUnusedAssetsForTest()'s comment for why
     // this has no menu/shortcut wiring yet.
@@ -463,6 +489,23 @@ private:
     // the always-false isTimelineVisible member) so every call site has one uniform signature;
     // the carve driven by it is what's actually gated, inside the .cpp.
     PanelBoundsResult computePanelBounds(bool libVisible, bool aiVisible, bool timelineVisible) const;
+
+    // ---- Timeline panel height (user-resizable, persisted) ----
+
+    // Metrics::timelinePanelHeight (220 headless) — the DEFAULT height and the MINIMUM the user can
+    // drag down to, never the fixed height it used to be.
+    int defaultTimelinePanelHeight() const;
+
+    // [defaultTimelinePanelHeight(), 75% of the window height]. Applied on every layout pass, so a
+    // height saved on a big window can never swallow a smaller window's canvas. Before the first
+    // layout (window height still 0) only the floor applies — otherwise construction would clamp a
+    // persisted height away against a window that doesn't exist yet.
+    int clampTimelinePanelHeight(int desiredHeight) const;
+
+    // Clamps, stores and re-lays-out (live, once per drag callback — user-driven, not a
+    // free-running repaint). `persist` writes kTimelinePanelHeightKey; the drag does that only on
+    // mouse-up.
+    void setTimelinePanelHeight(int desiredHeight, bool persist);
 
     // Update the displayed patch name (status bar). Immediate repaint, no timer delay.
     void setCurrentPatchName(const juce::String& name);
@@ -561,6 +604,10 @@ private:
     // only the toolbar button/command/carve that could ever flip isTimelineVisible are gated.
     synth::ui::TimelinePanelComponent timelinePanel;
     bool isTimelineVisible = false;
+    // The panel's docked height. Resolved in initialiseCommon() from kTimelinePanelHeightKey (theme
+    // metric when absent) and moved by the panel's top-edge drag; 0 only before that, and forever in
+    // a flag-OFF build, where nothing carries it into a layout.
+    int timelinePanelHeight_ = 0;
     // Playing->stopped edge detection for the MIDI recorder's auto-commit-on-stop, updated
     // once per 10 Hz poll tick — mirrors AutomationRecorder's own `lastPlaying` bookkeeping.
     bool wasTransportPlaying_ = false;

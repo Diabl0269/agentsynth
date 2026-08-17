@@ -13,6 +13,8 @@ constexpr double kMinLabelSpacingPx = 40.0;       // never draw two bar labels c
 constexpr double kMinBeatTickPixelsPerBeat = 8.0; // below this, per-beat ticks would just be noise
 constexpr float kLoopBraceHeight = 4.0f;
 constexpr float kLoopBraceTickHeight = 8.0f;
+// Hover affordance: just enough tint to read which half is armed, not enough to fight the ticks.
+constexpr float kHoverBandAlpha = 0.10f;
 
 // Same formula as TransportService::getPosition() (a beat is always a quarter note, regardless of
 // the file's notated denominator) — kept in sync there rather than shared, since that one lives on
@@ -39,6 +41,10 @@ double TimelineRulerComponent::snappedBeatAtX(double x) const noexcept {
     return viewState_.snapBeat(viewState_.xToBeat(x), currentBeatsPerBar());
 }
 
+TimelineRulerComponent::Zone TimelineRulerComponent::zoneAtY(float y) const noexcept {
+    return y < (float)getHeight() * 0.5f ? Zone::Loop : Zone::Playhead;
+}
+
 //==============================================================================
 void TimelineRulerComponent::mouseDown(const juce::MouseEvent& e) {
     if (transport_ == nullptr)
@@ -46,38 +52,87 @@ void TimelineRulerComponent::mouseDown(const juce::MouseEvent& e) {
 
     if (e.mods.isCommandDown()) {
         // Cmd+click: toggle looping off, keeping the existing bounds — v1 keeps this simple
-        // rather than also supporting re-enabling a brace from a plain click on it.
+        // rather than also supporting re-enabling a brace from a plain click on it. Zone-agnostic.
         const auto snap = transport_->getPositionSnapshot();
         transport_->setLoop(snap.loopStartPpq, snap.loopEndPpq, false);
         repaint();
         return;
     }
 
+    // Latch the zone for the whole gesture: mid-drag the pointer routinely leaves the band it
+    // started in, and the gesture must not change meaning under the user's hand.
+    gestureZone_ = zoneAtY(e.position.y);
+
     dragAnchorBeat_ = snappedBeatAtX((double)e.position.x);
     lastPostedLoopStart_ = -1.0; // nothing posted yet this gesture
     lastPostedLoopEnd_ = -1.0;
+    lastPostedSeekBeat_ = -1.0;
+
+    // Playhead zone seeks on press, not on release — the cursor lands where you clicked and then
+    // follows the drag.
+    if (gestureZone_ == Zone::Playhead)
+        postSeekIfChanged(e);
 }
 
 void TimelineRulerComponent::mouseDrag(const juce::MouseEvent& e) {
     if (transport_ == nullptr || e.mods.isCommandDown())
         return;
-    postLoopIfChanged(e);
+
+    if (gestureZone_ == Zone::Playhead)
+        postSeekIfChanged(e);
+    else
+        postLoopIfChanged(e);
 }
 
 void TimelineRulerComponent::mouseUp(const juce::MouseEvent& e) {
     if (transport_ == nullptr || e.mods.isCommandDown())
         return; // Cmd+click was already fully handled in mouseDown.
 
-    if (!e.mouseWasDraggedSinceMouseDown()) {
-        transport_->locateBeat(snappedBeatAtX((double)e.position.x));
-        repaint();
+    // Both finalisers are the same "only post when the snapped value changed" throttle their drag
+    // path used, so a release that adds no new information is a no-op.
+    if (gestureZone_ == Zone::Playhead) {
+        postSeekIfChanged(e);
         return;
     }
 
-    // Finalise the drag. postLoopIfChanged is the same "only post when the snapped pair changed"
-    // throttle mouseDrag used, so this naturally becomes a no-op if the last drag update already
-    // posted today's final [start,end] — satisfying "post on mouseUp OR on change" with one path.
-    postLoopIfChanged(e);
+    // Loop zone: a click with no drag does nothing. Deliberate — the loop range is the only thing
+    // this half owns, and a stray click must not clear or collapse it.
+    if (e.mouseWasDraggedSinceMouseDown())
+        postLoopIfChanged(e);
+}
+
+void TimelineRulerComponent::mouseEnter(const juce::MouseEvent& e) { setHoveredZone(zoneAtY(e.position.y)); }
+
+void TimelineRulerComponent::mouseMove(const juce::MouseEvent& e) { setHoveredZone(zoneAtY(e.position.y)); }
+
+void TimelineRulerComponent::mouseExit(const juce::MouseEvent&) { setHoveredZone(std::nullopt); }
+
+void TimelineRulerComponent::setHoveredZone(std::optional<Zone> zone) {
+    if (zone == hoveredZone_)
+        return; // repaint on zone changes only — never once per pixel of mouse movement
+    hoveredZone_ = zone;
+
+    if (!hoveredZone_.has_value())
+        setMouseCursor(juce::MouseCursor::NormalCursor);
+    else if (*hoveredZone_ == Zone::Playhead)
+        setMouseCursor(juce::MouseCursor::PointingHandCursor);
+    else
+        setMouseCursor(juce::MouseCursor::LeftRightResizeCursor);
+
+    repaint();
+}
+
+void TimelineRulerComponent::postSeekIfChanged(const juce::MouseEvent& e) {
+    // Clamped the same way TransportService::locateBeat clamps, so the dedupe below can't be
+    // fooled into re-posting identical seeks while the pointer drags left of beat 0.
+    const double beat = std::max(0.0, snappedBeatAtX((double)e.position.x));
+    if (beat == lastPostedSeekBeat_)
+        return; // unchanged since the last post — the FIFO dedupes nothing, so don't spam it
+
+    transport_->locateBeat(beat);
+    lastPostedSeekBeat_ = beat;
+    ++seekPostCount_;
+    repaint();
 }
 
 void TimelineRulerComponent::postLoopIfChanged(const juce::MouseEvent& e) {
@@ -179,6 +234,18 @@ void TimelineRulerComponent::paint(juce::Graphics& g) {
                                    (float)bounds.getHeight());
             }
         }
+    }
+
+    // Hover affordance: tint the half the pointer is over, so which gesture is armed is visible
+    // before pressing. Drawn under the loop brace so the brace stays legible.
+    if (hoveredZone_.has_value()) {
+        auto band = bounds.toFloat();
+        if (*hoveredZone_ == Zone::Loop)
+            band = band.removeFromTop(band.getHeight() * 0.5f);
+        else
+            band = band.removeFromBottom(band.getHeight() * 0.5f);
+        g.setColour(accent.withAlpha(kHoverBandAlpha));
+        g.fillRect(band);
     }
 
     // Loop brace: a bracket spanning [loopStartPpq, loopEndPpq] in the accent colour.

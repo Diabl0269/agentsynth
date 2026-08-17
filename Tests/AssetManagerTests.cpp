@@ -8,7 +8,9 @@
 //
 // Groups:
 //   1. ImportCopiesAndDedupes — collision-free naming, identical-content reuse, non-audio rejection.
-//   2. RelinkRewritesAllSharingClips — through MainComponent::relinkClipAssetForTest.
+//   2. RelinkRewritesAllSharingClips — through MainComponent::relinkClipAssetForTest — plus the
+//      authoring-gesture import (MainComponent::importAudioFileToClipForTest): saved-bundle and
+//      unsaved-project destinations, clip length from the file, and failure mutating nothing.
 //   3. CollectFindsExactlyUnused (+ clean deletes exactly that).
 //   4. Recordings/ adoption on save — file+ref rewrite, project.json, stability, source-start
 //      preservation, and that the original Recordings/ file is never touched.
@@ -272,6 +274,117 @@ TEST_F(AssetManagerRelinkTest, RelinkRewritesAllSharingClips) {
     EXPECT_DOUBLE_EQ(doc.getClip(sharerA)->sourceStartSeconds, 1.5);
     EXPECT_DOUBLE_EQ(doc.getClip(sharerB)->sourceStartSeconds, 2.5);
     EXPECT_FALSE(mc.getUndoManager().canUndo()) << "the whole relink was ONE undo step";
+}
+
+// ---- The authoring-gesture import (double-click an empty audio row / drop a file on one) ----
+//
+// Same policy as the relink above, one step further: it also creates the clip. The lane-area half
+// (which row, which beat) is covered in Tests/TimelineClipLaneTests.cpp group 7.
+
+TEST_F(AssetManagerRelinkTest, DroppedAudioFileImportsIntoSavedBundleAsOneUndoStep) {
+    MainComponent mc(std::make_unique<MockProviderAM>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+
+    auto& doc = mc.getTimelineDoc();
+    const auto trackId = doc.addTrack(TrackKind::Audio, "Audio 1");
+
+    const auto bundleDir = root.getChildFile("Import.agsproj");
+    mc.saveProjectForTest(bundleDir);
+    ASSERT_TRUE(ProjectBundle::isBundle(bundleDir));
+
+    // Exactly one second of audio, so the expected clip length is "one second in beats".
+    constexpr double kSampleRate = 44100.0;
+    const auto source = root.getChildFile("dropped.wav");
+    ASSERT_TRUE(writeWav(source, 44100, 1, kSampleRate, [](juce::int64 i, int) { return (float)i / 44100.0f; }));
+
+    const double bpm = mc.getAudioEngine().getTransport().getPositionSnapshot().bpm;
+    ASSERT_GT(bpm, 0.0);
+
+    mc.getUndoManager().clearUndoHistory();
+    mc.importAudioFileToClipForTest(trackId, 4.0, source);
+
+    const auto* track = doc.getTrack(trackId);
+    ASSERT_NE(track, nullptr);
+    ASSERT_EQ(track->clips.size(), 1u);
+    const auto& clip = track->clips[0];
+    EXPECT_EQ(clip.assetRef, juce::String("Audio/dropped.wav")) << "a saved project imports into the bundle";
+    EXPECT_EQ(clip.name, juce::String("dropped"));
+    EXPECT_DOUBLE_EQ(clip.startBeat, 4.0) << "the beat the gesture reported, unmodified";
+    EXPECT_DOUBLE_EQ(clip.sourceStartSeconds, 0.0) << "an imported file plays from its own start";
+    EXPECT_NEAR(clip.lengthBeats, bpm / 60.0, 1e-6) << "one second of audio, expressed in beats";
+    EXPECT_TRUE(bundleDir.getChildFile("Audio").getChildFile("dropped.wav").existsAsFile());
+    EXPECT_EQ(mc.getStatusBar().getTransientMessageForTest(), "Imported Audio/dropped.wav");
+
+    // The clip AND its asset binding are ONE undo step.
+    ASSERT_TRUE(mc.getUndoManager().canUndo());
+    mc.getUndoManager().undo();
+    EXPECT_TRUE(doc.getTrack(trackId)->clips.empty());
+    EXPECT_FALSE(mc.getUndoManager().canUndo());
+}
+
+TEST_F(AssetManagerRelinkTest, DroppedAudioFileOnUnsavedProjectUsesTheRecordingsPolicy) {
+    MainComponent mc(std::make_unique<MockProviderAM>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+
+    auto& doc = mc.getTimelineDoc();
+    const auto trackId = doc.addTrack(TrackKind::Audio, "Audio 1");
+
+    // Deliberately never saved: the import must land in the app-data Recordings/ convention that
+    // save-time adoption (synth::AssetManager::adoptRecordingsAssets) later sweeps into the bundle,
+    // exactly like a take recorded before the first save.
+    const auto source = root.getChildFile("agentsynth-unsaved-import.wav");
+    ASSERT_TRUE(writeWav(source, 22050, 1, 44100.0, [](juce::int64 i, int) { return (float)i / 22050.0f; }));
+
+    mc.importAudioFileToClipForTest(trackId, 0.0, source);
+
+    const auto* track = doc.getTrack(trackId);
+    ASSERT_NE(track, nullptr);
+    ASSERT_EQ(track->clips.size(), 1u);
+    const auto ref = track->clips[0].assetRef;
+    ASSERT_TRUE(ref.startsWith("Recordings/")) << "unsaved project ref prefix (see MainComponent::chooseTakeFiles)";
+
+    const auto imported = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                              .getChildFile("Agent Synth")
+                              .getChildFile("Recordings")
+                              .getChildFile(ref.fromLastOccurrenceOf("/", false, false));
+    EXPECT_TRUE(imported.existsAsFile()) << "the file itself is copied into app data, not referenced in place";
+    EXPECT_TRUE(source.existsAsFile()) << "the source is never moved or deleted";
+
+    imported.deleteFile(); // the app-data folder is real, shared state — leave nothing behind
+}
+
+TEST_F(AssetManagerRelinkTest, FailedImportMutatesNothing) {
+    MainComponent mc(std::make_unique<MockProviderAM>());
+    mc.setSize(1600, 900);
+    mc.getAudioEngine().suspendDeviceCallback();
+
+    auto& doc = mc.getTimelineDoc();
+    const auto audioTrack = doc.addTrack(TrackKind::Audio, "Audio 1");
+    const auto midiTrack = doc.addTrack(TrackKind::Midi, "Track 1");
+
+    const auto bundleDir = root.getChildFile("Failed.agsproj");
+    mc.saveProjectForTest(bundleDir);
+    mc.getUndoManager().clearUndoHistory();
+
+    // A ".wav" that is not a WAV: the sniff fails, so nothing is copied and nothing is created.
+    const auto garbage = root.getChildFile("garbage.wav");
+    garbage.replaceWithText("this is not a WAV file");
+
+    mc.importAudioFileToClipForTest(audioTrack, 0.0, garbage);
+
+    EXPECT_TRUE(doc.getTrack(audioTrack)->clips.empty()) << "a failed import leaves no clip behind";
+    EXPECT_FALSE(mc.getUndoManager().canUndo()) << "and no undo step either";
+    EXPECT_TRUE(mc.getStatusBar().getTransientMessageForTest().startsWith("Import failed:"));
+    EXPECT_FALSE(bundleDir.getChildFile("Audio").getChildFile("garbage.wav").existsAsFile());
+
+    // A MIDI-kind track is refused outright — an asset belongs on an audio row.
+    const auto source = root.getChildFile("real.wav");
+    ASSERT_TRUE(writeWav(source, 100, 1, 44100.0, [](juce::int64 i, int) { return (float)i / 1000.0f; }));
+    mc.importAudioFileToClipForTest(midiTrack, 0.0, source);
+    EXPECT_TRUE(doc.getTrack(midiTrack)->clips.empty());
+    EXPECT_FALSE(mc.getUndoManager().canUndo());
 }
 
 #endif // SYNTH_ENABLE_TIMELINE

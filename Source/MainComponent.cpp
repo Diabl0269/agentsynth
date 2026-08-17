@@ -96,13 +96,16 @@ bool isOrIsChildOf(const juce::Component* candidate, const juce::Component& ance
 
 #endif // SYNTH_ENABLE_TIMELINE
 
-// Human-readable identity for a graph node in the binding chip and its menu. Every Track In node
-// reports the same processor name, so the node id is appended — two "Track In" rows a user cannot
-// tell apart is exactly how a track ends up bound to the wrong one.
+// Human-readable identity for a graph node — the binding chip's base label and the re-bind menu's
+// starting point. Plain processor name only: appending "#id" unconditionally was itself the source
+// of founder confusion (a chip reading "Track In #16" reads like a module name, not a binding), and
+// the id means nothing outside a menu actually showing two same-named candidates at once.
+// getAvailableTrackInNodes (below) is where that disambiguation happens, over the option list it is
+// building — never here, and never on the chip.
 juce::String describeNodeForBinding(juce::AudioProcessorGraph::Node* node) {
     if (node == nullptr || node->getProcessor() == nullptr)
         return {};
-    return node->getProcessor()->getName() + " #" + juce::String((int)node->nodeID.uid);
+    return node->getProcessor()->getName();
 }
 
 } // namespace
@@ -198,6 +201,10 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // let a value persisted by an earlier flag-ON run silently dock the panel with no button or
     // shortcut left to hide it again.
     isTimelineVisible = appProperties.getUserSettings()->getBoolValue("timelinePanelVisible", false);
+    // The theme metric is the DEFAULT height, not the law: a height the user dragged wins. Clamped
+    // here and on every resized() — see clampTimelinePanelHeight().
+    timelinePanelHeight_ = clampTimelinePanelHeight(
+        appProperties.getUserSettings()->getIntValue(kTimelinePanelHeightKey, defaultTimelinePanelHeight()));
 #endif
     graphEditor.setAlignmentGuidesEnabled(
         appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true));
@@ -529,6 +536,15 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     timelinePanel.setMetronome(&audioEngine.getMetronome());
     timelinePanel.setApplicationProperties(&appProperties);
 
+    // The panel's top-edge drag reports a desired height; THIS component owns it — clamp, lay out
+    // live, and persist once the drag ends (not per pixel).
+    timelinePanel.onResizeHeight = [this](int desiredHeight) {
+        setTimelinePanelHeight(desiredHeight, /*persist=*/false);
+    };
+    timelinePanel.onResizeHeightCommitted = [this](int desiredHeight) {
+        setTimelinePanelHeight(desiredHeight, /*persist=*/true);
+    };
+
     // This component owns the app's one live TimelineDoc, so it owns the four hooks that
     // keep the rest of the system in step with it. The full inventory is in docs/architecture.md
     // ("App wiring") — keep the two in sync.
@@ -571,6 +587,13 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // "Relink audio…" bubbles up here rather than being handled inside the lane area itself
     // — it needs a host FileChooser and synth::AssetManager import, neither of which that class has.
     timelinePanel.getClipLaneArea().onRelinkAudioRequested = [this](synth::ClipId id) { promptRelinkClipAsset(id); };
+    // Same division of labour for the authoring gestures: the lane area decides WHICH audio track
+    // and WHICH beat (double-click on an empty audio row, or an OS file drop on one), and this owns
+    // the import + clip creation, because only it knows the bundle root.
+    timelinePanel.getClipLaneArea().onAudioFileDropped = [this](synth::TrackId track, double startBeat,
+                                                                juce::File file) {
+        importAudioFileToClip(track, startBeat, file);
+    };
     // BEFORE the first publish below — publishTimeline() syncs the clip streamer, and it can
     // only resolve an asset ref once it knows the roots.
     refreshAssetRoots();
@@ -713,7 +736,8 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         auto fromResult = computePanelBounds(isLibraryVisible, isAiPanelVisible, !newVisible); // previous layout
         if (newVisible) {
             // Showing: make visible before animating in, sliding up from a zero-height rect
-            // pinned at the panel's final y (bottom edge fixed, height 0 -> timelinePanelHeight).
+            // pinned at the panel's final y (bottom edge fixed, height 0 -> timelinePanelHeight_,
+            // i.e. the user's current height, not the theme metric).
             timelinePanel.setVisible(true);
             if (fromResult.timelineBounds.isEmpty()) {
                 auto finalBounds = computePanelBounds(isLibraryVisible, isAiPanelVisible, true).timelineBounds;
@@ -1821,10 +1845,10 @@ void MainComponent::resized() {
     // Full-width panel carved AFTER the status bar and BEFORE the AI/library removals, so
     // it sits directly above the status bar spanning the whole window width.
     if (isTimelineVisible) {
-        int timelineH = 220;
-        if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-            timelineH = lf->getTheme().metrics.timelinePanelHeight;
-        timelinePanel.setBounds(bounds.removeFromBottom(timelineH));
+        // Re-clamped every pass: the window may have shrunk since the height was set (or persisted
+        // on a larger one), and the canvas must stay usable.
+        timelinePanelHeight_ = clampTimelinePanelHeight(timelinePanelHeight_);
+        timelinePanel.setBounds(bounds.removeFromBottom(timelinePanelHeight_));
     }
 #endif
 
@@ -1958,12 +1982,8 @@ MainComponent::PanelBoundsResult MainComponent::computePanelBounds(bool libVisib
 #if SYNTH_ENABLE_TIMELINE
     // Carved AFTER the status bar and BEFORE the AI/library removals — full-width, directly
     // above the status bar (see resized(), which carves in the same order).
-    if (timelineVisible) {
-        int timelineH = 220;
-        if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-            timelineH = lf->getTheme().metrics.timelinePanelHeight;
-        result.timelineBounds = bounds.removeFromBottom(timelineH);
-    }
+    if (timelineVisible)
+        result.timelineBounds = bounds.removeFromBottom(clampTimelinePanelHeight(timelinePanelHeight_));
 #else
     (void)timelineVisible;
 #endif
@@ -1973,6 +1993,41 @@ MainComponent::PanelBoundsResult MainComponent::computePanelBounds(bool libVisib
         result.libraryBounds = bounds.removeFromLeft(libW);
     result.graphEditorBounds = bounds;
     return result;
+}
+
+// ---- Timeline panel height (user-resizable, persisted) ----
+
+int MainComponent::defaultTimelinePanelHeight() const {
+    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        return lf->getTheme().metrics.timelinePanelHeight;
+    return 220; // headless literal fallback, same pattern as resized()
+}
+
+int MainComponent::clampTimelinePanelHeight(int desiredHeight) const {
+    const int minHeight = defaultTimelinePanelHeight();
+    // Window not laid out yet: only the floor applies, so a persisted height survives construction
+    // and is capped by the first real resized() instead.
+    const int maxHeight =
+        getHeight() > 0 ? std::max(minHeight, (getHeight() * 3) / 4) : std::max(minHeight, desiredHeight);
+    return juce::jlimit(minHeight, maxHeight, desiredHeight);
+}
+
+void MainComponent::setTimelinePanelHeight(int desiredHeight, bool persist) {
+#if SYNTH_ENABLE_TIMELINE
+    const int clamped = clampTimelinePanelHeight(desiredHeight);
+    if (clamped != timelinePanelHeight_) {
+        timelinePanelHeight_ = clamped;
+        // One layout pass per drag callback — user-driven, so it is not a free-running repaint.
+        resized();
+    }
+    if (persist) {
+        appProperties.getUserSettings()->setValue(kTimelinePanelHeightKey, timelinePanelHeight_);
+        appProperties.saveIfNeeded();
+    }
+#else
+    (void)desiredHeight;
+    (void)persist;
+#endif
 }
 
 // ---- Animated panel transition ----
@@ -2593,6 +2648,72 @@ void MainComponent::relinkClipAsset(synth::ClipId id, const juce::File& chosenFi
 #endif
 }
 
+double MainComponent::audioFileLengthInBeats(const juce::File& file) const {
+#if SYNTH_ENABLE_TIMELINE
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
+    if (reader == nullptr || reader->sampleRate <= 0.0 || reader->lengthInSamples <= 0)
+        return 0.0;
+
+    const double seconds = (double)reader->lengthInSamples / reader->sampleRate;
+    const auto snap = audioEngine.getTransport().getPositionSnapshot();
+    const double bpm = snap.bpm > 0.0 ? snap.bpm : 120.0;
+    return seconds * bpm / 60.0;
+#else
+    juce::ignoreUnused(file);
+    return 0.0;
+#endif
+}
+
+void MainComponent::importAudioFileToClip(synth::TrackId track, double startBeat, const juce::File& sourceFile) {
+#if SYNTH_ENABLE_TIMELINE
+    const auto* trackPtr = timelineDoc.getTrack(track);
+    if (trackPtr == nullptr || trackPtr->kind != synth::TrackKind::Audio)
+        return;
+
+    // The SAME import policy relinkClipAsset() uses — a saved project imports into the bundle's
+    // Audio/, an unsaved one into the app-data Recordings/ convention chooseTakeFiles() writes takes
+    // into, which saveToFile() sweeps into the bundle via
+    // synth::AssetManager::adoptRecordingsAssets before it ever writes project.json.
+    juce::String error;
+    juce::String newRef;
+    if (currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_)) {
+        newRef = synth::AssetManager::importAudioFile(sourceFile, currentBundleDir_, &error);
+    } else {
+        const auto recordingsRoot = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                        .getChildFile(synth::branding::kSettingsFolderName)
+                                        .getChildFile(kRecordingsFolderName);
+        const auto name = synth::AssetManager::importAudioFileToDirectory(sourceFile, recordingsRoot, &error);
+        if (name.isNotEmpty())
+            newRef = juce::String(kRecordingsFolderName) + "/" + name;
+    }
+
+    if (newRef.isEmpty()) {
+        // Reported and abandoned BEFORE any mutation: a failed import leaves no clip behind.
+        statusBar.showMessage("Import failed: " + error);
+        return;
+    }
+
+    // The clip is as long as the file (never as long as some default), floored at the same minimum
+    // an audio take uses so a sub-frame file still produces a grabbable clip.
+    const double lengthBeats = std::max(kMinAudioClipLengthBeats, audioFileLengthInBeats(sourceFile));
+
+    // ONE undo step for the clip AND its asset binding, exactly like commitAudioRecording().
+    undoManager.recordTimelineChange(timelineDoc, [&] {
+        const auto clip =
+            timelineDoc.addClip(track, std::max(0.0, startBeat), lengthBeats, sourceFile.getFileNameWithoutExtension());
+        if (!clip.isValid())
+            return; // the track went away, or it is at kMaxClipsPerTrack
+        timelineDoc.setClipAsset(clip, newRef, 0.0);
+    });
+
+    statusBar.showMessage("Imported " + newRef);
+#else
+    juce::ignoreUnused(track, startBeat, sourceFile);
+#endif
+}
+
 int MainComponent::cleanUnusedAssets() {
 #if SYNTH_ENABLE_TIMELINE
     if (currentBundleDir_ == juce::File() || !synth::ProjectBundle::isBundle(currentBundleDir_))
@@ -2698,6 +2819,7 @@ MainComponent::getAvailableTrackInNodes(synth::TrackId forTrack) {
                                       ? ModuleType::TimelineAudioSource
                                       : ModuleType::TimelineMidiSource;
 
+    std::vector<juce::AudioProcessorGraph::Node*> candidates;
     for (auto* node : audioEngine.getGraph().getNodes()) {
         if (node == nullptr)
             continue;
@@ -2709,7 +2831,22 @@ MainComponent::getAvailableTrackInNodes(synth::TrackId forTrack) {
         if (uuid.isEmpty() || claimedByOtherTracks.count(uuid) > 0)
             continue;
 
-        options.push_back({uuid, describeNodeForBinding(node)});
+        candidates.push_back(node);
+    }
+
+    // "#id" is disambiguation, not identity: an option earns the suffix only when some OTHER
+    // candidate in this same menu carries the same plain name. Two passes because no candidate
+    // knows it needs one until the whole list is known.
+    std::map<juce::String, int> nameOccurrences;
+    for (auto* node : candidates)
+        ++nameOccurrences[describeNodeForBinding(node)];
+
+    for (auto* node : candidates) {
+        const juce::String uuid = node->properties["uuid"].toString();
+        const juce::String name = describeNodeForBinding(node);
+        const juce::String display =
+            nameOccurrences[name] > 1 ? name + " #" + juce::String((int)node->nodeID.uid) : name;
+        options.push_back({uuid, display});
     }
 #else
     juce::ignoreUnused(forTrack);
