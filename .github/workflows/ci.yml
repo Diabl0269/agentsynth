@@ -210,7 +210,24 @@ jobs:
         export LLVM_PROFILE_FILE="default.profraw"
         # Run without xvfb — tests are headless and xvfb's X11 event loop
         # adds ~44s overhead per pumpMessages() call on slow CI runners
-        ./build/Tests/Tests
+        #
+        # Watchdog: a hung test must die with thread stacks, not a silent step timeout. SIGABRT
+        # after 8 minutes, then print every thread's backtrace from the core.
+        sudo apt-get install -y --no-install-recommends gdb > /dev/null 2>&1 || true
+        ulimit -c unlimited
+        echo 'core.%p' | sudo tee /proc/sys/kernel/core_pattern > /dev/null
+        set +e
+        timeout -s ABRT 480 ./build/Tests/Tests
+        status=$?
+        set -e
+        if [ "$status" -ne 0 ]; then
+          core=$(ls core.* 2>/dev/null | head -1)
+          if [ -n "$core" ]; then
+            echo "=== hang/crash backtraces ==="
+            gdb -batch -ex 'thread apply all bt' ./build/Tests/Tests "$core" 2>/dev/null | tail -300
+          fi
+        fi
+        exit $status
 
     - name: Check Coverage
       if: github.event_name == 'pull_request'
