@@ -588,21 +588,21 @@ While placing a module, Agent Synth can **suggest logical cables** to nearby mod
 
 ### Modes (`Settings → Appearance → Smart connections`)
 
-Persisted as `smartConnectionMode` in `juce::ApplicationProperties`. Default: **New + unwired moves**.
+Persisted as `smartConnectionMode` in `juce::ApplicationProperties`. Default: **When main I/O is free** (`NewAndUnwired`).
 
 | Mode | Library drop | Reposition existing module |
 |---|---|---|
 | **Off** | Never | Never |
 | **New modules only** | Yes | Never |
-| **New + unwired moves** (default) | Yes | Only if the moved module has no cables yet |
-| **All module moves** | Yes | Yes (still only onto free destination jacks) |
+| **When main I/O is free** (default) | Yes | Yes, when the jacks that would be wired are still free (source output and dest input) |
+| **All module moves** | Yes | Yes (dest input must be free; a source that already fans out may still tap a free dest) |
 
 Group multi-select drags never smart-connect. Snippet drops are excluded.
 
 ### Behaviour
 
-1. During `updateDragPreview()`, if the mode allows it, scan neighbors within **96 px** edge-to-edge of the landing ghost.
-2. Score compatible jack pairs with `scoreJackPair` role matching, free destination jacks, and left→right bias. Stereo requires explicit Left/Right (or Audio L/R) labels — two unlabeled ports (e.g. Math A/B) are never treated as L/R. Cap at the best neighbor’s audio group (stereo L→L / R→R, or mono↔stereo fan of both legs, both-or-neither when a stereo dest has a taken leg) plus one MIDI suggestion. Mod-matrix / attenuverter destinations are skipped in v1. MIDI suggestions are limited to known MIDI sources/destinations (Sequencer, Poly MIDI, MIDI Keyboard, Oscillator, …) because `ModuleBase` defaults `producesMidi()`/`acceptsMidi()` to true for almost every card.
+1. During `updateDragPreview()`, if the mode allows it, cull neighbors whose **module** rects are more than **96 px** edge-to-edge, then score **jack-to-jack** distance (same 96 px cap). A pair is rejected when the source jack sits to the right of the dest jack — that stops wrap-around cables from a neighbor on the right into the dragged module’s left inputs.
+2. Score compatible jack pairs with `scoreJackPair` role matching and free destination jacks. In **When main I/O is free** the source output must also be unwired. Stereo requires explicit Left/Right (or Audio L/R) labels — two unlabeled ports (e.g. Math A/B) are never treated as L/R. Cap at the best neighbor’s audio group (stereo L→L / R→R, or mono↔stereo fan of both legs, both-or-neither when a stereo dest has a taken leg) plus one MIDI suggestion. Mod-matrix / attenuverter destinations are skipped in v1. MIDI suggestions are limited to known MIDI sources/destinations (Sequencer, Poly MIDI, MIDI Keyboard, Oscillator, …) because `ModuleBase` defaults `producesMidi()`/`acceptsMidi()` to true for almost every card.
 3. Frosted preview cables are drawn in `paintOverChildren` (~40% alpha via `drawConnectionWire`).
 4. On drop / `finalizeModuleDrag`, pending suggestions are applied through `connectPorts` (same path as a manual cable drag: poly fans, MIDI, structural pitch/gate).
 

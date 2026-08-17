@@ -940,9 +940,10 @@ bool GraphEditor::shouldOfferSmartConnections() const {
     case SmartConnectionMode::NewOnly:
         return false;
     case SmartConnectionMode::AllMoves:
-        return true;
     case SmartConnectionMode::NewAndUnwired:
-        return !nodeHasCables(dragPreviewSelfId);
+        // NewAndUnwired still applies on every single-module move; "unwired" is the
+        // per-jack free check in refreshSmartSuggestions (main I/O not already patched).
+        return true;
     case SmartConnectionMode::Off:
         return false;
     }
@@ -1033,6 +1034,50 @@ bool GraphEditor::isInputJackFree(juce::AudioProcessorGraph::NodeID nodeId, int 
             continue;
         for (int ch : rawChannels) {
             if (r.destChannelIndex == ch)
+                return false;
+        }
+    }
+    return true;
+}
+
+bool GraphEditor::isOutputJackFree(juce::AudioProcessorGraph::NodeID nodeId, int jack, bool isMidi) const {
+    auto& graph = audioEngine.getGraph();
+    if (isMidi) {
+        const int channel = juce::AudioProcessorGraph::midiChannelIndex;
+        for (const auto& c : graph.getConnections()) {
+            if (c.source.nodeID == nodeId && c.source.channelIndex == channel)
+                return false;
+        }
+        return true;
+    }
+
+    auto* node = graph.getNodeForId(nodeId);
+    auto* mb = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
+    std::vector<int> rawChannels;
+    if (mb != nullptr) {
+        for (const auto& t : mb->getJackTargets(jack, false)) {
+            for (int v = 0; v < t.voiceSpan; ++v)
+                rawChannels.push_back(t.rawHeadChannel + v);
+        }
+        if (rawChannels.empty())
+            rawChannels.push_back(jack);
+    } else {
+        rawChannels.push_back(jack);
+    }
+
+    for (const auto& c : graph.getConnections()) {
+        if (c.source.nodeID != nodeId)
+            continue;
+        for (int ch : rawChannels) {
+            if (c.source.channelIndex == ch)
+                return false;
+        }
+    }
+    for (const auto& r : audioEngine.getModulationRoutings()) {
+        if (!r.hasSource || r.sourceNodeID != nodeId)
+            continue;
+        for (int ch : rawChannels) {
+            if (r.sourceChannelIndex == ch)
                 return false;
         }
     }
@@ -1275,7 +1320,6 @@ void GraphEditor::refreshSmartSuggestions() {
     }
 
     const auto ghostBounds = dragPreviewGhost;
-    const float ghostCenterX = ghostBounds.toFloat().getCentreX();
 
     struct Candidate {
         SmartSuggestion suggestion;
@@ -1299,16 +1343,26 @@ void GraphEditor::refreshSmartSuggestions() {
             continue;
 
         const auto neighborBounds = neighbor->getBounds();
-        const float dist = edgeToEdgeDistance(ghostBounds.toFloat(), neighborBounds.toFloat());
-        if (dist > kSmartConnectionProximityPx)
+        const float moduleDist = edgeToEdgeDistance(ghostBounds.toFloat(), neighborBounds.toFloat());
+        // Cheap cull: facing jacks cannot be closer than the modules themselves.
+        if (moduleDist > kSmartConnectionProximityPx)
             continue;
 
         auto* neighborProc = neighbor->getModule();
+        const bool requireSourceFree = smartConnectionMode == SmartConnectionMode::NewAndUnwired;
 
-        const float neighborCenterX = neighborBounds.toFloat().getCentreX();
-        const bool ghostIsLeft = ghostCenterX <= neighborCenterX;
+        auto jackPoint = [&](bool fromGhost, int jack, bool isInput, bool isMidi) -> juce::Point<float> {
+            if (fromGhost)
+                return estimatePortCenter(ghostProc, ghostBounds, jack, isInput, isMidi).toFloat();
+            if (isMidi) {
+                const int x = isInput ? 10 : neighbor->getWidth() - 10;
+                return (neighbor->getBounds().getPosition() + juce::Point<int>(x, 30)).toFloat();
+            }
+            return (neighbor->getBounds().getPosition() + neighbor->getPortCenter(jack, isInput)).toFloat();
+        };
 
         auto pushAudioGroup = [&](bool ghostIsSource, juce::AudioProcessor* srcProc, juce::AudioProcessor* dstProc,
+                                  juce::AudioProcessorGraph::NodeID srcNodeIdForFreeCheck,
                                   juce::AudioProcessorGraph::NodeID dstNodeIdForFreeCheck, bool checkDstFree) {
             const auto srcLegs = collectSmartAudioLegs(srcProc, false);
             const auto dstLegs = collectSmartAudioLegs(dstProc, true);
@@ -1334,8 +1388,24 @@ void GraphEditor::refreshSmartSuggestions() {
             if (pairs.empty())
                 return;
 
-            // Free-check: unique dest jacks must all be free (both-or-neither for mono→stereo /
-            // stereo→stereo). Fan-in onto one mono jack only needs that single jack free.
+            // Jack-to-jack proximity + left-to-right flow: a module on the right must not wrap
+            // its outputs around to the dragged module's left inputs.
+            const size_t beforeProximity = pairs.size();
+            pairs.erase(std::remove_if(pairs.begin(), pairs.end(),
+                                       [&](const std::pair<int, int>& pr) {
+                                           const auto srcPt = jackPoint(ghostIsSource, pr.first, false, false);
+                                           const auto dstPt = jackPoint(!ghostIsSource, pr.second, true, false);
+                                           if (srcPt.x > dstPt.x + 8.0f)
+                                               return true;
+                                           return srcPt.getDistanceFrom(dstPt) > kSmartConnectionProximityPx;
+                                       }),
+                        pairs.end());
+            if (pairs.empty())
+                return;
+            // Stereo / fan groups: both-or-neither on proximity, same as occupancy.
+            if (beforeProximity >= 2 && pairs.size() != beforeProximity)
+                return;
+
             if (checkDstFree && dstNodeIdForFreeCheck.uid != 0) {
                 std::set<int> uniqueDsts;
                 for (const auto& pr : pairs)
@@ -1346,7 +1416,15 @@ void GraphEditor::refreshSmartSuggestions() {
                 }
             }
 
-            const int spatialBonus = (ghostIsSource == ghostIsLeft) ? 1 : 0;
+            if (requireSourceFree && srcNodeIdForFreeCheck.uid != 0) {
+                std::set<int> uniqueSrcs;
+                for (const auto& pr : pairs)
+                    uniqueSrcs.insert(pr.first);
+                for (int s : uniqueSrcs) {
+                    if (!isOutputJackFree(srcNodeIdForFreeCheck, s, false))
+                        return;
+                }
+            }
 
             for (const auto& [srcJack, dstJack] : pairs) {
                 const int pairScore = scoreSmartPair(srcMb, srcJack, dstMb, dstJack);
@@ -1359,34 +1437,29 @@ void GraphEditor::refreshSmartSuggestions() {
                 s.ghostJack = ghostIsSource ? srcJack : dstJack;
                 s.neighborJack = ghostIsSource ? dstJack : srcJack;
                 s.isMidi = false;
-                const auto ghostPt =
-                    estimatePortCenter(ghostProc, ghostBounds, s.ghostJack, !ghostIsSource, false).toFloat();
-                const auto neighborPt =
-                    (ghostIsSource
-                         ? neighbor->getBounds().getPosition() + neighbor->getPortCenter(s.neighborJack, true)
-                         : neighbor->getBounds().getPosition() + neighbor->getPortCenter(s.neighborJack, false))
-                        .toFloat();
-                s.p1 = ghostIsSource ? ghostPt : neighborPt;
-                s.p2 = ghostIsSource ? neighborPt : ghostPt;
+                const auto srcPt = jackPoint(ghostIsSource, srcJack, false, false);
+                const auto dstPt = jackPoint(!ghostIsSource, dstJack, true, false);
+                s.p1 = srcPt;
+                s.p2 = dstPt;
                 s.signal = signalForRoles(false, primaryRoleForJack(srcMb, srcJack, false));
                 if (auto* smb = dynamic_cast<ModuleBase*>(srcProc))
                     s.sourceCategory = synth::ui::categoryFor(smb->getModuleType());
 
-                int score = pairScore + spatialBonus;
-                // Prefer matched L→L over any residual cross-pair.
+                int score = pairScore;
                 if (srcLegs.size() >= 2 && dstLegs.size() >= 2 && srcJack == srcLegs[0] && dstJack == dstLegs[0])
                     score += 2;
 
-                audioCandidates.push_back({s, score, dist, false});
+                audioCandidates.push_back({s, score, srcPt.getDistanceFrom(dstPt), false});
             }
         };
 
         // Ghost outputs → neighbor inputs, then neighbor outputs → ghost inputs.
-        pushAudioGroup(true, ghostProc, neighborProc, neighbor->getNodeId(), true);
+        pushAudioGroup(true, ghostProc, neighborProc, dragPreviewSelfId, neighbor->getNodeId(), true);
         {
             const auto ghostDstId =
                 dragPreviewSelfId.uid != 0 ? dragPreviewSelfId : juce::AudioProcessorGraph::NodeID{};
-            pushAudioGroup(false, neighborProc, ghostProc, ghostDstId, dragPreviewSelfId.uid != 0);
+            pushAudioGroup(false, neighborProc, ghostProc, neighbor->getNodeId(), ghostDstId,
+                           dragPreviewSelfId.uid != 0);
         }
 
         // MIDI
@@ -1415,9 +1488,21 @@ void GraphEditor::refreshSmartSuggestions() {
                     return;
             }
 
+            const auto srcPt = jackPoint(ghostIsSource, 0, false, true);
+            const auto dstPt = jackPoint(!ghostIsSource, 0, true, true);
+            if (srcPt.x > dstPt.x + 8.0f)
+                return;
+            const float jackDist = srcPt.getDistanceFrom(dstPt);
+            if (jackDist > kSmartConnectionProximityPx)
+                return;
+
+            if (requireSourceFree) {
+                const auto srcId = ghostIsSource ? dragPreviewSelfId : neighbor->getNodeId();
+                if (srcId.uid != 0 && !isOutputJackFree(srcId, 0, true))
+                    return;
+            }
+
             int score = 4;
-            if (ghostIsSource == ghostIsLeft)
-                score += 1;
 
             SmartSuggestion s;
             s.ghostIsSource = ghostIsSource;
@@ -1425,20 +1510,13 @@ void GraphEditor::refreshSmartSuggestions() {
             s.ghostJack = 0;
             s.neighborJack = 0;
             s.isMidi = true;
-            const auto ghostPt = estimatePortCenter(ghostProc, ghostBounds, 0, !ghostIsSource, true).toFloat();
-            juce::Point<float> neighborPt;
-            if (ghostIsSource)
-                neighborPt = (neighbor->getBounds().getPosition() + juce::Point<int>(10, 30)).toFloat();
-            else
-                neighborPt =
-                    (neighbor->getBounds().getPosition() + juce::Point<int>(neighbor->getWidth() - 10, 30)).toFloat();
-            s.p1 = ghostIsSource ? ghostPt : neighborPt;
-            s.p2 = ghostIsSource ? neighborPt : ghostPt;
+            s.p1 = srcPt;
+            s.p2 = dstPt;
             s.signal = synth::ui::CableSignal::Midi;
             if (auto* smb = dynamic_cast<ModuleBase*>(ghostIsSource ? ghostProc : neighborProc))
                 s.sourceCategory = synth::ui::categoryFor(smb->getModuleType());
 
-            midiCandidates.push_back({s, score, dist, true});
+            midiCandidates.push_back({s, score, jackDist, true});
         };
         considerMidi(true);
         considerMidi(false);
@@ -1468,8 +1546,6 @@ void GraphEditor::refreshSmartSuggestions() {
             if (c.suggestion.neighborId != best.suggestion.neighborId)
                 continue;
             if (c.suggestion.ghostIsSource != best.suggestion.ghostIsSource)
-                continue;
-            if (c.distance > best.distance + 0.5f)
                 continue;
             smartSuggestions.push_back(c.suggestion);
         }

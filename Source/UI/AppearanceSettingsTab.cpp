@@ -262,7 +262,7 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     addAndMakeVisible(smartConnectionCombo);
     smartConnectionCombo.addItem("Off", 1);
     smartConnectionCombo.addItem("New modules only", 2);
-    smartConnectionCombo.addItem("New + unwired moves", 3);
+    smartConnectionCombo.addItem("When main I/O is free", 3);
     smartConnectionCombo.addItem("All module moves", 4);
     {
         const auto mode = GraphEditor::smartConnectionModeFromString(

@@ -2027,7 +2027,8 @@ TEST_F(GraphEditorTest, SmartConnectionNewAndUnwiredWiresUnwiredMove) {
     EXPECT_FALSE(editor.nodeHasCables(oscNode->nodeID));
 
     editor.beginDragPreview(oscComp->getWidth(), oscComp->getHeight(), oscComp->getNodeId());
-    editor.updateDragPreview({280, 100});
+    // Land just left of the Filter so output/input jacks face each other (not overlapping).
+    editor.updateDragPreview({100, 100});
     ASSERT_GT(editor.getSmartSuggestionCount(), 0);
     editor.finalizeModuleDrag(oscComp);
     editor.endDragPreview();
@@ -2070,6 +2071,81 @@ TEST_F(GraphEditorTest, SmartConnectionNewAndUnwiredSkipsAlreadyWiredMove) {
     editor.finalizeModuleDrag(oscComp);
     editor.endDragPreview();
     EXPECT_EQ(countAudioConnectionsBetween(graph, oscNode->nodeID, vcaNode->nodeID), 0);
+}
+
+TEST_F(GraphEditorTest, SmartConnectionDoesNotWrapAroundToRightNeighbor) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1000, 600);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    filterNode->properties.set("x", 40);
+    filterNode->properties.set("y", 100);
+    auto delayNode = graph.addNode(std::make_unique<DelayModule>());
+    delayNode->properties.set("x", 400);
+    delayNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    ModuleComponent* filterComp = nullptr;
+    for (auto* c : editor.getModuleComponents()) {
+        if (c->getNodeId() == filterNode->nodeID)
+            filterComp = c;
+    }
+    ASSERT_NE(filterComp, nullptr);
+
+    editor.beginDragPreview(filterComp->getWidth(), filterComp->getHeight(), filterComp->getNodeId());
+    editor.updateDragPreview({100, 100}); // slide toward the Delay on the right
+    for (const auto& s : editor.getSmartSuggestions()) {
+        EXPECT_TRUE(s.ghostIsSource) << "must not wrap Delay's right outputs into Filter's left inputs";
+        EXPECT_FALSE(s.isMidi);
+        EXPECT_EQ(s.neighborId, delayNode->nodeID);
+    }
+    editor.endDragPreview();
+}
+
+TEST_F(GraphEditorTest, SmartConnectionNewAndUnwiredWiresFreeOutputDespiteOtherCables) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 600);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    oscNode->properties.set("x", 40);
+    oscNode->properties.set("y", 100);
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    filterNode->properties.set("x", 400);
+    filterNode->properties.set("y", 100);
+    auto delayNode = graph.addNode(std::make_unique<DelayModule>());
+    delayNode->properties.set("x", 760);
+    delayNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    editor.connectPorts(oscNode->nodeID, 0, filterNode->nodeID, 0, false, false);
+    ASSERT_TRUE(editor.nodeHasCables(filterNode->nodeID));
+
+    ModuleComponent* filterComp = nullptr;
+    for (auto* c : editor.getModuleComponents()) {
+        if (c->getNodeId() == filterNode->nodeID)
+            filterComp = c;
+    }
+    ASSERT_NE(filterComp, nullptr);
+
+    editor.beginDragPreview(filterComp->getWidth(), filterComp->getHeight(), filterComp->getNodeId());
+    editor.updateDragPreview({420, 100}); // near Delay; Filter audio in is taken, audio out is free
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0)
+        << "NewAndUnwired should still offer Filter → Delay when the output jack is free";
+    for (const auto& s : editor.getSmartSuggestions()) {
+        EXPECT_TRUE(s.ghostIsSource);
+        EXPECT_EQ(s.neighborId, delayNode->nodeID);
+    }
+    editor.finalizeModuleDrag(filterComp);
+    editor.endDragPreview();
+    EXPECT_GT(countAudioConnectionsBetween(graph, filterNode->nodeID, delayNode->nodeID), 0);
 }
 
 TEST_F(GraphEditorTest, SmartConnectionAllMovesCanAddWireToFreeJack) {
