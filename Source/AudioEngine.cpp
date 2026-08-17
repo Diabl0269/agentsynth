@@ -68,6 +68,13 @@ void AudioEngine::initialise() {
     // supplies the real sample rate/channel count later, since there is no device to ask.
     if (!isHosted()) {
         initialiseDevices(savedDeviceState_.get());
+        // A machine with NO usable audio device (headless Linux, CI) never receives the
+        // audioDeviceAboutToStart() that normally configures the graph before the patch is built
+        // below. Unconfigured, the "Audio Output" IO node snapshots 0 channels and every
+        // connection into it is rejected as out-of-range — silently gutting the default patch.
+        // Mirror the hosted placeholder; a device appearing later reconfigures on start.
+        if (deviceManager.getCurrentAudioDevice() == nullptr)
+            mainProcessorGraph.setPlayConfigDetails(0, 2, 44100.0, 512);
     } else {
         // A default-constructed AudioProcessorGraph reports 0 output channels until something
         // sets its channel layout. The graph's "Audio Output" IO node snapshots that count once,
@@ -118,7 +125,11 @@ void AudioEngine::initialiseDevices(const juce::XmlElement* savedDeviceState) {
     deviceManager.addChangeListener(this);
 
     // Initialise MIDI input collector
-    midiMessageCollector.reset(deviceManager.getAudioDeviceSetup().sampleRate);
+    // With no device the setup reports 0 Hz, which MidiMessageCollector::reset asserts on;
+    // collected messages are only consumed from render passes, which a device-less engine
+    // never runs, so the placeholder rate is inert.
+    const double collectorRate = deviceManager.getAudioDeviceSetup().sampleRate;
+    midiMessageCollector.reset(collectorRate > 0.0 ? collectorRate : 44100.0);
 
     // Enable all available MIDI inputs by default
     for (auto& info : juce::MidiInput::getAvailableDevices()) {
