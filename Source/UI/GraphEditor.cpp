@@ -998,14 +998,41 @@ juce::Point<int> GraphEditor::estimatePortCenter(juce::AudioProcessor* proc, juc
 
 bool GraphEditor::isInputJackFree(juce::AudioProcessorGraph::NodeID nodeId, int jack, bool isMidi) const {
     auto& graph = audioEngine.getGraph();
-    const int channel = isMidi ? juce::AudioProcessorGraph::midiChannelIndex : jack;
-    for (const auto& c : graph.getConnections()) {
-        if (c.destination.nodeID == nodeId && c.destination.channelIndex == channel)
-            return false;
+    if (isMidi) {
+        const int channel = juce::AudioProcessorGraph::midiChannelIndex;
+        for (const auto& c : graph.getConnections()) {
+            if (c.destination.nodeID == nodeId && c.destination.channelIndex == channel)
+                return false;
+        }
+        return true;
     }
-    if (!isMidi) {
-        for (const auto& r : audioEngine.getModulationRoutings()) {
-            if (r.hasDest && r.destNodeID == nodeId && r.destChannelIndex == jack)
+
+    // Visible jack → raw channel(s), same path as areJacksAlreadyConnected / connectPorts.
+    auto* node = graph.getNodeForId(nodeId);
+    auto* mb = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
+    std::vector<int> rawChannels;
+    if (mb != nullptr) {
+        for (const auto& t : mb->getJackTargets(jack, true)) {
+            for (int v = 0; v < t.voiceSpan; ++v)
+                rawChannels.push_back(t.rawHeadChannel + v);
+        }
+    } else {
+        rawChannels.push_back(jack); // Audio I/O identity mapping
+    }
+
+    for (const auto& c : graph.getConnections()) {
+        if (c.destination.nodeID != nodeId)
+            continue;
+        for (int ch : rawChannels) {
+            if (c.destination.channelIndex == ch)
+                return false;
+        }
+    }
+    for (const auto& r : audioEngine.getModulationRoutings()) {
+        if (!r.hasDest || r.destNodeID != nodeId)
+            continue;
+        for (int ch : rawChannels) {
+            if (r.destChannelIndex == ch)
                 return false;
         }
     }
@@ -1044,19 +1071,6 @@ bool GraphEditor::areJacksAlreadyConnected(juce::AudioProcessorGraph::NodeID src
         if (r.hasSource && r.hasDest && r.sourceNodeID == srcId && r.destNodeID == dstId &&
             r.sourceChannelIndex == link.sourceRawChannel && r.destChannelIndex == link.destRawChannel)
             return true;
-    }
-    return false;
-}
-
-bool GraphEditor::isModCvDestination(const ModuleBase* dest, int visibleJack) {
-    if (dest == nullptr)
-        return false;
-    const auto targets = dest->getJackTargets(visibleJack, true);
-    for (const auto& t : targets) {
-        for (const auto& mt : dest->getModulationTargets()) {
-            if (mt.channelIndex == t.rawHeadChannel)
-                return true;
-        }
     }
     return false;
 }
@@ -1152,9 +1166,10 @@ bool audioJackIsModCvDest(const ModuleBase* dest, int visibleJack) {
     return false;
 }
 
-/** Visible audio jacks used for smart-connect: a stereo L/R pair when labeled (or exactly two
- *  non-CV audio legs), otherwise a single mono audio jack. Multi-voice banks collapse to the
- *  first jack so we do not fan onto every Voice Mixer input. */
+/** Visible audio jacks used for smart-connect. A stereo pair is returned only when jacks are
+ *  explicitly labeled Left/Right (or Audio L/R) — arity alone is not enough (Math A/B would
+ *  otherwise look like stereo). Unlabeled audio-ish jacks contribute at most one mono leg so
+ *  Voice Mixer banks are not fan-wired. Audio I/O nodes without ModuleBase use channel count. */
 std::vector<int> collectSmartAudioLegs(juce::AudioProcessor* proc, bool isInput) {
     std::vector<int> legs;
     if (proc == nullptr)
@@ -1203,8 +1218,7 @@ std::vector<int> collectSmartAudioLegs(juce::AudioProcessor* proc, bool isInput)
     if (labeled.size() == 1)
         return labeled;
 
-    if (unlabeled.size() == 2)
-        return unlabeled;
+    // Unlabeled: mono only — never treat Math A/B (or any two Others) as L/R.
     if (!unlabeled.empty())
         return {unlabeled.front()};
     return legs;
@@ -1254,8 +1268,11 @@ void GraphEditor::refreshSmartSuggestions() {
     } else {
         ghostProc = dragPreviewProbe.get();
     }
-    if (ghostProc == nullptr)
+    if (ghostProc == nullptr) {
+        if (previous != smartSuggestions)
+            content.repaint();
         return;
+    }
 
     const auto ghostBounds = dragPreviewGhost;
     const float ghostCenterX = ghostBounds.toFloat().getCentreX();
@@ -1269,15 +1286,6 @@ void GraphEditor::refreshSmartSuggestions() {
     std::vector<Candidate> audioCandidates;
     std::vector<Candidate> midiCandidates;
 
-    auto* ghostMb = dynamic_cast<ModuleBase*>(ghostProc);
-    int ghostIns = 0, ghostOuts = 0;
-    if (ghostMb) {
-        ghostIns = ghostMb->getVisibleInputPortCount();
-        ghostOuts = ghostMb->getVisibleOutputPortCount();
-    } else {
-        ghostIns = ghostProc->getTotalNumInputChannels();
-        ghostOuts = ghostProc->getTotalNumOutputChannels();
-    }
     const bool ghostAcceptsMidi = ghostProc->acceptsMidi();
     const bool ghostProducesMidi = ghostProc->producesMidi();
 
@@ -1296,48 +1304,54 @@ void GraphEditor::refreshSmartSuggestions() {
             continue;
 
         auto* neighborProc = neighbor->getModule();
-        auto* neighborMb = dynamic_cast<ModuleBase*>(neighborProc);
-        int neighborIns = 0, neighborOuts = 0;
-        if (neighborMb) {
-            neighborIns = neighborMb->getVisibleInputPortCount();
-            neighborOuts = neighborMb->getVisibleOutputPortCount();
-        } else {
-            neighborIns = neighborProc->getTotalNumInputChannels();
-            neighborOuts = neighborProc->getTotalNumOutputChannels();
-        }
 
         const float neighborCenterX = neighborBounds.toFloat().getCentreX();
         const bool ghostIsLeft = ghostCenterX <= neighborCenterX;
 
         auto pushAudioGroup = [&](bool ghostIsSource, juce::AudioProcessor* srcProc, juce::AudioProcessor* dstProc,
-                                  juce::AudioProcessorGraph::NodeID dstNodeIdForFreeCheck, bool checkDstFree,
-                                  int groupScore) {
+                                  juce::AudioProcessorGraph::NodeID dstNodeIdForFreeCheck, bool checkDstFree) {
             const auto srcLegs = collectSmartAudioLegs(srcProc, false);
             const auto dstLegs = collectSmartAudioLegs(dstProc, true);
-            const auto pairs = expandAudioJackPairs(srcLegs, dstLegs);
+            auto pairs = expandAudioJackPairs(srcLegs, dstLegs);
             if (pairs.empty())
                 return;
 
             auto* srcMb = dynamic_cast<ModuleBase*>(srcProc);
-            // Fan-in (stereo → mono) may land both legs on the same dest jack; only the first
-            // wire requires the jack to be free, subsequent wires to that same jack are allowed.
-            std::set<int> reservedDestJacks;
+            auto* dstMb = dynamic_cast<ModuleBase*>(dstProc);
+
+            // Drop pairs that target mod-CV or are already connected.
+            pairs.erase(std::remove_if(pairs.begin(), pairs.end(),
+                                       [&](const std::pair<int, int>& pr) {
+                                           if (audioJackIsModCvDest(dstMb, pr.second))
+                                               return true;
+                                           if (dragPreviewSelfId.uid == 0)
+                                               return false;
+                                           const auto srcId = ghostIsSource ? dragPreviewSelfId : neighbor->getNodeId();
+                                           const auto dstId = ghostIsSource ? neighbor->getNodeId() : dragPreviewSelfId;
+                                           return areJacksAlreadyConnected(srcId, pr.first, dstId, pr.second, false);
+                                       }),
+                        pairs.end());
+            if (pairs.empty())
+                return;
+
+            // Free-check: unique dest jacks must all be free (both-or-neither for mono→stereo /
+            // stereo→stereo). Fan-in onto one mono jack only needs that single jack free.
+            if (checkDstFree && dstNodeIdForFreeCheck.uid != 0) {
+                std::set<int> uniqueDsts;
+                for (const auto& pr : pairs)
+                    uniqueDsts.insert(pr.second);
+                for (int d : uniqueDsts) {
+                    if (!isInputJackFree(dstNodeIdForFreeCheck, d, false))
+                        return;
+                }
+            }
+
+            const int spatialBonus = (ghostIsSource == ghostIsLeft) ? 1 : 0;
 
             for (const auto& [srcJack, dstJack] : pairs) {
-                if (audioJackIsModCvDest(dynamic_cast<ModuleBase*>(dstProc), dstJack))
+                const int pairScore = scoreSmartPair(srcMb, srcJack, dstMb, dstJack);
+                if (pairScore < 0)
                     continue;
-
-                if (checkDstFree && reservedDestJacks.count(dstJack) == 0) {
-                    if (dstNodeIdForFreeCheck.uid != 0 && !isInputJackFree(dstNodeIdForFreeCheck, dstJack, false))
-                        continue;
-                }
-
-                if (dragPreviewSelfId.uid != 0) {
-                    const auto srcId = ghostIsSource ? dragPreviewSelfId : neighbor->getNodeId();
-                    const auto dstId = ghostIsSource ? neighbor->getNodeId() : dragPreviewSelfId;
-                    if (areJacksAlreadyConnected(srcId, srcJack, dstId, dstJack, false))
-                        continue;
-                }
 
                 SmartSuggestion s;
                 s.ghostIsSource = ghostIsSource;
@@ -1358,35 +1372,23 @@ void GraphEditor::refreshSmartSuggestions() {
                 if (auto* smb = dynamic_cast<ModuleBase*>(srcProc))
                     s.sourceCategory = synth::ui::categoryFor(smb->getModuleType());
 
-                // Prefer matched L→L / R→R over crossed legs when scoring the group.
-                int score = groupScore;
+                int score = pairScore + spatialBonus;
+                // Prefer matched L→L over any residual cross-pair.
                 if (srcLegs.size() >= 2 && dstLegs.size() >= 2 && srcJack == srcLegs[0] && dstJack == dstLegs[0])
                     score += 2;
-                if (ghostIsSource == ghostIsLeft)
-                    score += 1;
 
                 audioCandidates.push_back({s, score, dist, false});
-                reservedDestJacks.insert(dstJack);
             }
         };
 
         // Ghost outputs → neighbor inputs, then neighbor outputs → ghost inputs.
+        pushAudioGroup(true, ghostProc, neighborProc, neighbor->getNodeId(), true);
         {
-            int groupScore = 4;
-            if (ghostIsLeft)
-                groupScore += 1;
-            pushAudioGroup(true, ghostProc, neighborProc, neighbor->getNodeId(), true, groupScore);
-        }
-        {
-            int groupScore = 4;
-            if (!ghostIsLeft)
-                groupScore += 1;
             const auto ghostDstId =
                 dragPreviewSelfId.uid != 0 ? dragPreviewSelfId : juce::AudioProcessorGraph::NodeID{};
-            pushAudioGroup(false, neighborProc, ghostProc, ghostDstId, dragPreviewSelfId.uid != 0, groupScore);
+            pushAudioGroup(false, neighborProc, ghostProc, ghostDstId, dragPreviewSelfId.uid != 0);
         }
 
-        // MIDI
         // MIDI
         auto considerMidi = [&](bool ghostIsSource) {
             const juce::String ghostName = ghostProc->getName();
@@ -2920,7 +2922,6 @@ void GraphEditor::beginDragPreview(int w, int h, juce::AudioProcessorGraph::Node
     clearSmartSuggestions();
     // Body-drag of an existing module: clear any leftover library-drop probe.
     if (selfId.uid != 0) {
-        dragPreviewModuleName = {};
         dragPreviewIsSnippet = false;
         dragPreviewProbe.reset();
     }
@@ -3082,7 +3083,6 @@ void GraphEditor::endDragPreview() {
     dragPreviewGhost = {};
     alignmentGuides.clear();
     clearSmartSuggestions();
-    dragPreviewModuleName = {};
     dragPreviewIsSnippet = false;
     dragPreviewProbe.reset();
     content.repaint();
@@ -3097,7 +3097,6 @@ void GraphEditor::itemDragEnter(const SourceDetails& dragSourceDetails) {
     // instead of the single-module estimate table.
     juce::Point<int> estSize;
     dragPreviewIsSnippet = synth::SnippetManager::isSnippetPayload(name);
-    dragPreviewModuleName = name;
     dragPreviewProbe.reset();
     if (!dragPreviewIsSnippet) {
         dragPreviewProbe = synth::AIStateMapper::createModule(name);

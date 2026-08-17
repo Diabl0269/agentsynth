@@ -491,7 +491,6 @@ private:
     juce::AudioProcessorGraph::NodeID dragPreviewSelfId{};
     juce::Rectangle<int> dragPreviewGhost;
     // Library-drag probe: jack metadata for a module that does not exist on the canvas yet.
-    juce::String dragPreviewModuleName;
     bool dragPreviewIsSnippet = false;
     std::unique_ptr<juce::AudioProcessor> dragPreviewProbe;
 
@@ -510,7 +509,6 @@ private:
     bool isInputJackFree(juce::AudioProcessorGraph::NodeID nodeId, int jack, bool isMidi) const;
     bool areJacksAlreadyConnected(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
                                   juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi) const;
-    static bool isModCvDestination(const ModuleBase* dest, int visibleJack);
 
     juce::AudioProcessorGraph::NodeID draggingAttenuverterNodeId;
     float attenDragStartValue = 0.0f;

@@ -6,6 +6,7 @@
 #include "../Source/Modules/FX/ReverbModule.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/LFOModule.h"
+#include "../Source/Modules/MathModule.h"
 #include "../Source/Modules/ModuleBase.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/PolyMidiModule.h"
@@ -2244,4 +2245,70 @@ TEST_F(GraphEditorTest, SmartConnectionStereoToMonoFansBothOutputs) {
     ASSERT_NE(delayId.uid, 0u);
     EXPECT_TRUE(graph.isConnected({{delayId, 0}, {filterNode->nodeID, 0}}));
     EXPECT_TRUE(graph.isConnected({{delayId, 1}, {filterNode->nodeID, 0}}));
+}
+
+TEST_F(GraphEditorTest, SmartConnectionDoesNotTreatMathABAsStereo) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1000, 600);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto mathNode = graph.addNode(std::make_unique<MathModule>());
+    mathNode->properties.set("x", 400);
+    mathNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource, juce::Point<int>(80, 100));
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    // Math A/B are unlabeled PortRole::Other — must not fan mono into both.
+    EXPECT_LE(editor.getSmartSuggestionCount(), 1);
+    if (editor.getSmartSuggestionCount() == 1) {
+        editor.itemDropped(details);
+        juce::AudioProcessorGraph::NodeID oscId{};
+        for (auto* node : graph.getNodes()) {
+            if (node->getProcessor()->getName() == "Oscillator")
+                oscId = node->nodeID;
+        }
+        ASSERT_NE(oscId.uid, 0u);
+        const bool toA = graph.isConnected({{oscId, 0}, {mathNode->nodeID, 0}});
+        const bool toB = graph.isConnected({{oscId, 0}, {mathNode->nodeID, 1}});
+        EXPECT_TRUE(toA != toB) << "exactly one of Math A/B should receive the mono wire";
+        EXPECT_FALSE(toA && toB);
+    } else {
+        editor.endDragPreview();
+    }
+}
+
+TEST_F(GraphEditorTest, SmartConnectionMonoToStereoIsBothOrNeither) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1000, 600);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto delayNode = graph.addNode(std::make_unique<DelayModule>());
+    delayNode->properties.set("x", 400);
+    delayNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    // Occupy Delay Left only.
+    auto filler = graph.addNode(std::make_unique<OscillatorModule>());
+    filler->properties.set("x", 40);
+    filler->properties.set("y", 400);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+    editor.connectPorts(filler->nodeID, 0, delayNode->nodeID, 0, false, false);
+
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource, juce::Point<int>(80, 100));
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    // Left taken → both-or-neither: no mono→stereo fan onto Right alone.
+    EXPECT_EQ(editor.getSmartSuggestionCount(), 0);
+    editor.endDragPreview();
 }
