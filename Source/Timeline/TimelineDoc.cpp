@@ -125,7 +125,9 @@ bool readInt(const juce::var& v, int& out) {
         return true;
     }
     if (v.isInt64()) {
-        const auto wide = static_cast<std::int64_t>(v);
+        // Route through juce::int64: on LP64 Linux std::int64_t is `long`, which juce::var can
+        // convert to via BOTH its int and int64 operators — a direct cast is ambiguous there.
+        const auto wide = static_cast<std::int64_t>(static_cast<juce::int64>(v));
         if (wide < std::numeric_limits<int>::min() || wide > std::numeric_limits<int>::max())
             return false;
         out = static_cast<int>(wide);
@@ -136,7 +138,7 @@ bool readInt(const juce::var& v, int& out) {
 
 bool readInt64(const juce::var& v, std::int64_t& out) {
     if (v.isInt() || v.isInt64()) {
-        out = static_cast<std::int64_t>(v);
+        out = static_cast<std::int64_t>(static_cast<juce::int64>(v));
         return true;
     }
     return false;
@@ -1065,18 +1067,20 @@ void TimelineDoc::clear() {
 juce::var TimelineDoc::toVar() const {
     juce::DynamicObject::Ptr root = new juce::DynamicObject();
     root->setProperty("version", kFormatVersion);
-    root->setProperty("nextTrackId", nextTrackId);
-    root->setProperty("nextClipId", nextClipId);
-    root->setProperty("nextLaneId", nextLaneId);
-    root->setProperty("nextNoteId", nextNoteId);
+    // 64-bit values are written as juce::int64: juce::var has no `long` overload, so an LP64
+    // std::int64_t (Linux) is ambiguous between the int and int64 constructors.
+    root->setProperty("nextTrackId", static_cast<juce::int64>(nextTrackId));
+    root->setProperty("nextClipId", static_cast<juce::int64>(nextClipId));
+    root->setProperty("nextLaneId", static_cast<juce::int64>(nextLaneId));
+    root->setProperty("nextNoteId", static_cast<juce::int64>(nextNoteId));
 
     juce::Array<juce::var> trackVars;
     for (const auto& track : tracks) {
         juce::DynamicObject::Ptr t = new juce::DynamicObject();
-        t->setProperty("id", track.id.value);
+        t->setProperty("id", static_cast<juce::int64>(track.id.value));
         t->setProperty("kind", static_cast<int>(track.kind));
         t->setProperty("name", track.name);
-        t->setProperty("colourArgb", static_cast<std::int64_t>(track.colourArgb));
+        t->setProperty("colourArgb", static_cast<juce::int64>(track.colourArgb));
         t->setProperty("muted", track.muted);
         t->setProperty("soloed", track.soloed);
         t->setProperty("armed", track.armed);
@@ -1085,7 +1089,7 @@ juce::var TimelineDoc::toVar() const {
         juce::Array<juce::var> clipVars;
         for (const auto& clip : track.clips) {
             juce::DynamicObject::Ptr c = new juce::DynamicObject();
-            c->setProperty("id", clip.id.value);
+            c->setProperty("id", static_cast<juce::int64>(clip.id.value));
             c->setProperty("name", clip.name);
             c->setProperty("startBeat", clip.startBeat);
             c->setProperty("lengthBeats", clip.lengthBeats);
@@ -1101,7 +1105,7 @@ juce::var TimelineDoc::toVar() const {
             juce::Array<juce::var> noteVars;
             for (const auto& note : clip.notes) {
                 juce::DynamicObject::Ptr n = new juce::DynamicObject();
-                n->setProperty("id", note.id.value);
+                n->setProperty("id", static_cast<juce::int64>(note.id.value));
                 n->setProperty("startBeat", note.startBeat);
                 n->setProperty("lengthBeats", note.lengthBeats);
                 n->setProperty("pitch", note.pitch);
@@ -1117,7 +1121,7 @@ juce::var TimelineDoc::toVar() const {
         juce::Array<juce::var> laneVars;
         for (const auto& lane : track.lanes) {
             juce::DynamicObject::Ptr l = new juce::DynamicObject();
-            l->setProperty("id", lane.id.value);
+            l->setProperty("id", static_cast<juce::int64>(lane.id.value));
             l->setProperty("nodeUuid", lane.nodeUuid);
             l->setProperty("paramId", lane.paramId);
             l->setProperty("recordMode", lane.recordMode);

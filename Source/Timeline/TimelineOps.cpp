@@ -31,7 +31,9 @@ bool readInt(const juce::var& v, int& out) {
         return true;
     }
     if (v.isInt64()) {
-        const auto wide = static_cast<std::int64_t>(v);
+        // Route through juce::int64: on LP64 Linux std::int64_t is `long`, which juce::var can
+        // convert to via BOTH its int and int64 operators — a direct cast is ambiguous there.
+        const auto wide = static_cast<std::int64_t>(static_cast<juce::int64>(v));
         if (wide < std::numeric_limits<int>::min() || wide > std::numeric_limits<int>::max())
             return false;
         out = static_cast<int>(wide);
@@ -101,7 +103,9 @@ juce::String unknownKey(juce::DynamicObject& o, std::initializer_list<const char
 /** A beat as the shortest exact-looking decimal: "4" not "4.0", "4.5" not "4.500". */
 juce::String beatText(double v) {
     if (std::isfinite(v) && v == std::floor(v) && std::abs(v) < 1.0e15)
-        return juce::String(static_cast<std::int64_t>(v));
+        // juce::int64, not std::int64_t: juce::String has no `long` constructor, so an LP64
+        // int64_t argument is ambiguous between the int and int64 constructors on Linux.
+        return juce::String(static_cast<juce::int64>(v));
     return juce::String(v, 3).trimCharactersAtEnd("0");
 }
 

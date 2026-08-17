@@ -28,7 +28,9 @@ bool readInt(const juce::var& v, int& out) {
         return true;
     }
     if (v.isInt64()) {
-        const auto wide = static_cast<std::int64_t>(v);
+        // Route through juce::int64: on LP64 Linux std::int64_t is `long`, which juce::var can
+        // convert to via BOTH its int and int64 operators — a direct cast is ambiguous there.
+        const auto wide = static_cast<std::int64_t>(static_cast<juce::int64>(v));
         if (wide < std::numeric_limits<int>::min() || wide > std::numeric_limits<int>::max())
             return false;
         out = static_cast<int>(wide);
@@ -39,7 +41,7 @@ bool readInt(const juce::var& v, int& out) {
 
 bool readInt64(const juce::var& v, std::int64_t& out) {
     if (v.isInt() || v.isInt64()) {
-        out = static_cast<std::int64_t>(v);
+        out = static_cast<std::int64_t>(static_cast<juce::int64>(v));
         return true;
     }
     return false;
