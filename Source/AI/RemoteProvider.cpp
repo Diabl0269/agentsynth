@@ -224,6 +224,8 @@ RemoteProvider::~RemoteProvider() {
 
 void RemoteProvider::setAuthToken(const juce::String& token) { authToken = token; }
 
+void RemoteProvider::setConversationId(const juce::String& id) { conversationId = id; }
+
 RemoteProvider::RequestId RemoteProvider::sendPrompt(const std::vector<Message>& conversation,
                                                      CompletionCallback callback, const juce::var& responseSchema,
                                                      std::function<void(const juce::String&)> onDelta) {
@@ -368,7 +370,8 @@ void RemoteProvider::failAllPending(AIErrorKind kind, const juce::String& messag
         deliverError(req, kind, message, /*retryAfterSeconds=*/0, deliverSynchronously);
 }
 
-void RemoteProvider::deliverResult(const Request& req, const juce::String& responseText, bool forceSynchronous) {
+void RemoteProvider::deliverResult(const Request& req, const juce::String& responseText, bool forceSynchronous,
+                                   const juce::String& conversationId) {
     if (!claimDelivery(req))
         return;
 
@@ -379,6 +382,7 @@ void RemoteProvider::deliverResult(const Request& req, const juce::String& respo
     response.success = true;
     response.content = responseText;
     response.requestId = juce::String(req.id.value);
+    response.conversationId = conversationId;
 
     if (isTestMode || forceSynchronous) {
         req.callback(response);
@@ -472,8 +476,8 @@ void RemoteProvider::run() {
 }
 
 void RemoteProvider::processRequest(const Request& req) {
-    auto deliverSuccess = [this, &req](const juce::String& responseText) {
-        deliverResult(req, responseText, /*forceSynchronous=*/false);
+    auto deliverSuccess = [this, &req](const juce::String& responseText, const juce::String& respConversationId) {
+        deliverResult(req, responseText, /*forceSynchronous=*/false, respConversationId);
     };
     auto deliverErr = [this, &req](AIErrorKind kind, const juce::String& message, int retryAfterSeconds = 0) {
         deliverError(req, kind, message, retryAfterSeconds, /*forceSynchronous=*/false);
@@ -517,6 +521,11 @@ void RemoteProvider::processRequest(const Request& req) {
     // bearer token, anti-abuse signal when there is one. Harmless either way (not a secret).
     if (deviceId.isNotEmpty())
         requestHeaders.set("X-Device-Id", deviceId);
+    // Sent only when AIIntegrationService/AIChatComponent believe this session has a persisted
+    // server-side conversation to continue (Pro plan, and a prior response returned an id) — see
+    // AIProvider::setConversationId()'s doc comment. Never synthesized here.
+    if (conversationId.isNotEmpty())
+        requestHeaders.set("x-conversation-id", conversationId);
 
     const juce::String url = remoteHost + "/v1/capability/patch.generate";
 
@@ -633,7 +642,8 @@ void RemoteProvider::processRequest(const Request& req) {
     juce::var jsonResponse = juce::JSON::parse(result.body);
     if (auto* obj = jsonResponse.getDynamicObject()) {
         if (obj->hasProperty("data")) {
-            deliverSuccess(juce::JSON::toString(obj->getProperty("data")));
+            deliverSuccess(juce::JSON::toString(obj->getProperty("data")),
+                           result.headers.getValue("x-conversation-id", ""));
             return;
         }
     }

@@ -613,6 +613,54 @@ Locked by `AIIntegrationServiceTest.SetAuthTokenForwardsToInstalledProvider` and
 `AIIntegrationServiceTest.SetAuthTokenBeforeProviderInstalledIsRePushedBySetProvider` in
 `Tests/AIIntegrationServiceTests.cpp`.
 
+### Conversation-Id Threading (P6-8, client side)
+
+Server-side conversation history (`packages/conversations` in `synth-platform`) is Pro-plan only:
+`RemoteProvider`'s `patch.generate` calls carry an `x-conversation-id` request header when the
+client has one from a prior response in the same session, and the server responds with one (new
+or same) only when it actually persisted the exchange — a free-plan response carries **no**
+header at all, not an empty one.
+
+The re-push shape mirrors the Auth Token contract above almost exactly:
+`AIIntegrationService::setConversationId(id)` stores the value in `currentConversationId`
+regardless of whether a provider is installed, and `setProvider(...)` re-pushes it to whatever
+provider it installs next. `AIProvider::setConversationId()` defaults to a no-op, so `OllamaProvider`
+and any local/test provider are unaffected automatically.
+
+The one-way difference from the auth token: nothing external ever calls `setConversationId()` with
+a *real* id under normal operation. `AIIntegrationService::sendMessage()`'s success callback (the
+same branch that appends the assistant turn to `chatHistory`) captures a non-empty
+`AIResponse::conversationId` and calls `setConversationId()` itself, so the **next** call in the
+session continues the same server-side thread automatically. `RemoteProvider::processRequest()`
+reads the response's `x-conversation-id` header (same `result.headers` lookup used for
+`Retry-After`) onto the `AIResponse` it delivers, and sends the stored id as a request header only
+when non-empty — it has no notion of plans and never decides on its own whether to send one.
+
+`AIChatComponent` is the one plan-aware call site (`Source/AI/AccountService.h`'s free function
+`isProPlan(const AccountSnapshot&)`, also used by `PlanBadge`): right before every
+`aiService.sendMessage(...)` call in `sendButtonClicked()`, it clears the conversation id
+(`aiService.setConversationId({})`) whenever the attached `AccountService` is absent or its
+snapshot isn't Pro. This is defense-in-depth, not the real gate (the server enforces Pro-only
+persistence on its own) — its only job is covering a Pro→Free downgrade mid-session, where a
+conversation id captured earlier in the session would otherwise still be sitting in
+`AIIntegrationService` and get resent to a now-free account for no reason. A brand-new free-plan
+session never has an id to clear in the first place, since the server never sent one.
+
+Locked by `RemoteProviderTest.ConversationIdHeaderSentWhenSet` /
+`ConversationIdHeaderOnlySentWhenSet` / `ConversationIdHeaderCapturedFromResponseIntoAIResponse` /
+`MissingConversationIdHeaderLeavesAIResponseFieldEmpty` in `Tests/RemoteProviderTests.cpp`, and
+`AIIntegrationServiceTest.ConversationIdCapturedFromResponseAndRePushedToProvider` /
+`EmptyConversationIdOnResponseDoesNotCallSetConversationId` /
+`SetConversationIdBeforeProviderInstalledIsRePushedBySetProvider` in
+`Tests/AIIntegrationServiceTests.cpp`.
+
+`Source/AI/AuthClient.h/.cpp` additionally exposes cloud-only conversation methods alongside
+`fetchEntitlement()` — `listConversations()`, `getConversation(id)`, `deleteConversation(id)`,
+`deleteAllConversations()` — for a future history panel (not wired into any UI yet). Note
+`listConversations()` is not a side-effect-free read: the server's `GET /v1/conversations` lazily
+sets/clears a grace-period deletion date on every call (`ListConversationsResult::deletionScheduledAt`,
+empty when null).
+
 ### Account Sign-In Surface (P3-2: AccountRow / SignInDialog)
 
 The AI panel's account UI is `Source/UI/AccountRow.h/.cpp` (a slim status row: "Sign in" /

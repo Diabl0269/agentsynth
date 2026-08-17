@@ -32,6 +32,16 @@ struct AccountSnapshot {
 };
 
 /**
+ * @brief True only for an exact case-insensitive "pro" plan. Deliberately does NOT check
+ *        entitlementKnown: a default-constructed/entitlement-not-yet-fetched snapshot has
+ *        `plan` at its default value (empty string), which already fails the comparison — see
+ *        AccountSnapshot::entitlementKnown's doc comment. Callers that need to distinguish
+ *        "known Free" from "not yet known" should still check entitlementKnown separately;
+ *        this helper only answers "should this session behave as Pro right now."
+ */
+inline bool isProPlan(const AccountSnapshot& snapshot) { return snapshot.plan.equalsIgnoreCase("pro"); }
+
+/**
  * @class AccountService
  * @brief The account state machine: owns one AuthClient, one TokenStore, and a single background
  *        worker thread that runs at most one flow at a time (device sign-in, a silent

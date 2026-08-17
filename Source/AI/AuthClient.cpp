@@ -89,6 +89,10 @@ AuthClient::HttpResult performHttpWithCurl(const juce::String& method, const juc
         curl_easy_setopt(curl, CURLOPT_POST, 1L);
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.toRawUTF8());
         curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.getNumBytesAsUTF8()));
+    } else if (method == "DELETE") {
+        // P6-8's conversation-deletion endpoints. No body on either DELETE route this client
+        // calls, so nothing else to set beyond the verb override.
+        curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "DELETE");
     } else {
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     }
@@ -340,6 +344,172 @@ AuthClient::EntitlementResult AuthClient::fetchEntitlement(const juce::String& a
         result.usagePeriodStartIso = usage->getProperty("period_start").toString();
     }
 
+    result.ok = true;
+    return result;
+}
+
+AuthClient::ListConversationsResult AuthClient::listConversations(const juce::String& accessToken,
+                                                                  const std::atomic<bool>& cancelled) const {
+    ListConversationsResult result;
+
+    juce::StringPairArray headers;
+    headers.set("Authorization", "Bearer " + accessToken);
+
+    const auto http = performHttp("GET", host + "/v1/conversations", headers, {}, kRequestTimeoutMs, cancelled);
+
+    if (http.transportFailed || http.timedOut) {
+        result.transportError = http.errorMessage.isNotEmpty() ? http.errorMessage : "Error: request failed.";
+        return result;
+    }
+
+    if (http.httpStatus != 200) {
+        result.transportError = "Error: /v1/conversations failed (HTTP " + juce::String(http.httpStatus) + ").";
+        return result;
+    }
+
+    const auto parsed = juce::JSON::parse(http.body);
+    auto* obj = parsed.getDynamicObject();
+    auto* data = obj != nullptr ? obj->getProperty("data").getDynamicObject() : nullptr;
+    if (data == nullptr) {
+        result.transportError = "Error: could not parse /v1/conversations response.";
+        return result;
+    }
+
+    if (auto* arr = data->getProperty("conversations").getArray()) {
+        for (const auto& item : *arr) {
+            if (auto* itemObj = item.getDynamicObject()) {
+                ConversationSummary summary;
+                summary.id = itemObj->getProperty("id").toString();
+                summary.title = itemObj->getProperty("title").toString(); // null -> ""
+                summary.createdAt = itemObj->getProperty("createdAt").toString();
+                summary.updatedAt = itemObj->getProperty("updatedAt").toString();
+                result.conversations.push_back(std::move(summary));
+            }
+        }
+    }
+
+    // null -> "" (no grace-period deletion pending); a real ISO timestamp otherwise.
+    result.deletionScheduledAt = data->getProperty("deletionScheduledAt").toString();
+
+    result.ok = true;
+    return result;
+}
+
+AuthClient::ConversationDetailResult AuthClient::getConversation(const juce::String& accessToken,
+                                                                 const juce::String& conversationId,
+                                                                 const std::atomic<bool>& cancelled) const {
+    ConversationDetailResult result;
+
+    juce::StringPairArray headers;
+    headers.set("Authorization", "Bearer " + accessToken);
+
+    const auto http =
+        performHttp("GET", host + "/v1/conversations/" + conversationId, headers, {}, kRequestTimeoutMs, cancelled);
+
+    if (http.transportFailed || http.timedOut) {
+        result.transportError = http.errorMessage.isNotEmpty() ? http.errorMessage : "Error: request failed.";
+        return result;
+    }
+
+    if (http.httpStatus != 200) {
+        result.transportError =
+            "Error: /v1/conversations/" + conversationId + " failed (HTTP " + juce::String(http.httpStatus) + ").";
+        return result;
+    }
+
+    const auto parsed = juce::JSON::parse(http.body);
+    auto* obj = parsed.getDynamicObject();
+    auto* data = obj != nullptr ? obj->getProperty("data").getDynamicObject() : nullptr;
+    auto* conversation = data != nullptr ? data->getProperty("conversation").getDynamicObject() : nullptr;
+    if (conversation == nullptr) {
+        result.transportError = "Error: could not parse /v1/conversations/" + conversationId + " response.";
+        return result;
+    }
+
+    result.id = conversation->getProperty("id").toString();
+    result.title = conversation->getProperty("title").toString();
+    result.createdAt = conversation->getProperty("createdAt").toString();
+    result.updatedAt = conversation->getProperty("updatedAt").toString();
+
+    if (auto* arr = conversation->getProperty("messages").getArray()) {
+        for (const auto& item : *arr) {
+            if (auto* itemObj = item.getDynamicObject()) {
+                ConversationMessage message;
+                message.role = itemObj->getProperty("role").toString();
+                message.content = itemObj->getProperty("content").toString();
+                message.createdAt = itemObj->getProperty("createdAt").toString();
+                result.messages.push_back(std::move(message));
+            }
+        }
+    }
+
+    result.ok = true;
+    return result;
+}
+
+AuthClient::DeleteConversationResult AuthClient::deleteConversation(const juce::String& accessToken,
+                                                                    const juce::String& conversationId,
+                                                                    const std::atomic<bool>& cancelled) const {
+    DeleteConversationResult result;
+
+    juce::StringPairArray headers;
+    headers.set("Authorization", "Bearer " + accessToken);
+
+    const auto http =
+        performHttp("DELETE", host + "/v1/conversations/" + conversationId, headers, {}, kRequestTimeoutMs, cancelled);
+
+    if (http.transportFailed || http.timedOut) {
+        result.transportError = http.errorMessage.isNotEmpty() ? http.errorMessage : "Error: request failed.";
+        return result;
+    }
+
+    if (http.httpStatus != 200) {
+        result.transportError = "Error: DELETE /v1/conversations/" + conversationId + " failed (HTTP " +
+                                juce::String(http.httpStatus) + ").";
+        return result;
+    }
+
+    const auto parsed = juce::JSON::parse(http.body);
+    auto* obj = parsed.getDynamicObject();
+    auto* data = obj != nullptr ? obj->getProperty("data").getDynamicObject() : nullptr;
+    if (data == nullptr) {
+        result.transportError = "Error: could not parse DELETE /v1/conversations/" + conversationId + " response.";
+        return result;
+    }
+
+    result.deleted = static_cast<bool>(data->getProperty("deleted"));
+    result.ok = true;
+    return result;
+}
+
+AuthClient::DeleteAllConversationsResult AuthClient::deleteAllConversations(const juce::String& accessToken,
+                                                                            const std::atomic<bool>& cancelled) const {
+    DeleteAllConversationsResult result;
+
+    juce::StringPairArray headers;
+    headers.set("Authorization", "Bearer " + accessToken);
+
+    const auto http = performHttp("DELETE", host + "/v1/conversations", headers, {}, kRequestTimeoutMs, cancelled);
+
+    if (http.transportFailed || http.timedOut) {
+        result.transportError = http.errorMessage.isNotEmpty() ? http.errorMessage : "Error: request failed.";
+        return result;
+    }
+
+    if (http.httpStatus != 200) {
+        result.transportError = "Error: DELETE /v1/conversations failed (HTTP " + juce::String(http.httpStatus) + ").";
+        return result;
+    }
+
+    const auto parsed = juce::JSON::parse(http.body);
+    auto* obj = parsed.getDynamicObject();
+    auto* data = obj != nullptr ? obj->getProperty("data").getDynamicObject() : nullptr;
+    if (data == nullptr) {
+        result.transportError = "Error: could not parse DELETE /v1/conversations response.";
+        return result;
+    }
+
+    result.deletedCount = static_cast<int>(data->getProperty("deletedCount"));
     result.ok = true;
     return result;
 }

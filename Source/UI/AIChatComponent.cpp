@@ -778,6 +778,16 @@ void AIChatComponent::sendButtonClicked() {
     // Start timeout timer (120 seconds)
     startTimer(120000);
 
+    // Conversation-id persistence is Pro-only (server-enforced; see RemoteProvider's
+    // x-conversation-id header). AIIntegrationService::sendMessage() auto-captures/re-pushes a
+    // response id on its own for the common case (a free-plan response never carries one, so
+    // there's nothing to gate there) — this only handles the Pro-to-Free downgrade mid-session,
+    // where a stale id from an earlier Pro response would otherwise still be sitting in
+    // AIIntegrationService and get resent to a now-free account. Clearing it here means
+    // RemoteProvider naturally has nothing to send; it never has plan awareness of its own.
+    if (accountServicePtr == nullptr || !isProPlan(accountServicePtr->getSnapshot()))
+        aiService.setConversationId({});
+
     const auto requestId = aiService.sendMessage(
         text,
         [this, useStructuredOutput](const AIProvider::AIResponse& aiResponse) {
