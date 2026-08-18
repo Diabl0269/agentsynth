@@ -263,6 +263,8 @@ public:
             return "Short delay feedback comb-filter with a sweeping metallic sound.";
         if (moduleName.equalsIgnoreCase("Distortion"))
             return "Waveshaping distortion from soft saturation to hard clipping.";
+        if (moduleName.equalsIgnoreCase("Ring Modulator"))
+            return "Oversampled diode-ring modulator — metallic, bell-like sum and difference tones.";
         if (moduleName.equalsIgnoreCase("Bitcrusher"))
             return "For Lo-Fi, sample-rate reduction, and retro digital grit.";
         if (moduleName.equalsIgnoreCase("Pitch Shifter"))
@@ -917,6 +919,7 @@ private:
                 "Phaser",
                 "Flanger",
                 "Distortion",
+                "Ring Modulator",
                 "Bitcrusher",
                 "Pitch Shifter",
             }},

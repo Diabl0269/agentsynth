@@ -79,7 +79,7 @@ keeps the Obsidian default, so a theme can recolour just the categories it cares
 | `sequencing` | `#FFC792EA` | Sequencer, Poly Sequencer, MidiKeyboard, Poly MIDI, External MIDI |
 | `envelopes` | `#FF7FD962` | ADSR, VCA |
 | `filters` | `#FF4FC1FF` | Filter |
-| `modfx` | `#FFFF7AB2` | Chorus, Phaser, Flanger, Distortion, Bitcrusher |
+| `modfx` | `#FFFF7AB2` | Chorus, Phaser, Flanger, Distortion, Bitcrusher, Ring Modulator |
 | `timefx` | `#FF56D4C0` | Delay, Reverb |
 | `dynamics` | `#FFF07178` | Compressor, Limiter |
 | `utility` | `#FFA0A8B4` | Voice Mixer, Attenuverter |

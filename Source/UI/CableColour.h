@@ -148,6 +148,7 @@ inline ModuleCategory categoryFor(ModuleType t) noexcept {
     case ModuleType::Distortion:
     case ModuleType::Bitcrusher:
     case ModuleType::PitchShifter:
+    case ModuleType::RingModulator:
         return ModuleCategory::ModulationFX;
 
     case ModuleType::Delay:

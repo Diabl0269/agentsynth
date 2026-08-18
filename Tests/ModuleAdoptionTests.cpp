@@ -44,6 +44,7 @@ const std::vector<ModuleLevelPolicy>& levelPolicies() {
         {"Filter", LevelPolicy::SharedStage, nullptr, nullptr},
         {"Bitcrusher", LevelPolicy::SharedStage, nullptr, nullptr},
         {"Pitch Shifter", LevelPolicy::SharedStage, nullptr, nullptr},
+        {"Ring Modulator", LevelPolicy::SharedStage, nullptr, nullptr},
 
         // --- Own level/gain parameter, predating the shared stage ---
         // These must NOT also adopt the shared stage: two knobs doing the same job on one panel.
