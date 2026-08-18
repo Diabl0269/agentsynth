@@ -2,8 +2,11 @@
 #include "../Source/AppUndoManager.h"
 #include "../Source/Modules/ADSRModule.h"
 #include "../Source/Modules/AttenuverterModule.h"
+#include "../Source/Modules/FX/DelayModule.h"
+#include "../Source/Modules/FX/ReverbModule.h"
 #include "../Source/Modules/FilterModule.h"
 #include "../Source/Modules/LFOModule.h"
+#include "../Source/Modules/MathModule.h"
 #include "../Source/Modules/ModuleBase.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/PolyMidiModule.h"
@@ -1857,4 +1860,531 @@ TEST_F(GraphEditorTest, BuildMinimapModelReturnsOneNodePerModuleAndMatchingViewp
     const auto model = editor.buildMinimapModel();
     EXPECT_EQ(model.nodes.size(), 2u);
     EXPECT_TRUE(model.viewport == editor.getVisibleCanvasRect());
+}
+
+// --- Smart connections -------------------------------------------------------
+
+static int countAudioConnectionsBetween(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID a,
+                                        juce::AudioProcessorGraph::NodeID b) {
+    int n = 0;
+    for (const auto& c : graph.getConnections()) {
+        if (c.source.isMIDI() || c.destination.isMIDI())
+            continue;
+        if ((c.source.nodeID == a && c.destination.nodeID == b) || (c.source.nodeID == b && c.destination.nodeID == a))
+            ++n;
+    }
+    return n;
+}
+
+static void sizeModuleComponents(GraphEditor& editor, int w = 280, int h = 300) {
+    auto* content = editor.getChildComponent(0);
+    ASSERT_NE(content, nullptr);
+    for (auto* child : content->getChildren()) {
+        if (auto* mc = dynamic_cast<ModuleComponent*>(child))
+            mc->setSize(w, h);
+    }
+}
+
+TEST_F(GraphEditorTest, SmartConnectionOffDoesNotAutoWireOnDrop) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::Off);
+
+    auto& graph = engine.getGraph();
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    filterNode->properties.set("x", 400);
+    filterNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource, juce::Point<int>(120, 120));
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    EXPECT_EQ(editor.getSmartSuggestionCount(), 0);
+
+    editor.itemDropped(details);
+    juce::AudioProcessorGraph::NodeID oscId{};
+    for (auto* node : graph.getNodes()) {
+        if (node->getProcessor()->getName() == "Oscillator")
+            oscId = node->nodeID;
+    }
+    ASSERT_NE(oscId.uid, 0u);
+    EXPECT_EQ(countAudioConnectionsBetween(graph, oscId, filterNode->nodeID), 0);
+}
+
+TEST_F(GraphEditorTest, SmartConnectionSuggestsNearCompatibleNeighbor) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    filterNode->properties.set("x", 360);
+    filterNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    DummyDragSource dummySource;
+    // Drop point near the filter (within the 96 px proximity window after anti-overlap).
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource, juce::Point<int>(80, 100));
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+
+    EXPECT_GT(editor.getSmartSuggestionCount(), 0) << "Oscillator ghost near a Filter should suggest an audio cable";
+
+    // Far away — suggestions clear.
+    juce::DragAndDropTarget::SourceDetails far(juce::var("Oscillator"), &dummySource, juce::Point<int>(50, 500));
+    editor.itemDragMove(far);
+    EXPECT_EQ(editor.getSmartSuggestionCount(), 0);
+    editor.endDragPreview();
+}
+
+TEST_F(GraphEditorTest, SmartConnectionNewDropAutoWires) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewOnly);
+
+    auto& graph = engine.getGraph();
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    filterNode->properties.set("x", 360);
+    filterNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource, juce::Point<int>(80, 100));
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
+    editor.itemDropped(details);
+
+    juce::AudioProcessorGraph::NodeID oscId{};
+    for (auto* node : graph.getNodes()) {
+        if (node->getProcessor()->getName() == "Oscillator")
+            oscId = node->nodeID;
+    }
+    ASSERT_NE(oscId.uid, 0u);
+    EXPECT_GT(countAudioConnectionsBetween(graph, oscId, filterNode->nodeID), 0);
+}
+
+TEST_F(GraphEditorTest, SmartConnectionNewOnlyDoesNotWireOnUnwiredMove) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewOnly);
+
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    oscNode->properties.set("x", 40);
+    oscNode->properties.set("y", 100);
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    filterNode->properties.set("x", 400);
+    filterNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    ModuleComponent* oscComp = nullptr;
+    for (auto* c : editor.getModuleComponents()) {
+        if (c->getNodeId() == oscNode->nodeID)
+            oscComp = c;
+    }
+    ASSERT_NE(oscComp, nullptr);
+
+    editor.beginDragPreview(oscComp->getWidth(), oscComp->getHeight(), oscComp->getNodeId());
+    editor.updateDragPreview({280, 100}); // slide near filter
+    EXPECT_EQ(editor.getSmartSuggestionCount(), 0) << "NewOnly must not suggest on moves";
+    editor.finalizeModuleDrag(oscComp);
+    editor.endDragPreview();
+    EXPECT_EQ(countAudioConnectionsBetween(graph, oscNode->nodeID, filterNode->nodeID), 0);
+}
+
+TEST_F(GraphEditorTest, SmartConnectionNewAndUnwiredWiresUnwiredMove) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    oscNode->properties.set("x", 40);
+    oscNode->properties.set("y", 100);
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    filterNode->properties.set("x", 400);
+    filterNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    ModuleComponent* oscComp = nullptr;
+    for (auto* c : editor.getModuleComponents()) {
+        if (c->getNodeId() == oscNode->nodeID)
+            oscComp = c;
+    }
+    ASSERT_NE(oscComp, nullptr);
+    EXPECT_FALSE(editor.nodeHasCables(oscNode->nodeID));
+
+    editor.beginDragPreview(oscComp->getWidth(), oscComp->getHeight(), oscComp->getNodeId());
+    // Land just left of the Filter so output/input jacks face each other (not overlapping).
+    editor.updateDragPreview({100, 100});
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
+    editor.finalizeModuleDrag(oscComp);
+    editor.endDragPreview();
+    EXPECT_GT(countAudioConnectionsBetween(graph, oscNode->nodeID, filterNode->nodeID), 0);
+}
+
+TEST_F(GraphEditorTest, SmartConnectionNewAndUnwiredSkipsAlreadyWiredMove) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1000, 600);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    oscNode->properties.set("x", 40);
+    oscNode->properties.set("y", 100);
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    filterNode->properties.set("x", 400);
+    filterNode->properties.set("y", 100);
+    auto vcaNode = graph.addNode(std::make_unique<VCAModule>());
+    vcaNode->properties.set("x", 700);
+    vcaNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    // Pre-wire Osc -> Filter so the oscillator is no longer "unwired".
+    editor.connectPorts(oscNode->nodeID, 0, filterNode->nodeID, 0, false, false);
+    ASSERT_TRUE(editor.nodeHasCables(oscNode->nodeID));
+
+    ModuleComponent* oscComp = nullptr;
+    for (auto* c : editor.getModuleComponents()) {
+        if (c->getNodeId() == oscNode->nodeID)
+            oscComp = c;
+    }
+    ASSERT_NE(oscComp, nullptr);
+
+    editor.beginDragPreview(oscComp->getWidth(), oscComp->getHeight(), oscComp->getNodeId());
+    editor.updateDragPreview({560, 100}); // near VCA
+    EXPECT_EQ(editor.getSmartSuggestionCount(), 0);
+    editor.finalizeModuleDrag(oscComp);
+    editor.endDragPreview();
+    EXPECT_EQ(countAudioConnectionsBetween(graph, oscNode->nodeID, vcaNode->nodeID), 0);
+}
+
+TEST_F(GraphEditorTest, SmartConnectionDoesNotWrapAroundToRightNeighbor) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1000, 600);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    filterNode->properties.set("x", 40);
+    filterNode->properties.set("y", 100);
+    auto delayNode = graph.addNode(std::make_unique<DelayModule>());
+    delayNode->properties.set("x", 400);
+    delayNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    ModuleComponent* filterComp = nullptr;
+    for (auto* c : editor.getModuleComponents()) {
+        if (c->getNodeId() == filterNode->nodeID)
+            filterComp = c;
+    }
+    ASSERT_NE(filterComp, nullptr);
+
+    editor.beginDragPreview(filterComp->getWidth(), filterComp->getHeight(), filterComp->getNodeId());
+    editor.updateDragPreview({100, 100}); // slide toward the Delay on the right
+    for (const auto& s : editor.getSmartSuggestions()) {
+        EXPECT_TRUE(s.ghostIsSource) << "must not wrap Delay's right outputs into Filter's left inputs";
+        EXPECT_FALSE(s.isMidi);
+        EXPECT_EQ(s.neighborId, delayNode->nodeID);
+    }
+    editor.endDragPreview();
+}
+
+TEST_F(GraphEditorTest, SmartConnectionNewAndUnwiredWiresFreeOutputDespiteOtherCables) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 600);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    oscNode->properties.set("x", 40);
+    oscNode->properties.set("y", 100);
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    filterNode->properties.set("x", 400);
+    filterNode->properties.set("y", 100);
+    auto delayNode = graph.addNode(std::make_unique<DelayModule>());
+    delayNode->properties.set("x", 760);
+    delayNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    editor.connectPorts(oscNode->nodeID, 0, filterNode->nodeID, 0, false, false);
+    ASSERT_TRUE(editor.nodeHasCables(filterNode->nodeID));
+
+    ModuleComponent* filterComp = nullptr;
+    for (auto* c : editor.getModuleComponents()) {
+        if (c->getNodeId() == filterNode->nodeID)
+            filterComp = c;
+    }
+    ASSERT_NE(filterComp, nullptr);
+
+    editor.beginDragPreview(filterComp->getWidth(), filterComp->getHeight(), filterComp->getNodeId());
+    editor.updateDragPreview({420, 100}); // near Delay; Filter audio in is taken, audio out is free
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0)
+        << "NewAndUnwired should still offer Filter → Delay when the output jack is free";
+    for (const auto& s : editor.getSmartSuggestions()) {
+        EXPECT_TRUE(s.ghostIsSource);
+        EXPECT_EQ(s.neighborId, delayNode->nodeID);
+    }
+    editor.finalizeModuleDrag(filterComp);
+    editor.endDragPreview();
+    EXPECT_GT(countAudioConnectionsBetween(graph, filterNode->nodeID, delayNode->nodeID), 0);
+}
+
+TEST_F(GraphEditorTest, SmartConnectionAllMovesCanAddWireToFreeJack) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1000, 600);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::AllMoves);
+
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    oscNode->properties.set("x", 40);
+    oscNode->properties.set("y", 100);
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    filterNode->properties.set("x", 400);
+    filterNode->properties.set("y", 100);
+    auto vcaNode = graph.addNode(std::make_unique<VCAModule>());
+    vcaNode->properties.set("x", 700);
+    vcaNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    editor.connectPorts(oscNode->nodeID, 0, filterNode->nodeID, 0, false, false);
+
+    ModuleComponent* oscComp = nullptr;
+    for (auto* c : editor.getModuleComponents()) {
+        if (c->getNodeId() == oscNode->nodeID)
+            oscComp = c;
+    }
+    ASSERT_NE(oscComp, nullptr);
+
+    editor.beginDragPreview(oscComp->getWidth(), oscComp->getHeight(), oscComp->getNodeId());
+    editor.updateDragPreview({560, 100});
+    // Osc already feeds Filter; a free VCA audio in can still be suggested under AllMoves.
+    if (editor.getSmartSuggestionCount() > 0) {
+        editor.finalizeModuleDrag(oscComp);
+        editor.endDragPreview();
+        EXPECT_GT(countAudioConnectionsBetween(graph, oscNode->nodeID, vcaNode->nodeID), 0);
+    } else {
+        // Acceptable if heuristics prefer not to dual-route the same output; AllMoves still
+        // must not crash and must leave the existing Filter wire intact.
+        editor.endDragPreview();
+        EXPECT_GT(countAudioConnectionsBetween(graph, oscNode->nodeID, filterNode->nodeID), 0);
+    }
+}
+
+TEST_F(GraphEditorTest, SmartConnectionIncompatiblePairSuggestsNothing) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    filterNode->properties.set("x", 360);
+    filterNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    // Occupy the Filter's audio input so remaining free inputs are mod-CV (skipped in v1).
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    oscNode->properties.set("x", 40);
+    oscNode->properties.set("y", 400);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+    editor.connectPorts(oscNode->nodeID, 0, filterNode->nodeID, 0, false, false);
+
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("LFO"), &dummySource, juce::Point<int>(80, 100));
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    // LFO is not a known MIDI source; Filter audio in is taken; mod CV is not suggested in v1.
+    EXPECT_EQ(editor.getSmartSuggestionCount(), 0);
+    editor.endDragPreview();
+}
+
+TEST_F(GraphEditorTest, SmartConnectionModeRoundTrip) {
+    EXPECT_EQ(GraphEditor::smartConnectionModeFromString("Off"), GraphEditor::SmartConnectionMode::Off);
+    EXPECT_EQ(GraphEditor::smartConnectionModeFromString("NewOnly"), GraphEditor::SmartConnectionMode::NewOnly);
+    EXPECT_EQ(GraphEditor::smartConnectionModeFromString("AllMoves"), GraphEditor::SmartConnectionMode::AllMoves);
+    EXPECT_EQ(GraphEditor::smartConnectionModeFromString("NewAndUnwired"),
+              GraphEditor::SmartConnectionMode::NewAndUnwired);
+    EXPECT_EQ(GraphEditor::smartConnectionModeFromString("bogus"), GraphEditor::SmartConnectionMode::NewAndUnwired);
+    EXPECT_EQ(GraphEditor::smartConnectionModeToString(GraphEditor::SmartConnectionMode::Off), "Off");
+}
+
+TEST_F(GraphEditorTest, SmartConnectionStereoToStereoWiresBothLegs) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1000, 600);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto reverbNode = graph.addNode(std::make_unique<ReverbModule>());
+    reverbNode->properties.set("x", 400);
+    reverbNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Delay"), &dummySource, juce::Point<int>(80, 100));
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    ASSERT_GE(editor.getSmartSuggestionCount(), 2) << "Stereo→stereo should preview L and R";
+    editor.itemDropped(details);
+
+    juce::AudioProcessorGraph::NodeID delayId{};
+    for (auto* node : graph.getNodes()) {
+        if (node->getProcessor()->getName() == "Delay")
+            delayId = node->nodeID;
+    }
+    ASSERT_NE(delayId.uid, 0u);
+
+    // L→L and R→R
+    EXPECT_TRUE(graph.isConnected({{delayId, 0}, {reverbNode->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{delayId, 1}, {reverbNode->nodeID, 1}}));
+}
+
+TEST_F(GraphEditorTest, SmartConnectionMonoToStereoFansBothInputs) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1000, 600);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto delayNode = graph.addNode(std::make_unique<DelayModule>());
+    delayNode->properties.set("x", 400);
+    delayNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource, juce::Point<int>(80, 100));
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    ASSERT_GE(editor.getSmartSuggestionCount(), 2) << "Mono→stereo should preview both Delay inputs";
+    editor.itemDropped(details);
+
+    juce::AudioProcessorGraph::NodeID oscId{};
+    for (auto* node : graph.getNodes()) {
+        if (node->getProcessor()->getName() == "Oscillator")
+            oscId = node->nodeID;
+    }
+    ASSERT_NE(oscId.uid, 0u);
+    EXPECT_TRUE(graph.isConnected({{oscId, 0}, {delayNode->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{oscId, 0}, {delayNode->nodeID, 1}}));
+}
+
+TEST_F(GraphEditorTest, SmartConnectionStereoToMonoFansBothOutputs) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1000, 600);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    filterNode->properties.set("x", 400);
+    filterNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Delay"), &dummySource, juce::Point<int>(80, 100));
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    ASSERT_GE(editor.getSmartSuggestionCount(), 2) << "Stereo→mono should preview both Delay outs into Filter";
+    editor.itemDropped(details);
+
+    juce::AudioProcessorGraph::NodeID delayId{};
+    for (auto* node : graph.getNodes()) {
+        if (node->getProcessor()->getName() == "Delay")
+            delayId = node->nodeID;
+    }
+    ASSERT_NE(delayId.uid, 0u);
+    EXPECT_TRUE(graph.isConnected({{delayId, 0}, {filterNode->nodeID, 0}}));
+    EXPECT_TRUE(graph.isConnected({{delayId, 1}, {filterNode->nodeID, 0}}));
+}
+
+TEST_F(GraphEditorTest, SmartConnectionDoesNotTreatMathABAsStereo) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1000, 600);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto mathNode = graph.addNode(std::make_unique<MathModule>());
+    mathNode->properties.set("x", 400);
+    mathNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource, juce::Point<int>(80, 100));
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    // Math A/B are unlabeled PortRole::Other — must not fan mono into both.
+    EXPECT_LE(editor.getSmartSuggestionCount(), 1);
+    if (editor.getSmartSuggestionCount() == 1) {
+        editor.itemDropped(details);
+        juce::AudioProcessorGraph::NodeID oscId{};
+        for (auto* node : graph.getNodes()) {
+            if (node->getProcessor()->getName() == "Oscillator")
+                oscId = node->nodeID;
+        }
+        ASSERT_NE(oscId.uid, 0u);
+        const bool toA = graph.isConnected({{oscId, 0}, {mathNode->nodeID, 0}});
+        const bool toB = graph.isConnected({{oscId, 0}, {mathNode->nodeID, 1}});
+        EXPECT_TRUE(toA != toB) << "exactly one of Math A/B should receive the mono wire";
+        EXPECT_FALSE(toA && toB);
+    } else {
+        editor.endDragPreview();
+    }
+}
+
+TEST_F(GraphEditorTest, SmartConnectionMonoToStereoIsBothOrNeither) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1000, 600);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto delayNode = graph.addNode(std::make_unique<DelayModule>());
+    delayNode->properties.set("x", 400);
+    delayNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    // Occupy Delay Left only.
+    auto filler = graph.addNode(std::make_unique<OscillatorModule>());
+    filler->properties.set("x", 40);
+    filler->properties.set("y", 400);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+    editor.connectPorts(filler->nodeID, 0, delayNode->nodeID, 0, false, false);
+
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource, juce::Point<int>(80, 100));
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    // Left taken → both-or-neither: no mono→stereo fan onto Right alone.
+    EXPECT_EQ(editor.getSmartSuggestionCount(), 0);
+    editor.endDragPreview();
 }

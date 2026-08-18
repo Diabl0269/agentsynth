@@ -87,9 +87,9 @@ set(SYNTH_SPARKLE_PUBLIC_KEY "" CACHE STRING "Sparkle SUPublicEDKey (base64, pub
 # github-tag-action) without touching this file. A build number that only advances when a human
 # remembers to bump it would make Sparkle either never detect an update or always think one is
 # available. GITHUB_RUN_NUMBER is known before the build starts and increases every run regardless
-# of what tag the release job later mints, so CI passes it via -DGRAVISYNTH_BUILD_NUMBER. Local
+# of what tag the release job later mints, so CI passes it via -DSYNTH_BUILD_NUMBER. Local
 # builds default to "0" — never distributed, so Sparkle comparison doesn't matter for them.
-set(GRAVISYNTH_BUILD_NUMBER "0" CACHE STRING "CFBundleVersion — monotonic build number, CI sets this to the workflow run number")
+set(SYNTH_BUILD_NUMBER "0" CACHE STRING "CFBundleVersion — monotonic build number, CI sets this to the workflow run number")
 
 if(ENABLE_COVERAGE)
     if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
@@ -340,7 +340,7 @@ endif()
 juce_add_gui_app(AgentSynth
     PRODUCT_NAME "${SYNTH_PRODUCT_NAME}"
     VERSION "${PROJECT_VERSION}"
-    BUILD_VERSION "${GRAVISYNTH_BUILD_NUMBER}"
+    BUILD_VERSION "${SYNTH_BUILD_NUMBER}"
     COMPANY_NAME "${SYNTH_COMPANY_NAME}"
     BUNDLE_ID "${SYNTH_BUNDLE_ID}"
     BLUETOOTH_PERMISSION_ENABLED TRUE

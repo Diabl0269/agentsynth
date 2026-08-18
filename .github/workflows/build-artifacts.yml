@@ -145,8 +145,8 @@ jobs:
 
     # Configure CMake — Ninja on every OS so this matches the PR CI build path
     # (see the "Setup MSVC" note above for why Ninja and not the VS generator).
-    # GRAVISYNTH_BUILD_NUMBER becomes CFBundleVersion, the value Sparkle actually compares to decide
-    # an update is available (see CMakeLists.txt's comment on GRAVISYNTH_BUILD_NUMBER for why this
+    # SYNTH_BUILD_NUMBER becomes CFBundleVersion, the value Sparkle actually compares to decide
+    # an update is available (see CMakeLists.txt's comment on SYNTH_BUILD_NUMBER for why this
     # can't just be the project's marketing VERSION: that's hand-bumped in CMakeLists.txt, while
     # this workflow's tag-and-release step below bumps semver tags independently). run_number is
     # known before this step runs and increases every run, so it stays correct regardless of what
@@ -161,7 +161,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-          -DGRAVISYNTH_BUILD_NUMBER=${{ github.run_number }} \
+          -DSYNTH_BUILD_NUMBER=${{ github.run_number }} \
           -DSYNTH_SPARKLE_PUBLIC_KEY="${{ vars.SPARKLE_PUBLIC_KEY }}"
 
     # Build (Ninja is single-config; the build type comes from configure)

@@ -208,6 +208,8 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
 #endif
     graphEditor.setAlignmentGuidesEnabled(
         appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true));
+    graphEditor.setSmartConnectionMode(GraphEditor::smartConnectionModeFromString(
+        appProperties.getUserSettings()->getValue("smartConnectionMode", "NewAndUnwired")));
 
     // Minimap overlay visibility (issue #159), defaults to visible.
     const bool minimapVisible = appProperties.getUserSettings()->getBoolValue("minimapVisible", true);

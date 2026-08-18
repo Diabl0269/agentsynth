@@ -587,6 +587,34 @@ a slightly different footprint.
 
 ---
 
+## 8b. Smart Connections
+
+While placing a module, Agent Synth can **suggest logical cables** to nearby modules and auto-wire them on drop.
+
+### Modes (`Settings → Appearance → Smart connections`)
+
+Persisted as `smartConnectionMode` in `juce::ApplicationProperties`. Default: **When main I/O is free** (`NewAndUnwired`).
+
+| Mode | Library drop | Reposition existing module |
+|---|---|---|
+| **Off** | Never | Never |
+| **New modules only** | Yes | Never |
+| **When main I/O is free** (default) | Yes | Yes, when the jacks that would be wired are still free (source output and dest input) |
+| **All module moves** | Yes | Yes (dest input must be free; a source that already fans out may still tap a free dest) |
+
+Group multi-select drags never smart-connect. Snippet drops are excluded.
+
+### Behaviour
+
+1. During `updateDragPreview()`, if the mode allows it, cull neighbors whose **module** rects are more than **96 px** edge-to-edge, then score **jack-to-jack** distance (same 96 px cap). A pair is rejected when the source jack sits to the right of the dest jack — that stops wrap-around cables from a neighbor on the right into the dragged module’s left inputs.
+2. Score compatible jack pairs with `scoreJackPair` role matching and free destination jacks. In **When main I/O is free** the source output must also be unwired. Stereo requires explicit Left/Right (or Audio L/R) labels — two unlabeled ports (e.g. Math A/B) are never treated as L/R. Cap at the best neighbor’s audio group (stereo L→L / R→R, or mono↔stereo fan of both legs, both-or-neither when a stereo dest has a taken leg) plus one MIDI suggestion. Mod-matrix / attenuverter destinations are skipped in v1. MIDI suggestions are limited to known MIDI sources/destinations (Sequencer, Poly MIDI, MIDI Keyboard, Oscillator, …) because `ModuleBase` defaults `producesMidi()`/`acceptsMidi()` to true for almost every card.
+3. Frosted preview cables are drawn in `paintOverChildren` (~40% alpha via `drawConnectionWire`).
+4. On drop / `finalizeModuleDrag`, pending suggestions are applied through `connectPorts` (same path as a manual cable drag: poly fans, MIDI, structural pitch/gate).
+
+Library drags cache a short-lived `AIStateMapper::createModule` probe for jack metadata before a real `ModuleComponent` exists.
+
+---
+
 ## 9. Visualizer Components
 
 Several in-module visualizer components provide real-time signal display inside module cards; one of them (`EQCurveComponent`) is also an editor.
