@@ -314,6 +314,48 @@ a contract two `AIIntegrationServiceTest` cases assert verbatim. `SamplerAloneDo
 but deliberately not one here (a Sampler is silent until a file is loaded, and a model-authored patch
 cannot load one).
 
+## Testing Cloud-Gated Features Locally (not a test)
+
+Pro-gated features — cloud conversation history, `x-conversation-id` threading — only do anything
+interesting against a real `synth-platform` server; the local `AIChatComponent` test suite fakes
+the backend (`setHistorySourcesForTesting`), so exercising the real client/server contract needs an
+actual server running.
+
+There are two hosts involved, and only one of them was previously configurable:
+
+- **Chat / `patch.generate`** (`RemoteProvider`) — already user-configurable via the Settings
+  "Host" field for that provider. No change needed here.
+- **Auth / entitlement / cloud history** (`AccountService`/`AuthClient`, the `GET`/`DELETE`
+  `/v1/conversations*` endpoints) — hardcoded to production (`synth::branding::kApiBaseUrl`) with
+  no UI to override it. `synth::branding::resolveApiBaseUrl()` (`Source/Branding.h`) now reads a
+  `AGENTSYNTH_LOCAL_API_URL` environment variable in Debug builds only, so this can be redirected
+  without hand-editing `Branding.h` and rebuilding per URL change.
+
+Run `synth-platform` locally first (in-memory stores by default — no Postgres needed for this
+flow). See that repo's own `docs/local-development.md` for the full setup; the short version:
+
+```bash
+pnpm --filter @platform/api dev   # serves http://localhost:8787
+```
+
+Then, to test a Pro-gated flow end-to-end:
+
+1. Start local `synth-platform` as above.
+2. In AgentSynth's Settings, set the chat provider's Host field to `http://localhost:8787`.
+3. Launch the locally-built Debug app with the override set:
+
+   ```bash
+   AGENTSYNTH_LOCAL_API_URL=http://localhost:8787 "./build/AgentSynth_artefacts/Debug/Agent Synth.app/Contents/MacOS/Agent Synth"
+   ```
+
+`AGENTSYNTH_LOCAL_API_URL` is compiled out of Release builds entirely (`#ifndef NDEBUG`) — see the
+comment on `resolveApiBaseUrl()` in `Source/Branding.h` for why.
+
+Production conversation storage is Neon-managed Postgres
+(`packages/conversations/src/store/postgres.ts` in `synth-platform`, 180-day retention); local
+dev's in-memory store implements the identical `ConversationStore` interface, so this flow still
+exercises real client/server contract behavior even without a real Postgres in the loop.
+
 ## Adding Tests for New Modules
 
 When adding a new audio module:
