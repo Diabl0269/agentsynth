@@ -80,6 +80,17 @@ TEST(LogicalPortTests, PolyModulesDescribeTheirFans) {
     auto adsr_out3 = adsr.mapOutputChannel(3);
     EXPECT_FALSE(adsr_out3.isPolyGroupHead);
 
+    auto adsr_in0 = adsr.mapInputChannel(0);
+    EXPECT_EQ(adsr_in0.visibleJackIndex, 0);
+    EXPECT_EQ(adsr_in0.role, PortRole::Gate);
+    EXPECT_TRUE(adsr_in0.isPolyGroupHead);
+    EXPECT_EQ(adsr_in0.polyVoiceSpan, 8);
+
+    auto adsr_in8 = adsr.mapInputChannel(8);
+    EXPECT_EQ(adsr_in8.visibleJackIndex, 1);
+    EXPECT_EQ(adsr_in8.role, PortRole::ModCV);
+    EXPECT_EQ(adsr_in8.polyVoiceSpan, 1);
+
     // ---- Oscillator (poly) ----
     OscillatorModule osc;
     setPolyParam(osc, true);

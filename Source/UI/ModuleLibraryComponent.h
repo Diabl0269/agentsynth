@@ -243,8 +243,9 @@ public:
         if (moduleName.equalsIgnoreCase("External MIDI"))
             return "Routes external MIDI device input into the patch graph.";
         if (moduleName.equalsIgnoreCase("ADSR"))
-            return "Attack-Decay-Sustain-Release envelope generator. With Poly on it takes one gate "
-                   "per voice; with Poly off it is driven by MIDI rather than its Gate jack.";
+            return "Attack-Decay-Sustain-Release envelope generator. Gate CV or MIDI starts the "
+                   "envelope; Threshold sets how high the gate must rise. Switch Poly on for one "
+                   "envelope per voice.";
         if (moduleName.equalsIgnoreCase("Envelope Follower"))
             return "Tracks an audio signal's amplitude and outputs it as modulation CV.";
         if (moduleName.equalsIgnoreCase("VCA"))
@@ -285,6 +286,9 @@ public:
             return "Sums multiple polyphonic voices down to a stereo mix.";
         if (moduleName.equalsIgnoreCase("Math"))
             return "Dual-input math/logic utility - Sum, Difference, Min, Max and Product of A and B.";
+        if (moduleName.equalsIgnoreCase("Comparator"))
+            return "Emits a gate while the Signal is above Threshold, plus the inverted gate. Slice "
+                   "an LFO, a kick, or any CV into a pulse.";
         if (moduleName.equalsIgnoreCase("Audio Input"))
             return "Audio from the input device. Only one per patch.";
         if (moduleName.equalsIgnoreCase("Audio Output"))
@@ -934,6 +938,7 @@ private:
             {"Utility", {
                 "Macros",
                 "Sample & Hold",
+                "Comparator",
                 "Voice Mixer",
                 "Math",
             }},

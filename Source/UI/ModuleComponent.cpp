@@ -5,6 +5,7 @@
 #include "../Modules/PolySequencerModule.h"
 #include "../Modules/SamplerModule.h"
 #include "../Modules/SequencerModule.h"
+#include "../Modules/ThresholdMeterSource.h"
 #include "GraphEditor.h"
 #include "LayoutUtil.h"
 #include "Theme/AppLookAndFeel.h"
@@ -19,7 +20,6 @@ static constexpr int kLabelHeight = 18;
 static constexpr int kRowHeight = 24;  // combo box / toggle / button
 static constexpr int kKnobHeight = 58; // rotary + its text box
 static constexpr int kWaveformHeight = 72;
-static constexpr int kTriggerMeterHeight = 18;
 static constexpr int kBottomPadding = 12;
 // A port label box spans its jack centre ± 10; clear it by a bit more before placing any content.
 static constexpr int kPortLabelClearance = 15;
@@ -60,9 +60,15 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         }
     }
 
-    if (auto* shMod = dynamic_cast<SampleHoldModule*>(module)) {
-        triggerMeter = std::make_unique<TriggerMeterComponent>(*shMod);
-        addAndMakeVisible(triggerMeter.get());
+    if (auto* src = dynamic_cast<ThresholdMeterSource*>(module)) {
+        juce::AudioParameterFloat* thresholdParam = nullptr;
+        // Sample & Hold keeps its rotary Threshold; the control is meter-only there. ADSR and
+        // Comparator embed the slider in the control so the slice sits on the live level bar.
+        if (getType(module) != ModuleType::SampleHold)
+            thresholdParam =
+                dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(module, src->getThresholdParamID()));
+        thresholdControl = std::make_unique<ThresholdControlComponent>(*src, thresholdParam);
+        addAndMakeVisible(thresholdControl.get());
     }
 
     if (auto* filterMod = dynamic_cast<FilterModule*>(module)) {
@@ -150,8 +156,8 @@ void ModuleComponent::detachFromProcessor() {
     spectrumToggle.reset();
     eqPopOutButton.reset();
     keyboardComponent.reset();
-    // Same reasoning: the trigger meter times itself and holds a reference to the module.
-    triggerMeter.reset();
+    // Same reasoning: the threshold control times itself and holds a reference to the module.
+    thresholdControl.reset();
 
     // Same reason: the waveform view times against the SamplerModule, so it must go before the
     // processor pointer is dropped.
@@ -489,6 +495,11 @@ void ModuleComponent::createControls() {
                 auto* label = comboLabels.add(new juce::Label(param->getName(100), param->getName(100)));
                 addAndMakeVisible(label);
             } else if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param)) {
+                if (auto* src = dynamic_cast<ThresholdMeterSource*>(module)) {
+                    // ADSR / Comparator: the threshold slider lives inside ThresholdControlComponent.
+                    if (getType(module) != ModuleType::SampleHold && floatParam->paramID == src->getThresholdParamID())
+                        continue;
+                }
                 auto* slider = sliders.add(new juce::Slider());
                 slider->setComponentID(param->getName(100)); // ID for lookup
                 if (getType(module) == ModuleType::ADSR) {
@@ -1353,7 +1364,14 @@ void ModuleComponent::updateLayout() {
     }
 
     if (getType(module) == ModuleType::ADSR) {
-        setSize(220 + 60, 220); // Matches the ADSR branch of updateLayout (sliders + one toggle row)
+        const int thresholdH = thresholdControl != nullptr ? thresholdControl->getPreferredHeight() : 0;
+        if (getWidth() != 280)
+            setSize(280, juce::jmax(getHeight(), 100));
+        int height = getContentTopY() + 20 + 120 + 10; // label + sliders + gap
+        if (thresholdH > 0)
+            height += thresholdH + 8;
+        height += toggles.size() * 30 + 10;
+        setSize(280, height);
         return;
     }
 
@@ -1548,12 +1566,12 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
         y += kRowHeight + 2;
     }
 
-    // --- Trigger meter (Sample & Hold): sits directly above the knob grid, whose first knob is
-    // Threshold, so the marker and the control that moves it stay adjacent.
-    if (triggerMeter) {
+    // --- Threshold control: Sample & Hold is meter-only above its rotary; ADSR / Comparator
+    // embed the Threshold slider here so the slice sits on the live level bar.
+    if (thresholdControl) {
         if (apply)
-            triggerMeter->setBounds(contentX, y, contentW, kTriggerMeterHeight);
-        y += kTriggerMeterHeight + 6;
+            thresholdControl->setBounds(contentX, y, contentW, thresholdControl->getPreferredHeight());
+        y += thresholdControl->getPreferredHeight() + 6;
     }
 
     // --- Knob grid: kKnobColumns across, wrapping. A double-width card doubles the columns so
@@ -1824,6 +1842,14 @@ std::optional<ModuleComponent::Port> ModuleComponent::getModTargetPortForPoint(j
             return Port{slider->getBounds(), t.channelIndex, /*isInput*/ true, /*isMidi*/ false};
         }
     }
+
+    if (thresholdControl != nullptr && thresholdControl->getSlider() != nullptr &&
+        thresholdControl->getBounds().contains(localPoint)) {
+        for (const auto& t : targets) {
+            if (t.name == thresholdControl->getParamName())
+                return Port{thresholdControl->getBounds(), t.channelIndex, /*isInput*/ true, /*isMidi*/ false};
+        }
+    }
     return std::nullopt;
 }
 
@@ -2060,20 +2086,27 @@ void ModuleComponent::resized() {
 
     // --- ADSR Layout ---
     if (getType(module) == ModuleType::ADSR) {
-        int margin = 30; // Side margins for ports
-        int y = 30;
+        int y = getContentTopY();
         int sliderWidth = 50;
         int sliderHeight = 120;
+        int margin = 30;
 
         // Reserve a row per auto-generated toggle (the "Poly" checkbox) below the sliders. This
         // branch used to lay out only the sliders and return, leaving every toggle at its default
         // (0,0,0,0) bounds — present in the component tree but invisible and unclickable, which made
         // poly mode unreachable on this module.
-        int toggleY = y + 20 + sliderHeight + 10;
+        int afterSliders = y + 20 + sliderHeight + 10;
+        if (thresholdControl != nullptr) {
+            const int contentX = margin;
+            const int contentW = getWidth() - margin * 2;
+            thresholdControl->setBounds(contentX, afterSliders, contentW, thresholdControl->getPreferredHeight());
+            afterSliders += thresholdControl->getPreferredHeight() + 8;
+        }
+        int toggleY = afterSliders;
         setSize(220 + margin * 2, toggleY + toggles.size() * 30 + 10);
         int contentWidth = getWidth() - margin * 2;
 
-        // We expect 4 sliders: A, D, S, R
+        // We expect 4 sliders: A, D, S, R (Threshold lives in thresholdControl).
         for (int i = 0; i < sliders.size(); ++i) {
             int x = margin + 10 + i * sliderWidth;
             sliderLabels[i]->setBounds(x, y, sliderWidth, 20);
@@ -2397,7 +2430,10 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                       {"Pitch Shifter", ModuleType::PitchShifter}}},
                     {"Time FX", {{"Delay", ModuleType::Delay}, {"Reverb", ModuleType::Reverb}}},
                     {"Dynamics", {{"Compressor", ModuleType::Compressor}, {"Limiter", ModuleType::Limiter}}},
-                    {"Utility", {{"Sample & Hold", ModuleType::SampleHold}}},
+                    {"Utility",
+                     {{"Sample & Hold", ModuleType::SampleHold},
+                      {"Comparator", ModuleType::Comparator},
+                      {"Math", ModuleType::Math}}},
                 };
 
                 for (auto& cat : categories) {

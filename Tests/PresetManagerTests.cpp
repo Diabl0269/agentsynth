@@ -116,7 +116,7 @@ juce::Point<int> estimateModuleSize(const juce::String& typeName) {
         return {560, 150}; // kDoubleWidth
     if (typeName.containsIgnoreCase("ADSR") || typeName.containsIgnoreCase("Amp Env") ||
         typeName.containsIgnoreCase("Filter Env"))
-        return {280, 180};
+        return {280, 351};
     // Everything else: conservative default
     return {280, 300};
 }

@@ -122,6 +122,9 @@ add_library(Core STATIC
     Source/Modules/MidiKeyboardModule.h
     Source/Modules/LFOModule.h
     Source/Modules/SampleHoldModule.h
+    Source/Modules/SchmittTrigger.h
+    Source/Modules/ThresholdMeterSource.h
+    Source/Modules/ComparatorModule.h
     Source/Modules/AttenuverterModule.h
     Source/Modules/EnvelopeFollowerModule.h
     Source/Modules/MacroControlModule.h
@@ -372,6 +375,7 @@ add_library(AppUI STATIC
     Source/UI/SampleWaveformComponent.h
     Source/UI/WavetableDisplayComponent.h
     Source/UI/TriggerMeterComponent.h
+    Source/UI/ThresholdControlComponent.h
     Source/UI/ModMatrixComponent.cpp
     Source/UI/ModMatrixComponent.h
     Source/UI/SettingsWindow.cpp
