@@ -1087,6 +1087,33 @@ TEST_F(AIChatComponentTest, UpsellStripVisibleForSignedInFreePlan) {
     chatComponent.setAccountService(nullptr);
 }
 
+TEST_F(AIChatComponentTest, HistoryButtonTooltipCarriesUpsellTextOnlyWhenNotPro) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<MockChatProvider>());
+    juce::ApplicationProperties props;
+    configureTestAppProperties(props);
+    synth::AIChatComponent chatComponent(service, props);
+    chatComponent.setSize(400, 600);
+
+    // No AccountService at all: still "not Pro" (see upsellButton's member doc comment), so the
+    // tooltip should already carry the upsell text.
+    EXPECT_TRUE(chatComponent.getHistoryButtonTooltipForTesting().contains("saved locally only"));
+
+    auto tokenStore = std::make_unique<synth::InMemoryTokenStore>();
+    tokenStore->save("stored-refresh-token");
+    synth::AccountService accountService("http://mock-host:8787", makeSignInPerformer("pro"), std::move(tokenStore));
+    chatComponent.setAccountService(&accountService);
+
+    signInWithPlan(accountService, "pro");
+
+    auto proTooltip = chatComponent.getHistoryButtonTooltipForTesting();
+    EXPECT_FALSE(proTooltip.contains("saved locally only"));
+    EXPECT_TRUE(proTooltip.contains("View, restore, or clear saved conversations"));
+
+    chatComponent.setAccountService(nullptr);
+}
+
 // ---- History panel: backend selection per plan, and the downgrade strip -------------------
 
 TEST_F(AIChatComponentTest, NotSignedInHistoryPanelListsFromLocalBackendOnly) {

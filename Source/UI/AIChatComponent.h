@@ -123,6 +123,11 @@ public:
     bool lastHistoryPopupWasCloudForTesting() const { return lastHistoryPopupWasCloud; }
     const std::vector<LocalConversationSummary>& lastHistoryListForTesting() const { return lastHistoryList; }
 
+    // Testing hook: historyButton's tooltip, which carries the upsell strip's explanatory text
+    // whenever !isProPlan(snapshot) — see updateUpsellStrip()'s doc comment. Not const: JUCE's
+    // Button::getTooltip() (via SettableTooltipClient) isn't a const member function.
+    juce::String getHistoryButtonTooltipForTesting() { return historyButton.getTooltip(); }
+
     // Testing hook: the "Clear my history" confirmation-menu-item handler, exposed synchronously.
     void simulateClearHistoryConfirmed() { performClearHistory(); }
 
@@ -233,14 +238,15 @@ private:
     // bottom-chrome stack — see updateHostedModeNotice() and resized().
     juce::Label hostedModeNotice;
 
-    // P6-8 upsell strip: "Your history is saved locally only — subscribers get automatic cloud
-    // backup across devices." + an "Upgrade to Pro" button. Shown whenever !isProPlan(snapshot) —
+    // P6-8 upsell strip: an "Upgrade to Pro" button, shown whenever !isProPlan(snapshot) —
     // including with NO AccountService attached at all, which deliberately diverges from
     // accountRow/planBadge/hostedModeNotice's "invisible until a service says otherwise"
     // convention: those default to invisible because they have nothing true to say yet, but "not
     // Pro" is already true before any AccountService is ever attached (every caller starts on the
-    // free tier, signed out). See updateUpsellStrip().
-    juce::Label upsellLabel;
+    // free tier, signed out). The explanatory text ("Your history is saved locally only —
+    // subscribers get automatic cloud backup across devices.") lives on historyButton's tooltip
+    // instead of a separate label, so it doesn't compete for space in the bottom-chrome stack —
+    // see updateUpsellStrip().
     juce::TextButton upsellButton;
 
     // P6-8 downgrade notice: "Your subscription has lapsed — your saved history will be deleted on
@@ -341,9 +347,9 @@ private:
     bool lastHistoryPopupWasCloud = false;
     std::vector<LocalConversationSummary> lastHistoryList;
 
-    // P6-8: syncs upsellLabel/upsellButton visibility to !isProPlan(snapshot) (true whenever there
-    // is no AccountService at all — see the member doc comment). Called from setAccountService()'s
-    // onStateChanged handler and once at construction.
+    // P6-8: syncs upsellButton's visibility, and historyButton's tooltip, to !isProPlan(snapshot)
+    // (true whenever there is no AccountService at all — see upsellButton's member doc comment).
+    // Called from setAccountService()'s onStateChanged handler and once at construction.
     void updateUpsellStrip();
 
     // P6-8: syncs downgradeStripLabel visibility/text to (signed in && !isProPlan &&

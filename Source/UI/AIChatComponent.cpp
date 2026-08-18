@@ -499,10 +499,11 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
         updateChatDisplay();
     };
 
-    // P6-8: opens the history list/restore/clear popup — see historyButtonClicked().
+    // P6-8: opens the history list/restore/clear popup — see historyButtonClicked(). Tooltip is
+    // set by updateUpsellStrip() below (it varies by plan, so setting a static default here would
+    // just be overwritten), not here.
     addAndMakeVisible(historyButton);
     historyButton.setButtonText("History");
-    historyButton.setTooltip("View, restore, or clear saved conversations");
     historyButton.onClick = [this]() { historyButtonClicked(); };
 
     addAndMakeVisible(modelPicker);
@@ -527,16 +528,8 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
 
     // P6-8 upsell strip. Starts visible (see the member doc comment for why this diverges from
     // accountRow/planBadge/hostedModeNotice's invisible-until-known default) — updateUpsellStrip()
-    // below sets its real state from whatever AccountSnapshot is available at this point (none, at
-    // construction).
-    addChildComponent(upsellLabel);
-    upsellLabel.setJustificationType(juce::Justification::centredLeft);
-    upsellLabel.setMinimumHorizontalScale(1.0f);
-    upsellLabel.setFont(juce::Font(11.0f));
-    upsellLabel.setText("Your history is saved locally only \xe2\x80\x94 subscribers get automatic "
-                        "cloud backup across devices.",
-                        juce::dontSendNotification);
-
+    // below sets its real state, and historyButton's tooltip, from whatever AccountSnapshot is
+    // available at this point (none, at construction).
     addChildComponent(upsellButton);
     upsellButton.setButtonText("Upgrade to Pro");
     upsellButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF6B4FBB));
@@ -700,11 +693,13 @@ void AIChatComponent::resized() {
     const int downgradeStripHeight = downgradeStripLabel.isVisible() ? 18 : 0;
     const int downgradeStripGap = downgradeStripHeight > 0 ? 5 : 0;
 
-    // P6-8 upsell strip: label + button, so it needs more height than the single-line notices
-    // above. Same zero-height-when-absent contract, but starts VISIBLE by default (see the member
-    // doc comment) — most callers (including every existing test that never attaches an
-    // AccountService) will therefore reserve this space, unlike the other three rows in this stack.
-    const int upsellStripHeight = upsellLabel.isVisible() ? 44 : 0;
+    // P6-8 upsell strip: just the "Upgrade to Pro" button now (its explanatory text moved to
+    // historyButton's tooltip — see the member doc comment), so it only needs a single comfortable
+    // click-target row, not the taller label+button row this used to be. Same zero-height-when-absent
+    // contract, but starts VISIBLE by default (see the member doc comment) — most callers (including
+    // every existing test that never attaches an AccountService) will therefore reserve this space,
+    // unlike the other three rows in this stack.
+    const int upsellStripHeight = upsellButton.isVisible() ? 28 : 0;
     const int upsellStripGap = upsellStripHeight > 0 ? 5 : 0;
 
     auto bottomArea = b.removeFromBottom(70 + accountRowHeight + accountRowGap + planBadgeHeight + planBadgeGap +
@@ -750,9 +745,7 @@ void AIChatComponent::resized() {
     if (upsellStripHeight > 0) {
         bottomArea.removeFromBottom(upsellStripGap);
         auto upsellArea = bottomArea.removeFromBottom(upsellStripHeight);
-        upsellButton.setBounds(upsellArea.removeFromRight(110).reduced(0, 4));
-        upsellArea.removeFromRight(8);
-        upsellLabel.setBounds(upsellArea);
+        upsellButton.setBounds(upsellArea.removeFromRight(110).reduced(0, 2));
     }
 
     if (planBadgeHeight > 0) {
@@ -1178,9 +1171,14 @@ void AIChatComponent::updateHostedModeNotice() {
 // ============================================================================
 
 void AIChatComponent::updateUpsellStrip() {
+    static const juce::String kHistoryTooltipBase = "View, restore, or clear saved conversations";
+    static const juce::String kUpsellText =
+        juce::String::fromUTF8("Your history is saved locally only \xe2\x80\x94 subscribers get automatic "
+                               "cloud backup across devices.");
+
     const bool showUpsell = accountServicePtr == nullptr || !isProPlan(accountServicePtr->getSnapshot());
-    upsellLabel.setVisible(showUpsell);
     upsellButton.setVisible(showUpsell);
+    historyButton.setTooltip(showUpsell ? kHistoryTooltipBase + ". " + kUpsellText : kHistoryTooltipBase);
     resized();
 }
 
@@ -1192,8 +1190,8 @@ void AIChatComponent::updateDowngradeStrip() {
 
     downgradeStripLabel.setVisible(show);
     if (show) {
-        downgradeStripLabel.setText("Your subscription has lapsed \xe2\x80\x94 your saved history will be "
-                                    "deleted on " +
+        downgradeStripLabel.setText(juce::String::fromUTF8("Your subscription has lapsed \xe2\x80\x94 your saved "
+                                                           "history will be deleted on ") +
                                         formatReadableDate(lastDeletionScheduledAt) + ".",
                                     juce::dontSendNotification);
     }
