@@ -28,6 +28,21 @@ on/off tooltip — not a labelled checkbox.
 Wavetable / Sampler keep permanent `Audio L` / `Audio R` jacks — their right leg lives on a
 non-contiguous raw block (`kRightBase`) for CV layout reasons, so they are not on this toggle.
 
+**Dual I/O is FX-only, on purpose.** The voice modules went stereo in issue #219 the `kRightBase`
+way instead: Oscillator gained `Audio L`/`Audio R` outputs plus Pan, and Filter gained an `Audio L`/
+`Audio R` pair on both its input and output side with an independent ladder per leg. They cannot use
+this toggle, because it assumes raw ch0/ch1 are the audio pair and on those modules ch1 is Waveform
+or Cutoff CV — relabelling it "Right" would be a lie about the channel map and would break every
+saved patch routing to it. Two consequences worth knowing:
+
+- Their legs are separate jacks, so a mono cable does **not** fan into both. A stereo path through a
+  Filter means patching both jacks; an unpatched `Audio R` stays silent.
+- Merge-mode auto-connect (and smart-connection drops onto a mono destination) wires `Audio L` only,
+  matching what Wavetable has always done.
+
+See [`modules.md § Oscillator`](modules.md#oscillator-module) and
+[`§ Filter`](modules.md#filter-module) for the channel maps.
+
 ## Output Level (shared stage)
 
 Modules whose output is **audio** carry a `Level` parameter (`outputLevel`, linear 0.0–1.0, default 1.0) so their output can be scaled without patching a VCA into the chain. Provided by `ModuleBase` as three opt-in pieces:

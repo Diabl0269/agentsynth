@@ -16,6 +16,7 @@ add_executable(Tests
     LayoutUtilTests.cpp
     OscillatorTests.cpp
     FilterTests.cpp
+    StereoVoiceModuleTests.cpp
     NoiseModuleTests.cpp
     MathModuleTests.cpp
     MacroControlModuleTests.cpp

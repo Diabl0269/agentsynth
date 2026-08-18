@@ -1506,17 +1506,8 @@ private:
         panGains(pan, gainL, gainR);
     }
 
-    /** Balance pan law: centre leaves BOTH legs at unity, and panning attenuates only the leg
-        you are moving away from. -1 is hard left, +1 hard right.
-
-        Deliberately not equal-power. An equal-power centre sits at 1/sqrt2, which would have
-        quietened every existing mono patch by 3 dB the moment this module grew a second output
-        jack — Audio L has to keep carrying exactly what it carried in #172. */
-    static void panGains(float pan, float& gainL, float& gainR) {
-        const float p = juce::jlimit(-1.0f, 1.0f, pan);
-        gainL = juce::jlimit(0.0f, 1.0f, 1.0f - p);
-        gainR = juce::jlimit(0.0f, 1.0f, 1.0f + p);
-    }
+    // The balance pan law itself lives on ModuleBase::panGains — Oscillator and Filter grew
+    // Audio L/R blocks of their own in #219 and all three modules must place a signal identically.
 
     static bool isChannelActive(const juce::AudioBuffer<float>& buffer, int ch, int numSamples) {
         if (ch >= buffer.getNumChannels())

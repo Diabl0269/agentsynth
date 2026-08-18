@@ -2588,9 +2588,12 @@ TEST_F(GraphEditorTest, SmartConnectionDoesNotTreatMathABAsStereo) {
     juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource, juce::Point<int>(80, 100));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
-    // Math A/B are unlabeled PortRole::Other — must not fan mono into both.
-    EXPECT_LE(editor.getSmartSuggestionCount(), 1);
-    if (editor.getSmartSuggestionCount() == 1) {
+    // Math A/B are unlabeled PortRole::Other, so they are never a stereo destination pair. The
+    // Oscillator became a stereo SOURCE in #219 (Audio L/R), so it may legitimately offer both legs
+    // — but every one of them must land on Math A. B is a second operand, not a right channel.
+    const int suggestions = editor.getSmartSuggestionCount();
+    EXPECT_LE(suggestions, 2);
+    if (suggestions >= 1) {
         editor.itemDropped(details);
         juce::AudioProcessorGraph::NodeID oscId{};
         for (auto* node : graph.getNodes()) {
@@ -2598,10 +2601,14 @@ TEST_F(GraphEditorTest, SmartConnectionDoesNotTreatMathABAsStereo) {
                 oscId = node->nodeID;
         }
         ASSERT_NE(oscId.uid, 0u);
-        const bool toA = graph.isConnected({{oscId, 0}, {mathNode->nodeID, 0}});
-        const bool toB = graph.isConnected({{oscId, 0}, {mathNode->nodeID, 1}});
-        EXPECT_TRUE(toA != toB) << "exactly one of Math A/B should receive the mono wire";
-        EXPECT_FALSE(toA && toB);
+
+        bool anyIntoB = false;
+        for (const auto& conn : graph.getConnections())
+            if (conn.source.nodeID == oscId && conn.destination.nodeID == mathNode->nodeID &&
+                conn.destination.channelIndex == 1)
+                anyIntoB = true;
+        EXPECT_FALSE(anyIntoB) << "Math B is a second operand, not a right audio channel";
+        EXPECT_TRUE(graph.isConnected({{oscId, 0}, {mathNode->nodeID, 0}})) << "Audio L should reach Math A";
     } else {
         editor.endDragPreview();
     }

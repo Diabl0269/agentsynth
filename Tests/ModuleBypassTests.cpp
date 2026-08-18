@@ -75,7 +75,9 @@ TEST_F(ModuleBypassTest, BypassedEffectPassesAudioThrough) {
 
     // Create a buffer with the right number of input channels
     int numChannels = filter.getTotalNumInputChannels();
-    EXPECT_EQ(numChannels, 11);
+    // 8 voice audio + 3 shared CV + the 8-wide Audio R block added in #219.
+    EXPECT_EQ(numChannels, FilterModule::kNumChannels);
+    EXPECT_EQ(numChannels, 19);
 
     juce::AudioBuffer<float> buffer(numChannels, blockSize);
     // juce::AudioBuffer's constructor does NOT zero its memory, and FilterModule reads channels 1-3
@@ -151,10 +153,12 @@ TEST_F(ModuleBypassTest, BypassedSourceOutputsSilence) {
     oscillator.prepareToPlay(sampleRate, blockSize);
 
     // Create a buffer with the right number of output channels.
-    // OscillatorModule declares 14 output channels (8 audio + 6 silent pass-throughs)
-    // so that JUCE correctly copies shared CV input buffers that fan out to multiple nodes.
+    // OscillatorModule declares 22 output channels: 8 Audio L, 6 silent pass-throughs over the
+    // shared CV inputs, then the 8-wide Audio R block from #219. Declaring outputs above every CV
+    // input channel is what makes JUCE copy shared CV buffers that fan out to multiple nodes.
     int numChannels = oscillator.getTotalNumOutputChannels();
-    EXPECT_EQ(numChannels, 14);
+    EXPECT_EQ(numChannels, OscillatorModule::kNumOutputs);
+    EXPECT_EQ(numChannels, 22);
 
     juce::AudioBuffer<float> buffer(numChannels, blockSize);
     juce::MidiBuffer midiBuffer;

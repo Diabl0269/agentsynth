@@ -49,9 +49,11 @@
 // fails if this table drifts from what layoutDefaultContent() actually produces.
 juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Oscillator")
-        return {280, 449};
+        return {280, 545}; // +96 in #219: an Audio R output jack row and the Pan knob row
     if (typeName == "Filter")
-        return {280, 563}; // +1 knob row: the Level knob took it from 3 sliders to 4 (issue #122)
+        // +1 knob row: the Level knob took it from 3 sliders to 4 (issue #122).
+        // +20 in #219: the Audio L/R input pair adds a jack row to the port gutter.
+        return {280, 583};
     if (typeName == "LFO")
         return {280, 353};
     if (typeName == "VCA")

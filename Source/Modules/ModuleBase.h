@@ -120,6 +120,18 @@ public:
         return "Audio";
     }
 
+    /** Balance pan law shared by every stereo-capable module: centre leaves BOTH legs at unity,
+        and panning attenuates only the leg you move away from. -1 is hard left, +1 hard right.
+
+        Deliberately not equal-power. An equal-power centre sits at 1/sqrt(2), which would quieten
+        every existing mono patch by 3 dB the moment a module grows a second output jack — Audio L
+        has to keep carrying exactly what it carried while the module was mono. */
+    static void panGains(float pan, float& gainL, float& gainR) {
+        const float p = juce::jlimit(-1.0f, 1.0f, pan);
+        gainL = juce::jlimit(0.0f, 1.0f, 1.0f - p);
+        gainR = juce::jlimit(0.0f, 1.0f, 1.0f + p);
+    }
+
     /** Map raw ch0/ch1 (+ trailing CV) onto Dual or collapsed Audio jacks. */
     LogicalPort mapStereoPairInput(int raw, int numCvInputs) const {
         LogicalPort p;
@@ -412,6 +424,46 @@ protected:
             const float gain = smoothedOutputLevel.getNextValue();
             for (int ch = 0; ch < numChannels; ++ch)
                 channels[ch][i] *= gain;
+        }
+    }
+
+    // Two-block variant for modules whose Audio R block sits ABOVE the mod-CV inputs on a
+    // dedicated `kRightBase` block (Wavetable / Oscillator / Filter layouts) rather than on a
+    // contiguous ch0/ch1 pair. Scales [0, span) and [rightBase, rightBase + span) from ONE ramp:
+    // calling applyOutputLevel() twice would advance the smoother twice and leave the right leg
+    // a block behind the left, which reads as the image drifting while Level moves.
+    void applyOutputLevelSplit(juce::AudioBuffer<float>& buffer, int span, int rightBase) {
+        if (outputLevelParam == nullptr)
+            return;
+
+        const int numSamples = buffer.getNumSamples();
+        const int bufChannels = buffer.getNumChannels();
+        const int leftCount = juce::jmin(span, bufChannels);
+        if (numSamples == 0 || leftCount <= 0)
+            return;
+
+        const int rightCount = juce::jlimit(0, span, bufChannels - rightBase);
+
+        smoothedOutputLevel.setTargetValue(outputLevelParam->get());
+
+        if (!smoothedOutputLevel.isSmoothing()) {
+            const float gain = smoothedOutputLevel.getCurrentValue();
+            if (gain != 1.0f) {
+                for (int ch = 0; ch < leftCount; ++ch)
+                    buffer.applyGain(ch, 0, numSamples, gain);
+                for (int ch = 0; ch < rightCount; ++ch)
+                    buffer.applyGain(rightBase + ch, 0, numSamples, gain);
+            }
+            return;
+        }
+
+        auto* const* channels = buffer.getArrayOfWritePointers();
+        for (int i = 0; i < numSamples; ++i) {
+            const float gain = smoothedOutputLevel.getNextValue();
+            for (int ch = 0; ch < leftCount; ++ch)
+                channels[ch][i] *= gain;
+            for (int ch = 0; ch < rightCount; ++ch)
+                channels[rightBase + ch][i] *= gain;
         }
     }
 
