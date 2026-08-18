@@ -3,6 +3,7 @@
 #include "../Branding.h"
 #include "../ShortcutManager.h"
 #include "AppearanceSettingsTab.h"
+#include "PreferencesSettingsTab.h"
 #include "ShortcutsSettingsTab.h"
 
 //==============================================================================
@@ -175,6 +176,10 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
 
     auto* shortcutsSettingsTab = new ShortcutsSettingsTab(shortcutManager);
     tabs.addTab("Keyboard Shortcuts", juce::Colours::transparentBlack, shortcutsSettingsTab, true);
+
+    auto* preferencesSettingsTab = new PreferencesSettingsTab(appProperties);
+    preferencesSettingsTab->setGraphEditor(graphEditor);
+    tabs.addTab("Preferences", juce::Colours::transparentBlack, preferencesSettingsTab, true);
 
     auto* appearanceSettingsTab = new AppearanceSettingsTab(themeManager, appProperties);
     appearanceSettingsTab->setGraphEditor(graphEditor); // wire the tab to graph editor

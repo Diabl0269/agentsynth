@@ -2789,6 +2789,23 @@ void GraphEditor::disconnectPort(ModuleComponent* module, int portIndex, bool is
     repaint();
 }
 
+bool GraphEditor::isPortConnected(ModuleComponent* module, int portIndex, bool isInput, bool isMidi) const {
+    if (module == nullptr)
+        return false;
+
+    juce::AudioProcessorGraph::NodeID nodeId;
+    for (auto* n : audioEngine.getGraph().getNodes()) {
+        if (n->getProcessor() == module->getModule()) {
+            nodeId = n->nodeID;
+            break;
+        }
+    }
+    if (nodeId.uid == 0)
+        return false;
+
+    return isInput ? !isInputJackFree(nodeId, portIndex, isMidi) : !isOutputJackFree(nodeId, portIndex, isMidi);
+}
+
 void GraphEditor::rewireForPolyChange(ModuleComponent* module, const std::vector<LogicalPort>& previousInputMap,
                                       const std::vector<LogicalPort>& previousOutputMap) {
     if (module == nullptr)

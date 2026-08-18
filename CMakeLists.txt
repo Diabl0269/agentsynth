@@ -376,6 +376,8 @@ add_library(AppUI STATIC
     Source/UI/SettingsWindow.h
     Source/UI/AppearanceSettingsTab.cpp
     Source/UI/AppearanceSettingsTab.h
+    Source/UI/PreferencesSettingsTab.cpp
+    Source/UI/PreferencesSettingsTab.h
     Source/UI/ShortcutsSettingsTab.cpp
     Source/ShortcutManager.h
     Source/Update/UpdateManager.h
