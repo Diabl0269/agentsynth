@@ -32,11 +32,19 @@ public:
     };
 
     // ---- Row geometry (pixels) ----
-    static constexpr int kTopStripHeight = 24; // "Collapse all / Expand all" chrome above row 0
-    static constexpr int kFirstRowY = 10;      // gap between the strip and the first entry row
+    static constexpr int kSearchHeight = 32;   // search field pinned at the top of the sidebar
+    static constexpr int kTopStripHeight = 24; // "Collapse all / Expand all" chrome below the search field
+    static constexpr int kPinnedChromeHeight = kSearchHeight + kTopStripHeight;
+    static constexpr int kFirstRowY = 10; // gap between the pinned chrome and the first entry row
     static constexpr int kHeaderHeight = 25;
     static constexpr int kHeaderGap = 5; // extra breathing room above every header but the first
     static constexpr int kItemHeight = 32;
+
+    /** Inclusive [start, start+length) range of a case-insensitive query hit inside a label. */
+    struct HighlightSpan {
+        int start = 0;
+        int length = 0;
+    };
 
     static constexpr const char* kSnippetsHeader = "Snippets";
 
@@ -53,6 +61,23 @@ public:
         addChildComponent(verticalScrollBar);
         verticalScrollBar.setAutoHide(false);
         verticalScrollBar.addListener(this);
+
+        searchEditor.setMultiLine(false);
+        searchEditor.setReturnKeyStartsNewLine(false);
+        searchEditor.setEscapeAndReturnKeysConsumed(true);
+        searchEditor.setSelectAllWhenFocused(true);
+        searchEditor.setJustification(juce::Justification::centredLeft);
+        searchEditor.setBorder(juce::BorderSize<int>(0));
+        searchEditor.setIndents(6, 0);
+        searchEditor.setFont(juce::Font(juce::FontOptions(13.0f)));
+        searchEditor.setTooltip("Filter the library by module, snippet, or category name.");
+        searchEditor.onTextChange = [this] { applySearchQuery(searchEditor.getText()); };
+        searchEditor.onEscapeKey = [this] {
+            if (searchEditor.getText().isNotEmpty())
+                setSearchText({});
+        };
+        addAndMakeVisible(searchEditor);
+        applySearchEditorColours();
     }
 
     ~ModuleLibraryComponent() override {
@@ -81,6 +106,46 @@ public:
 
     /** Invoked when the user picks "Delete Snippet" from a snippet row's context menu. */
     std::function<void(const juce::String&)> onSnippetDeleteRequested;
+
+    // -------------------------------------------------------------------------
+    // Search
+    // -------------------------------------------------------------------------
+
+    /** Trimmed query: empty means the library is unfiltered. */
+    static juce::String normalisedSearchQuery(const juce::String& raw) { return raw.trim(); }
+
+    static bool textMatchesQuery(const juce::String& text, const juce::String& query) {
+        const auto q = normalisedSearchQuery(query);
+        return q.isNotEmpty() && text.containsIgnoreCase(q);
+    }
+
+    /** Non-overlapping case-insensitive hits of `query` inside `text`, in left-to-right order. */
+    static std::vector<HighlightSpan> highlightSpansFor(const juce::String& text, const juce::String& query) {
+        std::vector<HighlightSpan> spans;
+        const auto q = normalisedSearchQuery(query);
+        if (q.isEmpty() || text.isEmpty())
+            return spans;
+        const int qLen = q.length();
+        int from = 0;
+        while (from + qLen <= text.length()) {
+            const int hit = text.indexOfIgnoreCase(from, q);
+            if (hit < 0)
+                break;
+            spans.push_back({hit, qLen});
+            from = hit + qLen;
+        }
+        return spans;
+    }
+
+    void setSearchText(const juce::String& text) {
+        if (searchEditor.getText() != text)
+            searchEditor.setText(text, juce::dontSendNotification);
+        applySearchQuery(text);
+    }
+
+    juce::String getSearchText() const { return searchEditor.getText(); }
+
+    bool isSearchActive() const { return normalisedSearchQuery(searchQuery).isNotEmpty(); }
 
     // -------------------------------------------------------------------------
     // Collapse / expand
@@ -321,11 +386,16 @@ public:
      *  their natural spacing inside the band and are *truncated* at its bottom edge rather than
      *  squashed, so text never distorts mid-animation; `row.height` below `kItemHeight` means the
      *  row is partly clipped, and rows past the band are dropped (so they stop hit-testing too).
-     *  At progress 0 and 1 this reduces exactly to the un-animated layout. */
+     *  At progress 0 and 1 this reduces exactly to the un-animated layout.
+     *
+     *  An active search hides rows whose names (or whose section header) do not contain the query,
+     *  drops empty sections, and treats remaining sections as fully open so matches are not trapped
+     *  inside a fold. Collapse state itself is left alone — clearing the query restores it. */
     std::vector<Row> buildRows() const {
         std::vector<Row> rows;
-        int y = kTopStripHeight + kFirstRowY;
+        int y = kPinnedChromeHeight + kFirstRowY;
         bool seenHeader = false;
+        const bool filtering = isSearchActive();
 
         size_t i = 0;
         while (i < entries.size()) {
@@ -334,27 +404,43 @@ public:
                 continue;
             }
 
+            // Span of rows belonging to this header.
+            size_t end = i + 1;
+            while (end < entries.size() && entries[end].kind != RowKind::Header)
+                ++end;
+
+            std::vector<size_t> visibleChildren;
+            if (filtering) {
+                if (!sectionVisibleInSearch(i, end)) {
+                    i = end;
+                    continue;
+                }
+                for (size_t j = i + 1; j < end; ++j)
+                    if (childVisibleInSearch(entries[j]))
+                        visibleChildren.push_back(j);
+            } else {
+                for (size_t j = i + 1; j < end; ++j)
+                    visibleChildren.push_back(j);
+            }
+
             if (seenHeader)
                 y += kHeaderGap;
             seenHeader = true;
             rows.push_back({(int)i, y, kHeaderHeight});
             y += kHeaderHeight;
 
-            // Span of rows belonging to this header.
-            size_t end = i + 1;
-            while (end < entries.size() && entries[end].kind != RowKind::Header)
-                ++end;
-
-            const int naturalHeight = (int)(end - i - 1) * kItemHeight;
-            const float progress = getSectionProgress(entries[i].text);
+            const int naturalHeight = (int)visibleChildren.size() * kItemHeight;
+            // Search forces matching sections open without touching collapse progress, so typing
+            // does not fire the accordion (or persist a fold the user never asked for).
+            const float progress = filtering ? 0.0f : getSectionProgress(entries[i].text);
             const int bandHeight = juce::roundToInt((float)naturalHeight * (1.0f - progress));
             const int bandTop = y;
 
-            for (size_t j = i + 1; j < end; ++j) {
-                const int rowTop = bandTop + (int)(j - i - 1) * kItemHeight;
+            for (size_t c = 0; c < visibleChildren.size(); ++c) {
+                const int rowTop = bandTop + (int)c * kItemHeight;
                 const int visibleHeight = juce::jlimit(0, kItemHeight, bandTop + bandHeight - rowTop);
                 if (visibleHeight > 0)
-                    rows.push_back({(int)j, rowTop, visibleHeight});
+                    rows.push_back({(int)visibleChildren[c], rowTop, visibleHeight});
             }
 
             y = bandTop + bandHeight;
@@ -366,11 +452,14 @@ public:
     /** Total pixel height of the currently visible content. */
     int getTotalContentHeight() const {
         auto rows = buildRows();
-        return rows.empty() ? kTopStripHeight + kFirstRowY : rows.back().y + rows.back().height + kFirstRowY;
+        return rows.empty() ? kPinnedChromeHeight + kFirstRowY : rows.back().y + rows.back().height + kFirstRowY;
     }
 
-    /** True when y falls inside the collapse-all chrome above the first row. */
-    static bool isInTopStrip(int y) noexcept { return y >= 0 && y < kTopStripHeight; }
+    /** True when y falls inside the collapse-all chrome (below the search field). */
+    static bool isInTopStrip(int y) noexcept { return y >= kSearchHeight && y < kPinnedChromeHeight; }
+
+    /** True when y falls inside the pinned search field or the collapse-all strip. */
+    static bool isInPinnedChrome(int y) noexcept { return y >= 0 && y < kPinnedChromeHeight; }
 
     // -------------------------------------------------------------------------
     // Scrolling
@@ -378,12 +467,12 @@ public:
     // The library is one painted component rather than a Viewport + inner content: rows are drawn
     // from a single buildRows() pass, and a Viewport would mean splitting that (plus the tooltip
     // client and the drag source) across two components. Instead the rows are drawn through a
-    // scrollOffset and a juce::ScrollBar drives it. The COLLAPSE ALL strip stays pinned, so the one
-    // control that shortens an overflowing list never scrolls out of reach.
+    // scrollOffset and a juce::ScrollBar drives it. The search field and COLLAPSE ALL strip stay
+    // pinned, so the two controls that change which rows are on screen never scroll out of reach.
     // -------------------------------------------------------------------------
 
-    /** Rows scroll inside the panel below the pinned top strip. Both the content and the viewport
-     *  lose the same kTopStripHeight, so the maximum offset is just the plain overflow. */
+    /** Rows scroll inside the panel below the pinned chrome. Both the content and the viewport
+     *  lose the same kPinnedChromeHeight, so the maximum offset is just the plain overflow. */
     int getMaxScrollOffset() const { return juce::jmax(0, getTotalContentHeight() - juce::jmax(0, getHeight())); }
 
     int getScrollOffset() const noexcept { return scrollOffset; }
@@ -401,11 +490,15 @@ public:
     /** True when the rows overflow the panel and the scrollbar is therefore on screen. */
     bool isScrollBarVisible() const noexcept { return verticalScrollBar.isVisible(); }
 
-    void resized() override { updateScrollBar(); }
+    void resized() override {
+        searchEditor.setBounds(8, 4, juce::jmax(0, getWidth() - 16), kSearchHeight - 8);
+        updateScrollBar();
+    }
 
     void lookAndFeelChanged() override {
         // Scrollbar width is a theme token (AppLookAndFeel::kScrollbarWidth), so a theme switch can
         // change the bar's footprint and the width left for row text.
+        applySearchEditorColours();
         updateScrollBar();
     }
 
@@ -443,40 +536,50 @@ public:
 
         // Rows stop short of the scrollbar when it is on screen, so text never runs under the thumb.
         const int contentWidth = getRowContentWidth();
+        const auto rows = buildRows();
+        const juce::String query = normalisedSearchQuery(searchQuery);
 
-        // ---- Rows: clipped below the pinned strip and shifted by the scroll offset ----
-        // The clip is what keeps a scrolled row from painting over the strip; setOrigin then moves
-        // the content-space row.y values into component space.
+        // ---- Rows: clipped below the pinned chrome and shifted by the scroll offset ----
+        // The clip is what keeps a scrolled row from painting over the search field or the strip;
+        // setOrigin then moves the content-space row.y values into component space.
         {
             juce::Graphics::ScopedSaveState scrolled(g);
-            g.reduceClipRegion(0, kTopStripHeight, getWidth(), juce::jmax(0, getHeight() - kTopStripHeight));
+            g.reduceClipRegion(0, kPinnedChromeHeight, getWidth(), juce::jmax(0, getHeight() - kPinnedChromeHeight));
             g.setOrigin(0, -scrollOffset);
 
-            for (const auto& row : buildRows()) {
+            if (rows.empty() && isSearchActive()) {
+                g.setColour(mutedColour);
+                g.setFont(juce::Font(juce::FontOptions(13.0f)));
+                g.drawText("No matching modules", 20, kPinnedChromeHeight + 12, contentWidth - 40, 24,
+                           juce::Justification::centredLeft);
+            }
+
+            for (const auto& row : rows) {
                 const auto& entry = entries[(size_t)row.entryIndex];
 
                 if (entry.kind == RowKind::Header) {
                     // Disclosure chevron drawn as a path — glyph coverage for ▾/▸ is not guaranteed
                     // across the embedded typefaces (see the theming font limitation). It rotates on
-                    // the same progress value as the fold, so the two read as one motion.
-                    drawChevron(g, juce::Rectangle<float>(8.0f, (float)row.y + 6.0f, 8.0f, 8.0f),
-                                getSectionProgress(entry.text), headerColour);
+                    // the same progress value as the fold, so the two read as one motion. Search
+                    // forces matching sections open, so the chevron matches that layout.
+                    const float chevronProgress = isSearchActive() ? 0.0f : getSectionProgress(entry.text);
+                    drawChevron(g, juce::Rectangle<float>(8.0f, (float)row.y + 6.0f, 8.0f, 8.0f), chevronProgress,
+                                headerColour);
 
                     // Category icon at x=20 (null-guarded — no-op when LnF absent).
                     synth::theme::Icon catIcon = categoryIconForHeader(entry.text);
                     const juce::Drawable* icon = (lf != nullptr) ? lf->peekIcon(catIcon) : nullptr;
 
-                    g.setFont(juce::Font(juce::FontOptions(12.0f)));
+                    const juce::Font headerFont(juce::FontOptions(12.0f));
+                    const juce::String headerLabel = entry.text.toUpperCase();
                     if (icon != nullptr) {
                         icon->drawWithin(g, juce::Rectangle<float>(20.0f, (float)row.y + 2.0f, 16.0f, 16.0f),
                                          juce::RectanglePlacement::centred, 1.0f);
-                        g.setColour(headerColour);
-                        g.drawText(entry.text.toUpperCase(), 40, row.y, contentWidth - 50, 20,
-                                   juce::Justification::centredLeft);
+                        drawHighlightedText(g, headerLabel, query, {40, row.y, contentWidth - 50, 20}, headerFont,
+                                            headerColour, accentColour.withAlpha(0.28f), accentColour);
                     } else {
-                        g.setColour(headerColour);
-                        g.drawText(entry.text.toUpperCase(), 20, row.y, contentWidth - 30, 20,
-                                   juce::Justification::centredLeft);
+                        drawHighlightedText(g, headerLabel, query, {20, row.y, contentWidth - 30, 20}, headerFont,
+                                            headerColour, accentColour.withAlpha(0.28f), accentColour);
                     }
                     continue;
                 }
@@ -492,10 +595,9 @@ public:
                 }
 
                 if (entry.kind == RowKind::EmptyHint) {
-                    g.setColour(mutedColour.withAlpha(0.7f));
-                    g.setFont(juce::Font(juce::FontOptions(13.0f)));
-                    g.drawText(entry.text, 20, row.y, contentWidth - 40, kItemHeight - 4,
-                               juce::Justification::centredLeft);
+                    const juce::Font hintFont(juce::FontOptions(13.0f));
+                    drawHighlightedText(g, entry.text, query, {20, row.y, contentWidth - 40, kItemHeight - 4}, hintFont,
+                                        mutedColour.withAlpha(0.7f), accentColour.withAlpha(0.28f), accentColour);
                     continue;
                 }
 
@@ -508,9 +610,10 @@ public:
                 }
 
                 // Greyed out = already in the patch and not addable again.
-                g.setColour(enabled ? itemColour : mutedColour.withAlpha(0.5f));
-                g.setFont(juce::Font(juce::FontOptions(16.0f)));
-                g.drawText(entry.text, 20, row.y, contentWidth - 60, kItemHeight - 4, juce::Justification::centredLeft);
+                const juce::Colour labelColour = enabled ? itemColour : mutedColour.withAlpha(0.5f);
+                const juce::Font itemFont(juce::FontOptions(16.0f));
+                drawHighlightedText(g, entry.text, query, {20, row.y, contentWidth - 60, kItemHeight - 4}, itemFont,
+                                    labelColour, accentColour.withAlpha(0.28f), accentColour);
 
                 if (entry.kind == RowKind::Snippet) {
                     g.setColour(mutedColour);
@@ -521,17 +624,16 @@ public:
             }
         }
 
-        // ---- Top strip: one control to fold the whole library away ----
-        // Painted last, over its own background fill: it is pinned, so scrolled rows must not show
-        // through it.
+        // ---- Pinned chrome: the search field is a child TextEditor in the top 32 px; the
+        // collapse-all strip is drawn here so scrolled rows cannot show through it. ----
         {
             const bool allCollapsed = areAllSectionsCollapsed();
             g.setColour(bgColour);
-            g.fillRect(0, 0, getWidth(), kTopStripHeight);
+            g.fillRect(0, kSearchHeight, getWidth(), kTopStripHeight);
             g.setColour(topStripHovered ? accentColour : mutedColour);
             g.setFont(juce::Font(juce::FontOptions(11.0f)));
-            g.drawText(allCollapsed ? "EXPAND ALL" : "COLLAPSE ALL", 10, 2, contentWidth - 20, kTopStripHeight - 4,
-                       juce::Justification::centredRight);
+            g.drawText(allCollapsed ? "EXPAND ALL" : "COLLAPSE ALL", 10, kSearchHeight + 2, contentWidth - 20,
+                       kTopStripHeight - 4, juce::Justification::centredRight);
         }
     }
 
@@ -720,10 +822,10 @@ public:
         return -1;
     }
 
-    /** Component-space y → entry index, or -1. The top strip is pinned chrome, so a row scrolled
-     *  underneath it is never a hit. */
+    /** Component-space y → entry index, or -1. The search field and collapse strip are pinned
+     *  chrome, so a row scrolled underneath them is never a hit. */
     int getEntryIndexAtComponentY(int y) const {
-        if (isInTopStrip(y))
+        if (isInPinnedChrome(y))
             return -1;
         return getEntryIndexAt(y + scrollOffset);
     }
@@ -794,11 +896,12 @@ private:
     }
 
     /** Shows/hides and re-ranges the scrollbar for the current row set, and re-clamps the offset.
-     *  Must run after anything that changes the content height — a resize, a collapse, or a snippet
-     *  refresh — or a shrinking list would leave the view scrolled past its own end. */
+     *  Must run after anything that changes the content height — a resize, a collapse, a search
+     *  filter, or a snippet refresh — or a shrinking list would leave the view scrolled past its
+     *  own end. */
     void updateScrollBar() {
-        const int viewportHeight = getHeight() - kTopStripHeight;
-        const int scrollableHeight = getTotalContentHeight() - kTopStripHeight;
+        const int viewportHeight = getHeight() - kPinnedChromeHeight;
+        const int scrollableHeight = getTotalContentHeight() - kPinnedChromeHeight;
         const bool needed = viewportHeight > 0 && scrollableHeight > viewportHeight;
 
         verticalScrollBar.setVisible(needed);
@@ -808,7 +911,7 @@ private:
             return;
 
         const int barWidth = getScrollBarWidth();
-        verticalScrollBar.setBounds(getWidth() - barWidth, kTopStripHeight, barWidth, viewportHeight);
+        verticalScrollBar.setBounds(getWidth() - barWidth, kPinnedChromeHeight, barWidth, viewportHeight);
         verticalScrollBar.setSingleStepSize((double)kItemHeight);
         verticalScrollBar.setRangeLimits(0.0, (double)scrollableHeight, juce::dontSendNotification);
         verticalScrollBar.setCurrentRange((double)scrollOffset, (double)viewportHeight, juce::dontSendNotification);
@@ -834,6 +937,88 @@ private:
             if (row.entryIndex == hoveredIndex)
                 return;
         hoveredIndex = -1;
+    }
+
+    void applySearchQuery(const juce::String& text) {
+        if (searchQuery == text)
+            return;
+        searchQuery = text;
+        clampHoverToVisibleRow();
+        // New filters should show the first match, not leave the view parked halfway down a list
+        // that just shrank.
+        scrollOffset = 0;
+        updateScrollBar();
+        repaint();
+    }
+
+    bool sectionVisibleInSearch(size_t headerIndex, size_t end) const {
+        const auto q = normalisedSearchQuery(searchQuery);
+        if (textMatchesQuery(entries[headerIndex].text, q))
+            return true;
+        for (size_t j = headerIndex + 1; j < end; ++j)
+            if (textMatchesQuery(entries[j].text, q))
+                return true;
+        return false;
+    }
+
+    bool childVisibleInSearch(const Entry& entry) const {
+        const auto q = normalisedSearchQuery(searchQuery);
+        return textMatchesQuery(entry.text, q) || textMatchesQuery(entry.section, q);
+    }
+
+    void applySearchEditorColours() {
+        auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+        juce::Colour bg = juce::Colours::black.withAlpha(0.35f);
+        juce::Colour text = juce::Colours::white;
+        juce::Colour muted = juce::Colours::grey;
+        juce::Colour outline = juce::Colours::grey.darker();
+        if (lf != nullptr) {
+            const auto& c = lf->getTheme().colors;
+            bg = c.surface;
+            text = c.textPrimary;
+            muted = c.textMuted;
+            outline = c.border;
+        }
+        searchEditor.setColour(juce::TextEditor::backgroundColourId, bg);
+        searchEditor.setColour(juce::TextEditor::textColourId, text);
+        searchEditor.setColour(juce::TextEditor::outlineColourId, outline);
+        searchEditor.setColour(juce::TextEditor::focusedOutlineColourId, outline);
+        searchEditor.setTextToShowWhenEmpty("Search modules...", muted);
+    }
+
+    static void drawHighlightedText(juce::Graphics& g, const juce::String& text, const juce::String& query,
+                                    juce::Rectangle<int> bounds, const juce::Font& font, juce::Colour normal,
+                                    juce::Colour highlightFill, juce::Colour highlightText) {
+        g.setFont(font);
+        const auto spans = highlightSpansFor(text, query);
+        if (spans.empty()) {
+            g.setColour(normal);
+            g.drawText(text, bounds, juce::Justification::centredLeft, true);
+            return;
+        }
+
+        const float baseX = (float)bounds.getX();
+        for (const auto& span : spans) {
+            const float preW = font.getStringWidthFloat(text.substring(0, span.start));
+            const float matchW = font.getStringWidthFloat(text.substring(span.start, span.start + span.length));
+            g.setColour(highlightFill);
+            g.fillRoundedRectangle(baseX + preW - 1.0f, (float)bounds.getY() + 4.0f, matchW + 2.0f,
+                                   juce::jmax(8.0f, (float)bounds.getHeight() - 8.0f), 2.0f);
+        }
+
+        juce::AttributedString as;
+        as.setJustification(juce::Justification::centredLeft);
+        as.setWordWrap(juce::AttributedString::none);
+        int pos = 0;
+        for (const auto& span : spans) {
+            if (span.start > pos)
+                as.append(text.substring(pos, span.start), font, normal);
+            as.append(text.substring(span.start, span.start + span.length), font, highlightText);
+            pos = span.start + span.length;
+        }
+        if (pos < text.length())
+            as.append(text.substring(pos), font, normal);
+        as.draw(g, bounds.toFloat());
     }
 
     /** @param progress 0 = open (pointing down) .. 1 = folded (pointing right). Drawn as the open
@@ -963,6 +1148,9 @@ private:
     std::set<juce::String> collapsedSections;
     int hoveredIndex = -1;        // -1 = no hover; updated on mouseMove/mouseExit only
     bool topStripHovered = false; // hover state for the collapse-all chrome
+
+    juce::TextEditor searchEditor;
+    juce::String searchQuery; // raw editor text; isSearchActive() trims it
 
     juce::ScrollBar verticalScrollBar{true};
     int scrollOffset = 0; // px of content scrolled past the top of the row viewport
