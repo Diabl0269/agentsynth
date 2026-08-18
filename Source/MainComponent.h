@@ -219,8 +219,10 @@ private:
     // setAccountService(), see its header comment) is torn down first, while accountService is
     // still alive to have those callback slots cleared.
     // P4-6: explicit production host — the AccountService(host) default of localhost:8787 is a
-    // dev/test convenience only, and MainComponent is the real composition root.
-    synth::AccountService accountService{synth::branding::kApiBaseUrl};
+    // dev/test convenience only, and MainComponent is the real composition root. A Debug build can
+    // still redirect this to a local synth-platform server via AGENTSYNTH_LOCAL_API_URL — see
+    // synth::branding::resolveApiBaseUrl().
+    synth::AccountService accountService{synth::branding::resolveApiBaseUrl()};
     synth::AIChatComponent aiChatComponent;
     bool isAiPanelVisible = false;
     bool isLibraryVisible{true};

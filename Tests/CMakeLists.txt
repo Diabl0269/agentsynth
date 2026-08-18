@@ -105,6 +105,7 @@ add_executable(Tests
     MinimapComponentTests.cpp
     PluginProcessorTests.cpp
     PatchDocumentTests.cpp
+    BrandingTests.cpp
     ../Source/MainComponent.cpp
     ../Source/Plugin/PluginProcessor.cpp
     ../Source/Plugin/PluginEditor.cpp
