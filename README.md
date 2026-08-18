@@ -91,6 +91,8 @@ Agent Synth uses CMake for its build system.
         "./build/Release/Agent Synth"
         ```
 
+> **Plugin builds**: The same build also produces VST3 (Linux/macOS/Windows) and AU (macOS) audio-plugin bundles wrapping the same engine and UI as the standalone app. Prebuilt plugin bundles ship alongside the app in every [release](https://github.com/Diabl0269/agentsynth/releases).
+
 ## Development
 
 ### Project Structure

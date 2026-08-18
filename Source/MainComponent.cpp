@@ -6,7 +6,9 @@
 // ---- Primary constructor (injected ThemeManager + LookAndFeel from Main.cpp) ----
 MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLookAndFeel& lf,
                              std::unique_ptr<synth::AIProvider> provider)
-    : graphEditor(audioEngine, &undoManager)
+    : ownedAudioEngine(std::make_unique<AudioEngine>(AudioEngine::HostMode::Standalone))
+    , audioEngine(*ownedAudioEngine)
+    , graphEditor(audioEngine, &undoManager)
     , aiService(audioEngine.getGraph())
     , aiChatComponent(aiService, appProperties)
     , themeManager(&tm)
@@ -30,9 +32,37 @@ MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLo
     initialiseCommon(std::move(provider), synth::AIProviderRegistry::createDefault());
 }
 
+// ---- Plugin constructor (engine owned by AgentSynthAudioProcessor) ----
+// Identical to the primary ctor apart from where the engine comes from; the shared body lives in
+// initialiseCommon(), which skips engine initialise/shutdown when we don't own the engine.
+MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLookAndFeel& lf,
+                             AudioEngine& externalEngine, std::unique_ptr<synth::AIProvider> provider)
+    : audioEngine(externalEngine)
+    , graphEditor(audioEngine, &undoManager)
+    , aiService(audioEngine.getGraph())
+    , aiChatComponent(aiService, appProperties)
+    , themeManager(&tm)
+    , lookAndFeel(&lf) {
+    propertiesOptions.applicationName = synth::branding::kProductName;
+    propertiesOptions.folderName = synth::branding::kSettingsFolderName;
+    propertiesOptions.filenameSuffix = "settings";
+    propertiesOptions.osxLibrarySubFolder = "Application Support";
+    propertiesOptions.storageFormat = juce::PropertiesFile::storeAsXML;
+    appProperties.setStorageParameters(propertiesOptions);
+    shortcutManager.loadFromProperties(appProperties);
+
+    themeManager->initialise(&appProperties);
+    lookAndFeel->applyTheme(themeManager->getActiveTheme());
+    themeManager->addChangeListener(this);
+
+    initialiseCommon(std::move(provider), synth::AIProviderRegistry::createDefault());
+}
+
 // ---- Delegating constructor for tests / legacy call sites ----
 MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider, synth::AIProviderRegistry registry)
-    : graphEditor(audioEngine, &undoManager)
+    : ownedAudioEngine(std::make_unique<AudioEngine>(AudioEngine::HostMode::Standalone))
+    , audioEngine(*ownedAudioEngine)
+    , graphEditor(audioEngine, &undoManager)
     , aiService(audioEngine.getGraph())
     , aiChatComponent(aiService, appProperties) {
     // Own a default ThemeManager + LookAndFeel so the code behaves identically
@@ -72,6 +102,8 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     isAiPanelVisible = appProperties.getUserSettings()->getBoolValue("aiPanelVisible", false);
     graphEditor.setAlignmentGuidesEnabled(
         appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true));
+    graphEditor.setSmartConnectionMode(GraphEditor::smartConnectionModeFromString(
+        appProperties.getUserSettings()->getValue("smartConnectionMode", "NewAndUnwired")));
 
     // Minimap overlay visibility (issue #159), defaults to visible.
     const bool minimapVisible = appProperties.getUserSettings()->getBoolValue("minimapVisible", true);
@@ -96,16 +128,47 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         appProperties.saveIfNeeded();
     };
 
-    // Load AI provider preference. "ollama" is the persisted id (see AIProviderRegistry),
-    // not a display name — registry.create() falls back to the first registered provider
-    // if the saved id is unknown (e.g. stale pre-registry value, or empty).
-    juce::String savedProviderId = appProperties.getUserSettings()->getValue("aiProvider", "ollama");
-    juce::String savedOllamaHost = appProperties.getUserSettings()->getValue("ollamaHost", "http://localhost:11434");
-
     if (provider) {
         aiService.setProvider(std::move(provider));
     } else {
-        aiService.setProvider(registry.create(savedProviderId, {savedOllamaHost, {}}));
+        // Load AI provider preference. The persisted id (see AIProviderRegistry) is not a
+        // display name — registry.create() falls back to the first registered provider ("ollama")
+        // if the saved id is unknown (e.g. stale pre-registry value, or empty).
+        //
+        // P4-6 migration: "aiProvider" is only ever WRITTEN by AISettingsTab::updateSettings(), so
+        // most existing installs have never persisted it, even after months of use — its absence
+        // alone can't distinguish "brand new install" from "existing user who never opened AI
+        // settings". existsAsFile() can: it reflects whether the settings file was already on disk
+        // before this launch touched anything (nothing above this point in initialiseCommon(), nor
+        // shortcutManager.loadFromProperties()/themeManager->initialise() in the constructor, writes
+        // to appProperties — all read-only). See resolveDefaultProviderId() for the pure decision.
+        const bool hasExistingSettingsFile = appProperties.getUserSettings()->getFile().existsAsFile();
+        const juce::String defaultProviderId = resolveDefaultProviderId(hasExistingSettingsFile);
+        juce::String savedProviderId = appProperties.getUserSettings()->getValue("aiProvider", defaultProviderId);
+
+        // Pin the resolved id so every other reader of "aiProvider" (AISettingsTab) agrees with
+        // what actually got constructed here, instead of independently re-deriving a default.
+        // saveIfNeeded() is required, not optional: without it, a fresh install that resolves to
+        // "remote" here only holds that in memory — if the process exits before some OTHER write
+        // flushes the file, launch 2 finds a settings file on disk (from this launch's theme/
+        // shortcut/panel-visibility writes) with no "aiProvider" key in it, resolves
+        // hasExistingSettingsFile=true, and silently reverts a brand new install to "ollama".
+        if (!appProperties.getUserSettings()->containsKey("aiProvider")) {
+            appProperties.getUserSettings()->setValue("aiProvider", savedProviderId);
+            appProperties.saveIfNeeded();
+        }
+
+        // Each provider persists its own host under its own key — "ollamaHost" and "remoteHost"
+        // must never collide, or switching providers in Settings silently points one of them at
+        // the other's address (see AISettingsTab::hostSettingsKeyFor()). An empty remoteHost
+        // default lets AIProviderRegistry::createDefault() fall back to
+        // synth::branding::kApiBaseUrl.
+        const juce::String hostKey = savedProviderId == "remote" ? "remoteHost" : "ollamaHost";
+        const juce::String hostDefault =
+            savedProviderId == "remote" ? juce::String() : juce::String("http://localhost:11434");
+        juce::String savedHost = appProperties.getUserSettings()->getValue(hostKey, hostDefault);
+
+        aiService.setProvider(registry.create(savedProviderId, {savedHost, {}}));
     }
 
     // ORDERING CONTRACT: aiChatComponent is a member, so its constructor (which calls
@@ -310,8 +373,9 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     addAndMakeVisible(settingsButton);
     settingsButton.setComponentID("settingsButton");
     settingsButton.onClick = [this]() {
-        auto* settingsComp = new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService,
-                                                aiChatComponent, shortcutManager, *themeManager, &graphEditor);
+        auto* settingsComp =
+            new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent,
+                               shortcutManager, *themeManager, &graphEditor, /*showAudioTab=*/!audioEngine.isHosted());
         settingsComp->setSize(500, 450);
 
         juce::DialogWindow::LaunchOptions options;
@@ -347,6 +411,14 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     applyToolbarIcons();
     setCurrentPatchName("Default");
 
+    // Engine lifecycle is the owner's job. On the plugin path the processor already called
+    // initialise() (and will call shutdown()), and its graph may already hold host-restored
+    // state — re-initialising here would overwrite the user's session with the default patch.
+    if (ownedAudioEngine == nullptr) {
+        graphEditor.updateComponents();
+        return;
+    }
+
     if (juce::RuntimePermissions::isRequired(juce::RuntimePermissions::recordAudio) &&
         !juce::RuntimePermissions::isGranted(juce::RuntimePermissions::recordAudio)) {
         juce::RuntimePermissions::request(juce::RuntimePermissions::recordAudio, [&](bool granted) {
@@ -368,7 +440,10 @@ MainComponent::~MainComponent() {
     stopTimer();
     aiService.removeListener(this);
     graphEditor.detachAllModuleComponents();
-    audioEngine.shutdown();
+    // Only tear down an engine we own. On the plugin path the processor's engine must survive
+    // the editor being closed and reopened.
+    if (ownedAudioEngine != nullptr)
+        audioEngine.shutdown();
 }
 
 // ---- Theme change callback: re-skin pass ----
@@ -391,7 +466,9 @@ void MainComponent::timerCallback() {
     // only repaints the status bar when a displayed value actually changes. ZERO logging.
     if (++statusBarTickCount_ >= 2) {
         statusBarTickCount_ = 0;
-        const float cpu = (float)(audioEngine.getDeviceManager().getCpuUsage() * 100.0);
+        // Hosted (plugin) mode has no device manager of its own — the host owns the device, so
+        // getCpuUsage() would report a constant 0. Show 0 rather than a misleading reading.
+        const float cpu = audioEngine.isHosted() ? 0.0f : (float)(audioEngine.getDeviceManager().getCpuUsage() * 100.0);
         statusBar.update(cpu, audioEngine.getDisplayVoiceCount(), currentPatchName_);
     }
 }
@@ -447,6 +524,9 @@ void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
                        AppCommands::toggleMinimap, AppCommands::toggleAiPanel, AppCommands::autoArrange,
                        AppCommands::toggleLibrary, AppCommands::selectAllModules, AppCommands::saveSnippet,
                        AppCommands::copySelection, AppCommands::pasteSelection, AppCommands::duplicateSelection});
+#if JUCE_MAC
+    commands.add(AppCommands::checkForUpdates);
+#endif
 }
 
 void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationCommandInfo& result) {
@@ -551,6 +631,13 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
+#if JUCE_MAC
+    case AppCommands::checkForUpdates: {
+        result.setInfo("Check for Updates…", "Check for a newer version of the app", "Help", 0);
+        result.setActive(updateManager.isAvailable());
+        break;
+    }
+#endif
     default:
         break;
     }
@@ -631,6 +718,11 @@ bool MainComponent::perform(const InvocationInfo& info) {
             statusBar.showMessage("Nothing to duplicate - select one or more modules first");
         return true;
     }
+#if JUCE_MAC
+    case AppCommands::checkForUpdates:
+        updateManager.checkForUpdates();
+        return true;
+#endif
     default:
         return false;
     }

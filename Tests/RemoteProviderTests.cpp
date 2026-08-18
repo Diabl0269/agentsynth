@@ -373,6 +373,30 @@ TEST_F(RemoteProviderTest, MapsTooManyRequestsToRateLimitAndReadsRetryAfter) {
     EXPECT_EQ(result.error.retryAfterSeconds, 45);
 }
 
+// P4-3's monthly quota (enforce-quota.ts) answers 429 QUOTA_EXCEEDED — this must map to Quota
+// (the P4-4 upgrade-bubble UI keys off this kind), not the generic RateLimit above.
+TEST_F(RemoteProviderTest, MapsQuotaExceeded429ToQuotaError) {
+    auto performer = [](const juce::String&, const juce::StringPairArray&, const juce::String&, int,
+                        const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
+        return makeStatus(429, R"({"error":{"code":"QUOTA_EXCEEDED",)"
+                               R"("message":"Your monthly request quota is used up. Upgrading to Pro raises it."}})");
+    };
+
+    synth::RemoteProvider provider{kMockHost, performer};
+    provider.setTestMode(true);
+
+    MockPromptCallback callback;
+    provider.sendPrompt(
+        {{"user", "hi"}}, [&callback](const synth::AIProvider::AIResponse& r) { callback(r); }, makeSchema());
+
+    auto result = callback.getResult();
+    provider.stopThread(5000);
+
+    EXPECT_FALSE(result.success);
+    EXPECT_EQ(result.error.kind, synth::AIProvider::AIErrorKind::Quota);
+    EXPECT_EQ(result.error.message, juce::String("Your monthly request quota is used up. Upgrading to Pro raises it."));
+}
+
 // ============================================================================
 // Success / malformed bodies
 // ============================================================================

@@ -18,6 +18,17 @@ struct AccountSnapshot {
     juce::String verificationUriComplete;
     juce::String email;
     juce::String lastError;
+
+    // P4-4: entitlement, fetched alongside fetchMe() on sign-in (see completeSignIn()) and
+    // refreshable on demand (see refreshEntitlement()). entitlementKnown is false until the first
+    // successful fetch — a fetch failure is non-fatal (mirrors how a failed fetchMe() leaves
+    // `email` empty rather than failing sign-in), so callers must check it before trusting
+    // plan/monthlyRequestLimit/requestsUsed rather than treating a default-constructed plan as
+    // "Free".
+    juce::String plan;
+    int monthlyRequestLimit = 0;
+    int requestsUsed = 0;
+    bool entitlementKnown = false;
 };
 
 /**
@@ -68,6 +79,13 @@ public:
         on the worker thread; its result is ignored either way. */
     void signOut();
 
+    /** Re-fetches entitlement only (plan/limit/usage), leaving sign-in state untouched. No-op if
+        signed out. Fire-and-forget — publishes an updated snapshot via onStateChanged on success,
+        silent (logged, non-fatal) on failure, same contract as the entitlement fetch inside
+        completeSignIn(). Intended for "the user may have just paid — check again" moments (P4-4:
+        AIChatComponent calls this right after a Quota error). */
+    void refreshEntitlement();
+
     // Called (via MessageManager::callAsync when it originates from the worker thread) whenever
     // getSnapshot() would return something different.
     std::function<void()> onStateChanged;
@@ -77,9 +95,11 @@ public:
 
 private:
     struct PendingJob {
-        enum class Kind { none, deviceSignIn, silentSignIn, revoke };
+        enum class Kind { none, deviceSignIn, silentSignIn, revoke, refreshEntitlement };
         Kind kind = Kind::none;
-        juce::String arg; // stored refresh token (silentSignIn) or token to revoke (revoke)
+        // stored refresh token (silentSignIn), token to revoke (revoke), or the access token to
+        // refresh entitlement for (refreshEntitlement)
+        juce::String arg;
     };
 
     AuthClient authClient;
@@ -105,6 +125,7 @@ private:
     void runDeviceSignInFlow();
     void runSilentSignInFlow(const juce::String& storedRefreshToken);
     void runRevokeFlow(const juce::String& token);
+    void runRefreshEntitlementFlow(const juce::String& accessTokenForRefresh);
 
     /** Rotation-before-use invariant lives here: called by both flows once a fresh access/refresh
         token pair is in hand. */

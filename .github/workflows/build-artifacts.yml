@@ -145,13 +145,24 @@ jobs:
 
     # Configure CMake — Ninja on every OS so this matches the PR CI build path
     # (see the "Setup MSVC" note above for why Ninja and not the VS generator).
+    # SYNTH_BUILD_NUMBER becomes CFBundleVersion, the value Sparkle actually compares to decide
+    # an update is available (see CMakeLists.txt's comment on SYNTH_BUILD_NUMBER for why this
+    # can't just be the project's marketing VERSION: that's hand-bumped in CMakeLists.txt, while
+    # this workflow's tag-and-release step below bumps semver tags independently). run_number is
+    # known before this step runs and increases every run, so it stays correct regardless of what
+    # tag the release job mints afterwards. SYNTH_SPARKLE_PUBLIC_KEY reads from a repo VARIABLE
+    # (not a secret — SUPublicEDKey is the public half of the key pair) that doesn't exist yet; see
+    # docs/distribution.md. Both are harmless no-ops on Linux/Windows, where SYNTH_SPARKLE_* is
+    # unused.
     - name: Configure CMake
       shell: bash
       run: |
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DSYNTH_BUILD_NUMBER=${{ github.run_number }} \
+          -DSYNTH_SPARKLE_PUBLIC_KEY="${{ vars.SPARKLE_PUBLIC_KEY }}"
 
     # Build (Ninja is single-config; the build type comes from configure)
     - name: Build
@@ -195,6 +206,26 @@ jobs:
         fi
         chmod +x "artifact/Agent Synth"
 
+        # AgentSynthPlugin_VST3's .vst3 is a directory bundle on Linux, and
+        # softprops/action-gh-release (in the release job below) uploads `artifact/*` as release
+        # assets — GitHub release assets must be files, so the bundle is zipped rather than
+        # copied in raw. `zip -r` from inside the bundle's parent dir preserves its internal
+        # structure. find (not a hardcoded path) so a JUCE artefact-path change fails loudly here
+        # instead of silently shipping an artifact/ with no plugin in it.
+        VST3_PATH=$(find build -name "Agent Synth.vst3" -type d | head -n 1)
+        if [ -z "$VST3_PATH" ]; then
+          echo "Agent Synth.vst3 not found!"
+          exit 1
+        fi
+        VST3_DIR=$(dirname "$VST3_PATH")
+        VST3_NAME=$(basename "$VST3_PATH")
+        ARTIFACT_DIR="$(pwd)/artifact"
+        (cd "$VST3_DIR" && zip -r "$ARTIFACT_DIR/${{ matrix.artifact_name }}-Plugins.zip" "$VST3_NAME")
+        if [ ! -s "artifact/${{ matrix.artifact_name }}-Plugins.zip" ]; then
+          echo "Failed to create plugin zip!"
+          exit 1
+        fi
+
     # Package macOS
     - name: Package macOS Artifact
       if: runner.os == 'macOS'
@@ -213,6 +244,49 @@ jobs:
 
         ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" artifact/${{ matrix.artifact_name }}.zip
 
+        # Plugins (AgentSynthPlugin_VST3 / AgentSynthPlugin_AU) ship as their own zip, separate
+        # from the app above, so a plugin-only user isn't forced to also download the standalone
+        # app. find (not a hardcoded path) so a JUCE artefact-path change fails loudly here
+        # instead of silently shipping a zip with no plugin in it.
+        VST3_PATH=$(find build -name "Agent Synth.vst3" -type d | head -n 1)
+        if [ -z "$VST3_PATH" ]; then
+          echo "Agent Synth.vst3 not found!"
+          exit 1
+        fi
+        echo "Found VST3 at: $VST3_PATH"
+
+        AU_PATH=$(find build -name "Agent Synth.component" -type d | head -n 1)
+        if [ -z "$AU_PATH" ]; then
+          echo "Agent Synth.component not found!"
+          exit 1
+        fi
+        echo "Found AU at: $AU_PATH"
+
+        # Stage both bundles into one directory and archive THAT. `ditto -c -k` takes exactly one
+        # source ("ditto: Can't archive multiple sources"), so the two bundles cannot be passed
+        # side by side. Archiving the staging dir WITHOUT --keepParent puts its contents at the
+        # zip root, so extracting yields "Agent Synth.vst3" and "Agent Synth.component" next to
+        # each other rather than nested under a wrapper folder.
+        PLUGIN_STAGE="$RUNNER_TEMP/plugin-stage"
+        rm -rf "$PLUGIN_STAGE"
+        mkdir -p "$PLUGIN_STAGE"
+        cp -R "$VST3_PATH" "$PLUGIN_STAGE/"
+        cp -R "$AU_PATH" "$PLUGIN_STAGE/"
+
+        # Sign the staged COPIES — these are what ends up in the zip. cp -R preserves the bundle
+        # layout, and signing after the copy guarantees the shipped bundles carry the signature.
+        codesign --force --deep -s - "$PLUGIN_STAGE/$(basename "$VST3_PATH")"
+        codesign --verify --verbose "$PLUGIN_STAGE/$(basename "$VST3_PATH")"
+        codesign --force --deep -s - "$PLUGIN_STAGE/$(basename "$AU_PATH")"
+        codesign --verify --verbose "$PLUGIN_STAGE/$(basename "$AU_PATH")"
+
+        ditto -c -k --sequesterRsrc "$PLUGIN_STAGE" artifact/${{ matrix.artifact_name }}-Plugins.zip
+
+        if [ ! -s "artifact/${{ matrix.artifact_name }}-Plugins.zip" ]; then
+          echo "Failed to create plugin zip!"
+          exit 1
+        fi
+
     # Package Windows
     - name: Package Windows Artifact
       if: runner.os == 'Windows'
@@ -220,6 +294,26 @@ jobs:
       run: |
         New-Item -ItemType Directory -Force -Path artifact
         Get-ChildItem -Path build -Recurse -Filter "Agent Synth.exe" | Copy-Item -Destination artifact\
+
+        # AgentSynthPlugin_VST3's .vst3 is a directory bundle on Windows too (it contains
+        # Contents\x86_64-win\Agent Synth.vst3 internally), and softprops/action-gh-release (in
+        # the release job below) uploads `artifact/*` as release assets — GitHub release assets
+        # must be files, so the bundle is zipped rather than copied in raw. Passing the bundle
+        # DIRECTORY itself to Compress-Archive (no trailing \*) keeps the bundle folder as the
+        # archive root, preserving its internal structure. Get-ChildItem -Recurse
+        # (not a hardcoded path) so a JUCE artefact-path change fails loudly here instead of
+        # silently shipping an artifact\ with no plugin in it.
+        $vst3 = Get-ChildItem -Path build -Recurse -Directory -Filter "Agent Synth.vst3" | Select-Object -First 1
+        if (-not $vst3) {
+          Write-Error "Agent Synth.vst3 not found!"
+          exit 1
+        }
+        $pluginZip = "artifact\${{ matrix.artifact_name }}-Plugins.zip"
+        Compress-Archive -Path $vst3.FullName -DestinationPath $pluginZip
+        if (-not (Test-Path $pluginZip) -or (Get-Item $pluginZip).Length -eq 0) {
+          Write-Error "Failed to create plugin zip!"
+          exit 1
+        }
 
     # Upload Artifact
     - name: Upload Artifact
@@ -237,6 +331,8 @@ jobs:
     # (incl. the Windows build) before merging.
     if: always() && !contains(needs.build.result, 'failure') && github.event_name == 'push'
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag_version.outputs.new_tag }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -266,3 +362,51 @@ jobs:
           files: artifacts/*
           draft: false
           prerelease: true
+
+  publish-appcast:
+    name: Publish Sparkle appcast
+    needs: [release]
+    # Skips cleanly (not a failure) until both halves of the EdDSA signing key exist: the public
+    # key as a repo VARIABLE (embedded into the app's Info.plist by the build job above) and the
+    # private key as this job's SPARKLE_PRIVATE_KEY secret. See docs/distribution.md for how to
+    # generate both with Sparkle's own `generate_keys` tool. Until then, "Check for Updates" in the
+    # app itself also stays inert (UpdateManager checks for a non-empty SUPublicEDKey at startup).
+    if: needs.release.result == 'success' && vars.SPARKLE_PUBLIC_KEY != ''
+    runs-on: macos-latest
+    steps:
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: AgentSynth-macOS-arm64
+          path: appcast-work
+
+      # Version pin duplicated from cmake/DependencyVersions.cmake's SYNTH_SPARKLE_URL/
+      # SYNTH_SPARKLE_SHA256 — this job runs standalone (no CMake configure), so it re-fetches the
+      # same release directly rather than parsing the .cmake file. Keep both in sync when bumping.
+      - name: Fetch Sparkle tools
+        run: |
+          curl -sL -o sparkle.tar.xz https://github.com/sparkle-project/Sparkle/releases/download/2.9.5/Sparkle-2.9.5.tar.xz
+          echo "015336b601493e05c237964954bff6191370003d94edefe663724c88840d73cc  sparkle.tar.xz" | shasum -a 256 -c -
+          mkdir sparkle-tools
+          tar -xf sparkle.tar.xz -C sparkle-tools
+
+      # --download-url-prefix points at this same release's GitHub asset URLs, so only this small
+      # appcast.xml file needs hosting on agentsynth.app — the zip itself stays on GitHub Releases.
+      - name: Generate appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          echo "$SPARKLE_PRIVATE_KEY" | ./sparkle-tools/bin/generate_appcast \
+            --ed-key-file - \
+            --download-url-prefix "https://github.com/${{ github.repository }}/releases/download/${{ needs.release.outputs.tag }}/" \
+            -o appcast.xml \
+            appcast-work/
+
+      # Attaches appcast.xml to the release as a downloadable/inspectable asset. This is NOT the
+      # same as deploying it to https://agentsynth.app/updates/appcast.xml (the app's SUFeedURL) —
+      # that publish step still needs to be wired up separately (marketing site / Cloudflare), see
+      # docs/distribution.md's "what's not automated yet".
+      - name: Attach appcast to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload ${{ needs.release.outputs.tag }} appcast.xml --clobber --repo ${{ github.repository }}

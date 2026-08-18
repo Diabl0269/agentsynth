@@ -17,24 +17,40 @@
 #include <map>
 #include <set>
 
-AudioEngine::AudioEngine() {}
+AudioEngine::AudioEngine(HostMode mode)
+    : hostMode_(mode) {}
 
 AudioEngine::~AudioEngine() { shutdown(); }
 
 void AudioEngine::initialise() {
-    deviceManager.initialiseWithDefaultDevices(0, 2);
-    deviceManager.addAudioCallback(this);
+    // Hosted mode: the plugin wrapper owns the audio clock and forwards the host's MIDI, so we
+    // skip device/MIDI acquisition entirely and only build the initial patch. prepareForHost()
+    // supplies the real sample rate/channel count later, since there is no device to ask.
+    if (!isHosted()) {
+        deviceManager.initialiseWithDefaultDevices(0, 2);
+        deviceManager.addAudioCallback(this);
 
-    // Initialise MIDI input collector
-    midiMessageCollector.reset(deviceManager.getAudioDeviceSetup().sampleRate);
+        // Initialise MIDI input collector
+        midiMessageCollector.reset(deviceManager.getAudioDeviceSetup().sampleRate);
 
-    // Enable all available MIDI inputs by default
-    for (auto& info : juce::MidiInput::getAvailableDevices()) {
-        auto input = juce::MidiInput::openDevice(info.identifier, this);
-        if (input != nullptr) {
-            input->start();
-            midiInputs.push_back(std::move(input));
+        // Enable all available MIDI inputs by default
+        for (auto& info : juce::MidiInput::getAvailableDevices()) {
+            auto input = juce::MidiInput::openDevice(info.identifier, this);
+            if (input != nullptr) {
+                input->start();
+                midiInputs.push_back(std::move(input));
+            }
         }
+    } else {
+        // A default-constructed AudioProcessorGraph reports 0 output channels until something
+        // sets its channel layout. The graph's "Audio Output" IO node snapshots that count once,
+        // the moment it's added below (AudioGraphIOProcessor::setParentGraph) — so any patch
+        // connection into it made before the host's first prepareToPlay() would otherwise be
+        // rejected as out-of-range and silently dropped. Standalone gets this for free from
+        // audioDeviceAboutToStart(), which always runs before the patch is built; mirror it here
+        // with the same placeholder (0 in / 2 out) the plugin's BusesProperties declares.
+        // prepareForHost() reconciles this with the host's real layout before playback starts.
+        mainProcessorGraph.setPlayConfigDetails(0, 2, 44100.0, 512);
     }
 
     if (!synth::PresetManager::loadDefaultPreset(mainProcessorGraph)) {
@@ -43,17 +59,24 @@ void AudioEngine::initialise() {
 }
 
 void AudioEngine::shutdown() {
-    deviceManager.removeAudioCallback(this);
+    if (!isHosted()) {
+        deviceManager.removeAudioCallback(this);
 #if JUCE_LINUX || JUCE_BSD || JUCE_MAC || JUCE_IOS
-    for (auto& input : midiInputs) {
-        input->stop();
-    }
-    midiInputs.clear();
+        for (auto& input : midiInputs) {
+            input->stop();
+        }
+        midiInputs.clear();
 #endif
+    }
     mainProcessorGraph.clear();
 }
 
 void AudioEngine::ensureMidiDeviceOpen(const juce::String& deviceName) {
+    // Hosted mode never opens hardware MIDI itself — the host owns device routing and forwards
+    // note data through processBlock. Grabbing the port here would double-trigger every note.
+    if (isHosted())
+        return;
+
     for (auto& input : midiInputs) {
         if (input->getName() == deviceName) {
             return; // Already open
@@ -525,15 +548,15 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
 
     // MIDI messages from collector are already in midiMessages.
 
+    renderNextBlock(buffer, midiMessages);
+}
+
+void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
     mainProcessorGraph.processBlock(buffer, midiMessages);
 
     // Zero-fill AFTER processBlock so sequencers / LFOs / envelopes keep advancing.
-    if (masterMuted_.load(std::memory_order_relaxed)) {
-        for (int i = 0; i < numOutputChannels; ++i) {
-            if (outputChannelData[i])
-                std::fill(outputChannelData[i], outputChannelData[i] + numSamples, 0.0f);
-        }
-    }
+    if (masterMuted_.load(std::memory_order_relaxed))
+        buffer.clear();
 }
 
 void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device) {
@@ -546,3 +569,18 @@ void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device) {
 }
 
 void AudioEngine::audioDeviceStopped() { mainProcessorGraph.releaseResources(); }
+
+void AudioEngine::prepareForHost(double sampleRate, int blockSize, int numInputChannels, int numOutputChannels) {
+    // The collector is still used in hosted mode: ExternalMidiModule-bound messages and any
+    // future UI-generated MIDI go through it, and it must be reset to the host's rate or its
+    // timestamps land in the wrong block.
+    midiMessageCollector.reset(sampleRate);
+    mainProcessorGraph.setPlayConfigDetails(numInputChannels, numOutputChannels, sampleRate, blockSize);
+    mainProcessorGraph.prepareToPlay(sampleRate, blockSize);
+}
+
+void AudioEngine::processHostBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) {
+    renderNextBlock(buffer, midiMessages);
+}
+
+void AudioEngine::releaseFromHost() { mainProcessorGraph.releaseResources(); }

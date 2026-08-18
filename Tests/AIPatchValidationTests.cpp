@@ -6,6 +6,7 @@
 // patch misclassified into the wrong bucket would silently send the wrong correction.
 
 #include "../Source/AI/AIStateMapper.h"
+#include "../Source/Modules/OscillatorModule.h"
 #include <functional>
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -146,6 +147,12 @@ std::vector<Case> makeCases() {
                  R"({"nodes":[{"id":1,"type":"Oscillator","params":{"waveform":"Zigzag"}}],"connections":[]})");
          }},
 
+        {PatchValidationError::UnknownParameterKey, "params has a key that matches no real parameter",
+         [] {
+             return juce::JSON::parse(
+                 R"({"nodes":[{"id":1,"type":"Oscillator","params":{"waveform":"Saw","bogusKey":1.0}}],"connections":[]})");
+         }},
+
         {PatchValidationError::ConnectionEntryInvalid, "a connection entry is a bare integer",
          [] { return juce::JSON::parse(R"({"nodes":[],"connections":[7]})"); }},
 
@@ -195,15 +202,37 @@ std::vector<Case> makeCases() {
 
         {PatchValidationError::RemoveModulationEntryInvalid, "removeModulations entry is missing destPort",
          [] { return juce::JSON::parse(R"({"nodes":[],"removeModulations":[{"source":1,"dest":2}]})"); }},
+
+        {PatchValidationError::NodeIdTypeMismatch, "merge patch reuses a live node's id for another type",
+         [] { return juce::JSON::parse(R"({"nodes":[{"id":1,"type":"Filter"}],"connections":[]})"); },
+         /*mergeMode=*/true},
+
+        {PatchValidationError::TimelineNotAllowed, "patch carries a root 'timeline' key",
+         [] { return juce::JSON::parse(R"({"nodes":[],"connections":[],"timeline":{"tracks":[]}})"); }},
     };
+}
+
+// Merge-mode cases run against a graph that already holds one Oscillator, so a patch can collide
+// with a live node. A fresh juce::AudioProcessorGraph hands out uids from 1, so that node is id 1 —
+// asserted at the call site rather than assumed, since the patches above address it by that literal.
+void seedMergeGraph(juce::AudioProcessorGraph& graph) {
+    auto node = graph.addNode(std::make_unique<OscillatorModule>());
+    ASSERT_NE(node, nullptr);
+    ASSERT_EQ((int)node->nodeID.uid, 1);
 }
 
 } // namespace
 
 TEST(AIPatchValidationTest, EachMalformedPatchYieldsItsExactError) {
-    juce::AudioProcessorGraph graph; // empty; no case below depends on pre-existing nodes
-
     for (const auto& testCase : makeCases()) {
+        // Replace-mode cases run against an empty graph — none of them depends on pre-existing
+        // nodes; merge-mode cases need one to collide with.
+        juce::AudioProcessorGraph graph;
+        if (testCase.mergeMode) {
+            seedMergeGraph(graph);
+            ASSERT_FALSE(::testing::Test::HasFatalFailure());
+        }
+
         const auto result = AIStateMapper::validatePatch(testCase.build(), graph,
                                                          /*clearExisting=*/!testCase.mergeMode, /*trusted=*/false);
 
@@ -222,9 +251,9 @@ TEST(AIPatchValidationTest, EveryErrorValueIsCovered) {
     for (const auto& testCase : makeCases())
         covered.insert(testCase.expected);
 
-    // The enumeration's value range is 0..31 for its current size, so probing that span is
-    // well-defined; patchValidationErrorName() returns "Unknown" past the last enumerator.
-    for (int i = 0; i <= 31; ++i) {
+    // The enumeration is well short of 63 values, so probing that span is well-defined;
+    // patchValidationErrorName() returns "Unknown" past the last enumerator.
+    for (int i = 0; i <= 63; ++i) {
         const auto value = static_cast<PatchValidationError>(i);
         const auto name = synth::patchValidationErrorName(value);
         if (name == "Unknown")
@@ -238,7 +267,7 @@ TEST(AIPatchValidationTest, EveryErrorValueIsCovered) {
 
 TEST(AIPatchValidationTest, ErrorNamesAreDistinctAndNonEmpty) {
     std::set<juce::String> names;
-    for (int i = 0; i <= 31; ++i) {
+    for (int i = 0; i <= 63; ++i) {
         const auto name = synth::patchValidationErrorName(static_cast<PatchValidationError>(i));
         if (name == "Unknown")
             break;

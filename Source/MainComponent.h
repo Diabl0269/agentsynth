@@ -5,6 +5,7 @@
 #include "AI/AccountService.h"
 #include "AppUndoManager.h"
 #include "AudioEngine.h"
+#include "Branding.h"
 #include "PresetManager.h"
 #include "ShortcutManager.h"
 #include "SnippetManager.h"
@@ -16,6 +17,7 @@
 #include "UI/Theme/ThemeManager.h"
 #include "UI/ToolbarComponent.h"
 #include "UI/UIAnimation.h"
+#include "Update/UpdateManager.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -30,7 +32,15 @@ class MainComponent
 public:
     // Primary ctor: receives injected ThemeManager and LookAndFeel from Main.cpp.
     // provider is optional (nullptr → reads saved provider pref from appProperties).
+    // Owns its own (standalone) AudioEngine, which it initialises and shuts down.
     MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLookAndFeel& lf,
+                  std::unique_ptr<synth::AIProvider> provider = nullptr);
+
+    // Plugin ctor: the editor's AudioEngine is owned by AgentSynthAudioProcessor and outlives
+    // every editor instance, so it is injected rather than owned here. The engine's lifecycle
+    // (initialise/shutdown) belongs to the processor — this component must not touch it, or
+    // closing the plugin window would tear down the running graph.
+    MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLookAndFeel& lf, AudioEngine& externalEngine,
                   std::unique_ptr<synth::AIProvider> provider = nullptr);
 
     // Delegating ctor for tests and legacy call sites that don't inject theme objects.
@@ -56,6 +66,18 @@ public:
 
     juce::ApplicationCommandManager& getCommandManager() { return commandManager; }
     void updateCommandShortcuts();
+
+    // P4-6: pure decision function for the AI provider id used when no "aiProvider" key is
+    // persisted yet. A brand new install (no pre-existing settings file at all) defaults to
+    // "remote" (hosted); an install that has launched before but never touched AI settings — the
+    // common case, since that key is only ever written by AISettingsTab::updateSettings() —
+    // keeps its working "ollama" default rather than being silently moved to hosted on upgrade.
+    // Extracted as a free function so this decision is unit-testable without touching a real
+    // properties file — see initialiseCommon() for the caller and the existsAsFile() check it's
+    // based on.
+    static juce::String resolveDefaultProviderId(bool hasExistingSettingsFile) {
+        return hasExistingSettingsFile ? juce::String("ollama") : juce::String("remote");
+    }
 
     // Testing Hooks
     bool isAiPanelConfiguredVisible() const { return isAiPanelVisible; }
@@ -159,7 +181,14 @@ private:
     synth::theme::AppLookAndFeel* lookAndFeel{nullptr};
 
     AppUndoManager undoManager;
-    AudioEngine audioEngine;
+
+    // Owned only on the standalone paths (both ctors that don't take an external engine).
+    // Null when the plugin ctor injected the processor's engine — see the `audioEngine`
+    // reference below, which is the single access point either way. Mirrors the
+    // ownedThemeManager / themeManager split above.
+    std::unique_ptr<AudioEngine> ownedAudioEngine;
+    AudioEngine& audioEngine;
+
     GraphEditor graphEditor;
     ModuleLibraryComponent moduleLibrary;
 
@@ -189,7 +218,9 @@ private:
     // aiChatComponent (which installs AccountService::onStateChanged/onAccessTokenChanged in
     // setAccountService(), see its header comment) is torn down first, while accountService is
     // still alive to have those callback slots cleared.
-    synth::AccountService accountService;
+    // P4-6: explicit production host — the AccountService(host) default of localhost:8787 is a
+    // dev/test convenience only, and MainComponent is the real composition root.
+    synth::AccountService accountService{synth::branding::kApiBaseUrl};
     synth::AIChatComponent aiChatComponent;
     bool isAiPanelVisible = false;
     bool isLibraryVisible{true};
@@ -211,6 +242,10 @@ private:
 
     ShortcutManager shortcutManager;
     juce::ApplicationCommandManager commandManager;
+
+#if JUCE_MAC
+    synth::update::UpdateManager updateManager;
+#endif
 
     // ---- Panel slide animations (time-bounded, auto-stop) ----
     // One VBlankAnimatorUpdater shared by both panel animations (driven by MainComponent).

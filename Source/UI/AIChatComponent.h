@@ -2,7 +2,10 @@
 
 #include "../AI/AIIntegrationService.h"
 #include "../AI/AccountService.h"
+#include "../AI/PatchDiff.h"
+#include "../AI/PatchFeedbackStore.h"
 #include "AccountRow.h"
+#include "PlanBadge.h"
 #include "Theme/AppLookAndFeel.h"
 #include "UIAnimation.h"
 #include <atomic>
@@ -45,6 +48,14 @@ public:
     void sendButtonClicked();
     void triggerSend() { sendButtonClicked(); }
 
+    // Decides whether an outgoing message should carry the live patch JSON + structured-output
+    // schema (see AIIntegrationService::sendMessage). Pure and free-standing (no UI state) so it
+    // can be unit-tested directly: any message naming a real module/effect type, or using a
+    // generic edit-intent verb, is treated as patch-related. `moduleTypeNames` is normally
+    // AIStateMapper::moduleFactoryTypeNames() — passed in explicitly so a test can supply a
+    // synthetic registry without touching the real module factory.
+    static bool shouldUseStructuredOutput(const juce::String& text, const juce::StringArray& moduleTypeNames);
+
     /**
      * @brief Attaches (or detaches, with nullptr) the account UI to `service`.
      *
@@ -73,8 +84,28 @@ public:
     // Testing hook: returns the current isWaitingForResponse flag.
     bool isWaiting() const { return isWaitingForResponse; }
 
+    // Testing hook: responseMs of the most recent assistant message, or -1 if none / unmarked.
+    int getLastAssistantResponseMs() const;
+
+    // Compact wait-time label for the AI role row ("340ms", "1.2s", "1m 5s").
+    static juce::String formatResponseTime(int ms);
+
+    // Testing hook: text of the in-flight "AI is thinking..." status label, or empty when not waiting.
+    juce::String getWaitingStatusText() const;
+
+    // Testing hook: replaces the real "open in default browser" action a Quota error's Upgrade
+    // button invokes, so tests can assert on the URL without ever launching a real browser.
+    void setUrlOpenerForTesting(std::function<void(const juce::URL&)> opener) { urlOpener = std::move(opener); }
+
+    // Testing hook: redirects the local feedback log to a caller-supplied file so tests never
+    // touch the real per-user app-data location. Mirrors setUrlOpenerForTesting.
+    void setPatchFeedbackFileForTesting(const juce::File& file) { patchFeedbackStore = PatchFeedbackStore(file); }
+
 private:
     void timerCallback() override;
+
+    // Refreshes the in-flight thinking label with the current elapsed wait (no full redraw).
+    void refreshWaitingStatusLabel();
 
     // Stops the in-flight request and resets all waiting state.
     // Called both by the cancel button and by the timeout path.
@@ -146,11 +177,25 @@ private:
     juce::ApplicationProperties& appProperties;
     bool isWaitingForResponse = false;
 
+    // Wall-clock start of the in-flight wait (juce::Time::getMillisecondCounter).
+    // Meaningful only while isWaitingForResponse is true.
+    uint32_t requestStartMs = 0;
+
+    // Non-owning pointer to the "AI is thinking..." label in messageList (owned by messageList).
+    // Null whenever not waiting. Cleared before messageList.deleteAllChildren().
+    juce::Label* waitingStatusLabel = nullptr;
+
+    static constexpr int kRequestTimeoutMs = 120000;
+    // Tick rate for the live thinking timer — updates the status label only (not a full-panel
+    // repaint). Matches the AI-thinking spinner exception in the UI perf contract.
+    static constexpr int kWaitingStatusIntervalMs = 500;
+
     // Non-owning; set (once, by MainComponent) via setAccountService(). Held only so the
     // destructor can clear the two callback slots it installs on the service — see
     // setAccountService()'s comment for the single-owner contract those slots are under.
     AccountService* accountServicePtr = nullptr;
     AccountRow accountRow;
+    PlanBadge planBadge;
 
     // Handle for the request currently in flight, so cancelRequest() can tell the provider to
     // actually abandon it. Default (value 0) whenever nothing is outstanding — cleared by the
@@ -165,21 +210,86 @@ private:
     juce::TextButton newChatButton;
     juce::ComboBox modelPicker;
 
+    // P4-6 privacy disclosure: visible only while the active provider is hosted (RemoteProvider).
+    // Zero-height/invisible otherwise, same contract as accountRow/planBadge below it in the
+    // bottom-chrome stack — see updateHostedModeNotice() and resized().
+    juce::Label hostedModeNotice;
+
     // Pulse animation for the "AI is thinking" state indicator.
     // VBlankAnimatorUpdater is attached to this Component.
     juce::VBlankAnimatorUpdater vblankUpdater{this};
     SpinnerDot spinnerDot;
 
+    // Opens a Quota error's "Upgrade to Pro" button target. Real default; overridden in tests via
+    // setUrlOpenerForTesting() so no test ever launches a real browser.
+    std::function<void(const juce::URL&)> urlOpener = [](const juce::URL& u) { u.launchInDefaultBrowser(); };
+
+    // P6-3: local, append-only feedback log — see PatchFeedbackStore's doc comment for why this
+    // is client-only for now (no server endpoint exists yet to sync to).
+    PatchFeedbackStore patchFeedbackStore;
+
     void updateChatDisplay();
     void scrollToBottom();
+
+    // Syncs hostedModeNotice's visibility to aiService.isCurrentProviderHosted(). Called
+    // synchronously (provider identity is known immediately after setProvider(), no need to wait
+    // for the async model fetch) from refreshModels() — the same post-setProvider() resync point
+    // documented for model discovery (see CLAUDE.md "AI model discovery ordering").
+    void updateHostedModeNotice();
+
+    // P6-3: thumbs up/down on a patch card. `None` is the UI's un-rated default and is never
+    // itself written to PatchFeedbackStore — only Up/Down get persisted.
+    enum class PatchRatingUiState { None, Up, Down };
 
     struct MessageData {
         juce::String role;
         juce::String text;
         juce::String jsonPatch;
         bool isExpanded = false;
+        // P4-4: true only for a live Quota-error response — renders an "Upgrade to Pro" button on
+        // the bubble. Deliberately NOT reconstructed by the history-replay loop in the
+        // constructor, so a New Chat or app restart drops it along with the rest of that turn's
+        // transient UI state (mirrors how Cancel-button/spinner state is session-only).
+        bool showUpgradeAction = false;
+
+        // P6-3: session-scoped UI rating state, same "not reconstructed on replay" precedent as
+        // showUpgradeAction just above — the durable record lives in patchFeedbackStore, not here.
+        PatchRatingUiState ratingState = PatchRatingUiState::None;
+        juce::String ratingComment;
+
+        // Patch diff preview, computed ONCE (attachPatchPreview()) at the point this message is
+        // created, not on every updateChatDisplay() re-render — see that method's doc comment.
+        // patchIsMerge also pins which mode Apply/Merge will actually use, so it can't drift if
+        // the live graph changes while this message is still on screen.
+        //
+        // Only one of patchDiff/patchSummary is ever populated: merge-mode patches get patchDiff
+        // (synth::computeDiff() against the live graph, since a merge has stable node identity to
+        // diff against); replace-mode patches get patchSummary (synth::summarizePatch() of just
+        // the new patch's contents, since replace mode has no stable node identity to diff against
+        // — see PatchDiff.h). Both are empty when patchDiffAvailable is false.
+        bool patchIsMerge = false;
+        bool patchDiffAvailable = false;
+        std::vector<PatchChange> patchDiff;
+        PatchSummary patchSummary;
+
+        // Elapsed wait ms for bubbles that ended an in-flight request; -1 = no marker
+        // (history restore, patch-retry / apply-failure messages).
+        int responseMs = -1;
     };
     std::vector<MessageData> messages;
+
+    // Computes and caches data.patchIsMerge/patchDiff/patchDiffAvailable ONCE, at the point a
+    // message carrying a patch is created (every messages.push_back() site that can set
+    // jsonPatch) — NOT in updateChatDisplay(), which reruns on every redraw (message arrival,
+    // apply result, retry announcement) and would otherwise rebuild a scratch graph per
+    // patch-bearing message on every single one of those redraws. See docs/AI_Engine.md
+    // "Patch Diff Preview". Also more correct, not just faster: the diff is a snapshot of the
+    // graph at proposal time and must not silently change if the live graph is edited later
+    // (e.g. an earlier patch in the same conversation gets applied) while this message is still
+    // on screen. No-op when data.jsonPatch is empty. Reads `messages` (must already contain every
+    // turn up to and including `data`, for the merge-vs-replace user-intent heuristic) and
+    // `aiService`, so it must be called after data is appended to `messages`.
+    void attachPatchPreview(MessageData& data);
 
 #ifndef NDEBUG
     juce::TextEditor debugConsole;

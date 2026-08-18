@@ -36,6 +36,7 @@ add_executable(Tests
     AIPatchValidationTests.cpp
     AIPatchRetryTests.cpp
     PatchEvalTests.cpp
+    PatchDiffTests.cpp
     AIProviderRegistryTests.cpp
     OllamaProviderTests.cpp
     RemoteProviderTests.cpp
@@ -43,10 +44,12 @@ add_executable(Tests
     AccountServiceTests.cpp
     KeychainTokenStoreTests.cpp
     DeviceIdStoreTests.cpp
+    PatchFeedbackStoreTests.cpp
     MainComponentTests.cpp
     GraphEditorTests.cpp
     ModuleComponentTests.cpp
     AIChatComponentTests.cpp
+    PlanBadgeTests.cpp
     PolyMidiModuleTests.cpp
     PolySequencerModuleTests.cpp
     AIIntegrationServiceTests.cpp
@@ -99,17 +102,40 @@ add_executable(Tests
     ClipboardTests.cpp
     PanelAnimationAndLoadingTests.cpp
     MinimapComponentTests.cpp
+    PluginProcessorTests.cpp
+    PatchDocumentTests.cpp
     ../Source/MainComponent.cpp
+    ../Source/Plugin/PluginProcessor.cpp
+    ../Source/Plugin/PluginEditor.cpp
     ../Source/UI/GraphEditor.cpp
     ../Source/UI/ModMatrixComponent.cpp
     ../Source/UI/AIChatComponent.cpp
     ../Source/UI/AccountRow.cpp
+    ../Source/UI/PlanBadge.cpp
     ../Source/UI/SignInDialog.cpp
     ../Source/UI/ModuleComponent.cpp
     ../Source/UI/SettingsWindow.cpp
     ../Source/UI/AppearanceSettingsTab.cpp
     ../Source/UI/ShortcutsSettingsTab.cpp
 )
+
+# MainComponent.cpp above pulls in synth::update::UpdateManager (Source/Update/UpdateManager.h) on
+# macOS — Tests compiles MainComponent.cpp directly rather than linking the AgentSynth target, so
+# it needs the same Sparkle sources/linking AgentSynth gets in the top-level CMakeLists.txt.
+if(APPLE)
+    target_sources(Tests PRIVATE ../Source/Update/SparkleUpdateManager.mm)
+    set_source_files_properties(../Source/Update/SparkleUpdateManager.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+    target_compile_options(Tests PRIVATE "-F${sparkle_SOURCE_DIR}")
+    target_link_libraries(Tests PRIVATE "-F${sparkle_SOURCE_DIR}" "-framework Sparkle")
+
+    # Tests is a plain executable (not a .app bundle), always run from the build tree, so — unlike
+    # AgentSynth — there's no Contents/Frameworks to embed into; just point rpath straight at
+    # Sparkle.framework's fetched location.
+    set_target_properties(Tests PROPERTIES
+        BUILD_WITH_INSTALL_RPATH TRUE
+        INSTALL_RPATH "${sparkle_SOURCE_DIR}"
+    )
+endif()
 
 target_link_libraries(Tests PRIVATE
     GTest::gtest

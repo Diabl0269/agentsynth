@@ -19,7 +19,11 @@ enum CommandIDs {
     saveSnippet,
     copySelection,
     pasteSelection,
-    duplicateSelection
+    duplicateSelection,
+    // Not user-rebindable (no ShortcutManager actionId/binding) — Sparkle's own convention is a
+    // plain "Check for Updates…" menu item with no keyboard shortcut. macOS only; see
+    // Source/Update/UpdateManager.h.
+    checkForUpdates
 };
 
 inline juce::CommandID getCommandForAction(const juce::String& actionId) {

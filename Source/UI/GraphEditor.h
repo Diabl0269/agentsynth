@@ -2,12 +2,14 @@
 
 #include "../AppUndoManager.h"
 #include "../AudioEngine.h"
+#include "../PatchDocument.h"
 #include "CableColour.h"
 #include "LayoutUtil.h"
 #include "ModuleClipboard.h"
 #include "SelectionModel.h"
 #include "UIAnimation.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -249,6 +251,48 @@ public:
     void setAlignmentGuidesEnabled(bool enabled) { alignmentGuidesEnabled = enabled; }
     bool getAlignmentGuidesEnabled() const { return alignmentGuidesEnabled; }
 
+    // ---- Smart connections --------------------------------------------------
+    // Proximity-based cable suggestions while placing a module. One setting covers Off /
+    // library-only / free-main-I/O moves / all moves (see SmartConnectionMode).
+    enum class SmartConnectionMode { Off, NewOnly, NewAndUnwired, AllMoves };
+
+    /** One suggested cable shown as a frosted preview during drag; applied on drop. */
+    struct SmartSuggestion {
+        /** When true the dragged module is the cable source; when false it is the destination. */
+        bool ghostIsSource = true;
+        juce::AudioProcessorGraph::NodeID neighborId{};
+        int ghostJack = 0;
+        int neighborJack = 0;
+        bool isMidi = false;
+        juce::Point<float> p1{}, p2{}; // canvas endpoints for preview paint
+        synth::ui::CableSignal signal = synth::ui::CableSignal::Audio;
+        synth::ui::ModuleCategory sourceCategory = synth::ui::ModuleCategory::Utility;
+
+        bool operator==(const SmartSuggestion& o) const noexcept {
+            return ghostIsSource == o.ghostIsSource && neighborId == o.neighborId && ghostJack == o.ghostJack &&
+                   neighborJack == o.neighborJack && isMidi == o.isMidi;
+        }
+        bool operator!=(const SmartSuggestion& o) const noexcept { return !(*this == o); }
+    };
+
+    void setSmartConnectionMode(SmartConnectionMode mode) { smartConnectionMode = mode; }
+    SmartConnectionMode getSmartConnectionMode() const noexcept { return smartConnectionMode; }
+
+    /** Persist / restore helpers (Appearance tab + MainComponent launch restore). */
+    static SmartConnectionMode smartConnectionModeFromString(const juce::String& s);
+    static juce::String smartConnectionModeToString(SmartConnectionMode mode);
+
+    /** Wires two visible jacks the same way a completed cable-drag does (poly fan, MIDI,
+     *  attenuverter for mono mod CV). When recordUndo is false the caller owns the transaction
+     *  (e.g. inside an existing recordStructuralChange). */
+    void connectPorts(juce::AudioProcessorGraph::NodeID srcId, int srcJack, juce::AudioProcessorGraph::NodeID dstId,
+                      int dstJack, bool isMidi, bool recordUndo = true);
+
+    // Test accessors
+    int getSmartSuggestionCount() const noexcept { return (int)smartSuggestions.size(); }
+    const std::vector<SmartSuggestion>& getSmartSuggestions() const noexcept { return smartSuggestions; }
+    bool nodeHasCables(juce::AudioProcessorGraph::NodeID nodeId) const;
+
     // ---- Onboarding / UI Phase 5 helpers (headless-testable) ----
 
     /** Returns true when the canvas has no modules (empty state). Pure predicate.
@@ -451,6 +495,26 @@ private:
     int dragPreviewW = 0, dragPreviewH = 0;
     juce::AudioProcessorGraph::NodeID dragPreviewSelfId{};
     juce::Rectangle<int> dragPreviewGhost;
+    // Library-drag probe: jack metadata for a module that does not exist on the canvas yet.
+    bool dragPreviewIsSnippet = false;
+    std::unique_ptr<juce::AudioProcessor> dragPreviewProbe;
+
+    // Smart-connection suggestions for the active drag preview.
+    SmartConnectionMode smartConnectionMode = SmartConnectionMode::NewAndUnwired;
+    std::vector<SmartSuggestion> smartSuggestions;
+    static constexpr float kSmartConnectionProximityPx = 96.0f;
+
+    void refreshSmartSuggestions();
+    void applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostNodeId, bool recordUndo);
+    void clearSmartSuggestions();
+    bool shouldOfferSmartConnections() const;
+    /** Port centre inside a bounds rect — mirrors ModuleComponent::getPortCenter for ghost previews. */
+    static juce::Point<int> estimatePortCenter(juce::AudioProcessor* proc, juce::Rectangle<int> bounds, int jack,
+                                               bool isInput, bool isMidi);
+    bool isInputJackFree(juce::AudioProcessorGraph::NodeID nodeId, int jack, bool isMidi) const;
+    bool isOutputJackFree(juce::AudioProcessorGraph::NodeID nodeId, int jack, bool isMidi) const;
+    bool areJacksAlreadyConnected(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
+                                  juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi) const;
 
     juce::AudioProcessorGraph::NodeID draggingAttenuverterNodeId;
     float attenDragStartValue = 0.0f;
@@ -508,6 +572,12 @@ private:
     void applySelectionChange(const std::vector<juce::AudioProcessorGraph::NodeID>& newSelection);
 
     AppUndoManager* undoManager = nullptr;
+
+    // Top-level JSON keys the current build doesn't understand (e.g. a future "timeline"),
+    // stashed on load and re-merged on save so re-saving with an older build never destroys a
+    // newer build's data. Per-loaded-file: newPatch() clears it. Only the user preset save/load
+    // path (savePreset/loadPreset) touches this — undo/redo, snippets, and AI apply must not.
+    synth::PatchDocument patchDocument;
     std::vector<AudioEngine::ModulationDisplayInfo> cachedModDisplayInfo;
     std::vector<AudioEngine::ModulationRouting> cachedModRoutings;
 

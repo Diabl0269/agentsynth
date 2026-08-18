@@ -1,5 +1,7 @@
 #include "../Source/AI/AIProvider.h"
 #include "../Source/AI/AIProviderRegistry.h"
+#include "../Source/AI/RemoteProvider.h"
+#include "../Source/Branding.h"
 #include <gtest/gtest.h>
 
 namespace {
@@ -94,18 +96,45 @@ TEST(AIProviderRegistryTest, PersistedIdIsIndependentOfDisplayName) {
     ASSERT_NE(provider, nullptr);
 }
 
-TEST(AIProviderRegistryTest, CreateDefaultRegistersOllamaFirstAndRemoteHidden) {
+// P4-6: "remote" is no longer hidden — both providers are offered in AISettingsTab's combo.
+TEST(AIProviderRegistryTest, CreateDefaultRegistersOllamaFirstAndRemoteVisible) {
     auto registry = synth::AIProviderRegistry::createDefault();
 
     const auto& all = registry.listAll();
     ASSERT_EQ(all.size(), 2u);
 
     // "ollama" must stay first: AIProviderRegistry::create() falls back to descriptors.front()
-    // for an unknown/empty id, and that fallback must be unaffected by adding "remote".
+    // for an unknown/empty id, and that fallback must be unaffected by adding "remote". This is
+    // deliberate even though "remote" is now the default for a FRESH install (see
+    // MainComponent::resolveDefaultProviderId()) — an unrecognised/corrupt persisted id fails
+    // safe to the provider that sends no data anywhere, never to the one that does.
     EXPECT_EQ(all[0].id, "ollama");
     EXPECT_FALSE(all[0].hidden);
 
     const auto* remote = registry.find("remote");
     ASSERT_NE(remote, nullptr);
-    EXPECT_TRUE(remote->hidden);
+    EXPECT_FALSE(remote->hidden);
+}
+
+// Locks in the "ollama" fail-safe fallback described above, exercised through createDefault()
+// specifically (the generic version, UnknownIdFallsBackToFirstRegistered above, uses local stub
+// descriptors and wouldn't catch a registration-order regression in createDefault() itself).
+TEST(AIProviderRegistryTest, CreateDefaultUnknownIdFallsBackToOllamaNotRemote) {
+    auto registry = synth::AIProviderRegistry::createDefault();
+
+    auto provider = registry.create("some-corrupt-persisted-value", {});
+    ASSERT_NE(provider, nullptr);
+    EXPECT_EQ(provider->getProviderName(), "Ollama");
+}
+
+// AIProviderRegistry.cpp's "remote" descriptor falls back to synth::branding::kApiBaseUrl when
+// ProviderConfig::host is empty — the pre-P4-6 code hardcoded http://localhost:8787 here, which
+// would have silently pointed hosted mode at nothing in production.
+TEST(AIProviderRegistryTest, RemoteDescriptorDefaultsToProductionApiBaseUrlWhenHostEmpty) {
+    auto registry = synth::AIProviderRegistry::createDefault();
+
+    auto provider = registry.create("remote", {});
+    auto* remoteProvider = dynamic_cast<synth::RemoteProvider*>(provider.get());
+    ASSERT_NE(remoteProvider, nullptr);
+    EXPECT_EQ(remoteProvider->getHostForTesting(), juce::String(synth::branding::kApiBaseUrl));
 }

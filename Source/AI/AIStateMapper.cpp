@@ -35,8 +35,10 @@
 #include <functional> // For std::function
 #include <limits>
 #include <map>
+#include <optional>
 #include <set>
 #include <unordered_map> // For the factory map
+#include <vector>
 
 namespace synth {
 
@@ -85,6 +87,35 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
 
 namespace {
 
+// The module types a model may never author, as an explicit set with a reason recorded against
+// each entry — not a chain of equality tests, which said nothing about why a name was on it.
+//
+// Registering a module in moduleFactory above makes it model-authorable BY DEFAULT. That default
+// is right for an ordinary DSP module and wrong for anything that names an external resource or
+// carries privileged state (a hosted plugin binary, a timeline feed, a file path): such a module
+// belongs in this set at the moment it is registered. The exact resulting allowlist is pinned by
+// AIStateMapperTest.AuthorableModuleTypesGolden, so either kind of addition fails the build until
+// the choice is made deliberately.
+const std::set<juce::String> kNonAuthorableModuleTypes = {
+    // Attenuverters are an implementation detail of the `modulations` array — applyJSONToGraph
+    // creates them itself — so exposing them would invite the model to hand-build modulation
+    // chains that the mod matrix then can't read back.
+    "Attenuverter",
+    // The same AttenuverterModule, registered under the name the modulation UI uses for it.
+    "Mod Slot",
+};
+
+bool isInternalOnlyModule(const juce::String& typeName) { return kNonAuthorableModuleTypes.count(typeName) > 0; }
+
+// Whether a merge patch's "type" designates the module that already lives under that node id.
+// Two namespaces meet here: the factory key graphToJSON writes, and the processor's display name.
+// They differ for the ADSR aliases — an "Amp Env" node serializes as type "ADSR" — so comparing
+// against only one of them makes an update-in-place silently fall through to "create a second
+// node", which is the aliasing this predicate exists to prevent.
+bool patchTypeMatchesProcessor(juce::AudioProcessor* processor, const juce::String& type) {
+    return processor->getName() == type || AIStateMapper::getFactoryTypeName(processor) == type;
+}
+
 // Accepts only whole numbers representable as a uint32 (matches juce::AudioProcessorGraph::NodeID's
 // underlying type). Rejects negatives, fractional values, and non-numeric JSON values outright —
 // there is no legitimate node id that isn't one of these.
@@ -114,6 +145,18 @@ bool isValidPatchPort(int port) {
     if (port == -1)
         return true;
     return port >= 0 && port <= AIStateMapper::kMaxPortIndex;
+}
+
+// Adopts a patch node's "uuid" onto the live node — trusted callers only. Untrusted input never
+// dictates identity: a model could otherwise hand two nodes the same uuid, or claim the uuid of a
+// node that automation lanes and track bindings already point at. Nodes created from untrusted
+// JSON simply have no uuid until graphToJSON generates a fresh one for them.
+void adoptUuidIfTrusted(juce::AudioProcessorGraph::Node* node, const juce::DynamicObject* nObj, bool trusted) {
+    if (!trusted || node == nullptr || !nObj->hasProperty("uuid"))
+        return;
+    const juce::var uuidVar = nObj->getProperty("uuid");
+    if (uuidVar.isString() && uuidVar.toString().isNotEmpty())
+        node->properties.set("uuid", uuidVar.toString());
 }
 
 // Renders whatever the model put in an id field, so the rejection names the offending value even
@@ -179,10 +222,14 @@ juce::String patchValidationErrorName(PatchValidationError error) {
         return "UnknownNodeType";
     case PatchValidationError::DuplicateNodeId:
         return "DuplicateNodeId";
+    case PatchValidationError::NodeIdTypeMismatch:
+        return "NodeIdTypeMismatch";
     case PatchValidationError::InvalidParameterValue:
         return "InvalidParameterValue";
     case PatchValidationError::InvalidChoiceValue:
         return "InvalidChoiceValue";
+    case PatchValidationError::UnknownParameterKey:
+        return "UnknownParameterKey";
     case PatchValidationError::ConnectionEntryInvalid:
         return "ConnectionEntryInvalid";
     case PatchValidationError::ConnectionUnknownNode:
@@ -203,12 +250,42 @@ juce::String patchValidationErrorName(PatchValidationError error) {
         return "RemoveEntryInvalid";
     case PatchValidationError::RemoveModulationEntryInvalid:
         return "RemoveModulationEntryInvalid";
+    case PatchValidationError::TimelineNotAllowed:
+        return "TimelineNotAllowed";
     }
     return "Unknown";
 }
 
 PatchValidationResult AIStateMapper::validateNodeParams(juce::AudioProcessor* processor,
                                                         const juce::DynamicObject* paramsObj) {
+    std::set<juce::String> knownParamIds;
+    for (auto* param : processor->getParameters()) {
+        if (auto* p = dynamic_cast<juce::RangedAudioParameter*>(param))
+            knownParamIds.insert(p->paramID);
+    }
+
+    // applyParamsToProcessor (see file) only ever walks the processor's real parameters and looks
+    // each one up BY NAME in this object — a key that doesn't match any real paramID is never
+    // visited there, so it is silently dropped and the parameter is left at its default instead of
+    // being rejected. Catch that here so the mismatch surfaces as a validation failure and the
+    // retry/repair loop actually engages, rather than reporting success on a patch that quietly did
+    // less than it claimed.
+    for (const auto& entry : paramsObj->getProperties()) {
+        const juce::String key = entry.name.toString();
+        if (knownParamIds.count(key) == 0) {
+            // Name the real parameter IDs, not just that one was wrong — same reasoning as
+            // describeKnownIds() above: a retry that can't see the valid options re-rolls blind.
+            juce::StringArray ids;
+            for (const auto& id : knownParamIds)
+                ids.add(id);
+            return {false, PatchValidationError::UnknownParameterKey,
+                    "Unknown parameter \"" + key +
+                        "\" — it doesn't match any real parameter on this module and would be silently ignored, "
+                        "leaving that value at its default. This module's actual parameter IDs are: " +
+                        ids.joinIntoString(", ") + "."};
+        }
+    }
+
     for (auto* param : processor->getParameters()) {
         auto* p = dynamic_cast<juce::RangedAudioParameter*>(param);
         if (!p || !paramsObj->hasProperty(p->paramID))
@@ -300,6 +377,17 @@ PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const 
     if (trusted)
         return {};
 
+    // "timeline" is reserved for app-authored project data and is refused here rather than
+    // ignored. The validator lets unknown keys through, so a later build that starts honouring
+    // timeline data would silently begin executing provider-authored automation against patches
+    // accepted today; refusing now means that door can only be opened by a commit that deletes
+    // this check. Same class of rule as the node "state" blob (see applyExtraStateToProcessor).
+    if (rootObj->hasProperty("timeline"))
+        return {false, PatchValidationError::TimelineNotAllowed,
+                "Patch suggestions must not contain a \"timeline\" property — timeline and automation "
+                "data is not accepted from a patch suggestion. Remove it and resend only nodes, "
+                "connections and modulations."};
+
     if (nodesList && nodesList->size() > kMaxNodes)
         return {false, PatchValidationError::TooManyNodes,
                 "Patch has " + juce::String(nodesList->size()) + " nodes, exceeding the limit of " +
@@ -325,9 +413,26 @@ PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const 
     // already exist in the live graph. Populated fully before any connection/modulation is
     // checked, and nothing here mutates the graph — that only happens after validation passes.
     std::set<juce::uint32> knownIds;
+    // Merge mode only: the live node each patch id would land on, so a patch node that reuses an
+    // existing id for a DIFFERENT module can be rejected before anything is touched (see below).
+    // Ids the patch also removes are excluded — apply processes "remove" first, so re-using such
+    // an id creates a genuinely new node and aliases nothing.
+    std::map<juce::uint32, juce::AudioProcessor*> liveNodesById;
     if (!clearExisting) {
-        for (auto* node : graph.getNodes())
+        std::set<juce::uint32> removedIds;
+        if (removeList) {
+            for (const auto& idVar : *removeList) {
+                juce::uint32 removedId = 0;
+                if (extractUnsignedInt(idVar, removedId))
+                    removedIds.insert(removedId);
+            }
+        }
+
+        for (auto* node : graph.getNodes()) {
             knownIds.insert(node->nodeID.uid);
+            if (removedIds.count(node->nodeID.uid) == 0)
+                liveNodesById[node->nodeID.uid] = node->getProcessor();
+        }
     }
 
     std::set<juce::uint32> patchNodeIds;
@@ -364,6 +469,21 @@ PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const 
             auto probe = createModule(type);
             if (!probe)
                 return {false, PatchValidationError::UnknownNodeType, "Unknown module type: \"" + type + "\"."};
+
+            // Merge mode: an id that already names a live node of a DIFFERENT type is an identity
+            // collision, not a new module. Applying it would create a second node and rebind
+            // idMap[id] to it, so every later connection/modulation in the same patch that meant
+            // the ORIGINAL node silently re-points at the new one. Reject the patch whole — the
+            // model has to pick an unused id (or match the existing type to edit it in place).
+            // Checked after the factory probe so a made-up type is still reported as such.
+            if (auto live = liveNodesById.find(nodeId); live != liveNodesById.end()) {
+                if (!patchTypeMatchesProcessor(live->second, type))
+                    return {false, PatchValidationError::NodeIdTypeMismatch,
+                            "Node id " + juce::String(nodeId) + " already exists in this patch as a \"" +
+                                getFactoryTypeName(live->second) + "\", so it cannot be declared as a \"" + type +
+                                "\". Give a new module an id that no existing node uses, or repeat the existing "
+                                "type to change that module's parameters instead."};
+            }
 
             if (nObj->hasProperty("params")) {
                 if (auto* pObj = nObj->getProperty("params").getDynamicObject()) {
@@ -482,11 +602,32 @@ std::unique_ptr<juce::AudioProcessor> AIStateMapper::createModule(const juce::St
     if (baseName == "MidiKeyboard")
         return std::make_unique<MidiKeyboardModule>();
 
+    // JUCE's display name for the graph's MIDI input node, which older saves emitted as the node
+    // type before getFactoryTypeName mapped it back to the factory key.
+    if (baseName == "MIDI Input")
+        return std::make_unique<AudioGraphIOProcessor>(AudioGraphIOProcessor::midiInputNode);
+
     juce::Logger::writeToLog("AIStateMapper: Unknown module type: " + type);
     return nullptr;
 }
 
-static juce::String getFactoryTypeName(juce::AudioProcessor* processor) {
+juce::StringArray AIStateMapper::moduleFactoryTypeNames() {
+    juce::StringArray names;
+    for (const auto& entry : moduleFactory)
+        names.add(entry.first);
+    names.sort(false); // moduleFactory is unordered; callers want a stable order
+    return names;
+}
+
+juce::StringArray AIStateMapper::authorableModuleTypes() {
+    juce::StringArray names;
+    for (const auto& name : moduleFactoryTypeNames())
+        if (!isInternalOnlyModule(name))
+            names.add(name);
+    return names;
+}
+
+juce::String AIStateMapper::getFactoryTypeName(juce::AudioProcessor* processor) {
     if (auto* mb = dynamic_cast<ModuleBase*>(processor)) {
         switch (mb->getModuleType()) {
         case ModuleType::Oscillator:
@@ -496,13 +637,20 @@ static juce::String getFactoryTypeName(juce::AudioProcessor* processor) {
         case ModuleType::VCA:
             return "VCA";
         case ModuleType::ADSR:
-            return "ADSR";
+            // "ADSR", "Amp Env" and "Filter Env" are three factory keys for one module, told apart
+            // only by the display name it was constructed with — so emit that name rather than the
+            // generic key, or an Amp Env comes back from every save/undo as a plain "ADSR".
+            // createModule resolves any name containing "Env"/"ADSR", so this always round-trips.
+            return mb->getName();
         case ModuleType::LFO:
             return "LFO";
         case ModuleType::Sequencer:
             return "Sequencer";
         case ModuleType::PolySequencer:
-            return "Sequencer";
+            // Must be the factory key "Poly Sequencer", not "Sequencer": this string is what
+            // graphToJSON writes, so returning the mono type here downgraded a Poly Sequencer to a
+            // SequencerModule on every save/load and every structural undo (issue #196).
+            return "Poly Sequencer";
         case ModuleType::MidiKeyboard:
             return "MIDI Keyboard";
         case ModuleType::PolyMidi:
@@ -551,11 +699,21 @@ static juce::String getFactoryTypeName(juce::AudioProcessor* processor) {
             return "External MIDI";
         }
     }
+
+    // JUCE names the graph's MIDI input node "MIDI Input", which is NOT the factory key
+    // ("Midi Input"): falling through to getName() below would emit a type string createModule
+    // cannot resolve, and the node would silently vanish on the next load. The audio I/O nodes'
+    // names already match their keys exactly, so only this one needs mapping.
+    if (auto* io = dynamic_cast<AudioGraphIOProcessor*>(processor))
+        if (io->getType() == AudioGraphIOProcessor::midiInputNode)
+            return "Midi Input";
+
     return processor->getName();
 }
 
 juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
     juce::DynamicObject::Ptr root = new juce::DynamicObject();
+    root->setProperty("schemaVersion", kSchemaVersion);
 
     juce::Array<juce::var> nodes;
     for (auto* node : graph.getNodes()) {
@@ -563,6 +721,17 @@ juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
             juce::DynamicObject::Ptr n = new juce::DynamicObject();
             n->setProperty("id", (int)node->nodeID.uid);
             n->setProperty("type", getFactoryTypeName(processor));
+
+            // Stable per-node identity, generated on first save and persisted back onto the node so
+            // every later save of the same node emits the same string. The integer "id" cannot
+            // serve this purpose: merge-mode apply renumbers nodes, so anything holding a
+            // long-lived reference (automation lanes, timeline track bindings) keys on the uuid.
+            juce::String uuid = node->properties["uuid"].toString();
+            if (uuid.isEmpty()) {
+                uuid = juce::Uuid().toDashedString();
+                node->properties.set("uuid", uuid);
+            }
+            n->setProperty("uuid", uuid);
 
             // Params — store denormalized values to match applyJSONToGraph expectations
             juce::DynamicObject::Ptr params = new juce::DynamicObject();
@@ -683,8 +852,8 @@ juce::String AIStateMapper::getModuleSchema() {
     juce::String schema = "### Available Modules and Parameters\n\n";
 
     for (const auto& entry : moduleFactory) {
-        // Hide internal modules from AI — modulation uses the "modulations" array instead
-        if (entry.first == "Attenuverter" || entry.first == "Mod Slot")
+        // Hide non-authorable modules from AI — modulation uses the "modulations" array instead
+        if (isInternalOnlyModule(entry.first))
             continue;
 
         auto processor = entry.second();
@@ -753,7 +922,19 @@ int AIStateMapper::findChoiceIndex(juce::AudioParameterChoice* p, const juce::St
 }
 
 void AIStateMapper::applyParamsToProcessor(juce::AudioProcessor* processor, const juce::DynamicObject* paramsObj,
-                                           bool trusted) {
+                                           bool trusted, bool skipUnchanged) {
+    // Writing a parameter that already holds the target value is not a no-op: setValueNotifyingHost
+    // notifies its listeners unconditionally, and one of ours re-anchors a module's cables when
+    // "poly" changes — i.e. it mutates the graph. A snapshot restore re-applies every parameter of
+    // every surviving node, so for that caller the redundant writes are the overwhelming majority.
+    // The tolerance only has to absorb the float round-trip through the JSON's denormalized value;
+    // it is orders of magnitude below any parameter step a user or a model can express.
+    auto setNormalised = [skipUnchanged](juce::RangedAudioParameter* p, float normalised) {
+        if (skipUnchanged && std::abs(p->getValue() - normalised) <= 1.0e-6f)
+            return;
+        p->setValueNotifyingHost(normalised);
+    };
+
     for (auto* param : processor->getParameters()) {
         if (auto* p = dynamic_cast<juce::RangedAudioParameter*>(param)) {
             if (paramsObj->hasProperty(p->paramID)) {
@@ -763,15 +944,15 @@ void AIStateMapper::applyParamsToProcessor(juce::AudioProcessor* processor, cons
                     if (jsonValue.isString()) {
                         int index = findChoiceIndex(choice, jsonValue.toString());
                         if (index >= 0) {
-                            p->setValueNotifyingHost(p->getNormalisableRange().convertTo0to1((float)index));
+                            setNormalised(p, p->getNormalisableRange().convertTo0to1((float)index));
                         }
                     } else {
                         auto choiceRange = p->getNormalisableRange();
                         float val = choiceRange.snapToLegalValue((float)jsonValue);
-                        p->setValueNotifyingHost(choiceRange.convertTo0to1(val));
+                        setNormalised(p, choiceRange.convertTo0to1(val));
                     }
                 } else if (auto* b = dynamic_cast<juce::AudioParameterBool*>(p)) {
-                    b->setValueNotifyingHost((bool)jsonValue ? 1.0f : 0.0f);
+                    setNormalised(b, (bool)jsonValue ? 1.0f : 0.0f);
                 } else {
                     float val = (float)jsonValue;
                     auto range = p->getNormalisableRange();
@@ -788,8 +969,7 @@ void AIStateMapper::applyParamsToProcessor(juce::AudioProcessor* processor, cons
                     }
 
                     val = range.snapToLegalValue(val);
-                    float normalizedValue = range.convertTo0to1(val);
-                    p->setValueNotifyingHost(normalizedValue);
+                    setNormalised(p, range.convertTo0to1(val));
                 }
             }
         }
@@ -918,7 +1098,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                     if (!clearExisting && idMap.count(oldId)) {
                         auto existingNodeId = idMap[oldId];
                         if (auto* existingNode = graph.getNodeForId(existingNodeId)) {
-                            if (existingNode->getProcessor()->getName() == type) {
+                            if (patchTypeMatchesProcessor(existingNode->getProcessor(), type)) {
                                 // Update parameters on existing node
                                 if (nObj->hasProperty("params")) {
                                     if (auto* pObj = nObj->getProperty("params").getDynamicObject()) {
@@ -926,6 +1106,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                                     }
                                 }
                                 applyExtraStateToProcessor(existingNode->getProcessor(), nObj, trusted);
+                                adoptUuidIfTrusted(existingNode, nObj, trusted);
                                 // Update position if provided
                                 if (nObj->hasProperty("position")) {
                                     if (auto* posObj = nObj->getProperty("position").getDynamicObject()) {
@@ -962,6 +1143,7 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
                         if (node) {
                             idMap[oldId] = node->nodeID;
                             newlyCreatedNodes.insert(node->nodeID);
+                            adoptUuidIfTrusted(node.get(), nObj, trusted);
                             if (nObj->hasProperty("position")) {
                                 if (auto* posObj = nObj->getProperty("position").getDynamicObject()) {
                                     node->properties.set("x", posObj->getProperty("x"));
@@ -1191,24 +1373,305 @@ bool AIStateMapper::applyJSONToGraph(const juce::var& json, juce::AudioProcessor
 
 namespace {
 
-// Modules the AI must never author directly. Attenuverters are an implementation detail of the
-// `modulations` array — applyJSONToGraph creates them itself — so exposing them would invite the
-// model to hand-build modulation chains that the mod matrix then can't read back.
-bool isInternalOnlyModule(const juce::String& typeName) { return typeName == "Attenuverter" || typeName == "Mod Slot"; }
+/**
+ * One node of a snapshot, resolved far enough that the whole restore can be planned before the
+ * graph is touched at all. After planning, either `kept`/`liveId` names the live node this entry
+ * updates in place, or `created` holds the processor waiting to be added.
+ */
+struct SnapshotTargetNode {
+    const juce::DynamicObject* obj = nullptr;
+    juce::uint32 id = 0;
+    juce::String uuid;
+    juce::String type;
+    bool kept = false;
+    // Node IDENTITY, never a cached Node*: applying a parameter to a node that is already in the
+    // graph runs its listeners synchronously, and one of them re-anchors the module's cables — so
+    // any Node* held across that call can dangle. Everything below re-resolves through the graph.
+    bool hasLiveId = false;
+    juce::AudioProcessorGraph::NodeID liveId;
+    std::unique_ptr<juce::AudioProcessor> created;
+};
+
+/** A snapshot connection with both endpoints resolved to indices into the target-node vector. */
+struct SnapshotTargetConnection {
+    size_t srcIndex = 0;
+    size_t dstIndex = 0;
+    int srcPort = 0;
+    int dstPort = 0;
+};
+
+// Re-applies a node's non-parameter state ONLY when it differs from what the module already holds.
+// setExtraState is not a cheap setter — SamplerModule and WavetableOscillatorModule read a file off
+// disk from it — so a restore that re-applied it unconditionally would reload every sample and every
+// wavetable on every single Cmd+Z.
+void applyExtraStateIfChanged(juce::AudioProcessor* processor, const juce::DynamicObject* nObj) {
+    if (!nObj->hasProperty("state"))
+        return;
+    auto* mb = dynamic_cast<ModuleBase*>(processor);
+    if (mb == nullptr)
+        return;
+
+    const juce::var target = nObj->getProperty("state");
+    if (juce::JSON::toString(mb->getExtraState()) == juce::JSON::toString(target))
+        return;
+
+    mb->setExtraState(target);
+}
+
+// Copies the snapshot's stored canvas position onto a live node, if it carries one.
+void applyPositionToNode(juce::AudioProcessorGraph::Node* node, const juce::DynamicObject* nObj) {
+    if (auto* posObj = nObj->getProperty("position").getDynamicObject()) {
+        node->properties.set("x", posObj->getProperty("x"));
+        node->properties.set("y", posObj->getProperty("y"));
+    }
+}
+
+} // namespace
+
+bool AIStateMapper::applySnapshotPreservingNodes(const juce::var& snapshot, juce::AudioProcessorGraph& graph,
+                                                 std::function<void()> beforeNodeRemoval) {
+    auto* rootObj = snapshot.isObject() ? snapshot.getDynamicObject() : nullptr;
+    if (rootObj == nullptr)
+        return false;
+
+    // A merge delta describes a CHANGE, not a target state: there is nothing to diff a live graph
+    // against, so it is not something this entry point can restore.
+    if (rootObj->hasProperty("remove") || rootObj->hasProperty("removeModulations"))
+        return false;
+
+    const auto* nodesList = rootObj->hasProperty("nodes") ? rootObj->getProperty("nodes").getArray() : nullptr;
+    const auto* connList =
+        rootObj->hasProperty("connections") ? rootObj->getProperty("connections").getArray() : nullptr;
+    if (nodesList == nullptr || connList == nullptr)
+        return false;
+
+    // ---------------------------------------------------------------------------------------
+    // Plan. Nothing below this block mutates the graph, so every rejection here leaves the graph
+    // exactly as it was and the caller's full-rebuild fallback starts from a clean slate.
+    // ---------------------------------------------------------------------------------------
+
+    // Live nodes, indexed by identity. A node with no uuid, or a uuid two nodes share, means
+    // identity cannot be decided — give up rather than guess which node the snapshot meant.
+    std::map<juce::String, juce::AudioProcessorGraph::Node*> liveByUuid;
+    for (auto* node : graph.getNodes()) {
+        if (node->getProcessor() == nullptr)
+            return false;
+        const juce::String uuid = node->properties["uuid"].toString();
+        if (uuid.isEmpty() || !liveByUuid.emplace(uuid, node).second)
+            return false;
+    }
+
+    std::vector<SnapshotTargetNode> targets;
+    targets.reserve(static_cast<size_t>(nodesList->size()));
+    std::set<juce::String> targetUuids;
+    std::set<juce::uint32> targetIds;
+    std::map<juce::uint32, size_t> targetIndexById;
+
+    for (const auto& nVar : *nodesList) {
+        const auto* nObj = nVar.getDynamicObject();
+        if (nObj == nullptr)
+            return false;
+
+        SnapshotTargetNode t;
+        t.obj = nObj;
+        if (!extractUnsignedInt(nObj->getProperty("id"), t.id))
+            return false;
+
+        t.uuid = nObj->getProperty("uuid").toString();
+        t.type = nObj->getProperty("type").toString();
+        if (t.uuid.isEmpty() || t.type.isEmpty())
+            return false;
+        if (!targetUuids.insert(t.uuid).second || !targetIds.insert(t.id).second)
+            return false;
+
+        const auto liveEntry = liveByUuid.find(t.uuid);
+        if (liveEntry != liveByUuid.end()) {
+            // The same identity must still name the same module. A uuid whose type changed is a
+            // corrupt snapshot, not an update-in-place — and patchTypeMatchesProcessor is what
+            // knows that an "Amp Env" processor legitimately serializes as type "ADSR".
+            if (!patchTypeMatchesProcessor(liveEntry->second->getProcessor(), t.type))
+                return false;
+            t.kept = true;
+            t.hasLiveId = true;
+            t.liveId = liveEntry->second->nodeID;
+        } else {
+            t.created = createModule(t.type);
+            if (t.created == nullptr)
+                return false;
+        }
+
+        targetIndexById[t.id] = targets.size();
+        targets.push_back(std::move(t));
+    }
+
+    std::vector<SnapshotTargetConnection> targetConnections;
+    targetConnections.reserve(static_cast<size_t>(connList->size()));
+
+    for (const auto& cVar : *connList) {
+        const auto* cObj = cVar.getDynamicObject();
+        if (cObj == nullptr)
+            return false;
+        if (!cObj->hasProperty("srcPort") || !cObj->hasProperty("dstPort"))
+            return false;
+
+        juce::uint32 srcId = 0, dstId = 0;
+        if (!extractUnsignedInt(cObj->getProperty("src"), srcId) ||
+            !extractUnsignedInt(cObj->getProperty("dst"), dstId))
+            return false;
+
+        const auto srcEntry = targetIndexById.find(srcId);
+        const auto dstEntry = targetIndexById.find(dstId);
+        if (srcEntry == targetIndexById.end() || dstEntry == targetIndexById.end())
+            return false;
+
+        SnapshotTargetConnection c;
+        c.srcIndex = srcEntry->second;
+        c.dstIndex = dstEntry->second;
+        c.srcPort = static_cast<int>(cObj->getProperty("srcPort"));
+        c.dstPort = static_cast<int>(cObj->getProperty("dstPort"));
+        if (c.srcPort == -1)
+            c.srcPort = juce::AudioProcessorGraph::midiChannelIndex;
+        if (c.dstPort == -1)
+            c.dstPort = juce::AudioProcessorGraph::midiChannelIndex;
+        targetConnections.push_back(c);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Execute. Every topology op is issued with UpdateKind::none and the render sequence is
+    // rebuilt exactly once at the end, so a mixed restore pays for the rebuild once instead of
+    // once per node and per wire — and a restore that changes no topology pays nothing at all.
+    // No graph callback lock is taken: parameter stores are atomic, and JUCE's graph publishes
+    // topology to the audio thread through its own render-sequence exchange.
+    //
+    // Parameters go FIRST and all structure is reconciled after them, because a parameter write
+    // can re-enter and change the graph (ModuleComponent re-anchors a module's cables when "poly"
+    // flips). Reconciling afterwards means such a rewire is just more state for the diff to
+    // correct, instead of a hazard the plan has to anticipate.
+    // ---------------------------------------------------------------------------------------
+    bool topologyChanged = false;
+    bool teardownNotified = false;
+    auto notifyBeforeNodeRemoval = [&beforeNodeRemoval, &teardownNotified] {
+        if (teardownNotified)
+            return;
+        teardownNotified = true;
+        if (beforeNodeRemoval)
+            beforeNodeRemoval();
+    };
+    auto resolve = [&graph](const SnapshotTargetNode& t) {
+        return t.hasLiveId ? graph.getNodeForId(t.liveId) : nullptr;
+    };
+
+    // 1. Kept nodes: parameters, extra state and position updated in place. No lock is held across
+    //    this loop, so the audio callback keeps running through it.
+    for (auto& t : targets) {
+        if (!t.kept)
+            continue;
+
+        if (auto* live = resolve(t))
+            if (auto* pObj = t.obj->getProperty("params").getDynamicObject())
+                applyParamsToProcessor(live->getProcessor(), pObj, /*trusted=*/true, /*skipUnchanged=*/true);
+        if (auto* live = resolve(t))
+            applyExtraStateIfChanged(live->getProcessor(), t.obj);
+        if (auto* live = resolve(t))
+            applyPositionToNode(live, t.obj);
+    }
+
+    // 2. Drop every live node the snapshot does not contain. Their processors — and every UI object
+    //    reading them — die here, which is why the caller gets its one chance to detach first. The
+    //    set is recomputed from the live graph rather than taken from the plan, so a node that a
+    //    re-entrant rewire created above (it has no uuid) is swept up too.
+    std::vector<juce::AudioProcessorGraph::NodeID> doomed;
+    for (auto* node : graph.getNodes())
+        if (targetUuids.count(node->properties["uuid"].toString()) == 0)
+            doomed.push_back(node->nodeID);
+
+    if (!doomed.empty()) {
+        notifyBeforeNodeRemoval();
+        for (auto nodeId : doomed)
+            graph.removeNode(nodeId, juce::AudioProcessorGraph::UpdateKind::none);
+        topologyChanged = true;
+    }
+
+    // 3. Create every snapshot node the graph now lacks, re-adopting the snapshot's node id when it
+    //    is free so ids stay stable across the restore (a merge-mode patch card addresses existing
+    //    nodes by uid). Removals ran first precisely so those ids are available. Identity is
+    //    re-derived from the live graph, so a node destroyed by a re-entrant rewire is rebuilt here.
+    std::map<juce::String, juce::AudioProcessorGraph::NodeID> liveIdByUuid;
+    for (auto* node : graph.getNodes())
+        liveIdByUuid[node->properties["uuid"].toString()] = node->nodeID;
+
+    for (auto& t : targets) {
+        const auto liveEntry = liveIdByUuid.find(t.uuid);
+        if (liveEntry != liveIdByUuid.end()) {
+            t.hasLiveId = true;
+            t.liveId = liveEntry->second;
+            continue;
+        }
+
+        t.hasLiveId = false;
+        auto processor = t.created != nullptr ? std::move(t.created) : createModule(t.type);
+        if (processor == nullptr)
+            continue;
+
+        if (auto* pObj = t.obj->getProperty("params").getDynamicObject())
+            applyParamsToProcessor(processor.get(), pObj, /*trusted=*/true);
+        applyExtraStateToProcessor(processor.get(), t.obj, /*trusted=*/true);
+
+        std::optional<juce::AudioProcessorGraph::NodeID> preservedId;
+        const juce::AudioProcessorGraph::NodeID wantedId(t.id);
+        if (t.id > 0 && graph.getNodeForId(wantedId) == nullptr)
+            preservedId = wantedId;
+
+        auto node = graph.addNode(std::move(processor), preservedId, juce::AudioProcessorGraph::UpdateKind::none);
+        topologyChanged = true;
+        if (node == nullptr)
+            continue; // Unreachable in practice (the id was checked free); wires to it are skipped below.
+
+        t.hasLiveId = true;
+        t.liveId = node->nodeID;
+        node->properties.set("uuid", t.uuid);
+        applyPositionToNode(node.get(), t.obj);
+    }
+
+    // 4. Connections: apply the delta only. A restore that changed no wiring issues no graph
+    //    topology call here, which is what keeps a parameter-only undo free of any rebuild.
+    std::set<juce::AudioProcessorGraph::Connection> wanted;
+    for (const auto& c : targetConnections) {
+        auto* src = resolve(targets[c.srcIndex]);
+        auto* dst = resolve(targets[c.dstIndex]);
+        if (src == nullptr || dst == nullptr)
+            continue;
+        wanted.insert({{src->nodeID, c.srcPort}, {dst->nodeID, c.dstPort}});
+    }
+
+    for (const auto& conn : graph.getConnections()) {
+        if (wanted.count(conn) == 0) {
+            graph.removeConnection(conn, juce::AudioProcessorGraph::UpdateKind::none);
+            topologyChanged = true;
+        }
+    }
+
+    for (const auto& conn : wanted) {
+        if (!graph.isConnected(conn) && graph.addConnection(conn, juce::AudioProcessorGraph::UpdateKind::none))
+            topologyChanged = true;
+    }
+
+    if (topologyChanged) {
+        graph.rebuild();
+        graph.sendChangeMessage(); // Suppressed per-op above; announced once here instead.
+    }
+
+    return true;
+}
+
+namespace {
 
 // The module types the model may emit, taken from the factory itself rather than a hand-kept
 // list. The previous literal had silently drifted: "Voice Mixer" existed in the factory but was
 // absent from the schema, so a constrained decoder could never produce one.
-juce::Array<juce::var> authorableModuleTypes() {
-    juce::StringArray names;
-    for (const auto& entry : moduleFactory)
-        if (!isInternalOnlyModule(entry.first))
-            names.add(entry.first);
-
-    names.sort(false); // moduleFactory is unordered; keep the schema byte-stable between runs
-
+juce::Array<juce::var> authorableModuleTypeEnum() {
     juce::Array<juce::var> types;
-    for (const auto& name : names)
+    for (const auto& name : AIStateMapper::authorableModuleTypes())
         types.add(name);
     return types;
 }
@@ -1266,6 +1729,11 @@ juce::var choiceParamProperties() {
 } // namespace
 
 juce::var AIStateMapper::getPatchSchema() {
+    // Reserved fields are DELIBERATELY absent from this schema: "schemaVersion", node "uuid" and
+    // the root "timeline" key. This document is the output contract handed to the provider as
+    // `format` — every property in it is an invitation to emit that property, and all three are
+    // ours to write, never the model's (uuid is identity, timeline is refused outright by
+    // validatePatch). Pinned by AIStateMapperTest.SchemaOmitsReservedFields.
     juce::DynamicObject::Ptr schema = new juce::DynamicObject();
     schema->setProperty("type", "object");
 
@@ -1282,7 +1750,7 @@ juce::var AIStateMapper::getPatchSchema() {
 
     juce::DynamicObject::Ptr typeDef = new juce::DynamicObject();
     typeDef->setProperty("type", "string");
-    typeDef->setProperty("enum", juce::var(authorableModuleTypes()));
+    typeDef->setProperty("enum", juce::var(authorableModuleTypeEnum()));
     nodeProperties->setProperty("type", juce::var(typeDef.get()));
 
     // `additionalProperties` stays open on purpose: only choice parameters can be enumerated,

@@ -42,4 +42,18 @@ constexpr const char* kWebsiteUrl = "https://agentsynth.app";
 // Support contact address, for the About box / support links. Not yet referenced anywhere.
 constexpr const char* kSupportEmail = "support@agentsynth.app";
 
+// Static Polar checkout link (covers both the monthly and yearly Pro products) opened by the
+// "Upgrade to Pro" button on a Quota-kind AI error (P4-4, Source/UI/AIChatComponent.cpp).
+// Deliberately static rather than a dynamically-created checkout session — see docs/billing.md's
+// "what this deliberately does not do" for why P4-4 doesn't create checkout sessions.
+constexpr const char* kUpgradeUrl = "https://buy.polar.sh/polar_cl_DkiJlmel2CXVtpl236TvS52omgYaZM26HGe1U0rbD75";
+
+// Production base URL for the synth-platform inference/auth/billing service (Cloud Run,
+// apps/infra/Pulumi.prod.yaml's authPublicBaseUrl in the synth-platform repo). Default host for
+// RemoteProvider, AuthClient and AccountService — see AIProviderRegistry.cpp and
+// MainComponent.h/.cpp. As of P4-6 the Cloud Run service still has no `allUsers` invoker binding
+// (tracked separately under P4-7), so requests here 403 at the IAM layer until that follow-up
+// infra step makes it public — expected, not a bug in this client.
+constexpr const char* kApiBaseUrl = "https://synth-api-6eft3t2kxq-uc.a.run.app";
+
 } // namespace synth::branding
