@@ -69,6 +69,8 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         return {280, 171}; // +48 (one combo row) from the issue #198 Voice Steal selector
     if (typeName == "Distortion")
         return {280, 335};
+    if (typeName == "Ring Modulator")
+        return {280, 403};
     if (typeName == "Delay")
         return {280, 249}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
     if (typeName == "Reverb")

@@ -47,6 +47,7 @@ enum class ModuleType {
     VoiceMixer,
     Bitcrusher,
     PitchShifter,
+    RingModulator,
     Noise,
     Math,
     Sampler,

@@ -274,7 +274,8 @@ TEST(AIStateMapperTest, FactorySupportsAllModuleTypes) {
         "ADSR",          "Sequencer",     "LFO",        "Distortion",    "Delay",          "Reverb",
         "MIDI Keyboard", "Amp Env",       "Filter Env", "Poly MIDI",     "Poly Sequencer", "Attenuverter",
         "Chorus",        "Phaser",        "Compressor", "Flanger",       "Limiter",        "Bitcrusher",
-        "Pitch Shifter", "Parametric EQ", "Macros",     "Sample & Hold", "Math",           "Comparator"};
+        "Pitch Shifter", "Parametric EQ", "Macros",     "Sample & Hold", "Math",           "Ring Modulator",
+        "Comparator"};
     for (const auto& type : expectedTypes) {
         auto module = synth::AIStateMapper::createModule(type);
         EXPECT_NE(module, nullptr) << "Failed to create module: " << type.toStdString();
@@ -1174,6 +1175,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
                            "Step 5 Chord, Step 5 Root, Step 6 Chord, Step 6 Root, Step 7 Chord, Step 7 Root, "
                            "Step 8 Chord, Step 8 Root, bpm, bypassed, run"},
         {"Reverb", "bypassed, damping, dry, dualIO, muted, outputLevel, roomSize, wet, width"},
+        {"Ring Modulator", "bypassed, character, drive, mix, muted, outputLevel, oversampling"},
         {"Sample & Hold", "bypassed, clock, holdMode, level, muted, offset, rate, slew, source, trigThreshold"},
         {"Sampler", "bypassed, density, grainSize, level, loop, muted, pitch, playMode, rootNote, spray, start"},
         {"Sequencer", "F.Env 1, F.Env 2, F.Env 3, F.Env 4, F.Env 5, F.Env 6, F.Env 7, F.Env 8, Gate 1, Gate 2, "
@@ -1244,6 +1246,7 @@ TEST(AIStateMapperTest, AuthorableModuleTypesGolden) {
                                       "Poly MIDI",
                                       "Poly Sequencer",
                                       "Reverb",
+                                      "Ring Modulator",
                                       "Sample & Hold",
                                       "Sampler",
                                       "Sequencer",
