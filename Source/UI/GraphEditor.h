@@ -134,6 +134,11 @@ public:
     // Drops any routing left on an output jack that is no longer visible, then pushes overlapping
     // neighbours clear. The resized module itself never moves.
     void handleModuleResized(ModuleComponent* moduleComp);
+
+    // Dual I/O only remaps visible jacks onto raw ch0/ch1. A collapsed Audio cable that only
+    // landed on the left leg (typical when the far end is Audio Output, which is not ModuleBase)
+    // is completed to L→L / R→R so toggling Dual I/O on shows both jacks wired.
+    void completeStereoPairConnections(ModuleComponent* moduleComp);
     void finalizeModuleDrag(ModuleComponent* module);
     void autoArrange();
 
@@ -249,6 +254,11 @@ public:
     // Double-click a connected jack to disconnect (issue #216). On by default.
     void setDoubleClickPortDisconnectEnabled(bool enabled) { doubleClickPortDisconnectEnabled = enabled; }
     bool getDoubleClickPortDisconnectEnabled() const noexcept { return doubleClickPortDisconnectEnabled; }
+
+    // Default jack layout for newly created modules that expose the Dual I/O parameter.
+    // false (default): one collapsed "Audio" jack. true: split Left/Right by default.
+    void setDefaultDualIOForNewModules(bool enabled) { defaultDualIOForNewModules = enabled; }
+    bool getDefaultDualIOForNewModules() const noexcept { return defaultDualIOForNewModules; }
 
     /** True when the visible jack already has at least one graph edge or mod routing. */
     bool isPortConnected(ModuleComponent* module, int portIndex, bool isInput, bool isMidi) const;
@@ -510,6 +520,7 @@ private:
     void applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostNodeId, bool recordUndo);
     void clearSmartSuggestions();
     bool shouldOfferSmartConnections() const;
+    void applyDefaultDualIOForNewModule(juce::AudioProcessor& processor) const;
     /** Port centre inside a bounds rect — mirrors ModuleComponent::getPortCenter for ghost previews. */
     static juce::Point<int> estimatePortCenter(juce::AudioProcessor* proc, juce::Rectangle<int> bounds, int jack,
                                                bool isInput, bool isMidi);
@@ -607,6 +618,7 @@ private:
     // Alignment guides toggle (UI Phase 7 - Item 4)
     bool alignmentGuidesEnabled = true;
     bool doubleClickPortDisconnectEnabled = true;
+    bool defaultDualIOForNewModules = false;
 
     void updateTransform();
 

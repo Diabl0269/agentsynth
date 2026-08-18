@@ -12,6 +12,7 @@ public:
         addParameter(wetParam = new juce::AudioParameterFloat("wet", "Wet", 0.0f, 1.0f, 0.33f));
         addParameter(dryParam = new juce::AudioParameterFloat("dry", "Dry", 0.0f, 1.0f, 0.4f));
         addParameter(widthParam = new juce::AudioParameterFloat("width", "Width", 0.0f, 1.0f, 1.0f));
+        addDualIOParameter();
         addOutputLevelParameter();
         addMuteParameter();
     }
@@ -55,8 +56,12 @@ public:
         applyOutputLevel(buffer, 2);
     }
 
-    juce::String getInputPortLabel(int i) const override { return i == 0 ? "Left" : "Right"; }
-    juce::String getOutputPortLabel(int i) const override { return i == 0 ? "Left" : "Right"; }
+    juce::String getInputPortLabel(int i) const override { return stereoInputLabel(i, 0, nullptr); }
+    juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(0); }
+    int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 0); }
+    LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
     std::vector<ModulationTarget> getModulationTargets() const override {
         return {{"Size", 2}, {"Damping", 3}, {"Wet", 4}, {"Dry", 5}, {"Width", 6}};

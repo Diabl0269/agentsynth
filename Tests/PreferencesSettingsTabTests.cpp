@@ -27,15 +27,18 @@ TEST_F(PreferencesSettingsTabTest, DefaultsToNewAndUnwiredAndDoubleClickOn) {
     PreferencesSettingsTab tab(appProperties);
     EXPECT_EQ(tab.getSmartConnectionMode(), GraphEditor::SmartConnectionMode::NewAndUnwired);
     EXPECT_TRUE(tab.isDoubleClickPortDisconnectEnabled());
+    EXPECT_FALSE(tab.getDefaultDualIOForNewModules());
 }
 
 TEST_F(PreferencesSettingsTabTest, LoadsPersistedValues) {
     appProperties.getUserSettings()->setValue("smartConnectionMode", "Off");
     appProperties.getUserSettings()->setValue("doubleClickPortDisconnect", "0");
+    appProperties.getUserSettings()->setValue("defaultDualIOForNewModules", "1");
 
     PreferencesSettingsTab tab(appProperties);
     EXPECT_EQ(tab.getSmartConnectionMode(), GraphEditor::SmartConnectionMode::Off);
     EXPECT_FALSE(tab.isDoubleClickPortDisconnectEnabled());
+    EXPECT_TRUE(tab.getDefaultDualIOForNewModules());
 }
 
 TEST_F(PreferencesSettingsTabTest, ChangingControlsPersistsAndPushesToEditor) {
@@ -55,21 +58,32 @@ TEST_F(PreferencesSettingsTabTest, ChangingControlsPersistsAndPushesToEditor) {
     tab.setDoubleClickPortDisconnectEnabled(true);
     EXPECT_EQ(appProperties.getUserSettings()->getValue("doubleClickPortDisconnect"), "1");
     EXPECT_TRUE(editor.getDoubleClickPortDisconnectEnabled());
+
+    tab.setDefaultDualIOForNewModules(true);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("defaultDualIOForNewModules"), "1");
+    EXPECT_TRUE(editor.getDefaultDualIOForNewModules());
+
+    tab.setDefaultDualIOForNewModules(false);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("defaultDualIOForNewModules"), "0");
+    EXPECT_FALSE(editor.getDefaultDualIOForNewModules());
 }
 
 TEST_F(PreferencesSettingsTabTest, SetGraphEditorPushesCurrentValues) {
     appProperties.getUserSettings()->setValue("smartConnectionMode", "NewOnly");
     appProperties.getUserSettings()->setValue("doubleClickPortDisconnect", "0");
+    appProperties.getUserSettings()->setValue("defaultDualIOForNewModules", "1");
 
     PreferencesSettingsTab tab(appProperties);
     AudioEngine engine;
     GraphEditor editor(engine);
     ASSERT_EQ(editor.getSmartConnectionMode(), GraphEditor::SmartConnectionMode::NewAndUnwired);
     ASSERT_TRUE(editor.getDoubleClickPortDisconnectEnabled());
+    ASSERT_FALSE(editor.getDefaultDualIOForNewModules());
 
     tab.setGraphEditor(&editor);
     EXPECT_EQ(editor.getSmartConnectionMode(), GraphEditor::SmartConnectionMode::NewOnly);
     EXPECT_FALSE(editor.getDoubleClickPortDisconnectEnabled());
+    EXPECT_TRUE(editor.getDefaultDualIOForNewModules());
 }
 
 TEST_F(PreferencesSettingsTabTest, PaintDoesNotCrash) {

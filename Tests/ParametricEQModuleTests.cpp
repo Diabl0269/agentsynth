@@ -162,20 +162,18 @@ TEST(ParametricEQModuleTest, ChannelLayoutIsStereoPlusFourCV) {
     ParametricEQModule eq;
     EXPECT_EQ(eq.getTotalNumInputChannels(), 6);
     EXPECT_EQ(eq.getTotalNumOutputChannels(), 2);
-    EXPECT_EQ(eq.getVisibleInputPortCount(), 6);
-    EXPECT_EQ(eq.getVisibleOutputPortCount(), 2);
+    EXPECT_EQ(eq.getVisibleInputPortCount(), 5);
+    EXPECT_EQ(eq.getVisibleOutputPortCount(), 1);
 }
 
 TEST(ParametricEQModuleTest, PortLabelsNameTheTwoBellBands) {
     ParametricEQModule eq;
-    EXPECT_EQ(eq.getInputPortLabel(0), "Left");
-    EXPECT_EQ(eq.getInputPortLabel(1), "Right");
-    EXPECT_EQ(eq.getInputPortLabel(2), "B2 Freq");
-    EXPECT_EQ(eq.getInputPortLabel(3), "B2 Gain");
-    EXPECT_EQ(eq.getInputPortLabel(4), "B3 Freq");
-    EXPECT_EQ(eq.getInputPortLabel(5), "B3 Gain");
-    EXPECT_EQ(eq.getOutputPortLabel(0), "Left");
-    EXPECT_EQ(eq.getOutputPortLabel(1), "Right");
+    EXPECT_EQ(eq.getInputPortLabel(0), "Audio");
+    EXPECT_EQ(eq.getInputPortLabel(1), "B2 Freq");
+    EXPECT_EQ(eq.getInputPortLabel(2), "B2 Gain");
+    EXPECT_EQ(eq.getInputPortLabel(3), "B3 Freq");
+    EXPECT_EQ(eq.getInputPortLabel(4), "B3 Gain");
+    EXPECT_EQ(eq.getOutputPortLabel(0), "Audio");
 }
 
 TEST(ParametricEQModuleTest, ModulationTargetsMatchCVChannels) {
@@ -190,13 +188,21 @@ TEST(ParametricEQModuleTest, ModulationTargetsMatchCVChannels) {
 
 TEST(ParametricEQModuleTest, LogicalPortRolesSplitAudioFromCV) {
     ParametricEQModule eq;
-    for (int raw = 0; raw < 2; ++raw) {
-        EXPECT_EQ(eq.mapInputChannel(raw).role, PortRole::Audio) << "raw " << raw;
-        EXPECT_EQ(eq.mapInputChannel(raw).visibleJackIndex, raw);
-    }
+    // Default Dual I/O off: raw 0/1 collapse onto visible Audio jack 0; CV jacks shift down.
+    auto in0 = eq.mapInputChannel(0);
+    EXPECT_EQ(in0.role, PortRole::Audio);
+    EXPECT_EQ(in0.visibleJackIndex, 0);
+    EXPECT_TRUE(in0.isPolyGroupHead);
+    EXPECT_EQ(in0.polyVoiceSpan, 2);
+
+    auto in1 = eq.mapInputChannel(1);
+    EXPECT_EQ(in1.role, PortRole::Audio);
+    EXPECT_EQ(in1.visibleJackIndex, 0);
+    EXPECT_FALSE(in1.isPolyGroupHead);
+
     for (int raw = 2; raw < 6; ++raw) {
         EXPECT_EQ(eq.mapInputChannel(raw).role, PortRole::ModCV) << "raw " << raw;
-        EXPECT_EQ(eq.mapInputChannel(raw).visibleJackIndex, raw);
+        EXPECT_EQ(eq.mapInputChannel(raw).visibleJackIndex, raw - 1) << "raw " << raw;
     }
 }
 
