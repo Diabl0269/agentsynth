@@ -13,12 +13,35 @@
 // ============================================================================
 
 TEST(ModuleLibraryDescriptionFor, KnownModulesReturnNonEmpty) {
-    const char* known[] = {
-        "Oscillator",     "Wavetable",     "Noise",      "Sampler",          "LFO",         "Sequencer",
-        "Poly Sequencer", "MidiKeyboard",  "Poly MIDI",  "External MIDI",    "ADSR",        "VCA",
-        "Filter",         "Parametric EQ", "Chorus",     "Phaser",           "Flanger",     "Distortion",
-        "Delay",          "Reverb",        "Compressor", "Limiter",          "Voice Mixer", "Bitcrusher",
-        "Pitch Shifter",  "Sample & Hold", "Math",       "Envelope Follower"};
+    const char* known[] = {"Oscillator",
+                           "Wavetable",
+                           "Noise",
+                           "Sampler",
+                           "LFO",
+                           "Sequencer",
+                           "Poly Sequencer",
+                           "MidiKeyboard",
+                           "Poly MIDI",
+                           "External MIDI",
+                           "ADSR",
+                           "VCA",
+                           "Filter",
+                           "Parametric EQ",
+                           "Chorus",
+                           "Phaser",
+                           "Flanger",
+                           "Distortion",
+                           "Ring Modulator",
+                           "Delay",
+                           "Reverb",
+                           "Compressor",
+                           "Limiter",
+                           "Voice Mixer",
+                           "Bitcrusher",
+                           "Pitch Shifter",
+                           "Sample & Hold",
+                           "Math",
+                           "Envelope Follower"};
     for (const char* name : known) {
         juce::String desc = ModuleLibraryComponent::descriptionFor(name);
         EXPECT_FALSE(desc.isEmpty()) << "descriptionFor(\"" << name << "\") must not be empty";
@@ -26,12 +49,35 @@ TEST(ModuleLibraryDescriptionFor, KnownModulesReturnNonEmpty) {
 }
 
 TEST(ModuleLibraryDescriptionFor, KnownModulesReturnDistinctStrings) {
-    const char* known[] = {
-        "Oscillator",     "Wavetable",     "Noise",      "Sampler",          "LFO",         "Sequencer",
-        "Poly Sequencer", "MidiKeyboard",  "Poly MIDI",  "External MIDI",    "ADSR",        "VCA",
-        "Filter",         "Parametric EQ", "Chorus",     "Phaser",           "Flanger",     "Distortion",
-        "Delay",          "Reverb",        "Compressor", "Limiter",          "Voice Mixer", "Bitcrusher",
-        "Pitch Shifter",  "Sample & Hold", "Math",       "Envelope Follower"};
+    const char* known[] = {"Oscillator",
+                           "Wavetable",
+                           "Noise",
+                           "Sampler",
+                           "LFO",
+                           "Sequencer",
+                           "Poly Sequencer",
+                           "MidiKeyboard",
+                           "Poly MIDI",
+                           "External MIDI",
+                           "ADSR",
+                           "VCA",
+                           "Filter",
+                           "Parametric EQ",
+                           "Chorus",
+                           "Phaser",
+                           "Flanger",
+                           "Distortion",
+                           "Ring Modulator",
+                           "Delay",
+                           "Reverb",
+                           "Compressor",
+                           "Limiter",
+                           "Voice Mixer",
+                           "Bitcrusher",
+                           "Pitch Shifter",
+                           "Sample & Hold",
+                           "Math",
+                           "Envelope Follower"};
     std::vector<juce::String> descs;
     for (const char* name : known)
         descs.push_back(ModuleLibraryComponent::descriptionFor(name));

@@ -60,6 +60,7 @@ add_executable(Tests
     ParametricEQModuleTests.cpp
     VoiceMixerModuleTests.cpp
     BitcrusherModuleTests.cpp
+    RingModulatorModuleTests.cpp
     NoiseModuleTests.cpp
     EdgeCaseTests.cpp
     IntegrationTests.cpp

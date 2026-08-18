@@ -12,7 +12,7 @@ Modules whose output is **audio** carry a `Level` parameter (`outputLevel`, line
 | `prepareOutputLevel(sampleRate)` | in `prepareToPlay` — sets up the 10 ms anti-click ramp |
 | `applyOutputLevel(buffer, numAudioChannels)` | at the **end of the normal `processBlock` path** |
 
-Adopting modules: **Distortion, Delay, Reverb, Chorus, Phaser, Flanger, Filter, Bitcrusher, Pitch Shifter**.
+Adopting modules: **Distortion, Delay, Reverb, Chorus, Phaser, Flanger, Filter, Bitcrusher, Pitch Shifter, Ring Modulator**.
 
 **This is a standing rule, not a one-off.** Every *new* module whose output carries audio must have a level control — the shared stage here, or its own `level`/`gain` parameter. `Tests/ModuleAdoptionTests.cpp` enforces it: it classifies every module the factory can build into one of three buckets (shared stage / own parameter / no level by design, with a rationale), and a new module that nobody classified fails `EveryFactoryModuleIsClassified`. A renamed or deleted module fails `ClassificationTableHasNoStaleEntries`. So the decision cannot be skipped — only made explicitly.
 
@@ -36,6 +36,14 @@ CV control of Level is deliberately **not** implemented — it would need a new 
 - **Makeup Gain**: Automatic dynamic makeup gain (computed per-block from RMS ratio of dry vs. wet, clamped 0.01–1.0 linear, 50 ms smoothing). Not a user-visible parameter.
 - **Parameters**: Drive (1–20), Mix (0–1), Type (Soft/Hard/Foldback), Oversampling (Off/2x/4x), Level (0–1). Level is applied after the wet/dry mix and before the scope push, so the visualiser shows the real output.
 - **CV Inputs**: Drive (ch2), Mix (ch3).
+
+## Ring Modulator Module
+- **Algorithm**: Parker diode-ring (DAFx-11). Four parallel piecewise-quadratic diode approximations
+  `out = d(m + c/2) + d(-m + c/2) - d(m - c/2) - d(-m - c/2)`. This is **not** a clean multiply — Math's `Mult` output already covers that. The diode dead-zone is what gives the metallic, gated, bell-like character.
+- **Oversampling**: Same real-time-safe scheme as Distortion. `Off` / `2x` / `4x` (default `2x`); both oversamplers are pre-allocated in `prepareToPlay` and swapped via an `AudioProcessorParameter::Listener`. A latency-compensation delay line keeps the dry carrier aligned for wet/dry mixing. Oversampling is excluded from `getModulationTargets()`.
+- **I/O**: Carrier (ch0), Modulator (ch1), Mix CV (ch2), Drive CV (ch3). Stereo out is the mono ring-mod result duplicated to Left/Right. Dry is the unprocessed carrier. No internal carrier oscillator — patch an Oscillator into Carrier.
+- **Parameters**: Drive (0.5–8, default 1), Mix (0–1, default 1), Character (0–1, default 0.5), Oversampling (Off/2x/4x), Level (0–1). Character maps the diode forward-bias / linear-region breakpoints (`vb` / `vl`) from near-clean multiply (`vb≈0.02`, `vl≈0.05`) to hard gated (`vb≈0.5`, `vl≈1.0`). Parker's typical `vb≈0.2` / `vl≈0.4` sits at the default.
+- **CV Inputs**: Mix (ch2), Drive (ch3).
 
 ## Delay Module
 - **Type**: Stereo feedback delay.

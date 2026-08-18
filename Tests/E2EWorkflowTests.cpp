@@ -237,7 +237,8 @@ TEST_F(E2EWorkflowTest, DropAllModuleTypes_NoCrash) {
                                            "Reverb",         "MidiKeyboard",  "Chorus",        "Phaser",
                                            "Compressor",     "Flanger",       "Limiter",       "Poly MIDI",
                                            "Voice Mixer",    "Bitcrusher",    "Pitch Shifter", "Parametric EQ",
-                                           "Macros",         "Sample & Hold", "Math",          "Envelope Follower"};
+                                           "Macros",         "Sample & Hold", "Math",          "Envelope Follower",
+                                           "Ring Modulator"};
 
     for (const auto& type : moduleTypes) {
         auto nodeBefore = nodeCount();

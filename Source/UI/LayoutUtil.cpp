@@ -216,6 +216,7 @@ int roleRank(ModuleType t) {
     case ModuleType::Flanger:
     case ModuleType::Limiter:
     case ModuleType::PitchShifter:
+    case ModuleType::RingModulator:
         return 2;
     case ModuleType::ADSR:
     case ModuleType::LFO:

@@ -49,7 +49,7 @@ Every concrete module implements `virtual ModuleType getModuleType() const = 0`.
 Oscillator, Filter, VCA, ADSR, LFO, Sequencer, PolySequencer,
 MidiKeyboard, PolyMidi, ExternalMidi, Attenuverter,
 Delay, Distortion, Reverb, Chorus, Phaser, Compressor, Flanger, Limiter,
-ParametricEQ, VoiceMixer, Bitcrusher, PitchShifter, Noise, Math, Sampler, Wavetable,
+ParametricEQ, VoiceMixer, Bitcrusher, PitchShifter, RingModulator, Noise, Math, Sampler, Wavetable,
 MacroControl, SampleHold, EnvelopeFollower
 ```
 
@@ -234,4 +234,4 @@ All modules follow specific DSP requirements:
 
 - **Smoothing**: All gain/cutoff parameters use linear smoothing to avoid clicks.
 - **Antialiasing**: Oscillators use PolyBLEP for sharp waveforms.
-- **Oversampling**: Nonlinear effects support configurable oversampling (e.g., Distortion offers Off/2x/4x modes).
+- **Oversampling**: Nonlinear effects support configurable oversampling (e.g. Distortion and Ring Modulator offer Off/2x/4x modes).
