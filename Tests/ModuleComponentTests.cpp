@@ -2,6 +2,7 @@
 #include "../Source/Modules/ADSRModule.h"
 #include "../Source/Modules/MacroControlModule.h"
 #include "../Source/Modules/MathModule.h"
+#include "../Source/Modules/FX/DelayModule.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/SamplerModule.h"
 #include "../Source/Modules/VCAModule.h"
@@ -380,6 +381,36 @@ TEST_F(ModuleComponentTest, HeaderButtonsAreDrawableButtons) {
     EXPECT_EQ(foundDelete->getX(), 280 - 26);
     EXPECT_EQ(foundBypass->getX(), 280 - 50);
     EXPECT_EQ(foundMute->getX(), 280 - 74);
+    EXPECT_FALSE(foundBypass->getTooltip().isEmpty());
+    EXPECT_FALSE(foundMute->getTooltip().isEmpty());
+    EXPECT_FALSE(foundDelete->getTooltip().isEmpty());
+}
+
+TEST_F(ModuleComponentTest, DualIOHeaderButtonOnFxModulesOnly) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+
+    DelayModule delay;
+    ModuleComponent delayComp(&delay, juce::AudioProcessorGraph::NodeID(1), editor);
+    delayComp.setSize(280, 400);
+
+    juce::DrawableButton* foundDual = nullptr;
+    for (auto* child : delayComp.getChildren()) {
+        if (auto* db = dynamic_cast<juce::DrawableButton*>(child))
+            if (db->getName() == "Dual I/O")
+                foundDual = db;
+    }
+    ASSERT_NE(foundDual, nullptr) << "FX modules expose Dual I/O as a header icon, not a labelled checkbox";
+    EXPECT_EQ(foundDual->getX(), 280 - 98);
+    EXPECT_FALSE(foundDual->getTooltip().isEmpty());
+
+    OscillatorModule osc;
+    ModuleComponent oscComp(&osc, juce::AudioProcessorGraph::NodeID(2), editor);
+    oscComp.setSize(280, 400);
+    for (auto* child : oscComp.getChildren()) {
+        if (auto* db = dynamic_cast<juce::DrawableButton*>(child))
+            EXPECT_NE(db->getName(), "Dual I/O") << "synth-voice modules have no Dual I/O header button";
+    }
 }
 
 // §1.5: clicking the delete button removes the node from the graph via requestDeleteModule.

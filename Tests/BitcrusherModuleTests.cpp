@@ -10,13 +10,13 @@ TEST(BitcrusherModuleTest, ModuleTypeAndCategoryAreCorrect) {
 
 TEST(BitcrusherModuleTest, PortLabelsAreCorrect) {
     BitcrusherModule module;
-    EXPECT_EQ(module.getInputPortLabel(0), "Left");
-    EXPECT_EQ(module.getInputPortLabel(1), "Right");
-    EXPECT_EQ(module.getInputPortLabel(2), "Rate");
-    EXPECT_EQ(module.getInputPortLabel(3), "Depth");
-    EXPECT_EQ(module.getInputPortLabel(4), "Mix");
-    EXPECT_EQ(module.getOutputPortLabel(0), "Left");
-    EXPECT_EQ(module.getOutputPortLabel(1), "Right");
+    EXPECT_EQ(module.getInputPortLabel(0), "Audio");
+    EXPECT_EQ(module.getInputPortLabel(1), "Rate");
+    EXPECT_EQ(module.getInputPortLabel(2), "Depth");
+    EXPECT_EQ(module.getInputPortLabel(3), "Mix");
+    EXPECT_EQ(module.getOutputPortLabel(0), "Audio");
+    EXPECT_EQ(module.getVisibleInputPortCount(), 4);
+    EXPECT_EQ(module.getVisibleOutputPortCount(), 1);
 
     auto targets = module.getModulationTargets();
     ASSERT_EQ(targets.size(), 3u);

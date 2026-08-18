@@ -132,6 +132,11 @@ public:
     // Drops any routing left on an output jack that is no longer visible, then pushes overlapping
     // neighbours clear. The resized module itself never moves.
     void handleModuleResized(ModuleComponent* moduleComp);
+
+    // Dual I/O only remaps visible jacks onto raw ch0/ch1. A collapsed Audio cable that only
+    // landed on the left leg (typical when the far end is Audio Output, which is not ModuleBase)
+    // is completed to L→L / R→R so toggling Dual I/O on shows both jacks wired.
+    void completeStereoPairConnections(ModuleComponent* moduleComp);
     void finalizeModuleDrag(ModuleComponent* module);
     void autoArrange();
 

@@ -967,16 +967,45 @@ TEST(PortLabelTests, AttenuverterPortLabels) {
     EXPECT_EQ(att.getOutputPortLabel(0), "Out");
 }
 
-TEST(PortLabelTests, DelayPortLabels) {
+
+static void setDualIO(juce::AudioProcessor& proc, bool dual) {
+    for (auto* param : proc.getParameters()) {
+        if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
+            if (p->paramID == "dualIO") {
+                p->setValueNotifyingHost(dual ? 1.0f : 0.0f);
+                return;
+            }
+        }
+    }
+}
+
+TEST(PortLabelTests, DelayPortLabelsDefaultToSingleAudioJack) {
     DelayModule delay;
+    EXPECT_FALSE(delay.isDualIO());
+    EXPECT_EQ(delay.getVisibleInputPortCount(), 1);
+    EXPECT_EQ(delay.getVisibleOutputPortCount(), 1);
+    EXPECT_EQ(delay.getInputPortLabel(0), "Audio");
+    EXPECT_EQ(delay.getOutputPortLabel(0), "Audio");
+
+    setDualIO(delay, true);
+    EXPECT_EQ(delay.getVisibleInputPortCount(), 2);
+    EXPECT_EQ(delay.getVisibleOutputPortCount(), 2);
     EXPECT_EQ(delay.getInputPortLabel(0), "Left");
     EXPECT_EQ(delay.getInputPortLabel(1), "Right");
     EXPECT_EQ(delay.getOutputPortLabel(0), "Left");
     EXPECT_EQ(delay.getOutputPortLabel(1), "Right");
 }
 
-TEST(PortLabelTests, DistortionPortLabels) {
+TEST(PortLabelTests, DistortionPortLabelsCollapseCvJacksInSingleMode) {
     DistortionModule dist;
+    EXPECT_EQ(dist.getVisibleInputPortCount(), 3);
+    EXPECT_EQ(dist.getInputPortLabel(0), "Audio");
+    EXPECT_EQ(dist.getInputPortLabel(1), "Drive");
+    EXPECT_EQ(dist.getInputPortLabel(2), "Mix");
+    EXPECT_EQ(dist.getOutputPortLabel(0), "Audio");
+
+    setDualIO(dist, true);
+    EXPECT_EQ(dist.getVisibleInputPortCount(), 4);
     EXPECT_EQ(dist.getInputPortLabel(0), "Left");
     EXPECT_EQ(dist.getInputPortLabel(1), "Right");
     EXPECT_EQ(dist.getInputPortLabel(2), "Drive");
@@ -987,6 +1016,9 @@ TEST(PortLabelTests, DistortionPortLabels) {
 
 TEST(PortLabelTests, ReverbPortLabels) {
     ReverbModule reverb;
+    EXPECT_EQ(reverb.getInputPortLabel(0), "Audio");
+    EXPECT_EQ(reverb.getOutputPortLabel(0), "Audio");
+    setDualIO(reverb, true);
     EXPECT_EQ(reverb.getInputPortLabel(0), "Left");
     EXPECT_EQ(reverb.getInputPortLabel(1), "Right");
     EXPECT_EQ(reverb.getOutputPortLabel(0), "Left");
@@ -995,58 +1027,64 @@ TEST(PortLabelTests, ReverbPortLabels) {
 
 TEST(PortLabelTests, ChorusPortLabels) {
     ChorusModule chorus;
+    EXPECT_EQ(chorus.getInputPortLabel(0), "Audio");
+    EXPECT_EQ(chorus.getInputPortLabel(1), "Rate");
+    EXPECT_EQ(chorus.getInputPortLabel(2), "Depth");
+    setDualIO(chorus, true);
     EXPECT_EQ(chorus.getInputPortLabel(0), "Left");
     EXPECT_EQ(chorus.getInputPortLabel(1), "Right");
     EXPECT_EQ(chorus.getInputPortLabel(2), "Rate");
     EXPECT_EQ(chorus.getInputPortLabel(3), "Depth");
-    EXPECT_EQ(chorus.getOutputPortLabel(0), "Left");
-    EXPECT_EQ(chorus.getOutputPortLabel(1), "Right");
 }
 
 TEST(PortLabelTests, PhaserPortLabels) {
     PhaserModule phaser;
+    EXPECT_EQ(phaser.getInputPortLabel(0), "Audio");
+    setDualIO(phaser, true);
     EXPECT_EQ(phaser.getInputPortLabel(0), "Left");
     EXPECT_EQ(phaser.getInputPortLabel(1), "Right");
     EXPECT_EQ(phaser.getInputPortLabel(2), "Rate");
     EXPECT_EQ(phaser.getInputPortLabel(3), "Depth");
-    EXPECT_EQ(phaser.getOutputPortLabel(0), "Left");
-    EXPECT_EQ(phaser.getOutputPortLabel(1), "Right");
 }
 
 TEST(PortLabelTests, CompressorPortLabels) {
     CompressorModule comp;
+    EXPECT_EQ(comp.getInputPortLabel(0), "Audio");
+    setDualIO(comp, true);
     EXPECT_EQ(comp.getInputPortLabel(0), "Left");
     EXPECT_EQ(comp.getInputPortLabel(1), "Right");
-    EXPECT_EQ(comp.getOutputPortLabel(0), "Left");
-    EXPECT_EQ(comp.getOutputPortLabel(1), "Right");
 }
 
 TEST(PortLabelTests, FlangerPortLabels) {
     FlangerModule flanger;
+    EXPECT_EQ(flanger.getInputPortLabel(0), "Audio");
+    setDualIO(flanger, true);
     EXPECT_EQ(flanger.getInputPortLabel(0), "Left");
     EXPECT_EQ(flanger.getInputPortLabel(1), "Right");
     EXPECT_EQ(flanger.getInputPortLabel(2), "Rate");
     EXPECT_EQ(flanger.getInputPortLabel(3), "Depth");
-    EXPECT_EQ(flanger.getOutputPortLabel(0), "Left");
-    EXPECT_EQ(flanger.getOutputPortLabel(1), "Right");
 }
 
 TEST(PortLabelTests, LimiterPortLabels) {
     LimiterModule limiter;
+    EXPECT_EQ(limiter.getInputPortLabel(0), "Audio");
+    setDualIO(limiter, true);
     EXPECT_EQ(limiter.getInputPortLabel(0), "Left");
     EXPECT_EQ(limiter.getInputPortLabel(1), "Right");
-    EXPECT_EQ(limiter.getOutputPortLabel(0), "Left");
-    EXPECT_EQ(limiter.getOutputPortLabel(1), "Right");
 }
 
 TEST(PortLabelTests, PitchShifterPortLabels) {
     PitchShifterModule shifter;
+    EXPECT_EQ(shifter.getInputPortLabel(0), "Audio");
+    EXPECT_EQ(shifter.getInputPortLabel(1), "Pitch");
+    EXPECT_EQ(shifter.getInputPortLabel(2), "Shift");
+    EXPECT_EQ(shifter.getInputPortLabel(3), "Mix");
+    EXPECT_EQ(shifter.getInputPortLabel(4), "Feedback");
+    setDualIO(shifter, true);
     EXPECT_EQ(shifter.getInputPortLabel(0), "Left");
     EXPECT_EQ(shifter.getInputPortLabel(1), "Right");
     EXPECT_EQ(shifter.getInputPortLabel(2), "Pitch");
     EXPECT_EQ(shifter.getInputPortLabel(3), "Shift");
     EXPECT_EQ(shifter.getInputPortLabel(4), "Mix");
     EXPECT_EQ(shifter.getInputPortLabel(5), "Feedback");
-    EXPECT_EQ(shifter.getOutputPortLabel(0), "Left");
-    EXPECT_EQ(shifter.getOutputPortLabel(1), "Right");
 }

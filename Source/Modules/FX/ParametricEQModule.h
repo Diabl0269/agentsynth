@@ -73,6 +73,7 @@ public:
 
         addParameter(outputGainParam =
                          new juce::AudioParameterFloat("outputGain", "Output", gainRange(), 0.0f, dbAttributes()));
+        addDualIOParameter();
         addMuteParameter();
         enableVisualBuffer(true);
     }
@@ -185,10 +186,14 @@ public:
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String labels[] = {"Left", "Right", "B2 Freq", "B2 Gain", "B3 Freq", "B3 Gain"};
-        return (i >= 0 && i < 6) ? labels[i] : ModuleBase::getInputPortLabel(i);
+        const juce::String cv[] = {"B2 Freq", "B2 Gain", "B3 Freq", "B3 Gain"};
+        return stereoInputLabel(i, 4, cv);
     }
-    juce::String getOutputPortLabel(int i) const override { return i == 0 ? "Left" : "Right"; }
+    juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(4); }
+    int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 4); }
+    LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
     std::vector<ModulationTarget> getModulationTargets() const override {
         return {{"B2 Freq", 2}, {"B2 Gain", 3}, {"B3 Freq", 4}, {"B3 Gain", 5}};
@@ -196,17 +201,6 @@ public:
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Filter; }
     ModuleType getModuleType() const override { return ModuleType::ParametricEQ; }
 
-    LogicalPort mapInputChannel(int raw) const override {
-        LogicalPort p;
-        if (raw >= 0 && raw < 6) {
-            p.visibleJackIndex = raw;
-            p.role = (raw < kNumAudioChannels) ? PortRole::Audio : PortRole::ModCV;
-            p.isPolyGroupHead = true;
-            p.polyVoiceSpan = 1;
-            return p;
-        }
-        return ModuleBase::mapInputChannel(raw);
-    }
 
     // ---------- visualiser accessors / mutators (message thread) ----------
 

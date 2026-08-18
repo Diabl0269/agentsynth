@@ -8,6 +8,7 @@ public:
         : ModuleBase("Voice Mixer", 8, 2) // 8 voice channels in, stereo out
     {
         addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 0.125f));
+        addDualIOParameter();
     }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
@@ -56,7 +57,9 @@ public:
     }
 
     juce::String getInputPortLabel(int i) const override { return "Voice " + juce::String(i); }
-    juce::String getOutputPortLabel(int i) const override { return i == 0 ? "Left" : "Right"; }
+    juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
+    int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
+    LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
     ModuleType getModuleType() const override { return ModuleType::VoiceMixer; }
 
 private:

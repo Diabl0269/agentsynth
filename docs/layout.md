@@ -254,17 +254,18 @@ Each category section-header entry in `ModuleLibraryComponent::paint()` draws a 
 
 ### ModuleComponent header button layout
 
-The header area of each module card (`Source/UI/ModuleComponent.cpp`) contains three `DrawableButton` instances (not `TextButton`), positioned in `resized()`:
+The header area of each module card (`Source/UI/ModuleComponent.cpp`) contains `DrawableButton` instances (not `TextButton`), positioned in `resized()`:
 
 | Button | Bounds | Action |
 |---|---|---|
-| `deleteButton` | `(w-26, 2, 22, 20)` | Calls `owner.requestDeleteModule(nodeId)` |
-| `bypassButton` | `(w-50, 2, 22, 20)` | Toggles bypass state |
-| `muteButton` | `(w-74, 2, 22, 20)` | Toggles mute state |
+| `deleteButton` | `(w-26, 2, 22, 20)` | Calls `owner.requestDeleteModule(nodeId)` — tooltip "Delete module" |
+| `bypassButton` | `(w-50, 2, 22, 20)` | Toggles bypass state — tooltip "Bypass" |
+| `muteButton` | `(w-74, 2, 22, 20)` | Toggles mute state — tooltip "Mute" |
+| `dualIOButton` | `(w-98, 2, 22, 20)` | FX / Voice Mixer only — splits or merges the stereo jack pair. Tooltip names Dual I/O. |
 
 `requestDeleteModule(NodeID)` is the canonical delete entry point — `deleteButton.onClick` delegates here.
 
-`applyHeaderButtonIcons()` retints all three buttons from the active `AppLookAndFeel`. It is null-guarded: when the LnF cast fails (headless tests), the function returns early and buttons remain imageless but functional. `lookAndFeelChanged()` calls `applyHeaderButtonIcons()` so icons update on theme switch.
+`applyHeaderButtonIcons()` retints the header buttons from the active `AppLookAndFeel`. It is null-guarded: when the LnF cast fails (headless tests), the function returns early and buttons remain imageless but functional. `lookAndFeelChanged()` calls `applyHeaderButtonIcons()` so icons update on theme switch.
 
 ### Panel collapse and persistence
 

@@ -6,6 +6,7 @@
 #include "../Source/Modules/LFOModule.h"
 #include "../Source/Modules/ModuleBase.h"
 #include "../Source/Modules/OscillatorModule.h"
+#include "../Source/Modules/FX/DelayModule.h"
 #include "../Source/Modules/PolyMidiModule.h"
 #include "../Source/Modules/SamplerModule.h"
 #include "../Source/Modules/SequencerModule.h"
@@ -29,6 +30,17 @@ static void setPolyParam(juce::AudioProcessor& proc, bool value) {
     for (auto* param : proc.getParameters()) {
         if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
             if (p->paramID == "poly") {
+                p->setValueNotifyingHost(value ? 1.0f : 0.0f);
+                return;
+            }
+        }
+    }
+}
+
+static void setDualIOParam(juce::AudioProcessor& proc, bool value) {
+    for (auto* param : proc.getParameters()) {
+        if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
+            if (p->paramID == "dualIO") {
                 p->setValueNotifyingHost(value ? 1.0f : 0.0f);
                 return;
             }
@@ -991,6 +1003,218 @@ TEST_F(GraphEditorTest, ResolvePolyLinkBroadcastsMonoSourceAcrossModCvFan) {
     EXPECT_EQ(link.destRawChannel, 8);
     EXPECT_EQ(link.voiceCount, 8);
     EXPECT_EQ(link.sourceStride, 0);
+}
+
+
+TEST_F(GraphEditorTest, ResolvePolyLinkBroadcastsMonoIntoCollapsedStereoPair) {
+    // Collapsed Dual I/O (voiceSpan 2, PortRole::Audio) is a stereo bus, not a poly voice fan —
+    // mono sources duplicate onto L and R so a single cable feeds both FX legs.
+    OscillatorModule osc;
+    DelayModule delay; // Dual I/O defaults off → one Audio jack spanning raw 0/1
+
+    auto link = GraphEditor::resolvePolyLink(&osc, 0, &delay, 0);
+    EXPECT_EQ(link.sourceRawChannel, 0);
+    EXPECT_EQ(link.destRawChannel, 0);
+    EXPECT_EQ(link.voiceCount, 2);
+    EXPECT_EQ(link.sourceStride, 0);
+}
+
+TEST_F(GraphEditorTest, TogglingDualIOKeepsBothStereoLegs) {
+    // Dual I/O only changes jack visibility. A collapsed Audio cable fans onto raw ch0 and ch1;
+    // flipping Dual I/O on must not drop the right leg.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto oscNode = engine.getGraph().addNode(std::make_unique<OscillatorModule>());
+    auto delayNode = engine.getGraph().addNode(std::make_unique<DelayModule>());
+    editor.updateComponents();
+
+    ModuleComponent* oscComp = nullptr;
+    ModuleComponent* delayComp = nullptr;
+    auto* content = editor.getChildComponent(0);
+    if (content) {
+        for (auto* contentChild : content->getChildren()) {
+            if (auto* mod = dynamic_cast<ModuleComponent*>(contentChild)) {
+                if (mod->getModule() == oscNode->getProcessor())
+                    oscComp = mod;
+                if (mod->getModule() == delayNode->getProcessor())
+                    delayComp = mod;
+            }
+        }
+    }
+    ASSERT_NE(oscComp, nullptr);
+    ASSERT_NE(delayComp, nullptr);
+
+    oscComp->setBounds(0, 0, 100, 100);
+    delayComp->setBounds(200, 0, 100, 100);
+
+    editor.beginConnectionDrag(oscComp, 0, false, false, juce::Point<int>(0, 0));
+    editor.dragConnection(juce::Point<int>(50, 0));
+    editor.endConnectionDrag(delayComp->getBounds().getPosition() + delayComp->getPortCenter(0, true));
+
+    auto& graph = engine.getGraph();
+    auto hasEdge = [&](int srcCh, int dstCh) {
+        for (auto& conn : graph.getConnections())
+            if (conn.source.nodeID == oscNode->nodeID && conn.source.channelIndex == srcCh &&
+                conn.destination.nodeID == delayNode->nodeID && conn.destination.channelIndex == dstCh)
+                return true;
+        return false;
+    };
+    ASSERT_TRUE(hasEdge(0, 0));
+    ASSERT_TRUE(hasEdge(0, 1)) << "collapsed Audio jack must fan onto Delay Right before the toggle";
+
+    setDualIOParam(*delayNode->getProcessor(), true);
+
+    EXPECT_TRUE(hasEdge(0, 0)) << "Left leg must survive Dual I/O on";
+    EXPECT_TRUE(hasEdge(0, 1)) << "Right leg must survive Dual I/O on";
+
+    setDualIOParam(*delayNode->getProcessor(), false);
+
+    EXPECT_TRUE(hasEdge(0, 0));
+    EXPECT_TRUE(hasEdge(0, 1)) << "Right leg must survive Dual I/O off as well";
+}
+
+TEST_F(GraphEditorTest, TogglingDualIOCompletesStereoOutputPair) {
+    // A collapsed Audio output dropped on a 2-channel dest (Audio Output, or Dual I/O) often
+    // only records the left edge. Toggling Dual I/O on must add the matching right edge.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto srcNode = engine.getGraph().addNode(std::make_unique<DelayModule>());
+    auto dstNode = engine.getGraph().addNode(std::make_unique<DelayModule>());
+    editor.updateComponents();
+
+    ModuleComponent* srcComp = nullptr;
+    auto* content = editor.getChildComponent(0);
+    if (content) {
+        for (auto* contentChild : content->getChildren()) {
+            if (auto* mod = dynamic_cast<ModuleComponent*>(contentChild))
+                if (mod->getModule() == srcNode->getProcessor())
+                    srcComp = mod;
+        }
+    }
+    ASSERT_NE(srcComp, nullptr);
+
+    auto& graph = engine.getGraph();
+    ASSERT_TRUE(graph.addConnection({{srcNode->nodeID, 0}, {dstNode->nodeID, 0}}));
+    {
+        bool hasRightBefore = false;
+        for (const auto& conn : graph.getConnections())
+            if (conn.source.nodeID == srcNode->nodeID && conn.source.channelIndex == 1)
+                hasRightBefore = true;
+        ASSERT_FALSE(hasRightBefore);
+    }
+
+    setDualIOParam(*srcNode->getProcessor(), true);
+
+    bool hasRight = false;
+    for (const auto& conn : graph.getConnections())
+        if (conn.source.nodeID == srcNode->nodeID && conn.source.channelIndex == 1 &&
+            conn.destination.nodeID == dstNode->nodeID && conn.destination.channelIndex == 1)
+            hasRight = true;
+    EXPECT_TRUE(hasRight) << "Dual I/O on must pair Delay Right out to the dest Right in";
+}
+
+TEST_F(GraphEditorTest, DualIOOnSourceDrawsRightCableOntoCollapsedDest) {
+    // Both Dual I/O off: one Audio→Audio cable, two raw edges. Splitting only the source must
+    // still draw the Right output onto the dest's remaining Audio jack — not wait until the dest
+    // is split too (raw ch1 used to be treated as hidden because dest visibleCount == 1).
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto srcNode = engine.getGraph().addNode(std::make_unique<DelayModule>());
+    auto dstNode = engine.getGraph().addNode(std::make_unique<DelayModule>());
+    editor.updateComponents();
+
+    ModuleComponent* srcComp = nullptr;
+    ModuleComponent* dstComp = nullptr;
+    auto* content = editor.getChildComponent(0);
+    if (content) {
+        for (auto* contentChild : content->getChildren()) {
+            if (auto* mod = dynamic_cast<ModuleComponent*>(contentChild)) {
+                if (mod->getModule() == srcNode->getProcessor())
+                    srcComp = mod;
+                if (mod->getModule() == dstNode->getProcessor())
+                    dstComp = mod;
+            }
+        }
+    }
+    ASSERT_NE(srcComp, nullptr);
+    ASSERT_NE(dstComp, nullptr);
+    srcComp->setBounds(0, 0, 200, 200);
+    dstComp->setBounds(300, 0, 200, 200);
+
+    editor.beginConnectionDrag(srcComp, 0, false, false, juce::Point<int>(0, 0));
+    editor.dragConnection(juce::Point<int>(50, 0));
+    editor.endConnectionDrag(dstComp->getBounds().getPosition() + dstComp->getPortCenter(0, true));
+
+    setDualIOParam(*srcNode->getProcessor(), true);
+    ASSERT_FALSE(dynamic_cast<ModuleBase*>(dstNode->getProcessor())->isDualIO());
+
+    bool drawnFromRight = false;
+    for (const auto& cable : editor.buildVisibleCables())
+        if (cable.id.srcUid == srcNode->nodeID.uid && cable.id.dstUid == dstNode->nodeID.uid && cable.id.srcPort == 1)
+            drawnFromRight = true;
+    EXPECT_TRUE(drawnFromRight) << "Right out must draw onto the dest Audio jack while dest Dual I/O is still off";
+}
+
+TEST_F(GraphEditorTest, DualIOOnDestDrawsRightCableFromCollapsedSource) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto srcNode = engine.getGraph().addNode(std::make_unique<DelayModule>());
+    auto dstNode = engine.getGraph().addNode(std::make_unique<DelayModule>());
+    editor.updateComponents();
+
+    ModuleComponent* srcComp = nullptr;
+    ModuleComponent* dstComp = nullptr;
+    auto* content = editor.getChildComponent(0);
+    if (content) {
+        for (auto* contentChild : content->getChildren()) {
+            if (auto* mod = dynamic_cast<ModuleComponent*>(contentChild)) {
+                if (mod->getModule() == srcNode->getProcessor())
+                    srcComp = mod;
+                if (mod->getModule() == dstNode->getProcessor())
+                    dstComp = mod;
+            }
+        }
+    }
+    ASSERT_NE(srcComp, nullptr);
+    ASSERT_NE(dstComp, nullptr);
+    srcComp->setBounds(0, 0, 200, 200);
+    dstComp->setBounds(300, 0, 200, 200);
+
+    editor.beginConnectionDrag(srcComp, 0, false, false, juce::Point<int>(0, 0));
+    editor.dragConnection(juce::Point<int>(50, 0));
+    editor.endConnectionDrag(dstComp->getBounds().getPosition() + dstComp->getPortCenter(0, true));
+
+    setDualIOParam(*dstNode->getProcessor(), true);
+    ASSERT_FALSE(dynamic_cast<ModuleBase*>(srcNode->getProcessor())->isDualIO());
+
+    bool drawnOntoRight = false;
+    for (const auto& cable : editor.buildVisibleCables())
+        if (cable.id.srcUid == srcNode->nodeID.uid && cable.id.dstUid == dstNode->nodeID.uid && cable.id.dstPort == 1)
+            drawnOntoRight = true;
+    EXPECT_TRUE(drawnOntoRight) << "Dest Right in must draw from the source Audio jack while source Dual I/O is still off";
+}
+
+TEST_F(GraphEditorTest, ResolvePolyLinkFansCollapsedStereoSourceOntoStereoDest) {
+    DelayModule src;
+    DelayModule dst;
+
+    auto toOutput = GraphEditor::resolvePolyLink(&src, 0, nullptr, 0);
+    EXPECT_EQ(toOutput.sourceRawChannel, 0);
+    EXPECT_EQ(toOutput.destRawChannel, 0);
+    EXPECT_EQ(toOutput.voiceCount, 2);
+    EXPECT_EQ(toOutput.sourceStride, 1);
+
+    auto toFx = GraphEditor::resolvePolyLink(&src, 0, &dst, 0);
+    EXPECT_EQ(toFx.voiceCount, 2);
+    EXPECT_EQ(toFx.sourceStride, 1);
 }
 
 TEST_F(GraphEditorTest, ResolvePolyLinkDoesNotBroadcastAudioOrPitchFans) {
