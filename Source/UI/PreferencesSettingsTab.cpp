@@ -27,6 +27,10 @@ GraphEditor::SmartConnectionMode modeFromComboId(int id) {
         return GraphEditor::SmartConnectionMode::NewAndUnwired;
     }
 }
+
+int comboIdFromDualIODefault(bool enabled) { return enabled ? 2 : 1; }
+
+bool dualIODefaultFromComboId(int id) { return id == 2; }
 } // namespace
 
 PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& props)
@@ -62,6 +66,25 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     doubleClickDisconnectToggle.onClick = [this] {
         persistDoubleClickPortDisconnect(doubleClickDisconnectToggle.getToggleState());
     };
+
+    addAndMakeVisible(defaultDualIOLabel);
+    defaultDualIOLabel.setText("Default FX I/O jack layout:", juce::dontSendNotification);
+    defaultDualIOLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
+
+    addAndMakeVisible(defaultDualIOCombo);
+    defaultDualIOCombo.addItem("Single Audio jack", 1);
+    defaultDualIOCombo.addItem("Split Left/Right jacks", 2);
+    defaultDualIOCombo.setTooltip("Applies to newly created modules that support Dual I/O (FX + Voice Mixer output).");
+    defaultDualIOCombo.setSelectedId(
+        comboIdFromDualIODefault(appProperties.getUserSettings()->getBoolValue("defaultDualIOForNewModules", false)),
+        juce::dontSendNotification);
+    defaultDualIOCombo.onChange = [this] {
+        persistDefaultDualIOForNewModules(dualIODefaultFromComboId(defaultDualIOCombo.getSelectedId()));
+    };
+
+    addAndMakeVisible(perModuleDefaultsButton);
+    perModuleDefaultsButton.setEnabled(false);
+    perModuleDefaultsButton.setTooltip("Per-module I/O default overrides are planned in a follow-up preference.");
 }
 
 void PreferencesSettingsTab::paint(juce::Graphics& g) {
@@ -80,6 +103,14 @@ void PreferencesSettingsTab::resized() {
     bounds.removeFromTop(10);
 
     doubleClickDisconnectToggle.setBounds(bounds.removeFromTop(24));
+    bounds.removeFromTop(10);
+
+    auto dualIORow = bounds.removeFromTop(24);
+    defaultDualIOLabel.setBounds(dualIORow.removeFromLeft(220));
+    defaultDualIOCombo.setBounds(dualIORow.removeFromLeft(220));
+    bounds.removeFromTop(10);
+
+    perModuleDefaultsButton.setBounds(bounds.removeFromTop(24).removeFromLeft(220));
 }
 
 void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
@@ -88,6 +119,7 @@ void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
         return;
     graphEditor->setSmartConnectionMode(modeFromComboId(smartConnectionCombo.getSelectedId()));
     graphEditor->setDoubleClickPortDisconnectEnabled(doubleClickDisconnectToggle.getToggleState());
+    graphEditor->setDefaultDualIOForNewModules(dualIODefaultFromComboId(defaultDualIOCombo.getSelectedId()));
 }
 
 GraphEditor::SmartConnectionMode PreferencesSettingsTab::getSmartConnectionMode() const {
@@ -108,6 +140,15 @@ void PreferencesSettingsTab::setDoubleClickPortDisconnectEnabled(bool enabled) {
     persistDoubleClickPortDisconnect(enabled);
 }
 
+bool PreferencesSettingsTab::getDefaultDualIOForNewModules() const {
+    return dualIODefaultFromComboId(defaultDualIOCombo.getSelectedId());
+}
+
+void PreferencesSettingsTab::setDefaultDualIOForNewModules(bool enabled) {
+    defaultDualIOCombo.setSelectedId(comboIdFromDualIODefault(enabled), juce::dontSendNotification);
+    persistDefaultDualIOForNewModules(enabled);
+}
+
 void PreferencesSettingsTab::persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode) {
     appProperties.getUserSettings()->setValue("smartConnectionMode", GraphEditor::smartConnectionModeToString(mode));
     appProperties.getUserSettings()->saveIfNeeded();
@@ -120,4 +161,11 @@ void PreferencesSettingsTab::persistDoubleClickPortDisconnect(bool enabled) {
     appProperties.getUserSettings()->saveIfNeeded();
     if (graphEditor)
         graphEditor->setDoubleClickPortDisconnectEnabled(enabled);
+}
+
+void PreferencesSettingsTab::persistDefaultDualIOForNewModules(bool enabled) {
+    appProperties.getUserSettings()->setValue("defaultDualIOForNewModules", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor)
+        graphEditor->setDefaultDualIOForNewModules(enabled);
 }

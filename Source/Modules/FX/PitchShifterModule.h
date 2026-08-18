@@ -37,6 +37,7 @@ public:
                          new juce::AudioParameterFloat("window", "Window (ms)", kMinWindowMs, kMaxWindowMs, 50.0f));
         addParameter(feedbackParam = new juce::AudioParameterFloat("feedback", "Feedback", 0.0f, kMaxFeedback, 0.0f));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 1.0f));
+        addDualIOParameter();
         addOutputLevelParameter();
         addMuteParameter();
         enableVisualBuffer(true);
@@ -226,10 +227,14 @@ public:
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String labels[] = {"Left", "Right", "Pitch", "Shift", "Mix", "Feedback"};
-        return (i >= 0 && i < 6) ? labels[i] : ModuleBase::getInputPortLabel(i);
+        const juce::String cv[] = {"Pitch", "Shift", "Mix", "Feedback"};
+        return stereoInputLabel(i, 4, cv);
     }
-    juce::String getOutputPortLabel(int i) const override { return i == 0 ? "Left" : "Right"; }
+    juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(4); }
+    int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 4); }
+    LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
     std::vector<ModulationTarget> getModulationTargets() const override {
         return {{"Pitch", 2}, {"Shift", 3}, {"Mix", 4}, {"Feedback", 5}};

@@ -242,3 +242,66 @@ TEST(LogicalPortTests, VCAPolyOutputIsSummedNotFanned) {
 
     EXPECT_EQ(vca.mapOutputChannel(0).polyVoiceSpan, 1);
 }
+
+#include "../Source/Modules/FX/DelayModule.h"
+#include "../Source/Modules/FX/DistortionModule.h"
+
+static void setDualIOParam(juce::AudioProcessor& proc, bool dual) {
+    for (auto* param : proc.getParameters()) {
+        if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
+            if (p->paramID == "dualIO") {
+                p->setValueNotifyingHost(dual ? 1.0f : 0.0f);
+                return;
+            }
+        }
+    }
+}
+
+TEST(LogicalPortTests, CollapsedStereoPairFansBothRawChannelsOntoOneJack) {
+    DelayModule delay;
+    ASSERT_FALSE(delay.isDualIO());
+
+    auto in0 = delay.mapInputChannel(0);
+    EXPECT_EQ(in0.visibleJackIndex, 0);
+    EXPECT_EQ(in0.role, PortRole::Audio);
+    EXPECT_TRUE(in0.isPolyGroupHead);
+    EXPECT_EQ(in0.polyVoiceSpan, 2);
+
+    auto in1 = delay.mapInputChannel(1);
+    EXPECT_EQ(in1.visibleJackIndex, 0);
+    EXPECT_EQ(in1.role, PortRole::Audio);
+    EXPECT_FALSE(in1.isPolyGroupHead);
+
+    const auto targets = delay.getJackTargets(0, true);
+    ASSERT_EQ(targets.size(), 1u);
+    EXPECT_EQ(targets[0].rawHeadChannel, 0);
+    EXPECT_EQ(targets[0].voiceSpan, 2);
+    EXPECT_EQ(targets[0].role, PortRole::Audio);
+}
+
+TEST(LogicalPortTests, DualIOExposesSeparateLeftRightJacks) {
+    DelayModule delay;
+    setDualIOParam(delay, true);
+
+    EXPECT_EQ(delay.getVisibleInputPortCount(), 2);
+    auto left = delay.mapInputChannel(0);
+    auto right = delay.mapInputChannel(1);
+    EXPECT_EQ(left.visibleJackIndex, 0);
+    EXPECT_EQ(right.visibleJackIndex, 1);
+    EXPECT_EQ(left.polyVoiceSpan, 1);
+    EXPECT_EQ(right.polyVoiceSpan, 1);
+    EXPECT_TRUE(left.isPolyGroupHead);
+    EXPECT_TRUE(right.isPolyGroupHead);
+}
+
+TEST(LogicalPortTests, DistortionCvJacksShiftWhenStereoCollapses) {
+    DistortionModule dist;
+    // Single: Audio @0, Drive @1, Mix @2 — raw Drive stays ch2
+    auto drive = dist.mapInputChannel(2);
+    EXPECT_EQ(drive.visibleJackIndex, 1);
+    EXPECT_EQ(drive.role, PortRole::ModCV);
+
+    setDualIOParam(dist, true);
+    drive = dist.mapInputChannel(2);
+    EXPECT_EQ(drive.visibleJackIndex, 2);
+}

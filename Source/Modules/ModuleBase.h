@@ -74,6 +74,137 @@ public:
             addParameter(mutedParam = new juce::AudioParameterBool("muted", "Muted", false));
     }
 
+    // Opt-in stereo I/O jack layout for modules that process a fixed L/R pair on raw ch0/ch1.
+    //
+    // Bus layout stays 2+ channels for the module's lifetime (JUCE cannot renegotiate without
+    // dropping graph connections). Dual I/O only changes *visibility* and logical-port mapping:
+    //   Dual on  — separate Left / Right jacks (legacy FX layout)
+    //   Dual off — one "Audio" jack that fans both raw channels (polyVoiceSpan == 2)
+    // Call before addOutputLevelParameter() / addMuteParameter() so Level stays last among
+    // value params. Default is single-jack — the common mono→FX insert case.
+    void addDualIOParameter(bool defaultDual = false) {
+        if (dualIOParam)
+            return;
+        addParameter(dualIOParam = new juce::AudioParameterBool("dualIO", "Dual I/O", defaultDual));
+    }
+
+    bool hasDualIOParameter() const { return dualIOParam != nullptr; }
+    bool isDualIO() const { return dualIOParam != nullptr && dualIOParam->get(); }
+
+    /** Visible input jacks when raw 0/1 are a stereo pair followed by `numCvInputs` ModCV jacks. */
+    int stereoVisibleInputCount(int numCvInputs) const { return (isDualIO() ? 2 : 1) + numCvInputs; }
+    int stereoVisibleOutputCount() const { return isDualIO() ? 2 : 1; }
+
+    juce::String stereoInputLabel(int visibleJack, int numCvInputs, const juce::String* cvLabels) const {
+        if (isDualIO()) {
+            if (visibleJack == 0)
+                return "Left";
+            if (visibleJack == 1)
+                return "Right";
+            const int cv = visibleJack - 2;
+            if (cv >= 0 && cv < numCvInputs)
+                return cvLabels[cv];
+        } else {
+            if (visibleJack == 0)
+                return "Audio";
+            const int cv = visibleJack - 1;
+            if (cv >= 0 && cv < numCvInputs)
+                return cvLabels[cv];
+        }
+        return "In " + juce::String(visibleJack);
+    }
+
+    juce::String stereoOutputLabel(int visibleJack) const {
+        if (isDualIO())
+            return visibleJack == 0 ? "Left" : "Right";
+        return "Audio";
+    }
+
+    /** Map raw ch0/ch1 (+ trailing CV) onto Dual or collapsed Audio jacks. */
+    LogicalPort mapStereoPairInput(int raw, int numCvInputs) const {
+        LogicalPort p;
+        if (isDualIO()) {
+            if (raw == 0 || raw == 1) {
+                p.visibleJackIndex = raw;
+                p.role = PortRole::Audio;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
+            if (raw >= 2 && raw < 2 + numCvInputs) {
+                p.visibleJackIndex = raw;
+                p.role = PortRole::ModCV;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
+        } else {
+            if (raw == 0) {
+                p.visibleJackIndex = 0;
+                p.role = PortRole::Audio;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 2;
+                return p;
+            }
+            if (raw == 1) {
+                p.visibleJackIndex = 0;
+                p.role = PortRole::Audio;
+                p.isPolyGroupHead = false;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
+            if (raw >= 2 && raw < 2 + numCvInputs) {
+                p.visibleJackIndex = raw - 1;
+                p.role = PortRole::ModCV;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
+        }
+        LogicalPort fallback;
+        const int vis = stereoVisibleInputCount(numCvInputs);
+        fallback.visibleJackIndex = (vis > 0) ? juce::jlimit(0, vis - 1, raw) : 0;
+        fallback.role = PortRole::Other;
+        fallback.isPolyGroupHead = false;
+        fallback.polyVoiceSpan = 1;
+        return fallback;
+    }
+
+    LogicalPort mapStereoPairOutput(int raw) const {
+        LogicalPort p;
+        if (isDualIO()) {
+            if (raw == 0 || raw == 1) {
+                p.visibleJackIndex = raw;
+                p.role = PortRole::Audio;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
+        } else {
+            if (raw == 0) {
+                p.visibleJackIndex = 0;
+                p.role = PortRole::Audio;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 2;
+                return p;
+            }
+            if (raw == 1) {
+                p.visibleJackIndex = 0;
+                p.role = PortRole::Audio;
+                p.isPolyGroupHead = false;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
+        }
+        LogicalPort fallback;
+        const int vis = stereoVisibleOutputCount();
+        fallback.visibleJackIndex = (vis > 0) ? juce::jlimit(0, vis - 1, raw) : 0;
+        fallback.role = PortRole::Other;
+        fallback.isPolyGroupHead = false;
+        fallback.polyVoiceSpan = 1;
+        return fallback;
+    }
+
     // Opt-in output-level stage for modules whose output is audio.
     //
     // Deliberately NOT added in the ModuleBase ctor: parameter position is load-bearing
@@ -286,6 +417,7 @@ protected:
 
     juce::AudioParameterBool* bypassedParam = nullptr;
     juce::AudioParameterBool* mutedParam = nullptr;
+    juce::AudioParameterBool* dualIOParam = nullptr;
     juce::AudioParameterFloat* outputLevelParam = nullptr;
 
 private:

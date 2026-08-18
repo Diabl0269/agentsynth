@@ -1141,18 +1141,18 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Attenuverter", "amount, bypassed"},
         {"Audio Input", ""},
         {"Audio Output", ""},
-        {"Bitcrusher", "bypassed, depth, dither, mix, muted, outputLevel, rate"},
-        {"Chorus", "bypassed, centreDelay, depth, feedback, mix, muted, outputLevel, rate"},
-        {"Compressor", "attack, bypassed, makeupGain, muted, ratio, release, threshold"},
-        {"Delay", "bypassed, feedback, mix, muted, outputLevel, time"},
-        {"Distortion", "bypassed, drive, mix, muted, outputLevel, oversampling, type"},
+        {"Bitcrusher", "bypassed, depth, dither, dualIO, mix, muted, outputLevel, rate"},
+        {"Chorus", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
+        {"Compressor", "attack, bypassed, dualIO, makeupGain, muted, ratio, release, threshold"},
+        {"Delay", "bypassed, dualIO, feedback, mix, muted, outputLevel, time"},
+        {"Distortion", "bypassed, drive, dualIO, mix, muted, outputLevel, oversampling, type"},
         {"Envelope Follower", "attack, bypassed, detection, muted, release, sensitivity"},
         {"External MIDI", "bypassed, channel, deviceIndex"},
         {"Filter", "bypassed, cutoff, drive, filterType, muted, outputLevel, poly, resonance"},
         {"Filter Env", "attack, bypassed, decay, muted, poly, release, sustain"},
-        {"Flanger", "bypassed, centreDelay, depth, feedback, mix, muted, outputLevel, rate"},
+        {"Flanger", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
         {"LFO", "bipolar, bypassed, glide, level, mode, muted, rateHz, rateSync, retrig, shape"},
-        {"Limiter", "bypassed, inputGain, muted, release, threshold"},
+        {"Limiter", "bypassed, dualIO, inputGain, muted, release, threshold"},
         {"MIDI Keyboard", "bypassed, octave"},
         {"Macros", "bypassed, macro1, macro10, macro11, macro12, macro13, macro14, macro15, macro16, macro2, macro3, "
                    "macro4, macro5, macro6, macro7, macro8, macro9, macroBipolar, macroCount, muted"},
@@ -1162,16 +1162,17 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Noise", "bypassed, color, level, muted, noiseType, poly"},
         {"Oscillator", "bypassed, coarse, detune, fine, level, muted, octave, poly, unison, waveform"},
         {"Parametric EQ", "band1Freq, band1Gain, band1On, band1Q, band2Freq, band2Gain, band2On, band2Q, band3Freq, "
-                          "band3Gain, band3On, band3Q, band4Freq, band4Gain, band4On, band4Q, bypassed, muted, "
+                          "band3Gain, band3On, band3Q, band4Freq, band4Gain, band4On, band4Q, bypassed, dualIO, muted, "
                           "outputGain"},
-        {"Phaser", "bypassed, centreFreq, depth, feedback, mix, muted, outputLevel, rate"},
-        {"Pitch Shifter", "bypassed, feedback, fine, mix, muted, outputLevel, pitch, shiftHz, shiftMode, window"},
+        {"Phaser", "bypassed, centreFreq, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
+        {"Pitch Shifter",
+         "bypassed, dualIO, feedback, fine, mix, muted, outputLevel, pitch, shiftHz, shiftMode, window"},
         {"Poly MIDI", "bypassed, voiceSteal"},
         {"Poly Sequencer", "Gate 1, Gate 2, Gate 3, Gate 4, Gate 5, Gate 6, Gate 7, Gate 8, Step 1 Chord, Step 1 Root, "
                            "Step 2 Chord, Step 2 Root, Step 3 Chord, Step 3 Root, Step 4 Chord, Step 4 Root, "
                            "Step 5 Chord, Step 5 Root, Step 6 Chord, Step 6 Root, Step 7 Chord, Step 7 Root, "
                            "Step 8 Chord, Step 8 Root, bpm, bypassed, run"},
-        {"Reverb", "bypassed, damping, dry, muted, outputLevel, roomSize, wet, width"},
+        {"Reverb", "bypassed, damping, dry, dualIO, muted, outputLevel, roomSize, wet, width"},
         {"Ring Modulator", "bypassed, character, drive, mix, muted, outputLevel, oversampling"},
         {"Sample & Hold", "bypassed, clock, holdMode, level, muted, offset, rate, slew, source, trigThreshold"},
         {"Sampler", "bypassed, density, grainSize, level, loop, muted, pitch, playMode, rootNote, spray, start"},
@@ -1179,7 +1180,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
                       "Gate 3, Gate 4, Gate 5, Gate 6, Gate 7, Gate 8, Pitch 1, Pitch 2, Pitch 3, Pitch 4, Pitch 5, "
                       "Pitch 6, Pitch 7, Pitch 8, bpm, bypassed, run"},
         {"VCA", "bypassed, gain, muted, poly"},
-        {"Voice Mixer", "bypassed, level"},
+        {"Voice Mixer", "bypassed, dualIO, level"},
         {"Wavetable", "blend, bypassed, coarse, detune, fine, importMode, interpolation, level, muted, octave, pan, "
                       "phase, poly, position, randomPhase, spread, stack, subLevel, subOctave, subShape, syncMode, "
                       "table, unison, warp, warpAmount, width"},

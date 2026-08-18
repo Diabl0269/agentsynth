@@ -2,6 +2,32 @@
 
 Technical documentation for the Agent Synth effects suite.
 
+## Stereo I/O (Dual I/O toggle)
+
+Every FX module (and Voice Mixer outputs) processes a fixed **raw** stereo pair on channels 0/1.
+That is always stereo DSP — Dual I/O is **not** a mono/stereo switch, and turning it off does not
+sum to mono or drop a channel. JUCE freezes the bus layout at construction, so the UI cannot grow
+or shrink the channel count — it only changes how many jacks you see:
+
+| Dual I/O | Visible audio jacks | Wiring |
+|---|---|---|
+| **Off (default)** | One `"Audio"` in and out | Dragging onto the jack fans both raw L/R legs (`polyVoiceSpan == 2`). A mono source is duplicated onto both legs. |
+| **On** | Separate `"Left"` / `"Right"` | Independent cables per leg — for mid/side tricks, dual-mono patches, or feeding only one side. |
+
+CV jacks (Drive, Rate, …) keep their **raw** channel indices so presets and the AI schema stay stable;
+in single-jack mode they simply shift one slot down in the visible column.
+
+Toggling Dual I/O **does not rewire existing cables away**. Raw ch0/ch1 stay connected; only jack
+visibility changes. If only the left output was patched (common when the next node is Audio Output),
+toggling Dual I/O on completes the pair (`L→L` / `R→R`) so the Right jack is not left hanging.
+Splitting only one end of a cable still draws the Right jack: the far end's collapsed `"Audio"` jack
+owns both raw legs, so the extra wire lands on that same jack rather than waiting for both modules
+to split. The control is a header icon (`Icon::ModuleDualIO`, a Y-fork into two jacks) with an
+on/off tooltip — not a labelled checkbox.
+
+Wavetable / Sampler keep permanent `Audio L` / `Audio R` jacks — their right leg lives on a
+non-contiguous raw block (`kRightBase`) for CV layout reasons, so they are not on this toggle.
+
 ## Output Level (shared stage)
 
 Modules whose output is **audio** carry a `Level` parameter (`outputLevel`, linear 0.0–1.0, default 1.0) so their output can be scaled without patching a VCA into the chain. Provided by `ModuleBase` as three opt-in pieces:
@@ -19,7 +45,7 @@ Adopting modules: **Distortion, Delay, Reverb, Chorus, Phaser, Flanger, Filter, 
 Rules that make this safe:
 
 - **Opt-in, never in the `ModuleBase` ctor.** "Gain" is wrong on pitch/gate CV outputs — scaling a V/oct pitch CV transposes it, and scaling a gate drops it under the `> 0.5f` trigger threshold that ADSR uses. Sequencer, ADSR, LFO, Poly MIDI, MIDI Keyboard and External MIDI therefore do **not** adopt it. Attenuverter does not either — it already *is* a gain/polarity stage.
-- **Added last in the parameter list.** Parameter position is load-bearing for positional `getParameters()[n]` call sites; appending keeps existing indices pointing at the same parameter. Pinned by `OutputLevelTests.LevelParameterIsAddedLast` and `…AttenuverterKeepsAmountAtParameterIndexOne`.
+- **Added last in the parameter list among value params.** Parameter position is load-bearing for positional `getParameters()[n]` call sites; appending keeps existing indices pointing at the same parameter. `addDualIOParameter()` (layout toggle) is added *before* Level so Level stays the last continuous control. Pinned by `OutputLevelTests.LevelParameterIsAddedLast` and `…AttenuverterKeepsAmountAtParameterIndexOne`.
 - **Modules that already have a level/gain parameter do not get a second one** — Oscillator, LFO, Noise and Voice Mixer have `level`; VCA has `gain`; Limiter has `inputGain`; Compressor has `makeupGain`.
 - **`numAudioChannels` excludes CV.** Only the leading audio channels are scaled; CV input channels are left for the module's own clearing logic. Filter passes `8` in poly mode and `1` in mono.
 - **Bypass/mute contract is unchanged.** `applyOutputLevel` is never reached on the bypass branch (dry pass-through stays untouched, so Level cannot silence a bypassed module) nor on mute (already cleared). See [`architecture.md`](architecture.md).

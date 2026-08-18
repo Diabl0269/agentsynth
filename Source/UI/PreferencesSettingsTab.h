@@ -27,10 +27,13 @@ public:
     void setSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
     bool isDoubleClickPortDisconnectEnabled() const;
     void setDoubleClickPortDisconnectEnabled(bool enabled);
+    bool getDefaultDualIOForNewModules() const;
+    void setDefaultDualIOForNewModules(bool enabled);
 
 private:
     void persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
     void persistDoubleClickPortDisconnect(bool enabled);
+    void persistDefaultDualIOForNewModules(bool enabled);
 
     juce::ApplicationProperties& appProperties;
     GraphEditor* graphEditor{nullptr}; // weak, owned by MainComponent
@@ -39,6 +42,9 @@ private:
     juce::Label smartConnectionLabel;
     juce::ComboBox smartConnectionCombo;
     juce::ToggleButton doubleClickDisconnectToggle{"Double-click port to disconnect"};
+    juce::Label defaultDualIOLabel;
+    juce::ComboBox defaultDualIOCombo;
+    juce::TextButton perModuleDefaultsButton{"Per-module I/O defaults..."};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PreferencesSettingsTab)
 };
