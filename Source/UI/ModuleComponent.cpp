@@ -103,16 +103,25 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     if (getType(module) != ModuleType::Attenuverter) {
         bypassButton = std::make_unique<juce::DrawableButton>("Bypass", juce::DrawableButton::ImageFitted);
         bypassButton->setClickingTogglesState(true);
+        bypassButton->setTooltip("Bypass");
         addAndMakeVisible(*bypassButton);
 
         muteButton = std::make_unique<juce::DrawableButton>("Mute", juce::DrawableButton::ImageFitted);
         muteButton->setClickingTogglesState(true);
+        muteButton->setTooltip("Mute");
         addAndMakeVisible(*muteButton);
 
         deleteButton = std::make_unique<juce::DrawableButton>("Delete", juce::DrawableButton::ImageFitted);
         deleteButton->setTooltip("Delete module");
         deleteButton->onClick = [this] { this->owner.requestDeleteModule(this->nodeId); };
         addAndMakeVisible(*deleteButton);
+
+        if (auto* mb = dynamic_cast<ModuleBase*>(module); mb != nullptr && mb->hasDualIOParameter()) {
+            dualIOButton = std::make_unique<juce::DrawableButton>("Dual I/O", juce::DrawableButton::ImageFitted);
+            dualIOButton->setClickingTogglesState(true);
+            updateDualIOTooltip();
+            addAndMakeVisible(*dualIOButton);
+        }
     }
 
     createSamplerControls();
@@ -181,6 +190,7 @@ void ModuleComponent::detachFromProcessor() {
     if (processorAlive) {
         bypassAttachment.reset();
         muteAttachment.reset();
+        dualIOAttachment.reset();
         sliderAttachments.clear();
         comboAttachments.clear();
         buttonAttachments.clear();
@@ -189,6 +199,7 @@ void ModuleComponent::detachFromProcessor() {
         // in ~ParameterAttachment which calls parameter->removeListener()
         (void)bypassAttachment.release();
         (void)muteAttachment.release();
+        (void)dualIOAttachment.release();
         while (sliderAttachments.size() > 0)
             (void)sliderAttachments.removeAndReturn(sliderAttachments.size() - 1);
         while (comboAttachments.size() > 0)
@@ -225,6 +236,10 @@ void ModuleComponent::applyHeaderButtonIcons() {
     if (deleteButton) {
         if (auto d = lf->getIcon(synth::theme::Icon::ModuleDelete))
             deleteButton->setImages(d.get());
+    }
+    if (dualIOButton) {
+        if (auto d = lf->getIcon(synth::theme::Icon::ModuleDualIO))
+            dualIOButton->setImages(d.get());
     }
 }
 
@@ -516,7 +531,7 @@ void ModuleComponent::createControls() {
                 label->setJustificationType(juce::Justification::centred);
                 addAndMakeVisible(label);
             } else if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param)) {
-                if (boolParam->paramID == "bypassed" || boolParam->paramID == "muted")
+                if (boolParam->paramID == "bypassed" || boolParam->paramID == "muted" || boolParam->paramID == "dualIO")
                     continue;
 
                 auto* toggle = toggles.add(new juce::ToggleButton(boolParam->getName(100)));
@@ -537,6 +552,9 @@ void ModuleComponent::createControls() {
                 } else if (boolParam->paramID == "muted") {
                     muteAttachment =
                         std::make_unique<juce::ButtonParameterAttachment>(*boolParam, *muteButton, nullptr);
+                } else if (boolParam->paramID == "dualIO" && dualIOButton) {
+                    dualIOAttachment =
+                        std::make_unique<juce::ButtonParameterAttachment>(*boolParam, *dualIOButton, nullptr);
                 }
             }
         }
@@ -1973,8 +1991,8 @@ void ModuleComponent::resized() {
     if (module == nullptr)
         return;
 
-    // Header icon buttons: delete (rightmost) → bypass → mute (leftmost of the three).
-    // Attenuverter path: all three are null → no-op.
+    // Header icon buttons: delete (rightmost) → bypass → mute → Dual I/O (when present).
+    // Attenuverter path: all four are null → no-op.
     if (deleteButton)
         deleteButton->setBounds(getWidth() - 26, 2, 22, 20);
 
@@ -1983,6 +2001,9 @@ void ModuleComponent::resized() {
 
     if (muteButton)
         muteButton->setBounds(getWidth() - 74, 2, 22, 20);
+
+    if (dualIOButton)
+        dualIOButton->setBounds(getWidth() - 98, 2, 22, 20);
 
     if (auto* macro = dynamic_cast<MacroControlModule*>(module)) {
         layoutMacroBank(macro->getMacroCount());
@@ -2156,6 +2177,18 @@ void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) 
                     safeThis->applyPolyStateChange();
             });
         }
+    } else if (param->paramID == "dualIO") {
+        // Dual I/O only remaps visible jacks onto the same raw ch0/ch1 — tearing cables down
+        // and rebuilding through resolvePolyLink would drop the right leg.
+        if (juce::MessageManager::existsAndIsCurrentThread()) {
+            applyDualIOLayoutChange();
+        } else {
+            juce::Component::SafePointer<ModuleComponent> safeThis(this);
+            juce::MessageManager::callAsync([safeThis] {
+                if (safeThis != nullptr)
+                    safeThis->applyDualIOLayoutChange();
+            });
+        }
     } else if (param->paramID == "macroCount") {
         // Resizing touches the component tree and the graph, so it must happen on the message
         // thread even though this callback can arrive from the audio thread.
@@ -2241,6 +2274,29 @@ void ModuleComponent::applyPolyStateChange() {
     const auto previousOutputMap = cachedOutputPortMap;
     captureLogicalPortMaps(); // adopt the new layout before the graph is touched
     owner.rewireForPolyChange(this, previousInputMap, previousOutputMap);
+    updateLayout();
+    owner.handleModuleResized(this);
+    repaint();
+}
+
+void ModuleComponent::updateDualIOTooltip() {
+    if (dualIOButton == nullptr)
+        return;
+    const bool dual = dynamic_cast<ModuleBase*>(module) != nullptr && static_cast<ModuleBase*>(module)->isDualIO();
+    dualIOButton->setTooltip(dual ? "Dual I/O on — separate Left and Right jacks"
+                                  : "Dual I/O off — one Audio jack (Left + Right)");
+}
+
+void ModuleComponent::applyDualIOLayoutChange() {
+    if (module == nullptr)
+        return;
+
+    captureLogicalPortMaps();
+    updateDualIOTooltip();
+    owner.completeStereoPairConnections(this);
+    updateLayout();
+    owner.handleModuleResized(this);
+    repaint();
 }
 
 void ModuleComponent::parameterGestureChanged(int parameterIndex, bool gestureIsStarting) {
@@ -2267,14 +2323,16 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
     if (port) {
         if (e.mods.isPopupMenu()) {
             // Right click -> Disconnect
-            // Show menu? Or just disconnect?
-            // User asked for "way to disconnect". Instant disconnect is fast.
-            // Or a menu "Disconnect".
             juce::PopupMenu m;
             m.addItem("Disconnect",
                       [this, port] { owner.disconnectPort(this, port->index, port->isInput, port->isMidi); });
 
             m.showMenuAsync(juce::PopupMenu::Options());
+        } else if (e.getNumberOfClicks() >= 2 && owner.getDoubleClickPortDisconnectEnabled()) {
+            // Issue #216: intercept the second click so it does not start another cable drag.
+            if (owner.isPortConnected(this, port->index, port->isInput, port->isMidi))
+                owner.disconnectPort(this, port->index, port->isInput, port->isMidi);
+            return;
         } else {
             // Start Connection Drag
             owner.beginConnectionDrag(this, port->index, port->isInput, port->isMidi, e.getScreenPosition());

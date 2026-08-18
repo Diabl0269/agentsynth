@@ -254,17 +254,18 @@ Each category section-header entry in `ModuleLibraryComponent::paint()` draws a 
 
 ### ModuleComponent header button layout
 
-The header area of each module card (`Source/UI/ModuleComponent.cpp`) contains three `DrawableButton` instances (not `TextButton`), positioned in `resized()`:
+The header area of each module card (`Source/UI/ModuleComponent.cpp`) contains `DrawableButton` instances (not `TextButton`), positioned in `resized()`:
 
 | Button | Bounds | Action |
 |---|---|---|
-| `deleteButton` | `(w-26, 2, 22, 20)` | Calls `owner.requestDeleteModule(nodeId)` |
-| `bypassButton` | `(w-50, 2, 22, 20)` | Toggles bypass state |
-| `muteButton` | `(w-74, 2, 22, 20)` | Toggles mute state |
+| `deleteButton` | `(w-26, 2, 22, 20)` | Calls `owner.requestDeleteModule(nodeId)` — tooltip "Delete module" |
+| `bypassButton` | `(w-50, 2, 22, 20)` | Toggles bypass state — tooltip "Bypass" |
+| `muteButton` | `(w-74, 2, 22, 20)` | Toggles mute state — tooltip "Mute" |
+| `dualIOButton` | `(w-98, 2, 22, 20)` | FX / Voice Mixer only — splits or merges the stereo jack pair. Tooltip names Dual I/O. |
 
 `requestDeleteModule(NodeID)` is the canonical delete entry point — `deleteButton.onClick` delegates here.
 
-`applyHeaderButtonIcons()` retints all three buttons from the active `AppLookAndFeel`. It is null-guarded: when the LnF cast fails (headless tests), the function returns early and buttons remain imageless but functional. `lookAndFeelChanged()` calls `applyHeaderButtonIcons()` so icons update on theme switch.
+`applyHeaderButtonIcons()` retints the header buttons from the active `AppLookAndFeel`. It is null-guarded: when the LnF cast fails (headless tests), the function returns early and buttons remain imageless but functional. `lookAndFeelChanged()` calls `applyHeaderButtonIcons()` so icons update on theme switch.
 
 ### Panel collapse and persistence
 
@@ -586,7 +587,7 @@ a slightly different footprint.
 
 While placing a module, Agent Synth can **suggest logical cables** to nearby modules and auto-wire them on drop.
 
-### Modes (`Settings → Appearance → Smart connections`)
+### Modes (`Settings → Preferences → Smart connections`)
 
 Persisted as `smartConnectionMode` in `juce::ApplicationProperties`. Default: **When main I/O is free** (`NewAndUnwired`).
 
@@ -607,6 +608,16 @@ Group multi-select drags never smart-connect. Snippet drops are excluded.
 4. On drop / `finalizeModuleDrag`, pending suggestions are applied through `connectPorts` (same path as a manual cable drag: poly fans, MIDI, structural pitch/gate).
 
 Library drags cache a short-lived `AIStateMapper::createModule` probe for jack metadata before a real `ModuleComponent` exists.
+
+---
+
+## 8c. Double-click Port Disconnect
+
+Double-clicking a **connected** jack removes every cable on that port — the same path as the right-click **Disconnect** menu (`GraphEditor::disconnectPort`, which fans across every raw channel a visible jack owns). An unconnected jack is a no-op. The first click of a double-click still begins (and immediately ends) a cable drag; the second click is intercepted in `ModuleComponent::mouseDown` (`getNumberOfClicks() >= 2`) so it does not start another drag.
+
+### Preference (`Settings → Preferences → Double-click port to disconnect`)
+
+Persisted as `doubleClickPortDisconnect` in `juce::ApplicationProperties`. Default: **on**. Restored in `MainComponent::initialiseCommon()` so the canvas honours it without opening Settings. When off, double-clicking a jack behaves like two single clicks (cable drag).
 
 ---
 

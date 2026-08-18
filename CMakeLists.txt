@@ -335,6 +335,7 @@ juce_add_binary_data(Assets SOURCES
     assets/icons/waveform-triangle.svg
     # Minimap toggle (issue #159).
     assets/icons/toggle-minimap.svg
+    assets/icons/module-dual-io.svg
 )
 
 # The themed LookAndFeel lives in Core and pulls typefaces from BinaryData;
@@ -380,6 +381,8 @@ add_library(AppUI STATIC
     Source/UI/SettingsWindow.h
     Source/UI/AppearanceSettingsTab.cpp
     Source/UI/AppearanceSettingsTab.h
+    Source/UI/PreferencesSettingsTab.cpp
+    Source/UI/PreferencesSettingsTab.h
     Source/UI/ShortcutsSettingsTab.cpp
     Source/ShortcutManager.h
     Source/Update/UpdateManager.h

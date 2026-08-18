@@ -11,6 +11,7 @@ public:
         addParameter(depthParam = new juce::AudioParameterFloat("depth", "Bit Depth", 1.0f, 24.0f, 24.0f));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 1.0f));
         addParameter(ditherParam = new juce::AudioParameterFloat("dither", "Dither", 0.0f, 1.0f, 0.0f));
+        addDualIOParameter();
         addOutputLevelParameter();
         addMuteParameter();
         enableVisualBuffer(true);
@@ -133,10 +134,14 @@ public:
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String labels[] = {"Left", "Right", "Rate", "Depth", "Mix"};
-        return (i >= 0 && i < 5) ? labels[i] : ModuleBase::getInputPortLabel(i);
+        const juce::String cv[] = {"Rate", "Depth", "Mix"};
+        return stereoInputLabel(i, 3, cv);
     }
-    juce::String getOutputPortLabel(int i) const override { return i == 0 ? "Left" : "Right"; }
+    juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(3); }
+    int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 3); }
+    LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
     std::vector<ModulationTarget> getModulationTargets() const override {
         return {{"Rate", 2}, {"Depth", 3}, {"Mix", 4}};
