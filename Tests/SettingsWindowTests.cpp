@@ -1,5 +1,6 @@
 #include "../Source/AI/AIIntegrationService.h"
 #include "../Source/AI/AIProvider.h"
+#include "../Source/AI/LocalHistoryStore.h"
 #include "../Source/AudioEngine.h"
 #include "../Source/ShortcutManager.h"
 #include "../Source/UI/AIChatComponent.h"
@@ -200,6 +201,85 @@ TEST_F(SettingsWindowTest, EachProviderReadsItsOwnPersistedHost) {
         ASSERT_NE(hostEditor, nullptr);
         EXPECT_EQ(hostEditor->getText(), "https://remote.example");
     }
+}
+
+// ============================================================================
+// P6-8: local chat-history retention control (AI tab, added after provider/host controls)
+// ============================================================================
+
+namespace {
+// The retention combo is the SECOND ComboBox in the AI tab's child order (providerCombo is
+// first) — see SettingsWindow.cpp's comment on why it's added after providerCombo/hostEditor.
+juce::ComboBox* findHistoryRetentionCombo(juce::Component* aiTab) {
+    int comboIndex = 0;
+    for (auto* child : aiTab->getChildren()) {
+        if (auto* combo = dynamic_cast<juce::ComboBox*>(child)) {
+            if (comboIndex == 1)
+                return combo;
+            ++comboIndex;
+        }
+    }
+    return nullptr;
+}
+} // namespace
+
+TEST_F(SettingsWindowTest, HistoryRetentionDefaultsTo180Days) {
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr);
+    settingsWindow.setSize(600, 400);
+    settingsWindow.resized();
+
+    auto* aiTab = settingsWindow.getTabs().getTabContentComponent(1);
+    ASSERT_NE(aiTab, nullptr);
+    auto* retentionCombo = findHistoryRetentionCombo(aiTab);
+    ASSERT_NE(retentionCombo, nullptr);
+    EXPECT_EQ(retentionCombo->getText(), "180 days");
+}
+
+TEST_F(SettingsWindowTest, HistoryRetentionLoadsPersistedSelection) {
+    appProperties.getUserSettings()->setValue("historyRetentionDays", 90);
+
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr);
+    settingsWindow.setSize(600, 400);
+    settingsWindow.resized();
+
+    auto* aiTab = settingsWindow.getTabs().getTabContentComponent(1);
+    ASSERT_NE(aiTab, nullptr);
+    auto* retentionCombo = findHistoryRetentionCombo(aiTab);
+    ASSERT_NE(retentionCombo, nullptr);
+    EXPECT_EQ(retentionCombo->getText(), "90 days");
+}
+
+TEST_F(SettingsWindowTest, HistoryRetentionPersistsSelectionToAppProperties) {
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr);
+    settingsWindow.setSize(600, 400);
+    settingsWindow.resized();
+
+    auto* aiTab = settingsWindow.getTabs().getTabContentComponent(1);
+    ASSERT_NE(aiTab, nullptr);
+    auto* retentionCombo = findHistoryRetentionCombo(aiTab);
+    ASSERT_NE(retentionCombo, nullptr);
+
+    retentionCombo->setSelectedItemIndex(4, juce::sendNotificationSync); // "Keep forever"
+    EXPECT_EQ(appProperties.getUserSettings()->getIntValue("historyRetentionDays", -999),
+              synth::LocalHistoryStore::kRetainForever);
+}
+
+TEST_F(SettingsWindowTest, HistoryRetentionOutOfRangePersistedValueDisplaysAsDefault) {
+    appProperties.getUserSettings()->setValue("historyRetentionDays", 0); // hand-edited/corrupt value
+
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr);
+    settingsWindow.setSize(600, 400);
+    settingsWindow.resized();
+
+    auto* aiTab = settingsWindow.getTabs().getTabContentComponent(1);
+    ASSERT_NE(aiTab, nullptr);
+    auto* retentionCombo = findHistoryRetentionCombo(aiTab);
+    ASSERT_NE(retentionCombo, nullptr);
+    EXPECT_EQ(retentionCombo->getText(), "180 days");
 }
 
 TEST_F(SettingsWindowTest, RemembersLastSelectedTab) {
