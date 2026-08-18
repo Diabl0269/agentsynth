@@ -84,6 +84,13 @@ public:
     // PianoRollComponent::openClip via its own openPianoRoll(ClipId).
     std::function<void(synth::ClipId)> onClipDoubleClicked;
 
+    // "Loop the selection" (the P key — Cubase's locators-to-selection), fired with the selected
+    // clips' [min startBeat, max endBeat] span in absolute doc beats. The OWNER points the transport
+    // at it (MainComponent: setLoop(start, end, true)); this class holds a TransportService only to
+    // read its time signature and must never command it. Non-owning; may be unset, in which case P
+    // falls through like any other unhandled key.
+    std::function<void(double startBeat, double endBeat)> onLoopRangeRequested;
+
     // ---- Authoring: audio files (double-click an audio row, or drop files on one) ----
 
     // Fired with (audio track, floor-snapped start beat, the chosen/dropped file) — the OWNER
@@ -137,11 +144,15 @@ public:
     // goes through this callback (or a menu) at all.
     std::function<void(synth::ClipId)> onRelinkAudioRequested;
 
-    // Panel-scoped Delete/Escape (see GraphEditor's identical idiom). Grabs focus on mouseDown, so
+    // Panel-scoped Delete/Escape/P (see GraphEditor's identical idiom). Grabs focus on mouseDown, so
     // pressing Delete right after a click lands here rather than on whichever panel had focus
     // before. Returns false when there is nothing to act on so the key falls through — this is
     // only the local half of cross-panel key arbitration.
     bool keyPressed(const juce::KeyPress& key) override;
+
+    // The selected clips' [min startBeat, max endBeat] span in absolute doc beats, or nullopt when
+    // nothing selected resolves to a clip. What P hands to onLoopRangeRequested.
+    std::optional<std::pair<double, double>> getSelectedClipSpan() const;
 
     // Non-owning; may be null. Runs one refresh (see class comment) — the same thing
     // TimelinePanelComponent::timelineChanged() calls on every subsequent doc notification.

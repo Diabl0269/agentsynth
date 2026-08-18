@@ -952,7 +952,40 @@ void TimelineClipLaneArea::mouseMove(const juce::MouseEvent& e) {
 }
 
 //==============================================================================
+std::optional<std::pair<double, double>> TimelineClipLaneArea::getSelectedClipSpan() const {
+    if (doc_ == nullptr)
+        return std::nullopt;
+
+    bool any = false;
+    double start = 0.0, end = 0.0;
+    for (auto id : selection_.getSelected()) {
+        const auto* clip = doc_->getClip(id);
+        if (clip == nullptr)
+            continue; // a selection entry the doc no longer has: skipped, never guessed at
+        const double clipStart = clip->startBeat;
+        const double clipEnd = clip->startBeat + clip->lengthBeats;
+        start = any ? std::min(start, clipStart) : clipStart;
+        end = any ? std::max(end, clipEnd) : clipEnd;
+        any = true;
+    }
+
+    if (!any || !(end > start))
+        return std::nullopt;
+    return std::make_pair(start, end);
+}
+
 bool TimelineClipLaneArea::keyPressed(const juce::KeyPress& key) {
+    // P = loop the selection (Cubase's locators-to-selection). Surface-local like Delete/Escape,
+    // NOT a ShortcutManager command: no selection (or no owner listening) returns false so a plain
+    // P keeps whatever meaning it has elsewhere.
+    if (key == juce::KeyPress('p')) {
+        const auto span = getSelectedClipSpan();
+        if (!span || !onLoopRangeRequested)
+            return false;
+        onLoopRangeRequested(span->first, span->second);
+        return true;
+    }
+
     if (key == juce::KeyPress::escapeKey) {
         if (selection_.isEmpty())
             return false;

@@ -368,9 +368,10 @@ private:
     // Occupies the exact same rect as clipLaneArea_ (gridLanesBounds_), added right after
     // it (addChildComponent — not addAndMakeVisible, so it starts invisible) so z-order still
     // reads grid -> clips/piano-roll -> playhead. Only one of clipLaneArea_/pianoRoll_ is visible
-    // at a time; openPianoRoll()/closePianoRoll() toggle it. See PianoRollComponent's class
-    // comment for why its note x positions use viewState_.beatToX(beat) unmodified (no keys-
-    // column offset) — that is what keeps them aligned with playhead_ below.
+    // at a time; openPianoRoll()/closePianoRoll() toggle it. The roll owns its OWN beat<->x
+    // mapping (keys column as a real gutter, its own zoom/scroll), which is why it is registered as
+    // playhead_'s LocalPlayheadClient: while it is open the overlay skips its rows and hands it the
+    // drawn beat instead. See PianoRollComponent's class comment.
     synth::ui::PianoRollComponent pianoRoll_{viewState_};
     // Added LAST in the constructor so it sits on top of the ruler AND the clip lane area/piano
     // roll; spans ruler + lanes and intercepts no mouse clicks (see TimelinePlayheadOverlay's ctor).

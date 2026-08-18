@@ -579,6 +579,69 @@ TEST(TimelineClipLaneInteractionTest, EscapeKeyClearsSelection) {
     EXPECT_FALSE(f.lane.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey))) << "nothing left to clear";
 }
 
+// ---- Panel-scoped "P" = loop the selection ----
+
+TEST(TimelineClipLaneInteractionTest, LoopSelectionKeyReportsTheSelectionSpan) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 4.0, 4.0, "A");
+    ASSERT_TRUE(clipId.isValid());
+
+    double reportedStart = -1.0, reportedEnd = -1.0;
+    int calls = 0;
+    f.lane.onLoopRangeRequested = [&](double start, double end) {
+        reportedStart = start;
+        reportedEnd = end;
+        ++calls;
+    };
+
+    f.selection.setSelection({clipId});
+    EXPECT_TRUE(f.lane.keyPressed(juce::KeyPress('p')));
+    EXPECT_EQ(calls, 1);
+    EXPECT_DOUBLE_EQ(reportedStart, 4.0);
+    EXPECT_DOUBLE_EQ(reportedEnd, 8.0) << "the span is [startBeat, startBeat + lengthBeats]";
+
+    // The doc is untouched: this reports a range outwards, it never edits anything.
+    EXPECT_EQ(f.doc.getTrack(trackId)->clips.size(), 1u);
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(TimelineClipLaneInteractionTest, LoopSelectionKeySpansEverySelectedClip) {
+    ClipLaneFixture f;
+    const auto trackA = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto trackB = f.doc.addTrack(TrackKind::Midi, "Track 2");
+    const auto early = f.doc.addClip(trackB, 2.0, 1.0, "early"); // earliest start, on the LATER row
+    const auto late = f.doc.addClip(trackA, 16.0, 4.0, "late");  // latest end
+    const auto middle = f.doc.addClip(trackA, 8.0, 2.0, "middle");
+    const auto unselected = f.doc.addClip(trackB, 40.0, 4.0, "unselected");
+    ASSERT_TRUE(unselected.isValid());
+
+    double reportedStart = -1.0, reportedEnd = -1.0;
+    f.lane.onLoopRangeRequested = [&](double start, double end) {
+        reportedStart = start;
+        reportedEnd = end;
+    };
+
+    f.selection.setSelection({late, early, middle});
+    EXPECT_TRUE(f.lane.keyPressed(juce::KeyPress('p')));
+    EXPECT_DOUBLE_EQ(reportedStart, 2.0) << "min startBeat across the whole selection, any row";
+    EXPECT_DOUBLE_EQ(reportedEnd, 20.0) << "max endBeat — a clip outside the selection is ignored";
+}
+
+TEST(TimelineClipLaneInteractionTest, LoopSelectionKeyWithEmptySelectionReturnsFalse) {
+    ClipLaneFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    f.doc.addClip(trackId, 0.0, 4.0, "A");
+
+    int calls = 0;
+    f.lane.onLoopRangeRequested = [&](double, double) { ++calls; };
+
+    ASSERT_TRUE(f.selection.isEmpty());
+    EXPECT_FALSE(f.lane.keyPressed(juce::KeyPress('p'))) << "nothing selected: the key must bubble";
+    EXPECT_EQ(calls, 0);
+    EXPECT_FALSE(f.lane.getSelectedClipSpan().has_value());
+}
+
 // ---- Doc-change pruning ----
 
 TEST(TimelineClipLaneInteractionTest, DocChangeRefreshesAndPrunesSelection) {

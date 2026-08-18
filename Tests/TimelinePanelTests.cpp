@@ -480,6 +480,100 @@ TEST(TimelineRulerInteractionTest, HoveredZoneFollowsPointerHalfAndClearsOnExit)
     EXPECT_FALSE(ruler.getHoveredZoneForTest().has_value());
 }
 
+// The locators stay VISIBLE when looping is off: a range that exists is always braced, just greyed
+// out. Three states — range+armed, range+disarmed, no range at all.
+TEST(TimelineRulerInteractionTest, LoopBraceStaysVisibleWhileDisarmed) {
+    using Ruler = synth::ui::TimelineRulerComponent;
+    using BraceState = Ruler::BraceState;
+
+    // The pure rule first: only the range's existence decides whether a brace is drawn at all.
+    EXPECT_EQ(Ruler::braceStateFor(true, 2.0, 6.0), BraceState::Active);
+    EXPECT_EQ(Ruler::braceStateFor(false, 2.0, 6.0), BraceState::Inactive);
+    EXPECT_EQ(Ruler::braceStateFor(false, 2.0, 2.0), BraceState::None);
+    EXPECT_EQ(Ruler::braceStateFor(true, 6.0, 2.0), BraceState::None) << "a reversed range is not a range";
+
+    // ...and that a disarmed brace is drawn in a visibly DIFFERENT colour from an armed one (the
+    // muted text token, not a faded accent — the hover band is already accent at 10%).
+    const juce::Colour accent(0xff00D1FF), textMuted(0xff8A93A0);
+    EXPECT_EQ(Ruler::braceColourFor(BraceState::Active, accent, textMuted), accent);
+    EXPECT_NE(Ruler::braceColourFor(BraceState::Inactive, accent, textMuted), accent);
+
+    synth::ui::TimelineViewState state;
+    state.pixelsPerBeat = 40.0;
+
+    synth::TransportService transport;
+    transport.prepare(48000.0, 512);
+
+    Ruler ruler(state);
+    ruler.setSize(800, 24);
+    EXPECT_EQ(ruler.getBraceStateForTest(), BraceState::None) << "no transport: nothing to brace";
+
+    ruler.setTransport(&transport);
+    ASSERT_TRUE(transport.setLoop(2.0, 6.0, true));
+    transport.tick(512);
+    EXPECT_EQ(ruler.getBraceStateForTest(), BraceState::Active);
+
+    // Cmd+click disarms it — the brace must survive, dimmed, rather than vanishing.
+    const juce::ModifierKeys cmd(juce::ModifierKeys::commandModifier);
+    ruler.mouseDown(makeClickEvent(ruler, {100.0f, kLoopZoneY}, cmd));
+    transport.tick(512);
+    ASSERT_FALSE(transport.getPositionSnapshot().looping);
+    EXPECT_EQ(ruler.getBraceStateForTest(), BraceState::Inactive);
+
+    // A collapsed range has no locators to show at all.
+    ASSERT_TRUE(transport.setLoop(3.0, 3.0, true));
+    transport.tick(512);
+    EXPECT_EQ(ruler.getBraceStateForTest(), BraceState::None);
+
+    EXPECT_FALSE(ruler.createComponentSnapshot(ruler.getLocalBounds()).isNull());
+}
+
+// A plain click on the dimmed brace re-arms the existing range (the inverse of the Cmd+click that
+// disarmed it). Outside the brace's span, a no-drag loop-zone click stays inert.
+TEST(TimelineRulerInteractionTest, ClickOnDimmedBraceReArmsLooping) {
+    synth::ui::TimelineViewState state;
+    state.pixelsPerBeat = 40.0;
+    state.firstVisibleBeat = 0.0;
+    state.snap = synth::ui::TimelineViewState::Snap::Beat;
+
+    synth::TransportService transport;
+    transport.prepare(48000.0, 512);
+    ASSERT_TRUE(transport.setLoop(2.0, 6.0, false)); // a range exists, looping off -> dimmed brace
+    transport.tick(512);
+
+    synth::ui::TimelineRulerComponent ruler(state);
+    ruler.setTransport(&transport);
+    ruler.setSize(800, 24);
+    ASSERT_EQ(ruler.getBraceStateForTest(), synth::ui::TimelineRulerComponent::BraceState::Inactive);
+
+    // x = 400px -> beat 10: past the brace's [80, 240] px span, so nothing happens.
+    const juce::Point<float> outside(400.0f, kLoopZoneY);
+    ruler.mouseDown(makeClickEvent(ruler, outside));
+    ruler.mouseUp(makeClickEvent(ruler, outside));
+    transport.tick(512);
+    auto snap = transport.getPositionSnapshot();
+    EXPECT_FALSE(snap.looping) << "a click off the brace must not arm anything";
+    EXPECT_DOUBLE_EQ(snap.loopStartPpq, 2.0);
+    EXPECT_DOUBLE_EQ(snap.loopEndPpq, 6.0);
+
+    // x = 160px -> beat 4, inside [2, 6): re-arms, bounds untouched.
+    const juce::Point<float> onBrace(160.0f, kLoopZoneY);
+    ruler.mouseDown(makeClickEvent(ruler, onBrace));
+    ruler.mouseUp(makeClickEvent(ruler, onBrace));
+    transport.tick(512);
+    snap = transport.getPositionSnapshot();
+    EXPECT_TRUE(snap.looping);
+    EXPECT_DOUBLE_EQ(snap.loopStartPpq, 2.0);
+    EXPECT_DOUBLE_EQ(snap.loopEndPpq, 6.0);
+    EXPECT_EQ(ruler.getSeekPostCountForTest(), 0) << "a loop-zone click never moves the playhead";
+
+    // Clicking an ALREADY-armed brace stays inert (it is not a toggle — Cmd+click is).
+    ruler.mouseDown(makeClickEvent(ruler, onBrace));
+    ruler.mouseUp(makeClickEvent(ruler, onBrace));
+    transport.tick(512);
+    EXPECT_TRUE(transport.getPositionSnapshot().looping);
+}
+
 // Plain wheel scrolls (pixelsPerBeat untouched); Cmd+wheel zooms around the cursor, keeping the
 // beat under it fixed.
 TEST(TimelinePanelInteractionTest, WheelScrollsAndCmdWheelZooms) {
@@ -1170,6 +1264,40 @@ TEST_F(TimelineAppWiringTest, RecorderCapturesAGestureAndAProgrammaticLoadRecord
     recorder.setGlobalRecordEnable(false);
     transport.stop();
     transport.tick(512);
+}
+
+// ---- "P" on the clip lanes points the transport's loop at the selected clips ----
+
+TEST_F(TimelineAppWiringTest, LoopSelectionKeySetsTransportLoop) {
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    mc.setSize(1600, 900);
+    quiesceEngine(mc);
+
+    auto& doc = mc.getTimelineDoc();
+    const auto trackId = doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipA = doc.addClip(trackId, 4.0, 4.0, "A");
+    const auto clipB = doc.addClip(trackId, 12.0, 2.0, "B");
+    ASSERT_TRUE(clipA.isValid());
+    ASSERT_TRUE(clipB.isValid());
+
+    auto& panel = mc.getTimelinePanel();
+    auto& transport = mc.getAudioEngine().getTransport();
+    ASSERT_FALSE(transport.getPositionSnapshot().looping);
+
+    // Nothing selected: the key falls through and the transport is untouched.
+    EXPECT_FALSE(panel.getClipLaneArea().keyPressed(juce::KeyPress('p')));
+    transport.tick(512);
+    EXPECT_FALSE(transport.getPositionSnapshot().looping);
+
+    // Two clips selected -> the loop spans both, and looping is switched ON by the same gesture.
+    panel.getClipSelection().setSelection({clipA, clipB});
+    EXPECT_TRUE(panel.getClipLaneArea().keyPressed(juce::KeyPress('p')));
+    transport.tick(512);
+
+    const auto snap = transport.getPositionSnapshot();
+    EXPECT_TRUE(snap.looping);
+    EXPECT_DOUBLE_EQ(snap.loopStartPpq, 4.0);
+    EXPECT_DOUBLE_EQ(snap.loopEndPpq, 14.0);
 }
 
 #endif // SYNTH_ENABLE_TIMELINE

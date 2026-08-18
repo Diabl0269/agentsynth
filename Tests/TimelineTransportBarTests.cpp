@@ -13,6 +13,7 @@
 #include "../Source/AI/AIProvider.h"
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/Transport/TransportService.h"
+#include "../Source/UI/Theme/AppLookAndFeel.h"
 #include "../Source/UI/TimelinePanelComponent.h"
 #include "../Source/UI/TimelineTransportBar.h"
 #include "MainComponent.h"
@@ -175,6 +176,56 @@ TEST(TimelineTransportBarTest, EveryInteractiveChildHasATooltip) {
     }
     // The 4 glyph buttons, the count-in combo, and the BPM/time-sig labels.
     EXPECT_EQ(tooltipClientsChecked, 7);
+}
+
+// ---- 7. RecordReadsRedWhenEngaged ----
+
+// Record-red is a constant, not a theme token: an engaged record button must read as RED whatever
+// the theme's accent is (see TimelineTransportBar::kRecordRedArgb).
+TEST(TimelineTransportBarTest, RecordReadsRedWhenEngaged) {
+    synth::theme::AppLookAndFeel lf;
+    synth::ui::TimelineTransportBar bar;
+    bar.setSize(500, 28);
+
+    const juce::Colour recordRed(synth::ui::TimelineTransportBar::kRecordRedArgb);
+
+    EXPECT_NE(bar.getRecordGlyphColourForTest(), recordRed) << "idle record is a neutral outline";
+
+    bar.setRecordingState(true);
+    EXPECT_EQ(bar.getRecordGlyphColourForTest(), recordRed);
+
+    // With a real theme installed — whose accent every OTHER lit glyph uses — record stays red.
+    bar.setLookAndFeel(&lf);
+    EXPECT_EQ(bar.getRecordGlyphColourForTest(), recordRed);
+    EXPECT_NE(lf.getTheme().colors.accent, recordRed) << "the test is only meaningful if they differ";
+    bar.setLookAndFeel(nullptr);
+
+    bar.setRecordingState(false);
+    EXPECT_NE(bar.getRecordGlyphColourForTest(), recordRed);
+}
+
+// ---- 8. GlyphButtonsAreSquareAndSpaced ----
+
+// The founder read the button row as "really dense": the glyphs are drawn inside a square, so a
+// squat slot flattened every one of them, and 4 px gaps ran them together. Pinned at both the full
+// strip height and the height it actually gets once the panel's 5 px resize strip is trimmed off.
+TEST(TimelineTransportBarTest, GlyphButtonsAreSquareAndSpaced) {
+    synth::ui::TimelineTransportBar bar;
+
+    for (const int height : {28, 23}) {
+        bar.setSize(500, height);
+
+        for (auto* button :
+             {&bar.getPlayStopButton(), &bar.getRecordButton(), &bar.getLoopButton(), &bar.getMetronomeButton()}) {
+            const auto bounds = button->getBounds();
+            EXPECT_EQ(bounds.getWidth(), bounds.getHeight()) << "height " << height << ": a squat slot squashes it";
+            EXPECT_GE(bounds.getWidth(), 12) << "height " << height;
+            EXPECT_TRUE(bar.getLocalBounds().contains(bounds)) << "height " << height;
+        }
+
+        EXPECT_GE(bar.getRecordButton().getX() - bar.getPlayStopButton().getRight(), 6) << "height " << height;
+        EXPECT_GE(bar.getLoopButton().getX() - bar.getRecordButton().getRight(), 6) << "height " << height;
+    }
 }
 
 // ============================================================================

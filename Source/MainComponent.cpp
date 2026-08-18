@@ -596,6 +596,11 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
                                                                 juce::File file) {
         importAudioFileToClip(track, startBeat, file);
     };
+    // P on the clip lanes = loop the selection. The lane area knows the span; only this owns the
+    // transport (same division as every other callback above).
+    timelinePanel.getClipLaneArea().onLoopRangeRequested = [this](double startBeat, double endBeat) {
+        audioEngine.getTransport().setLoop(startBeat, endBeat, /*enabled=*/true);
+    };
     // BEFORE the first publish below — publishTimeline() syncs the clip streamer, and it can
     // only resolve an asset ref once it knows the roots.
     refreshAssetRoots();

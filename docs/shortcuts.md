@@ -65,7 +65,7 @@ What each surface does:
 |---|---|---|---|
 | Graph | Copies the selected modules (unchanged since before TL5-10) | Pastes at the next cascade position | Copies the selection one step down-right, clipboard untouched |
 | TimelineClips | Serialises the selected clips — notes, lengths, and starts relative to the earliest selected clip — into the panel's own clip clipboard | Re-inserts every clipboard clip onto **its original track**, re-based so the earliest clip lands at the transport's current position (snapped to the view-state's snap setting); a clip whose original track is gone lands on the doc's first `Midi`-kind track, or is skipped if there is none. One undo step for the whole paste; the pasted clips end up selected. | `TimelineDoc::duplicateClip` per selected clip, batched into one undo step; the new clips end up selected |
-| PianoRoll | *(inactive — v1 deliberate gap; the roll's own note-editing gestures, e.g. click-drag-to-draw and double-click-to-delete, cover copy/duplicate/undo already)* | *(inactive)* | *(inactive)* |
+| PianoRoll | *(inactive — v1 deliberate gap; the roll's own note-editing gestures, e.g. double-click-to-create and double-click-to-delete, cover copy/duplicate/undo already)* | *(inactive)* | *(inactive)* |
 
 `getCommandInfo` marks Paste active only when the **surface-matching** clipboard has something in
 it — the Graph clipboard and the TimelineClips clipboard are entirely separate, so copying modules
@@ -80,6 +80,7 @@ does not make Paste live on the clip lanes or vice versa.
 | Delete / Backspace | Canvas, modules selected | Delete every selected module (one undo step) |
 | Escape | Clip lanes, clips selected | Clear the clip selection |
 | Delete / Backspace | Clip lanes, clips selected | Delete every selected clip (one undo step) |
+| P | Clip lanes, clips selected | Loop the selection: sets the transport loop to the selected clips' `[min start, max end]` span and switches looping on |
 | Escape | Piano roll, notes selected | Clear the note selection |
 | Escape | Piano roll, nothing selected | Close the roll, back to the clip lanes |
 | Delete / Backspace | Piano roll, notes selected | Delete every selected note (one undo step) |
@@ -88,8 +89,9 @@ Escape is handled by `AIChatComponent::keyPressed()` and only acts while a reque
 otherwise it is passed through so it keeps whatever meaning the enclosing window gives it. It is not
 user-rebindable — it is a panel-local binding, not part of the `ShortcutManager` table.
 
-The canvas selection keys are handled by `GraphEditor::keyPressed()`, the clip-lane ones by
-`TimelineClipLaneArea::keyPressed()`, and the piano-roll ones by `PianoRollComponent::keyPressed()`
+The canvas selection keys are handled by `GraphEditor::keyPressed()`, the clip-lane ones (including
+`P`) by `TimelineClipLaneArea::keyPressed()`, and the piano-roll ones by
+`PianoRollComponent::keyPressed()`
 — all three are likewise **not** rebindable. This is deliberate: an unmodified `Delete` registered
 in the app-wide `ShortcutManager` table would fire from any panel that does not consume the key
 first — see the "surface routing" section above, which is exactly the same problem Cmd+C/V/D had

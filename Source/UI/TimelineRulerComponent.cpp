@@ -15,6 +15,8 @@ constexpr float kLoopBraceHeight = 4.0f;
 constexpr float kLoopBraceTickHeight = 8.0f;
 // Hover affordance: just enough tint to read which half is armed, not enough to fight the ticks.
 constexpr float kHoverBandAlpha = 0.10f;
+// A disarmed brace stays fully drawn, just greyed — see braceColourFor().
+constexpr float kInactiveBraceAlpha = 0.7f;
 
 // Same formula as TransportService::getPosition() (a beat is always a quarter note, regardless of
 // the file's notated denominator) — kept in sync there rather than shared, since that one lives on
@@ -45,14 +47,33 @@ TimelineRulerComponent::Zone TimelineRulerComponent::zoneAtY(float y) const noex
     return y < (float)getHeight() * 0.5f ? Zone::Loop : Zone::Playhead;
 }
 
+TimelineRulerComponent::BraceState TimelineRulerComponent::braceStateFor(bool looping, double loopStartBeat,
+                                                                         double loopEndBeat) noexcept {
+    if (!(loopEndBeat > loopStartBeat))
+        return BraceState::None;
+    return looping ? BraceState::Active : BraceState::Inactive;
+}
+
+juce::Colour TimelineRulerComponent::braceColourFor(BraceState state, juce::Colour accent,
+                                                    juce::Colour textMuted) noexcept {
+    return state == BraceState::Active ? accent : textMuted.withAlpha(kInactiveBraceAlpha);
+}
+
+TimelineRulerComponent::BraceState TimelineRulerComponent::getBraceStateForTest() const noexcept {
+    if (transport_ == nullptr)
+        return BraceState::None;
+    const auto snap = transport_->getPositionSnapshot();
+    return braceStateFor(snap.looping, snap.loopStartPpq, snap.loopEndPpq);
+}
+
 //==============================================================================
 void TimelineRulerComponent::mouseDown(const juce::MouseEvent& e) {
     if (transport_ == nullptr)
         return;
 
     if (e.mods.isCommandDown()) {
-        // Cmd+click: toggle looping off, keeping the existing bounds — v1 keeps this simple
-        // rather than also supporting re-enabling a brace from a plain click on it. Zone-agnostic.
+        // Cmd+click: toggle looping off, keeping the existing bounds. Zone-agnostic. The way back
+        // on is a plain click on the resulting dimmed brace (see mouseUp).
         const auto snap = transport_->getPositionSnapshot();
         transport_->setLoop(snap.loopStartPpq, snap.loopEndPpq, false);
         repaint();
@@ -95,10 +116,13 @@ void TimelineRulerComponent::mouseUp(const juce::MouseEvent& e) {
         return;
     }
 
-    // Loop zone: a click with no drag does nothing. Deliberate — the loop range is the only thing
-    // this half owns, and a stray click must not clear or collapse it.
-    if (e.mouseWasDraggedSinceMouseDown())
+    // Loop zone: a click with no drag does nothing, except on a dimmed brace — the loop range is
+    // the only thing this half owns, and a stray click must not clear or collapse it.
+    if (e.mouseWasDraggedSinceMouseDown()) {
         postLoopIfChanged(e);
+        return;
+    }
+    reArmLoopIfClickOnInactiveBrace(e);
 }
 
 void TimelineRulerComponent::mouseEnter(const juce::MouseEvent& e) { setHoveredZone(zoneAtY(e.position.y)); }
@@ -147,6 +171,21 @@ void TimelineRulerComponent::postLoopIfChanged(const juce::MouseEvent& e) {
     transport_->setLoop(start, end, true);
     lastPostedLoopStart_ = start;
     lastPostedLoopEnd_ = end;
+    repaint();
+}
+
+void TimelineRulerComponent::reArmLoopIfClickOnInactiveBrace(const juce::MouseEvent& e) {
+    const auto snap = transport_->getPositionSnapshot();
+    if (braceStateFor(snap.looping, snap.loopStartPpq, snap.loopEndPpq) != BraceState::Inactive)
+        return;
+
+    // The target is the brace's whole x-span across the loop half, not just the 4 px bar it draws:
+    // a 4 px strip is not a click target. Anything outside the span stays inert.
+    const double x = (double)e.position.x;
+    if (x < viewState_.beatToX(snap.loopStartPpq) || x > viewState_.beatToX(snap.loopEndPpq))
+        return;
+
+    transport_->setLoop(snap.loopStartPpq, snap.loopEndPpq, true);
     repaint();
 }
 
@@ -248,14 +287,17 @@ void TimelineRulerComponent::paint(juce::Graphics& g) {
         g.fillRect(band);
     }
 
-    // Loop brace: a bracket spanning [loopStartPpq, loopEndPpq] in the accent colour.
-    if (looping && loopEndBeat > loopStartBeat) {
+    // Loop brace: a bracket spanning [loopStartPpq, loopEndPpq]. Drawn whenever a RANGE exists —
+    // looping switched off greys it out rather than hiding it, so the locators stay findable (and
+    // a click on the grey brace re-arms them).
+    const auto braceState = braceStateFor(looping, loopStartBeat, loopEndBeat);
+    if (braceState != BraceState::None) {
         const double xStart = viewState_.beatToX(loopStartBeat);
         const double xEnd = viewState_.beatToX(loopEndBeat);
         if (xEnd >= 0.0 && xStart <= widthPx) {
             const float clampedStart = (float)juce::jlimit(0.0, widthPx, xStart);
             const float clampedEnd = (float)juce::jlimit(0.0, widthPx, xEnd);
-            g.setColour(accent);
+            g.setColour(braceColourFor(braceState, accent, textMuted));
             g.fillRect(clampedStart, 0.0f, std::max(1.0f, clampedEnd - clampedStart), kLoopBraceHeight);
             g.fillRect(clampedStart, 0.0f, 1.5f, kLoopBraceTickHeight);
             g.fillRect(clampedEnd - 1.5f, 0.0f, 1.5f, kLoopBraceTickHeight);

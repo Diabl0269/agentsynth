@@ -47,6 +47,20 @@ public:
     static constexpr float kLineWidth = 2.0f;
     static constexpr int kStripHalfWidth = 2;
 
+    // A sub-region of the overlay that maps beats to x through its OWN zoom/scroll — the piano
+    // roll, whose grid starts right of a keys gutter and scrolls/zooms independently of the shared
+    // TimelineViewState. While a client is attached AND reports itself active, the overlay treats
+    // that region as not its own: it neither draws nor requests a repaint inside it, and instead
+    // hands the DRAWN beat over on every refresh so the client can run the same strip-confined
+    // discipline against its own mapping. The panel still has exactly ONE playhead timer — this
+    // one; a client never starts another.
+    class LocalPlayheadClient {
+    public:
+        virtual ~LocalPlayheadClient() = default;
+        virtual bool isLocalPlayheadActive() const = 0;
+        virtual void setPlayheadBeat(double absoluteBeat) = 0;
+    };
+
     explicit TimelinePlayheadOverlay(TimelineViewState& viewState);
     ~TimelinePlayheadOverlay() override = default;
 
@@ -55,6 +69,13 @@ public:
     void setTransport(synth::TransportService* transport) noexcept { transport_ = transport; }
     synth::TransportService* getTransport() const noexcept { return transport_; }
 
+    // Non-owning; may be null (the default — with no client the overlay owns its whole rect and
+    // behaves exactly as it always did). See LocalPlayheadClient above.
+    void setLocalPlayheadClient(LocalPlayheadClient* client) noexcept { localClient_ = client; }
+    // The client's rect in THIS overlay's coordinates. The client is a sibling, so only the owner
+    // (TimelinePanelComponent::resized) knows the offset — it sets this alongside the bounds.
+    void setLocalPlayheadRegion(juce::Rectangle<int> region) noexcept { localRegion_ = region; }
+
     // THE drive seam. Called from the owner's LOW-RATE poll (10 Hz), never faster: it stores the
     // snapshot, starts/stops the 30 Hz timer on a play/stop transition, and requests a strip repaint
     // only when the rounded line x actually moved (plus the one guaranteed final strip on stop).
@@ -62,10 +83,19 @@ public:
 
     void paint(juce::Graphics& g) override;
 
+    // The beat the line is drawn at RIGHT NOW: the transport position offset backwards by the
+    // output latency, clamped >= 0 (see the class comment). This is also what a LocalPlayheadClient
+    // is handed — the beat, never a pixel, because the client maps it itself.
+    double getDrawnBeat() const noexcept;
+
     // The x (in this component's coordinates, which share TimelineViewState's origin) the line is
     // drawn at RIGHT NOW, latency offset included. Recomputed from the stored snapshot + view state
     // on every call — it is not cached, so a zoom/scroll changes it immediately.
     int getLineX() const noexcept;
+
+    // The part of this overlay the SHARED mapping still owns: everything, minus the local client's
+    // region while one is active. Both paint() and the repaint strips are confined to it.
+    juce::Rectangle<int> getSharedRegion() const noexcept;
 
     // The x the line was last DRAWN/REQUESTED at, in PIXEL space. Deliberately not re-derived from
     // the old beat: after a zoom the old beat maps somewhere new, but the stale pixels that must be
@@ -97,6 +127,8 @@ private:
 
     TimelineViewState& viewState_;
     synth::TransportService* transport_ = nullptr;
+    LocalPlayheadClient* localClient_ = nullptr;
+    juce::Rectangle<int> localRegion_;
 
     synth::TransportService::PositionSnapshot snapshot_{};
     double outputLatencySeconds_ = 0.0;

@@ -898,6 +898,8 @@ struct CountingPlayhead : synth::ui::TimelinePlayheadOverlay {
 
 **Reuse this pattern for any future timed repaint.** A repaint budget that cannot be asserted is a repaint budget that will regress.
 
+`PianoRollComponent` is the first reuse, and it is a *delegation*, not a fourth exception: the roll maps beats through its own zoom/scroll, so while it is open the overlay confines itself to `getSharedRegion()` (the ruler rows) and hands the roll the drawn beat through `TimelinePlayheadOverlay::LocalPlayheadClient`. The roll draws the line at its own x under an identical `requestRepaintStrip` seam and the identical no-move-no-repaint gate — still one timer for the whole panel, still zero repaints while stopped. See §16 (TL5-8).
+
 ---
 
 ## 6. Alignment Guides (UI Phase 7 - Item 4)
@@ -1535,8 +1537,8 @@ of that strip, left-aligned — see TL5-5 below) and persists under the `"timeli
 non-owning, may be null). `paint()` reads `getPositionSnapshot()` once per frame (message thread,
 cheap) for the time signature and loop bounds, draws bar ticks/labels with adaptive density (the
 labelled-bar stride doubles until labels are `>= 40px` apart, so they never overlap; per-beat ticks
-only appear once `pixelsPerBeat >= 8`) and, when the snapshot reports `looping`, a bracket over
-`[loopStartPpq, loopEndPpq]` in the theme's accent colour. No timer of its own: `repaint()` is called
+only appear once `pixelsPerBeat >= 8`) and a bracket over `[loopStartPpq, loopEndPpq]`.
+No timer of its own: `repaint()` is called
 after one of its own interactions, or by the panel's 10 Hz poll when the time signature or loop range
 changed from elsewhere (TL5-4, below). The moving position line is the separate
 `TimelinePlayheadOverlay` drawn over it.
@@ -1556,8 +1558,20 @@ gesture must never change meaning mid-flight.
 | Press in the bottom (playhead) zone | `transport->locateBeat()` to the snapped beat under the cursor — on **press**, not release |
 | Drag in the bottom zone | Keeps seeking as the pointer moves: the cursor follows the mouse (scrub) |
 | Press-drag-release in the top (loop) zone | `transport->setLoop(min, max, true)` to the snapped `[start,end]` range (dragging leftwards normalises) |
-| Click (no drag) in the top zone | **Nothing.** Deliberate: the loop range is all this half owns, so a stray click can't clear or collapse it |
-| Cmd+click (no drag), either zone | Toggles looping off, keeping the existing bounds (v1 — no re-enable-from-click) |
+| Click (no drag) in the top zone, **on a dimmed brace** | Re-arms that range (`setLoop(start, end, true)`), bounds untouched — the inverse of the Cmd+click below |
+| Click (no drag) in the top zone, anywhere else | **Nothing.** Deliberate: the loop range is all this half owns, so a stray click can't clear or collapse it |
+| Cmd+click (no drag), either zone | Toggles looping off, keeping the existing bounds |
+
+**Locator visibility.** The brace is drawn whenever a RANGE exists (`loopEnd > loopStart`) —
+**not** only while looping is armed. Disarming greys it out instead of hiding it, so a loop you set
+earlier stays findable (and re-armable) rather than disappearing the moment you switch looping off.
+`TimelineRulerComponent::braceStateFor(looping, start, end)` is the pure rule
+(`BraceState::None / Inactive / Active`) that `paint()` and the `getBraceStateForTest()` seam both
+call, so a drawn brace and an asserted one can't diverge; `braceColourFor()` picks the colour —
+`colors.accent` armed, `colors.textMuted` at 70% alpha disarmed. Muted *text*, not a faded accent:
+the hover band is already accent at 10% alpha, and a dimmed accent brace over it would still read as
+lit. The click target for the re-arm is the brace's whole x-span across the loop half, not the 4 px
+bar it paints (4 px is not a click target).
 
 Both drag paths share the same throttle discipline: a command is posted only when the snapped value
 changed since the last post, never once per pixel of movement (`TransportService`'s command FIFO
@@ -1745,13 +1759,31 @@ restricts; asking for a repaint is.
 
 `Source/UI/TimelineTransportBar.h/.cpp` (`synth::ui::TimelineTransportBar`) — play/stop, record,
 loop, BPM and time-signature editors, and the bar:beat readout, left-aligned in the transport-bar
-strip (the snap combo stays docked right, TL5-2 above). Buttons are ~22 px squares with `kGap = 4px`
-between them; the two editable labels and the readout follow, in that order.
+strip (the snap combo stays docked right, TL5-2 above). Buttons are **square** — `min(22 px, the
+strip height after padding)`, centred in their slot — with `kGap = 7px` between them and `kGap * 2`
+between groups; the two editable labels and the readout follow, in that order.
 
 **No SVG assets.** All three buttons are one `GlyphButton` (a `juce::Button` subclass) drawing a
 plain `juce::Path` per glyph in `paintButton` — a triangle/square for play-stop, a circle for
 record, an open arc with an arrowhead for loop. This mirrors the CLAUDE.md rule that themes never
 swap typefaces: a one-off shape for a single caller doesn't earn a new icon asset either.
+
+**Glyph geometry: one centred square, always.** Every glyph is drawn inside the button's shorter
+side, inset by `kGlyphInsetRatio` (24%) on each edge — never a fraction of the *width* applied to
+both axes, which is what flattened all four glyphs once the panel's 5 px resize grab strip left the
+bar ~19 px tall, and is exactly the "really dense" the founder reported. Everything scales off
+that square (the loop arc's stroke and arrowhead, the note's head/stem), so the row stays legible at
+any strip height. `Tests/TimelineTransportBarTests.cpp::GlyphButtonsAreSquareAndSpaced` pins
+squareness and the gaps at both the full and the trimmed strip height.
+
+> **Record-red is deliberately theme-independent.** An engaged record button is
+> `TimelineTransportBar::kRecordRedArgb` (`0xFFE53935`) — a filled red circle, a red border and a
+> faint red wash behind it — **whatever the theme's accent is**, and themes may not override it. A
+> hardware record LED is red on every desk; drawn in a cyan (or green) accent, "armed" stops reading
+> as armed at all. It is the one colour on this bar that is not a theme token — every other lit
+> glyph (play/stop, loop, metronome) still uses `colors.accent`. Idle record is a neutral outline
+> (`colors.textPrimary` at 75%), not a dim red one. `GlyphButton::glyphColour()` is the single
+> source for both the paint and the `getRecordGlyphColourForTest()` seam.
 
 **The transport is the truth, read fresh, not cached.** Every button click and every editor commit
 reads `TransportService::getPositionSnapshot()` **at the moment of the action**, rather than from a
@@ -1854,9 +1886,9 @@ the metronome pointer if the other has already been supplied.
 elsewhere. See `docs/architecture.md`'s Metronome subsection for the full count-in choreography
 (locate-back, forced-on click, the punch-in filter) this selector feeds.
 
-Layout: `metronomeButton_` (22 px) + 4 px gap + `countInCombo_` (64 px) + 8 px gap, inserted between
-the loop button and the BPM label — the bar's fixed-width strip grows by ~98 px, well inside the
-timeline panel's normal width.
+Layout: `metronomeButton_` (a square button, like its three siblings) + `kGap` + `countInCombo_`
+(64 px) + `kGap * 2`, inserted between the loop button and the BPM label — the bar's fixed-width
+strip grows by ~98 px, well inside the timeline panel's normal width.
 
 ### TL5-7: clip lanes
 
@@ -1915,6 +1947,7 @@ view-state changes (zoom/scroll/snap), and interactions — never a timer.
 | Drop audio files from the OS | Imports the first readable one onto the audio row under the cursor — see **Adding content** |
 | Delete / Backspace | Deletes every selected clip as ONE undo step; returns `false` (key falls through) when the selection is empty |
 | Escape | Clears the selection; returns `false` when it is already empty |
+| P | **Loop the selection** — sets the transport loop to the selected clips' `[min startBeat, max endBeat]` span and arms looping; returns `false` when nothing is selected |
 
 **One undo step per gesture.** Every drag/trim previews locally (a member offset or length, read
 back by `paint()` through `effectiveGeometryFor()`) and commits to the doc exactly once on
@@ -1987,6 +2020,18 @@ arbitration — this section's final **Keyboard & focus** subsection (TL5-10) fo
 cross-panel rule that decides which of the graph editor / clip lanes / piano roll a given keypress
 belongs to in the first place.
 
+**P = loop the selection** (Cubase's locators-to-selection) rides on that same local half: an
+unmodified `P` handled in `TimelineClipLaneArea::keyPressed`, **not** a `ShortcutManager` command,
+for exactly the reason Delete/Escape aren't (see [`shortcuts.md`](shortcuts.md) and TL5-10 below) —
+a bare letter in the app-wide table would fire from any panel that doesn't consume it first. The
+lane area owns no transport: `getSelectedClipSpan()` computes `[min startBeat, max endBeat]` across
+the selection (any row, ignoring anything unselected) and hands it outwards through
+`std::function<void(double startBeat, double endBeat)> onLoopRangeRequested`, which
+`MainComponent` wires to `transport.setLoop(start, end, /*enabled=*/true)` — the same
+"the lane decides what, the owner does it" division as `onAudioFileDropped`/`onRelinkAudioRequested`
+above. Nothing selected (or no owner listening) returns `false` so the key keeps its meaning
+elsewhere. The piano-roll surface has no equivalent yet.
+
 Tests: `Tests/TimelineClipLaneTests.cpp` — `ClipSelectionModel`/`clipHitTestMarquee` unit coverage,
 pure-geometry tests for `computeClipRect`, and interaction tests driven by hand-built
 `juce::MouseEvent`s (same pattern as TL5-2's ruler tests in `Tests/TimelinePanelTests.cpp`) against
@@ -2008,8 +2053,10 @@ plus a `noteHitTestMarquee` free function mirroring `clipHitTestMarquee`.
 **Entry/exit.** Double-clicking a clip in `TimelineClipLaneArea` fires its `onClipDoubleClicked(ClipId)`
 callback, which `TimelinePanelComponent`'s constructor wires to `openPianoRoll(ClipId)`. That call:
 hides `clipLaneArea_`, shows `pianoRoll_` (same rect — see Z-order below), and calls
-`PianoRollComponent::openClip`, which centres the pitch scroll on the clip's median note pitch (60
-for an empty clip). A drawn "◀ Clips" back button (top-left of the header strip) and Escape (when
+`PianoRollComponent::openClip`, which frames the clip: the pitch scroll centres on its median note
+pitch (60 for an empty clip), and the roll's own horizontal mapping is set so the clip's START sits
+at the keys column's right edge, zoomed so the whole clip fits the grid width (clamped to
+`TimelineViewState`'s pixels-per-beat bounds). A drawn "◀ Clips" back button (top-left of the header strip) and Escape (when
 nothing is selected — a first Escape only clears the selection) both call the roll's own
 `requestClose()`, which closes itself immediately (so `isOpen()` is accurate even with no owner
 wired) and fires `onCloseRequested` — the panel wires this to `closePianoRoll()`, which re-shows
@@ -2025,29 +2072,54 @@ added via `addChildComponent` (not `addAndMakeVisible`, so it starts invisible) 
 and the playhead overlay stays topmost and untouched either way (same bounds, same
 `viewState_.beatToX` mapping it always had).
 
-**Coordinate system — the one deliberate deviation from a conventional piano roll.** The design
-calls for a 44 px keys column at the left and a note grid to its right, both reading absolute beats
-off the SAME shared `TimelineViewState` so zoom/scroll stay consistent with the lanes and "the
-playhead lines up." A conventional layout would reserve the keys column as a margin and offset the
-grid's origin by its width — but `TimelinePlayheadOverlay` is untouched by this task (same bounds,
-same unmodified `beatToX(beat)` call), so an offset grid would drift out of alignment with it. The
-fix: note x positions use `viewState_.beatToX(beat)` **unmodified**, in exactly the same
-component-local coordinate frame `TimelineClipLaneArea` draws clips in (which is also
-`TimelinePlayheadOverlay`'s frame) — a note at absolute beat *B* always lands on the same pixel the
-playhead line would at beat *B*. The 44 px keys column is therefore not a margin that shifts that
-origin; it is a fixed opaque strip painted OVER the leftmost 44 px of that same frame (mouseDown/
-mouseDrag/mouseDoubleClick all gate `x < kKeysColumnWidth` as inert — no virtual-keyboard preview in
-v1). The trade-off — whatever beat is currently scrolled to local x == 0 sits visually under the
-keys column rather than being pushed rightward — is accepted for v1 and documented at the top of
-`PianoRollComponent.h`, not a bug.
+**Coordinate system — the roll owns its own horizontal mapping.** The keys column is a real 44 px
+GUTTER: `PianoRollComponent::beatToX(absBeat)` is `kKeysColumnWidth + (beat - firstVisibleBeat) *
+pixelsPerBeat` against the roll's OWN `TimelineViewState` member (`rollView_`), so `x ==
+kKeysColumnWidth` is the first visible beat and the clip's opening bar is reachable. (It previously
+was not: the column was an opaque strip painted OVER the leftmost 44 px of the shared mapping, with
+clicks there ignored — the first bar of a clip parked at x == 0 was unclickable and half-hidden.)
+The roll's zoom and scroll are its own; the panel-wide `TimelineViewState` is still shared, but for
+exactly ONE thing — the **snap division** (`snapBeat`/`divisionBeats`), so the roll's gridlines, its
+snapped edits and the panel's snap selector can never disagree.
 
-Vertically there is no such external constraint (nothing else on screen maps pitch to y), so pitch
-uses a plain fixed mapping: 10 px/semitone, `firstVisiblePitch_` names the HIGHEST pitch drawn at
-the grid's top row, clamped to `[0, 127]`. A 20 px header strip sits above both the keys column and
-the grid, housing the back button and a "Q" (quantise) button — both plain `juce::Path`/text shapes,
-never a Unicode glyph through a themed font (the same "draw it, don't asset it" rule
-`TimelineTransportBar`'s `GlyphButton` follows, and the reason `TimelineViewState::divisionBeats`
-below and every label here go through `AppLookAndFeel` — see the CLAUDE.md font-swap invariant).
+**Playhead delegation** is the consequence, and the rule. `TimelinePlayheadOverlay` maps beats
+through the SHARED view state, so inside the roll's rect its x is simply wrong. Instead of adding a
+second timer, the overlay grew a delegation seam: `TimelinePlayheadOverlay::LocalPlayheadClient`
+(`isLocalPlayheadActive()` + `setPlayheadBeat(absBeat)`), plus `setLocalPlayheadRegion(rect)` — the
+client's rect in the overlay's own coordinates, set by `TimelinePanelComponent::resized()` (the
+sibling offset is only known there). While a client is active the overlay:
+
+- confines `paint()` and every repaint strip to `getSharedRegion()` — everything **above** the
+  client's rows, i.e. the ruler strip only; and
+- hands the client the DRAWN beat (position minus output latency, clamped ≥ 0) on **every**
+  `refreshLine`, *before* its own "did my x move?" gate — a differently-zoomed mapping can move on a
+  frame where the shared one didn't.
+
+`PianoRollComponent` then runs the identical confinement contract on its own side: its
+`requestRepaintStrip(Rectangle<int>)` is the paint-count seam (same pattern, same test style as
+`TimelinePlayheadTests.cpp`), a beat whose rounded x is unchanged requests **nothing** (so a stopped
+transport costs zero repaints), a moved beat requests the union of the old and new strips clipped to
+the grid rect, and the FIRST beat after an open costs exactly one strip (there was no line on screen
+yet). The line is drawn in `paint()` before the keys column and the header, so both clip it exactly
+the way they clip a note that has scrolled off to the left. There is still exactly ONE playhead
+timer in the whole panel — the overlay's, playing-only.
+
+Vertically, pitch maps at `pixelsPerSemitone_` px/semitone (default `kPixelsPerSemitone` = 10,
+Cmd+Shift+wheel scales it within `[kMinPixelsPerSemitone, kMaxPixelsPerSemitone]` = `[4, 40]`);
+`firstVisiblePitch_` names the HIGHEST pitch drawn at the grid's top row, clamped to `[0, 127]`. A
+20 px header strip sits above both the keys column and the grid, housing the back button and a "Q"
+(quantise) button — both plain `juce::Path`/text shapes, never a Unicode glyph through a themed font
+(the same "draw it, don't asset it" rule `TimelineTransportBar`'s `GlyphButton` follows, and the
+reason `TimelineViewState::divisionBeats` below and every label here go through `AppLookAndFeel` —
+see the CLAUDE.md font-swap invariant).
+
+**Gridlines** are drawn from state alone, faintest level first so a bar line always wins a shared
+pixel: the current snap division at alpha 0.14 (only when it is finer than a beat — `Snap::Off` has
+no division at all), beats at 0.30, bars at 0.75. Each level is dropped entirely when its spacing
+falls under `kMinGridLinePixels` (3 px), the same adaptive-density idea the panel's own grid uses.
+`visibleLineRange(spacingBeats)` is the ONE range computation `paintGridLines` and the
+`getGridLineCountForTest` seam both walk, so the assertion can never drift from the paint. Changing
+the snap selector repaints the roll (`TimelinePanelComponent`'s `snapCombo_.onChange`); no timer.
 
 **Rendering.** Row backgrounds alternate white/black-key tint (`colors.bg1` / `colors.surfaceHi`,
 the same tokens `ModuleComponent`'s themed `MidiKeyboardComponent` uses), a C-octave label per
@@ -2063,20 +2135,30 @@ so a multi-note move/scrub/delete is one undo step):
 
 | Gesture | Effect |
 |---|---|
-| Click empty grid, drag | DRAWS a note — pitch from the row, start/length Snap-quantised, floored at one snap unit (or 1/16 beat when Snap is Off); velocity 100, channel 1. A plain click with no drag still commits a minimum-length note. |
+| **Single click on empty grid** | DESELECTS (click-through). Creates nothing, writes no undo step. |
+| **Double-click on empty grid** | Creates ONE note: pitch from the row, start snapped, length exactly **one snap division** (1 bar quantise → a 1-bar note; 1/4 → a quarter; 1/16 beat when Snap is Off), velocity 100, channel 1. Selected, one undo step. Snapping up past the clip's end steps back one division rather than creating nothing. |
 | Shift+drag from empty grid | Marquee (intersection hit-test, additive with Cmd/Ctrl) |
-| Click a note | Selects it (Shift adds); drag the body moves it (+ every other selected note, by one shared snapped beat delta and one shared semitone delta) |
-| Drag within 5 px of a note's right edge | Resizes (trims) just that note's length, Snap-quantised, floored at 1/16 beat — even inside a wider selection |
-| Double-click a note | Deletes it, one step |
+| Click a note | Selects it; **Shift** toggles it in/out of the selection, **Cmd** adds it (never removes — the drag that may follow scrubs the whole selection) |
+| Drag a note's body | Moves it + every other selected note, by one shared snapped beat delta and one shared semitone delta |
+| Drag within 5 px of a note's right edge | Resizes (trims) just that note's length, Snap-quantised, floored at one division (1/16 beat when Snap is Off) — even inside a wider selection |
+| **Double-click a note** | Deletes it, one step (standard DAW idiom — the mirror of double-click-to-create) |
 | Delete / Backspace | Deletes the selection, one step; returns `false` when the selection is empty |
 | Escape | Clears the selection; closes the roll when nothing is selected |
 | Cmd+vertical-drag on a note | Scrubs velocity, ~1/px, clamped to `[1, 127]` independently per note (multi-selection scrubs all by the same delta) |
-| "Q" button | Quantises the selected notes' starts to the current Snap (per-note `moveNote`, one mutation lambda — `TimelineDoc::quantiseNotes` has no note-subset overload); with nothing selected, quantises every note in the clip via `quantiseNotes` directly. A no-op when Snap is Off. |
+| "Q" button | Quantises the SELECTED notes' starts to the current Snap (per-note `moveNote`, one mutation lambda — `TimelineDoc::quantiseNotes` has no note-subset overload); with **nothing selected it quantises every note in the clip** via `quantiseNotes` directly. Tooltip: *"Quantize selected notes to the current grid — or all notes when nothing is selected"*. Paints dimmed when it would do nothing (Snap Off, or a clip with no notes), flashes on every click, and writes NO undo step when the clip is already quantised (`recordTimelineChange` drops no-op mutations). |
 
-**Pencil-by-default, not deferred-click.** Unlike `TimelineClipLaneArea`'s deferred-empty-click
-trick (needed there to tell "deselect" from "marquee begins"), a plain drag from empty grid here
-*always* draws — there is no ambiguity to defer, so no pending-click state exists. Marquee is
-reached only through Shift, decided entirely at `mouseDown`.
+**No pencil-by-default any more.** Creating a note is the double-click; a single click on empty grid
+is a plain deselect, and a plain drag from empty grid does nothing at all. Marquee is reached only
+through Shift, decided entirely at `mouseDown`. JUCE dispatches `mouseDoubleClick` from
+`internalMouseUp` — i.e. AFTER the second `mouseDown`/`mouseUp` pair — so the deselect (or the
+select-a-note) has already happened by the time the create/delete runs; the double-click is the last
+word either way.
+
+The Q button's flash is a **one-shot** `juce::Timer` (`kQuantiseFlashMs` = 120; `timerCallback()`
+stops the timer on its first call) repainting only the button's own rect — bounded, never a running
+animation, per the CLAUDE.md repaint invariant. The tooltip is served by `juce::TooltipClient`
+resolved by position (`getTooltipFor(Point<int>)`), since the header's buttons are drawn shapes, not
+child `juce::Button`s.
 
 **Edits stay inside the clip window.** `TimelineDoc` itself only clamps a note's `startBeat >= 0`
 finite — "notes can only exist inside the clip" is this editor's own policy, enforced before every
@@ -2086,12 +2168,18 @@ its shared delta so the group's earliest start never goes below 0 and its latest
 Move branch, extended with an upper bound because notes, unlike clips, live inside one). A note
 whose available room shrinks to zero-length is rejected by `TimelineDoc::addNote`'s own validation.
 
-**Wheel.** Plain vertical wheel scrolls pitch (`kPitchScrollSemitonesPerWheelUnit`, clamped to
-`[0, 127]`); `deltaX` scrolls time through the shared `TimelineViewState`. Cmd+wheel is forwarded
-verbatim via `juce::Component::mouseWheelMove(e, wheel)` — the base implementation walks up to the
-nearest enabled ancestor, the same mechanism `TimelineRulerComponent` relies on by not overriding
-wheel handling at all — so `TimelinePanelComponent::mouseWheelMove`'s existing zoom-around-cursor
-code runs unmodified rather than being duplicated.
+**Wheel.** All four bindings are handled here and NOTHING bubbles to the panel — the roll's
+zoom/scroll are its own, so the shared `TimelineViewState` must not move when the wheel lands inside
+the roll:
+
+| Binding | Effect |
+|---|---|
+| Cmd+wheel | Horizontal zoom around the beat under the cursor (`rollView_.zoomAroundX`, anchor = `x - kKeysColumnWidth`), same `exp(deltaY * 2.0)` factor as the ruler's zoom so the two feel identical |
+| Cmd+Shift+wheel | Vertical zoom — scales `pixelsPerSemitone_` within `[4, 40]`, keeping the pitch under the cursor put |
+| Shift+wheel, or a trackpad's `deltaX` | Horizontal scroll (`kScrollPixelsPerWheelUnit` px per unit, converted to beats at the roll's own zoom) |
+| Plain wheel | Vertical (pitch) scroll, `kPitchScrollSemitonesPerWheelUnit`, clamped to `[0, 127]` |
+
+Zoom is not persisted across opens — `openClip` reframes to the clip every time.
 
 `TimelineViewState::divisionBeats(beatsPerBar)` (factored out of `snapBeat` for this task) exposes
 the current snap grid as a plain beat value — what `performQuantise()` feeds `quantiseNotes`/
@@ -2100,7 +2188,14 @@ the current snap grid as a plain beat value — what `performQuantise()` feeds `
 Tests: `Tests/PianoRollTests.cpp` — `NoteSelectionModel`/`noteHitTestMarquee` unit coverage (mirrors
 `TimelineClipLaneTests.cpp`'s groups 1–2) and `PianoRollComponent` interaction tests driven by
 hand-built `juce::MouseEvent`s against a bare `TimelineDoc` + `AppUndoManager` +
-`PianoRollComponent`, no `TimelinePanelComponent` needed.
+`PianoRollComponent`, no `TimelinePanelComponent` needed. The gesture table is pinned test by test
+(single click deselects and creates nothing; double-click creates one note per snap division, at two
+divisions; double-click deletes; click-select-then-drag moves, one step), as are the first-bar
+reachability fix, zoom-around-cursor's fixed point (plus "the shared view state never moves"), the
+gridline-density seam, and the local playhead — the last through `CountingRoll`, a subclass
+overriding `requestRepaintStrip`, exactly as `TimelinePlayheadTests.cpp` does for the overlay.
+Note: `juce::MouseWheelDetails` has no default member initialisers, so wheel tests construct it
+`{}`-initialised or a garbage `deltaX` decides the branch.
 
 ### TL5-9: automation strip
 
@@ -2129,7 +2224,8 @@ canvas. Panel API: `showAutomationLane(LaneId)` / `closeAutomationStrip()` /
 
 **`Source/UI/AutomationLaneEditor.h/.cpp`** (`synth::ui::AutomationLaneEditor`) is the curve canvas,
 editing ONE `synth::AutomationLane` at a time. X is the SAME shared `TimelineViewState` the clip
-lanes and piano roll use (so it lines up with the playhead pixel-for-pixel); Y maps the lane's own
+lanes use (so it lines up with the playhead pixel-for-pixel — the piano roll is the one surface that
+maps beats through its own zoom/scroll instead; see TL5-8); Y maps the lane's own
 `RangeSnapshot [min..max]` linearly onto the component's height, top = max
 (`valueToY`/`yToValue`). The curve is sampled every ~2 px by building a local
 `TimelineSnapshot::Point[]` from the lane's breakpoints and calling `AutomationKernel::evaluate`

@@ -22,12 +22,25 @@ TimelinePlayheadOverlay::TimelinePlayheadOverlay(TimelineViewState& viewState)
 }
 
 //==============================================================================
-int TimelinePlayheadOverlay::getLineX() const noexcept {
+double TimelinePlayheadOverlay::getDrawnBeat() const noexcept {
     const double beatsPerSecond = std::max(0.0, snapshot_.bpm) / 60.0;
     // Draw where the audio being HEARD is, not where the block being rendered is.
-    const double drawPpq = std::max(0.0, snapshot_.ppq - outputLatencySeconds_ * beatsPerSecond);
-    const double x = std::clamp(viewState_.beatToX(drawPpq), -kMaxLineXMagnitude, kMaxLineXMagnitude);
+    return std::max(0.0, snapshot_.ppq - outputLatencySeconds_ * beatsPerSecond);
+}
+
+int TimelinePlayheadOverlay::getLineX() const noexcept {
+    const double x = std::clamp(viewState_.beatToX(getDrawnBeat()), -kMaxLineXMagnitude, kMaxLineXMagnitude);
     return (int)std::llround(x);
+}
+
+juce::Rectangle<int> TimelinePlayheadOverlay::getSharedRegion() const noexcept {
+    auto bounds = getLocalBounds();
+    if (localClient_ == nullptr || !localClient_->isLocalPlayheadActive() || localRegion_.isEmpty())
+        return bounds;
+    // The client's region is always a bottom-anchored band (the lanes rect below the ruler), so
+    // "not the client's rows" is a single setBottom rather than a rectangle subtraction.
+    bounds.setBottom(juce::jlimit(bounds.getY(), bounds.getBottom(), localRegion_.getY()));
+    return bounds;
 }
 
 juce::Rectangle<int> TimelinePlayheadOverlay::stripFor(int x) const noexcept {
@@ -73,6 +86,12 @@ void TimelinePlayheadOverlay::timerCallback() {
 }
 
 void TimelinePlayheadOverlay::refreshLine(bool force) {
+    // The local client is told the beat on EVERY refresh, before this overlay's own "did my x
+    // move?" gate: its mapping is zoomed differently, so its line can move on a frame where the
+    // shared one didn't. It runs the identical no-move-no-repaint gate on its own side.
+    if (localClient_ != nullptr && localClient_->isLocalPlayheadActive())
+        localClient_->setPlayheadBeat(getDrawnBeat());
+
     const int x = getLineX();
 
     if (!hasLineX_) {
@@ -89,15 +108,18 @@ void TimelinePlayheadOverlay::refreshLine(bool force) {
     lineX_ = x;
 
     // The union of where the line WAS (in pixels — see getLastRequestedLineX's note on why the old
-    // position is remembered in pixel space, not re-derived from the old beat) and where it now is.
-    const auto strip = stripFor(previousX).getUnion(stripFor(x)).getIntersection(getLocalBounds());
+    // position is remembered in pixel space, not re-derived from the old beat) and where it now is,
+    // clipped to the rows this overlay still owns (a local client owns the rest — and repaints it).
+    const auto strip = stripFor(previousX).getUnion(stripFor(x)).getIntersection(getSharedRegion());
     if (!strip.isEmpty())
         requestRepaintStrip(strip);
 }
 
 //==============================================================================
 void TimelinePlayheadOverlay::paint(juce::Graphics& g) {
-    const auto bounds = getLocalBounds();
+    // Only the rows the shared mapping still owns: while the piano roll is open it draws the line
+    // inside its own rect, at its own x.
+    const auto bounds = getSharedRegion();
     if (bounds.isEmpty())
         return;
 

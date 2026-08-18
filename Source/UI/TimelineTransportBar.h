@@ -27,7 +27,9 @@ class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 // outcome — see docs/architecture.md's MidiRecorder wiring entry.
 //
 // No SVG assets: the four transport glyphs (play/stop, record, loop, metronome) are drawn as plain
-// juce::Path/juce::Rectangle shapes in GlyphButton::paintButton.
+// juce::Path/juce::Rectangle shapes in GlyphButton::paintButton, each inside a centred square with
+// generous inset (see GlyphButton). Record engaged is the one theme-independent colour on the bar —
+// see kRecordRedArgb.
 //
 // Metronome + count-in: `metronomeButton_` is a direct on/off toggle (no owner-side veto, unlike
 // record). `countInCombo_` ("Off"/"1 bar"/"2 bars") is read by MainComponent's record flow at the
@@ -61,6 +63,17 @@ public:
     // (repaint-wise) when the state isn't actually changing.
     void setRecordingState(bool recording) noexcept;
     bool isRecordingForTest() const noexcept { return recordButton_.getToggleState(); }
+
+    // Record red, and DELIBERATELY theme-independent — a hardware record LED is red on every desk,
+    // and an engaged record button drawn in a theme's accent (cyan, green, magenta…) stops reading
+    // as "armed" at all. Themes may not override it: this is the one colour on the bar that is not
+    // a theme token. Every other lit glyph still uses theme.colors.accent.
+    static constexpr juce::uint32 kRecordRedArgb = 0xFFE53935;
+
+    // The colour the record glyph is painting in right now — red when engaged, a neutral text
+    // colour when idle. The same accessor paintButton() itself uses, so this is the drawn state,
+    // not a parallel guess at it.
+    juce::Colour getRecordGlyphColourForTest() const { return recordButton_.glyphColour(); }
 
     // Metronome + count-in. Non-owning; may be null (tests, or before MainComponent finishes
     // wiring) — the button click is then inert, matching setTransport's null contract. Whichever of
@@ -104,7 +117,9 @@ public:
 private:
     // A small juce::Button subclass that draws one of the transport glyphs as a plain path — see
     // the class comment. getToggleState() selects which visual each glyph shows: play vs stop for
-    // PlayStop, outline vs filled-red for Record, dim vs lit-accent for Loop and Metronome.
+    // PlayStop, outline vs filled-red for Record, dim vs lit-accent for Loop and Metronome. Every
+    // glyph is drawn inside a CENTRED SQUARE inset from the button, so a button that isn't square
+    // (the strip is only ~19 px tall once the resize grab strip is trimmed off) never squashes it.
     class GlyphButton : public juce::Button {
     public:
         enum class Glyph { PlayStop, Record, Loop, Metronome };
@@ -112,6 +127,11 @@ private:
             : juce::Button(name)
             , glyph_(glyph) {}
         void paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool shouldDrawDown) override;
+
+        // THE colour this glyph is drawn in — paintButton()'s only source, and the record button's
+        // red/idle test seam (see getRecordGlyphColourForTest). Record is the one glyph whose lit
+        // colour is not the theme accent (kRecordRedArgb).
+        juce::Colour glyphColour() const;
 
     private:
         Glyph glyph_;

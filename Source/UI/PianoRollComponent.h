@@ -2,6 +2,7 @@
 
 #include "../Timeline/TimelineDoc.h"
 #include "NoteSelectionModel.h"
+#include "TimelinePlayheadOverlay.h"
 #include "TimelineViewState.h"
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -15,38 +16,65 @@ namespace synth {
 class TransportService; // Forward declaration (Source/Transport/TransportService.h)
 }
 
-// PianoRollComponent — the minimal piano-roll editor for ONE clip, shown INSIDE the timeline
-// panel's lanes region (no separate window). TimelinePanelComponent swaps this in for
-// synth::ui::TimelineClipLaneArea (same rect, same z-order slot, below the playhead overlay)
-// when a clip is double-clicked, and swaps back on the back button, Escape-with-nothing-selected,
-// or the edited clip disappearing from the doc.
+// PianoRollComponent — the per-clip note editor shown INSIDE the timeline panel's lanes region (no
+// separate window). TimelinePanelComponent swaps this in for synth::ui::TimelineClipLaneArea (same
+// rect, same z-order slot, below the playhead overlay) when a clip is double-clicked, and swaps
+// back on the back button, Escape-with-nothing-selected, or the edited clip disappearing.
 //
 // Non-owning refs/pointers (TimelineViewState&, TimelineDoc* / AppUndoManager* / TransportService*)
 // may be null and degrade to "read but don't mutate". Every edit previews locally and commits to
 // the doc exactly once on mouse-up via AppUndoManager::recordTimelineChange, so a multi-note
 // move/resize/velocity-scrub/delete is ONE undo step however many notes it touches.
 //
-// Coordinate system: note x positions use viewState_.beatToX(beat) UNMODIFIED — the same call
-// TimelineClipLaneArea makes for a clip, in the same component-local coordinate frame — so a note
-// at a given absolute beat and the playhead line at that beat land on the same pixel. The 44 px
-// keys column is NOT a margin that shifts the grid's origin; it is an opaque strip painted OVER
-// the leftmost 44 px of that same frame (mouseDown/mouseDrag ignore x < kKeysColumnWidth). See
-// docs/layout.md §16.
+// Coordinate system: the roll owns its OWN horizontal mapping (beatToX/xToBeat below) — its own
+// zoom and its own scroll origin, independent of the panel-wide TimelineViewState. x ==
+// kKeysColumnWidth is the first visible beat, so the keys column is a real GUTTER and the first bar
+// of a clip is reachable rather than hidden under an opaque strip. The shared TimelineViewState is
+// still consulted for ONE thing: the snap division (snapBeat/divisionBeats), so the roll's grid,
+// its snapped edits and the panel's snap selector never disagree.
+//
+// Because that mapping differs from the panel's, the panel-wide TimelinePlayheadOverlay would draw
+// the playhead at the wrong x inside this rect. The roll therefore implements
+// TimelinePlayheadOverlay::LocalPlayheadClient: while it is open the overlay stops drawing and
+// repainting inside the roll's region and pushes the DRAWN beat here instead (setPlayheadBeat),
+// and the roll draws the line at its own x under the same strip-confined repaint discipline
+// (requestRepaintStrip — zero repaints while the position is unchanged, one strip while playing).
+// No timer is added here: the overlay's single playing-only timer still drives everything.
 //
 // Notes are clip-relative in the doc (MidiNote::startBeat); every doc read/write here converts to
 // absolute beats via clip->startBeat and back.
+//
+// See docs/layout.md §16 (TL5-8) for the gesture table.
 namespace synth::ui {
 
-class PianoRollComponent : public juce::Component {
+class PianoRollComponent
+    : public juce::Component
+    , public juce::TooltipClient
+    , public TimelinePlayheadOverlay::LocalPlayheadClient
+    , private juce::Timer {
 public:
     // Piano-roll-only constants; not shared with Theme::Metrics.
     static constexpr int kKeysColumnWidth = 44;
     static constexpr int kHeaderHeight = 20;
+    // Default vertical zoom, and its clamps (Cmd+Shift+wheel scales it — see mouseWheelMove).
     static constexpr double kPixelsPerSemitone = 10.0;
-    // Floor under a drawn/resized note's length when Snap is Off: TimelineViewState's finest grid unit.
+    static constexpr double kMinPixelsPerSemitone = 4.0;
+    static constexpr double kMaxPixelsPerSemitone = 40.0;
+    // Floor under a new/resized note's length when Snap is Off: TimelineViewState's finest grid unit.
+    // With Snap ON a NEW note is exactly one snap division long (1 bar quantise -> a 1-bar note).
     static constexpr double kMinNoteLengthBeats = 0.0625;
     // Resize handle zone at a note's right edge, in px (no left-edge resize in v1).
     static constexpr int kResizeZonePx = 5;
+    // Local playhead line: same width/strip margin the panel overlay uses, so the line reads as one
+    // stroke across the ruler and the roll.
+    static constexpr float kPlayheadLineWidth = TimelinePlayheadOverlay::kLineWidth;
+    static constexpr int kPlayheadStripHalfWidth = TimelinePlayheadOverlay::kStripHalfWidth;
+    // Momentary "Q was pressed" highlight, in ms. Driven by a ONE-SHOT juce::Timer (it stops itself
+    // in the first callback) and repainting only the button's own rect — bounded, never a loop.
+    static constexpr int kQuantiseFlashMs = 120;
+
+    static constexpr const char* kQuantiseTooltip =
+        "Quantize selected notes to the current grid \xE2\x80\x94 or all notes when nothing is selected";
 
     explicit PianoRollComponent(TimelineViewState& viewState);
     ~PianoRollComponent() override = default;
@@ -58,11 +86,22 @@ public:
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
     void mouseDoubleClick(const juce::MouseEvent& e) override;
+    // Cmd+wheel        -> horizontal zoom around the beat under the cursor
+    // Cmd+Shift+wheel  -> vertical zoom (pixels per semitone) around the pitch under the cursor
+    // Shift+wheel / trackpad deltaX -> horizontal scroll
+    // plain wheel      -> vertical (pitch) scroll
+    // Nothing bubbles to the panel: the roll's zoom/scroll are its own, so the shared
+    // TimelineViewState must not move when the wheel lands here.
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
 
     // Panel-scoped Delete/Escape. Returns false (key falls through) when there is nothing to act
     // on, the same TimelineClipLaneArea contract.
     bool keyPressed(const juce::KeyPress& key) override;
+
+    // juce::TooltipClient — the "Q" button's tooltip (the header's buttons are drawn shapes, not
+    // child juce::Buttons, so the tooltip is resolved by position).
+    juce::String getTooltip() override;
+    juce::String getTooltipFor(juce::Point<int> pos) const;
 
     // Non-owning; may be null. Same degrade-gracefully contract as every other timeline
     // sub-component's setter.
@@ -78,8 +117,10 @@ public:
     // straight to these three) ----
 
     // Opens the roll for `id`. A no-op (stays/becomes closed) if doc_ is null or `id` does not
-    // resolve to a live clip. Clears the note selection, resets any in-flight gesture, and centres
-    // the pitch scroll on the clip's median note pitch (60 for an empty clip).
+    // resolve to a live clip. Clears the note selection, resets any in-flight gesture, centres the
+    // pitch scroll on the clip's median note pitch (60 for an empty clip), and frames the clip
+    // horizontally: its start sits at the keys column's right edge, zoomed so the whole clip fits
+    // (subject to the pixels-per-beat clamps).
     void openClip(synth::ClipId id);
     void closeRoll();
     bool isOpen() const noexcept { return clipId_.isValid(); }
@@ -97,6 +138,34 @@ public:
     // the owner swaps back to the clip lanes. A no-op while closed.
     void refreshFromDoc();
 
+    // ---- The roll's OWN horizontal mapping ----
+
+    // Absolute beat <-> this component's x. x == kKeysColumnWidth is the first visible beat: the
+    // keys column is a gutter, NOT an overlay painted over the grid's leftmost pixels.
+    double beatToX(double absBeat) const noexcept;
+    double xToBeat(double x) const noexcept;
+
+    double getPixelsPerBeat() const noexcept { return rollView_.pixelsPerBeat; }
+    double getFirstVisibleBeat() const noexcept { return rollView_.firstVisibleBeat; }
+    double getPixelsPerSemitone() const noexcept { return pixelsPerSemitone_; }
+
+    // Pins the horizontal mapping directly (pixelsPerBeat clamped to TimelineViewState's zoom
+    // bounds, firstVisibleBeat clamped >= 0). openClip() derives both from the clip; this is what
+    // a test (or a future "restore my zoom" path) uses to set them explicitly.
+    void setHorizontalView(double pixelsPerBeat, double firstVisibleBeat);
+    void setPixelsPerSemitone(double pixelsPerSemitone);
+
+    // ---- TimelinePlayheadOverlay::LocalPlayheadClient ----
+    // While open, the panel overlay hands the drawn beat here instead of drawing inside this rect
+    // (its shared mapping would put the line at the wrong x). Same discipline as the overlay's own
+    // refreshLine: a beat whose rounded x did not move requests NOTHING.
+    bool isLocalPlayheadActive() const override { return isOpen(); }
+    void setPlayheadBeat(double absoluteBeat) override;
+
+    // The x the local playhead line is drawn at right now, in this component's coordinates.
+    int getPlayheadLineX() const noexcept;
+    bool hasPlayheadPosition() const noexcept { return hasPlayheadX_; }
+
     // ---- Test hooks (mirrors TimelineClipLaneArea's getClipRect / isMarqueeActiveForTest) ----
     juce::Rectangle<int> getBackButtonBounds() const noexcept { return backButtonBounds_; }
     juce::Rectangle<int> getQuantiseButtonBounds() const noexcept { return quantiseButtonBounds_; }
@@ -106,19 +175,37 @@ public:
     bool isMarqueeActiveForTest() const noexcept { return dragMode_ == DragMode::Marquee; }
     NoteSelectionModel& getSelectionForTest() noexcept { return selection_; }
 
+    // The snap division the grid currently draws its faintest lines at (0.0 for Snap::Off), and how
+    // many lines at a given spacing are inside the grid region — both computed from state alone, so
+    // a test can assert "the gridlines follow the snap division" without going near paint().
+    double getGridDivisionForTest() const noexcept { return currentGridBeats(); }
+    int getGridLineCountForTest(double spacingBeats) const noexcept;
+
+    // True while the "Q" button is showing its momentary pressed highlight, and whether it would do
+    // anything at all (a grid to snap to AND at least one note in the clip — it paints dimmed
+    // otherwise).
+    bool isQuantiseFlashingForTest() const noexcept { return quantiseFlash_; }
+    bool isQuantiseEnabled() const;
+
     // The live rect for a note id, using its CURRENT doc geometry (never a mid-drag preview) — the
     // same "what tests use to compute where to synthesize a mouse event" role
     // TimelineClipLaneArea::getClipRect plays. Returns an empty rect if the id does not resolve
     // (doc null, roll closed, or no such note).
     juce::Rectangle<int> getNoteRect(synth::NoteId id) const;
 
-    // Pure pitch<->y mapping for the current scroll position (no component, no doc) — what a test
-    // uses to place a synthetic mouse event at a target pitch row.
+    // Pure pitch<->y mapping for the current scroll position and vertical zoom (no component, no
+    // doc) — what a test uses to place a synthetic mouse event at a target pitch row.
     int yForPitch(int pitch) const noexcept;
     int pitchForY(int y) const noexcept;
 
+protected:
+    // THE paint-count seam for the local playhead line, mirroring
+    // TimelinePlayheadOverlay::requestRepaintStrip exactly (a test subclasses and counts). Every
+    // repaint the playhead costs here goes through it and nowhere else.
+    virtual void requestRepaintStrip(juce::Rectangle<int> strip);
+
 private:
-    enum class DragMode { None, Draw, Move, Resize, Marquee, VelocityScrub };
+    enum class DragMode { None, Move, Resize, Marquee, VelocityScrub };
 
     struct NoteHit {
         synth::NoteId id;
@@ -139,9 +226,7 @@ private:
 
     std::optional<NoteHit> hitTestNote(juce::Point<int> pos) const;
     std::vector<std::pair<synth::NoteId, juce::Rectangle<int>>> collectNoteRects() const;
-    // Absolute-beat span + pitch -> the note's rect in this component's own coordinate frame — see
-    // the class comment on why this is viewState_.beatToX(absBeat) UNMODIFIED (no keys-column
-    // offset).
+    // Absolute-beat span + pitch -> the note's rect, through the roll's OWN mapping (beatToX).
     juce::Rectangle<int> computeNoteRect(double absStartBeat, double absLengthBeats, int pitch) const;
     double currentBeatsPerBar() const;
     double currentGridBeats() const; // viewState_.divisionBeats(currentBeatsPerBar())
@@ -150,6 +235,9 @@ private:
     // only exist inside the clip. TimelineDoc itself has no upper clamp (only startBeat >= 0), so
     // this is the editor's own policy, applied before every doc write.
     void clampToClipWindow(double& start, double& length) const;
+    // The grid rect (right of the keys gutter, below the header) — what the local playhead strip
+    // and the gridline sweep are clipped to.
+    juce::Rectangle<int> gridRegion() const noexcept;
 
     // Effective (possibly mid-drag) clip-relative geometry / velocity for one note — read by
     // paint() and by commit-on-mouseUp, exactly like TimelineClipLaneArea::effectiveGeometryFor.
@@ -161,7 +249,9 @@ private:
     };
     NoteGeometry effectiveGeometryFor(const synth::MidiNote& note) const;
 
-    void beginDraw(juce::Point<int> pos);
+    // Double-click on empty grid: adds ONE note, snapped, exactly one snap division long (or
+    // kMinNoteLengthBeats when Snap is Off), selected, in one undo step.
+    void createNoteAt(juce::Point<int> pos);
     void beginMoveOrResize(const NoteHit& hit, juce::Point<int> pos);
     void beginVelocityScrub(juce::Point<int> pos);
     void beginMarquee(juce::Point<int> anchor, bool additive);
@@ -169,15 +259,37 @@ private:
     void endMarquee();
 
     void performQuantise();
+    void flashQuantiseButton();
+    void timerCallback() override; // one-shot: ends the quantise flash and stops itself
     void requestClose();
 
     void paintKeysColumn(juce::Graphics& g);
     void paintHeader(juce::Graphics& g);
     void paintGrid(juce::Graphics& g);
+    void paintGridLines(juce::Graphics& g, juce::Colour lineColour);
     void paintNote(juce::Graphics& g, const synth::MidiNote& note);
+    void paintPlayhead(juce::Graphics& g);
     void paintMarquee(juce::Graphics& g);
 
-    TimelineViewState& viewState_;
+    // [first, last] multiples of `spacingBeats` visible in the grid region — empty (last < first)
+    // when the lines would be closer together than kMinGridLinePixels. paintGridLines and
+    // getGridLineCountForTest walk the SAME range, so the seam can never drift from the paint.
+    struct LineRange {
+        long long first = 0;
+        long long last = -1;
+        int count() const noexcept { return last < first ? 0 : (int)(last - first + 1); }
+    };
+    LineRange visibleLineRange(double spacingBeats) const noexcept;
+
+    juce::Rectangle<int> playheadStripFor(int x) const noexcept;
+
+    TimelineViewState& viewState_; // shared: SNAP ONLY (see the class comment)
+    // The roll's own zoom/scroll. Reuses TimelineViewState purely for its clamped
+    // zoomAroundX/scrollBeats math; its x origin is the GRID's left edge, which beatToX/xToBeat
+    // offset by kKeysColumnWidth.
+    TimelineViewState rollView_;
+    double pixelsPerSemitone_ = kPixelsPerSemitone;
+
     synth::TimelineDoc* doc_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
     synth::TransportService* transport_ = nullptr;
@@ -196,11 +308,6 @@ private:
     synth::NoteId activeNote_;
     juce::Point<int> mouseDownPos_;
 
-    // ---- Draw preview (pencil-by-default gesture; see class comment) ----
-    double drawStartBeat_ = 0.0; // clip-relative, fixed anchor
-    int drawPitch_ = 60;
-    double drawLength_ = kMinNoteLengthBeats;
-
     // ---- Move preview (one or many notes, one shared snapped beat delta + semitone delta) ----
     std::vector<NoteOrigin> dragNotes_;
     double previewDeltaBeats_ = 0.0;
@@ -218,6 +325,13 @@ private:
     juce::Rectangle<int> marqueeRect_;
     bool marqueeAdditive_ = false;
     std::vector<synth::NoteId> marqueeBaseSelection_;
+
+    // ---- Local playhead (fed by TimelinePlayheadOverlay; no timer of our own) ----
+    double playheadBeat_ = 0.0;
+    int playheadLineX_ = 0;
+    bool hasPlayheadX_ = false;
+
+    bool quantiseFlash_ = false;
 
     juce::Rectangle<int> backButtonBounds_;
     juce::Rectangle<int> quantiseButtonBounds_;

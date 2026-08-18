@@ -69,6 +69,9 @@ TimelinePanelComponent::TimelinePanelComponent() {
         viewState_.snap = (TimelineViewState::Snap)(snapCombo_.getSelectedId() - 1);
         persistSnapChoice();
         ruler_.repaint();
+        // The roll's gridlines and its new-note length both come from the division — a snap change
+        // is the only thing that moves them, so this is where they are redrawn.
+        pianoRoll_.repaint();
     };
 
     // Added after everything else but BEFORE the playhead below, so clips draw above the
@@ -130,6 +133,10 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // Added LAST so it is topmost — it draws over the ruler, the lanes grid AND the clips.
     addAndMakeVisible(playhead_);
     playhead_.setComponentID("timelinePlayhead");
+    // The piano roll maps beats to x through its OWN zoom/scroll, so while it is open the overlay
+    // hands it the drawn beat and leaves its rows alone entirely — one timer, two mappings. The
+    // region itself is set in resized(), which is the only place the offset is known.
+    playhead_.setLocalPlayheadClient(&pianoRoll_);
 
     // After the playhead, so the top few pixels always belong to the resize gesture rather than to
     // the transport controls underneath. It never overlaps the playhead (which starts below the
@@ -221,6 +228,9 @@ void TimelinePanelComponent::openPianoRoll(synth::ClipId id) {
     clipLaneArea_.setVisible(false);
     pianoRoll_.setVisible(true);
     pianoRoll_.grabKeyboardFocus();
+    // Which rows of the overlay are still its own just changed — one repaint, on a user action,
+    // never per tick.
+    playhead_.repaint();
 }
 
 void TimelinePanelComponent::closePianoRoll() {
@@ -228,6 +238,7 @@ void TimelinePanelComponent::closePianoRoll() {
     pianoRoll_.setVisible(false);
     clipLaneArea_.setVisible(true);
     clipLaneArea_.grabKeyboardFocus();
+    playhead_.repaint(); // the overlay owns its whole rect again
 }
 
 //==============================================================================
@@ -685,6 +696,10 @@ void TimelinePanelComponent::resized() {
     // draws underneath the strip's own chrome.
     playhead_.setBounds(!automationStripBounds_.isEmpty() ? lanesBounds_.withTrimmedBottom(automationStripHeight)
                                                           : lanesBounds_);
+    // The piano roll's rect expressed in the OVERLAY's coordinates (both share lanesBounds_'s x
+    // origin; only the ruler strip separates their tops). While the roll is open the overlay skips
+    // exactly these rows — see TimelinePlayheadOverlay::LocalPlayheadClient.
+    playhead_.setLocalPlayheadRegion(gridLanesBounds_ - playhead_.getBounds().getPosition());
 
     // Strip header row (tool buttons, lane/record-mode pickers, close) above the curve
     // canvas. Visibility follows automationStripVisible_ exactly — nothing else flips it.
