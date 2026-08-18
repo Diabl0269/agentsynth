@@ -760,13 +760,13 @@ TEST(FXBypassTest, ParametricEQMuteSilencesOutput) {
             EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "Ch" << ch << " sample " << i;
 }
 
-// --- Ring Modulator --- (4 channels: Carrier/Modulator audio on 0+1, Mix/Drive CV on 2+3)
+// --- Ring Modulator --- (5 channels: Carrier/Modulator audio on 0+1, Mix/Drive/Character CV on 2-4)
 
 TEST(FXBypassTest, RingModulatorBypassPassesDryAudio) {
     RingModulatorModule module;
     module.prepareToPlay(44100.0, 512);
 
-    juce::AudioBuffer<float> buffer(4, 512);
+    juce::AudioBuffer<float> buffer(5, 512);
     buffer.clear();
     for (int i = 0; i < 512; ++i) {
         buffer.setSample(0, i, 0.7f);
@@ -787,30 +787,28 @@ TEST(FXBypassTest, RingModulatorBypassClearsCVChannels) {
     RingModulatorModule module;
     module.prepareToPlay(44100.0, 512);
 
-    juce::AudioBuffer<float> buffer(4, 512);
+    juce::AudioBuffer<float> buffer(5, 512);
     buffer.clear();
-    for (int i = 0; i < 512; ++i) {
-        buffer.setSample(2, i, 0.5f);
-        buffer.setSample(3, i, 0.5f);
-    }
+    for (int ch = 2; ch < 5; ++ch)
+        for (int i = 0; i < 512; ++i)
+            buffer.setSample(ch, i, 0.5f);
 
     module.setBypassed(true);
     juce::MidiBuffer midi;
     module.processBlock(buffer, midi);
 
-    for (int i = 0; i < 512; ++i) {
-        EXPECT_FLOAT_EQ(buffer.getSample(2, i), 0.0f) << "CV ch2 sample " << i;
-        EXPECT_FLOAT_EQ(buffer.getSample(3, i), 0.0f) << "CV ch3 sample " << i;
-    }
+    for (int ch = 2; ch < 5; ++ch)
+        for (int i = 0; i < 512; ++i)
+            EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "CV ch" << ch << " sample " << i;
 }
 
 TEST(FXBypassTest, RingModulatorMuteSilencesOutput) {
     RingModulatorModule module;
     module.prepareToPlay(44100.0, 512);
 
-    juce::AudioBuffer<float> buffer(4, 512);
+    juce::AudioBuffer<float> buffer(5, 512);
     buffer.clear();
-    for (int ch = 0; ch < 4; ++ch)
+    for (int ch = 0; ch < 5; ++ch)
         for (int i = 0; i < 512; ++i)
             buffer.setSample(ch, i, 0.7f);
 
@@ -818,7 +816,7 @@ TEST(FXBypassTest, RingModulatorMuteSilencesOutput) {
     juce::MidiBuffer midi;
     module.processBlock(buffer, midi);
 
-    for (int ch = 0; ch < 4; ++ch)
+    for (int ch = 0; ch < 5; ++ch)
         for (int i = 0; i < 512; ++i)
             EXPECT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "Ch" << ch << " sample " << i;
 }

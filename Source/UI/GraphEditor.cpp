@@ -70,7 +70,7 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Distortion")
         return {280, 355};
     if (typeName == "Ring Modulator")
-        return {280, 383};
+        return {280, 403};
     if (typeName == "Delay")
         return {280, 269}; // +1 knob row: the Level knob took it from 3 sliders to 4 (issue #122)
     if (typeName == "Reverb")

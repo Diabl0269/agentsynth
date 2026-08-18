@@ -41,9 +41,9 @@ CV control of Level is deliberately **not** implemented — it would need a new 
 - **Algorithm**: Parker diode-ring (DAFx-11). Four parallel piecewise-quadratic diode approximations
   `out = d(m + c/2) + d(-m + c/2) - d(m - c/2) - d(-m - c/2)`. This is **not** a clean multiply — Math's `Mult` output already covers that. The diode dead-zone is what gives the metallic, gated, bell-like character.
 - **Oversampling**: Same real-time-safe scheme as Distortion. `Off` / `2x` / `4x` (default `2x`); both oversamplers are pre-allocated in `prepareToPlay` and swapped via an `AudioProcessorParameter::Listener`. A latency-compensation delay line keeps the dry carrier aligned for wet/dry mixing. Oversampling is excluded from `getModulationTargets()`.
-- **I/O**: Carrier (ch0), Modulator (ch1), Mix CV (ch2), Drive CV (ch3). Stereo out is the mono ring-mod result duplicated to Left/Right. Dry is the unprocessed carrier. No internal carrier oscillator — patch an Oscillator into Carrier.
+- **I/O**: Carrier (ch0), Modulator (ch1), Mix CV (ch2), Drive CV (ch3), Character CV (ch4). Stereo out is the mono ring-mod result duplicated to Left/Right. Dry is the unprocessed carrier. No internal carrier oscillator — patch an Oscillator into Carrier.
 - **Parameters**: Drive (0.5–8, default 1), Mix (0–1, default 1), Character (0–1, default 0.5), Oversampling (Off/2x/4x), Level (0–1). Character maps the diode forward-bias / linear-region breakpoints (`vb` / `vl`) from near-clean multiply (`vb≈0.02`, `vl≈0.05`) to hard gated (`vb≈0.5`, `vl≈1.0`). Parker's typical `vb≈0.2` / `vl≈0.4` sits at the default.
-- **CV Inputs**: Mix (ch2), Drive (ch3).
+- **CV Inputs**: Mix (ch2), Drive (ch3), Character (ch4). Every continuous parameter has a CV jack; Oversampling does not.
 
 ## Delay Module
 - **Type**: Stereo feedback delay.

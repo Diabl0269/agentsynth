@@ -95,15 +95,18 @@ TEST_F(RingModulatorModuleTest, PortLabelsAndModulationTargets) {
     EXPECT_EQ(module->getInputPortLabel(1), "Modulator");
     EXPECT_EQ(module->getInputPortLabel(2), "Mix");
     EXPECT_EQ(module->getInputPortLabel(3), "Drive");
+    EXPECT_EQ(module->getInputPortLabel(4), "Character");
     EXPECT_EQ(module->getOutputPortLabel(0), "Left");
     EXPECT_EQ(module->getOutputPortLabel(1), "Right");
 
     auto targets = module->getModulationTargets();
-    ASSERT_EQ(targets.size(), 2u);
+    ASSERT_EQ(targets.size(), 3u);
     EXPECT_EQ(targets[0].name, "Mix");
     EXPECT_EQ(targets[0].channelIndex, 2);
     EXPECT_EQ(targets[1].name, "Drive");
     EXPECT_EQ(targets[1].channelIndex, 3);
+    EXPECT_EQ(targets[2].name, "Character");
+    EXPECT_EQ(targets[2].channelIndex, 4);
 }
 
 TEST_F(RingModulatorModuleTest, OversamplingNotInModulationTargets) {
@@ -128,12 +131,13 @@ TEST_F(RingModulatorModuleTest, MixDefaultIsFullyWet) {
 }
 
 TEST_F(RingModulatorModuleTest, ProcessBlockProducesOutputAndClearsCV) {
-    juce::AudioBuffer<float> buffer(4, kBlockSize);
+    juce::AudioBuffer<float> buffer(5, kBlockSize);
     buffer.clear();
     fillSines(buffer, 440.0f, 220.0f, kSampleRate);
     for (int i = 0; i < kBlockSize; ++i) {
         buffer.setSample(2, i, 0.4f);
         buffer.setSample(3, i, 0.4f);
+        buffer.setSample(4, i, 0.4f);
     }
 
     juce::MidiBuffer midi;
@@ -151,6 +155,7 @@ TEST_F(RingModulatorModuleTest, ProcessBlockProducesOutputAndClearsCV) {
     for (int i = 0; i < kBlockSize; ++i) {
         EXPECT_FLOAT_EQ(buffer.getSample(2, i), 0.0f);
         EXPECT_FLOAT_EQ(buffer.getSample(3, i), 0.0f);
+        EXPECT_FLOAT_EQ(buffer.getSample(4, i), 0.0f);
     }
 }
 
@@ -296,6 +301,31 @@ TEST_F(RingModulatorModuleTest, MixCVSweepsTowardDry) {
 
     for (int i = 64; i < kBlockSize; ++i)
         EXPECT_NEAR(buffer.getSample(0, i), original.getSample(0, i), 1.0e-3f) << "sample " << i;
+}
+
+TEST_F(RingModulatorModuleTest, CharacterCVMatchesFullKnob) {
+    setChoice(*module, "oversampling", 0);
+    setFloat(*module, "mix", 1.0f);
+
+    auto renderBlock = [&](float characterKnob, float characterCv) {
+        setFloat(*module, "character", characterKnob);
+        module->prepareToPlay(kSampleRate, kBlockSize);
+        juce::AudioBuffer<float> buffer(5, kBlockSize);
+        buffer.clear();
+        fillSines(buffer, 440.0f, 1300.0f, kSampleRate);
+        if (characterCv != 0.0f)
+            for (int i = 0; i < kBlockSize; ++i)
+                buffer.setSample(4, i, characterCv);
+        juce::MidiBuffer midi;
+        module->processBlock(buffer, midi);
+        return buffer;
+    };
+
+    auto viaKnob = renderBlock(1.0f, 0.0f);
+    auto viaCv = renderBlock(0.0f, 1.0f);
+
+    for (int i = 64; i < kBlockSize; ++i)
+        EXPECT_NEAR(viaCv.getSample(0, i), viaKnob.getSample(0, i), 1.0e-3f) << "sample " << i;
 }
 
 // High-frequency carrier × modulator produces a sum tone above Nyquist. At 1x that

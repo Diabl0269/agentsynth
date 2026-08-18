@@ -13,7 +13,7 @@ class RingModulatorModule
     , public juce::AudioProcessorParameter::Listener {
 public:
     RingModulatorModule()
-        : ModuleBase("Ring Modulator", 4, 2) // Carrier, Modulator, Mix CV, Drive CV
+        : ModuleBase("Ring Modulator", 5, 2) // Carrier, Modulator, Mix CV, Drive CV, Character CV
     {
         addParameter(driveParam = new juce::AudioParameterFloat("drive", "Drive", 0.5f, 8.0f, 1.0f));
         addParameter(mixParam = new juce::AudioParameterFloat("mix", "Mix", 0.0f, 1.0f, 1.0f));
@@ -94,9 +94,11 @@ public:
 
         const float* cvMix = (numChannels > 2) ? buffer.getReadPointer(2) : nullptr;
         const float* cvDrive = (numChannels > 3) ? buffer.getReadPointer(3) : nullptr;
+        const float* cvCharacter = (numChannels > 4) ? buffer.getReadPointer(4) : nullptr;
 
         bool cvMixActive = isChannelActive(cvMix, numSamples);
         bool cvDriveActive = isChannelActive(cvDrive, numSamples);
+        bool cvCharacterActive = isChannelActive(cvCharacter, numSamples);
 
         smoothedDrive.setTargetValue(*driveParam);
         smoothedMix.setTargetValue(*mixParam);
@@ -120,8 +122,10 @@ public:
             for (int i = 0; i < numSamples; ++i) {
                 float driveMod = cvDriveActive ? cvDrive[i] : 0.0f;
                 float drive = juce::jlimit(0.5f, 8.0f, smoothedDrive.getNextValue() + driveMod * 4.0f);
+                float characterMod = cvCharacterActive ? cvCharacter[i] : 0.0f;
                 float vb = 0.0f, vl = 0.0f;
-                characterToBreakpoints(smoothedCharacter.getNextValue(), vb, vl);
+                characterToBreakpoints(juce::jlimit(0.0f, 1.0f, smoothedCharacter.getNextValue() + characterMod), vb,
+                                       vl);
                 const float wet = diodeRing(carrier[i] * drive, modulator[i] * drive, vb, vl);
                 carrier[i] = wet;
                 modulator[i] = wet;
@@ -143,9 +147,13 @@ public:
                 for (size_t i = 0; i < oversampledBlock.getNumSamples(); ++i) {
                     int sampleIdx = static_cast<int>(i) / factor;
                     if (i % static_cast<size_t>(factor) == 0) {
-                        float driveMod = cvDriveActive ? cvDrive[std::min(sampleIdx, numSamples - 1)] : 0.0f;
+                        const int src = std::min(sampleIdx, numSamples - 1);
+                        float driveMod = cvDriveActive ? cvDrive[src] : 0.0f;
                         currentDrive = juce::jlimit(0.5f, 8.0f, smoothedDrive.getNextValue() + driveMod * 4.0f);
-                        characterToBreakpoints(smoothedCharacter.getNextValue(), currentVb, currentVl);
+                        float characterMod = cvCharacterActive ? cvCharacter[src] : 0.0f;
+                        characterToBreakpoints(
+                            juce::jlimit(0.0f, 1.0f, smoothedCharacter.getNextValue() + characterMod), currentVb,
+                            currentVl);
                     }
                     const float wet =
                         diodeRing(carrier[i] * currentDrive, modulator[i] * currentDrive, currentVb, currentVl);
@@ -186,12 +194,14 @@ public:
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String labels[] = {"Carrier", "Modulator", "Mix", "Drive"};
-        return (i >= 0 && i < 4) ? labels[i] : ModuleBase::getInputPortLabel(i);
+        const juce::String labels[] = {"Carrier", "Modulator", "Mix", "Drive", "Character"};
+        return (i >= 0 && i < 5) ? labels[i] : ModuleBase::getInputPortLabel(i);
     }
     juce::String getOutputPortLabel(int i) const override { return i == 0 ? "Left" : "Right"; }
 
-    std::vector<ModulationTarget> getModulationTargets() const override { return {{"Mix", 2}, {"Drive", 3}}; }
+    std::vector<ModulationTarget> getModulationTargets() const override {
+        return {{"Mix", 2}, {"Drive", 3}, {"Character", 4}};
+    }
 
     ModulationCategory getModulationCategory() const override { return ModulationCategory::FX; }
     ModuleType getModuleType() const override { return ModuleType::RingModulator; }
