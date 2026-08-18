@@ -688,16 +688,24 @@ Oscilloscope waveform display used by all modules that have a `VisualBuffer`.
 
 **Themed colours**: resolved via `dynamic_cast<AppLookAndFeel*>` — `border` for grid, `textDisabled` for no-signal label, `accent` for the waveform. When the cast fails (headless), hardcoded fallbacks are used (`0xff2A2F38`, `0xff5C6470`, limegreen).
 
-### TriggerMeterComponent (`Source/UI/TriggerMeterComponent.h`)
+### ThresholdControlComponent (`Source/UI/ThresholdControlComponent.h`)
 
-Live Trigger-jack level readout used by `SampleHoldModule` cards, so the module's `Threshold` can be
-set by eye against the actual incoming signal instead of guessed.
+Live threshold readout used by Sample & Hold (meter-only, bipolar), ADSR (slider + unipolar meter)
+and Comparator (slider + bipolar meter). The Decibels scale is ready for Compressor / Limiter to
+adopt later without a new widget.
 
-Draws a bipolar bar (-1 left, 0 centre, +1 right) that fills from the centre toward the signal's
-sign, a marker line at the **effective** threshold (knob + Threshold CV), and a pip that flashes for
-`getFlashFrames()` ticks on each capture. The bar switches to the `gateWire` colour while the Schmitt
-trigger is armed. Reads four atomics off the module: `getTriggerLevel()`, `getEffectiveThreshold()`,
-`isTriggerHigh()`, `getTriggerCount()`.
+`TriggerMeterComponent` is a compatibility alias for the same type.
+
+Two presentations:
+
+- **Meter-only**: a thin bar (18 px) matching the original Sample & Hold trigger meter. The module
+  keeps its own rotary for Threshold.
+- **Slider+meter**: a caption, a level bar, and a linear slider whose thumb is the threshold
+  "slice". The bar fills to the current input so the slice can be set by eye.
+
+The bar switches to the `gateWire` colour while the detector is armed. A marker sits at the
+**effective** threshold (knob + Threshold CV). Reads `ThresholdMeterSource`
+(`getMeterLevel()`, `getEffectiveThreshold()`, `isOverThreshold()`, `getTriggerCount()`).
 
 **Why it is a separate component, not something `ModuleComponent::paint` draws:** `ModuleComponent`
 is `setBufferedToImage(true)`, so painting a live meter inside its `paint()` would invalidate that
@@ -709,8 +717,9 @@ moves past a visible amount (see `needsRepaint`), leaving the parent's cached im
 
 | Helper | Signature | Notes |
 |---|---|---|
-| `valueToX` | `static float valueToX(float value, float x, float width) noexcept` | Maps bipolar [-1,1] → x offset within a width; clamps out-of-range input |
-| `needsRepaint` | `static bool needsRepaint(...) noexcept` | Mirrors the `timerCallback` repaint gate; lets the "no repaint while idle" rule be tested without a message loop |
+| `valueToNormalized` | `static float valueToNormalized(float, ThresholdScale, float minDb)` | Maps native units → [0, 1] |
+| `valueToX` | `static float valueToX(float, float x, float width, ThresholdScale, float minDb)` | Maps native units → x offset; bipolar default matches the original meter |
+| `needsRepaint` | `static bool needsRepaint(...) noexcept` | Mirrors the `timerCallback` repaint gate |
 | `getFlashFrames` | `static constexpr int getFlashFrames() noexcept` | Ticks the fired-flash stays lit |
 
 ### WavetableDisplayComponent (`Source/UI/WavetableDisplayComponent.h`)

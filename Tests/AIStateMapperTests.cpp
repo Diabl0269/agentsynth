@@ -270,12 +270,11 @@ TEST(AIStateMapperTest, MergeMode_UpdateExistingNodeParams) {
 TEST(AIStateMapperTest, FactorySupportsAllModuleTypes) {
     // Verify all expected module types can be created
     juce::StringArray expectedTypes = {
-        "Audio Input",   "Audio Output",   "Midi Input",    "Oscillator", "Filter",
-        "VCA",           "ADSR",           "Sequencer",     "LFO",        "Distortion",
-        "Delay",         "Reverb",         "MIDI Keyboard", "Amp Env",    "Filter Env",
-        "Poly MIDI",     "Poly Sequencer", "Attenuverter",  "Chorus",     "Phaser",
-        "Compressor",    "Flanger",        "Limiter",       "Bitcrusher", "Pitch Shifter",
-        "Parametric EQ", "Macros",         "Sample & Hold", "Math"};
+        "Audio Input",   "Audio Output",  "Midi Input", "Oscillator",    "Filter",         "VCA",
+        "ADSR",          "Sequencer",     "LFO",        "Distortion",    "Delay",          "Reverb",
+        "MIDI Keyboard", "Amp Env",       "Filter Env", "Poly MIDI",     "Poly Sequencer", "Attenuverter",
+        "Chorus",        "Phaser",        "Compressor", "Flanger",       "Limiter",        "Bitcrusher",
+        "Pitch Shifter", "Parametric EQ", "Macros",     "Sample & Hold", "Math",           "Comparator"};
     for (const auto& type : expectedTypes) {
         auto module = synth::AIStateMapper::createModule(type);
         EXPECT_NE(module, nullptr) << "Failed to create module: " << type.toStdString();
@@ -1137,20 +1136,21 @@ TEST(AIStateMapperTest, PolySequencerSurvivesRoundTrip) {
 // removing a parameter edits one row.
 TEST(AIStateMapperTest, ParamIdsGolden) {
     const std::map<juce::String, juce::String> golden = {
-        {"ADSR", "attack, bypassed, decay, muted, poly, release, sustain"},
-        {"Amp Env", "attack, bypassed, decay, muted, poly, release, sustain"},
+        {"ADSR", "attack, bypassed, decay, gateThreshold, muted, poly, release, sustain"},
+        {"Amp Env", "attack, bypassed, decay, gateThreshold, muted, poly, release, sustain"},
         {"Attenuverter", "amount, bypassed"},
         {"Audio Input", ""},
         {"Audio Output", ""},
         {"Bitcrusher", "bypassed, depth, dither, mix, muted, outputLevel, rate"},
         {"Chorus", "bypassed, centreDelay, depth, feedback, mix, muted, outputLevel, rate"},
+        {"Comparator", "bypassed, muted, trigThreshold"},
         {"Compressor", "attack, bypassed, makeupGain, muted, ratio, release, threshold"},
         {"Delay", "bypassed, feedback, mix, muted, outputLevel, time"},
         {"Distortion", "bypassed, drive, mix, muted, outputLevel, oversampling, type"},
         {"Envelope Follower", "attack, bypassed, detection, muted, release, sensitivity"},
         {"External MIDI", "bypassed, channel, deviceIndex"},
         {"Filter", "bypassed, cutoff, drive, filterType, muted, outputLevel, poly, resonance"},
-        {"Filter Env", "attack, bypassed, decay, muted, poly, release, sustain"},
+        {"Filter Env", "attack, bypassed, decay, gateThreshold, muted, poly, release, sustain"},
         {"Flanger", "bypassed, centreDelay, depth, feedback, mix, muted, outputLevel, rate"},
         {"LFO", "bipolar, bypassed, glide, level, mode, muted, rateHz, rateSync, retrig, shape"},
         {"Limiter", "bypassed, inputGain, muted, release, threshold"},
@@ -1220,6 +1220,7 @@ TEST(AIStateMapperTest, AuthorableModuleTypesGolden) {
                                       "Audio Output",
                                       "Bitcrusher",
                                       "Chorus",
+                                      "Comparator",
                                       "Compressor",
                                       "Delay",
                                       "Distortion",

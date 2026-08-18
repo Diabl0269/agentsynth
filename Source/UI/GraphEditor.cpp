@@ -57,7 +57,7 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "VCA")
         return {280, 245};
     if (typeName == "ADSR" || typeName == "Amp Env" || typeName == "Filter Env")
-        return {280, 220}; // sliders + the Poly toggle row — see the ADSR branch of updateLayout
+        return {280, 351}; // sliders below 2 jacks + threshold control + Poly toggle
     if (typeName.containsIgnoreCase("Sequencer") && !typeName.containsIgnoreCase("Poly"))
         return {synth::LayoutUtil::kDoubleWidth, 380};
     if (typeName.containsIgnoreCase("Poly") && typeName.containsIgnoreCase("Sequencer"))
@@ -87,6 +87,8 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         return {280, 251};
     if (typeName == "Sample & Hold")
         return {280, 563};
+    if (typeName == "Comparator")
+        return {280, 197};
     if (typeName == "Macros")
         // Height tracks the bank's "Knobs" count at runtime; the drop estimate uses the default.
         return {synth::LayoutUtil::kSingleWidth,

@@ -4,6 +4,7 @@
 #include "../Modules/ExternalMidiModule.h"
 #include "../Modules/FX/ChorusModule.h"
 
+#include "../Modules/ComparatorModule.h"
 #include "../Modules/EnvelopeFollowerModule.h"
 #include "../Modules/FX/BitcrusherModule.h"
 #include "../Modules/FX/CompressorModule.h"
@@ -81,6 +82,7 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Math", []() { return std::make_unique<MathModule>(); }},
     {"Macros", []() { return std::make_unique<MacroControlModule>(); }},
     {"Sample & Hold", []() { return std::make_unique<SampleHoldModule>(); }},
+    {"Comparator", []() { return std::make_unique<ComparatorModule>(); }},
     {"Sampler", []() { return std::make_unique<SamplerModule>(); }},
     {"Wavetable", []() { return std::make_unique<WavetableOscillatorModule>(); }},
     {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }}};
@@ -695,6 +697,8 @@ juce::String AIStateMapper::getFactoryTypeName(juce::AudioProcessor* processor) 
             return "Wavetable";
         case ModuleType::SampleHold:
             return "Sample & Hold";
+        case ModuleType::Comparator:
+            return "Comparator";
         case ModuleType::ExternalMidi:
             return "External MIDI";
         }

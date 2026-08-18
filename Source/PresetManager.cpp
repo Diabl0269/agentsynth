@@ -47,7 +47,7 @@ juce::String PresetManager::getPresetJSON(int index) {
     // (Heights shrank when ModuleComponent moved to a 3-knob grid; the authored positions below were
     //  computed against the older, taller cards, so they stay overlap-free — verified by
     //  E2EWorkflowTest.AllPresetsLoadWithoutOverlapAsAuthored, which measures the real components.)
-    //   Amp Env / Filter Env / ADSR: 280 x 180
+    //   Amp Env / Filter Env / ADSR: 280 x 351  (threshold control + 2 input jacks)
     //   Attenuverter:  40 x 40   (not a ModuleComponent; excluded from overlap check)
     //   Sequencer:   560 x 380   ← DOUBLE-wide (kDoubleWidth = 2 × kSingleWidth = 560)
     //   MIDI Keyboard: 560 x 150 ← DOUBLE-wide
@@ -302,7 +302,7 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"id": 5, "type": "Oscillator", "position": {"x": 350, "y": 10}, "params": {"waveform": "Saw", "poly": true, "unison": 2, "detune": 10.0, "level": 0.7}},
     {"id": 6, "type": "Filter", "position": {"x": 650, "y": 10}, "params": {"cutoff": 1200.0, "resonance": 0.15, "poly": true}},
     {"id": 7, "type": "VCA", "position": {"x": 950, "y": 10}, "params": {"gain": 0.8, "poly": true}},
-    {"id": 8, "type": "Amp Env", "position": {"x": 560, "y": 600}, "params": {"attack": 0.3, "decay": 0.4, "sustain": 0.7, "release": 1.5, "poly": true}},
+    {"id": 8, "type": "Amp Env", "position": {"x": 584, "y": 600}, "params": {"attack": 0.3, "decay": 0.4, "sustain": 0.7, "release": 1.5, "poly": true}},
     {"id": 10, "type": "Reverb", "position": {"x": 1250, "y": 10}, "params": {"roomSize": 0.8, "damping": 0.3, "wet": 0.5, "dry": 0.5, "width": 1.0}}
   ],
   "connections": [

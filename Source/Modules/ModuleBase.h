@@ -53,7 +53,8 @@ enum class ModuleType {
     Wavetable,
     MacroControl,
     SampleHold,
-    EnvelopeFollower
+    EnvelopeFollower,
+    Comparator
 };
 
 class ModuleBase : public juce::AudioProcessor {

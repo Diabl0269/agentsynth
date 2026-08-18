@@ -69,6 +69,8 @@ const std::vector<ModuleLevelPolicy>& levelPolicies() {
         {"Macros", LevelPolicy::NoLevelByDesign, nullptr, "Bank of assignable CV knobs."},
         {"Math", LevelPolicy::NoLevelByDesign, nullptr,
          "Signal-agnostic CV/audio utility — a level would silently rescale CV used for pitch or gates."},
+        {"Comparator", LevelPolicy::NoLevelByDesign, nullptr,
+         "Gate CV output — scaling a gate would drop it under the trigger threshold."},
         {"Sequencer", LevelPolicy::NoLevelByDesign, nullptr, "Pitch/gate CV and MIDI output."},
         {"Poly Sequencer", LevelPolicy::NoLevelByDesign, nullptr, "Pitch/gate CV and MIDI output."},
         {"MIDI Keyboard", LevelPolicy::NoLevelByDesign, nullptr, "MIDI output."},
