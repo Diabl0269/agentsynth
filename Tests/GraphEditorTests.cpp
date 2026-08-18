@@ -101,6 +101,30 @@ TEST_F(GraphEditorTest, DropModuleCreatesNode) {
     EXPECT_TRUE(foundOsc);
 }
 
+TEST_F(GraphEditorTest, NewDualIOModuleHonoursDefaultPreference) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+    editor.setDefaultDualIOForNewModules(true);
+
+    DummyDragSource dummySource;
+    juce::var description("Delay");
+    juce::DragAndDropTarget::SourceDetails details(description, &dummySource, juce::Point<int>(100, 100));
+    editor.itemDropped(details);
+
+    ModuleBase* delay = nullptr;
+    for (auto* node : engine.getGraph().getNodes()) {
+        if (node->getProcessor()->getName() == "Delay") {
+            delay = dynamic_cast<ModuleBase*>(node->getProcessor());
+            break;
+        }
+    }
+
+    ASSERT_NE(delay, nullptr);
+    ASSERT_TRUE(delay->hasDualIOParameter());
+    EXPECT_TRUE(delay->isDualIO());
+}
+
 // --- Audio-file drop on the canvas ------------------------------------------------------------
 // Dropping a sample on empty canvas should build a Sampler already holding it, so the user never has
 // to open the file chooser.

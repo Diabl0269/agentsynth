@@ -3382,6 +3382,7 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
     auto newProcessor = synth::AIStateMapper::createModule(name);
 
     if (newProcessor) {
+        applyDefaultDualIOForNewModule(*newProcessor);
         if (configure)
             configure(*newProcessor);
 
@@ -3448,6 +3449,18 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
             }
         }
     }
+}
+
+void GraphEditor::applyDefaultDualIOForNewModule(juce::AudioProcessor& processor) const {
+    if (!defaultDualIOForNewModules)
+        return;
+
+    auto* mb = dynamic_cast<ModuleBase*>(&processor);
+    if (mb == nullptr || !mb->hasDualIOParameter())
+        return;
+
+    if (auto* dual = findParameterByID(&processor, "dualIO"))
+        dual->setValueNotifyingHost(1.0f);
 }
 
 void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
