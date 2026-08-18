@@ -8,11 +8,26 @@ if(APPLE)
     enable_language(OBJCXX)
 endif()
 
-# Enable ccache if available
+# Enable ccache if available.
+#
+# The launcher is PER LANGUAGE, and CMake counts Objective-C++ as a language of its own. Wiring only
+# C/CXX left every .mm compile bypassing ccache entirely — 103 translation units per macOS build,
+# because JUCE ships each module as one ObjC++ unity file and every target compiles its own copy
+# (Core, AppUI, AgentSynth, the plugin, Tests and the two AI harnesses). Those units never change,
+# yet they were rebuilt cold on every CI run and dominated the critical path: ~12 min of a 12 min
+# 45 s macOS job, ending in a near-serial chain of 20–35 s juce_gui_basics / juce_audio_processors
+# compiles. It hid well, because ccache's own hit rate showed 54% — merely mediocre, not broken:
+# a compile that never reaches ccache is counted as neither a hit nor a miss. Guarded by
+# scripts/ci-cache-check.sh, which reads build.ninja and fails if any C/CXX/OBJC/OBJCXX compile
+# rule is missing its launcher.
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)
     set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
     set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    if(APPLE)
+        set(CMAKE_OBJC_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+        set(CMAKE_OBJCXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    endif()
 endif()
 
 # Set C++ standard

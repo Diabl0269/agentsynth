@@ -63,6 +63,7 @@ run() {
     local out status
     out="$(env -u CACHE_MATCHED_KEY -u DEPS_MATCHED_KEY -u CACHE_WARM_EXPECTED \
                -u CACHE_MIN_HIT_RATE -u CACHE_CHECK_ENFORCE -u CCACHE_STATS_FILE \
+               -u BUILD_NINJA BUILD_NINJA=/nonexistent/build.ninja \
                "$@" GITHUB_STEP_SUMMARY="$WORK/summary.md" bash "$CHECK" 2>&1)"
     status=$?
 
@@ -213,6 +214,79 @@ run "fail-safe: a genuinely cold cache (15%) still fails" 1 "::error::" \
     CACHE_WARM_EXPECTED=true \
     CACHE_CHECK_ENFORCE=true \
     CCACHE_STATS_FILE="$WORK/stats-cold.txt"
+
+# --- compiler-launcher audit ---------------------------------------------------------------
+# Regression cases for the Aug 2026 fault: CMake's compiler launcher is per language, so setting
+# only C/CXX left all 103 JUCE Objective-C++ units bypassing ccache — rebuilt cold every macOS run,
+# and invisible to the hit rate, because a compile that never reaches ccache counts as neither hit
+# nor miss. Only build.ninja can see it, so the check reads the generator's own output.
+cat >"$WORK/ninja-good.ninja" <<'EOF'
+rule CXX_COMPILER__Core_unscanned_Release
+  depfile = $DEP_FILE
+  command = /opt/homebrew/bin/ccache /usr/bin/c++ $DEFINES $INCLUDES -o $out -c $in
+  description = Building CXX object $out
+rule OBJCXX_COMPILER__Core_unscanned_Release
+  command = /opt/homebrew/bin/ccache /usr/bin/c++ -x objective-c++ $DEFINES -o $out -c $in
+rule CXX_STATIC_LIBRARY_LINKER__Core_Release
+  command = /usr/bin/ar qc $out $in
+rule RC_COMPILER__AgentSynth_Release
+  command = rc.exe /fo$out $in
+EOF
+
+# The exact shape of the bug: CXX wired, OBJCXX not.
+cat >"$WORK/ninja-no-objcxx.ninja" <<'EOF'
+rule CXX_COMPILER__Core_unscanned_Release
+  command = /opt/homebrew/bin/ccache /usr/bin/c++ $DEFINES -o $out -c $in
+rule OBJCXX_COMPILER__Core_unscanned_Release
+  command = /usr/bin/c++ -x objective-c++ $DEFINES -o $out -c $in
+  description = Building OBJCXX object $out
+EOF
+
+run "launcher audit: every compile rule uses ccache" 0 "OBJCXX compile rules  : 1/1 via ccache" \
+    CACHE_MATCHED_KEY=macOS-ccache-main-abc \
+    DEPS_MATCHED_KEY=macOS-deps3-def \
+    CACHE_WARM_EXPECTED=true \
+    CCACHE_STATS_FILE="$WORK/stats-modern.txt" \
+    BUILD_NINJA="$WORK/ninja-good.ninja"
+
+run "launcher audit: OBJCXX bypassing ccache fails the build" 1 \
+    "::error::1 of 1 OBJCXX compile rules do not go through ccache" \
+    CACHE_MATCHED_KEY=macOS-ccache-main-abc \
+    DEPS_MATCHED_KEY=macOS-deps3-def \
+    CACHE_WARM_EXPECTED=true \
+    CCACHE_STATS_FILE="$WORK/stats-modern.txt" \
+    BUILD_NINJA="$WORK/ninja-no-objcxx.ninja"
+
+# The link rule and the Windows resource compiler never go through ccache and must not be flagged.
+run "launcher audit: link and RC rules are out of scope" 0 "-" \
+    CACHE_MATCHED_KEY=macOS-ccache-main-abc \
+    DEPS_MATCHED_KEY=macOS-deps3-def \
+    CACHE_WARM_EXPECTED=true \
+    CCACHE_STATS_FILE="$WORK/stats-modern.txt" \
+    BUILD_NINJA="$WORK/ninja-good.ninja"
+
+run "launcher audit: absent build.ninja is skipped, not a failure" 0 \
+    "launcher audit    : skipped" \
+    CACHE_MATCHED_KEY=macOS-ccache-main-abc \
+    DEPS_MATCHED_KEY=macOS-deps3-def \
+    CACHE_WARM_EXPECTED=true \
+    CCACHE_STATS_FILE="$WORK/stats-modern.txt"
+
+# A build.ninja whose compile rules the audit cannot recognise (CMake renamed them, say) must warn
+# that the audit checked nothing — not print the reassuring "skipped" line, which would restore the
+# exact silent-success blind spot the audit was added to close.
+cat >"$WORK/ninja-unparseable.ninja" <<'EOF'
+rule CXX_BUILD_STEP_Core_Release
+  command = /usr/bin/c++ -o $out -c $in
+EOF
+
+run "launcher audit: unrecognised rule names warn instead of passing quietly" 0 \
+    "::warning::Launcher audit recognised no C/CXX/OBJC/OBJCXX compile rules" \
+    CACHE_MATCHED_KEY=macOS-ccache-main-abc \
+    DEPS_MATCHED_KEY=macOS-deps3-def \
+    CACHE_WARM_EXPECTED=true \
+    CCACHE_STATS_FILE="$WORK/stats-modern.txt" \
+    BUILD_NINJA="$WORK/ninja-unparseable.ninja"
 
 # --- job summary is written ---------------------------------------------------------------
 if grep -q "Build cache health" "$WORK/summary.md"; then
