@@ -9,7 +9,6 @@
 #include "../Source/Modules/MathModule.h"
 #include "../Source/Modules/ModuleBase.h"
 #include "../Source/Modules/OscillatorModule.h"
-#include "../Source/Modules/FX/DelayModule.h"
 #include "../Source/Modules/PolyMidiModule.h"
 #include "../Source/Modules/SamplerModule.h"
 #include "../Source/Modules/SequencerModule.h"
@@ -1008,7 +1007,6 @@ TEST_F(GraphEditorTest, ResolvePolyLinkBroadcastsMonoSourceAcrossModCvFan) {
     EXPECT_EQ(link.sourceStride, 0);
 }
 
-
 TEST_F(GraphEditorTest, ResolvePolyLinkBroadcastsMonoIntoCollapsedStereoPair) {
     // Collapsed Dual I/O (voiceSpan 2, PortRole::Audio) is a stereo bus, not a poly voice fan —
     // mono sources duplicate onto L and R so a single cable feeds both FX legs.
@@ -1202,7 +1200,8 @@ TEST_F(GraphEditorTest, DualIOOnDestDrawsRightCableFromCollapsedSource) {
     for (const auto& cable : editor.buildVisibleCables())
         if (cable.id.srcUid == srcNode->nodeID.uid && cable.id.dstUid == dstNode->nodeID.uid && cable.id.dstPort == 1)
             drawnOntoRight = true;
-    EXPECT_TRUE(drawnOntoRight) << "Dest Right in must draw from the source Audio jack while source Dual I/O is still off";
+    EXPECT_TRUE(drawnOntoRight)
+        << "Dest Right in must draw from the source Audio jack while source Dual I/O is still off";
 }
 
 TEST_F(GraphEditorTest, ResolvePolyLinkFansCollapsedStereoSourceOntoStereoDest) {
@@ -2472,7 +2471,7 @@ TEST_F(GraphEditorTest, SmartConnectionStereoToStereoWiresBothLegs) {
     juce::DragAndDropTarget::SourceDetails details(juce::var("Delay"), &dummySource, juce::Point<int>(80, 100));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
-    ASSERT_GE(editor.getSmartSuggestionCount(), 2) << "Stereo→stereo should preview L and R";
+    ASSERT_GE(editor.getSmartSuggestionCount(), 1) << "Dual I/O off: one Audio→Audio preview, which fans both raw legs";
     editor.itemDropped(details);
 
     juce::AudioProcessorGraph::NodeID delayId{};
@@ -2482,7 +2481,7 @@ TEST_F(GraphEditorTest, SmartConnectionStereoToStereoWiresBothLegs) {
     }
     ASSERT_NE(delayId.uid, 0u);
 
-    // L→L and R→R
+    // Collapsed Audio jacks still own raw L/R — one visible cable, two graph edges.
     EXPECT_TRUE(graph.isConnected({{delayId, 0}, {reverbNode->nodeID, 0}}));
     EXPECT_TRUE(graph.isConnected({{delayId, 1}, {reverbNode->nodeID, 1}}));
 }
@@ -2504,7 +2503,7 @@ TEST_F(GraphEditorTest, SmartConnectionMonoToStereoFansBothInputs) {
     juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource, juce::Point<int>(80, 100));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
-    ASSERT_GE(editor.getSmartSuggestionCount(), 2) << "Mono→stereo should preview both Delay inputs";
+    ASSERT_GE(editor.getSmartSuggestionCount(), 1) << "Mono→collapsed stereo should preview Delay's Audio jack";
     editor.itemDropped(details);
 
     juce::AudioProcessorGraph::NodeID oscId{};
@@ -2534,7 +2533,7 @@ TEST_F(GraphEditorTest, SmartConnectionStereoToMonoFansBothOutputs) {
     juce::DragAndDropTarget::SourceDetails details(juce::var("Delay"), &dummySource, juce::Point<int>(80, 100));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
-    ASSERT_GE(editor.getSmartSuggestionCount(), 2) << "Stereo→mono should preview both Delay outs into Filter";
+    ASSERT_GE(editor.getSmartSuggestionCount(), 1) << "Collapsed stereo→mono should preview Delay Audio into Filter";
     editor.itemDropped(details);
 
     juce::AudioProcessorGraph::NodeID delayId{};
@@ -2544,7 +2543,8 @@ TEST_F(GraphEditorTest, SmartConnectionStereoToMonoFansBothOutputs) {
     }
     ASSERT_NE(delayId.uid, 0u);
     EXPECT_TRUE(graph.isConnected({{delayId, 0}, {filterNode->nodeID, 0}}));
-    EXPECT_TRUE(graph.isConnected({{delayId, 1}, {filterNode->nodeID, 0}}));
+    EXPECT_FALSE(graph.isConnected({{delayId, 1}, {filterNode->nodeID, 0}}))
+        << "Filter ch1 is Cutoff, not a second audio input — Dual I/O off must not dump Right onto it";
 }
 
 TEST_F(GraphEditorTest, SmartConnectionDoesNotTreatMathABAsStereo) {

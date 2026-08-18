@@ -967,7 +967,6 @@ TEST(PortLabelTests, AttenuverterPortLabels) {
     EXPECT_EQ(att.getOutputPortLabel(0), "Out");
 }
 
-
 static void setDualIO(juce::AudioProcessor& proc, bool dual) {
     for (auto* param : proc.getParameters()) {
         if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {

@@ -520,8 +520,7 @@ void ModuleComponent::createControls() {
                 label->setJustificationType(juce::Justification::centred);
                 addAndMakeVisible(label);
             } else if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param)) {
-                if (boolParam->paramID == "bypassed" || boolParam->paramID == "muted" ||
-                    boolParam->paramID == "dualIO")
+                if (boolParam->paramID == "bypassed" || boolParam->paramID == "muted" || boolParam->paramID == "dualIO")
                     continue;
 
                 auto* toggle = toggles.add(new juce::ToggleButton(boolParam->getName(100)));
@@ -2250,8 +2249,7 @@ void ModuleComponent::applyPolyStateChange() {
 void ModuleComponent::updateDualIOTooltip() {
     if (dualIOButton == nullptr)
         return;
-    const bool dual = dynamic_cast<ModuleBase*>(module) != nullptr &&
-                      static_cast<ModuleBase*>(module)->isDualIO();
+    const bool dual = dynamic_cast<ModuleBase*>(module) != nullptr && static_cast<ModuleBase*>(module)->isDualIO();
     dualIOButton->setTooltip(dual ? "Dual I/O on — separate Left and Right jacks"
                                   : "Dual I/O off — one Audio jack (Left + Right)");
 }

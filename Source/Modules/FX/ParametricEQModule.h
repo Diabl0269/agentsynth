@@ -201,7 +201,6 @@ public:
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Filter; }
     ModuleType getModuleType() const override { return ModuleType::ParametricEQ; }
 
-
     // ---------- visualiser accessors / mutators (message thread) ----------
 
     /** Band settings as the visualiser should draw them.
