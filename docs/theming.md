@@ -79,7 +79,7 @@ keeps the Obsidian default, so a theme can recolour just the categories it cares
 | `sequencing` | `#FFC792EA` | Sequencer, Poly Sequencer, MidiKeyboard, Poly MIDI, External MIDI |
 | `envelopes` | `#FF7FD962` | ADSR, VCA |
 | `filters` | `#FF4FC1FF` | Filter |
-| `modfx` | `#FFFF7AB2` | Chorus, Phaser, Flanger, Distortion, Bitcrusher |
+| `modfx` | `#FFFF7AB2` | Chorus, Phaser, Flanger, Distortion, Bitcrusher, Ring Modulator |
 | `timefx` | `#FF56D4C0` | Delay, Reverb |
 | `dynamics` | `#FFF07178` | Compressor, Limiter |
 | `utility` | `#FFA0A8B4` | Voice Mixer, Attenuverter |
@@ -192,7 +192,7 @@ Agent Synth uses SVG `Drawable` icons — **not** an icon or glyph font. This av
 
 ### Icon enum
 
-29 icons are defined in `synth::theme::Icon` (in `Source/UI/Theme/IconLibrary.h`):
+30 icons are defined in `synth::theme::Icon` (in `Source/UI/Theme/IconLibrary.h`):
 
 ```
 TransportPlay    TransportStop    ActionUndo       ActionRedo
@@ -202,14 +202,16 @@ ThemeToggle      ModuleBypass     ModuleMute       ModuleDelete
 CatSources       CatSequencing    CatEnvelopes     CatFilters
 CatModulationFX  CatTimeFX        CatDynamics      CatUtility
 WaveformSine     WaveformSaw      WaveformSquare   WaveformTriangle
-ToggleMinimap
+ToggleMinimap    ModuleDualIO
 ```
 
 **`Icon::TransportPlay` is scaffolding** — the SVG asset is present and the enum value exists, but no `DrawableButton` is wired to it. It is tinted to `textMuted` and reserved for a future transport affordance.
 
 The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle`, indices 24–27) are rendered in the Oscillator waveform combo via `AppLookAndFeel::drawPopupMenuItem` (14×14 glyph left of the item text) and `drawComboBox` (selected waveform glyph in the closed combo). `positionComboBoxText` shifts the label right when the selected item has an icon.
 
-**`Icon::ToggleMinimap`** (index 28, the last enum value before `kCount`) is the toolbar toggle for the Graph Editor minimap overlay — see [`layout.md` §15](layout.md#15-minimap-overlay-issue-159).
+**`Icon::ToggleMinimap`** (index 28) is the toolbar toggle for the Graph Editor minimap overlay — see [`layout.md` §15](layout.md#15-minimap-overlay-issue-159).
+
+**`Icon::ModuleDualIO`** (index 29) is the module-header toggle that splits a collapsed `"Audio"` jack into separate Left/Right jacks. There is no universal stereo-split glyph; this one is a Y-fork into two jacks. The button's tooltip carries the Dual I/O on/off copy. See [`fx_modules.md` § Stereo I/O](fx_modules.md#stereo-io-dual-io-toggle).
 
 ### Token → tint map
 
@@ -220,6 +222,7 @@ The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `W
 | `ModuleBypass` | `textMuted` |
 | `ModuleMute` | `warning` |
 | `ModuleDelete` | `error` |
+| `ModuleDualIO` | `textMuted` |
 | `TransportPlay` | `textMuted` (scaffolding; no DrawableButton consumer) |
 | All toolbar actions + transport stop + toggles | `textPrimary` |
 | Category icons (`CatSources` … `CatUtility`) | `textMuted` |

@@ -12,6 +12,7 @@
 #include "Modules/FX/PhaserModule.h"
 #include "Modules/FX/PitchShifterModule.h"
 #include "Modules/FX/ReverbModule.h"
+#include "Modules/FX/RingModulatorModule.h"
 #include "Modules/FilterModule.h"
 #include <gtest/gtest.h>
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -70,6 +71,7 @@ std::vector<LevelModuleCase> allCases() {
         {"Distortion", 2, [] { return std::make_unique<DistortionModule>(); }},
         {"Bitcrusher", 2, [] { return std::make_unique<BitcrusherModule>(); }},
         {"Pitch Shifter", 2, [] { return std::make_unique<PitchShifterModule>(); }},
+        {"Ring Modulator", 2, [] { return std::make_unique<RingModulatorModule>(); }},
         {"Filter", 1, [] { return std::make_unique<FilterModule>(); }},
     };
 }

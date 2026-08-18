@@ -199,6 +199,7 @@ void AppLookAndFeel::retintIcons() {
     iconLibrary_.setTintColour(Icon::ModuleBypass, c.textMuted);
     iconLibrary_.setTintColour(Icon::ModuleMute, c.warning);
     iconLibrary_.setTintColour(Icon::ModuleDelete, c.error);
+    iconLibrary_.setTintColour(Icon::ModuleDualIO, c.textMuted);
 
     // Toolbar actions + transport-stop + panel toggles render as primary chrome.
     iconLibrary_.setTintColour(Icon::TransportStop, c.textPrimary);

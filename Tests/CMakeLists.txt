@@ -32,6 +32,8 @@ add_executable(Tests
     VCAModuleTests.cpp
     LFOModuleTests.cpp
     SampleHoldModuleTests.cpp
+    SchmittTriggerTests.cpp
+    ComparatorModuleTests.cpp
     SequencerModuleTests.cpp
     TransportServiceTests.cpp
     TimelineDocTests.cpp
@@ -88,6 +90,7 @@ add_executable(Tests
     ParametricEQModuleTests.cpp
     VoiceMixerModuleTests.cpp
     BitcrusherModuleTests.cpp
+    RingModulatorModuleTests.cpp
     NoiseModuleTests.cpp
     EdgeCaseTests.cpp
     IntegrationTests.cpp
@@ -104,6 +107,7 @@ add_executable(Tests
     SettingsWindowTests.cpp
     ShortcutManagerTests.cpp
     ShortcutsSettingsTabTests.cpp
+    PreferencesSettingsTabTests.cpp
     AudioRenderingTests.cpp
     LogicalPortTests.cpp
     OutputLevelTests.cpp
@@ -173,6 +177,7 @@ add_executable(Tests
     ../Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
     ../Source/UI/SettingsWindow.cpp
     ../Source/UI/AppearanceSettingsTab.cpp
+    ../Source/UI/PreferencesSettingsTab.cpp
     ../Source/UI/ShortcutsSettingsTab.cpp
 )
 

@@ -799,6 +799,23 @@ TEST(TriggerMeterTest, ValueToXClampsOutOfRangeInput) {
     EXPECT_FLOAT_EQ(TriggerMeterComponent::valueToX(5.0f, 0.0f, 100.0f), 100.0f);
 }
 
+TEST(ThresholdControlTest, UnipolarMapsZeroToLeftAndOneToRight) {
+    EXPECT_FLOAT_EQ(ThresholdControlComponent::valueToNormalized(0.0f, ThresholdScale::Unipolar), 0.0f);
+    EXPECT_FLOAT_EQ(ThresholdControlComponent::valueToNormalized(1.0f, ThresholdScale::Unipolar), 1.0f);
+    EXPECT_FLOAT_EQ(ThresholdControlComponent::valueToX(0.5f, 0.0f, 100.0f, ThresholdScale::Unipolar), 50.0f);
+}
+
+TEST(ThresholdControlTest, DecibelsMapsFloorToLeftAndZeroToRight) {
+    EXPECT_FLOAT_EQ(ThresholdControlComponent::valueToNormalized(-60.0f, ThresholdScale::Decibels, -60.0f), 0.0f);
+    EXPECT_FLOAT_EQ(ThresholdControlComponent::valueToNormalized(0.0f, ThresholdScale::Decibels, -60.0f), 1.0f);
+    EXPECT_FLOAT_EQ(ThresholdControlComponent::valueToNormalized(-30.0f, ThresholdScale::Decibels, -60.0f), 0.5f);
+}
+
+TEST(ThresholdControlTest, PreferredHeightDependsOnSliderMode) {
+    EXPECT_EQ(ThresholdControlComponent::getMeterOnlyHeight(), 18);
+    EXPECT_GT(ThresholdControlComponent::getSliderModeHeight(), ThresholdControlComponent::getMeterOnlyHeight());
+}
+
 TEST(TriggerMeterTest, NeedsRepaintIsFalseWhenNothingChanged) {
     EXPECT_FALSE(TriggerMeterComponent::needsRepaint(0.5f, 0.5f, 0.5f, 0.5f, false, false, 3, 3, 0))
         << "An idle meter must not repaint — that would invalidate the parent's cached image";

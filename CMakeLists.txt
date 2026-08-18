@@ -179,6 +179,9 @@ add_library(Core STATIC
     Source/Modules/MidiKeyboardModule.h
     Source/Modules/LFOModule.h
     Source/Modules/SampleHoldModule.h
+    Source/Modules/SchmittTrigger.h
+    Source/Modules/ThresholdMeterSource.h
+    Source/Modules/ComparatorModule.h
     Source/Modules/AttenuverterModule.h
     Source/Modules/EnvelopeFollowerModule.h
     Source/Modules/MacroControlModule.h
@@ -197,6 +200,7 @@ add_library(Core STATIC
     Source/Modules/FX/LimiterModule.h
     Source/Modules/FX/BitcrusherModule.h
     Source/Modules/FX/PitchShifterModule.h
+    Source/Modules/FX/RingModulatorModule.h
     Source/Modules/FX/ParametricEQModule.h
     Source/Modules/NoiseModule.h
     # Plugin hosting (TL7-2) — third-party VST3/AU plugins as graph modules. In Core, not in the
@@ -421,6 +425,7 @@ juce_add_binary_data(Assets SOURCES
     assets/icons/waveform-triangle.svg
     # Minimap toggle (issue #159).
     assets/icons/toggle-minimap.svg
+    assets/icons/module-dual-io.svg
 )
 
 # The themed LookAndFeel lives in Core and pulls typefaces from BinaryData;
@@ -486,6 +491,7 @@ add_library(AppUI STATIC
     Source/UI/SampleWaveformComponent.h
     Source/UI/WavetableDisplayComponent.h
     Source/UI/TriggerMeterComponent.h
+    Source/UI/ThresholdControlComponent.h
     Source/UI/ModMatrixComponent.cpp
     Source/UI/ModMatrixComponent.h
     Source/UI/SettingsWindow.cpp
@@ -497,6 +503,8 @@ add_library(AppUI STATIC
     Source/Plugin/Hosting/HostedPluginWindowManager.h
     Source/UI/AppearanceSettingsTab.cpp
     Source/UI/AppearanceSettingsTab.h
+    Source/UI/PreferencesSettingsTab.cpp
+    Source/UI/PreferencesSettingsTab.h
     Source/UI/ShortcutsSettingsTab.cpp
     Source/ShortcutManager.h
     Source/Update/UpdateManager.h

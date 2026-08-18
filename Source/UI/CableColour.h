@@ -154,6 +154,7 @@ inline ModuleCategory categoryFor(ModuleType t) noexcept {
     case ModuleType::Distortion:
     case ModuleType::Bitcrusher:
     case ModuleType::PitchShifter:
+    case ModuleType::RingModulator:
         return ModuleCategory::ModulationFX;
 
     case ModuleType::Delay:
@@ -166,6 +167,7 @@ inline ModuleCategory categoryFor(ModuleType t) noexcept {
 
     case ModuleType::MacroControl:
     case ModuleType::SampleHold:
+    case ModuleType::Comparator:
     case ModuleType::VoiceMixer:
     case ModuleType::Math:
     case ModuleType::Attenuverter:

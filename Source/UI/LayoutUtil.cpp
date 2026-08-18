@@ -216,12 +216,14 @@ int roleRank(ModuleType t) {
     case ModuleType::Flanger:
     case ModuleType::Limiter:
     case ModuleType::PitchShifter:
+    case ModuleType::RingModulator:
         return 2;
     case ModuleType::ADSR:
     case ModuleType::LFO:
     case ModuleType::Math:
     case ModuleType::MacroControl:
     case ModuleType::SampleHold:
+    case ModuleType::Comparator:
     case ModuleType::EnvelopeFollower:
         return 3;
     default:

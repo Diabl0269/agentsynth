@@ -80,6 +80,17 @@ TEST(LogicalPortTests, PolyModulesDescribeTheirFans) {
     auto adsr_out3 = adsr.mapOutputChannel(3);
     EXPECT_FALSE(adsr_out3.isPolyGroupHead);
 
+    auto adsr_in0 = adsr.mapInputChannel(0);
+    EXPECT_EQ(adsr_in0.visibleJackIndex, 0);
+    EXPECT_EQ(adsr_in0.role, PortRole::Gate);
+    EXPECT_TRUE(adsr_in0.isPolyGroupHead);
+    EXPECT_EQ(adsr_in0.polyVoiceSpan, 8);
+
+    auto adsr_in8 = adsr.mapInputChannel(8);
+    EXPECT_EQ(adsr_in8.visibleJackIndex, 1);
+    EXPECT_EQ(adsr_in8.role, PortRole::ModCV);
+    EXPECT_EQ(adsr_in8.polyVoiceSpan, 1);
+
     // ---- Oscillator (poly) ----
     OscillatorModule osc;
     setPolyParam(osc, true);
@@ -241,4 +252,67 @@ TEST(LogicalPortTests, VCAPolyOutputIsSummedNotFanned) {
     setPolyParam(vca, true);
 
     EXPECT_EQ(vca.mapOutputChannel(0).polyVoiceSpan, 1);
+}
+
+#include "../Source/Modules/FX/DelayModule.h"
+#include "../Source/Modules/FX/DistortionModule.h"
+
+static void setDualIOParam(juce::AudioProcessor& proc, bool dual) {
+    for (auto* param : proc.getParameters()) {
+        if (auto* p = dynamic_cast<juce::AudioProcessorParameterWithID*>(param)) {
+            if (p->paramID == "dualIO") {
+                p->setValueNotifyingHost(dual ? 1.0f : 0.0f);
+                return;
+            }
+        }
+    }
+}
+
+TEST(LogicalPortTests, CollapsedStereoPairFansBothRawChannelsOntoOneJack) {
+    DelayModule delay;
+    ASSERT_FALSE(delay.isDualIO());
+
+    auto in0 = delay.mapInputChannel(0);
+    EXPECT_EQ(in0.visibleJackIndex, 0);
+    EXPECT_EQ(in0.role, PortRole::Audio);
+    EXPECT_TRUE(in0.isPolyGroupHead);
+    EXPECT_EQ(in0.polyVoiceSpan, 2);
+
+    auto in1 = delay.mapInputChannel(1);
+    EXPECT_EQ(in1.visibleJackIndex, 0);
+    EXPECT_EQ(in1.role, PortRole::Audio);
+    EXPECT_FALSE(in1.isPolyGroupHead);
+
+    const auto targets = delay.getJackTargets(0, true);
+    ASSERT_EQ(targets.size(), 1u);
+    EXPECT_EQ(targets[0].rawHeadChannel, 0);
+    EXPECT_EQ(targets[0].voiceSpan, 2);
+    EXPECT_EQ(targets[0].role, PortRole::Audio);
+}
+
+TEST(LogicalPortTests, DualIOExposesSeparateLeftRightJacks) {
+    DelayModule delay;
+    setDualIOParam(delay, true);
+
+    EXPECT_EQ(delay.getVisibleInputPortCount(), 2);
+    auto left = delay.mapInputChannel(0);
+    auto right = delay.mapInputChannel(1);
+    EXPECT_EQ(left.visibleJackIndex, 0);
+    EXPECT_EQ(right.visibleJackIndex, 1);
+    EXPECT_EQ(left.polyVoiceSpan, 1);
+    EXPECT_EQ(right.polyVoiceSpan, 1);
+    EXPECT_TRUE(left.isPolyGroupHead);
+    EXPECT_TRUE(right.isPolyGroupHead);
+}
+
+TEST(LogicalPortTests, DistortionCvJacksShiftWhenStereoCollapses) {
+    DistortionModule dist;
+    // Single: Audio @0, Drive @1, Mix @2 — raw Drive stays ch2
+    auto drive = dist.mapInputChannel(2);
+    EXPECT_EQ(drive.visibleJackIndex, 1);
+    EXPECT_EQ(drive.role, PortRole::ModCV);
+
+    setDualIOParam(dist, true);
+    drive = dist.mapInputChannel(2);
+    EXPECT_EQ(drive.visibleJackIndex, 2);
 }

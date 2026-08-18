@@ -5,6 +5,7 @@
 #include "../Modules/PolySequencerModule.h"
 #include "../Modules/SamplerModule.h"
 #include "../Modules/SequencerModule.h"
+#include "../Modules/ThresholdMeterSource.h"
 #include "../Plugin/Hosting/HostedPluginModule.h"
 #include "GraphEditor.h"
 #include "LayoutUtil.h"
@@ -21,7 +22,6 @@ static constexpr int kLabelHeight = 18;
 static constexpr int kRowHeight = 24;  // combo box / toggle / button
 static constexpr int kKnobHeight = 58; // rotary + its text box
 static constexpr int kWaveformHeight = 72;
-static constexpr int kTriggerMeterHeight = 18;
 static constexpr int kBottomPadding = 12;
 // A port label box spans its jack centre ± 10; clear it by a bit more before placing any content.
 static constexpr int kPortLabelClearance = 15;
@@ -62,9 +62,15 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         }
     }
 
-    if (auto* shMod = dynamic_cast<SampleHoldModule*>(module)) {
-        triggerMeter = std::make_unique<TriggerMeterComponent>(*shMod);
-        addAndMakeVisible(triggerMeter.get());
+    if (auto* src = dynamic_cast<ThresholdMeterSource*>(module)) {
+        juce::AudioParameterFloat* thresholdParam = nullptr;
+        // Sample & Hold keeps its rotary Threshold; the control is meter-only there. ADSR and
+        // Comparator embed the slider in the control so the slice sits on the live level bar.
+        if (getType(module) != ModuleType::SampleHold)
+            thresholdParam =
+                dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(module, src->getThresholdParamID()));
+        thresholdControl = std::make_unique<ThresholdControlComponent>(*src, thresholdParam);
+        addAndMakeVisible(thresholdControl.get());
     }
 
     if (auto* filterMod = dynamic_cast<FilterModule*>(module)) {
@@ -99,16 +105,25 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     if (getType(module) != ModuleType::Attenuverter) {
         bypassButton = std::make_unique<juce::DrawableButton>("Bypass", juce::DrawableButton::ImageFitted);
         bypassButton->setClickingTogglesState(true);
+        bypassButton->setTooltip("Bypass");
         addAndMakeVisible(*bypassButton);
 
         muteButton = std::make_unique<juce::DrawableButton>("Mute", juce::DrawableButton::ImageFitted);
         muteButton->setClickingTogglesState(true);
+        muteButton->setTooltip("Mute");
         addAndMakeVisible(*muteButton);
 
         deleteButton = std::make_unique<juce::DrawableButton>("Delete", juce::DrawableButton::ImageFitted);
         deleteButton->setTooltip("Delete module");
         deleteButton->onClick = [this] { this->owner.requestDeleteModule(this->nodeId); };
         addAndMakeVisible(*deleteButton);
+
+        if (auto* mb = dynamic_cast<ModuleBase*>(module); mb != nullptr && mb->hasDualIOParameter()) {
+            dualIOButton = std::make_unique<juce::DrawableButton>("Dual I/O", juce::DrawableButton::ImageFitted);
+            dualIOButton->setClickingTogglesState(true);
+            updateDualIOTooltip();
+            addAndMakeVisible(*dualIOButton);
+        }
     }
 
     createSamplerControls();
@@ -144,8 +159,8 @@ void ModuleComponent::detachFromProcessor() {
     eqPopOutButton.reset();
     openPluginEditorButton.reset();
     keyboardComponent.reset();
-    // Same reasoning: the trigger meter times itself and holds a reference to the module.
-    triggerMeter.reset();
+    // Same reasoning: the threshold control times itself and holds a reference to the module.
+    thresholdControl.reset();
 
     // Same reason: the waveform view times against the SamplerModule, so it must go before the
     // processor pointer is dropped.
@@ -178,6 +193,7 @@ void ModuleComponent::detachFromProcessor() {
     if (processorAlive) {
         bypassAttachment.reset();
         muteAttachment.reset();
+        dualIOAttachment.reset();
         sliderAttachments.clear();
         comboAttachments.clear();
         buttonAttachments.clear();
@@ -186,6 +202,7 @@ void ModuleComponent::detachFromProcessor() {
         // in ~ParameterAttachment which calls parameter->removeListener()
         (void)bypassAttachment.release();
         (void)muteAttachment.release();
+        (void)dualIOAttachment.release();
         while (sliderAttachments.size() > 0)
             (void)sliderAttachments.removeAndReturn(sliderAttachments.size() - 1);
         while (comboAttachments.size() > 0)
@@ -222,6 +239,10 @@ void ModuleComponent::applyHeaderButtonIcons() {
     if (deleteButton) {
         if (auto d = lf->getIcon(synth::theme::Icon::ModuleDelete))
             deleteButton->setImages(d.get());
+    }
+    if (dualIOButton) {
+        if (auto d = lf->getIcon(synth::theme::Icon::ModuleDualIO))
+            dualIOButton->setImages(d.get());
     }
 }
 
@@ -499,6 +520,11 @@ void ModuleComponent::createControls() {
                 auto* label = comboLabels.add(new juce::Label(param->getName(100), param->getName(100)));
                 addAndMakeVisible(label);
             } else if (auto* floatParam = dynamic_cast<juce::AudioParameterFloat*>(param)) {
+                if (auto* src = dynamic_cast<ThresholdMeterSource*>(module)) {
+                    // ADSR / Comparator: the threshold slider lives inside ThresholdControlComponent.
+                    if (getType(module) != ModuleType::SampleHold && floatParam->paramID == src->getThresholdParamID())
+                        continue;
+                }
                 auto* slider = sliders.add(new juce::Slider());
                 slider->setComponentID(param->getName(100)); // ID for lookup
                 if (getType(module) == ModuleType::ADSR) {
@@ -538,7 +564,7 @@ void ModuleComponent::createControls() {
                 label->setJustificationType(juce::Justification::centred);
                 addAndMakeVisible(label);
             } else if (auto* boolParam = dynamic_cast<juce::AudioParameterBool*>(param)) {
-                if (boolParam->paramID == "bypassed" || boolParam->paramID == "muted")
+                if (boolParam->paramID == "bypassed" || boolParam->paramID == "muted" || boolParam->paramID == "dualIO")
                     continue;
 
                 auto* toggle = toggles.add(new juce::ToggleButton(boolParam->getName(100)));
@@ -559,6 +585,9 @@ void ModuleComponent::createControls() {
                 } else if (boolParam->paramID == "muted") {
                     muteAttachment =
                         std::make_unique<juce::ButtonParameterAttachment>(*boolParam, *muteButton, nullptr);
+                } else if (boolParam->paramID == "dualIO" && dualIOButton) {
+                    dualIOAttachment =
+                        std::make_unique<juce::ButtonParameterAttachment>(*boolParam, *dualIOButton, nullptr);
                 }
             }
         }
@@ -1426,7 +1455,14 @@ void ModuleComponent::updateLayout() {
     }
 
     if (getType(module) == ModuleType::ADSR) {
-        setSize(220 + 60, 220); // Matches the ADSR branch of updateLayout (sliders + one toggle row)
+        const int thresholdH = thresholdControl != nullptr ? thresholdControl->getPreferredHeight() : 0;
+        if (getWidth() != 280)
+            setSize(280, juce::jmax(getHeight(), 100));
+        int height = getContentTopY() + 20 + 120 + 10; // label + sliders + gap
+        if (thresholdH > 0)
+            height += thresholdH + 8;
+        height += toggles.size() * 30 + 10;
+        setSize(280, height);
         return;
     }
 
@@ -1628,12 +1664,12 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
         y += kRowHeight + 2;
     }
 
-    // --- Trigger meter (Sample & Hold): sits directly above the knob grid, whose first knob is
-    // Threshold, so the marker and the control that moves it stay adjacent.
-    if (triggerMeter) {
+    // --- Threshold control: Sample & Hold is meter-only above its rotary; ADSR / Comparator
+    // embed the Threshold slider here so the slice sits on the live level bar.
+    if (thresholdControl) {
         if (apply)
-            triggerMeter->setBounds(contentX, y, contentW, kTriggerMeterHeight);
-        y += kTriggerMeterHeight + 6;
+            thresholdControl->setBounds(contentX, y, contentW, thresholdControl->getPreferredHeight());
+        y += thresholdControl->getPreferredHeight() + 6;
     }
 
     // --- Knob grid: kKnobColumns across, wrapping. A double-width card doubles the columns so
@@ -1904,6 +1940,14 @@ std::optional<ModuleComponent::Port> ModuleComponent::getModTargetPortForPoint(j
             return Port{slider->getBounds(), t.channelIndex, /*isInput*/ true, /*isMidi*/ false};
         }
     }
+
+    if (thresholdControl != nullptr && thresholdControl->getSlider() != nullptr &&
+        thresholdControl->getBounds().contains(localPoint)) {
+        for (const auto& t : targets) {
+            if (t.name == thresholdControl->getParamName())
+                return Port{thresholdControl->getBounds(), t.channelIndex, /*isInput*/ true, /*isMidi*/ false};
+        }
+    }
     return std::nullopt;
 }
 
@@ -2045,8 +2089,8 @@ void ModuleComponent::resized() {
     if (module == nullptr)
         return;
 
-    // Header icon buttons: delete (rightmost) → bypass → mute (leftmost of the three).
-    // Attenuverter path: all three are null → no-op.
+    // Header icon buttons: delete (rightmost) → bypass → mute → Dual I/O (when present).
+    // Attenuverter path: all four are null → no-op.
     if (deleteButton)
         deleteButton->setBounds(getWidth() - 26, 2, 22, 20);
 
@@ -2055,6 +2099,9 @@ void ModuleComponent::resized() {
 
     if (muteButton)
         muteButton->setBounds(getWidth() - 74, 2, 22, 20);
+
+    if (dualIOButton)
+        dualIOButton->setBounds(getWidth() - 98, 2, 22, 20);
 
     if (auto* macro = dynamic_cast<MacroControlModule*>(module)) {
         layoutMacroBank(macro->getMacroCount());
@@ -2149,20 +2196,27 @@ void ModuleComponent::resized() {
 
     // --- ADSR Layout ---
     if (getType(module) == ModuleType::ADSR) {
-        int margin = 30; // Side margins for ports
-        int y = 30;
+        int y = getContentTopY();
         int sliderWidth = 50;
         int sliderHeight = 120;
+        int margin = 30;
 
         // Reserve a row per auto-generated toggle (the "Poly" checkbox) below the sliders. This
         // branch used to lay out only the sliders and return, leaving every toggle at its default
         // (0,0,0,0) bounds — present in the component tree but invisible and unclickable, which made
         // poly mode unreachable on this module.
-        int toggleY = y + 20 + sliderHeight + 10;
+        int afterSliders = y + 20 + sliderHeight + 10;
+        if (thresholdControl != nullptr) {
+            const int contentX = margin;
+            const int contentW = getWidth() - margin * 2;
+            thresholdControl->setBounds(contentX, afterSliders, contentW, thresholdControl->getPreferredHeight());
+            afterSliders += thresholdControl->getPreferredHeight() + 8;
+        }
+        int toggleY = afterSliders;
         setSize(220 + margin * 2, toggleY + toggles.size() * 30 + 10);
         int contentWidth = getWidth() - margin * 2;
 
-        // We expect 4 sliders: A, D, S, R
+        // We expect 4 sliders: A, D, S, R (Threshold lives in thresholdControl).
         for (int i = 0; i < sliders.size(); ++i) {
             int x = margin + 10 + i * sliderWidth;
             sliderLabels[i]->setBounds(x, y, sliderWidth, 20);
@@ -2231,6 +2285,18 @@ void ModuleComponent::parameterValueChanged(int parameterIndex, float newValue) 
                                                  [safeThis] { safeThis->applyPolyStateChange(); });
                 else
                     safeThis->applyPolyStateChange();
+            });
+        }
+    } else if (param->paramID == "dualIO") {
+        // Dual I/O only remaps visible jacks onto the same raw ch0/ch1 — tearing cables down
+        // and rebuilding through resolvePolyLink would drop the right leg.
+        if (juce::MessageManager::existsAndIsCurrentThread()) {
+            applyDualIOLayoutChange();
+        } else {
+            juce::Component::SafePointer<ModuleComponent> safeThis(this);
+            juce::MessageManager::callAsync([safeThis] {
+                if (safeThis != nullptr)
+                    safeThis->applyDualIOLayoutChange();
             });
         }
     } else if (param->paramID == "macroCount") {
@@ -2327,6 +2393,29 @@ void ModuleComponent::applyPolyStateChange() {
     const auto previousOutputMap = cachedOutputPortMap;
     captureLogicalPortMaps(); // adopt the new layout before the graph is touched
     owner.rewireForPolyChange(this, previousInputMap, previousOutputMap);
+    updateLayout();
+    owner.handleModuleResized(this);
+    repaint();
+}
+
+void ModuleComponent::updateDualIOTooltip() {
+    if (dualIOButton == nullptr)
+        return;
+    const bool dual = dynamic_cast<ModuleBase*>(module) != nullptr && static_cast<ModuleBase*>(module)->isDualIO();
+    dualIOButton->setTooltip(dual ? "Dual I/O on — separate Left and Right jacks"
+                                  : "Dual I/O off — one Audio jack (Left + Right)");
+}
+
+void ModuleComponent::applyDualIOLayoutChange() {
+    if (module == nullptr)
+        return;
+
+    captureLogicalPortMaps();
+    updateDualIOTooltip();
+    owner.completeStereoPairConnections(this);
+    updateLayout();
+    owner.handleModuleResized(this);
+    repaint();
 }
 
 void ModuleComponent::parameterGestureChanged(int parameterIndex, bool gestureIsStarting) {
@@ -2370,14 +2459,16 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
     if (port) {
         if (e.mods.isPopupMenu()) {
             // Right click -> Disconnect
-            // Show menu? Or just disconnect?
-            // User asked for "way to disconnect". Instant disconnect is fast.
-            // Or a menu "Disconnect".
             juce::PopupMenu m;
             m.addItem("Disconnect",
                       [this, port] { owner.disconnectPort(this, port->index, port->isInput, port->isMidi); });
 
             m.showMenuAsync(juce::PopupMenu::Options());
+        } else if (e.getNumberOfClicks() >= 2 && owner.getDoubleClickPortDisconnectEnabled()) {
+            // Issue #216: intercept the second click so it does not start another cable drag.
+            if (owner.isPortConnected(this, port->index, port->isInput, port->isMidi))
+                owner.disconnectPort(this, port->index, port->isInput, port->isMidi);
+            return;
         } else {
             // Start Connection Drag
             owner.beginConnectionDrag(this, port->index, port->isInput, port->isMidi, e.getScreenPosition());
@@ -2473,11 +2564,15 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
                       {"Phaser", ModuleType::Phaser},
                       {"Flanger", ModuleType::Flanger},
                       {"Distortion", ModuleType::Distortion},
+                      {"Ring Modulator", ModuleType::RingModulator},
                       {"Bitcrusher", ModuleType::Bitcrusher},
                       {"Pitch Shifter", ModuleType::PitchShifter}}},
                     {"Time FX", {{"Delay", ModuleType::Delay}, {"Reverb", ModuleType::Reverb}}},
                     {"Dynamics", {{"Compressor", ModuleType::Compressor}, {"Limiter", ModuleType::Limiter}}},
-                    {"Utility", {{"Sample & Hold", ModuleType::SampleHold}}},
+                    {"Utility",
+                     {{"Sample & Hold", ModuleType::SampleHold},
+                      {"Comparator", ModuleType::Comparator},
+                      {"Math", ModuleType::Math}}},
                 };
 
                 for (auto& cat : categories) {
