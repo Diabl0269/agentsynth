@@ -246,6 +246,13 @@ public:
     void setAlignmentGuidesEnabled(bool enabled) { alignmentGuidesEnabled = enabled; }
     bool getAlignmentGuidesEnabled() const { return alignmentGuidesEnabled; }
 
+    // Double-click a connected jack to disconnect (issue #216). On by default.
+    void setDoubleClickPortDisconnectEnabled(bool enabled) { doubleClickPortDisconnectEnabled = enabled; }
+    bool getDoubleClickPortDisconnectEnabled() const noexcept { return doubleClickPortDisconnectEnabled; }
+
+    /** True when the visible jack already has at least one graph edge or mod routing. */
+    bool isPortConnected(ModuleComponent* module, int portIndex, bool isInput, bool isMidi) const;
+
     // ---- Smart connections --------------------------------------------------
     // Proximity-based cable suggestions while placing a module. One setting covers Off /
     // library-only / free-main-I/O moves / all moves (see SmartConnectionMode).
@@ -273,7 +280,7 @@ public:
     void setSmartConnectionMode(SmartConnectionMode mode) { smartConnectionMode = mode; }
     SmartConnectionMode getSmartConnectionMode() const noexcept { return smartConnectionMode; }
 
-    /** Persist / restore helpers (Appearance tab + MainComponent launch restore). */
+    /** Persist / restore helpers (Preferences tab + MainComponent launch restore). */
     static SmartConnectionMode smartConnectionModeFromString(const juce::String& s);
     static juce::String smartConnectionModeToString(SmartConnectionMode mode);
 
@@ -599,6 +606,7 @@ private:
 
     // Alignment guides toggle (UI Phase 7 - Item 4)
     bool alignmentGuidesEnabled = true;
+    bool doubleClickPortDisconnectEnabled = true;
 
     void updateTransform();
 

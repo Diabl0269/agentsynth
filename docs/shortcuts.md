@@ -64,6 +64,7 @@ habit changes. See [`layout.md §12`](layout.md) for the full contract.
 | Click empty canvas | Clear the selection |
 | Right-click a module | Copy / Duplicate / Paste / Save as Snippet / Delete for the whole selection |
 | Right-click empty canvas | Paste Here (at the click point) / Select All Modules |
+| Double-click a connected jack | Disconnect every cable on that port (on by default; `Settings → Preferences`) |
 
 Right-clicking empty canvas keeps the selection rather than clearing it, so the menu can still act
 on what is selected. "Paste Here" drops the group at the click point and re-anchors the paste

@@ -76,6 +76,7 @@ add_executable(Tests
     SettingsWindowTests.cpp
     ShortcutManagerTests.cpp
     ShortcutsSettingsTabTests.cpp
+    PreferencesSettingsTabTests.cpp
     AudioRenderingTests.cpp
     LogicalPortTests.cpp
     OutputLevelTests.cpp
@@ -116,6 +117,7 @@ add_executable(Tests
     ../Source/UI/ModuleComponent.cpp
     ../Source/UI/SettingsWindow.cpp
     ../Source/UI/AppearanceSettingsTab.cpp
+    ../Source/UI/PreferencesSettingsTab.cpp
     ../Source/UI/ShortcutsSettingsTab.cpp
 )
 

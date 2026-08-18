@@ -2234,14 +2234,16 @@ void ModuleComponent::mouseDown(const juce::MouseEvent& e) {
     if (port) {
         if (e.mods.isPopupMenu()) {
             // Right click -> Disconnect
-            // Show menu? Or just disconnect?
-            // User asked for "way to disconnect". Instant disconnect is fast.
-            // Or a menu "Disconnect".
             juce::PopupMenu m;
             m.addItem("Disconnect",
                       [this, port] { owner.disconnectPort(this, port->index, port->isInput, port->isMidi); });
 
             m.showMenuAsync(juce::PopupMenu::Options());
+        } else if (e.getNumberOfClicks() >= 2 && owner.getDoubleClickPortDisconnectEnabled()) {
+            // Issue #216: intercept the second click so it does not start another cable drag.
+            if (owner.isPortConnected(this, port->index, port->isInput, port->isMidi))
+                owner.disconnectPort(this, port->index, port->isInput, port->isMidi);
+            return;
         } else {
             // Start Connection Drag
             owner.beginConnectionDrag(this, port->index, port->isInput, port->isMidi, e.getScreenPosition());
