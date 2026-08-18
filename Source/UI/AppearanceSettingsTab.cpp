@@ -255,47 +255,6 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
             graphEditor->setAlignmentGuidesEnabled(alignmentGuideToggle.getToggleState());
     };
 
-    addAndMakeVisible(smartConnectionLabel);
-    smartConnectionLabel.setText("Smart connections:", juce::dontSendNotification);
-    smartConnectionLabel.setFont(juce::Font(juce::FontOptions(12.0f)));
-
-    addAndMakeVisible(smartConnectionCombo);
-    smartConnectionCombo.addItem("Off", 1);
-    smartConnectionCombo.addItem("New modules only", 2);
-    smartConnectionCombo.addItem("When main I/O is free", 3);
-    smartConnectionCombo.addItem("All module moves", 4);
-    {
-        const auto mode = GraphEditor::smartConnectionModeFromString(
-            appProperties.getUserSettings()->getValue("smartConnectionMode", "NewAndUnwired"));
-        const int id = mode == GraphEditor::SmartConnectionMode::Off        ? 1
-                       : mode == GraphEditor::SmartConnectionMode::NewOnly  ? 2
-                       : mode == GraphEditor::SmartConnectionMode::AllMoves ? 4
-                                                                            : 3;
-        smartConnectionCombo.setSelectedId(id, juce::dontSendNotification);
-    }
-    smartConnectionCombo.onChange = [this] {
-        GraphEditor::SmartConnectionMode mode = GraphEditor::SmartConnectionMode::NewAndUnwired;
-        switch (smartConnectionCombo.getSelectedId()) {
-        case 1:
-            mode = GraphEditor::SmartConnectionMode::Off;
-            break;
-        case 2:
-            mode = GraphEditor::SmartConnectionMode::NewOnly;
-            break;
-        case 4:
-            mode = GraphEditor::SmartConnectionMode::AllMoves;
-            break;
-        default:
-            mode = GraphEditor::SmartConnectionMode::NewAndUnwired;
-            break;
-        }
-        appProperties.getUserSettings()->setValue("smartConnectionMode",
-                                                  GraphEditor::smartConnectionModeToString(mode));
-        appProperties.getUserSettings()->saveIfNeeded();
-        if (graphEditor)
-            graphEditor->setSmartConnectionMode(mode);
-    };
-
     // ---- Cable colours (issue #157) ----
     cableColourMode = synth::ui::loadCableColourMode(*appProperties.getUserSettings());
     cableColourOverrides = synth::ui::loadCableColourOverrides(*appProperties.getUserSettings());
@@ -375,15 +334,9 @@ void AppearanceSettingsTab::resized() {
     }
     cablesTitleLabel.setBounds(bounds.removeFromBottom(22));
 
-    // Alignment guide toggle + smart connections (under the theme list title area).
+    // Alignment guide toggle (under the theme list title area).
     bounds.removeFromBottom(8);
     alignmentGuideToggle.setBounds(bounds.removeFromTop(24));
-    bounds.removeFromTop(6);
-    {
-        auto smartRow = bounds.removeFromTop(24);
-        smartConnectionLabel.setBounds(smartRow.removeFromLeft(140));
-        smartConnectionCombo.setBounds(smartRow.removeFromLeft(200));
-    }
 
     themeList.setBounds(bounds);
 }
@@ -454,11 +407,6 @@ void AppearanceSettingsTab::changeListenerCallback(juce::ChangeBroadcaster* sour
 void AppearanceSettingsTab::setGraphEditor(GraphEditor* ge) {
     graphEditor = ge;
     applyCableColoursToEditor(); // the editor starts on defaults; push the persisted config
-    if (graphEditor != nullptr) {
-        const auto mode = GraphEditor::smartConnectionModeFromString(
-            appProperties.getUserSettings()->getValue("smartConnectionMode", "NewAndUnwired"));
-        graphEditor->setSmartConnectionMode(mode);
-    }
 }
 
 void AppearanceSettingsTab::applyCableColoursToEditor() {

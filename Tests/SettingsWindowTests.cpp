@@ -3,6 +3,7 @@
 #include "../Source/AudioEngine.h"
 #include "../Source/ShortcutManager.h"
 #include "../Source/UI/AIChatComponent.h"
+#include "../Source/UI/PreferencesSettingsTab.h"
 #include "../Source/UI/SettingsWindow.h"
 #include "../Source/UI/Theme/ThemeManager.h"
 #include <gtest/gtest.h>
@@ -70,10 +71,10 @@ protected:
     synth::theme::ThemeManager themeManager;
 };
 
-TEST_F(SettingsWindowTest, HasFourTabs) {
+TEST_F(SettingsWindowTest, HasFiveTabs) {
     SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
                                   themeManager, nullptr);
-    EXPECT_EQ(settingsWindow.getNumTabs(), 4);
+    EXPECT_EQ(settingsWindow.getNumTabs(), 5);
 }
 
 TEST_F(SettingsWindowTest, TabNamesAreCorrect) {
@@ -82,7 +83,17 @@ TEST_F(SettingsWindowTest, TabNamesAreCorrect) {
     EXPECT_EQ(settingsWindow.getTabName(0), "Audio");
     EXPECT_EQ(settingsWindow.getTabName(1), "AI");
     EXPECT_EQ(settingsWindow.getTabName(2), "Keyboard Shortcuts");
-    EXPECT_EQ(settingsWindow.getTabName(3), "Appearance");
+    EXPECT_EQ(settingsWindow.getTabName(3), "Preferences");
+    EXPECT_EQ(settingsWindow.getTabName(4), "Appearance");
+}
+
+TEST_F(SettingsWindowTest, PreferencesTabHostsBehaviourControls) {
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr);
+    auto* tab = dynamic_cast<PreferencesSettingsTab*>(settingsWindow.getTabs().getTabContentComponent(3));
+    ASSERT_NE(tab, nullptr);
+    EXPECT_EQ(tab->getSmartConnectionMode(), GraphEditor::SmartConnectionMode::NewAndUnwired);
+    EXPECT_TRUE(tab->isDoubleClickPortDisconnectEnabled());
 }
 
 TEST_F(SettingsWindowTest, DefaultTabIsAudio) {

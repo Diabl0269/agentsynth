@@ -587,7 +587,7 @@ a slightly different footprint.
 
 While placing a module, Agent Synth can **suggest logical cables** to nearby modules and auto-wire them on drop.
 
-### Modes (`Settings → Appearance → Smart connections`)
+### Modes (`Settings → Preferences → Smart connections`)
 
 Persisted as `smartConnectionMode` in `juce::ApplicationProperties`. Default: **When main I/O is free** (`NewAndUnwired`).
 
@@ -608,6 +608,16 @@ Group multi-select drags never smart-connect. Snippet drops are excluded.
 4. On drop / `finalizeModuleDrag`, pending suggestions are applied through `connectPorts` (same path as a manual cable drag: poly fans, MIDI, structural pitch/gate).
 
 Library drags cache a short-lived `AIStateMapper::createModule` probe for jack metadata before a real `ModuleComponent` exists.
+
+---
+
+## 8c. Double-click Port Disconnect
+
+Double-clicking a **connected** jack removes every cable on that port — the same path as the right-click **Disconnect** menu (`GraphEditor::disconnectPort`, which fans across every raw channel a visible jack owns). An unconnected jack is a no-op. The first click of a double-click still begins (and immediately ends) a cable drag; the second click is intercepted in `ModuleComponent::mouseDown` (`getNumberOfClicks() >= 2`) so it does not start another drag.
+
+### Preference (`Settings → Preferences → Double-click port to disconnect`)
+
+Persisted as `doubleClickPortDisconnect` in `juce::ApplicationProperties`. Default: **on**. Restored in `MainComponent::initialiseCommon()` so the canvas honours it without opening Settings. When off, double-clicking a jack behaves like two single clicks (cable drag).
 
 ---
 

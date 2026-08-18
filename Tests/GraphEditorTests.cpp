@@ -2612,3 +2612,91 @@ TEST_F(GraphEditorTest, SmartConnectionMonoToStereoIsBothOrNeither) {
     EXPECT_EQ(editor.getSmartSuggestionCount(), 0);
     editor.endDragPreview();
 }
+
+// --- Double-click port disconnect (issue #216) -------------------------------
+
+static ModuleComponent* findModuleComp(GraphEditor& editor, juce::AudioProcessor* proc) {
+    auto* content = editor.getChildComponent(0);
+    if (content == nullptr)
+        return nullptr;
+    for (auto* child : content->getChildren())
+        if (auto* mc = dynamic_cast<ModuleComponent*>(child))
+            if (mc->getModule() == proc)
+                return mc;
+    return nullptr;
+}
+
+static juce::MouseEvent makeModuleClick(juce::Component& comp, juce::Point<int> position, int clicks) {
+    const auto pos = position.toFloat();
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos, juce::ModifierKeys(), 0.0f, 0.0f,
+                            0.0f, 0.0f, 0.0f, &comp, &comp, juce::Time::getCurrentTime(), pos,
+                            juce::Time::getCurrentTime(), clicks, false);
+}
+
+TEST_F(GraphEditorTest, DoubleClickConnectedPortDisconnectsByDefault) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto oscNode = engine.getGraph().addNode(std::make_unique<OscillatorModule>());
+    auto vcaNode = engine.getGraph().addNode(std::make_unique<VCAModule>());
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    auto* oscComp = findModuleComp(editor, oscNode->getProcessor());
+    auto* vcaComp = findModuleComp(editor, vcaNode->getProcessor());
+    ASSERT_NE(oscComp, nullptr);
+    ASSERT_NE(vcaComp, nullptr);
+
+    editor.connectPorts(oscNode->nodeID, 0, vcaNode->nodeID, 0, false, false);
+    ASSERT_EQ(countAudioConnectionsBetween(engine.getGraph(), oscNode->nodeID, vcaNode->nodeID), 1);
+    ASSERT_TRUE(editor.isPortConnected(oscComp, 0, false, false));
+    ASSERT_TRUE(editor.getDoubleClickPortDisconnectEnabled());
+
+    oscComp->mouseDown(makeModuleClick(*oscComp, oscComp->getPortCenter(0, false), 2));
+
+    EXPECT_EQ(countAudioConnectionsBetween(engine.getGraph(), oscNode->nodeID, vcaNode->nodeID), 0);
+    EXPECT_FALSE(editor.isPortConnected(oscComp, 0, false, false));
+    EXPECT_FALSE(editor.isPortConnected(vcaComp, 0, true, false));
+}
+
+TEST_F(GraphEditorTest, DoubleClickDoesNotDisconnectWhenPreferenceOff) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+    editor.setDoubleClickPortDisconnectEnabled(false);
+
+    auto oscNode = engine.getGraph().addNode(std::make_unique<OscillatorModule>());
+    auto vcaNode = engine.getGraph().addNode(std::make_unique<VCAModule>());
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    auto* oscComp = findModuleComp(editor, oscNode->getProcessor());
+    ASSERT_NE(oscComp, nullptr);
+
+    editor.connectPorts(oscNode->nodeID, 0, vcaNode->nodeID, 0, false, false);
+    ASSERT_EQ(countAudioConnectionsBetween(engine.getGraph(), oscNode->nodeID, vcaNode->nodeID), 1);
+
+    oscComp->mouseDown(makeModuleClick(*oscComp, oscComp->getPortCenter(0, false), 2));
+
+    EXPECT_EQ(countAudioConnectionsBetween(engine.getGraph(), oscNode->nodeID, vcaNode->nodeID), 1);
+}
+
+TEST_F(GraphEditorTest, DoubleClickUnconnectedPortIsANoOp) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto oscNode = engine.getGraph().addNode(std::make_unique<OscillatorModule>());
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    auto* oscComp = findModuleComp(editor, oscNode->getProcessor());
+    ASSERT_NE(oscComp, nullptr);
+    ASSERT_FALSE(editor.isPortConnected(oscComp, 0, false, false));
+
+    oscComp->mouseDown(makeModuleClick(*oscComp, oscComp->getPortCenter(0, false), 2));
+
+    EXPECT_EQ(engine.getGraph().getConnections().size(), 0u);
+    EXPECT_FALSE(editor.isPortConnected(oscComp, 0, false, false));
+}
