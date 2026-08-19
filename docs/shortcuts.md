@@ -23,6 +23,11 @@ Shortcuts are configurable in **Settings → Keyboard Shortcuts** tab (renamed f
 | Cmd+D | Duplicate (Selected Modules, or the selected clips) |
 | Space | Toggle Playback (play/stop the timeline transport — `SYNTH_ENABLE_TIMELINE` builds only) |
 
+Cmd+T and Space are also inactive (in addition to a `SYNTH_ENABLE_TIMELINE`-OFF build) whenever
+Preferences → "Show timeline (experimental)" is turned off — the runtime kill switch described in
+[`layout.md §16`](layout.md). While it's off, the timeline transport simply isn't reachable; that's
+intended, not a bug.
+
 `Cmd+Shift+A` / `Cmd+Shift+S` use the Shift variants because `Cmd+A` (Toggle AI Panel) and `Cmd+S`
 (Save Preset) are already bound. Like every row above, both are rebindable in Settings.
 

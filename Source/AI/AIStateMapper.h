@@ -198,6 +198,23 @@ public:
      */
     static juce::var getPatchSchema();
 
+    /**
+     * @brief getPatchSchema() plus an OPTIONAL top-level "timelineOps" array — the local
+     *        (Ollama) structured-output contract while the timeline AI tools are enabled
+     *        (AIIntegrationService::setTimelineToolsEnabled).
+     *
+     * The ops item schema is deliberately PERMISSIVE (one object shape, only "op" required, every
+     * per-op field optional): it is a GRAMMAR that lets the model express any of the four ops, not
+     * a validator — `TimelineOps::validate` is the gate, and it rejects unknown fields, bad
+     * shapes and out-of-range values whole-batch regardless of what the grammar allowed through.
+     * A strict discriminated union here would double-maintain the validator's rules in a dialect
+     * (llama.cpp's grammar compiler) that handles `anyOf` poorly.
+     *
+     * The reserved-fields rule is unchanged: "timeline" (the document dialect), "schemaVersion"
+     * and node "uuid" stay absent — "timelineOps" is the separate door (see TimelineOps).
+     */
+    static juce::var getPatchSchemaWithTimelineOps();
+
     static std::unique_ptr<juce::AudioProcessor> createModule(const juce::String& type);
 
     /**

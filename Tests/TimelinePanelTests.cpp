@@ -130,10 +130,11 @@ protected:
         juce::ApplicationProperties props;
         props.setStorageParameters(opts);
         if (auto* s = props.getUserSettings()) {
-            s->setValue("librarySidebarVisible", "1"); // default: visible
-            s->setValue("aiPanelVisible", "0");        // default: hidden
-            s->setValue("minimapVisible", "1");        // default: visible
-            s->setValue("timelinePanelVisible", "0");  // default: hidden
+            s->setValue("librarySidebarVisible", "1");  // default: visible
+            s->setValue("aiPanelVisible", "0");         // default: hidden
+            s->setValue("minimapVisible", "1");         // default: visible
+            s->setValue("timelinePanelVisible", "0");   // default: hidden
+            s->setValue("timelineFeatureEnabled", "1"); // default: enabled (the kill switch is off)
             // Removed, not defaulted: absent is what makes the theme metric the default height.
             s->removeValue(MainComponent::kTimelinePanelHeightKey);
             s->saveIfNeeded();
@@ -208,6 +209,60 @@ TEST_F(TimelinePanelIntegrationTest, VisibilityPersists) {
     MainComponent mc2(std::make_unique<MockProviderTL>());
     EXPECT_TRUE(mc2.isTimelineConfiguredVisible());
     EXPECT_TRUE(mc2.getTimelinePanel().isVisible());
+}
+
+// ----------------------------------------------------------------------------
+// Preferences "Show timeline (experimental)" kill switch — hides the user-facing entry points
+// (toolbar button, Cmd+T, Space) without touching the timeline doc or audio-engine playback.
+// See MainComponent::applyTimelineFeatureEnabled().
+// ----------------------------------------------------------------------------
+
+TEST_F(TimelinePanelIntegrationTest, DisablingFeatureHidesVisiblePanelAndButton) {
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    mc.setSize(1600, 900);
+    mc.simulateToggleTimelineClick();
+    ASSERT_TRUE(mc.isTimelineConfiguredVisible());
+    ASSERT_TRUE(mc.getTimelinePanel().isVisible());
+
+    mc.applyTimelineFeatureEnabled(false);
+    EXPECT_FALSE(mc.isTimelineFeatureEnabledForTest());
+    // Hidden via the SAME path as a manual toolbar click — persisted, not just visually hidden.
+    EXPECT_FALSE(mc.isTimelineConfiguredVisible());
+    EXPECT_FALSE(mc.getTimelinePanel().isVisible());
+    EXPECT_FALSE(mc.getAppPropertiesForTest().getUserSettings()->getBoolValue("timelinePanelVisible", true));
+}
+
+TEST_F(TimelinePanelIntegrationTest, ReenablingFeatureRestoresButtonNotPanel) {
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    mc.setSize(1600, 900);
+
+    mc.applyTimelineFeatureEnabled(false);
+    ASSERT_FALSE(mc.isTimelineFeatureEnabledForTest());
+
+    mc.applyTimelineFeatureEnabled(true);
+    EXPECT_TRUE(mc.isTimelineFeatureEnabledForTest());
+    // Re-enabling brings the button back but does not itself reopen the panel — that stays a
+    // separate, explicit user action (toolbar click / Cmd+T).
+    EXPECT_FALSE(mc.isTimelineConfiguredVisible());
+}
+
+TEST_F(TimelinePanelIntegrationTest, CmdTIsInertWhileFeatureDisabled) {
+    MainComponent mc(std::make_unique<MockProviderTL>());
+    mc.setSize(1600, 900);
+    mc.applyTimelineFeatureEnabled(false);
+
+    auto& cm = mc.getCommandManager();
+    juce::ApplicationCommandInfo info(AppCommands::toggleTimelinePanel);
+    mc.getCommandInfo(AppCommands::toggleTimelinePanel, info);
+    EXPECT_NE(info.flags & juce::ApplicationCommandInfo::isDisabled, 0)
+        << "toggleTimelinePanel must be inactive while the timeline feature preference is off";
+    EXPECT_FALSE(cm.invokeDirectly(AppCommands::toggleTimelinePanel, false));
+    EXPECT_FALSE(mc.isTimelineConfiguredVisible());
+
+    juce::ApplicationCommandInfo playbackInfo(AppCommands::togglePlayback);
+    mc.getCommandInfo(AppCommands::togglePlayback, playbackInfo);
+    EXPECT_NE(playbackInfo.flags & juce::ApplicationCommandInfo::isDisabled, 0)
+        << "togglePlayback (Space) must be inactive while the timeline feature preference is off";
 }
 
 #endif // SYNTH_ENABLE_TIMELINE

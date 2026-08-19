@@ -205,6 +205,14 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // here and on every resized() — see clampTimelinePanelHeight().
     timelinePanelHeight_ = clampTimelinePanelHeight(
         appProperties.getUserSettings()->getIntValue(kTimelinePanelHeightKey, defaultTimelinePanelHeight()));
+    // The Preferences kill switch (PreferencesSettingsTab::isTimelineFeatureEnabled(), same key).
+    // DEFAULT TRUE — an existing install that has never opened Preferences must restore exactly
+    // as before. If a run somehow persisted the panel open while the feature was off (e.g. a
+    // crash between the two writes in applyTimelineFeatureEnabled), never restore a docked panel
+    // with no button/shortcut left to close it.
+    timelineFeatureEnabled = appProperties.getUserSettings()->getBoolValue("timelineFeatureEnabled", true);
+    if (!timelineFeatureEnabled)
+        isTimelineVisible = false;
 #endif
     graphEditor.setAlignmentGuidesEnabled(
         appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true));
@@ -295,6 +303,9 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // Both outlive aiService (declaration order: timelineDoc, then audioEngine's referent, then
     // aiService), so this pointer never dangles for aiService's lifetime.
     aiService.setTimelineContext(&timelineDoc, &audioEngine.getTransport());
+    // The AI's timeline/automation authoring surface follows the runtime "Show timeline"
+    // preference from first launch, not only from the next Preferences toggle.
+    aiService.setTimelineToolsEnabled(timelineFeatureEnabled);
 
     // The WRITE half. The service only ever holds the doc as const (it is a context reader),
     // and it owns no undo manager for the timeline, so the host supplies the apply path — the same
@@ -771,6 +782,9 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
             timelinePanel.setVisible(false);
         animatePanelTransition(fromResult, toResult, /*hideLib=*/false, /*hideAi=*/false, /*hideTimeline=*/!newVisible);
     };
+    // Initial visibility from the Preferences kill switch read above — a fresh DrawableButton
+    // defaults visible, so an existing-off-preference install must not flash the button on launch.
+    toggleTimelineButton.setVisible(timelineFeatureEnabled);
 #endif
 
     addAndMakeVisible(toggleMinimapButton);
@@ -807,7 +821,13 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     settingsButton.onClick = [this]() {
         auto* settingsComp =
             new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent,
-                               shortcutManager, *themeManager, &graphEditor, /*showAudioTab=*/!audioEngine.isHosted());
+                               shortcutManager, *themeManager, &graphEditor, /*showAudioTab=*/!audioEngine.isHosted(),
+#if SYNTH_ENABLE_TIMELINE
+                               [this](bool enabled) { applyTimelineFeatureEnabled(enabled); }
+#else
+            nullptr
+#endif
+            );
         settingsComp->setSize(500, 450);
 
         juce::DialogWindow::LaunchOptions options;
@@ -1485,9 +1505,11 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
     case AppCommands::togglePlayback: {
         result.setInfo("Toggle Playback", "Play or stop the timeline transport", "Transport", 0);
         // Space is GLOBAL — no resolveEditSurface() branch, unlike C/V/D above. Inactive
-        // outright in a SYNTH_ENABLE_TIMELINE=OFF build, where there is no transport to toggle.
+        // outright in a SYNTH_ENABLE_TIMELINE=OFF build, where there is no transport to toggle,
+        // and inactive when the "Show timeline (experimental)" preference has hidden the
+        // transport too — the transport isn't reachable while hidden, which is intended.
 #if SYNTH_ENABLE_TIMELINE
-        result.setActive(true);
+        result.setActive(timelineFeatureEnabled);
 #else
         result.setActive(false);
 #endif
@@ -1498,6 +1520,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
 #if SYNTH_ENABLE_TIMELINE
     case AppCommands::toggleTimelinePanel: {
         result.setInfo("Toggle Timeline Panel", "Toggle the bottom-docked timeline panel", "View", 0);
+        result.setActive(timelineFeatureEnabled);
         auto kp = shortcutManager.getBinding("toggleTimelinePanel");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
@@ -2162,6 +2185,27 @@ void MainComponent::setCurrentPatchName(const juce::String& name) {
 // and no call site in this file needs an #if of its own.
 // =============================================================================
 
+#if SYNTH_ENABLE_TIMELINE
+void MainComponent::applyTimelineFeatureEnabled(bool enabled) {
+    // Disabling while the panel is visible: hide it through the SAME path the toolbar toggle
+    // uses (persistence + layout + animation all stay consistent with a manual click), rather
+    // than reaching into isTimelineVisible/appProperties/resized() directly here and duplicating
+    // that logic — same idiom as the two existing "force-open" call sites in this file.
+    if (!enabled && isTimelineVisible && toggleTimelineButton.onClick)
+        toggleTimelineButton.onClick();
+
+    toggleTimelineButton.setVisible(enabled);
+    timelineFeatureEnabled = enabled;
+    resized();
+
+    // The AI's timeline/automation authoring follows the same switch: off means the local model's
+    // prompt, schema and targets context revert to the pure patch surface (see
+    // AIIntegrationService::setTimelineToolsEnabled — extraction/apply stay wired, gated by the
+    // user's own Apply click either way).
+    aiService.setTimelineToolsEnabled(enabled);
+}
+#endif
+
 void MainComponent::timelineChanged(const synth::TimelineDoc&) { publishTimelineAndRebindRecorder(); }
 
 void MainComponent::publishTimelineAndRebindRecorder() {
@@ -2743,6 +2787,13 @@ int MainComponent::cleanUnusedAssets() {
 
 void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
 #if SYNTH_ENABLE_TIMELINE
+    // The knob menu's "Automate" would force-open the timeline panel — while the runtime "Show
+    // timeline" preference has the feature hidden, say so instead of overriding the user's choice.
+    if (!timelineFeatureEnabled) {
+        statusBar.showMessage("Timeline is disabled - enable it in Settings > Preferences to automate parameters");
+        return;
+    }
+
     auto* node = audioEngine.getGraph().getNodeForId(nodeId);
     auto* module = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
     if (module == nullptr) {

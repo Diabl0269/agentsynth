@@ -1451,6 +1451,17 @@ Keyboard focus is orthogonal to this diagram, not another region: whichever of t
 clip lanes / piano roll the user last clicked owns Cmd+C/V/D, per the **Keyboard & focus**
 subsection at the end of this section (TL5-10).
 
+Inside a `SYNTH_ENABLE_TIMELINE` build, Preferences has a runtime kill switch on top of all of
+this: "Show timeline (experimental)" (`PreferencesSettingsTab`, key `timelineFeatureEnabled`,
+default **on**). Turning it off hides the user-facing entry points only — the toolbar button
+(`MainComponent::toggleTimelineButton`), the Cmd+T command, and the Space play/stop transport key
+all become inactive/invisible via `MainComponent::applyTimelineFeatureEnabled()`, which reuses the
+toolbar toggle's own hide path if the panel happens to be open. It deliberately leaves everything
+else alive: the `TimelineDoc`, its audio-thread publishing, and project load/save all keep working
+exactly as before, so turning the preference back on picks up right where the user left off. The
+compile-time `SYNTH_ENABLE_TIMELINE` flag itself stays a build/CI concern — this preference cannot
+turn the feature back on in a flag-OFF build.
+
 ### What it is
 
 The always-present scaffold (TL5-1): a themed background (`theme.colors.bg0`-family, same fallback

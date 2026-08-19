@@ -1941,4 +1941,50 @@ juce::var AIStateMapper::getPatchSchema() {
     return juce::var(schema.get());
 }
 
+juce::var AIStateMapper::getPatchSchemaWithTimelineOps() {
+    juce::var schema = getPatchSchema();
+    auto* schemaObj = schema.getDynamicObject();
+    jassert(schemaObj != nullptr);
+    auto* properties = schemaObj->getProperty("properties").getDynamicObject();
+    jassert(properties != nullptr);
+
+    // One permissive op shape — see the header comment for why this is a grammar, not a
+    // validator. Field names/types mirror TimelineOps.cpp's readers exactly; "track" is left
+    // untyped because it is legitimately either a string (exact track name) or {"index": N}.
+    const juce::String opsSchemaJson = R"json({
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "op": {"type": "string", "enum": ["addTrack", "placeClips", "writeLane", "placeMidiClip"]},
+                "kind": {"type": "string", "enum": ["midi", "automation"]},
+                "name": {"type": "string"},
+                "track": {},
+                "clips": {"type": "array", "items": {"type": "object", "properties": {
+                    "startBeat": {"type": "number"}, "lengthBeats": {"type": "number"},
+                    "name": {"type": "string"},
+                    "notes": {"type": "array", "items": {"type": "object", "properties": {
+                        "startBeat": {"type": "number"}, "lengthBeats": {"type": "number"},
+                        "pitch": {"type": "integer"}, "velocity": {"type": "integer"},
+                        "channel": {"type": "integer"}},
+                        "required": ["startBeat", "lengthBeats", "pitch"]}}},
+                    "required": ["startBeat", "lengthBeats", "notes"]}},
+                "nodeUuid": {"type": "string"},
+                "paramId": {"type": "string"},
+                "points": {"type": "array", "items": {"type": "object", "properties": {
+                    "beat": {"type": "number"}, "value": {"type": "number"},
+                    "tension": {"type": "number"}, "curve": {"type": "integer"}},
+                    "required": ["beat", "value"]}},
+                "startBeat": {"type": "number"},
+                "midBase64": {"type": "string"}
+            },
+            "required": ["op"]
+        }
+    })json";
+    properties->setProperty("timelineOps", juce::JSON::parse(opsSchemaJson));
+    // Deliberately NOT added to "required": a patch-only response stays exactly as valid as it
+    // was under getPatchSchema(), and the prompt tells the model when the key is warranted.
+    return schema;
+}
+
 } // namespace synth

@@ -706,6 +706,32 @@ This is the **client** half of the capability. TL8-2 (platform) owns the **serve
 capability schema the model actually emits against, the counterpart of `getPatchSchema` for
 patches. Nothing here trusts that schema: an envelope is re-validated locally whatever produced it.
 
+**The LOCAL (Ollama) path can author this envelope too**, behind
+`AIIntegrationService::setTimelineToolsEnabled` — driven by the runtime "Show timeline
+(experimental)" preference via `MainComponent::applyTimelineFeatureEnabled`, and additionally gated
+on a timeline context being installed (`hasTimelineContext()`). While active, three things change
+and nothing else:
+
+- the system prompt gains a "TIMELINE & AUTOMATION OPERATIONS" section teaching the four ops
+  (swapped into the existing history **in place** — a mid-conversation toggle never clears the
+  chat, and off means byte-identical to the pre-timeline prompt);
+- the structured-output `format` becomes `AIStateMapper::getPatchSchemaWithTimelineOps()` —
+  `getPatchSchema()` plus an OPTIONAL `timelineOps` array whose item schema is deliberately
+  permissive (one object shape, only `"op"` required): it is a grammar that lets the model express
+  the ops, not a validator — `TimelineOps::validate` remains the gate, and the reserved-fields
+  rule (`"timeline"`, `"schemaVersion"`, node `"uuid"` absent) is untouched;
+- the outgoing request grows an `## Automation targets` section
+  (`buildAutomationTargetsSection()`): one line per uuid-bearing node listing its float parameter
+  ids and RAW ranges — the addressing channel `writeLane` needs. Node uuids appear there **on
+  purpose**, despite `ArrangementContext`'s no-uuid rule: that rule keeps identifiers out of the
+  human-readable summary; this section is what makes the grammar usable at all, uuids are random
+  per-node identity (never a path or plugin id), and `validate()` only accepts pairs that resolve
+  against the live graph anyway. Bounded to ~2000 chars, whole lines, with a truncation marker.
+
+Extraction, validation, preview and Apply are unchanged and provider-agnostic either way — they
+act on what a response actually carries, and the user's Apply click stays the write gate.
+Pinned by `AIIntegrationServiceTest.TimelineToolsToggle*` / `AutomationTargetsSection*`.
+
 | Op | What it does | What it deliberately does not do |
 | --- | --- | --- |
 | `addTrack` | Creates the **doc** track. `kind` is `"midi"` or `"automation"`. | No graph node, no Track In wiring — binding a track to a module is a routing decision about the user's own patch, so it stays a user/host gesture. The new track is unbound and the preview says so. `"audio"` is not offered: an audio track needs an asset, and assets are trusted-only. |

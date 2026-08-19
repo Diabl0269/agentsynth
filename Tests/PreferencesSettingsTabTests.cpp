@@ -86,6 +86,36 @@ TEST_F(PreferencesSettingsTabTest, SetGraphEditorPushesCurrentValues) {
     EXPECT_TRUE(editor.getDefaultDualIOForNewModules());
 }
 
+TEST_F(PreferencesSettingsTabTest, TimelineFeatureDefaultsToEnabled) {
+    PreferencesSettingsTab tab(appProperties);
+    EXPECT_TRUE(tab.isTimelineFeatureEnabled());
+    // Not yet touched by the user — nothing should be written to disk until setToggle/persist runs.
+    EXPECT_FALSE(appProperties.getUserSettings()->containsKey("timelineFeatureEnabled"));
+}
+
+TEST_F(PreferencesSettingsTabTest, TimelineFeatureLoadsPersistedValue) {
+    appProperties.getUserSettings()->setValue("timelineFeatureEnabled", "0");
+    PreferencesSettingsTab tab(appProperties);
+    EXPECT_FALSE(tab.isTimelineFeatureEnabled());
+}
+
+TEST_F(PreferencesSettingsTabTest, TogglingTimelineFeaturePersistsAndFiresCallback) {
+    PreferencesSettingsTab tab(appProperties);
+
+    std::vector<bool> fired;
+    tab.onTimelineFeatureToggled = [&](bool enabled) { fired.push_back(enabled); };
+
+    tab.setTimelineFeatureEnabled(false);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineFeatureEnabled"), "0");
+    ASSERT_EQ(fired.size(), 1u);
+    EXPECT_FALSE(fired.back());
+
+    tab.setTimelineFeatureEnabled(true);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineFeatureEnabled"), "1");
+    ASSERT_EQ(fired.size(), 2u);
+    EXPECT_TRUE(fired.back());
+}
+
 TEST_F(PreferencesSettingsTabTest, PaintDoesNotCrash) {
     PreferencesSettingsTab tab(appProperties);
     tab.setSize(500, 400);

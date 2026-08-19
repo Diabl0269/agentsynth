@@ -61,7 +61,28 @@ public:
     void setTimelineContext(const TimelineDoc* doc, const TransportService* transport) {
         timelineDoc = doc;
         transportService = transport;
+        refreshSystemPrompt(); // the timeline tool section is gated on context being present
     }
+
+    /**
+     * @brief Switches the LOCAL model's timeline/automation authoring on or off — the runtime
+     *        "Show timeline" preference's AI half, driven by MainComponent.
+     *
+     * On (and with a timeline context installed): the system prompt teaches the `timelineOps`
+     * grammar, the structured-output schema handed to the provider grows an optional
+     * `timelineOps` property (AIStateMapper::getPatchSchemaWithTimelineOps), and the outgoing
+     * request's context gains an "Automation targets" section (the (nodeUuid, paramId) pairs
+     * writeLane needs — see buildAutomationTargetsSection). Off: prompt, schema and context are
+     * byte-identical to the pre-timeline behaviour. Extraction/preview/apply stay wired either
+     * way — they act on what a response actually carries, and the Apply gate is the user's.
+     */
+    void setTimelineToolsEnabled(bool enabled) {
+        if (timelineToolsEnabled == enabled)
+            return;
+        timelineToolsEnabled = enabled;
+        refreshSystemPrompt();
+    }
+    bool areTimelineToolsEnabled() const { return timelineToolsEnabled; }
 
     // -- Timeline operations -----------------------------------------------------------------
     // The write half of the timeline seam, and a deliberate mirror of the patch card's flow:
@@ -299,9 +320,37 @@ private:
 
     // The host's write path, installed by MainComponent — see setTimelineOpsApplyCallback().
     TimelineOpsApplyCallback timelineOpsApply;
+
+    // The runtime switch behind setTimelineToolsEnabled(). Off by default: the timeline prompt
+    // section, schema extension and targets context only exist once the app explicitly opts in.
+    bool timelineToolsEnabled = false;
+
+    // The (nodeUuid, paramId, range) inventory a `writeLane` op needs — the model cannot name a
+    // node it was never told about. Uuids appear here ON PURPOSE, despite ArrangementContext's
+    // no-uuid rule: that rule keeps identifiers out of the human-readable SUMMARY (where a display
+    // name serves better and a leak buys nothing); this section is the ADDRESSING channel without
+    // which the writeLane grammar is unusable. A node uuid is random per-node identity — never a
+    // file path, plugin identifier or factory key — and validate() only accepts pairs that resolve
+    // against the live graph anyway.
+    juce::String buildAutomationTargetsSection() const;
 #endif
 
+    // True while the timeline tool surface should be offered to the model: the switch is on AND
+    // a timeline context is installed. Always false in a SYNTH_ENABLE_TIMELINE=OFF build.
+    bool timelineToolsActive() const {
+#if SYNTH_ENABLE_TIMELINE
+        return timelineToolsEnabled && hasTimelineContext();
+#else
+        return false;
+#endif
+    }
+
     void initSystemPrompt();
+
+    /** The full system-message text — initSystemPrompt() pushes it, refreshSystemPrompt() swaps it
+     *  into an existing history in place (mid-conversation toggles must not clear the chat). */
+    juce::String buildSystemPrompt() const;
+    void refreshSystemPrompt();
 
     /**
      * @brief Builds the patch-augmented request content for a user message, without mutating chatHistory.
