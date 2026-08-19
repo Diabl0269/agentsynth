@@ -68,6 +68,53 @@ TEST_F(PreferencesSettingsTabTest, ChangingControlsPersistsAndPushesToEditor) {
     EXPECT_FALSE(editor.getDefaultDualIOForNewModules());
 }
 
+// The tests above drive the programmatic setters. This one clicks the actual button, which is what
+// a user does — it is the only thing that exercises the onClick lambda wiring.
+TEST_F(PreferencesSettingsTabTest, ClickingTheToggleReachesTheEditorAndNewModules) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 420);
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+    tab.setGraphEditor(&editor);
+
+    juce::ToggleButton* dualToggle = nullptr;
+    for (auto* child : tab.getChildren())
+        if (auto* tb = dynamic_cast<juce::ToggleButton*>(child))
+            if (tb->getButtonText().containsIgnoreCase("Split"))
+                dualToggle = tb;
+    ASSERT_NE(dualToggle, nullptr) << "the Dual I/O preference must be a labelled toggle";
+    ASSERT_FALSE(dualToggle->getBounds().isEmpty()) << "an unlaid-out control cannot be clicked";
+    ASSERT_FALSE(dualToggle->getToggleState());
+
+    // NOT triggerClick(): that posts a command message, which never dispatches in a headless test.
+    // sendNotificationSync runs the same onClick lambda a real click would, synchronously.
+    dualToggle->setToggleState(true, juce::sendNotificationSync);
+    EXPECT_TRUE(dualToggle->getToggleState());
+    EXPECT_TRUE(editor.getDefaultDualIOForNewModules()) << "the click never reached the GraphEditor";
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("defaultDualIOForNewModules"), "1");
+
+    // ...and a module created afterwards actually honours it.
+    editor.addModuleAtCanvasPosition("Delay", juce::Point<int>(100, 100), nullptr);
+    editor.addModuleAtCanvasPosition("Oscillator", juce::Point<int>(400, 100), nullptr);
+    for (auto* node : engine.getGraph().getNodes()) {
+        const auto name = node->getProcessor()->getName();
+        if (name == "Delay" || name == "Oscillator") {
+            auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor());
+            ASSERT_NE(mb, nullptr);
+            EXPECT_TRUE(mb->isDualIO()) << name << " ignored the preference set by clicking the toggle";
+        }
+    }
+
+    dualToggle->setToggleState(false, juce::sendNotificationSync);
+    EXPECT_FALSE(editor.getDefaultDualIOForNewModules());
+    editor.addModuleAtCanvasPosition("Filter", juce::Point<int>(700, 100), nullptr);
+    for (auto* node : engine.getGraph().getNodes())
+        if (node->getProcessor()->getName() == "Filter")
+            EXPECT_FALSE(dynamic_cast<ModuleBase*>(node->getProcessor())->isDualIO())
+                << "Filter ignored the single-jack preference";
+}
+
 TEST_F(PreferencesSettingsTabTest, SetGraphEditorPushesCurrentValues) {
     appProperties.getUserSettings()->setValue("smartConnectionMode", "NewOnly");
     appProperties.getUserSettings()->setValue("doubleClickPortDisconnect", "0");

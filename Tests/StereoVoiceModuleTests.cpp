@@ -646,6 +646,27 @@ TEST(SplitBlockDualIO, CollapsingDoesNotDisturbTheCVChannelMap) {
     }
 }
 
+TEST(SplitBlockDualIO, FlippingTheParameterFlipsTheVisibleJacks) {
+    // The header button and the Preferences default both work by setting this one parameter, so
+    // this is what "pushing the toggle changes the module" reduces to.
+    FilterModule filter;
+    auto* dual = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(&filter, "dualIO"));
+    ASSERT_NE(dual, nullptr);
+
+    ASSERT_TRUE(filter.isDualIO());
+    ASSERT_EQ(filter.getVisibleInputPortCount(), 5);
+
+    dual->setValueNotifyingHost(0.0f);
+    EXPECT_FALSE(filter.isDualIO());
+    EXPECT_EQ(filter.getVisibleInputPortCount(), 4) << "collapsing must actually drop a jack";
+    EXPECT_EQ(filter.getVisibleOutputPortCount(), 1);
+
+    dual->setValueNotifyingHost(1.0f);
+    EXPECT_TRUE(filter.isDualIO());
+    EXPECT_EQ(filter.getVisibleInputPortCount(), 5) << "and re-expanding must bring it back";
+    EXPECT_EQ(filter.getVisibleOutputPortCount(), 2);
+}
+
 TEST(SplitBlockDualIO, CollapsingDoesNotChangeWhatTheModuleRenders) {
     // Collapsing hides a jack; it must not alter the DSP. Audio L is byte-identical either way.
     auto renderWith = [](bool dual) {
