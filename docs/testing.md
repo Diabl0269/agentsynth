@@ -324,6 +324,21 @@ interesting against a real `synth-platform` server; the local `AIChatComponent` 
 the backend (`setHistorySourcesForTesting`), so exercising the real client/server contract needs an
 actual server running.
 
+**Fast path:** `scripts/run-local-cloud-dev.sh` does everything below in one command — starts a
+disposable local Postgres (Docker), migrates it, starts `synth-platform`'s API server against it
+(dev IdP, real Ollama inference, auto-picks a sane model if `llama3.1` isn't pulled), then launches
+this repo's locally-built Debug app with the override already set:
+
+```bash
+scripts/run-local-cloud-dev.sh            # start everything + launch the app
+scripts/run-local-cloud-dev.sh --down     # stop the API server and Postgres container
+```
+
+Requires a `synth-platform` checkout as a sibling directory by default (override with
+`SYNTH_PLATFORM_DIR`) and a Debug `AgentSynth` build already present (`BUILD_DIR`, default `build`
+— see `## Build` above). It prints the exact Settings/sign-in steps once the app launches. The rest
+of this section explains what it's doing and why, for when something needs debugging by hand.
+
 There are two hosts involved, and only one of them was previously configurable:
 
 - **Chat / `patch.generate`** (`RemoteProvider`) — already user-configurable via the Settings
