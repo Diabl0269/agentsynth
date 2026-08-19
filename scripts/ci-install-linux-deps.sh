@@ -23,8 +23,16 @@
 #   APT_GET           apt-get binary (default "apt-get")
 #   TIMEOUT_BIN       timeout binary (default "timeout"; "" disables the cap — macOS has none)
 #   MIRROR_FILES      space-separated files to rewrite when dropping the mirror
-#   UPDATE_TIMEOUT    seconds `apt-get update` may take before it counts as stalled (default 180)
-#   INSTALL_TIMEOUT   seconds `apt-get install` may take before it counts as stalled (default 600)
+#   UPDATE_TIMEOUT    seconds `apt-get update` may take before it counts as stalled (default 60)
+#   INSTALL_TIMEOUT   seconds `apt-get install` may take before it counts as stalled (default 300)
+#
+# Those two defaults are set from the measured healthy and unhealthy numbers, not guessed. Healthy:
+# update ~5-15 s, install ~40 s. Unhealthy, measured on the live outage in run 32232448856: the
+# first update burned the full cap, the rewrite took milliseconds, and the retry then fetched
+# 10.7 MB in 2 s with install fetching 31.4 MB in 2 s. So the cap is almost entirely dead time when
+# the mirror is sick — it wants to be the smallest value that cannot fire on a slow-but-alive
+# mirror, which is why it is 60 s and not the 180 s first shipped (that made a recovered run 3m19s
+# where 1m10s was available).
 
 set -euo pipefail
 
@@ -32,8 +40,8 @@ SUDO="${SUDO-sudo}"
 APT_GET="${APT_GET:-apt-get}"
 TIMEOUT_BIN="${TIMEOUT_BIN-timeout}"
 MIRROR_FILES="${MIRROR_FILES:-/etc/apt/apt-mirrors.txt}"
-UPDATE_TIMEOUT="${UPDATE_TIMEOUT:-180}"
-INSTALL_TIMEOUT="${INSTALL_TIMEOUT:-600}"
+UPDATE_TIMEOUT="${UPDATE_TIMEOUT:-60}"
+INSTALL_TIMEOUT="${INSTALL_TIMEOUT:-300}"
 
 # Keep this list in sync with the ASAN job's cache-apt-pkgs-action package list in ci.yml.
 PACKAGES=(
