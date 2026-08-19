@@ -1429,6 +1429,16 @@ void AIChatComponent::showHistoryPopup(std::vector<LocalConversationSummary> lis
     lastHistoryPopupWasCloud = isCloud;
     lastHistoryList = list;
 
+    // Real UI is skipped under test (see didShowHistoryPopupForTesting()'s doc comment) — a test
+    // only ever reaches this method via simulateHistoryButtonClick() after installing fakes with
+    // setHistorySourcesForTesting(), so that's what signals "under test" here, with no separate
+    // flag for a future test to forget to set. Actually opening a native juce::PopupMenu window
+    // on a headless CI runner with no X server crashes JUCE's XWindowSystem outright (asserts
+    // then segfaults) — every test above only asserts on the *ForTesting() state already set
+    // above, never on an actual visible menu, so skipping the real window is lossless for them.
+    if (testLocalHistorySource != nullptr || testCloudHistorySource != nullptr)
+        return;
+
     juce::PopupMenu menu;
     menu.addItem(1, "Clear my history");
     menu.addSeparator();
