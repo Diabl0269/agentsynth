@@ -242,6 +242,32 @@ The status bar polls at 5 Hz, driven by `MainComponent`'s 10 Hz timer via an eve
 
 Each category section-header entry in `ModuleLibraryComponent::paint()` draws a 16×16 category icon at `x=10` using `lf->peekIcon(catIcon)`, then shifts the header text to `x=30`. This is null-guarded: when the `AppLookAndFeel` cast returns null (headless tests or assets absent), no icon is drawn and header text falls back to the original `x=10` position.
 
+### ModuleLibraryComponent search
+
+A `juce::TextEditor` is pinned at the top of the library (`kSearchHeight = 32`), above the COLLAPSE ALL strip. Together they form `kPinnedChromeHeight` — the scrollbar, row clip, and hit-testing all start below that band so a scrolled row cannot steal a click from the search field.
+
+Typing a query (trimmed, case-insensitive substring) filters `buildRows()`:
+
+- A module or snippet row is kept when its name contains the query, or when its section header contains the query (so searching `"Time"` shows Delay and Reverb).
+- A section with no remaining children is omitted entirely.
+- Matching sections are drawn fully open regardless of `collapsedSections`. The stored fold is not rewritten and `onCollapseStateChanged` does not fire, so clearing the field restores the user's collapse state.
+- The matching substring is painted with the theme accent (fill + coloured glyphs) via `highlightSpansFor`. A query that matches nothing leaves the list empty and draws "No matching modules".
+- Filtering is layout-only: `getDraggableModuleNames()` still returns every factory type.
+
+### ModuleLibraryComponent search
+
+A `juce::TextEditor` is pinned at the top of the library (`kSearchHeight = 32`), above the COLLAPSE ALL strip. The two together are `kPinnedChromeHeight`; rows and the scrollbar live below that band, so the field never scrolls away.
+
+Typing a query (trimmed, case-insensitive substring):
+
+- Hides module, snippet, and empty-hint rows that do not contain the query.
+- A section stays visible when its header matches **or** any of its children match. A header match reveals every child in that section (searching "Time" shows Delay and Reverb).
+- Matching sections layout as fully open. The stored collapse set is not rewritten and `onCollapseStateChanged` does not fire, so clearing the field restores the fold the user had.
+- Matching runs in the visible label are highlighted (accent fill + accent text). `highlightSpansFor` is the pure helper paint uses; tests cover it directly.
+- No hits: `buildRows()` is empty and the body draws "No matching modules".
+
+Escape clears the field. `getDraggableModuleNames()` is unfiltered — callers that instantiate via the factory must not see a search-shrunk catalogue.
+
 ### ModMatrixComponent chrome
 
 `Source/UI/ModMatrixComponent.h/.cpp` paints rows with the following visual rules:
@@ -857,7 +883,7 @@ Composes tooltip text with an optional keyboard shortcut hint appended in `[brac
 | **Library section collapse/expand** | Band-height fold (150 ms), `easeInOutCubic` | `ModuleLibraryComponent` |
 | **AI panel show/hide** | Bounds tween, `easeInOutCubic` | `MainComponent` |
 | **Empty-canvas first-run hint** | Static drawn text; no animation — drawn only when `isCanvasEmpty(nodeCount)` returns `true` | `GraphEditor` |
-| **ModuleLibraryComponent rows** | Row hover-highlight; grab/dragging-hand cursor on draggable rows; per-module descriptions via `descriptionFor(name)` surfaced as `setTooltip()` | `ModuleLibraryComponent` |
+| **ModuleLibraryComponent rows** | Row hover-highlight; grab/dragging-hand cursor on draggable rows; per-module descriptions via `descriptionFor(name)` surfaced as `setTooltip()`; search-query substring highlight on matching labels | `ModuleLibraryComponent` |
 | **Preset-load feedback** | Status bar text updated during load; no spinner | `MainComponent` → `StatusBarComponent` |
 | **AI request Cancel + spinner** | Cancel button visible while a request is in flight; pulsing "thinking" spinner (time-bounded — stops on completion or cancel, confined to its region) | `AIChatComponent` |
 

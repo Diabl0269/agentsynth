@@ -4,7 +4,8 @@
 //   • visibility     — the bar appears only when the rows outgrow the panel, and hides again
 //   • clamping       — the offset never leaves [0, overflow], including after resize/collapse
 //   • hit-testing    — component-space y maps through the offset to the right row
-//   • pinned strip   — the COLLAPSE ALL chrome is never a row hit, however far the rows scrolled
+//   • pinned chrome  — the search field and COLLAPSE ALL strip are never a row hit, however far
+//                      the rows scrolled
 //   • paint          — drawing a scrolled panel does not crash
 
 #include "../Source/UI/ModuleLibraryComponent.h"
@@ -95,7 +96,8 @@ TEST(ModuleLibraryScroll, ScrollBarSitsBelowThePinnedStripAtTheRightEdge) {
     ASSERT_NE(bar, nullptr);
 
     EXPECT_EQ(bar->getRight(), kPanelWidth) << "the bar hugs the right edge";
-    EXPECT_EQ(bar->getY(), ModuleLibraryComponent::kTopStripHeight) << "the bar starts below the pinned strip";
+    EXPECT_EQ(bar->getY(), ModuleLibraryComponent::kPinnedChromeHeight)
+        << "the bar starts below the search field and collapse-all strip";
     EXPECT_EQ(bar->getBottom(), kShortPanelHeight);
     EXPECT_GT(bar->getWidth(), 0);
 }
@@ -183,7 +185,7 @@ TEST(ModuleLibraryScroll, HitTestingFollowsTheScrollOffset) {
 
     comp.setScrollOffset(comp.getMaxScrollOffset());
     const int screenY = last.y + last.height / 2 - comp.getScrollOffset();
-    ASSERT_GE(screenY, ModuleLibraryComponent::kTopStripHeight);
+    ASSERT_GE(screenY, ModuleLibraryComponent::kPinnedChromeHeight);
     ASSERT_LT(screenY, kShortPanelHeight);
 
     EXPECT_EQ(comp.getEntryIndexAtComponentY(screenY), last.entryIndex)
@@ -226,8 +228,9 @@ TEST(ModuleLibraryScroll, PinnedTopStripIsNeverARowHitWhileScrolled) {
     comp.setScrollOffset(comp.getMaxScrollOffset());
     ASSERT_GT(comp.getScrollOffset(), 0);
 
-    // Scrolled far enough that rows now pass *under* the strip; the strip still owns those pixels.
-    for (int y = 0; y < ModuleLibraryComponent::kTopStripHeight; ++y)
+    // Scrolled far enough that rows now pass *under* the search field and collapse-all strip;
+    // that chrome still owns those pixels.
+    for (int y = 0; y < ModuleLibraryComponent::kPinnedChromeHeight; ++y)
         EXPECT_EQ(comp.getEntryIndexAtComponentY(y), -1) << "y=" << y << " is pinned chrome, not a row";
 
     simulateMouseMoveAt(comp, 2);

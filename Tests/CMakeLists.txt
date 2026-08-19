@@ -101,6 +101,7 @@ add_executable(Tests
     ModuleLibraryCollapseTests.cpp
     ModuleLibraryCollapseAnimationTests.cpp
     ModuleLibraryScrollTests.cpp
+    ModuleLibrarySearchTests.cpp
     SelectionModelTests.cpp
     SnippetManagerTests.cpp
     MultiSelectTests.cpp
