@@ -121,6 +121,33 @@ public:
         return "Audio";
     }
 
+    // -------------------------------------------------------------------------
+    // Split-block stereo (Audio R on a dedicated kRightBase block)
+    //
+    // The helpers above assume the stereo pair is raw ch0/ch1, which is true for the FX. The voice
+    // modules cannot use that: their ch1 is a CV input (Waveform / Position / Cutoff / gain), so
+    // Audio R lives on its own block above the CV inputs. That block is NOT adjacent to ch0, and a
+    // collapsed jack can only fan to ADJACENT raw channels, so "Dual I/O off" on these modules
+    // means "show the left leg only" rather than "one jack that feeds both legs".
+    // -------------------------------------------------------------------------
+
+    /** Raw channel carrying the right audio leg, or -1 when the module has no second leg.
+        Defaults to the FX layout (ch1); split-block modules override it with their kRightBase. */
+    virtual int rightAudioLegChannel() const { return hasDualIOParameter() ? 1 : -1; }
+
+    /** True when the right leg sits on its own block rather than on ch1. Callers that want to wire
+        or unwire a stereo pair must go through rightAudioLegChannel() rather than assuming ch1. */
+    bool hasSplitBlockStereo() const { return rightAudioLegChannel() > 1; }
+
+    /** Visible audio jacks for a split-block module: 2 when dual, 1 when collapsed. */
+    int splitAudioJackCount() const { return isDualIO() ? 2 : 1; }
+
+    juce::String splitAudioLabel(int visibleJack) const {
+        if (!isDualIO())
+            return "Audio";
+        return visibleJack == 1 ? "Audio R" : "Audio L";
+    }
+
     /** Balance pan law shared by every stereo-capable module: centre leaves BOTH legs at unity,
         and panning attenuates only the leg you move away from. -1 is hard left, +1 hard right.
 

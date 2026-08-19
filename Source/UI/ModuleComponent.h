@@ -189,8 +189,10 @@ private:
     // Re-anchors this module's connections onto its new channel layout after a poly toggle.
     void applyPolyStateChange();
 
-    // Dual I/O only changes which jacks are *visible* — raw ch0/ch1 stay put — so this refreshes
-    // layout without tearing cables down. Message thread only.
+    // Dual I/O changes which jacks are *visible*. For an FX pair the raw ch0/ch1 legs stay put and
+    // no cable is touched; for a split-block module (#219) collapsing also hides its kRightBase
+    // leg, so GraphEditor drops the cables left on it — an invisible jack cannot be unplugged.
+    // Message thread only.
     void applyDualIOLayoutChange();
     void updateDualIOTooltip();
 

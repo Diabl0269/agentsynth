@@ -35,6 +35,9 @@ public:
         : ModuleBase("VCA", kNumChannels, kNumChannels) {
         addParameter(gainParam = new juce::AudioParameterFloat("gain", "Gain", 0.0f, 1.0f, 0.5f));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
+        // Defaults to dual: this module gates in stereo now. Collapsed, its jack layout is exactly
+        // what it was before #219 — Audio, CV.
+        addDualIOParameter(/*defaultDual=*/true);
         addMuteParameter();
         enableVisualBuffer(true);
     }
@@ -160,14 +163,17 @@ public:
     }
 
     std::vector<ModulationTarget> getModulationTargets() const override { return {{"CV", 1}}; }
+    /** Audio R sits next to Audio L; CV keeps its raw channel, only its visible slot moves. */
     juce::String getInputPortLabel(int i) const override {
-        // Audio R sits next to Audio L; CV keeps its raw channel, only its visible slot moves.
-        const juce::String labels[] = {"Audio L", "Audio R", "CV"};
-        return (i >= 0 && i < 3) ? labels[i] : ModuleBase::getInputPortLabel(i);
+        const int audioJacks = splitAudioJackCount();
+        if (i >= 0 && i < audioJacks)
+            return splitAudioLabel(i);
+        return (i == audioJacks) ? "CV" : ModuleBase::getInputPortLabel(i);
     }
-    juce::String getOutputPortLabel(int i) const override { return i == 1 ? "Audio R" : "Audio L"; }
-    int getVisibleInputPortCount() const override { return 3; }
-    int getVisibleOutputPortCount() const override { return 2; }
+    juce::String getOutputPortLabel(int i) const override { return splitAudioLabel(i); }
+    int getVisibleInputPortCount() const override { return splitAudioJackCount() + 1; }
+    int getVisibleOutputPortCount() const override { return splitAudioJackCount(); }
+    int rightAudioLegChannel() const override { return kRightBase; }
     ModuleType getModuleType() const override { return ModuleType::VCA; }
 
     LogicalPort mapInputChannel(int raw) const override {
@@ -178,14 +184,14 @@ public:
         if (polyParam->get()) {
             // Poly mode: raw 8-15 = per-voice ModCV fan
             if (raw >= kPolyCVBase && raw < kPolyCVBase + kNumVoices) {
-                p.visibleJackIndex = 2;
+                p.visibleJackIndex = splitAudioJackCount();
                 p.role = PortRole::ModCV;
                 p.isPolyGroupHead = (raw == kPolyCVBase);
                 p.polyVoiceSpan = (raw == kPolyCVBase) ? kNumVoices : 1;
                 return p;
             }
         } else if (raw == 1) {
-            p.visibleJackIndex = 2;
+            p.visibleJackIndex = splitAudioJackCount();
             p.role = PortRole::ModCV;
             p.isPolyGroupHead = true;
             p.polyVoiceSpan = 1;
@@ -214,7 +220,7 @@ public:
             p.isPolyGroupHead = true;
             return p;
         }
-        if (raw == kRightBase) {
+        if (isDualIO() && raw == kRightBase) {
             p.visibleJackIndex = 1;
             p.isPolyGroupHead = true;
             return p;
@@ -231,7 +237,8 @@ public:
     /** Shared by the input map and the audio half of the output map. */
     std::optional<LogicalPort> mapAudioLeg(int raw) const {
         const int span = polyParam->get() ? kNumVoices : 1;
-        for (int leg = 0; leg < 2; ++leg) {
+        const int legs = splitAudioJackCount(); // collapsed: the right block is not exposed
+        for (int leg = 0; leg < legs; ++leg) {
             const int base = legBaseChannel(leg);
             if (raw >= base && raw < base + span) {
                 LogicalPort p;

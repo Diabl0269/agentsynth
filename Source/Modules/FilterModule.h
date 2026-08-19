@@ -46,6 +46,9 @@ public:
                          "filterType", "Filter Type",
                          juce::StringArray{"LPF24", "LPF12", "HPF24", "HPF12", "BPF24", "BPF12", "Notch"}, 0));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
+        // Defaults to dual: this module filters in stereo now. Collapsed, its jack layout is
+        // exactly what it was before #219 — Audio, Cutoff, Resonance, Drive.
+        addDualIOParameter(/*defaultDual=*/true);
         addOutputLevelParameter();
         addMuteParameter();
         enableVisualBuffer(true);
@@ -123,16 +126,21 @@ public:
             return {{"Cutoff", 8}, {"Resonance", 9}, {"Drive", 10}};
         return {{"Cutoff", 1}, {"Resonance", 2}, {"Drive", 3}};
     }
+    /** Audio R sits next to Audio L rather than after Drive, so the two legs read as a pair. Visible
+        jack order is presentation only — connections persist by raw channel index, so the CV jacks
+        shifting as the toggle flips never touches a saved patch. */
     juce::String getInputPortLabel(int i) const override {
-        // Audio R sits next to Audio L rather than after Drive, so the two legs read as a pair.
-        // Visible jack order is presentation only — connections persist by raw channel index, so
-        // Cutoff/Resonance/Drive moving from jacks 1-3 to 2-4 does not touch a saved patch.
-        const juce::String labels[] = {"Audio L", "Audio R", "Cutoff", "Resonance", "Drive"};
-        return (i >= 0 && i < kNumVisibleInputs) ? labels[i] : ModuleBase::getInputPortLabel(i);
+        const int audioJacks = splitAudioJackCount();
+        if (i >= 0 && i < audioJacks)
+            return splitAudioLabel(i);
+        const juce::String cvLabels[] = {"Cutoff", "Resonance", "Drive"};
+        const int cv = i - audioJacks;
+        return (cv >= 0 && cv < kNumCVInputs) ? cvLabels[cv] : ModuleBase::getInputPortLabel(i);
     }
-    juce::String getOutputPortLabel(int i) const override { return i == 1 ? "Audio R" : "Audio L"; }
-    int getVisibleInputPortCount() const override { return kNumVisibleInputs; }
-    int getVisibleOutputPortCount() const override { return 2; }
+    juce::String getOutputPortLabel(int i) const override { return splitAudioLabel(i); }
+    int getVisibleInputPortCount() const override { return splitAudioJackCount() + kNumCVInputs; }
+    int getVisibleOutputPortCount() const override { return splitAudioJackCount(); }
+    int rightAudioLegChannel() const override { return kRightBase; }
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Filter; }
     ModuleType getModuleType() const override { return ModuleType::Filter; }
 
@@ -147,7 +155,7 @@ public:
         for (int cv = 0; cv < kNumCVInputs; ++cv) {
             if (raw == cvChannelFor(cv, poly)) {
                 LogicalPort p;
-                p.visibleJackIndex = 2 + cv; // after Audio L / Audio R
+                p.visibleJackIndex = splitAudioJackCount() + cv; // after the audio jack(s)
                 p.role = PortRole::ModCV;
                 p.isPolyGroupHead = true;
                 p.polyVoiceSpan = 1;
@@ -188,7 +196,8 @@ public:
         const bool poly = polyParam->get();
         const int span = poly ? kNumVoices : 1;
 
-        for (int leg = 0; leg < kLegCount; ++leg) {
+        const int legs = splitAudioJackCount(); // collapsed: the right block is not exposed
+        for (int leg = 0; leg < legs; ++leg) {
             const int base = legBaseChannel(leg);
             if (raw >= base && raw < base + span) {
                 LogicalPort p;

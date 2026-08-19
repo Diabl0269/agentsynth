@@ -1,6 +1,7 @@
 #include "../Source/AI/AIStateMapper.h"
 #include "../Source/Modules/ADSRModule.h"
 #include "../Source/Modules/FX/DelayModule.h"
+#include "../Source/Modules/LFOModule.h"
 #include "../Source/Modules/MacroControlModule.h"
 #include "../Source/Modules/MathModule.h"
 #include "../Source/Modules/OscillatorModule.h"
@@ -386,7 +387,7 @@ TEST_F(ModuleComponentTest, HeaderButtonsAreDrawableButtons) {
     EXPECT_FALSE(foundDelete->getTooltip().isEmpty());
 }
 
-TEST_F(ModuleComponentTest, DualIOHeaderButtonOnFxModulesOnly) {
+TEST_F(ModuleComponentTest, DualIOHeaderButtonOnEveryStereoCapableModule) {
     AudioEngine engine;
     GraphEditor editor(engine);
 
@@ -404,12 +405,28 @@ TEST_F(ModuleComponentTest, DualIOHeaderButtonOnFxModulesOnly) {
     EXPECT_EQ(foundDual->getX(), 280 - 98);
     EXPECT_FALSE(foundDual->getTooltip().isEmpty());
 
+    // Since #219 the voice modules are stereo too, so they carry the same header icon. Their right
+    // leg is on a kRightBase block rather than ch1, but that is a channel-map detail — the control
+    // is identical from the user's side.
     OscillatorModule osc;
     ModuleComponent oscComp(&osc, juce::AudioProcessorGraph::NodeID(2), editor);
     oscComp.setSize(280, 400);
+    juce::DrawableButton* oscDual = nullptr;
     for (auto* child : oscComp.getChildren()) {
         if (auto* db = dynamic_cast<juce::DrawableButton*>(child))
-            EXPECT_NE(db->getName(), "Dual I/O") << "synth-voice modules have no Dual I/O header button";
+            if (db->getName() == "Dual I/O")
+                oscDual = db;
+    }
+    ASSERT_NE(oscDual, nullptr) << "voice modules are stereo-capable and expose the same toggle";
+    EXPECT_FALSE(oscDual->getTooltip().isEmpty());
+
+    // A module with no second audio leg must NOT grow the control.
+    LFOModule lfo;
+    ModuleComponent lfoComp(&lfo, juce::AudioProcessorGraph::NodeID(3), editor);
+    lfoComp.setSize(280, 400);
+    for (auto* child : lfoComp.getChildren()) {
+        if (auto* db = dynamic_cast<juce::DrawableButton*>(child))
+            EXPECT_NE(db->getName(), "Dual I/O") << "a CV-only module has no stereo pair to split";
     }
 }
 

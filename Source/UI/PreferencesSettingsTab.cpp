@@ -28,9 +28,6 @@ GraphEditor::SmartConnectionMode modeFromComboId(int id) {
     }
 }
 
-int comboIdFromDualIODefault(bool enabled) { return enabled ? 2 : 1; }
-
-bool dualIODefaultFromComboId(int id) { return id == 2; }
 } // namespace
 
 PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& props)
@@ -67,20 +64,13 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         persistDoubleClickPortDisconnect(doubleClickDisconnectToggle.getToggleState());
     };
 
-    addAndMakeVisible(defaultDualIOLabel);
-    defaultDualIOLabel.setText("Default FX I/O jack layout:", juce::dontSendNotification);
-    defaultDualIOLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
-
-    addAndMakeVisible(defaultDualIOCombo);
-    defaultDualIOCombo.addItem("Single Audio jack", 1);
-    defaultDualIOCombo.addItem("Split Left/Right jacks", 2);
-    defaultDualIOCombo.setTooltip("Applies to newly created modules that support Dual I/O (FX + Voice Mixer output).");
-    defaultDualIOCombo.setSelectedId(
-        comboIdFromDualIODefault(appProperties.getUserSettings()->getBoolValue("defaultDualIOForNewModules", false)),
-        juce::dontSendNotification);
-    defaultDualIOCombo.onChange = [this] {
-        persistDefaultDualIOForNewModules(dualIODefaultFromComboId(defaultDualIOCombo.getSelectedId()));
-    };
+    addAndMakeVisible(defaultDualIOToggle);
+    defaultDualIOToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue("defaultDualIOForNewModules", false), juce::dontSendNotification);
+    defaultDualIOToggle.setTooltip("Applies to newly created modules with a Dual I/O toggle — FX, Voice Mixer output, "
+                                   "and the voice modules (Oscillator, Wavetable, Filter, VCA, Sampler). Off gives "
+                                   "them a single Audio jack; existing modules on the canvas are not changed.");
+    defaultDualIOToggle.onClick = [this] { persistDefaultDualIOForNewModules(defaultDualIOToggle.getToggleState()); };
 
     addAndMakeVisible(perModuleDefaultsButton);
     perModuleDefaultsButton.setEnabled(false);
@@ -89,10 +79,25 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
 
 void PreferencesSettingsTab::paint(juce::Graphics& g) {
     g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
+
+    // Group separators. Drawn from the text colour at low alpha rather than a theme token so the
+    // rule stays legible on both light and dark themes without needing one of its own.
+    g.setColour(findColour(juce::Label::textColourId).withAlpha(0.18f));
+    for (const auto& divider : dividerBounds)
+        g.fillRect(divider);
 }
 
 void PreferencesSettingsTab::resized() {
     auto bounds = getLocalBounds().reduced(12);
+    dividerBounds.clear();
+
+    // Each group is followed by a hairline rule, so related settings read as one block instead of
+    // an undifferentiated stack of rows.
+    auto addDivider = [this, &bounds] {
+        bounds.removeFromTop(10);
+        dividerBounds.push_back(bounds.removeFromTop(1));
+        bounds.removeFromTop(10);
+    };
 
     titleLabel.setBounds(bounds.removeFromTop(28));
     bounds.removeFromTop(12);
@@ -100,16 +105,13 @@ void PreferencesSettingsTab::resized() {
     auto smartRow = bounds.removeFromTop(24);
     smartConnectionLabel.setBounds(smartRow.removeFromLeft(160));
     smartConnectionCombo.setBounds(smartRow.removeFromLeft(220));
-    bounds.removeFromTop(10);
+    addDivider();
 
     doubleClickDisconnectToggle.setBounds(bounds.removeFromTop(24));
-    bounds.removeFromTop(10);
+    addDivider();
 
-    auto dualIORow = bounds.removeFromTop(24);
-    defaultDualIOLabel.setBounds(dualIORow.removeFromLeft(220));
-    defaultDualIOCombo.setBounds(dualIORow.removeFromLeft(220));
+    defaultDualIOToggle.setBounds(bounds.removeFromTop(24));
     bounds.removeFromTop(10);
-
     perModuleDefaultsButton.setBounds(bounds.removeFromTop(24).removeFromLeft(220));
 }
 
@@ -119,7 +121,7 @@ void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
         return;
     graphEditor->setSmartConnectionMode(modeFromComboId(smartConnectionCombo.getSelectedId()));
     graphEditor->setDoubleClickPortDisconnectEnabled(doubleClickDisconnectToggle.getToggleState());
-    graphEditor->setDefaultDualIOForNewModules(dualIODefaultFromComboId(defaultDualIOCombo.getSelectedId()));
+    graphEditor->setDefaultDualIOForNewModules(defaultDualIOToggle.getToggleState());
 }
 
 GraphEditor::SmartConnectionMode PreferencesSettingsTab::getSmartConnectionMode() const {
@@ -140,12 +142,10 @@ void PreferencesSettingsTab::setDoubleClickPortDisconnectEnabled(bool enabled) {
     persistDoubleClickPortDisconnect(enabled);
 }
 
-bool PreferencesSettingsTab::getDefaultDualIOForNewModules() const {
-    return dualIODefaultFromComboId(defaultDualIOCombo.getSelectedId());
-}
+bool PreferencesSettingsTab::getDefaultDualIOForNewModules() const { return defaultDualIOToggle.getToggleState(); }
 
 void PreferencesSettingsTab::setDefaultDualIOForNewModules(bool enabled) {
-    defaultDualIOCombo.setSelectedId(comboIdFromDualIODefault(enabled), juce::dontSendNotification);
+    defaultDualIOToggle.setToggleState(enabled, juce::dontSendNotification);
     persistDefaultDualIOForNewModules(enabled);
 }
 

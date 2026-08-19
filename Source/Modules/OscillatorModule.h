@@ -48,6 +48,9 @@ public:
         addParameter(unisonParam = new juce::AudioParameterInt(juce::ParameterID("unison", 1), "Unison", 1, 8, 1));
         addParameter(detuneParam = new juce::AudioParameterFloat("detune", "Detune", 0.0f, 100.0f, 0.0f));
         addParameter(panParam = new juce::AudioParameterFloat("pan", "Pan", -1.0f, 1.0f, 0.0f));
+        // Defaults to dual: this module is stereo now, so showing both legs is the honest
+        // out-of-the-box state. The Preferences default overrides it for newly dropped modules.
+        addDualIOParameter(/*defaultDual=*/true);
         addMuteParameter();
         enableVisualBuffer(true);
     }
@@ -112,9 +115,10 @@ public:
         const juce::String labels[] = {"Pitch", "Waveform", "Octave", "Coarse", "Fine", "Level", "Pan"};
         return (i >= 0 && i < kNumJacks) ? labels[i] : ModuleBase::getInputPortLabel(i);
     }
-    juce::String getOutputPortLabel(int i) const override { return i == 1 ? "Audio R" : "Audio L"; }
+    juce::String getOutputPortLabel(int i) const override { return splitAudioLabel(i); }
     int getVisibleInputPortCount() const override { return kNumJacks; }
-    int getVisibleOutputPortCount() const override { return 2; }
+    int getVisibleOutputPortCount() const override { return splitAudioJackCount(); }
+    int rightAudioLegChannel() const override { return kRightBase; }
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Oscillator; }
     ModuleType getModuleType() const override { return ModuleType::Oscillator; }
 
@@ -202,7 +206,9 @@ public:
             p.polyVoiceSpan = (raw == 0) ? span : 1;
             return p;
         }
-        if (raw >= kRightBase && raw < kRightBase + span) {
+        // Collapsed (Dual I/O off): the right block still renders, it is simply not exposed as a
+        // jack, so nothing can be patched to it. Falls through to the non-head case below.
+        if (isDualIO() && raw >= kRightBase && raw < kRightBase + span) {
             p.visibleJackIndex = 1;
             p.isPolyGroupHead = (raw == kRightBase);
             p.polyVoiceSpan = (raw == kRightBase) ? span : 1;

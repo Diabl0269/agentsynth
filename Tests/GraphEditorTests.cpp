@@ -125,6 +125,76 @@ TEST_F(GraphEditorTest, NewDualIOModuleHonoursDefaultPreference) {
     EXPECT_TRUE(delay->isDualIO());
 }
 
+// The preference is what the user sets to say "I want split jacks on everything I make". Before
+// #219 it only reached FX, and it could only ever force Dual I/O *on* — so a module whose own
+// default is dual could not be made single from Preferences at all.
+TEST_F(GraphEditorTest, DefaultDualIOPreferenceReachesVoiceModulesInBothDirections) {
+    auto dropAndFind = [](bool preferDual, const juce::String& type) {
+        auto engine = std::make_unique<AudioEngine>();
+        GraphEditor editor(*engine);
+        editor.setSize(800, 600);
+        editor.setDefaultDualIOForNewModules(preferDual);
+
+        DummyDragSource dummySource;
+        juce::DragAndDropTarget::SourceDetails details(juce::var(type), &dummySource, juce::Point<int>(100, 100));
+        editor.itemDropped(details);
+
+        bool dual = false;
+        bool found = false;
+        for (auto* node : engine->getGraph().getNodes()) {
+            if (node->getProcessor()->getName() == type) {
+                auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor());
+                found = mb != nullptr && mb->hasDualIOParameter();
+                dual = mb != nullptr && mb->isDualIO();
+            }
+        }
+        EXPECT_TRUE(found) << type << " should expose a Dual I/O parameter";
+        return dual;
+    };
+
+    for (const juce::String& type : {"Oscillator", "Filter", "VCA", "Wavetable", "Sampler", "Delay"}) {
+        EXPECT_TRUE(dropAndFind(true, type)) << type << " ignored the split-jacks preference";
+        EXPECT_FALSE(dropAndFind(false, type)) << type << " ignored the single-jack preference";
+    }
+}
+
+// An invisible jack cannot be unplugged: collapsing a split-block module has to take its right-leg
+// cables with it, or they keep sounding with no way to reach them.
+TEST_F(GraphEditorTest, CollapsingASplitBlockModuleDropsItsHiddenRightLegWires) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1000, 600);
+
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    ASSERT_NE(oscNode, nullptr);
+    ASSERT_NE(filterNode, nullptr);
+    editor.updateComponents();
+
+    const int oscR = OscillatorModule::kRightBase;
+    const int filterR = FilterModule::kRightBase;
+    graph.addConnection({{oscNode->nodeID, 0}, {filterNode->nodeID, 0}});
+    graph.addConnection({{oscNode->nodeID, oscR}, {filterNode->nodeID, filterR}});
+    ASSERT_TRUE(graph.isConnected({{oscNode->nodeID, oscR}, {filterNode->nodeID, filterR}}));
+
+    // Collapse the Filter.
+    ModuleComponent* filterComp = nullptr;
+    for (auto* mc : editor.getModuleComponents())
+        if (mc != nullptr && mc->getNodeId() == filterNode->nodeID)
+            filterComp = mc;
+    ASSERT_NE(filterComp, nullptr);
+
+    if (auto* dual = findParameterByID(filterNode->getProcessor(), "dualIO"))
+        dual->setValueNotifyingHost(0.0f);
+    // The same call ModuleComponent::applyDualIOLayoutChange makes when the header toggle flips.
+    editor.completeStereoPairConnections(filterComp);
+
+    EXPECT_FALSE(graph.isConnected({{oscNode->nodeID, oscR}, {filterNode->nodeID, filterR}}))
+        << "the wire into the now-hidden Audio R jack must be dropped";
+    EXPECT_TRUE(graph.isConnected({{oscNode->nodeID, 0}, {filterNode->nodeID, 0}})) << "the left leg is untouched";
+}
+
 // --- Audio-file drop on the canvas ------------------------------------------------------------
 // Dropping a sample on empty canvas should build a Sampler already holding it, so the user never has
 // to open the file chooser.

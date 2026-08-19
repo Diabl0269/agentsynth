@@ -3458,15 +3458,16 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
 }
 
 void GraphEditor::applyDefaultDualIOForNewModule(juce::AudioProcessor& processor) const {
-    if (!defaultDualIOForNewModules)
-        return;
-
     auto* mb = dynamic_cast<ModuleBase*>(&processor);
     if (mb == nullptr || !mb->hasDualIOParameter())
         return;
 
+    // Applied in BOTH directions. It used to only ever force Dual I/O *on*, which meant the
+    // preference could not express "I want single jacks" for a module whose own default is dual —
+    // and the voice modules default to dual since #219. The preference is the user's stated intent
+    // for anything they create, so it wins over the module's constructor default either way.
     if (auto* dual = findParameterByID(&processor, "dualIO"))
-        dual->setValueNotifyingHost(1.0f);
+        dual->setValueNotifyingHost(defaultDualIOForNewModules ? 1.0f : 0.0f);
 }
 
 void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
@@ -3491,41 +3492,75 @@ void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
         return false;
     };
 
-    auto isStereoAudioInput = [](juce::AudioProcessor* proc) {
-        if (proc == nullptr || proc->getTotalNumInputChannels() < 2)
-            return false;
-        if (auto* destMb = dynamic_cast<ModuleBase*>(proc))
-            return destMb->hasDualIOParameter() && destMb->mapInputChannel(1).role == PortRole::Audio;
-        return true; // graph I/O (Audio Output)
+    // Which raw channel is each end's right leg? FX put it on ch1; the voice modules put it on
+    // their own kRightBase block, so asking the module beats assuming ch1 — assuming would have
+    // wired an Oscillator's Waveform CV channel as if it were audio.
+    auto rightLegOf = [](juce::AudioProcessor* proc, bool asInput) -> int {
+        if (proc == nullptr)
+            return -1;
+        auto* peerMb = dynamic_cast<ModuleBase*>(proc);
+        if (peerMb == nullptr) {
+            // Graph I/O (Audio Input/Output) is a plain contiguous pair.
+            const int channels = asInput ? proc->getTotalNumInputChannels() : proc->getTotalNumOutputChannels();
+            return channels >= 2 ? 1 : -1;
+        }
+        const int leg = peerMb->rightAudioLegChannel();
+        if (leg < 0)
+            return -1;
+        const int channels = asInput ? proc->getTotalNumInputChannels() : proc->getTotalNumOutputChannels();
+        if (leg >= channels)
+            return -1;
+        const LogicalPort port = asInput ? peerMb->mapInputChannel(leg) : peerMb->mapOutputChannel(leg);
+        return port.role == PortRole::Audio ? leg : -1;
     };
 
-    auto isStereoAudioOutput = [](juce::AudioProcessor* proc) {
-        if (proc == nullptr || proc->getTotalNumOutputChannels() < 2)
-            return false;
-        if (auto* srcMb = dynamic_cast<ModuleBase*>(proc))
-            return srcMb->hasDualIOParameter() && srcMb->mapOutputChannel(1).role == PortRole::Audio;
-        return true; // graph I/O (Audio Input)
-    };
+    const int myOutputLeg = rightLegOf(mb, /*asInput=*/false);
+    const int myInputLeg = rightLegOf(mb, /*asInput=*/true);
 
     const auto connections = graph.getConnections();
     for (const auto& c : connections) {
         if (c.source.isMIDI() || c.destination.isMIDI())
             continue;
 
-        // Outgoing: ch0 is patched to dest ch0, but ch1 is not — complete L→L / R→R.
-        if (c.source.nodeID == nodeId && c.source.channelIndex == 0 && c.destination.channelIndex == 0) {
+        // Outgoing: our left leg is patched to dest's left leg, but the right pair is not —
+        // complete L→L / R→R using each end's own right-leg channel.
+        if (c.source.nodeID == nodeId && c.source.channelIndex == 0 && c.destination.channelIndex == 0 &&
+            myOutputLeg >= 0) {
             auto* destNode = graph.getNodeForId(c.destination.nodeID);
-            if (destNode != nullptr && isStereoAudioInput(destNode->getProcessor()) &&
-                !hasEdge(nodeId, 1, destNode->nodeID, 1))
-                graph.addConnection({{nodeId, 1}, {destNode->nodeID, 1}});
+            const int destLeg = destNode != nullptr ? rightLegOf(destNode->getProcessor(), /*asInput=*/true) : -1;
+            if (destLeg >= 0 && !hasEdge(nodeId, myOutputLeg, destNode->nodeID, destLeg))
+                graph.addConnection({{nodeId, myOutputLeg}, {destNode->nodeID, destLeg}});
         }
 
-        // Incoming: source ch0 is patched to our ch0, source is itself a stereo pair.
-        if (c.destination.nodeID == nodeId && c.destination.channelIndex == 0 && c.source.channelIndex == 0) {
+        // Incoming: source's left leg is patched to ours, and the source is itself a stereo pair.
+        if (c.destination.nodeID == nodeId && c.destination.channelIndex == 0 && c.source.channelIndex == 0 &&
+            myInputLeg >= 0) {
             auto* srcNode = graph.getNodeForId(c.source.nodeID);
-            if (srcNode != nullptr && isStereoAudioOutput(srcNode->getProcessor()) &&
-                !hasEdge(srcNode->nodeID, 1, nodeId, 1))
-                graph.addConnection({{srcNode->nodeID, 1}, {nodeId, 1}});
+            const int srcLeg = srcNode != nullptr ? rightLegOf(srcNode->getProcessor(), /*asInput=*/false) : -1;
+            if (srcLeg >= 0 && !hasEdge(srcNode->nodeID, srcLeg, nodeId, myInputLeg))
+                graph.addConnection({{srcNode->nodeID, srcLeg}, {nodeId, myInputLeg}});
+        }
+    }
+
+    // Collapsing a SPLIT-BLOCK module hides its right leg entirely — unlike an FX pair, where the
+    // collapsed jack still owns both raw legs. An invisible jack cannot be unplugged, so anything
+    // left wired to that block has to be dropped here or it becomes a cable the user can see the
+    // effect of but never reach. (Only for split-block layouts: dropping ch1 on an FX module would
+    // silently break the perfectly valid collapsed stereo pair.)
+    if (!mb->isDualIO() && mb->hasSplitBlockStereo()) {
+        const int hiddenBase = mb->rightAudioLegChannel();
+        const int inputCount = mb->getTotalNumInputChannels();
+        const int outputCount = mb->getTotalNumOutputChannels();
+
+        for (const auto& c : graph.getConnections()) {
+            if (c.source.isMIDI() || c.destination.isMIDI())
+                continue;
+            const bool fromHiddenOutput =
+                c.source.nodeID == nodeId && c.source.channelIndex >= hiddenBase && c.source.channelIndex < outputCount;
+            const bool intoHiddenInput = c.destination.nodeID == nodeId && c.destination.channelIndex >= hiddenBase &&
+                                         c.destination.channelIndex < inputCount;
+            if (fromHiddenOutput || intoHiddenInput)
+                graph.removeConnection(c);
         }
     }
 }
