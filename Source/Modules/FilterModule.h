@@ -154,7 +154,17 @@ public:
                 return p;
             }
         }
-        return ModuleBase::mapInputChannel(raw);
+
+        // Unclaimed channels (the poly CV block while in mono, and vice versa) are addressable but
+        // never a jack head. Deliberately not ModuleBase's default: it reports isPolyGroupHead for
+        // any raw channel below the VISIBLE jack count, so growing to 5 jacks would make raw ch4 a
+        // phantom second head on the Drive jack and getJackTargets would hand out two wires.
+        LogicalPort p;
+        p.visibleJackIndex = 0;
+        p.role = PortRole::Other;
+        p.isPolyGroupHead = false;
+        p.polyVoiceSpan = 1;
+        return p;
     }
 
     LogicalPort mapOutputChannel(int raw) const override {

@@ -89,6 +89,13 @@ juce::String PresetManager::getPresetJSON(int index) {
     //   Reverb (h=300):     y=620, bottom=920
     //
     // All pairs verified pairwise with kCollisionGap = 12; zero overlaps per preset.
+    //
+    // Stereo (issue #219): the Default preset wires BOTH legs down the voice chain —
+    // Osc ch14 -> Filter ch11 -> VCA ch16 -> Distortion ch1, alongside the ch0 left leg. Each
+    // module's right leg is its own kRightBase block, never ch1 (that is Waveform / Cutoff / gain
+    // CV on the three of them). The FX tail from Distortion onwards takes a contiguous ch0/ch1
+    // pair, which is why the right leg lands on Distortion ch1 rather than a kRightBase channel.
+    // Pinned by StereoDefaultPreset.RightLegIsWiredFromOscillatorThroughToTheFX.
 
     switch (index) {
     case 0: // Default - Matching original sound exactly
@@ -119,13 +126,15 @@ juce::String PresetManager::getPresetJSON(int index) {
     {"src": 15, "srcPort": -1, "dst": 7, "dstPort": -1},
     {"src": 15, "srcPort": -1, "dst": 4, "dstPort": -1},
     {"src": 3, "srcPort": 0, "dst": 4, "dstPort": 0},
+    {"src": 3, "srcPort": 14, "dst": 4, "dstPort": 11},
     {"src": 4, "srcPort": 0, "dst": 5, "dstPort": 0},
+    {"src": 4, "srcPort": 11, "dst": 5, "dstPort": 16},
     {"src": 6, "srcPort": 0, "dst": 13, "dstPort": 0},
     {"src": 13, "srcPort": 0, "dst": 5, "dstPort": 1},
     {"src": 7, "srcPort": 0, "dst": 14, "dstPort": 0},
     {"src": 14, "srcPort": 0, "dst": 4, "dstPort": 1},
     {"src": 5, "srcPort": 0, "dst": 10, "dstPort": 0},
-    {"src": 5, "srcPort": 0, "dst": 10, "dstPort": 1},
+    {"src": 5, "srcPort": 16, "dst": 10, "dstPort": 1},
     {"src": 10, "srcPort": 0, "dst": 11, "dstPort": 0},
     {"src": 10, "srcPort": 1, "dst": 11, "dstPort": 1},
     {"src": 11, "srcPort": 0, "dst": 12, "dstPort": 0},

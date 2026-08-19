@@ -57,7 +57,7 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "LFO")
         return {280, 353};
     if (typeName == "VCA")
-        return {280, 245};
+        return {280, 265}; // +20 in #219: the Audio L/R input pair adds a jack row
     if (typeName == "ADSR" || typeName == "Amp Env" || typeName == "Filter Env")
         return {280, 351}; // sliders below 2 jacks + threshold control + Poly toggle
     if (typeName.containsIgnoreCase("Sequencer") && !typeName.containsIgnoreCase("Poly"))

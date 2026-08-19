@@ -221,9 +221,11 @@ Loads an audio file from disk and plays it back one of two ways.
 
 ## VCA (Amplifier) Module
 - **Inputs**: 
-    - Mono mode: Audio (ch0), CV (ch1).
-    - Poly mode: Per-voice audio ch0-7, per-voice envelope/CV ch8-15.
-- **Poly summing**: In poly mode, multiplies each voice's audio by its corresponding envelope CV, then sums all 8 voices to stereo (ch0/ch1) with `tanh` soft saturation and 1/8 normalization.
+    - Mono mode: `Audio L` (ch0), CV (ch1), `Audio R` (ch16).
+    - Poly mode: Per-voice `Audio L` ch0-7, per-voice envelope/CV ch8-15, per-voice `Audio R` ch16-23.
+- **Stereo (issue #219)**: `Audio L` / `Audio R` jacks on both sides, with the right leg on a dedicated block at `kRightBase` (ch16). It is not on ch1 — that is the gain CV input. Both legs are gated by the **same** gain ramp and the same CV, so the stereo image cannot drift while Gain moves. A silent `Audio R` is skipped per block. This is what carries the default preset's stereo path from the Filter into the FX chain.
+- **Poly summing**: In poly mode, multiplies each voice's audio by its corresponding envelope CV, then sums all 8 voices with `tanh` soft saturation and 1/8 normalization — the left block to ch0, the right block to ch16. Follower voices in both blocks are zeroed so they don't leak downstream.
+- **Legacy ch0→ch1 duplicate, deliberately preserved**: mono still copies the gated ch0 onto ch1 after processing, and the poly left sum is still written to both ch0 and ch1. That was the module's old "mono to stereo" affordance and `VCAModuleTest.MonoToStereoCopy` / `PolyMode_MultiVoice` / `MonoMode_BackwardsCompatible` pin it. It is vestigial now that there is a real right leg — prefer the `Audio R` jack.
 - **Features**: Parameter smoothing for click-free gain changes.
 
 ## Poly MIDI Module
@@ -445,9 +447,15 @@ Declare your per-voice **output** fan in `mapOutputChannel()` if the module actu
 | **Filter (mono)** | ch2 | In | Resonance CV |
 | **Filter (mono)** | ch3 | In | Drive CV |
 | **Filter (mono)** | ch11 | In/Out | `Audio R` (`kRightBase`) in / filtered out |
-| **VCA (poly)** | ch0-7 | In | Per-voice audio |
+| **VCA (poly)** | ch0-7 | In | Per-voice audio — `Audio L` |
 | **VCA (poly)** | ch8-15 | In | Per-voice envelope/CV |
-| **VCA (poly)** | ch0-1 | Out | Stereo sum (L/R) |
+| **VCA (poly)** | ch16-23 | In | Per-voice audio — `Audio R` (`kRightBase`) |
+| **VCA (poly)** | ch0 | Out | `Audio L` — sum of the left voice block |
+| **VCA (poly)** | ch1 | Out | Vestigial duplicate of the left sum (pre-#219 mono→stereo affordance) |
+| **VCA (poly)** | ch16 | Out | `Audio R` — sum of the right voice block |
+| **VCA (mono)** | ch0 | In/Out | `Audio L` in / gated out |
+| **VCA (mono)** | ch1 | In | Gain CV (also overwritten on the way out — see above) |
+| **VCA (mono)** | ch16 | In/Out | `Audio R` (`kRightBase`) in / gated out |
 | **ADSR (poly)** | ch0-7 | In | Per-voice gate CV |
 | **ADSR** | ch8 | In | Threshold CV (shared) |
 | **ADSR (poly)** | ch0-7 | Out | Per-voice envelope (0–1) |

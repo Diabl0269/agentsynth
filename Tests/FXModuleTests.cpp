@@ -947,10 +947,12 @@ TEST(PortLabelTests, FilterPortLabels) {
 
 TEST(PortLabelTests, VCAPortLabels) {
     VCAModule vca;
-    // Default mono mode: original 2-input layout
-    EXPECT_EQ(vca.getInputPortLabel(0), "Audio");
-    EXPECT_EQ(vca.getInputPortLabel(1), "CV");
-    EXPECT_EQ(vca.getOutputPortLabel(0), "Audio");
+    // Audio L/R lead the visible jacks since #219; CV keeps its raw channel and only moves slot.
+    EXPECT_EQ(vca.getInputPortLabel(0), "Audio L");
+    EXPECT_EQ(vca.getInputPortLabel(1), "Audio R");
+    EXPECT_EQ(vca.getInputPortLabel(2), "CV");
+    EXPECT_EQ(vca.getOutputPortLabel(0), "Audio L");
+    EXPECT_EQ(vca.getOutputPortLabel(1), "Audio R");
 }
 
 TEST(PortLabelTests, ADSRPortLabels) {

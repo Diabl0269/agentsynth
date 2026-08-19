@@ -8,6 +8,8 @@
 
 #include "Modules/FilterModule.h"
 #include "Modules/OscillatorModule.h"
+#include "Modules/VCAModule.h"
+#include "PresetManager.h"
 #include <cmath>
 #include <gtest/gtest.h>
 
@@ -330,6 +332,18 @@ TEST(FilterStereo, CutoffCVKeepsChannelOneAndIsNeverReportedAsAudio) {
     EXPECT_EQ(rOut.visibleJackIndex, 1);
 }
 
+TEST(FilterStereo, UnclaimedChannelsAreNotPhantomJackHeads) {
+    // ModuleBase's default input map reports isPolyGroupHead for any raw channel below the VISIBLE
+    // jack count. Going from 4 jacks to 5 would therefore have made mono raw ch4 a second head on
+    // the Drive jack, and getJackTargets would hand out two wires for one jack.
+    FilterModule filter;
+    for (int raw = 4; raw < FilterModule::kRightBase; ++raw)
+        EXPECT_FALSE(filter.mapInputChannel(raw).isPolyGroupHead) << "mono raw channel " << raw << " is a phantom head";
+
+    for (int jack = 0; jack < filter.getVisibleInputPortCount(); ++jack)
+        EXPECT_EQ(filter.getJackTargets(jack, true).size(), 1u) << "visible input jack " << jack;
+}
+
 TEST(FilterStereo, CVTargetChannelsAreUnchangedInBothVoiceModes) {
     FilterModule filter;
 
@@ -536,6 +550,166 @@ TEST(FilterStereo, PolyModeFiltersBothEightWideBlocks) {
         EXPECT_GT(rmsOf(buffer, v), 1.0e-5f) << "voice " << v << " left leg";
         EXPECT_GT(rmsOf(buffer, FilterModule::kRightBase + v), 1.0e-5f) << "voice " << v << " right leg";
     }
+}
+
+// ---------------------------------------------------------------------------
+// VCA — the last link in the default preset's stereo chain
+// ---------------------------------------------------------------------------
+
+TEST(VCAStereo, AudioRIsItsOwnBlockAndCVKeepsItsRawChannels) {
+    EXPECT_EQ(VCAModule::kRightBase, 16);
+    EXPECT_EQ(VCAModule::kNumChannels, 24);
+
+    VCAModule vca;
+    EXPECT_EQ(vca.getTotalNumInputChannels(), VCAModule::kNumChannels);
+    EXPECT_EQ(vca.getTotalNumOutputChannels(), VCAModule::kNumChannels);
+    EXPECT_EQ(vca.getVisibleInputPortCount(), 3);
+    EXPECT_EQ(vca.getVisibleOutputPortCount(), 2);
+
+    // The gain CV keeps raw ch1 (mono) / ch8 (poly) — only its visible slot moved.
+    EXPECT_EQ(vca.getModulationTargets()[0].channelIndex, 1);
+    EXPECT_EQ(vca.mapInputChannel(1).role, PortRole::ModCV);
+    EXPECT_EQ(vca.mapInputChannel(1).visibleJackIndex, 2);
+
+    // ch1 must never advertise itself as the Audio R output head.
+    const auto out1 = vca.mapOutputChannel(1);
+    EXPECT_FALSE(out1.isPolyGroupHead);
+    EXPECT_EQ(out1.visibleJackIndex, 0);
+    EXPECT_TRUE(vca.mapOutputChannel(VCAModule::kRightBase).isPolyGroupHead);
+    EXPECT_EQ(vca.mapOutputChannel(VCAModule::kRightBase).visibleJackIndex, 1);
+}
+
+TEST(VCAStereo, MonoGatesBothLegsWithTheSameGainAndCV) {
+    VCAModule vca;
+    vca.prepareToPlay(kSampleRate, kBlockSize);
+    setFloatParam(vca, "gain", 1.0f);
+
+    juce::AudioBuffer<float> buffer(VCAModule::kNumChannels, kBlockSize);
+    juce::MidiBuffer midi;
+    for (int block = 0; block < 4; ++block) {
+        buffer.clear();
+        fillTone(buffer, 0, 1000.0f);
+        fillTone(buffer, VCAModule::kRightBase, 1000.0f);
+        for (int i = 0; i < kBlockSize; ++i)
+            buffer.setSample(1, i, 0.5f); // gain CV
+        vca.processBlock(buffer, midi);
+    }
+
+    ASSERT_GT(rmsOf(buffer, 0), 1.0e-4f);
+    EXPECT_LT(maxAbsDiff(buffer, 0, buffer, VCAModule::kRightBase), 1.0e-6f)
+        << "both legs must ride one gain ramp, or the image drifts while Gain moves";
+}
+
+TEST(VCAStereo, SilentAudioRStaysSilent) {
+    VCAModule vca;
+    vca.prepareToPlay(kSampleRate, kBlockSize);
+
+    juce::AudioBuffer<float> buffer(VCAModule::kNumChannels, kBlockSize);
+    buffer.clear();
+    fillTone(buffer, 0, 1000.0f);
+    for (int i = 0; i < kBlockSize; ++i)
+        buffer.setSample(1, i, 1.0f);
+
+    juce::MidiBuffer midi;
+    vca.processBlock(buffer, midi);
+
+    EXPECT_GT(rmsOf(buffer, 0), 1.0e-4f);
+    EXPECT_LT(rmsOf(buffer, VCAModule::kRightBase), 1.0e-9f);
+}
+
+TEST(VCAStereo, ClearsDoNotEraseAudioR) {
+    VCAModule vca;
+    vca.prepareToPlay(kSampleRate, kBlockSize);
+    setFloatParam(vca, "gain", 1.0f);
+
+    juce::AudioBuffer<float> buffer(VCAModule::kNumChannels, kBlockSize);
+    buffer.clear();
+    fillTone(buffer, VCAModule::kRightBase, 1000.0f);
+    for (int i = 0; i < kBlockSize; ++i)
+        buffer.setSample(1, i, 1.0f);
+
+    juce::MidiBuffer midi;
+    vca.processBlock(buffer, midi);
+    EXPECT_GT(rmsOf(buffer, VCAModule::kRightBase), 1.0e-4f);
+
+    // And on bypass the right leg passes through dry rather than being cleared with the CV block.
+    VCAModule bypassed;
+    bypassed.prepareToPlay(kSampleRate, kBlockSize);
+    bypassed.setBypassed(true);
+    juce::AudioBuffer<float> dry(VCAModule::kNumChannels, kBlockSize);
+    dry.clear();
+    fillTone(dry, 0, 1000.0f);
+    fillTone(dry, VCAModule::kRightBase, 1000.0f);
+    juce::AudioBuffer<float> expected(dry);
+    bypassed.processBlock(dry, midi);
+
+    EXPECT_LT(maxAbsDiff(dry, 0, expected, 0), 1.0e-9f);
+    EXPECT_LT(maxAbsDiff(dry, VCAModule::kRightBase, expected, VCAModule::kRightBase), 1.0e-9f);
+}
+
+TEST(VCAStereo, PolySumsTheRightBlockToItsOwnHead) {
+    VCAModule vca;
+    setBoolParam(vca, "poly", true);
+    vca.prepareToPlay(kSampleRate, kBlockSize);
+    setFloatParam(vca, "gain", 1.0f);
+
+    juce::AudioBuffer<float> buffer(VCAModule::kNumChannels, kBlockSize);
+    buffer.clear();
+    for (int v = 0; v < 3; ++v) {
+        fillTone(buffer, v, 300.0f * (float)(v + 1));
+        fillTone(buffer, VCAModule::kRightBase + v, 300.0f * (float)(v + 1));
+        for (int i = 0; i < kBlockSize; ++i)
+            buffer.setSample(8 + v, i, 1.0f); // per-voice gain CV
+    }
+
+    juce::MidiBuffer midi;
+    vca.processBlock(buffer, midi);
+
+    EXPECT_GT(rmsOf(buffer, 0), 1.0e-4f);
+    EXPECT_GT(rmsOf(buffer, VCAModule::kRightBase), 1.0e-4f);
+    // Follower voices of the right block are zeroed, exactly like the left block's.
+    for (int v = 1; v < 8; ++v)
+        EXPECT_LT(rmsOf(buffer, VCAModule::kRightBase + v), 1.0e-9f) << "right follower voice " << v;
+}
+
+// ---------------------------------------------------------------------------
+// The default preset carries stereo all the way to the FX chain
+// ---------------------------------------------------------------------------
+
+TEST(StereoDefaultPreset, RightLegIsWiredFromOscillatorThroughToTheFX) {
+    juce::AudioProcessorGraph graph;
+    ASSERT_TRUE(synth::PresetManager::loadDefaultPreset(graph));
+
+    auto nodeNamed = [&graph](const juce::String& name) -> juce::AudioProcessorGraph::NodeID {
+        for (auto* node : graph.getNodes())
+            if (node->getProcessor()->getName() == name)
+                return node->nodeID;
+        return {};
+    };
+
+    const auto osc = nodeNamed("Oscillator");
+    const auto filter = nodeNamed("Filter");
+    const auto vca = nodeNamed("VCA");
+    const auto dist = nodeNamed("Distortion");
+    ASSERT_NE(osc.uid, 0u);
+    ASSERT_NE(filter.uid, 0u);
+    ASSERT_NE(vca.uid, 0u);
+    ASSERT_NE(dist.uid, 0u);
+
+    // Left leg: unchanged from before #219.
+    EXPECT_TRUE(graph.isConnected({{osc, 0}, {filter, 0}}));
+    EXPECT_TRUE(graph.isConnected({{filter, 0}, {vca, 0}}));
+    EXPECT_TRUE(graph.isConnected({{vca, 0}, {dist, 0}}));
+
+    // Right leg: each module's own kRightBase block, never ch1 (which is CV on all three).
+    EXPECT_TRUE(graph.isConnected({{osc, OscillatorModule::kRightBase}, {filter, FilterModule::kRightBase}}));
+    EXPECT_TRUE(graph.isConnected({{filter, FilterModule::kRightBase}, {vca, VCAModule::kRightBase}}));
+    EXPECT_TRUE(graph.isConnected({{vca, VCAModule::kRightBase}, {dist, 1}}))
+        << "the FX chain takes a contiguous ch0/ch1 pair, so the right leg lands on Distortion ch1";
+
+    // The gain/cutoff CV wires must not have been displaced onto an audio leg.
+    EXPECT_FALSE(graph.isConnected({{osc, 0}, {filter, 1}}));
+    EXPECT_FALSE(graph.isConnected({{filter, 0}, {vca, 1}}));
 }
 
 TEST(FilterStereo, BypassPassesBothLegsThroughUntouched) {

@@ -10,17 +10,23 @@
 TEST(LogicalPortTests, DefaultMappingClampsPhantomChannels) {
     VCAModule vca;
 
-    // VCAModule has getVisibleInputPortCount() == 2
-    ASSERT_EQ(vca.getVisibleInputPortCount(), 2);
+    // VCAModule has getVisibleInputPortCount() == 3 since #219 (Audio L, Audio R, CV)
+    ASSERT_EQ(vca.getVisibleInputPortCount(), 3);
 
-    // rawChannel 8 >= vis(2) in mono mode: falls through to base, clamped to vis-1 == 1, isPolyGroupHead == false
+    // rawChannel 8 is the poly CV block, unclaimed while the module is mono. VCA answers for it
+    // itself rather than falling through to ModuleBase: the base map reports isPolyGroupHead for
+    // ANY raw channel below the visible jack count, which once the count grew to 3 would have made
+    // mono raw ch2 a phantom second head on the CV jack and handed getJackTargets a duplicate wire.
     auto port8 = vca.mapInputChannel(8);
-    EXPECT_EQ(port8.visibleJackIndex, 1);
     EXPECT_EQ(port8.role, PortRole::Other);
     EXPECT_EQ(port8.polyVoiceSpan, 1);
     EXPECT_FALSE(port8.isPolyGroupHead);
 
-    // rawChannel 0 < vis(2), so visibleJackIndex == 0, isPolyGroupHead == true
+    // The channels between the audio legs must not masquerade as jack heads either.
+    for (int raw = 2; raw < VCAModule::kRightBase; ++raw)
+        EXPECT_FALSE(vca.mapInputChannel(raw).isPolyGroupHead) << "mono raw channel " << raw << " is a phantom head";
+
+    // rawChannel 0 is Audio L, so visibleJackIndex == 0, isPolyGroupHead == true
     auto port0 = vca.mapInputChannel(0);
     EXPECT_EQ(port0.visibleJackIndex, 0);
     EXPECT_TRUE(port0.isPolyGroupHead);
@@ -54,14 +60,14 @@ TEST(LogicalPortTests, PolyModulesDescribeTheirFans) {
     EXPECT_TRUE(vca_in0.isPolyGroupHead);
     EXPECT_EQ(vca_in0.polyVoiceSpan, 8);
 
-    // Raw 8: ModCV jack1, head of 8-voice fan
+    // Raw 8: ModCV, head of 8-voice fan. Visible jack 2 since #219 put Audio L/R first.
     auto vca_in8 = vca.mapInputChannel(8);
-    EXPECT_EQ(vca_in8.visibleJackIndex, 1);
+    EXPECT_EQ(vca_in8.visibleJackIndex, 2);
     EXPECT_EQ(vca_in8.role, PortRole::ModCV);
     EXPECT_TRUE(vca_in8.isPolyGroupHead);
     EXPECT_EQ(vca_in8.polyVoiceSpan, 8);
 
-    // Raw 9: ModCV jack1, NOT head (not a group head)
+    // Raw 9: ModCV, NOT head (not a group head)
     auto vca_in9 = vca.mapInputChannel(9);
     EXPECT_FALSE(vca_in9.isPolyGroupHead);
 
@@ -150,16 +156,16 @@ TEST(LogicalPortTests, JackTargetsResolveVisibleJacksToRawHeads) {
     EXPECT_EQ(audioTargets[0].role, PortRole::Audio);
     EXPECT_EQ(audioTargets[0].voiceSpan, 8);
 
-    // Poly VCA: visible jack 1 (CV) fronts raw head 8, NOT raw channel 1.
-    auto cvTargets = vca.getJackTargets(1, true);
+    // Poly VCA: visible jack 2 (CV, behind Audio L/R since #219) fronts raw head 8, NOT raw channel 1.
+    auto cvTargets = vca.getJackTargets(2, true);
     ASSERT_EQ(cvTargets.size(), 1u);
     EXPECT_EQ(cvTargets[0].rawHeadChannel, 8);
     EXPECT_EQ(cvTargets[0].role, PortRole::ModCV);
     EXPECT_EQ(cvTargets[0].voiceSpan, 8);
 
-    // Mono VCA: visible jack 1 (CV) fronts raw channel 1, a mono (span-1) wire.
+    // Mono VCA: visible jack 2 (CV) fronts raw channel 1, a mono (span-1) wire.
     VCAModule monoVca;
-    auto monoCvTargets = monoVca.getJackTargets(1, true);
+    auto monoCvTargets = monoVca.getJackTargets(2, true);
     ASSERT_EQ(monoCvTargets.size(), 1u);
     EXPECT_EQ(monoCvTargets[0].rawHeadChannel, 1);
     EXPECT_EQ(monoCvTargets[0].role, PortRole::ModCV);

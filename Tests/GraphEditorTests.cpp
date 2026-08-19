@@ -977,7 +977,7 @@ TEST_F(GraphEditorTest, ResolvePolyLinkFansEnvelopeToPolyVCA) {
     setPolyParam(adsr, true);
     setPolyParam(vca, true);
 
-    auto link = GraphEditor::resolvePolyLink(&adsr, 0, &vca, 1);
+    auto link = GraphEditor::resolvePolyLink(&adsr, 0, &vca, 2); // VCA CV moved to jack 2 behind Audio L/R (#219)
     EXPECT_EQ(link.sourceRawChannel, 0);
     EXPECT_EQ(link.destRawChannel, 8);
     EXPECT_EQ(link.voiceCount, 8);
@@ -1010,7 +1010,7 @@ TEST_F(GraphEditorTest, ResolvePolyLinkStaysMonoWhenDestIsMono) {
     VCAModule monoVca; // poly defaults to false
 
     // A poly source into a mono jack must not sum eight envelopes onto one CV channel.
-    auto link = GraphEditor::resolvePolyLink(&polyAdsr, 0, &monoVca, 1);
+    auto link = GraphEditor::resolvePolyLink(&polyAdsr, 0, &monoVca, 2); // CV jack (#219)
     EXPECT_EQ(link.sourceRawChannel, 0);
     EXPECT_EQ(link.destRawChannel, 1);
     EXPECT_EQ(link.voiceCount, 1);
@@ -1024,7 +1024,7 @@ TEST_F(GraphEditorTest, ResolvePolyLinkBroadcastsMonoSourceAcrossModCvFan) {
     VCAModule polyVca;
     setPolyParam(polyVca, true);
 
-    auto link = GraphEditor::resolvePolyLink(&lfo, 0, &polyVca, 1);
+    auto link = GraphEditor::resolvePolyLink(&lfo, 0, &polyVca, 2); // CV jack (#219)
     EXPECT_EQ(link.sourceRawChannel, 0);
     EXPECT_EQ(link.destRawChannel, 8);
     EXPECT_EQ(link.voiceCount, 8);
@@ -1308,7 +1308,7 @@ TEST_F(GraphEditorTest, DragBetweenPolyModulesFansOutAllVoices) {
     editor.beginConnectionDrag(adsrComp, 0, false, false, juce::Point<int>(0, 0));
     editor.dragConnection(juce::Point<int>(50, 0));
 
-    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(1, true);
+    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(2, true);
     editor.endConnectionDrag(vcaTargetPoint);
 
     auto& graph = engine.getGraph();
@@ -1372,7 +1372,7 @@ TEST_F(GraphEditorTest, DragBetweenMonoModulesIsUnchanged) {
     editor.beginConnectionDrag(adsrComp, 0, false, false, juce::Point<int>(0, 0));
     editor.dragConnection(juce::Point<int>(50, 0));
 
-    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(1, true);
+    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(2, true);
     editor.endConnectionDrag(vcaTargetPoint);
 
     auto& graph = engine.getGraph();
@@ -1427,7 +1427,7 @@ TEST_F(GraphEditorTest, DisconnectPolyPortRemovesEntireFan) {
     editor.beginConnectionDrag(adsrComp, 0, false, false, juce::Point<int>(0, 0));
     editor.dragConnection(juce::Point<int>(50, 0));
 
-    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(1, true);
+    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(2, true);
     editor.endConnectionDrag(vcaTargetPoint);
 
     auto& graph = engine.getGraph();
@@ -1438,7 +1438,7 @@ TEST_F(GraphEditorTest, DisconnectPolyPortRemovesEntireFan) {
             ++preCount;
     ASSERT_EQ(preCount, 8) << "Setup must produce the 8-voice fan before disconnecting";
 
-    editor.disconnectPort(vcaComp, 1, true, false);
+    editor.disconnectPort(vcaComp, 2, true, false);
 
     int postCount = 0;
     for (auto& conn : graph.getConnections())
@@ -1608,7 +1608,7 @@ TEST_F(GraphEditorTest, DragMonoLfoOntoPolyVcaBroadcastsToEveryVoice) {
     editor.beginConnectionDrag(lfoComp, 0, false, false, juce::Point<int>(0, 0));
     editor.dragConnection(juce::Point<int>(50, 0));
 
-    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(1, true);
+    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(2, true);
     editor.endConnectionDrag(vcaTargetPoint);
 
     auto& graph = engine.getGraph();
@@ -1687,7 +1687,7 @@ TEST_F(GraphEditorTest, TogglingPolyOnBroadcastsExistingMonoModWire) {
 
     editor.beginConnectionDrag(lfoComp, 0, false, false, juce::Point<int>(0, 0));
     editor.dragConnection(juce::Point<int>(50, 0));
-    editor.endConnectionDrag(vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(1, true));
+    editor.endConnectionDrag(vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(2, true));
 
     auto& graph = engine.getGraph();
 
@@ -1883,7 +1883,7 @@ TEST_F(GraphEditorTest, TogglingPolyMovesModCvWireOntoPolyChannels) {
     editor.beginConnectionDrag(adsrComp, 0, false, false, juce::Point<int>(0, 0));
     editor.dragConnection(juce::Point<int>(50, 0));
 
-    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(1, true);
+    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(2, true);
     editor.endConnectionDrag(vcaTargetPoint);
 
     auto& graph = engine.getGraph();
