@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../AI/AIIntegrationService.h"
+#include "../AI/AccountService.h"
 #include "AIChatComponent.h"
 #include "GraphEditor.h"
 #include "Theme/ThemeManager.h"
@@ -16,10 +17,16 @@ public:
     // showAudioTab=false omits the audio-device selector. Used by the plugin build: the host owns
     // the audio device, so an AudioDeviceSelectorComponent there would be inert at best and, if the
     // user touched it, would try to open hardware out from under the host.
+    //
+    // accountService is nullable, defaulting to nullptr — same "invisible/inert until attached"
+    // contract as AccountRow/PlanBadge::setAccountService(nullptr) — so every existing call site
+    // (including every SettingsWindowTests.cpp test) keeps compiling and gets the signed-out-only
+    // AI tab (P6-7's prompt-learning toggle disabled) rather than a required dependency.
     SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::ApplicationProperties& appProperties,
                    synth::AIIntegrationService& aiService, synth::AIChatComponent& aiChatComponent,
                    ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager, GraphEditor* graphEditor,
-                   bool showAudioTab = true, std::function<void(bool)> onTimelineFeatureToggled = nullptr);
+                   synth::AccountService* accountService = nullptr, bool showAudioTab = true,
+                   std::function<void(bool)> onTimelineFeatureToggled = nullptr);
     ~SettingsWindow() override;
 
     void resized() override;

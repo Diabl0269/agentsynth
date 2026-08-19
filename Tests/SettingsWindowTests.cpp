@@ -1,11 +1,15 @@
 #include "../Source/AI/AIIntegrationService.h"
 #include "../Source/AI/AIProvider.h"
+#include "../Source/AI/AccountService.h"
+#include "../Source/AI/LocalHistoryStore.h"
 #include "../Source/AudioEngine.h"
+#include "../Source/Auth/InMemoryTokenStore.h"
 #include "../Source/ShortcutManager.h"
 #include "../Source/UI/AIChatComponent.h"
 #include "../Source/UI/PreferencesSettingsTab.h"
 #include "../Source/UI/SettingsWindow.h"
 #include "../Source/UI/Theme/ThemeManager.h"
+#include <chrono>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -35,6 +39,117 @@ public:
 private:
     juce::String currentModel = "MockModel1";
 };
+
+// ============================================================================
+// P6-7: prompt-learning opt-in checkbox test support
+// ============================================================================
+namespace {
+
+synth::AuthClient::HttpResult makeStatus(int status, const juce::String& body) {
+    synth::AuthClient::HttpResult result;
+    result.httpStatus = status;
+    result.body = body;
+    return result;
+}
+
+synth::AuthClient::HttpResult makeTransportFailure() {
+    synth::AuthClient::HttpResult result;
+    result.transportFailed = true;
+    result.errorMessage = "offline";
+    return result;
+}
+
+synth::AuthClient::HttpResult makeTokenSuccess(const juce::String& accessToken, const juce::String& refreshToken) {
+    juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+    obj->setProperty("access_token", accessToken);
+    obj->setProperty("expires_in", 3600);
+    obj->setProperty("refresh_token", refreshToken);
+    return makeStatus(200, juce::JSON::toString(juce::var(obj.get())));
+}
+
+synth::AuthClient::HttpResult makeMeSuccess(const juce::String& email) {
+    juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+    obj->setProperty("id", "user-1");
+    obj->setProperty("email", email);
+    obj->setProperty("display_name", "Test User");
+    obj->setProperty("created_at", "2024-01-01");
+    return makeStatus(200, juce::JSON::toString(juce::var(obj.get())));
+}
+
+synth::AuthClient::HttpResult makePromptLearningResponse(bool optedIn) {
+    juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+    obj->setProperty("opted_in", optedIn);
+    obj->setProperty("opted_in_at", optedIn ? juce::var("2026-08-19T00:00:00.000Z") : juce::var());
+    return makeStatus(200, juce::JSON::toString(juce::var(obj.get())));
+}
+
+// Minimal fake auth transport, mirroring AccountServiceTests.cpp's FakeAuthServer but scoped to
+// only what these tests need: a silent-sign-in round trip (token + me), and GET/PUT
+// /v1/prompt-learning distinguished by method (see AccountServiceTests.cpp's FakeAuthServer for
+// why method-based dispatch matters — GET and PUT share a URL).
+class FakeSettingsAuthServer {
+public:
+    synth::AuthClient::HttpResult tokenResponse = makeTransportFailure();
+    synth::AuthClient::HttpResult meResponse = makeMeSuccess("jane@example.com");
+    synth::AuthClient::HttpResult entitlementResponse = makeTransportFailure();
+    synth::AuthClient::HttpResult promptLearningGetResponse = makeTransportFailure();
+    synth::AuthClient::HttpResult promptLearningPutResponse = makeTransportFailure();
+
+    mutable std::mutex mutex;
+    int promptLearningGetCallCount = 0;
+    int promptLearningPutCallCount = 0;
+
+    synth::AuthClient::HttpPerformer performer() {
+        return [this](const juce::String& method, const juce::String& url, const juce::StringPairArray&,
+                      const juce::String&, int, const std::atomic<bool>&) -> synth::AuthClient::HttpResult {
+            const std::lock_guard<std::mutex> lock(mutex);
+            if (url.endsWith("/v1/auth/token"))
+                return tokenResponse;
+            if (url.endsWith("/v1/auth/me"))
+                return meResponse;
+            if (url.endsWith("/v1/entitlement"))
+                return entitlementResponse;
+            if (url.endsWith("/v1/prompt-learning")) {
+                if (method == "PUT") {
+                    ++promptLearningPutCallCount;
+                    return promptLearningPutResponse;
+                }
+                ++promptLearningGetCallCount;
+                return promptLearningGetResponse;
+            }
+            return makeTransportFailure();
+        };
+    }
+
+    int promptLearningPutCalls() const {
+        const std::lock_guard<std::mutex> lock(mutex);
+        return promptLearningPutCallCount;
+    }
+};
+
+// Pumps the JUCE message loop while polling `predicate` — AccountService's sign-in/refresh flows
+// run on a worker thread and publish via MessageManager::callAsync (see AccountServiceTests.cpp's
+// identical helper).
+template <typename Predicate>
+bool waitUntil(Predicate predicate, std::chrono::milliseconds timeout = std::chrono::milliseconds(5000)) {
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    do {
+        if (predicate())
+            return true;
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(10);
+    } while (std::chrono::steady_clock::now() < deadline);
+    return predicate();
+}
+
+// The toggle is the only juce::ToggleButton in the AI tab (see SettingsWindow.cpp).
+juce::ToggleButton* findPromptLearningToggle(juce::Component* aiTab) {
+    for (auto* child : aiTab->getChildren())
+        if (auto* toggle = dynamic_cast<juce::ToggleButton*>(child))
+            return toggle;
+    return nullptr;
+}
+
+} // namespace
 
 class SettingsWindowTest : public ::testing::Test {
 protected:
@@ -213,6 +328,85 @@ TEST_F(SettingsWindowTest, EachProviderReadsItsOwnPersistedHost) {
     }
 }
 
+// ============================================================================
+// P6-8: local chat-history retention control (AI tab, added after provider/host controls)
+// ============================================================================
+
+namespace {
+// The retention combo is the SECOND ComboBox in the AI tab's child order (providerCombo is
+// first) — see SettingsWindow.cpp's comment on why it's added after providerCombo/hostEditor.
+juce::ComboBox* findHistoryRetentionCombo(juce::Component* aiTab) {
+    int comboIndex = 0;
+    for (auto* child : aiTab->getChildren()) {
+        if (auto* combo = dynamic_cast<juce::ComboBox*>(child)) {
+            if (comboIndex == 1)
+                return combo;
+            ++comboIndex;
+        }
+    }
+    return nullptr;
+}
+} // namespace
+
+TEST_F(SettingsWindowTest, HistoryRetentionDefaultsTo180Days) {
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr);
+    settingsWindow.setSize(600, 400);
+    settingsWindow.resized();
+
+    auto* aiTab = settingsWindow.getTabs().getTabContentComponent(1);
+    ASSERT_NE(aiTab, nullptr);
+    auto* retentionCombo = findHistoryRetentionCombo(aiTab);
+    ASSERT_NE(retentionCombo, nullptr);
+    EXPECT_EQ(retentionCombo->getText(), "180 days");
+}
+
+TEST_F(SettingsWindowTest, HistoryRetentionLoadsPersistedSelection) {
+    appProperties.getUserSettings()->setValue("historyRetentionDays", 90);
+
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr);
+    settingsWindow.setSize(600, 400);
+    settingsWindow.resized();
+
+    auto* aiTab = settingsWindow.getTabs().getTabContentComponent(1);
+    ASSERT_NE(aiTab, nullptr);
+    auto* retentionCombo = findHistoryRetentionCombo(aiTab);
+    ASSERT_NE(retentionCombo, nullptr);
+    EXPECT_EQ(retentionCombo->getText(), "90 days");
+}
+
+TEST_F(SettingsWindowTest, HistoryRetentionPersistsSelectionToAppProperties) {
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr);
+    settingsWindow.setSize(600, 400);
+    settingsWindow.resized();
+
+    auto* aiTab = settingsWindow.getTabs().getTabContentComponent(1);
+    ASSERT_NE(aiTab, nullptr);
+    auto* retentionCombo = findHistoryRetentionCombo(aiTab);
+    ASSERT_NE(retentionCombo, nullptr);
+
+    retentionCombo->setSelectedItemIndex(4, juce::sendNotificationSync); // "Keep forever"
+    EXPECT_EQ(appProperties.getUserSettings()->getIntValue("historyRetentionDays", -999),
+              synth::LocalHistoryStore::kRetainForever);
+}
+
+TEST_F(SettingsWindowTest, HistoryRetentionOutOfRangePersistedValueDisplaysAsDefault) {
+    appProperties.getUserSettings()->setValue("historyRetentionDays", 0); // hand-edited/corrupt value
+
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr);
+    settingsWindow.setSize(600, 400);
+    settingsWindow.resized();
+
+    auto* aiTab = settingsWindow.getTabs().getTabContentComponent(1);
+    ASSERT_NE(aiTab, nullptr);
+    auto* retentionCombo = findHistoryRetentionCombo(aiTab);
+    ASSERT_NE(retentionCombo, nullptr);
+    EXPECT_EQ(retentionCombo->getText(), "180 days");
+}
+
 TEST_F(SettingsWindowTest, RemembersLastSelectedTab) {
     // Set the settingsTab preference to 1 (AI tab) before constructing
     appProperties.getUserSettings()->setValue("settingsTab", 1);
@@ -242,4 +436,98 @@ TEST_F(SettingsWindowTest, GeneralTabShowsShortcuts) {
     // The General tab should have child labels for shortcuts (title label + 5 desc labels + 5 bind buttons + reset
     // button = 12)
     EXPECT_GE(generalTab->getNumChildComponents(), 11);
+}
+
+// ============================================================================
+// P6-7: prompt-learning opt-in checkbox (AI tab)
+// ============================================================================
+
+TEST_F(SettingsWindowTest, PromptLearningToggleDisabledAndUncheckedWithNoAccountService) {
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr, nullptr);
+    settingsWindow.setSize(600, 400);
+    settingsWindow.resized();
+
+    auto* aiTab = settingsWindow.getTabs().getTabContentComponent(1);
+    ASSERT_NE(aiTab, nullptr);
+    auto* toggle = findPromptLearningToggle(aiTab);
+    ASSERT_NE(toggle, nullptr);
+    EXPECT_FALSE(toggle->isEnabled());
+    EXPECT_FALSE(toggle->getToggleState());
+}
+
+TEST_F(SettingsWindowTest, PromptLearningToggleDisabledWithSignInRequiredTooltipWhenSignedOut) {
+    FakeSettingsAuthServer server;
+    synth::AccountService accountService{"http://mock-host:8787", server.performer(),
+                                         std::make_unique<synth::InMemoryTokenStore>()};
+
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr, &accountService);
+    settingsWindow.setSize(600, 400);
+    settingsWindow.resized();
+
+    auto* aiTab = settingsWindow.getTabs().getTabContentComponent(1);
+    ASSERT_NE(aiTab, nullptr);
+    auto* toggle = findPromptLearningToggle(aiTab);
+    ASSERT_NE(toggle, nullptr);
+    EXPECT_FALSE(toggle->isEnabled());
+    EXPECT_FALSE(toggle->getToggleState());
+    EXPECT_EQ(toggle->getTooltip(), juce::String("Sign in required"));
+}
+
+TEST_F(SettingsWindowTest, PromptLearningToggleEnabledAndReflectsServerOptInWhenSignedIn) {
+    FakeSettingsAuthServer server;
+    server.tokenResponse = makeTokenSuccess("at1", "rt1");
+    server.promptLearningGetResponse = makePromptLearningResponse(true);
+
+    auto tokenStore = std::make_unique<synth::InMemoryTokenStore>();
+    tokenStore->save("stored-refresh-token");
+    synth::AccountService accountService{"http://mock-host:8787", server.performer(), std::move(tokenStore)};
+    accountService.attemptSilentSignIn();
+    ASSERT_TRUE(waitUntil([&] { return accountService.getSnapshot().state == synth::AccountState::SignedIn; }));
+
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr, &accountService);
+    settingsWindow.setSize(600, 400);
+    settingsWindow.resized();
+
+    auto* aiTab = settingsWindow.getTabs().getTabContentComponent(1);
+    ASSERT_NE(aiTab, nullptr);
+    auto* toggle = findPromptLearningToggle(aiTab);
+    ASSERT_NE(toggle, nullptr);
+    EXPECT_TRUE(toggle->isEnabled());
+
+    // AISettingsTab fires a fresh refreshPromptLearningOptIn() at construction (already
+    // signed in) rather than trusting a possibly-stale cached snapshot — wait for that round trip
+    // rather than asserting the pre-refresh (default false) state.
+    ASSERT_TRUE(waitUntil([&] { return toggle->getToggleState(); }))
+        << "checkbox never reflected the server's opted_in=true";
+}
+
+TEST_F(SettingsWindowTest, TogglingPromptLearningCheckboxCallsAccountServiceSetter) {
+    FakeSettingsAuthServer server;
+    server.tokenResponse = makeTokenSuccess("at1", "rt1");
+    server.promptLearningPutResponse = makePromptLearningResponse(true);
+
+    auto tokenStore = std::make_unique<synth::InMemoryTokenStore>();
+    tokenStore->save("stored-refresh-token");
+    synth::AccountService accountService{"http://mock-host:8787", server.performer(), std::move(tokenStore)};
+    accountService.attemptSilentSignIn();
+    ASSERT_TRUE(waitUntil([&] { return accountService.getSnapshot().state == synth::AccountState::SignedIn; }));
+
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr, &accountService);
+    settingsWindow.setSize(600, 400);
+    settingsWindow.resized();
+
+    auto* aiTab = settingsWindow.getTabs().getTabContentComponent(1);
+    ASSERT_NE(aiTab, nullptr);
+    auto* toggle = findPromptLearningToggle(aiTab);
+    ASSERT_NE(toggle, nullptr);
+    ASSERT_TRUE(toggle->isEnabled());
+
+    toggle->setToggleState(true, juce::sendNotificationSync);
+
+    ASSERT_TRUE(waitUntil([&] { return server.promptLearningPutCalls() >= 1; }))
+        << "toggling the checkbox never called into AccountService::setPromptLearningOptIn()";
 }

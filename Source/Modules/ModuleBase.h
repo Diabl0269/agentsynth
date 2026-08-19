@@ -145,6 +145,73 @@ public:
         return "Audio";
     }
 
+    // -------------------------------------------------------------------------
+    // Split-block stereo (Audio R on a dedicated kRightBase block)
+    //
+    // The helpers above assume the stereo pair is raw ch0/ch1, which is true for the FX. The voice
+    // modules cannot use that: their ch1 is a CV input (Waveform / Position / Cutoff / gain), so
+    // Audio R lives on its own block above the CV inputs. That block is NOT adjacent to ch0, and a
+    // collapsed jack can only fan to ADJACENT raw channels, so "Dual I/O off" on these modules
+    // means "show the left leg only" rather than "one jack that feeds both legs".
+    // -------------------------------------------------------------------------
+
+    /** Raw channel carrying the right audio leg, or -1 when the module has no second leg.
+        Defaults to the FX layout (ch1); split-block modules override it with their kRightBase. */
+    virtual int rightAudioLegChannel() const { return hasDualIOParameter() ? 1 : -1; }
+
+    /** True when the right leg sits on its own block rather than on ch1. Callers that want to wire
+        or unwire a stereo pair must go through rightAudioLegChannel() rather than assuming ch1. */
+    bool hasSplitBlockStereo() const { return rightAudioLegChannel() > 1; }
+
+    /** Visible audio jacks for a split-block module: 2 when dual, 1 when collapsed. */
+    int splitAudioJackCount() const { return isDualIO() ? 2 : 1; }
+
+    juce::String splitAudioLabel(int visibleJack) const {
+        if (!isDualIO())
+            return "Audio";
+        return visibleJack == 1 ? "Audio R" : "Audio L";
+    }
+
+    // -------------------------------------------------------------------------
+    // Reserved jack counts
+    //
+    // How many jacks a side would show in the DUAL state. A collapsed module gains exactly one
+    // audio jack per side that already carries audio, which is why this asks the channel map rather
+    // than hard-coding per module: an Oscillator's inputs are all CV and gain nothing, while a
+    // Filter gains one on each side.
+    //
+    // NOT currently used for layout. Reserving this much gutter would make flipping Dual I/O
+    // height-neutral (nice when the Preferences default re-lays every module at once), but it also
+    // makes every collapsed card a jack row TALLER than it is today — all twelve FX default to
+    // collapsed, so they would each grow 20px of blank gutter and the factory preset rows would
+    // need rebaking again. Left available for a follow-up that wants to make that trade.
+    // -------------------------------------------------------------------------
+    int getReservedInputPortCount() const {
+        int count = getVisibleInputPortCount();
+        if (hasDualIOParameter() && !isDualIO() && mapInputChannel(0).role == PortRole::Audio)
+            ++count;
+        return count;
+    }
+
+    int getReservedOutputPortCount() const {
+        int count = getVisibleOutputPortCount();
+        if (hasDualIOParameter() && !isDualIO() && mapOutputChannel(0).role == PortRole::Audio)
+            ++count;
+        return count;
+    }
+
+    /** Balance pan law shared by every stereo-capable module: centre leaves BOTH legs at unity,
+        and panning attenuates only the leg you move away from. -1 is hard left, +1 hard right.
+
+        Deliberately not equal-power. An equal-power centre sits at 1/sqrt(2), which would quieten
+        every existing mono patch by 3 dB the moment a module grows a second output jack — Audio L
+        has to keep carrying exactly what it carried while the module was mono. */
+    static void panGains(float pan, float& gainL, float& gainR) {
+        const float p = juce::jlimit(-1.0f, 1.0f, pan);
+        gainL = juce::jlimit(0.0f, 1.0f, 1.0f - p);
+        gainR = juce::jlimit(0.0f, 1.0f, 1.0f + p);
+    }
+
     /** Map raw ch0/ch1 (+ trailing CV) onto Dual or collapsed Audio jacks. */
     LogicalPort mapStereoPairInput(int raw, int numCvInputs) const {
         LogicalPort p;
@@ -468,6 +535,46 @@ protected:
             const float gain = smoothedOutputLevel.getNextValue();
             for (int ch = 0; ch < numChannels; ++ch)
                 channels[ch][i] *= gain;
+        }
+    }
+
+    // Two-block variant for modules whose Audio R block sits ABOVE the mod-CV inputs on a
+    // dedicated `kRightBase` block (Wavetable / Oscillator / Filter layouts) rather than on a
+    // contiguous ch0/ch1 pair. Scales [0, span) and [rightBase, rightBase + span) from ONE ramp:
+    // calling applyOutputLevel() twice would advance the smoother twice and leave the right leg
+    // a block behind the left, which reads as the image drifting while Level moves.
+    void applyOutputLevelSplit(juce::AudioBuffer<float>& buffer, int span, int rightBase) {
+        if (outputLevelParam == nullptr)
+            return;
+
+        const int numSamples = buffer.getNumSamples();
+        const int bufChannels = buffer.getNumChannels();
+        const int leftCount = juce::jmin(span, bufChannels);
+        if (numSamples == 0 || leftCount <= 0)
+            return;
+
+        const int rightCount = juce::jlimit(0, span, bufChannels - rightBase);
+
+        smoothedOutputLevel.setTargetValue(outputLevelParam->get());
+
+        if (!smoothedOutputLevel.isSmoothing()) {
+            const float gain = smoothedOutputLevel.getCurrentValue();
+            if (gain != 1.0f) {
+                for (int ch = 0; ch < leftCount; ++ch)
+                    buffer.applyGain(ch, 0, numSamples, gain);
+                for (int ch = 0; ch < rightCount; ++ch)
+                    buffer.applyGain(rightBase + ch, 0, numSamples, gain);
+            }
+            return;
+        }
+
+        auto* const* channels = buffer.getArrayOfWritePointers();
+        for (int i = 0; i < numSamples; ++i) {
+            const float gain = smoothedOutputLevel.getNextValue();
+            for (int ch = 0; ch < leftCount; ++ch)
+                channels[ch][i] *= gain;
+            for (int ch = 0; ch < rightCount; ++ch)
+                channels[rightBase + ch][i] *= gain;
         }
     }
 

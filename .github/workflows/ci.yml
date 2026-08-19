@@ -102,6 +102,10 @@ jobs:
       # The cache check is what tells us the build cache broke; if it breaks silently we are back
       # to shipping 100%-cold builds unnoticed. Cheap (~1s, no compiler) so it rides along here.
       run: bash scripts/tests/ci-cache-check.test.sh
+    - name: Test Linux dependency install
+      # Covers the apt mirror-failover path, which by definition only runs during an outage — the
+      # one that burned six hours of runner time on 2026-08-18. Same deal: ~1s, no apt, no network.
+      run: bash scripts/tests/ci-install-linux-deps.test.sh
 
   build-and-test:
     name: Build, Test, and Coverage
@@ -110,10 +114,14 @@ jobs:
     steps:
     - uses: actions/checkout@v6
 
+    # The package list and the mirror-failover logic live in the script, which has tests
+    # (scripts/tests/ci-install-linux-deps.test.sh, run by the Lint job). timeout-minutes is the
+    # backstop, not the mechanism: the script itself caps each apt call so it can *recover* from a
+    # sick mirror, while this ceiling exists because a bare `apt-get` has none — on 2026-08-18 one
+    # run sat in this step for six hours before anyone noticed.
     - name: Install Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake ninja-build libasound2-dev libx11-dev libxinerama-dev libxext-dev libxcomposite-dev libxcursor-dev libxrandr-dev libxrender-dev libfontconfig1-dev libfreetype6-dev libglu1-mesa-dev libcurl4-openssl-dev libgtk-3-dev libjack-jackd2-dev freeglut3-dev pkg-config llvm clang ccache xvfb
+      timeout-minutes: 15
+      run: bash scripts/ci-install-linux-deps.sh
 
     # NOTE: restore + save are split deliberately. The combined `actions/cache` action declares
     # exactly ONE output, `cache-hit` (true only on an exact primary-key match); only
@@ -322,6 +330,7 @@ jobs:
     - uses: actions/checkout@v6
 
     - name: Install Dependencies
+      timeout-minutes: 15
       uses: awalsh128/cache-apt-pkgs-action@latest
       with:
         packages: cmake ninja-build libasound2-dev libx11-dev libxinerama-dev libxext-dev libxcomposite-dev libxcursor-dev libxrandr-dev libxrender-dev libfontconfig1-dev libfreetype6-dev libglu1-mesa-dev libcurl4-openssl-dev libgtk-3-dev libjack-jackd2-dev freeglut3-dev pkg-config clang xvfb
@@ -362,7 +371,10 @@ jobs:
     steps:
     - uses: actions/checkout@v6
 
+    # Same ceiling as the Linux job, for the same reason: a package manager with no timeout can
+    # stall on a bad mirror until the 6-hour job limit rather than failing.
     - name: Install Dependencies
+      timeout-minutes: 15
       run: brew install cmake ninja ccache
 
     # See the build-and-test job for why restore and save are split.
@@ -396,12 +408,20 @@ jobs:
 
     - name: Configure CMake
       run: |
+        # OBJC/OBJCXX are separate CMake languages and need their own launcher. JUCE compiles each
+        # of its modules as one Objective-C++ unity file per target — 103 .mm translation units in
+        # this build — and without these two flags every one of them skipped ccache and was rebuilt
+        # cold on every run: ~12 min of a 12 min 45 s macOS job, tailing off into a near-serial
+        # chain of 20–35 s juce_gui_basics / juce_audio_processors compiles. CMakeLists.txt sets the
+        # same four launchers when it finds ccache; these stay explicit to match the C/CXX flags.
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DENABLE_TESTS=ON \
           -DENABLE_AI_HARNESS=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_OBJC_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache
 
     - name: Build
       run: cmake --build build

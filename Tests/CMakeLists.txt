@@ -16,6 +16,7 @@ add_executable(Tests
     LayoutUtilTests.cpp
     OscillatorTests.cpp
     FilterTests.cpp
+    StereoVoiceModuleTests.cpp
     NoiseModuleTests.cpp
     MathModuleTests.cpp
     MacroControlModuleTests.cpp
@@ -74,6 +75,7 @@ add_executable(Tests
     KeychainTokenStoreTests.cpp
     DeviceIdStoreTests.cpp
     PatchFeedbackStoreTests.cpp
+    LocalHistoryStoreTests.cpp
     MainComponentTests.cpp
     GraphEditorTests.cpp
     ModuleComponentTests.cpp
@@ -128,6 +130,7 @@ add_executable(Tests
     ModuleLibraryCollapseTests.cpp
     ModuleLibraryCollapseAnimationTests.cpp
     ModuleLibraryScrollTests.cpp
+    ModuleLibrarySearchTests.cpp
     SelectionModelTests.cpp
     SnippetManagerTests.cpp
     MultiSelectTests.cpp
@@ -156,6 +159,7 @@ add_executable(Tests
     PatchDocumentTests.cpp
     ProjectBundleTests.cpp
     AssetManagerTests.cpp
+    BrandingTests.cpp
     ../Source/MainComponent.cpp
     ../Source/UI/TimelinePanelComponent.cpp
     ../Source/UI/TimelineRulerComponent.cpp

@@ -1152,7 +1152,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Distortion", "bypassed, drive, dualIO, mix, muted, outputLevel, oversampling, type"},
         {"Envelope Follower", "attack, bypassed, detection, muted, release, sensitivity"},
         {"External MIDI", "bypassed, channel, deviceIndex"},
-        {"Filter", "bypassed, cutoff, drive, filterType, muted, outputLevel, poly, resonance"},
+        {"Filter", "bypassed, cutoff, drive, dualIO, filterType, muted, outputLevel, poly, resonance"},
         {"Filter Env", "attack, bypassed, decay, gateThreshold, muted, poly, release, sustain"},
         {"Flanger", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
         // The host module has no parameters of its own beyond bypass/mute — the hosted
@@ -1167,7 +1167,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Midi Input", ""},
         {"Mod Slot", "amount, bypassed"},
         {"Noise", "bypassed, color, level, muted, noiseType, poly"},
-        {"Oscillator", "bypassed, coarse, detune, fine, level, muted, octave, poly, unison, waveform"},
+        {"Oscillator", "bypassed, coarse, detune, dualIO, fine, level, muted, octave, pan, poly, unison, waveform"},
         {"Parametric EQ", "band1Freq, band1Gain, band1On, band1Q, band2Freq, band2Gain, band2On, band2Q, band3Freq, "
                           "band3Gain, band3On, band3Q, band4Freq, band4Gain, band4On, band4Q, bypassed, dualIO, muted, "
                           "outputGain"},
@@ -1188,7 +1188,8 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Reverb", "bypassed, damping, dry, dualIO, muted, outputLevel, roomSize, wet, width"},
         {"Ring Modulator", "bypassed, character, drive, mix, muted, outputLevel, oversampling"},
         {"Sample & Hold", "bypassed, clock, holdMode, level, muted, offset, rate, slew, source, trigThreshold"},
-        {"Sampler", "bypassed, density, grainSize, level, loop, muted, pitch, playMode, rootNote, spray, start"},
+        {"Sampler",
+         "bypassed, density, dualIO, grainSize, level, loop, muted, pitch, playMode, rootNote, spray, start"},
         {"Sequencer", "F.Env 1, F.Env 2, F.Env 3, F.Env 4, F.Env 5, F.Env 6, F.Env 7, F.Env 8, Gate 1, Gate 2, "
                       "Gate 3, Gate 4, Gate 5, Gate 6, Gate 7, Gate 8, Pitch 1, Pitch 2, Pitch 3, Pitch 4, Pitch 5, "
                       "Pitch 6, Pitch 7, Pitch 8, bpm, bypassed, run, syncToTransport"},
@@ -1201,11 +1202,11 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         // Gated on the timeline flag, so the row is gated too.
         {"Track In", "bypassed"},
 #endif
-        {"VCA", "bypassed, gain, muted, poly"},
+        {"VCA", "bypassed, dualIO, gain, muted, poly"},
         {"Voice Mixer", "bypassed, dualIO, level"},
-        {"Wavetable", "blend, bypassed, coarse, detune, fine, importMode, interpolation, level, muted, octave, pan, "
-                      "phase, poly, position, randomPhase, spread, stack, subLevel, subOctave, subShape, syncMode, "
-                      "table, unison, warp, warpAmount, width"},
+        {"Wavetable", "blend, bypassed, coarse, detune, dualIO, fine, importMode, interpolation, level, muted, "
+                      "octave, pan, phase, poly, position, randomPhase, spread, stack, subLevel, subOctave, "
+                      "subShape, syncMode, table, unison, warp, warpAmount, width"},
     };
 
     const auto keys = synth::AIStateMapper::moduleFactoryTypeNames();

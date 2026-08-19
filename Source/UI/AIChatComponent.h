@@ -2,6 +2,8 @@
 
 #include "../AI/AIIntegrationService.h"
 #include "../AI/AccountService.h"
+#include "../AI/ConversationHistorySource.h"
+#include "../AI/LocalHistoryStore.h"
 #include "../AI/PatchDiff.h"
 #include "../AI/PatchFeedbackStore.h"
 #include "AccountRow.h"
@@ -100,6 +102,51 @@ public:
     // Testing hook: redirects the local feedback log to a caller-supplied file so tests never
     // touch the real per-user app-data location. Mirrors setUrlOpenerForTesting.
     void setPatchFeedbackFileForTesting(const juce::File& file) { patchFeedbackStore = PatchFeedbackStore(file); }
+
+    // Testing hook: redirects local chat-history persistence (LocalHistoryStore) to a
+    // caller-supplied directory so tests never touch the real per-user app-data location. Mirrors
+    // setPatchFeedbackFileForTesting.
+    void setLocalHistoryDirectoryForTesting(const juce::File& dir) { localHistoryDirOverride = dir; }
+
+    // Testing hook: replaces the real local/cloud history backends (historyButtonClicked() would
+    // otherwise construct a LocalHistorySource against the real directory, and a CloudHistorySource
+    // that makes a real HTTP call) with fakes, so tests can assert which backend a given
+    // AccountSnapshot routes to without touching disk or the network. Either may be null; a null
+    // cloud source means historyButtonClicked() falls back to a no-op stand-in that reports
+    // ok=false (mirrors "signed in but the request failed" rather than crashing).
+    void setHistorySourcesForTesting(std::unique_ptr<ConversationHistorySource> local,
+                                     std::unique_ptr<ConversationHistorySource> cloud) {
+        testLocalHistorySource = std::move(local);
+        testCloudHistorySource = std::move(cloud);
+    }
+
+    // Testing hook: the History button's click handler, exposed synchronously (mirrors
+    // simulateCancelClick()/triggerSend()) so tests can drive the real list/restore/downgrade-date
+    // path without a real click event.
+    void simulateHistoryButtonClick() { historyButtonClicked(); }
+
+    // Testing hook: true once historyButtonClicked() has shown a popup (real UI is skipped in
+    // headless tests — juce::PopupMenu can't be driven from a test without a real event loop — but
+    // this still proves the list/backend-selection logic ran, which is what these tests assert).
+    bool didShowHistoryPopupForTesting() const { return lastHistoryPopupShown; }
+    bool lastHistoryPopupWasCloudForTesting() const { return lastHistoryPopupWasCloud; }
+    const std::vector<LocalConversationSummary>& lastHistoryListForTesting() const { return lastHistoryList; }
+
+    // Testing hook: historyButton's tooltip, which carries the upsell strip's explanatory text
+    // whenever !isProPlan(snapshot) — see updateUpsellStrip()'s doc comment. Not const: JUCE's
+    // Button::getTooltip() (via SettableTooltipClient) isn't a const member function.
+    juce::String getHistoryButtonTooltipForTesting() { return historyButton.getTooltip(); }
+
+    // Testing hook: the "Clear my history" confirmation-menu-item handler, exposed synchronously.
+    void simulateClearHistoryConfirmed() { performClearHistory(); }
+
+    // Testing hook: restoring a specific history-popup entry, exposed synchronously — a real
+    // juce::PopupMenu item click can't be driven headlessly (see showHistoryPopup()'s doc comment
+    // on didShowHistoryPopupForTesting()), so tests drive the same restoreConversation() a real
+    // click would.
+    void simulateRestoreConversationForTesting(const juce::String& id, bool isCloud) {
+        restoreConversation(id, isCloud);
+    }
 
 private:
     void timerCallback() override;
@@ -210,12 +257,32 @@ private:
     juce::TextButton sendButton;
     juce::TextButton cancelButton; // Visible ONLY while waiting
     juce::TextButton newChatButton;
+    juce::TextButton historyButton; // P6-8: opens the history list/restore/clear popup
     juce::ComboBox modelPicker;
 
     // P4-6 privacy disclosure: visible only while the active provider is hosted (RemoteProvider).
     // Zero-height/invisible otherwise, same contract as accountRow/planBadge below it in the
     // bottom-chrome stack — see updateHostedModeNotice() and resized().
     juce::Label hostedModeNotice;
+
+    // P6-8 upsell strip: an "Upgrade to Pro" button, shown whenever !isProPlan(snapshot) —
+    // including with NO AccountService attached at all, which deliberately diverges from
+    // accountRow/planBadge/hostedModeNotice's "invisible until a service says otherwise"
+    // convention: those default to invisible because they have nothing true to say yet, but "not
+    // Pro" is already true before any AccountService is ever attached (every caller starts on the
+    // free tier, signed out). The explanatory text ("Your history is saved locally only —
+    // subscribers get automatic cloud backup across devices.") lives on historyButton's tooltip
+    // instead of a separate label, so it doesn't compete for space in the bottom-chrome stack —
+    // see updateUpsellStrip().
+    juce::TextButton upsellButton;
+
+    // P6-8 downgrade notice: "Your subscription has lapsed — your saved history will be deleted on
+    // {date}." Shown only once signed in, !isProPlan(snapshot), AND a grace-period deletion date is
+    // known — which is learned ONLY from an explicit History-button click (listConversations()
+    // writes on read server-side, see docs/AI_Engine.md — this must not be polled). See
+    // historyButtonClicked()/updateDowngradeStrip().
+    juce::Label downgradeStripLabel;
+    juce::String lastDeletionScheduledAt; // "" = none known/pending
 
     // Pulse animation for the "AI is thinking" state indicator.
     // VBlankAnimatorUpdater is attached to this Component.
@@ -301,6 +368,106 @@ private:
     // turn up to and including `data`, for the merge-vs-replace user-intent heuristic) and
     // `aiService`, so it must be called after data is appended to `messages`.
     void attachPatchPreview(MessageData& data);
+
+    // P6-8: this session's local conversation identity — minted lazily on the first successful
+    // exchange (saveCurrentConversationLocally()), not at construction, so a session that never
+    // sends a message never creates an empty history file. Also adopted by restoreConversation()
+    // so that restoring an earlier conversation makes subsequent local (and, for a Pro restore,
+    // cloud) saves continue appending to THAT conversation rather than starting a new one.
+    juce::String currentLocalConversationId;
+    juce::String currentLocalConversationCreatedAt;
+
+    // Testing hook storage for setLocalHistoryDirectoryForTesting()/setHistorySourcesForTesting().
+    juce::File localHistoryDirOverride; // invalid File() = use LocalHistoryStore::getDefaultHistoryDirectory()
+    std::unique_ptr<ConversationHistorySource> testLocalHistorySource;
+    std::unique_ptr<ConversationHistorySource> testCloudHistorySource;
+
+    // Testing observation hooks for historyButtonClicked() — see didShowHistoryPopupForTesting().
+    bool lastHistoryPopupShown = false;
+    bool lastHistoryPopupWasCloud = false;
+    std::vector<LocalConversationSummary> lastHistoryList;
+
+    // P6-8: syncs upsellButton's visibility, and historyButton's tooltip, to !isProPlan(snapshot)
+    // (true whenever there is no AccountService at all — see upsellButton's member doc comment).
+    // Called from setAccountService()'s onStateChanged handler and once at construction.
+    void updateUpsellStrip();
+
+    // P6-8: syncs downgradeStripLabel visibility/text to (signed in && !isProPlan &&
+    // lastDeletionScheduledAt.isNotEmpty()). Called from historyButtonClicked()'s cloud callback —
+    // NOT from onStateChanged, since the date it renders is only ever learned from an explicit
+    // History click (see lastDeletionScheduledAt's doc comment).
+    void updateDowngradeStrip();
+
+    // P6-8: rebuilds `messages` from a flat (role, content) sequence — content still carries any
+    // fenced ```json block unsplit, exactly like AIProvider::Message::content / a stored
+    // LocalConversationMessage/AuthClient::ConversationMessage. Shared by the constructor's
+    // aiService.getHistory() replay and restoreConversation()'s history-panel replay, so the two
+    // can never drift.
+    void replayMessagesFrom(const std::vector<std::pair<juce::String, juce::String>>& roleContentPairs);
+
+    // P6-8: reconstructs `content` for one MessageData the same way replayMessagesFrom() expects to
+    // consume it back (text, plus a re-fenced ```json block when jsonPatch is non-empty).
+    static juce::String reconstructMessageContent(const MessageData& data);
+
+    // P6-8: builds this session's LocalConversation snapshot from `messages` and writes it via
+    // LocalHistoryStore::save(), minting currentLocalConversationId/CreatedAt on first call. Called
+    // once per successful exchange, right after the assistant turn is appended to `messages` (see
+    // sendButtonClicked()) — deliberately NOT from AIIntegrationService::sendMessage()'s own
+    // callback, which can run on a provider worker thread and doesn't have `messages` (the UI's
+    // own copy, split into text/jsonPatch) to hand.
+    void saveCurrentConversationLocally();
+
+    // P6-8: first user message's text, trimmed/truncated — the title stored alongside a locally
+    // saved conversation. Empty `messages` (shouldn't happen when this is called, but defensively)
+    // yields "New Conversation" rather than an empty title, which would render as a blank row in
+    // the history popup.
+    juce::String deriveConversationTitle() const;
+
+    // P6-8: the directory saveCurrentConversationLocally()/historyButtonClicked() read/write
+    // through — localHistoryDirOverride when set (tests), else the real per-user location.
+    juce::File resolveLocalHistoryDirectory() const;
+
+    // P6-8: History button handler. Always sources the LOCAL list when !isProPlan(snapshot) or no
+    // AccountService/not signed in. When signed in, ALSO fires a cloud listConversations() call
+    // regardless of plan — that call is the only source of a pending grace-period deletion date
+    // (see lastDeletionScheduledAt), and when the plan IS Pro its result is the list itself. Never
+    // called speculatively/on a timer — see ListConversationsResult's read-writes-on-read caveat in
+    // docs/AI_Engine.md.
+    void historyButtonClicked();
+
+    // P6-8: builds a juce::PopupMenu from `list` (a "Clear my history" item plus one row per
+    // conversation, titled with its readable updatedAt) and shows it. `isCloud` records which
+    // backend to call get()/restore against when an item is picked.
+    void showHistoryPopup(std::vector<LocalConversationSummary> list, bool isCloud);
+
+    // P6-8: fetches the full conversation (from whichever backend showHistoryPopup() was built
+    // against) and replays it into `messages` via replayMessagesFrom(). Also clears aiService's
+    // own chatHistory (aiService.clearHistory()) and adopts `id` as currentLocalConversationId, so
+    // subsequent exchanges in this session continue THIS conversation locally; for a cloud (Pro)
+    // restore, also calls aiService.setConversationId(id) so the server continues the same thread.
+    // Deliberately does NOT attempt to re-seed aiService's chatHistory with the restored turns
+    // (there is no API for that — see docs/AI_Engine.md's "Local History (P6-8)" section), so the
+    // model has no memory of the restored conversation until new turns accumulate.
+    void restoreConversation(const juce::String& id, bool isCloud);
+
+    // P6-8: "Clear my history" — shows an AlertWindow confirmation (mirrors ShortcutsSettingsTab's
+    // "Reset to Defaults" pattern), then calls performClearHistory().
+    void confirmAndClearHistory();
+
+    // P6-8: the actual delete, wired to the same backend historyButtonClicked() last populated the
+    // popup from (local deleteAll() when !isProPlan, cloud deleteAllConversations() when Pro).
+    void performClearHistory();
+
+    // P6-8: returns the backend to use for this call — the test double from
+    // setHistorySourcesForTesting() when one was installed, otherwise a freshly constructed real
+    // implementation OWNED BY `fallbackStorage` (a unique_ptr living in the CALLER's stack frame).
+    // Every ConversationHistorySource implementation here only touches its own state during the
+    // synchronous portion of list()/get()/deleteAll() (CloudHistorySource copies what its
+    // background thread needs before returning — see its class comment), so it's safe for
+    // `fallbackStorage` to go out of scope immediately after that one call completes; nothing
+    // holds onto the returned pointer past it.
+    ConversationHistorySource* resolveLocalHistorySource(std::unique_ptr<ConversationHistorySource>& fallbackStorage);
+    ConversationHistorySource* resolveCloudHistorySource(std::unique_ptr<ConversationHistorySource>& fallbackStorage);
 
 #ifndef NDEBUG
     juce::TextEditor debugConsole;

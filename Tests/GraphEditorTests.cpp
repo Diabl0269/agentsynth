@@ -125,6 +125,76 @@ TEST_F(GraphEditorTest, NewDualIOModuleHonoursDefaultPreference) {
     EXPECT_TRUE(delay->isDualIO());
 }
 
+// The preference is what the user sets to say "I want split jacks on everything I make". Before
+// #219 it only reached FX, and it could only ever force Dual I/O *on* — so a module whose own
+// default is dual could not be made single from Preferences at all.
+TEST_F(GraphEditorTest, DefaultDualIOPreferenceReachesVoiceModulesInBothDirections) {
+    auto dropAndFind = [](bool preferDual, const juce::String& type) {
+        auto engine = std::make_unique<AudioEngine>();
+        GraphEditor editor(*engine);
+        editor.setSize(800, 600);
+        editor.setDefaultDualIOForNewModules(preferDual);
+
+        DummyDragSource dummySource;
+        juce::DragAndDropTarget::SourceDetails details(juce::var(type), &dummySource, juce::Point<int>(100, 100));
+        editor.itemDropped(details);
+
+        bool dual = false;
+        bool found = false;
+        for (auto* node : engine->getGraph().getNodes()) {
+            if (node->getProcessor()->getName() == type) {
+                auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor());
+                found = mb != nullptr && mb->hasDualIOParameter();
+                dual = mb != nullptr && mb->isDualIO();
+            }
+        }
+        EXPECT_TRUE(found) << type << " should expose a Dual I/O parameter";
+        return dual;
+    };
+
+    for (const juce::String& type : {"Oscillator", "Filter", "VCA", "Wavetable", "Sampler", "Delay"}) {
+        EXPECT_TRUE(dropAndFind(true, type)) << type << " ignored the split-jacks preference";
+        EXPECT_FALSE(dropAndFind(false, type)) << type << " ignored the single-jack preference";
+    }
+}
+
+// An invisible jack cannot be unplugged: collapsing a split-block module has to take its right-leg
+// cables with it, or they keep sounding with no way to reach them.
+TEST_F(GraphEditorTest, CollapsingASplitBlockModuleDropsItsHiddenRightLegWires) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1000, 600);
+
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    ASSERT_NE(oscNode, nullptr);
+    ASSERT_NE(filterNode, nullptr);
+    editor.updateComponents();
+
+    const int oscR = OscillatorModule::kRightBase;
+    const int filterR = FilterModule::kRightBase;
+    graph.addConnection({{oscNode->nodeID, 0}, {filterNode->nodeID, 0}});
+    graph.addConnection({{oscNode->nodeID, oscR}, {filterNode->nodeID, filterR}});
+    ASSERT_TRUE(graph.isConnected({{oscNode->nodeID, oscR}, {filterNode->nodeID, filterR}}));
+
+    // Collapse the Filter.
+    ModuleComponent* filterComp = nullptr;
+    for (auto* mc : editor.getModuleComponents())
+        if (mc != nullptr && mc->getNodeId() == filterNode->nodeID)
+            filterComp = mc;
+    ASSERT_NE(filterComp, nullptr);
+
+    if (auto* dual = findParameterByID(filterNode->getProcessor(), "dualIO"))
+        dual->setValueNotifyingHost(0.0f);
+    // The same call ModuleComponent::applyDualIOLayoutChange makes when the header toggle flips.
+    editor.completeStereoPairConnections(filterComp);
+
+    EXPECT_FALSE(graph.isConnected({{oscNode->nodeID, oscR}, {filterNode->nodeID, filterR}}))
+        << "the wire into the now-hidden Audio R jack must be dropped";
+    EXPECT_TRUE(graph.isConnected({{oscNode->nodeID, 0}, {filterNode->nodeID, 0}})) << "the left leg is untouched";
+}
+
 // --- Audio-file drop on the canvas ------------------------------------------------------------
 // Dropping a sample on empty canvas should build a Sampler already holding it, so the user never has
 // to open the file chooser.
@@ -977,7 +1047,7 @@ TEST_F(GraphEditorTest, ResolvePolyLinkFansEnvelopeToPolyVCA) {
     setPolyParam(adsr, true);
     setPolyParam(vca, true);
 
-    auto link = GraphEditor::resolvePolyLink(&adsr, 0, &vca, 1);
+    auto link = GraphEditor::resolvePolyLink(&adsr, 0, &vca, 2); // VCA CV moved to jack 2 behind Audio L/R (#219)
     EXPECT_EQ(link.sourceRawChannel, 0);
     EXPECT_EQ(link.destRawChannel, 8);
     EXPECT_EQ(link.voiceCount, 8);
@@ -1010,7 +1080,7 @@ TEST_F(GraphEditorTest, ResolvePolyLinkStaysMonoWhenDestIsMono) {
     VCAModule monoVca; // poly defaults to false
 
     // A poly source into a mono jack must not sum eight envelopes onto one CV channel.
-    auto link = GraphEditor::resolvePolyLink(&polyAdsr, 0, &monoVca, 1);
+    auto link = GraphEditor::resolvePolyLink(&polyAdsr, 0, &monoVca, 2); // CV jack (#219)
     EXPECT_EQ(link.sourceRawChannel, 0);
     EXPECT_EQ(link.destRawChannel, 1);
     EXPECT_EQ(link.voiceCount, 1);
@@ -1024,7 +1094,7 @@ TEST_F(GraphEditorTest, ResolvePolyLinkBroadcastsMonoSourceAcrossModCvFan) {
     VCAModule polyVca;
     setPolyParam(polyVca, true);
 
-    auto link = GraphEditor::resolvePolyLink(&lfo, 0, &polyVca, 1);
+    auto link = GraphEditor::resolvePolyLink(&lfo, 0, &polyVca, 2); // CV jack (#219)
     EXPECT_EQ(link.sourceRawChannel, 0);
     EXPECT_EQ(link.destRawChannel, 8);
     EXPECT_EQ(link.voiceCount, 8);
@@ -1308,7 +1378,7 @@ TEST_F(GraphEditorTest, DragBetweenPolyModulesFansOutAllVoices) {
     editor.beginConnectionDrag(adsrComp, 0, false, false, juce::Point<int>(0, 0));
     editor.dragConnection(juce::Point<int>(50, 0));
 
-    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(1, true);
+    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(2, true);
     editor.endConnectionDrag(vcaTargetPoint);
 
     auto& graph = engine.getGraph();
@@ -1372,7 +1442,7 @@ TEST_F(GraphEditorTest, DragBetweenMonoModulesIsUnchanged) {
     editor.beginConnectionDrag(adsrComp, 0, false, false, juce::Point<int>(0, 0));
     editor.dragConnection(juce::Point<int>(50, 0));
 
-    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(1, true);
+    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(2, true);
     editor.endConnectionDrag(vcaTargetPoint);
 
     auto& graph = engine.getGraph();
@@ -1427,7 +1497,7 @@ TEST_F(GraphEditorTest, DisconnectPolyPortRemovesEntireFan) {
     editor.beginConnectionDrag(adsrComp, 0, false, false, juce::Point<int>(0, 0));
     editor.dragConnection(juce::Point<int>(50, 0));
 
-    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(1, true);
+    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(2, true);
     editor.endConnectionDrag(vcaTargetPoint);
 
     auto& graph = engine.getGraph();
@@ -1438,7 +1508,7 @@ TEST_F(GraphEditorTest, DisconnectPolyPortRemovesEntireFan) {
             ++preCount;
     ASSERT_EQ(preCount, 8) << "Setup must produce the 8-voice fan before disconnecting";
 
-    editor.disconnectPort(vcaComp, 1, true, false);
+    editor.disconnectPort(vcaComp, 2, true, false);
 
     int postCount = 0;
     for (auto& conn : graph.getConnections())
@@ -1608,7 +1678,7 @@ TEST_F(GraphEditorTest, DragMonoLfoOntoPolyVcaBroadcastsToEveryVoice) {
     editor.beginConnectionDrag(lfoComp, 0, false, false, juce::Point<int>(0, 0));
     editor.dragConnection(juce::Point<int>(50, 0));
 
-    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(1, true);
+    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(2, true);
     editor.endConnectionDrag(vcaTargetPoint);
 
     auto& graph = engine.getGraph();
@@ -1687,7 +1757,7 @@ TEST_F(GraphEditorTest, TogglingPolyOnBroadcastsExistingMonoModWire) {
 
     editor.beginConnectionDrag(lfoComp, 0, false, false, juce::Point<int>(0, 0));
     editor.dragConnection(juce::Point<int>(50, 0));
-    editor.endConnectionDrag(vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(1, true));
+    editor.endConnectionDrag(vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(2, true));
 
     auto& graph = engine.getGraph();
 
@@ -1883,7 +1953,7 @@ TEST_F(GraphEditorTest, TogglingPolyMovesModCvWireOntoPolyChannels) {
     editor.beginConnectionDrag(adsrComp, 0, false, false, juce::Point<int>(0, 0));
     editor.dragConnection(juce::Point<int>(50, 0));
 
-    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(1, true);
+    auto vcaTargetPoint = vcaComp->getBounds().getPosition() + vcaComp->getPortCenter(2, true);
     editor.endConnectionDrag(vcaTargetPoint);
 
     auto& graph = engine.getGraph();
@@ -2588,9 +2658,12 @@ TEST_F(GraphEditorTest, SmartConnectionDoesNotTreatMathABAsStereo) {
     juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource, juce::Point<int>(80, 100));
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
-    // Math A/B are unlabeled PortRole::Other — must not fan mono into both.
-    EXPECT_LE(editor.getSmartSuggestionCount(), 1);
-    if (editor.getSmartSuggestionCount() == 1) {
+    // Math A/B are unlabeled PortRole::Other, so they are never a stereo destination pair. The
+    // Oscillator became a stereo SOURCE in #219 (Audio L/R), so it may legitimately offer both legs
+    // — but every one of them must land on Math A. B is a second operand, not a right channel.
+    const int suggestions = editor.getSmartSuggestionCount();
+    EXPECT_LE(suggestions, 2);
+    if (suggestions >= 1) {
         editor.itemDropped(details);
         juce::AudioProcessorGraph::NodeID oscId{};
         for (auto* node : graph.getNodes()) {
@@ -2598,10 +2671,14 @@ TEST_F(GraphEditorTest, SmartConnectionDoesNotTreatMathABAsStereo) {
                 oscId = node->nodeID;
         }
         ASSERT_NE(oscId.uid, 0u);
-        const bool toA = graph.isConnected({{oscId, 0}, {mathNode->nodeID, 0}});
-        const bool toB = graph.isConnected({{oscId, 0}, {mathNode->nodeID, 1}});
-        EXPECT_TRUE(toA != toB) << "exactly one of Math A/B should receive the mono wire";
-        EXPECT_FALSE(toA && toB);
+
+        bool anyIntoB = false;
+        for (const auto& conn : graph.getConnections())
+            if (conn.source.nodeID == oscId && conn.destination.nodeID == mathNode->nodeID &&
+                conn.destination.channelIndex == 1)
+                anyIntoB = true;
+        EXPECT_FALSE(anyIntoB) << "Math B is a second operand, not a right audio channel";
+        EXPECT_TRUE(graph.isConnected({{oscId, 0}, {mathNode->nodeID, 0}})) << "Audio L should reach Math A";
     } else {
         editor.endDragPreview();
     }

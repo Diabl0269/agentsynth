@@ -5,15 +5,38 @@
 
 class OscillatorModule : public ModuleBase {
 public:
+    // -------------------------------------------------------------------------
+    // Channel map
+    //
+    // Inputs (14, unchanged since the module was mono): mono mode puts jack j on raw ch j
+    // (Pitch, Waveform, Octave, Coarse, Fine, Level, Pan); poly mode fans Pitch across ch0-7 and
+    // puts the shared mod-CV block at kPolyModCVBase, so jack j (j >= 1) lands on
+    // kPolyModCVBase + j - 1. Pan (#219) took the channels that were already declared and
+    // unused — ch6 in mono, ch13 in poly — so every pre-#219 CV routing keeps its raw channel.
+    //
+    // Outputs: Audio L on the voice block (ch0, or ch0-7 in poly) and Audio R on a dedicated
+    // block at kRightBase. R deliberately does NOT live on ch1: that is the Waveform CV input,
+    // and relabelling it would break both the CV routing and every saved patch using it.
+    // -------------------------------------------------------------------------
+    static constexpr int kNumVoices = 8;
+    static constexpr int kJackPan = 6;                          // last visible input jack
+    static constexpr int kNumJacks = kJackPan + 1;              // Pitch..Pan
+    static constexpr int kPolyModCVBase = kNumVoices;           // poly shared-CV block start
+    static constexpr int kNumInputs = 14;                       // 8 pitch fan + 6 shared mod CV
+    static constexpr int kRightBase = kNumInputs;               // Audio R block starts here
+    static constexpr int kNumOutputs = kRightBase + kNumVoices; // 22
+
+    /** Raw channel carrying jack `jack`'s CV, for the current voice mode. */
+    static constexpr int modCVChannelFor(int jack, bool poly) { return poly ? (kPolyModCVBase + jack - 1) : jack; }
+
     OscillatorModule()
-        : ModuleBase("Oscillator", 14,
-                     14) // 14 in: 8 per-voice pitch CV (0-7) + 6 shared mod CV (8-13).
-                         // 14 out declared so JUCE copies shared-mod-CV inputs when they fan out to
-                         // multiple downstream nodes (avoids buffer aliasing when inputChan >= numOuts).
-                         // Only channels 0-7 carry audio; 8-13 are silent pass-through outputs.
-                         // 14 outputs (not 8): channels 8-13 are silent pass-through outputs; this also
-                         // makes JUCE copy shared CV input buffers so our post-render clear can't
-                         // corrupt them — see processPolyMode clear note.
+        : ModuleBase("Oscillator", kNumInputs,
+                     kNumOutputs) // 14 in: 8 per-voice pitch CV (0-7) + 6 shared mod CV (8-13).
+                                  // 22 out: Audio L on 0-7, silent pass-throughs on 8-13, Audio R on
+                                  // 14-21. Declaring outputs ABOVE every CV input channel is what makes
+                                  // JUCE copy shared-mod-CV input buffers when they fan out to several
+                                  // downstream nodes, so our post-render clear cannot corrupt them —
+                                  // see the processPolyMode clear note. Do NOT reduce this below 14.
     {
         addParameter(waveformParam = new juce::AudioParameterChoice("waveform", "Waveform",
                                                                     {"Sine", "Square", "Saw", "Triangle"}, 0));
@@ -24,6 +47,10 @@ public:
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
         addParameter(unisonParam = new juce::AudioParameterInt(juce::ParameterID("unison", 1), "Unison", 1, 8, 1));
         addParameter(detuneParam = new juce::AudioParameterFloat("detune", "Detune", 0.0f, 100.0f, 0.0f));
+        addParameter(panParam = new juce::AudioParameterFloat("pan", "Pan", -1.0f, 1.0f, 0.0f));
+        // Defaults to dual: this module is stereo now, so showing both legs is the honest
+        // out-of-the-box state. The Preferences default overrides it for newly dropped modules.
+        addDualIOParameter(/*defaultDual=*/true);
         addMuteParameter();
         enableVisualBuffer(true);
     }
@@ -46,10 +73,20 @@ public:
         // so a static render is bit-identical to the un-smoothed version.
         smoothedLevel.reset(sampleRate, 0.01);
         smoothedLevel.setCurrentAndTargetValue(levelParam->get());
+        smoothedPan.reset(sampleRate, 0.01);
+        smoothedPan.setCurrentAndTargetValue(panParam->get());
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
-        if (isBypassed() || isMuted()) {
+        // Two separate branches, per the bypass/mute contract in docs/architecture.md. A pure
+        // source has no dry audio path to pass through, so bypass clears here rather than
+        // returning early — but it stays its own branch so the two cases can never be conflated.
+        if (isBypassed()) {
+            buffer.clear();
+            return;
+        }
+
+        if (isMuted()) {
             buffer.clear();
             return;
         }
@@ -79,16 +116,17 @@ public:
 
     std::vector<ModulationTarget> getModulationTargets() const override {
         if (polyParam->get())
-            return {{"Waveform", 8}, {"Octave", 9}, {"Coarse", 10}, {"Fine", 11}, {"Level", 12}};
-        return {{"Pitch", 0}, {"Waveform", 1}, {"Octave", 2}, {"Coarse", 3}, {"Fine", 4}, {"Level", 5}};
+            return {{"Waveform", 8}, {"Octave", 9}, {"Coarse", 10}, {"Fine", 11}, {"Level", 12}, {"Pan", 13}};
+        return {{"Pitch", 0}, {"Waveform", 1}, {"Octave", 2}, {"Coarse", 3}, {"Fine", 4}, {"Level", 5}, {"Pan", 6}};
     }
     juce::String getInputPortLabel(int i) const override {
-        const juce::String labels[] = {"Pitch", "Waveform", "Octave", "Coarse", "Fine", "Level"};
-        return (i >= 0 && i < 6) ? labels[i] : ModuleBase::getInputPortLabel(i);
+        const juce::String labels[] = {"Pitch", "Waveform", "Octave", "Coarse", "Fine", "Level", "Pan"};
+        return (i >= 0 && i < kNumJacks) ? labels[i] : ModuleBase::getInputPortLabel(i);
     }
-    juce::String getOutputPortLabel(int) const override { return "Audio"; }
-    int getVisibleInputPortCount() const override { return 6; }
-    int getVisibleOutputPortCount() const override { return 1; }
+    juce::String getOutputPortLabel(int i) const override { return splitAudioLabel(i); }
+    int getVisibleInputPortCount() const override { return kNumJacks; }
+    int getVisibleOutputPortCount() const override { return splitAudioJackCount(); }
+    int rightAudioLegChannel() const override { return kRightBase; }
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Oscillator; }
     ModuleType getModuleType() const override { return ModuleType::Oscillator; }
 
@@ -138,9 +176,16 @@ public:
                 p.polyVoiceSpan = 1;
                 return p;
             }
+            if (raw == modCVChannelFor(kJackPan, /*poly*/ true)) { // ch13
+                p.visibleJackIndex = kJackPan;
+                p.role = PortRole::ModCV;
+                p.isPolyGroupHead = true;
+                p.polyVoiceSpan = 1;
+                return p;
+            }
         } else {
-            // Mono mode: raw 0-5 = ModCV jacks 0-5
-            if (raw >= 0 && raw <= 5) {
+            // Mono mode: raw 0-6 = ModCV jacks 0-6 (Pitch..Pan)
+            if (raw >= 0 && raw < kNumJacks) {
                 p.visibleJackIndex = raw;
                 p.role = PortRole::ModCV;
                 p.isPolyGroupHead = true;
@@ -151,25 +196,40 @@ public:
         return ModuleBase::mapInputChannel(raw);
     }
 
+    /** Audio L lives on the voice block (ch0, or ch0-7 in poly) and Audio R on a dedicated block
+        starting at kRightBase, so neither output ever collides with a mod-CV input channel. Poly
+        fans both blocks eight wide, which is what carries a panned poly chord into the Voice Mixer
+        as a stereo pair. */
     LogicalPort mapOutputChannel(int raw) const override {
+        const bool poly = polyParam->get();
+        const int span = poly ? kNumVoices : 1;
+
         LogicalPort p;
-        if (polyParam->get()) {
-            // Poly mode: raw 0-7 = per-voice audio fan, all anchored to the single visible Audio jack
-            if (raw >= 0 && raw <= 7) {
-                p.visibleJackIndex = 0;
-                p.role = PortRole::Audio;
-                p.isPolyGroupHead = (raw == 0);
-                p.polyVoiceSpan = (raw == 0) ? 8 : 1;
-                return p;
-            }
-        } else if (raw == 0) {
+        p.role = PortRole::Audio;
+        p.polyVoiceSpan = 1;
+
+        if (raw >= 0 && raw < span) {
             p.visibleJackIndex = 0;
-            p.role = PortRole::Audio;
-            p.isPolyGroupHead = true;
-            p.polyVoiceSpan = 1;
+            p.isPolyGroupHead = (raw == 0);
+            p.polyVoiceSpan = (raw == 0) ? span : 1;
             return p;
         }
-        return ModuleBase::mapOutputChannel(raw);
+        // Collapsed (Dual I/O off): the right block still renders, it is simply not exposed as a
+        // jack, so nothing can be patched to it. Falls through to the non-head case below.
+        if (isDualIO() && raw >= kRightBase && raw < kRightBase + span) {
+            p.visibleJackIndex = 1;
+            p.isPolyGroupHead = (raw == kRightBase);
+            p.polyVoiceSpan = (raw == kRightBase) ? span : 1;
+            return p;
+        }
+
+        // Silent pass-through channels (the mod-CV block, and voices 1-7 in mono): addressable but
+        // never a poly-bus head. Falling through to ModuleBase here would be wrong — its default
+        // clamps the raw channel onto a visible jack index, so mono ch1 would advertise itself as
+        // the head of the Audio R jack and a wire could be drawn off the Waveform CV channel.
+        p.visibleJackIndex = 0;
+        p.isPolyGroupHead = false;
+        return p;
     }
 
     bool isAutoPromotableModTarget(int dstChannel) const override {
@@ -213,6 +273,15 @@ private:
             levelRamp[(size_t)i] = smoothedLevel.getNextValue();
     }
 
+    /** Same materialise-once contract as fillLevelRamp, for Pan: placeVoiceInStereo runs once per
+        VOICE, so pulling the smoother inside it would advance it eight times per block. */
+    void fillPanRamp(int len) {
+        len = std::min(len, (int)panRamp.size()); // same clamp contract as the level ramp's caller
+        smoothedPan.setTargetValue(panParam->get());
+        for (int i = 0; i < len; ++i)
+            panRamp[(size_t)i] = smoothedPan.getNextValue();
+    }
+
     // -------------------------------------------------------------------------
     // Mono mode processing (voice 0 only, MIDI driven)
     // -------------------------------------------------------------------------
@@ -233,6 +302,7 @@ private:
         juce::HeapBlock<float> cvCoarseSaved(numSamples);
         juce::HeapBlock<float> cvFineSaved(numSamples);
         juce::HeapBlock<float> cvLevelSaved(numSamples);
+        juce::HeapBlock<float> cvPanSaved(numSamples);
 
         // Zero them initially
         juce::FloatVectorOperations::clear(cvWaveformSaved, numSamples);
@@ -240,6 +310,7 @@ private:
         juce::FloatVectorOperations::clear(cvCoarseSaved, numSamples);
         juce::FloatVectorOperations::clear(cvFineSaved, numSamples);
         juce::FloatVectorOperations::clear(cvLevelSaved, numSamples);
+        juce::FloatVectorOperations::clear(cvPanSaved, numSamples);
 
         // Helper to check if a channel is active
         auto isChannelActive = [&](int ch) {
@@ -262,6 +333,9 @@ private:
             juce::FloatVectorOperations::copy(cvFineSaved, buffer.getReadPointer(4), numSamples);
         if (isChannelActive(5))
             juce::FloatVectorOperations::copy(cvLevelSaved, buffer.getReadPointer(5), numSamples);
+        if (isChannelActive(modCVChannelFor(kJackPan, /*poly*/ false)))
+            juce::FloatVectorOperations::copy(cvPanSaved, buffer.getReadPointer(modCVChannelFor(kJackPan, false)),
+                                              numSamples);
 
         // Clear output channels 0..getTotalNumOutputChannels()-1 (==14). This range includes the
         // shared mod-CV input channels (1-5 mono), but clearing them here is SAFE because:
@@ -381,11 +455,57 @@ private:
             ch0[i] = sample * level;
         }
 
+        // Place the finished mono voice across Audio L / Audio R. Done as a post-pass rather than
+        // inside the render loop so the generator stays byte-identical to the pre-#219 mono path.
+        fillPanRamp(numSamples);
+        placeVoiceInStereo(buffer, /*voiceIndex*/ 0, numSamples, cvPanSaved.get(), numSamples);
+
         // Push to visual buffer
         if (auto* vb = getVisualBuffer()) {
             for (int i = 0; i < numSamples; ++i) {
                 vb->pushSample(ch0[i]);
             }
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Stereo placement
+    // -------------------------------------------------------------------------
+    /** Splits voice `voiceIndex`, rendered in place on its Audio L channel, across Audio L and the
+        matching Audio R channel at kRightBase + voiceIndex.
+
+        `panCV` may be null; `panCVLength` is how many samples of it are valid (the poly cache is
+        capped at 4096, so a longer block holds the last cached value rather than reading past it).
+
+        The balance law (ModuleBase::panGains) leaves both legs at unity when centred, so at the
+        default Pan of 0 Audio L carries exactly what it carried while this module was mono and
+        Audio R is a bit-identical copy of it. */
+    void placeVoiceInStereo(juce::AudioBuffer<float>& buffer, int voiceIndex, int numSamples, const float* panCV,
+                            int panCVLength) {
+        const int rightCh = kRightBase + voiceIndex;
+        if (voiceIndex >= buffer.getNumChannels() || rightCh >= buffer.getNumChannels())
+            return;
+
+        float* left = buffer.getWritePointer(voiceIndex);
+        float* right = buffer.getWritePointer(rightCh);
+
+        // Reads the block's smoothed pan ramp (fillPanRamp — materialised once, before the voice
+        // loop) so an automated Pan step glides instead of clicking (AutomationZipperTest).
+        const int rampLast = std::min(std::max(0, numSamples - 1), (int)panRamp.size() - 1);
+        const bool hasCV = (panCV != nullptr && panCVLength > 0);
+        if (!hasCV && panRamp[0] == 0.0f && panRamp[(size_t)rampLast] == 0.0f) {
+            juce::FloatVectorOperations::copy(right, left, numSamples);
+            return;
+        }
+
+        for (int i = 0; i < numSamples; ++i) {
+            float gainL = 1.0f;
+            float gainR = 1.0f;
+            panGains(panRamp[(size_t)std::min(i, rampLast)] + (hasCV ? panCV[std::min(i, panCVLength - 1)] : 0.0f),
+                     gainL, gainR);
+            const float sample = left[i];
+            left[i] = sample * gainL;
+            right[i] = sample * gainR;
         }
     }
 
@@ -416,9 +536,9 @@ private:
                 std::fill_n(pitchCVCache[v].data(), ns, 0.0f);
         }
 
-        // Cache shared mod CVs (channels 8-12) before clearing buffer
+        // Cache shared mod CVs (channels 8-13) before clearing buffer
         // ch8 -> waveformCVCache, ch9 -> octaveCVCache, ch10 -> coarseCVCache
-        // ch11 -> fineCVCache, ch12 -> levelCVCache
+        // ch11 -> fineCVCache, ch12 -> levelCVCache, ch13 -> panCVCache
         bool hasWaveCV = isChannelActive(8);
         bool hasOctCV = isChannelActive(9);
         bool hasCoarseCV = isChannelActive(10);
@@ -450,10 +570,18 @@ private:
         else
             std::fill_n(levelCVCache.data(), ns, 0.0f);
 
+        const int panCVChannel = modCVChannelFor(kJackPan, /*poly*/ true); // ch13
+        const bool hasPanCV = isChannelActive(panCVChannel);
+        if (hasPanCV)
+            std::copy_n(buffer.getReadPointer(panCVChannel), ns, panCVCache.data());
+        else
+            std::fill_n(panCVCache.data(), ns, 0.0f);
+
         bool pitchMod = hasOctCV || hasCoarseCV || hasFineCV;
 
         // Materialised once, before the voice loop — see fillLevelRamp.
         fillLevelRamp(ns);
+        fillPanRamp(ns);
 
         // Clear output channels 0..getTotalNumOutputChannels()-1 (==14). This range includes the
         // shared mod-CV input channels (8-12 poly), but clearing them here is SAFE because:
@@ -617,9 +745,16 @@ private:
             }
         }
 
-        // Clear CV channels (>= 8) so they do not leak downstream
-        for (int ch = 8; ch < numChannels; ++ch)
+        // Clear the shared CV channels so they do not leak downstream as audio. The Audio R block
+        // sits ABOVE them at kRightBase, so this clears only the span between the two audio blocks
+        // — running to numChannels would wipe the right leg we are about to write.
+        for (int ch = kPolyModCVBase; ch < kRightBase && ch < numChannels; ++ch)
             buffer.clear(ch, 0, numSamples);
+
+        // Place each rendered voice across its Audio L / Audio R pair. Voices that were skipped
+        // above are still silent on both legs from the up-front clear.
+        for (int v = 0; v < MAX_VOICES && v < numChannels; ++v)
+            placeVoiceInStereo(buffer, v, numSamples, panCVCache.data(), ns);
 
         // Push voice 0 to visual buffer
         if (auto* vb = getVisualBuffer()) {
@@ -708,8 +843,11 @@ private:
     std::array<float, 4096> fineCVCache{};
     std::array<float, 4096> levelCVCache{};
     std::array<float, 4096> levelRamp{};
+    std::array<float, 4096> panRamp{};
+    std::array<float, 4096> panCVCache{};
 
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedLevel;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedPan;
 
     juce::AudioParameterChoice* waveformParam = nullptr;
     juce::AudioParameterInt* octaveParam = nullptr;
@@ -719,5 +857,6 @@ private:
     juce::AudioParameterBool* polyParam = nullptr;
     juce::AudioParameterInt* unisonParam = nullptr;
     juce::AudioParameterFloat* detuneParam = nullptr;
+    juce::AudioParameterFloat* panParam = nullptr;
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(OscillatorModule)
 };

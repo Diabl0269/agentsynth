@@ -25,8 +25,61 @@ owns both raw legs, so the extra wire lands on that same jack rather than waitin
 to split. The control is a header icon (`Icon::ModuleDualIO`, a Y-fork into two jacks) with an
 on/off tooltip — not a labelled checkbox.
 
-Wavetable / Sampler keep permanent `Audio L` / `Audio R` jacks — their right leg lives on a
-non-contiguous raw block (`kRightBase`) for CV layout reasons, so they are not on this toggle.
+Wavetable and Sampler used to keep permanent `Audio L` / `Audio R` jacks. Since issue #219 they are
+on this toggle too, along with Oscillator, Filter and VCA — see below for what "off" means on a
+module whose right leg is not the contiguous ch0/ch1 pair.
+
+### Split-block modules share the toggle, not the channel layout
+
+Every stereo-capable module has the Dual I/O toggle — the FX, Voice Mixer's output, and (since
+issue #219) Oscillator, Wavetable, Filter, VCA and Sampler. What differs is where the right leg
+lives, and that changes what "off" means:
+
+| Layout | Modules | Dual I/O off |
+|---|---|---|
+| **Contiguous pair** (raw ch0/ch1) | FX, Voice Mixer out, Sampler | One `"Audio"` jack **owning both raw legs** — a mono source fans onto L and R. |
+| **Split block** (`kRightBase`) | Oscillator, Wavetable, Filter, VCA | One `"Audio"` jack carrying the **left leg only**; the right block is hidden and unpatchable. |
+
+The split-block modules cannot collapse the FX way: a collapsed jack can only fan to *adjacent* raw
+channels, and their right leg deliberately sits above the mod-CV inputs because ch1 is Waveform /
+Position / Cutoff / gain CV. So on those modules the toggle picks between "one jack, left leg" and
+"two jacks". Collapsed, their jack layout is exactly what it was before #219 — a Filter shows
+`Audio`, `Cutoff`, `Resonance`, `Drive` again.
+
+Two consequences worth knowing:
+
+- Collapsing a split-block module **drops the cables on its right leg** (`GraphEditor::completeStereoPairConnections`), because an invisible jack cannot be unplugged. Collapsing an FX module drops nothing — its collapsed jack still owns both legs.
+- Merge-mode auto-connect (and smart-connection drops onto a mono destination) wires `Audio L` only, matching what Wavetable has always done.
+
+Anything pairing two modules' legs must ask `ModuleBase::rightAudioLegChannel()` rather than
+assuming ch1 — on a voice module ch1 is CV, and wiring it as audio corrupts the patch.
+
+**Preferences → "Split Left/Right jacks"** applies in both directions to modules already on the
+canvas *and* to anything created afterwards, overriding each module's own default. Scoping it to new
+modules only made it look broken — the obvious way to check a setting is to flip it and watch the
+patch in front of you, which never changed.
+
+It is also applied once at startup, to the patch the app opens with — `MainComponent::
+applyStoredDualIOPreferenceToPatch()`. That has to run **after** `AudioEngine::initialise()`, which
+is what builds the default preset: the preset loader constructs its modules knowing nothing about
+preferences, so they come up on their constructor defaults, and the voice modules default to dual.
+Restoring the preference without this step left a user who had chosen single jacks with a split
+Oscillator and Filter on every launch.
+
+Two paths deliberately do NOT re-lay the patch: `PreferencesSettingsTab::setGraphEditor` (called
+every time the Settings window opens — otherwise it would collapse jacks the user had just split by
+hand), and the plugin, whose graph holds a host-restored session where each module carries its own
+saved `dualIO` value. A patch the user saved carries that value too, so reloading their own work
+keeps its layout; the preference governs the factory patch.
+
+Known rough edge: collapsing frees a jack row, so a card gets ~20px shorter (and taller again when
+split). Making the toggle height-neutral means reserving the dual-layout gutter in both states,
+which would add a row of blank gutter to all twelve FX — they default to collapsed — and force
+another rebake of the factory preset rows. `ModuleBase::getReservedInputPortCount` /
+`getReservedOutputPortCount` compute the reserved counts if a follow-up wants to make that trade.
+
+See [`modules.md § Oscillator`](modules.md#oscillator-module) and
+[`§ Filter`](modules.md#filter-module) for the channel maps.
 
 ## Output Level (shared stage)
 

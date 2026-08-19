@@ -2,6 +2,7 @@
 
 #include "GraphEditor.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <vector>
 
 // The Settings "Preferences" tab (issues #216 / #217).
 //
@@ -53,11 +54,15 @@ private:
     juce::Label smartConnectionLabel;
     juce::ComboBox smartConnectionCombo;
     juce::ToggleButton doubleClickDisconnectToggle{"Double-click port to disconnect"};
-    juce::Label defaultDualIOLabel;
-    juce::ComboBox defaultDualIOCombo;
+    // One line, one control: the old label + two-item ComboBox said the same thing in two widgets
+    // and read as a mode picker rather than the on/off it actually is.
+    juce::ToggleButton defaultDualIOToggle{"Split Left/Right jacks on new modules"};
     juce::TextButton perModuleDefaultsButton{"Per-module I/O defaults..."};
     juce::ToggleButton loopSelectionArmsToggle{"Timeline: P (loop selection) also switches looping on"};
     juce::ToggleButton timelineFeatureToggle{"Show timeline (experimental)"};
+
+    // Hairline rules between preference groups, painted in paint() from these bounds.
+    std::vector<juce::Rectangle<int>> dividerBounds;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PreferencesSettingsTab)
 };

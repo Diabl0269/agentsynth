@@ -28,6 +28,7 @@ public:
         } else {
             response.success = true;
             response.content = mockResponse;
+            response.conversationId = mockConversationId;
         }
         if (callback)
             callback(response);
@@ -51,7 +52,19 @@ public:
     // AIIntegrationService::setAuthToken()/setProvider() forwarded.
     void setAuthToken(const juce::String& token) override { lastAuthToken = token; }
 
+    // Same purpose as setAuthToken() above, for AIIntegrationService::setConversationId()'s
+    // capture-and-repush contract. setConversationIdCalled is tracked separately from
+    // lastConversationId so a test can distinguish "never called" from "called with empty".
+    void setConversationId(const juce::String& id) override {
+        setConversationIdCalled = true;
+        lastConversationId = id;
+    }
+
     juce::String mockResponse = "{\"nodes\": [], \"connections\": []}";
+    // Set on a successful mock AIResponse, mirroring RemoteProvider surfacing the
+    // x-conversation-id response header. Empty (the default) matches the free-plan case: no
+    // header at all.
+    juce::String mockConversationId;
     bool shouldFail = false;
     // Configurable so tests can exercise any AIErrorKind (e.g. TrialExhausted) through
     // AIIntegrationService without needing a real RemoteProvider/HTTP mock — see
@@ -60,6 +73,8 @@ public:
     juce::String mockErrorMessage = "Error";
     juce::String currentModel;
     juce::String lastAuthToken;
+    bool setConversationIdCalled = false;
+    juce::String lastConversationId;
     std::vector<Message> lastConversation;
 };
 
@@ -241,6 +256,50 @@ TEST_F(AIIntegrationServiceTest, SetAuthTokenBeforeProviderInstalledIsRePushedBy
     service->setProvider(std::move(provider));
 
     EXPECT_EQ(rawProvider->lastAuthToken, "token-xyz");
+}
+
+// P6-8: a successful response carrying a conversation id (the server persisted this exchange —
+// Pro plan) must be captured and re-pushed to the provider immediately, so the NEXT sendMessage()
+// call in this session continues the same server-side thread.
+TEST_F(AIIntegrationServiceTest, ConversationIdCapturedFromResponseAndRePushedToProvider) {
+    auto provider = std::make_unique<MockAIProvider>();
+    auto* rawProvider = provider.get();
+    service->setProvider(std::move(provider));
+
+    rawProvider->mockConversationId = "conv-123";
+    service->sendMessage("hi", [](const AIProvider::AIResponse&) {});
+
+    EXPECT_TRUE(rawProvider->setConversationIdCalled);
+    EXPECT_EQ(rawProvider->lastConversationId, "conv-123");
+}
+
+// The free-plan case: no conversationId on the response (mirrors RemoteProvider seeing no
+// x-conversation-id header at all) must leave the provider untouched — never call
+// setConversationId() with anything, empty or otherwise.
+TEST_F(AIIntegrationServiceTest, EmptyConversationIdOnResponseDoesNotCallSetConversationId) {
+    auto provider = std::make_unique<MockAIProvider>();
+    auto* rawProvider = provider.get();
+    service->setProvider(std::move(provider));
+
+    // mockConversationId defaults to empty.
+    service->sendMessage("hi", [](const AIProvider::AIResponse&) {});
+
+    EXPECT_FALSE(rawProvider->setConversationIdCalled);
+    EXPECT_TRUE(rawProvider->lastConversationId.isEmpty());
+}
+
+// setConversationId() before a provider is installed must not be lost — same re-push contract as
+// SetAuthTokenBeforeProviderInstalledIsRePushedBySetProvider above.
+TEST_F(AIIntegrationServiceTest, SetConversationIdBeforeProviderInstalledIsRePushedBySetProvider) {
+    service->setConversationId("conv-xyz");
+
+    auto provider = std::make_unique<MockAIProvider>();
+    auto* rawProvider = provider.get();
+    EXPECT_FALSE(rawProvider->setConversationIdCalled);
+
+    service->setProvider(std::move(provider));
+
+    EXPECT_EQ(rawProvider->lastConversationId, "conv-xyz");
 }
 
 // P3-3 (anonymous trial): a mocked 402 TRIAL_EXHAUSTED response from the provider must reach the

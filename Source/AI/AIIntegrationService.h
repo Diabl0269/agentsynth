@@ -132,6 +132,20 @@ public:
 #endif
 
     /**
+     * @brief Sets (or clears) the conversation id forwarded to the active provider's
+     *        AIProvider::setConversationId().
+     *
+     * Same re-push contract as setAuthToken(): stored regardless of whether a provider is
+     * currently installed, and setProvider() re-pushes it to whatever provider it installs next.
+     * Normally callers don't need to call this directly — sendMessage() captures a non-empty
+     * AIResponse::conversationId from a successful response and stores/re-pushes it itself, so
+     * the next call in the session continues the same server-side thread. AIChatComponent calls
+     * this directly only to CLEAR it (empty string) when the active plan isn't Pro, so a stale id
+     * from an earlier Pro session isn't sent to a since-downgraded account.
+     */
+    void setConversationId(const juce::String& id);
+
+    /**
      * @class Listener
      * @brief Interface for observing AI-driven changes to the synthesizer state.
      */
@@ -306,6 +320,7 @@ private:
     juce::AudioProcessorGraph& audioGraph;
     AppUndoManager* undoManager = nullptr;
     juce::String currentAuthToken;
+    juce::String currentConversationId;
     juce::String lastPatchError;
     PatchValidationError lastPatchErrorCode = PatchValidationError::None;
     bool lastPatchModeRepaired = false;

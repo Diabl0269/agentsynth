@@ -29,7 +29,27 @@ struct AccountSnapshot {
     int monthlyRequestLimit = 0;
     int requestsUsed = 0;
     bool entitlementKnown = false;
+
+    // P6-7: opt-in flag for hosted-mode prompt collection used for product learning (human
+    // review, never model training/fine-tuning — see docs/AI_Engine.md). Off by default, matching
+    // the server's default, so a default-constructed/not-yet-fetched snapshot is indistinguishable
+    // from "known opted out" — same reasoning as `plan`'s empty-string default above, and safe
+    // here for the same reason: a settings checkbox reading this before the first fetch shows
+    // unchecked, never a stale opted-in. promptLearningOptInAt is the server's ISO-8601
+    // `opted_in_at`, empty when never opted in.
+    bool promptLearningOptIn = false;
+    juce::String promptLearningOptInAt;
 };
+
+/**
+ * @brief True only for an exact case-insensitive "pro" plan. Deliberately does NOT check
+ *        entitlementKnown: a default-constructed/entitlement-not-yet-fetched snapshot has
+ *        `plan` at its default value (empty string), which already fails the comparison — see
+ *        AccountSnapshot::entitlementKnown's doc comment. Callers that need to distinguish
+ *        "known Free" from "not yet known" should still check entitlementKnown separately;
+ *        this helper only answers "should this session behave as Pro right now."
+ */
+inline bool isProPlan(const AccountSnapshot& snapshot) { return snapshot.plan.equalsIgnoreCase("pro"); }
 
 /**
  * @class AccountService
@@ -86,6 +106,19 @@ public:
         AIChatComponent calls this right after a Quota error). */
     void refreshEntitlement();
 
+    /** Re-fetches the prompt-learning opt-in preference (P6-7) only, leaving sign-in state and
+        entitlement untouched. No-op if signed out. Same fire-and-forget contract as
+        refreshEntitlement(): publishes an updated snapshot on success, silent (logged, non-fatal)
+        on failure. Intended for "the settings dialog just opened, or the user just signed in"
+        moments — see AISettingsTab. */
+    void refreshPromptLearningOptIn();
+
+    /** Sets the prompt-learning opt-in preference (P6-7) on the server and, on success, updates
+        the published snapshot to match. No-op if signed out — same gating as every other
+        account-only action. Fire-and-forget: a transport failure leaves the snapshot (and
+        therefore the settings checkbox) at whatever it was before the call, logged non-fatal. */
+    void setPromptLearningOptIn(bool optedIn);
+
     // Called (via MessageManager::callAsync when it originates from the worker thread) whenever
     // getSnapshot() would return something different.
     std::function<void()> onStateChanged;
@@ -95,11 +128,25 @@ public:
 
 private:
     struct PendingJob {
-        enum class Kind { none, deviceSignIn, silentSignIn, revoke, refreshEntitlement };
+        enum class Kind {
+            none,
+            deviceSignIn,
+            silentSignIn,
+            revoke,
+            refreshEntitlement,
+            refreshPromptLearning,
+            setPromptLearningOptIn
+        };
         Kind kind = Kind::none;
         // stored refresh token (silentSignIn), token to revoke (revoke), or the access token to
-        // refresh entitlement for (refreshEntitlement)
+        // refresh entitlement/prompt-learning preference for (refreshEntitlement,
+        // refreshPromptLearning, setPromptLearningOptIn)
         juce::String arg;
+        // Only meaningful for setPromptLearningOptIn: the new opted-in value to PUT. A second
+        // field rather than encoding it into `arg` (which setPromptLearningOptIn also needs, for
+        // the access token) or a second Kind pair (setPromptLearningOptInTrue/False) — this is the
+        // minimal extension that keeps `arg`'s existing meaning intact for every other job kind.
+        bool boolArg = false;
     };
 
     AuthClient authClient;
@@ -126,12 +173,14 @@ private:
     void runSilentSignInFlow(const juce::String& storedRefreshToken);
     void runRevokeFlow(const juce::String& token);
     void runRefreshEntitlementFlow(const juce::String& accessTokenForRefresh);
+    void runRefreshPromptLearningFlow(const juce::String& accessTokenForRefresh);
+    void runSetPromptLearningFlow(const juce::String& accessTokenForRefresh, bool optedIn);
 
     /** Rotation-before-use invariant lives here: called by both flows once a fresh access/refresh
         token pair is in hand. */
     void completeSignIn(const juce::String& newAccessToken, const juce::String& newRefreshToken);
 
-    void startJob(PendingJob::Kind kind, juce::String arg = {});
+    void startJob(PendingJob::Kind kind, juce::String arg = {}, bool boolArg = false);
     bool ensureWorkerRunning();
 
     /** Replaces the published snapshot and notifies onStateChanged via callAsync. Normally called

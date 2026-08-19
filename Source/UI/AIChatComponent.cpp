@@ -59,6 +59,18 @@ juce::String prettyPrintJson(const juce::String& raw) {
     return juce::JSON::toString(parsed, /*allOnOneLine=*/false);
 }
 
+// P6-8: date-only rendering ("18 Aug 2026") for the downgrade strip and history popup rows. Falls
+// back to the raw ISO string on parse failure rather than showing nothing — an unreadable-but-
+// present date is more useful than a blank one.
+juce::String formatReadableDate(const juce::String& iso) {
+    if (iso.isEmpty())
+        return {};
+    auto t = juce::Time::fromISO8601(iso);
+    if (t == juce::Time())
+        return iso;
+    return t.toString(true, false);
+}
+
 } // namespace
 
 //==============================================================================
@@ -566,8 +578,25 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     newChatButton.onClick = [this]() {
         aiService.clearHistory();
         messages.clear();
+        // A fresh conversation gets a fresh local-history id — the outgoing conversation's file is
+        // left alone (its own save() already captured everything up to this point).
+        currentLocalConversationId.clear();
+        currentLocalConversationCreatedAt.clear();
+        // Also clear the CLOUD conversation id (mirrors the same clear sendButtonClicked() does on
+        // a Pro-to-Free downgrade): without this, a Pro user's next message after New Chat would
+        // still carry the OLD x-conversation-id, so the server would append the "new" chat's turns
+        // onto the previous cloud thread while a separate fresh file starts locally — local and
+        // cloud silently diverging. The server mints a fresh id on the next response either way.
+        aiService.setConversationId({});
         updateChatDisplay();
     };
+
+    // P6-8: opens the history list/restore/clear popup — see historyButtonClicked(). Tooltip is
+    // set by updateUpsellStrip() below (it varies by plan, so setting a static default here would
+    // just be overwritten), not here.
+    addAndMakeVisible(historyButton);
+    historyButton.setButtonText("History");
+    historyButton.onClick = [this]() { historyButtonClicked(); };
 
     addAndMakeVisible(modelPicker);
     modelPicker.setTooltip("Select the AI model to use");
@@ -586,30 +615,40 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     hostedModeNotice.setFont(juce::Font(11.0f));
     hostedModeNotice.setText("Hosted mode sends your prompt and current patch to Agent Synth's servers.",
                              juce::dontSendNotification);
-    hostedModeNotice.setTooltip("Local (Ollama) mode keeps everything on this machine. See " +
-                                juce::String(synth::branding::kWebsiteUrl) + "/privacy for details.");
+    // Tooltip repeats the (possibly ellipsis-truncated) label text in full rather than describing
+    // the other mode — hovering a cut-off label should always reveal what it already started
+    // saying, never switch topic to something else.
+    hostedModeNotice.setTooltip(
+        "Hosted mode sends your prompt and current patch to Agent Synth's servers for processing. See " +
+        juce::String(synth::branding::kWebsiteUrl) + "/privacy for details.");
+
+    // P6-8 upsell strip. Starts visible (see the member doc comment for why this diverges from
+    // accountRow/planBadge/hostedModeNotice's invisible-until-known default) — updateUpsellStrip()
+    // below sets its real state, and historyButton's tooltip, from whatever AccountSnapshot is
+    // available at this point (none, at construction).
+    addChildComponent(upsellButton);
+    upsellButton.setButtonText("Upgrade to Pro");
+    upsellButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF6B4FBB));
+    upsellButton.onClick = [this] { urlOpener(juce::URL(synth::branding::kUpgradeUrl)); };
+
+    // P6-8 downgrade notice — invisible until historyButtonClicked() learns a real grace-period
+    // deletion date (see lastDeletionScheduledAt's doc comment); never shown speculatively.
+    addChildComponent(downgradeStripLabel);
+    downgradeStripLabel.setJustificationType(juce::Justification::centredLeft);
+    downgradeStripLabel.setMinimumHorizontalScale(1.0f);
+    downgradeStripLabel.setFont(juce::Font(11.0f));
 
     refreshModels();
+    updateUpsellStrip();
 
-    // Populate history
-    for (const auto& msg : aiService.getHistory()) {
-        if (msg.role == "system")
-            continue;
-
-        juce::String json;
-        juce::String cleanText = msg.content;
-        int start = msg.content.indexOf("```json");
-        if (start != -1) {
-            int end = msg.content.indexOf(start + 7, "```");
-            if (end != -1) {
-                json = msg.content.substring(start + 7, end).trim();
-                cleanText = msg.content.substring(0, start) + msg.content.substring(end + 3);
-            }
-        }
-        // showUpgradeAction deliberately left at its default false: a replayed history turn never
-        // resurrects the Upgrade button, same as Cancel-button/spinner state being session-only.
-        messages.push_back({msg.role, cleanText.trim(), json});
-        attachPatchPreview(messages.back());
+    // Populate history from aiService's own in-memory record (its lifetime spans app restarts
+    // within the same session but not across them — see replayMessagesFrom()'s doc comment for why
+    // this is shared with restoreConversation()'s history-panel replay).
+    {
+        std::vector<std::pair<juce::String, juce::String>> pairs;
+        for (const auto& msg : aiService.getHistory())
+            pairs.push_back({msg.role, msg.content});
+        replayMessagesFrom(pairs);
     }
 
     updateChatDisplay();
@@ -638,6 +677,8 @@ void AIChatComponent::setAccountService(AccountService* service) {
     accountServicePtr = service;
     accountRow.setAccountService(service);
     planBadge.setAccountService(service);
+    updateUpsellStrip();
+    updateDowngradeStrip();
 
     if (service == nullptr)
         return;
@@ -651,6 +692,13 @@ void AIChatComponent::setAccountService(AccountService* service) {
         if (auto* self = safeThis.getComponent()) {
             self->accountRow.refresh();
             self->planBadge.refresh();
+            self->updateUpsellStrip();
+            // NOT self->updateDowngradeStrip() here — the date it renders is only ever learned
+            // from an explicit History-button click (see lastDeletionScheduledAt's doc comment),
+            // so a plan/sign-in change alone must not resurrect a stale one. updateDowngradeStrip()
+            // is still worth calling: if the account just signed out or went Pro again, its own
+            // gate (signedIn && !pro) already hides the strip even with a stale cached date.
+            self->updateDowngradeStrip();
         }
     };
     service->onAccessTokenChanged = [safeThis](juce::String token) {
@@ -734,9 +782,11 @@ void AIChatComponent::cancelRequest() {
 void AIChatComponent::resized() {
     auto b = getLocalBounds().reduced(10);
 
-    // Top row: New Chat
+    // Top row: New Chat, History
     auto topArea = b.removeFromTop(40);
     newChatButton.setBounds(topArea.removeFromLeft(100));
+    topArea.removeFromLeft(5);
+    historyButton.setBounds(topArea.removeFromLeft(80));
 
     // Account row: reserved directly above the model-picker row, inside the bottom chrome.
     // Zero height (and invisible) when no AccountService is attached, so every panel/test that
@@ -755,8 +805,23 @@ void AIChatComponent::resized() {
     const int hostedNoticeHeight = hostedModeNotice.isVisible() ? 18 : 0;
     const int hostedNoticeGap = hostedNoticeHeight > 0 ? 5 : 0;
 
+    // P6-8 downgrade notice: same zero-height-when-absent contract, reserved only once
+    // updateDowngradeStrip() has something true to say (see its doc comment).
+    const int downgradeStripHeight = downgradeStripLabel.isVisible() ? 18 : 0;
+    const int downgradeStripGap = downgradeStripHeight > 0 ? 5 : 0;
+
+    // P6-8 upsell strip: just the "Upgrade to Pro" button now (its explanatory text moved to
+    // historyButton's tooltip — see the member doc comment), so it only needs a single comfortable
+    // click-target row, not the taller label+button row this used to be. Same zero-height-when-absent
+    // contract, but starts VISIBLE by default (see the member doc comment) — most callers (including
+    // every existing test that never attaches an AccountService) will therefore reserve this space,
+    // unlike the other three rows in this stack.
+    const int upsellStripHeight = upsellButton.isVisible() ? 28 : 0;
+    const int upsellStripGap = upsellStripHeight > 0 ? 5 : 0;
+
     auto bottomArea = b.removeFromBottom(70 + accountRowHeight + accountRowGap + planBadgeHeight + planBadgeGap +
-                                         hostedNoticeHeight + hostedNoticeGap); // Increased height for all four rows
+                                         hostedNoticeHeight + hostedNoticeGap + downgradeStripHeight +
+                                         downgradeStripGap + upsellStripHeight + upsellStripGap);
 
     // Bottom row: Input + Send (+ Cancel when waiting + spinner dot)
     auto inputRow = bottomArea.removeFromBottom(40);
@@ -787,6 +852,17 @@ void AIChatComponent::resized() {
     if (hostedNoticeHeight > 0) {
         bottomArea.removeFromBottom(hostedNoticeGap);
         hostedModeNotice.setBounds(bottomArea.removeFromBottom(hostedNoticeHeight));
+    }
+
+    if (downgradeStripHeight > 0) {
+        bottomArea.removeFromBottom(downgradeStripGap);
+        downgradeStripLabel.setBounds(bottomArea.removeFromBottom(downgradeStripHeight));
+    }
+
+    if (upsellStripHeight > 0) {
+        bottomArea.removeFromBottom(upsellStripGap);
+        auto upsellArea = bottomArea.removeFromBottom(upsellStripHeight);
+        upsellButton.setBounds(upsellArea.removeFromRight(110).reduced(0, 2));
     }
 
     if (planBadgeHeight > 0) {
@@ -892,6 +968,26 @@ void AIChatComponent::sendButtonClicked() {
     // Live thinking-status timer (also enforces the 120 s timeout).
     startTimer(kWaitingStatusIntervalMs);
 
+    // Conversation-id persistence is Pro-only (server-enforced; see RemoteProvider's
+    // x-conversation-id header). AIIntegrationService::sendMessage() auto-captures/re-pushes a
+    // response id on its own for the common case (a free-plan response never carries one, so
+    // there's nothing to gate there) — this only handles the Pro-to-Free downgrade mid-session,
+    // where a stale id from an earlier Pro response would otherwise still be sitting in
+    // AIIntegrationService and get resent to a now-free account. Clearing it here means
+    // RemoteProvider naturally has nothing to send; it never has plan awareness of its own.
+    if (accountServicePtr == nullptr || !isProPlan(accountServicePtr->getSnapshot()))
+        aiService.setConversationId({});
+
+    // Conversation-id persistence is Pro-only (server-enforced; see RemoteProvider's
+    // x-conversation-id header). AIIntegrationService::sendMessage() auto-captures/re-pushes a
+    // response id on its own for the common case (a free-plan response never carries one, so
+    // there's nothing to gate there) — this only handles the Pro-to-Free downgrade mid-session,
+    // where a stale id from an earlier Pro response would otherwise still be sitting in
+    // AIIntegrationService and get resent to a now-free account. Clearing it here means
+    // RemoteProvider naturally has nothing to send; it never has plan awareness of its own.
+    if (accountServicePtr == nullptr || !isProPlan(accountServicePtr->getSnapshot()))
+        aiService.setConversationId({});
+
     const auto requestId = aiService.sendMessage(
         text,
         [this, useStructuredOutput](const AIProvider::AIResponse& aiResponse) {
@@ -975,6 +1071,13 @@ void AIChatComponent::sendButtonClicked() {
                                               /*showUpgradeAction=*/false, timelineOpsJson, timelineOpsPreview});
                     self->messages.back().responseMs = elapsed;
                     self->attachPatchPreview(self->messages.back());
+
+                    // P6-8: local-first — every session writes here regardless of plan, right after
+                    // the assistant turn lands and `messages` reflects the full exchange. Not in
+                    // AIIntegrationService::sendMessage()'s own callback: that one can run on a
+                    // provider worker thread and only has aiService.chatHistory (unsplit
+                    // text+patch), not this component's own text/jsonPatch-split `messages`.
+                    self->saveCurrentConversationLocally();
                 } else if (aiResponse.error.kind == AIProvider::AIErrorKind::Quota) {
                     // The server's message is already a complete, user-facing sentence — no
                     // "Error: " prefix, same precedent as TrialExhausted/ServiceCapacityExceeded.
@@ -1277,6 +1380,296 @@ void AIChatComponent::updateHostedModeNotice() {
     }
     hostedModeNotice.setVisible(hosted);
     resized();
+}
+
+// ============================================================================
+// P6-8: local multi-conversation history + unified history UI + upsell/downgrade strips
+// ============================================================================
+
+void AIChatComponent::updateUpsellStrip() {
+    static const juce::String kHistoryTooltipBase = "View, restore, or clear saved conversations";
+    static const juce::String kUpsellText =
+        juce::String::fromUTF8("Your history is saved locally only \xe2\x80\x94 subscribers get automatic "
+                               "cloud backup across devices.");
+
+    const bool showUpsell = accountServicePtr == nullptr || !isProPlan(accountServicePtr->getSnapshot());
+    upsellButton.setVisible(showUpsell);
+    historyButton.setTooltip(showUpsell ? kHistoryTooltipBase + ". " + kUpsellText : kHistoryTooltipBase);
+    resized();
+}
+
+void AIChatComponent::updateDowngradeStrip() {
+    const bool signedIn =
+        accountServicePtr != nullptr && accountServicePtr->getSnapshot().state == AccountState::SignedIn;
+    const bool pro = accountServicePtr != nullptr && isProPlan(accountServicePtr->getSnapshot());
+    const bool show = signedIn && !pro && lastDeletionScheduledAt.isNotEmpty();
+
+    downgradeStripLabel.setVisible(show);
+    if (show) {
+        downgradeStripLabel.setText(juce::String::fromUTF8("Your subscription has lapsed \xe2\x80\x94 your saved "
+                                                           "history will be deleted on ") +
+                                        formatReadableDate(lastDeletionScheduledAt) + ".",
+                                    juce::dontSendNotification);
+    }
+    resized();
+}
+
+void AIChatComponent::replayMessagesFrom(const std::vector<std::pair<juce::String, juce::String>>& roleContentPairs) {
+    messages.clear();
+    for (const auto& pair : roleContentPairs) {
+        const auto& role = pair.first;
+        const auto& content = pair.second;
+        if (role == "system")
+            continue;
+
+        juce::String json;
+        juce::String cleanText = content;
+        int start = content.indexOf("```json");
+        if (start != -1) {
+            int end = content.indexOf(start + 7, "```");
+            if (end != -1) {
+                json = content.substring(start + 7, end).trim();
+                cleanText = content.substring(0, start) + content.substring(end + 3);
+            }
+        }
+        // showUpgradeAction deliberately left at its default false: a replayed turn never
+        // resurrects the Upgrade button, same as Cancel-button/spinner state being session-only.
+        messages.push_back({role, cleanText.trim(), json});
+        attachPatchPreview(messages.back());
+    }
+}
+
+juce::String AIChatComponent::reconstructMessageContent(const MessageData& data) {
+    if (data.jsonPatch.isEmpty())
+        return data.text;
+    return data.text + "\n```json\n" + data.jsonPatch + "\n```";
+}
+
+juce::String AIChatComponent::deriveConversationTitle() const {
+    static constexpr int kMaxTitleLength = 60;
+    for (const auto& m : messages) {
+        if (m.role == "user" && m.text.isNotEmpty()) {
+            auto title = m.text.trim();
+            if (title.length() > kMaxTitleLength)
+                title = title.substring(0, kMaxTitleLength).trim() + juce::String::fromUTF8("\xe2\x80\xa6");
+            return title;
+        }
+    }
+    return "New Conversation"; // empty title would render as a blank row in the history popup
+}
+
+juce::File AIChatComponent::resolveLocalHistoryDirectory() const {
+    return localHistoryDirOverride != juce::File() ? localHistoryDirOverride
+                                                   : LocalHistoryStore::getDefaultHistoryDirectory();
+}
+
+void AIChatComponent::saveCurrentConversationLocally() {
+    if (currentLocalConversationId.isEmpty()) {
+        currentLocalConversationId = LocalHistoryStore::newConversationId();
+        currentLocalConversationCreatedAt = juce::Time::getCurrentTime().toISO8601(true);
+    }
+
+    LocalConversation conversation;
+    conversation.id = currentLocalConversationId;
+    conversation.createdAt = currentLocalConversationCreatedAt;
+    conversation.updatedAt = juce::Time::getCurrentTime().toISO8601(true);
+    conversation.title = deriveConversationTitle();
+
+    for (const auto& m : messages) {
+        if (m.role != "user" && m.role != "assistant")
+            continue;
+        conversation.messages.push_back({m.role, reconstructMessageContent(m), conversation.updatedAt});
+    }
+
+    const int retentionDays =
+        appProperties.getUserSettings()->getIntValue("historyRetentionDays", LocalHistoryStore::kDefaultRetentionDays);
+    LocalHistoryStore::save(resolveLocalHistoryDirectory(), conversation, retentionDays);
+}
+
+ConversationHistorySource*
+AIChatComponent::resolveLocalHistorySource(std::unique_ptr<ConversationHistorySource>& fallbackStorage) {
+    if (testLocalHistorySource)
+        return testLocalHistorySource.get();
+    fallbackStorage = std::make_unique<LocalHistorySource>(resolveLocalHistoryDirectory());
+    return fallbackStorage.get();
+}
+
+ConversationHistorySource*
+AIChatComponent::resolveCloudHistorySource(std::unique_ptr<ConversationHistorySource>& fallbackStorage) {
+    if (testCloudHistorySource)
+        return testCloudHistorySource.get();
+    if (accountServicePtr == nullptr)
+        return nullptr;
+    auto token = accountServicePtr->getAccessToken();
+    if (token.isEmpty())
+        return nullptr;
+    fallbackStorage = std::make_unique<CloudHistorySource>(synth::branding::kApiBaseUrl, token);
+    return fallbackStorage.get();
+}
+
+void AIChatComponent::historyButtonClicked() {
+    juce::Component::SafePointer<AIChatComponent> safeThis(this);
+
+    // Shared by every "show the local list" path below (not signed in; signed in with no usable
+    // token; signed in but Free/lapsed).
+    auto showLocalList = [safeThis]() {
+        auto* self = safeThis.getComponent();
+        if (self == nullptr)
+            return;
+        std::unique_ptr<ConversationHistorySource> fallback;
+        auto* localSource = self->resolveLocalHistorySource(fallback);
+        localSource->list([safeThis](ConversationHistorySource::ListResult result) {
+            if (auto* self2 = safeThis.getComponent())
+                self2->showHistoryPopup(result.conversations, /*isCloud=*/false);
+        });
+    };
+
+    const AccountSnapshot snapshot =
+        accountServicePtr != nullptr ? accountServicePtr->getSnapshot() : AccountSnapshot{};
+    const bool signedIn = accountServicePtr != nullptr && snapshot.state == AccountState::SignedIn;
+    const bool pro = isProPlan(snapshot);
+
+    if (!signedIn) {
+        showLocalList();
+        return;
+    }
+
+    std::unique_ptr<ConversationHistorySource> cloudFallback;
+    auto* cloudSource = resolveCloudHistorySource(cloudFallback);
+    if (cloudSource == nullptr) {
+        showLocalList();
+        return;
+    }
+
+    // Signed in: ALWAYS fire the cloud call, regardless of plan — it's the only source of a
+    // pending grace-period deletion date (see lastDeletionScheduledAt's doc comment), and when the
+    // plan IS Pro its result doubles as the list itself. Only ever called from this explicit click.
+    cloudSource->list([safeThis, pro, showLocalList](ConversationHistorySource::ListResult cloudResult) {
+        juce::MessageManager::callAsync([safeThis, cloudResult, pro, showLocalList]() {
+            auto* self = safeThis.getComponent();
+            if (self == nullptr)
+                return;
+
+            self->lastDeletionScheduledAt = cloudResult.ok ? cloudResult.deletionScheduledAt : juce::String();
+            self->updateDowngradeStrip();
+
+            if (pro)
+                self->showHistoryPopup(cloudResult.conversations, /*isCloud=*/true);
+            else
+                showLocalList();
+        });
+    });
+}
+
+void AIChatComponent::showHistoryPopup(std::vector<LocalConversationSummary> list, bool isCloud) {
+    lastHistoryPopupShown = true;
+    lastHistoryPopupWasCloud = isCloud;
+    lastHistoryList = list;
+
+    // Real UI is skipped under test (see didShowHistoryPopupForTesting()'s doc comment) — a test
+    // only ever reaches this method via simulateHistoryButtonClick() after installing fakes with
+    // setHistorySourcesForTesting(), so that's what signals "under test" here, with no separate
+    // flag for a future test to forget to set. Actually opening a native juce::PopupMenu window
+    // on a headless CI runner with no X server crashes JUCE's XWindowSystem outright (asserts
+    // then segfaults) — every test above only asserts on the *ForTesting() state already set
+    // above, never on an actual visible menu, so skipping the real window is lossless for them.
+    if (testLocalHistorySource != nullptr || testCloudHistorySource != nullptr)
+        return;
+
+    juce::PopupMenu menu;
+    menu.addItem(1, "Clear my history");
+    menu.addSeparator();
+    if (list.empty()) {
+        menu.addItem(-1, "No saved conversations", false, false);
+    } else {
+        int itemId = 2;
+        for (const auto& summary : list) {
+            juce::String title = summary.title.isNotEmpty() ? summary.title : juce::String("Untitled");
+            menu.addItem(itemId++, title + "   " + formatReadableDate(summary.updatedAt));
+        }
+    }
+
+    juce::Component::SafePointer<AIChatComponent> safeThis(this);
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&historyButton),
+                       [safeThis, list, isCloud](int result) {
+                           auto* self = safeThis.getComponent();
+                           if (self == nullptr || result <= 0)
+                               return;
+
+                           if (result == 1) {
+                               self->confirmAndClearHistory();
+                               return;
+                           }
+
+                           const size_t index = (size_t)(result - 2);
+                           if (index < list.size())
+                               self->restoreConversation(list[index].id, isCloud);
+                       });
+}
+
+void AIChatComponent::restoreConversation(const juce::String& id, bool isCloud) {
+    juce::Component::SafePointer<AIChatComponent> safeThis(this);
+
+    auto onLoaded = [safeThis, id, isCloud](bool ok, LocalConversation conversation) {
+        juce::MessageManager::callAsync([safeThis, ok, conversation, id, isCloud]() {
+            auto* self = safeThis.getComponent();
+            if (self == nullptr || !ok)
+                return;
+
+            std::vector<std::pair<juce::String, juce::String>> pairs;
+            for (const auto& m : conversation.messages)
+                pairs.push_back({m.role, m.content});
+            self->replayMessagesFrom(pairs);
+
+            // aiService's own chatHistory is cleared, NOT re-seeded with the restored turns —
+            // there is no API for that (see this method's doc comment / docs/AI_Engine.md). The
+            // model has no memory of the restored conversation until new turns accumulate.
+            self->aiService.clearHistory();
+
+            // Adopt the restored id so subsequent local (and, for a Pro restore, cloud) saves
+            // continue THIS conversation instead of starting a new one.
+            self->currentLocalConversationId = id;
+            self->currentLocalConversationCreatedAt = conversation.createdAt.isNotEmpty()
+                                                          ? conversation.createdAt
+                                                          : juce::Time::getCurrentTime().toISO8601(true);
+            if (isCloud)
+                self->aiService.setConversationId(id);
+
+            self->updateChatDisplay();
+        });
+    };
+
+    std::unique_ptr<ConversationHistorySource> fallback;
+    auto* source = isCloud ? resolveCloudHistorySource(fallback) : resolveLocalHistorySource(fallback);
+    if (source == nullptr)
+        return;
+    source->get(id, onLoaded);
+}
+
+void AIChatComponent::confirmAndClearHistory() {
+    auto options = juce::MessageBoxOptions()
+                       .withIconType(juce::MessageBoxIconType::WarningIcon)
+                       .withTitle("Clear History")
+                       .withMessage("Delete your saved conversation history? This cannot be undone.")
+                       .withButton("Delete")
+                       .withButton("Cancel");
+    juce::Component::SafePointer<AIChatComponent> safeThis(this);
+    juce::AlertWindow::showAsync(options, [safeThis](int result) {
+        if (result == 1) {
+            if (auto* self = safeThis.getComponent())
+                self->performClearHistory();
+        }
+    });
+}
+
+void AIChatComponent::performClearHistory() {
+    const bool pro = accountServicePtr != nullptr && isProPlan(accountServicePtr->getSnapshot());
+
+    std::unique_ptr<ConversationHistorySource> fallback;
+    auto* source = pro ? resolveCloudHistorySource(fallback) : resolveLocalHistorySource(fallback);
+    if (source == nullptr)
+        return;
+    source->deleteAll([](bool, int) {});
 }
 
 #ifndef NDEBUG

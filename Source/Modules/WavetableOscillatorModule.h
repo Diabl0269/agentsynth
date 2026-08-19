@@ -206,6 +206,9 @@ public:
         addParameter(subOctaveParam = new juce::AudioParameterChoice("subOctave", "Sub Oct", {"-1", "-2"}, 0));
         addParameter(subShapeParam = new juce::AudioParameterChoice("subShape", "Sub Wave", {"Sine", "Square"}, 0));
         addParameter(panParam = new juce::AudioParameterFloat("pan", "Pan", -1.0f, 1.0f, 0.0f));
+        // Defaults to dual — this module has been stereo since #180. Collapsed it shows a single
+        // "Audio" jack carrying the left leg, matching every other split-block module (#219).
+        addDualIOParameter(/*defaultDual=*/true);
         addParameter(syncModeParam = new juce::AudioParameterChoice("syncMode", "Sync In",
                                                                     {"Off", "Hard Sync", "Ring Mod", "AM"}, 0));
 
@@ -318,9 +321,10 @@ public:
     juce::String getInputPortLabel(int i) const override {
         return (i >= 0 && i < kNumJacks) ? jackLabels()[i] : ModuleBase::getInputPortLabel(i);
     }
-    juce::String getOutputPortLabel(int i) const override { return i == 1 ? "Audio R" : "Audio L"; }
+    juce::String getOutputPortLabel(int i) const override { return splitAudioLabel(i); }
     int getVisibleInputPortCount() const override { return kNumJacks; }
-    int getVisibleOutputPortCount() const override { return 2; }
+    int getVisibleOutputPortCount() const override { return splitAudioJackCount(); }
+    int rightAudioLegChannel() const override { return kRightBase; }
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Oscillator; }
     ModuleType getModuleType() const override { return ModuleType::Wavetable; }
 
@@ -371,7 +375,8 @@ public:
             p.polyVoiceSpan = (raw == 0) ? span : 1;
             return p;
         }
-        if (raw >= kRightBase && raw < kRightBase + span) {
+        // Collapsed (Dual I/O off): the right block still renders, it is simply not exposed.
+        if (isDualIO() && raw >= kRightBase && raw < kRightBase + span) {
             p.visibleJackIndex = 1;
             p.isPolyGroupHead = (raw == kRightBase);
             p.polyVoiceSpan = (raw == kRightBase) ? span : 1;
@@ -1506,17 +1511,8 @@ private:
         panGains(pan, gainL, gainR);
     }
 
-    /** Balance pan law: centre leaves BOTH legs at unity, and panning attenuates only the leg
-        you are moving away from. -1 is hard left, +1 hard right.
-
-        Deliberately not equal-power. An equal-power centre sits at 1/sqrt2, which would have
-        quietened every existing mono patch by 3 dB the moment this module grew a second output
-        jack — Audio L has to keep carrying exactly what it carried in #172. */
-    static void panGains(float pan, float& gainL, float& gainR) {
-        const float p = juce::jlimit(-1.0f, 1.0f, pan);
-        gainL = juce::jlimit(0.0f, 1.0f, 1.0f - p);
-        gainR = juce::jlimit(0.0f, 1.0f, 1.0f + p);
-    }
+    // The balance pan law itself lives on ModuleBase::panGains — Oscillator and Filter grew
+    // Audio L/R blocks of their own in #219 and all three modules must place a signal identically.
 
     static bool isChannelActive(const juce::AudioBuffer<float>& buffer, int ch, int numSamples) {
         if (ch >= buffer.getNumChannels())

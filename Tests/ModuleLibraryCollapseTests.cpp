@@ -248,11 +248,13 @@ TEST(ModuleLibraryCollapseAll, ClickingTheTopStripTogglesEverything) {
     ModuleLibraryComponent comp;
     comp.setSize(200, 1200);
 
-    ASSERT_TRUE(ModuleLibraryComponent::isInTopStrip(4));
+    const int stripY = ModuleLibraryComponent::kSearchHeight + 4;
+    ASSERT_TRUE(ModuleLibraryComponent::isInTopStrip(stripY));
+    ASSERT_FALSE(ModuleLibraryComponent::isInTopStrip(4)) << "the search field sits above the collapse-all strip";
 
     juce::MouseInputSource src = juce::Desktop::getInstance().getMainMouseSource();
-    juce::MouseEvent evt(src, juce::Point<float>(150.0f, 4.0f), juce::ModifierKeys(), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-                         &comp, &comp, juce::Time::getCurrentTime(), juce::Point<float>(150.0f, 4.0f),
+    juce::MouseEvent evt(src, juce::Point<float>(150.0f, (float)stripY), juce::ModifierKeys(), 1.0f, 0.0f, 0.0f, 0.0f,
+                         0.0f, &comp, &comp, juce::Time::getCurrentTime(), juce::Point<float>(150.0f, (float)stripY),
                          juce::Time::getCurrentTime(), 1, false);
     comp.mouseDown(evt);
 
@@ -265,9 +267,9 @@ TEST(ModuleLibraryCollapseAll, TheTopStripSitsAboveEveryRow) {
 
     auto rows = comp.buildRows();
     ASSERT_FALSE(rows.empty());
-    EXPECT_GE(rows.front().y, ModuleLibraryComponent::kTopStripHeight)
-        << "the collapse-all chrome must not overlap row 0";
-    EXPECT_EQ(comp.getEntryIndexAt(2), -1) << "a click in the strip is not an entry click";
+    EXPECT_GE(rows.front().y, ModuleLibraryComponent::kPinnedChromeHeight)
+        << "the search field and collapse-all chrome must not overlap row 0";
+    EXPECT_EQ(comp.getEntryIndexAt(2), -1) << "a click in the chrome is not an entry click";
 }
 
 // ============================================================================

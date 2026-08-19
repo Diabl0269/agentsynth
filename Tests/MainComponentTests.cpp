@@ -80,6 +80,62 @@ protected:
     void TearDown() override { resetPanelKeys(); }
 };
 
+// The jack-layout preference has to reach the patch the app OPENS with, not just modules created
+// later. AudioEngine loads the default preset inside its own constructor, so by the time
+// MainComponent restores the setting those modules already exist holding their constructor
+// defaults — and the voice modules default to dual, so choosing single jacks was ignored on every
+// launch.
+TEST_F(MainComponentTest, StartupAppliesTheDualIOPreferenceToTheOpeningPatch) {
+    auto writeDualIOPref = [](const char* value) {
+        juce::PropertiesFile::Options opts;
+        opts.applicationName = "Agent Synth";
+        opts.folderName = "Agent Synth";
+        opts.filenameSuffix = "settings";
+        opts.osxLibrarySubFolder = "Application Support";
+        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+        juce::ApplicationProperties props;
+        props.setStorageParameters(opts);
+        if (auto* s = props.getUserSettings()) {
+            s->setValue("defaultDualIOForNewModules", value);
+            s->saveIfNeeded();
+        }
+    };
+
+    // Reports how many stereo-capable modules in the opening patch are split, and how many total.
+    auto countSplit = [](MainComponent& comp) {
+        int split = 0;
+        int capable = 0;
+        for (auto* node : comp.getAudioEngine().getGraph().getNodes()) {
+            if (auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor())) {
+                if (!mb->hasDualIOParameter())
+                    continue;
+                ++capable;
+                if (mb->isDualIO())
+                    ++split;
+            }
+        }
+        return std::pair<int, int>{split, capable};
+    };
+
+    {
+        writeDualIOPref("0");
+        MainComponent mainComp(std::make_unique<MockProvider>());
+        const auto [split, capable] = countSplit(mainComp);
+        ASSERT_GT(capable, 0) << "the default preset should contain stereo-capable modules";
+        EXPECT_EQ(split, 0) << "with the preference set to single jacks, nothing should open split";
+    }
+
+    {
+        writeDualIOPref("1");
+        MainComponent mainComp(std::make_unique<MockProvider>());
+        const auto [split, capable] = countSplit(mainComp);
+        ASSERT_GT(capable, 0);
+        EXPECT_EQ(split, capable) << "with the preference set to split, every one of them should open split";
+    }
+
+    writeDualIOPref("0"); // leave the shared settings file as it was found
+}
+
 TEST_F(MainComponentTest, AIPanelIsHiddenByDefault) {
     MainComponent mainComp(std::make_unique<MockProvider>());
     EXPECT_FALSE(mainComp.isAiPanelConfiguredVisible());

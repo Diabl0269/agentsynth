@@ -981,6 +981,211 @@ Locked by `AIIntegrationServiceTest.SetAuthTokenForwardsToInstalledProvider` and
 `AIIntegrationServiceTest.SetAuthTokenBeforeProviderInstalledIsRePushedBySetProvider` in
 `Tests/AIIntegrationServiceTests.cpp`.
 
+### Conversation-Id Threading (P6-8, client side)
+
+Server-side conversation history (`packages/conversations` in `synth-platform`) is Pro-plan only:
+`RemoteProvider`'s `patch.generate` calls carry an `x-conversation-id` request header when the
+client has one from a prior response in the same session, and the server responds with one (new
+or same) only when it actually persisted the exchange — a free-plan response carries **no**
+header at all, not an empty one.
+
+The re-push shape mirrors the Auth Token contract above almost exactly:
+`AIIntegrationService::setConversationId(id)` stores the value in `currentConversationId`
+regardless of whether a provider is installed, and `setProvider(...)` re-pushes it to whatever
+provider it installs next. `AIProvider::setConversationId()` defaults to a no-op, so `OllamaProvider`
+and any local/test provider are unaffected automatically.
+
+The one-way difference from the auth token: nothing external ever calls `setConversationId()` with
+a *real* id under normal operation. `AIIntegrationService::sendMessage()`'s success callback (the
+same branch that appends the assistant turn to `chatHistory`) captures a non-empty
+`AIResponse::conversationId` and calls `setConversationId()` itself, so the **next** call in the
+session continues the same server-side thread automatically. `RemoteProvider::processRequest()`
+reads the response's `x-conversation-id` header (same `result.headers` lookup used for
+`Retry-After`) onto the `AIResponse` it delivers, and sends the stored id as a request header only
+when non-empty — it has no notion of plans and never decides on its own whether to send one.
+
+`AIChatComponent` is the one plan-aware call site (`Source/AI/AccountService.h`'s free function
+`isProPlan(const AccountSnapshot&)`, also used by `PlanBadge`): right before every
+`aiService.sendMessage(...)` call in `sendButtonClicked()`, it clears the conversation id
+(`aiService.setConversationId({})`) whenever the attached `AccountService` is absent or its
+snapshot isn't Pro. This is defense-in-depth, not the real gate (the server enforces Pro-only
+persistence on its own) — its only job is covering a Pro→Free downgrade mid-session, where a
+conversation id captured earlier in the session would otherwise still be sitting in
+`AIIntegrationService` and get resent to a now-free account for no reason. A brand-new free-plan
+session never has an id to clear in the first place, since the server never sent one.
+
+Locked by `RemoteProviderTest.ConversationIdHeaderSentWhenSet` /
+`ConversationIdHeaderOnlySentWhenSet` / `ConversationIdHeaderCapturedFromResponseIntoAIResponse` /
+`MissingConversationIdHeaderLeavesAIResponseFieldEmpty` in `Tests/RemoteProviderTests.cpp`, and
+`AIIntegrationServiceTest.ConversationIdCapturedFromResponseAndRePushedToProvider` /
+`EmptyConversationIdOnResponseDoesNotCallSetConversationId` /
+`SetConversationIdBeforeProviderInstalledIsRePushedBySetProvider` in
+`Tests/AIIntegrationServiceTests.cpp`.
+
+`Source/AI/AuthClient.h/.cpp` additionally exposes cloud-only conversation methods alongside
+`fetchEntitlement()` — `listConversations()`, `getConversation(id)`, `deleteConversation(id)`,
+`deleteAllConversations()`. Note `listConversations()` is not a side-effect-free read: the server's
+`GET /v1/conversations` lazily sets/clears a grace-period deletion date on every call
+(`ListConversationsResult::deletionScheduledAt`, empty when null).
+
+### Local History (P6-8, client side)
+
+Local-first, cloud-as-sync: **every** session writes its conversation to a local file regardless of
+plan; a Pro session *additionally* syncs to the cloud via the conversation-id threading above. This
+gives Pro users offline resilience for free and keeps `AIChatComponent` on one code path instead of
+branching storage logic throughout it.
+
+**`Source/AI/LocalHistoryStore.h/.cpp`** — one JSON file per conversation, following
+`SnippetManager`'s exact convention (static methods over an explicit directory, a
+`getDefaultHistoryDirectory()` for production callers, pure/filesystem-free JSON transforms):
+
+- Location: `<userApplicationDataDirectory>/<kSettingsFolderName>/History/<id>.json`.
+- Shape: `{id, title, createdAt, updatedAt, messages: [{role, content, createdAt}]}` — the same
+  field names as `AuthClient::ConversationDetailResult`/`ConversationMessage`, so a UI reading
+  either backend never has to translate field names. `content` still carries any fenced ` ```json `
+  block **unsplit**, exactly like a stored `AIProvider::Message` — `AIChatComponent`'s existing
+  extract/clean logic (originally only run once, on `aiService.getHistory()` in the constructor) is
+  now `AIChatComponent::replayMessagesFrom()`, shared by that constructor path and by restoring a
+  history-panel entry, so the two can never drift.
+- No file-locking — same as `SnippetManager`/`ThemeManager`/`DeviceIdStore`. The multi-instance
+  concurrent-write hazard is avoided by construction: each app/plugin-instance *session* mints its
+  own conversation id lazily, on its first successful exchange (`AIChatComponent::
+  saveCurrentConversationLocally()`), so no two writers ever target the same file. A history-panel
+  list scanning all files can very rarely race a torn write from another live instance — accepted,
+  same as the classes above.
+- Retention is **user-configurable, local only**: a day count (30/90/180/365) or "keep forever"
+  (`LocalHistoryStore::kRetainForever`), read from `juce::ApplicationProperties`'s
+  `"historyRetentionDays"` key (Settings → AI tab, added after the provider/host controls —
+  `SettingsWindow.cpp`'s `AISettingsTab`). `save()` prunes by `updatedAt` on every write; an
+  out-of-range persisted value (e.g. a hand-edited `0`) falls back to the 180-day default rather
+  than pruning everything. Independent of that setting, a hard cap
+  (`LocalHistoryStore::kHardCapFiles`, 2000 files) always applies as an engineering backstop.
+  **Cloud retention is explicitly NOT per-tier/configurable in this PR** — it stays the server's
+  single global default; only the local copy has a user-facing retention control.
+
+**`Source/AI/ConversationHistorySource.h`** — the backend-agnostic interface behind the history
+panel: `list()`/`get(id)`/`deleteAll()`, all callback-based (never blocking the message thread).
+`LocalHistorySource` wraps `LocalHistoryStore` and answers synchronously (file I/O is fast enough
+not to need offloading). `CloudHistorySource` wraps the `AuthClient` conversation methods; each call
+launches a **detached** worker thread that copies everything it needs (a copy of the small,
+stateless `AuthClient`, the access token, a heap-allocated cancellation flag) before returning, so
+the `ConversationHistorySource` object itself never needs to outlive the call — mirrors
+`AIProvider::sendPrompt()`'s existing contract that a completion callback may arrive on a background
+thread, leaving the caller responsible for hopping back to the message thread
+(`Component::SafePointer` + `MessageManager::callAsync`, exactly like
+`AIChatComponent::sendButtonClicked()` already does for `aiService.sendMessage()`).
+
+**Backend selection** (`AIChatComponent::historyButtonClicked()`) is plan-driven, but the cloud call
+itself is **signed-in**-driven, not plan-driven — that asymmetry is deliberate: `listConversations()`
+is the *only* source of a pending grace-period deletion date, and that date only ever matters for a
+signed-in account that has lapsed off Pro. So: whenever signed in, a cloud `listConversations()` call
+always fires (learning `deletionScheduledAt` either way); when the plan is Pro its result is *also*
+the list rendered; when the plan is Free/lapsed, the list rendered instead comes from
+`LocalHistoryStore`. Not signed in (or no `AccountService` attached) skips the cloud call entirely.
+This call happens **only** on an explicit History-button click — never speculatively, never on a
+timer — because of the read-writes-on-read caveat above.
+
+**Restoring** an entry (`AIChatComponent::restoreConversation()`) replays its messages via
+`replayMessagesFrom()` and clears `aiService`'s own `chatHistory` (`aiService.clearHistory()`) —
+deliberately does **not** attempt to re-seed `AIIntegrationService`'s history with the restored
+turns, since no API exists for that (out of scope for this PR; adding one is a candidate for a
+follow-up). The model therefore has no memory of the restored conversation until new turns
+accumulate in the current session. The restored id is adopted as this session's
+`currentLocalConversationId`, so subsequent local (and, for a Pro/cloud restore,
+`aiService.setConversationId(id)`-continued cloud) saves keep appending to that same conversation
+rather than starting a new one.
+
+**UI chrome** (`Source/UI/AIChatComponent.h/.cpp`):
+- A **History** button (top toolbar, next to New Chat) opens a `juce::PopupMenu` — a "Clear my
+  history" item, then one row per conversation (title + readable date). No custom list component
+  needed; `PopupMenu` was already this codebase's pattern for a "pick one item" affordance
+  elsewhere (`GraphEditor`, `ModuleLibraryComponent`, `ModMatrixComponent`).
+- **Upsell strip** (`upsellButton`): a single "Upgrade to Pro" button (same `urlOpener`/`kUpgradeUrl`
+  mechanism as the Quota-error bubble's button, but a persistent strip, not a per-message one).
+  Shown whenever `!isProPlan(snapshot)` — **including with no `AccountService` attached at all**,
+  which deliberately diverges from `accountRow`/`planBadge`/`hostedModeNotice`'s "invisible until a
+  service says otherwise" convention: those default to invisible because they have nothing true to
+  say yet, but "not Pro" is already true before any `AccountService` exists (every caller starts on
+  the free tier, signed out). The explanatory copy ("Your history is saved locally only —
+  subscribers get automatic cloud backup across devices.") lives on `historyButton`'s tooltip
+  instead of its own label, so it doesn't compete for space in the bottom-chrome stack — see
+  `updateUpsellStrip()`.
+- **Downgrade notice** (`downgradeStripLabel`): "Your subscription has lapsed — your saved history
+  will be deleted on {date}." Shown only once signed in, `!isProPlan(snapshot)`, and a
+  `deletionScheduledAt` is known from the last History click. Never polled.
+- Both strips follow `hostedModeNotice`'s exact construction/visibility pattern
+  (`addChildComponent` + `set*Visible()` + `resized()` reserving height only when visible).
+
+Tests: `Tests/LocalHistoryStoreTests.cpp` (save/list/get/delete round trips; pure JSON transforms;
+age-based pruning at each offered retention value plus "forever"; the hard cap; out-of-range
+retention falling back to the default; an unparseable `updatedAt` being kept, not treated as
+infinitely old). `Tests/AIChatComponentTests.cpp` (upsell/downgrade strip visibility across
+signed-out/free/pro/lapsed-with-date snapshots; history panel backend selection per plan via
+`setHistorySourcesForTesting()`; "Clear my history" wired to the plan-appropriate backend; restoring
+a conversation replaying its messages; every successful exchange saved locally regardless of plan).
+`Tests/SettingsWindowTests.cpp` (the retention control's default, persisted-value load, round trip,
+and out-of-range fallback). `Tests/BrandingTests.cpp` (`resolveApiBaseUrl()`'s Debug-only
+`AGENTSYNTH_LOCAL_API_URL` env var override, used to point a local build's auth/entitlement/
+cloud-history traffic at a locally-run `synth-platform` server — see `docs/testing.md` "Testing
+Cloud-Gated Features Locally").
+
+### Opt-In Prompt Collection for Product Learning (P6-7, client side)
+
+A single settings checkbox — "Help improve AgentSynth — share my hosted-mode prompts for product
+learning" (`Source/UI/SettingsWindow.cpp`'s `AISettingsTab`, next to the provider picker's hosted-
+mode disclosure) — lets a signed-in user opt in to the team reviewing their hosted-mode prompt +
+resulting patch for **human review** (improving prompts/UX/features), off by default. This is
+explicitly **not** used to train or fine-tune AI models — the privacy policy's existing "we do not
+use your prompts or patches to train AI models" promise stays intact and untouched by this feature.
+Toggling off purges any already-collected samples for that user server-side immediately; the client
+has nothing further to do on revoke.
+
+The client half is a thin state-sync layer, mirroring the entitlement fetch almost exactly:
+`AccountSnapshot::promptLearningOptIn`/`promptLearningOptInAt` are populated the same way
+`plan`/`monthlyRequestLimit` are — `AccountService::refreshPromptLearningOptIn()` (fire-and-forget,
+GET `/v1/prompt-learning`) and `setPromptLearningOptIn(bool)` (fire-and-forget, PUT
+`/v1/prompt-learning` with `{"opted_in": ...}`) both go through `AuthClient`'s existing
+Bearer-token layer, both no-op when signed out, and both merge their result onto the currently
+published snapshot rather than replacing it (dropping the result if a sign-out raced the network
+call, same guard as `refreshEntitlement()`'s). `AccountService::PendingJob` gained two `Kind`
+values for this and a `bool boolArg` field (used only by `setPromptLearningOptIn`, to carry the new
+value alongside the access token already occupying `arg`) — the minimal extension rather than a
+second `Kind` pair or a second queue slot.
+
+`AISettingsTab` reflects the checkbox's enabled/checked state from `AccountService`'s published
+snapshot — disabled with a "Sign in required" tooltip when signed out (same gating precedent as
+`AccountRow`/`PlanBadge` reading `AccountService::getSnapshot().state`), and kept live while the
+Settings dialog is open by chaining onto `AccountService::onStateChanged`. That callback is a
+**single `std::function` slot**, not a multicast delegate — `AIChatComponent` installs it once, for
+the app's lifetime, in its `setAccountService()` — so `AISettingsTab` captures whatever was already
+installed, wraps it with its own refresh, and restores the original callback verbatim in its own
+destructor rather than overwriting the slot outright (which would silently stop
+`AIChatComponent`'s `accountRow`/`planBadge` from refreshing for as long as the Settings dialog
+stayed open). This is safe only because nothing else touches `onStateChanged` while a
+`SettingsWindow` is open in practice; a future second long-lived subscriber to this slot should
+make it an actual multicast rather than adding a third link to this chain.
+
+**Distinct from two other things that also touch "prompts," easy to conflate:**
+- **P4-5's failure-debug retention** is not an app-owned table at all — it's GCP Cloud Logging's
+  unconditional 30-day bucket retention on the backend's error logs, which only ever contain
+  `{err, capability, code}`, never a prompt body. It applies to every request regardless of this
+  opt-in and has no client-side surface at all.
+- **P6-8's conversation history** (`/v1/conversations/*`, see above) is a **Pro-only, user-facing
+  convenience** — letting a subscriber list/resume/delete their *own* past exchanges, stored so
+  *they* can come back to them. P6-7 is a **different purpose and different storage**: the product
+  team reviewing opted-in samples to improve the product, available regardless of plan (consent is
+  the gate here, not plan tier), stored separately from conversation rows. Toggling this off purges
+  P6-7's samples; it has no effect on P6-8's conversation history, and vice versa.
+
+Tests: `Tests/AuthClientTests.cpp` (`fetchPromptLearningPreference`/`setPromptLearningPreference` —
+method/URL/headers/body, the off-by-default null-timestamp shape, unauthorized, transport failure).
+`Tests/AccountServiceTests.cpp` (`setPromptLearningOptIn`/`refreshPromptLearningOptIn` go through
+the authenticated job/token path and update the snapshot; both are a no-op when signed out, asserted
+by a zero-calls check on the fake server — mirroring `RefreshEntitlementIsNoOpWhenSignedOut`).
+`Tests/SettingsWindowTests.cpp` (checkbox disabled/unchecked with no `AccountService` or when signed
+out with the "Sign in required" tooltip; enabled and reflecting the server's opted-in value once
+signed in; toggling it calls into `AccountService::setPromptLearningOptIn()`).
+
 ### Account Sign-In Surface (P3-2: AccountRow / SignInDialog)
 
 The AI panel's account UI is `Source/UI/AccountRow.h/.cpp` (a slim status row: "Sign in" /
