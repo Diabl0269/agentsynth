@@ -303,3 +303,24 @@ TEST(ModuleLibraryPaintSmoke, PaintAfterMouseExitNoCrash) {
     juce::Graphics g(img);
     EXPECT_NO_THROW(comp.paint(g));
 }
+
+// ============================================================================
+// Focus behavior — clicking the parent should not cause child TextEditor to gain focus
+// ============================================================================
+
+/** Verifies that the module library component does not grab keyboard focus when clicked.
+ *  This ensures that clicking on the “Collapse All” strip (or any other part of the parent)
+ *  does not cause the searchEditor child to gain focus, which would be distracting UX. */
+TEST(ModuleLibraryFocus, ParentDoesNotGrabFocusOnMouseClick) {
+    ModuleLibraryComponent comp;
+
+    // The parent should not want to grab focus on mouse clicks
+    EXPECT_FALSE(comp.getMouseClickGrabsKeyboardFocus())
+        << "ModuleLibraryComponent should not grab focus when clicked, to prevent child TextEditor "
+        << "from gaining focus when clicking on the collapse-all strip";
+
+    // Verify the searchEditor is still focusable (it should want keyboard focus)
+    // and the default behavior for TextEditor is to want keyboard focus.
+    // We can't directly test the searchEditor's focus behavior from here since it's private,
+    // but we've verified the parent's behavior is correct.
+}
