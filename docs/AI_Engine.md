@@ -522,6 +522,18 @@ example set further or to gate it per-model.
 
 `AIChatComponent` (`Source/UI/AIChatComponent.cpp`) is the chat UI for AI-assisted patching. It wires user prompts to `AIIntegrationService` and displays the conversation history with optional JSON patch previews.
 
+### Response timing marker
+
+Assistant bubbles that end an in-flight wait (successful reply, provider error, cancel, or the
+120 s timeout) show a compact elapsed-time label right-aligned on the same role row as `"AI"`
+(e.g. `340ms`, `1.2s`, `1m 5s`). The value is wall-clock ms from send until the wait ends, stored
+on `MessageData::responseMs`. History-restored turns and patch-retry / apply-failure bubbles leave
+`responseMs` at `-1` and omit the marker. Format helper: `AIChatComponent::formatResponseTime`.
+
+While a request is in flight, the `"AI is thinking..."` status line shows the same formatted elapsed
+time and refreshes on a 500 ms `juce::Timer` tick (label text only — not a full chat redraw). That
+timer also enforces the 120 s timeout.
+
 ### Debug Logger Registration (Debug builds only)
 
 In **Debug builds only**, `AIChatComponent` registers itself as the global `juce::Logger` by calling `juce::Logger::setCurrentLogger(this)` inside the `#else` branch of an `#ifdef NDEBUG` guard in the constructor. The debug console (`TextEditor`) and the "Debug" toggle button are also created and wired there. The destructor unregisters under `#ifndef NDEBUG`:
@@ -732,14 +744,16 @@ rather than starting a new one.
   history" item, then one row per conversation (title + readable date). No custom list component
   needed; `PopupMenu` was already this codebase's pattern for a "pick one item" affordance
   elsewhere (`GraphEditor`, `ModuleLibraryComponent`, `ModMatrixComponent`).
-- **Upsell strip** (`upsellLabel`/`upsellButton`): "Your history is saved locally only — subscribers
-  get automatic cloud backup across devices." + an "Upgrade to Pro" button (same `urlOpener`/
-  `kUpgradeUrl` mechanism as the Quota-error bubble's button, but a persistent strip, not a
-  per-message one). Shown whenever `!isProPlan(snapshot)` — **including with no `AccountService`
-  attached at all**, which deliberately diverges from `accountRow`/`planBadge`/`hostedModeNotice`'s
-  "invisible until a service says otherwise" convention: those default to invisible because they
-  have nothing true to say yet, but "not Pro" is already true before any `AccountService` exists
-  (every caller starts on the free tier, signed out).
+- **Upsell strip** (`upsellButton`): a single "Upgrade to Pro" button (same `urlOpener`/`kUpgradeUrl`
+  mechanism as the Quota-error bubble's button, but a persistent strip, not a per-message one).
+  Shown whenever `!isProPlan(snapshot)` — **including with no `AccountService` attached at all**,
+  which deliberately diverges from `accountRow`/`planBadge`/`hostedModeNotice`'s "invisible until a
+  service says otherwise" convention: those default to invisible because they have nothing true to
+  say yet, but "not Pro" is already true before any `AccountService` exists (every caller starts on
+  the free tier, signed out). The explanatory copy ("Your history is saved locally only —
+  subscribers get automatic cloud backup across devices.") lives on `historyButton`'s tooltip
+  instead of its own label, so it doesn't compete for space in the bottom-chrome stack — see
+  `updateUpsellStrip()`.
 - **Downgrade notice** (`downgradeStripLabel`): "Your subscription has lapsed — your saved history
   will be deleted on {date}." Shown only once signed in, `!isProPlan(snapshot)`, and a
   `deletionScheduledAt` is known from the last History click. Never polled.
@@ -754,7 +768,10 @@ signed-out/free/pro/lapsed-with-date snapshots; history panel backend selection 
 `setHistorySourcesForTesting()`; "Clear my history" wired to the plan-appropriate backend; restoring
 a conversation replaying its messages; every successful exchange saved locally regardless of plan).
 `Tests/SettingsWindowTests.cpp` (the retention control's default, persisted-value load, round trip,
-and out-of-range fallback).
+and out-of-range fallback). `Tests/BrandingTests.cpp` (`resolveApiBaseUrl()`'s Debug-only
+`AGENTSYNTH_LOCAL_API_URL` env var override, used to point a local build's auth/entitlement/
+cloud-history traffic at a locally-run `synth-platform` server — see `docs/testing.md` "Testing
+Cloud-Gated Features Locally").
 
 ### Account Sign-In Surface (P3-2: AccountRow / SignInDialog)
 

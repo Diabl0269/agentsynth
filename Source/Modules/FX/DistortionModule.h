@@ -17,6 +17,7 @@ public:
         addParameter(oversamplingParam = new juce::AudioParameterChoice("oversampling", "Oversampling",
                                                                         juce::StringArray{"Off", "2x", "4x"},
                                                                         1)); // default 2x preserves backward compat
+        addDualIOParameter();
         addOutputLevelParameter();
         addMuteParameter();
         oversamplingParam->addListener(this);
@@ -221,10 +222,14 @@ public:
     }
 
     juce::String getInputPortLabel(int i) const override {
-        const juce::String labels[] = {"Left", "Right", "Drive", "Mix"};
-        return (i >= 0 && i < 4) ? labels[i] : ModuleBase::getInputPortLabel(i);
+        const juce::String cv[] = {"Drive", "Mix"};
+        return stereoInputLabel(i, 2, cv);
     }
-    juce::String getOutputPortLabel(int i) const override { return i == 0 ? "Left" : "Right"; }
+    juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(2); }
+    int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 2); }
+    LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
     std::vector<ModulationTarget> getModulationTargets() const override { return {{"Drive", 2}, {"Mix", 3}}; }
 

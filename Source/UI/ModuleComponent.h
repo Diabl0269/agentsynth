@@ -9,7 +9,7 @@
 #include "FrequencyResponseComponent.h"
 #include "SampleWaveformComponent.h"
 #include "ScopeComponent.h"
-#include "TriggerMeterComponent.h"
+#include "ThresholdControlComponent.h"
 #include "WavetableDisplayComponent.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
@@ -119,7 +119,7 @@ private:
     std::unique_ptr<juce::TextButton> eqPopOutButton;
     juce::Component::SafePointer<juce::DialogWindow> eqWindow;
     std::unique_ptr<juce::MidiKeyboardComponent> keyboardComponent;
-    std::unique_ptr<TriggerMeterComponent> triggerMeter;
+    std::unique_ptr<ThresholdControlComponent> thresholdControl;
     std::unique_ptr<WavetableDisplayComponent> wavetableDisplay;
     std::unique_ptr<juce::TextButton> loadWavetableButton;
     std::unique_ptr<juce::FileChooser> wavetableChooser;
@@ -157,6 +157,8 @@ private:
     std::unique_ptr<juce::DrawableButton> muteButton;
     std::unique_ptr<juce::ButtonParameterAttachment> muteAttachment;
     std::unique_ptr<juce::DrawableButton> deleteButton;
+    std::unique_ptr<juce::DrawableButton> dualIOButton;
+    std::unique_ptr<juce::ButtonParameterAttachment> dualIOAttachment;
 
     AppUndoManager* undoManager = nullptr;
     std::map<int, float> gestureStartValues;
@@ -175,8 +177,8 @@ private:
     void createControls();
     void updateLayout();
 
-    // Raw->LogicalPort snapshots of the module's current channel layout. Only the "poly" parameter
-    // changes that layout, so these are captured at construction and refreshed on each poly toggle.
+    // Raw->LogicalPort snapshots of the module's current channel layout. "poly" and "dualIO"
+    // change that layout, so these are captured at construction and refreshed on each toggle.
     // Kept because rewireForPolyChange needs to know which visible jack an existing connection was
     // anchored to *before* the toggle — by the time the listener fires, the live mapping already
     // describes the new layout.
@@ -186,6 +188,11 @@ private:
 
     // Re-anchors this module's connections onto its new channel layout after a poly toggle.
     void applyPolyStateChange();
+
+    // Dual I/O only changes which jacks are *visible* — raw ch0/ch1 stay put — so this refreshes
+    // layout without tearing cables down. Message thread only.
+    void applyDualIOLayoutChange();
+    void updateDualIOTooltip();
 
     // Macro bank only. Re-lays the component for the new "Knobs" count and asks the GraphEditor
     // to settle the consequences (drop routings on jacks that just disappeared, nudge neighbours

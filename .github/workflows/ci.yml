@@ -308,12 +308,20 @@ jobs:
 
     - name: Configure CMake
       run: |
+        # OBJC/OBJCXX are separate CMake languages and need their own launcher. JUCE compiles each
+        # of its modules as one Objective-C++ unity file per target — 103 .mm translation units in
+        # this build — and without these two flags every one of them skipped ccache and was rebuilt
+        # cold on every run: ~12 min of a 12 min 45 s macOS job, tailing off into a near-serial
+        # chain of 20–35 s juce_gui_basics / juce_audio_processors compiles. CMakeLists.txt sets the
+        # same four launchers when it finds ccache; these stay explicit to match the C/CXX flags.
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DENABLE_TESTS=ON \
           -DENABLE_AI_HARNESS=ON \
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_OBJC_COMPILER_LAUNCHER=ccache \
+          -DCMAKE_OBJCXX_COMPILER_LAUNCHER=ccache
 
     - name: Build
       run: cmake --build build

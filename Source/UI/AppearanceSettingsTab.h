@@ -11,7 +11,7 @@ class GraphEditor; // forward declaration for AppearanceSettingsTab
 // offers "Open Themes Folder" (File::revealToUser) and "Reload Themes"
 // (ThemeManager::loadUserThemesFromFolder). Highlights the active row; updates if the manager
 // broadcasts (it is a ChangeListener so external changes reflect here too).
-// Also contains a toggle for alignment guides visibility.
+// Also contains a toggle for alignment guides.
 class AppearanceSettingsTab
     : public juce::Component
     , private juce::ChangeListener {

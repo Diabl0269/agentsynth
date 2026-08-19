@@ -1,5 +1,26 @@
 #include "Modules/ADSRModule.h"
+#include "Modules/ModuleBase.h"
 #include <gtest/gtest.h>
+
+static juce::AudioParameterFloat* floatParam(ADSRModule& m, const juce::String& id) {
+    return dynamic_cast<juce::AudioParameterFloat*>(findParameterByID(&m, id));
+}
+
+static juce::AudioParameterBool* boolParam(ADSRModule& m, const juce::String& id) {
+    return dynamic_cast<juce::AudioParameterBool*>(findParameterByID(&m, id));
+}
+
+static void setFloat(ADSRModule& m, const juce::String& id, float actual) {
+    auto* p = floatParam(m, id);
+    ASSERT_NE(p, nullptr);
+    p->setValueNotifyingHost(p->convertTo0to1(actual));
+}
+
+static void setPoly(ADSRModule& m, bool on) {
+    auto* p = boolParam(m, "poly");
+    ASSERT_NE(p, nullptr);
+    *p = on;
+}
 
 class ADSRTest : public ::testing::Test {
 protected:
@@ -15,24 +36,8 @@ protected:
 };
 
 TEST_F(ADSRTest, StartsIdle) {
-    // Initially should output 0
     adsr.processBlock(buffer, midiMessages);
-    // Since ADSR modifies buffer in place (multiplying?), typically ADSR is a
-    // control signal or VCA? In Agent Synth, ADSRModule might just generate an
-    // envelope or apply it. Checking code... wait, I need to check ADSRModule
-    // implementation to know if it's a generator or processor. Assuming standard
-    // VCA-like behavior or just check "getNextSample" if exposed? "ModuleBase"
-    // usually implies processBlock. If buffer was clear (0), output should be 0.
-
-    // Let's set buffer to 1.0 to see if envelope is applied
-    for (int i = 0; i < buffer.getNumSamples(); ++i)
-        buffer.setSample(0, i, 1.0f);
-
-    adsr.processBlock(buffer, midiMessages);
-
-    // Without NoteOn, envelope should be 0 (if valid), so output 0.
     float rms = buffer.getRMSLevel(0, 0, buffer.getNumSamples());
-    // expect close to 0
     EXPECT_NEAR(rms, 0.0f, 1e-4);
 }
 
@@ -43,8 +48,8 @@ TEST_F(ADSRTest, AttackPhase) {
 
     // Set buffer to constant 1.0 to measure envelope
     for (int i = 0; i < buffer.getNumSamples(); ++i) {
-        buffer.setSample(0, i, 1.0f);
-        buffer.setSample(1, i, 1.0f);
+        buffer.setSample(0, i, 0.0f);
+        buffer.setSample(1, i, 0.0f);
     }
 
     adsr.processBlock(buffer, midiMessages);
@@ -56,7 +61,7 @@ TEST_F(ADSRTest, AttackPhase) {
 
 TEST_F(ADSRTest, SustainLevel) {
     // Set sustain to 0.75
-    dynamic_cast<juce::AudioParameterFloat*>(adsr.getParameters()[3])->setValueNotifyingHost(0.75f);
+    setFloat(adsr, "sustain", 0.75f);
 
     // Trigger NoteOn
     auto noteOn = juce::MidiMessage::noteOn(1, 60, (juce::uint8)100);
@@ -64,8 +69,8 @@ TEST_F(ADSRTest, SustainLevel) {
 
     // Fill buffer and process the note on block
     for (int i = 0; i < buffer.getNumSamples(); ++i) {
-        buffer.setSample(0, i, 1.0f);
-        buffer.setSample(1, i, 1.0f);
+        buffer.setSample(0, i, 0.0f);
+        buffer.setSample(1, i, 0.0f);
     }
     adsr.processBlock(buffer, midiMessages);
 
@@ -75,8 +80,8 @@ TEST_F(ADSRTest, SustainLevel) {
     for (int block = 0; block < 30; ++block) {
         buffer.clear();
         for (int i = 0; i < buffer.getNumSamples(); ++i) {
-            buffer.setSample(0, i, 1.0f);
-            buffer.setSample(1, i, 1.0f);
+            buffer.setSample(0, i, 0.0f);
+            buffer.setSample(1, i, 0.0f);
         }
         juce::MidiBuffer emptyMidi;
         adsr.processBlock(buffer, emptyMidi);
@@ -89,7 +94,7 @@ TEST_F(ADSRTest, SustainLevel) {
 
 TEST_F(ADSRTest, ReleasePhase) {
     // Set sustain to non-zero so envelope holds at a level
-    dynamic_cast<juce::AudioParameterFloat*>(adsr.getParameters()[3])->setValueNotifyingHost(0.8f);
+    setFloat(adsr, "sustain", 0.8f);
 
     // Trigger NoteOn
     auto noteOn = juce::MidiMessage::noteOn(1, 60, (juce::uint8)100);
@@ -97,8 +102,8 @@ TEST_F(ADSRTest, ReleasePhase) {
 
     // Fill buffer and process note on
     for (int i = 0; i < buffer.getNumSamples(); ++i) {
-        buffer.setSample(0, i, 1.0f);
-        buffer.setSample(1, i, 1.0f);
+        buffer.setSample(0, i, 0.0f);
+        buffer.setSample(1, i, 0.0f);
     }
     adsr.processBlock(buffer, midiMessages);
 
@@ -106,8 +111,8 @@ TEST_F(ADSRTest, ReleasePhase) {
     for (int block = 0; block < 30; ++block) {
         buffer.clear();
         for (int i = 0; i < buffer.getNumSamples(); ++i) {
-            buffer.setSample(0, i, 1.0f);
-            buffer.setSample(1, i, 1.0f);
+            buffer.setSample(0, i, 0.0f);
+            buffer.setSample(1, i, 0.0f);
         }
         juce::MidiBuffer emptyMidi;
         adsr.processBlock(buffer, emptyMidi);
@@ -123,8 +128,8 @@ TEST_F(ADSRTest, ReleasePhase) {
     noteOffMidi.addEvent(noteOff, 0);
 
     for (int i = 0; i < buffer.getNumSamples(); ++i) {
-        buffer.setSample(0, i, 1.0f);
-        buffer.setSample(1, i, 1.0f);
+        buffer.setSample(0, i, 0.0f);
+        buffer.setSample(1, i, 0.0f);
     }
     adsr.processBlock(buffer, noteOffMidi);
 
@@ -134,8 +139,8 @@ TEST_F(ADSRTest, ReleasePhase) {
     for (int block = 0; block < 20; ++block) {
         buffer.clear();
         for (int i = 0; i < buffer.getNumSamples(); ++i) {
-            buffer.setSample(0, i, 1.0f);
-            buffer.setSample(1, i, 1.0f);
+            buffer.setSample(0, i, 0.0f);
+            buffer.setSample(1, i, 0.0f);
         }
         juce::MidiBuffer emptyMidi;
         adsr.processBlock(buffer, emptyMidi);
@@ -155,8 +160,8 @@ TEST_F(ADSRTest, RetriggerDuringRelease) {
 
     // Fill buffer and process note on
     for (int i = 0; i < buffer.getNumSamples(); ++i) {
-        buffer.setSample(0, i, 1.0f);
-        buffer.setSample(1, i, 1.0f);
+        buffer.setSample(0, i, 0.0f);
+        buffer.setSample(1, i, 0.0f);
     }
     adsr.processBlock(buffer, noteOnMidi);
 
@@ -164,8 +169,8 @@ TEST_F(ADSRTest, RetriggerDuringRelease) {
     for (int block = 0; block < 30; ++block) {
         buffer.clear();
         for (int i = 0; i < buffer.getNumSamples(); ++i) {
-            buffer.setSample(0, i, 1.0f);
-            buffer.setSample(1, i, 1.0f);
+            buffer.setSample(0, i, 0.0f);
+            buffer.setSample(1, i, 0.0f);
         }
         juce::MidiBuffer emptyMidi;
         adsr.processBlock(buffer, emptyMidi);
@@ -177,8 +182,8 @@ TEST_F(ADSRTest, RetriggerDuringRelease) {
     noteOffMidi.addEvent(noteOff, 0);
 
     for (int i = 0; i < buffer.getNumSamples(); ++i) {
-        buffer.setSample(0, i, 1.0f);
-        buffer.setSample(1, i, 1.0f);
+        buffer.setSample(0, i, 0.0f);
+        buffer.setSample(1, i, 0.0f);
     }
     adsr.processBlock(buffer, noteOffMidi);
 
@@ -186,8 +191,8 @@ TEST_F(ADSRTest, RetriggerDuringRelease) {
     for (int block = 0; block < 5; ++block) {
         buffer.clear();
         for (int i = 0; i < buffer.getNumSamples(); ++i) {
-            buffer.setSample(0, i, 1.0f);
-            buffer.setSample(1, i, 1.0f);
+            buffer.setSample(0, i, 0.0f);
+            buffer.setSample(1, i, 0.0f);
         }
         juce::MidiBuffer emptyMidi;
         adsr.processBlock(buffer, emptyMidi);
@@ -202,8 +207,8 @@ TEST_F(ADSRTest, RetriggerDuringRelease) {
     retriggerMidi.addEvent(noteOnAgain, 0);
 
     for (int i = 0; i < buffer.getNumSamples(); ++i) {
-        buffer.setSample(0, i, 1.0f);
-        buffer.setSample(1, i, 1.0f);
+        buffer.setSample(0, i, 0.0f);
+        buffer.setSample(1, i, 0.0f);
     }
     adsr.processBlock(buffer, retriggerMidi);
 
@@ -211,8 +216,8 @@ TEST_F(ADSRTest, RetriggerDuringRelease) {
     for (int block = 0; block < 3; ++block) {
         buffer.clear();
         for (int i = 0; i < buffer.getNumSamples(); ++i) {
-            buffer.setSample(0, i, 1.0f);
-            buffer.setSample(1, i, 1.0f);
+            buffer.setSample(0, i, 0.0f);
+            buffer.setSample(1, i, 0.0f);
         }
         juce::MidiBuffer emptyMidi;
         adsr.processBlock(buffer, emptyMidi);
@@ -225,7 +230,7 @@ TEST_F(ADSRTest, RetriggerDuringRelease) {
 
 TEST_F(ADSRTest, ZeroSustain) {
     // Set sustain to 0.0
-    dynamic_cast<juce::AudioParameterFloat*>(adsr.getParameters()[3])->setValueNotifyingHost(0.0f);
+    setFloat(adsr, "sustain", 0.0f);
 
     // Trigger NoteOn
     auto noteOn = juce::MidiMessage::noteOn(1, 60, (juce::uint8)100);
@@ -233,8 +238,8 @@ TEST_F(ADSRTest, ZeroSustain) {
 
     // Fill buffer and process
     for (int i = 0; i < buffer.getNumSamples(); ++i) {
-        buffer.setSample(0, i, 1.0f);
-        buffer.setSample(1, i, 1.0f);
+        buffer.setSample(0, i, 0.0f);
+        buffer.setSample(1, i, 0.0f);
     }
     adsr.processBlock(buffer, midiMessages);
 
@@ -242,8 +247,8 @@ TEST_F(ADSRTest, ZeroSustain) {
     for (int block = 0; block < 40; ++block) {
         buffer.clear();
         for (int i = 0; i < buffer.getNumSamples(); ++i) {
-            buffer.setSample(0, i, 1.0f);
-            buffer.setSample(1, i, 1.0f);
+            buffer.setSample(0, i, 0.0f);
+            buffer.setSample(1, i, 0.0f);
         }
         juce::MidiBuffer emptyMidi;
         adsr.processBlock(buffer, emptyMidi);
@@ -256,7 +261,7 @@ TEST_F(ADSRTest, ZeroSustain) {
 
 TEST_F(ADSRTest, FastAttack) {
     // Set attack to minimum (0.01f, clamped to 0.002f)
-    dynamic_cast<juce::AudioParameterFloat*>(adsr.getParameters()[1])->setValueNotifyingHost(0.0f);
+    setFloat(adsr, "attack", 0.01f);
 
     // Trigger NoteOn
     auto noteOn = juce::MidiMessage::noteOn(1, 60, (juce::uint8)100);
@@ -264,8 +269,8 @@ TEST_F(ADSRTest, FastAttack) {
 
     // Fill buffer and process
     for (int i = 0; i < buffer.getNumSamples(); ++i) {
-        buffer.setSample(0, i, 1.0f);
-        buffer.setSample(1, i, 1.0f);
+        buffer.setSample(0, i, 0.0f);
+        buffer.setSample(1, i, 0.0f);
     }
     adsr.processBlock(buffer, midiMessages);
 
@@ -276,8 +281,8 @@ TEST_F(ADSRTest, FastAttack) {
     // Process one more block
     buffer.clear();
     for (int i = 0; i < buffer.getNumSamples(); ++i) {
-        buffer.setSample(0, i, 1.0f);
-        buffer.setSample(1, i, 1.0f);
+        buffer.setSample(0, i, 0.0f);
+        buffer.setSample(1, i, 0.0f);
     }
     juce::MidiBuffer emptyMidi;
     adsr.processBlock(buffer, emptyMidi);
@@ -294,8 +299,8 @@ TEST_F(ADSRTest, ParameterChangesDuringPlayback) {
 
     // Fill buffer and process
     for (int i = 0; i < buffer.getNumSamples(); ++i) {
-        buffer.setSample(0, i, 1.0f);
-        buffer.setSample(1, i, 1.0f);
+        buffer.setSample(0, i, 0.0f);
+        buffer.setSample(1, i, 0.0f);
     }
     adsr.processBlock(buffer, midiMessages);
 
@@ -303,8 +308,8 @@ TEST_F(ADSRTest, ParameterChangesDuringPlayback) {
     for (int block = 0; block < 30; ++block) {
         buffer.clear();
         for (int i = 0; i < buffer.getNumSamples(); ++i) {
-            buffer.setSample(0, i, 1.0f);
-            buffer.setSample(1, i, 1.0f);
+            buffer.setSample(0, i, 0.0f);
+            buffer.setSample(1, i, 0.0f);
         }
         juce::MidiBuffer emptyMidi;
         adsr.processBlock(buffer, emptyMidi);
@@ -315,14 +320,14 @@ TEST_F(ADSRTest, ParameterChangesDuringPlayback) {
     EXPECT_LT(rmsBeforeChange, 0.05f);
 
     // Now change sustain parameter mid-stream to 0.6
-    dynamic_cast<juce::AudioParameterFloat*>(adsr.getParameters()[3])->setValueNotifyingHost(0.6f);
+    setFloat(adsr, "sustain", 0.6f);
 
     // Process more blocks; the envelope should adapt
     for (int block = 0; block < 15; ++block) {
         buffer.clear();
         for (int i = 0; i < buffer.getNumSamples(); ++i) {
-            buffer.setSample(0, i, 1.0f);
-            buffer.setSample(1, i, 1.0f);
+            buffer.setSample(0, i, 0.0f);
+            buffer.setSample(1, i, 0.0f);
         }
         juce::MidiBuffer emptyMidi;
         adsr.processBlock(buffer, emptyMidi);
@@ -335,9 +340,7 @@ TEST_F(ADSRTest, ParameterChangesDuringPlayback) {
 
 TEST_F(ADSRTest, PolyMode_IndependentEnvelopes) {
     // Enable poly mode
-    auto* polyP = dynamic_cast<juce::AudioParameterBool*>(adsr.getParameters()[5]);
-    ASSERT_NE(polyP, nullptr);
-    *polyP = true;
+    setPoly(adsr, true);
 
     juce::AudioBuffer<float> polyBuffer(8, 512);
     polyBuffer.clear();
@@ -358,8 +361,7 @@ TEST_F(ADSRTest, PolyMode_IndependentEnvelopes) {
 }
 
 TEST_F(ADSRTest, PolyMode_GateEdgeDetection) {
-    auto* polyP = dynamic_cast<juce::AudioParameterBool*>(adsr.getParameters()[5]);
-    *polyP = true;
+    setPoly(adsr, true);
 
     // Block 1: gate ON
     juce::AudioBuffer<float> polyBuffer(8, 512);
@@ -376,4 +378,138 @@ TEST_F(ADSRTest, PolyMode_GateEdgeDetection) {
     polyBuffer.clear();
     adsr.processBlock(polyBuffer, emptyMidi);
     // Envelope should start decaying
+}
+
+TEST_F(ADSRTest, MonoGateCvRisingEdgeStartsEnvelope) {
+    for (int i = 0; i < buffer.getNumSamples(); ++i)
+        buffer.setSample(0, i, 1.0f);
+
+    juce::MidiBuffer emptyMidi;
+    adsr.processBlock(buffer, emptyMidi);
+
+    EXPECT_GT(buffer.getRMSLevel(0, 0, buffer.getNumSamples()), 0.001f);
+    EXPECT_TRUE(adsr.isOverThreshold());
+}
+
+TEST_F(ADSRTest, MonoGateCvFallingEdgeReleasesEnvelope) {
+    setFloat(adsr, "sustain", 0.8f);
+
+    juce::MidiBuffer emptyMidi;
+    for (int block = 0; block < 30; ++block) {
+        buffer.clear();
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+            buffer.setSample(0, i, 1.0f);
+        adsr.processBlock(buffer, emptyMidi);
+    }
+    const float sustainRms = buffer.getRMSLevel(0, 0, buffer.getNumSamples());
+    EXPECT_GT(sustainRms, 0.5f);
+
+    buffer.clear();
+    adsr.processBlock(buffer, emptyMidi);
+    for (int block = 0; block < 20; ++block) {
+        buffer.clear();
+        adsr.processBlock(buffer, emptyMidi);
+    }
+    EXPECT_LT(buffer.getRMSLevel(0, 0, buffer.getNumSamples()), 0.1f);
+}
+
+TEST_F(ADSRTest, MonoMidiStillWorksWithSilentGate) {
+    auto noteOn = juce::MidiMessage::noteOn(1, 60, (juce::uint8)100);
+    midiMessages.addEvent(noteOn, 0);
+    adsr.processBlock(buffer, midiMessages);
+    EXPECT_GT(buffer.getRMSLevel(0, 0, buffer.getNumSamples()), 0.001f);
+}
+
+TEST_F(ADSRTest, MidiOffDoesNotReleaseWhileGateCvIsHigh) {
+    setFloat(adsr, "sustain", 0.8f);
+
+    auto noteOn = juce::MidiMessage::noteOn(1, 60, (juce::uint8)100);
+    midiMessages.addEvent(noteOn, 0);
+    adsr.processBlock(buffer, midiMessages);
+
+    juce::MidiBuffer emptyMidi;
+    for (int block = 0; block < 30; ++block) {
+        buffer.clear();
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+            buffer.setSample(0, i, 1.0f);
+        adsr.processBlock(buffer, emptyMidi);
+    }
+    const float held = buffer.getRMSLevel(0, 0, buffer.getNumSamples());
+    EXPECT_GT(held, 0.5f);
+
+    juce::MidiBuffer noteOffMidi;
+    noteOffMidi.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
+    buffer.clear();
+    for (int i = 0; i < buffer.getNumSamples(); ++i)
+        buffer.setSample(0, i, 1.0f);
+    adsr.processBlock(buffer, noteOffMidi);
+
+    EXPECT_GT(buffer.getRMSLevel(0, 0, buffer.getNumSamples()), 0.5f);
+}
+
+TEST_F(ADSRTest, GateBelowThresholdDoesNotStartEnvelope) {
+    setFloat(adsr, "gateThreshold", 0.8f);
+    for (int i = 0; i < buffer.getNumSamples(); ++i)
+        buffer.setSample(0, i, 0.6f);
+
+    juce::MidiBuffer emptyMidi;
+    adsr.processBlock(buffer, emptyMidi);
+    EXPECT_NEAR(buffer.getRMSLevel(0, 0, buffer.getNumSamples()), 0.0f, 1e-4);
+}
+
+TEST_F(ADSRTest, GateAboveRaisedThresholdStartsEnvelope) {
+    setFloat(adsr, "gateThreshold", 0.8f);
+    for (int i = 0; i < buffer.getNumSamples(); ++i)
+        buffer.setSample(0, i, 0.95f);
+
+    juce::MidiBuffer emptyMidi;
+    adsr.processBlock(buffer, emptyMidi);
+    EXPECT_GT(buffer.getRMSLevel(0, 0, buffer.getNumSamples()), 0.001f);
+}
+
+TEST_F(ADSRTest, ThresholdCVShiftsTheGatePoint) {
+    juce::AudioBuffer<float> buf(9, 512);
+    buf.clear();
+    for (int i = 0; i < 512; ++i) {
+        buf.setSample(0, i, 0.4f);  // below the 0.5 default
+        buf.setSample(8, i, -0.2f); // pulls threshold down to 0.3
+    }
+    juce::MidiBuffer emptyMidi;
+    adsr.processBlock(buf, emptyMidi);
+    EXPECT_GT(buf.getRMSLevel(0, 0, 512), 0.001f);
+    EXPECT_NEAR(adsr.getEffectiveThreshold(), 0.3f, 1e-4);
+}
+
+TEST_F(ADSRTest, DefaultThresholdIsHalf) { EXPECT_NEAR(adsr.getEffectiveThreshold(), 0.5f, 1e-5f); }
+
+TEST_F(ADSRTest, HysteresisRejectsDitherAroundThreshold) {
+    juce::MidiBuffer emptyMidi;
+    buffer.clear();
+    for (int i = 0; i < buffer.getNumSamples(); ++i)
+        buffer.setSample(0, i, 0.6f);
+    adsr.processBlock(buffer, emptyMidi);
+    EXPECT_TRUE(adsr.isOverThreshold());
+
+    buffer.clear();
+    for (int i = 0; i < buffer.getNumSamples(); ++i)
+        buffer.setSample(0, i, 0.48f); // still inside the 0.05 gap below 0.5
+    adsr.processBlock(buffer, emptyMidi);
+    EXPECT_TRUE(adsr.isOverThreshold());
+}
+
+TEST_F(ADSRTest, ChannelLayoutIncludesThresholdCv) {
+    EXPECT_EQ(adsr.getTotalNumInputChannels(), 9);
+    EXPECT_EQ(adsr.getTotalNumOutputChannels(), 9);
+    EXPECT_EQ(adsr.getVisibleInputPortCount(), 2);
+    EXPECT_EQ(adsr.getVisibleOutputPortCount(), 1);
+    EXPECT_EQ(adsr.getInputPortLabel(0), "Gate");
+    EXPECT_EQ(adsr.getInputPortLabel(1), "Threshold");
+}
+
+TEST_F(ADSRTest, ThresholdChannelIsModCv) {
+    auto gate = adsr.mapInputChannel(0);
+    EXPECT_EQ(gate.role, PortRole::Gate);
+    auto thresh = adsr.mapInputChannel(8);
+    EXPECT_EQ(thresh.visibleJackIndex, 1);
+    EXPECT_EQ(thresh.role, PortRole::ModCV);
 }

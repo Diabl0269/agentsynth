@@ -49,8 +49,8 @@ Every concrete module implements `virtual ModuleType getModuleType() const = 0`.
 Oscillator, Filter, VCA, ADSR, LFO, Sequencer, PolySequencer,
 MidiKeyboard, PolyMidi, ExternalMidi, Attenuverter,
 Delay, Distortion, Reverb, Chorus, Phaser, Compressor, Flanger, Limiter,
-ParametricEQ, VoiceMixer, Bitcrusher, PitchShifter, Noise, Math, Sampler, Wavetable,
-MacroControl, SampleHold, EnvelopeFollower
+ParametricEQ, VoiceMixer, Bitcrusher, PitchShifter, RingModulator, Noise, Math, Sampler, Wavetable,
+MacroControl, SampleHold, EnvelopeFollower, Comparator
 ```
 
 `ModuleType` is consumed by `LayoutUtil::getModuleWidthBucket` to classify modules into width buckets (Narrow / Single / Double) and by `ModuleComponent` for type-safe UI layout switching.
@@ -121,7 +121,7 @@ if (isMuted()) {
 **Exception:** modules with no dry audio path clear their output on bypass, because there is nothing to pass through. Two shapes qualify:
 
 - **Pure sources** — no audio *input* (e.g. `OscillatorModule`, `PolyMidiModule`).
-- **Audio-in / CV-out taps** — no audio *output* (e.g. `EnvelopeFollowerModule`, whose ch0 output is Env CV). Passing the dry signal through would push audio-rate samples into a CV destination, which is worse than emitting no modulation.
+- **Audio-in / CV-out taps** — no audio *output* (e.g. `EnvelopeFollowerModule`, whose ch0 output is Env CV, and `ComparatorModule`, whose outputs are Gate / Inverse). Passing the dry signal through would push audio-rate samples into a CV destination, which is worse than emitting no modulation.
 
 Both still use two separate branches, never a fused `if (isBypassed() || isMuted())`, so the intent stays explicit.
 
@@ -234,4 +234,4 @@ All modules follow specific DSP requirements:
 
 - **Smoothing**: All gain/cutoff parameters use linear smoothing to avoid clicks.
 - **Antialiasing**: Oscillators use PolyBLEP for sharp waveforms.
-- **Oversampling**: Nonlinear effects support configurable oversampling (e.g., Distortion offers Off/2x/4x modes).
+- **Oversampling**: Nonlinear effects support configurable oversampling (e.g. Distortion and Ring Modulator offer Off/2x/4x modes).

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "ModuleBase.h"
+#include "SchmittTrigger.h"
+#include "ThresholdMeterSource.h"
 #include <atomic>
 #include <cmath>
 #include <juce_core/juce_core.h>
@@ -27,7 +29,9 @@
  *        ch6 Threshold CV
  *    Out ch0 CV     | ch1-6 silent pass-throughs (prevent AudioProcessorGraph buffer aliasing)
  */
-class SampleHoldModule : public ModuleBase {
+class SampleHoldModule
+    : public ModuleBase
+    , public ThresholdMeterSource {
 public:
     SampleHoldModule()
         : ModuleBase("Sample & Hold", 7, 7) {
@@ -56,7 +60,7 @@ public:
         // Start "past" the end of a cycle so the internal clock latches a value on the very
         // first sample instead of sitting at 0 until the first wrap.
         phase = 1.0f;
-        previousTriggerHigh = false;
+        trigger.reset();
         heldValue = 0.0f;
         currentValue = 0.0f;
         cachedSlew = -1.0f; // force slew coefficient recompute on the next block
@@ -135,14 +139,10 @@ public:
                     threshold = juce::jlimit(-1.0f, 1.0f, threshold + thresholdCV[s]);
                 lastThreshold = threshold;
 
-                if (!previousTriggerHigh && trig > threshold) {
-                    previousTriggerHigh = true;
-                    if (!useInternalClock) {
-                        captureNow = true;
-                        ++firedThisBlock;
-                    }
-                } else if (previousTriggerHigh && trig < threshold - kTriggerHysteresis) {
-                    previousTriggerHigh = false;
+                const auto edge = trigger.process(trig, threshold);
+                if (edge == SchmittTrigger::Edge::Rising && !useInternalClock) {
+                    captureNow = true;
+                    ++firedThisBlock;
                 }
             }
 
@@ -163,7 +163,7 @@ public:
                 }
                 tracking = phase < 0.5f; // 50% duty internal gate
             } else {
-                tracking = previousTriggerHigh;
+                tracking = trigger.high;
             }
 
             if (trackMode ? tracking : captureNow)
@@ -200,7 +200,7 @@ public:
         lastValue.store(out[numSamples - 1], std::memory_order_relaxed);
         triggerLevel.store(meterPeak, std::memory_order_relaxed);
         effectiveThreshold.store(lastThreshold, std::memory_order_relaxed);
-        triggerHigh.store(previousTriggerHigh, std::memory_order_relaxed);
+        triggerHigh.store(trigger.high, std::memory_order_relaxed);
         if (firedThisBlock > 0)
             triggerCount.fetch_add(firedThisBlock, std::memory_order_relaxed);
 
@@ -258,25 +258,27 @@ public:
     float getTriggerLevel() const { return triggerLevel.load(std::memory_order_relaxed); }
 
     /** Threshold actually in force last block, i.e. the knob plus any Threshold CV. */
-    float getEffectiveThreshold() const { return effectiveThreshold.load(std::memory_order_relaxed); }
+    float getEffectiveThreshold() const override { return effectiveThreshold.load(std::memory_order_relaxed); }
 
     /** True while the Schmitt trigger is armed (input above threshold, not yet released). */
     bool isTriggerHigh() const { return triggerHigh.load(std::memory_order_relaxed); }
 
     /** Monotonic count of captures. The UI flashes when this changes. */
-    int getTriggerCount() const { return triggerCount.load(std::memory_order_relaxed); }
+    int getTriggerCount() const override { return triggerCount.load(std::memory_order_relaxed); }
+
+    float getMeterLevel() const override { return getTriggerLevel(); }
+    bool isOverThreshold() const override { return isTriggerHigh(); }
+    ThresholdScale getThresholdScale() const override { return ThresholdScale::Bipolar; }
+    juce::String getThresholdParamID() const override { return "trigThreshold"; }
+    juce::String getMeterIdleLabel() const override { return "no trigger"; }
 
     /** Hysteresis gap below the threshold before the trigger can re-arm. */
-    static constexpr float getTriggerHysteresis() { return kTriggerHysteresis; }
+    static constexpr float getTriggerHysteresis() { return SchmittTrigger::kHysteresis; }
 
 private:
     static constexpr float kMinRateHz = 0.1f;
     static constexpr float kMaxRateHz = 50.0f;
     static constexpr float kMaxSlewSeconds = 0.5f;
-    // Wide enough to reject dither and slow-sine loitering around the threshold, narrow enough
-    // that a threshold set near the top of a signal's range still re-arms. Not user-exposed —
-    // the Module Development Guide is explicit about not crowding modules with extra knobs.
-    static constexpr float kTriggerHysteresis = 0.05f;
 
     juce::AudioParameterChoice* sourceParam = nullptr;
     juce::AudioParameterChoice* modeParam = nullptr;
@@ -296,7 +298,7 @@ private:
 
     double currentSampleRate = 44100.0;
     float phase = 1.0f;
-    bool previousTriggerHigh = false;
+    SchmittTrigger trigger;
     float heldValue = 0.0f;
     float currentValue = 0.0f;
     float cachedSlew = -1.0f;

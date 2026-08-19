@@ -78,6 +78,49 @@ private:
     juce::String currentModel;
 };
 
+// Holds sendPrompt's CompletionCallback until the test resolves it — used to assert wait-state
+// timing (responseMs) after a real elapsed interval, and to cancel while still waiting.
+class DeferredPromptProvider : public synth::AIProvider {
+public:
+    juce::String getProviderName() const override { return "DeferredPromptProvider"; }
+
+    void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
+        callback({"MockModel1"}, true);
+    }
+
+    RequestId sendPrompt(const std::vector<synth::AIProvider::Message>&, CompletionCallback callback,
+                         const juce::var& = juce::var(), std::function<void(const juce::String&)> = {}) override {
+        pendingPromptCallback = std::move(callback);
+        return {42};
+    }
+
+    void resolvePrompt(const AIResponse& response) {
+        auto callback = std::move(pendingPromptCallback);
+        pendingPromptCallback = nullptr;
+        if (callback)
+            callback(response);
+    }
+
+    bool hasPendingPrompt() const { return static_cast<bool>(pendingPromptCallback); }
+
+    void cancel(RequestId) override {
+        if (!pendingPromptCallback)
+            return;
+        AIResponse cancelled;
+        cancelled.success = false;
+        cancelled.error.kind = AIErrorKind::Cancelled;
+        cancelled.error.message = "Cancelled";
+        resolvePrompt(cancelled);
+    }
+
+    void setModel(const juce::String& name) override { currentModel = name; }
+    juce::String getCurrentModel() const override { return currentModel; }
+
+private:
+    CompletionCallback pendingPromptCallback;
+    juce::String currentModel;
+};
+
 // Synchronously delivers a failed AIResponse with a caller-chosen error kind/message — used to
 // exercise AIChatComponent's failure-branch UI (P4-4: the Quota error's upgrade bubble, and the
 // regression lock that every other kind keeps the old flat bubble).
@@ -850,6 +893,144 @@ TEST_F(AIChatComponentTest, ClickingThumbsUpRecordsFeedbackLocally) {
     EXPECT_EQ(record->getProperty("rating").toString(), "up");
 
     feedbackFile.getParentDirectory().deleteRecursively();
+}
+
+TEST_F(AIChatComponentTest, FormatResponseTimeHelper) {
+    EXPECT_EQ(synth::AIChatComponent::formatResponseTime(0), "0ms");
+    EXPECT_EQ(synth::AIChatComponent::formatResponseTime(340), "340ms");
+    EXPECT_EQ(synth::AIChatComponent::formatResponseTime(999), "999ms");
+    EXPECT_EQ(synth::AIChatComponent::formatResponseTime(1200), "1.2s");
+    EXPECT_EQ(synth::AIChatComponent::formatResponseTime(65000), "1m 5s");
+}
+
+TEST_F(AIChatComponentTest, AssistantResponseRecordsElapsedMs) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    auto ownedProvider = std::make_unique<DeferredPromptProvider>();
+    auto* provider = ownedProvider.get();
+    service.setProvider(std::move(ownedProvider));
+
+    juce::ApplicationProperties props;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Test";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(options);
+
+    synth::AIChatComponent chatComponent(service, props);
+    chatComponent.setSize(400, 600);
+
+    juce::TextEditor* inputField = nullptr;
+    for (auto* child : chatComponent.getChildren()) {
+        if (auto* editor = dynamic_cast<juce::TextEditor*>(child))
+            inputField = editor;
+    }
+    ASSERT_NE(inputField, nullptr);
+
+    inputField->setText("hello");
+    chatComponent.triggerSend();
+    ASSERT_TRUE(chatComponent.isWaiting());
+    ASSERT_TRUE(provider->hasPendingPrompt());
+
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+
+    synth::AIProvider::AIResponse response;
+    response.success = true;
+    response.content = "Hi there.";
+    provider->resolvePrompt(response);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+
+    EXPECT_FALSE(chatComponent.isWaiting());
+    const int elapsed = chatComponent.getLastAssistantResponseMs();
+    EXPECT_GE(elapsed, 0);
+    EXPECT_LT(elapsed, 60000);
+}
+
+TEST_F(AIChatComponentTest, CancelledResponseRecordsElapsedMs) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    auto ownedProvider = std::make_unique<DeferredPromptProvider>();
+    auto* provider = ownedProvider.get();
+    service.setProvider(std::move(ownedProvider));
+
+    juce::ApplicationProperties props;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Test";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(options);
+
+    synth::AIChatComponent chatComponent(service, props);
+    chatComponent.setSize(400, 600);
+
+    juce::TextEditor* inputField = nullptr;
+    for (auto* child : chatComponent.getChildren()) {
+        if (auto* editor = dynamic_cast<juce::TextEditor*>(child))
+            inputField = editor;
+    }
+    ASSERT_NE(inputField, nullptr);
+
+    inputField->setText("hello");
+    chatComponent.triggerSend();
+    ASSERT_TRUE(chatComponent.isWaiting());
+    ASSERT_TRUE(provider->hasPendingPrompt());
+
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    chatComponent.simulateCancelClick();
+
+    EXPECT_FALSE(chatComponent.isWaiting());
+    EXPECT_GE(chatComponent.getLastAssistantResponseMs(), 0);
+    juce::ignoreUnused(provider);
+}
+
+TEST_F(AIChatComponentTest, ThinkingStatusShowsLiveElapsedTime) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    auto ownedProvider = std::make_unique<DeferredPromptProvider>();
+    auto* provider = ownedProvider.get();
+    service.setProvider(std::move(ownedProvider));
+
+    juce::ApplicationProperties props;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Test";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(options);
+
+    synth::AIChatComponent chatComponent(service, props);
+    chatComponent.setSize(400, 600);
+
+    juce::TextEditor* inputField = nullptr;
+    for (auto* child : chatComponent.getChildren()) {
+        if (auto* editor = dynamic_cast<juce::TextEditor*>(child))
+            inputField = editor;
+    }
+    ASSERT_NE(inputField, nullptr);
+
+    inputField->setText("hello");
+    chatComponent.triggerSend();
+    ASSERT_TRUE(chatComponent.isWaiting());
+
+    const auto initial = chatComponent.getWaitingStatusText();
+    EXPECT_TRUE(initial.contains("thinking"));
+    EXPECT_TRUE(initial.contains("ms") || initial.contains("s"));
+
+    // Let the 500 ms waiting-status timer tick at least once.
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(700);
+
+    ASSERT_TRUE(chatComponent.isWaiting());
+    const auto updated = chatComponent.getWaitingStatusText();
+    EXPECT_TRUE(updated.contains("thinking"));
+    EXPECT_NE(updated, juce::String());
+
+    synth::AIProvider::AIResponse response;
+    response.success = true;
+    response.content = "done";
+    provider->resolvePrompt(response);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+
+    EXPECT_FALSE(chatComponent.isWaiting());
+    EXPECT_TRUE(chatComponent.getWaitingStatusText().isEmpty());
 }
 
 // ============================================================================

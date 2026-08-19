@@ -10,13 +10,13 @@ Two numbers are baked into every macOS build, and they mean different things:
 
 - **`CFBundleShortVersionString`** (`PROJECT_VERSION` in `CMakeLists.txt`, e.g. `0.13.2`) — the
   human-facing marketing version. Hand-bumped by editing `project(AgentSynth VERSION ...)`.
-- **`CFBundleVersion`** (`GRAVISYNTH_BUILD_NUMBER` cache var) — the value Sparkle actually compares
+- **`CFBundleVersion`** (`SYNTH_BUILD_NUMBER` cache var) — the value Sparkle actually compares
   to decide whether an update is available. This is **not** the same value on purpose:
   `build-artifacts.yml`'s release job (`mathieudutour/github-tag-action`) auto-tags every push to
   `main` with a semver bump, entirely independent of `CMakeLists.txt`. If `CFBundleVersion` only
   advanced when a human remembered to bump `PROJECT_VERSION`, Sparkle would either never detect a
   real update or always think one was available. Instead, CI passes
-  `-DGRAVISYNTH_BUILD_NUMBER=${{ github.run_number }}` at configure time — a value that's known
+  `-DSYNTH_BUILD_NUMBER=${{ github.run_number }}` at configure time — a value that's known
   before the build starts and increases every workflow run, regardless of what tag gets minted
   afterwards. Local/dev builds default to `0` and are never distributed, so this doesn't matter for
   them.
@@ -133,8 +133,8 @@ ls "build/AgentSynth_artefacts/AgentSynth.app/Contents/Frameworks/Sparkle.framew
 for Updates… — it should be greyed out, and no misconfiguration alert should appear.
 
 **3. Full local update flow**, once you've generated a key (see above):
-- Configure with your real public key: `cmake -S . -B build -DSYNTH_SPARKLE_PUBLIC_KEY=<your key> -DGRAVISYNTH_BUILD_NUMBER=1` and rebuild.
-- Build a second copy with a *higher* build number (e.g. `-DGRAVISYNTH_BUILD_NUMBER=2`), zip its
+- Configure with your real public key: `cmake -S . -B build -DSYNTH_SPARKLE_PUBLIC_KEY=<your key> -DSYNTH_BUILD_NUMBER=1` and rebuild.
+- Build a second copy with a *higher* build number (e.g. `-DSYNTH_BUILD_NUMBER=2`), zip its
   `.app`, and run Sparkle's `generate_appcast` against a directory containing just that zip:
   ```bash
   ./build/_deps/sparkle-src/bin/generate_appcast /path/to/dir-with-the-zip

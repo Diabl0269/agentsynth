@@ -334,7 +334,7 @@ void AppearanceSettingsTab::resized() {
     }
     cablesTitleLabel.setBounds(bounds.removeFromBottom(22));
 
-    // Alignment guide toggle (UI Phase 7 - Item 4) — stays directly under the title, as before.
+    // Alignment guide toggle (under the theme list title area).
     bounds.removeFromBottom(8);
     alignmentGuideToggle.setBounds(bounds.removeFromTop(24));
 

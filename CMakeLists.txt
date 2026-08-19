@@ -8,11 +8,26 @@ if(APPLE)
     enable_language(OBJCXX)
 endif()
 
-# Enable ccache if available
+# Enable ccache if available.
+#
+# The launcher is PER LANGUAGE, and CMake counts Objective-C++ as a language of its own. Wiring only
+# C/CXX left every .mm compile bypassing ccache entirely — 103 translation units per macOS build,
+# because JUCE ships each module as one ObjC++ unity file and every target compiles its own copy
+# (Core, AppUI, AgentSynth, the plugin, Tests and the two AI harnesses). Those units never change,
+# yet they were rebuilt cold on every CI run and dominated the critical path: ~12 min of a 12 min
+# 45 s macOS job, ending in a near-serial chain of 20–35 s juce_gui_basics / juce_audio_processors
+# compiles. It hid well, because ccache's own hit rate showed 54% — merely mediocre, not broken:
+# a compile that never reaches ccache is counted as neither a hit nor a miss. Guarded by
+# scripts/ci-cache-check.sh, which reads build.ninja and fails if any C/CXX/OBJC/OBJCXX compile
+# rule is missing its launcher.
 find_program(CCACHE_PROGRAM ccache)
 if(CCACHE_PROGRAM)
     set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
     set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    if(APPLE)
+        set(CMAKE_OBJC_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+        set(CMAKE_OBJCXX_COMPILER_LAUNCHER "${CCACHE_PROGRAM}")
+    endif()
 endif()
 
 # Set C++ standard
@@ -78,9 +93,9 @@ set(SYNTH_SPARKLE_PUBLIC_KEY "" CACHE STRING "Sparkle SUPublicEDKey (base64, pub
 # github-tag-action) without touching this file. A build number that only advances when a human
 # remembers to bump it would make Sparkle either never detect an update or always think one is
 # available. GITHUB_RUN_NUMBER is known before the build starts and increases every run regardless
-# of what tag the release job later mints, so CI passes it via -DGRAVISYNTH_BUILD_NUMBER. Local
+# of what tag the release job later mints, so CI passes it via -DSYNTH_BUILD_NUMBER. Local
 # builds default to "0" — never distributed, so Sparkle comparison doesn't matter for them.
-set(GRAVISYNTH_BUILD_NUMBER "0" CACHE STRING "CFBundleVersion — monotonic build number, CI sets this to the workflow run number")
+set(SYNTH_BUILD_NUMBER "0" CACHE STRING "CFBundleVersion — monotonic build number, CI sets this to the workflow run number")
 
 if(ENABLE_COVERAGE)
     if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
@@ -122,6 +137,9 @@ add_library(Core STATIC
     Source/Modules/MidiKeyboardModule.h
     Source/Modules/LFOModule.h
     Source/Modules/SampleHoldModule.h
+    Source/Modules/SchmittTrigger.h
+    Source/Modules/ThresholdMeterSource.h
+    Source/Modules/ComparatorModule.h
     Source/Modules/AttenuverterModule.h
     Source/Modules/EnvelopeFollowerModule.h
     Source/Modules/MacroControlModule.h
@@ -136,6 +154,7 @@ add_library(Core STATIC
     Source/Modules/FX/LimiterModule.h
     Source/Modules/FX/BitcrusherModule.h
     Source/Modules/FX/PitchShifterModule.h
+    Source/Modules/FX/RingModulatorModule.h
     Source/Modules/FX/ParametricEQModule.h
     Source/Modules/NoiseModule.h
     # AI
@@ -260,7 +279,7 @@ endif()
 juce_add_gui_app(AgentSynth
     PRODUCT_NAME "${SYNTH_PRODUCT_NAME}"
     VERSION "${PROJECT_VERSION}"
-    BUILD_VERSION "${GRAVISYNTH_BUILD_NUMBER}"
+    BUILD_VERSION "${SYNTH_BUILD_NUMBER}"
     COMPANY_NAME "${SYNTH_COMPANY_NAME}"
     BUNDLE_ID "${SYNTH_BUNDLE_ID}"
     BLUETOOTH_PERMISSION_ENABLED TRUE
@@ -335,6 +354,7 @@ juce_add_binary_data(Assets SOURCES
     assets/icons/waveform-triangle.svg
     # Minimap toggle (issue #159).
     assets/icons/toggle-minimap.svg
+    assets/icons/module-dual-io.svg
 )
 
 # The themed LookAndFeel lives in Core and pulls typefaces from BinaryData;
@@ -373,12 +393,15 @@ add_library(AppUI STATIC
     Source/UI/SampleWaveformComponent.h
     Source/UI/WavetableDisplayComponent.h
     Source/UI/TriggerMeterComponent.h
+    Source/UI/ThresholdControlComponent.h
     Source/UI/ModMatrixComponent.cpp
     Source/UI/ModMatrixComponent.h
     Source/UI/SettingsWindow.cpp
     Source/UI/SettingsWindow.h
     Source/UI/AppearanceSettingsTab.cpp
     Source/UI/AppearanceSettingsTab.h
+    Source/UI/PreferencesSettingsTab.cpp
+    Source/UI/PreferencesSettingsTab.h
     Source/UI/ShortcutsSettingsTab.cpp
     Source/ShortcutManager.h
     Source/Update/UpdateManager.h

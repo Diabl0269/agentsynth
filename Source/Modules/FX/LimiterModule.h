@@ -12,6 +12,7 @@ public:
         addParameter(releaseParam = new juce::AudioParameterFloat("release", "Release (ms)", 1.0f, 500.0f, 100.0f));
         addParameter(inputGainParam =
                          new juce::AudioParameterFloat("inputGain", "Input Gain (dB)", -20.0f, 20.0f, 0.0f));
+        addDualIOParameter();
         addMuteParameter();
     }
 
@@ -59,8 +60,12 @@ public:
         limiter.process(context);
     }
 
-    juce::String getInputPortLabel(int i) const override { return i == 0 ? "Left" : "Right"; }
-    juce::String getOutputPortLabel(int i) const override { return i == 0 ? "Left" : "Right"; }
+    juce::String getInputPortLabel(int i) const override { return stereoInputLabel(i, 0, nullptr); }
+    juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
+    int getVisibleInputPortCount() const override { return stereoVisibleInputCount(0); }
+    int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
+    LogicalPort mapInputChannel(int raw) const override { return mapStereoPairInput(raw, 0); }
+    LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
     std::vector<ModulationTarget> getModulationTargets() const override { return {}; }
     ModulationCategory getModulationCategory() const override { return ModulationCategory::FX; }
