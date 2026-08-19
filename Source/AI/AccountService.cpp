@@ -122,14 +122,28 @@ void AccountService::refreshEntitlement() {
     startJob(PendingJob::Kind::refreshEntitlement, token);
 }
 
-void AccountService::startJob(PendingJob::Kind kind, juce::String arg) {
+void AccountService::refreshPromptLearningOptIn() {
+    const juce::String token = getAccessToken();
+    if (token.isEmpty())
+        return; // signed out — nothing to refresh
+    startJob(PendingJob::Kind::refreshPromptLearning, token);
+}
+
+void AccountService::setPromptLearningOptIn(bool optedIn) {
+    const juce::String token = getAccessToken();
+    if (token.isEmpty())
+        return; // signed out — nothing to set
+    startJob(PendingJob::Kind::setPromptLearningOptIn, token, optedIn);
+}
+
+void AccountService::startJob(PendingJob::Kind kind, juce::String arg, bool boolArg) {
     bool mustStart = false;
     {
         const juce::ScopedLock sl(queueLock);
         if (isShuttingDown)
             return;
 
-        queuedJob = PendingJob{kind, std::move(arg)};
+        queuedJob = PendingJob{kind, std::move(arg), boolArg};
 
         const bool ownerVanished = (workerState == WorkerState::running && !isThreadRunning());
         mustStart = (workerState == WorkerState::idle) || ownerVanished;
@@ -207,6 +221,12 @@ void AccountService::run() {
                 break;
             case PendingJob::Kind::refreshEntitlement:
                 runRefreshEntitlementFlow(job.arg);
+                break;
+            case PendingJob::Kind::refreshPromptLearning:
+                runRefreshPromptLearningFlow(job.arg);
+                break;
+            case PendingJob::Kind::setPromptLearningOptIn:
+                runSetPromptLearningFlow(job.arg, job.boolArg);
                 break;
             case PendingJob::Kind::none:
                 break;
@@ -361,6 +381,48 @@ void AccountService::runRefreshEntitlementFlow(const juce::String& accessTokenFo
     s.monthlyRequestLimit = entitlement.monthlyRequestLimit;
     s.requestsUsed = entitlement.requestsUsed;
     s.entitlementKnown = true;
+    publishSnapshot(s);
+}
+
+void AccountService::runRefreshPromptLearningFlow(const juce::String& accessTokenForRefresh) {
+    if (threadShouldExit() || cancelRequested.load())
+        return;
+
+    const auto pref = authClient.fetchPromptLearningPreference(accessTokenForRefresh, cancelRequested);
+    if (!pref.ok) {
+        juce::Logger::writeToLog("AccountService: refreshPromptLearningOptIn failed (non-fatal): " +
+                                 pref.transportError);
+        return;
+    }
+
+    // Same merge-onto-current-snapshot / drop-if-signed-out-meanwhile guard as
+    // runRefreshEntitlementFlow() above — see its comment for the race this closes.
+    AccountSnapshot s = getSnapshot();
+    if (s.state != AccountState::SignedIn)
+        return;
+
+    s.promptLearningOptIn = pref.optedIn;
+    s.promptLearningOptInAt = pref.optedInAt;
+    publishSnapshot(s);
+}
+
+void AccountService::runSetPromptLearningFlow(const juce::String& accessTokenForRefresh, bool optedIn) {
+    if (threadShouldExit() || cancelRequested.load())
+        return;
+
+    const auto pref = authClient.setPromptLearningPreference(accessTokenForRefresh, optedIn, cancelRequested);
+    if (!pref.ok) {
+        juce::Logger::writeToLog("AccountService: setPromptLearningOptIn failed (non-fatal): " + pref.transportError);
+        return;
+    }
+
+    // Same merge/drop-if-signed-out-meanwhile guard as runRefreshPromptLearningFlow() above.
+    AccountSnapshot s = getSnapshot();
+    if (s.state != AccountState::SignedIn)
+        return;
+
+    s.promptLearningOptIn = pref.optedIn;
+    s.promptLearningOptInAt = pref.optedInAt;
     publishSnapshot(s);
 }
 

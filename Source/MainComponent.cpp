@@ -382,7 +382,8 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     settingsButton.onClick = [this]() {
         auto* settingsComp =
             new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent,
-                               shortcutManager, *themeManager, &graphEditor, /*showAudioTab=*/!audioEngine.isHosted());
+                               shortcutManager, *themeManager, &graphEditor, &accountService,
+                               /*showAudioTab=*/!audioEngine.isHosted());
         settingsComp->setSize(500, 450);
 
         juce::DialogWindow::LaunchOptions options;

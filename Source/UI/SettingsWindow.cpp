@@ -13,10 +13,11 @@
 class AISettingsTab : public juce::Component {
 public:
     AISettingsTab(juce::ApplicationProperties& props, synth::AIIntegrationService& aiServ,
-                  synth::AIChatComponent& aiChatComp)
+                  synth::AIChatComponent& aiChatComp, synth::AccountService* accountServiceIn)
         : appProperties(props)
         , aiService(aiServ)
         , aiChatComponent(aiChatComp)
+        , accountService(accountServiceIn)
         , providerRegistry(synth::AIProviderRegistry::createDefault()) {
         addAndMakeVisible(providerLabel);
         providerLabel.setText("AI Provider:", juce::dontSendNotification);
@@ -96,6 +97,52 @@ public:
                                                       retentionDaysForItemId(historyRetentionCombo.getSelectedId()));
             appProperties.saveIfNeeded();
         };
+
+        // P6-7: opt-in prompt collection for product learning. Human review only — never used to
+        // train/fine-tune models (see docs/AI_Engine.md, and the "we do not use your prompts to
+        // train AI models" promise in the privacy policy this deliberately doesn't touch).
+        // Disabled + "sign in required" tooltip when signed out, same gating precedent as
+        // AccountRow/PlanBadge reading AccountService's published state.
+        addAndMakeVisible(promptLearningToggle);
+        promptLearningToggle.setButtonText("Help improve AgentSynth \xe2\x80\x94 share my hosted-mode "
+                                           "prompts for product learning");
+        promptLearningToggle.onClick = [this] {
+            if (accountService != nullptr)
+                accountService->setPromptLearningOptIn(promptLearningToggle.getToggleState());
+        };
+
+        if (accountService != nullptr) {
+            // Chains onto whatever onStateChanged already holds (AIChatComponent installs it once
+            // at startup and owns the slot for the app's lifetime — see its setAccountService()) —
+            // AccountService::onStateChanged is a single std::function slot, not a multicast
+            // delegate, so overwriting it outright would silently stop AIChatComponent's
+            // accountRow/planBadge from refreshing for as long as this dialog stays open.
+            // Restored verbatim in the destructor: safe only because nothing else touches
+            // onStateChanged while a SettingsWindow is open (AIChatComponent's own installation
+            // happens exactly once, at MainComponent construction).
+            juce::Component::SafePointer<AISettingsTab> safeThis(this);
+            previousOnStateChanged = accountService->onStateChanged;
+            accountService->onStateChanged = [safeThis, previous = previousOnStateChanged] {
+                if (previous)
+                    previous();
+                if (auto* self = safeThis.getComponent())
+                    self->refreshPromptLearningFromAccountService();
+            };
+
+            // Reflect the last-known snapshot immediately (synchronous, matches
+            // AccountRow::setAccountService()'s contract), then kick a fresh fetch so the checkbox
+            // shows the server's actual current value rather than a possibly-stale cached one.
+            refreshPromptLearningFromAccountService();
+            if (accountService->getSnapshot().state == synth::AccountState::SignedIn)
+                accountService->refreshPromptLearningOptIn();
+        } else {
+            refreshPromptLearningFromAccountService();
+        }
+    }
+
+    ~AISettingsTab() override {
+        if (accountService != nullptr)
+            accountService->onStateChanged = previousOnStateChanged;
     }
 
     void paint(juce::Graphics& g) override { g.fillAll(findColour(juce::ResizableWindow::backgroundColourId)); }
@@ -116,6 +163,9 @@ public:
         auto historyRow = bounds.removeFromTop(25);
         historyRetentionLabel.setBounds(historyRow.removeFromLeft(100));
         historyRetentionCombo.setBounds(historyRow.removeFromLeft(150));
+
+        bounds.removeFromTop(30);
+        promptLearningToggle.setBounds(bounds.removeFromTop(40));
     }
 
     void updateSettings() {
@@ -135,6 +185,20 @@ public:
     }
 
 private:
+    // Reflects AccountService's current published snapshot onto promptLearningToggle: enabled +
+    // checked-per-server when signed in, disabled + unchecked + "sign in required" tooltip
+    // otherwise (a signed-out snapshot's promptLearningOptIn is always false anyway — see
+    // AccountSnapshot's doc comment — but the explicit unchecked-when-disabled below doesn't rely
+    // on that, since accountService itself may be null in tests).
+    void refreshPromptLearningFromAccountService() {
+        const bool signedIn =
+            accountService != nullptr && accountService->getSnapshot().state == synth::AccountState::SignedIn;
+        promptLearningToggle.setEnabled(signedIn);
+        promptLearningToggle.setTooltip(signedIn ? juce::String() : juce::String("Sign in required"));
+        promptLearningToggle.setToggleState(signedIn && accountService->getSnapshot().promptLearningOptIn,
+                                            juce::dontSendNotification);
+    }
+
     // ComboBox item ids for the retention control. Deliberately NOT the raw day counts (a
     // ComboBox item id of 0 is reserved by JUCE for "no selection"), so kRetentionForeverId maps
     // to LocalHistoryStore::kRetainForever (-1) via retentionDaysForItemId() below rather than
@@ -211,6 +275,12 @@ private:
     juce::ApplicationProperties& appProperties;
     synth::AIIntegrationService& aiService;
     synth::AIChatComponent& aiChatComponent;
+    // Nullable: nullptr in every context that doesn't wire an account (e.g. most existing tests),
+    // in which case promptLearningToggle just stays permanently disabled — see
+    // refreshPromptLearningFromAccountService().
+    synth::AccountService* accountService = nullptr;
+    // Captured/restored around accountService->onStateChanged — see the constructor/destructor.
+    std::function<void()> previousOnStateChanged;
     synth::AIProviderRegistry providerRegistry;
     // Non-owning pointers into providerRegistry's storage — valid for the AISettingsTab's
     // lifetime because providerRegistry is a fellow member and outlives this vector. See the
@@ -224,6 +294,7 @@ private:
     juce::TextEditor hostEditor;
     juce::Label historyRetentionLabel;
     juce::ComboBox historyRetentionCombo;
+    juce::ToggleButton promptLearningToggle;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AISettingsTab)
 };
@@ -234,7 +305,7 @@ private:
 SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::ApplicationProperties& appProperties,
                                synth::AIIntegrationService& aiService, synth::AIChatComponent& aiChatComponent,
                                ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager,
-                               GraphEditor* graphEditor, bool showAudioTab)
+                               GraphEditor* graphEditor, synth::AccountService* accountService, bool showAudioTab)
     : appProperties(appProperties)
     , themeManager(themeManager) {
     if (showAudioTab) {
@@ -246,7 +317,7 @@ SettingsWindow::SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::Ap
         tabs.addTab("Audio", juce::Colours::transparentBlack, audioSelector, true);
     }
 
-    auto* aiSettingsTab = new AISettingsTab(appProperties, aiService, aiChatComponent);
+    auto* aiSettingsTab = new AISettingsTab(appProperties, aiService, aiChatComponent, accountService);
     tabs.addTab("AI", juce::Colours::transparentBlack, aiSettingsTab, true);
 
     auto* shortcutsSettingsTab = new ShortcutsSettingsTab(shortcutManager);
