@@ -89,6 +89,11 @@ public:
     /** Stores the token; when non-empty, every request carries `Authorization: Bearer <token>`. */
     void setAuthToken(const juce::String& token) override;
 
+    /** Stores the id; when non-empty, every request carries `x-conversation-id: <id>`. See
+        AIProvider::setConversationId()'s doc comment — AIIntegrationService is what decides when
+        to call this, this class just sends whatever it's given (or nothing at all). */
+    void setConversationId(const juce::String& id) override;
+
     void setTestMode(bool testMode) { isTestMode = testMode; }
 
     // Test-only accessor so a test can confirm which host a provider ended up constructed with
@@ -99,6 +104,7 @@ private:
     juce::String remoteHost;
     juce::String currentModel; // cosmetic only: the service picks its own model server-side
     juce::String authToken;
+    juce::String conversationId;
     // A stable per-install identifier (Source/Auth/DeviceIdStore.h), sent as the X-Device-Id
     // header on every capability request whether or not authToken is set — used for an anonymous
     // free-trial tier when there's no bearer token, and as anti-abuse signal once there is one.
@@ -174,8 +180,10 @@ private:
 
     /** Single delivery channel for every successful result. `forceSynchronous` bypasses
         MessageManager::callAsync for shutdown paths, where the message loop cannot be relied on to
-        run the callback before this object is gone. */
-    void deliverResult(const Request& req, const juce::String& responseText, bool forceSynchronous);
+        run the callback before this object is gone. `conversationId` is the (possibly empty)
+        `x-conversation-id` response header, copied onto the delivered AIResponse verbatim. */
+    void deliverResult(const Request& req, const juce::String& responseText, bool forceSynchronous,
+                       const juce::String& conversationId = {});
 
     /** Single delivery channel for every error. Same `forceSynchronous` contract as
         deliverResult(). */

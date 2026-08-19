@@ -148,6 +148,47 @@ TEST(PlanBadgeTest, RendersFreePlanTextOnceEntitlementIsKnown) {
     badge.setAccountService(nullptr);
 }
 
+// ============================================================================
+// isProPlan() — free function next to AccountSnapshot (Source/AI/AccountService.h)
+// ============================================================================
+
+TEST(IsProPlanTest, TrueForExactLowercasePro) {
+    synth::AccountSnapshot snapshot;
+    snapshot.entitlementKnown = true;
+    snapshot.plan = "pro";
+    EXPECT_TRUE(synth::isProPlan(snapshot));
+}
+
+TEST(IsProPlanTest, TrueForProRegardlessOfCase) {
+    synth::AccountSnapshot snapshot;
+    snapshot.entitlementKnown = true;
+    snapshot.plan = "PrO";
+    EXPECT_TRUE(synth::isProPlan(snapshot));
+}
+
+TEST(IsProPlanTest, FalseForFree) {
+    synth::AccountSnapshot snapshot;
+    snapshot.entitlementKnown = true;
+    snapshot.plan = "free";
+    EXPECT_FALSE(synth::isProPlan(snapshot));
+}
+
+TEST(IsProPlanTest, FalseForEmptyPlanString) {
+    synth::AccountSnapshot snapshot;
+    snapshot.entitlementKnown = true;
+    snapshot.plan = "";
+    EXPECT_FALSE(synth::isProPlan(snapshot));
+}
+
+// entitlementKnown == false: same as PlanBadgeTest.ZeroHeightWhenSignedOut's premise — a
+// snapshot whose entitlement hasn't been fetched yet leaves `plan` at its default (empty), so
+// isProPlan() answers false without needing to consult entitlementKnown itself.
+TEST(IsProPlanTest, FalseWhenEntitlementNotYetKnown) {
+    synth::AccountSnapshot snapshot; // default: entitlementKnown = false, plan = ""
+    EXPECT_FALSE(snapshot.entitlementKnown);
+    EXPECT_FALSE(synth::isProPlan(snapshot));
+}
+
 TEST(PlanBadgeTest, RendersProPlanTextOnceEntitlementIsKnown) {
     auto performer = makeSignInPerformer(makeTokenSuccess("at1", "rt1"), makeMeSuccess("jane@example.com"),
                                          makeEntitlementSuccess("pro", 10000, 1203));

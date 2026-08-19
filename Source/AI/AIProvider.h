@@ -74,6 +74,12 @@ public:
         juce::String content;
         AIError error;
         juce::String requestId;
+
+        // Set from the `x-conversation-id` response header when a hosted provider's backend
+        // persisted this exchange (Pro-plan only — see RemoteProvider::processRequest and
+        // AIIntegrationService::sendMessage). Empty when the backend didn't persist (free plan,
+        // or a provider with no notion of server-side history at all).
+        juce::String conversationId;
     };
 
     using CompletionCallback = std::function<void(const AIResponse& response)>;
@@ -122,6 +128,14 @@ public:
      *        default, so providers with no notion of auth (e.g. local Ollama) are unaffected.
      */
     virtual void setAuthToken(const juce::String&) {}
+
+    /**
+     * @brief Sets the conversation id to send with subsequent requests, so a backend that
+     *        persists conversation history (Pro-plan only) can append to the same thread instead
+     *        of starting a new one each call. No-op by default, so providers with no notion of
+     *        server-side conversation persistence (e.g. local Ollama) are unaffected.
+     */
+    virtual void setConversationId(const juce::String&) {}
 
     /**
      * @brief True when this provider sends the prompt and current patch to a remote/hosted

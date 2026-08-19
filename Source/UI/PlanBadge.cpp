@@ -50,7 +50,7 @@ void PlanBadge::updateFromSnapshot(const AccountSnapshot& snapshot) {
     }
 
     auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-    const bool isPro = snapshot.plan.equalsIgnoreCase("pro");
+    const bool isPro = isProPlan(snapshot);
     const juce::Colour textColour = lf != nullptr
                                         ? (isPro ? lf->getTheme().colors.accent : lf->getTheme().colors.textMuted)
                                         : (isPro ? juce::Colours::lightblue : juce::Colours::grey);
