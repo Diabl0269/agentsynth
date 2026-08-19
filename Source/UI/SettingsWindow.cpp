@@ -104,8 +104,8 @@ public:
         // Disabled + "sign in required" tooltip when signed out, same gating precedent as
         // AccountRow/PlanBadge reading AccountService's published state.
         addAndMakeVisible(promptLearningToggle);
-        promptLearningToggle.setButtonText("Help improve AgentSynth \xe2\x80\x94 share my hosted-mode "
-                                           "prompts for product learning");
+        promptLearningToggle.setButtonText(juce::String::fromUTF8(
+            "Help improve AgentSynth \xe2\x80\x94 share my hosted-mode prompts for product learning"));
         promptLearningToggle.onClick = [this] {
             if (accountService != nullptr)
                 accountService->setPromptLearningOptIn(promptLearningToggle.getToggleState());
