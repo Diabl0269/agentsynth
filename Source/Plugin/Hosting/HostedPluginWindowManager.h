@@ -53,8 +53,11 @@ public:
         // A DocumentWindow's default position is the screen origin, i.e. top-left UNDER the menu
         // bar and behind the app's main window — "Open Editor did nothing" to the user. Centre it
         // at its content size and bring it forward, in that order, before/after the one
-        // setVisible(true) that creates the native peer.
-        window->centreWithSize(juce::jmax(1, window->getWidth()), juce::jmax(1, window->getHeight()));
+        // setVisible(true) that creates the native peer. Guarded on a display existing:
+        // centreWithSize dereferences getPrimaryDisplay(), which is NULL on a headless test
+        // runner (Linux CI has no display server; this crashed there and nowhere else).
+        if (juce::Desktop::getInstance().getDisplays().getPrimaryDisplay() != nullptr)
+            window->centreWithSize(juce::jmax(1, window->getWidth()), juce::jmax(1, window->getHeight()));
         window->setVisible(true); // the one call in this class that creates a native peer
         window->toFront(true);
         windows_.emplace(nodeId, std::move(window));
