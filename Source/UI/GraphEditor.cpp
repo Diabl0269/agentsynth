@@ -3458,20 +3458,40 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
 }
 
 void GraphEditor::applyDualIOToExistingModules(bool dual) {
-    for (auto* moduleComp : content.getModules()) {
-        if (moduleComp == nullptr)
-            continue;
-        auto* mb = dynamic_cast<ModuleBase*>(moduleComp->getModule());
+    auto& graph = audioEngine.getGraph();
+
+    // Walks the GRAPH, not the cards. At startup the preference is restored before any
+    // ModuleComponent exists — AudioEngine loads the default preset in its own constructor — so a
+    // card-driven pass would silently do nothing and the patch would open with whatever layout each
+    // module's constructor happened to default to.
+    std::vector<juce::AudioProcessorGraph::NodeID> changed;
+    for (auto* node : graph.getNodes()) {
+        auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor());
         if (mb == nullptr || !mb->hasDualIOParameter() || mb->isDualIO() == dual)
             continue;
-
-        if (auto* param = findParameterByID(moduleComp->getModule(), "dualIO"))
+        if (auto* param = findParameterByID(node->getProcessor(), "dualIO"))
             param->setValueNotifyingHost(dual ? 1.0f : 0.0f);
+        changed.push_back(node->nodeID);
+    }
 
-        // Driven straight rather than left to the parameter listener: that path is asynchronous, so
-        // changing every module at once would let the canvas settle a frame late, and each module's
-        // hidden-leg cable cleanup would race the next one's layout change.
-        moduleComp->applyDualIOLayoutChange();
+    if (changed.empty())
+        return;
+
+    for (auto nodeId : changed) {
+        // Settle through the card when there is one: it also completes L/R pairs on expand. Driven
+        // straight rather than left to the parameter listener, which is asynchronous — re-laying
+        // every module at once would settle a frame late and each module's cable cleanup would race
+        // the next one's layout change. With no card yet (startup) the graph-side cleanup is all
+        // that is needed; the first updateComponents() then builds the cards at the right size.
+        ModuleComponent* card = nullptr;
+        for (auto* mc : content.getModules())
+            if (mc != nullptr && mc->getNodeId() == nodeId)
+                card = mc;
+
+        if (card != nullptr)
+            card->applyDualIOLayoutChange();
+        else
+            dropHiddenRightLegConnections(nodeId);
     }
 }
 
@@ -3560,26 +3580,40 @@ void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
         }
     }
 
+    dropHiddenRightLegConnections(nodeId);
+}
+
+void GraphEditor::dropHiddenRightLegConnections(juce::AudioProcessorGraph::NodeID nodeId) {
+    auto& graph = audioEngine.getGraph();
+    auto* node = graph.getNodeForId(nodeId);
+    if (node == nullptr)
+        return;
+
+    auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor());
+    if (mb == nullptr)
+        return;
+
     // Collapsing a SPLIT-BLOCK module hides its right leg entirely — unlike an FX pair, where the
     // collapsed jack still owns both raw legs. An invisible jack cannot be unplugged, so anything
-    // left wired to that block has to be dropped here or it becomes a cable the user can see the
-    // effect of but never reach. (Only for split-block layouts: dropping ch1 on an FX module would
+    // left wired to that block has to be dropped here or it becomes a cable whose effect the user
+    // can hear but never reach. (Only for split-block layouts: dropping ch1 on an FX module would
     // silently break the perfectly valid collapsed stereo pair.)
-    if (!mb->isDualIO() && mb->hasSplitBlockStereo()) {
-        const int hiddenBase = mb->rightAudioLegChannel();
-        const int inputCount = mb->getTotalNumInputChannels();
-        const int outputCount = mb->getTotalNumOutputChannels();
+    if (mb->isDualIO() || !mb->hasSplitBlockStereo())
+        return;
 
-        for (const auto& c : graph.getConnections()) {
-            if (c.source.isMIDI() || c.destination.isMIDI())
-                continue;
-            const bool fromHiddenOutput =
-                c.source.nodeID == nodeId && c.source.channelIndex >= hiddenBase && c.source.channelIndex < outputCount;
-            const bool intoHiddenInput = c.destination.nodeID == nodeId && c.destination.channelIndex >= hiddenBase &&
-                                         c.destination.channelIndex < inputCount;
-            if (fromHiddenOutput || intoHiddenInput)
-                graph.removeConnection(c);
-        }
+    const int hiddenBase = mb->rightAudioLegChannel();
+    const int inputCount = mb->getTotalNumInputChannels();
+    const int outputCount = mb->getTotalNumOutputChannels();
+
+    for (const auto& c : graph.getConnections()) {
+        if (c.source.isMIDI() || c.destination.isMIDI())
+            continue;
+        const bool fromHiddenOutput =
+            c.source.nodeID == nodeId && c.source.channelIndex >= hiddenBase && c.source.channelIndex < outputCount;
+        const bool intoHiddenInput = c.destination.nodeID == nodeId && c.destination.channelIndex >= hiddenBase &&
+                                     c.destination.channelIndex < inputCount;
+        if (fromHiddenOutput || intoHiddenInput)
+            graph.removeConnection(c);
     }
 }
 

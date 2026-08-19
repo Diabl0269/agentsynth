@@ -267,6 +267,11 @@ public:
      *  change of the preference calls this. Card heights do not move — the gutter reserves room for
      *  the dual layout in both states. */
     void applyDualIOToExistingModules(bool dual);
+
+    /** Removes any cable still attached to a collapsed split-block module's hidden right leg.
+     *  Graph-level, so it works before the cards exist. No-op for FX pairs, whose collapsed jack
+     *  legitimately still owns both raw legs. */
+    void dropHiddenRightLegConnections(juce::AudioProcessorGraph::NodeID nodeId);
     bool getDefaultDualIOForNewModules() const noexcept { return defaultDualIOForNewModules; }
 
     /** True when the visible jack already has at least one graph edge or mod routing. */

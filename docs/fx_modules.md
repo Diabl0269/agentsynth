@@ -59,10 +59,18 @@ canvas *and* to anything created afterwards, overriding each module's own defaul
 modules only made it look broken — the obvious way to check a setting is to flip it and watch the
 patch in front of you, which never changed.
 
-Only a deliberate change retro-applies. `PreferencesSettingsTab::setGraphEditor` (called every time
-the Settings window opens) and the startup restore in `MainComponent` push the value **without**
-re-laying the patch — otherwise opening Settings would collapse jacks the user had split by hand,
-and every launch would collapse the factory preset's voice modules.
+It is also applied once at startup, to the patch the app opens with — `MainComponent::
+applyStoredDualIOPreferenceToPatch()`. That has to run **after** `AudioEngine::initialise()`, which
+is what builds the default preset: the preset loader constructs its modules knowing nothing about
+preferences, so they come up on their constructor defaults, and the voice modules default to dual.
+Restoring the preference without this step left a user who had chosen single jacks with a split
+Oscillator and Filter on every launch.
+
+Two paths deliberately do NOT re-lay the patch: `PreferencesSettingsTab::setGraphEditor` (called
+every time the Settings window opens — otherwise it would collapse jacks the user had just split by
+hand), and the plugin, whose graph holds a host-restored session where each module carries its own
+saved `dualIO` value. A patch the user saved carries that value too, so reloading their own work
+keeps its layout; the preference governs the factory patch.
 
 Known rough edge: collapsing frees a jack row, so a card gets ~20px shorter (and taller again when
 split). Making the toggle height-neutral means reserving the dual-layout gutter in both states,
