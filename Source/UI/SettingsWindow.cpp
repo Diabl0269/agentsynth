@@ -1,5 +1,6 @@
 #include "SettingsWindow.h"
 #include "../AI/AIProviderRegistry.h"
+#include "../AI/LocalHistoryStore.h"
 #include "../Branding.h"
 #include "../ShortcutManager.h"
 #include "AppearanceSettingsTab.h"
@@ -70,6 +71,31 @@ public:
         hostEditor.onFocusLost = [this] { updateSettings(); };
 
         updateHostFieldForSelectedProvider();
+
+        // P6-8: local chat-history retention. This is deliberately the only *local* retention
+        // control — cloud retention stays the server's single global default (see docs/AI_Engine.md).
+        // Added AFTER providerCombo/hostEditor above so existing tests that grab "the first
+        // ComboBox"/"the first TextEditor" in this tab keep resolving to the provider controls.
+        addAndMakeVisible(historyRetentionLabel);
+        historyRetentionLabel.setText("Local History:", juce::dontSendNotification);
+
+        addAndMakeVisible(historyRetentionCombo);
+        historyRetentionCombo.setTooltip("How long AI chat history stays on this device. Independent of "
+                                         "cloud sync, which subscribers get automatically.");
+        historyRetentionCombo.addItem("30 days", kRetention30Id);
+        historyRetentionCombo.addItem("90 days", kRetention90Id);
+        historyRetentionCombo.addItem("180 days", kRetention180Id);
+        historyRetentionCombo.addItem("365 days", kRetention365Id);
+        historyRetentionCombo.addItem("Keep forever", kRetentionForeverId);
+
+        const int savedRetentionDays = appProperties.getUserSettings()->getIntValue(
+            "historyRetentionDays", synth::LocalHistoryStore::kDefaultRetentionDays);
+        historyRetentionCombo.setSelectedId(itemIdForRetentionDays(savedRetentionDays), juce::dontSendNotification);
+        historyRetentionCombo.onChange = [this] {
+            appProperties.getUserSettings()->setValue("historyRetentionDays",
+                                                      retentionDaysForItemId(historyRetentionCombo.getSelectedId()));
+            appProperties.saveIfNeeded();
+        };
     }
 
     void paint(juce::Graphics& g) override { g.fillAll(findColour(juce::ResizableWindow::backgroundColourId)); }
@@ -85,6 +111,11 @@ public:
         auto hostRow = bounds.removeFromTop(25);
         hostLabel.setBounds(hostRow.removeFromLeft(100));
         hostEditor.setBounds(hostRow);
+
+        bounds.removeFromTop(30);
+        auto historyRow = bounds.removeFromTop(25);
+        historyRetentionLabel.setBounds(historyRow.removeFromLeft(100));
+        historyRetentionCombo.setBounds(historyRow.removeFromLeft(150));
     }
 
     void updateSettings() {
@@ -104,6 +135,48 @@ public:
     }
 
 private:
+    // ComboBox item ids for the retention control. Deliberately NOT the raw day counts (a
+    // ComboBox item id of 0 is reserved by JUCE for "no selection"), so kRetentionForeverId maps
+    // to LocalHistoryStore::kRetainForever (-1) via retentionDaysForItemId() below rather than
+    // being stored directly.
+    static constexpr int kRetention30Id = 1;
+    static constexpr int kRetention90Id = 2;
+    static constexpr int kRetention180Id = 3;
+    static constexpr int kRetention365Id = 4;
+    static constexpr int kRetentionForeverId = 5;
+
+    static int retentionDaysForItemId(int itemId) {
+        switch (itemId) {
+        case kRetention30Id:
+            return 30;
+        case kRetention90Id:
+            return 90;
+        case kRetention365Id:
+            return 365;
+        case kRetentionForeverId:
+            return synth::LocalHistoryStore::kRetainForever;
+        case kRetention180Id:
+        default:
+            return 180;
+        }
+    }
+
+    static int itemIdForRetentionDays(int days) {
+        switch (days) {
+        case 30:
+            return kRetention30Id;
+        case 90:
+            return kRetention90Id;
+        case 365:
+            return kRetention365Id;
+        case synth::LocalHistoryStore::kRetainForever:
+            return kRetentionForeverId;
+        case 180:
+        default:
+            return kRetention180Id; // out-of-range persisted value falls back to the 180-day default
+        }
+    }
+
     const synth::ProviderDescriptor* selectedDescriptor() const {
         int selectedIndex = providerCombo.getSelectedItemIndex();
         if (selectedIndex >= 0 && (size_t)selectedIndex < visibleProviders.size())
@@ -149,6 +222,8 @@ private:
     juce::ComboBox providerCombo;
     juce::Label hostLabel;
     juce::TextEditor hostEditor;
+    juce::Label historyRetentionLabel;
+    juce::ComboBox historyRetentionCombo;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AISettingsTab)
 };
