@@ -192,9 +192,20 @@ fi
 # arrives — a new language, a new target kind, a dropped -D flag, a CMake upgrade. RC and the
 # C++20 module-scan rules are deliberately out of scope (ccache does not handle them); links are
 # not compiles.
+#
+# Read the rule definitions from BOTH files: CMake does not put them in build.ninja, it emits
+# CMakeFiles/rules.ninja and `include`s it. Auditing build.ninja alone matched nothing and only the
+# no-rules-matched warning below caught it (run 32221371730). Keep both paths — the Makefile-era
+# layout may come back, and a file that isn't there is skipped.
+launcher_sources=""
+[ -f "$BUILD_NINJA" ] && launcher_sources="$BUILD_NINJA"
+rules_ninja="$(dirname "$BUILD_NINJA")/CMakeFiles/rules.ninja"
+[ -f "$rules_ninja" ] && launcher_sources="$launcher_sources $rules_ninja"
+
 launcher_report=""
-if [ -f "$BUILD_NINJA" ]; then
-    launcher_report="$(awk '
+if [ -n "$launcher_sources" ]; then
+    # shellcheck disable=SC2086  # deliberate word splitting: one or two paths, both ours
+    launcher_report="$(cat $launcher_sources | awk '
         /^rule (C|CXX|OBJC|OBJCXX)_COMPILER__/ {
             split($2, parts, "_COMPILER__"); lang = parts[1]; rule = $2; next
         }
@@ -206,7 +217,7 @@ if [ -f "$BUILD_NINJA" ]; then
         }
         END {
             for (l in seen) printf "%s %d %d %s\n", l, (l in bad ? bad[l] : 0), seen[l], example[l]
-        }' "$BUILD_NINJA" | sort)"
+        }' | sort)"
 fi
 
 if [ -n "$launcher_report" ]; then
@@ -225,18 +236,19 @@ cover OBJC/OBJCXX)."
     done <<EOF
 $launcher_report
 EOF
-elif [ -f "$BUILD_NINJA" ]; then
-    # The file is there but no compile rule matched, so the audit proved nothing. Say so loudly
+elif [ -n "$launcher_sources" ]; then
+    # The files are there but no compile rule matched, so the audit proved nothing. Say so loudly
     # rather than printing a reassuring "skipped": a parser that silently matches nothing is the
-    # same silent-success failure mode this whole script exists to catch. Most likely cause is a
-    # change in how CMake names its compile rules (this expects `rule <LANG>_COMPILER__<target>`).
+    # same silent-success failure mode this whole script exists to catch. This is not theoretical —
+    # it is how the first version of this audit failed (it read only build.ninja, while CMake emits
+    # its rules into CMakeFiles/rules.ninja), and this warning is what surfaced it.
     annotate warning "Launcher audit recognised no C/CXX/OBJC/OBJCXX compile rules in \
-${BUILD_NINJA}. The audit is not checking anything — update its rule-name pattern in \
+${launcher_sources}. The audit is not checking anything — update its rule-name pattern in \
 scripts/ci-cache-check.sh."
     warnings=$((warnings + 1))
-    printf 'launcher audit    : NO RULES MATCHED in %s\n' "$BUILD_NINJA"
+    printf 'launcher audit    : NO RULES MATCHED in %s\n' "$launcher_sources"
 else
-    printf 'launcher audit    : skipped (%s not found)\n' "$BUILD_NINJA"
+    printf 'launcher audit    : skipped (no ninja files found at %s)\n' "$BUILD_NINJA"
 fi
 
 if [ "$failures" -gt 0 ]; then

@@ -265,6 +265,51 @@ run "launcher audit: link and RC rules are out of scope" 0 "-" \
     CCACHE_STATS_FILE="$WORK/stats-modern.txt" \
     BUILD_NINJA="$WORK/ninja-good.ninja"
 
+# The layout CMake actually generates: build.ninja holds the build statements and `include`s
+# CMakeFiles/rules.ninja, which is where every rule definition lives. The first version of this
+# audit read build.ninja alone, matched nothing, and was caught in CI by the warning below rather
+# than by a test — so the real layout is now a fixture.
+mkdir -p "$WORK/realdir/CMakeFiles"
+cat >"$WORK/realdir/build.ninja" <<'EOF'
+include CMakeFiles/rules.ninja
+build CMakeFiles/Core.dir/juce_core.mm.o: OBJCXX_COMPILER__Core_unscanned_Release ../juce_core.mm
+EOF
+cat >"$WORK/realdir/CMakeFiles/rules.ninja" <<'EOF'
+rule OBJCXX_COMPILER__Core_unscanned_Release
+  depfile = $DEP_FILE
+  command = /opt/homebrew/bin/ccache /usr/bin/c++ -x objective-c++ $DEFINES -o $out -c $in
+  description = Building OBJCXX object $out
+rule CXX_COMPILER__Core_unscanned_Release
+  command = /opt/homebrew/bin/ccache /usr/bin/c++ $DEFINES -o $out -c $in
+EOF
+
+run "launcher audit: reads rules from CMakeFiles/rules.ninja, as CMake emits them" 0 \
+    "OBJCXX compile rules  : 1/1 via ccache" \
+    CACHE_MATCHED_KEY=macOS-ccache-main-abc \
+    DEPS_MATCHED_KEY=macOS-deps3-def \
+    CACHE_WARM_EXPECTED=true \
+    CCACHE_STATS_FILE="$WORK/stats-modern.txt" \
+    BUILD_NINJA="$WORK/realdir/build.ninja"
+
+# Same layout, launcher missing on OBJCXX only — the actual Aug 2026 bug, seen through the real
+# file layout rather than a flattened fixture.
+mkdir -p "$WORK/realdir-bad/CMakeFiles"
+cp "$WORK/realdir/build.ninja" "$WORK/realdir-bad/build.ninja"
+cat >"$WORK/realdir-bad/CMakeFiles/rules.ninja" <<'EOF'
+rule OBJCXX_COMPILER__Core_unscanned_Release
+  command = /usr/bin/c++ -x objective-c++ $DEFINES -o $out -c $in
+rule CXX_COMPILER__Core_unscanned_Release
+  command = /opt/homebrew/bin/ccache /usr/bin/c++ $DEFINES -o $out -c $in
+EOF
+
+run "launcher audit: real layout, OBJCXX unwired, fails" 1 \
+    "::error::1 of 1 OBJCXX compile rules do not go through ccache" \
+    CACHE_MATCHED_KEY=macOS-ccache-main-abc \
+    DEPS_MATCHED_KEY=macOS-deps3-def \
+    CACHE_WARM_EXPECTED=true \
+    CCACHE_STATS_FILE="$WORK/stats-modern.txt" \
+    BUILD_NINJA="$WORK/realdir-bad/build.ninja"
+
 run "launcher audit: absent build.ninja is skipped, not a failure" 0 \
     "launcher audit    : skipped" \
     CACHE_MATCHED_KEY=macOS-ccache-main-abc \
