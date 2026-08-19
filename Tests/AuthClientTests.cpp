@@ -434,6 +434,130 @@ TEST(AuthClientTest, FetchEntitlementTransportFailure) {
 }
 
 // ============================================================================
+// fetchPromptLearningPreference / setPromptLearningPreference (P6-7)
+// ============================================================================
+
+TEST(AuthClientTest, FetchPromptLearningPreferenceParsesOptedInTrue) {
+    juce::String capturedMethod;
+    juce::StringPairArray capturedHeaders;
+
+    auto performer = [&](const juce::String& method, const juce::String& url, const juce::StringPairArray& headers,
+                         const juce::String&, int, const std::atomic<bool>&) -> synth::AuthClient::HttpResult {
+        capturedMethod = method;
+        capturedHeaders = headers;
+        EXPECT_EQ(url, kHost + "/v1/prompt-learning");
+        return makeStatus(200, R"({"opted_in":true,"opted_in_at":"2026-08-19T00:00:00.000Z"})");
+    };
+
+    synth::AuthClient client{kHost, kClientId, performer};
+    const auto result = client.fetchPromptLearningPreference("access-token-123", kNeverCancelled);
+
+    ASSERT_TRUE(result.ok);
+    EXPECT_TRUE(result.optedIn);
+    EXPECT_EQ(result.optedInAt, juce::String("2026-08-19T00:00:00.000Z"));
+    EXPECT_EQ(capturedMethod, juce::String("GET"));
+    EXPECT_EQ(capturedHeaders.getValue("Authorization", ""), juce::String("Bearer access-token-123"));
+}
+
+// Default/never-opted-in shape: opted_in false, opted_in_at null — this is the load-bearing
+// "off by default" response a brand-new account gets.
+TEST(AuthClientTest, FetchPromptLearningPreferenceDefaultIsOptedOutWithNullTimestamp) {
+    auto performer = [](const juce::String&, const juce::String&, const juce::StringPairArray&, const juce::String&,
+                        int, const std::atomic<bool>&) -> synth::AuthClient::HttpResult {
+        return makeStatus(200, R"({"opted_in":false,"opted_in_at":null})");
+    };
+
+    synth::AuthClient client{kHost, kClientId, performer};
+    const auto result = client.fetchPromptLearningPreference("access-token-123", kNeverCancelled);
+
+    ASSERT_TRUE(result.ok);
+    EXPECT_FALSE(result.optedIn);
+    EXPECT_TRUE(result.optedInAt.isEmpty());
+}
+
+TEST(AuthClientTest, FetchPromptLearningPreferenceUnauthorized) {
+    auto performer = [](const juce::String&, const juce::String&, const juce::StringPairArray&, const juce::String&,
+                        int, const std::atomic<bool>&) -> synth::AuthClient::HttpResult {
+        return makeStatus(401, R"({"error":"invalid_token"})");
+    };
+
+    synth::AuthClient client{kHost, kClientId, performer};
+    const auto result = client.fetchPromptLearningPreference("bad-token", kNeverCancelled);
+
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(result.transportError.isNotEmpty());
+}
+
+TEST(AuthClientTest, FetchPromptLearningPreferenceTransportFailure) {
+    auto performer = [](const juce::String&, const juce::String&, const juce::StringPairArray&, const juce::String&,
+                        int,
+                        const std::atomic<bool>&) -> synth::AuthClient::HttpResult { return makeTransportFailure(); };
+
+    synth::AuthClient client{kHost, kClientId, performer};
+    const auto result = client.fetchPromptLearningPreference("access-token-123", kNeverCancelled);
+
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(result.transportError.isNotEmpty());
+}
+
+TEST(AuthClientTest, SetPromptLearningPreferenceSendsPutWithJsonBodyAndParsesResponse) {
+    juce::String capturedMethod;
+    juce::String capturedBody;
+    juce::StringPairArray capturedHeaders;
+
+    auto performer = [&](const juce::String& method, const juce::String& url, const juce::StringPairArray& headers,
+                         const juce::String& body, int, const std::atomic<bool>&) -> synth::AuthClient::HttpResult {
+        capturedMethod = method;
+        capturedBody = body;
+        capturedHeaders = headers;
+        EXPECT_EQ(url, kHost + "/v1/prompt-learning");
+        return makeStatus(200, R"({"opted_in":true,"opted_in_at":"2026-08-19T00:00:00.000Z"})");
+    };
+
+    synth::AuthClient client{kHost, kClientId, performer};
+    const auto result = client.setPromptLearningPreference("access-token-123", true, kNeverCancelled);
+
+    ASSERT_TRUE(result.ok);
+    EXPECT_TRUE(result.optedIn);
+    EXPECT_EQ(result.optedInAt, juce::String("2026-08-19T00:00:00.000Z"));
+    EXPECT_EQ(capturedMethod, juce::String("PUT"));
+    EXPECT_EQ(capturedHeaders.getValue("Authorization", ""), juce::String("Bearer access-token-123"));
+
+    const auto parsedBody = juce::JSON::parse(capturedBody);
+    auto* bodyObj = parsedBody.getDynamicObject();
+    ASSERT_NE(bodyObj, nullptr);
+    EXPECT_TRUE(static_cast<bool>(bodyObj->getProperty("opted_in")));
+}
+
+// Revoking (true -> false) purges server-side samples, but that's entirely server-side; the
+// client only needs to see the flipped opted_in/opted_in_at reflected back correctly.
+TEST(AuthClientTest, SetPromptLearningPreferenceFalseParsesRevokedResponse) {
+    auto performer = [](const juce::String&, const juce::String&, const juce::StringPairArray&, const juce::String&,
+                        int, const std::atomic<bool>&) -> synth::AuthClient::HttpResult {
+        return makeStatus(200, R"({"opted_in":false,"opted_in_at":null})");
+    };
+
+    synth::AuthClient client{kHost, kClientId, performer};
+    const auto result = client.setPromptLearningPreference("access-token-123", false, kNeverCancelled);
+
+    ASSERT_TRUE(result.ok);
+    EXPECT_FALSE(result.optedIn);
+    EXPECT_TRUE(result.optedInAt.isEmpty());
+}
+
+TEST(AuthClientTest, SetPromptLearningPreferenceTransportFailure) {
+    auto performer = [](const juce::String&, const juce::String&, const juce::StringPairArray&, const juce::String&,
+                        int,
+                        const std::atomic<bool>&) -> synth::AuthClient::HttpResult { return makeTransportFailure(); };
+
+    synth::AuthClient client{kHost, kClientId, performer};
+    const auto result = client.setPromptLearningPreference("access-token-123", true, kNeverCancelled);
+
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(result.transportError.isNotEmpty());
+}
+
+// ============================================================================
 // listConversations / getConversation / deleteConversation / deleteAllConversations (P6-8)
 // ============================================================================
 

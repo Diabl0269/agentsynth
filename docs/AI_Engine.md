@@ -773,6 +773,63 @@ and out-of-range fallback). `Tests/BrandingTests.cpp` (`resolveApiBaseUrl()`'s D
 cloud-history traffic at a locally-run `synth-platform` server — see `docs/testing.md` "Testing
 Cloud-Gated Features Locally").
 
+### Opt-In Prompt Collection for Product Learning (P6-7, client side)
+
+A single settings checkbox — "Help improve AgentSynth — share my hosted-mode prompts for product
+learning" (`Source/UI/SettingsWindow.cpp`'s `AISettingsTab`, next to the provider picker's hosted-
+mode disclosure) — lets a signed-in user opt in to the team reviewing their hosted-mode prompt +
+resulting patch for **human review** (improving prompts/UX/features), off by default. This is
+explicitly **not** used to train or fine-tune AI models — the privacy policy's existing "we do not
+use your prompts or patches to train AI models" promise stays intact and untouched by this feature.
+Toggling off purges any already-collected samples for that user server-side immediately; the client
+has nothing further to do on revoke.
+
+The client half is a thin state-sync layer, mirroring the entitlement fetch almost exactly:
+`AccountSnapshot::promptLearningOptIn`/`promptLearningOptInAt` are populated the same way
+`plan`/`monthlyRequestLimit` are — `AccountService::refreshPromptLearningOptIn()` (fire-and-forget,
+GET `/v1/prompt-learning`) and `setPromptLearningOptIn(bool)` (fire-and-forget, PUT
+`/v1/prompt-learning` with `{"opted_in": ...}`) both go through `AuthClient`'s existing
+Bearer-token layer, both no-op when signed out, and both merge their result onto the currently
+published snapshot rather than replacing it (dropping the result if a sign-out raced the network
+call, same guard as `refreshEntitlement()`'s). `AccountService::PendingJob` gained two `Kind`
+values for this and a `bool boolArg` field (used only by `setPromptLearningOptIn`, to carry the new
+value alongside the access token already occupying `arg`) — the minimal extension rather than a
+second `Kind` pair or a second queue slot.
+
+`AISettingsTab` reflects the checkbox's enabled/checked state from `AccountService`'s published
+snapshot — disabled with a "Sign in required" tooltip when signed out (same gating precedent as
+`AccountRow`/`PlanBadge` reading `AccountService::getSnapshot().state`), and kept live while the
+Settings dialog is open by chaining onto `AccountService::onStateChanged`. That callback is a
+**single `std::function` slot**, not a multicast delegate — `AIChatComponent` installs it once, for
+the app's lifetime, in its `setAccountService()` — so `AISettingsTab` captures whatever was already
+installed, wraps it with its own refresh, and restores the original callback verbatim in its own
+destructor rather than overwriting the slot outright (which would silently stop
+`AIChatComponent`'s `accountRow`/`planBadge` from refreshing for as long as the Settings dialog
+stayed open). This is safe only because nothing else touches `onStateChanged` while a
+`SettingsWindow` is open in practice; a future second long-lived subscriber to this slot should
+make it an actual multicast rather than adding a third link to this chain.
+
+**Distinct from two other things that also touch "prompts," easy to conflate:**
+- **P4-5's failure-debug retention** is not an app-owned table at all — it's GCP Cloud Logging's
+  unconditional 30-day bucket retention on the backend's error logs, which only ever contain
+  `{err, capability, code}`, never a prompt body. It applies to every request regardless of this
+  opt-in and has no client-side surface at all.
+- **P6-8's conversation history** (`/v1/conversations/*`, see above) is a **Pro-only, user-facing
+  convenience** — letting a subscriber list/resume/delete their *own* past exchanges, stored so
+  *they* can come back to them. P6-7 is a **different purpose and different storage**: the product
+  team reviewing opted-in samples to improve the product, available regardless of plan (consent is
+  the gate here, not plan tier), stored separately from conversation rows. Toggling this off purges
+  P6-7's samples; it has no effect on P6-8's conversation history, and vice versa.
+
+Tests: `Tests/AuthClientTests.cpp` (`fetchPromptLearningPreference`/`setPromptLearningPreference` —
+method/URL/headers/body, the off-by-default null-timestamp shape, unauthorized, transport failure).
+`Tests/AccountServiceTests.cpp` (`setPromptLearningOptIn`/`refreshPromptLearningOptIn` go through
+the authenticated job/token path and update the snapshot; both are a no-op when signed out, asserted
+by a zero-calls check on the fake server — mirroring `RefreshEntitlementIsNoOpWhenSignedOut`).
+`Tests/SettingsWindowTests.cpp` (checkbox disabled/unchecked with no `AccountService` or when signed
+out with the "Sign in required" tooltip; enabled and reflecting the server's opted-in value once
+signed in; toggling it calls into `AccountService::setPromptLearningOptIn()`).
+
 ### Account Sign-In Surface (P3-2: AccountRow / SignInDialog)
 
 The AI panel's account UI is `Source/UI/AccountRow.h/.cpp` (a slim status row: "Sign in" /

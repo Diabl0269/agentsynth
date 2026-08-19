@@ -63,6 +63,12 @@ public:
     // don't care about entitlement get the same "fetchEntitlement failed, non-fatal" path
     // completeSignIn() already tolerates for fetchMe(), so they don't need to set this explicitly.
     AuthClient::HttpResult entitlementResponse = makeTransportFailure();
+    // P6-7: same "unset = transport failure" default as entitlementResponse above, and same
+    // reasoning — a test that doesn't set this explicitly gets the non-fatal-failure path.
+    // Separate responses for GET (refresh) and PUT (set) since real server semantics differ:
+    // GET always reflects current state, PUT reflects the just-applied state.
+    AuthClient::HttpResult promptLearningGetResponse = makeTransportFailure();
+    AuthClient::HttpResult promptLearningPutResponse = makeTransportFailure();
     // Consumed FIFO by /v1/auth/token calls (covers both the device-code poll and refreshToken());
     // the last entry repeats once exhausted, so a test that only cares about the first N calls
     // doesn't need to size this exactly.
@@ -74,11 +80,14 @@ public:
     int meCallCount = 0;
     int revokeCallCount = 0;
     int entitlementCallCount = 0;
+    int promptLearningGetCallCount = 0;
+    int promptLearningPutCallCount = 0;
+    juce::String lastPromptLearningPutBody;
     std::vector<std::chrono::steady_clock::time_point> tokenCallTimes;
 
     AuthClient::HttpPerformer performer() {
-        return [this](const juce::String&, const juce::String& url, const juce::StringPairArray&, const juce::String&,
-                      int, const std::atomic<bool>&) -> AuthClient::HttpResult {
+        return [this](const juce::String& method, const juce::String& url, const juce::StringPairArray&,
+                      const juce::String& body, int, const std::atomic<bool>&) -> AuthClient::HttpResult {
             const std::lock_guard<std::mutex> lock(mutex);
 
             if (url.endsWith("/v1/auth/device/code")) {
@@ -107,6 +116,19 @@ public:
                 ++entitlementCallCount;
                 return entitlementResponse;
             }
+            // GET and PUT /v1/prompt-learning share a URL — the two calls are only
+            // distinguishable by method, which is exactly the bug this suite guards against (see
+            // AuthClient.cpp's curl performer needing an explicit PUT branch, not falling through
+            // to its GET default).
+            if (url.endsWith("/v1/prompt-learning")) {
+                if (method == "PUT") {
+                    ++promptLearningPutCallCount;
+                    lastPromptLearningPutBody = body;
+                    return promptLearningPutResponse;
+                }
+                ++promptLearningGetCallCount;
+                return promptLearningGetResponse;
+            }
             return makeTransportFailure();
         };
     }
@@ -114,6 +136,16 @@ public:
     int entitlementCalls() const {
         const std::lock_guard<std::mutex> lock(mutex);
         return entitlementCallCount;
+    }
+
+    int promptLearningGetCalls() const {
+        const std::lock_guard<std::mutex> lock(mutex);
+        return promptLearningGetCallCount;
+    }
+
+    int promptLearningPutCalls() const {
+        const std::lock_guard<std::mutex> lock(mutex);
+        return promptLearningPutCallCount;
     }
 
     int tokenCalls() const {
@@ -160,6 +192,13 @@ AuthClient::HttpResult makeMeSuccess(const juce::String& email) {
     obj->setProperty("email", email);
     obj->setProperty("display_name", "Test User");
     obj->setProperty("created_at", "2024-01-01");
+    return makeStatus(200, juce::JSON::toString(juce::var(obj.get())));
+}
+
+AuthClient::HttpResult makePromptLearningResponse(bool optedIn, const juce::String& optedInAt = {}) {
+    juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+    obj->setProperty("opted_in", optedIn);
+    obj->setProperty("opted_in_at", optedInAt.isEmpty() ? juce::var() : juce::var(optedInAt));
     return makeStatus(200, juce::JSON::toString(juce::var(obj.get())));
 }
 
@@ -554,6 +593,106 @@ TEST(AccountServiceTest, RefreshEntitlementIsNoOpWhenSignedOut) {
 
     juce::Thread::sleep(200);
     EXPECT_EQ(server.entitlementCalls(), 0);
+}
+
+// ============================================================================
+// prompt-learning opt-in (P6-7)
+// ============================================================================
+
+TEST(AccountServiceTest, SetPromptLearningOptInTrueGoesThroughAuthenticatedPutAndUpdatesSnapshot) {
+    FakeAuthServer server;
+    server.deviceCodeResponse = makeDeviceCodeResponse(0);
+    server.tokenResponses = {makeTokenSuccess("at1", "rt1")};
+    server.meResponse = makeMeSuccess("jane@example.com");
+    server.promptLearningPutResponse = makePromptLearningResponse(true, "2026-08-19T00:00:00.000Z");
+
+    AccountService service{kHost, server.performer(), std::make_unique<InMemoryTokenStore>()};
+    service.beginSignIn();
+    ASSERT_TRUE(waitUntil([&] { return service.getSnapshot().state == AccountState::SignedIn; }));
+    ASSERT_FALSE(service.getSnapshot().promptLearningOptIn) << "off by default";
+
+    service.setPromptLearningOptIn(true);
+
+    ASSERT_TRUE(waitUntil([&] { return server.promptLearningPutCalls() >= 1; }))
+        << "setPromptLearningOptIn() never hit the network";
+    ASSERT_TRUE(waitUntil([&] { return service.getSnapshot().promptLearningOptIn; }));
+
+    const auto snapshot = service.getSnapshot();
+    EXPECT_EQ(snapshot.promptLearningOptInAt, juce::String("2026-08-19T00:00:00.000Z"));
+    EXPECT_EQ(snapshot.state, AccountState::SignedIn) << "setPromptLearningOptIn() must not touch sign-in state";
+    EXPECT_EQ(server.promptLearningGetCalls(), 0) << "the set path must go through PUT, not GET";
+
+    const auto parsedBody = juce::JSON::parse(server.lastPromptLearningPutBody);
+    auto* bodyObj = parsedBody.getDynamicObject();
+    ASSERT_NE(bodyObj, nullptr);
+    EXPECT_TRUE(static_cast<bool>(bodyObj->getProperty("opted_in")));
+}
+
+TEST(AccountServiceTest, SetPromptLearningOptInFalseUpdatesSnapshotToRevoked) {
+    FakeAuthServer server;
+    server.deviceCodeResponse = makeDeviceCodeResponse(0);
+    server.tokenResponses = {makeTokenSuccess("at1", "rt1")};
+    server.meResponse = makeMeSuccess("jane@example.com");
+    server.promptLearningPutResponse = makePromptLearningResponse(false);
+
+    AccountService service{kHost, server.performer(), std::make_unique<InMemoryTokenStore>()};
+    service.beginSignIn();
+    ASSERT_TRUE(waitUntil([&] { return service.getSnapshot().state == AccountState::SignedIn; }));
+
+    service.setPromptLearningOptIn(false);
+
+    ASSERT_TRUE(waitUntil([&] { return server.promptLearningPutCalls() >= 1; }));
+    juce::Thread::sleep(200); // give the (already-false) snapshot update a moment to land either way
+    EXPECT_FALSE(service.getSnapshot().promptLearningOptIn);
+    EXPECT_TRUE(service.getSnapshot().promptLearningOptInAt.isEmpty());
+}
+
+TEST(AccountServiceTest, SetPromptLearningOptInIsNoOpWhenSignedOut) {
+    FakeAuthServer server;
+
+    AccountService service{kHost, server.performer(), std::make_unique<InMemoryTokenStore>()};
+    ASSERT_EQ(service.getSnapshot().state, AccountState::SignedOut);
+
+    service.setPromptLearningOptIn(true);
+
+    juce::Thread::sleep(200);
+    EXPECT_EQ(server.promptLearningPutCalls(), 0);
+    EXPECT_EQ(server.promptLearningGetCalls(), 0);
+    EXPECT_FALSE(service.getSnapshot().promptLearningOptIn);
+}
+
+TEST(AccountServiceTest, RefreshPromptLearningOptInUpdatesSnapshotFromServer) {
+    FakeAuthServer server;
+    server.deviceCodeResponse = makeDeviceCodeResponse(0);
+    server.tokenResponses = {makeTokenSuccess("at1", "rt1")};
+    server.meResponse = makeMeSuccess("jane@example.com");
+
+    AccountService service{kHost, server.performer(), std::make_unique<InMemoryTokenStore>()};
+    service.beginSignIn();
+    ASSERT_TRUE(waitUntil([&] { return service.getSnapshot().state == AccountState::SignedIn; }));
+    ASSERT_FALSE(service.getSnapshot().promptLearningOptIn);
+
+    // Simulate "the server already has this user opted in" (e.g. set from another device).
+    server.promptLearningGetResponse = makePromptLearningResponse(true, "2026-08-01T00:00:00.000Z");
+    service.refreshPromptLearningOptIn();
+
+    ASSERT_TRUE(waitUntil([&] { return server.promptLearningGetCalls() >= 1; }))
+        << "refreshPromptLearningOptIn() never hit the network";
+    ASSERT_TRUE(waitUntil([&] { return service.getSnapshot().promptLearningOptIn; }));
+    EXPECT_EQ(service.getSnapshot().promptLearningOptInAt, juce::String("2026-08-01T00:00:00.000Z"));
+    EXPECT_EQ(server.promptLearningPutCalls(), 0) << "the refresh path must go through GET, not PUT";
+}
+
+TEST(AccountServiceTest, RefreshPromptLearningOptInIsNoOpWhenSignedOut) {
+    FakeAuthServer server;
+
+    AccountService service{kHost, server.performer(), std::make_unique<InMemoryTokenStore>()};
+    ASSERT_EQ(service.getSnapshot().state, AccountState::SignedOut);
+
+    service.refreshPromptLearningOptIn();
+
+    juce::Thread::sleep(200);
+    EXPECT_EQ(server.promptLearningGetCalls(), 0);
 }
 
 // ============================================================================

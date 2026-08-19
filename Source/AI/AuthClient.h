@@ -92,6 +92,16 @@ public:
         juce::String transportError;
     };
 
+    /** Result of GET/PUT /v1/prompt-learning (P6-7: opt-in prompt collection for product
+        learning). `optedInAt` is the server's ISO-8601 `opted_in_at`, empty when it sent null
+        (never opted in, or opted out again). */
+    struct PromptLearningPreferenceResult {
+        bool ok = false;
+        bool optedIn = false;
+        juce::String optedInAt;
+        juce::String transportError;
+    };
+
     /** One entry in GET /v1/conversations' `data.conversations` array, and the summary fields of
         GET /v1/conversations/:id's `data.conversation`. */
     struct ConversationSummary {
@@ -172,6 +182,17 @@ public:
 
     /** GET /v1/entitlement with `Authorization: Bearer <accessToken>`. */
     EntitlementResult fetchEntitlement(const juce::String& accessToken, const std::atomic<bool>& cancelled) const;
+
+    /** GET /v1/prompt-learning with `Authorization: Bearer <accessToken>` (P6-7). */
+    PromptLearningPreferenceResult fetchPromptLearningPreference(const juce::String& accessToken,
+                                                                 const std::atomic<bool>& cancelled) const;
+
+    /** PUT /v1/prompt-learning with `Authorization: Bearer <accessToken>` and a JSON
+        `{"opted_in": optedIn}` body (P6-7). Toggling to false purges the server's accumulated
+        samples for this user; that purge is a server-side concern, nothing further for the client
+        to do. */
+    PromptLearningPreferenceResult setPromptLearningPreference(const juce::String& accessToken, bool optedIn,
+                                                               const std::atomic<bool>& cancelled) const;
 
     /** GET /v1/conversations with `Authorization: Bearer <accessToken>` (P6-8). See
         ListConversationsResult's doc comment for the read-writes-deletionScheduledAt caveat. */
