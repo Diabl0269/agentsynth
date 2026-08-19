@@ -936,7 +936,16 @@ ModuleComponent* componentFor(GraphEditor& editor, juce::AudioProcessorGraph::No
 void setKnobs(juce::AudioProcessor* macros, int count) {
     auto* p = knobCountParam(macros);
     p->setValueNotifyingHost(p->convertTo0to1(count));
-    // parameterValueChanged marshals the resize onto the message thread.
+    // parameterValueChanged marshals the resize onto the message thread. A single fixed 50 ms
+    // pump was measured too tight on a loaded CI runner (the macOS job flaked exactly here), so
+    // pump in slices until the module actually reports the new count — bounded, then one extra
+    // slice so the same message-thread callback's routing cleanup has run too.
+    auto* mb = dynamic_cast<ModuleBase*>(macros);
+    for (int i = 0; i < 40; ++i) {
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+        if (mb != nullptr && mb->getVisibleOutputPortCount() == count)
+            break;
+    }
     juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
 }
 
