@@ -32,6 +32,8 @@ add_executable(Tests
     VCAModuleTests.cpp
     LFOModuleTests.cpp
     SampleHoldModuleTests.cpp
+    SchmittTriggerTests.cpp
+    ComparatorModuleTests.cpp
     SequencerModuleTests.cpp
     AIStateMapperTests.cpp
     AIPatchValidationTests.cpp

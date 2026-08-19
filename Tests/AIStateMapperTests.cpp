@@ -274,7 +274,8 @@ TEST(AIStateMapperTest, FactorySupportsAllModuleTypes) {
         "ADSR",          "Sequencer",     "LFO",        "Distortion",    "Delay",          "Reverb",
         "MIDI Keyboard", "Amp Env",       "Filter Env", "Poly MIDI",     "Poly Sequencer", "Attenuverter",
         "Chorus",        "Phaser",        "Compressor", "Flanger",       "Limiter",        "Bitcrusher",
-        "Pitch Shifter", "Parametric EQ", "Macros",     "Sample & Hold", "Math",           "Ring Modulator"};
+        "Pitch Shifter", "Parametric EQ", "Macros",     "Sample & Hold", "Math",           "Ring Modulator",
+        "Comparator"};
     for (const auto& type : expectedTypes) {
         auto module = synth::AIStateMapper::createModule(type);
         EXPECT_NE(module, nullptr) << "Failed to create module: " << type.toStdString();
@@ -1136,20 +1137,21 @@ TEST(AIStateMapperTest, PolySequencerSurvivesRoundTrip) {
 // removing a parameter edits one row.
 TEST(AIStateMapperTest, ParamIdsGolden) {
     const std::map<juce::String, juce::String> golden = {
-        {"ADSR", "attack, bypassed, decay, muted, poly, release, sustain"},
-        {"Amp Env", "attack, bypassed, decay, muted, poly, release, sustain"},
+        {"ADSR", "attack, bypassed, decay, gateThreshold, muted, poly, release, sustain"},
+        {"Amp Env", "attack, bypassed, decay, gateThreshold, muted, poly, release, sustain"},
         {"Attenuverter", "amount, bypassed"},
         {"Audio Input", ""},
         {"Audio Output", ""},
         {"Bitcrusher", "bypassed, depth, dither, dualIO, mix, muted, outputLevel, rate"},
         {"Chorus", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
+        {"Comparator", "bypassed, muted, trigThreshold"},
         {"Compressor", "attack, bypassed, dualIO, makeupGain, muted, ratio, release, threshold"},
         {"Delay", "bypassed, dualIO, feedback, mix, muted, outputLevel, time"},
         {"Distortion", "bypassed, drive, dualIO, mix, muted, outputLevel, oversampling, type"},
         {"Envelope Follower", "attack, bypassed, detection, muted, release, sensitivity"},
         {"External MIDI", "bypassed, channel, deviceIndex"},
         {"Filter", "bypassed, cutoff, drive, filterType, muted, outputLevel, poly, resonance"},
-        {"Filter Env", "attack, bypassed, decay, muted, poly, release, sustain"},
+        {"Filter Env", "attack, bypassed, decay, gateThreshold, muted, poly, release, sustain"},
         {"Flanger", "bypassed, centreDelay, depth, dualIO, feedback, mix, muted, outputLevel, rate"},
         {"LFO", "bipolar, bypassed, glide, level, mode, muted, rateHz, rateSync, retrig, shape"},
         {"Limiter", "bypassed, dualIO, inputGain, muted, release, threshold"},
@@ -1215,14 +1217,42 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
 // any registration changes the list and MUST consciously update the golden below, either by adding
 // the new type here or by adding it to kNonAuthorableModuleTypes in AIStateMapper.cpp.
 TEST(AIStateMapperTest, AuthorableModuleTypesGolden) {
-    const juce::StringArray golden = {
-        "ADSR",          "Amp Env",        "Audio Input",   "Audio Output",   "Bitcrusher",
-        "Chorus",        "Compressor",     "Delay",         "Distortion",     "Envelope Follower",
-        "External MIDI", "Filter",         "Filter Env",    "Flanger",        "LFO",
-        "Limiter",       "MIDI Keyboard",  "Macros",        "Math",           "Midi Input",
-        "Noise",         "Oscillator",     "Parametric EQ", "Phaser",         "Pitch Shifter",
-        "Poly MIDI",     "Poly Sequencer", "Reverb",        "Ring Modulator", "Sample & Hold",
-        "Sampler",       "Sequencer",      "VCA",           "Voice Mixer",    "Wavetable"};
+    const juce::StringArray golden = {"ADSR",
+                                      "Amp Env",
+                                      "Audio Input",
+                                      "Audio Output",
+                                      "Bitcrusher",
+                                      "Chorus",
+                                      "Comparator",
+                                      "Compressor",
+                                      "Delay",
+                                      "Distortion",
+                                      "Envelope Follower",
+                                      "External MIDI",
+                                      "Filter",
+                                      "Filter Env",
+                                      "Flanger",
+                                      "LFO",
+                                      "Limiter",
+                                      "MIDI Keyboard",
+                                      "Macros",
+                                      "Math",
+                                      "Midi Input",
+                                      "Noise",
+                                      "Oscillator",
+                                      "Parametric EQ",
+                                      "Phaser",
+                                      "Pitch Shifter",
+                                      "Poly MIDI",
+                                      "Poly Sequencer",
+                                      "Reverb",
+                                      "Ring Modulator",
+                                      "Sample & Hold",
+                                      "Sampler",
+                                      "Sequencer",
+                                      "VCA",
+                                      "Voice Mixer",
+                                      "Wavetable"};
 
     const auto actual = synth::AIStateMapper::authorableModuleTypes();
     EXPECT_EQ(actual.joinIntoString(", "), golden.joinIntoString(", "))

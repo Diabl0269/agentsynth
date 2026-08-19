@@ -202,9 +202,12 @@ Loads an audio file from disk and plays it back one of two ways.
 
 ## ADSR (Envelope) Module
 - **Stages**: Attack, Decay, Sustain, Release.
-- **Mono output**: Generates a single control signal (0.0 to 1.0) on channel 0, triggered by MIDI.
-- **Poly mode**: 8 gate CV inputs (ch0-7) drive 8 independent ADSR instances; outputs 8 per-voice envelopes (ch0-7).
+- **Mono output**: Generates a single control signal (0.0 to 1.0) on channel 0. The envelope is held while **either** MIDI is down **or** the Gate CV is high, and releases only when both are low. Unpatched Gate stays silent, so existing MIDI-only patches are unchanged.
+- **Gate CV**: a Schmitt trigger on ch0 (same `SchmittTrigger` helper as Sample & Hold / Comparator). Arms above `Threshold` and only re-arms once the signal falls a fixed 0.05 below it. Poly mode already did this; mono used to ignore the jack and overwrite the incoming CV (issue #187).
+- **Threshold**: `gateThreshold` (0.0–1.0, default 0.5) plus Threshold CV on ch8. The id is `gateThreshold` rather than `threshold` / `trigThreshold` because Compressor owns `threshold` as dB and Sample & Hold / Comparator own `trigThreshold` as bipolar CV.
+- **Poly mode**: 8 gate CV inputs (ch0-7) drive 8 independent ADSR instances; outputs 8 per-voice envelopes (ch0-7). Threshold CV (ch8) is shared across voices.
 - **Uses**: Modulation of VCA gain, Filter cutoff, or Oscillator Level.
+- **Threshold control**: `ThresholdControlComponent` in slider+meter mode — a live unipolar bar of the Gate jack with the Threshold slider attached, so the slice can be set by eye.
 
 ## Envelope Follower Module
 - **Role**: A *detector*, not a generator — tracks the amplitude contour of an audio input and emits it as unipolar `[0, 1]` modulation CV. Deliberately separate from ADSR: its input is audio (not a gate), its times are milliseconds (not seconds), and it has no decay/sustain stages.
@@ -334,9 +337,18 @@ Loads an audio file from disk and plays it back one of two ways.
     - `Offset` (-1.0–1.0, default 0.0) — output offset; use +0.5 with Level 0.5 for a unipolar 0–1 CV.
 - **Output**: bipolar CV on ch0, clamped to [-1, 1].
 - **Why `Source`/`Clock` are explicit choices**: the module deliberately does *not* infer "is anything patched in?" from channel activity. A gate signal sits at 0 most of the time and a slow LFO crosses zero, so activity detection misfires. Defaults (Internal clock + Random source) make the module produce stepped random CV the moment it is dropped on the canvas, with nothing patched.
-- **Trigger detection**: a Schmitt trigger. It arms when the Trigger input rises above `Threshold` and only re-arms once the signal falls a fixed `kTriggerHysteresis` (0.05) *below* it. Gate state is carried across block boundaries — a gate that stays high spanning two blocks is one edge, not two. The hysteresis is deliberately not user-exposed (see the Module Development Guide on not crowding modules with knobs); without it, any signal loitering near the threshold — a slow sine, anything with dither on it — would retrigger every sample.
-- **Trigger meter**: `Source/UI/TriggerMeterComponent.h` draws the live Trigger level as a bipolar bar with a marker at the effective threshold, so the threshold can be set by eye against the real signal. The module publishes `getTriggerLevel()` / `getEffectiveThreshold()` / `isTriggerHigh()` / `getTriggerCount()` as atomics for it. The meter is tracked **whichever clock is selected**, so the threshold can be dialled in before switching to External.
+- **Trigger detection**: a Schmitt trigger (`Source/Modules/SchmittTrigger.h`, shared with ADSR and Comparator). It arms when the Trigger input rises above `Threshold` and only re-arms once the signal falls a fixed `kHysteresis` (0.05) *below* it. Gate state is carried across block boundaries — a gate that stays high spanning two blocks is one edge, not two. The hysteresis is deliberately not user-exposed (see the Module Development Guide on not crowding modules with knobs); without it, any signal loitering near the threshold — a slow sine, anything with dither on it — would retrigger every sample.
+- **Trigger meter**: `ThresholdControlComponent` in meter-only mode draws the live Trigger level as a bipolar bar with a marker at the effective threshold, so the threshold can be set by eye against the real signal. The module publishes `getTriggerLevel()` / `getEffectiveThreshold()` / `isTriggerHigh()` / `getTriggerCount()` as atomics for it. The meter is tracked **whichever clock is selected**, so the threshold can be dialled in before switching to External.
 - **CV inputs**: `Rate` maps raw CV exponentially over ±4 octaves (per the Module Development Guide convention); `Slew`, `Level` and `Offset` are additive over their native ranges. Only these four jacks are auto-promotable mod targets — Signal and Trigger connections stay direct rather than being wrapped in an attenuverter.
+- **Width**: SINGLE (280 px).
+
+## Comparator Module
+- **Source file**: `Source/Modules/ComparatorModule.h`
+- **Purpose**: A *switch*, not a detector and not an envelope generator — emits a 0/1 gate while Signal is above Threshold, and the inverted gate on a second output. Slice an LFO into a pulse, a kick into a gate, any CV into a window. Envelope Follower tracks amplitude continuously; ADSR shapes a gate into A/D/S/R; Comparator only answers "is it over the line?".
+- **Parameters**: `Threshold` (-1.0–1.0, default 0.5, param id `trigThreshold`) — same id and meaning as Sample & Hold. Hysteresis is the shared `SchmittTrigger::kHysteresis` (0.05), not user-exposed.
+- **Channels**: in ch0 = Signal, ch1 = Threshold CV. Out ch0 = Gate, ch1 = Inverse.
+- **Bypass / mute**: both clear. There is no dry audio path — passing Signal through would push audio-rate samples into a Gate destination.
+- **Threshold control**: `ThresholdControlComponent` in slider+meter mode on a bipolar scale.
 - **Width**: SINGLE (280 px).
 
 ## Macro Control Module ("Macros")
@@ -437,6 +449,7 @@ Declare your per-voice **output** fan in `mapOutputChannel()` if the module actu
 | **VCA (poly)** | ch8-15 | In | Per-voice envelope/CV |
 | **VCA (poly)** | ch0-1 | Out | Stereo sum (L/R) |
 | **ADSR (poly)** | ch0-7 | In | Per-voice gate CV |
+| **ADSR** | ch8 | In | Threshold CV (shared) |
 | **ADSR (poly)** | ch0-7 | Out | Per-voice envelope (0–1) |
 | **Sample & Hold** | ch0 | In/Out | Signal in / held CV out (shared channel; read before overwrite) |
 | **Sample & Hold** | ch1 | In | Trigger / gate |
@@ -446,6 +459,8 @@ Declare your per-voice **output** fan in `mapOutputChannel()` if the module actu
 | **Sample & Hold** | ch5 | In | Offset CV |
 | **Sample & Hold** | ch6 | In | Threshold CV |
 | **Sample & Hold** | ch1-6 | Out | Silent (cleared each block so CV does not leak downstream) |
+| **Comparator** | ch0 | In/Out | Signal in / Gate out (shared channel; read before overwrite) |
+| **Comparator** | ch1 | In/Out | Threshold CV in / Inverse gate out |
 
 ---
 

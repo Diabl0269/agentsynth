@@ -9,7 +9,7 @@
 #include "FrequencyResponseComponent.h"
 #include "SampleWaveformComponent.h"
 #include "ScopeComponent.h"
-#include "TriggerMeterComponent.h"
+#include "ThresholdControlComponent.h"
 #include "WavetableDisplayComponent.h"
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_audio_utils/juce_audio_utils.h>
@@ -119,7 +119,7 @@ private:
     std::unique_ptr<juce::TextButton> eqPopOutButton;
     juce::Component::SafePointer<juce::DialogWindow> eqWindow;
     std::unique_ptr<juce::MidiKeyboardComponent> keyboardComponent;
-    std::unique_ptr<TriggerMeterComponent> triggerMeter;
+    std::unique_ptr<ThresholdControlComponent> thresholdControl;
     std::unique_ptr<WavetableDisplayComponent> wavetableDisplay;
     std::unique_ptr<juce::TextButton> loadWavetableButton;
     std::unique_ptr<juce::FileChooser> wavetableChooser;
