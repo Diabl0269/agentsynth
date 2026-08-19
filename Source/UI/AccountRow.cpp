@@ -116,8 +116,11 @@ void AccountRow::paint(juce::Graphics&) {
 void AccountRow::resized() {
     auto b = getLocalBounds();
 
+    // Right-aligned to match signOutButton below and AIChatComponent's upsellButton in the row
+    // beneath this one — every bottom-chrome action button hugs the same edge so the stack reads
+    // as one coherent column instead of alternating sides.
     if (signInButton.isVisible()) {
-        signInButton.setBounds(b.removeFromLeft(90));
+        signInButton.setBounds(b.removeFromRight(90));
         return;
     }
 

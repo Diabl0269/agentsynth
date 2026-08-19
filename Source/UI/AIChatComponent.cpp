@@ -523,8 +523,12 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     hostedModeNotice.setFont(juce::Font(11.0f));
     hostedModeNotice.setText("Hosted mode sends your prompt and current patch to Agent Synth's servers.",
                              juce::dontSendNotification);
-    hostedModeNotice.setTooltip("Local (Ollama) mode keeps everything on this machine. See " +
-                                juce::String(synth::branding::kWebsiteUrl) + "/privacy for details.");
+    // Tooltip repeats the (possibly ellipsis-truncated) label text in full rather than describing
+    // the other mode — hovering a cut-off label should always reveal what it already started
+    // saying, never switch topic to something else.
+    hostedModeNotice.setTooltip(
+        "Hosted mode sends your prompt and current patch to Agent Synth's servers for processing. See " +
+        juce::String(synth::branding::kWebsiteUrl) + "/privacy for details.");
 
     // P6-8 upsell strip. Starts visible (see the member doc comment for why this diverges from
     // accountRow/planBadge/hostedModeNotice's invisible-until-known default) — updateUpsellStrip()
