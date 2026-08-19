@@ -649,8 +649,8 @@ TEST(TimelinePanelInteractionTest, WheelScrollsAndCmdWheelZooms) {
     const double firstVisibleBefore = state.firstVisibleBeat;
 
     // Plain vertical wheel: vertical track scroll, horizontal mapping untouched.
-    juce::MouseWheelDetails wheel;
-    wheel.deltaY = -0.5f; // wheel down -> scroll down into the track list
+    juce::MouseWheelDetails wheel{}; // value-init: deltaX has no default and the router reads it
+    wheel.deltaY = -0.5f;            // wheel down -> scroll down into the track list
     panel.mouseWheelMove(makeClickEvent(panel, {400.0f, 100.0f}), wheel);
     EXPECT_DOUBLE_EQ(state.pixelsPerBeat, ppbBefore);
     EXPECT_DOUBLE_EQ(state.firstVisibleBeat, firstVisibleBefore);
@@ -660,7 +660,7 @@ TEST(TimelinePanelInteractionTest, WheelScrollsAndCmdWheelZooms) {
 
     // Shift+wheel: horizontal scroll, vertical untouched.
     const double trackScrollBefore = state.trackScrollY;
-    juce::MouseWheelDetails hWheel;
+    juce::MouseWheelDetails hWheel{};
     hWheel.deltaY = 0.5f;
     panel.mouseWheelMove(makeClickEvent(panel, {400.0f, 100.0f}, juce::ModifierKeys(juce::ModifierKeys::shiftModifier)),
                          hWheel);
@@ -670,7 +670,7 @@ TEST(TimelinePanelInteractionTest, WheelScrollsAndCmdWheelZooms) {
 
     // Cmd+Shift+wheel: vertical (row height) zoom within its clamps.
     const double scaleBefore = state.rowHeightScale;
-    juce::MouseWheelDetails vZoomWheel;
+    juce::MouseWheelDetails vZoomWheel{};
     vZoomWheel.deltaY = 0.5f;
     panel.mouseWheelMove(
         makeClickEvent(panel, {400.0f, 100.0f},
@@ -686,7 +686,7 @@ TEST(TimelinePanelInteractionTest, WheelScrollsAndCmdWheelZooms) {
     const double anchorBeatBefore = state.xToBeat(anchorXInRuler);
     const double ppbBeforeZoom = state.pixelsPerBeat;
 
-    juce::MouseWheelDetails zoomWheel;
+    juce::MouseWheelDetails zoomWheel{};
     zoomWheel.deltaY = 0.5f;
     panel.mouseWheelMove(makeClickEvent(panel, cursor, juce::ModifierKeys(juce::ModifierKeys::commandModifier)),
                          zoomWheel);

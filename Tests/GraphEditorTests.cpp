@@ -2148,7 +2148,7 @@ TEST_F(GraphEditorTest, WheelZoomKeepsCanvasPointUnderCursorFixed) {
     const auto canvasBefore = screenToCanvas(editor, cursor);
     const auto widthBefore = editor.getVisibleCanvasRect().getWidth();
 
-    juce::MouseWheelDetails wheel;
+    juce::MouseWheelDetails wheel{}; // value-init: the struct has no default member initialisers
     wheel.deltaY = 1.5f;
     editor.mouseWheelMove(makeGraphEditorMouseEvent(editor, cursor), wheel);
 

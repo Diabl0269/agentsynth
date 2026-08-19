@@ -444,7 +444,7 @@ TEST(MinimapComponentTest, MouseAndWheelEventsAreSafeWithoutCallbacks) {
     EXPECT_NO_THROW(comp.mouseDown(event));
     EXPECT_NO_THROW(comp.mouseDrag(event));
 
-    juce::MouseWheelDetails wheel;
+    juce::MouseWheelDetails wheel{}; // value-init: the struct has no default member initialisers
     wheel.deltaY = 0.5f;
     EXPECT_NO_THROW(comp.mouseWheelMove(event, wheel));
 }
