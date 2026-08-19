@@ -458,11 +458,16 @@ TEST(AutomationRecordTest, OverflowSetsFlagAndSurvives) {
 // ============================================================================
 
 TEST(AutomationRecordTest, UnbindAllLeavesNoStaleClaimSlot) {
+    // Declared BEFORE the harness on purpose: bindLane below passes an empty Node::Ptr (there is
+    // no graph node here), so nothing keeps this module alive for the recorder's destructor —
+    // which removes listeners from every still-bound parameter. Reverse declaration order made
+    // that a use-after-free (caught by the ASAN job); this way the recorder dies first.
+    FilterModule otherFilter;
+
     Harness h;
     h.setMode(LaneRecordMode::Latch); // Latch, so the span outlives the gesture that opened it
 
     // A second lane on a second module's parameter — the victim of a stale slot index.
-    FilterModule otherFilter;
     auto* otherParam = findParameterByID(&otherFilter, "cutoff");
     ASSERT_NE(otherParam, nullptr);
     const auto otherLaneId = h.doc.addLane(h.trackId, kSecondNodeUuid, "cutoff", cutoffRange());
