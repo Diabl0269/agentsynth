@@ -918,7 +918,7 @@ struct CountingPlayhead : synth::ui::TimelinePlayheadOverlay {
 
 **Reuse this pattern for any future timed repaint.** A repaint budget that cannot be asserted is a repaint budget that will regress.
 
-`PianoRollComponent` is the first reuse, and it is a *delegation*, not a fourth exception: the roll maps beats through its own zoom/scroll, so while it is open the overlay confines itself to `getSharedRegion()` (the ruler rows) and hands the roll the drawn beat through `TimelinePlayheadOverlay::LocalPlayheadClient`. The roll draws the line at its own x under an identical `requestRepaintStrip` seam and the identical no-move-no-repaint gate — still one timer for the whole panel, still zero repaints while stopped. See §16 (TL5-8).
+`PianoRollComponent` is the first reuse, and it is a *delegation*, not a fourth exception: the roll maps beats through its own zoom/scroll, so while it is open the overlay confines itself to `getSharedRegion()` (empty while the roll is open — the ruler rows follow the roll's mapping override too, see §16) and hands the roll the drawn beat through `TimelinePlayheadOverlay::LocalPlayheadClient`. The roll draws the line at its own x under an identical `requestRepaintStrip` seam and the identical no-move-no-repaint gate — still one timer for the whole panel, still zero repaints while stopped. See §16 (TL5-8).
 
 ---
 
@@ -1538,15 +1538,20 @@ fixed on screen, clamps preserved — see the comment on why the anchor invarian
 beatsPerBar)`. No JUCE dependency; `TimelinePanelComponent` owns the one instance and exposes it
 via `getViewState()`.
 
-**Snap** (`TimelineViewState::Snap`) — `Off, Bar, Beat, Half, Quarter, Eighth, Sixteenth`. Every
-non-`Bar`/non-`Off` value is a fraction of **one beat** (not a whole note): `Beat` (combo label
-`"1"`, the default) = 1.0 beat, `Half` = 0.5, `Quarter` = 0.25, `Eighth` = 0.125, `Sixteenth` =
-0.0625 — the same unit as `TransportService::kMinLoopLengthBeats` (1/16 of a beat). `Bar` snaps to
+**Snap** (`TimelineViewState::Snap`) — `Off, Bar, Whole, Half, Quarter, Eighth, Sixteenth`. Every
+non-`Bar`/non-`Off` value is a **note value** (a fraction of a whole note), the DAW-conventional
+reading of the grid selector: `Whole` (combo label `"1"`) = 4 beats — a full 4/4 bar, `Half` = 2,
+`Quarter` (label `"1/4"`, the default) = 1 beat, `Eighth` = 0.5, `Sixteenth` = 0.25. `Bar` snaps to
 multiples of `beatsPerBar` (`tsNum * 4 / tsDen` off the transport's time signature — same formula
 `TransportService::getPosition()` already uses). Ties round up (toward +infinity, beats are never
-negative in practice). The snap choice lives in a `juce::ComboBox` docked in the transport bar's
-right-hand side (items `Off/Bar/1/1⁄2/1⁄4/1⁄8/1⁄16`; `synth::ui::TimelineTransportBar` fills the rest
-of that strip, left-aligned — see TL5-5 below) and persists under the `"timelineSnap"` int key in
+negative in practice). On top of the division sits a master switch, `TimelineViewState::snapEnabled`
+— the piano roll's `Q` button and the panel-wide `Q` key toggle it; `divisionBeats()` (the effective
+grid every magnetic edit and grid paint reads) returns 0.0 while it is off, and
+`divisionBeatsRaw()` keeps returning the chosen division (what the roll's one-shot quantise uses).
+Picking a division from the combo flips the switch back on. The snap choice lives in a
+`juce::ComboBox` docked in the transport bar's right-hand side (items `Off/Bar/1/1⁄2/1⁄4/1⁄8/1⁄16`;
+`synth::ui::TimelineTransportBar` fills the rest of that strip, left-aligned — see TL5-5 below) and
+persists under the `"timelineSnap"` int key (plus `"timelineSnapEnabled"` for the switch) in
 `juce::ApplicationProperties`, set via
 `TimelinePanelComponent::setApplicationProperties()` (non-owning pointer setter, same shape as
 `AIChatComponent::setAccountService()`).
@@ -2165,7 +2170,8 @@ so a multi-note move/scrub/delete is one undo step):
 | Delete / Backspace | Deletes the selection, one step; returns `false` when the selection is empty |
 | Escape | Clears the selection; closes the roll when nothing is selected |
 | Cmd+vertical-drag on a note | Scrubs velocity, ~1/px, clamped to `[1, 127]` independently per note (multi-selection scrubs all by the same delta) |
-| "Q" button | Quantises the SELECTED notes' starts to the current Snap (per-note `moveNote`, one mutation lambda — `TimelineDoc::quantiseNotes` has no note-subset overload); with **nothing selected it quantises every note in the clip** via `quantiseNotes` directly. Tooltip: *"Quantize selected notes to the current grid — or all notes when nothing is selected"*. Paints dimmed when it would do nothing (Snap Off, or a clip with no notes), flashes on every click, and writes NO undo step when the clip is already quantised (`recordTimelineChange` drops no-op mutations). |
+| "Q" button (plain click, or the `Q` key) | **Toggles snap** — flips the shared `TimelineViewState::snapEnabled`, so grid magnetism switches off/on everywhere (roll, clip lanes, ruler) while the chosen division survives underneath. Paints lit (accent fill/border) while snap is effective, muted while off. A view-state toggle, never a document edit — no undo step. Fires `onSnapToggled` so the panel persists the choice and repaints the other grid painters. |
+| Shift+click on "Q" (or Shift+`Q`) | **One-shot quantise**: snaps the SELECTED notes' starts to the chosen division (per-note `moveNote`, one mutation lambda — `TimelineDoc::quantiseNotes` has no note-subset overload); with **nothing selected it quantises every note in the clip** via `quantiseNotes` directly. Reads `divisionBeatsRaw()`, so it works even while the snap toggle is off (cleaning up free-hand notes is its whole point). Flashes on every press, and writes NO undo step when the clip is already quantised (`recordTimelineChange` drops no-op mutations). |
 
 **No pencil-by-default any more.** Creating a note is the double-click; a single click on empty grid
 is a plain deselect, and a plain drag from empty grid does nothing at all. Marquee is reached only
@@ -2202,8 +2208,21 @@ the roll:
 Zoom is not persisted across opens — `openClip` reframes to the clip every time.
 
 `TimelineViewState::divisionBeats(beatsPerBar)` (factored out of `snapBeat` for this task) exposes
-the current snap grid as a plain beat value — what `performQuantise()` feeds `quantiseNotes`/
-`moveNote`, since neither takes a `TimelineViewState::Snap` directly.
+the EFFECTIVE snap grid as a plain beat value (0.0 while the snap toggle is off);
+`divisionBeatsRaw()` is the chosen division regardless of the toggle — what `performQuantise()`
+feeds `quantiseNotes`/`moveNote`, since neither takes a `TimelineViewState::Snap` directly.
+
+**The ruler above the roll shows the clip's REAL timeline position.** While the roll is open,
+`TimelinePanelComponent::openPianoRoll` installs the roll's own view state into the ruler
+(`TimelineRulerComponent::setMappingOverride(&roll.getRollViewState(), kKeysColumnWidth)` — the
+offset is the keys gutter, which sits right of the ruler's x == 0). Labels, ticks, the loop brace
+AND the ruler's drag-to-loop / drag-to-scrub gestures all map through the override (the snap
+division still comes from the shared state), so opening a clip parked at bar 6 shows "6" at the
+gutter's edge rather than wherever the lanes were scrolled. The roll fires
+`onHorizontalViewChanged` on every zoom/scroll so the panel can repaint the ruler; close restores
+the shared mapping. While the override is live the playhead overlay's shared-mapping line would be
+a lie in the ruler strip too, so the overlay's local-client region covers the ruler rows as well as
+the roll's (`TimelinePanelComponent::resized`) — the roll draws the only playhead line.
 
 Tests: `Tests/PianoRollTests.cpp` — `NoteSelectionModel`/`noteHitTestMarquee` unit coverage (mirrors
 `TimelineClipLaneTests.cpp`'s groups 1–2) and `PianoRollComponent` interaction tests driven by

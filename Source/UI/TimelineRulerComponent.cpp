@@ -39,8 +39,28 @@ double TimelineRulerComponent::currentBeatsPerBar() const noexcept {
     return beatsPerBar > 0.0 ? beatsPerBar : 4.0;
 }
 
+double TimelineRulerComponent::mapBeatToX(double beat) const noexcept {
+    return overrideView_ != nullptr ? (double)overrideOffsetPx_ + overrideView_->beatToX(beat)
+                                    : viewState_.beatToX(beat);
+}
+
+double TimelineRulerComponent::mapXToBeat(double x) const noexcept {
+    return overrideView_ != nullptr ? overrideView_->xToBeat(x - (double)overrideOffsetPx_) : viewState_.xToBeat(x);
+}
+
+double TimelineRulerComponent::mapPixelsPerBeat() const noexcept {
+    return overrideView_ != nullptr ? overrideView_->pixelsPerBeat : viewState_.pixelsPerBeat;
+}
+
+double TimelineRulerComponent::mapFirstVisibleBeat() const noexcept {
+    // The beat at this component's x == 0 — through the override that sits LEFT of the roll's
+    // keys gutter, which is fine for paint()'s "which bars are visible" sweep (it culls per bar).
+    return mapXToBeat(0.0);
+}
+
 double TimelineRulerComponent::snappedBeatAtX(double x) const noexcept {
-    return viewState_.snapBeat(viewState_.xToBeat(x), currentBeatsPerBar());
+    // Snap division from the SHARED state (the one snap setting); mapping via the override.
+    return viewState_.snapBeat(mapXToBeat(x), currentBeatsPerBar());
 }
 
 TimelineRulerComponent::Zone TimelineRulerComponent::zoneAtY(float y) const noexcept {
@@ -182,7 +202,7 @@ void TimelineRulerComponent::reArmLoopIfClickOnInactiveBrace(const juce::MouseEv
     // The target is the brace's whole x-span across the loop half, not just the 4 px bar it draws:
     // a 4 px strip is not a click target. Anything outside the span stays inert.
     const double x = (double)e.position.x;
-    if (x < viewState_.beatToX(snap.loopStartPpq) || x > viewState_.beatToX(snap.loopEndPpq))
+    if (x < mapBeatToX(snap.loopStartPpq) || x > mapBeatToX(snap.loopEndPpq))
         return;
 
     transport_->setLoop(snap.loopStartPpq, snap.loopEndPpq, true);
@@ -231,17 +251,17 @@ void TimelineRulerComponent::paint(juce::Graphics& g) {
         loopEndBeat = snap.loopEndPpq;
     }
 
-    const double startBeat = viewState_.firstVisibleBeat;
-    const double endBeat = viewState_.xToBeat(widthPx);
+    const double startBeat = mapFirstVisibleBeat();
+    const double endBeat = mapXToBeat(widthPx);
 
     // Adaptive bar-label density: widen the stride by powers of two until labelled bars are at
     // least kMinLabelSpacingPx apart, so labels never overlap regardless of zoom.
-    const double barWidthPx = beatsPerBar * viewState_.pixelsPerBeat;
+    const double barWidthPx = beatsPerBar * mapPixelsPerBeat();
     juce::int64 labelEveryNBars = 1;
     while (barWidthPx * (double)labelEveryNBars < kMinLabelSpacingPx)
         labelEveryNBars *= 2;
 
-    const bool drawBeatTicks = viewState_.pixelsPerBeat >= kMinBeatTickPixelsPerBeat;
+    const bool drawBeatTicks = mapPixelsPerBeat() >= kMinBeatTickPixelsPerBeat;
     const int beatsPerBarRounded = std::max(1, (int)std::llround(beatsPerBar));
 
     const juce::int64 firstBar = (juce::int64)std::floor(startBeat / beatsPerBar) - 1;
@@ -250,7 +270,7 @@ void TimelineRulerComponent::paint(juce::Graphics& g) {
     g.setFont(juce::Font(11.0f));
     for (juce::int64 bar = firstBar; bar <= lastBar; ++bar) {
         const double barBeat = (double)bar * beatsPerBar;
-        const double x = viewState_.beatToX(barBeat);
+        const double x = mapBeatToX(barBeat);
         if (x < -1.0 || x > widthPx + 1.0)
             continue;
 
@@ -265,7 +285,7 @@ void TimelineRulerComponent::paint(juce::Graphics& g) {
 
         if (drawBeatTicks) {
             for (int beatInBar = 1; beatInBar < beatsPerBarRounded; ++beatInBar) {
-                const double beatX = viewState_.beatToX(barBeat + (double)beatInBar);
+                const double beatX = mapBeatToX(barBeat + (double)beatInBar);
                 if (beatX < 0.0 || beatX > widthPx)
                     continue;
                 g.setColour(border.withAlpha(0.4f));
@@ -292,8 +312,8 @@ void TimelineRulerComponent::paint(juce::Graphics& g) {
     // a click on the grey brace re-arms them).
     const auto braceState = braceStateFor(looping, loopStartBeat, loopEndBeat);
     if (braceState != BraceState::None) {
-        const double xStart = viewState_.beatToX(loopStartBeat);
-        const double xEnd = viewState_.beatToX(loopEndBeat);
+        const double xStart = mapBeatToX(loopStartBeat);
+        const double xEnd = mapBeatToX(loopEndBeat);
         if (xEnd >= 0.0 && xStart <= widthPx) {
             const float clampedStart = (float)juce::jlimit(0.0, widthPx, xStart);
             const float clampedEnd = (float)juce::jlimit(0.0, widthPx, xEnd);

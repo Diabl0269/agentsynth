@@ -22,6 +22,7 @@ constexpr double kScrollPixelsPerWheelUnit = 200.0;
 
 constexpr int kSnapComboWidth = 90;
 constexpr const char* kTimelineSnapPropertyKey = "timelineSnap";
+constexpr const char* kTimelineSnapEnabledPropertyKey = "timelineSnapEnabled";
 
 // the "+ Track" strip at the top of the track-header column. Fixed height — the headers
 // below it scroll, the button never does.
@@ -67,6 +68,9 @@ TimelinePanelComponent::TimelinePanelComponent() {
     snapCombo_.setSelectedId((int)viewState_.snap + 1, juce::dontSendNotification);
     snapCombo_.onChange = [this] {
         viewState_.snap = (TimelineViewState::Snap)(snapCombo_.getSelectedId() - 1);
+        // Picking a division is an explicit "snap to THIS" — flip the master switch back on so
+        // the choice takes effect immediately (choosing "Off" from the combo already means off).
+        viewState_.snapEnabled = true;
         persistSnapChoice();
         ruler_.repaint();
         // The roll's gridlines and its new-note length both come from the division — a snap change
@@ -86,6 +90,16 @@ TimelinePanelComponent::TimelinePanelComponent() {
     addChildComponent(pianoRoll_);
     pianoRoll_.setComponentID("timelinePianoRoll");
     pianoRoll_.onCloseRequested = [this] { closePianoRoll(); };
+    // While the roll is open the ruler mirrors the roll's own mapping (installed in
+    // openPianoRoll()), so every roll zoom/scroll must repaint it.
+    pianoRoll_.onHorizontalViewChanged = [this] { ruler_.repaint(); };
+    // The roll's Q button / Q key flipped the shared snapEnabled: persist it, and repaint the
+    // lanes+ruler that also paint the (now present/absent) snap grid.
+    pianoRoll_.onSnapToggled = [this] {
+        persistSnapChoice();
+        ruler_.repaint();
+        repaint();
+    };
 
     // Automation strip. All start invisible — resized()/showAutomationLane()/
     // closeAutomationStrip() are the only things that flip visibility, driven by
@@ -228,6 +242,9 @@ void TimelinePanelComponent::openPianoRoll(synth::ClipId id) {
     clipLaneArea_.setVisible(false);
     pianoRoll_.setVisible(true);
     pianoRoll_.grabKeyboardFocus();
+    // The ruler now labels the ROLL's beats (offset by its keys gutter), so the bar numbers above
+    // show the edited clip's real timeline position instead of wherever the lanes were scrolled.
+    ruler_.setMappingOverride(&pianoRoll_.getRollViewState(), PianoRollComponent::kKeysColumnWidth);
     // Which rows of the overlay are still its own just changed — one repaint, on a user action,
     // never per tick.
     playhead_.repaint();
@@ -238,7 +255,8 @@ void TimelinePanelComponent::closePianoRoll() {
     pianoRoll_.setVisible(false);
     clipLaneArea_.setVisible(true);
     clipLaneArea_.grabKeyboardFocus();
-    playhead_.repaint(); // the overlay owns its whole rect again
+    ruler_.setMappingOverride(nullptr, 0); // back to the shared lanes mapping
+    playhead_.repaint();                   // the overlay owns its whole rect again
 }
 
 //==============================================================================
@@ -487,6 +505,51 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
         closeAutomationStrip();
         return true;
     }
+
+    // Panel-scoped transport/snap keys. These fire when the key was NOT consumed by the focused
+    // child (JUCE bubbles unhandled keys up the parent chain), so they cover every focus target
+    // inside the timeline — track headers, the lanes, the roll (which consumes Q itself). Matched
+    // on the key CODE (JUCE letter key codes are the uppercase character), tolerating either case.
+    const auto isKey = [&key](juce::juce_wchar letter) {
+        return key.getKeyCode() == (int)letter ||
+               key.getKeyCode() == (int)juce::CharacterFunctions::toLowerCase(letter);
+    };
+
+    // Q = toggle grid magnetism (Shift+Q one-shot quantise lives on the roll, where the notes are).
+    if (isKey('Q')) {
+        viewState_.snapEnabled = !viewState_.snapEnabled;
+        persistSnapChoice();
+        ruler_.repaint();
+        repaint();
+        return true;
+    }
+
+    // L = toggle looping, keeping the existing bounds — exactly the transport bar's loop button.
+    if (isKey('L') && transport_ != nullptr) {
+        const auto snap = transport_->getPositionSnapshot();
+        transport_->setLoop(snap.loopStartPpq, snap.loopEndPpq, !snap.looping);
+        ruler_.repaint();
+        return true;
+    }
+
+    // P = loop the selection. With the roll open the "selection" is the edited clip; otherwise the
+    // lane area already handles P itself when focused — this is the fallback for other focus
+    // targets inside the panel (same span, same setLoop the lane's callback performs).
+    if (isKey('P') && transport_ != nullptr) {
+        std::optional<std::pair<double, double>> span;
+        if (pianoRoll_.isOpen() && doc_ != nullptr) {
+            if (const auto* clip = doc_->getClip(pianoRoll_.getClipId()))
+                span = std::make_pair(clip->startBeat, clip->startBeat + clip->lengthBeats);
+        } else {
+            span = clipLaneArea_.getSelectedClipSpan();
+        }
+        if (!span || !(span->second > span->first))
+            return false;
+        transport_->setLoop(span->first, span->second, true);
+        ruler_.repaint();
+        return true;
+    }
+
     return false;
 }
 
@@ -608,6 +671,8 @@ void TimelinePanelComponent::setApplicationProperties(juce::ApplicationPropertie
     saved = juce::jlimit((int)TimelineViewState::Snap::Off, (int)TimelineViewState::Snap::Sixteenth, saved);
     viewState_.snap = (TimelineViewState::Snap)saved;
     snapCombo_.setSelectedId(saved + 1, juce::dontSendNotification);
+    viewState_.snapEnabled =
+        appProperties_->getUserSettings()->getBoolValue(kTimelineSnapEnabledPropertyKey, viewState_.snapEnabled);
 
     // A pure forward — the transport bar owns and persists its own two keys. See this
     // method's header comment.
@@ -618,6 +683,7 @@ void TimelinePanelComponent::persistSnapChoice() {
     if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
         return;
     appProperties_->getUserSettings()->setValue(kTimelineSnapPropertyKey, (int)viewState_.snap);
+    appProperties_->getUserSettings()->setValue(kTimelineSnapEnabledPropertyKey, viewState_.snapEnabled);
     appProperties_->saveIfNeeded();
 }
 
@@ -696,10 +762,13 @@ void TimelinePanelComponent::resized() {
     // draws underneath the strip's own chrome.
     playhead_.setBounds(!automationStripBounds_.isEmpty() ? lanesBounds_.withTrimmedBottom(automationStripHeight)
                                                           : lanesBounds_);
-    // The piano roll's rect expressed in the OVERLAY's coordinates (both share lanesBounds_'s x
-    // origin; only the ruler strip separates their tops). While the roll is open the overlay skips
-    // exactly these rows — see TimelinePlayheadOverlay::LocalPlayheadClient.
-    playhead_.setLocalPlayheadRegion(gridLanesBounds_ - playhead_.getBounds().getPosition());
+    // The piano roll's rect PLUS the ruler strip above it, expressed in the OVERLAY's coordinates.
+    // While the roll is open the overlay skips these rows — the roll draws its own line
+    // (LocalPlayheadClient), and the ruler strip is skipped too because it then labels bars
+    // through the ROLL's mapping (setMappingOverride), where the overlay's shared-mapping x would
+    // be a lie. While the roll is closed the region is ignored and the overlay owns its whole rect.
+    playhead_.setLocalPlayheadRegion(ruler_.getBounds().getUnion(gridLanesBounds_) -
+                                     playhead_.getBounds().getPosition());
 
     // Strip header row (tool buttons, lane/record-mode pickers, close) above the curve
     // canvas. Visibility follows automationStripVisible_ exactly — nothing else flips it.

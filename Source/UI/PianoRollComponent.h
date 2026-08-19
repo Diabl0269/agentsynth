@@ -60,7 +60,9 @@ public:
     static constexpr double kPixelsPerSemitone = 10.0;
     static constexpr double kMinPixelsPerSemitone = 4.0;
     static constexpr double kMaxPixelsPerSemitone = 40.0;
-    // Floor under a new/resized note's length when Snap is Off: TimelineViewState's finest grid unit.
+    // Floor under a new/resized note's length when Snap is Off: 1/16 of a beat, matching
+    // TransportService::kMinLoopLengthBeats (finer than the snap selector's finest division —
+    // Snap Off is exactly the mode that wants sub-grid freedom).
     // With Snap ON a NEW note is exactly one snap division long (1 bar quantise -> a 1-bar note).
     static constexpr double kMinNoteLengthBeats = 0.0625;
     // Resize handle zone at a note's right edge, in px (no left-edge resize in v1).
@@ -74,7 +76,8 @@ public:
     static constexpr int kQuantiseFlashMs = 120;
 
     static constexpr const char* kQuantiseTooltip =
-        "Quantize selected notes to the current grid \xE2\x80\x94 or all notes when nothing is selected";
+        "Snap to grid on/off (Q) \xE2\x80\x94 Shift+click quantizes the selected notes to the grid "
+        "(or all notes when nothing is selected)";
 
     explicit PianoRollComponent(TimelineViewState& viewState);
     ~PianoRollComponent() override = default;
@@ -131,6 +134,23 @@ public:
     // this to its own closePianoRoll(), which also re-shows the clip-lane area. Not fired by a
     // direct closeRoll() call (that IS the close — no need to ask again).
     std::function<void()> onCloseRequested;
+
+    // Fired after toggleSnap() flipped the shared TimelineViewState::snapEnabled — the owner
+    // persists the choice and repaints whatever else paints the grid (the lanes behind us).
+    std::function<void()> onSnapToggled;
+
+    // Fired whenever the roll's OWN horizontal mapping changed (openClip's framing, wheel
+    // zoom/scroll). While the roll is open the panel's ruler mirrors that mapping (see
+    // TimelineRulerComponent::setMappingOverride), so it has to repaint on this.
+    std::function<void()> onHorizontalViewChanged;
+
+    // The roll's own zoom/scroll — what the panel hands the ruler as its mapping override while
+    // the roll is open, so the bar numbers above show the clip's REAL timeline position.
+    const TimelineViewState& getRollViewState() const noexcept { return rollView_; }
+
+    // Flips the shared snap switch (TimelineViewState::snapEnabled), flashes the Q button and
+    // fires onSnapToggled. The Q button and the panel-wide Q key both land here.
+    void toggleSnap();
 
     // THE refresh seam, called by the panel's TimelineDoc::Listener on every doc mutation (mirrors
     // TimelineClipLaneArea::refreshFromDoc): prunes the note selection of anything the mutation

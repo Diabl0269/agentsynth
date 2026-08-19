@@ -36,37 +36,49 @@ struct TimelineViewState {
 
     void scrollBeats(double deltaBeats) noexcept { firstVisibleBeat = std::max(0.0, firstVisibleBeat + deltaBeats); }
 
-    // Snap division, expressed as a fraction of ONE BEAT (not of a whole note/bar) — the combo
-    // item labelled "1" is Beat (division 1.0 beat); "1/2"/"1/4"/"1/8"/"1/16" are literally that
-    // fraction of a beat (0.5 / 0.25 / 0.125 / 0.0625 beat). This matches TransportService's own
-    // kMinLoopLengthBeats = 1/16 = 0.0625 — the smallest grid here is exactly that same unit, not
-    // a musical "sixteenth note" measured against a whole note (which would be 0.25 beat).
-    enum class Snap : int { Off = 0, Bar, Beat, Half, Quarter, Eighth, Sixteenth };
-    Snap snap = Snap::Beat;
+    // Snap division, expressed as a NOTE VALUE (a fraction of a whole note), the way every DAW's
+    // grid selector reads: "1" is a whole note (4 beats — a full 4/4 bar), "1/4" is a quarter note
+    // (1 beat), "1/16" is a sixteenth (0.25 beat). A beat is always a quarter note here
+    // (TransportService's own convention), so these are fixed beat counts; only Snap::Bar consults
+    // the time signature.
+    enum class Snap : int { Off = 0, Bar, Whole, Half, Quarter, Eighth, Sixteenth };
+    Snap snap = Snap::Quarter;
 
-    // The current snap division, expressed as a fraction of one beat (0.0 for Snap::Off, meaning
-    // "no grid"). beatsPerBar is only consulted for Snap::Bar (pass TransportService's
-    // tsNum * 4 / tsDen). Factored out of snapBeat() so a caller that needs the raw grid size —
-    // PianoRollComponent::performQuantise, which feeds TimelineDoc::quantiseNotes a gridBeats
-    // value rather than snapping a single beat — doesn't duplicate this switch.
-    double divisionBeats(double beatsPerBar) const noexcept {
+    // Master snap switch, toggled by the piano roll's Q button and the panel-wide Q key. When off,
+    // divisionBeats()/snapBeat() behave exactly like Snap::Off (no grid, raw beats pass through)
+    // while `snap` keeps the chosen division, so toggling back on restores it. divisionBeatsRaw()
+    // ignores this switch — that is what a one-shot "quantise now" action wants.
+    bool snapEnabled = true;
+
+    // The chosen division in beats regardless of snapEnabled (0.0 only for Snap::Off). beatsPerBar
+    // is only consulted for Snap::Bar (pass TransportService's tsNum * 4 / tsDen). Factored out of
+    // snapBeat() so a caller that needs the raw grid size — PianoRollComponent's quantise-now
+    // action, which feeds TimelineDoc::quantiseNotes a gridBeats value rather than snapping a
+    // single beat — doesn't duplicate this switch.
+    double divisionBeatsRaw(double beatsPerBar) const noexcept {
         switch (snap) {
         case Snap::Off:
             return 0.0;
         case Snap::Bar:
             return beatsPerBar;
-        case Snap::Beat:
-            return 1.0;
+        case Snap::Whole:
+            return 4.0;
         case Snap::Half:
-            return 0.5;
+            return 2.0;
         case Snap::Quarter:
-            return 0.25;
+            return 1.0;
         case Snap::Eighth:
-            return 0.125;
+            return 0.5;
         case Snap::Sixteenth:
-            return 0.0625;
+            return 0.25;
         }
         return 0.0;
+    }
+
+    // The EFFECTIVE snap division (0.0 when snap is off — either Snap::Off or snapEnabled false).
+    // Every magnetic edit and every grid paint reads this one.
+    double divisionBeats(double beatsPerBar) const noexcept {
+        return snapEnabled ? divisionBeatsRaw(beatsPerBar) : 0.0;
     }
 
     // Nearest multiple of the snap division; beatsPerBar is only consulted for Snap::Bar (pass

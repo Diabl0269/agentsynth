@@ -426,13 +426,16 @@ void setParam(juce::AudioProcessor& p, const juce::String& id, float value) {
 std::vector<float> renderPolyIntoAdsr(const std::vector<std::vector<Event>>& blocks) {
     PolyMidiModule poly;
     ADSRModule adsr;
-    poly.prepareToPlay(kSampleRate, kBlockSize);
-    adsr.prepareToPlay(kSampleRate, kBlockSize);
+    // Parameters BEFORE prepareToPlay: prepare seeds ADSRModule's sustain smoothing (the TL4-3
+    // zipper fix) from the current parameter value, so setting sustain afterwards would ramp it
+    // 0 -> 1 across the first few blocks and every level assertion below would chase that ramp.
     setParam(adsr, "poly", 1.0f);
     setParam(adsr, "attack", 0.01f); // parameter minimum — 441 samples
     setParam(adsr, "decay", 0.01f);
     setParam(adsr, "sustain", 1.0f);
     setParam(adsr, "release", 0.01f);
+    poly.prepareToPlay(kSampleRate, kBlockSize);
+    adsr.prepareToPlay(kSampleRate, kBlockSize);
 
     juce::AudioBuffer<float> polyBuf(kNumChannels, kBlockSize);
     juce::AudioBuffer<float> adsrBuf(8, kBlockSize);
@@ -460,28 +463,28 @@ float endOfBlock(const std::vector<float>& env, int block) { return env[(size_t)
 
 } // namespace
 
-// Documents the *real* end-to-end behaviour, which is asymmetric on purpose:
-//
-// ADSRModule's poly branch samples the gate CV exactly once per block (`gateData[0]`, ADSRModule.h
-// §"Edge detection at start of block"). So PolyMidi's 1 ms gap re-articulates the envelope only
-// when it covers a block boundary; a retrigger in the middle of a block is invisible to that ADSR,
-// because the gate is back up before the next block starts. This is why the contract pins the gap
-// in absolute samples rather than trusting the smoothed shape, and it is what the Track In node
-// must schedule against.
-//
-// The second half of this test pins a limitation, not a desired behaviour: if ADSRModule ever gains
-// per-sample edge detection, delete it rather than "fixing" it.
-TEST(PolyMidiToAdsrTest, RetriggerReArticulatesAdsrWhenTheGapSpansABlockBoundary) {
-    // Retrigger 8 samples before the block ends: the 44-sample gap straddles the boundary, so block
-    // 3 starts with the gate low and the ADSR sees fall-then-rise on consecutive blocks.
+// Documents the *real* end-to-end behaviour after ADSRModule gained per-sample Schmitt edge
+// detection (#221): PolyMidi's snap-to-zero re-articulation gap is seen on the exact sample it
+// happens, wherever it falls in the block. The dip is PARTIAL by design — the gap is ~1 ms
+// (44 samples) plus the 5 ms gate-smoothing rise back through the Schmitt threshold, against a
+// 10 ms release — so the envelope re-attacks from roughly two-thirds height, it does not fall to
+// silence. (The pre-#221 ADSR sampled the gate once per block, which made mid-block retriggers
+// invisible; that asymmetry is gone, so this test now pins the SAME contract for both placements.)
+TEST(PolyMidiToAdsrTest, RetriggerReArticulatesAdsrRegardlessOfBlockAlignment) {
+    // Retrigger 8 samples before block 2 ends: the falling edge lands late in block 2, the gate
+    // climbs back over the Schmitt threshold ~146 samples into block 3.
     const auto spanning = renderPolyIntoAdsr({{{60, 0, true}}, {}, {{60, kBlockSize - 8, true}}, {}, {}});
     EXPECT_GT(endOfBlock(spanning, 1), 0.9f) << "envelope should be sustaining before the retrigger";
-    EXPECT_LT(minOverBlock(spanning, 3, kBlockSize - 32), 0.05f) << "ADSR must release on the gate's falling edge";
+    const float spanningDip = minOverBlock(spanning, 3);
+    EXPECT_LT(spanningDip, 0.8f) << "the gap must release the envelope — a real re-articulation";
+    EXPECT_GT(spanningDip, 0.3f) << "…but only partially: a ~150-sample gap against a 441-sample release";
     EXPECT_GT(endOfBlock(spanning, 4), 0.9f) << "and re-attack on the rise — a real retrigger";
 
-    // Same retrigger in mid-block: the gate is fully back up before block 3 is sampled, so this ADSR
-    // never observes the edge and the note simply sustains through.
+    // Same retrigger mid-block: per-sample edge detection sees it identically (the pre-#221
+    // block-sampled ADSR missed this one entirely).
     const auto midBlock = renderPolyIntoAdsr({{{60, 0, true}}, {}, {{60, 128, true}}, {}, {}});
-    EXPECT_GT(minOverBlock(midBlock, 3), 0.9f) << "known: ADSR samples the gate once per block";
-    EXPECT_GT(minOverBlock(midBlock, 4), 0.9f);
+    const float midDip = minOverBlock(midBlock, 2);
+    EXPECT_LT(midDip, 0.8f) << "a mid-block gap re-articulates too";
+    EXPECT_GT(midDip, 0.3f);
+    EXPECT_GT(endOfBlock(midBlock, 4), 0.9f);
 }

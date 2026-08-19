@@ -81,6 +81,10 @@ does not make Paste live on the clip lanes or vice versa.
 | Escape | Clip lanes, clips selected | Clear the clip selection |
 | Delete / Backspace | Clip lanes, clips selected | Delete every selected clip (one undo step) |
 | P | Clip lanes, clips selected | Loop the selection: sets the transport loop to the selected clips' `[min start, max end]` span and switches looping on |
+| P | Timeline panel (any focus target inside it) | Same loop-the-selection; with the piano roll open the "selection" is the edited clip |
+| L | Timeline panel (any focus target inside it) | Toggle looping on/off, keeping the existing loop bounds (the transport bar's loop button) |
+| Q | Timeline panel (any focus target inside it) | Toggle snap (grid magnetism) on/off — the chosen division survives underneath |
+| Shift+Q | Piano roll | One-shot quantise: snap the selected notes (or all notes when nothing is selected) to the chosen grid, even while snap is toggled off |
 | Escape | Piano roll, notes selected | Clear the note selection |
 | Escape | Piano roll, nothing selected | Close the roll, back to the clip lanes |
 | Delete / Backspace | Piano roll, notes selected | Delete every selected note (one undo step) |
@@ -90,8 +94,10 @@ otherwise it is passed through so it keeps whatever meaning the enclosing window
 user-rebindable — it is a panel-local binding, not part of the `ShortcutManager` table.
 
 The canvas selection keys are handled by `GraphEditor::keyPressed()`, the clip-lane ones (including
-`P`) by `TimelineClipLaneArea::keyPressed()`, and the piano-roll ones by
-`PianoRollComponent::keyPressed()`
+`P`) by `TimelineClipLaneArea::keyPressed()`, the piano-roll ones by
+`PianoRollComponent::keyPressed()`, and the panel-wide `Q`/`L`/`P` fallbacks by
+`TimelinePanelComponent::keyPressed()` (they fire when the focused child did not consume the key —
+JUCE bubbles unhandled keys up the parent chain)
 — all three are likewise **not** rebindable. This is deliberate: an unmodified `Delete` registered
 in the app-wide `ShortcutManager` table would fire from any panel that does not consume the key
 first — see the "surface routing" section above, which is exactly the same problem Cmd+C/V/D had

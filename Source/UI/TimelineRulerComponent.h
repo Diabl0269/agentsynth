@@ -42,6 +42,21 @@ public:
     void setTransport(synth::TransportService* transport) noexcept { transport_ = transport; }
     synth::TransportService* getTransport() const noexcept { return transport_; }
 
+    // While the piano roll is open it maps beats to x through its OWN zoom/scroll, so this strip
+    // would otherwise label bars that have nothing to do with what is on screen below it.
+    // TimelinePanelComponent hands the roll's view state here (plus the roll's keys-gutter width
+    // as a pixel offset, since the roll's grid starts that far right of this strip's x == 0) on
+    // openPianoRoll(), and clears it (nullptr) on close. Everything — labels, ticks, the loop
+    // brace, drag-to-loop and drag-to-scrub — follows the override, so the ruler stays a truthful,
+    // interactive ruler over the roll. The SNAP division still comes from the shared view state
+    // (there is only one snap setting).
+    void setMappingOverride(const TimelineViewState* view, int xOffsetPx) noexcept {
+        overrideView_ = view;
+        overrideOffsetPx_ = xOffsetPx;
+        repaint();
+    }
+    bool hasMappingOverrideForTest() const noexcept { return overrideView_ != nullptr; }
+
     void paint(juce::Graphics& g) override;
 
     // Loop zone (top half): press-drag-release sets the loop to the snapped
@@ -81,6 +96,12 @@ public:
 
 private:
     Zone zoneAtY(float y) const noexcept;
+    // The beat<->x mapping every paint/gesture site goes through: the shared view state normally,
+    // the override (offset by overrideOffsetPx_) while one is installed.
+    double mapBeatToX(double beat) const noexcept;
+    double mapXToBeat(double x) const noexcept;
+    double mapPixelsPerBeat() const noexcept;
+    double mapFirstVisibleBeat() const noexcept;
     double snappedBeatAtX(double x) const noexcept;
     double currentBeatsPerBar() const noexcept;
     void postLoopIfChanged(const juce::MouseEvent& e);
@@ -92,6 +113,11 @@ private:
 
     TimelineViewState& viewState_;
     synth::TransportService* transport_ = nullptr;
+
+    // Non-owning; set/cleared by the panel around the piano roll's open/close (see
+    // setMappingOverride). The pointee outlives the override window — both live on the panel.
+    const TimelineViewState* overrideView_ = nullptr;
+    int overrideOffsetPx_ = 0;
 
     // Gesture state (message thread only; mouseDown/mouseDrag/mouseUp are always dispatched from
     // there). gestureZone_ is latched in mouseDown.

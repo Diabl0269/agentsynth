@@ -69,7 +69,7 @@ struct AutomationEditorFixture {
     AutomationEditorFixture() {
         state.pixelsPerBeat = 40.0;
         state.firstVisibleBeat = 0.0;
-        state.snap = TimelineViewState::Snap::Beat;
+        state.snap = TimelineViewState::Snap::Quarter;
 
         editor.setTimelineDoc(&doc);
         editor.setUndoManager(&undo);

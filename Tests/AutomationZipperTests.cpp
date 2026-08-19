@@ -208,6 +208,18 @@ const std::vector<ModuleConfig>& moduleConfigs() {
           {"band3Gain", 2.5f, kEqGainJumpReason},
           {"band4Gain", 2.5f, kEqGainJumpReason}}},
 
+        {/*factoryName*/ "Comparator",
+         false,
+         "",
+         1,
+         {},
+         false,
+         // A comparator IS a threshold detector: its gate output flips rail-to-rail whenever the
+         // input crosses the (swept) threshold. The steps are the function, so only the NaN/Inf
+         // check is meaningful here.
+         2.2f},
+        {/*factoryName*/ "Ring Modulator", false, "", 2},
+
         // ---- excluded ------------------------------------------------------------------------
         {/*factoryName*/ "Sequencer", true,
          "declares zero audio channels; BPM / Gate / F.Env only time or fill discrete MIDI events"},

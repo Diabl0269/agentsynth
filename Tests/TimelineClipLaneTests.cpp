@@ -243,7 +243,7 @@ struct ClipLaneFixture {
     ClipLaneFixture() {
         state.pixelsPerBeat = 40.0;
         state.firstVisibleBeat = 0.0;
-        state.snap = TimelineViewState::Snap::Beat;
+        state.snap = TimelineViewState::Snap::Quarter;
         lane.setTimelineDoc(&doc);
         lane.setUndoManager(&undo);
         lane.setSize(1200, 400);

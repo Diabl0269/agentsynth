@@ -137,6 +137,8 @@ void PianoRollComponent::setHorizontalView(double pixelsPerBeat, double firstVis
         std::clamp(pixelsPerBeat, TimelineViewState::kMinPixelsPerBeat, TimelineViewState::kMaxPixelsPerBeat);
     rollView_.firstVisibleBeat = std::max(0.0, firstVisibleBeat);
     repaint();
+    if (onHorizontalViewChanged)
+        onHorizontalViewChanged();
 }
 
 void PianoRollComponent::setPixelsPerSemitone(double pixelsPerSemitone) {
@@ -504,17 +506,22 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
     g.setColour(border);
     g.drawRoundedRectangle(backButtonBounds_.toFloat(), 3.0f, 1.0f);
 
-    // Quantise button: dimmed (disabled-looking) when it would do nothing — Snap::Off, or a clip
-    // with no notes to quantise. The momentary flash is a fill behind the glyph, ended by the
-    // one-shot timer in timerCallback().
-    const bool enabled = isQuantiseEnabled();
+    // Snap toggle ("Q"): lit while grid magnetism is on (snapEnabled AND a division to snap to),
+    // muted while off — a real on/off switch, not an action button. The momentary flash (a fill
+    // behind the glyph, ended by the one-shot timer in timerCallback()) still acknowledges every
+    // press, including Shift+click's one-shot quantise.
+    const bool snapOn = viewState_.snapEnabled && viewState_.snap != TimelineViewState::Snap::Off;
+    if (snapOn) {
+        g.setColour(accent.withAlpha(0.18f));
+        g.fillRoundedRectangle(quantiseButtonBounds_.toFloat(), 3.0f);
+    }
     if (quantiseFlash_) {
         g.setColour(accent.withAlpha(0.35f));
         g.fillRoundedRectangle(quantiseButtonBounds_.toFloat(), 3.0f);
     }
-    g.setColour(enabled ? accent : textCol.withAlpha(0.35f));
+    g.setColour(snapOn ? accent : textCol.withAlpha(0.35f));
     g.drawText("Q", quantiseButtonBounds_, juce::Justification::centred, false);
-    g.setColour(border.withAlpha(enabled ? 1.0f : 0.5f));
+    g.setColour(snapOn ? accent.withAlpha(0.8f) : border.withAlpha(0.5f));
     g.drawRoundedRectangle(quantiseButtonBounds_.toFloat(), 3.0f, 1.0f);
 }
 
@@ -695,10 +702,19 @@ void PianoRollComponent::endMarquee() {
 }
 
 bool PianoRollComponent::isQuantiseEnabled() const {
-    if (doc_ == nullptr || !clipId_.isValid() || currentGridBeats() <= 0.0)
+    // Raw division on purpose: the one-shot quantise works from the CHOSEN grid even while the
+    // magnetism switch is off (that is its whole point — clean up notes drawn free-hand).
+    if (doc_ == nullptr || !clipId_.isValid() || viewState_.divisionBeatsRaw(currentBeatsPerBar()) <= 0.0)
         return false;
     const auto* clip = doc_->getClip(clipId_);
     return clip != nullptr && !clip->notes.empty();
+}
+
+void PianoRollComponent::toggleSnap() {
+    viewState_.snapEnabled = !viewState_.snapEnabled;
+    repaint(); // the gridlines and the Q button's lit state both follow the switch
+    if (onSnapToggled)
+        onSnapToggled();
 }
 
 void PianoRollComponent::flashQuantiseButton() {
@@ -720,7 +736,7 @@ void PianoRollComponent::timerCallback() {
 void PianoRollComponent::performQuantise() {
     if (!isQuantiseEnabled())
         return;
-    const double grid = currentGridBeats();
+    const double grid = viewState_.divisionBeatsRaw(currentBeatsPerBar());
 
     const auto selectedIds = selection_.getSelected();
     if (selectedIds.empty()) {
@@ -782,8 +798,11 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
         return;
     }
     if (quantiseButtonBounds_.contains(pos)) {
-        flashQuantiseButton(); // feedback even when the click is a no-op or the button is dimmed
-        performQuantise();
+        flashQuantiseButton(); // feedback even when the click is a no-op
+        if (e.mods.isShiftDown())
+            performQuantise(); // one-shot: snap the existing notes to the grid
+        else
+            toggleSnap(); // plain click: the grid-magnetism switch
         return;
     }
     if (pos.y < kHeaderHeight)
@@ -1009,6 +1028,8 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
         const double anchorGridX = std::max(0.0, (double)pos.x - (double)kKeysColumnWidth);
         rollView_.zoomAroundX(std::exp((double)wheel.deltaY * kZoomWheelSensitivity), anchorGridX);
         repaint();
+        if (onHorizontalViewChanged)
+            onHorizontalViewChanged();
         return;
     }
 
@@ -1021,6 +1042,8 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
         if (delta != 0.0) {
             rollView_.scrollBeats(-delta * kScrollPixelsPerWheelUnit / rollView_.pixelsPerBeat);
             repaint();
+            if (onHorizontalViewChanged)
+                onHorizontalViewChanged();
         }
         return;
     }
@@ -1034,6 +1057,19 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
 
 //==============================================================================
 bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {
+    // Q = toggle grid magnetism; Shift+Q = one-shot quantise (same pair as the header button's
+    // click / Shift+click). Handled here so it works while the roll has focus; the panel handles
+    // the same key for every other focus target inside the timeline. Matched on the key CODE
+    // (JUCE letter key codes are the uppercase character), so the Shift variant still matches.
+    if (key.getKeyCode() == 'Q' || key.getKeyCode() == 'q') {
+        flashQuantiseButton();
+        if (key.getModifiers().isShiftDown())
+            performQuantise();
+        else
+            toggleSnap();
+        return true;
+    }
+
     if (key == juce::KeyPress::escapeKey) {
         if (!selection_.isEmpty()) {
             selection_.clear();

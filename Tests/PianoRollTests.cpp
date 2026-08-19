@@ -220,7 +220,7 @@ struct PianoRollFixture {
         // beatToX/xToBeat, never this one (which is now consulted for the snap division alone).
         state.pixelsPerBeat = 40.0;
         state.firstVisibleBeat = 0.0;
-        state.snap = TimelineViewState::Snap::Beat;
+        state.snap = TimelineViewState::Snap::Quarter;
         roll.setTimelineDoc(&doc);
         roll.setUndoManager(&undo);
         roll.setSize(900, 160);
@@ -330,7 +330,7 @@ TEST(PianoRollEditingTest, DoubleClickCreatesSnappedNoteOneStep) {
     ASSERT_EQ(clip->notes.size(), 1u);
     const auto& note = clip->notes[0];
     EXPECT_DOUBLE_EQ(note.startBeat, 2.0);
-    EXPECT_DOUBLE_EQ(note.lengthBeats, 1.0) << "one snap division (Snap::Beat) long";
+    EXPECT_DOUBLE_EQ(note.lengthBeats, 1.0) << "one snap division (Snap::Quarter) long";
     EXPECT_EQ(note.pitch, pitch);
     EXPECT_EQ(note.velocity, 100);
     EXPECT_TRUE(f.roll.getSelectionForTest().contains(note.id)) << "the new note ends up selected";
@@ -387,13 +387,14 @@ TEST(PianoRollEditingTest, NewNoteLengthFollowsTheSnapDivision) {
     EXPECT_DOUBLE_EQ(clip->notes[0].startBeat, 4.0);
     EXPECT_DOUBLE_EQ(clip->notes[0].lengthBeats, 4.0) << "1 bar quantise -> a 1-bar note";
 
-    // 1/4 beat, three rows lower (further from the header, still well inside the grid).
-    f.state.snap = TimelineViewState::Snap::Quarter;
+    // A sixteenth note (0.25 beat), three rows lower (further from the header, still well inside
+    // the grid).
+    f.state.snap = TimelineViewState::Snap::Sixteenth;
     f.roll.mouseDoubleClick(leftClick(f.roll, {(float)f.roll.beatToX(10.1), y + 30.0f}));
     ASSERT_EQ(f.doc.getClip(clipId)->notes.size(), 2u);
-    const auto& quarter = f.doc.getClip(clipId)->notes[1];
-    EXPECT_DOUBLE_EQ(quarter.startBeat, 10.0);
-    EXPECT_DOUBLE_EQ(quarter.lengthBeats, 0.25) << "1/4 quantise -> a quarter-long note";
+    const auto& sixteenth = f.doc.getClip(clipId)->notes[1];
+    EXPECT_DOUBLE_EQ(sixteenth.startBeat, 10.0);
+    EXPECT_DOUBLE_EQ(sixteenth.lengthBeats, 0.25) << "1/16 quantise -> a sixteenth-long note";
 }
 
 // A double-click ON a note deletes it (standard DAW idiom), in one undo step — and creating and
@@ -594,7 +595,7 @@ TEST(PianoRollEditingTest, QuantiseSelectedAndAll) {
     // Selected subset: only idA quantises (per-note moveNote path — quantiseNotes has no subset
     // overload).
     f.roll.getSelectionForTest().setSelection({idA});
-    f.roll.mouseDown(leftClick(f.roll, centreOf(f.roll.getQuantiseButtonBounds())));
+    f.roll.mouseDown(leftClick(f.roll, centreOf(f.roll.getQuantiseButtonBounds()), juce::ModifierKeys::shiftModifier));
 
     EXPECT_DOUBLE_EQ(f.doc.getNote(idA)->startBeat, 1.0);
     EXPECT_DOUBLE_EQ(f.doc.getNote(idB)->startBeat, 2.6) << "unselected note is untouched";
@@ -605,7 +606,7 @@ TEST(PianoRollEditingTest, QuantiseSelectedAndAll) {
 
     // Nothing selected: quantises EVERY note in the clip via doc.quantiseNotes.
     f.roll.getSelectionForTest().clear();
-    f.roll.mouseDown(leftClick(f.roll, centreOf(f.roll.getQuantiseButtonBounds())));
+    f.roll.mouseDown(leftClick(f.roll, centreOf(f.roll.getQuantiseButtonBounds()), juce::ModifierKeys::shiftModifier));
 
     EXPECT_DOUBLE_EQ(f.doc.getNote(idA)->startBeat, 1.0);
     EXPECT_DOUBLE_EQ(f.doc.getNote(idB)->startBeat, 3.0) << "an empty selection means ALL notes";
@@ -625,11 +626,12 @@ TEST(PianoRollEditingTest, QuantiseNoOpWritesNoUndoStep) {
     ASSERT_TRUE(idB.isValid());
 
     const auto qCentre = centreOf(f.roll.getQuantiseButtonBounds());
-    f.roll.mouseDown(leftClick(f.roll, qCentre)); // real change -> one undo step
+    f.roll.mouseDown(leftClick(f.roll, qCentre, juce::ModifierKeys::shiftModifier)); // real change -> one undo step
     ASSERT_TRUE(f.undo.canUndo());
     EXPECT_TRUE(f.roll.isQuantiseFlashingForTest()) << "the click flashes the button";
 
-    f.roll.mouseDown(leftClick(f.roll, qCentre)); // already quantised -> nothing to record
+    f.roll.mouseDown(
+        leftClick(f.roll, qCentre, juce::ModifierKeys::shiftModifier)); // already quantised -> nothing to record
     EXPECT_TRUE(f.roll.isQuantiseFlashingForTest()) << "a no-op click still gives visual feedback";
 
     ASSERT_TRUE(f.undo.canUndo());
@@ -638,6 +640,56 @@ TEST(PianoRollEditingTest, QuantiseNoOpWritesNoUndoStep) {
                                                             "so the second click wrote no step";
     EXPECT_DOUBLE_EQ(f.doc.getNote(idB)->startBeat, 2.6);
     EXPECT_FALSE(f.undo.canUndo());
+}
+
+// A PLAIN click on Q (and the plain Q key) toggles grid magnetism — the shared snapEnabled switch
+// — and moves no note. Shift is what quantises (covered above).
+TEST(PianoRollEditingTest, PlainQTogglesSnapWithoutMovingNotes) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    f.open(clipId);
+    const auto idA = f.doc.addNote(clipId, makeNote(1.1, 60));
+    ASSERT_TRUE(idA.isValid());
+    ASSERT_TRUE(f.state.snapEnabled);
+
+    int toggles = 0;
+    f.roll.onSnapToggled = [&] { ++toggles; };
+
+    f.roll.mouseDown(leftClick(f.roll, centreOf(f.roll.getQuantiseButtonBounds())));
+    EXPECT_FALSE(f.state.snapEnabled) << "plain click flips the switch off";
+    EXPECT_EQ(toggles, 1);
+    EXPECT_DOUBLE_EQ(f.doc.getNote(idA)->startBeat, 1.1) << "toggling never moves notes";
+    EXPECT_FALSE(f.undo.canUndo()) << "a view-state toggle is not a document edit";
+    EXPECT_TRUE(f.roll.isQuantiseFlashingForTest()) << "the press still flashes the button";
+
+    // With the switch off the effective grid is gone (edits go free-hand)…
+    EXPECT_DOUBLE_EQ(f.roll.getGridDivisionForTest(), 0.0);
+
+    // …and the Q key toggles it right back.
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress('q')));
+    EXPECT_TRUE(f.state.snapEnabled);
+    EXPECT_EQ(toggles, 2);
+    EXPECT_DOUBLE_EQ(f.roll.getGridDivisionForTest(), 1.0);
+}
+
+// Shift+Q (the key) is the one-shot quantise, and it works from the CHOSEN division even while the
+// magnetism switch is off — that is the whole point of a one-shot clean-up.
+TEST(PianoRollEditingTest, ShiftQKeyQuantisesEvenWhileSnapToggledOff) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    f.open(clipId);
+    const auto idA = f.doc.addNote(clipId, makeNote(1.1, 60));
+    ASSERT_TRUE(idA.isValid());
+
+    f.state.snapEnabled = false;
+    EXPECT_TRUE(f.roll.isQuantiseEnabled()) << "the one-shot reads the RAW division, not the switch";
+
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress('Q', juce::ModifierKeys::shiftModifier, 0)));
+    EXPECT_DOUBLE_EQ(f.doc.getNote(idA)->startBeat, 1.0);
+    EXPECT_FALSE(f.state.snapEnabled) << "Shift+Q never flips the switch";
+    ASSERT_TRUE(f.undo.canUndo());
 }
 
 // The button paints dimmed when it would do nothing, and carries the tooltip that explains its
@@ -828,15 +880,15 @@ TEST(PianoRollInteractionTest, GridLinesFollowTheSnapDivision) {
     const auto clipId = f.doc.addClip(trackId, 0.0, 32.0, "Clip");
     f.open(clipId); // 40 px/beat, beat 0 at the gutter
 
-    f.state.snap = TimelineViewState::Snap::Beat;
+    f.state.snap = TimelineViewState::Snap::Quarter;
     EXPECT_DOUBLE_EQ(f.roll.getGridDivisionForTest(), 1.0);
     const int beatLines = f.roll.getGridLineCountForTest(1.0);
     EXPECT_GT(beatLines, 0);
 
-    f.state.snap = TimelineViewState::Snap::Eighth;
-    EXPECT_DOUBLE_EQ(f.roll.getGridDivisionForTest(), 0.125);
-    const int eighthLines = f.roll.getGridLineCountForTest(f.roll.getGridDivisionForTest());
-    EXPECT_GT(eighthLines, beatLines * 7) << "a finer division draws proportionally more lines";
+    f.state.snap = TimelineViewState::Snap::Sixteenth;
+    EXPECT_DOUBLE_EQ(f.roll.getGridDivisionForTest(), 0.25);
+    const int sixteenthLines = f.roll.getGridLineCountForTest(f.roll.getGridDivisionForTest());
+    EXPECT_GT(sixteenthLines, beatLines * 3) << "a finer division draws proportionally more lines";
 
     f.state.snap = TimelineViewState::Snap::Off;
     EXPECT_DOUBLE_EQ(f.roll.getGridDivisionForTest(), 0.0) << "Snap::Off has no sub-beat level at all";
@@ -844,7 +896,7 @@ TEST(PianoRollInteractionTest, GridLinesFollowTheSnapDivision) {
 
     // Zoomed far out, a sub-beat level is dropped rather than drawn as a wall of lines.
     f.roll.setHorizontalView(TimelineViewState::kMinPixelsPerBeat, 0.0);
-    EXPECT_EQ(f.roll.getGridLineCountForTest(0.125), 0);
+    EXPECT_EQ(f.roll.getGridLineCountForTest(0.25), 0);
 }
 
 // ---- The local playhead: the roll draws it at ITS OWN x, under the same strip discipline ----

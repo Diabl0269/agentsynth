@@ -121,29 +121,45 @@ TEST(TimelineViewStateTest, SnapTableExactValuesAt4_4) {
     EXPECT_DOUBLE_EQ(state.snapBeat(2.1, beatsPerBar), 4.0);
     EXPECT_DOUBLE_EQ(state.snapBeat(7.9, beatsPerBar), 8.0);
 
-    state.snap = Snap::Beat;
+    // Note values: a whole note is 4 beats (a beat is always a quarter note), so "1" spans a full
+    // 4/4 bar — the DAW-conventional reading of the grid selector.
+    state.snap = Snap::Whole;
+    EXPECT_DOUBLE_EQ(state.snapBeat(1.9, beatsPerBar), 0.0);
+    EXPECT_DOUBLE_EQ(state.snapBeat(2.1, beatsPerBar), 4.0);
+
+    state.snap = Snap::Half;
+    EXPECT_DOUBLE_EQ(state.snapBeat(0.9, beatsPerBar), 0.0);
+    EXPECT_DOUBLE_EQ(state.snapBeat(1.1, beatsPerBar), 2.0);
+
+    state.snap = Snap::Quarter;
     EXPECT_DOUBLE_EQ(state.snapBeat(1.4, beatsPerBar), 1.0);
     EXPECT_DOUBLE_EQ(state.snapBeat(1.6, beatsPerBar), 2.0);
 
-    state.snap = Snap::Half;
+    // Eighth note = half a beat.
+    state.snap = Snap::Eighth;
     EXPECT_DOUBLE_EQ(state.snapBeat(1.24, beatsPerBar), 1.0);
     EXPECT_DOUBLE_EQ(state.snapBeat(1.26, beatsPerBar), 1.5);
 
-    state.snap = Snap::Quarter;
+    // Sixteenth note = 0.25 beat — the finest grid the selector offers.
+    state.snap = Snap::Sixteenth;
     EXPECT_DOUBLE_EQ(state.snapBeat(1.1, beatsPerBar), 1.0);
     EXPECT_DOUBLE_EQ(state.snapBeat(1.2, beatsPerBar), 1.25);
+}
 
-    // Eighth = 1/8 of a beat = 0.125 beat.
-    state.snap = Snap::Eighth;
-    EXPECT_DOUBLE_EQ(state.snapBeat(1.0625, beatsPerBar), 1.125);
-    EXPECT_DOUBLE_EQ(state.snapBeat(1.05, beatsPerBar), 1.0);
+TEST(TimelineViewStateTest, SnapEnabledFalseBehavesLikeOffButKeepsDivision) {
+    TimelineViewState state;
+    state.snap = Snap::Quarter;
+    state.snapEnabled = false;
 
-    // Sixteenth = 1/16 of a beat = 0.0625 beat — matches TransportService::kMinLoopLengthBeats,
-    // which is defined as exactly this same unit (1/16 of a beat, not a musical "sixteenth note"
-    // measured against a whole note, which would be 0.25 beat).
-    state.snap = Snap::Sixteenth;
-    EXPECT_DOUBLE_EQ(state.snapBeat(1.05, beatsPerBar), 1.0625); // closer to 17 * 0.0625 than 16 *
-    EXPECT_DOUBLE_EQ(state.snapBeat(1.02, beatsPerBar), 1.0);    // closer to 16 * 0.0625
+    // Effective division/snap: no grid, raw beats pass through.
+    EXPECT_DOUBLE_EQ(state.divisionBeats(4.0), 0.0);
+    EXPECT_DOUBLE_EQ(state.snapBeat(1.37, 4.0), 1.37);
+
+    // The chosen division survives underneath (what a one-shot quantise reads), and toggling back
+    // on restores the magnetism.
+    EXPECT_DOUBLE_EQ(state.divisionBeatsRaw(4.0), 1.0);
+    state.snapEnabled = true;
+    EXPECT_DOUBLE_EQ(state.snapBeat(1.37, 4.0), 1.0);
 }
 
 TEST(TimelineViewStateTest, SnapTableExactValuesAt3_4) {
@@ -158,17 +174,17 @@ TEST(TimelineViewStateTest, SnapTableExactValuesAt3_4) {
     EXPECT_DOUBLE_EQ(state.snapBeat(4.6, beatsPerBar), 6.0);
     EXPECT_DOUBLE_EQ(state.snapBeat(7.6, beatsPerBar), 9.0);
 
-    // Beat/Half/Quarter/Eighth/Sixteenth are all defined relative to ONE BEAT, so beatsPerBar is
-    // irrelevant to them — only Bar consults it.
-    state.snap = Snap::Beat;
+    // Whole/Half/Quarter/Eighth/Sixteenth are fixed note values (a beat is always a quarter
+    // note), so beatsPerBar is irrelevant to them — only Bar consults it.
+    state.snap = Snap::Quarter;
     EXPECT_DOUBLE_EQ(state.snapBeat(2.6, beatsPerBar), 3.0);
     state.snap = Snap::Sixteenth;
-    EXPECT_DOUBLE_EQ(state.snapBeat(1.05, beatsPerBar), 1.0625);
+    EXPECT_DOUBLE_EQ(state.snapBeat(1.1, beatsPerBar), 1.0);
 }
 
 TEST(TimelineViewStateTest, SnapTableTiesRoundHalfUp) {
     TimelineViewState state;
-    state.snap = Snap::Beat;
+    state.snap = Snap::Quarter;
     // Exactly halfway between 1 and 2 rounds up (toward +infinity, deterministic).
     EXPECT_DOUBLE_EQ(state.snapBeat(1.5, 4.0), 2.0);
 
@@ -176,5 +192,5 @@ TEST(TimelineViewStateTest, SnapTableTiesRoundHalfUp) {
     EXPECT_DOUBLE_EQ(state.snapBeat(2.0, 4.0), 4.0); // exactly halfway between bar 0 and bar 1
 
     state.snap = Snap::Sixteenth;
-    EXPECT_DOUBLE_EQ(state.snapBeat(1.0 + 0.0625 / 2.0, 4.0), 1.0625);
+    EXPECT_DOUBLE_EQ(state.snapBeat(1.0 + 0.25 / 2.0, 4.0), 1.25);
 }

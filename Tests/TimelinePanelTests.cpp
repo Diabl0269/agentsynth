@@ -253,7 +253,7 @@ TEST(TimelineRulerInteractionTest, PressInPlayheadZoneSeeksSnapped) {
     synth::ui::TimelineViewState state;
     state.pixelsPerBeat = 40.0;
     state.firstVisibleBeat = 0.0;
-    state.snap = synth::ui::TimelineViewState::Snap::Beat;
+    state.snap = synth::ui::TimelineViewState::Snap::Quarter;
 
     synth::TransportService transport;
     transport.prepare(48000.0, 512);
@@ -283,7 +283,7 @@ TEST(TimelineRulerInteractionTest, DragInPlayheadZoneScrubsAndThrottlesPosts) {
     synth::ui::TimelineViewState state;
     state.pixelsPerBeat = 40.0;
     state.firstVisibleBeat = 0.0;
-    state.snap = synth::ui::TimelineViewState::Snap::Beat;
+    state.snap = synth::ui::TimelineViewState::Snap::Quarter;
 
     synth::TransportService transport;
     transport.prepare(48000.0, 512);
@@ -327,7 +327,7 @@ TEST(TimelineRulerInteractionTest, GestureZoneIsStickyForTheWholeDrag) {
     synth::ui::TimelineViewState state;
     state.pixelsPerBeat = 40.0;
     state.firstVisibleBeat = 0.0;
-    state.snap = synth::ui::TimelineViewState::Snap::Beat;
+    state.snap = synth::ui::TimelineViewState::Snap::Quarter;
 
     synth::TransportService transport;
     transport.prepare(48000.0, 512);
@@ -363,7 +363,7 @@ TEST(TimelineRulerInteractionTest, ClickInLoopZoneChangesNothing) {
     synth::ui::TimelineViewState state;
     state.pixelsPerBeat = 40.0;
     state.firstVisibleBeat = 0.0;
-    state.snap = synth::ui::TimelineViewState::Snap::Beat;
+    state.snap = synth::ui::TimelineViewState::Snap::Quarter;
 
     synth::TransportService transport;
     transport.prepare(48000.0, 512);
@@ -534,7 +534,7 @@ TEST(TimelineRulerInteractionTest, ClickOnDimmedBraceReArmsLooping) {
     synth::ui::TimelineViewState state;
     state.pixelsPerBeat = 40.0;
     state.firstVisibleBeat = 0.0;
-    state.snap = synth::ui::TimelineViewState::Snap::Beat;
+    state.snap = synth::ui::TimelineViewState::Snap::Quarter;
 
     synth::TransportService transport;
     transport.prepare(48000.0, 512);
@@ -634,7 +634,7 @@ TEST(TimelinePanelSnapComboTest, SnapChoicePersists) {
 
     synth::ui::TimelinePanelComponent panel;
     panel.setApplicationProperties(&props);
-    ASSERT_EQ(panel.getViewState().snap, synth::ui::TimelineViewState::Snap::Beat); // documented default
+    ASSERT_EQ(panel.getViewState().snap, synth::ui::TimelineViewState::Snap::Quarter); // documented default
 
     panel.getSnapCombo().setSelectedId(7, juce::sendNotificationSync); // "1/16" -> Sixteenth
     EXPECT_EQ(panel.getViewState().snap, synth::ui::TimelineViewState::Snap::Sixteenth);
@@ -1607,4 +1607,122 @@ TEST(TimelinePanelComponentTest, DoubleClickOnEmptyMidiLaneCreatesAClipAndOpensT
     ASSERT_TRUE(panel.isPianoRollOpen()) << "the user lands in the note editor, ready to draw";
     EXPECT_EQ(panel.getPianoRoll().getClipId(), clip.id);
     EXPECT_FALSE(lane.isVisible()) << "the piano roll replaced the lanes, same as reopening a clip";
+}
+
+// ============================================================================
+// Panel-scoped keys (Q = snap toggle, L = loop toggle, P = loop the selection) and the ruler's
+// piano-roll mapping override.
+// ============================================================================
+
+TEST(TimelinePanelComponentTest, QKeyTogglesSnapEnabled) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1000, 300);
+    ASSERT_TRUE(panel.getViewState().snapEnabled);
+
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('q')));
+    EXPECT_FALSE(panel.getViewState().snapEnabled);
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('q')));
+    EXPECT_TRUE(panel.getViewState().snapEnabled);
+}
+
+TEST(TimelinePanelComponentTest, PickingADivisionReEnablesSnap) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.getViewState().snapEnabled = false;
+    panel.getSnapCombo().setSelectedId(4, juce::sendNotificationSync); // "1/2"
+    EXPECT_TRUE(panel.getViewState().snapEnabled) << "choosing a grid size means 'snap to THIS'";
+    EXPECT_EQ(panel.getViewState().snap, synth::ui::TimelineViewState::Snap::Half);
+}
+
+TEST(TimelinePanelComponentTest, LKeyTogglesLoopingKeepingBounds) {
+    synth::ui::TimelinePanelComponent panel;
+    synth::TransportService transport;
+    transport.prepare(48000.0, 512);
+    ASSERT_TRUE(transport.setLoop(2.0, 6.0, false));
+    transport.tick(512);
+    panel.setTransport(&transport);
+
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('l')));
+    transport.tick(512);
+    auto snap = transport.getPositionSnapshot();
+    EXPECT_TRUE(snap.looping);
+    EXPECT_DOUBLE_EQ(snap.loopStartPpq, 2.0);
+    EXPECT_DOUBLE_EQ(snap.loopEndPpq, 6.0);
+
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('l')));
+    transport.tick(512);
+    snap = transport.getPositionSnapshot();
+    EXPECT_FALSE(snap.looping);
+    EXPECT_DOUBLE_EQ(snap.loopStartPpq, 2.0) << "toggling keeps the bounds";
+}
+
+TEST(TimelinePanelComponentTest, PKeyLoopsTheSelectedClipsFromPanelScope) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    synth::TransportService transport;
+    transport.prepare(48000.0, 512);
+    panel.setTransport(&transport);
+    panel.setTimelineDoc(&doc);
+
+    const auto trackId = doc.addTrack(synth::TrackKind::Midi, "Track 1");
+    const auto clipA = doc.addClip(trackId, 4.0, 4.0, "A");
+    const auto clipB = doc.addClip(trackId, 12.0, 2.0, "B");
+    ASSERT_TRUE(clipA.isValid());
+    ASSERT_TRUE(clipB.isValid());
+
+    EXPECT_FALSE(panel.keyPressed(juce::KeyPress('p'))) << "no selection -> the key falls through";
+
+    panel.getClipSelection().setSelection({clipA, clipB});
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('p')));
+    transport.tick(512);
+    const auto snap = transport.getPositionSnapshot();
+    EXPECT_TRUE(snap.looping);
+    EXPECT_DOUBLE_EQ(snap.loopStartPpq, 4.0);
+    EXPECT_DOUBLE_EQ(snap.loopEndPpq, 14.0) << "the span covers the whole multi-clip selection";
+}
+
+TEST(TimelinePanelComponentTest, PKeyWithThePianoRollOpenLoopsTheEditedClip) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    synth::TransportService transport;
+    transport.prepare(48000.0, 512);
+    panel.setTransport(&transport);
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 320);
+
+    const auto trackId = doc.addTrack(synth::TrackKind::Midi, "Track 1");
+    const auto clipId = doc.addClip(trackId, 8.0, 4.0, "Clip");
+    ASSERT_TRUE(clipId.isValid());
+    panel.openPianoRoll(clipId);
+    ASSERT_TRUE(panel.isPianoRollOpen());
+
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('p')));
+    transport.tick(512);
+    const auto snap = transport.getPositionSnapshot();
+    EXPECT_TRUE(snap.looping);
+    EXPECT_DOUBLE_EQ(snap.loopStartPpq, 8.0);
+    EXPECT_DOUBLE_EQ(snap.loopEndPpq, 12.0);
+}
+
+// While the roll is open the ruler mirrors the ROLL's mapping (offset by the keys gutter), so its
+// bar numbers show the edited clip's real timeline position; closing restores the shared mapping.
+TEST(TimelinePanelComponentTest, PianoRollOpenInstallsTheRulerMappingOverride) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 320);
+
+    const auto trackId = doc.addTrack(synth::TrackKind::Midi, "Track 1");
+    const auto clipId = doc.addClip(trackId, 20.0, 4.0, "Clip"); // bar 6 in 4/4
+    ASSERT_TRUE(clipId.isValid());
+    ASSERT_FALSE(panel.getRuler().hasMappingOverrideForTest());
+
+    panel.openPianoRoll(clipId);
+    ASSERT_TRUE(panel.isPianoRollOpen());
+    EXPECT_TRUE(panel.getRuler().hasMappingOverrideForTest());
+    // The roll framed the clip with its start at the keys gutter's right edge — beat 20, i.e. the
+    // ruler above now starts labelling from bar 6, not bar 1.
+    EXPECT_DOUBLE_EQ(panel.getPianoRoll().getFirstVisibleBeat(), 20.0);
+
+    panel.closePianoRoll();
+    EXPECT_FALSE(panel.getRuler().hasMappingOverrideForTest());
 }
