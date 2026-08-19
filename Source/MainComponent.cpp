@@ -601,9 +601,15 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         importAudioFileToClip(track, startBeat, file);
     };
     // P on the clip lanes = loop the selection. The lane area knows the span; only this owns the
-    // transport (same division as every other callback above).
+    // transport (same division as every other callback above). Whether P also ARMS looping is the
+    // "timelineLoopSelectionArms" preference (default yes; off = place the locators, keep the
+    // current loop state) — the same key TimelinePanelComponent's own P fallback reads.
     timelinePanel.getClipLaneArea().onLoopRangeRequested = [this](double startBeat, double endBeat) {
-        audioEngine.getTransport().setLoop(startBeat, endBeat, /*enabled=*/true);
+        auto& transport = audioEngine.getTransport();
+        bool arm = true;
+        if (auto* settings = appProperties.getUserSettings())
+            arm = settings->getBoolValue("timelineLoopSelectionArms", true);
+        transport.setLoop(startBeat, endBeat, arm || transport.getPositionSnapshot().looping);
     };
     // BEFORE the first publish below — publishTimeline() syncs the clip streamer, and it can
     // only resolve an asset ref once it knows the roots.

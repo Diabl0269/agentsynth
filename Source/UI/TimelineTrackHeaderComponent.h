@@ -129,6 +129,21 @@ public:
     juce::String getBindingChipText() const { return bindingChip_.getButtonText(); }
     bool isBindingChipWarning() const noexcept { return chipWarning_; }
 
+    // ---- Track-kind badge ------------------------------------------------------
+    // A fixed per-TrackKind label ("MIDI" / "AUD" / "AUTO") drawn in the top row, right of the
+    // colour swatch. Not editable and not doc-driven beyond the kind itself, so there is no
+    // corresponding setter — refreshFromDoc() just repaints when the kind can't have changed anyway
+    // (a track's kind, unlike its name or colour, never changes after creation).
+    juce::String getKindBadgeTextForTest() const;
+    juce::Rectangle<int> getKindBadgeBoundsForTest() const noexcept { return kindBadgeBounds_; }
+
+    // ---- Automation open/close button -------------------------------------------
+    // Visible only when the track has at least one automation lane. The header never decides
+    // open-vs-close itself — it just reports the click and TimelinePanelComponent (which owns the
+    // single automation strip) works out whether that means "open this track's lane" or "close the
+    // strip that's already showing it".
+    std::function<void(synth::TrackId)> onAutomationToggleRequested;
+
     /** The chip menu's contents, in menu-id order (option i has menu id i + 1). Exposed so tests
      *  drive the choice without a juce::PopupMenu, which never runs headlessly. */
     std::vector<TrackHeaderHost::BindingOption> collectBindingOptions() const;
@@ -152,6 +167,7 @@ public:
     juce::Button& getArmButton() noexcept { return armButton_; }
     juce::Button& getColourSwatch() noexcept { return colourSwatch_; }
     juce::Button& getBindingChip() noexcept { return bindingChip_; }
+    juce::Button& getAutomationButton() noexcept { return automationButton_; }
     juce::Colour getResolvedColour() const noexcept { return resolvedColour_; }
 
 private:
@@ -185,10 +201,14 @@ private:
     juce::TextButton muteButton_{"M"};
     juce::TextButton soloButton_{"S"};
     juce::TextButton armButton_{"R"};
+    juce::TextButton automationButton_{"A"};
     juce::TextButton bindingChip_;
 
     juce::Colour resolvedColour_{juce::Colours::grey};
     bool chipWarning_ = false;
+    // Set in resized(); the kind badge itself is drawn straight from track()->kind in paint(), so
+    // this is only a hit-rect for tests, not a cache of the badge's text.
+    juce::Rectangle<int> kindBadgeBounds_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelineTrackHeaderComponent)
 };

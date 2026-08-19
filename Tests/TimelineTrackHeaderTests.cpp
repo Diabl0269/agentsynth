@@ -99,8 +99,8 @@ dedupedBindingOptions(const std::vector<std::pair<juce::String, juce::String>>& 
 
 // A doc + one track + a header wired to a stub host — the shape every test below needs.
 struct HeaderFixture {
-    HeaderFixture() {
-        trackId = doc.addTrack(TrackKind::Midi, "Track 1");
+    explicit HeaderFixture(TrackKind kind = TrackKind::Midi) {
+        trackId = doc.addTrack(kind, "Track 1");
         host = std::make_unique<StubTrackHeaderHost>(doc);
         header = std::make_unique<TimelineTrackHeaderComponent>(doc, trackId, host.get());
         header->setSize(160, TimelineTrackHeaderComponent::kRowHeight);
@@ -409,7 +409,67 @@ TEST(TimelineTrackHeaderTest, OrphanedChipTooltipExplainsTheMissingNode) {
 }
 
 // =============================================================================
-// 7. synth::ui::resolveTrackColour — the pure resolver
+// 7. Track-kind badge, the automation open/close button, and the Automation-track binding chip
+// =============================================================================
+
+TEST(TimelineTrackHeaderTest, KindBadgeTextPerTrackKind) {
+    HeaderFixture midi(TrackKind::Midi);
+    EXPECT_EQ(midi.header->getKindBadgeTextForTest(), "MIDI");
+
+    HeaderFixture audio(TrackKind::Audio);
+    EXPECT_EQ(audio.header->getKindBadgeTextForTest(), "AUD");
+
+    HeaderFixture automation(TrackKind::Automation);
+    EXPECT_EQ(automation.header->getKindBadgeTextForTest(), "AUTO");
+}
+
+TEST(TimelineTrackHeaderTest, KindBadgeTextEmptyWhenTrackIsGone) {
+    HeaderFixture f;
+    ASSERT_TRUE(f.doc.removeTrack(f.trackId));
+    f.header->refreshFromDoc();
+    EXPECT_EQ(f.header->getKindBadgeTextForTest(), juce::String());
+}
+
+TEST(TimelineTrackHeaderTest, AutomationButtonHiddenUntilTheTrackHasALane) {
+    HeaderFixture f;
+    EXPECT_FALSE(f.header->getAutomationButton().isVisible());
+
+    synth::AutomationLane::RangeSnapshot range;
+    const auto laneId = f.doc.addLane(f.trackId, "node-uuid", "cutoff", range);
+    ASSERT_TRUE(laneId.isValid());
+    f.header->refreshFromDoc();
+
+    EXPECT_TRUE(f.header->getAutomationButton().isVisible());
+}
+
+TEST(TimelineTrackHeaderTest, AutomationButtonClickFiresOnAutomationToggleRequestedWithTheTrackId) {
+    HeaderFixture f;
+    synth::AutomationLane::RangeSnapshot range;
+    f.doc.addLane(f.trackId, "node-uuid", "cutoff", range);
+    f.header->refreshFromDoc();
+
+    synth::TrackId requestedTrack;
+    int calls = 0;
+    f.header->onAutomationToggleRequested = [&](synth::TrackId trackId) {
+        requestedTrack = trackId;
+        ++calls;
+    };
+
+    f.header->getAutomationButton().onClick();
+    EXPECT_EQ(calls, 1);
+    EXPECT_TRUE(requestedTrack == f.trackId);
+}
+
+TEST(TimelineTrackHeaderTest, AutomationTrackHasNoBindingChipButMidiTrackKeepsIt) {
+    HeaderFixture automation(TrackKind::Automation);
+    EXPECT_FALSE(automation.header->getBindingChip().isVisible());
+
+    HeaderFixture midi(TrackKind::Midi);
+    EXPECT_TRUE(midi.header->getBindingChip().isVisible());
+}
+
+// =============================================================================
+// 8. synth::ui::resolveTrackColour — the pure resolver
 // =============================================================================
 
 TEST(TrackColourTest, StoredColourWinsOverThePalette) {

@@ -96,6 +96,9 @@ public:
     // Nothing bubbles to the panel: the roll's zoom/scroll are its own, so the shared
     // TimelineViewState must not move when the wheel lands here.
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
+    // Trackpad pinch: plain = horizontal zoom around the pinch point, Shift = vertical zoom —
+    // the same pair TimelinePanelComponent::mouseMagnify binds for the lanes.
+    void mouseMagnify(const juce::MouseEvent& e, float scaleFactor) override;
 
     // Panel-scoped Delete/Escape. Returns false (key falls through) when there is nothing to act
     // on, the same TimelineClipLaneArea contract.

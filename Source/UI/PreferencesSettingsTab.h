@@ -29,11 +29,14 @@ public:
     void setDoubleClickPortDisconnectEnabled(bool enabled);
     bool getDefaultDualIOForNewModules() const;
     void setDefaultDualIOForNewModules(bool enabled);
+    bool isLoopSelectionArmsEnabled() const;
+    void setLoopSelectionArmsEnabled(bool enabled);
 
 private:
     void persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
     void persistDoubleClickPortDisconnect(bool enabled);
     void persistDefaultDualIOForNewModules(bool enabled);
+    void persistLoopSelectionArms(bool enabled);
 
     juce::ApplicationProperties& appProperties;
     GraphEditor* graphEditor{nullptr}; // weak, owned by MainComponent
@@ -45,6 +48,7 @@ private:
     juce::Label defaultDualIOLabel;
     juce::ComboBox defaultDualIOCombo;
     juce::TextButton perModuleDefaultsButton{"Per-module I/O defaults..."};
+    juce::ToggleButton loopSelectionArmsToggle{"Timeline: P (loop selection) also switches looping on"};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PreferencesSettingsTab)
 };

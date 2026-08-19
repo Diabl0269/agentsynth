@@ -103,9 +103,12 @@ void TimelineClipLaneArea::setAssetExistsResolver(std::function<bool(const juce:
 }
 
 int TimelineClipLaneArea::getRowHeight() const {
+    int base = TimelineTrackHeaderComponent::kRowHeight;
     if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        return lf->getTheme().metrics.timelineTrackRowHeight;
-    return TimelineTrackHeaderComponent::kRowHeight;
+        base = lf->getTheme().metrics.timelineTrackRowHeight;
+    // Vertical zoom: the shared scale keeps this in lock-step with the header column's rows
+    // (TimelinePanelComponent::layoutTrackHeaders applies the same factor).
+    return std::max(8, (int)std::llround((double)base * viewState_.rowHeightScale));
 }
 
 double TimelineClipLaneArea::currentBeatsPerBar() const {
@@ -136,14 +139,19 @@ std::optional<int> TimelineClipLaneArea::trackIndexAt(juce::Point<int> pos) cons
     const int rowHeight = getRowHeight();
     if (rowHeight <= 0)
         return std::nullopt;
-    const int index = pos.y / rowHeight;
+    // Same vertical-scroll offset rowBounds() subtracts — a hit test and a painted row must never
+    // disagree about which track a y lands in.
+    const int contentY = pos.y + (int)std::llround(viewState_.trackScrollY);
+    if (contentY < 0)
+        return std::nullopt;
+    const int index = contentY / rowHeight;
     if (index >= (int)doc_->getTracks().size())
         return std::nullopt; // below the last row: empty panel space, not a row
     return index;
 }
 
 juce::Rectangle<int> TimelineClipLaneArea::rowBounds(int trackIndex, int rowHeight) const {
-    return {0, trackIndex * rowHeight, getWidth(), rowHeight};
+    return {0, trackIndex * rowHeight - (int)std::llround(viewState_.trackScrollY), getWidth(), rowHeight};
 }
 
 //==============================================================================
@@ -153,7 +161,8 @@ juce::Rectangle<int> TimelineClipLaneArea::computeClipRect(const TimelineViewSta
     const double x1 = viewState.beatToX(startBeat + lengthBeats);
     const int left = (int)std::llround(x0);
     const int right = (int)std::llround(x1);
-    return {left, trackIndex * rowHeight, std::max(right - left, 1), rowHeight};
+    return {left, trackIndex * rowHeight - (int)std::llround(viewState.trackScrollY), std::max(right - left, 1),
+            rowHeight};
 }
 
 TimelineClipLaneArea::BucketRange TimelineClipLaneArea::bucketRangeForClip(const synth::PeaksFile::Data& peaks,

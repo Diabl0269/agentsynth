@@ -21,8 +21,12 @@ constexpr double kZoomWheelSensitivity = 2.0;
 constexpr double kScrollPixelsPerWheelUnit = 200.0;
 
 constexpr int kSnapComboWidth = 90;
+constexpr int kSnapToggleButtonWidth = 26;
 constexpr const char* kTimelineSnapPropertyKey = "timelineSnap";
 constexpr const char* kTimelineSnapEnabledPropertyKey = "timelineSnapEnabled";
+// Item: P (loop the selection) also ARMS looping by default; Preferences can turn the arming off
+// so P only places the locators (Cubase's behaviour). Read at key time — no cached copy to drift.
+constexpr const char* kTimelineLoopSelectionArmsPropertyKey = "timelineLoopSelectionArms";
 
 // the "+ Track" strip at the top of the track-header column. Fixed height — the headers
 // below it scroll, the button never does.
@@ -50,6 +54,16 @@ TimelinePanelComponent::TimelinePanelComponent() {
     trackHeaderViewport_.setComponentID("timelineTrackHeaderViewport");
     trackHeaderViewport_.setScrollBarsShown(true, false);
     trackHeaderViewport_.setViewedComponent(&trackHeaderList_, false);
+    // A scrollbar drag on the header column moves the SHARED vertical scroll, so the lanes follow
+    // it exactly like they follow the wheel. syncTrackScroll()'s own setViewPosition re-enters
+    // here with an unchanged value and stops — no feedback loop.
+    trackHeaderViewport_.onScrolledY = [this](int y) {
+        if ((int)std::llround(viewState_.trackScrollY) == y)
+            return;
+        viewState_.trackScrollY = (double)y;
+        clipLaneArea_.repaint();
+        repaint(gridLanesBounds_);
+    };
 
     // Added before the snap combo so it sits left of it in z-order too (they never overlap,
     // but this keeps tab-order/z-order matching visual left-to-right order).
@@ -70,13 +84,20 @@ TimelinePanelComponent::TimelinePanelComponent() {
         viewState_.snap = (TimelineViewState::Snap)(snapCombo_.getSelectedId() - 1);
         // Picking a division is an explicit "snap to THIS" — flip the master switch back on so
         // the choice takes effect immediately (choosing "Off" from the combo already means off).
-        viewState_.snapEnabled = true;
-        persistSnapChoice();
-        ruler_.repaint();
+        setSnapEnabled(true);
         // The roll's gridlines and its new-note length both come from the division — a snap change
         // is the only thing that moves them, so this is where they are redrawn.
         pianoRoll_.repaint();
     };
+
+    // The snap toggle lives in the transport bar so grid magnetism is discoverable without opening
+    // a clip — the same switch the piano roll's header "Q" and the panel-wide Q key flip.
+    addAndMakeVisible(snapToggleButton_);
+    snapToggleButton_.setComponentID("timelineSnapToggle");
+    snapToggleButton_.setTooltip("Snap to grid on/off (Q)");
+    snapToggleButton_.setClickingTogglesState(false); // the shared view state is the truth
+    snapToggleButton_.setToggleState(viewState_.snapEnabled, juce::dontSendNotification);
+    snapToggleButton_.onClick = [this] { setSnapEnabled(!viewState_.snapEnabled); };
 
     // Added after everything else but BEFORE the playhead below, so clips draw above the
     // grid (painted by this component's own paint(), which — as a parent — always paints before
@@ -93,10 +114,12 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // While the roll is open the ruler mirrors the roll's own mapping (installed in
     // openPianoRoll()), so every roll zoom/scroll must repaint it.
     pianoRoll_.onHorizontalViewChanged = [this] { ruler_.repaint(); };
-    // The roll's Q button / Q key flipped the shared snapEnabled: persist it, and repaint the
-    // lanes+ruler that also paint the (now present/absent) snap grid.
+    // The roll's Q button / Q key flipped the shared snapEnabled: persist it, sync the transport
+    // bar's own Q toggle, and repaint the lanes+ruler that also paint the (now present/absent)
+    // snap grid.
     pianoRoll_.onSnapToggled = [this] {
         persistSnapChoice();
+        snapToggleButton_.setToggleState(viewState_.snapEnabled, juce::dontSendNotification);
         ruler_.repaint();
         repaint();
     };
@@ -517,10 +540,7 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
 
     // Q = toggle grid magnetism (Shift+Q one-shot quantise lives on the roll, where the notes are).
     if (isKey('Q')) {
-        viewState_.snapEnabled = !viewState_.snapEnabled;
-        persistSnapChoice();
-        ruler_.repaint();
-        repaint();
+        setSnapEnabled(!viewState_.snapEnabled);
         return true;
     }
 
@@ -545,7 +565,12 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
         }
         if (!span || !(span->second > span->first))
             return false;
-        transport_->setLoop(span->first, span->second, true);
+        // Whether P also ARMS looping is a preference (default yes); off means "place the
+        // locators, keep the current loop state" — Cubase's reading.
+        bool arm = true;
+        if (appProperties_ != nullptr && appProperties_->getUserSettings() != nullptr)
+            arm = appProperties_->getUserSettings()->getBoolValue(kTimelineLoopSelectionArmsPropertyKey, true);
+        transport_->setLoop(span->first, span->second, arm || transport_->getPositionSnapshot().looping);
         ruler_.repaint();
         return true;
     }
@@ -641,18 +666,37 @@ void TimelinePanelComponent::syncTrackHeaders() {
     for (const auto& track : tracks) {
         auto* header =
             trackHeaderList_.headers.add(new TimelineTrackHeaderComponent(*doc_, track.id, trackHeaderHost_));
+        // The header only ever reports "the A button was clicked" — this panel is the one that
+        // knows whether the strip is already open on this track's lane, so it's the one that
+        // decides open vs. close.
+        const auto trackId = track.id;
+        header->onAutomationToggleRequested = [this, trackId](synth::TrackId) { toggleAutomationForTrack(trackId); };
         trackHeaderList_.addAndMakeVisible(header);
     }
     layoutTrackHeaders();
 }
 
+void TimelinePanelComponent::toggleAutomationForTrack(synth::TrackId trackId) {
+    if (doc_ == nullptr)
+        return;
+    const auto* t = doc_->getTrack(trackId);
+    if (t == nullptr || t->lanes.empty())
+        return; // no-op: the button is hidden in this case anyway (see refreshFromDoc())
+
+    // Already open on one of THIS track's lanes -> close. Anything else (closed, or open on a
+    // different track) -> open this track's first lane, switching the strip if needed.
+    const bool openOnThisTrack = automationStripVisible_ && doc_->getTrackForLane(selectedAutomationLane_) == t;
+    if (openOnThisTrack)
+        closeAutomationStrip();
+    else
+        showAutomationLane(t->lanes.front().id);
+}
+
 void TimelinePanelComponent::layoutTrackHeaders() {
-    // Themed with a literal fallback, same pattern as resized() above — and the SAME token
-    // synth::ui::TimelineClipLaneArea reads for its own row height, so header rows and clip rows
-    // never drift apart.
-    int rowHeight = TimelineTrackHeaderComponent::kRowHeight;
-    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-        rowHeight = lf->getTheme().metrics.timelineTrackRowHeight;
+    // Themed with a literal fallback, same pattern as resized() above — and the SAME value
+    // (token x vertical-zoom scale) synth::ui::TimelineClipLaneArea reads for its own row height,
+    // so header rows and clip rows never drift apart.
+    const int rowHeight = currentRowHeight();
 
     const int count = trackHeaderList_.headers.size();
     const int width = std::max(0, trackHeaderViewport_.getMaximumVisibleWidth());
@@ -673,10 +717,19 @@ void TimelinePanelComponent::setApplicationProperties(juce::ApplicationPropertie
     snapCombo_.setSelectedId(saved + 1, juce::dontSendNotification);
     viewState_.snapEnabled =
         appProperties_->getUserSettings()->getBoolValue(kTimelineSnapEnabledPropertyKey, viewState_.snapEnabled);
+    snapToggleButton_.setToggleState(viewState_.snapEnabled, juce::dontSendNotification);
 
     // A pure forward — the transport bar owns and persists its own two keys. See this
     // method's header comment.
     transportBar_.setApplicationProperties(props);
+}
+
+void TimelinePanelComponent::setSnapEnabled(bool enabled) {
+    viewState_.snapEnabled = enabled;
+    persistSnapChoice();
+    snapToggleButton_.setToggleState(enabled, juce::dontSendNotification);
+    ruler_.repaint();
+    repaint();
 }
 
 void TimelinePanelComponent::persistSnapChoice() {
@@ -695,16 +748,92 @@ void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juc
     // beatToX/xToBeat expect.
     const double anchorX = (double)e.getEventRelativeTo(&ruler_).position.x;
 
-    if (e.mods.isCommandDown()) {
-        const double factor = std::exp((double)wheel.deltaY * kZoomWheelSensitivity);
-        viewState_.zoomAroundX(factor, anchorX);
-    } else {
-        const double deltaBeats = -(double)wheel.deltaY * kScrollPixelsPerWheelUnit / viewState_.pixelsPerBeat;
-        viewState_.scrollBeats(deltaBeats);
+    // Cubase-style bindings: Cmd = horizontal zoom, Cmd+Shift = vertical zoom (row height),
+    // Shift or a trackpad's own deltaX = horizontal scroll, plain vertical wheel = vertical
+    // track scroll (headers + lanes together).
+    if (e.mods.isCommandDown() && e.mods.isShiftDown()) {
+        zoomTrackRows(std::exp((double)wheel.deltaY * kZoomWheelSensitivity),
+                      (double)e.getEventRelativeTo(&clipLaneArea_).position.y);
+        return;
     }
 
+    if (e.mods.isCommandDown()) {
+        viewState_.zoomAroundX(std::exp((double)wheel.deltaY * kZoomWheelSensitivity), anchorX);
+        ruler_.repaint();
+        repaint();
+        return;
+    }
+
+    const bool horizontal = e.mods.isShiftDown() || std::abs(wheel.deltaX) > std::abs(wheel.deltaY);
+    if (horizontal) {
+        const double delta =
+            std::abs(wheel.deltaX) > std::abs(wheel.deltaY) ? (double)wheel.deltaX : (double)wheel.deltaY;
+        viewState_.scrollBeats(-delta * kScrollPixelsPerWheelUnit / viewState_.pixelsPerBeat);
+        ruler_.repaint();
+        repaint();
+        return;
+    }
+
+    scrollTrackRows(-(double)wheel.deltaY * kScrollPixelsPerWheelUnit);
+}
+
+void TimelinePanelComponent::mouseMagnify(const juce::MouseEvent& e, float scaleFactor) {
+    // Trackpad pinch: deliberate enough that it needs no modifier. Plain pinch = horizontal zoom
+    // around the pinch point; Shift+pinch = vertical (row height) zoom.
+    if (!std::isfinite(scaleFactor) || scaleFactor <= 0.0f)
+        return;
+    if (e.mods.isShiftDown()) {
+        zoomTrackRows((double)scaleFactor, (double)e.getEventRelativeTo(&clipLaneArea_).position.y);
+        return;
+    }
+    viewState_.zoomAroundX((double)scaleFactor, (double)e.getEventRelativeTo(&ruler_).position.x);
     ruler_.repaint();
     repaint();
+}
+
+int TimelinePanelComponent::currentRowHeight() const {
+    int base = TimelineTrackHeaderComponent::kRowHeight;
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        base = lf->getTheme().metrics.timelineTrackRowHeight;
+    return std::max(8, (int)std::llround((double)base * viewState_.rowHeightScale));
+}
+
+double TimelinePanelComponent::maxTrackScrollPx() const {
+    const int rows = doc_ != nullptr ? (int)doc_->getTracks().size() : 0;
+    return std::max(0.0, (double)(rows * currentRowHeight() - gridLanesBounds_.getHeight()));
+}
+
+void TimelinePanelComponent::scrollTrackRows(double deltaPx) {
+    const double before = viewState_.trackScrollY;
+    viewState_.scrollTracksPx(deltaPx, maxTrackScrollPx());
+    if (viewState_.trackScrollY == before)
+        return;
+    syncTrackScroll();
+}
+
+void TimelinePanelComponent::zoomTrackRows(double factor, double anchorLaneY) {
+    // Keep the row under the pointer put: contentY scales with the row height, the visible y must
+    // not move. Recompute from the actual (rounded, clamped) row heights rather than `factor` so
+    // the clamps can't make the anchor drift.
+    const int oldRowHeight = currentRowHeight();
+    const double contentY = anchorLaneY + viewState_.trackScrollY;
+    viewState_.scaleRowHeight(factor);
+    const int newRowHeight = currentRowHeight();
+    if (newRowHeight == oldRowHeight)
+        return;
+    viewState_.trackScrollY = contentY * (double)newRowHeight / (double)oldRowHeight - anchorLaneY;
+    viewState_.scrollTracksPx(0.0, maxTrackScrollPx()); // clamp into the new range
+    layoutTrackHeaders();
+    syncTrackScroll();
+}
+
+void TimelinePanelComponent::syncTrackScroll() {
+    // One writer, two readers: the header viewport mirrors trackScrollY, the lanes/roll repaint.
+    // setViewPosition fires visibleAreaChanged, whose handler sees an unchanged value and stops —
+    // no feedback loop.
+    trackHeaderViewport_.setViewPosition(0, (int)std::llround(viewState_.trackScrollY));
+    clipLaneArea_.repaint();
+    repaint(gridLanesBounds_);
 }
 
 //==============================================================================
@@ -803,6 +932,7 @@ void TimelinePanelComponent::resized() {
     // record/loop + BPM/time-sig + readout) fill the rest, left-aligned.
     auto transportBar = transportBarBounds_.withTrimmedTop(kResizeHandleHeight);
     snapCombo_.setBounds(transportBar.removeFromRight(kSnapComboWidth).reduced(2));
+    snapToggleButton_.setBounds(transportBar.removeFromRight(kSnapToggleButtonWidth).reduced(2));
     transportBar_.setBounds(transportBar);
 }
 

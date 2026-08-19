@@ -9,6 +9,20 @@ namespace {
 constexpr int kSwatchWidth = 8;
 constexpr int kToggleWidth = 20;
 constexpr int kRowPadding = 3;
+constexpr int kKindBadgeWidth = 34;
+
+// Fixed per-TrackKind label. Never edited, never doc-driven beyond the kind itself.
+juce::String kindBadgeText(synth::TrackKind kind) {
+    switch (kind) {
+    case synth::TrackKind::Midi:
+        return "MIDI";
+    case synth::TrackKind::Audio:
+        return "AUD";
+    case synth::TrackKind::Automation:
+        return "AUTO";
+    }
+    return {};
+}
 
 // Themed colours with literal fallbacks — the headless test path installs no AppLookAndFeel (same
 // pattern as TimelinePanelComponent::paint()).
@@ -107,6 +121,18 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     });
     armButton_.setTooltip("Arm this track for recording");
 
+    // Automation open/close: a plain click button, not a toggle — the header never knows whether the
+    // strip is open or which track it's showing, only the panel does. Visibility (lanes or none) is
+    // set in refreshFromDoc(), including the call at the end of this constructor.
+    addAndMakeVisible(automationButton_);
+    automationButton_.setComponentID("trackHeaderAutomationButton");
+    automationButton_.setClickingTogglesState(false);
+    automationButton_.setTooltip("Show/hide this track's automation lane");
+    automationButton_.onClick = [this] {
+        if (onAutomationToggleRequested)
+            onAutomationToggleRequested(trackId_);
+    };
+
     addAndMakeVisible(bindingChip_);
     bindingChip_.setComponentID("trackBindingChip");
     bindingChip_.onClick = [this] { handleChipClick(true); };
@@ -121,6 +147,11 @@ int TimelineTrackHeaderComponent::trackIndex() const {
         if (tracks[(size_t)i].id == trackId_)
             return i;
     return -1;
+}
+
+juce::String TimelineTrackHeaderComponent::getKindBadgeTextForTest() const {
+    const auto* t = track();
+    return t != nullptr ? kindBadgeText(t->kind) : juce::String();
 }
 
 void TimelineTrackHeaderComponent::performEdit(const std::function<void()>& mutation) {
@@ -145,28 +176,38 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
     soloButton_.setToggleState(t->soloed, juce::dontSendNotification);
     armButton_.setToggleState(t->armed, juce::dontSendNotification);
 
-    // Chip text/state/tooltip. Three cases, two of them amber. The tooltip is what carries the
-    // "this shows a binding, it does not add a module" explanation the button text has no room for.
-    if (t->bindingUuid.isEmpty()) {
-        bindingChip_.setButtonText("Unbound");
-        chipWarning_ = true;
-        bindingChip_.setTooltip("This track has no bound node. Click to choose one.");
-    } else if (t->orphaned) {
-        bindingChip_.setButtonText("Missing");
-        chipWarning_ = true;
-        bindingChip_.setTooltip("The node this track was bound to is gone. Click to re-bind.");
-    } else {
-        const juce::String name = host_ != nullptr ? host_->getNodeDisplayName(t->bindingUuid) : juce::String();
-        const juce::String displayName = name.isNotEmpty() ? name : juce::String("Track In");
-        bindingChip_.setButtonText(displayName);
-        chipWarning_ = false;
-        bindingChip_.setTooltip("This track plays through the '" + displayName +
-                                "' node in the graph. Click to choose a different node.");
-    }
+    automationButton_.setVisible(!t->lanes.empty());
 
-    const auto colours = coloursFor(*this);
-    bindingChip_.setColour(juce::TextButton::buttonColourId, chipWarning_ ? colours.warning : colours.surface);
-    bindingChip_.setColour(juce::TextButton::textColourOffId, chipWarning_ ? colours.surface : colours.text);
+    // An Automation-kind track hosts lanes; a node binding is meaningless for it, so the chip is
+    // hidden outright rather than shown pointing at nothing. Midi/Audio tracks are unaffected.
+    if (t->kind == synth::TrackKind::Automation) {
+        bindingChip_.setVisible(false);
+    } else {
+        bindingChip_.setVisible(true);
+
+        // Chip text/state/tooltip. Three cases, two of them amber. The tooltip is what carries the
+        // "this shows a binding, it does not add a module" explanation the button text has no room for.
+        if (t->bindingUuid.isEmpty()) {
+            bindingChip_.setButtonText("Unbound");
+            chipWarning_ = true;
+            bindingChip_.setTooltip("This track has no bound node. Click to choose one.");
+        } else if (t->orphaned) {
+            bindingChip_.setButtonText("Missing");
+            chipWarning_ = true;
+            bindingChip_.setTooltip("The node this track was bound to is gone. Click to re-bind.");
+        } else {
+            const juce::String name = host_ != nullptr ? host_->getNodeDisplayName(t->bindingUuid) : juce::String();
+            const juce::String displayName = name.isNotEmpty() ? name : juce::String("Track In");
+            bindingChip_.setButtonText(displayName);
+            chipWarning_ = false;
+            bindingChip_.setTooltip("This track plays through the '" + displayName +
+                                    "' node in the graph. Click to choose a different node.");
+        }
+
+        const auto colours = coloursFor(*this);
+        bindingChip_.setColour(juce::TextButton::buttonColourId, chipWarning_ ? colours.warning : colours.surface);
+        bindingChip_.setColour(juce::TextButton::textColourOffId, chipWarning_ ? colours.surface : colours.text);
+    }
 
     repaint();
 }
@@ -178,11 +219,16 @@ void TimelineTrackHeaderComponent::resized() {
     colourSwatch_.setBounds(bounds.removeFromLeft(kSwatchWidth));
     bounds.removeFromLeft(kRowPadding);
 
-    // Top row: name + M/S/R. Bottom row: the binding chip, full width.
+    // Top row: kind badge + name + (optional A) + R/S/M, right to left. Bottom row: the binding
+    // chip, full width (hidden entirely for Automation-kind tracks — see refreshFromDoc()).
     auto topRow = bounds.removeFromTop(bounds.getHeight() / 2);
     armButton_.setBounds(topRow.removeFromRight(kToggleWidth));
     soloButton_.setBounds(topRow.removeFromRight(kToggleWidth));
     muteButton_.setBounds(topRow.removeFromRight(kToggleWidth));
+    if (automationButton_.isVisible())
+        automationButton_.setBounds(topRow.removeFromRight(kToggleWidth));
+
+    kindBadgeBounds_ = topRow.removeFromLeft(kKindBadgeWidth);
     nameLabel_.setBounds(topRow);
 
     bindingChip_.setBounds(bounds.reduced(0, 1));
@@ -200,6 +246,24 @@ void TimelineTrackHeaderComponent::paint(juce::Graphics& g) {
 
     g.setColour(colours.border);
     g.drawHorizontalLine(getHeight() - 1, 0.0f, (float)getWidth());
+
+    // Track-kind badge: a muted micro-font pill right of the swatch, before the name. Fixed per
+    // TrackKind (see kindBadgeText above) — this is identity chrome, not a control.
+    if (const auto* t = track()) {
+        float microSize = 8.5f;
+        if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+            microSize = lf->getTheme().type.micro;
+
+        auto badgeBounds = kindBadgeBounds_.reduced(1, 3).toFloat();
+        g.setColour(colours.textMuted.withAlpha(0.15f));
+        g.fillRoundedRectangle(badgeBounds, 3.0f);
+        g.setColour(colours.textMuted.withAlpha(0.6f));
+        g.drawRoundedRectangle(badgeBounds, 3.0f, 1.0f);
+
+        g.setColour(colours.textMuted);
+        g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), microSize, juce::Font::plain));
+        g.drawText(kindBadgeText(t->kind), kindBadgeBounds_, juce::Justification::centred, false);
+    }
 }
 
 //==============================================================================

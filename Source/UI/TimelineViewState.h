@@ -36,6 +36,28 @@ struct TimelineViewState {
 
     void scrollBeats(double deltaBeats) noexcept { firstVisibleBeat = std::max(0.0, firstVisibleBeat + deltaBeats); }
 
+    // ---- Vertical track geometry, shared by the header column and the lanes grid ----
+    // rowHeightScale multiplies the themed row height (vertical zoom); trackScrollY is how many
+    // pixels of track rows are scrolled off the top. Both live here (not on the panel) for the
+    // same reason the horizontal mapping does: the headers and the lanes must read ONE value or
+    // their rows drift apart.
+    static constexpr double kMinRowHeightScale = 0.5;
+    static constexpr double kMaxRowHeightScale = 3.0;
+    double rowHeightScale = 1.0;
+    double trackScrollY = 0.0; // px, always clamped >= 0
+
+    void scaleRowHeight(double factor) noexcept {
+        if (!std::isfinite(factor) || factor <= 0.0)
+            return;
+        rowHeightScale = std::clamp(rowHeightScale * factor, kMinRowHeightScale, kMaxRowHeightScale);
+    }
+
+    // maxScrollPx is (total rows height - visible lanes height), computed by the caller — this
+    // struct deliberately knows nothing about track counts or component heights.
+    void scrollTracksPx(double deltaPx, double maxScrollPx) noexcept {
+        trackScrollY = std::clamp(trackScrollY + deltaPx, 0.0, std::max(0.0, maxScrollPx));
+    }
+
     // Snap division, expressed as a NOTE VALUE (a fraction of a whole note), the way every DAW's
     // grid selector reads: "1" is a whole note (4 beats — a full 4/4 bar), "1/4" is a quarter note
     // (1 beat), "1/16" is a sixteenth (0.25 beat). A beat is always a quarter note here

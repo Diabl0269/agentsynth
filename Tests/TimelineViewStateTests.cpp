@@ -146,6 +146,26 @@ TEST(TimelineViewStateTest, SnapTableExactValuesAt4_4) {
     EXPECT_DOUBLE_EQ(state.snapBeat(1.2, beatsPerBar), 1.25);
 }
 
+TEST(TimelineViewStateTest, RowHeightScaleClampsAndTrackScrollClamps) {
+    TimelineViewState state;
+    EXPECT_DOUBLE_EQ(state.rowHeightScale, 1.0);
+    EXPECT_DOUBLE_EQ(state.trackScrollY, 0.0);
+
+    state.scaleRowHeight(100.0);
+    EXPECT_DOUBLE_EQ(state.rowHeightScale, TimelineViewState::kMaxRowHeightScale);
+    state.scaleRowHeight(1.0e-6);
+    EXPECT_DOUBLE_EQ(state.rowHeightScale, TimelineViewState::kMinRowHeightScale);
+    state.scaleRowHeight(0.0); // non-positive factors are ignored, not clamped
+    EXPECT_DOUBLE_EQ(state.rowHeightScale, TimelineViewState::kMinRowHeightScale);
+
+    state.scrollTracksPx(500.0, 120.0);
+    EXPECT_DOUBLE_EQ(state.trackScrollY, 120.0);
+    state.scrollTracksPx(-500.0, 120.0);
+    EXPECT_DOUBLE_EQ(state.trackScrollY, 0.0);
+    state.scrollTracksPx(50.0, -10.0); // a shrunken content range clamps to 0, never negative
+    EXPECT_DOUBLE_EQ(state.trackScrollY, 0.0);
+}
+
 TEST(TimelineViewStateTest, SnapEnabledFalseBehavesLikeOffButKeepsDivision) {
     TimelineViewState state;
     state.snap = Snap::Quarter;

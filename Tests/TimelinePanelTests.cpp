@@ -574,11 +574,17 @@ TEST(TimelineRulerInteractionTest, ClickOnDimmedBraceReArmsLooping) {
     EXPECT_TRUE(transport.getPositionSnapshot().looping);
 }
 
-// Plain wheel scrolls (pixelsPerBeat untouched); Cmd+wheel zooms around the cursor, keeping the
-// beat under it fixed.
+// Wheel bindings (Cubase-style): plain vertical wheel scrolls the TRACK rows, Shift+wheel (or a
+// trackpad's own deltaX) scrolls horizontally, Cmd+wheel zooms horizontally around the cursor
+// (keeping the beat under it fixed), Cmd+Shift+wheel zooms the row height.
 TEST(TimelinePanelInteractionTest, WheelScrollsAndCmdWheelZooms) {
+    synth::TimelineDoc doc;
     synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
     panel.setSize(1200, 220);
+    // Enough tracks that the rows overflow the visible lanes height and vertical scroll has range.
+    for (int i = 0; i < 24; ++i)
+        doc.addTrack(synth::TrackKind::Midi, "T" + juce::String(i));
 
     auto& state = panel.getViewState();
     // Start comfortably away from the firstVisibleBeat >= 0 clamp so the scroll below is visible
@@ -587,11 +593,36 @@ TEST(TimelinePanelInteractionTest, WheelScrollsAndCmdWheelZooms) {
     const double ppbBefore = state.pixelsPerBeat;
     const double firstVisibleBefore = state.firstVisibleBeat;
 
+    // Plain vertical wheel: vertical track scroll, horizontal mapping untouched.
     juce::MouseWheelDetails wheel;
-    wheel.deltaY = 0.5f;
+    wheel.deltaY = -0.5f; // wheel down -> scroll down into the track list
     panel.mouseWheelMove(makeClickEvent(panel, {400.0f, 100.0f}), wheel);
     EXPECT_DOUBLE_EQ(state.pixelsPerBeat, ppbBefore);
+    EXPECT_DOUBLE_EQ(state.firstVisibleBeat, firstVisibleBefore);
+    EXPECT_GT(state.trackScrollY, 0.0);
+    EXPECT_EQ(panel.getTrackHeaderViewport().getViewPositionY(), (int)std::llround(state.trackScrollY))
+        << "the header column follows the shared vertical scroll";
+
+    // Shift+wheel: horizontal scroll, vertical untouched.
+    const double trackScrollBefore = state.trackScrollY;
+    juce::MouseWheelDetails hWheel;
+    hWheel.deltaY = 0.5f;
+    panel.mouseWheelMove(makeClickEvent(panel, {400.0f, 100.0f}, juce::ModifierKeys(juce::ModifierKeys::shiftModifier)),
+                         hWheel);
+    EXPECT_DOUBLE_EQ(state.pixelsPerBeat, ppbBefore);
     EXPECT_NE(state.firstVisibleBeat, firstVisibleBefore);
+    EXPECT_DOUBLE_EQ(state.trackScrollY, trackScrollBefore);
+
+    // Cmd+Shift+wheel: vertical (row height) zoom within its clamps.
+    const double scaleBefore = state.rowHeightScale;
+    juce::MouseWheelDetails vZoomWheel;
+    vZoomWheel.deltaY = 0.5f;
+    panel.mouseWheelMove(
+        makeClickEvent(panel, {400.0f, 100.0f},
+                       juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier)),
+        vZoomWheel);
+    EXPECT_GT(state.rowHeightScale, scaleBefore);
+    EXPECT_LE(state.rowHeightScale, synth::ui::TimelineViewState::kMaxRowHeightScale);
 
     const juce::Point<float> cursor(300.0f, 12.0f);
     // The ruler shares TimelineViewState's x==0 origin, so reproject into its coordinate space to
@@ -1625,6 +1656,23 @@ TEST(TimelinePanelComponentTest, QKeyTogglesSnapEnabled) {
     EXPECT_TRUE(panel.getViewState().snapEnabled);
 }
 
+// The transport bar's own Q button flips the same shared switch and mirrors its state — including
+// when the flip came from somewhere else (the Q key here).
+TEST(TimelinePanelComponentTest, SnapToggleButtonFlipsAndMirrorsSnapEnabled) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1000, 300);
+    auto& button = panel.getSnapToggleButton();
+    ASSERT_TRUE(panel.getViewState().snapEnabled);
+    EXPECT_TRUE(button.getToggleState());
+
+    button.onClick();
+    EXPECT_FALSE(panel.getViewState().snapEnabled);
+    EXPECT_FALSE(button.getToggleState());
+
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('q')));
+    EXPECT_TRUE(button.getToggleState()) << "a Q-key flip re-lights the button";
+}
+
 TEST(TimelinePanelComponentTest, PickingADivisionReEnablesSnap) {
     synth::ui::TimelinePanelComponent panel;
     panel.getViewState().snapEnabled = false;
@@ -1678,6 +1726,53 @@ TEST(TimelinePanelComponentTest, PKeyLoopsTheSelectedClipsFromPanelScope) {
     EXPECT_TRUE(snap.looping);
     EXPECT_DOUBLE_EQ(snap.loopStartPpq, 4.0);
     EXPECT_DOUBLE_EQ(snap.loopEndPpq, 14.0) << "the span covers the whole multi-clip selection";
+}
+
+// With the "timelineLoopSelectionArms" preference off, P places the locators but leaves the loop
+// switch exactly as it was (Cubase's reading); L is then what arms it.
+TEST(TimelinePanelComponentTest, PKeyRespectsTheLoopSelectionArmsPreference) {
+    juce::PropertiesFile::Options opts;
+    opts.applicationName = "Agent Synth Timeline LoopArms Test";
+    opts.folderName = "Agent Synth Timeline LoopArms Test";
+    opts.filenameSuffix = "settings";
+    opts.osxLibrarySubFolder = "Application Support";
+    opts.storageFormat = juce::PropertiesFile::storeAsXML;
+    juce::ApplicationProperties props;
+    props.setStorageParameters(opts);
+    if (auto* s = props.getUserSettings())
+        s->setValue("timelineLoopSelectionArms", "0");
+
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    synth::TransportService transport;
+    transport.prepare(48000.0, 512);
+    panel.setTransport(&transport);
+    panel.setTimelineDoc(&doc);
+    panel.setApplicationProperties(&props);
+
+    const auto trackId = doc.addTrack(synth::TrackKind::Midi, "Track 1");
+    const auto clipId = doc.addClip(trackId, 4.0, 4.0, "A");
+    ASSERT_TRUE(clipId.isValid());
+    panel.getClipSelection().setSelection({clipId});
+
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('p')));
+    transport.tick(512);
+    auto snap = transport.getPositionSnapshot();
+    EXPECT_FALSE(snap.looping) << "preference off: locators only, looping untouched";
+    EXPECT_DOUBLE_EQ(snap.loopStartPpq, 4.0);
+    EXPECT_DOUBLE_EQ(snap.loopEndPpq, 8.0);
+
+    // Already-armed looping stays armed — the preference suppresses the ARM, it never disarms.
+    ASSERT_TRUE(transport.setLoop(0.0, 2.0, true));
+    transport.tick(512);
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('p')));
+    transport.tick(512);
+    snap = transport.getPositionSnapshot();
+    EXPECT_TRUE(snap.looping);
+    EXPECT_DOUBLE_EQ(snap.loopStartPpq, 4.0);
+
+    if (auto* s = props.getUserSettings())
+        s->getFile().deleteFile();
 }
 
 TEST(TimelinePanelComponentTest, PKeyWithThePianoRollOpenLoopsTheEditedClip) {

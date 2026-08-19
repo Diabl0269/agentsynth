@@ -1193,8 +1193,13 @@ Every section header is now a disclosure toggle, plus a **COLLAPSE ALL / EXPAND 
   and is used by *both* `paint()` and `getEntryIndexAt()`. These previously duplicated the y-advance
   arithmetic in two places — a standing invitation for paint and hit-testing to disagree. Guarded by
   `ModuleLibraryStructure.HitTestingAgreesWithTheRowLayout`.
-- **Rows carry a `RowKind`** (`Header` / `Module` / `Snippet` / `EmptyHint`) and their owning
-  `section`, so collapsing is just "skip rows whose section is collapsed". Headers stay visible.
+- **Rows carry a `RowKind`** (`Header` / `SubHeader` / `Module` / `Snippet` / `Plugin` / `Action` /
+  `EmptyHint`) and their owning `section`, so collapsing is just "skip rows whose section is
+  collapsed". Headers stay visible. The Plugins section sub-groups its rows by format (`VST3`,
+  `AudioUnit`, …) behind a non-clickable `SubHeader` row per format — sorted alphabetically by
+  format, name-sorted within a group, and shown even for a single format — so a scan with more than
+  one plugin format doesn't read as one undifferentiated list; collapsing the section hides its
+  sub-labels along with everything else.
 - **The Snippets section stays visible when empty**, showing a "No snippets yet" hint, so the feature
   is discoverable before the first snippet exists.
 - **Chevrons are `juce::Path` triangles, not glyphs** — `▾`/`▸` coverage is not guaranteed across the
@@ -1614,11 +1619,20 @@ per mouse-move pixel — and there is no timer or animation involved (§11).
 **Grid + wheel:** `TimelinePanelComponent::paint()` draws the same bar/beat lines directly into the
 lanes region below the ruler (bar lines at full `colors.border`, beat lines at 35% alpha — no
 dedicated grid tokens exist, and one caller didn't justify adding any). `mouseWheelMove()` is
-implemented once, on the panel: plain wheel scrolls (`deltaY` converted to beats at the current
-zoom — a constant *pixel* distance per wheel unit, so the same physical gesture covers less musical
-time zoomed in); Cmd+wheel (`mods.isCommandDown()`, already Ctrl-on-other-platforms via JUCE) zooms
-around the cursor. JUCE bubbles an unhandled wheel event from the ruler child up to the panel, so
-both regions share identical behaviour from one implementation.
+implemented once, on the panel, with Cubase-style bindings: **plain vertical wheel scrolls the
+track rows vertically** (`TimelineViewState::trackScrollY`, shared with the header column — a
+scrollbar drag on the header viewport writes the same value back via
+`HeaderViewport::onScrolledY`, and `syncTrackScroll()` is the one re-sync point); **Shift+wheel or
+a trackpad's own `deltaX` scrolls horizontally** (`deltaY` converted to beats at the current zoom —
+a constant *pixel* distance per wheel unit, so the same physical gesture covers less musical time
+zoomed in); **Cmd+wheel** (`mods.isCommandDown()`, already Ctrl-on-other-platforms via JUCE) zooms
+horizontally around the cursor; **Cmd+Shift+wheel** zooms vertically — it scales
+`TimelineViewState::rowHeightScale` within `[0.5, 3.0]`, which multiplies the themed row height in
+BOTH `TimelineClipLaneArea::getRowHeight()` and the panel's `layoutTrackHeaders()`, anchored so the
+row under the pointer stays put. `mouseMagnify()` (trackpad pinch — deliberate enough to need no
+modifier) maps plain pinch to horizontal zoom and Shift+pinch to vertical zoom, on the panel and
+inside the piano roll alike. JUCE bubbles an unhandled wheel event from the ruler child up to the
+panel, so both regions share identical behaviour from one implementation.
 
 ### TL5-3: track headers, binding chips, add-track
 
@@ -1637,10 +1651,19 @@ through the doc. Headers are rebuilt/refreshed **only** from `TimelineDoc::Liste
 is unchanged refreshes the existing rows in place; only an added/removed/reordered track rebuilds
 them, so a mute click doesn't destroy the row the user is typing a name into.
 
-**Row contents:** colour swatch (click cycles the palette), name label (double-click to edit),
-`M` / `S` / `R` toggles, and the binding chip. `R` flips `Track::armed` in the document and nothing
-else — arming is not recording; the record button and `MidiRecorder::startRecording` live on the
-transport bar (TL5-5, below), which looks for the first `armed` track when it starts a take.
+**Row contents:** colour swatch (click cycles the palette), a track-kind badge (`"MIDI"` / `"AUD"` /
+`"AUTO"`, fixed per `TrackKind` — identity chrome, not a control), name label (double-click to
+edit), an `A` button (visible only when `Track::lanes` is non-empty), `M` / `S` / `R` toggles, and
+the binding chip. `R` flips `Track::armed` in the document and nothing else — arming is not
+recording; the record button and `MidiRecorder::startRecording` live on the transport bar (TL5-5,
+below), which looks for the first `armed` track when it starts a take.
+
+**The `A` button** toggles this track's automation lane in the (single, doc-wide) automation strip.
+The header only reports the click via `onAutomationToggleRequested` — it never tracks open/closed
+state itself, since it can't see whether another track's lane is the one currently shown.
+`TimelinePanelComponent::toggleAutomationForTrack` decides: already open on one of this track's own
+lanes closes the strip; anything else (closed, or open on a different track) opens the track's first
+lane.
 
 **Colour** resolves *only* through `synth::ui::resolveTrackColour` (`Source/UI/TrackColour.h`): the
 track's stored `colourArgb` when non-zero, otherwise a deterministic 8-entry palette indexed by the
@@ -1656,6 +1679,10 @@ a theme-dependent value would mean a project opened under another theme came bac
 | `bindingUuid` resolves | the node's plain display name (e.g. `"Track In"`) | plays through that node |
 | `bindingUuid` empty | `"Unbound"` (amber) | never pointed anywhere; the track plays nowhere |
 | `orphaned` | `"Missing"` (amber) | it WAS bound and the node is gone — retained, never auto-deleted |
+
+An `Automation`-kind track shows **no chip at all** (`setVisible(false)`, decided in
+`refreshFromDoc()`) — that track hosts lanes, and a node binding is meaningless for it; the bottom
+half-row is simply empty. `Midi`/`Audio` tracks are unaffected.
 
 The chip always carries a tooltip explaining what it shows and, when amber, how to fix it; the
 `"#id"` suffix a bound name used to carry unconditionally is now added only in the re-bind menu, and

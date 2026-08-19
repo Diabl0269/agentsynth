@@ -81,9 +81,9 @@ does not make Paste live on the clip lanes or vice versa.
 | Escape | Clip lanes, clips selected | Clear the clip selection |
 | Delete / Backspace | Clip lanes, clips selected | Delete every selected clip (one undo step) |
 | P | Clip lanes, clips selected | Loop the selection: sets the transport loop to the selected clips' `[min start, max end]` span and switches looping on |
-| P | Timeline panel (any focus target inside it) | Same loop-the-selection; with the piano roll open the "selection" is the edited clip |
+| P | Timeline panel (any focus target inside it) | Same loop-the-selection; with the piano roll open the "selection" is the edited clip. Whether P also ARMS looping is Settings → Preferences → "Timeline: P (loop selection) also switches looping on" (default on; off = locators only) |
 | L | Timeline panel (any focus target inside it) | Toggle looping on/off, keeping the existing loop bounds (the transport bar's loop button) |
-| Q | Timeline panel (any focus target inside it) | Toggle snap (grid magnetism) on/off — the chosen division survives underneath |
+| Q | Timeline panel (any focus target inside it) | Toggle snap (grid magnetism) on/off — the chosen division survives underneath. Also a lit "Q" toggle button next to the snap selector in the transport bar |
 | Shift+Q | Piano roll | One-shot quantise: snap the selected notes (or all notes when nothing is selected) to the chosen grid, even while snap is toggled off |
 | Escape | Piano roll, notes selected | Clear the note selection |
 | Escape | Piano roll, nothing selected | Close the roll, back to the clip lanes |

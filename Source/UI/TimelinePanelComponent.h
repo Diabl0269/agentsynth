@@ -209,6 +209,10 @@ public:
     // comment). Same panel-scoped idiom as every other timeline sub-component's Delete/Escape.
     bool keyPressed(const juce::KeyPress& key) override;
 
+    // Trackpad pinch: plain = horizontal zoom, Shift = vertical (row height) zoom. The wheel
+    // bindings live in mouseWheelMove; see its comment for the full Cubase-style table.
+    void mouseMagnify(const juce::MouseEvent& e, float scaleFactor) override;
+
     // Pure geometry getters — later tasks and tests build on the same rects rather than
     // re-deriving the arithmetic in resized().
     juce::Rectangle<int> getTransportBarBounds() const noexcept { return transportBarBounds_; }
@@ -221,6 +225,7 @@ public:
     TimelineRulerComponent& getRuler() noexcept { return ruler_; }
     TimelinePlayheadOverlay& getPlayhead() noexcept { return playhead_; }
     juce::ComboBox& getSnapCombo() noexcept { return snapCombo_; }
+    juce::TextButton& getSnapToggleButton() noexcept { return snapToggleButton_; }
     // play/stop/record/loop + BPM/time-sig editors + the bar:beat readout.
     TimelineTransportBar& getTransportBar() noexcept { return transportBar_; }
 
@@ -288,6 +293,11 @@ private:
     void layoutTrackHeaders();
 
     // ---- Automation strip ----
+    // A header's "A" button click lands here. The header itself never knows open/closed state, so
+    // this is the one place that decides: if the strip is already open on THIS track's lane, close
+    // it; otherwise open it on the track's first lane. A track with no lanes is a no-op (the button
+    // is hidden in that case anyway — see TimelineTrackHeaderComponent::refreshFromDoc()).
+    void toggleAutomationForTrack(synth::TrackId trackId);
     // Repopulates the lane picker from the doc, preserving the current selection when it still
     // resolves. Called whenever the doc notifies while the strip is open, and by showAutomationLane().
     void syncAutomationLaneCombo();
@@ -377,6 +387,13 @@ private:
     // roll; spans ruler + lanes and intercepts no mouse clicks (see TimelinePlayheadOverlay's ctor).
     TimelinePlayheadOverlay playhead_{viewState_};
     juce::ComboBox snapCombo_;
+    // The transport-bar twin of the piano roll's "Q": toggles TimelineViewState::snapEnabled from
+    // the panel chrome, so the switch is discoverable without opening a clip. Toggle STATE mirrors
+    // the shared flag via setSnapEnabled() — the button never owns it.
+    juce::TextButton snapToggleButton_{"Q"};
+    // The one writer for the snap switch from panel chrome/keys: flips the flag, persists, syncs
+    // the button's lit state, and repaints every grid painter.
+    void setSnapEnabled(bool enabled);
     // Left-aligned in the transport-bar strip, the snap combo stays right of it.
     TimelineTransportBar transportBar_;
 
@@ -413,7 +430,29 @@ private:
     juce::TextButton addTrackButton_{"+ Track"};
 
     void showAddTrackMenu();
-    juce::Viewport trackHeaderViewport_;
+
+    // ---- Vertical track scroll/zoom (shared TimelineViewState::trackScrollY/rowHeightScale) ----
+    // The themed row height with the shared vertical-zoom factor applied — the SAME value
+    // TimelineClipLaneArea::getRowHeight computes, duplicated only because the two components
+    // resolve their LookAndFeel independently.
+    int currentRowHeight() const;
+    double maxTrackScrollPx() const;
+    void scrollTrackRows(double deltaPx);
+    void zoomTrackRows(double factor, double anchorLaneY);
+    // Pushes trackScrollY into the header viewport and repaints the lanes — the ONE place the two
+    // columns are brought back in step after any scroll/zoom writer.
+    void syncTrackScroll();
+
+    // Forwards scrollbar/drag scrolling of the header column into the shared trackScrollY, so the
+    // lanes follow a scrollbar drag exactly like they follow the wheel.
+    struct HeaderViewport : juce::Viewport {
+        std::function<void(int)> onScrolledY;
+        void visibleAreaChanged(const juce::Rectangle<int>& newVisibleArea) override {
+            if (onScrolledY)
+                onScrolledY(newVisibleArea.getY());
+        }
+    };
+    HeaderViewport trackHeaderViewport_;
     TrackHeaderList trackHeaderList_;
 
     // The strip's own copy of the undo manager (record-mode/lane-picker edits made directly

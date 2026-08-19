@@ -65,6 +65,10 @@ public:
     void drawLabel(juce::Graphics&, juce::Label&) override;
     void drawToggleButton(juce::Graphics&, juce::ToggleButton&, bool shouldDrawButtonAsHighlighted,
                           bool shouldDrawButtonAsDown) override;
+    // Hugs the pointer (centred, 14 px below, flipping above at the parent's edge) instead of the
+    // stock 24-px sideways offset — sized with drawTooltip()'s own font so fitted text never clips.
+    juce::Rectangle<int> getTooltipBounds(const juce::String& tipText, juce::Point<int> screenPos,
+                                          juce::Rectangle<int> parentArea) override;
     void drawTooltip(juce::Graphics&, const juce::String& text, int width, int height) override;
     void drawTabButton(juce::TabBarButton&, juce::Graphics&, bool isMouseOver, bool isMouseDown) override;
     void drawTabbedButtonBarBackground(juce::TabbedButtonBar&, juce::Graphics&) override;

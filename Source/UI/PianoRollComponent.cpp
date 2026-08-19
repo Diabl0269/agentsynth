@@ -1055,6 +1055,27 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
     }
 }
 
+void PianoRollComponent::mouseMagnify(const juce::MouseEvent& e, float scaleFactor) {
+    // Trackpad pinch, same pair as the panel's: plain = horizontal zoom around the pinch point
+    // (through the roll's OWN mapping), Shift = vertical (pixels-per-semitone) zoom.
+    if (!std::isfinite(scaleFactor) || scaleFactor <= 0.0f)
+        return;
+    const auto pos = e.getPosition();
+    if (e.mods.isShiftDown()) {
+        const double rowsAbove = ((double)pos.y - (double)kHeaderHeight) / pixelsPerSemitone_;
+        const double anchorPitch = (double)firstVisiblePitch_ - rowsAbove;
+        setPixelsPerSemitone(pixelsPerSemitone_ * (double)scaleFactor);
+        const double newRowsAbove = ((double)pos.y - (double)kHeaderHeight) / pixelsPerSemitone_;
+        firstVisiblePitch_ = juce::jlimit(0, 127, (int)std::llround(anchorPitch + newRowsAbove));
+        repaint();
+        return;
+    }
+    rollView_.zoomAroundX((double)scaleFactor, std::max(0.0, (double)pos.x - (double)kKeysColumnWidth));
+    repaint();
+    if (onHorizontalViewChanged)
+        onHorizontalViewChanged();
+}
+
 //==============================================================================
 bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {
     // Q = toggle grid magnetism; Shift+Q = one-shot quantise (same pair as the header button's

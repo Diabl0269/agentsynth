@@ -747,6 +747,63 @@ TEST(PluginScanTest, LibraryPluginsSectionShowsScannedRows) {
     EXPECT_EQ(countRowsOfKind(library, ModuleLibraryComponent::RowKind::Action), 1);
 }
 
+TEST(PluginScanTest, LibraryPluginsSectionSubGroupsRowsByFormat) {
+    ModuleLibraryComponent library;
+
+    // Handed in reverse-format order (and not name-sorted within a format) to prove the section
+    // does its own alphabetical-by-format grouping rather than trusting caller order.
+    PluginIdentity vst3Zeta;
+    vst3Zeta.format = "VST3";
+    vst3Zeta.name = "Zeta";
+    vst3Zeta.uid = 1;
+    PluginIdentity vst3Alpha;
+    vst3Alpha.format = "VST3";
+    vst3Alpha.name = "Alpha";
+    vst3Alpha.uid = 2;
+    PluginIdentity auBeta;
+    auBeta.format = "AudioUnit";
+    auBeta.name = "Beta";
+    auBeta.uid = 3;
+    library.setPlugins({vst3Zeta, vst3Alpha, auBeta});
+
+    // Two formats -> exactly two non-clickable sub-label rows, sorted alphabetically by format
+    // ("AudioUnit" before "VST3"), each carrying only its format name and living in the Plugins
+    // section.
+    EXPECT_EQ(countRowsOfKind(library, ModuleLibraryComponent::RowKind::SubHeader), 2);
+
+    juce::StringArray subHeaderTextsInOrder;
+    for (int i = 0; i < library.getEntryCount(); ++i)
+        if (library.getEntry(i).kind == ModuleLibraryComponent::RowKind::SubHeader)
+            subHeaderTextsInOrder.add(library.getEntry(i).text);
+    ASSERT_EQ(subHeaderTextsInOrder.size(), 2);
+    EXPECT_EQ(subHeaderTextsInOrder[0], "AudioUnit");
+    EXPECT_EQ(subHeaderTextsInOrder[1], "VST3");
+
+    const int auSubHeader = entryIndexForText(library, "AudioUnit");
+    const int vst3SubHeader = entryIndexForText(library, "VST3");
+    ASSERT_GE(auSubHeader, 0);
+    ASSERT_GE(vst3SubHeader, 0);
+    EXPECT_EQ(library.getEntry(auSubHeader).section, ModuleLibraryComponent::kPluginsHeader);
+    EXPECT_EQ(library.getEntry(vst3SubHeader).section, ModuleLibraryComponent::kPluginsHeader);
+
+    // The AudioUnit group (one row) comes entirely before the VST3 group (two rows, name-sorted).
+    const int betaRow = entryIndexForText(library, "Beta");
+    const int alphaRow = entryIndexForText(library, "Alpha");
+    const int zetaRow = entryIndexForText(library, "Zeta");
+    ASSERT_GE(betaRow, 0);
+    ASSERT_GE(alphaRow, 0);
+    ASSERT_GE(zetaRow, 0);
+    EXPECT_LT(auSubHeader, betaRow);
+    EXPECT_LT(betaRow, vst3SubHeader);
+    EXPECT_LT(vst3SubHeader, alphaRow);
+    EXPECT_LT(alphaRow, zetaRow);
+
+    // A sub-label is not draggable, not the click-activated scan row, and not a header — it must
+    // not participate in section-collapse row accounting or keyboard/hover interaction.
+    EXPECT_FALSE(library.isEntryEnabled(auSubHeader));
+    EXPECT_EQ(library.getPluginIdentity(auSubHeader), PluginIdentity{});
+}
+
 TEST(PluginScanTest, LibrarySnippetsEmptyHintIsUnaffectedByThePluginsSection) {
     // The Plugins section uses its own row kind precisely so it does not perturb the Snippets
     // section's single EmptyHint row (or any of the counts built on it).

@@ -4,6 +4,7 @@
 #include "../SnippetManager.h"
 #include "Theme/AppLookAndFeel.h"
 #include "UIAnimation.h"
+#include <algorithm>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 #include <optional>
@@ -18,12 +19,13 @@ class ModuleLibraryComponent
 public:
     /** What a row in the sidebar is, which decides how it paints and what a click does. */
     enum class RowKind {
-        Header,   // category title — clicking it collapses/expands the section
-        Module,   // draggable module name
-        Snippet,  // draggable saved group (issue #156)
-        Plugin,   // draggable scanned third-party plugin
-        Action,   // clickable command row, e.g. "Scan for plugins…"
-        EmptyHint // non-interactive placeholder, e.g. "No snippets yet"
+        Header,    // category title — clicking it collapses/expands the section
+        SubHeader, // non-interactive sub-label inside a section, e.g. a plugin format group ("VST3")
+        Module,    // draggable module name
+        Snippet,   // draggable saved group (issue #156)
+        Plugin,    // draggable scanned third-party plugin
+        Action,    // clickable command row, e.g. "Scan for plugins…"
+        EmptyHint  // non-interactive placeholder, e.g. "No snippets yet"
     };
 
     struct Entry {
@@ -578,6 +580,17 @@ public:
                     continue;
                 }
 
+                // Sub-group label inside a section (e.g. "VST3" / "AudioUnit" under Plugins) — painted
+                // in the same muted style as a Header but smaller and indented, so it reads as a
+                // sub-level without competing with the section title. Non-clickable, no hover state.
+                if (entry.kind == RowKind::SubHeader) {
+                    g.setColour(mutedColour.withAlpha(0.6f));
+                    g.setFont(juce::Font(juce::FontOptions(10.5f)));
+                    g.drawText(entry.text.toUpperCase(), 28, row.y, contentWidth - 40, kItemHeight - 4,
+                               juce::Justification::centredLeft);
+                    continue;
+                }
+
                 // Command row — reads like a hint until hovered, so an empty Plugins section looks
                 // like a prompt rather than like a broken module row.
                 if (entry.kind == RowKind::Action) {
@@ -704,7 +717,7 @@ public:
             return;
         }
 
-        if (entry.kind == RowKind::EmptyHint)
+        if (entry.kind == RowKind::EmptyHint || entry.kind == RowKind::SubHeader)
             return;
 
         // Click-activated rows (the scan command, and plugin rows, which support BOTH click-to-add
@@ -1137,8 +1150,28 @@ private:
         // move a single existing row.
         addHeader(kPluginsHeader);
         entries.push_back({kScanPluginsRowText, false, RowKind::Action, kPluginsHeader, 0, {}, 0});
-        for (const auto& plugin : plugins)
+
+        // Sub-grouped by format (VST3, AudioUnit, …) so a big scan doesn't read as one undifferentiated
+        // blob. Groups sort alphabetically by format name, rows inside a group by plugin name —
+        // sorted here outright rather than trusting the caller's order (PluginScanService happens
+        // to hand the list name-sorted, but setPlugins() makes no such promise). One sub-label per
+        // format — even a single-format library still gets one, so the section always reads the
+        // same way rather than special-casing the common case.
+        std::vector<synth::PluginIdentity> sortedPlugins = plugins;
+        std::sort(sortedPlugins.begin(), sortedPlugins.end(),
+                  [](const synth::PluginIdentity& a, const synth::PluginIdentity& b) {
+                      return a.format != b.format ? a.format < b.format : a.name < b.name;
+                  });
+        juce::String currentFormat;
+        bool haveFormat = false;
+        for (const auto& plugin : sortedPlugins) {
+            if (!haveFormat || plugin.format != currentFormat) {
+                entries.push_back({plugin.format, false, RowKind::SubHeader, kPluginsHeader, 0, {}, 0});
+                currentFormat = plugin.format;
+                haveFormat = true;
+            }
             entries.push_back({plugin.name, false, RowKind::Plugin, kPluginsHeader, 0, plugin.format, plugin.uid});
+        }
     }
 
     std::vector<Entry> entries;

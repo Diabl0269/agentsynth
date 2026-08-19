@@ -396,6 +396,49 @@ TEST(TimelinePanelAutomationStripTest, RecordModeSelectorWritesDoc) {
     EXPECT_EQ(doc.getLane(laneId)->recordMode, static_cast<int>(synth::LaneRecordMode::Read));
 }
 
+TEST(TimelinePanelAutomationStripTest, TrackHeaderAutomationButtonTogglesTheStripForThatTrack) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 400);
+    TimelineDoc doc;
+    panel.setTimelineDoc(&doc);
+
+    // Two Automation tracks, each with one lane — syncTrackHeaders() (driven by setTimelineDoc's
+    // initial refresh, then this addTrack/addLane notification) builds a header per track and wires
+    // its onAutomationToggleRequested straight into TimelinePanelComponent::toggleAutomationForTrack.
+    const auto trackA = doc.addTrack(TrackKind::Automation, "Automation A");
+    AutomationLane::RangeSnapshot range;
+    const auto laneA = doc.addLane(trackA, "node-uuid-a", "cutoff", range);
+    const auto trackB = doc.addTrack(TrackKind::Automation, "Automation B");
+    const auto laneB = doc.addLane(trackB, "node-uuid-b", "resonance", range);
+    ASSERT_TRUE(laneA.isValid());
+    ASSERT_TRUE(laneB.isValid());
+
+    ASSERT_EQ(panel.getTrackHeaderCount(), 2);
+    auto* headerA = panel.getTrackHeaderAt(0);
+    auto* headerB = panel.getTrackHeaderAt(1);
+    ASSERT_NE(headerA, nullptr);
+    ASSERT_NE(headerB, nullptr);
+
+    // First click on track A's button: strip was closed -> opens on track A's (only) lane.
+    headerA->getAutomationButton().onClick();
+    EXPECT_TRUE(panel.isAutomationStripVisible());
+    EXPECT_EQ(panel.getSelectedAutomationLane(), laneA);
+
+    // Second click on the SAME track's button: strip is already open on this track -> closes.
+    headerA->getAutomationButton().onClick();
+    EXPECT_FALSE(panel.isAutomationStripVisible());
+
+    // A different track's button while closed: opens on that track's lane.
+    headerB->getAutomationButton().onClick();
+    EXPECT_TRUE(panel.isAutomationStripVisible());
+    EXPECT_EQ(panel.getSelectedAutomationLane(), laneB);
+
+    // Track A's button while the strip shows track B's lane: switches the strip, doesn't close it.
+    headerA->getAutomationButton().onClick();
+    EXPECT_TRUE(panel.isAutomationStripVisible());
+    EXPECT_EQ(panel.getSelectedAutomationLane(), laneA);
+}
+
 // ============================================================================
 // 3. MainComponent integration — right-click-any-knob's headless hook.
 // ============================================================================

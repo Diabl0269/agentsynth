@@ -85,6 +85,14 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     addAndMakeVisible(perModuleDefaultsButton);
     perModuleDefaultsButton.setEnabled(false);
     perModuleDefaultsButton.setTooltip("Per-module I/O default overrides are planned in a follow-up preference.");
+
+    addAndMakeVisible(loopSelectionArmsToggle);
+    loopSelectionArmsToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue("timelineLoopSelectionArms", true), juce::dontSendNotification);
+    loopSelectionArmsToggle.setTooltip(
+        "When on, pressing P in the timeline both places the loop locators around the selection AND switches "
+        "looping on. When off, P only places the locators (use L to toggle looping).");
+    loopSelectionArmsToggle.onClick = [this] { persistLoopSelectionArms(loopSelectionArmsToggle.getToggleState()); };
 }
 
 void PreferencesSettingsTab::paint(juce::Graphics& g) {
@@ -111,6 +119,9 @@ void PreferencesSettingsTab::resized() {
     bounds.removeFromTop(10);
 
     perModuleDefaultsButton.setBounds(bounds.removeFromTop(24).removeFromLeft(220));
+    bounds.removeFromTop(10);
+
+    loopSelectionArmsToggle.setBounds(bounds.removeFromTop(24));
 }
 
 void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
@@ -147,6 +158,20 @@ bool PreferencesSettingsTab::getDefaultDualIOForNewModules() const {
 void PreferencesSettingsTab::setDefaultDualIOForNewModules(bool enabled) {
     defaultDualIOCombo.setSelectedId(comboIdFromDualIODefault(enabled), juce::dontSendNotification);
     persistDefaultDualIOForNewModules(enabled);
+}
+
+bool PreferencesSettingsTab::isLoopSelectionArmsEnabled() const { return loopSelectionArmsToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setLoopSelectionArmsEnabled(bool enabled) {
+    loopSelectionArmsToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistLoopSelectionArms(enabled);
+}
+
+void PreferencesSettingsTab::persistLoopSelectionArms(bool enabled) {
+    // Read at use time by TimelinePanelComponent's P handler and MainComponent's
+    // onLoopRangeRequested — nothing live to push here, unlike the GraphEditor settings above.
+    appProperties.getUserSettings()->setValue("timelineLoopSelectionArms", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
 }
 
 void PreferencesSettingsTab::persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode) {

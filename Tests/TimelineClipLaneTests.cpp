@@ -220,11 +220,17 @@ TEST(TimelineClipLaneGeometryTest, GeometryMapsBeatsAndRows) {
     const auto rowBelow = TimelineClipLaneArea::computeClipRect(state, 3, 3.0, 2.5, rowHeight);
     EXPECT_EQ(rowBelow.getY() - rect.getY(), rowHeight);
 
-    // Scroll (firstVisibleBeat) shifts x, never y.
+    // Horizontal scroll (firstVisibleBeat) shifts x, never y.
     state.firstVisibleBeat = 1.0;
     const auto scrolled = TimelineClipLaneArea::computeClipRect(state, 2, 3.0, 2.5, rowHeight);
     EXPECT_EQ(scrolled.getY(), rect.getY());
     EXPECT_LT(scrolled.getX(), rect.getX());
+
+    // Vertical track scroll (trackScrollY) shifts y, never x.
+    state.trackScrollY = 30.0;
+    const auto vScrolled = TimelineClipLaneArea::computeClipRect(state, 2, 3.0, 2.5, rowHeight);
+    EXPECT_EQ(vScrolled.getX(), scrolled.getX());
+    EXPECT_EQ(vScrolled.getY(), 2 * rowHeight - 30);
 }
 
 // ============================================================================

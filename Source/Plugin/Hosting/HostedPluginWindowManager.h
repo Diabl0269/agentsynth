@@ -50,7 +50,13 @@ public:
 
         auto window = std::make_unique<HostedPluginEditorWindow>(*module, nodeId);
         window->onCloseRequested = [this](juce::AudioProcessorGraph::NodeID id) { closeAllForNode(id); };
+        // A DocumentWindow's default position is the screen origin, i.e. top-left UNDER the menu
+        // bar and behind the app's main window — "Open Editor did nothing" to the user. Centre it
+        // at its content size and bring it forward, in that order, before/after the one
+        // setVisible(true) that creates the native peer.
+        window->centreWithSize(juce::jmax(1, window->getWidth()), juce::jmax(1, window->getHeight()));
         window->setVisible(true); // the one call in this class that creates a native peer
+        window->toFront(true);
         windows_.emplace(nodeId, std::move(window));
     }
 
