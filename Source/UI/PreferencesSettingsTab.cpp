@@ -67,9 +67,9 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     addAndMakeVisible(defaultDualIOToggle);
     defaultDualIOToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue("defaultDualIOForNewModules", false), juce::dontSendNotification);
-    defaultDualIOToggle.setTooltip("Applies to newly created modules with a Dual I/O toggle — FX, Voice Mixer output, "
-                                   "and the voice modules (Oscillator, Wavetable, Filter, VCA, Sampler). Off gives "
-                                   "them a single Audio jack; existing modules on the canvas are not changed.");
+    defaultDualIOToggle.setTooltip("Splits the audio jacks on every stereo-capable module — FX, Voice Mixer output, "
+                                   "Oscillator, Wavetable, Filter, VCA and Sampler. Applies to modules already on the "
+                                   "canvas as well as new ones. Card heights do not change.");
     defaultDualIOToggle.onClick = [this] { persistDefaultDualIOForNewModules(defaultDualIOToggle.getToggleState()); };
 
     addAndMakeVisible(perModuleDefaultsButton);
@@ -166,6 +166,12 @@ void PreferencesSettingsTab::persistDoubleClickPortDisconnect(bool enabled) {
 void PreferencesSettingsTab::persistDefaultDualIOForNewModules(bool enabled) {
     appProperties.getUserSettings()->setValue("defaultDualIOForNewModules", enabled ? "1" : "0");
     appProperties.getUserSettings()->saveIfNeeded();
-    if (graphEditor)
+    if (graphEditor) {
         graphEditor->setDefaultDualIOForNewModules(enabled);
+        // Deliberately changing the preference re-lays what is already on the canvas as well.
+        // Scoping it to new modules made it look broken: the obvious way to test a setting is to
+        // flip it and look at the patch in front of you, which never changed. Only this path
+        // retro-applies — setGraphEditor() and the startup restore must not touch the patch.
+        graphEditor->applyDualIOToExistingModules(enabled);
+    }
 }

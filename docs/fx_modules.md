@@ -54,9 +54,21 @@ Two consequences worth knowing:
 Anything pairing two modules' legs must ask `ModuleBase::rightAudioLegChannel()` rather than
 assuming ch1 — on a voice module ch1 is CV, and wiring it as audio corrupts the patch.
 
-**Preferences → "Split Left/Right jacks on new modules"** sets the initial state for anything you
-create, in both directions, and overrides the module's own default. It does not touch modules
-already on the canvas.
+**Preferences → "Split Left/Right jacks"** applies in both directions to modules already on the
+canvas *and* to anything created afterwards, overriding each module's own default. Scoping it to new
+modules only made it look broken — the obvious way to check a setting is to flip it and watch the
+patch in front of you, which never changed.
+
+Only a deliberate change retro-applies. `PreferencesSettingsTab::setGraphEditor` (called every time
+the Settings window opens) and the startup restore in `MainComponent` push the value **without**
+re-laying the patch — otherwise opening Settings would collapse jacks the user had split by hand,
+and every launch would collapse the factory preset's voice modules.
+
+Known rough edge: collapsing frees a jack row, so a card gets ~20px shorter (and taller again when
+split). Making the toggle height-neutral means reserving the dual-layout gutter in both states,
+which would add a row of blank gutter to all twelve FX — they default to collapsed — and force
+another rebake of the factory preset rows. `ModuleBase::getReservedInputPortCount` /
+`getReservedOutputPortCount` compute the reserved counts if a follow-up wants to make that trade.
 
 See [`modules.md § Oscillator`](modules.md#oscillator-module) and
 [`§ Filter`](modules.md#filter-module) for the channel maps.

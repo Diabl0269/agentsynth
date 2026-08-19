@@ -115,6 +115,66 @@ TEST_F(PreferencesSettingsTabTest, ClickingTheToggleReachesTheEditorAndNewModule
                 << "Filter ignored the single-jack preference";
 }
 
+// The setting reads as broken otherwise: the obvious way to check a preference is to flip it and
+// look at the patch in front of you, and scoping it to new modules meant that never changed.
+TEST_F(PreferencesSettingsTabTest, ChangingThePreferenceRelaysModulesAlreadyOnTheCanvas) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 420);
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 700);
+    tab.setGraphEditor(&editor);
+
+    // Built BEFORE the preference is touched: a split-block module and a contiguous-pair FX.
+    editor.addModuleAtCanvasPosition("Filter", juce::Point<int>(100, 100), nullptr);
+    editor.addModuleAtCanvasPosition("Delay", juce::Point<int>(500, 100), nullptr);
+
+    auto stateOf = [&engine](const juce::String& type) {
+        for (auto* node : engine.getGraph().getNodes())
+            if (node->getProcessor()->getName() == type)
+                if (auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor()))
+                    return mb->isDualIO() ? 1 : 0;
+        return -1;
+    };
+
+    ASSERT_EQ(stateOf("Filter"), 0) << "the pref defaults off, so a new Filter starts collapsed";
+    ASSERT_EQ(stateOf("Delay"), 0);
+
+    tab.setDefaultDualIOForNewModules(true);
+    EXPECT_EQ(stateOf("Filter"), 1) << "an existing split-block module must follow the preference";
+    EXPECT_EQ(stateOf("Delay"), 1) << "an existing FX module must follow the preference";
+
+    tab.setDefaultDualIOForNewModules(false);
+    EXPECT_EQ(stateOf("Filter"), 0);
+    EXPECT_EQ(stateOf("Delay"), 0);
+}
+
+// ...but opening the Settings window, or restoring the setting at startup, must NOT rewrite the
+// user's patch. Only a deliberate change does.
+TEST_F(PreferencesSettingsTabTest, MerelyWiringTheEditorDoesNotRelayExistingModules) {
+    appProperties.getUserSettings()->setValue("defaultDualIOForNewModules", "0");
+
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 700);
+
+    // A patch where the user (or a factory preset) deliberately split a module's jacks.
+    editor.addModuleAtCanvasPosition("Filter", juce::Point<int>(100, 100), nullptr);
+    for (auto* node : engine.getGraph().getNodes())
+        if (node->getProcessor()->getName() == "Filter")
+            if (auto* dual = findParameterByID(node->getProcessor(), "dualIO"))
+                dual->setValueNotifyingHost(1.0f);
+
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 420);
+    tab.setGraphEditor(&editor); // what happens every time Settings opens
+
+    for (auto* node : engine.getGraph().getNodes())
+        if (node->getProcessor()->getName() == "Filter")
+            EXPECT_TRUE(dynamic_cast<ModuleBase*>(node->getProcessor())->isDualIO())
+                << "opening Settings must not collapse a module the user deliberately split";
+}
+
 TEST_F(PreferencesSettingsTabTest, SetGraphEditorPushesCurrentValues) {
     appProperties.getUserSettings()->setValue("smartConnectionMode", "NewOnly");
     appProperties.getUserSettings()->setValue("doubleClickPortDisconnect", "0");

@@ -3457,6 +3457,24 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
     }
 }
 
+void GraphEditor::applyDualIOToExistingModules(bool dual) {
+    for (auto* moduleComp : content.getModules()) {
+        if (moduleComp == nullptr)
+            continue;
+        auto* mb = dynamic_cast<ModuleBase*>(moduleComp->getModule());
+        if (mb == nullptr || !mb->hasDualIOParameter() || mb->isDualIO() == dual)
+            continue;
+
+        if (auto* param = findParameterByID(moduleComp->getModule(), "dualIO"))
+            param->setValueNotifyingHost(dual ? 1.0f : 0.0f);
+
+        // Driven straight rather than left to the parameter listener: that path is asynchronous, so
+        // changing every module at once would let the canvas settle a frame late, and each module's
+        // hidden-leg cable cleanup would race the next one's layout change.
+        moduleComp->applyDualIOLayoutChange();
+    }
+}
+
 void GraphEditor::applyDefaultDualIOForNewModule(juce::AudioProcessor& processor) const {
     auto* mb = dynamic_cast<ModuleBase*>(&processor);
     if (mb == nullptr || !mb->hasDualIOParameter())

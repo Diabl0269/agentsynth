@@ -258,6 +258,15 @@ public:
     // Default jack layout for newly created modules that expose the Dual I/O parameter.
     // false (default): one collapsed "Audio" jack. true: split Left/Right by default.
     void setDefaultDualIOForNewModules(bool enabled) { defaultDualIOForNewModules = enabled; }
+
+    /** Re-lays every stereo-capable module already on the canvas to `dual`.
+     *
+     *  Deliberately separate from setDefaultDualIOForNewModules: that one is also called at startup
+     *  and whenever the Settings window opens, and retro-applying there would rewrite the user's
+     *  patch (collapsing the factory preset's voice modules on every launch). Only a deliberate
+     *  change of the preference calls this. Card heights do not move — the gutter reserves room for
+     *  the dual layout in both states. */
+    void applyDualIOToExistingModules(bool dual);
     bool getDefaultDualIOForNewModules() const noexcept { return defaultDualIOForNewModules; }
 
     /** True when the visible jack already has at least one graph edge or mod routing. */

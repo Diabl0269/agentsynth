@@ -148,6 +148,34 @@ public:
         return visibleJack == 1 ? "Audio R" : "Audio L";
     }
 
+    // -------------------------------------------------------------------------
+    // Reserved jack counts
+    //
+    // How many jacks a side would show in the DUAL state. A collapsed module gains exactly one
+    // audio jack per side that already carries audio, which is why this asks the channel map rather
+    // than hard-coding per module: an Oscillator's inputs are all CV and gain nothing, while a
+    // Filter gains one on each side.
+    //
+    // NOT currently used for layout. Reserving this much gutter would make flipping Dual I/O
+    // height-neutral (nice when the Preferences default re-lays every module at once), but it also
+    // makes every collapsed card a jack row TALLER than it is today — all twelve FX default to
+    // collapsed, so they would each grow 20px of blank gutter and the factory preset rows would
+    // need rebaking again. Left available for a follow-up that wants to make that trade.
+    // -------------------------------------------------------------------------
+    int getReservedInputPortCount() const {
+        int count = getVisibleInputPortCount();
+        if (hasDualIOParameter() && !isDualIO() && mapInputChannel(0).role == PortRole::Audio)
+            ++count;
+        return count;
+    }
+
+    int getReservedOutputPortCount() const {
+        int count = getVisibleOutputPortCount();
+        if (hasDualIOParameter() && !isDualIO() && mapOutputChannel(0).role == PortRole::Audio)
+            ++count;
+        return count;
+    }
+
     /** Balance pan law shared by every stereo-capable module: centre leaves BOTH legs at unity,
         and panning attenuates only the leg you move away from. -1 is hard left, +1 hard right.
 
