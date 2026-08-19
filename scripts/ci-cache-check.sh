@@ -13,6 +13,11 @@
 #      LRU-evicting everything else.
 #   3. The Linux job cached ~/.ccache while ccache 4.x on Ubuntu 24.04 writes to ~/.cache/ccache,
 #      so the Linux ccache was never even saved.
+#   4. (Aug 2026) Only CMAKE_C/CXX_COMPILER_LAUNCHER were set, and CMake treats Objective-C++ as
+#      its own language, so all 103 JUCE .mm translation units bypassed ccache and were rebuilt
+#      cold every run — ~12 min of the macOS job. This one was invisible even to the hit-rate
+#      check below: a compile that never reaches ccache is not counted as a miss, so the rate read
+#      54%, low but plausible. Hence the build.ninja launcher audit further down.
 # A silent cache failure looks exactly like a healthy build, just slower — hence this check.
 #
 # Reads its inputs from the environment so it is runnable (and testable) outside CI:
@@ -24,6 +29,8 @@
 #                        invoking ccache (used by the unit tests)
 #   CACHE_MIN_HIT_RATE   integer percent floor for the ccache hit rate (default 25)
 #   CACHE_CHECK_ENFORCE  "true" (default) => exit 1 on a hard failure; "false" => annotate only
+#   BUILD_NINJA          path to the generated build.ninja for the launcher audit
+#                        (default build/build.ninja; skipped when the file is absent)
 #
 # Hard failure (exit 1) means "a cache that should have restored did not" — the actionable,
 # unambiguous signal. A hit rate below the floor is only ever a warning: it drops legitimately
@@ -38,6 +45,7 @@ CACHE_WARM_EXPECTED="${CACHE_WARM_EXPECTED:-true}"
 CACHE_MIN_HIT_RATE="${CACHE_MIN_HIT_RATE:-25}"
 CACHE_CHECK_ENFORCE="${CACHE_CHECK_ENFORCE:-true}"
 CCACHE_STATS_FILE="${CCACHE_STATS_FILE:-}"
+BUILD_NINJA="${BUILD_NINJA:-build/build.ninja}"
 
 failures=0
 warnings=0
@@ -170,6 +178,111 @@ if [ "$total" -eq 0 ]; then
     annotate warning "No ccache statistics available — ccache is not on PATH, or the compiler \
 launcher is not wired up. The build is not being cached at all."
     warnings=$((warnings + 1))
+fi
+
+# --- compiler-launcher audit ----------------------------------------------------------------
+# The hit rate cannot see this class of fault. CMAKE_<LANG>_COMPILER_LAUNCHER is per language, and
+# a language left unwired doesn't lower the hit rate — its compiles never reach ccache at all, so
+# they are counted as neither hit nor miss. That is how 103 Objective-C++ units (JUCE ships every
+# module as one .mm unity file, compiled once per target) were rebuilt cold on every macOS run for
+# weeks behind a merely-mediocre-looking 54%.
+#
+# So audit the generator's own output: every compile of a language we cache must invoke ccache.
+# That is generator output, not our source, so it catches the fault however it arrives — a new
+# language, a new target kind, a dropped -D flag, a CMake upgrade. RC and the C++20 module-scan
+# rules are deliberately out of scope (ccache does not handle them); links are not compiles.
+#
+# HOW THE LAUNCHER ACTUALLY LANDS IN NINJA OUTPUT, because two wrong guesses have already cost a
+# CI round trip each. CMake splits it across the two files:
+#
+#   CMakeFiles/rules.ninja   rule OBJCXX_COMPILER__Core_unscanned_
+#                              command = ${LAUNCHER}${CODE_CHECK}/usr/bin/c++ ... -c $in
+#   build.ninja              build CMakeFiles/Core.dir/juce_core.mm.o: OBJCXX_COMPILER__Core_...
+#                              LAUNCHER = /opt/homebrew/bin/ccache
+#
+# The rule command NEVER contains the word ccache — it contains the placeholder — and the real
+# path is a per-build-statement variable. So the unit of audit is the build STATEMENT, not the
+# rule: one per translation unit, which is also the number worth reporting (103 .mm files, not
+# the ~10 ObjC++ rules they share). Older CMake inlined the launcher into the rule command
+# instead, so a rule whose command does name ccache still counts as wired.
+launcher_rules="$(dirname "$BUILD_NINJA")/CMakeFiles/rules.ninja"
+launcher_sources=""
+[ -f "$launcher_rules" ] && launcher_sources="$launcher_rules"
+[ -f "$BUILD_NINJA" ] && launcher_sources="$launcher_sources $BUILD_NINJA"
+
+launcher_report=""
+if [ -n "$launcher_sources" ]; then
+    # rules.ninja first: a statement's verdict may depend on its rule, defined in the other file.
+    # shellcheck disable=SC2086  # deliberate word splitting: one or two paths, both ours
+    launcher_report="$(cat $launcher_sources | awk '
+        # Close the statement being read and record its verdict.
+        function flush() {
+            if (lang != "") {
+                seen[lang]++
+                if (!launcher_ok && !(stmt_rule in rule_has_ccache)) {
+                    bad[lang]++
+                    if (!(lang in example)) example[lang] = stmt_out
+                }
+            }
+            lang = ""; launcher_ok = 0; stmt_rule = ""; stmt_out = ""
+        }
+
+        # --- rule definitions (any language: we only need the ccache verdict per rule name) ---
+        /^rule /                          { rule_name = $2; in_rule = 1; next }
+        in_rule && /^[ \t]*command[ \t]*=/ {
+            if ($0 ~ /[Cc]cache/) rule_has_ccache[rule_name] = 1
+            in_rule = 0; next
+        }
+
+        # --- build statements ---
+        /^build / {
+            flush()
+            if (match($0, /: (C|CXX|OBJC|OBJCXX)_COMPILER__[^ ]*/)) {
+                stmt_rule = substr($0, RSTART + 2, RLENGTH - 2)
+                split(stmt_rule, parts, "_COMPILER__")
+                lang = parts[1]
+                stmt_out = $2; sub(/:$/, "", stmt_out)
+            }
+            next
+        }
+        lang != "" && /^[ \t]+LAUNCHER[ \t]*=/ { if ($0 ~ /[Cc]cache/) launcher_ok = 1; next }
+        /^[^ \t]/ { flush() }   # any unindented line ends the statement
+
+        END {
+            flush()
+            for (l in seen) printf "%s %d %d %s\n", l, (l in bad ? bad[l] : 0), seen[l], example[l]
+        }' | sort)"
+fi
+
+if [ -n "$launcher_report" ]; then
+    while read -r lang bad_count rule_count example_rule; do
+        [ -z "$lang" ] && continue
+        if [ "$bad_count" -gt 0 ]; then
+            annotate error "${bad_count} of ${rule_count} ${lang} compiles do not go through ccache \
+(e.g. ${example_rule}). Those translation units are rebuilt from cold on every run and are \
+invisible in the hit rate, because a compile that never reaches ccache is counted as neither hit \
+nor miss. Set CMAKE_${lang}_COMPILER_LAUNCHER (CMake's launcher is per language — C and CXX do not \
+cover OBJC/OBJCXX)."
+            failures=$((failures + 1))
+        fi
+        printf '%-6s compiles       : %s/%s via ccache\n' \
+            "$lang" "$((rule_count - bad_count))" "$rule_count"
+    done <<EOF
+$launcher_report
+EOF
+elif [ -n "$launcher_sources" ]; then
+    # The files are there but no compile rule matched, so the audit proved nothing. Say so loudly
+    # rather than printing a reassuring "skipped": a parser that silently matches nothing is the
+    # same silent-success failure mode this whole script exists to catch. This is not theoretical —
+    # it is how the first version of this audit failed (it read only build.ninja, while CMake emits
+    # its rules into CMakeFiles/rules.ninja), and this warning is what surfaced it.
+    annotate warning "Launcher audit recognised no C/CXX/OBJC/OBJCXX compiles in \
+${launcher_sources}. The audit is not checking anything — update its build-statement pattern in \
+scripts/ci-cache-check.sh."
+    warnings=$((warnings + 1))
+    printf 'launcher audit    : NOTHING MATCHED in %s\n' "$launcher_sources"
+else
+    printf 'launcher audit    : skipped (no ninja files found at %s)\n' "$BUILD_NINJA"
 fi
 
 if [ "$failures" -gt 0 ]; then
