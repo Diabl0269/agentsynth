@@ -115,8 +115,9 @@ protected:
 TEST_F(SamplerModuleTest, FactoryInitialisation) {
     EXPECT_EQ(module->getModuleType(), ModuleType::Sampler);
     EXPECT_EQ(module->getName(), "Sampler");
-    // bypassed, playMode, pitch, rootNote, loop, start, grainSize, density, spray, level, muted
-    EXPECT_EQ(module->getParameters().size(), 11);
+    // bypassed, playMode, pitch, rootNote, loop, start, grainSize, density, spray, level, dualIO,
+    // muted  (dualIO added in #219 — the module has always emitted a real stereo pair)
+    EXPECT_EQ(module->getParameters().size(), 12);
     EXPECT_EQ(module->getTotalNumInputChannels(), SamplerModule::kNumChannels);
     EXPECT_EQ(module->getTotalNumOutputChannels(), SamplerModule::kNumChannels);
     EXPECT_EQ(module->getVisibleInputPortCount(), SamplerModule::kNumChannels);

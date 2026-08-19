@@ -106,6 +106,9 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         appProperties.getUserSettings()->getValue("smartConnectionMode", "NewAndUnwired")));
     graphEditor.setDoubleClickPortDisconnectEnabled(
         appProperties.getUserSettings()->getBoolValue("doubleClickPortDisconnect", true));
+    // Stored here, but APPLIED to the patch further down — the default preset does not exist yet.
+    // AudioEngine::initialise() builds it, and that runs at the end of this constructor. See
+    // applyStoredDualIOPreferenceToPatch().
     graphEditor.setDefaultDualIOForNewModules(
         appProperties.getUserSettings()->getBoolValue("defaultDualIOForNewModules", false));
 
@@ -419,6 +422,9 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // initialise() (and will call shutdown()), and its graph may already hold host-restored
     // state — re-initialising here would overwrite the user's session with the default patch.
     if (ownedAudioEngine == nullptr) {
+        // Plugin path: the graph already holds the host-restored session, whose modules each carry
+        // their own saved dualIO value. Forcing the preference over that would rewrite the user's
+        // session, which is exactly what restoring state is supposed to avoid.
         graphEditor.updateComponents();
         return;
     }
@@ -428,13 +434,28 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         juce::RuntimePermissions::request(juce::RuntimePermissions::recordAudio, [&](bool granted) {
             if (granted) {
                 audioEngine.initialise();
+                applyStoredDualIOPreferenceToPatch();
                 graphEditor.updateComponents();
             }
         });
     } else {
         audioEngine.initialise();
+        applyStoredDualIOPreferenceToPatch();
         graphEditor.updateComponents();
     }
+}
+
+void MainComponent::applyStoredDualIOPreferenceToPatch() {
+    // Runs once, right after AudioEngine::initialise() has built the opening patch. Storing the
+    // preference on the GraphEditor is not enough on its own: the default preset's modules are
+    // constructed by the preset loader, which knows nothing about preferences, so they come up
+    // holding their constructor defaults. The voice modules default to dual — so a user who had
+    // chosen single jacks got a split Oscillator and Filter on every launch.
+    //
+    // A patch the user saved carries an explicit dualIO value per module and is applied later by
+    // applyJSONToGraph, so this governs the factory patch rather than a reload of their own work.
+    graphEditor.applyDualIOToExistingModules(
+        appProperties.getUserSettings()->getBoolValue("defaultDualIOForNewModules", false));
 }
 
 MainComponent::~MainComponent() {

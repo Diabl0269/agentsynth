@@ -928,25 +928,31 @@ TEST(PortLabelTests, OscillatorPortLabels) {
     EXPECT_EQ(osc.getInputPortLabel(3), "Coarse");
     EXPECT_EQ(osc.getInputPortLabel(4), "Fine");
     EXPECT_EQ(osc.getInputPortLabel(5), "Level");
-    EXPECT_EQ(osc.getOutputPortLabel(0), "Audio");
+    EXPECT_EQ(osc.getInputPortLabel(6), "Pan");
+    EXPECT_EQ(osc.getOutputPortLabel(0), "Audio L");
+    EXPECT_EQ(osc.getOutputPortLabel(1), "Audio R");
 }
 
 TEST(PortLabelTests, FilterPortLabels) {
     FilterModule filter;
-    // Default mono mode: original 4-input layout
-    EXPECT_EQ(filter.getInputPortLabel(0), "Audio");
-    EXPECT_EQ(filter.getInputPortLabel(1), "Cutoff");
-    EXPECT_EQ(filter.getInputPortLabel(2), "Resonance");
-    EXPECT_EQ(filter.getInputPortLabel(3), "Drive");
-    EXPECT_EQ(filter.getOutputPortLabel(0), "Audio");
+    // Audio L/R lead the visible jacks; the CV labels keep their order behind them.
+    EXPECT_EQ(filter.getInputPortLabel(0), "Audio L");
+    EXPECT_EQ(filter.getInputPortLabel(1), "Audio R");
+    EXPECT_EQ(filter.getInputPortLabel(2), "Cutoff");
+    EXPECT_EQ(filter.getInputPortLabel(3), "Resonance");
+    EXPECT_EQ(filter.getInputPortLabel(4), "Drive");
+    EXPECT_EQ(filter.getOutputPortLabel(0), "Audio L");
+    EXPECT_EQ(filter.getOutputPortLabel(1), "Audio R");
 }
 
 TEST(PortLabelTests, VCAPortLabels) {
     VCAModule vca;
-    // Default mono mode: original 2-input layout
-    EXPECT_EQ(vca.getInputPortLabel(0), "Audio");
-    EXPECT_EQ(vca.getInputPortLabel(1), "CV");
-    EXPECT_EQ(vca.getOutputPortLabel(0), "Audio");
+    // Audio L/R lead the visible jacks since #219; CV keeps its raw channel and only moves slot.
+    EXPECT_EQ(vca.getInputPortLabel(0), "Audio L");
+    EXPECT_EQ(vca.getInputPortLabel(1), "Audio R");
+    EXPECT_EQ(vca.getInputPortLabel(2), "CV");
+    EXPECT_EQ(vca.getOutputPortLabel(0), "Audio L");
+    EXPECT_EQ(vca.getOutputPortLabel(1), "Audio R");
 }
 
 TEST(PortLabelTests, ADSRPortLabels) {

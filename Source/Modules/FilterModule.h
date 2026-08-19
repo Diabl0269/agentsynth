@@ -3,11 +3,42 @@
 #include "ModuleBase.h"
 #include <atomic>
 #include <juce_dsp/juce_dsp.h>
+#include <optional>
 
 class FilterModule : public ModuleBase {
 public:
+    // -------------------------------------------------------------------------
+    // Channel map
+    //
+    // Audio L: ch0 in mono, ch0-7 in poly — both as input and as output, unchanged since the
+    // module was mono. Shared CV: ch1-3 (mono) / ch8-10 (poly), also unchanged.
+    //
+    // Audio R (#219) is a dedicated block at kRightBase, again in AND out: this is a processor, so
+    // the right leg needs an input jack as well as an output. R deliberately does NOT live on ch1
+    // the way an FX Dual I/O pair does — ch1 is the Cutoff CV input, and moving it would break
+    // every saved patch that modulates cutoff.
+    // -------------------------------------------------------------------------
+    static constexpr int kNumVoices = 8;
+    static constexpr int kPolyCVBase = kNumVoices;                // shared CV block in poly mode
+    static constexpr int kNumCVInputs = 3;                        // Cutoff, Resonance, Drive
+    static constexpr int kNumInputs = kPolyCVBase + kNumCVInputs; // 11
+    static constexpr int kRightBase = kNumInputs;                 // Audio R block starts here
+    static constexpr int kNumChannels = kRightBase + kNumVoices;  // 19, in and out
+    static constexpr int kLegCount = 2;                           // 0 = Audio L, 1 = Audio R
+    static constexpr int kNumVisibleInputs = 2 + kNumCVInputs;    // Audio L, Audio R, then CV
+
+    /** Raw channel carrying CV jack `cv` (0 = Cutoff, 1 = Resonance, 2 = Drive). Mono packs the CV
+        block directly above the single audio channel (1-3); poly puts it above the voice fan (8-10). */
+    static constexpr int cvChannelFor(int cv, bool poly) { return poly ? (kPolyCVBase + cv) : (1 + cv); }
+
+    /** Raw head channel of audio leg `leg` (0 = L, 1 = R). */
+    static constexpr int legBaseChannel(int leg) { return leg == 0 ? 0 : kRightBase; }
+
     FilterModule()
-        : ModuleBase("Filter", 11, 8) { // 0-7: per-voice audio, 8-10: shared CV, outputs 0-7: filtered audio
+        // 19 in / 19 out: Audio L on 0-7, shared CV on 8-10, Audio R on 11-18. Declaring the
+        // outputs above every CV input channel also makes JUCE hand this node private copies of
+        // shared CV buffers, so the end-of-block CV clear can only ever zero our own copy.
+        : ModuleBase("Filter", kNumChannels, kNumChannels) {
         addParameter(cutoffParam = new juce::AudioParameterFloat("cutoff", "Cutoff", 20.0f, 20000.0f, 440.0f));
         addParameter(resonanceParam = new juce::AudioParameterFloat("resonance", "Resonance", 0.0f, 1.0f, 0.1f));
         addParameter(driveParam = new juce::AudioParameterFloat("drive", "Drive", 1.0f, 10.0f, 1.0f));
@@ -15,6 +46,9 @@ public:
                          "filterType", "Filter Type",
                          juce::StringArray{"LPF24", "LPF12", "HPF24", "HPF12", "BPF24", "BPF12", "Notch"}, 0));
         addParameter(polyParam = new juce::AudioParameterBool("poly", "Poly", false));
+        // Defaults to dual: this module filters in stereo now. Collapsed, its jack layout is
+        // exactly what it was before #219 — Audio, Cutoff, Resonance, Drive.
+        addDualIOParameter(/*defaultDual=*/true);
         addOutputLevelParameter();
         addMuteParameter();
         enableVisualBuffer(true);
@@ -23,10 +57,15 @@ public:
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
         lastSampleRate = sampleRate;
         juce::dsp::ProcessSpec monoSpec = {sampleRate, static_cast<juce::uint32>(samplesPerBlock), 1};
-        for (int v = 0; v < MAX_VOICES; ++v) {
-            ladders[v].prepare(monoSpec);
-            ladders[v].setEnabled(true);
-            svfsForNotch[v].prepare(monoSpec);
+        // Both legs are prepared up front — a module's channel count is fixed for its lifetime, so
+        // there is no "stereo on" moment at which it would be safe to allocate the right-hand
+        // ladders. Unused legs cost state, not CPU: a silent R input is skipped per block.
+        for (int leg = 0; leg < kLegCount; ++leg) {
+            for (int v = 0; v < MAX_VOICES; ++v) {
+                ladders[leg][v].prepare(monoSpec);
+                ladders[leg][v].setEnabled(true);
+                svfsForNotch[leg][v].prepare(monoSpec);
+            }
         }
         applyFilterType(filterTypeParam->getIndex());
         smoothedCutoff.reset(sampleRate, 0.005);
@@ -62,9 +101,10 @@ public:
             processPolyMode(buffer, numSamples, numChannels, baseRes, baseDrive);
         }
 
-        // Audio lives on ch0 in mono mode and ch0-7 in poly mode; the CV inputs above
-        // those are cleared below and must not be scaled.
-        applyOutputLevel(buffer, polyParam->get() ? MAX_VOICES : 1);
+        // Audio lives on ch0 (mono) / ch0-7 (poly) plus the matching Audio R block at kRightBase;
+        // the CV inputs between them are cleared below and must not be scaled. One shared ramp for
+        // both legs — see applyOutputLevelSplit.
+        applyOutputLevelSplit(buffer, polyParam->get() ? MAX_VOICES : 1, kRightBase);
 
         // Push voice 0 to visual buffer
         if (auto* vb = getVisualBuffer()) {
@@ -73,9 +113,11 @@ public:
                 vb->pushSample(ch[i]);
         }
 
-        // Clear CV channels to prevent leaking to downstream modules
-        int cvStartChannel = polyParam->get() ? 8 : 1;
-        for (int ch = cvStartChannel; ch < buffer.getNumChannels(); ++ch)
+        // Clear CV channels to prevent leaking to downstream modules. Bounded at kRightBase: the
+        // Audio R block sits above the CV inputs, so running to getNumChannels() would erase the
+        // right leg we just filtered.
+        int cvStartChannel = cvChannelFor(0, polyParam->get());
+        for (int ch = cvStartChannel; ch < kRightBase && ch < buffer.getNumChannels(); ++ch)
             buffer.clear(ch, 0, numSamples);
     }
 
@@ -84,101 +126,89 @@ public:
             return {{"Cutoff", 8}, {"Resonance", 9}, {"Drive", 10}};
         return {{"Cutoff", 1}, {"Resonance", 2}, {"Drive", 3}};
     }
+    /** Audio R sits next to Audio L rather than after Drive, so the two legs read as a pair. Visible
+        jack order is presentation only — connections persist by raw channel index, so the CV jacks
+        shifting as the toggle flips never touches a saved patch. */
     juce::String getInputPortLabel(int i) const override {
-        const juce::String labels[] = {"Audio", "Cutoff", "Resonance", "Drive"};
-        return (i >= 0 && i < 4) ? labels[i] : ModuleBase::getInputPortLabel(i);
+        const int audioJacks = splitAudioJackCount();
+        if (i >= 0 && i < audioJacks)
+            return splitAudioLabel(i);
+        const juce::String cvLabels[] = {"Cutoff", "Resonance", "Drive"};
+        const int cv = i - audioJacks;
+        return (cv >= 0 && cv < kNumCVInputs) ? cvLabels[cv] : ModuleBase::getInputPortLabel(i);
     }
-    juce::String getOutputPortLabel(int) const override { return "Audio"; }
-    int getVisibleInputPortCount() const override { return 4; }
-    int getVisibleOutputPortCount() const override { return 1; }
+    juce::String getOutputPortLabel(int i) const override { return splitAudioLabel(i); }
+    int getVisibleInputPortCount() const override { return splitAudioJackCount() + kNumCVInputs; }
+    int getVisibleOutputPortCount() const override { return splitAudioJackCount(); }
+    int rightAudioLegChannel() const override { return kRightBase; }
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Filter; }
     ModuleType getModuleType() const override { return ModuleType::Filter; }
 
+    /** Audio L on the voice block (ch0, or ch0-7 in poly), Audio R on its own block at kRightBase,
+        and the shared CV inputs between them keeping the raw channels they have always had. Both
+        legs are input AND output channels — this module filters what it is handed in place. */
     LogicalPort mapInputChannel(int raw) const override {
-        LogicalPort p;
-        if (polyParam->get()) {
-            // Poly mode: raw 0-7 = per-voice Audio fan; raw 8,9,10 = shared ModCV
-            if (raw >= 0 && raw <= 7) {
-                p.visibleJackIndex = 0;
-                p.role = PortRole::Audio;
-                p.isPolyGroupHead = (raw == 0);
-                p.polyVoiceSpan = (raw == 0) ? 8 : 1;
-                return p;
-            }
-            if (raw == 8) {
-                p.visibleJackIndex = 1;
-                p.role = PortRole::ModCV;
-                p.isPolyGroupHead = true;
-                p.polyVoiceSpan = 1;
-                return p;
-            }
-            if (raw == 9) {
-                p.visibleJackIndex = 2;
-                p.role = PortRole::ModCV;
-                p.isPolyGroupHead = true;
-                p.polyVoiceSpan = 1;
-                return p;
-            }
-            if (raw == 10) {
-                p.visibleJackIndex = 3;
-                p.role = PortRole::ModCV;
-                p.isPolyGroupHead = true;
-                p.polyVoiceSpan = 1;
-                return p;
-            }
-        } else {
-            // Mono mode: raw 0 = Audio jack0; raw 1,2,3 = ModCV jacks 1,2,3
-            if (raw == 0) {
-                p.visibleJackIndex = 0;
-                p.role = PortRole::Audio;
-                p.isPolyGroupHead = true;
-                p.polyVoiceSpan = 1;
-                return p;
-            }
-            if (raw == 1) {
-                p.visibleJackIndex = 1;
-                p.role = PortRole::ModCV;
-                p.isPolyGroupHead = true;
-                p.polyVoiceSpan = 1;
-                return p;
-            }
-            if (raw == 2) {
-                p.visibleJackIndex = 2;
-                p.role = PortRole::ModCV;
-                p.isPolyGroupHead = true;
-                p.polyVoiceSpan = 1;
-                return p;
-            }
-            if (raw == 3) {
-                p.visibleJackIndex = 3;
+        if (auto audio = mapAudioLeg(raw))
+            return *audio;
+
+        const bool poly = polyParam->get();
+        for (int cv = 0; cv < kNumCVInputs; ++cv) {
+            if (raw == cvChannelFor(cv, poly)) {
+                LogicalPort p;
+                p.visibleJackIndex = splitAudioJackCount() + cv; // after the audio jack(s)
                 p.role = PortRole::ModCV;
                 p.isPolyGroupHead = true;
                 p.polyVoiceSpan = 1;
                 return p;
             }
         }
-        return ModuleBase::mapInputChannel(raw);
+
+        // Unclaimed channels (the poly CV block while in mono, and vice versa) are addressable but
+        // never a jack head. Deliberately not ModuleBase's default: it reports isPolyGroupHead for
+        // any raw channel below the VISIBLE jack count, so growing to 5 jacks would make raw ch4 a
+        // phantom second head on the Drive jack and getJackTargets would hand out two wires.
+        LogicalPort p;
+        p.visibleJackIndex = 0;
+        p.role = PortRole::Other;
+        p.isPolyGroupHead = false;
+        p.polyVoiceSpan = 1;
+        return p;
     }
 
     LogicalPort mapOutputChannel(int raw) const override {
+        if (auto audio = mapAudioLeg(raw))
+            return *audio;
+
+        // Silent pass-through channels (the CV block, and voices 1-7 in mono): addressable but never
+        // a poly-bus head. Deliberately not ModuleBase's default, which clamps the raw channel onto
+        // a visible jack index and so would advertise mono ch1 (Cutoff CV) as the Audio R head.
         LogicalPort p;
-        if (polyParam->get()) {
-            // Poly mode: raw 0-7 = per-voice filtered audio fan on the single visible Audio jack
-            if (raw >= 0 && raw <= 7) {
-                p.visibleJackIndex = 0;
+        p.visibleJackIndex = 0;
+        p.role = PortRole::Audio;
+        p.isPolyGroupHead = false;
+        p.polyVoiceSpan = 1;
+        return p;
+    }
+
+    /** Shared by the input and output maps: both directions use the same two audio blocks. Returns
+        nothing when `raw` is not part of either leg. */
+    std::optional<LogicalPort> mapAudioLeg(int raw) const {
+        const bool poly = polyParam->get();
+        const int span = poly ? kNumVoices : 1;
+
+        const int legs = splitAudioJackCount(); // collapsed: the right block is not exposed
+        for (int leg = 0; leg < legs; ++leg) {
+            const int base = legBaseChannel(leg);
+            if (raw >= base && raw < base + span) {
+                LogicalPort p;
+                p.visibleJackIndex = leg;
                 p.role = PortRole::Audio;
-                p.isPolyGroupHead = (raw == 0);
-                p.polyVoiceSpan = (raw == 0) ? 8 : 1;
+                p.isPolyGroupHead = (raw == base);
+                p.polyVoiceSpan = (raw == base) ? span : 1;
                 return p;
             }
-        } else if (raw == 0) {
-            p.visibleJackIndex = 0;
-            p.role = PortRole::Audio;
-            p.isPolyGroupHead = true;
-            p.polyVoiceSpan = 1;
-            return p;
         }
-        return ModuleBase::mapOutputChannel(raw);
+        return std::nullopt;
     }
 
     bool isAutoPromotableModTarget(int dstChannel) const override {
@@ -235,31 +265,81 @@ private:
             f = juce::jlimit(20.0f, 20000.0f, f);
             if (cutoffCVActive)
                 modulatedCutoff.store(f, std::memory_order_relaxed);
-            ladders[0].setCutoffFrequencyHz(f);
+            ladders[0][0].setCutoffFrequencyHz(f);
 
             float totalResMod = cvResCh ? cvResCh[i] : 0.0f;
             totalResMod = juce::jlimit(-1.0f, 1.0f, totalResMod);
             float res = juce::jlimit(0.0f, 1.0f, baseRes + totalResMod);
             if (resCVActive)
                 modulatedResonance.store(res, std::memory_order_relaxed);
-            ladders[0].setResonance(res);
+            ladders[0][0].setResonance(res);
 
             float totalDriveMod = cvDriveCh ? cvDriveCh[i] : 0.0f;
             totalDriveMod = juce::jlimit(-1.0f, 1.0f, totalDriveMod);
             float drive = juce::jlimit(1.0f, 10.0f, baseDrive + (totalDriveMod * 9.0f));
-            ladders[0].setDrive(drive);
+            ladders[0][0].setDrive(drive);
+
+            // Stash the coefficients this sample resolved to so the right leg gets the identical
+            // treatment without re-advancing smoothedCutoff — a second getNextValue() walk would
+            // put R half a block ahead of L and detune the stereo image.
+            if (i < kMaxBlock) {
+                cutoffCoeffCache[(size_t)i] = f;
+                resCoeffCache[(size_t)i] = res;
+                driveCoeffCache[(size_t)i] = drive;
+            }
 
             if (isNotchMode) {
-                svfsForNotch[0].setCutoffFrequency(f);
-                svfsForNotch[0].setResonance(0.707f + res * 15.0f);
-                svfsForNotch[0].setType(juce::dsp::StateVariableTPTFilterType::bandpass);
+                svfsForNotch[0][0].setCutoffFrequency(f);
+                svfsForNotch[0][0].setResonance(0.707f + res * 15.0f);
+                svfsForNotch[0][0].setType(juce::dsp::StateVariableTPTFilterType::bandpass);
                 float input = audioData[i];
-                float filtered = svfsForNotch[0].processSample(0, input);
+                float filtered = svfsForNotch[0][0].processSample(0, input);
                 audioData[i] = input - filtered;
             } else {
                 auto sampleBlock = singleChannelBlock.getSubBlock(i, 1);
                 juce::dsp::ProcessContextReplacing<float> context(sampleBlock);
-                ladders[0].process(context);
+                ladders[0][0].process(context);
+            }
+        }
+
+        // Right leg: same coefficients, its own filter state. Skipped entirely when nothing is
+        // patched into Audio R, so a mono insert costs exactly what it did before #219.
+        processRightLegMono(buffer, numSamples, numChannels);
+    }
+
+    /** Runs the cached per-sample coefficients over the Audio R channel with the right-leg ladder.
+        No-op when the R input is silent. */
+    void processRightLegMono(juce::AudioBuffer<float>& buffer, int numSamples, int numChannels) {
+        if (numChannels <= kRightBase)
+            return;
+        if (buffer.getRMSLevel(kRightBase, 0, numSamples) < 1e-6f)
+            return;
+
+        const int cached = std::min(numSamples, kMaxBlock);
+        juce::dsp::AudioBlock<float> block(buffer);
+        auto rightChannelBlock = block.getSingleChannelBlock((size_t)kRightBase);
+        auto* audioData = buffer.getWritePointer(kRightBase);
+
+        for (int i = 0; i < numSamples; ++i) {
+            const size_t idx = (size_t)std::min(i, cached - 1);
+            const float f = cutoffCoeffCache[idx];
+            const float res = resCoeffCache[idx];
+
+            ladders[1][0].setCutoffFrequencyHz(f);
+            ladders[1][0].setResonance(res);
+            ladders[1][0].setDrive(driveCoeffCache[idx]);
+
+            if (isNotchMode) {
+                svfsForNotch[1][0].setCutoffFrequency(f);
+                svfsForNotch[1][0].setResonance(0.707f + res * 15.0f);
+                svfsForNotch[1][0].setType(juce::dsp::StateVariableTPTFilterType::bandpass);
+                const float input = audioData[i];
+                const float filtered = svfsForNotch[1][0].processSample(0, input);
+                audioData[i] = input - filtered;
+            } else {
+                auto sampleBlock = rightChannelBlock.getSubBlock((size_t)i, 1);
+                juce::dsp::ProcessContextReplacing<float> context(sampleBlock);
+                ladders[1][0].process(context);
             }
         }
     }
@@ -300,31 +380,39 @@ private:
         modulatedResonance.store(res, std::memory_order_relaxed);
         modulatedDrive.store(drive, std::memory_order_relaxed);
 
-        // Process only active voices (skip silent channels to save CPU)
+        // Process only active voices (skip silent channels to save CPU). Both legs fan eight wide:
+        // the right leg is its own poly head at kRightBase, not voice 1 relabelled.
         juce::dsp::AudioBlock<float> fullBlock(buffer);
-        for (int v = 0; v < voiceCount; ++v) {
-            // Skip silent voices
-            if (buffer.getRMSLevel(v, 0, numSamples) < 1e-6f)
-                continue;
+        for (int leg = 0; leg < kLegCount; ++leg) {
+            const int legBase = legBaseChannel(leg);
+            for (int v = 0; v < voiceCount; ++v) {
+                const int ch = legBase + v;
+                if (ch >= numChannels)
+                    break;
 
-            ladders[v].setCutoffFrequencyHz(f);
-            ladders[v].setResonance(res);
-            ladders[v].setDrive(drive);
+                // Skip silent voices
+                if (buffer.getRMSLevel(ch, 0, numSamples) < 1e-6f)
+                    continue;
 
-            if (isNotchMode) {
-                svfsForNotch[v].setCutoffFrequency(f);
-                svfsForNotch[v].setResonance(0.707f + res * 15.0f);
-                svfsForNotch[v].setType(juce::dsp::StateVariableTPTFilterType::bandpass);
-                float* audioData = buffer.getWritePointer(v);
-                for (int i = 0; i < numSamples; ++i) {
-                    float input = audioData[i];
-                    float filtered = svfsForNotch[v].processSample(0, input);
-                    audioData[i] = input - filtered;
+                ladders[leg][v].setCutoffFrequencyHz(f);
+                ladders[leg][v].setResonance(res);
+                ladders[leg][v].setDrive(drive);
+
+                if (isNotchMode) {
+                    svfsForNotch[leg][v].setCutoffFrequency(f);
+                    svfsForNotch[leg][v].setResonance(0.707f + res * 15.0f);
+                    svfsForNotch[leg][v].setType(juce::dsp::StateVariableTPTFilterType::bandpass);
+                    float* audioData = buffer.getWritePointer(ch);
+                    for (int i = 0; i < numSamples; ++i) {
+                        float input = audioData[i];
+                        float filtered = svfsForNotch[leg][v].processSample(0, input);
+                        audioData[i] = input - filtered;
+                    }
+                } else {
+                    auto voiceBlock = fullBlock.getSingleChannelBlock((size_t)ch);
+                    juce::dsp::ProcessContextReplacing<float> context(voiceBlock);
+                    ladders[leg][v].process(context);
                 }
-            } else {
-                auto voiceBlock = fullBlock.getSingleChannelBlock((size_t)v);
-                juce::dsp::ProcessContextReplacing<float> context(voiceBlock);
-                ladders[v].process(context);
             }
         }
     }
@@ -336,20 +424,29 @@ private:
                 juce::dsp::LadderFilterMode::LPF24, juce::dsp::LadderFilterMode::LPF12,
                 juce::dsp::LadderFilterMode::HPF24, juce::dsp::LadderFilterMode::HPF12,
                 juce::dsp::LadderFilterMode::BPF24, juce::dsp::LadderFilterMode::BPF12};
-            for (int v = 0; v < MAX_VOICES; ++v)
-                ladders[v].setMode(modes[typeIndex]);
+            for (int leg = 0; leg < kLegCount; ++leg)
+                for (int v = 0; v < MAX_VOICES; ++v)
+                    ladders[leg][v].setMode(modes[typeIndex]);
         } else if (typeIndex == 6) {
             isNotchMode = true;
         }
     }
 
     // Pre-allocated CV caches to avoid heap allocation in audio thread
-    std::array<float, 4096> cutoffCVCache{};
-    std::array<float, 4096> resCVCache{};
-    std::array<float, 4096> driveCVCache{};
+    static constexpr int kMaxBlock = 4096;
+    std::array<float, kMaxBlock> cutoffCVCache{};
+    std::array<float, kMaxBlock> resCVCache{};
+    std::array<float, kMaxBlock> driveCVCache{};
 
-    juce::dsp::LadderFilter<float> ladders[MAX_VOICES];
-    juce::dsp::StateVariableTPTFilter<float> svfsForNotch[MAX_VOICES];
+    // Per-sample coefficients the left leg resolved to this block, replayed on the right leg.
+    std::array<float, kMaxBlock> cutoffCoeffCache{};
+    std::array<float, kMaxBlock> resCoeffCache{};
+    std::array<float, kMaxBlock> driveCoeffCache{};
+
+    // One independent ladder (and notch SVF) per audio leg per voice: a stereo filter has to keep
+    // L and R separate all the way through, or the image collapses at the VCF.
+    juce::dsp::LadderFilter<float> ladders[kLegCount][MAX_VOICES];
+    juce::dsp::StateVariableTPTFilter<float> svfsForNotch[kLegCount][MAX_VOICES];
     bool isNotchMode = false;
     double lastSampleRate = 44100.0;
     juce::SmoothedValue<float> smoothedCutoff;

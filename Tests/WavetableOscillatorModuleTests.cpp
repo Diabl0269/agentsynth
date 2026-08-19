@@ -157,8 +157,8 @@ TEST_F(WavetableOscillatorModuleTest, FactoryInitialisation) {
     EXPECT_EQ(module->getName(), "Wavetable");
     // Bypassed, Table, Position, Octave, Coarse, Fine, Level, Poly, Unison, Detune, Warp,
     // Warp Amt, Phase, Rand Phase, Spread, Width, Blend, Stack, Sub, Sub Oct, Sub Wave, Pan,
-    // Sync In, Import, Interp, Muted
-    EXPECT_EQ(module->getParameters().size(), 26);
+    // Sync In, Import, Interp, Dual I/O (#219), Muted
+    EXPECT_EQ(module->getParameters().size(), 27);
     EXPECT_EQ(module->getTotalNumInputChannels(), WT::kNumInputs);
     EXPECT_EQ(module->getTotalNumOutputChannels(), WT::kNumOutputs);
     EXPECT_EQ(module->getVisibleInputPortCount(), WT::kNumJacks);

@@ -12,8 +12,12 @@ Detailed specifications for Agent Synth's primary synthesis modules.
     - MIDI-to-Frequency tracking with unison and detune support.
     - Integrated visual buffer for real-time waveform display.
 - **Poly mode**: 8 voices driven by pitch CV (Hz). See [Poly Channel Layout](#poly-channel-layout) for channel details.
-- **Poly `processBlock` CV-save order**: In poly mode, both the per-voice pitch CVs (ch0-7) and the shared mod CVs (ch8-12) are copied into pre-allocated `std::array` caches (`pitchCVCache`, `waveformCVCache`, `octaveCVCache`, `coarseCVCache`, `fineCVCache`, `levelCVCache`) **before** the output buffer is cleared. This is necessary because ch0-7 carry both output audio (written after the clear) and input pitch CV, so they must be read first.
-- **Buffer aliasing note**: Declared with 14 output channels so JUCE's `AudioProcessorGraph` correctly copies shared mod-CV input channels (8-13) when they fan out to multiple downstream nodes. Channels 8-13 of the output are silent pass-throughs.
+- **Stereo output (issue #219)**: two output jacks, `Audio L` and `Audio R`, plus a `Pan` parameter (−1…+1, default 0) and a `Pan` CV jack. `Audio R` lives on a dedicated block at `kRightBase` (ch14, fanning to ch14-21 in poly), **not** on ch1 — ch1 is the Waveform CV input. Poly gives each voice its own L/R pair, so a panned chord reaches the Voice Mixer as a stereo image rather than eight mono voices.
+- **Pan is a balance law, not equal-power** (`ModuleBase::panGains`): centre leaves both legs at unity and panning attenuates only the leg you move away from. At the default Pan of 0, `Audio L` carries bit-for-bit what it carried while the module was mono and `Audio R` is an identical copy — an equal-power centre would have quietened every existing patch by 3 dB. Pinned by `StereoPanLaw.CentreLeavesBothLegsAtUnity` and `OscillatorStereo.CentrePanDoesNotAttenuateAudioL`.
+- **Stereo and Poly are independent axes** — there is deliberately no three-way `mono / stereo / poly` switch. Poly is voice count, stereo is spatial placement, and you want both at once (a chord spread across the panorama).
+- **Poly `processBlock` CV-save order**: In poly mode, both the per-voice pitch CVs (ch0-7) and the shared mod CVs (ch8-13) are copied into pre-allocated `std::array` caches (`pitchCVCache`, `waveformCVCache`, `octaveCVCache`, `coarseCVCache`, `fineCVCache`, `levelCVCache`, `panCVCache`) **before** the output buffer is cleared. This is necessary because ch0-7 carry both output audio (written after the clear) and input pitch CV, so they must be read first.
+- **Buffer aliasing note**: Declared with **22** output channels (14 before #219) so JUCE's `AudioProcessorGraph` correctly copies shared mod-CV input channels (8-13) when they fan out to multiple downstream nodes. What matters is that the output count stays **above every CV input channel index** — the Audio R block raising it from 14 to 22 preserves that. Channels 8-13 of the output remain silent pass-throughs.
+- **The poly CV clear is bounded at `kRightBase`.** It used to run to the end of the buffer; with Audio R sitting above the CV block, an unbounded clear would erase the right leg.
 
 ## Wavetable Module
 Serum / Vital-style wavetable oscillator (`Source/Modules/WavetableOscillatorModule.h`). Type-name string: `"Wavetable"`.
@@ -184,10 +188,15 @@ Loads an audio file from disk and plays it back one of two ways.
 ## Filter Module
 - **Types**: 7 filter types — `LPF24`, `LPF12`, `HPF24`, `HPF12`, `BPF24`, `BPF12`, `Notch`.
 - **Implementation**: `LPF24/12`, `HPF24/12`, `BPF24/12` use `juce::dsp::LadderFilter`; `Notch` uses `juce::dsp::StateVariableTPTFilter` (notch computed as input minus bandpass).
-- **Parameters**: Cutoff (20–20000 Hz), Resonance (0–1), Drive (1–10), Filter Type (choice), Poly (bool), Level (0–1, default 1.0 — the shared output-level stage; see [`fx_modules.md § Output Level`](fx_modules.md#output-level-shared-stage)). Level scales ch0 in mono mode and all 8 voice channels in poly mode, never the CV inputs.
-- **CV inputs (mono mode)**: Cutoff = ch1, Resonance = ch2, Drive = ch3.
+- **Parameters**: Cutoff (20–20000 Hz), Resonance (0–1), Drive (1–10), Filter Type (choice), Poly (bool), Level (0–1, default 1.0 — the shared output-level stage; see [`fx_modules.md § Output Level`](fx_modules.md#output-level-shared-stage)). Level scales ch0 in mono mode and all 8 voice channels in poly mode, plus the matching `Audio R` block, never the CV inputs. It goes through `ModuleBase::applyOutputLevelSplit` so **one** smoothing ramp covers both legs — two `applyOutputLevel` calls would advance the smoother twice and leave the right leg a block behind the left.
+- **Stereo (issue #219)**: two audio input jacks (`Audio L`, `Audio R`) and two output jacks. Unlike a pure source, a filter needs the right leg as an **input** as well as an output, so `kRightBase` (ch11, fanning to ch11-18 in poly) is both. Each leg has its own `juce::dsp::LadderFilter` (and notch SVF) per voice — `ladders[leg][voice]` — because a stereo signal through a single shared ladder collapses back to mono. Both legs get identical per-sample coefficients; only their state is separate.
+- **Why not FX-style Dual I/O**: that toggle assumes a contiguous ch0/ch1 audio pair, and ch1 here is the Cutoff CV input. Moving Cutoff would break every saved patch that modulates it, so the right leg goes on its own block above the CV inputs instead. Dual I/O stays FX-only.
+- **A silent `Audio R` costs nothing.** The right leg is skipped per block when its input is silent, so a mono insert performs as it did before #219 and emits silence on `Audio R`. Patch both jacks to get a stereo path.
+- **CV inputs (mono mode)**: Cutoff = ch1, Resonance = ch2, Drive = ch3 — unchanged by #219. Visible jack *order* changed (Audio L, Audio R, then the CV jacks), but connections persist by raw channel index, so no saved patch is affected.
 - **CV inputs (poly mode)**: Cutoff = ch8, Resonance = ch9, Drive = ch10.
-- **Poly mode**: 8 per-voice audio inputs (ch0-7) + 3 shared CV inputs (ch8-10). Shared CV is computed once per block and applied to all active voices.
+- **Poly mode**: 8 per-voice audio inputs (ch0-7) + 3 shared CV inputs (ch8-10) + 8 per-voice `Audio R` inputs (ch11-18). Shared CV is computed once per block and applied to all active voices on both legs.
+- **The end-of-block CV clear is bounded at `kRightBase`** — it used to run to `getNumChannels()`, which would now erase the filtered right leg. Pinned by `FilterStereo.CVClearDoesNotEraseAudioR`.
+- **Declared 19 in / 19 out** (was 11 in / 8 out). Raising the output count above every CV input index also means JUCE hands this node private copies of shared CV buffers, so the CV clear can only ever zero its own copy.
 - **Atomic modulated params**: `modulatedCutoff`, `modulatedResonance`, and `modulatedDrive` are `std::atomic<float>` members updated every `processBlock` (before voice processing in poly mode; per-sample in mono mode). `FrequencyResponseComponent` reads `getCurrentCutoff()` / `getModulatedResonance()` on the UI thread without locks.
 - **`isAutoPromotableModTarget`**: Returns `false` in poly mode (poly CV connections stay plain `DirectCV`, not auto-wrapped in attenuverters).
 
@@ -212,9 +221,11 @@ Loads an audio file from disk and plays it back one of two ways.
 
 ## VCA (Amplifier) Module
 - **Inputs**: 
-    - Mono mode: Audio (ch0), CV (ch1).
-    - Poly mode: Per-voice audio ch0-7, per-voice envelope/CV ch8-15.
-- **Poly summing**: In poly mode, multiplies each voice's audio by its corresponding envelope CV, then sums all 8 voices to stereo (ch0/ch1) with `tanh` soft saturation and 1/8 normalization.
+    - Mono mode: `Audio L` (ch0), CV (ch1), `Audio R` (ch16).
+    - Poly mode: Per-voice `Audio L` ch0-7, per-voice envelope/CV ch8-15, per-voice `Audio R` ch16-23.
+- **Stereo (issue #219)**: `Audio L` / `Audio R` jacks on both sides, with the right leg on a dedicated block at `kRightBase` (ch16). It is not on ch1 — that is the gain CV input. Both legs are gated by the **same** gain ramp and the same CV, so the stereo image cannot drift while Gain moves. A silent `Audio R` is skipped per block. This is what carries the default preset's stereo path from the Filter into the FX chain.
+- **Poly summing**: In poly mode, multiplies each voice's audio by its corresponding envelope CV, then sums all 8 voices with `tanh` soft saturation and 1/8 normalization — the left block to ch0, the right block to ch16. Follower voices in both blocks are zeroed so they don't leak downstream.
+- **Legacy ch0→ch1 duplicate, deliberately preserved**: mono still copies the gated ch0 onto ch1 after processing, and the poly left sum is still written to both ch0 and ch1. That was the module's old "mono to stereo" affordance and `VCAModuleTest.MonoToStereoCopy` / `PolyMode_MultiVoice` / `MonoMode_BackwardsCompatible` pin it. It is vestigial now that there is a real right leg — prefer the `Audio R` jack.
 - **Features**: Parameter smoothing for click-free gain changes.
 
 ## Poly MIDI Module
@@ -396,14 +407,18 @@ Declare your per-voice **output** fan in `mapOutputChannel()` if the module actu
 | **Oscillator (poly)** | ch10 | In | Shared Coarse CV |
 | **Oscillator (poly)** | ch11 | In | Shared Fine CV |
 | **Oscillator (poly)** | ch12 | In | Shared Level CV |
-| **Oscillator (poly)** | ch0-7 | Out | Per-voice audio |
+| **Oscillator (poly)** | ch13 | In | Shared Pan CV |
+| **Oscillator (poly)** | ch0-7 | Out | Per-voice audio — `Audio L` |
 | **Oscillator (poly)** | ch8-13 | Out | Silent pass-throughs (prevent buffer aliasing) |
-| **Oscillator (mono)** | ch0 | In/Out | Pitch CV in / Audio out (shared channel, CV saved before clear) |
+| **Oscillator (poly)** | ch14-21 | Out | Per-voice audio — `Audio R` (`kRightBase`) |
+| **Oscillator (mono)** | ch0 | In/Out | Pitch CV in / `Audio L` out (shared channel, CV saved before clear) |
 | **Oscillator (mono)** | ch1 | In | Waveform CV |
 | **Oscillator (mono)** | ch2 | In | Octave CV |
 | **Oscillator (mono)** | ch3 | In | Coarse CV |
 | **Oscillator (mono)** | ch4 | In | Fine CV |
 | **Oscillator (mono)** | ch5 | In | Level CV |
+| **Oscillator (mono)** | ch6 | In | Pan CV |
+| **Oscillator (mono)** | ch14 | Out | `Audio R` (`kRightBase`) |
 | **Wavetable (poly)** | ch0-7 | In | Per-voice pitch CV (Hz) |
 | **Wavetable (poly)** | ch8 | In | Shared Position CV |
 | **Wavetable (poly)** | ch9 | In | Shared Octave CV |
@@ -422,18 +437,25 @@ Declare your per-voice **output** fan in `mapOutputChannel()` if the module actu
 | **Wavetable (mono)** | ch5 | In | Level CV |
 | **Wavetable (mono)** | ch6-15 | In | Warp, Phase, Rand, Detune, Spread, Width, Blend, Sub, Pan, Sync CV |
 | **Wavetable (mono)** | ch23 | Out | Audio R (`kRightBase`) |
-| **Filter (poly)** | ch0-7 | In | Per-voice audio |
+| **Filter (poly)** | ch0-7 | In/Out | Per-voice audio — `Audio L`, filtered in place |
 | **Filter (poly)** | ch8 | In | Shared Cutoff CV |
 | **Filter (poly)** | ch9 | In | Shared Resonance CV |
 | **Filter (poly)** | ch10 | In | Shared Drive CV |
-| **Filter (poly)** | ch0-7 | Out | Filtered audio per voice |
-| **Filter (mono)** | ch0 | In/Out | Audio in / filtered audio out |
+| **Filter (poly)** | ch11-18 | In/Out | Per-voice audio — `Audio R` (`kRightBase`), own ladder per voice |
+| **Filter (mono)** | ch0 | In/Out | `Audio L` in / filtered out |
 | **Filter (mono)** | ch1 | In | Cutoff CV |
 | **Filter (mono)** | ch2 | In | Resonance CV |
 | **Filter (mono)** | ch3 | In | Drive CV |
-| **VCA (poly)** | ch0-7 | In | Per-voice audio |
+| **Filter (mono)** | ch11 | In/Out | `Audio R` (`kRightBase`) in / filtered out |
+| **VCA (poly)** | ch0-7 | In | Per-voice audio — `Audio L` |
 | **VCA (poly)** | ch8-15 | In | Per-voice envelope/CV |
-| **VCA (poly)** | ch0-1 | Out | Stereo sum (L/R) |
+| **VCA (poly)** | ch16-23 | In | Per-voice audio — `Audio R` (`kRightBase`) |
+| **VCA (poly)** | ch0 | Out | `Audio L` — sum of the left voice block |
+| **VCA (poly)** | ch1 | Out | Vestigial duplicate of the left sum (pre-#219 mono→stereo affordance) |
+| **VCA (poly)** | ch16 | Out | `Audio R` — sum of the right voice block |
+| **VCA (mono)** | ch0 | In/Out | `Audio L` in / gated out |
+| **VCA (mono)** | ch1 | In | Gain CV (also overwritten on the way out — see above) |
+| **VCA (mono)** | ch16 | In/Out | `Audio R` (`kRightBase`) in / gated out |
 | **ADSR (poly)** | ch0-7 | In | Per-voice gate CV |
 | **ADSR** | ch8 | In | Threshold CV (shared) |
 | **ADSR (poly)** | ch0-7 | Out | Per-voice envelope (0–1) |

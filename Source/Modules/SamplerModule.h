@@ -90,6 +90,10 @@ public:
                          new juce::AudioParameterFloat("density", "Density", kMinDensity, kMaxDensity, 20.0f));
         addParameter(sprayParam = new juce::AudioParameterFloat("spray", "Spray", 0.0f, 1.0f, 0.1f));
         addParameter(levelParam = new juce::AudioParameterFloat("level", "Level", 0.0f, 1.0f, 0.8f));
+        // Defaults to dual — this module has always emitted a real stereo pair. Its legs ARE the
+        // contiguous ch0/ch1 pair, so collapsing uses the FX helpers rather than the split-block
+        // ones: one "Audio" jack that owns both raw legs (#219).
+        addDualIOParameter(/*defaultDual=*/true);
         addMuteParameter();
         enableVisualBuffer(true);
     }
@@ -398,10 +402,12 @@ public:
         return (i >= 0 && i < kNumChannels) ? labels[i] : ModuleBase::getInputPortLabel(i);
     }
 
-    juce::String getOutputPortLabel(int i) const override { return i == 1 ? "Audio R" : "Audio L"; }
+    juce::String getOutputPortLabel(int i) const override {
+        return isDualIO() ? (i == 1 ? "Audio R" : "Audio L") : "Audio";
+    }
 
     int getVisibleInputPortCount() const override { return kNumChannels; }
-    int getVisibleOutputPortCount() const override { return 2; }
+    int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Oscillator; }
     ModuleType getModuleType() const override { return ModuleType::Sampler; }
 
@@ -417,14 +423,9 @@ public:
         return ModuleBase::mapInputChannel(raw);
     }
 
-    LogicalPort mapOutputChannel(int raw) const override {
-        LogicalPort p;
-        p.visibleJackIndex = juce::jlimit(0, 1, raw);
-        p.role = PortRole::Audio;
-        p.isPolyGroupHead = (raw < 2);
-        p.polyVoiceSpan = 1;
-        return p;
-    }
+    /** Contiguous ch0/ch1 pair, so this is the FX-style collapse: one "Audio" jack owning both raw
+        legs (polyVoiceSpan 2) when Dual I/O is off, separate jacks when it is on. */
+    LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
 private:
     struct Grain {

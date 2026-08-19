@@ -58,6 +58,16 @@ public:
     std::optional<Port> getPortForPoint(juce::Point<int> localPoint);
     juce::Point<int> getPortCenter(int index, bool isInput);
 
+    /** Re-lays the card after its Dual I/O parameter changed. For an FX pair the raw ch0/ch1 legs
+     *  stay put and no cable is touched; for a split-block module (#219) collapsing also hides its
+     *  kRightBase leg, so GraphEditor drops the cables left on it — an invisible jack cannot be
+     *  unplugged. NOTE: the card does get one jack row shorter when collapsed — see the reserved-
+     *  count note on ModuleBase::getReservedInputPortCount for why height stability was not taken.
+     *
+     *  Public so GraphEditor can drive it synchronously when the Preferences default re-lays every
+     *  module at once; the parameter-listener path is asynchronous. Message thread only. */
+    void applyDualIOLayoutChange();
+
     /** Serum-style modulation drop: the visible knob under `localPoint`, reported as the input
      *  Port its CV jack would be.
      *
@@ -189,9 +199,6 @@ private:
     // Re-anchors this module's connections onto its new channel layout after a poly toggle.
     void applyPolyStateChange();
 
-    // Dual I/O only changes which jacks are *visible* — raw ch0/ch1 stay put — so this refreshes
-    // layout without tearing cables down. Message thread only.
-    void applyDualIOLayoutChange();
     void updateDualIOTooltip();
 
     // Macro bank only. Re-lays the component for the new "Knobs" count and asks the GraphEditor
