@@ -48,6 +48,7 @@ add_executable(Tests
     KeychainTokenStoreTests.cpp
     DeviceIdStoreTests.cpp
     PatchFeedbackStoreTests.cpp
+    LocalHistoryStoreTests.cpp
     MainComponentTests.cpp
     GraphEditorTests.cpp
     ModuleComponentTests.cpp
@@ -109,6 +110,7 @@ add_executable(Tests
     MinimapComponentTests.cpp
     PluginProcessorTests.cpp
     PatchDocumentTests.cpp
+    BrandingTests.cpp
     ../Source/MainComponent.cpp
     ../Source/Plugin/PluginProcessor.cpp
     ../Source/Plugin/PluginEditor.cpp

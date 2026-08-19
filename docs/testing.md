@@ -317,6 +317,63 @@ a contract two `AIIntegrationServiceTest` cases assert verbatim. `SamplerAloneDo
 but deliberately not one here (a Sampler is silent until a file is loaded, and a model-authored patch
 cannot load one).
 
+## Testing Cloud-Gated Features Locally (not a test)
+
+Pro-gated features — cloud conversation history, `x-conversation-id` threading — only do anything
+interesting against a real `synth-platform` server; the local `AIChatComponent` test suite fakes
+the backend (`setHistorySourcesForTesting`), so exercising the real client/server contract needs an
+actual server running.
+
+**Fast path:** `scripts/run-local-cloud-dev.sh` does everything below in one command — starts a
+disposable local Postgres (Docker), migrates it, starts `synth-platform`'s API server against it
+(dev IdP, real Ollama inference, auto-picks a sane model if `llama3.1` isn't pulled), then launches
+this repo's locally-built Debug app with the override already set:
+
+```bash
+scripts/run-local-cloud-dev.sh            # start everything + launch the app
+scripts/run-local-cloud-dev.sh --down     # stop the API server and Postgres container
+```
+
+Requires a `synth-platform` checkout as a sibling directory by default (override with
+`SYNTH_PLATFORM_DIR`) and a Debug `AgentSynth` build already present (`BUILD_DIR`, default `build`
+— see `## Build` above). It prints the exact Settings/sign-in steps once the app launches. The rest
+of this section explains what it's doing and why, for when something needs debugging by hand.
+
+There are two hosts involved, and only one of them was previously configurable:
+
+- **Chat / `patch.generate`** (`RemoteProvider`) — already user-configurable via the Settings
+  "Host" field for that provider. No change needed here.
+- **Auth / entitlement / cloud history** (`AccountService`/`AuthClient`, the `GET`/`DELETE`
+  `/v1/conversations*` endpoints) — hardcoded to production (`synth::branding::kApiBaseUrl`) with
+  no UI to override it. `synth::branding::resolveApiBaseUrl()` (`Source/Branding.h`) now reads a
+  `AGENTSYNTH_LOCAL_API_URL` environment variable in Debug builds only, so this can be redirected
+  without hand-editing `Branding.h` and rebuilding per URL change.
+
+Run `synth-platform` locally first (in-memory stores by default — no Postgres needed for this
+flow). See that repo's own `docs/local-development.md` for the full setup; the short version:
+
+```bash
+pnpm --filter @platform/api dev   # serves http://localhost:8787
+```
+
+Then, to test a Pro-gated flow end-to-end:
+
+1. Start local `synth-platform` as above.
+2. In AgentSynth's Settings, set the chat provider's Host field to `http://localhost:8787`.
+3. Launch the locally-built Debug app with the override set:
+
+   ```bash
+   AGENTSYNTH_LOCAL_API_URL=http://localhost:8787 "./build/AgentSynth_artefacts/Debug/Agent Synth.app/Contents/MacOS/Agent Synth"
+   ```
+
+`AGENTSYNTH_LOCAL_API_URL` is compiled out of Release builds entirely (`#ifndef NDEBUG`) — see the
+comment on `resolveApiBaseUrl()` in `Source/Branding.h` for why.
+
+Production conversation storage is Neon-managed Postgres
+(`packages/conversations/src/store/postgres.ts` in `synth-platform`, 180-day retention); local
+dev's in-memory store implements the identical `ConversationStore` interface, so this flow still
+exercises real client/server contract behavior even without a real Postgres in the loop.
+
 ## Adding Tests for New Modules
 
 When adding a new audio module:
@@ -464,6 +521,16 @@ gh api "repos/:owner/:repo/actions/caches?per_page=100" \
 # Total size — evictions start once this approaches GitHub's 10 GB limit:
 gh api "repos/:owner/:repo/actions/caches?per_page=100" -q '[.actions_caches[].size_in_bytes]|add/1073741824'
 ```
+
+#### Dependency install: the apt mirror is not reliable
+
+The Linux job installs its build dependencies through `scripts/ci-install-linux-deps.sh`, not a bare `apt-get`, because GitHub's ubuntu runners resolve the archive through `/etc/apt/apt-mirrors.txt` — `azure.archive.ubuntu.com` first, `archive.ubuntu.com` as fallback — and when the Azure mirror is degraded **apt does not fail fast**. Its default `Acquire` timeout is 120 s with retries, applied per index and per package, so ~30 packages become a multi-minute or multi-hour stall that still ends in a green build. The log signature is a run of `Ign: http://azure.archive.ubuntu.com/… InRelease` lines followed by a `Hit:` on `archive.ubuntu.com`: apt burning its whole retry budget before failing over to the mirror that works.
+
+On 2026-08-19 this step degraded across one morning — 19 s, then 2m12s, 3m36s, 4m38s, 18 min+ — and on 2026-08-18 a single job sat in it from 15:53 to 21:54. **Six hours, in a step that normally takes 20 seconds**, and it was invisible because a slow success looks like a healthy build.
+
+The script therefore: caps each apt call (15 s per attempt, 2 retries, instead of apt's 120 s default); on a stall, rewrites the mirror list to `https://archive.ubuntu.com` and retries — note the scheme, since the runner lists Azure over cleartext while the fallback already serves TLS; and treats a second failed `update` as non-fatal, letting the *install* decide the exit status, since the image ships usable indexes. The healthy path is unchanged: a working Azure mirror is genuinely faster (same datacenter), so this switches on failure rather than hard-coding the fallback.
+
+`timeout-minutes: 15` on the step is the backstop, not the mechanism — every package-manager step has one now (Linux apt, macOS brew, the ASAN job's cached-apt action), because a package manager with no ceiling stalls until the 6-hour job limit instead of failing. Failover is covered by `scripts/tests/ci-install-linux-deps.test.sh` (13 cases, Lint job) against a fake `apt-get`: a path that only runs during an outage otherwise gets tested by the outage. One of those cases exists because `sed -i` takes a mandatory backup suffix on BSD sed and none on GNU sed, so the original rewrite edited the file in CI and silently did nothing on macOS.
 
 ### What didn't work
 

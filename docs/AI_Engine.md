@@ -668,10 +668,110 @@ Locked by `RemoteProviderTest.ConversationIdHeaderSentWhenSet` /
 
 `Source/AI/AuthClient.h/.cpp` additionally exposes cloud-only conversation methods alongside
 `fetchEntitlement()` — `listConversations()`, `getConversation(id)`, `deleteConversation(id)`,
-`deleteAllConversations()` — for a future history panel (not wired into any UI yet). Note
-`listConversations()` is not a side-effect-free read: the server's `GET /v1/conversations` lazily
-sets/clears a grace-period deletion date on every call (`ListConversationsResult::deletionScheduledAt`,
-empty when null).
+`deleteAllConversations()`. Note `listConversations()` is not a side-effect-free read: the server's
+`GET /v1/conversations` lazily sets/clears a grace-period deletion date on every call
+(`ListConversationsResult::deletionScheduledAt`, empty when null).
+
+### Local History (P6-8, client side)
+
+Local-first, cloud-as-sync: **every** session writes its conversation to a local file regardless of
+plan; a Pro session *additionally* syncs to the cloud via the conversation-id threading above. This
+gives Pro users offline resilience for free and keeps `AIChatComponent` on one code path instead of
+branching storage logic throughout it.
+
+**`Source/AI/LocalHistoryStore.h/.cpp`** — one JSON file per conversation, following
+`SnippetManager`'s exact convention (static methods over an explicit directory, a
+`getDefaultHistoryDirectory()` for production callers, pure/filesystem-free JSON transforms):
+
+- Location: `<userApplicationDataDirectory>/<kSettingsFolderName>/History/<id>.json`.
+- Shape: `{id, title, createdAt, updatedAt, messages: [{role, content, createdAt}]}` — the same
+  field names as `AuthClient::ConversationDetailResult`/`ConversationMessage`, so a UI reading
+  either backend never has to translate field names. `content` still carries any fenced ` ```json `
+  block **unsplit**, exactly like a stored `AIProvider::Message` — `AIChatComponent`'s existing
+  extract/clean logic (originally only run once, on `aiService.getHistory()` in the constructor) is
+  now `AIChatComponent::replayMessagesFrom()`, shared by that constructor path and by restoring a
+  history-panel entry, so the two can never drift.
+- No file-locking — same as `SnippetManager`/`ThemeManager`/`DeviceIdStore`. The multi-instance
+  concurrent-write hazard is avoided by construction: each app/plugin-instance *session* mints its
+  own conversation id lazily, on its first successful exchange (`AIChatComponent::
+  saveCurrentConversationLocally()`), so no two writers ever target the same file. A history-panel
+  list scanning all files can very rarely race a torn write from another live instance — accepted,
+  same as the classes above.
+- Retention is **user-configurable, local only**: a day count (30/90/180/365) or "keep forever"
+  (`LocalHistoryStore::kRetainForever`), read from `juce::ApplicationProperties`'s
+  `"historyRetentionDays"` key (Settings → AI tab, added after the provider/host controls —
+  `SettingsWindow.cpp`'s `AISettingsTab`). `save()` prunes by `updatedAt` on every write; an
+  out-of-range persisted value (e.g. a hand-edited `0`) falls back to the 180-day default rather
+  than pruning everything. Independent of that setting, a hard cap
+  (`LocalHistoryStore::kHardCapFiles`, 2000 files) always applies as an engineering backstop.
+  **Cloud retention is explicitly NOT per-tier/configurable in this PR** — it stays the server's
+  single global default; only the local copy has a user-facing retention control.
+
+**`Source/AI/ConversationHistorySource.h`** — the backend-agnostic interface behind the history
+panel: `list()`/`get(id)`/`deleteAll()`, all callback-based (never blocking the message thread).
+`LocalHistorySource` wraps `LocalHistoryStore` and answers synchronously (file I/O is fast enough
+not to need offloading). `CloudHistorySource` wraps the `AuthClient` conversation methods; each call
+launches a **detached** worker thread that copies everything it needs (a copy of the small,
+stateless `AuthClient`, the access token, a heap-allocated cancellation flag) before returning, so
+the `ConversationHistorySource` object itself never needs to outlive the call — mirrors
+`AIProvider::sendPrompt()`'s existing contract that a completion callback may arrive on a background
+thread, leaving the caller responsible for hopping back to the message thread
+(`Component::SafePointer` + `MessageManager::callAsync`, exactly like
+`AIChatComponent::sendButtonClicked()` already does for `aiService.sendMessage()`).
+
+**Backend selection** (`AIChatComponent::historyButtonClicked()`) is plan-driven, but the cloud call
+itself is **signed-in**-driven, not plan-driven — that asymmetry is deliberate: `listConversations()`
+is the *only* source of a pending grace-period deletion date, and that date only ever matters for a
+signed-in account that has lapsed off Pro. So: whenever signed in, a cloud `listConversations()` call
+always fires (learning `deletionScheduledAt` either way); when the plan is Pro its result is *also*
+the list rendered; when the plan is Free/lapsed, the list rendered instead comes from
+`LocalHistoryStore`. Not signed in (or no `AccountService` attached) skips the cloud call entirely.
+This call happens **only** on an explicit History-button click — never speculatively, never on a
+timer — because of the read-writes-on-read caveat above.
+
+**Restoring** an entry (`AIChatComponent::restoreConversation()`) replays its messages via
+`replayMessagesFrom()` and clears `aiService`'s own `chatHistory` (`aiService.clearHistory()`) —
+deliberately does **not** attempt to re-seed `AIIntegrationService`'s history with the restored
+turns, since no API exists for that (out of scope for this PR; adding one is a candidate for a
+follow-up). The model therefore has no memory of the restored conversation until new turns
+accumulate in the current session. The restored id is adopted as this session's
+`currentLocalConversationId`, so subsequent local (and, for a Pro/cloud restore,
+`aiService.setConversationId(id)`-continued cloud) saves keep appending to that same conversation
+rather than starting a new one.
+
+**UI chrome** (`Source/UI/AIChatComponent.h/.cpp`):
+- A **History** button (top toolbar, next to New Chat) opens a `juce::PopupMenu` — a "Clear my
+  history" item, then one row per conversation (title + readable date). No custom list component
+  needed; `PopupMenu` was already this codebase's pattern for a "pick one item" affordance
+  elsewhere (`GraphEditor`, `ModuleLibraryComponent`, `ModMatrixComponent`).
+- **Upsell strip** (`upsellButton`): a single "Upgrade to Pro" button (same `urlOpener`/`kUpgradeUrl`
+  mechanism as the Quota-error bubble's button, but a persistent strip, not a per-message one).
+  Shown whenever `!isProPlan(snapshot)` — **including with no `AccountService` attached at all**,
+  which deliberately diverges from `accountRow`/`planBadge`/`hostedModeNotice`'s "invisible until a
+  service says otherwise" convention: those default to invisible because they have nothing true to
+  say yet, but "not Pro" is already true before any `AccountService` exists (every caller starts on
+  the free tier, signed out). The explanatory copy ("Your history is saved locally only —
+  subscribers get automatic cloud backup across devices.") lives on `historyButton`'s tooltip
+  instead of its own label, so it doesn't compete for space in the bottom-chrome stack — see
+  `updateUpsellStrip()`.
+- **Downgrade notice** (`downgradeStripLabel`): "Your subscription has lapsed — your saved history
+  will be deleted on {date}." Shown only once signed in, `!isProPlan(snapshot)`, and a
+  `deletionScheduledAt` is known from the last History click. Never polled.
+- Both strips follow `hostedModeNotice`'s exact construction/visibility pattern
+  (`addChildComponent` + `set*Visible()` + `resized()` reserving height only when visible).
+
+Tests: `Tests/LocalHistoryStoreTests.cpp` (save/list/get/delete round trips; pure JSON transforms;
+age-based pruning at each offered retention value plus "forever"; the hard cap; out-of-range
+retention falling back to the default; an unparseable `updatedAt` being kept, not treated as
+infinitely old). `Tests/AIChatComponentTests.cpp` (upsell/downgrade strip visibility across
+signed-out/free/pro/lapsed-with-date snapshots; history panel backend selection per plan via
+`setHistorySourcesForTesting()`; "Clear my history" wired to the plan-appropriate backend; restoring
+a conversation replaying its messages; every successful exchange saved locally regardless of plan).
+`Tests/SettingsWindowTests.cpp` (the retention control's default, persisted-value load, round trip,
+and out-of-range fallback). `Tests/BrandingTests.cpp` (`resolveApiBaseUrl()`'s Debug-only
+`AGENTSYNTH_LOCAL_API_URL` env var override, used to point a local build's auth/entitlement/
+cloud-history traffic at a locally-run `synth-platform` server — see `docs/testing.md` "Testing
+Cloud-Gated Features Locally").
 
 ### Account Sign-In Surface (P3-2: AccountRow / SignInDialog)
 

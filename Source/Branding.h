@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdlib>
+
 // Single source of truth for product identity in application code. Renaming the product
 // later should mean editing the values in this file (plus the mirrored CMake cache
 // variables in CMakeLists.txt, which JUCE's PRODUCT_NAME/COMPANY_NAME/BUNDLE_ID need at
@@ -55,5 +57,22 @@ constexpr const char* kUpgradeUrl = "https://buy.polar.sh/polar_cl_DkiJlmel2CXVt
 // (tracked separately under P4-7), so requests here 403 at the IAM layer until that follow-up
 // infra step makes it public — expected, not a bug in this client.
 constexpr const char* kApiBaseUrl = "https://synth-api-6eft3t2kxq-uc.a.run.app";
+
+// Debug-only override for kApiBaseUrl above — lets a locally-built app point its
+// auth/entitlement/cloud-history traffic (AccountService/AuthClient, see MainComponent.h) at a
+// locally-run synth-platform server, so testing Pro-gated flows end-to-end (e.g. cloud conversation
+// history) doesn't require hand-editing this file and rebuilding per URL change. See
+// docs/testing.md "Testing Cloud-Gated Features Locally". Compiled out of Release builds entirely
+// (#ifndef NDEBUG) so a tampered environment variable can never redirect a shipped binary's auth
+// traffic away from production — same trust boundary as every other "never trust the client"
+// invariant in this codebase (see CLAUDE.md).
+inline const char* resolveApiBaseUrl() {
+#ifndef NDEBUG
+    if (const char* override = std::getenv("AGENTSYNTH_LOCAL_API_URL"))
+        if (override[0] != '\0')
+            return override;
+#endif
+    return kApiBaseUrl;
+}
 
 } // namespace synth::branding
