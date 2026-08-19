@@ -346,9 +346,11 @@ TEST(AutomationLaneEditorTest, SnapshotSmoke) {
 // ============================================================================
 
 TEST(TimelinePanelAutomationStripTest, StripOpensWithLaneSelectionAndCloseRestores) {
+    // Doc BEFORE panel (members die in reverse): ~TimelinePanelComponent de-registers from the
+    // doc, so the doc must still be alive then — flagged as a stack-use-after-scope by ASAN.
+    TimelineDoc doc;
     synth::ui::TimelinePanelComponent panel;
     panel.setSize(1200, 400);
-    TimelineDoc doc;
     panel.setTimelineDoc(&doc);
 
     const auto trackId = doc.addTrack(TrackKind::Automation, "Automation");
@@ -375,10 +377,11 @@ TEST(TimelinePanelAutomationStripTest, StripOpensWithLaneSelectionAndCloseRestor
 }
 
 TEST(TimelinePanelAutomationStripTest, RecordModeSelectorWritesDoc) {
-    synth::ui::TimelinePanelComponent panel;
-    panel.setSize(1200, 400);
+    // Doc/undo before the panel — same destruction-order rule as the test above.
     TimelineDoc doc;
     AppUndoManager undo;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 400);
     panel.setTimelineDoc(&doc);
     panel.setUndoManager(&undo);
 
@@ -397,9 +400,10 @@ TEST(TimelinePanelAutomationStripTest, RecordModeSelectorWritesDoc) {
 }
 
 TEST(TimelinePanelAutomationStripTest, TrackHeaderAutomationButtonTogglesTheStripForThatTrack) {
+    // Doc before the panel — same destruction-order rule as the tests above.
+    TimelineDoc doc;
     synth::ui::TimelinePanelComponent panel;
     panel.setSize(1200, 400);
-    TimelineDoc doc;
     panel.setTimelineDoc(&doc);
 
     // Two Automation tracks, each with one lane — syncTrackHeaders() (driven by setTimelineDoc's
