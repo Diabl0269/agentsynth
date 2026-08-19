@@ -465,6 +465,16 @@ gh api "repos/:owner/:repo/actions/caches?per_page=100" \
 gh api "repos/:owner/:repo/actions/caches?per_page=100" -q '[.actions_caches[].size_in_bytes]|add/1073741824'
 ```
 
+#### Dependency install: the apt mirror is not reliable
+
+The Linux job installs its build dependencies through `scripts/ci-install-linux-deps.sh`, not a bare `apt-get`, because GitHub's ubuntu runners resolve the archive through `/etc/apt/apt-mirrors.txt` — `azure.archive.ubuntu.com` first, `archive.ubuntu.com` as fallback — and when the Azure mirror is degraded **apt does not fail fast**. Its default `Acquire` timeout is 120 s with retries, applied per index and per package, so ~30 packages become a multi-minute or multi-hour stall that still ends in a green build. The log signature is a run of `Ign: http://azure.archive.ubuntu.com/… InRelease` lines followed by a `Hit:` on `archive.ubuntu.com`: apt burning its whole retry budget before failing over to the mirror that works.
+
+On 2026-08-19 this step degraded across one morning — 19 s, then 2m12s, 3m36s, 4m38s, 18 min+ — and on 2026-08-18 a single job sat in it from 15:53 to 21:54. **Six hours, in a step that normally takes 20 seconds**, and it was invisible because a slow success looks like a healthy build.
+
+The script therefore: caps each apt call (15 s per attempt, 2 retries, instead of apt's 120 s default); on a stall, rewrites the mirror list to `https://archive.ubuntu.com` and retries — note the scheme, since the runner lists Azure over cleartext while the fallback already serves TLS; and treats a second failed `update` as non-fatal, letting the *install* decide the exit status, since the image ships usable indexes. The healthy path is unchanged: a working Azure mirror is genuinely faster (same datacenter), so this switches on failure rather than hard-coding the fallback.
+
+`timeout-minutes: 15` on the step is the backstop, not the mechanism — every package-manager step has one now (Linux apt, macOS brew, the ASAN job's cached-apt action), because a package manager with no ceiling stalls until the 6-hour job limit instead of failing. Failover is covered by `scripts/tests/ci-install-linux-deps.test.sh` (13 cases, Lint job) against a fake `apt-get`: a path that only runs during an outage otherwise gets tested by the outage. One of those cases exists because `sed -i` takes a mandatory backup suffix on BSD sed and none on GNU sed, so the original rewrite edited the file in CI and silently did nothing on macOS.
+
 ### What didn't work
 
 - **Unity builds** (`CMAKE_UNITY_BUILD`): Incompatible with JUCE — Obj-C++ `.mm` files cannot be merged into C++ unity translation units.
