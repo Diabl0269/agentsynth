@@ -22,12 +22,22 @@ void AIIntegrationService::setProvider(std::unique_ptr<AIProvider> newProvider) 
     // existed at all, so the value must be forwarded to whatever provider is installed now.
     if (provider && currentAuthToken.isNotEmpty())
         provider->setAuthToken(currentAuthToken);
+
+    // Same re-push shape for the conversation id (see setConversationId()'s doc comment).
+    if (provider && currentConversationId.isNotEmpty())
+        provider->setConversationId(currentConversationId);
 }
 
 void AIIntegrationService::setAuthToken(const juce::String& token) {
     currentAuthToken = token;
     if (provider)
         provider->setAuthToken(currentAuthToken);
+}
+
+void AIIntegrationService::setConversationId(const juce::String& id) {
+    currentConversationId = id;
+    if (provider)
+        provider->setConversationId(currentConversationId);
 }
 
 AIProvider::RequestId AIIntegrationService::sendMessage(const juce::String& text,
@@ -71,6 +81,20 @@ AIProvider::RequestId AIIntegrationService::sendMessage(const juce::String& text
             if (response.error.kind != AIProvider::AIErrorKind::Cancelled && response.success) {
                 self->chatHistory.push_back({"assistant", response.content});
                 self->trimHistory();
+
+                // Capture a persisted-conversation id from a Pro-plan hosted backend and re-push
+                // it so the NEXT call in this session continues the same server-side thread. A
+                // free-plan response carries no id (see AIProvider::AIResponse::conversationId's
+                // doc comment) — this is a no-op for that case, not a special branch.
+                //
+                // Same thread-context as the chatHistory mutation just above (this callback can
+                // run on a provider worker thread in test/forceSynchronous mode, or via
+                // MessageManager::callAsync in production): safe because no caller starts request
+                // N+1 while N's callback is still landing — AIChatComponent disables Send for the
+                // whole in-flight window (isWaitingForResponse), so there is never a concurrent
+                // processRequest() reading currentConversationId while this write happens.
+                if (response.conversationId.isNotEmpty())
+                    self->setConversationId(response.conversationId);
             }
 
             if (callback) {

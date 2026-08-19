@@ -233,6 +233,50 @@ TEST_F(RemoteProviderTest, DeviceIdHeaderOmittedWhenNotConfigured) {
     EXPECT_FALSE(capturedHeaders.containsKey("X-Device-Id"));
 }
 
+TEST_F(RemoteProviderTest, ConversationIdHeaderOnlySentWhenSet) {
+    juce::StringPairArray capturedHeaders;
+    auto performer = [&](const juce::String&, const juce::StringPairArray& headers, const juce::String&, int,
+                         const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
+        capturedHeaders = headers;
+        return makeSuccess(R"({"data":{}})");
+    };
+
+    synth::RemoteProvider provider{kMockHost, performer};
+    provider.setTestMode(true);
+
+    // No setConversationId() call: nothing to continue, so nothing should be sent — mirrors
+    // AuthorizationHeaderOnlySentWhenTokenSet's premise for the auth header.
+    MockPromptCallback callback;
+    provider.sendPrompt(
+        {{"user", "hi"}}, [&callback](const synth::AIProvider::AIResponse& r) { callback(r); }, makeSchema());
+    callback.getResult();
+    provider.stopThread(5000);
+
+    EXPECT_FALSE(capturedHeaders.containsKey("x-conversation-id"));
+}
+
+TEST_F(RemoteProviderTest, ConversationIdHeaderSentWhenSet) {
+    juce::StringPairArray capturedHeaders;
+    auto performer = [&](const juce::String&, const juce::StringPairArray& headers, const juce::String&, int,
+                         const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
+        capturedHeaders = headers;
+        return makeSuccess(R"({"data":{}})");
+    };
+
+    synth::RemoteProvider provider{kMockHost, performer};
+    provider.setTestMode(true);
+    provider.setConversationId("conv-abc-123");
+
+    MockPromptCallback callback;
+    provider.sendPrompt(
+        {{"user", "hi"}}, [&callback](const synth::AIProvider::AIResponse& r) { callback(r); }, makeSchema());
+    callback.getResult();
+    provider.stopThread(5000);
+
+    EXPECT_TRUE(capturedHeaders.containsKey("x-conversation-id"));
+    EXPECT_EQ(capturedHeaders.getValue("x-conversation-id", ""), juce::String("conv-abc-123"));
+}
+
 // ============================================================================
 // Fail-fast: no network call
 // ============================================================================
@@ -424,6 +468,53 @@ TEST_F(RemoteProviderTest, SuccessReturnsDataReserializedAsJsonText) {
     ASSERT_NE(nodes, nullptr);
     ASSERT_EQ(nodes->size(), 1);
     EXPECT_EQ((*nodes)[0].getProperty("type", juce::var()).toString(), juce::String("Oscillator"));
+}
+
+// The full round trip a single-session conversation relies on: a response's x-conversation-id
+// header is surfaced on AIResponse::conversationId (RemoteProvider's half of the contract —
+// AIIntegrationServiceTests.cpp covers the capture-and-repush half on top of this).
+TEST_F(RemoteProviderTest, ConversationIdHeaderCapturedFromResponseIntoAIResponse) {
+    juce::StringPairArray responseHeaders;
+    responseHeaders.set("x-conversation-id", "conv-server-issued");
+
+    auto performer = [&](const juce::String&, const juce::StringPairArray&, const juce::String&, int,
+                         const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
+        return makeStatus(200, R"({"data":{}})", responseHeaders);
+    };
+
+    synth::RemoteProvider provider{kMockHost, performer};
+    provider.setTestMode(true);
+
+    MockPromptCallback callback;
+    provider.sendPrompt(
+        {{"user", "hi"}}, [&callback](const synth::AIProvider::AIResponse& r) { callback(r); }, makeSchema());
+    auto result = callback.getResult();
+    provider.stopThread(5000);
+
+    ASSERT_TRUE(result.success);
+    EXPECT_EQ(result.conversationId, juce::String("conv-server-issued"));
+}
+
+// The free-plan case (P6-8): the server sends no header at all when it didn't persist. Must not
+// be confused with an empty-but-present header — both collapse to an empty conversationId, which
+// is exactly the "nothing to resend" state AIIntegrationService's capture gate checks for.
+TEST_F(RemoteProviderTest, MissingConversationIdHeaderLeavesAIResponseFieldEmpty) {
+    auto performer = [](const juce::String&, const juce::StringPairArray&, const juce::String&, int,
+                        const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
+        return makeSuccess(R"({"data":{}})"); // no headers set at all
+    };
+
+    synth::RemoteProvider provider{kMockHost, performer};
+    provider.setTestMode(true);
+
+    MockPromptCallback callback;
+    provider.sendPrompt(
+        {{"user", "hi"}}, [&callback](const synth::AIProvider::AIResponse& r) { callback(r); }, makeSchema());
+    auto result = callback.getResult();
+    provider.stopThread(5000);
+
+    ASSERT_TRUE(result.success);
+    EXPECT_TRUE(result.conversationId.isEmpty());
 }
 
 TEST_F(RemoteProviderTest, UnparseableSuccessBodyMapsToSchema) {

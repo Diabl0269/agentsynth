@@ -3,6 +3,7 @@
 #include <atomic>
 #include <functional>
 #include <juce_core/juce_core.h>
+#include <vector>
 
 namespace synth {
 
@@ -91,6 +92,64 @@ public:
         juce::String transportError;
     };
 
+    /** One entry in GET /v1/conversations' `data.conversations` array, and the summary fields of
+        GET /v1/conversations/:id's `data.conversation`. */
+    struct ConversationSummary {
+        juce::String id;
+        juce::String title; // empty when the server sent null (untitled conversation)
+        juce::String createdAt;
+        juce::String updatedAt;
+    };
+
+    /** Result of GET /v1/conversations (P6-8). Cloud-only — conversation persistence itself is
+        Pro-gated server-side; this client has no plan awareness of its own, same as every other
+        AuthClient method. */
+    struct ListConversationsResult {
+        bool ok = false;
+        std::vector<ConversationSummary> conversations;
+        // `data.deletionScheduledAt` — empty when the server sent null (no grace-period deletion
+        // pending). NOTE: this endpoint writes on read server-side — the first list call after a
+        // plan lapse is what sets this date — so calling listConversations() is not a
+        // side-effect-free read. See docs/AI_Engine.md.
+        juce::String deletionScheduledAt;
+        juce::String transportError;
+    };
+
+    /** One message in a conversation's `messages` array (GET /v1/conversations/:id). */
+    struct ConversationMessage {
+        juce::String role; // "user" or "assistant"
+        juce::String content;
+        juce::String createdAt;
+    };
+
+    /** Result of GET /v1/conversations/:id. Flattens `data.conversation`'s summary fields
+        alongside its `messages` array, rather than nesting a ConversationSummary, so a caller
+        that only wants messages doesn't have to reach through an extra level. */
+    struct ConversationDetailResult {
+        bool ok = false;
+        juce::String id;
+        juce::String title;
+        juce::String createdAt;
+        juce::String updatedAt;
+        std::vector<ConversationMessage> messages;
+        juce::String transportError;
+    };
+
+    /** Result of DELETE /v1/conversations/:id. */
+    struct DeleteConversationResult {
+        bool ok = false;
+        bool deleted = false; // `data.deleted` — parroted back rather than assumed from `ok`
+        juce::String transportError;
+    };
+
+    /** Result of DELETE /v1/conversations (GDPR erasure — every conversation owned by the
+        signed-in account). */
+    struct DeleteAllConversationsResult {
+        bool ok = false;
+        int deletedCount = 0;
+        juce::String transportError;
+    };
+
     explicit AuthClient(juce::String host = "http://localhost:8787", juce::String clientId = "synth-desktop",
                         juce::String deviceId = "");
 
@@ -113,6 +172,24 @@ public:
 
     /** GET /v1/entitlement with `Authorization: Bearer <accessToken>`. */
     EntitlementResult fetchEntitlement(const juce::String& accessToken, const std::atomic<bool>& cancelled) const;
+
+    /** GET /v1/conversations with `Authorization: Bearer <accessToken>` (P6-8). See
+        ListConversationsResult's doc comment for the read-writes-deletionScheduledAt caveat. */
+    ListConversationsResult listConversations(const juce::String& accessToken,
+                                              const std::atomic<bool>& cancelled) const;
+
+    /** GET /v1/conversations/:id with `Authorization: Bearer <accessToken>`. */
+    ConversationDetailResult getConversation(const juce::String& accessToken, const juce::String& conversationId,
+                                             const std::atomic<bool>& cancelled) const;
+
+    /** DELETE /v1/conversations/:id with `Authorization: Bearer <accessToken>`. */
+    DeleteConversationResult deleteConversation(const juce::String& accessToken, const juce::String& conversationId,
+                                                const std::atomic<bool>& cancelled) const;
+
+    /** DELETE /v1/conversations with `Authorization: Bearer <accessToken>` — GDPR erasure of
+        every conversation owned by the signed-in account. */
+    DeleteAllConversationsResult deleteAllConversations(const juce::String& accessToken,
+                                                        const std::atomic<bool>& cancelled) const;
 
     /** POST /v1/auth/revoke. Fire-and-forget: the endpoint always answers 200 with an empty body,
         so the return value only reflects whether the transport succeeded — callers are not
