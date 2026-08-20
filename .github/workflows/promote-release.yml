@@ -1,0 +1,63 @@
+name: Promote Release
+
+# Deliberately separate from build-artifacts.yml: that workflow tags and ships a
+# GitHub prerelease on every non-docs push to main (continuous build/QA output).
+# This workflow does the opposite job — it promotes ONE already-built, already-CI'd
+# prerelease to a real, non-prerelease release. That flip is what Sparkle/WinSparkle
+# auto-update and the marketing site's download links key off of (P5-10), so it must
+# stay a deliberate, manually-triggered act, never automatic. Nothing here rebuilds
+# anything: the tag's artifacts already went through build-artifacts.yml.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing prerelease tag to promote to stable, e.g. v0.112.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  promote:
+    name: Promote ${{ github.event.inputs.tag }} to stable
+    runs-on: ubuntu-latest
+    # Solo-maintained repo: promoting a build to what real users' auto-update
+    # feeds and the download page point at is a judgment call, not something
+    # any collaborator's workflow_dispatch click should be able to trigger.
+    # Tighten/replace this list if that ever changes.
+    if: github.actor == 'Diabl0269'
+    steps:
+      - name: Verify the tag is a promotable prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag }}
+        run: |
+          release_json=$(gh release view "$TAG" --repo "${{ github.repository }}" \
+            --json isPrerelease,isDraft,assets)
+
+          if [ "$(echo "$release_json" | jq -r '.isDraft')" = "true" ]; then
+            echo "::error::$TAG is still a draft — publish it first, then promote." >&2
+            exit 1
+          fi
+          if [ "$(echo "$release_json" | jq -r '.isPrerelease')" != "true" ]; then
+            echo "::error::$TAG is already a stable release (or doesn't exist) — nothing to promote." >&2
+            exit 1
+          fi
+
+          # appcast.xml and SHA256SUMS.txt are what auto-update and the download page
+          # actually consume once this tag becomes /releases/latest — a tag missing
+          # either would promote cleanly and then 404 for real users. Fail loudly
+          # instead: see docs/distribution.md for what to do (re-run the build).
+          for asset in appcast.xml SHA256SUMS.txt; do
+            if ! echo "$release_json" | jq -e --arg a "$asset" '.assets[] | select(.name == $a)' > /dev/null; then
+              echo "::error::$TAG is missing the '$asset' release asset — refusing to promote." >&2
+              exit 1
+            fi
+          done
+
+      - name: Promote to a real (non-prerelease) release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag }}
+        run: gh release edit "$TAG" --repo "${{ github.repository }}" --prerelease=false

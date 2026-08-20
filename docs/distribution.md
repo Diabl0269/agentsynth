@@ -94,13 +94,14 @@ Automated (`build-artifacts.yml`):
   and uploads the resulting `appcast.xml` back onto the release as an asset.
 - Publishing that `appcast.xml` to `https://agentsynth.app/updates/appcast.xml` — the `SUFeedURL`
   baked into the app (`SYNTH_UPDATE_FEED_URL` in `CMakeLists.txt`) — is automated too, but the
-  workflow lives in the **synth-platform** repo, not here: this repo has no Cloudflare credentials,
-  so `synth-platform/.github/workflows/deploy-web.yml` polls this repo's Releases API every 30
-  minutes (this repo's releases are all `prerelease: true`, so it lists releases and picks the
-  newest with an `appcast.xml` asset rather than using `/releases/latest`, which excludes
-  prereleases and 404s), and redeploys `apps/web` — with the fetched appcast dropped at
-  `dist/updates/appcast.xml` — only when the appcast actually changed. A push to that repo's
-  `apps/web` always redeploys regardless. The zip itself still stays on GitHub Releases
+  workflow lives in the **synth-platform** repo, not here: `synth-platform/.github/workflows/deploy-web.yml`
+  fetches `https://github.com/Diabl0269/agentsynth/releases/latest/download/appcast.xml` and
+  redeploys `apps/web` — with the fetched appcast dropped at `dist/updates/appcast.xml` — only when
+  it changed. That alias only ever resolves to the newest **non-prerelease** release, which is
+  exactly the point (see "Promoting a build to stable" below): a per-push prerelease never reaches
+  real users' auto-update feed. A push to that repo's `apps/web` always redeploys regardless of the
+  appcast; a daily schedule in that same workflow is a safety net in case a promotion's manual
+  `deploy-web` trigger (see below) gets forgotten. The zip itself still stays on GitHub Releases
   (`--download-url-prefix` points there directly, so only the small `appcast.xml` file needed a
   second home).
 
@@ -108,6 +109,30 @@ Automated (`build-artifacts.yml`):
 for Updates" now round-trips against a real, live feed once a key exists; the 404-then-silent-no-op
 behavior described in earlier drafts of this doc no longer applies to that step. What's still
 missing is WinSparkle (P5·6, see below) — the feed above only ever contains a macOS item.
+
+## Promoting a build to stable
+
+Every push to `main` ships a GitHub **prerelease** (`build-artifacts.yml`) — that's continuous
+build/QA output, not something real users should auto-update onto. `promote-release.yml` is the
+separate, manual step that turns one specific already-built prerelease into the actual release
+Sparkle/WinSparkle and the download page serve (P5·10):
+
+1. Pick a tag that's been running/tested and looks good — `gh release list --repo Diabl0269/agentsynth`.
+2. Actions ▸ Promote Release ▸ Run workflow, with that tag (e.g. `v0.112.0`) as the input. (Only the
+   repo owner can run it — the job checks `github.actor`.)
+3. The job re-publishes the existing release as `prerelease: false` — it does **not** rebuild
+   anything. It first asserts the tag isn't a draft, is currently a prerelease, and carries both
+   `appcast.xml` and `SHA256SUMS.txt` assets, and fails loudly rather than promoting a release that
+   would leave auto-update or the download page's checksum link 404ing.
+4. GitHub's `/releases/latest` (and `/releases/latest/download/<asset>`) now resolves to this tag.
+   Trigger `synth-platform`'s `deploy-web` workflow by hand (`workflow_dispatch`) so
+   `agentsynth.app/updates/appcast.xml` picks up the promoted build immediately — otherwise its
+   daily schedule catches it within 24h regardless.
+
+**How often**: whenever a batch of merged commits is worth shipping to real users — there's no
+fixed cadence. There's deliberately no scheduled/automatic promotion: every previous release stays
+a permanent prerelease, so skipping a promotion costs nothing, and auto-update only ever moves
+forward on a promotion you chose.
 
 ## What's not built yet
 
@@ -163,3 +188,10 @@ refuses the update instead of installing it.
 **5. End-to-end against the real deployment** — `https://agentsynth.app/updates/appcast.xml` is
 live (P5·7); with a real key and a signed release, repeat step 3 against production instead of a
 local server.
+
+**`promote-release.yml`**: no automated coverage — it's ~20 lines of `gh` CLI calls against GitHub's
+own Releases API, which has no local/offline equivalent to test against (mirrors why the
+`ci-cache-check.test.sh` shell-test pattern doesn't apply here: there's no repo state to assert on,
+only a live API call). Verify by running it against a real prerelease tag and confirming: the guard
+rejects a run from any actor but the owner, rejects a tag missing `appcast.xml`/`SHA256SUMS.txt`,
+and `gh release view <tag>` shows `isPrerelease: false` after a successful run.
