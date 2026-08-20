@@ -117,6 +117,15 @@ struct MidiNote {
     int pitch = 60;
     int velocity = 100;
     int channel = 1;
+
+    // Per-note mute (the Mute tool's note-level half). The note keeps its id, its fields and its
+    // place in the sorted list; it is simply not flattened into TimelineSnapshot. Deliberately
+    // NOT modelled as velocity 0 or as a delete: a mute has to be exactly reversible, and both of
+    // those destroy information the user expects back when they un-mute. The flag travels with the
+    // note through every structural edit — a split re-bases it, a duplicate copies it, a join
+    // merges it — because it is part of the note, not of the clip that happens to hold it.
+    // Additive field: absent in a file loads as false, and kFormatVersion stays 1.
+    bool muted = false;
 };
 
 // Notes within a clip stay sorted by (startBeat, pitch, id) — that invariant is what makes the
@@ -156,6 +165,20 @@ struct Clip {
     // Where inside the ASSET this clip starts reading, in seconds. Seconds rather than beats
     // because it indexes a recorded file, whose samples do not move when the tempo map does.
     double sourceStartSeconds = 0.0;
+
+    // Per-clip mute (the Mute tool's clip-level half). A muted clip keeps its id, its position,
+    // its notes and every audio field, and contributes NOTHING to TimelineSnapshot — no note
+    // events, no AudioClipInfo entry. Doing the exclusion at flatten time is what keeps every
+    // downstream consumer (TimelineMidiSource, the AudioClipStreamer's assignment table) unaware
+    // that mute exists at all: they simply never see the clip.
+    //
+    // Independent of Track::muted — un-muting a track does not un-mute a clip the user muted, and
+    // the two are ORed by omission (a muted track's whole run is silenced by its consumers, a
+    // muted clip is missing from the run in the first place). It survives every structural edit:
+    // both halves of a split inherit it, a duplicate copies it, and a join keeps the SURVIVING
+    // clip's flag (see splitClip / duplicateClip / joinClips). Additive field: absent in a file
+    // loads as false, and kFormatVersion stays 1.
+    bool muted = false;
 };
 
 // One automated parameter. Identity is the (nodeUuid, paramId) pair, doc-wide: there is at
@@ -315,7 +338,40 @@ public:
     bool removeClip(ClipId id);
     // Re-seats the clip at its new sorted position; notes move with it (they are clip-relative).
     bool moveClip(ClipId id, double newStartBeat);
+    // moveClip's cross-track sibling — the model half of dragging a clip onto another lane.
+    // Validates exactly what moveClip and addClip do (finite newStartBeat >= 0; no clamping, no
+    // overlap policy — overlapping clips are legal in this model; the DESTINATION track's
+    // kMaxClipsPerTrack cap applies, since that is the vector the clip ends up in) plus two rules
+    // of its own:
+    //   - `destTrack` must exist, and
+    //   - the clip's PAYLOAD must match what the destination track plays: a clip with a non-empty
+    //     assetRef may only land on a TrackKind::Audio track, and a MIDI clip (empty assetRef) only
+    //     on a TrackKind::Midi one. Automation tracks accept neither.
+    // That kind check is deliberately stricter than the rest of the model, which is permissive on
+    // purpose (see synth::Clip — the track's kind, not the clip's contents, decides which half is
+    // flattened, so a stray note or a stray assetRef is inert rather than half-played). A DRAG is
+    // the one moment where the user states an intent about which lane a clip belongs to, so
+    // refusing the drop is far better than silently parking an audio clip somewhere that will
+    // never make a sound.
+    //
+    // `destTrack` == the clip's current track is not a special case to the caller: it behaves
+    // EXACTLY like moveClip(id, newStartBeat), no-op included (moving to where it already is
+    // returns true without bumping the revision), and skips the kind check — an in-place drag must
+    // never fail on data the model already tolerates.
+    //
+    // Notes are clip-relative, so the payload moves untouched; the clip keeps its id, its name, its
+    // muted flag and every audio field. One mutation.
+    bool moveClipToTrack(ClipId id, TrackId destTrack, double newStartBeat);
     bool resizeClip(ClipId id, double newLengthBeats);
+    // Renames the clip. The name is TRIMMED first and a name that is empty after trimming is
+    // REJECTED (no mutation) rather than stored — a blank clip title is indistinguishable from a
+    // rendering bug in the lane, and the rename UI's cancel path is a cancel, not an erase. No
+    // length cap and no other sanitisation, matching setTrackName exactly. Setting the name the
+    // clip already has (post-trim) is a no-op, like every other setter here.
+    bool setClipName(ClipId id, const juce::String& name);
+    // Mutes / un-mutes the clip: a muted clip is excluded WHOLESALE from TimelineSnapshot (see
+    // Clip::muted). Setting the flag it already has is a no-op — no revision bump, no notification.
+    bool setClipMuted(ClipId id, bool muted);
 
     const Clip* getClip(ClipId id) const;
     const Track* getTrackForClip(ClipId id) const;
@@ -326,7 +382,9 @@ public:
     // untouched; notes entirely at/after it move to the right clip, re-based to its new start;
     // a note straddling the boundary is itself split in two — the left half keeps the original
     // note's id and is truncated to end exactly at the boundary, the right half gets a new id,
-    // starts at beat 0, and runs for the remainder, with the same pitch/velocity/channel. One
+    // starts at beat 0, and runs for the remainder, with the same pitch/velocity/channel/muted.
+    // BOTH halves inherit the source clip's `muted` flag: a split is a cut, not an edit of what
+    // the user muted, so cutting a muted clip in two must not make half of it audible. One
     // mutation. Returns a pair of invalid ids if the clip doesn't exist, atBeat is out of range,
     // or the track is already at kMaxClipsPerTrack.
     std::pair<ClipId, ClipId> splitClip(ClipId id, double atBeat);
@@ -334,12 +392,16 @@ public:
     // and they must not overlap (a gap between them is legal and becomes silence) — overlapping
     // clips are rejected so note re-basing stays unambiguous. On success, a is extended to span
     // [a.start, b.end), b's notes are re-based by (b.start - a.start) and merged into a's note
-    // list (sorted merge), b is removed, and one mutation fires. Rejected if the merged note
+    // list (sorted merge), b is removed, and one mutation fires. The result keeps A's `muted`
+    // flag — a is the clip that survives, so its state is the one that survives with it, the same
+    // rule its asset, gain and source offset already follow. Each merged NOTE keeps its own muted
+    // flag, which is a property of the note rather than of either clip. Rejected if the merged note
     // count would exceed kMaxNotesPerClip.
     bool joinClips(ClipId a, ClipId b);
-    // Appends a copy of the clip immediately after it (new start = start + length), same name
-    // and length, with a fresh id for the clip and for every one of its (deep-copied) notes.
-    // Rejects if the track is already at kMaxClipsPerTrack.
+    // Appends a copy of the clip immediately after it (new start = start + length), same name,
+    // length and `muted` flag, with a fresh id for the clip and for every one of its (deep-copied)
+    // notes — each of which keeps its own muted flag. Rejects if the track is already at
+    // kMaxClipsPerTrack.
     ClipId duplicateClip(ClipId id);
 
     // -- Audio clips ------------------------------------------------------------
@@ -379,6 +441,12 @@ public:
     bool moveNote(NoteId id, double newStartBeat, int newPitch);
     bool resizeNote(NoteId id, double newLengthBeats); // rejects non-positive/non-finite
     bool setNoteVelocity(NoteId id, int velocity);     // rejects outside 1..127
+    // Mutes / un-mutes a single note inside its clip: the note is skipped when the clip is
+    // flattened into TimelineSnapshot, and is otherwise untouched (see MidiNote::muted). Setting
+    // the flag it already has is a no-op — no revision bump, no notification. Note that a muted
+    // CLIP already contributes nothing, so a note's own flag only decides anything inside an
+    // unmuted clip.
+    bool setNoteMuted(NoteId id, bool muted);
 
     // Snaps every note in the clip toward the nearest multiple of gridBeats (rejected if <= 0 or
     // non-finite): newStart = start + strength * (nearestGridMultiple(start) - start), with

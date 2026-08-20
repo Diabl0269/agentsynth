@@ -496,6 +496,47 @@ bool TimelineDoc::moveClip(ClipId id, double newStartBeat) {
     });
 }
 
+bool TimelineDoc::moveClipToTrack(ClipId id, TrackId destTrack, double newStartBeat) {
+    if (!isFiniteAtOrAfterZero(newStartBeat))
+        return false;
+    Track* owner = nullptr;
+    auto* clip = findClip(id, &owner);
+    if (clip == nullptr)
+        return false;
+    auto* dest = findTrack(destTrack);
+    if (dest == nullptr)
+        return false;
+
+    // Dropping a clip back on its own track IS moveClip — including its no-op case, and including
+    // the fact that it applies no kind check. An in-place drag must never fail on data the model
+    // already tolerates (a note left on an audio track, an assetRef left on a MIDI clip).
+    if (dest == owner)
+        return moveClip(id, newStartBeat);
+
+    // Cross-track only: the clip's payload has to match what the destination track plays. See
+    // moveClipToTrack's declaration for why this one path is stricter than the rest of the model.
+    const bool carriesAsset = clip->assetRef.isNotEmpty();
+    if (carriesAsset ? dest->kind != TrackKind::Audio : dest->kind != TrackKind::Midi)
+        return false;
+    // The DESTINATION's cap, because that is the vector the clip ends up in — the same check
+    // addClip makes before growing a track.
+    if (static_cast<int>(dest->clips.size()) >= kMaxClipsPerTrack)
+        return false;
+
+    return applyMutation([&] {
+        // Same lift-and-re-insert as moveClip, just landing in a different track's vector. `dest`
+        // points into `tracks`, which erasing from owner->clips cannot invalidate, and notes ride
+        // along untouched because they're stored clip-relative.
+        const auto index = clip - owner->clips.data();
+        Clip moved = std::move(*clip);
+        moved.startBeat = newStartBeat;
+        owner->clips.erase(owner->clips.begin() + index);
+        const auto pos = std::lower_bound(dest->clips.begin(), dest->clips.end(), moved, clipLess);
+        dest->clips.insert(pos, std::move(moved));
+        return true;
+    });
+}
+
 bool TimelineDoc::resizeClip(ClipId id, double newLengthBeats) {
     if (!isFinitePositive(newLengthBeats))
         return false;
@@ -507,6 +548,39 @@ bool TimelineDoc::resizeClip(ClipId id, double newLengthBeats) {
 
     return applyMutation([&] {
         clip->lengthBeats = newLengthBeats; // length doesn't participate in the clip ordering
+        return true;
+    });
+}
+
+bool TimelineDoc::setClipName(ClipId id, const juce::String& name) {
+    // Trimmed-then-rejected rather than trimmed-then-stored-blank: an empty title is
+    // indistinguishable from a broken lane, and the inline rename editor's escape path is a cancel.
+    // No length cap and nothing else sanitised — setTrackName applies neither, and the two must not
+    // disagree about what a legal name is.
+    const juce::String trimmed = name.trim();
+    if (trimmed.isEmpty())
+        return false;
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    if (clip->name == trimmed)
+        return true; // already there: no revision bump, no notification
+
+    return applyMutation([&] {
+        clip->name = trimmed;
+        return true;
+    });
+}
+
+bool TimelineDoc::setClipMuted(ClipId id, bool muted) {
+    auto* clip = findClip(id);
+    if (clip == nullptr)
+        return false;
+    if (clip->muted == muted)
+        return true;
+
+    return applyMutation([&] {
+        clip->muted = muted;
         return true;
     });
 }
@@ -581,6 +655,11 @@ std::pair<ClipId, ClipId> TimelineDoc::splitClip(ClipId id, double atBeat) {
         right.gainDb = clip->gainDb;
         right.fadeOutBeats = clip->fadeOutBeats;
         right.sourceStartSeconds = clip->sourceStartSeconds;
+        // Both halves inherit the mute: cutting a muted clip in two is a cut, not an un-mute of
+        // half of it. (The left half keeps its own flag by simply not being rewritten.) Each note's
+        // own muted flag rides along in the struct copies above, including the straddling note's
+        // two halves.
+        right.muted = clip->muted;
         clip->fadeOutBeats = 0.0;
 
         // `clip` (and therefore `id`, the original/left id) stays valid; only insert may
@@ -630,7 +709,9 @@ bool TimelineDoc::joinClips(ClipId a, ClipId b) {
         // `a` keeps its OWN asset, gain, source offset and fade-in; `b`'s are dropped along
         // with `b`. Two audio clips naming different assets cannot become one clip naming both, so
         // "the survivor's asset wins" is the only answer that doesn't invent a crossfade. `a` does
-        // inherit b's fade-OUT, because that edge is now a's.
+        // inherit b's fade-OUT, because that edge is now a's. `a`'s `muted` is likewise left
+        // untouched — the survivor's state is the one that survives — while each merged note keeps
+        // its own muted flag through the struct copies above.
         clipA->fadeOutBeats = clipB->fadeOutBeats;
 
         // Erase b last: clipA and clipB alias the same vector, but nothing above dereferences
@@ -661,6 +742,9 @@ ClipId TimelineDoc::duplicateClip(ClipId id) {
         dup.fadeInBeats = clip->fadeInBeats;
         dup.fadeOutBeats = clip->fadeOutBeats;
         dup.sourceStartSeconds = clip->sourceStartSeconds;
+        // Copied field by field rather than by struct assignment (the ids must not be), so `muted`
+        // has to be listed here explicitly — a duplicate of a muted clip is muted.
+        dup.muted = clip->muted;
         dup.notes.reserve(clip->notes.size());
         for (const auto& note : clip->notes) {
             MidiNote copy = note;
@@ -817,6 +901,19 @@ bool TimelineDoc::setNoteVelocity(NoteId id, int velocity) {
 
     return applyMutation([&] {
         note->velocity = velocity;
+        return true;
+    });
+}
+
+bool TimelineDoc::setNoteMuted(NoteId id, bool muted) {
+    auto* note = findNote(id);
+    if (note == nullptr)
+        return false;
+    if (note->muted == muted)
+        return true;
+
+    return applyMutation([&] {
+        note->muted = muted; // mute doesn't participate in note ordering
         return true;
     });
 }
@@ -1093,6 +1190,9 @@ juce::var TimelineDoc::toVar() const {
             c->setProperty("name", clip.name);
             c->setProperty("startBeat", clip.startBeat);
             c->setProperty("lengthBeats", clip.lengthBeats);
+            // Additive, same "written ALWAYS" rule as the audio fields below: a reader that
+            // predates it ignores the key, and one that has it gets a single shape to parse.
+            c->setProperty("muted", clip.muted);
             // Audio fields, written ALWAYS (not only when non-default): a reader that
             // predates them ignores unknown keys, and a reader that has them gets one shape to
             // parse rather than two. Additive — kFormatVersion stays 1.
@@ -1111,6 +1211,7 @@ juce::var TimelineDoc::toVar() const {
                 n->setProperty("pitch", note.pitch);
                 n->setProperty("velocity", note.velocity);
                 n->setProperty("channel", note.channel);
+                n->setProperty("muted", note.muted); // additive; absent loads as false
                 noteVars.add(juce::var(n.get()));
             }
             c->setProperty("notes", noteVars);
@@ -1242,9 +1343,13 @@ bool TimelineDoc::fromVar(const juce::var& state) {
                         return false;
                     clip.id = ClipId{clipIdValue};
 
+                    // `muted` is optional like the rest: a file written before per-clip mute
+                    // existed simply has no key, and the struct default (false — audible) is what
+                    // that file always meant.
                     if (!readOptionalString(cObj->getProperty("name"), clip.name) ||
                         !readOptionalDouble(cObj->getProperty("startBeat"), clip.startBeat) ||
-                        !readOptionalDouble(cObj->getProperty("lengthBeats"), clip.lengthBeats))
+                        !readOptionalDouble(cObj->getProperty("lengthBeats"), clip.lengthBeats) ||
+                        !readOptionalBool(cObj->getProperty("muted"), clip.muted))
                         return false;
                     if (!isFiniteAtOrAfterZero(clip.startBeat) || !isFinitePositive(clip.lengthBeats))
                         return false;
@@ -1289,7 +1394,8 @@ bool TimelineDoc::fromVar(const juce::var& state) {
                                 !readOptionalDouble(nObj->getProperty("lengthBeats"), note.lengthBeats) ||
                                 !readOptionalInt(nObj->getProperty("pitch"), note.pitch) ||
                                 !readOptionalInt(nObj->getProperty("velocity"), note.velocity) ||
-                                !readOptionalInt(nObj->getProperty("channel"), note.channel))
+                                !readOptionalInt(nObj->getProperty("channel"), note.channel) ||
+                                !readOptionalBool(nObj->getProperty("muted"), note.muted))
                                 return false;
                             if (!isValidNote(note))
                                 return false;
