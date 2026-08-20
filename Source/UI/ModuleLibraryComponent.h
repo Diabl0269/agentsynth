@@ -66,6 +66,10 @@ public:
         rebuildEntries();
         snapSectionProgressToTargets();
         setMouseCursor(juce::MouseCursor::NormalCursor);
+        // Prevent the parent component from grabbing keyboard focus when clicked (e.g. on the
+        // collapse-all strip). Without this, clicking anywhere in the parent would cause the
+        // searchEditor child to gain focus, clearing its placeholder text.
+        setMouseClickGrabsKeyboardFocus(false);
 
         // addChildComponent, not addAndMakeVisible: updateScrollBar() owns the visibility, so the bar
         // only appears once the rows actually outgrow the panel.
