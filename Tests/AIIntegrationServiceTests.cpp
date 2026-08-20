@@ -1038,6 +1038,240 @@ TEST_F(AIIntegrationServiceTest, AutomationTargetsSectionListsUuidBearingFloatPa
     service->sendMessage("automate something", [](const AIProvider::AIResponse&) {}, /*useStructuredOutput=*/true);
     EXPECT_FALSE(provider->lastConversation.back().content.contains("## Automation targets"));
 }
+
+// ============================================================================
+// Arrange mode: sendArrangeMessage → the hosted timeline.generate capability.
+// ============================================================================
+
+namespace {
+// Records what sendCapabilityRequest() was handed, so the routing and the request body are both
+// observable. Also counts sendPrompt() calls: an arrange request must never fall through to the
+// conversation path.
+class CapabilityCapturingProvider : public AIProvider {
+public:
+    RequestId sendPrompt(const std::vector<Message>&, CompletionCallback callback, const juce::var&,
+                         std::function<void(const juce::String&)> = {}) override {
+        ++sendPromptCalls;
+        AIResponse response;
+        response.success = true;
+        response.content = "ok";
+        if (callback)
+            callback(response);
+        return {};
+    }
+
+    RequestId sendCapabilityRequest(const juce::String& capability, const juce::var& body,
+                                    CompletionCallback callback) override {
+        ++capabilityCalls;
+        lastCapability = capability;
+        lastBody = body;
+        AIResponse response;
+        response.success = true;
+        response.content = mockResponse;
+        response.conversationId = mockConversationId;
+        if (callback)
+            callback(response);
+        return {};
+    }
+
+    void cancel(RequestId) override {}
+    void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
+        callback({}, true);
+    }
+    void setModel(const juce::String& name) override { model = name; }
+    juce::String getCurrentModel() const override { return model; }
+    juce::String getProviderName() const override { return "CapabilityCapturingProvider"; }
+    void setConversationId(const juce::String& id) override { lastConversationId = id; }
+    bool isHosted() const override { return true; }
+
+    int sendPromptCalls = 0;
+    int capabilityCalls = 0;
+    juce::String lastCapability;
+    juce::var lastBody;
+    juce::String mockResponse = R"({"timelineOps":[]})";
+    juce::String mockConversationId;
+    juce::String lastConversationId;
+    juce::String model;
+};
+} // namespace
+
+TEST_F(AIIntegrationServiceTest, ArrangeRequestRoutesToTimelineGenerateWithStructuredBody) {
+    auto node = graph->addNode(std::make_unique<OscillatorModule>());
+    ASSERT_NE(node, nullptr);
+    node->properties.set("uuid", "arrange-uuid-1");
+
+    TimelineDoc doc;
+    doc.addTrack(TrackKind::Midi, "Melody");
+    doc.addTrack(TrackKind::Automation, "Sweep");
+    TransportService transport;
+    service->setTimelineContext(&doc, &transport);
+    service->setTimelineToolsEnabled(true);
+
+    auto providerPtr = std::make_unique<CapabilityCapturingProvider>();
+    auto* provider = providerPtr.get();
+    service->setProvider(std::move(providerPtr));
+
+    bool called = false;
+    service->sendArrangeMessage("build a 16 bar arrangement", [&](const AIProvider::AIResponse&) { called = true; });
+
+    EXPECT_TRUE(called);
+    EXPECT_EQ(provider->capabilityCalls, 1);
+    EXPECT_EQ(provider->sendPromptCalls, 0) << "arrange mode never falls through to the conversation path";
+    EXPECT_EQ(provider->lastCapability, juce::String("timeline.generate"));
+
+    const juce::var& body = provider->lastBody;
+    ASSERT_TRUE(body.isObject());
+
+    // userPrompt is the RAW text — timeline.generate composes its own context sections
+    // server-side, so the patch path's pre-wrapping must never leak in here.
+    EXPECT_EQ(body["userPrompt"].toString(), juce::String("build a 16 bar arrangement"));
+    EXPECT_FALSE(body["userPrompt"].toString().contains("Current patch state"));
+    EXPECT_FALSE(body["userPrompt"].toString().contains("User request:"));
+
+    EXPECT_TRUE(body["arrangementContext"].isString());
+    EXPECT_TRUE(body["arrangementContext"].toString().isNotEmpty()) << "a non-empty doc summarises to something";
+
+    ASSERT_TRUE(body["paramTargets"].isArray());
+    ASSERT_GT(body["paramTargets"].getArray()->size(), 0) << "the uuid-bearing Oscillator's float params are offered";
+    const juce::var target = (*body["paramTargets"].getArray())[0];
+    EXPECT_EQ(target["nodeUuid"].toString(), juce::String("arrange-uuid-1"));
+    EXPECT_TRUE(target["nodeName"].toString().isNotEmpty());
+    EXPECT_TRUE(target["paramId"].toString().isNotEmpty());
+    // Real numeric range + default, in the parameter's own units — presence and type, not values
+    // (those belong to the module's own tests).
+    EXPECT_TRUE(target["min"].isDouble() || target["min"].isInt());
+    EXPECT_TRUE(target["max"].isDouble() || target["max"].isInt());
+    EXPECT_TRUE(target["default"].isDouble() || target["default"].isInt());
+
+    ASSERT_TRUE(body["availableTracks"].isArray());
+    ASSERT_EQ(body["availableTracks"].getArray()->size(), 2);
+    const juce::var track0 = (*body["availableTracks"].getArray())[0];
+    const juce::var track1 = (*body["availableTracks"].getArray())[1];
+    EXPECT_EQ(track0["name"].toString(), juce::String("Melody"));
+    EXPECT_EQ(track0["kind"].toString(), juce::String("midi"));
+    EXPECT_EQ(static_cast<int>(track0["index"]), 0);
+    EXPECT_EQ(track1["name"].toString(), juce::String("Sweep"));
+    EXPECT_EQ(track1["kind"].toString(), juce::String("automation"));
+    EXPECT_EQ(static_cast<int>(track1["index"]), 1);
+
+    // productName is the PROVIDER's field (RemoteProvider adds it) — the service must not
+    // duplicate it into the caller-authored half.
+    EXPECT_FALSE(body.hasProperty("productName"));
+}
+
+TEST_F(AIIntegrationServiceTest, ArrangeRequestParamTargetsAreCappedAtServerMax) {
+    // Enough uuid-bearing nodes that the flat float-param count exceeds the cap.
+    int paramsPerNode = 0;
+    {
+        auto probe = graph->addNode(std::make_unique<OscillatorModule>());
+        ASSERT_NE(probe, nullptr);
+        probe->properties.set("uuid", "probe-uuid");
+        for (auto* p : probe->getProcessor()->getParameters())
+            if (dynamic_cast<juce::AudioParameterFloat*>(p) != nullptr)
+                ++paramsPerNode;
+    }
+    ASSERT_GT(paramsPerNode, 0);
+
+    const int nodesNeeded = AIIntegrationService::kMaxRemoteParamTargets / paramsPerNode + 1;
+    for (int i = 0; i < nodesNeeded; ++i) {
+        auto node = graph->addNode(std::make_unique<OscillatorModule>());
+        ASSERT_NE(node, nullptr);
+        node->properties.set("uuid", "bulk-uuid-" + juce::String(i));
+    }
+
+    TimelineDoc doc;
+    TransportService transport;
+    service->setTimelineContext(&doc, &transport);
+    service->setTimelineToolsEnabled(true);
+
+    const juce::var body = service->buildArrangeRequestBody("automate everything");
+    ASSERT_TRUE(body["paramTargets"].isArray());
+    EXPECT_EQ(body["paramTargets"].getArray()->size(), AIIntegrationService::kMaxRemoteParamTargets)
+        << "a longer list would be rejected by the server's input schema before any model saw it";
+}
+
+TEST_F(AIIntegrationServiceTest, ArrangeRequestOnEmptyTimelineSaysSoExplicitly) {
+    TimelineDoc doc;
+    TransportService transport;
+    service->setTimelineContext(&doc, &transport);
+    service->setTimelineToolsEnabled(true);
+
+    const juce::var body = service->buildArrangeRequestBody("start an arrangement");
+
+    // The schema requires both keys but allows them empty — "a caller with nothing to say should
+    // say so explicitly rather than have the field quietly go missing".
+    ASSERT_TRUE(body.hasProperty("arrangementContext"));
+    EXPECT_EQ(body["arrangementContext"].toString(), juce::String());
+    ASSERT_TRUE(body["availableTracks"].isArray());
+    EXPECT_EQ(body["availableTracks"].getArray()->size(), 0);
+}
+
+TEST_F(AIIntegrationServiceTest, ArrangeMessageSharesHistoryAndConversationIdContractWithSendMessage) {
+    TimelineDoc doc;
+    TransportService transport;
+    service->setTimelineContext(&doc, &transport);
+    service->setTimelineToolsEnabled(true);
+
+    auto providerPtr = std::make_unique<CapabilityCapturingProvider>();
+    auto* provider = providerPtr.get();
+    provider->mockResponse = R"({"timelineOps":[{"op":"addTrack","kind":"midi","name":"Bass"}]})";
+    provider->mockConversationId = "conv-arrange-1";
+    service->setProvider(std::move(providerPtr));
+
+    service->sendArrangeMessage("add a bass line", [](const AIProvider::AIResponse&) {});
+
+    // Same bookkeeping as sendMessage(): user turn (raw text), assistant turn (envelope JSON),
+    // and the Pro-plan conversation id captured and re-pushed to the provider.
+    const auto& history = service->getHistory();
+    ASSERT_EQ(history.size(), 3u);
+    EXPECT_EQ(history[1].role, "user");
+    EXPECT_EQ(history[1].content, "add a bass line");
+    EXPECT_EQ(history[2].role, "assistant");
+    EXPECT_EQ(history[2].content, provider->mockResponse);
+    EXPECT_EQ(provider->lastConversationId, juce::String("conv-arrange-1"));
+}
+
+TEST_F(AIIntegrationServiceTest, ArrangeMessageWithoutProviderFailsWithTypedError) {
+    TimelineDoc doc;
+    TransportService transport;
+    service->setTimelineContext(&doc, &transport);
+    service->setTimelineToolsEnabled(true);
+
+    AIProvider::AIResponse captured;
+    bool called = false;
+    service->sendArrangeMessage("anything", [&](const AIProvider::AIResponse& r) {
+        captured = r;
+        called = true;
+    });
+
+    ASSERT_TRUE(called);
+    EXPECT_FALSE(captured.success);
+    EXPECT_EQ(captured.error.kind, AIProvider::AIErrorKind::Schema);
+    EXPECT_EQ(captured.error.message, juce::String("Error: No AI provider selected."));
+}
+
+TEST_F(AIIntegrationServiceTest, ArrangeMessageOnProviderWithoutCapabilitySupportFailsTyped) {
+    // MockAIProvider does not override sendCapabilityRequest — the AIProvider base-class default
+    // must deliver a typed failure, never crash or silently drop the callback.
+    TimelineDoc doc;
+    TransportService transport;
+    service->setTimelineContext(&doc, &transport);
+    service->setTimelineToolsEnabled(true);
+    service->setProvider(std::make_unique<MockAIProvider>());
+
+    AIProvider::AIResponse captured;
+    bool called = false;
+    service->sendArrangeMessage("anything", [&](const AIProvider::AIResponse& r) {
+        captured = r;
+        called = true;
+    });
+
+    ASSERT_TRUE(called);
+    EXPECT_FALSE(captured.success);
+    EXPECT_EQ(captured.error.kind, AIProvider::AIErrorKind::Schema);
+    EXPECT_TRUE(captured.error.message.contains("does not support capability requests"));
+    EXPECT_TRUE(captured.error.message.contains("timeline.generate"));
+}
 #endif // SYNTH_ENABLE_TIMELINE
 
 } // namespace synth

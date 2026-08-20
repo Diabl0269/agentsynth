@@ -98,8 +98,38 @@ public:
                                  std::function<void(const juce::String& delta)> onDelta = {}) = 0;
 
     /**
-     * @brief Requests cancellation of a previously started sendPrompt(). Providers that cannot
-     *        cancel in-flight requests may implement this as a no-op.
+     * @brief Sends a structured capability request (`POST /v1/capability/<capability>`) whose
+     *        body the CALLER authors field-by-field, instead of a conversation.
+     *
+     * The remote service exposes more than one capability, and they differ in input shape:
+     * patch.generate takes a prompt (sendPrompt() covers it), while timeline.generate takes
+     * structured fields (paramTargets, availableTracks, arrangementContext) that have no home in
+     * a Message vector. `body` must be a JSON object var carrying exactly those caller-authored
+     * fields; the provider adds what IT owns (productName, headers), never the caller.
+     *
+     * Default implementation fails the callback synchronously with a typed Schema error — the
+     * same fail-fast precedent as AIIntegrationService's "no provider selected" path — so a
+     * provider with no capability endpoint (local Ollama, test doubles) never needs to know this
+     * method exists. Cancellation uses the same cancel() as sendPrompt().
+     */
+    virtual RequestId sendCapabilityRequest(const juce::String& capability, const juce::var& body,
+                                            CompletionCallback callback) {
+        juce::ignoreUnused(body);
+        if (callback) {
+            AIResponse response;
+            response.success = false;
+            response.error.kind = AIErrorKind::Schema;
+            response.error.message =
+                "Error: The active AI provider does not support capability requests (" + capability + ").";
+            callback(response);
+        }
+        return {};
+    }
+
+    /**
+     * @brief Requests cancellation of a previously started sendPrompt() or
+     *        sendCapabilityRequest(). Providers that cannot cancel in-flight requests may
+     *        implement this as a no-op.
      */
     virtual void cancel(RequestId requestId) = 0;
 

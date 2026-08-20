@@ -67,6 +67,24 @@ or a value outside a parameter's range), the card says so and offers no button r
 silently. It can also place a ready-made MIDI clip in one step by attaching a `.mid` file's notes to
 its answer — the safest note data the AI can hand back, since a `.mid` blob can only ever carry notes.
 
+### The Patch / Arrange selector (Hosted mode)
+
+In **Hosted** mode, with the timeline feature switched on (Preferences → Show timeline), a small
+**Patch / Arrange** selector appears next to the model picker. It decides — explicitly, with no
+keyword guessing — which service your message goes to:
+
+- **Patch** (the default): patch creation and editing, exactly as before. Timeline suggestions can
+  still ride along on a patch answer when the model volunteers them.
+- **Arrange**: the message goes to the hosted arrangement service instead, which answers *only*
+  with a Timeline Changes card — tracks, clips, notes and automation. Along with your message it
+  receives a compact summary of your arrangement, your track list, and the list of automatable
+  parameters (the same information the hosted-mode privacy notice covers).
+
+Everything downstream is identical to the flow above: the card shows the validated summary,
+nothing is applied until you press **Apply timeline changes**, and a suggestion that fails
+validation shows the reason with no button. The selector only appears when both conditions hold —
+in local (Ollama) mode, or with the timeline feature off, requests route exactly as before.
+
 ## 5. Troubleshooting
 
 *   **"Error: No AI provider selected."**: In local (Ollama) mode, ensure you have selected an AI model from the dropdown. If no models appear, check if your Ollama server is running and accessible at `http://localhost:11434`. (In hosted mode the picker shows "Model chosen automatically" instead — that's expected, not an error.)
