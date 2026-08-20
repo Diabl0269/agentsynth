@@ -212,12 +212,12 @@ if(WIN32)
         SYNTH_WINSPARKLE_PUBLIC_KEY_STR=""
     )
     target_sources(Tests PRIVATE ../Source/Update/WinSparkleUpdateManager.cpp)
-    target_include_directories(Tests PRIVATE "${winsparkle_SOURCE_DIR}/include")
-    target_link_libraries(Tests PRIVATE "${winsparkle_SOURCE_DIR}/x64/Release/WinSparkle.lib")
+    target_include_directories(Tests PRIVATE "${SYNTH_WINSPARKLE_DIR}/include")
+    target_link_libraries(Tests PRIVATE "${SYNTH_WINSPARKLE_DIR}/x64/Release/WinSparkle.lib")
 
     add_custom_command(TARGET Tests POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${winsparkle_SOURCE_DIR}/x64/Release/WinSparkle.dll"
+            "${SYNTH_WINSPARKLE_DIR}/x64/Release/WinSparkle.dll"
             "$<TARGET_FILE_DIR:Tests>"
         COMMENT "Copying WinSparkle.dll next to Tests"
     )

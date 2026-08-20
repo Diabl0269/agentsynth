@@ -70,6 +70,11 @@ if(WIN32)
         URL_HASH SHA256=${SYNTH_WINSPARKLE_SHA256}
     )
     FetchContent_MakeAvailable(winsparkle)
+    # Unlike Sparkle's .tar.xz (which extracts flat), WinSparkle's release zip wraps every file in
+    # a single "WinSparkle-X.Y.Z/" top-level directory — FetchContent's zip extraction preserves
+    # that nesting rather than stripping it. Centralized here (one place to bump on a version
+    # change) rather than hardcoded at every ${SYNTH_WINSPARKLE_DIR} use below.
+    set(SYNTH_WINSPARKLE_DIR "${winsparkle_SOURCE_DIR}/WinSparkle-0.9.4")
 endif()
 
 # Coverage Option
@@ -661,16 +666,16 @@ if(WIN32)
         SYNTH_WINSPARKLE_PUBLIC_KEY_STR="${SYNTH_WINSPARKLE_PUBLIC_KEY}"
     )
 
-    target_include_directories(AgentSynth PRIVATE "${winsparkle_SOURCE_DIR}/include")
+    target_include_directories(AgentSynth PRIVATE "${SYNTH_WINSPARKLE_DIR}/include")
     # WinSparkle ships prebuilt per-arch (Win32/x64/ARM64) directories; this project's CI matrix
     # only builds x64 (see build-artifacts.yml), so that's the only one wired up here.
-    target_link_libraries(AgentSynth PRIVATE "${winsparkle_SOURCE_DIR}/x64/Release/WinSparkle.lib")
+    target_link_libraries(AgentSynth PRIVATE "${SYNTH_WINSPARKLE_DIR}/x64/Release/WinSparkle.lib")
 
     # WinSparkle.dll is a prebuilt binary CMake's bundle logic doesn't know to place — unlike
     # macOS there's no Frameworks dir, the DLL just needs to sit next to the exe (or be on PATH).
     add_custom_command(TARGET AgentSynth POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${winsparkle_SOURCE_DIR}/x64/Release/WinSparkle.dll"
+            "${SYNTH_WINSPARKLE_DIR}/x64/Release/WinSparkle.dll"
             "$<TARGET_FILE_DIR:AgentSynth>"
         COMMENT "Copying WinSparkle.dll next to Agent Synth.exe"
     )
@@ -822,16 +827,16 @@ if(ENABLE_PLUGIN)
             SYNTH_WINSPARKLE_PUBLIC_KEY_STR=""
         )
         target_sources(AgentSynthPlugin_VST3 PRIVATE Source/Update/WinSparkleUpdateManager.cpp)
-        target_include_directories(AgentSynthPlugin_VST3 PRIVATE "${winsparkle_SOURCE_DIR}/include")
+        target_include_directories(AgentSynthPlugin_VST3 PRIVATE "${SYNTH_WINSPARKLE_DIR}/include")
         target_link_libraries(AgentSynthPlugin_VST3 PRIVATE
-            "${winsparkle_SOURCE_DIR}/x64/Release/WinSparkle.lib"
+            "${SYNTH_WINSPARKLE_DIR}/x64/Release/WinSparkle.lib"
             delayimp
         )
         target_link_options(AgentSynthPlugin_VST3 PRIVATE "/DELAYLOAD:WinSparkle.dll")
 
         add_custom_command(TARGET AgentSynthPlugin_VST3 POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${winsparkle_SOURCE_DIR}/x64/Release/WinSparkle.dll"
+                "${SYNTH_WINSPARKLE_DIR}/x64/Release/WinSparkle.dll"
                 "$<TARGET_FILE_DIR:AgentSynthPlugin_VST3>"
             COMMENT "Copying WinSparkle.dll next to AgentSynthPlugin_VST3"
         )
