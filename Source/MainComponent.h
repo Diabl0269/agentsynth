@@ -694,7 +694,7 @@ private:
     // Consulted first by resolveEditSurface(); std::nullopt means "use real focus".
     std::optional<EditSurface> editSurfaceOverrideForTest_;
 
-#if JUCE_MAC
+#if JUCE_MAC || JUCE_WINDOWS
     synth::update::UpdateManager updateManager;
 #endif
 

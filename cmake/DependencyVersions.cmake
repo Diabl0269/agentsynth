@@ -32,3 +32,12 @@ set(SYNTH_SPARKLE_URL "https://github.com/sparkle-project/Sparkle/releases/downl
 
 set(SYNTH_SPARKLE_SHA256 "015336b601493e05c237964954bff6191370003d94edefe663724c88840d73cc"
     CACHE STRING "SHA-256 of SYNTH_SPARKLE_URL — verified against the GitHub release asset at pin time")
+
+# WinSparkle (Windows auto-update, P5-6) ships as a prebuilt binary distribution (headers, import
+# lib, DLL, and its own signing CLI) rather than a CMake project — fetched only on WIN32 (see
+# CMakeLists.txt), same "keep build/_deps cache key stable" rationale as the Sparkle pin above.
+set(SYNTH_WINSPARKLE_URL "https://github.com/vslavik/winsparkle/releases/download/v0.9.4/WinSparkle-0.9.4.zip"
+    CACHE STRING "WinSparkle (Windows auto-update) binary distribution fetched via FetchContent")
+
+set(SYNTH_WINSPARKLE_SHA256 "6037df37fc263bd1650a1c4949681a9d40ffe991d01f35892a406cb5d103c976"
+    CACHE STRING "SHA-256 of SYNTH_WINSPARKLE_URL — verified against the GitHub release asset at pin time")
