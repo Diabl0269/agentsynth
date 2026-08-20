@@ -608,10 +608,11 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     };
 
     // Patch/Arrange mode selector — an EXPLICIT routing control (never a keyword heuristic:
-    // shouldUseStructuredOutput() stays a patch-path concern). Starts invisible; visible only
-    // while the hosted provider AND the timeline feature are both active — see
-    // refreshModeControls(), called from refreshModels() below and re-called by MainComponent
-    // when the timeline preference toggles. Selection is session-scoped, defaulting to Patch.
+    // shouldUseStructuredOutput() stays a patch-path concern), provider-agnostic per the
+    // local/remote parity rule. Starts invisible; visible only while the timeline feature is
+    // active — see refreshModeControls(), called from refreshModels() below and re-called by
+    // MainComponent when the timeline preference toggles. Selection is session-scoped,
+    // defaulting to Patch.
     addChildComponent(modeSelector);
     modeSelector.addItem("Patch", kModeSelectorPatchId);
     modeSelector.addItem("Arrange", kModeSelectorArrangeId);
@@ -1359,8 +1360,9 @@ juce::String AIChatComponent::getWaitingStatusText() const {
 
 void AIChatComponent::refreshModels() {
     // Provider identity (unlike its model list) is known synchronously right after
-    // setProvider() — no need to wait for the fetch below to resolve. The mode selector's
-    // hosted-provider gate re-syncs at the same moment, for the same reason.
+    // setProvider() — no need to wait for the fetch below to resolve. The mode selector's gates
+    // don't read the provider (parity rule), but this is still a convenient known resync point
+    // for owners that call refreshModels() after wiring things up.
     updateHostedModeNotice();
     refreshModeControls();
 
@@ -1429,13 +1431,15 @@ void AIChatComponent::updateHostedModeNotice() {
 
 void AIChatComponent::refreshModeControls() {
 #if SYNTH_ENABLE_TIMELINE
+    // PROVIDER-AGNOSTIC on purpose (the local/remote parity rule): arrange mode is served by
+    // whichever transport the active provider has (AIIntegrationService::sendArrangeMessage), so
+    // the selector's gate is the timeline preference alone — never the provider.
     // hasTimelineContext() rides along with the preference switch: with no live doc installed
     // there is nothing to summarise, validate against, or apply to, so offering Arrange would
     // only manufacture the "cannot be checked or applied" failure previewTimelineOps() reports.
     // In the real app the context is installed whenever the feature is on (MainComponent wires
     // both), so this is one gate in practice and a safety net in tests.
-    const bool show =
-        aiService.isCurrentProviderHosted() && aiService.areTimelineToolsEnabled() && aiService.hasTimelineContext();
+    const bool show = aiService.areTimelineToolsEnabled() && aiService.hasTimelineContext();
 #else
     const bool show = false;
 #endif

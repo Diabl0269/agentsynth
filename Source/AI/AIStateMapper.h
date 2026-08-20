@@ -215,6 +215,20 @@ public:
      */
     static juce::var getPatchSchemaWithTimelineOps();
 
+    /**
+     * @brief An envelope-ONLY structured-output contract: a top-level REQUIRED "timelineOps"
+     *        array and nothing else — the local (Ollama) transport for arrange mode
+     *        (AIIntegrationService::sendArrangeMessage), mirroring the hosted
+     *        timeline.generate capability's output schema so the two providers answer arrange
+     *        requests in the same shape.
+     *
+     * Shares getPatchSchemaWithTimelineOps' permissive ops grammar (one item schema, one source),
+     * and the same posture: the grammar lets the model express the four ops,
+     * TimelineOps::validate is the gate. Unlike the patch-mode extension, "timelineOps" is
+     * required — an arrange answer with no ops is not an answer.
+     */
+    static juce::var getTimelineOpsEnvelopeSchema();
+
     static std::unique_ptr<juce::AudioProcessor> createModule(const juce::String& type);
 
     /**

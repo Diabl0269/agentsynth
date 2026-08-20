@@ -67,23 +67,24 @@ or a value outside a parameter's range), the card says so and offers no button r
 silently. It can also place a ready-made MIDI clip in one step by attaching a `.mid` file's notes to
 its answer — the safest note data the AI can hand back, since a `.mid` blob can only ever carry notes.
 
-### The Patch / Arrange selector (Hosted mode)
+### The Patch / Arrange selector
 
-In **Hosted** mode, with the timeline feature switched on (Preferences → Show timeline), a small
-**Patch / Arrange** selector appears next to the model picker. It decides — explicitly, with no
-keyword guessing — which service your message goes to:
+With the timeline feature switched on (Preferences → Show timeline), a small **Patch / Arrange**
+selector appears next to the model picker — in Hosted and local (Ollama) mode alike. It decides —
+explicitly, with no keyword guessing — what your message asks for:
 
-- **Patch** (the default): patch creation and editing, exactly as before. Timeline suggestions can
-  still ride along on a patch answer when the model volunteers them.
-- **Arrange**: the message goes to the hosted arrangement service instead, which answers *only*
-  with a Timeline Changes card — tracks, clips, notes and automation. Along with your message it
-  receives a compact summary of your arrangement, your track list, and the list of automatable
-  parameters (the same information the hosted-mode privacy notice covers).
+- **Patch** (the default): patch creation and editing, exactly as before. With a local model,
+  timeline suggestions can still ride along on a patch answer when the model volunteers them.
+- **Arrange**: the answer is *only* a Timeline Changes card — tracks, clips, notes and
+  automation. Along with your message the model receives a compact summary of your arrangement,
+  your track list, and the list of automatable parameters. In Hosted mode this goes to the
+  arrangement service (the same information the hosted-mode privacy notice covers); in local mode
+  it goes to your own Ollama model and nothing leaves your machine, as always.
 
 Everything downstream is identical to the flow above: the card shows the validated summary,
 nothing is applied until you press **Apply timeline changes**, and a suggestion that fails
-validation shows the reason with no button. The selector only appears when both conditions hold —
-in local (Ollama) mode, or with the timeline feature off, requests route exactly as before.
+validation shows the reason with no button. With the timeline feature off, the selector is hidden
+and requests route exactly as before.
 
 ## 5. Troubleshooting
 

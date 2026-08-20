@@ -1941,16 +1941,13 @@ juce::var AIStateMapper::getPatchSchema() {
     return juce::var(schema.get());
 }
 
-juce::var AIStateMapper::getPatchSchemaWithTimelineOps() {
-    juce::var schema = getPatchSchema();
-    auto* schemaObj = schema.getDynamicObject();
-    jassert(schemaObj != nullptr);
-    auto* properties = schemaObj->getProperty("properties").getDynamicObject();
-    jassert(properties != nullptr);
-
-    // One permissive op shape — see the header comment for why this is a grammar, not a
-    // validator. Field names/types mirror TimelineOps.cpp's readers exactly; "track" is left
-    // untyped because it is legitimately either a string (exact track name) or {"index": N}.
+namespace {
+// One permissive op shape, shared by BOTH structured-output contracts that can carry ops
+// (getPatchSchemaWithTimelineOps and getTimelineOpsEnvelopeSchema) so the grammar cannot drift
+// between them — see getPatchSchemaWithTimelineOps' header comment for why this is a grammar,
+// not a validator. Field names/types mirror TimelineOps.cpp's readers exactly; "track" is left
+// untyped because it is legitimately either a string (exact track name) or {"index": N}.
+juce::var timelineOpsArraySchema() {
     const juce::String opsSchemaJson = R"json({
         "type": "array",
         "items": {
@@ -1981,10 +1978,35 @@ juce::var AIStateMapper::getPatchSchemaWithTimelineOps() {
             "required": ["op"]
         }
     })json";
-    properties->setProperty("timelineOps", juce::JSON::parse(opsSchemaJson));
+    return juce::JSON::parse(opsSchemaJson);
+}
+} // namespace
+
+juce::var AIStateMapper::getPatchSchemaWithTimelineOps() {
+    juce::var schema = getPatchSchema();
+    auto* schemaObj = schema.getDynamicObject();
+    jassert(schemaObj != nullptr);
+    auto* properties = schemaObj->getProperty("properties").getDynamicObject();
+    jassert(properties != nullptr);
+
+    properties->setProperty("timelineOps", timelineOpsArraySchema());
     // Deliberately NOT added to "required": a patch-only response stays exactly as valid as it
     // was under getPatchSchema(), and the prompt tells the model when the key is warranted.
     return schema;
+}
+
+juce::var AIStateMapper::getTimelineOpsEnvelopeSchema() {
+    juce::DynamicObject::Ptr properties = new juce::DynamicObject();
+    properties->setProperty("timelineOps", timelineOpsArraySchema());
+
+    juce::DynamicObject::Ptr schema = new juce::DynamicObject();
+    schema->setProperty("type", "object");
+    schema->setProperty("properties", juce::var(properties.get()));
+    // Required here, unlike getPatchSchemaWithTimelineOps: an arrange-mode answer that carries
+    // no ops is not an answer, and the grammar refusing it beats a prose apology the extraction
+    // step would drop.
+    schema->setProperty("required", juce::Array<juce::var>({"timelineOps"}));
+    return juce::var(schema.get());
 }
 
 } // namespace synth

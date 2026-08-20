@@ -2230,9 +2230,8 @@ void MainComponent::applyTimelineFeatureEnabled(bool enabled) {
     // AIIntegrationService::setTimelineToolsEnabled — extraction/apply stay wired, gated by the
     // user's own Apply click either way).
     aiService.setTimelineToolsEnabled(enabled);
-    // The chat's Patch/Arrange selector follows it too (its other gate is the hosted provider,
-    // which refreshModels() covers); the service has no listener for this switch, so the owner
-    // that flipped it re-syncs the selector.
+    // The chat's Patch/Arrange selector follows it too; the service has no listener for this
+    // switch, so the owner that flipped it re-syncs the selector.
     aiChatComponent.refreshModeControls();
 }
 #endif

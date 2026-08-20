@@ -1471,19 +1471,36 @@ quota/trial/capacity enforcement byte-identical across capabilities (locked by
 its final JSON string on the *enqueuing* thread (`Request::capabilityBodyJson`) so no ref-counted
 `juce::var` ever crosses to the worker.
 
-**The arrange path, end to end.** `AIChatComponent` shows a Patch/Arrange selector in the model
-row, visible only while BOTH gates hold: the active provider is hosted
-(`isCurrentProviderHosted()`) and the timeline feature preference is on
-(`areTimelineToolsEnabled()` + a live `setTimelineContext()`). Routing is the selector's call
-**alone — never a keyword heuristic**; `shouldUseStructuredOutput()` stays a patch-path concern.
-The selector's gates re-sync at exactly two points: `refreshModels()` (the post-`setProvider()`
-resync, so a provider switch updates it) and `AIChatComponent::refreshModeControls()` called by
-`MainComponent::applyTimelineFeatureEnabled` / `initialiseCommon` (the service has no listener for
-the preference switch, so the owner that flips it re-syncs the selector). Hiding the selector
-resets it to Patch — an invisible control must not keep steering requests.
+**The arrange path, end to end — one intent, two transports.** `AIChatComponent` shows a
+Patch/Arrange selector in the model row, visible while the timeline feature preference is on
+(`areTimelineToolsEnabled()` + a live `setTimelineContext()`). The gate is deliberately
+**provider-agnostic** — the local/remote parity rule: arrange mode works on both transports, so
+the provider never gates the UI. Routing is the selector's call **alone — never a keyword
+heuristic**; `shouldUseStructuredOutput()` stays a patch-path concern. The selector's gate
+re-syncs at `refreshModels()` (a convenient known resync point) and at
+`AIChatComponent::refreshModeControls()` called by `MainComponent::applyTimelineFeatureEnabled` /
+`initialiseCommon` (the service has no listener for the preference switch, so the owner that
+flips it re-syncs the selector). Hiding the selector resets it to Patch — an invisible control
+must not keep steering requests.
 
-An Arrange send goes through `AIIntegrationService::sendArrangeMessage()`, which builds the
-`timeline.generate` input (`buildArrangeRequestBody()` — public, so tests reproduce the real
+An Arrange send goes through `AIIntegrationService::sendArrangeMessage()`, which absorbs the
+transport difference so it is never a behaviour difference:
+
+- **Hosted provider** → `sendCapabilityRequest("timeline.generate", …)` with the structured
+  input body below.
+- **Local provider (Ollama)** → `sendPrompt()` with the SAME fields composed into the outgoing
+  message (`buildArrangeAugmentedContent()`, section-for-section the way the server's own
+  `buildTimelineUserMessage()` composes them: arrangement context when non-empty, then tracks,
+  then targets, then the prompt — plus one trailing steering line, standing in for the dedicated
+  arrange system prompt the server swaps in and a mid-conversation local request cannot), and
+  `AIStateMapper::getTimelineOpsEnvelopeSchema()` as the response contract: an envelope-ONLY
+  grammar sharing the ops item schema with `getPatchSchemaWithTimelineOps` (one source, cannot
+  drift), with `timelineOps` **required** — an arrange answer with no ops is not an answer. The
+  history splice matches `sendMessage()`: chatHistory keeps the raw user text, the composed
+  context exists only on the wire.
+
+Either way the answer is the same `{"timelineOps": [...]}` envelope, and everything downstream is
+shared. The structured input (`buildArrangeRequestBody()` — public, so tests reproduce the real
 request):
 
 - `userPrompt` — the **raw** user text. Deliberately NOT pre-wrapped the way
@@ -1529,9 +1546,10 @@ automation-only surface ever becomes worth it client-side, the seam is ready:
 Tests: `Tests/RemoteProviderTests.cpp` (capability URL/body/headers, fail-fast validation, the
 entitlement-error pass-through, envelope re-serialization), `Tests/AIIntegrationServiceTests.cpp`
 (`Arrange*` — request-body shape, the 64-target cap, empty-timeline explicitness, the shared
-history/conversation-id contract, typed no-provider and no-capability-support failures), and
-`Tests/AIChatComponentTests.cpp` (`Arrange*` — selector gating, explicit routing both ways, and
-the card flow for a validated and a rejected canned envelope).
+history/conversation-id contract, the local transport's composed message + envelope-only schema +
+raw-text history, typed no-provider and hosted-without-capability failures), and
+`Tests/AIChatComponentTests.cpp` (`Arrange*` — provider-agnostic selector gating, explicit
+routing on both transports, and the card flow for a validated and a rejected canned envelope).
 
 **HTTP transport seam.** `RemoteProvider::HttpPerformer` (`RemoteProvider.h`) parallels
 `OllamaProvider::InputStreamFactory`: a constructor taking just a host installs the real

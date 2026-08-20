@@ -140,24 +140,31 @@ public:
     static constexpr int kMaxRemoteParamTargets = 64;
 
     /**
-     * @brief Sends an arrange-mode request to the hosted provider's `timeline.generate`
-     *        capability — the remote sibling of the local model's timelineOps authoring.
+     * @brief Sends an arrange-mode request — ONE intent served by whichever transport the active
+     *        provider has (the local/remote parity rule: the transport difference is absorbed
+     *        here, never surfaced as a behaviour difference).
      *
-     * Same history contract as sendMessage(): the user's raw text is recorded as the user turn,
-     * a successful response's content (the timelineOps envelope JSON) as the assistant turn, and
-     * a Pro-plan conversation id is captured/re-pushed identically. The response content carries
-     * `{"timelineOps": [...]}`, which the existing extraction/preview/apply flow
-     * (extractTimelineOps → previewTimelineOps → the chat card's user-gated Apply) consumes
-     * unchanged — this method adds a second way to ASK, never a second way to APPLY.
+     * Hosted provider: the `timeline.generate` capability, with the structured request body from
+     * buildArrangeRequestBody(). Local provider: sendPrompt() with the SAME fields composed into
+     * the outgoing message (buildArrangeAugmentedContent, mirroring the server's own section
+     * layout) and AIStateMapper::getTimelineOpsEnvelopeSchema() as the response contract. Either
+     * way the answer is a `{"timelineOps": [...]}` envelope, which the existing
+     * extraction/preview/apply flow (extractTimelineOps → previewTimelineOps → the chat card's
+     * user-gated Apply) consumes unchanged — this method adds ways to ASK, never a second way to
+     * APPLY.
      *
-     * No client-side retry on a validation rejection: the server already runs its own bounded
-     * repair-retry inside the capability (generateStructured), so a envelope that still fails
-     * TimelineOps::validate here is surfaced to the user as the card's rejection message.
+     * Same history contract as sendMessage(): the user's raw text is recorded as the user turn
+     * (the composed arrange context exists only on the wire), a successful response's content as
+     * the assistant turn, and a Pro-plan conversation id is captured/re-pushed identically.
+     *
+     * No client-side retry on a validation rejection: the server runs its own bounded
+     * repair-retry inside the capability, and for the local model the envelope-only grammar plays
+     * the same role — an envelope that still fails TimelineOps::validate is surfaced to the user
+     * as the card's rejection message.
      *
      * With no provider installed, fails synchronously with the same typed error as sendMessage().
-     * On a provider without a capability endpoint (local Ollama, plain test doubles), the
-     * AIProvider::sendCapabilityRequest default delivers a typed Schema error — callers gate this
-     * method on isCurrentProviderHosted(), so that path is a defensive backstop, not a UI state.
+     * On a hosted provider without a capability endpoint (a test double), the
+     * AIProvider::sendCapabilityRequest default delivers a typed Schema error.
      */
     AIProvider::RequestId sendArrangeMessage(const juce::String& text, AIProvider::CompletionCallback callback);
 
@@ -421,6 +428,11 @@ private:
     // parameters only (that is what an automation lane drives), real ranges from the parameter's
     // own NormalisableRange. Graph order, unbounded — each caller applies its own cap.
     std::vector<AutomationTargetInfo> enumerateAutomationTargets() const;
+
+    // The LOCAL transport's rendering of an arrange request: buildArrangeRequestBody()'s fields
+    // composed into one message, section-for-section the way the server's
+    // buildTimelineUserMessage composes them for the hosted transport. See sendArrangeMessage().
+    juce::String buildArrangeAugmentedContent(const juce::String& text) const;
 #endif
 
     // True while the timeline tool surface should be offered to the model: the switch is on AND

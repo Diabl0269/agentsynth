@@ -305,8 +305,47 @@ AIProvider::RequestId AIIntegrationService::sendArrangeMessage(const juce::Strin
         return {};
     }
 
-    return provider->sendCapabilityRequest("timeline.generate", buildArrangeRequestBody(text),
-                                           wrapCompletionForHistory(std::move(callback)));
+    // One intent, two transports (the local/remote parity rule): a hosted provider has a
+    // dedicated capability whose input is the structured fields; a local provider gets the SAME
+    // fields composed into the outgoing message (buildArrangeAugmentedContent mirrors the
+    // server's own section layout) with an envelope-only response schema. Both providers answer
+    // with the identical timelineOps envelope, so the downstream extract → validate → card flow
+    // cannot tell them apart — the transport difference is absorbed HERE, never surfaced as a
+    // behaviour difference.
+    if (provider->isHosted())
+        return provider->sendCapabilityRequest("timeline.generate", buildArrangeRequestBody(text),
+                                               wrapCompletionForHistory(std::move(callback)));
+
+    // Same splice-into-the-request-copy shape as sendMessage(): chatHistory keeps the user's raw
+    // text; the composed arrange context exists only on the wire.
+    std::vector<AIProvider::Message> request = chatHistory;
+    if (!request.empty())
+        request.back().content = buildArrangeAugmentedContent(text);
+
+    return provider->sendPrompt(request, wrapCompletionForHistory(std::move(callback)),
+                                AIStateMapper::getTimelineOpsEnvelopeSchema());
+}
+
+juce::String AIIntegrationService::buildArrangeAugmentedContent(const juce::String& text) const {
+    // Composed from the SAME fields the hosted request sends (buildArrangeRequestBody), in the
+    // SAME section order the server's buildTimelineUserMessage uses (synth-platform
+    // timeline-generate/capability.ts: arrangement context when non-empty, then tracks, then
+    // targets, then the prompt) — one source of truth for what an arrange request tells the
+    // model, however it travels. The one addition is the trailing instruction: the server swaps
+    // in a dedicated arrange system prompt, which a mid-conversation local request cannot do, so
+    // that steering rides in the message instead (the envelope-only schema enforces the shape
+    // regardless; the line is for answer quality, not for safety).
+    const juce::var body = buildArrangeRequestBody(text);
+
+    juce::String content;
+    const juce::String arrangement = body["arrangementContext"].toString();
+    if (arrangement.trim().isNotEmpty())
+        content << "Arrangement context:\n" << arrangement << "\n\n";
+    content << "Project tracks:\n```json\n" << juce::JSON::toString(body["availableTracks"]) << "\n```\n\n";
+    content << "Automation targets:\n```json\n" << juce::JSON::toString(body["paramTargets"]) << "\n```\n\n";
+    content << text << "\n\n";
+    content << "Respond ONLY with a JSON object containing a \"timelineOps\" array. No patch, no prose.";
+    return content;
 }
 #endif
 

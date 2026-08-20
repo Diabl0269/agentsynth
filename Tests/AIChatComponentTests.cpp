@@ -1590,12 +1590,12 @@ TEST_F(AIChatComponentTest, NewChatClearsCloudConversationIdToo) {
 
 namespace {
 
-// Hosted provider that answers sendCapabilityRequest() with a canned timelineOps envelope and
-// counts which entry point each request used — the seam the routing tests observe.
+// Provider (hosted by default, local when `hosted` is flipped) that answers
+// sendCapabilityRequest() with a canned timelineOps envelope and counts which entry point each
+// request used — the seam the routing tests observe.
 class ArrangeCapableProvider : public synth::AIProvider {
 public:
     juce::String getProviderName() const override { return "ArrangeCapableProvider"; }
-    bool isHosted() const override { return true; }
 
     void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
         callback({}, true);
@@ -1606,7 +1606,7 @@ public:
         ++sendPromptCalls;
         AIResponse response;
         response.success = true;
-        response.content = "plain answer";
+        response.content = promptResponse;
         callback(response);
         return {};
     }
@@ -1625,10 +1625,13 @@ public:
     void cancel(RequestId) override {}
     void setModel(const juce::String& name) override { currentModel = name; }
     juce::String getCurrentModel() const override { return currentModel; }
+    bool isHosted() const override { return hosted; }
 
+    bool hosted = true; // flip to false to stand in for a local (Ollama-shaped) provider
     int sendPromptCalls = 0;
     int capabilityCalls = 0;
     juce::String lastCapability;
+    juce::String promptResponse = "plain answer";
     juce::String cannedEnvelope = R"({"timelineOps":[{"op":"addTrack","kind":"midi","name":"Bass"}]})";
 
 private:
@@ -1658,29 +1661,34 @@ juce::TextEditor* findChatInputField(juce::Component& parent) {
 
 } // namespace
 
-TEST_F(AIChatComponentTest, ArrangeModeSelectorVisibilityFollowsBothGates) {
+TEST_F(AIChatComponentTest, ArrangeModeSelectorFollowsTimelinePreferenceRegardlessOfProvider) {
     AudioEngine engine;
     synth::AIIntegrationService service(engine.getGraph());
     TestAppProperties props;
     synth::AIChatComponent chat(service, props.props);
     chat.setSize(400, 600);
 
-    // Local (non-hosted) provider: hidden, even with the timeline half fully on.
+    // Timeline preference off: hidden, whatever the provider.
     service.setProvider(std::make_unique<MockChatProvider>());
+    chat.refreshModels();
+    EXPECT_FALSE(chat.isModeSelectorVisibleForTesting());
+
+    // LOCAL provider + timeline preference on + live context: visible — the parity rule; arrange
+    // mode is served on both transports, so the provider never gates the UI.
     synth::TimelineDoc doc;
     synth::TransportService transport;
     service.setTimelineContext(&doc, &transport);
     service.setTimelineToolsEnabled(true);
-    chat.refreshModels(); // the post-setProvider resync point (CLAUDE.md ordering contract)
-    EXPECT_FALSE(chat.isModeSelectorVisibleForTesting());
+    chat.refreshModeControls();
+    EXPECT_TRUE(chat.isModeSelectorVisibleForTesting());
 
-    // Hosted provider + timeline preference on + live context: visible.
+    // Provider switch to hosted: still visible, nothing about the gate changed.
     service.setProvider(std::make_unique<HostedMockProvider>());
-    chat.refreshModels();
+    chat.refreshModels(); // the post-setProvider resync point (CLAUDE.md ordering contract)
     EXPECT_TRUE(chat.isModeSelectorVisibleForTesting());
 
     // Preference toggled off mid-session (MainComponent::applyTimelineFeatureEnabled re-syncs the
-    // selector): hidden again, even though the provider is still hosted.
+    // selector): hidden again.
     service.setTimelineToolsEnabled(false);
     chat.refreshModeControls();
     EXPECT_FALSE(chat.isModeSelectorVisibleForTesting());
@@ -1689,6 +1697,44 @@ TEST_F(AIChatComponentTest, ArrangeModeSelectorVisibilityFollowsBothGates) {
     service.setTimelineToolsEnabled(true);
     chat.refreshModeControls();
     EXPECT_TRUE(chat.isModeSelectorVisibleForTesting());
+}
+
+TEST_F(AIChatComponentTest, ArrangeModeWithLocalProviderRoutesToPromptTransportAndShowsCard) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    synth::TimelineDoc doc;
+    synth::TransportService transport;
+    service.setTimelineContext(&doc, &transport);
+    service.setTimelineToolsEnabled(true);
+
+    ArrangeCapableProvider* provider = nullptr;
+    {
+        auto p = std::make_unique<ArrangeCapableProvider>();
+        provider = p.get();
+        provider->hosted = false;
+        provider->promptResponse = provider->cannedEnvelope; // what a grammar-constrained local model returns
+        service.setProvider(std::move(p));
+    }
+
+    TestAppProperties props;
+    synth::AIChatComponent chat(service, props.props);
+    chat.setSize(400, 600);
+    chat.refreshModels();
+    ASSERT_TRUE(chat.isModeSelectorVisibleForTesting()) << "the selector shows for a local provider too";
+    chat.setArrangeModeForTesting(true);
+
+    auto* input = findChatInputField(chat);
+    ASSERT_NE(input, nullptr);
+    input->setText("add a bass track");
+    chat.triggerSend();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+
+    // Local transport: sendPrompt, never the capability endpoint — and the downstream card flow
+    // is identical to the hosted case (transport-agnostic by construction).
+    EXPECT_EQ(provider->sendPromptCalls, 1);
+    EXPECT_EQ(provider->capabilityCalls, 0);
+    EXPECT_TRUE(chat.getLastTimelineOpsJsonForTesting().isNotEmpty());
+    EXPECT_TRUE(chat.getLastTimelineOpsPreviewForTesting().contains("Bass"));
 }
 
 TEST_F(AIChatComponentTest, ArrangeModeRoutesToCapabilityAndPatchModeToPrompt) {

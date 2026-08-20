@@ -1049,12 +1049,15 @@ namespace {
 // conversation path.
 class CapabilityCapturingProvider : public AIProvider {
 public:
-    RequestId sendPrompt(const std::vector<Message>&, CompletionCallback callback, const juce::var&,
-                         std::function<void(const juce::String&)> = {}) override {
+    RequestId sendPrompt(const std::vector<Message>& conversation, CompletionCallback callback,
+                         const juce::var& responseSchema, std::function<void(const juce::String&)> = {}) override {
         ++sendPromptCalls;
+        lastConversation = conversation;
+        lastPromptSchema = responseSchema;
         AIResponse response;
         response.success = true;
-        response.content = "ok";
+        response.content = mockResponse;
+        response.conversationId = mockConversationId;
         if (callback)
             callback(response);
         return {};
@@ -1082,15 +1085,43 @@ public:
     juce::String getCurrentModel() const override { return model; }
     juce::String getProviderName() const override { return "CapabilityCapturingProvider"; }
     void setConversationId(const juce::String& id) override { lastConversationId = id; }
-    bool isHosted() const override { return true; }
+    bool isHosted() const override { return hosted; }
 
+    bool hosted = true; // flip to false to stand in for a local (Ollama-shaped) provider
     int sendPromptCalls = 0;
     int capabilityCalls = 0;
     juce::String lastCapability;
     juce::var lastBody;
+    std::vector<Message> lastConversation;
+    juce::var lastPromptSchema;
     juce::String mockResponse = R"({"timelineOps":[]})";
     juce::String mockConversationId;
     juce::String lastConversationId;
+    juce::String model;
+};
+
+// Hosted, but WITHOUT a sendCapabilityRequest override — stands in for a hosted provider the
+// AIProvider base-class default must protect (a typed failure, never a crash or a silent drop).
+class HostedNoCapabilityProvider : public AIProvider {
+public:
+    RequestId sendPrompt(const std::vector<Message>&, CompletionCallback callback, const juce::var&,
+                         std::function<void(const juce::String&)> = {}) override {
+        AIResponse response;
+        response.success = true;
+        response.content = "ok";
+        if (callback)
+            callback(response);
+        return {};
+    }
+    void cancel(RequestId) override {}
+    void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
+        callback({}, true);
+    }
+    void setModel(const juce::String& name) override { model = name; }
+    juce::String getCurrentModel() const override { return model; }
+    juce::String getProviderName() const override { return "HostedNoCapabilityProvider"; }
+    bool isHosted() const override { return true; }
+
     juce::String model;
 };
 } // namespace
@@ -1250,14 +1281,16 @@ TEST_F(AIIntegrationServiceTest, ArrangeMessageWithoutProviderFailsWithTypedErro
     EXPECT_EQ(captured.error.message, juce::String("Error: No AI provider selected."));
 }
 
-TEST_F(AIIntegrationServiceTest, ArrangeMessageOnProviderWithoutCapabilitySupportFailsTyped) {
-    // MockAIProvider does not override sendCapabilityRequest — the AIProvider base-class default
-    // must deliver a typed failure, never crash or silently drop the callback.
+TEST_F(AIIntegrationServiceTest, ArrangeMessageOnHostedProviderWithoutCapabilitySupportFailsTyped) {
+    // HostedNoCapabilityProvider does not override sendCapabilityRequest — the AIProvider
+    // base-class default must deliver a typed failure, never crash or silently drop the callback.
+    // (A NON-hosted provider never reaches that default: it routes to the sendPrompt transport,
+    // pinned by the local-transport test below.)
     TimelineDoc doc;
     TransportService transport;
     service->setTimelineContext(&doc, &transport);
     service->setTimelineToolsEnabled(true);
-    service->setProvider(std::make_unique<MockAIProvider>());
+    service->setProvider(std::make_unique<HostedNoCapabilityProvider>());
 
     AIProvider::AIResponse captured;
     bool called = false;
@@ -1271,6 +1304,62 @@ TEST_F(AIIntegrationServiceTest, ArrangeMessageOnProviderWithoutCapabilitySuppor
     EXPECT_EQ(captured.error.kind, AIProvider::AIErrorKind::Schema);
     EXPECT_TRUE(captured.error.message.contains("does not support capability requests"));
     EXPECT_TRUE(captured.error.message.contains("timeline.generate"));
+}
+
+TEST_F(AIIntegrationServiceTest, ArrangeMessageOnLocalProviderComposesPromptWithEnvelopeOnlySchema) {
+    // The parity rule's other half: a LOCAL provider serves the same arrange intent through
+    // sendPrompt — the structured fields composed into the message (mirroring the server's own
+    // section layout) plus an envelope-ONLY response schema, never the capability endpoint.
+    auto node = graph->addNode(std::make_unique<OscillatorModule>());
+    ASSERT_NE(node, nullptr);
+    node->properties.set("uuid", "local-arrange-uuid");
+
+    TimelineDoc doc;
+    doc.addTrack(TrackKind::Midi, "Melody");
+    TransportService transport;
+    service->setTimelineContext(&doc, &transport);
+    service->setTimelineToolsEnabled(true);
+
+    auto providerPtr = std::make_unique<CapabilityCapturingProvider>();
+    auto* provider = providerPtr.get();
+    provider->hosted = false;
+    service->setProvider(std::move(providerPtr));
+
+    bool called = false;
+    service->sendArrangeMessage("automate the cutoff over 8 bars",
+                                [&](const AIProvider::AIResponse&) { called = true; });
+
+    EXPECT_TRUE(called);
+    EXPECT_EQ(provider->capabilityCalls, 0) << "a local provider must never be asked for a capability endpoint";
+    EXPECT_EQ(provider->sendPromptCalls, 1);
+
+    // The outgoing message carries the SAME fields the hosted body would, section by section,
+    // ending with the raw prompt + the envelope steering line.
+    ASSERT_FALSE(provider->lastConversation.empty());
+    const juce::String content = provider->lastConversation.back().content;
+    EXPECT_TRUE(content.contains("Arrangement context:"));
+    EXPECT_TRUE(content.contains("Project tracks:"));
+    EXPECT_TRUE(content.contains("\"Melody\""));
+    EXPECT_TRUE(content.contains("Automation targets:"));
+    EXPECT_TRUE(content.contains("\"local-arrange-uuid\""));
+    EXPECT_TRUE(content.contains("automate the cutoff over 8 bars"));
+    EXPECT_TRUE(content.contains("timelineOps"));
+
+    // Envelope-only contract: timelineOps present AND required; no patch grammar in sight.
+    auto* schemaObj = provider->lastPromptSchema.getDynamicObject();
+    ASSERT_NE(schemaObj, nullptr);
+    auto* props = schemaObj->getProperty("properties").getDynamicObject();
+    ASSERT_NE(props, nullptr);
+    EXPECT_TRUE(props->hasProperty("timelineOps"));
+    EXPECT_FALSE(props->hasProperty("nodes"));
+    ASSERT_TRUE(schemaObj->getProperty("required").isArray());
+    EXPECT_TRUE(schemaObj->getProperty("required").getArray()->contains(juce::var("timelineOps")));
+
+    // History keeps the RAW user text — the composed arrange context exists only on the wire,
+    // exactly like sendMessage()'s patch-context splice.
+    const auto& history = service->getHistory();
+    ASSERT_GE(history.size(), 2u);
+    EXPECT_EQ(history[1].content, "automate the cutoff over 8 bars");
 }
 #endif // SYNTH_ENABLE_TIMELINE
 
