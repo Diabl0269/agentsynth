@@ -203,6 +203,26 @@ if(APPLE)
     )
 endif()
 
+# Same reasoning as the APPLE block above, for WinSparkle on Windows. A plain hard link is fine
+# here (unlike the plugin target in the top-level CMakeLists.txt) — Tests is a normal executable
+# with no juce_vst3_helper early-load step, so there's no ordering hazard to work around.
+if(WIN32)
+    target_compile_definitions(Tests PRIVATE
+        SYNTH_UPDATE_FEED_URL_STR=""
+        SYNTH_WINSPARKLE_PUBLIC_KEY_STR=""
+    )
+    target_sources(Tests PRIVATE ../Source/Update/WinSparkleUpdateManager.cpp)
+    target_include_directories(Tests PRIVATE "${winsparkle_SOURCE_DIR}/include")
+    target_link_libraries(Tests PRIVATE "${winsparkle_SOURCE_DIR}/x64/Release/WinSparkle.lib")
+
+    add_custom_command(TARGET Tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${winsparkle_SOURCE_DIR}/x64/Release/WinSparkle.dll"
+            "$<TARGET_FILE_DIR:Tests>"
+        COMMENT "Copying WinSparkle.dll next to Tests"
+    )
+endif()
+
 target_link_libraries(Tests PRIVATE
     GTest::gtest
     Core

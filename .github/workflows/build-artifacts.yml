@@ -143,6 +143,14 @@ jobs:
         ccache --set-config=sloppiness=time_macros,include_file_mtime,include_file_ctime
         ccache --zero-stats
 
+    # NSIS (P5-6): windows-latest doesn't ship it, and it's only needed to build the installer,
+    # so this step is a no-op cost on the other two matrix legs' runners were it there — guard by
+    # OS to avoid an unnecessary choco call on Linux/macOS.
+    - name: Install NSIS
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: choco install nsis -y
+
     # Configure CMake — Ninja on every OS so this matches the PR CI build path
     # (see the "Setup MSVC" note above for why Ninja and not the VS generator).
     # SYNTH_BUILD_NUMBER becomes CFBundleVersion, the value Sparkle actually compares to decide
@@ -150,9 +158,9 @@ jobs:
     # can't just be the project's marketing VERSION: that's hand-bumped in CMakeLists.txt, while
     # this workflow's tag-and-release step below bumps semver tags independently). run_number is
     # known before this step runs and increases every run, so it stays correct regardless of what
-    # tag the release job mints afterwards. SYNTH_SPARKLE_PUBLIC_KEY reads from a repo VARIABLE
-    # (not a secret — SUPublicEDKey is the public half of the key pair) that doesn't exist yet; see
-    # docs/distribution.md. Both are harmless no-ops on Linux/Windows, where SYNTH_SPARKLE_* is
+    # tag the release job mints afterwards. SYNTH_SPARKLE_PUBLIC_KEY / SYNTH_WINSPARKLE_PUBLIC_KEY
+    # read from repo VARIABLES (not secrets — both are the public half of their key pair) that
+    # don't exist yet; see docs/distribution.md. Both are harmless no-ops on the OSes where they're
     # unused.
     - name: Configure CMake
       shell: bash
@@ -162,11 +170,27 @@ jobs:
           -DCMAKE_C_COMPILER_LAUNCHER=ccache \
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
           -DSYNTH_BUILD_NUMBER=${{ github.run_number }} \
-          -DSYNTH_SPARKLE_PUBLIC_KEY="${{ vars.SPARKLE_PUBLIC_KEY }}"
+          -DSYNTH_SPARKLE_PUBLIC_KEY="${{ vars.SPARKLE_PUBLIC_KEY }}" \
+          -DSYNTH_WINSPARKLE_PUBLIC_KEY="${{ vars.WINSPARKLE_PUBLIC_KEY }}"
 
     # Build (Ninja is single-config; the build type comes from configure)
     - name: Build
       run: cmake --build build
+
+    # Build the Windows installer (P5-6). AgentSynth.exe + WinSparkle.dll land next to each other
+    # in the target's output dir (CMakeLists.txt's POST_BUILD copy step), which is exactly what
+    # the .nsi's STAGE_DIR expects. Output filename is pinned to AgentSynthSetup.exe — see the
+    # .nsi's header comment for why it must not change without a matching site update. Version is
+    # the human-facing marketing version (project(AgentSynth VERSION ...) in CMakeLists.txt), not
+    # SYNTH_BUILD_NUMBER — the installer's Add/Remove Programs entry should read "0.13.2", not a
+    # CI run number.
+    - name: Build Windows installer
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $stageDir = (Get-ChildItem -Path build -Recurse -Filter "Agent Synth.exe" | Select-Object -First 1).DirectoryName
+        $version = (Select-String -Path CMakeLists.txt -Pattern 'project\(AgentSynth VERSION ([\d.]+)\)').Matches[0].Groups[1].Value
+        makensis "/DVERSION=$version" "/DSTAGE_DIR=$stageDir" installer\windows\AgentSynth.nsi
 
     # Report-only: a cold cache must never block a release. CACHE_WARM_EXPECTED is pinned false
     # so the check writes its summary table and annotates, but cannot fail the job — losing a
@@ -287,13 +311,16 @@ jobs:
           exit 1
         fi
 
-    # Package Windows
+    # Package Windows. Ships AgentSynthSetup.exe (built by the "Build Windows installer" step
+    # above), not the raw "Agent Synth.exe" — P5-6: WinSparkle's default auto-update flow runs
+    # whatever the appcast enclosure points at, and a raw portable exe would just launch a second
+    # instance rather than install anything.
     - name: Package Windows Artifact
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
         New-Item -ItemType Directory -Force -Path artifact
-        Get-ChildItem -Path build -Recurse -Filter "Agent Synth.exe" | Copy-Item -Destination artifact\
+        Copy-Item -Path "installer\windows\AgentSynthSetup.exe" -Destination artifact\
 
         # AgentSynthPlugin_VST3's .vst3 is a directory bundle on Windows too (it contains
         # Contents\x86_64-win\Agent Synth.vst3 internally), and softprops/action-gh-release (in
@@ -411,11 +438,104 @@ jobs:
             -o appcast.xml \
             appcast-work/
 
-      # Attaches appcast.xml to the release as a downloadable/inspectable asset. This is NOT the
-      # same as deploying it to https://agentsynth.app/updates/appcast.xml (the app's SUFeedURL) —
-      # that publish step still needs to be wired up separately (marketing site / Cloudflare), see
-      # docs/distribution.md's "what's not automated yet".
+      # Attaches appcast.xml to the release as a downloadable/inspectable asset. Deploying it to
+      # https://agentsynth.app/updates/appcast.xml (the app's SUFeedURL) is a separate step, done
+      # in synth-platform (P5-7, done) — see docs/distribution.md's "Promoting a build to stable".
       - name: Attach appcast to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload ${{ needs.release.outputs.tag }} appcast.xml --clobber --repo ${{ github.repository }}
+
+  publish-appcast-windows:
+    name: Publish WinSparkle appcast
+    needs: [release]
+    # Same skip-cleanly-until-configured pattern as publish-appcast above, gated on WinSparkle's
+    # OWN key pair (WINSPARKLE_PUBLIC_KEY/WINSPARKLE_PRIVATE_KEY) — separate and independent from
+    # Sparkle's, even though both use EdDSA. See docs/distribution.md for key generation.
+    if: needs.release.result == 'success' && vars.WINSPARKLE_PUBLIC_KEY != ''
+    runs-on: windows-latest
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: AgentSynth-Windows-x64
+          path: appcast-work
+
+      # Version pin duplicated from cmake/DependencyVersions.cmake's SYNTH_WINSPARKLE_URL/
+      # SYNTH_WINSPARKLE_SHA256 — this job runs standalone (no CMake configure), so it re-fetches
+      # the same release directly rather than parsing the .cmake file. Keep both in sync when
+      # bumping. Unlike Sparkle's generate_appcast (which scans a directory of macOS archives and
+      # reads versions from Info.plist), WinSparkle has no directory-scanning equivalent — there's
+      # nothing in a bare .exe for it to read — so the appcast XML below is hand-templated instead.
+      - name: Fetch WinSparkle tools
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/vslavik/winsparkle/releases/download/v0.9.4/WinSparkle-0.9.4.zip" -OutFile winsparkle.zip
+          $hash = (Get-FileHash winsparkle.zip -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne "6037df37fc263bd1650a1c4949681a9d40ffe991d01f35892a406cb5d103c976") {
+            Write-Error "WinSparkle zip hash mismatch: $hash"
+            exit 1
+          }
+          Expand-Archive -Path winsparkle.zip -DestinationPath winsparkle-tools
+
+      # winsparkle-tool's exact CLI is verified from the project's README (`winsparkle-tool sign -f
+      # private.key Updater.exe`, printing `sparkle:edSignature="..." length="..."` to stdout) —
+      # NOT independently re-verified against `--help` output in this environment (no Windows
+      # machine to run the .exe on). The private key is written to a temp file only for the
+      # duration of this step and removed immediately after, never left on disk or logged.
+      - name: Sign Windows installer
+        id: sign
+        shell: pwsh
+        env:
+          WINSPARKLE_PRIVATE_KEY: ${{ secrets.WINSPARKLE_PRIVATE_KEY }}
+        run: |
+          $keyFile = New-TemporaryFile
+          Set-Content -Path $keyFile -Value $env:WINSPARKLE_PRIVATE_KEY -NoNewline
+          $exePath = "appcast-work\AgentSynthSetup.exe"
+          $toolExe = Get-ChildItem -Path winsparkle-tools -Recurse -Filter "winsparkle-tool.exe" | Select-Object -First 1
+          $output = & $toolExe.FullName sign -f $keyFile $exePath
+          Remove-Item -Path $keyFile -Force
+          # Per the README's documented example output, $output already contains both
+          # sparkle:edSignature="..." AND length="..." as one string — no separate length needed.
+          Write-Output "signature-attrs=$output" >> $env:GITHUB_OUTPUT
+
+      # Hand-templated rather than tool-generated (see "Fetch WinSparkle tools" above). WinSparkle
+      # documents itself as sharing Sparkle's appcast format/namespace, so this mirrors the shape
+      # Sparkle's generate_appcast produces for a single release. sparkle:version is the same
+      # SYNTH_BUILD_NUMBER (github.run_number) baked into the exe's own VERSIONINFO resource via
+      # BUILD_VERSION in CMakeLists.txt's juce_add_gui_app call — NOT independently confirmed that
+      # WinSparkle reads that resource for its own "current version" comparison rather than some
+      # other mechanism; flag this as the first thing to check if update detection doesn't trigger
+      # in real testing.
+      - name: Generate appcast-windows.xml
+        shell: pwsh
+        run: |
+          $downloadUrl = "https://github.com/${{ github.repository }}/releases/download/${{ needs.release.outputs.tag }}/AgentSynthSetup.exe"
+          $pubDate = [DateTime]::UtcNow.ToString("ddd, dd MMM yyyy HH:mm:ss +0000")
+          $xml = @"
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+            <channel>
+              <title>Agent Synth Windows Updates</title>
+              <item>
+                <title>${{ needs.release.outputs.tag }}</title>
+                <pubDate>$pubDate</pubDate>
+                <enclosure url="$downloadUrl"
+                           sparkle:version="${{ github.run_number }}"
+                           sparkle:shortVersionString="${{ needs.release.outputs.tag }}"
+                           ${{ steps.sign.outputs.signature-attrs }}
+                           type="application/octet-stream" />
+              </item>
+            </channel>
+          </rss>
+          "@
+          Set-Content -Path appcast-windows.xml -Value $xml
+
+      # Attaches appcast-windows.xml to the release as a downloadable/inspectable asset — deploying
+      # it to https://agentsynth.app/updates/appcast-windows.xml is the synth-platform side (small
+      # extension to deploy-web.yml, P5-7's existing infrastructure). promote-release.yml also
+      # requires this asset to exist before a tag can be promoted to stable (see that workflow).
+      - name: Attach appcast to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload ${{ needs.release.outputs.tag }} appcast-windows.xml --clobber --repo ${{ github.repository }}

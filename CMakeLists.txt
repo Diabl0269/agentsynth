@@ -50,8 +50,7 @@ FetchContent_MakeAvailable(juce)
 
 # Fetch Sparkle (macOS auto-update). Prebuilt .xcframework distribution, not a CMake project —
 # FetchContent_MakeAvailable populates it and, finding no CMakeLists.txt at its root, does not try
-# to add_subdirectory it. See docs/distribution.md for the WinSparkle (Windows) equivalent, tracked
-# as a separate roadmap task.
+# to add_subdirectory it.
 if(APPLE)
     FetchContent_Declare(
         sparkle
@@ -59,6 +58,18 @@ if(APPLE)
         URL_HASH SHA256=${SYNTH_SPARKLE_SHA256}
     )
     FetchContent_MakeAvailable(sparkle)
+endif()
+
+# Fetch WinSparkle (Windows auto-update, P5-6). Same "prebuilt binary, no CMakeLists.txt at its
+# root" shape as Sparkle above — headers + import lib + DLL + its own signing CLI
+# (bin/winsparkle-tool.exe), not a CMake project.
+if(WIN32)
+    FetchContent_Declare(
+        winsparkle
+        URL      ${SYNTH_WINSPARKLE_URL}
+        URL_HASH SHA256=${SYNTH_WINSPARKLE_SHA256}
+    )
+    FetchContent_MakeAvailable(winsparkle)
 endif()
 
 # Coverage Option
@@ -87,14 +98,29 @@ set(SYNTH_PRODUCT_NAME "Agent Synth" CACHE STRING "Display name: window title, A
 set(SYNTH_COMPANY_NAME "yourcompany" CACHE STRING "JUCE COMPANY_NAME / macOS bundle vendor")
 set(SYNTH_BUNDLE_ID "com.agentsynth.app" CACHE STRING "macOS/iOS CFBundleIdentifier")
 
-# Auto-update (Sparkle on macOS — see docs/distribution.md). SYNTH_SPARKLE_PUBLIC_KEY is
-# deliberately empty by default: SparkleUpdateManager checks for a non-empty key at startup and
-# stays inert without one, so a dev/local build never shows Sparkle's "app is misconfigured" alert.
-# CI supplies the real key via -DSYNTH_SPARKLE_PUBLIC_KEY, read from the (non-secret, public)
-# SPARKLE_PUBLIC_KEY repository variable once it exists.
-set(SYNTH_UPDATE_FEED_URL "https://agentsynth.app/updates/appcast.xml"
-    CACHE STRING "Sparkle SUFeedURL — the appcast this build checks for updates")
+# Auto-update (Sparkle on macOS, WinSparkle on Windows — see docs/distribution.md).
+# SYNTH_SPARKLE_PUBLIC_KEY / SYNTH_WINSPARKLE_PUBLIC_KEY are deliberately empty by default: both
+# update managers check for a non-empty key at startup and stay inert without one, so a dev/local
+# build never shows an "app is misconfigured" alert. CI supplies the real keys via
+# -DSYNTH_SPARKLE_PUBLIC_KEY / -DSYNTH_WINSPARKLE_PUBLIC_KEY, read from the (non-secret, public)
+# SPARKLE_PUBLIC_KEY / WINSPARKLE_PUBLIC_KEY repository variables once they exist. The two are
+# separate, independent EdDSA key pairs — WinSparkle's own signing tool, not interchangeable with
+# Sparkle's.
+#
+# One cache var for the feed URL, platform-conditional default: mac and Windows publish separate
+# appcast files (a Windows client can't parse a macOS enclosure and vice versa), but both live
+# under the same agentsynth.app/updates/ path.
+if(APPLE)
+    set(SYNTH_UPDATE_FEED_URL_DEFAULT "https://agentsynth.app/updates/appcast.xml")
+elseif(WIN32)
+    set(SYNTH_UPDATE_FEED_URL_DEFAULT "https://agentsynth.app/updates/appcast-windows.xml")
+else()
+    set(SYNTH_UPDATE_FEED_URL_DEFAULT "")
+endif()
+set(SYNTH_UPDATE_FEED_URL "${SYNTH_UPDATE_FEED_URL_DEFAULT}"
+    CACHE STRING "Sparkle/WinSparkle feed URL — the appcast this build checks for updates")
 set(SYNTH_SPARKLE_PUBLIC_KEY "" CACHE STRING "Sparkle SUPublicEDKey (base64, public half of the EdDSA signing key)")
+set(SYNTH_WINSPARKLE_PUBLIC_KEY "" CACHE STRING "WinSparkle EdDSA public key (base64, WinSparkle's own key pair, separate from Sparkle's)")
 
 # CFBundleVersion (Sparkle's actual update-comparison key) is intentionally NOT the same as
 # PROJECT_VERSION above: PROJECT_VERSION is the human-facing marketing version, hand-bumped in this
@@ -565,6 +591,10 @@ if(APPLE)
     set_source_files_properties(Source/Update/SparkleUpdateManager.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
 endif()
 
+if(WIN32)
+    target_sources(AgentSynth PRIVATE Source/Update/WinSparkleUpdateManager.cpp)
+endif()
+
 # Link against JUCE modules
 target_link_libraries(AgentSynth PRIVATE
     AppUI # Editor UI, shared with the plugin target
@@ -618,6 +648,31 @@ if(APPLE)
         COMMAND ${CMAKE_COMMAND} -E rm -rf "$<TARGET_BUNDLE_CONTENT_DIR:AgentSynth>/Frameworks/Sparkle.framework"
         COMMAND ditto "${sparkle_SOURCE_DIR}/Sparkle.framework" "$<TARGET_BUNDLE_CONTENT_DIR:AgentSynth>/Frameworks/Sparkle.framework"
         COMMENT "Embedding Sparkle.framework"
+    )
+endif()
+
+if(WIN32)
+    # No Info.plist on Windows, so the feed URL / public key that macOS reads out of the bundle at
+    # runtime are baked in as compile-time string literals instead. Escaped for MSVC's preprocessor
+    # (the URL contains no quotes/backslashes today, but the public key is base64 and could in
+    # theory need escaping — CMake's target_compile_definitions already quotes the whole value).
+    target_compile_definitions(AgentSynth PRIVATE
+        SYNTH_UPDATE_FEED_URL_STR="${SYNTH_UPDATE_FEED_URL}"
+        SYNTH_WINSPARKLE_PUBLIC_KEY_STR="${SYNTH_WINSPARKLE_PUBLIC_KEY}"
+    )
+
+    target_include_directories(AgentSynth PRIVATE "${winsparkle_SOURCE_DIR}/include")
+    # WinSparkle ships prebuilt per-arch (Win32/x64/ARM64) directories; this project's CI matrix
+    # only builds x64 (see build-artifacts.yml), so that's the only one wired up here.
+    target_link_libraries(AgentSynth PRIVATE "${winsparkle_SOURCE_DIR}/x64/Release/WinSparkle.lib")
+
+    # WinSparkle.dll is a prebuilt binary CMake's bundle logic doesn't know to place — unlike
+    # macOS there's no Frameworks dir, the DLL just needs to sit next to the exe (or be on PATH).
+    add_custom_command(TARGET AgentSynth POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${winsparkle_SOURCE_DIR}/x64/Release/WinSparkle.dll"
+            "$<TARGET_FILE_DIR:AgentSynth>"
+        COMMENT "Copying WinSparkle.dll next to Agent Synth.exe"
     )
 endif()
 
@@ -739,6 +794,47 @@ if(ENABLE_PLUGIN)
             )
         endforeach()
         set_source_files_properties(Source/Update/SparkleUpdateManager.mm PROPERTIES COMPILE_OPTIONS -fobjc-arc)
+    endif()
+
+    # MainComponent.cpp (in AppUI) pulls in synth::update::UpdateManager on Windows too, same
+    # reasoning as the APPLE block above: AgentSynthPlugin_VST3 needs the same WinSparkle
+    # source/linking AgentSynth gets, purely to satisfy the linker — the plugin's own build never
+    # gets SUFeedURL/SUPublicEDKey-equivalent compile definitions (only AgentSynth does, above), so
+    # UpdateManager::isAvailable() reads empty values and stays inert here.
+    #
+    # Delay-loaded (/DELAYLOAD, not a normal import-lib link) rather than linked hard: on macOS the
+    # equivalent hazard is that juce_vst3_helper dlopens the freshly-linked plugin bundle right
+    # after linking (to write moduleinfo.json), before this target's own POST_BUILD DLL-copy step
+    # below has run, and a hard Sparkle.framework dependency made that early load fail outright —
+    # fixed there with a *weak* framework link. Windows' juce_vst3_helper does the equivalent
+    # LoadLibrary-based introspection, and normal (non-delay-load) import-lib linking resolves ALL
+    # imports at that load time regardless of whether any WinSparkle function is ever actually
+    # called — there's no "weak" import equivalent on Windows, so a hard link would hit the same
+    # "DLL not found" failure the moment WinSparkle.dll isn't next to the plugin's DLL yet.
+    # Delay-loading defers DLL resolution to first *call* of a WinSparkle function, and the inert
+    # (empty key/URL) plugin path never calls one — matching the macOS "linked but functionally
+    # never invoked" intent. NOT verified against a real Windows juce_vst3_helper run (no Windows
+    # toolchain in this environment) — if CI's Windows plugin build fails at the helper step with a
+    # WinSparkle.dll-not-found error, this is the block to revisit first.
+    if(WIN32)
+        target_compile_definitions(AgentSynthPlugin_VST3 PRIVATE
+            SYNTH_UPDATE_FEED_URL_STR=""
+            SYNTH_WINSPARKLE_PUBLIC_KEY_STR=""
+        )
+        target_sources(AgentSynthPlugin_VST3 PRIVATE Source/Update/WinSparkleUpdateManager.cpp)
+        target_include_directories(AgentSynthPlugin_VST3 PRIVATE "${winsparkle_SOURCE_DIR}/include")
+        target_link_libraries(AgentSynthPlugin_VST3 PRIVATE
+            "${winsparkle_SOURCE_DIR}/x64/Release/WinSparkle.lib"
+            delayimp
+        )
+        target_link_options(AgentSynthPlugin_VST3 PRIVATE "/DELAYLOAD:WinSparkle.dll")
+
+        add_custom_command(TARGET AgentSynthPlugin_VST3 POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${winsparkle_SOURCE_DIR}/x64/Release/WinSparkle.dll"
+                "$<TARGET_FILE_DIR:AgentSynthPlugin_VST3>"
+            COMMENT "Copying WinSparkle.dll next to AgentSynthPlugin_VST3"
+        )
     endif()
 endif()
 

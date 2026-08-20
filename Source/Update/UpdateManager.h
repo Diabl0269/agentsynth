@@ -2,18 +2,19 @@
 
 #include <juce_core/juce_core.h>
 
-#if JUCE_MAC
+#if JUCE_MAC || JUCE_WINDOWS
 
 #include <memory>
 
 namespace synth::update {
 
-// Thin bridge to Sparkle's SPUStandardUpdaterController (Source/Update/SparkleUpdateManager.mm).
-// Construction reads SUFeedURL/SUPublicEDKey from the app bundle's Info.plist (populated at
-// configure time from SYNTH_UPDATE_FEED_URL/SYNTH_SPARKLE_PUBLIC_KEY in CMakeLists.txt) and only
-// starts Sparkle's updater if both are non-empty. A build with no signing key configured yet
-// (the default until someone runs Sparkle's generate_keys tool — see docs/distribution.md)
-// therefore never starts Sparkle and never shows its "app is misconfigured" alert.
+// Thin bridge to Sparkle (macOS, Source/Update/SparkleUpdateManager.mm) or WinSparkle (Windows,
+// Source/Update/WinSparkleUpdateManager.cpp). Construction reads the feed URL/public key baked in
+// at configure time (macOS: SUFeedURL/SUPublicEDKey merged into the app bundle's Info.plist;
+// Windows: SYNTH_UPDATE_FEED_URL_STR/SYNTH_WINSPARKLE_PUBLIC_KEY_STR compile definitions, since
+// there's no Info.plist) and only starts the platform updater if both are non-empty. A build with
+// no signing key configured yet (the default until someone runs the platform's key-generation
+// tool — see docs/distribution.md) therefore never starts and never shows a "misconfigured" alert.
 class UpdateManager {
 public:
     UpdateManager();
@@ -35,4 +36,4 @@ private:
 
 } // namespace synth::update
 
-#endif // JUCE_MAC
+#endif // JUCE_MAC || JUCE_WINDOWS
