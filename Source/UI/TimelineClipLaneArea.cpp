@@ -50,6 +50,14 @@ constexpr float kHintFontHeight = 11.0f;
 // margin is what keeps an antialiased line from leaving a fringe outside the repainted column.
 constexpr int kSplitPreviewMarginPx = 2;
 
+// A copy-drag ghost: a translucent wash of the SOURCE track's colour, well under the 0.65/0.85 a
+// real clip body paints at, plus a soft one-pixel outline. Translucency alone carries "not real
+// yet" on purpose — a true blur would mean rendering the region to an image and filtering it once
+// per drag frame, which is exactly the kind of unbounded per-frame paint work docs/layout.md
+// §10-11 rules out.
+constexpr float kDragGhostFillAlpha = 0.4f;
+constexpr float kDragGhostOutlineAlpha = 0.7f;
+
 // A muted clip keeps its shape, its selection border and its waveform/notes, and loses only
 // brightness — mute is reversible, so it must not look like damage. The name label dims further
 // than the body (it is the one part a glance reads as "this clip is fine").
@@ -84,6 +92,16 @@ TimelineClipLaneArea::TimelineClipLaneArea(TimelineViewState& viewState, ClipSel
     , selection_(selection) {
     setComponentID("timelineClipLaneArea");
     setInterceptsMouseClicks(true, false);
+    // Load-bearing, and invisible to every headless test: juce::grabKeyboardFocus() is a NO-OP on
+    // a component that does not want focus, so without this the mouseDown() call below never moves
+    // focus here — MainComponent::resolveEditSurface() then finds whatever had focus before,
+    // falls through to EditSurface::Graph, and every per-surface verb (Cmd+X/C/V/D) plus this
+    // class's own Delete/Escape/P go to the patch canvas instead of the clips the user just
+    // clicked. GraphEditor and PianoRollComponent set the same flag for the same reason. The
+    // focus-override tests (MainComponent::editSurfaceOverrideForTest_) bypass real focus
+    // entirely, which is exactly why this hole survived until a user hit it — see
+    // ClipLaneAcceptsKeyboardFocusSoSurfaceVerbsCanRoute for the guard that now pins it.
+    setWantsKeyboardFocus(true);
     audioFormats_.registerBasicFormats();
     // The production chooser, installed as the DEFAULT rather than called directly, so a test can
     // replace it wholesale (see setAudioFileChooser).
@@ -295,7 +313,12 @@ std::optional<TimelineClipLaneArea::ClipHit> TimelineClipLaneArea::hitTestClip(j
 }
 
 TimelineClipLaneArea::Geometry TimelineClipLaneArea::effectiveGeometryFor(const synth::Clip& clip) const {
-    if (dragMode_ == DragMode::Move) {
+    // The copy-drag guard has to match effectiveRowFor's EXACTLY: the two together decide where a
+    // clip paints, and a copy-drag's promise is that the original does not move on ANY axis while
+    // the ghosts do. Guarding only the row (as this did before) slid every original sideways under
+    // the pointer, which reads as a move that also happens to be drawing outlines — the opposite
+    // of what Alt means.
+    if (dragMode_ == DragMode::Move && !copyDrag_) {
         for (const auto& origin : dragClips_)
             if (origin.id == clip.id)
                 return {origin.originalStart + previewDeltaBeats_, origin.lengthBeats};
@@ -308,6 +331,7 @@ TimelineClipLaneArea::Geometry TimelineClipLaneArea::effectiveGeometryFor(const 
 }
 
 int TimelineClipLaneArea::effectiveRowFor(synth::ClipId id, int trackIndex) const {
+    // Same copyDrag_ guard as effectiveGeometryFor above, and it must stay the same — see there.
     if (dragMode_ != DragMode::Move || copyDrag_ || previewRowDelta_ == 0)
         return trackIndex;
     for (const auto& origin : dragClips_)
@@ -467,22 +491,66 @@ void TimelineClipLaneArea::paintMarquee(juce::Graphics& g) {
 
 //==============================================================================
 // Tool affordances: the copy-drag ghosts, the Draw ghost and the Split preview line. All three
-// are outlines rather than fills — they describe a result that does not exist yet, and a filled
-// rectangle would read as a clip that does.
+// describe a result that does not exist yet, so all three are drawn well under a real clip's own
+// alpha — the Draw ghost and the split line as bare outlines (they have no source to borrow a
+// colour from), the copy-drag ghosts as a translucent wash of the source track's colour so the
+// user can see WHICH clip each one came from mid-drag.
 //==============================================================================
+
+juce::Rectangle<int> TimelineClipLaneArea::dragGhostRectFor(const DragOrigin& origin, int rowHeight) const {
+    return computeClipRect(viewState_, origin.trackIndex + previewRowDelta_, origin.originalStart + previewDeltaBeats_,
+                           origin.lengthBeats, rowHeight);
+}
+
+std::vector<juce::Rectangle<int>> TimelineClipLaneArea::getDragGhostRectsForTest() const {
+    std::vector<juce::Rectangle<int>> rects;
+    if (dragMode_ != DragMode::Move || !copyDrag_)
+        return rects;
+    const int rowHeight = getRowHeight();
+    rects.reserve(dragClips_.size());
+    for (const auto& origin : dragClips_)
+        rects.push_back(dragGhostRectFor(origin, rowHeight));
+    return rects;
+}
+
+std::optional<std::pair<double, double>> TimelineClipLaneArea::getEffectiveGeometryForTest(synth::ClipId id) const {
+    if (doc_ == nullptr)
+        return std::nullopt;
+    const auto* clip = doc_->getClip(id);
+    if (clip == nullptr)
+        return std::nullopt;
+    const auto geometry = effectiveGeometryFor(*clip);
+    return std::make_pair(geometry.start, geometry.length);
+}
 
 void TimelineClipLaneArea::paintDragGhosts(juce::Graphics& g) {
     if (dragMode_ != DragMode::Move || !copyDrag_ || doc_ == nullptr)
         return;
 
     const int rowHeight = getRowHeight();
-    g.setColour(juce::Colours::white.withAlpha(0.75f));
+    const auto& tracks = doc_->getTracks();
     for (const auto& origin : dragClips_) {
-        const auto rect = computeClipRect(viewState_, origin.trackIndex + previewRowDelta_,
-                                          origin.originalStart + previewDeltaBeats_, origin.lengthBeats, rowHeight);
+        const auto rect = dragGhostRectFor(origin, rowHeight);
         if (rect.getRight() < 0 || rect.getX() > getWidth())
-            continue;
-        g.drawRoundedRectangle(rect.toFloat().reduced(1.0f), 3.0f, 1.5f);
+            continue; // same offscreen cull paintClip() uses
+
+        // The SOURCE track's colour, not the destination row's: a ghost that changed hue as the
+        // pointer crossed rows would read as the clip having already landed there. Muted state
+        // comes along for the same reason it does in paintClip() — a copy of a muted clip is
+        // still muted when it lands.
+        juce::Colour base = juce::Colours::white;
+        if (juce::isPositiveAndBelow(origin.trackIndex, (int)tracks.size())) {
+            const auto& track = tracks[(std::size_t)origin.trackIndex];
+            base = synth::ui::resolveTrackColour(track.colourArgb, origin.trackIndex, track.muted);
+        }
+
+        const auto body = rect.toFloat().reduced(1.0f);
+        g.setColour(base.withAlpha(kDragGhostFillAlpha));
+        g.fillRoundedRectangle(body, 3.0f);
+        g.setColour(base.brighter(0.4f).withAlpha(kDragGhostOutlineAlpha));
+        g.drawRoundedRectangle(body, 3.0f, 1.0f);
+        // Deliberately no name label: the label is the single strongest "this is a real clip"
+        // cue, and its absence is what keeps a ghost legible AS a ghost at a glance.
     }
 }
 

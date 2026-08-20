@@ -127,6 +127,15 @@ TimelinePanelComponent::TimelinePanelComponent() {
         button->setTooltip(juce::String(editToolName(tool)) + " (" + juce::String(editToolKeyDigit(tool)) + ")");
         button->setClickingTogglesState(true);
         button->setRadioGroupId(kEditToolRadioGroupId);
+        // A tool button must never become the focused component. juce::Button's constructor opts
+        // INTO keyboard focus, and a click grabs it by default, so picking a tool would otherwise
+        // move focus out of the clip lane / piano roll — and
+        // MainComponent::resolveEditSurface() reads real focus, so the very next Cmd+X would be
+        // routed to the graph rather than to the clips the tool was just chosen for. Both calls
+        // are needed: the second is what stops the CLICK grabbing focus, the first is what keeps
+        // the button out of the tab chain.
+        button->setWantsKeyboardFocus(false);
+        button->setMouseClickGrabsKeyboardFocus(false);
         button->onClick = [this, tool] { setActiveTool(tool); };
         addAndMakeVisible(*button);
         toolButtons_[(std::size_t)tool] = std::move(button);
@@ -211,6 +220,23 @@ TimelinePanelComponent::TimelinePanelComponent() {
     automationCloseButton_.setComponentID("automationCloseButton");
     automationCloseButton_.setButtonText(juce::String::fromUTF8("\xE2\x9C\x95"));
     automationCloseButton_.onClick = [this] { closeAutomationStrip(); };
+
+    // No transport-bar or automation-strip chrome may steal keyboard focus on click:
+    // MainComponent::resolveEditSurface() reads REAL focus, so clicking the snap toggle (or any
+    // other chrome control) would otherwise silently reroute the very next Cmd+X/C/V/D from the
+    // clips to the graph — the same failure the edit-tool strip above opts out of. juce::Button
+    // and a non-editable juce::ComboBox both enable click-grabs-focus in their constructors, so
+    // this is an explicit opt-out. Focusability itself is left alone: a combo tabbed to on
+    // purpose still takes focus; only the incidental mouse-click grab is disabled.
+    for (juce::Component* chrome :
+         {static_cast<juce::Component*>(&addTrackButton_), static_cast<juce::Component*>(&snapToggleButton_),
+          static_cast<juce::Component*>(&snapCombo_), static_cast<juce::Component*>(&automationToolPointerButton_),
+          static_cast<juce::Component*>(&automationToolPencilButton_),
+          static_cast<juce::Component*>(&automationToolLineButton_),
+          static_cast<juce::Component*>(&automationToolEraserButton_),
+          static_cast<juce::Component*>(&automationCloseButton_), static_cast<juce::Component*>(&laneCombo_),
+          static_cast<juce::Component*>(&recordModeCombo_)})
+        chrome->setMouseClickGrabsKeyboardFocus(false);
 
     // Added LAST so it is topmost — it draws over the ruler, the lanes grid AND the clips.
     addAndMakeVisible(playhead_);

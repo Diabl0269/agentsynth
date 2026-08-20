@@ -914,6 +914,104 @@ TEST(TimelineClipToolTest, AltClickWithoutADragCopiesNothing) {
     EXPECT_FALSE(f.undo.canUndo());
 }
 
+// The user-visible half of the Alt copy-drag, and the one the doc assertions above could not
+// see: what is on SCREEN between mouseDown and mouseUp. The originals must not move on either
+// axis (the doc is untouched mid-drag either way, so only the effective geometry can prove it),
+// and the ghosts must carry the delta instead.
+TEST(TimelineClipToolTest, AltDragLeavesEveryOriginalInPlaceWhileTheGhostsCarryTheDelta) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto first = f.doc.addClip(track, 0.0, 4.0, "a");
+    const auto second = f.doc.addClip(track, 8.0, 2.0, "b");
+    ASSERT_TRUE(first.isValid());
+    ASSERT_TRUE(second.isValid());
+    f.selection.setSelection({first, second});
+
+    const auto anchor = clipCentre(f.lane, first);
+    const juce::Point<float> dragged(anchor.x + 80.0f, anchor.y); // +2.0 beats at 40 px/beat
+    const int alt = juce::ModifierKeys::altModifier;
+
+    f.lane.mouseDown(toolClick(f.lane, anchor, alt));
+    f.lane.mouseDrag(toolDrag(f.lane, dragged, anchor, alt));
+    ASSERT_TRUE(f.lane.isCopyDragForTest());
+
+    // Both originals paint at their DOC geometry — this is the regression: before the fix the
+    // start followed previewDeltaBeats_ while only the row was copy-guarded, so the original
+    // slid sideways under the pointer and the gesture read as a move.
+    const auto firstGeometry = f.lane.getEffectiveGeometryForTest(first);
+    ASSERT_TRUE(firstGeometry.has_value());
+    EXPECT_DOUBLE_EQ(firstGeometry->first, 0.0) << "an Alt-dragged original must not move mid-drag";
+    EXPECT_DOUBLE_EQ(firstGeometry->second, 4.0);
+    const auto secondGeometry = f.lane.getEffectiveGeometryForTest(second);
+    ASSERT_TRUE(secondGeometry.has_value());
+    EXPECT_DOUBLE_EQ(secondGeometry->first, 8.0) << "every original in the selection, not just the grabbed one";
+    EXPECT_DOUBLE_EQ(secondGeometry->second, 2.0);
+
+    // The ghosts are what moved — one per dragged clip, each at origin + the shared delta.
+    const int rowHeight = f.lane.getRowHeight();
+    const auto ghosts = f.lane.getDragGhostRectsForTest();
+    ASSERT_EQ(ghosts.size(), 2u);
+    EXPECT_EQ(ghosts[0], synth::ui::TimelineClipLaneArea::computeClipRect(f.state, 0, 2.0, 4.0, rowHeight));
+    EXPECT_EQ(ghosts[1], synth::ui::TimelineClipLaneArea::computeClipRect(f.state, 0, 10.0, 2.0, rowHeight));
+
+    f.lane.mouseUp(toolDrag(f.lane, dragged, anchor, alt));
+    EXPECT_TRUE(f.lane.getDragGhostRectsForTest().empty()) << "the ghosts end with the gesture";
+}
+
+TEST(TimelineClipToolTest, AltDragAcrossRowsPutsOnlyTheGhostOnTheDestinationRow) {
+    ToolLaneFixture f;
+    const auto upper = f.doc.addTrack(TrackKind::Midi, "Upper");
+    ASSERT_TRUE(f.doc.addTrack(TrackKind::Midi, "Lower").isValid());
+    const auto clip = f.doc.addClip(upper, 0.0, 4.0, "c");
+    ASSERT_TRUE(clip.isValid());
+    f.selection.setSelection({clip});
+
+    const auto anchor = clipCentre(f.lane, clip);
+    const juce::Point<float> dragged(anchor.x + 80.0f, anchor.y + f.rowHeightF()); // one row down, +2 beats
+    const int alt = juce::ModifierKeys::altModifier;
+
+    f.lane.mouseDown(toolClick(f.lane, anchor, alt));
+    f.lane.mouseDrag(toolDrag(f.lane, dragged, anchor, alt));
+    ASSERT_TRUE(f.lane.isCopyDragForTest());
+    EXPECT_EQ(f.lane.getPreviewRowDeltaForTest(), 1);
+
+    const auto geometry = f.lane.getEffectiveGeometryForTest(clip);
+    ASSERT_TRUE(geometry.has_value());
+    EXPECT_DOUBLE_EQ(geometry->first, 0.0) << "the vertical half of the drag must not move the original either";
+
+    const auto ghosts = f.lane.getDragGhostRectsForTest();
+    ASSERT_EQ(ghosts.size(), 1u);
+    EXPECT_EQ(ghosts[0], synth::ui::TimelineClipLaneArea::computeClipRect(f.state, 1, 2.0, 4.0, f.lane.getRowHeight()))
+        << "the ghost is the only thing on the destination row";
+}
+
+// The other side of the same guard: a PLAIN move-drag still previews on the original, which is
+// what makes a normal drag look like the clip following the pointer.
+TEST(TimelineClipToolTest, PlainMoveDragStillPreviewsTheDeltaOnTheOriginal) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = f.doc.addClip(track, 0.0, 4.0, "c");
+    ASSERT_TRUE(clip.isValid());
+    f.selection.setSelection({clip});
+
+    const auto anchor = clipCentre(f.lane, clip);
+    const juce::Point<float> dragged(anchor.x + 80.0f, anchor.y);
+
+    f.lane.mouseDown(toolClick(f.lane, anchor));
+    f.lane.mouseDrag(toolDrag(f.lane, dragged, anchor));
+    EXPECT_FALSE(f.lane.isCopyDragForTest());
+
+    const auto geometry = f.lane.getEffectiveGeometryForTest(clip);
+    ASSERT_TRUE(geometry.has_value());
+    EXPECT_DOUBLE_EQ(geometry->first, 2.0) << "a plain drag previews on the clip itself";
+    EXPECT_DOUBLE_EQ(geometry->second, 4.0);
+    EXPECT_TRUE(f.lane.getDragGhostRectsForTest().empty()) << "and draws no ghosts at all";
+
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clip)->startBeat, 0.0) << "the DOC still only changes on mouseUp";
+    f.lane.mouseUp(toolDrag(f.lane, dragged, anchor));
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clip)->startBeat, 2.0);
+}
+
 // ------------------------------------------------------- Cross-track drag ---
 
 TEST(TimelineClipToolTest, CrossTrackDragMovesTheClipToTheRowBelow) {

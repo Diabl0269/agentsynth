@@ -351,6 +351,15 @@ public:
     // Whether the in-flight Select-tool move drag is an Alt copy-drag (originals stay put, ghosts
     // move) rather than a plain move.
     bool isCopyDragForTest() const noexcept { return dragMode_ == DragMode::Move && copyDrag_; }
+    // The destination rects the copy-drag ghosts occupy right now, in dragClips_ order — empty
+    // unless a copy-drag is in flight. Computed by the SAME helper paintDragGhosts() draws from,
+    // so an assertion about a ghost cannot pass while the drawn ghost sits somewhere else.
+    std::vector<juce::Rectangle<int>> getDragGhostRectsForTest() const;
+    // The (startBeat, lengthBeats) a clip PAINTS at this instant — its doc geometry except while
+    // its own move/trim drag is previewing (see effectiveGeometryFor). The pair a copy-drag test
+    // asserts is UNCHANGED mid-drag, while getDragGhostRectsForTest() shows the delta. nullopt
+    // when the id does not resolve.
+    std::optional<std::pair<double, double>> getEffectiveGeometryForTest(synth::ClipId id) const;
     // The track-row offset the in-flight move/copy drag would apply to the whole selection — 0
     // whenever the drop would be illegal for any clip in it (see mouseDrag's kind check).
     int getPreviewRowDeltaForTest() const noexcept { return previewRowDelta_; }
@@ -459,8 +468,13 @@ private:
     // covers the stroke rather than a zero-width column.
     juce::Rectangle<int> splitPreviewBounds(synth::ClipId clip, double beat) const;
     void paintSplitPreview(juce::Graphics& g);
-    // The outlined destinations of a copy-drag (the originals keep painting in place).
+    // The ghosted destinations of a copy-drag (the originals keep painting in place, unmoved on
+    // both axes — see effectiveGeometryFor/effectiveRowFor).
     void paintDragGhosts(juce::Graphics& g);
+    // ONE dragged clip's ghost rect. The single geometry source shared by paintDragGhosts() and
+    // getDragGhostRectsForTest() — computing them separately is how a drawn affordance drifts
+    // from the one a test pins (the same reasoning GraphEditor::buildVisibleCables() states).
+    juce::Rectangle<int> dragGhostRectFor(const DragOrigin& origin, int rowHeight) const;
     void paintDrawGhost(juce::Graphics& g);
 
     // ---- Tool cursors (built once per theme — never per mouse move) ----

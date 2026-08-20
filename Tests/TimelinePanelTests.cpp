@@ -1958,6 +1958,36 @@ TEST(TimelineToolStripTest, ButtonsMirrorTheActiveToolAndCarryTheirShortcutInThe
             << "exactly one button is lit: " << synth::ui::editToolName(tool);
 }
 
+// ---- Keyboard-focus routing (the "Cmd+X works everywhere but the tracks" regression) ----
+//
+// MainComponent::resolveEditSurface() reads the REAL focused component, so which component owns
+// focus is what decides where Cmd+X/C/V/D — and the lane's own Delete/Escape/P — are routed. The
+// two guards below pin the two halves of that: the lane can receive focus at all, and no tool
+// button takes it away. Neither is observable through the editSurfaceOverrideForTest_ path the
+// routing tests use, which is precisely why the hole shipped.
+
+TEST(TimelineToolStripTest, ClipLaneAcceptsKeyboardFocusSoSurfaceVerbsCanRoute) {
+    ToolPanelFixture f;
+    EXPECT_TRUE(f.panel.getClipLaneArea().getWantsKeyboardFocus())
+        << "juce::grabKeyboardFocus() (called from TimelineClipLaneArea::mouseDown) is a no-op "
+           "without this, so clicking a clip would leave focus wherever it was and every "
+           "per-surface verb would fall through to the graph";
+}
+
+TEST(TimelineToolStripTest, ToolButtonsNeverGrabKeyboardFocusFromTheEditSurfaces) {
+    ToolPanelFixture f;
+    for (auto tool : synth::ui::kAllEditTools) {
+        auto* button = f.panel.getToolButton(tool);
+        ASSERT_NE(button, nullptr);
+        EXPECT_FALSE(button->getWantsKeyboardFocus())
+            << "juce::Button opts into focus by default: " << synth::ui::editToolName(tool);
+        EXPECT_FALSE(button->getMouseClickGrabsKeyboardFocus())
+            << "picking a tool must not move focus off the clip lane, or the next Cmd+X goes to "
+               "the graph: "
+            << synth::ui::editToolName(tool);
+    }
+}
+
 // ---- Clipboard: the audio-field regression ----
 
 TEST(TimelineClipClipboardTest, CopyPasteRoundTripsEveryAudioFieldAndTheMuteFlag) {
