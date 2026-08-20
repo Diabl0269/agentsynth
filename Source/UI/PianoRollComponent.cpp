@@ -2,9 +2,11 @@
 #include "../AppUndoManager.h"
 #include "../Transport/TransportService.h"
 #include "Theme/AppLookAndFeel.h"
+#include "ToolCursors.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <memory>
 #include <set>
 
 namespace synth::ui {
@@ -35,6 +37,32 @@ bool isBlackKeyPitchClass(int pitchClass) noexcept {
     }
 }
 
+// Tolerance for the "is this cut strictly inside the note" / "does this paste still fit" beat
+// comparisons. Beats are doubles that have been through a snap multiply-divide, so an exact
+// comparison would reject a cut that IS on a grid line by a few ULPs.
+constexpr double kBeatEpsilon = 1.0e-9;
+
+// The themed icon each tool's cursor is rendered from (IconLibrary's table is ordered
+// independently of EditTool, so the mapping is spelled out rather than cast).
+synth::theme::Icon iconForTool(EditTool tool) noexcept {
+    using synth::theme::Icon;
+    switch (tool) {
+    case EditTool::Select:
+        return Icon::ToolSelect;
+    case EditTool::Split:
+        return Icon::ToolSplit;
+    case EditTool::Glue:
+        return Icon::ToolGlue;
+    case EditTool::Erase:
+        return Icon::ToolErase;
+    case EditTool::Mute:
+        return Icon::ToolMute;
+    case EditTool::Draw:
+        return Icon::ToolDraw;
+    }
+    return Icon::ToolSelect;
+}
+
 int medianPitchOf(const std::vector<synth::MidiNote>& notes) {
     if (notes.empty())
         return 60;
@@ -63,6 +91,10 @@ void PianoRollComponent::openClip(synth::ClipId id) {
     selection_.clear();
     // The line has to be re-announced against the new framing before it is drawn again.
     hasPlayheadX_ = false;
+    // The hovered cut belonged to a note in the OLD clip. (The clipboard deliberately survives —
+    // see copySelectedNotes.)
+    hasSplitPreview_ = false;
+    splitPreviewNote_ = {};
 
     if (doc_ == nullptr) {
         clipId_ = {};
@@ -92,6 +124,8 @@ void PianoRollComponent::closeRoll() {
     selection_.clear();
     dragMode_ = DragMode::None;
     hasPlayheadX_ = false;
+    hasSplitPreview_ = false;
+    splitPreviewNote_ = {};
     repaint();
 }
 
@@ -118,6 +152,12 @@ void PianoRollComponent::refreshFromDoc() {
     for (const auto& note : clip->notes)
         alive.push_back(note.id);
     selection_.retainOnly(alive);
+    // Same pruning for the hovered cut: a Split click removes nothing, but an undo (or another
+    // view's edit) can delete the note the preview line is drawn on.
+    if (hasSplitPreview_ && doc_->getNote(splitPreviewNote_) == nullptr) {
+        hasSplitPreview_ = false;
+        splitPreviewNote_ = {};
+    }
     repaint();
 }
 
@@ -258,6 +298,10 @@ void PianoRollComponent::paint(juce::Graphics& g) {
         return;
 
     paintGrid(g);
+    // Over the notes (both are about a note that is there or about to be), still under the keys
+    // column and the header so everything is clipped by the same gutter.
+    paintDrawPreview(g);
+    paintSplitPreview(g);
     // Before the keys column and the header, so both clip the line the same way they clip a note
     // that has scrolled off to the left.
     paintPlayhead(g);
@@ -395,10 +439,61 @@ void PianoRollComponent::paintNote(juce::Graphics& g, const synth::MidiNote& not
         noteColour.withMultipliedBrightness(0.5f + 0.7f * brightness).withAlpha(selected ? 0.95f : 0.8f);
 
     const auto bodyBounds = rect.toFloat().reduced(0.5f, 1.0f);
+
+    // A MUTED note reads as an empty outline: it is still there, still selectable, still exactly
+    // where it was — it just makes no sound, so it must not carry the same visual weight as a note
+    // that does. The flag is read from the DOC, never from the snapshot, because a muted note is
+    // excluded at flatten time and so is simply absent downstream (see MidiNote::muted). The
+    // selection halo survives the dimming: muting a selected note must not look like deselecting it.
+    if (note.muted) {
+        g.setColour(fill.withMultipliedAlpha(0.12f));
+        g.fillRoundedRectangle(bodyBounds, 2.0f);
+        g.setColour(selected ? accent : noteColour.withAlpha(0.55f));
+        g.drawRoundedRectangle(bodyBounds, 2.0f, selected ? 2.0f : 1.0f);
+        return;
+    }
+
     g.setColour(fill);
     g.fillRoundedRectangle(bodyBounds, 2.0f);
     g.setColour(selected ? accent : noteColour.darker(0.5f));
     g.drawRoundedRectangle(bodyBounds, 2.0f, selected ? 2.0f : 1.0f);
+}
+
+void PianoRollComponent::paintDrawPreview(juce::Graphics& g) {
+    if (dragMode_ != DragMode::DrawNew || drawLengthBeats_ <= 0.0)
+        return;
+    const auto* clip = doc_->getClip(clipId_);
+    if (clip == nullptr)
+        return;
+
+    juce::Colour accent = juce::Colours::cyan;
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        accent = lf->getTheme().colors.accent;
+
+    const auto rect = computeNoteRect(clip->startBeat + drawStartBeat_, drawLengthBeats_, drawPitch_);
+    const auto bounds = rect.toFloat().reduced(0.5f, 1.0f);
+    g.setColour(accent.withAlpha(0.25f));
+    g.fillRoundedRectangle(bounds, 2.0f);
+    g.setColour(accent.withAlpha(0.8f));
+    g.drawRoundedRectangle(bounds, 2.0f, 1.0f);
+}
+
+void PianoRollComponent::paintSplitPreview(juce::Graphics& g) {
+    if (!hasSplitPreview_)
+        return;
+    const auto* clip = doc_->getClip(clipId_);
+    const auto* note = doc_->getNote(splitPreviewNote_);
+    if (clip == nullptr || note == nullptr)
+        return;
+
+    juce::Colour accent = juce::Colours::cyan;
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        accent = lf->getTheme().colors.accent;
+
+    const float x = (float)beatToX(clip->startBeat + splitPreviewBeat_);
+    const float y = (float)yForPitch(note->pitch);
+    g.setColour(accent);
+    g.fillRect(x - 0.5f, y, 1.0f, (float)std::max(1, (int)pixelsPerSemitone_));
 }
 
 void PianoRollComponent::paintPlayhead(juce::Graphics& g) {
@@ -550,6 +645,8 @@ juce::Rectangle<int> PianoRollComponent::playheadStripFor(int x) const noexcept 
 
 void PianoRollComponent::requestRepaintStrip(juce::Rectangle<int> strip) { repaint(strip); }
 
+void PianoRollComponent::requestRepaintPreviewStrip(juce::Rectangle<int> strip) { repaint(strip); }
+
 void PianoRollComponent::setPlayheadBeat(double absoluteBeat) {
     if (!std::isfinite(absoluteBeat))
         return;
@@ -592,33 +689,47 @@ void PianoRollComponent::clampToClipWindow(double& start, double& length) const 
     length = juce::jlimit(0.0, clipLength - start, length);
 }
 
-void PianoRollComponent::createNoteAt(juce::Point<int> pos) {
-    const auto* clip = doc_->getClip(clipId_);
+bool PianoRollComponent::computeNewNoteAnchor(juce::Point<int> pos, bool floorToGrid, double& startOut,
+                                              double& lengthOut, int& pitchOut) const {
+    const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
     if (clip == nullptr)
-        return;
+        return false;
 
     // The new note is exactly ONE snap division long: quantise 1 bar -> a 1-bar note, 1/4 -> a
     // quarter. Snap Off has no division, so it falls back to the finest grid unit.
     const double grid = currentGridBeats();
     const double length = grid > 0.0 ? grid : kMinNoteLengthBeats;
     const double rawStart = xToBeat((double)pos.x) - clip->startBeat;
-    double start = snappedBeatAt(rawStart);
+    // Nearest division for the double-click (aiming at a line), the containing CELL for the Draw
+    // tool's pencil — see the declaration for why the two differ.
+    double start = rawStart;
+    if (grid > 0.0)
+        start = floorToGrid ? std::floor(rawStart / grid) * grid : snappedBeatAt(rawStart);
     // Snapping up past the clip's end would leave no room at all — step back one division instead
     // of silently creating nothing.
     if (grid > 0.0 && start >= clip->lengthBeats)
-        start = std::max(0.0, std::floor((clip->lengthBeats - 1.0e-9) / grid) * grid);
+        start = std::max(0.0, std::floor((clip->lengthBeats - kBeatEpsilon) / grid) * grid);
 
     double clampedLength = length;
     clampToClipWindow(start, clampedLength);
     if (clampedLength <= 0.0)
-        return; // no room left inside the clip
+        return false; // no room left inside the clip
 
-    const int pitch = juce::jlimit(0, 127, pitchForY(pos.y));
+    startOut = start;
+    lengthOut = clampedLength;
+    pitchOut = juce::jlimit(0, 127, pitchForY(pos.y));
+    return true;
+}
+
+void PianoRollComponent::commitNewNote(double startBeat, double lengthBeats, int pitch) {
+    if (doc_ == nullptr || !clipId_.isValid() || lengthBeats <= 0.0)
+        return;
+
     synth::NoteId newId;
-    auto mutate = [this, start, clampedLength, pitch, &newId] {
+    auto mutate = [this, startBeat, lengthBeats, pitch, &newId] {
         synth::MidiNote note;
-        note.startBeat = start;
-        note.lengthBeats = clampedLength;
+        note.startBeat = startBeat;
+        note.lengthBeats = lengthBeats;
         note.pitch = pitch;
         note.velocity = 100;
         note.channel = 1;
@@ -632,6 +743,14 @@ void PianoRollComponent::createNoteAt(juce::Point<int> pos) {
     if (newId.isValid())
         selection_.setSelection({newId});
     repaint();
+}
+
+void PianoRollComponent::createNoteAt(juce::Point<int> pos) {
+    double start = 0.0, length = 0.0;
+    int pitch = 60;
+    if (!computeNewNoteAnchor(pos, false, start, length, pitch))
+        return;
+    commitNewNote(start, length, pitch);
 }
 
 void PianoRollComponent::beginMoveOrResize(const NoteHit& hit, juce::Point<int> pos) {
@@ -699,6 +818,590 @@ void PianoRollComponent::endMarquee() {
     marqueeBaseSelection_.clear();
     marqueeAdditive_ = false;
     repaint();
+}
+
+//==============================================================================
+// ---- Edit tools ----
+
+void PianoRollComponent::setActiveTool(EditTool tool) {
+    if (activeTool_ == tool)
+        return;
+    activeTool_ = tool;
+
+    // Any gesture already in flight belonged to the OLD tool — finishing it under the new one
+    // would commit an edit the user has just said they no longer want to make.
+    dragMode_ = DragMode::None;
+    dragNotes_.clear();
+    previewDeltaBeats_ = 0.0;
+    previewDeltaPitch_ = 0;
+    previewDeltaVelocity_ = 0;
+    drawLengthBeats_ = 0.0;
+    clearSplitPreview();
+
+    applyToolCursor();
+    repaint();
+}
+
+void PianoRollComponent::handleToolMouseDown(juce::Point<int> pos) {
+    auto hit = hitTestNote(pos);
+
+    switch (activeTool_) {
+    case EditTool::Split:
+        if (hit)
+            performSplit(hit->id, pos);
+        return;
+    case EditTool::Glue:
+        if (hit)
+            performGlue(hit->id);
+        return;
+    case EditTool::Erase:
+        if (hit)
+            performErase(hit->id);
+        return;
+    case EditTool::Mute:
+        if (hit)
+            performMuteToggle(hit->id);
+        return;
+    case EditTool::Draw: {
+        if (hit)
+            return; // the pencil never redraws over a note that is already there
+        double start = 0.0, length = 0.0;
+        int pitch = 60;
+        if (!computeNewNoteAnchor(pos, true, start, length, pitch))
+            return;
+        // Armed, not committed: the note exists only as a preview until mouseUp, so a drag can
+        // still change its length and an abandoned gesture costs no undo step.
+        dragMode_ = DragMode::DrawNew;
+        mouseDownPos_ = pos;
+        drawStartBeat_ = start;
+        drawLengthBeats_ = length;
+        drawPitch_ = pitch;
+        repaint();
+        return;
+    }
+    case EditTool::Select:
+        return; // never routed here — mouseDown keeps the whole Select gesture table inline
+    }
+}
+
+std::optional<double> PianoRollComponent::splitBeatFor(const synth::MidiNote& note, int x) const {
+    const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
+    if (clip == nullptr)
+        return std::nullopt;
+
+    const double cut = snappedBeatAt(xToBeat((double)x) - clip->startBeat);
+    const double noteEnd = note.startBeat + note.lengthBeats;
+    if (cut - note.startBeat < kMinNoteLengthBeats - kBeatEpsilon)
+        return std::nullopt;
+    if (noteEnd - cut < kMinNoteLengthBeats - kBeatEpsilon)
+        return std::nullopt;
+    return cut;
+}
+
+void PianoRollComponent::performSplit(synth::NoteId id, juce::Point<int> pos) {
+    const auto* found = doc_ != nullptr ? doc_->getNote(id) : nullptr;
+    if (found == nullptr)
+        return;
+    // COPY the note before mutating: resizeNote re-positions it inside the clip's sorted vector,
+    // so the pointer above is only valid until the first write.
+    const synth::MidiNote original = *found;
+
+    const auto cut = splitBeatFor(original, pos.x);
+    if (!cut)
+        return; // the snapped cut is not strictly inside the note — a no-op, and no undo step
+
+    const double leftLength = *cut - original.startBeat;
+    const double rightLength = original.startBeat + original.lengthBeats - *cut;
+    const double cutBeat = *cut;
+
+    // Both halves in ONE undo step: a split the user has to undo twice is a split that looks
+    // broken. The right half inherits everything the left keeps — pitch, velocity, channel and
+    // `muted` — because a split divides a note, it does not author a new one.
+    auto mutate = [this, id, leftLength, rightLength, cutBeat, original] {
+        doc_->resizeNote(id, leftLength);
+        synth::MidiNote right;
+        right.startBeat = cutBeat;
+        right.lengthBeats = rightLength;
+        right.pitch = original.pitch;
+        right.velocity = original.velocity;
+        right.channel = original.channel;
+        right.muted = original.muted;
+        doc_->addNote(clipId_, right);
+    };
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+
+    // Selection is deliberately untouched: the left half keeps the id it had, so a selected note
+    // stays selected and the new right half starts unselected — the same shape as a clip split.
+    clearSplitPreview();
+    repaint();
+}
+
+std::optional<synth::NoteId> PianoRollComponent::glueCandidateFor(const synth::MidiNote& note) const {
+    const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
+    if (clip == nullptr)
+        return std::nullopt;
+
+    const double noteEnd = note.startBeat + note.lengthBeats;
+    std::optional<synth::NoteId> best;
+    double bestStart = 0.0;
+    for (const auto& other : clip->notes) {
+        if (other.id == note.id || other.pitch != note.pitch)
+            continue; // glue joins ONE voice: a neighbour at another pitch is a different line
+        if (other.startBeat < noteEnd - kBeatEpsilon)
+            continue; // starts before the clicked note ends — not a "next" note
+        if (!best || other.startBeat < bestStart) {
+            best = other.id;
+            bestStart = other.startBeat;
+        }
+    }
+    return best;
+}
+
+void PianoRollComponent::performGlue(synth::NoteId id) {
+    const auto* found = doc_ != nullptr ? doc_->getNote(id) : nullptr;
+    if (found == nullptr)
+        return;
+    const synth::MidiNote clicked = *found;
+
+    const auto candidate = glueCandidateFor(clicked);
+    if (!candidate)
+        return; // nothing to absorb — a no-op, and no undo step
+
+    const auto* nextNote = doc_->getNote(*candidate);
+    if (nextNote == nullptr)
+        return;
+    // The gap between them is BRIDGED (Cubase's behaviour): the survivor runs from the clicked
+    // note's start to the absorbed note's end, which is the only way to glue a staccato pair back
+    // into one sustained note. A glue that only closed touching notes would do nothing useful.
+    const double newLength = nextNote->startBeat + nextNote->lengthBeats - clicked.startBeat;
+    const auto absorbedId = *candidate;
+
+    auto mutate = [this, id, newLength, absorbedId] {
+        doc_->resizeNote(id, newLength);
+        doc_->removeNote(absorbedId);
+    };
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+
+    selection_.remove(absorbedId);
+    repaint();
+}
+
+void PianoRollComponent::performErase(synth::NoteId id) {
+    if (doc_ == nullptr || doc_->getNote(id) == nullptr)
+        return;
+    auto mutate = [this, id] { doc_->removeNote(id); };
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+
+    selection_.remove(id);
+    clearSplitPreview();
+    repaint();
+}
+
+void PianoRollComponent::performMuteToggle(synth::NoteId id) {
+    const auto* note = doc_ != nullptr ? doc_->getNote(id) : nullptr;
+    if (note == nullptr)
+        return;
+    const bool wanted = !note->muted;
+    auto mutate = [this, id, wanted] { doc_->setNoteMuted(id, wanted); };
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+    repaint();
+}
+
+//==============================================================================
+// ---- Split-tool hover preview (state-change gated; see the class comment) ----
+
+juce::Rectangle<int> PianoRollComponent::splitPreviewStrip() const {
+    const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
+    const auto* note = doc_ != nullptr ? doc_->getNote(splitPreviewNote_) : nullptr;
+    if (clip == nullptr || note == nullptr)
+        return {};
+    const int x = (int)std::llround(beatToX(clip->startBeat + splitPreviewBeat_));
+    const juce::Rectangle<int> strip(x - 2, yForPitch(note->pitch), 5, std::max(1, (int)pixelsPerSemitone_));
+    return strip.getIntersection(gridRegion());
+}
+
+void PianoRollComponent::updateSplitPreview(juce::Point<int> pos) {
+    synth::NoteId note;
+    double beat = 0.0;
+    bool has = false;
+
+    if (activeTool_ == EditTool::Split && doc_ != nullptr && clipId_.isValid() && pos.y >= kHeaderHeight &&
+        pos.x >= kKeysColumnWidth) {
+        if (auto hit = hitTestNote(pos)) {
+            if (const auto* hovered = doc_->getNote(hit->id)) {
+                if (auto cut = splitBeatFor(*hovered, pos.x)) {
+                    note = hit->id;
+                    beat = *cut;
+                    has = true;
+                }
+            }
+        }
+    }
+
+    // THE gate: a pointer sliding around inside one note at one snap division changes nothing, so
+    // it costs nothing. Only a different note or a different snapped cut repaints, and then only
+    // the two one-row strips involved.
+    if (has == hasSplitPreview_ && note == splitPreviewNote_ &&
+        (!has || std::abs(beat - splitPreviewBeat_) < kBeatEpsilon))
+        return;
+
+    const auto oldStrip = hasSplitPreview_ ? splitPreviewStrip() : juce::Rectangle<int>();
+    hasSplitPreview_ = has;
+    splitPreviewNote_ = note;
+    splitPreviewBeat_ = beat;
+    const auto newStrip = has ? splitPreviewStrip() : juce::Rectangle<int>();
+
+    const auto strip = oldStrip.isEmpty() ? newStrip : (newStrip.isEmpty() ? oldStrip : oldStrip.getUnion(newStrip));
+    if (!strip.isEmpty())
+        requestRepaintPreviewStrip(strip);
+}
+
+void PianoRollComponent::clearSplitPreview() {
+    if (!hasSplitPreview_)
+        return;
+    const auto strip = splitPreviewStrip();
+    hasSplitPreview_ = false;
+    splitPreviewNote_ = {};
+    splitPreviewBeat_ = 0.0;
+    if (!strip.isEmpty())
+        requestRepaintPreviewStrip(strip);
+}
+
+//==============================================================================
+// ---- Tool cursors ----
+
+void PianoRollComponent::rebuildToolCursors() {
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    for (auto tool : kAllEditTools) {
+        std::unique_ptr<juce::Drawable> icon;
+        if (lf != nullptr)
+            icon = lf->getIcon(iconForTool(tool));
+        // makeToolCursor is null-safe by contract (headless builds have no icon assets at all).
+        toolCursors_[(size_t)tool] = makeToolCursor(tool, icon.get());
+    }
+    toolCursorsBuilt_ = true;
+}
+
+juce::MouseCursor PianoRollComponent::cursorForActiveTool() {
+    if (!toolCursorsBuilt_)
+        rebuildToolCursors();
+    return toolCursors_[(size_t)activeTool_];
+}
+
+void PianoRollComponent::applyToolCursor() {
+    showingResizeCursor_ = false;
+    setMouseCursor(cursorForActiveTool());
+}
+
+void PianoRollComponent::updateHoverCursor(juce::Point<int> pos) {
+    if (activeTool_ != EditTool::Select)
+        return; // the other five tools act on a click — their cursor never changes on hover
+
+    bool onEdge = false;
+    if (doc_ != nullptr && clipId_.isValid() && pos.y >= kHeaderHeight && pos.x >= kKeysColumnWidth) {
+        if (auto hit = hitTestNote(pos))
+            onEdge = hit->onRightEdge;
+    }
+    if (onEdge == showingResizeCursor_)
+        return; // state-change gate again: no per-move cursor churn
+
+    showingResizeCursor_ = onEdge;
+    setMouseCursor(onEdge ? juce::MouseCursor(juce::MouseCursor::LeftRightResizeCursor) : cursorForActiveTool());
+}
+
+void PianoRollComponent::lookAndFeelChanged() {
+    // The cursors are rasterised from the THEMED icons, so a theme switch invalidates all six.
+    toolCursorsBuilt_ = false;
+    applyToolCursor();
+}
+
+//==============================================================================
+// ---- Note clipboard ----
+
+std::vector<PianoRollComponent::ClipboardNote> PianoRollComponent::captureSelectionEntries(double& earliestStartOut,
+                                                                                           double& spanBeatsOut) const {
+    std::vector<ClipboardNote> entries;
+    earliestStartOut = 0.0;
+    spanBeatsOut = 0.0;
+    if (doc_ == nullptr)
+        return entries;
+
+    std::vector<synth::MidiNote> notes;
+    for (auto id : selection_.getSelected())
+        if (const auto* note = doc_->getNote(id))
+            notes.push_back(*note);
+    if (notes.empty())
+        return entries;
+
+    double earliest = notes.front().startBeat;
+    double latestEnd = notes.front().startBeat + notes.front().lengthBeats;
+    for (const auto& note : notes) {
+        earliest = std::min(earliest, note.startBeat);
+        latestEnd = std::max(latestEnd, note.startBeat + note.lengthBeats);
+    }
+
+    entries.reserve(notes.size());
+    for (const auto& note : notes) {
+        ClipboardNote entry;
+        entry.offsetFromEarliest = note.startBeat - earliest;
+        entry.lengthBeats = note.lengthBeats;
+        entry.pitch = note.pitch;
+        entry.velocity = note.velocity;
+        entry.channel = note.channel;
+        entry.muted = note.muted;
+        entries.push_back(entry);
+    }
+
+    earliestStartOut = earliest;
+    spanBeatsOut = latestEnd - earliest;
+    return entries;
+}
+
+bool PianoRollComponent::copySelectedNotes() {
+    double earliest = 0.0, span = 0.0;
+    auto entries = captureSelectionEntries(earliest, span);
+    if (entries.empty())
+        return false;
+    noteClipboard_ = std::move(entries);
+    return true;
+}
+
+bool PianoRollComponent::canPasteNotes() const noexcept {
+    return !noteClipboard_.empty() && doc_ != nullptr && clipId_.isValid();
+}
+
+bool PianoRollComponent::buildPastedNotes(const std::vector<ClipboardNote>& entries, double anchorBeat,
+                                          std::vector<synth::MidiNote>& out) const {
+    const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
+    if (clip == nullptr || entries.empty() || !std::isfinite(anchorBeat))
+        return false;
+
+    const double clipLength = clip->lengthBeats;
+    bool placedAny = false;
+    for (const auto& entry : entries) {
+        const double start = anchorBeat + entry.offsetFromEarliest;
+        if (start < 0.0 || start >= clipLength - kBeatEpsilon)
+            continue; // outside the clip: notes only exist inside one
+        const double room = clipLength - start;
+        if (room < kMinNoteLengthBeats)
+            continue; // less than the editor's minimum note left — skipped, never shrunk below it
+
+        synth::MidiNote note;
+        note.startBeat = start;
+        note.lengthBeats = std::min(entry.lengthBeats, room);
+        note.pitch = entry.pitch;
+        note.velocity = entry.velocity;
+        note.channel = entry.channel;
+        note.muted = entry.muted;
+        out.push_back(note);
+        placedAny = true;
+    }
+    return placedAny;
+}
+
+bool PianoRollComponent::commitPastedNotes(const std::vector<synth::MidiNote>& notes) {
+    if (doc_ == nullptr || !clipId_.isValid() || notes.empty())
+        return false;
+
+    std::vector<synth::NoteId> added;
+    auto mutate = [this, &notes, &added] {
+        added.clear();
+        for (const auto& note : notes)
+            if (const auto id = doc_->addNote(clipId_, note); id.isValid())
+                added.push_back(id);
+    };
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+
+    if (added.empty())
+        return false;
+    // The pasted block becomes the selection — the user's next gesture is almost always aimed at
+    // what they just placed (drag it, transpose it, paste again further along).
+    selection_.setSelection(added);
+    repaint();
+    return true;
+}
+
+bool PianoRollComponent::pasteNotesAtPlayhead() {
+    if (!canPasteNotes())
+        return false;
+    const auto* clip = doc_->getClip(clipId_);
+    if (clip == nullptr)
+        return false;
+
+    // The playhead is an ABSOLUTE timeline beat; notes are clip-relative. A playhead parked
+    // outside the edited clip has no meaningful position inside it, so the block goes to the
+    // clip's start rather than nowhere.
+    double anchor = snappedBeatAt(playheadBeat_ - clip->startBeat);
+    if (!(anchor >= 0.0 && anchor < clip->lengthBeats))
+        anchor = 0.0;
+
+    std::vector<synth::MidiNote> notes;
+    buildPastedNotes(noteClipboard_, anchor, notes);
+    return commitPastedNotes(notes);
+}
+
+bool PianoRollComponent::duplicateSelectedNotes() {
+    double earliest = 0.0, span = 0.0;
+    const auto entries = captureSelectionEntries(earliest, span);
+    if (entries.empty() || span <= 0.0)
+        return false;
+
+    std::vector<synth::MidiNote> notes;
+    buildPastedNotes(entries, earliest + span, notes);
+    return commitPastedNotes(notes);
+}
+
+bool PianoRollComponent::cutSelectedNotes() {
+    if (!copySelectedNotes())
+        return false;
+
+    const auto ids = selection_.getSelected();
+    auto mutate = [this, ids] {
+        for (auto id : ids)
+            doc_->removeNote(id);
+    };
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+
+    selection_.clear();
+    clearSplitPreview();
+    repaint();
+    return true;
+}
+
+bool PianoRollComponent::selectAllNotes() {
+    const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
+    if (clip == nullptr || clip->notes.empty())
+        return false;
+
+    std::vector<synth::NoteId> ids;
+    ids.reserve(clip->notes.size());
+    for (const auto& note : clip->notes)
+        ids.push_back(note.id);
+    selection_.setSelection(ids);
+    repaint();
+    return true;
+}
+
+bool PianoRollComponent::repeatSelectedNotes(int count) {
+    if (count <= 0)
+        return false;
+    double earliest = 0.0, span = 0.0;
+    const auto entries = captureSelectionEntries(earliest, span);
+    if (entries.empty() || span <= 0.0)
+        return false;
+
+    std::vector<synth::MidiNote> notes;
+    for (int i = 1; i <= count; ++i) {
+        // STOP at the first block that lands entirely outside the clip rather than piling the
+        // remaining copies onto the last beat — a repeat that runs off the end simply repeats
+        // fewer times.
+        if (!buildPastedNotes(entries, earliest + span * (double)i, notes))
+            break;
+    }
+    return commitPastedNotes(notes);
+}
+
+//==============================================================================
+// ---- Arrow-key editing ----
+
+bool PianoRollComponent::nudgeSelectedNotes(int direction) {
+    const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
+    if (clip == nullptr)
+        return false;
+
+    std::vector<NoteOrigin> origins;
+    double minStart = 0.0, maxEnd = 0.0;
+    bool first = true;
+    for (auto id : selection_.getSelected()) {
+        const auto* note = doc_->getNote(id);
+        if (note == nullptr)
+            continue;
+        origins.push_back({id, note->startBeat, note->lengthBeats, note->pitch, note->velocity});
+        const double end = note->startBeat + note->lengthBeats;
+        if (first || note->startBeat < minStart)
+            minStart = note->startBeat;
+        if (first || end > maxEnd)
+            maxEnd = end;
+        first = false;
+    }
+    if (origins.empty())
+        return false;
+
+    // One grid step (a sixteenth when snap is off — the same floor a free-hand note gets), and ONE
+    // shared delta clamped so the whole block stays inside the clip. Clamping per note would
+    // silently squash a chord against the boundary instead of stopping it as a unit.
+    const double grid = currentGridBeats();
+    double delta = (grid > 0.0 ? grid : kMinNoteLengthBeats) * (double)direction;
+    delta = std::max(delta, -minStart);
+    delta = std::min(delta, clip->lengthBeats - maxEnd);
+
+    auto mutate = [this, origins, delta] {
+        for (const auto& origin : origins)
+            doc_->moveNote(origin.id, origin.startBeat + delta, origin.pitch);
+    };
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+
+    repaint();
+    return true; // consumed even when the clamp left nothing to do — the key WAS applicable
+}
+
+bool PianoRollComponent::transposeSelectedNotes(int semitones) {
+    if (doc_ == nullptr || !clipId_.isValid())
+        return false;
+
+    std::vector<NoteOrigin> origins;
+    int minPitch = 127, maxPitch = 0;
+    bool first = true;
+    for (auto id : selection_.getSelected()) {
+        const auto* note = doc_->getNote(id);
+        if (note == nullptr)
+            continue;
+        origins.push_back({id, note->startBeat, note->lengthBeats, note->pitch, note->velocity});
+        if (first || note->pitch < minPitch)
+            minPitch = note->pitch;
+        if (first || note->pitch > maxPitch)
+            maxPitch = note->pitch;
+        first = false;
+    }
+    if (origins.empty())
+        return false;
+
+    // Same shared-delta rule as the drag's pitch clamp: the interval between the selected notes is
+    // preserved, so a chord transposes as a chord and never collapses at the pitch extremes.
+    const int delta = juce::jlimit(-minPitch, 127 - maxPitch, semitones);
+
+    auto mutate = [this, origins, delta] {
+        for (const auto& origin : origins)
+            doc_->moveNote(origin.id, origin.startBeat, origin.pitch + delta);
+    };
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+
+    repaint();
+    return true;
 }
 
 bool PianoRollComponent::isQuantiseEnabled() const {
@@ -810,6 +1513,14 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
     if (pos.x < kKeysColumnWidth)
         return; // keys column: no virtual-keyboard preview in v1
 
+    // Everything below this line is the SELECT tool's gesture table. The other five tools act on
+    // the click alone and start no drag at all (see setActiveTool), so they never reach it — no
+    // modifier combination can turn an Erase click into a move.
+    if (activeTool_ != EditTool::Select) {
+        handleToolMouseDown(pos);
+        return;
+    }
+
     auto hit = hitTestNote(pos);
 
     if (hit && e.mods.isCommandDown() && !e.mods.isShiftDown()) {
@@ -862,6 +1573,19 @@ void PianoRollComponent::mouseDrag(const juce::MouseEvent& e) {
     }
 
     const auto pos = e.getPosition();
+
+    if (dragMode_ == DragMode::DrawNew) {
+        // The pencil's anchor never moves — only the length follows the pointer, snapped exactly
+        // the way a right-edge resize is, so drawing and then resizing a note feel identical.
+        const double grid = currentGridBeats();
+        const double minLen = grid > 0.0 ? grid : kMinNoteLengthBeats;
+        const double snappedEnd = snappedBeatAt(xToBeat((double)pos.x) - clip->startBeat);
+        double length = std::max(snappedEnd - drawStartBeat_, minLen);
+        length = std::min(length, std::max(0.0, clip->lengthBeats - drawStartBeat_));
+        drawLengthBeats_ = length;
+        repaint();
+        return;
+    }
 
     if (dragMode_ == DragMode::Move) {
         double anchorOriginalStart = 0.0;
@@ -937,6 +1661,18 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent&) {
         return;
     }
 
+    if (dragMode_ == DragMode::DrawNew) {
+        // A plain click and a drag commit through the SAME path: the click simply never changed
+        // the one-division length the press armed. One addNote, one undo step, note selected.
+        const double start = drawStartBeat_;
+        const double length = drawLengthBeats_;
+        const int pitch = drawPitch_;
+        dragMode_ = DragMode::None;
+        drawLengthBeats_ = 0.0;
+        commitNewNote(start, length, pitch);
+        return;
+    }
+
     if (dragMode_ == DragMode::Move && (std::abs(previewDeltaBeats_) > 1e-9 || previewDeltaPitch_ != 0)) {
         const auto notes = dragNotes_;
         const double delta = previewDeltaBeats_;
@@ -981,6 +1717,11 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent&) {
 void PianoRollComponent::mouseDoubleClick(const juce::MouseEvent& e) {
     if (doc_ == nullptr || !clipId_.isValid())
         return;
+    // Create-and-delete-by-double-click belongs to the SELECT tool. Under any other tool both
+    // clicks have already been handled as that tool's own single-click action, and adding a note
+    // on top of (say) a second Erase click would be a gesture nobody asked for.
+    if (activeTool_ != EditTool::Select)
+        return;
     const auto pos = e.getPosition();
     if (pos.y < kHeaderHeight || pos.x < kKeysColumnWidth)
         return;
@@ -1003,6 +1744,22 @@ void PianoRollComponent::mouseDoubleClick(const juce::MouseEvent& e) {
 
     createNoteAt(pos);
 }
+
+void PianoRollComponent::mouseMove(const juce::MouseEvent& e) {
+    const auto pos = e.getPosition();
+    updateSplitPreview(pos);
+    updateHoverCursor(pos);
+}
+
+void PianoRollComponent::mouseEnter(const juce::MouseEvent& e) {
+    // The cursor is set on ENTER (and on a tool change), never per move — six rasterised icons is
+    // not per-frame work.
+    applyToolCursor();
+    updateSplitPreview(e.getPosition());
+    updateHoverCursor(e.getPosition());
+}
+
+void PianoRollComponent::mouseExit(const juce::MouseEvent&) { clearSplitPreview(); }
 
 void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) {
     const bool command = e.mods.isCommandDown();
@@ -1118,6 +1875,20 @@ bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {
         selection_.clear();
         repaint();
         return true;
+    }
+
+    // Arrow keys edit the SELECTION and nothing else: with nothing selected they fall through, so
+    // the panel (and the graph behind it) keep whatever those keys mean there. Matched on the key
+    // CODE because juce::KeyPress::operator==(int) also requires no modifiers, which would miss
+    // Shift+Up. Digit keys are deliberately NOT handled here at all — tool switching belongs to
+    // the panel (see setActiveTool).
+    const int code = key.getKeyCode();
+    if (code == juce::KeyPress::leftKey || code == juce::KeyPress::rightKey)
+        return nudgeSelectedNotes(code == juce::KeyPress::rightKey ? 1 : -1);
+    if (code == juce::KeyPress::upKey || code == juce::KeyPress::downKey) {
+        // Shift is the octave jump, the same 12-semitone convention every DAW uses.
+        const int step = key.getModifiers().isShiftDown() ? 12 : 1;
+        return transposeSelectedNotes(code == juce::KeyPress::upKey ? step : -step);
     }
 
     return false;

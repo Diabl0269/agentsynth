@@ -13,9 +13,21 @@
 //      repaint seam, the Q button, and a snapshot smoke test. Driven by hand-built
 //      juce::MouseEvents against a bare TimelineDoc + AppUndoManager + PianoRollComponent — no
 //      TimelinePanelComponent needed.
+//   4. The edit TOOLS (Split / Glue / Erase / Mute / Draw) — each one's single-click gesture, its
+//      no-op cases (which must leave the undo stack alone), and the fact that none of them can
+//      start a Select-tool drag.
+//   5. The note CLIPBOARD — copy/cut/paste-at-playhead/duplicate/repeat/select-all, including the
+//      cross-clip paste the member clipboard exists for.
+//   6. ARROW-key editing — grid nudge, semitone/octave transpose, group clamping, and the
+//      fall-through contract when nothing is selected.
+//
+// Every test in 4-6 configures snap explicitly (never inherits a default), because these are
+// grid-sensitive assertions and a machine-local snap preference must never be able to decide
+// whether they pass.
 
 #include "../Source/AppUndoManager.h"
 #include "../Source/Timeline/TimelineDoc.h"
+#include "../Source/UI/EditTool.h"
 #include "../Source/UI/NoteSelectionModel.h"
 #include "../Source/UI/PianoRollComponent.h"
 #include "../Source/UI/TimelineViewState.h"
@@ -27,6 +39,7 @@ using synth::ClipId;
 using synth::NoteId;
 using synth::TimelineDoc;
 using synth::TrackKind;
+using synth::ui::EditTool;
 using synth::ui::NoteSelectionModel;
 using synth::ui::PianoRollComponent;
 using synth::ui::TimelineViewState;
@@ -194,17 +207,27 @@ TEST(NoteSelectionMarqueeTest, EmptyListYieldsNoHits) {
 namespace {
 
 // Counts every repaint the roll's LOCAL playhead asks for — the same paint-count pattern
-// TimelinePlayheadTests.cpp uses on the overlay, applied to the roll's own seam.
+// TimelinePlayheadTests.cpp uses on the overlay, applied to the roll's own seam. The Split tool's
+// hover preview has its OWN counter (its own seam), so a test can prove a hover repaints the
+// preview strip and NOTHING else.
 struct CountingRoll : PianoRollComponent {
     using PianoRollComponent::PianoRollComponent;
 
     int requests = 0;
     juce::Rectangle<int> lastStrip;
+    int previewRequests = 0;
+    juce::Rectangle<int> lastPreviewStrip;
 
     void requestRepaintStrip(juce::Rectangle<int> strip) override {
         ++requests;
         lastStrip = strip;
         PianoRollComponent::requestRepaintStrip(strip);
+    }
+
+    void requestRepaintPreviewStrip(juce::Rectangle<int> strip) override {
+        ++previewRequests;
+        lastPreviewStrip = strip;
+        PianoRollComponent::requestRepaintPreviewStrip(strip);
     }
 };
 
@@ -953,4 +976,846 @@ TEST(PianoRollInteractionTest, SnapshotSmoke) {
     EXPECT_FALSE(img.isNull());
     EXPECT_EQ(img.getWidth(), 900);
     EXPECT_EQ(img.getHeight(), 160);
+}
+
+// ============================================================================
+// 4. Edit tools
+// ============================================================================
+
+namespace {
+
+// A point inside the row for `pitch` at the given ABSOLUTE beat, through the roll's own mapping.
+// +5 lands in the middle of a 10 px row (kPixelsPerSemitone), so a click can never fall on the
+// boundary between two rows.
+juce::Point<float> pointAt(PianoRollComponent& roll, double absBeat, int pitch) {
+    return {(float)roll.beatToX(absBeat), (float)roll.yForPitch(pitch) + 5.0f};
+}
+
+// A no-button move: what mouseMove/mouseEnter get, as opposed to leftClick's pressed state.
+juce::MouseEvent hover(juce::Component& comp, juce::Point<float> pos) {
+    return makeRollMouseEvent(comp, pos, juce::ModifierKeys(), false, pos);
+}
+
+// Pins snap explicitly — never inherited from the fixture or from a machine-local preference.
+void setSnap(PianoRollFixture& f, TimelineViewState::Snap snap, bool enabled = true) {
+    f.state.snap = snap;
+    f.state.snapEnabled = enabled;
+}
+
+} // namespace
+
+TEST(PianoRollToolTest, DefaultsToSelectAndTakesTheToolFromItsOwner) {
+    PianoRollFixture f;
+    EXPECT_EQ(f.roll.getActiveTool(), EditTool::Select);
+    f.roll.setActiveTool(EditTool::Erase);
+    EXPECT_EQ(f.roll.getActiveTool(), EditTool::Erase);
+    f.roll.setActiveTool(EditTool::Select);
+    EXPECT_EQ(f.roll.getActiveTool(), EditTool::Select);
+}
+
+// The tool DIGITS belong to the panel: the roll must leave them unconsumed or the two would fight
+// over which tool is active (see setActiveTool).
+TEST(PianoRollToolTest, DigitKeysAreLeftForThePanel) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+    ASSERT_TRUE(f.doc.addNote(clipId, makeNote(1.0, 60)).isValid());
+
+    EXPECT_FALSE(f.roll.keyPressed(juce::KeyPress('1')));
+    EXPECT_FALSE(f.roll.keyPressed(juce::KeyPress('3')));
+    EXPECT_FALSE(f.roll.keyPressed(juce::KeyPress('8')));
+    EXPECT_EQ(f.roll.getActiveTool(), EditTool::Select) << "the roll never switches tool by itself";
+}
+
+// ---- Split ----
+
+TEST(PianoRollToolTest, SplitCutsANoteInTwoAndTheRightHalfInheritsEveryField) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    auto n = makeNote(1.0, 60, 2.0); // [1, 3)
+    n.velocity = 77;
+    n.channel = 3;
+    const auto id = f.doc.addNote(clipId, n);
+    ASSERT_TRUE(id.isValid());
+    ASSERT_TRUE(f.doc.setNoteMuted(id, true));
+    ASSERT_FALSE(f.undo.canUndo()) << "doc setup happened outside the undo manager";
+
+    f.roll.setActiveTool(EditTool::Split);
+    f.roll.mouseDown(leftClick(f.roll, pointAt(f.roll, 2.0, 60)));
+
+    const auto* clip = f.doc.getClip(clipId);
+    ASSERT_EQ(clip->notes.size(), 2u);
+    const auto& left = clip->notes[0]; // notes stay sorted by startBeat
+    const auto& right = clip->notes[1];
+
+    EXPECT_EQ(left.id, id) << "the left half keeps the original note's identity";
+    EXPECT_DOUBLE_EQ(left.startBeat, 1.0);
+    EXPECT_DOUBLE_EQ(left.lengthBeats, 1.0);
+    EXPECT_DOUBLE_EQ(right.startBeat, 2.0);
+    EXPECT_DOUBLE_EQ(right.lengthBeats, 1.0);
+    EXPECT_EQ(right.pitch, 60);
+    EXPECT_EQ(right.velocity, 77);
+    EXPECT_EQ(right.channel, 3);
+    EXPECT_TRUE(right.muted) << "a split divides a note — the right half inherits mute too";
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    ASSERT_EQ(f.doc.getClip(clipId)->notes.size(), 1u);
+    EXPECT_DOUBLE_EQ(f.doc.getNote(id)->lengthBeats, 2.0);
+    EXPECT_FALSE(f.undo.canUndo()) << "resize + add were ONE undo step";
+}
+
+TEST(PianoRollToolTest, SplitTooCloseToAnEdgeIsANoOpWithNoUndoStep) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    const auto id = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0)); // [1, 2): every snapped cut is an edge
+    ASSERT_TRUE(id.isValid());
+    f.roll.setActiveTool(EditTool::Split);
+
+    f.roll.mouseDown(leftClick(f.roll, pointAt(f.roll, 1.2, 60))); // snaps back to the start
+    f.roll.mouseDown(leftClick(f.roll, pointAt(f.roll, 1.8, 60))); // snaps up to the end
+
+    EXPECT_EQ(f.doc.getClip(clipId)->notes.size(), 1u) << "neither cut leaves room on both sides";
+    EXPECT_DOUBLE_EQ(f.doc.getNote(id)->lengthBeats, 1.0);
+    EXPECT_FALSE(f.undo.canUndo()) << "a no-op gesture writes no undo step";
+}
+
+// The hover preview follows the SNAPPED cut and repaints only when that cut actually moves — and
+// it repaints its own strip, never the playhead's.
+TEST(PianoRollToolTest, SplitHoverPreviewRepaintsOnlyWhenTheCutMoves) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+    ASSERT_TRUE(f.doc.addNote(clipId, makeNote(1.0, 60, 4.0)).isValid()); // [1, 5)
+
+    f.roll.setActiveTool(EditTool::Split);
+    EXPECT_EQ(f.roll.previewRequests, 0);
+
+    f.roll.mouseMove(hover(f.roll, pointAt(f.roll, 2.0, 60)));
+    EXPECT_TRUE(f.roll.hasSplitPreviewForTest());
+    EXPECT_DOUBLE_EQ(f.roll.getSplitPreviewBeatForTest(), 2.0);
+    EXPECT_EQ(f.roll.previewRequests, 1);
+
+    f.roll.mouseMove(hover(f.roll, pointAt(f.roll, 2.2, 60)));
+    EXPECT_EQ(f.roll.previewRequests, 1) << "same snapped cut — a moving pointer costs nothing";
+
+    f.roll.mouseMove(hover(f.roll, pointAt(f.roll, 3.0, 60)));
+    EXPECT_DOUBLE_EQ(f.roll.getSplitPreviewBeatForTest(), 3.0);
+    EXPECT_EQ(f.roll.previewRequests, 2);
+
+    f.roll.mouseMove(hover(f.roll, pointAt(f.roll, 6.0, 60))); // off the note entirely
+    EXPECT_FALSE(f.roll.hasSplitPreviewForTest());
+    EXPECT_EQ(f.roll.previewRequests, 3);
+
+    EXPECT_EQ(f.roll.requests, 0) << "hovering must never repaint the playhead's strip";
+}
+
+// ---- Glue ----
+
+TEST(PianoRollToolTest, GlueAbsorbsTheNextSamePitchNoteAndBridgesTheGap) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    const auto first = f.doc.addNote(clipId, makeNote(0.0, 60, 1.0));  // [0, 1)
+    const auto second = f.doc.addNote(clipId, makeNote(2.0, 60, 1.0)); // [2, 3), a 1-beat GAP away
+    ASSERT_TRUE(first.isValid());
+    ASSERT_TRUE(second.isValid());
+    f.roll.getSelectionForTest().setSelection({first, second});
+
+    f.roll.setActiveTool(EditTool::Glue);
+    f.roll.mouseDown(leftClick(f.roll, pointAt(f.roll, 0.5, 60)));
+
+    ASSERT_EQ(f.doc.getClip(clipId)->notes.size(), 1u);
+    ASSERT_NE(f.doc.getNote(first), nullptr);
+    EXPECT_DOUBLE_EQ(f.doc.getNote(first)->startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(f.doc.getNote(first)->lengthBeats, 3.0) << "the gap is bridged, Cubase-style";
+    EXPECT_EQ(f.doc.getNote(second), nullptr);
+    EXPECT_FALSE(f.roll.getSelectionForTest().contains(second)) << "the absorbed note leaves the selection";
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getClip(clipId)->notes.size(), 2u);
+    EXPECT_DOUBLE_EQ(f.doc.getNote(first)->lengthBeats, 1.0);
+    EXPECT_FALSE(f.undo.canUndo()) << "resize + remove were ONE undo step";
+}
+
+TEST(PianoRollToolTest, GlueIgnoresANeighbourAtADifferentPitch) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    const auto first = f.doc.addNote(clipId, makeNote(0.0, 60, 1.0));
+    const auto other = f.doc.addNote(clipId, makeNote(2.0, 64, 1.0)); // a different VOICE
+    ASSERT_TRUE(first.isValid());
+    ASSERT_TRUE(other.isValid());
+
+    f.roll.setActiveTool(EditTool::Glue);
+    f.roll.mouseDown(leftClick(f.roll, pointAt(f.roll, 0.5, 60)));
+
+    EXPECT_EQ(f.doc.getClip(clipId)->notes.size(), 2u);
+    EXPECT_DOUBLE_EQ(f.doc.getNote(first)->lengthBeats, 1.0);
+    EXPECT_NE(f.doc.getNote(other), nullptr);
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(PianoRollToolTest, GlueWithNothingToAbsorbWritesNoUndoStep) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    const auto only = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0));
+    ASSERT_TRUE(only.isValid());
+
+    f.roll.setActiveTool(EditTool::Glue);
+    f.roll.mouseDown(leftClick(f.roll, pointAt(f.roll, 1.5, 60)));
+
+    EXPECT_DOUBLE_EQ(f.doc.getNote(only)->lengthBeats, 1.0);
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+// ---- Erase ----
+
+TEST(PianoRollToolTest, EraseClickDeletesTheNoteInOneStep) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    const auto idA = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0));
+    const auto idB = f.doc.addNote(clipId, makeNote(3.0, 64, 1.0));
+    ASSERT_TRUE(idA.isValid());
+    ASSERT_TRUE(idB.isValid());
+    f.roll.getSelectionForTest().setSelection({idA});
+
+    f.roll.setActiveTool(EditTool::Erase);
+    f.roll.mouseDown(leftClick(f.roll, pointAt(f.roll, 1.5, 60)));
+
+    EXPECT_EQ(f.doc.getNote(idA), nullptr);
+    EXPECT_NE(f.doc.getNote(idB), nullptr) << "only the clicked note goes";
+    EXPECT_FALSE(f.roll.getSelectionForTest().contains(idA));
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getClip(clipId)->notes.size(), 2u);
+    EXPECT_FALSE(f.undo.canUndo());
+
+    // A click on empty grid erases nothing at all.
+    f.roll.mouseDown(leftClick(f.roll, pointAt(f.roll, 6.0, 60)));
+    EXPECT_EQ(f.doc.getClip(clipId)->notes.size(), 2u);
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+// ---- Mute ----
+
+TEST(PianoRollToolTest, MuteClickTogglesBothWays) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    const auto id = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0));
+    ASSERT_TRUE(id.isValid());
+    ASSERT_FALSE(f.doc.getNote(id)->muted);
+
+    f.roll.setActiveTool(EditTool::Mute);
+    f.roll.mouseDown(leftClick(f.roll, pointAt(f.roll, 1.5, 60)));
+    EXPECT_TRUE(f.doc.getNote(id)->muted);
+    EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 1.0) << "muting never moves a note";
+
+    f.roll.mouseDown(leftClick(f.roll, pointAt(f.roll, 1.5, 60)));
+    EXPECT_FALSE(f.doc.getNote(id)->muted) << "the same click un-mutes";
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_TRUE(f.doc.getNote(id)->muted) << "each toggle is its own undo step";
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_FALSE(f.doc.getNote(id)->muted);
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+// ---- Draw ----
+
+TEST(PianoRollToolTest, DrawDragCreatesANoteOfTheDraggedLength) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    const int pitch = f.roll.getFirstVisiblePitchForTest() - 2;
+    const auto anchor = pointAt(f.roll, 1.6, pitch); // inside the [1, 2) grid CELL
+    const auto dragged = pointAt(f.roll, 3.0, pitch);
+
+    f.roll.setActiveTool(EditTool::Draw);
+    f.roll.mouseDown(leftClick(f.roll, anchor));
+    EXPECT_DOUBLE_EQ(f.roll.getDrawPreviewLengthForTest(), 1.0) << "the press arms one division";
+    f.roll.mouseDrag(leftDrag(f.roll, dragged, anchor));
+    EXPECT_DOUBLE_EQ(f.roll.getDrawPreviewLengthForTest(), 2.0);
+    EXPECT_TRUE(f.doc.getClip(clipId)->notes.empty()) << "nothing is committed until the release";
+    f.roll.mouseUp(leftDrag(f.roll, dragged, anchor));
+
+    const auto* clip = f.doc.getClip(clipId);
+    ASSERT_EQ(clip->notes.size(), 1u);
+    EXPECT_DOUBLE_EQ(clip->notes[0].startBeat, 1.0) << "the pencil FLOORS to the cell it was pressed in";
+    EXPECT_DOUBLE_EQ(clip->notes[0].lengthBeats, 2.0);
+    EXPECT_EQ(clip->notes[0].pitch, pitch);
+    EXPECT_EQ(clip->notes[0].velocity, 100);
+    EXPECT_TRUE(f.roll.getSelectionForTest().contains(clip->notes[0].id));
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_TRUE(f.doc.getClip(clipId)->notes.empty()) << "the draw was ONE undo step";
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(PianoRollToolTest, DrawPlainClickCreatesAOneDivisionNote) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    const int pitch = f.roll.getFirstVisiblePitchForTest() - 2;
+    const auto pos = pointAt(f.roll, 1.6, pitch);
+    f.roll.setActiveTool(EditTool::Draw);
+    f.roll.mouseDown(leftClick(f.roll, pos));
+    f.roll.mouseUp(leftClick(f.roll, pos));
+
+    ASSERT_EQ(f.doc.getClip(clipId)->notes.size(), 1u);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->notes[0].startBeat, 1.0);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->notes[0].lengthBeats, 1.0);
+
+    // The division still decides the length: a sixteenth grid draws a sixteenth.
+    setSnap(f, TimelineViewState::Snap::Sixteenth);
+    const auto pos2 = pointAt(f.roll, 8.3, pitch - 3);
+    f.roll.mouseDown(leftClick(f.roll, pos2));
+    f.roll.mouseUp(leftClick(f.roll, pos2));
+    ASSERT_EQ(f.doc.getClip(clipId)->notes.size(), 2u);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->notes[1].startBeat, 8.25);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->notes[1].lengthBeats, 0.25);
+}
+
+TEST(PianoRollToolTest, DrawNeverRedrawsOverAnExistingNote) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+    const auto id = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0));
+    ASSERT_TRUE(id.isValid());
+
+    f.roll.setActiveTool(EditTool::Draw);
+    const auto pos = pointAt(f.roll, 1.5, 60);
+    f.roll.mouseDown(leftClick(f.roll, pos));
+    f.roll.mouseUp(leftClick(f.roll, pos));
+
+    EXPECT_EQ(f.doc.getClip(clipId)->notes.size(), 1u);
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+// ---- The tools disable the Select-tool drags entirely ----
+
+TEST(PianoRollToolTest, NonSelectToolsNeverMoveResizeOrMarquee) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    const auto id = f.doc.addNote(clipId, makeNote(2.0, 60, 1.0));
+    ASSERT_TRUE(id.isValid());
+    f.roll.getSelectionForTest().setSelection({id});
+
+    // Mute tool: press on the note, drag a long way, release. The note toggles and stays put.
+    f.roll.setActiveTool(EditTool::Mute);
+    const auto anchor = pointAt(f.roll, 2.5, 60);
+    const juce::Point<float> dragged(anchor.x + 160.0f, anchor.y - 40.0f);
+    f.roll.mouseDown(leftClick(f.roll, anchor));
+    f.roll.mouseDrag(leftDrag(f.roll, dragged, anchor));
+    f.roll.mouseUp(leftDrag(f.roll, dragged, anchor));
+
+    const auto* note = f.doc.getNote(id);
+    ASSERT_NE(note, nullptr);
+    EXPECT_DOUBLE_EQ(note->startBeat, 2.0) << "no move";
+    EXPECT_EQ(note->pitch, 60) << "no transpose";
+    EXPECT_DOUBLE_EQ(note->lengthBeats, 1.0) << "no resize";
+    EXPECT_TRUE(note->muted);
+
+    // Shift+drag on empty grid arms no marquee under a non-Select tool.
+    const auto emptyAnchor = pointAt(f.roll, 9.0, 55);
+    f.roll.mouseDown(leftClick(f.roll, emptyAnchor, juce::ModifierKeys::shiftModifier));
+    EXPECT_FALSE(f.roll.isMarqueeActiveForTest());
+    f.roll.mouseUp(leftClick(f.roll, emptyAnchor, juce::ModifierKeys::shiftModifier));
+}
+
+// Switching back to Select restores the whole original gesture table, double-click included.
+TEST(PianoRollToolTest, SelectToolKeepsItsDoubleClickCreateAndDelete) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    const int pitch = f.roll.getFirstVisiblePitchForTest() - 2;
+    const auto pos = pointAt(f.roll, 2.1, pitch);
+
+    // Under Erase, a double-click must not create anything.
+    f.roll.setActiveTool(EditTool::Erase);
+    f.roll.mouseDoubleClick(leftClick(f.roll, pos));
+    EXPECT_TRUE(f.doc.getClip(clipId)->notes.empty());
+
+    f.roll.setActiveTool(EditTool::Select);
+    f.roll.mouseDoubleClick(leftClick(f.roll, pos));
+    ASSERT_EQ(f.doc.getClip(clipId)->notes.size(), 1u);
+    const auto id = f.doc.getClip(clipId)->notes[0].id;
+    EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 2.0) << "the double-click still snaps to the NEAREST division";
+
+    f.roll.mouseDoubleClick(leftClick(f.roll, centreOf(f.roll.getNoteRect(id))));
+    EXPECT_TRUE(f.doc.getClip(clipId)->notes.empty());
+
+    // And the Select drag still moves.
+    const auto moved = f.doc.addNote(clipId, makeNote(2.0, 60, 1.0));
+    ASSERT_TRUE(moved.isValid());
+    const auto rect = f.roll.getNoteRect(moved);
+    const juce::Point<float> dragAnchor = centreOf(rect);
+    const juce::Point<float> dragTo(dragAnchor.x + 40.0f, dragAnchor.y);
+    f.roll.mouseDown(leftClick(f.roll, dragAnchor));
+    f.roll.mouseDrag(leftDrag(f.roll, dragTo, dragAnchor));
+    f.roll.mouseUp(leftDrag(f.roll, dragTo, dragAnchor));
+    EXPECT_DOUBLE_EQ(f.doc.getNote(moved)->startBeat, 3.0);
+}
+
+// ============================================================================
+// 5. Note clipboard
+// ============================================================================
+
+TEST(PianoRollClipboardTest, CopyThenPasteAtThePlayheadInsideTheClip) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    const auto idA = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0));
+    const auto idB = f.doc.addNote(clipId, makeNote(2.0, 64, 1.0));
+    ASSERT_TRUE(idA.isValid());
+    ASSERT_TRUE(idB.isValid());
+
+    EXPECT_FALSE(f.roll.canPasteNotes()) << "nothing copied yet";
+    EXPECT_FALSE(f.roll.copySelectedNotes()) << "and nothing selected to copy";
+
+    f.roll.getSelectionForTest().setSelection({idA, idB});
+    EXPECT_TRUE(f.roll.hasNoteSelection());
+    EXPECT_TRUE(f.roll.copySelectedNotes());
+    EXPECT_EQ(f.roll.getClipboardSizeForTest(), 2);
+    EXPECT_TRUE(f.roll.canPasteNotes());
+    EXPECT_FALSE(f.undo.canUndo()) << "copying is not a document edit";
+
+    f.roll.setPlayheadBeat(4.0);
+    EXPECT_TRUE(f.roll.pasteNotesAtPlayhead());
+
+    const auto* clip = f.doc.getClip(clipId);
+    ASSERT_EQ(clip->notes.size(), 4u);
+    EXPECT_DOUBLE_EQ(clip->notes[2].startBeat, 4.0) << "the earliest copied note lands ON the playhead";
+    EXPECT_EQ(clip->notes[2].pitch, 60);
+    EXPECT_DOUBLE_EQ(clip->notes[3].startBeat, 5.0) << "and the block keeps its internal shape";
+    EXPECT_EQ(clip->notes[3].pitch, 64);
+
+    const auto selected = f.roll.getSelectionForTest().getSelected();
+    ASSERT_EQ(selected.size(), 2u);
+    EXPECT_EQ(selected[0], clip->notes[2].id);
+    EXPECT_EQ(selected[1], clip->notes[3].id) << "the pasted block becomes the selection";
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getClip(clipId)->notes.size(), 2u) << "both pasted notes came back in ONE undo";
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(PianoRollClipboardTest, PasteWithThePlayheadOutsideTheClipAnchorsAtZero) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 4.0, 4.0, "Clip"); // absolute [4, 8)
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    const auto idA = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0));
+    ASSERT_TRUE(idA.isValid());
+    f.roll.getSelectionForTest().setSelection({idA});
+    ASSERT_TRUE(f.roll.copySelectedNotes());
+
+    f.roll.setPlayheadBeat(0.0); // well before the clip starts
+    EXPECT_TRUE(f.roll.pasteNotesAtPlayhead());
+
+    const auto* clip = f.doc.getClip(clipId);
+    ASSERT_EQ(clip->notes.size(), 2u);
+    EXPECT_DOUBLE_EQ(clip->notes[0].startBeat, 0.0) << "an out-of-clip playhead anchors the block at the clip start";
+}
+
+TEST(PianoRollClipboardTest, CopiedNotesPasteIntoADifferentClip) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipA = f.doc.addClip(trackId, 0.0, 8.0, "A");
+    const auto clipB = f.doc.addClip(trackId, 8.0, 8.0, "B");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipA);
+
+    const auto id = f.doc.addNote(clipA, makeNote(1.0, 60, 1.0));
+    ASSERT_TRUE(id.isValid());
+    f.roll.getSelectionForTest().setSelection({id});
+    ASSERT_TRUE(f.roll.copySelectedNotes());
+
+    // Switching clips clears the SELECTION but never the clipboard — that is the whole reason the
+    // clipboard is a member of the roll.
+    f.open(clipB);
+    EXPECT_TRUE(f.roll.getSelectionForTest().isEmpty());
+    EXPECT_TRUE(f.roll.canPasteNotes());
+
+    f.roll.setPlayheadBeat(10.0); // absolute -> clip-relative beat 2 inside B
+    EXPECT_TRUE(f.roll.pasteNotesAtPlayhead());
+
+    ASSERT_EQ(f.doc.getClip(clipB)->notes.size(), 1u);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipB)->notes[0].startBeat, 2.0);
+    EXPECT_EQ(f.doc.getClip(clipB)->notes[0].pitch, 60);
+    EXPECT_EQ(f.doc.getClip(clipA)->notes.size(), 1u) << "the source clip is untouched";
+}
+
+TEST(PianoRollClipboardTest, PasteClampsLengthAtTheClipEndAndSkipsNotesPastIt) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 4.0, "Clip"); // [0, 4)
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    const auto idA = f.doc.addNote(clipId, makeNote(0.0, 60, 2.0)); // offset 0, two beats long
+    const auto idB = f.doc.addNote(clipId, makeNote(3.0, 64, 1.0)); // offset 3
+    ASSERT_TRUE(idA.isValid());
+    ASSERT_TRUE(idB.isValid());
+    f.roll.getSelectionForTest().setSelection({idA, idB});
+    ASSERT_TRUE(f.roll.copySelectedNotes());
+
+    f.roll.setPlayheadBeat(3.0); // only one beat of room left
+    EXPECT_TRUE(f.roll.pasteNotesAtPlayhead());
+
+    const auto* clip = f.doc.getClip(clipId);
+    ASSERT_EQ(clip->notes.size(), 3u) << "the +3 offset lands past the clip's end and is skipped";
+    const auto pasted = f.roll.getSelectionForTest().getSelected();
+    ASSERT_EQ(pasted.size(), 1u);
+    const auto* note = f.doc.getNote(pasted[0]);
+    ASSERT_NE(note, nullptr);
+    EXPECT_DOUBLE_EQ(note->startBeat, 3.0);
+    EXPECT_DOUBLE_EQ(note->lengthBeats, 1.0) << "clamped to the clip's end rather than overrunning it";
+}
+
+TEST(PianoRollClipboardTest, DuplicatePlacesCopiesAfterTheSelectionSpan) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    const auto idA = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0)); // [1, 2)
+    const auto idB = f.doc.addNote(clipId, makeNote(2.0, 64, 2.0)); // [2, 4)  -> span 3
+    ASSERT_TRUE(idA.isValid());
+    ASSERT_TRUE(idB.isValid());
+    f.roll.getSelectionForTest().setSelection({idA, idB});
+
+    EXPECT_TRUE(f.roll.duplicateSelectedNotes());
+
+    const auto* clip = f.doc.getClip(clipId);
+    ASSERT_EQ(clip->notes.size(), 4u);
+    EXPECT_DOUBLE_EQ(clip->notes[2].startBeat, 4.0) << "immediately after the span's end";
+    EXPECT_EQ(clip->notes[2].pitch, 60);
+    EXPECT_DOUBLE_EQ(clip->notes[3].startBeat, 5.0);
+    EXPECT_EQ(clip->notes[3].pitch, 64);
+    EXPECT_DOUBLE_EQ(clip->notes[3].lengthBeats, 2.0);
+    EXPECT_EQ(f.roll.getSelectionForTest().size(), 2) << "the copies become the selection";
+    EXPECT_EQ(f.roll.getClipboardSizeForTest(), 0) << "duplicating never stomps the clipboard";
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getClip(clipId)->notes.size(), 2u) << "ONE undo step";
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(PianoRollClipboardTest, CutFillsTheClipboardAndDeletesInOneStep) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    const auto idA = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0));
+    const auto idB = f.doc.addNote(clipId, makeNote(2.0, 64, 1.0));
+    ASSERT_TRUE(idA.isValid());
+    ASSERT_TRUE(idB.isValid());
+    f.roll.getSelectionForTest().setSelection({idA, idB});
+
+    EXPECT_TRUE(f.roll.cutSelectedNotes());
+    EXPECT_TRUE(f.doc.getClip(clipId)->notes.empty());
+    EXPECT_TRUE(f.roll.getSelectionForTest().isEmpty());
+    EXPECT_EQ(f.roll.getClipboardSizeForTest(), 2);
+    EXPECT_TRUE(f.roll.canPasteNotes()) << "a cut is always pasteable";
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getClip(clipId)->notes.size(), 2u) << "the whole cut was ONE undo step";
+    EXPECT_FALSE(f.undo.canUndo());
+
+    // And what it captured really does paste back.
+    f.doc.clearNotes(clipId);
+    f.roll.setPlayheadBeat(8.0);
+    EXPECT_TRUE(f.roll.pasteNotesAtPlayhead());
+    ASSERT_EQ(f.doc.getClip(clipId)->notes.size(), 2u);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->notes[0].startBeat, 8.0);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->notes[1].startBeat, 9.0);
+}
+
+TEST(PianoRollClipboardTest, RepeatPlacesBackToBackBlocksAndStopsAtTheClipEnd) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    const auto id = f.doc.addNote(clipId, makeNote(0.0, 60, 1.0)); // span 1 beat
+    ASSERT_TRUE(id.isValid());
+    f.roll.getSelectionForTest().setSelection({id});
+
+    EXPECT_FALSE(f.roll.repeatSelectedNotes(0)) << "a zero repeat does nothing";
+    EXPECT_TRUE(f.roll.repeatSelectedNotes(2));
+
+    const auto* clip = f.doc.getClip(clipId);
+    ASSERT_EQ(clip->notes.size(), 3u);
+    EXPECT_DOUBLE_EQ(clip->notes[1].startBeat, 1.0);
+    EXPECT_DOUBLE_EQ(clip->notes[2].startBeat, 2.0) << "back to back, one span apart";
+    EXPECT_EQ(f.roll.getSelectionForTest().size(), 2) << "both copies end up selected";
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getClip(clipId)->notes.size(), 1u) << "the whole repeat was ONE undo step";
+    EXPECT_FALSE(f.undo.canUndo());
+
+    // Asking for more copies than fit stops at the boundary instead of piling them on the last beat.
+    f.roll.getSelectionForTest().setSelection({id});
+    EXPECT_TRUE(f.roll.repeatSelectedNotes(20));
+    const auto* filled = f.doc.getClip(clipId);
+    EXPECT_EQ(filled->notes.size(), 8u) << "beats 0..7 of an 8-beat clip, and no more";
+    EXPECT_DOUBLE_EQ(filled->notes.back().startBeat, 7.0);
+}
+
+TEST(PianoRollClipboardTest, SelectAllSelectsEveryNoteInTheOpenClip) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    EXPECT_FALSE(f.roll.selectAllNotes()) << "an empty clip has nothing to select";
+    EXPECT_FALSE(f.roll.hasNoteSelection());
+
+    ASSERT_TRUE(f.doc.addNote(clipId, makeNote(0.0, 60, 1.0)).isValid());
+    ASSERT_TRUE(f.doc.addNote(clipId, makeNote(1.0, 62, 1.0)).isValid());
+    ASSERT_TRUE(f.doc.addNote(clipId, makeNote(2.0, 64, 1.0)).isValid());
+
+    EXPECT_TRUE(f.roll.selectAllNotes());
+    EXPECT_EQ(f.roll.getSelectionForTest().size(), 3);
+    EXPECT_FALSE(f.undo.canUndo()) << "selecting is not a document edit";
+}
+
+// ============================================================================
+// 6. Arrow-key editing
+// ============================================================================
+
+TEST(PianoRollArrowKeyTest, LeftAndRightNudgeByTheGridDivision) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    const auto id = f.doc.addNote(clipId, makeNote(2.0, 60, 1.0));
+    ASSERT_TRUE(id.isValid());
+    f.roll.getSelectionForTest().setSelection({id});
+
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::rightKey)));
+    EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 3.0);
+    EXPECT_EQ(f.doc.getNote(id)->pitch, 60) << "a horizontal nudge never transposes";
+
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::leftKey)));
+    EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 2.0);
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 3.0) << "each press is its own undo step";
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 2.0);
+    EXPECT_FALSE(f.undo.canUndo());
+
+    // A finer grid nudges by that grid.
+    setSnap(f, TimelineViewState::Snap::Sixteenth);
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::rightKey)));
+    EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 2.25);
+}
+
+TEST(PianoRollArrowKeyTest, NudgeFallsBackToASixteenthWhenSnapIsOff) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter, /*enabled*/ false);
+    f.open(clipId);
+    ASSERT_DOUBLE_EQ(f.roll.getGridDivisionForTest(), 0.0);
+
+    const auto id = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0));
+    ASSERT_TRUE(id.isValid());
+    f.roll.getSelectionForTest().setSelection({id});
+
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::rightKey)));
+    EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 1.0 + PianoRollComponent::kMinNoteLengthBeats);
+}
+
+TEST(PianoRollArrowKeyTest, NudgeClampsTheWholeGroupAtBothClipEdges) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 4.0, "Clip"); // [0, 4)
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    const auto idA = f.doc.addNote(clipId, makeNote(0.0, 60, 1.0)); // [0, 1)
+    const auto idB = f.doc.addNote(clipId, makeNote(2.0, 64, 1.0)); // [2, 3)
+    ASSERT_TRUE(idA.isValid());
+    ASSERT_TRUE(idB.isValid());
+    f.roll.getSelectionForTest().setSelection({idA, idB});
+
+    // One step right fits exactly (the group's end reaches the clip's end)…
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::rightKey)));
+    EXPECT_DOUBLE_EQ(f.doc.getNote(idA)->startBeat, 1.0);
+    EXPECT_DOUBLE_EQ(f.doc.getNote(idB)->startBeat, 3.0);
+
+    // …and the next one is clamped to nothing: the key is still consumed, but nothing moves and no
+    // undo step is written. Crucially the group keeps its shape — the leading note does NOT slide
+    // on while the trailing one is stuck.
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::rightKey)));
+    EXPECT_DOUBLE_EQ(f.doc.getNote(idA)->startBeat, 1.0);
+    EXPECT_DOUBLE_EQ(f.doc.getNote(idB)->startBeat, 3.0);
+
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::leftKey)));
+    EXPECT_DOUBLE_EQ(f.doc.getNote(idA)->startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(f.doc.getNote(idB)->startBeat, 2.0);
+
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::leftKey)));
+    EXPECT_DOUBLE_EQ(f.doc.getNote(idA)->startBeat, 0.0) << "clamped at the clip's start";
+    EXPECT_DOUBLE_EQ(f.doc.getNote(idB)->startBeat, 2.0);
+
+    // Two real moves, two undo steps — the two clamped presses wrote none.
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_DOUBLE_EQ(f.doc.getNote(idA)->startBeat, 1.0);
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_DOUBLE_EQ(f.doc.getNote(idA)->startBeat, 0.0);
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(PianoRollArrowKeyTest, UpAndDownTransposeBySemitoneAndByOctaveWithShift) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    const auto id = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0));
+    ASSERT_TRUE(id.isValid());
+    f.roll.getSelectionForTest().setSelection({id});
+
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::upKey)));
+    EXPECT_EQ(f.doc.getNote(id)->pitch, 61);
+    EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 1.0) << "a transpose never moves a note in time";
+
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::downKey)));
+    EXPECT_EQ(f.doc.getNote(id)->pitch, 60);
+
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier, 0)));
+    EXPECT_EQ(f.doc.getNote(id)->pitch, 72) << "Shift is the octave jump";
+
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier, 0)));
+    EXPECT_EQ(f.doc.getNote(id)->pitch, 60);
+
+    // Four presses, four undo steps.
+    for (int i = 0; i < 4; ++i) {
+        ASSERT_TRUE(f.undo.canUndo());
+        f.undo.undo();
+    }
+    EXPECT_EQ(f.doc.getNote(id)->pitch, 60);
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(PianoRollArrowKeyTest, TransposeClampsTheWholeGroupAtThePitchExtremes) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+
+    const auto high = f.doc.addNote(clipId, makeNote(0.0, 120, 1.0));
+    const auto higher = f.doc.addNote(clipId, makeNote(1.0, 126, 1.0));
+    ASSERT_TRUE(high.isValid());
+    ASSERT_TRUE(higher.isValid());
+    f.roll.getSelectionForTest().setSelection({high, higher});
+
+    // +12 would take 126 past the top, so the SHARED delta is clamped to +1 — the interval between
+    // the two notes survives, which per-note clamping would have destroyed.
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier, 0)));
+    EXPECT_EQ(f.doc.getNote(high)->pitch, 121);
+    EXPECT_EQ(f.doc.getNote(higher)->pitch, 127);
+
+    // Same rule at the bottom.
+    const auto low = f.doc.addNote(clipId, makeNote(2.0, 1, 1.0));
+    const auto lower = f.doc.addNote(clipId, makeNote(3.0, 5, 1.0));
+    ASSERT_TRUE(low.isValid());
+    ASSERT_TRUE(lower.isValid());
+    f.roll.getSelectionForTest().setSelection({low, lower});
+
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier, 0)));
+    EXPECT_EQ(f.doc.getNote(low)->pitch, 0);
+    EXPECT_EQ(f.doc.getNote(lower)->pitch, 4);
+}
+
+TEST(PianoRollArrowKeyTest, ArrowKeysFallThroughWhenNothingIsSelected) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+    ASSERT_TRUE(f.doc.addNote(clipId, makeNote(1.0, 60, 1.0)).isValid());
+    ASSERT_TRUE(f.roll.getSelectionForTest().isEmpty());
+
+    EXPECT_FALSE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::leftKey)));
+    EXPECT_FALSE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::rightKey)));
+    EXPECT_FALSE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::upKey)));
+    EXPECT_FALSE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::downKey)));
+    EXPECT_FALSE(f.undo.canUndo());
 }
