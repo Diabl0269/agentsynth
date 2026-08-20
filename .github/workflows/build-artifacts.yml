@@ -353,6 +353,15 @@ jobs:
           path: artifacts
           merge-multiple: true
 
+      # Referenced by the marketing site's download page (P5-5): this filename must
+      # always exist and never be renamed without also updating the site's
+      # WINDOWS_CHECKSUMS_URL link target (SHA256SUMS.txt).
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          sha256sum * > SHA256SUMS.txt
+          cd ..
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
