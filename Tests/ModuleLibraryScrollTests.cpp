@@ -15,7 +15,10 @@
 namespace {
 
 // A panel short enough that the fully expanded library (9 sections, ~30 rows) overflows it.
-constexpr int kShortPanelHeight = 400;
+// Tall enough that ALL section headers alone fit (the timeline branch added a Plugins section,
+// whose header pushed the collapsed-everything total to 401), while staying far shorter than the
+// expanded content so the scroll premises above still bite.
+constexpr int kShortPanelHeight = 440;
 constexpr int kPanelWidth = 200;
 
 /** juce::ScrollBar notifies its listeners through an AsyncUpdater, so the offset only catches up

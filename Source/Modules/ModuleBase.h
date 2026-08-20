@@ -1,6 +1,9 @@
 #pragma once
 
 #include "VisualBuffer.h"
+#include <algorithm>
+#include <atomic>
+#include <cstring>
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
@@ -55,7 +58,28 @@ enum class ModuleType {
     MacroControl,
     SampleHold,
     EnvelopeFollower,
-    Comparator
+    Comparator,
+    // The device-input tap. A singleton in the patch (GraphEditor::isSingletonIOModule),
+    // paired with the "Audio Output" node, which is still a juce::AudioGraphIOProcessor.
+    AudioInput,
+    // Internal-only: the timeline's "Track In" node. Created by the add-track flow, never
+    // offered by the library and never authorable by a model.
+    TimelineMidiSource,
+    // Internal-only: the "Rec Tap" node an audio take records through. Auto-spliced in
+    // front of Audio Output by the record flow; same three exclusions as Track In (no library row,
+    // no replace-menu entry, never authorable — it names a file path on disk).
+    RecordTap,
+    // Internal-only: the timeline's "Track Audio" node — the disk-streaming playback end of
+    // an audio track. Created by the add-track flow, same three exclusions as Track In and Rec Tap
+    // (a model that could author one could point playback at a clip, and therefore a file, it
+    // chose).
+    TimelineAudioSource,
+    // Internal-only: a third-party VST3/AU plugin hosted as a module
+    // (synth::HostedPluginModule). Not offered by the library or the replace menu until the scan
+    // list and load UX ship, and never authorable by a model — its "state" carries an opaque
+    // byte blob handed straight to third-party code, which is the last thing that should arrive
+    // from a model.
+    HostedPlugin
 };
 
 class ModuleBase : public juce::AudioProcessor {
@@ -354,6 +378,37 @@ public:
 
     void setModuleName(const juce::String& name) { moduleName = name; }
 
+    // -- Node identity, readable from the audio thread ---------------------------------------
+    //
+    // The graph node's "uuid" property is the app's long-lived node identity (see
+    // AIStateMapper::graphToJSON): timeline track bindings and automation lanes key on it. It
+    // lives in a juce::NamedValueSet of juce::Strings, neither of which the audio thread may
+    // touch, so it is MIRRORED here into a fixed char buffer the moment it is assigned. A module
+    // that has to recognise itself in an audio-thread data structure (Track In matching a
+    // TimelineSnapshot::TrackInfo::bindingUuid) strcmps against getNodeUuid().
+    //
+    // Writers: the three places AIStateMapper writes node->properties["uuid"] — adoptUuidIfTrusted
+    // (trusted apply), graphToJSON's lazy generation, and applySnapshotPreservingNodes. Each
+    // mirrors into the processor immediately after setting the property, so the two never diverge.
+    //
+    // INVARIANT the lock-free read relies on: the uuid only ever transitions EMPTY -> value, and
+    // only while the node is not yet audio-visible (graphToJSON/adopt run on a node the caller
+    // just created, or with the graph callback lock held). It is never rewritten to a different
+    // value and never cleared, so an audio-thread reader either sees "" (and does nothing) or the
+    // final value — there is no torn intermediate. The release/acquire pair on nodeUuidSet_ is
+    // what publishes the buffer's bytes alongside the flag.
+    void setNodeUuid(const juce::String& uuid) {
+        const auto* utf8 = uuid.toRawUTF8();
+        const auto length = std::strlen(utf8);
+        const auto copied = std::min<std::size_t>(length, sizeof(nodeUuid_) - 1);
+        std::memcpy(nodeUuid_, utf8, copied);
+        std::memset(nodeUuid_ + copied, 0, sizeof(nodeUuid_) - copied);
+        nodeUuidSet_.store(true, std::memory_order_release);
+    }
+
+    // Audio-safe: no allocation, no juce::String, never null. Returns "" until a uuid is assigned.
+    const char* getNodeUuid() const noexcept { return nodeUuidSet_.load(std::memory_order_acquire) ? nodeUuid_ : ""; }
+
     virtual std::vector<ModulationTarget> getModulationTargets() const { return {}; }
     virtual juce::String getInputPortLabel(int channelIndex) const { return "In " + juce::String(channelIndex); }
     virtual juce::String getOutputPortLabel(int channelIndex) const { return "Out " + juce::String(channelIndex); }
@@ -530,6 +585,10 @@ protected:
 
 private:
     juce::String moduleName;
+    // 64 bytes including the NUL — matches TimelineSnapshot::kMaxStringBytes, so the strcmp
+    // against a snapshot's bindingUuid compares two identically-truncated copies. A uuid is 36.
+    char nodeUuid_[64] = {};
+    std::atomic<bool> nodeUuidSet_{false};
     std::unique_ptr<VisualBuffer> visualBuffer;
     juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedOutputLevel;
 

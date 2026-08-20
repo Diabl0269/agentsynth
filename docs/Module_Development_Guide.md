@@ -138,16 +138,30 @@ MyNewModule::MyNewModule()
 
 Adhering to these standards ensures the highest audio quality for Agent Synth modules:
 
-*   **Parameter Smoothing**: For any continuous parameters (e.g., gain, cutoff, frequency), use `juce::SmoothedValue<float>` to avoid clicks and zipper noise when parameters are automated or changed rapidly.
+*   **Parameter Smoothing (enforced)**: **Every `juce::AudioParameterFloat` a module owns must either be smoothed or carry a one-line comment justifying why it isn't.** Timeline automation writes a parameter's base value once per block (or per 64-sample slice) through `param->setValue(...)`, so anything that reaches a DSP coefficient raw steps at block rate and zippers. `Tests/AutomationZipperTests.cpp` enforces the *coverage* half of this: it derives its cases from the live module factory, so a new module — or a new float parameter on an existing one — is swept automatically, and a module the config table neither covers nor excludes fails the build.
+
     ```cpp
-    juce::SmoothedValue<float> smoothedGain;
-    // In prepareToPlay:
-    smoothedGain.reset (getSampleRate(), 0.05); // 50ms smoothing time
-    // In processBlock:
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedGain;
+
+    // In prepareToPlay — reset(), then SNAP to the current knob value. Snapping is what keeps a
+    // static render bit-identical to the un-smoothed version, which is the acceptance bar for
+    // touching an existing module (the golden .raw renders must not be regenerated).
+    smoothedGain.reset (sampleRate, 0.01);                 // 10 ms: an anti-click gain ramp
+    smoothedGain.setCurrentAndTargetValue (*myGainParam);
+
+    // In processBlock — retarget once per block, consume per sample.
     smoothedGain.setTargetValue (*myGainParam);
-    float currentGain = smoothedGain.getNextValue();
-    // ... apply currentGain to audio
+    for (int i = 0; i < numSamples; ++i)
+        data[i] *= smoothedGain.getNextValue();
     ```
+
+    Ramp times in use: **5 ms** for filter cutoff/resonance/drive, **10 ms** for gains and levels, **20 ms** for EQ coefficients and envelope sustain, **50 ms** for delay times and LFO rates. Where the underlying DSP object only takes a parameter once per block (`juce::dsp::Compressor::setThreshold`, `juce::dsp::Chorus::setCentreDelay`, a biquad coefficient set), advance the smoother a block at a time instead — `getCurrentValue()` before the call and `skip(numSamples)` after.
+
+    Legitimate reasons **not** to smooth, each of which belongs in a comment next to the read:
+    *   **Frequencies and rates** (oscillator detune, LFO rate, S&H clock, sampler playback pitch): a step changes a phase *increment*, and the phase itself stays continuous, so there is no discontinuity.
+    *   **Detector time constants** (compressor/limiter attack & release, envelope-follower attack & release): a step changes how fast a follower tracks, never the current gain.
+    *   **Values consulted only at a discrete event** (sequencer BPM and gate length, sampler grain size / density / spray, wavetable retrigger phase, LFO glide): they shape the next event, not the samples between events.
+    *   **Parameters the wrapped DSP object already smooths internally** — check before adding a second smoother, which only adds lag. `juce::Reverb` smooths all five of its parameters; `juce::dsp::Chorus`/`Phaser` smooth feedback and mix (`DryWetMixer`) but *not* centre delay / centre frequency.
 
 *   **Anti-Aliased Oscillators**: For waveforms with sharp edges (Square, Saw), use anti-aliasing techniques like PolyBLEP or band-limited synthesis to prevent aliasing artifacts at higher frequencies. JUCE's `juce::dsp::Oscillator` can handle this automatically if configured correctly.
 

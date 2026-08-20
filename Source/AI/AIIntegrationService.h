@@ -8,6 +8,12 @@
 #include <memory>
 #include <vector>
 
+#if SYNTH_ENABLE_TIMELINE
+#include "../Timeline/ArrangementContext.h"
+#include "../Timeline/TimelineOps.h"
+#include "../Transport/TransportService.h"
+#endif
+
 class AppUndoManager; // Forward declaration — the service only holds a non-owning pointer.
 
 namespace synth {
@@ -42,6 +48,88 @@ public:
      * installs the real provider, so a value set first must not be lost.
      */
     void setAuthToken(const juce::String& token);
+
+#if SYNTH_ENABLE_TIMELINE
+    /**
+     * @brief Installs (or clears) the timeline/transport this service reads for arrangement
+     *        context. Non-owning — MainComponent owns both for the app's lifetime.
+     *
+     * Mirrors setProvider()/setUndoManager(): a plain pointer setter, safe to call with either
+     * argument null (arrangement context is then simply omitted from the outgoing request, same
+     * as an empty TimelineDoc would produce).
+     */
+    void setTimelineContext(const TimelineDoc* doc, const TransportService* transport) {
+        timelineDoc = doc;
+        transportService = transport;
+        refreshSystemPrompt(); // the timeline tool section is gated on context being present
+    }
+
+    /**
+     * @brief Switches the LOCAL model's timeline/automation authoring on or off — the runtime
+     *        "Show timeline" preference's AI half, driven by MainComponent.
+     *
+     * On (and with a timeline context installed): the system prompt teaches the `timelineOps`
+     * grammar, the structured-output schema handed to the provider grows an optional
+     * `timelineOps` property (AIStateMapper::getPatchSchemaWithTimelineOps), and the outgoing
+     * request's context gains an "Automation targets" section (the (nodeUuid, paramId) pairs
+     * writeLane needs — see buildAutomationTargetsSection). Off: prompt, schema and context are
+     * byte-identical to the pre-timeline behaviour. Extraction/preview/apply stay wired either
+     * way — they act on what a response actually carries, and the Apply gate is the user's.
+     */
+    void setTimelineToolsEnabled(bool enabled) {
+        if (timelineToolsEnabled == enabled)
+            return;
+        timelineToolsEnabled = enabled;
+        refreshSystemPrompt();
+    }
+    bool areTimelineToolsEnabled() const { return timelineToolsEnabled; }
+
+    // -- Timeline operations -----------------------------------------------------------------
+    // The write half of the timeline seam, and a deliberate mirror of the patch card's flow:
+    // extract -> validate (untrusted) -> preview to the user -> the user clicks Apply -> apply.
+    // A timelineOps envelope is a SIBLING of a patch suggestion, never nested inside one — a
+    // "timeline" key inside patch JSON stays refused by validatePatch forever. A single response
+    // may legitimately carry both, and each half gets its own gate and its own button.
+
+    /**
+     * @brief The timelineOps envelope carried by a model response, or a void var if it has none.
+     *
+     * Runs exactly the same extraction applyPatch() does (extractJsonFromResponse: fenced block,
+     * bare braces, or the whole body), then hands back the parsed ROOT — envelope and patch share
+     * one JSON object when the model sends both, so this is the same var the patch path parses.
+     * Static and public for the same reason extractJsonFromResponse is: a harness or a test can
+     * reproduce the real extraction rather than approximate it.
+     */
+    static juce::var extractTimelineOps(const juce::String& response);
+
+    /** True once MainComponent has wired the live timeline in (setTimelineContext). Without it
+     *  there is nothing to validate against, and timeline suggestions are not offered at all. */
+    bool hasTimelineContext() const { return timelineDoc != nullptr; }
+
+    /**
+     * @brief Validates an envelope against the live timeline + graph WITHOUT applying it.
+     *
+     * The preview step: on success the result's previewText is what the chat card shows the user
+     * before they agree to anything. Fails (applying nothing, as always) when no timeline context
+     * is installed.
+     */
+    TimelineOpsResult previewTimelineOps(const juce::var& envelope) const;
+
+    /**
+     * @brief Installed by the app-level owner (MainComponent) to route an Apply back to
+     *        `TimelineOps::apply` with the real doc, graph and undo manager.
+     *
+     * The service holds the timeline only as a CONST pointer (it is a context reader), and
+     * it owns no undo manager for the timeline — so the host supplies the write path, exactly as
+     * AIChatComponent supplies its own urlOpener. With no callback installed, applyTimelineOps()
+     * reports that it cannot apply rather than silently doing nothing.
+     */
+    using TimelineOpsApplyCallback = std::function<TimelineOpsResult(const juce::var& envelope)>;
+    void setTimelineOpsApplyCallback(TimelineOpsApplyCallback callback) { timelineOpsApply = std::move(callback); }
+
+    /** @brief Applies a previously previewed envelope through the host callback. One undo step. */
+    TimelineOpsResult applyTimelineOps(const juce::var& envelope);
+#endif
 
     /**
      * @brief Sets (or clears) the conversation id forwarded to the active provider's
@@ -238,7 +326,46 @@ private:
     bool lastPatchModeRepaired = false;
     juce::ListenerList<Listener> listeners;
 
+#if SYNTH_ENABLE_TIMELINE
+    // Non-owning, installed post-construction via setTimelineContext() — see its doc comment.
+    // Either or both may be null (a SYNTH_ENABLE_TIMELINE=OFF build never declares these members
+    // at all, and buildPatchAugmentedContent()'s arrangement section is #if-gated out).
+    const TimelineDoc* timelineDoc = nullptr;
+    const TransportService* transportService = nullptr;
+
+    // The host's write path, installed by MainComponent — see setTimelineOpsApplyCallback().
+    TimelineOpsApplyCallback timelineOpsApply;
+
+    // The runtime switch behind setTimelineToolsEnabled(). Off by default: the timeline prompt
+    // section, schema extension and targets context only exist once the app explicitly opts in.
+    bool timelineToolsEnabled = false;
+
+    // The (nodeUuid, paramId, range) inventory a `writeLane` op needs — the model cannot name a
+    // node it was never told about. Uuids appear here ON PURPOSE, despite ArrangementContext's
+    // no-uuid rule: that rule keeps identifiers out of the human-readable SUMMARY (where a display
+    // name serves better and a leak buys nothing); this section is the ADDRESSING channel without
+    // which the writeLane grammar is unusable. A node uuid is random per-node identity — never a
+    // file path, plugin identifier or factory key — and validate() only accepts pairs that resolve
+    // against the live graph anyway.
+    juce::String buildAutomationTargetsSection() const;
+#endif
+
+    // True while the timeline tool surface should be offered to the model: the switch is on AND
+    // a timeline context is installed. Always false in a SYNTH_ENABLE_TIMELINE=OFF build.
+    bool timelineToolsActive() const {
+#if SYNTH_ENABLE_TIMELINE
+        return timelineToolsEnabled && hasTimelineContext();
+#else
+        return false;
+#endif
+    }
+
     void initSystemPrompt();
+
+    /** The full system-message text — initSystemPrompt() pushes it, refreshSystemPrompt() swaps it
+     *  into an existing history in place (mid-conversation toggles must not clear the chat). */
+    juce::String buildSystemPrompt() const;
+    void refreshSystemPrompt();
 
     /**
      * @brief Builds the patch-augmented request content for a user message, without mutating chatHistory.

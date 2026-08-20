@@ -43,6 +43,10 @@ public:
     void prepareToPlay(double sampleRate, int /*samplesPerBlock*/) override {
         currentSampleRate = sampleRate;
         shSmoother.reset(sampleRate, 0.05); // 50ms default ramp for smooth glide
+        // Level scales the emitted CV directly, so an automated step steps every destination
+        // downstream. Snapped at prepare so a static render is unchanged.
+        smoothedLevel.reset(sampleRate, 0.01);
+        smoothedLevel.setCurrentAndTargetValue(levelParam->get());
     }
 
     void releaseResources() override {}
@@ -121,11 +125,14 @@ public:
             rate = 1.0f / ((60.0 / bpm) * subdivision);
         }
 
+        // Rate is a frequency: stepping it changes the phase increment while the phase itself
+        // stays continuous, so it cannot click. Deliberately not smoothed.
         float phaseIncrement = rate / (float)currentSampleRate;
-        float level = levelParam->get();
+        smoothedLevel.setTargetValue(levelParam->get());
         int shape = shapeParam->getIndex();
 
         for (int sample = 0; sample < buffer.getNumSamples(); ++sample) {
+            const float level = smoothedLevel.getNextValue();
             float currentSample = 0.0f;
 
             switch (shape) {
@@ -157,6 +164,8 @@ public:
                     // Trigger new random value
                     lastRandomSample = (random.nextFloat() * 2.0f) - 1.0f;
 
+                    // Glide is read only at this S&H step edge, where it re-times the ramp to the
+                    // next held value — a discrete event, nothing to smooth.
                     float glideValue = glideParam->get();
                     if (glideValue <= 0.0f) {
                         shSmoother.setCurrentAndTargetValue(lastRandomSample);
@@ -209,4 +218,5 @@ private:
     float lastRandomSample = 0.0f;
     juce::Random random;
     juce::LinearSmoothedValue<float> shSmoother;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedLevel;
 };

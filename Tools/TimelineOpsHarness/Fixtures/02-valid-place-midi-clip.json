@@ -1,0 +1,16 @@
+{
+  "name": "valid-place-midi-clip",
+  "description": "A real base64-encoded PPQ Standard MIDI File (type 1, 2 tracks, 17 notes each — generated with MidiClipFile::exportClip, see TL8-5 report for the generator) placed with placeMidiClip.",
+  "kind": "timelineOps",
+  "expectedValid": true,
+  "expectedMessageContains": "",
+  "expectedPreviewContains": "places 2 MIDI clips (34 notes) from a .mid blob at beat 0 on \"Bass\"",
+  "payload": {
+    "timelineOps": [
+      { "op": "addTrack", "kind": "midi", "name": "Bass" },
+      { "op": "placeMidiClip", "track": "Bass", "startBeat": 0,
+        "midBase64": "TVRoZAAAAAYAAQACA8BNVHJrAAAAnQCQJGSDYIAkAACQJWSDYIAlAACQJmSDYIAmAACQJ2SDYIAnAACQKGSDYIAoAACQKWSDYIApAACQKmSDYIAqAACQK2SDYIArAACQLGSDYIAsAACQLWSDYIAtAACQLmSDYIAuAACQL2SDYIAvAACQJGSDYIAkAACQJWSDYIAlAACQJmSDYIAmAACQJ2SDYIAnAACQKGSDYIAoAAD/LwBNVHJrAAAAnQCQPGSDYIA8AACQPWSDYIA9AACQPmSDYIA+AACQP2SDYIA/AACQQGSDYIBAAACQQWSDYIBBAACQQmSDYIBCAACQQ2SDYIBDAACQRGSDYIBEAACQRWSDYIBFAACQRmSDYIBGAACQR2SDYIBHAACQPGSDYIA8AACQPWSDYIA9AACQPmSDYIA+AACQP2SDYIA/AACQQGSDYIBAAAD/LwA="
+      }
+    ]
+  }
+}

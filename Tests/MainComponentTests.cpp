@@ -244,12 +244,20 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
     // shortcut table — Sparkle's own convention is a menu-only "Check for Updates…" item with no
     // keyboard shortcut, so the "keypress fires and nothing happens" risk this invariant guards
     // against doesn't apply to it.
-    auto expectedCommandCount = shortcuts.getActionIds().size();
+    auto expectedActions = shortcuts.getActionIds();
+#if !SYNTH_ENABLE_TIMELINE
+    // toggleTimelinePanel keeps its shortcut-table row in every build (rebindable defaults are
+    // compile-independent) but registers no command when the flag is off — the panel it drives is
+    // compiled out, so the fires-silently risk this invariant guards doesn't apply. togglePlayback
+    // stays registered-but-inactive in OFF builds by deliberate choice, so it stays here.
+    expectedActions.removeString("toggleTimelinePanel");
+#endif
+    auto expectedCommandCount = expectedActions.size();
 #if JUCE_MAC
     expectedCommandCount += 1;
 #endif
     EXPECT_EQ(commands.size(), expectedCommandCount);
-    for (const auto& actionId : shortcuts.getActionIds())
+    for (const auto& actionId : expectedActions)
         EXPECT_TRUE(commands.contains(AppCommands::getCommandForAction(actionId)))
             << actionId << " is bindable but has no registered command";
 

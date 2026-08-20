@@ -1,8 +1,10 @@
 #pragma once
 
+#include "../Plugin/Hosting/HostedPluginBackend.h"
 #include "../SnippetManager.h"
 #include "Theme/AppLookAndFeel.h"
 #include "UIAnimation.h"
+#include <algorithm>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 #include <optional>
@@ -17,10 +19,13 @@ class ModuleLibraryComponent
 public:
     /** What a row in the sidebar is, which decides how it paints and what a click does. */
     enum class RowKind {
-        Header,   // category title — clicking it collapses/expands the section
-        Module,   // draggable module name
-        Snippet,  // draggable saved group (issue #156)
-        EmptyHint // non-interactive placeholder, e.g. "No snippets yet"
+        Header,    // category title — clicking it collapses/expands the section
+        SubHeader, // non-interactive sub-label inside a section, e.g. a plugin format group ("VST3")
+        Module,    // draggable module name
+        Snippet,   // draggable saved group (issue #156)
+        Plugin,    // draggable scanned third-party plugin
+        Action,    // clickable command row, e.g. "Scan for plugins…"
+        EmptyHint  // non-interactive placeholder, e.g. "No snippets yet"
     };
 
     struct Entry {
@@ -29,6 +34,8 @@ public:
         RowKind kind = RowKind::Module;
         juce::String section; // text of the header this row lives under ("" for headers)
         int moduleCount = 0;  // Snippet rows only — shown as a count suffix
+        juce::String detail;  // Plugin rows only — the format tag drawn on the right ("VST3")
+        int pluginUid = 0;    // Plugin rows only — completes the identity the drag payload carries
     };
 
     // ---- Row geometry (pixels) ----
@@ -47,6 +54,10 @@ public:
     };
 
     static constexpr const char* kSnippetsHeader = "Snippets";
+    static constexpr const char* kPluginsHeader = "Plugins";
+    /** The one row the Plugins section always has: the scan trigger, and — when nothing has been
+     *  scanned yet — the only thing in the section, so it doubles as the empty-state hint. */
+    static constexpr const char* kScanPluginsRowText = "Scan for plugins...";
 
     ModuleLibraryComponent() {
         // The flat entry list is rebuilt rather than assigned literally, because it now has to be
@@ -146,6 +157,61 @@ public:
     juce::String getSearchText() const { return searchEditor.getText(); }
 
     bool isSearchActive() const { return normalisedSearchQuery(searchQuery).isNotEmpty(); }
+
+    // -------------------------------------------------------------------------
+    // Plugins
+    //
+    // The sidebar knows nothing about scanning: it is handed a list of identities and hands back
+    // two callbacks. That keeps PluginScanService (Core, background threads, child processes) out of
+    // a GUI component entirely, and it is why this section is exercisable headlessly — a test calls
+    // setPlugins() and activateRow() without a scan ever happening.
+    //
+    // A row carries the IDENTITY (format + uid + name), never a file path: the drag payload is read
+    // by whatever component the user drops on, and a path on that channel would undo the whole point
+    // of PluginIdentity. Resolving identity -> binary stays inside the scan list.
+    // -------------------------------------------------------------------------
+
+    /** Replaces the Plugins section contents. Called by the owner on startup and after every scan. */
+    void setPlugins(const std::vector<synth::PluginIdentity>& newPlugins) {
+        plugins = newPlugins;
+        rebuildEntries();
+        clampHoverToVisibleRow();
+        updateScrollBar();
+        repaint();
+    }
+
+    int getPluginCount() const noexcept { return (int)plugins.size(); }
+
+    /** Fired when the user clicks the "Scan for plugins..." row. */
+    std::function<void()> onScanPluginsRequested;
+
+    /** Fired when the user clicks (rather than drags) a plugin row — the owner adds the module at a
+     *  sensible canvas position. Dragging goes through the DragAndDrop payload instead. */
+    std::function<void(const synth::PluginIdentity&)> onPluginActivated;
+
+    /** Performs the click action for the row at `index`: fires the scan request for the Action row,
+     *  or onPluginActivated for a Plugin row. No-op for anything else. Public so the behaviour is
+     *  reachable without synthesising mouse events. */
+    void activateRow(int index) {
+        if (index < 0 || index >= (int)entries.size())
+            return;
+
+        const auto& entry = entries[(size_t)index];
+        if (entry.kind == RowKind::Action) {
+            if (onScanPluginsRequested)
+                onScanPluginsRequested();
+            return;
+        }
+        if (entry.kind == RowKind::Plugin && onPluginActivated)
+            onPluginActivated(identityForEntry(entry));
+    }
+
+    /** The identity a Plugin row stands for; an invalid identity for any other row. */
+    synth::PluginIdentity getPluginIdentity(int index) const {
+        if (index < 0 || index >= (int)entries.size() || entries[(size_t)index].kind != RowKind::Plugin)
+            return {};
+        return identityForEntry(entries[(size_t)index]);
+    }
 
     // -------------------------------------------------------------------------
     // Collapse / expand
@@ -355,7 +421,7 @@ public:
             return "Emits a gate while the Signal is above Threshold, plus the inverted gate. Slice "
                    "an LFO, a kick, or any CV into a pulse.";
         if (moduleName.equalsIgnoreCase("Audio Input"))
-            return "Audio from the input device. Only one per patch.";
+            return "Audio from the input device — one jack per input channel. Only one per patch.";
         if (moduleName.equalsIgnoreCase("Audio Output"))
             return "Sends the patch to the output device. Only one per patch.";
         // Generic fallback for any unrecognised module name.
@@ -366,6 +432,21 @@ public:
     static juce::String snippetDescription(const juce::String& name, int moduleCount) {
         return "Snippet \"" + name + "\" — " + juce::String(moduleCount) +
                (moduleCount == 1 ? " module. " : " modules. ") + "Drag onto the canvas to insert the whole group.";
+    }
+
+    /** Tooltip for a scanned plugin row. */
+    static juce::String pluginDescription(const juce::String& name, const juce::String& format) {
+        return name + " (" + format +
+               ") — a plugin installed on this machine. Drag it onto the canvas, or click "
+               "to drop it in the middle.";
+    }
+
+    /** Tooltip for the scan row. */
+    static juce::String scanRowDescription(bool anyPluginsKnown) {
+        return anyPluginsKnown ? "Rescan for installed plugins. Each one is checked in its own process, so a plugin "
+                                 "that crashes cannot take the app down."
+                               : "Look for VST3 and Audio Unit plugins installed on this machine. Each one is "
+                                 "checked in its own process, so a plugin that crashes cannot take the app down.";
     }
 
     // -------------------------------------------------------------------------
@@ -601,7 +682,33 @@ public:
                     continue;
                 }
 
-                // Draggable row (module or snippet).
+                // Sub-group label inside a section (e.g. "VST3" / "AudioUnit" under Plugins) — painted
+                // in the same muted style as a Header but smaller and indented, so it reads as a
+                // sub-level without competing with the section title. Non-clickable, no hover state.
+                if (entry.kind == RowKind::SubHeader) {
+                    g.setColour(mutedColour.withAlpha(0.6f));
+                    g.setFont(juce::Font(juce::FontOptions(10.5f)));
+                    g.drawText(entry.text.toUpperCase(), 28, row.y, contentWidth - 40, kItemHeight - 4,
+                               juce::Justification::centredLeft);
+                    continue;
+                }
+
+                // Command row — reads like a hint until hovered, so an empty Plugins section looks
+                // like a prompt rather than like a broken module row.
+                if (entry.kind == RowKind::Action) {
+                    const bool hot = row.entryIndex == hoveredIndex;
+                    if (hot) {
+                        g.setColour(accentColour.withAlpha(0.12f));
+                        g.fillRect(0, row.y, contentWidth, row.height);
+                    }
+                    g.setColour(hot ? accentColour : mutedColour.withAlpha(0.85f));
+                    g.setFont(juce::Font(juce::FontOptions(13.0f)));
+                    g.drawText(entry.text, 20, row.y, contentWidth - 40, kItemHeight - 4,
+                               juce::Justification::centredLeft);
+                    continue;
+                }
+
+                // Draggable row (module, snippet or plugin).
                 const bool enabled = isEntryEnabled(row.entryIndex);
 
                 if (row.entryIndex == hoveredIndex && enabled) {
@@ -620,6 +727,13 @@ public:
                     g.setFont(juce::Font(juce::FontOptions(12.0f)));
                     g.drawText("(" + juce::String(entry.moduleCount) + ")", contentWidth - 44, row.y, 34,
                                kItemHeight - 4, juce::Justification::centredRight);
+                } else if (entry.kind == RowKind::Plugin) {
+                    // The format tag is load-bearing, not decoration: the same plugin often ships as
+                    // both VST3 and AU, and the two are different entries with different state.
+                    g.setColour(mutedColour);
+                    g.setFont(juce::Font(juce::FontOptions(11.0f)));
+                    g.drawText(entry.detail, contentWidth - 74, row.y, 64, kItemHeight - 4,
+                               juce::Justification::centredRight);
                 }
             }
         }
@@ -646,8 +760,8 @@ public:
         topStripHovered = isInTopStrip(e.y);
 
         const int entryUnderMouse = getEntryIndexAtComponentY(e.y);
-        // Only draggable rows can be hovered; headers and hints clamp to -1.
-        const int newIndex = isDraggableEntry(entryUnderMouse) ? entryUnderMouse : -1;
+        // Only interactive rows can be hovered; headers and hints clamp to -1.
+        const int newIndex = isInteractiveEntry(entryUnderMouse) ? entryUnderMouse : -1;
 
         if (newIndex != hoveredIndex || topStripHovered != wasTopStripHovered) {
             hoveredIndex = newIndex;
@@ -658,12 +772,7 @@ public:
             if (topStripHovered) {
                 setTooltip("Collapse or expand every category in the library.");
             } else if (hoveredIndex >= 0) {
-                const auto& entry = entries[(size_t)hoveredIndex];
-                juce::String tip = entry.kind == RowKind::Snippet ? snippetDescription(entry.text, entry.moduleCount)
-                                                                  : descriptionFor(entry.text);
-                if (!isEntryEnabled(hoveredIndex))
-                    tip += " (already in this patch)";
-                setTooltip(tip);
+                setTooltip(tooltipForEntry(hoveredIndex));
             } else {
                 setTooltip({});
             }
@@ -673,9 +782,9 @@ public:
 
         // Update cursor: grab hand for draggable items, pointing hand for the clickable chrome.
         // An unavailable row is not draggable, so it must not advertise the grab hand.
-        if (hoveredIndex >= 0 && isEntryEnabled(hoveredIndex))
+        if (hoveredIndex >= 0 && isDraggableEntry(hoveredIndex) && isEntryEnabled(hoveredIndex))
             setMouseCursor(juce::MouseCursor::DraggingHandCursor);
-        else if (topStripHovered || isHeaderEntry(entryUnderMouse))
+        else if (topStripHovered || isHeaderEntry(entryUnderMouse) || isActionEntry(hoveredIndex))
             setMouseCursor(juce::MouseCursor::PointingHandCursor);
         else
             setMouseCursor(juce::MouseCursor::NormalCursor);
@@ -692,6 +801,8 @@ public:
     }
 
     void mouseDown(const juce::MouseEvent& e) override {
+        pressedIndex = -1;
+
         if (isInTopStrip(e.y)) {
             toggleAllSections();
             return;
@@ -708,8 +819,17 @@ public:
             return;
         }
 
-        if (entry.kind == RowKind::EmptyHint)
+        if (entry.kind == RowKind::EmptyHint || entry.kind == RowKind::SubHeader)
             return;
+
+        // Click-activated rows (the scan command, and plugin rows, which support BOTH click-to-add
+        // and drag-to-place) defer to mouseUp/mouseDrag. Module and snippet rows keep starting their
+        // drag on mouse-down, which is what every existing drag test drives.
+        if (entry.kind == RowKind::Action || entry.kind == RowKind::Plugin) {
+            if (!e.mods.isPopupMenu())
+                pressedIndex = index;
+            return;
+        }
 
         if (entry.kind == RowKind::Snippet && e.mods.isPopupMenu()) {
             const auto name = entry.text;
@@ -730,19 +850,30 @@ public:
         if (!isEntryEnabled(index))
             return;
 
-        // Snippet payloads carry a prefix so the canvas can tell a group drop from a module drop
-        // on the same DragAndDrop channel.
-        const juce::String payload =
-            (entry.kind == RowKind::Snippet) ? synth::SnippetManager::payloadForName(entry.text) : entry.text;
+        startDragForEntry(index);
+    }
 
-        juce::Image dragImage(juce::Image::ARGB, 150, 30, true);
-        juce::Graphics dg(dragImage);
-        dg.setColour(juce::Colours::white);
-        dg.setFont(juce::Font(juce::FontOptions(16.0f)));
-        dg.drawText(entry.text, dragImage.getBounds(), juce::Justification::centred, false);
+    void mouseDrag(const juce::MouseEvent& e) override {
+        // Only the click-activated kinds get here with a pending press; everything else already
+        // started its drag on mouse-down.
+        if (pressedIndex < 0)
+            return;
+        if (entries[(size_t)pressedIndex].kind != RowKind::Plugin)
+            return; // the scan command is a button, not a drag source
+        if (e.getDistanceFromDragStart() < kDragStartThresholdPx)
+            return;
 
-        if (auto* container = juce::DragAndDropContainer::findParentDragContainerFor(this))
-            container->startDragging(payload, this, dragImage);
+        const int index = pressedIndex;
+        pressedIndex = -1;
+        startDragForEntry(index);
+    }
+
+    void mouseUp(const juce::MouseEvent& e) override {
+        const int index = pressedIndex;
+        pressedIndex = -1;
+        if (index < 0 || e.mouseWasDraggedSinceMouseDown())
+            return;
+        activateRow(index);
     }
 
     // -------------------------------------------------------------------------
@@ -921,11 +1052,66 @@ private:
         if (index < 0 || index >= (int)entries.size())
             return false;
         const auto kind = entries[(size_t)index].kind;
-        return kind == RowKind::Module || kind == RowKind::Snippet;
+        return kind == RowKind::Module || kind == RowKind::Snippet || kind == RowKind::Plugin;
     }
+
+    bool isActionEntry(int index) const {
+        return index >= 0 && index < (int)entries.size() && entries[(size_t)index].kind == RowKind::Action;
+    }
+
+    /** Draggable rows plus the command rows — everything that highlights on hover. */
+    bool isInteractiveEntry(int index) const { return isDraggableEntry(index) || isActionEntry(index); }
 
     bool isHeaderEntry(int index) const {
         return index >= 0 && index < (int)entries.size() && entries[(size_t)index].kind == RowKind::Header;
+    }
+
+    static synth::PluginIdentity identityForEntry(const Entry& entry) {
+        synth::PluginIdentity identity;
+        identity.format = entry.detail;
+        identity.name = entry.text;
+        identity.uid = entry.pluginUid;
+        return identity;
+    }
+
+    juce::String tooltipForEntry(int index) const {
+        const auto& entry = entries[(size_t)index];
+        switch (entry.kind) {
+        case RowKind::Snippet:
+            return snippetDescription(entry.text, entry.moduleCount);
+        case RowKind::Plugin:
+            return pluginDescription(entry.text, entry.detail);
+        case RowKind::Action:
+            return scanRowDescription(!plugins.empty());
+        default:
+            break;
+        }
+        juce::String tip = descriptionFor(entry.text);
+        if (!isEntryEnabled(index))
+            tip += " (already in this patch)";
+        return tip;
+    }
+
+    /** Starts the DragAndDrop session for a draggable row. Every payload rides the same channel and
+     *  is told apart by its prefix — plain text is a module type, "snippet:" a saved group,
+     *  "plugin:" a scanned plugin identity. */
+    void startDragForEntry(int index) {
+        const auto& entry = entries[(size_t)index];
+
+        juce::String payload = entry.text;
+        if (entry.kind == RowKind::Snippet)
+            payload = synth::SnippetManager::payloadForName(entry.text);
+        else if (entry.kind == RowKind::Plugin)
+            payload = identityForEntry(entry).toDragPayload();
+
+        juce::Image dragImage(juce::Image::ARGB, 150, 30, true);
+        juce::Graphics dg(dragImage);
+        dg.setColour(juce::Colours::white);
+        dg.setFont(juce::Font(juce::FontOptions(16.0f)));
+        dg.drawText(entry.text, dragImage.getBounds(), juce::Justification::centred, false);
+
+        if (auto* container = juce::DragAndDropContainer::findParentDragContainerFor(this))
+            container->startDragging(payload, this, dragImage);
     }
 
     /** Drops a hover that a collapse (or a snippet-list refresh) just hid, so no highlight is
@@ -1036,7 +1222,7 @@ private:
 
     // Map a category header string to its Icon enum value.
     static synth::theme::Icon categoryIconForHeader(const juce::String& header) {
-        if (header.equalsIgnoreCase(kSnippetsHeader))
+        if (header.equalsIgnoreCase(kSnippetsHeader) || header.equalsIgnoreCase(kPluginsHeader))
             return synth::theme::Icon::CatUtility;
         if (header.equalsIgnoreCase("Sources"))
             return synth::theme::Icon::CatSources;
@@ -1061,15 +1247,17 @@ private:
     void rebuildEntries() {
         entries.clear();
 
-        auto addHeader = [this](const juce::String& text) { entries.push_back({text, true, RowKind::Header, {}, 0}); };
+        auto addHeader = [this](const juce::String& text) {
+            entries.push_back({text, true, RowKind::Header, {}, 0, {}, 0});
+        };
 
         addHeader(kSnippetsHeader);
         if (snippets.isEmpty()) {
             // Keep the section visible when empty so the feature is discoverable at all.
-            entries.push_back({"No snippets yet", false, RowKind::EmptyHint, kSnippetsHeader, 0});
+            entries.push_back({"No snippets yet", false, RowKind::EmptyHint, kSnippetsHeader, 0, {}, 0});
         } else {
             for (const auto& snippet : snippets)
-                entries.push_back({snippet.name, false, RowKind::Snippet, kSnippetsHeader, snippet.moduleCount});
+                entries.push_back({snippet.name, false, RowKind::Snippet, kSnippetsHeader, snippet.moduleCount, {}, 0});
         }
 
         struct Category {
@@ -1139,15 +1327,48 @@ private:
         for (const auto& category : catalogue) {
             addHeader(category.header);
             for (const auto* moduleName : category.modules)
-                entries.push_back({moduleName, false, RowKind::Module, category.header, 0});
+                entries.push_back({moduleName, false, RowKind::Module, category.header, 0, {}, 0});
+        }
+
+        // Plugins last: it is the only section whose contents come from outside this app, it is
+        // empty until the user asks for a scan, and keeping it at the bottom means adding it did not
+        // move a single existing row.
+        addHeader(kPluginsHeader);
+        entries.push_back({kScanPluginsRowText, false, RowKind::Action, kPluginsHeader, 0, {}, 0});
+
+        // Sub-grouped by format (VST3, AudioUnit, …) so a big scan doesn't read as one undifferentiated
+        // blob. Groups sort alphabetically by format name, rows inside a group by plugin name —
+        // sorted here outright rather than trusting the caller's order (PluginScanService happens
+        // to hand the list name-sorted, but setPlugins() makes no such promise). One sub-label per
+        // format — even a single-format library still gets one, so the section always reads the
+        // same way rather than special-casing the common case.
+        std::vector<synth::PluginIdentity> sortedPlugins = plugins;
+        std::sort(sortedPlugins.begin(), sortedPlugins.end(),
+                  [](const synth::PluginIdentity& a, const synth::PluginIdentity& b) {
+                      return a.format != b.format ? a.format < b.format : a.name < b.name;
+                  });
+        juce::String currentFormat;
+        bool haveFormat = false;
+        for (const auto& plugin : sortedPlugins) {
+            if (!haveFormat || plugin.format != currentFormat) {
+                entries.push_back({plugin.format, false, RowKind::SubHeader, kPluginsHeader, 0, {}, 0});
+                currentFormat = plugin.format;
+                haveFormat = true;
+            }
+            entries.push_back({plugin.name, false, RowKind::Plugin, kPluginsHeader, 0, plugin.format, plugin.uid});
         }
     }
 
     std::vector<Entry> entries;
     juce::Array<synth::SnippetInfo> snippets;
+    std::vector<synth::PluginIdentity> plugins;
     std::set<juce::String> collapsedSections;
     int hoveredIndex = -1;        // -1 = no hover; updated on mouseMove/mouseExit only
+    int pressedIndex = -1;        // row whose click is pending a mouseUp (Action / Plugin rows only)
     bool topStripHovered = false; // hover state for the collapse-all chrome
+
+    /** Pixels of movement that turn a plugin-row press into a drag rather than a click. */
+    static constexpr int kDragStartThresholdPx = 4;
 
     juce::TextEditor searchEditor;
     juce::String searchQuery; // raw editor text; isSearchActive() trims it

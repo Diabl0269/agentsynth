@@ -124,6 +124,11 @@ inline ModuleCategory categoryFor(ModuleType t) noexcept {
     case ModuleType::Noise:
     case ModuleType::Sampler:
     case ModuleType::LFO:
+    // Track Audio is bucketed with the Sampler rather than with its sibling Track In: in
+    // ByModuleCategory mode the bucket colours the CABLE, and what leaves this node is audio read
+    // off a file — exactly what leaves a Sampler. Track In stays under Sequencing because what
+    // leaves it is notes.
+    case ModuleType::TimelineAudioSource:
         return ModuleCategory::Sources;
 
     case ModuleType::Sequencer:
@@ -131,6 +136,7 @@ inline ModuleCategory categoryFor(ModuleType t) noexcept {
     case ModuleType::MidiKeyboard:
     case ModuleType::PolyMidi:
     case ModuleType::ExternalMidi:
+    case ModuleType::TimelineMidiSource:
         return ModuleCategory::Sequencing;
 
     case ModuleType::ADSR:
@@ -165,6 +171,20 @@ inline ModuleCategory categoryFor(ModuleType t) noexcept {
     case ModuleType::VoiceMixer:
     case ModuleType::Math:
     case ModuleType::Attenuverter:
+    // Audio Input sits under the library's "I/O" header, which has no cable-colour bucket of its
+    // own (its partner, Audio Output, is not even a ModuleBase). Utility is the bucket that means
+    // "plumbing", which is exactly what a device tap is.
+    case ModuleType::AudioInput:
+    // Rec Tap is plumbing in the purest sense: a transparent stereo pass-through that
+    // exists only so a take has somewhere to be copied out of. Same bucket as the device tap.
+    case ModuleType::RecordTap:
+    // Hosted Plugin. Every other entry in this switch names a module with ONE DSP role;
+    // this one names a host, and what it hosts is a third-party instrument or a third-party effect
+    // of any kind — unknowable here, since categoryFor() sees a ModuleType and not the loaded
+    // instance. Utility is the neutral bucket rather than a guess that would be wrong about half
+    // the time (and the library has no section for it either — it is hidden for now). A future pass
+    // can split it on the instance's isInstrument flag once the card can ask.
+    case ModuleType::HostedPlugin:
         return ModuleCategory::Utility;
     }
     return ModuleCategory::Utility;

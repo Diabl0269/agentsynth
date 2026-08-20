@@ -19,7 +19,8 @@
 class ToolbarComponent : public juce::Component {
 public:
     // Logical slot order — matches the left group [Library..AutoArrange] + right group
-    // [ToggleMinimap, ToggleModMatrix, ToggleAiPanel, ToggleTheme]. NumSlots is the array size.
+    // [ToggleMinimap, ToggleModMatrix, ToggleAiPanel, ToggleTimeline, ToggleTheme]. NumSlots is
+    // the array size.
     enum Slot {
         Library = 0,
         New,
@@ -30,10 +31,14 @@ public:
         Redo,
         AutoArrange,
         // ToggleMinimap sits before ToggleModMatrix so the right-hand group reads
-        // minimap -> mod matrix -> AI panel -> theme (issue #159).
+        // minimap -> mod matrix -> AI panel -> timeline -> theme (issue #159).
         ToggleMinimap,
         ToggleModMatrix,
         ToggleAiPanel,
+        // Timeline panel toggle, right before the theme toggle. Present unconditionally
+        // here even when SYNTH_ENABLE_TIMELINE is OFF — MainComponent simply leaves this slot's
+        // button pointer null in that build, and layoutButtons() already skips null slots.
+        ToggleTimeline,
         ToggleTheme,
         NumSlots
     };

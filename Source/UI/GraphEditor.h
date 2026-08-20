@@ -3,6 +3,7 @@
 #include "../AppUndoManager.h"
 #include "../AudioEngine.h"
 #include "../PatchDocument.h"
+#include "../Plugin/Hosting/HostedPluginBackend.h"
 #include "CableColour.h"
 #include "LayoutUtil.h"
 #include "ModuleClipboard.h"
@@ -128,12 +129,33 @@ public:
     // undoable structural change when undoManager is present (Cmd+Z restores the prior patch).
     void newPatch();
 
+    /** The per-loaded-file stash of top-level JSON keys this build doesn't understand (see
+     *  `patchDocument` below). Exposed so the app's `.agsproj` save/load path can re-merge the very
+     *  same stash a plain `.json` save/load already does — GraphEditor owns no file dialogs, and
+     *  MainComponent owns no PatchDocument. */
+    synth::PatchDocument& getPatchDocument() noexcept { return patchDocument; }
+
     // Layout / anti-overlap
     juce::Point<int> resolvePlacement(juce::Point<int> desired, int w, int h, juce::AudioProcessorGraph::NodeID selfId);
+
+    /** A free canvas slot at the LEFT edge, below every module currently on the canvas — where the
+     *  timeline's add-track flow drops the "Track In" node it creates. Falls back to the canvas
+     *  origin on an empty canvas. Anti-overlapped through resolvePlacement like any drop. */
+    juce::Point<int> findLeftEdgeSlotBelowModules(int w, int h);
     // A module changed footprint in place (the Macro bank, when its "Knobs" count changes).
     // Drops any routing left on an output jack that is no longer visible, then pushes overlapping
     // neighbours clear. The resized module itself never moves.
     void handleModuleResized(ModuleComponent* moduleComp);
+
+    /** Removes every connection leaving an output jack this node no longer shows. The other half of
+     *  the max-channel/visible-port pattern (docs/modules.md): the module silences its hidden
+     *  channels, and the owner unplugs them — a jack you cannot see is a jack you cannot unplug. */
+    void dropRoutingsOnHiddenJacks(juce::AudioProcessorGraph::NodeID nodeId);
+
+    /** MESSAGE THREAD. The audio device changed: re-point every Audio Input module at the
+     *  engine's new input channel count, drop cables left on jacks that just disappeared, and
+     *  re-measure the affected cards. Called from the owner's device-state-changed callback. */
+    void refreshIoModulesAfterDeviceChange();
 
     // Dual I/O only remaps visible jacks onto raw ch0/ch1. A collapsed Audio cable that only
     // landed on the left leg (typical when the far end is Audio Output, which is not ModuleBase)
@@ -209,6 +231,19 @@ public:
 
     /** Set by the owner to resolve a snippet name (from a library drag payload) to its JSON. */
     std::function<juce::var(const juce::String&)> snippetProvider;
+
+    /** right-click-any-knob -> "Automate '<Param>'" (ModuleComponent's generic auto-UI slider
+     *  branch). Set by the owner (MainComponent::automateParameter) to resolve the node's uuid,
+     *  find-or-create the doc's Automation track, bind a lane and open the automation strip —
+     *  GraphEditor deliberately owns no TimelineDoc, mirroring onSaveSnippetRequested above. */
+    std::function<void(juce::AudioProcessorGraph::NodeID, const juce::String&)> onAutomateParameterRequested;
+
+    /** A hosted-plugin card's "Open Editor" button (ModuleComponent's HostedPluginModule branch).
+     *  Set by the owner (MainComponent) to resolve `nodeId` to its live HostedPluginModule and hand
+     *  it to HostedPluginWindowManager::openEditorFor — mirrors onAutomateParameterRequested's
+     *  shape exactly, for the same reason: GraphEditor owns neither the module lookup nor the
+     *  window manager. */
+    std::function<void(juce::AudioProcessorGraph::NodeID)> onOpenPluginEditorRequested;
 
     // ---- Copy / paste / duplicate -------------------------------------------------------
     //
@@ -371,6 +406,21 @@ public:
      *  sets is captured by the undo snapshot. */
     void addModuleAtCanvasPosition(const juce::String& name, juce::Point<int> dropPos,
                                    const std::function<void(juce::AudioProcessor&)>& configure);
+
+    /** Creates a Hosted Plugin node already pointed at `identity`.
+     *
+     *  Deliberately a thin wrapper over addModuleAtCanvasPosition rather than a second add path: the
+     *  identity is set through the same `configure` hook the Sampler's dropped file uses, so it is in
+     *  place before the node joins the graph and is therefore inside the undo snapshot — undo/redo of
+     *  a plugin add behaves exactly like undo/redo of any other module add, including remembering
+     *  WHICH plugin on redo. The actual load is asynchronous and resolves through the default
+     *  backend's scan service, so a canvas with no service installed adds a placeholder rather than
+     *  failing the add. */
+    void addHostedPluginAtCanvasPosition(const synth::PluginIdentity& identity, juce::Point<int> dropPos);
+
+    /** Canvas coordinates of the middle of the current view — where a clicked (rather than dragged)
+     *  library row lands. */
+    juce::Point<int> getViewportCentreInCanvasSpace() const;
 
     // Mouse Overrides
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;

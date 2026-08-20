@@ -1,10 +1,35 @@
 #include "Branding.h"
 #include "MainComponent.h"
+#include "Plugin/Hosting/PluginScanService.h"
 #include "SettingsMigration.h"
 #include "ShortcutManager.h"
 #include "UI/Theme/AppLookAndFeel.h"
 #include "UI/Theme/ThemeManager.h"
+#include "UserSettings.h"
 #include <JuceHeader.h>
+#include <iostream>
+
+// True on every platform where JUCE's entry point is a plain main(argc, argv) — i.e. everything
+// except a Windows GUI-subsystem build, whose WinMain gets no argv. See the entry point at the
+// bottom of this file for what the difference costs.
+#if JUCE_WINDOWS && !defined(_CONSOLE)
+#define SYNTH_HAS_ARGV_MAIN 0
+#else
+#define SYNTH_HAS_ARGV_MAIN 1
+#endif
+
+namespace {
+
+/** Writes the child scan's document where the parent's pipe reader will find it. Deliberately
+ *  std::cout and not juce::Logger: the parent parses this, and the Logger is hijacked by the AI
+ *  console in Debug builds. */
+void emitPluginScanChildOutput(const juce::String& xml) {
+    if (xml.isNotEmpty())
+        std::cout << xml << std::endl;
+    std::cout.flush();
+}
+
+} // namespace
 
 class AppApplication : public juce::JUCEApplication {
 public:
@@ -16,6 +41,22 @@ public:
 
     void initialise(const juce::String& commandLine) override {
         juce::ignoreUnused(commandLine);
+
+#if !SYNTH_HAS_ARGV_MAIN
+        // Windows GUI fallback for the out-of-process plugin scan. Everywhere else main()
+        // below short-circuits before the app object is ever constructed; here JUCE owns WinMain and
+        // this is the earliest hook there is, so the child pays for an app spin-up. It still creates
+        // no window, no engine and no settings file — this runs before all of that.
+        {
+            juce::String scanXml;
+            if (const auto exitCode = synth::runPluginScanChildMode(getCommandLineParameterArray(), scanXml)) {
+                emitPluginScanChildOutput(scanXml);
+                setApplicationReturnValue(*exitCode);
+                quit();
+                return;
+            }
+        }
+#endif
 
         migrateLegacyUserData();
 
@@ -46,12 +87,7 @@ private:
     // (MainComponent's constructor does this) — otherwise JUCE creates an empty current-name
     // folder first, and migrateUserData's "already exists" guard skips the real migration.
     static void migrateLegacyUserData() {
-        juce::PropertiesFile::Options options;
-        options.applicationName = synth::branding::kProductName;
-        options.folderName = synth::branding::kSettingsFolderName;
-        options.filenameSuffix = "settings";
-        options.osxLibrarySubFolder = "Application Support";
-        options.storageFormat = juce::PropertiesFile::storeAsXML;
+        const auto options = synth::userSettingsOptions();
 
         // getDefaultFile() resolves the platform-specific settings file inside the
         // folderName directory; its grandparent is the directory that contains every
@@ -154,4 +190,35 @@ private:
 };
 
 //==============================================================================
-START_JUCE_APPLICATION(AppApplication)
+// Entry point.
+//
+// Hand-rolled rather than START_JUCE_APPLICATION so the out-of-process plugin scan can be
+// intercepted BEFORE the app object exists. A scan launches this binary once per candidate plugin;
+// if each of those spun up a JUCEApplication first, macOS would bounce a Dock icon per plugin and
+// every child would pay for an NSApplication it never uses. The macro's two halves are used
+// verbatim — this differs from it only in the `if` below.
+//
+// Windows GUI builds have no argv here, so they keep the macro's WinMain and intercept at the top of
+// initialise() instead (see SYNTH_HAS_ARGV_MAIN above).
+JUCE_BEGIN_IGNORE_WARNINGS_GCC_LIKE("-Wmissing-prototypes")
+JUCE_CREATE_APPLICATION_DEFINE(AppApplication)
+
+#if SYNTH_HAS_ARGV_MAIN
+int main(int argc, char* argv[]) {
+    juce::StringArray args;
+    for (int i = 0; i < argc; ++i)
+        args.add(juce::String::fromUTF8(argv[i]));
+
+    juce::String scanXml;
+    if (const auto exitCode = synth::runPluginScanChildMode(args, scanXml)) {
+        emitPluginScanChildOutput(scanXml);
+        return *exitCode;
+    }
+
+    juce::JUCEApplicationBase::createInstance = &juce_CreateApplication;
+    return juce::JUCEApplicationBase::main(argc, (const char**)argv);
+}
+#else
+JUCE_MAIN_FUNCTION_DEFINITION
+#endif
+JUCE_END_IGNORE_WARNINGS_GCC_LIKE

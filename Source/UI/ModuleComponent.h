@@ -47,6 +47,11 @@ public:
     // Removes listeners, destroys attachments, stops timer, nulls module pointer.
     void detachFromProcessor();
 
+    /** Re-measures the card after its VISIBLE PORT COUNT changed for a reason that is not a
+     *  parameter gesture — today only Audio Input, whose jacks follow the audio device. Same three
+     *  steps applyMacroCountChange takes for the Macro bank's "Knobs" parameter. */
+    void refreshPortLayout();
+
     // Interaction Logic
     struct Port {
         juce::Rectangle<int> area;
@@ -100,6 +105,13 @@ public:
      *  rule can be tested without a themed LookAndFeel and a live modulation routing. */
     int getModRingSliderIndex(const juce::String& paramName) const;
 
+    /** Applies an automation-driven value to whichever slider/combo was built for `param`,
+     *  denormalised via that parameter's own range, via setValue(..., dontSendNotification) — never
+     *  touches the parameter, never fires the attachment, so there is no write-back loop and
+     *  AutomationRecorder (a parameter listener) hears nothing. A `param` this component never built
+     *  a control for (custom chrome, or a stale event for the wrong node) is a silent no-op. */
+    void reflectParameterValue(const juce::AudioProcessorParameter* param, float normalized);
+
 private:
     juce::AudioProcessor* module;
     juce::AudioProcessorGraph::NodeID nodeId;
@@ -112,6 +124,14 @@ private:
     juce::OwnedArray<juce::ComboBox> comboBoxes;
     juce::OwnedArray<juce::Label> comboLabels;
     juce::OwnedArray<juce::ToggleButton> toggles;
+
+    // Param -> control mapping for reflectParameterValue(), index-parallel to `sliders` /
+    // `comboBoxes` respectively. Populated only in createControls()'s generic auto-UI branch (the
+    // float/int slider and choice-combo cases) — a control built by bespoke chrome, or the
+    // ExternalMidiModule device/channel combos (which don't go through ComboBoxParameterAttachment),
+    // gets a null entry so the arrays stay aligned and a match against them is a safe no-op.
+    juce::Array<juce::RangedAudioParameter*> sliderParams;
+    juce::Array<juce::RangedAudioParameter*> comboParams;
 
     // Attachments need to be kept alive.
     // We are using raw pointers for parameters currently.
@@ -128,6 +148,10 @@ private:
     // must close it in detachFromProcessor() — it references the module by reference.
     std::unique_ptr<juce::TextButton> eqPopOutButton;
     juce::Component::SafePointer<juce::DialogWindow> eqWindow;
+    // Hosted Plugin only: fires owner.onOpenPluginEditorRequested, routed to MainComponent's
+    // HostedPluginWindowManager. Enabled only while the module reports hasInstance() — refreshed
+    // each timerCallback() tick, since an async load can flip that at any moment.
+    std::unique_ptr<juce::TextButton> openPluginEditorButton;
     std::unique_ptr<juce::MidiKeyboardComponent> keyboardComponent;
     std::unique_ptr<ThresholdControlComponent> thresholdControl;
     std::unique_ptr<WavetableDisplayComponent> wavetableDisplay;
@@ -186,6 +210,15 @@ private:
 
     void createControls();
     void updateLayout();
+
+    /** Right-click-any-knob entry point into the automation lane editor. Attached as a
+     *  MouseListener on every generic auto-UI slider (createControls()'s float/int branches) via
+     *  addMouseListener(this, false) — mouseDown() dispatches here first when e.eventComponent
+     *  isn't this component's own body (checked by identity against `sliders`, index-parallel to
+     *  `sliderParams` exactly like reflectParameterValue()'s lookup). Fires
+     *  owner.onAutomateParameterRequested (if set) with this module's nodeId and the parameter's
+     *  paramID; a no-op otherwise (headless build, no host wired, or a null sliderParams entry). */
+    void showAutomateMenuForSlider(juce::RangedAudioParameter* param);
 
     // Raw->LogicalPort snapshots of the module's current channel layout. "poly" and "dualIO"
     // change that layout, so these are captured at construction and refreshed on each toggle.

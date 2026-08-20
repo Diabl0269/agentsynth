@@ -2,6 +2,7 @@
 #include "../AI/AIStateMapper.h"
 #include "../Modules/ADSRModule.h"
 #include "../Modules/AttenuverterModule.h"
+#include "../Modules/AudioInputModule.h"
 #include "../Modules/ExternalMidiModule.h"
 #include "../Modules/FX/ChorusModule.h"
 #include "../Modules/FX/CompressorModule.h"
@@ -25,6 +26,7 @@
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
 #include "../Modules/WavetableOscillatorModule.h"
+#include "../Plugin/Hosting/HostedPluginModule.h"
 #include "../PresetManager.h"
 #include "../SnippetManager.h"
 #include "LayoutUtil.h"
@@ -61,14 +63,18 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "ADSR" || typeName == "Amp Env" || typeName == "Filter Env")
         return {280, 351}; // sliders below 2 jacks + threshold control + Poly toggle
     if (typeName.containsIgnoreCase("Sequencer") && !typeName.containsIgnoreCase("Poly"))
-        return {synth::LayoutUtil::kDoubleWidth, 380};
+        // +26 (one toggle row) for the Sync to Transport switch, appended below the step grid.
+        return {synth::LayoutUtil::kDoubleWidth, 406};
     if (typeName.containsIgnoreCase("Poly") && typeName.containsIgnoreCase("Sequencer"))
-        return {synth::LayoutUtil::kDoubleWidth, 380};
+        // +26 (one toggle row) for the Sync to Transport switch, appended below the step grid.
+        return {synth::LayoutUtil::kDoubleWidth, 406};
     if (typeName.containsIgnoreCase("MidiKeyboard") || typeName.containsIgnoreCase("Midi Keyboard") ||
         typeName.containsIgnoreCase("MIDI Keyboard"))
         return {synth::LayoutUtil::kDoubleWidth, 150};
     if (typeName == "Poly MIDI" || typeName == "PolyMidi")
-        return {280, 171}; // +48 (one combo row) from the issue #198 Voice Steal selector
+        // +48 (one combo row) from the issue #198 Voice Steal selector, then +26 (one toggle row)
+        // for the Vel → Gate switch.
+        return {280, 197};
     if (typeName == "Distortion")
         return {280, 335};
     if (typeName == "Ring Modulator")
@@ -76,9 +82,16 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Delay")
         return {280, 249}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
     if (typeName == "Reverb")
-        return {280, 249};
-    if (typeName == "AudioInput" || typeName == "AudioOutput" || typeName == "Audio Input" ||
-        typeName == "Audio Output")
+        return {280, 249}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
+    if (typeName == "AudioInput" || typeName == "Audio Input")
+        // Height tracks the DEVICE's input channel count at runtime (one jack per channel, up to
+        // AudioInputModule::kMaxChannels — eight jacks measure 217px, pinned by
+        // AudioInputModuleTest.DeviceShrinkDropsHiddenRoutings), exactly like the Macro bank tracks
+        // its knob count. The drop estimate uses the resting card, which the 100px floor in
+        // updateLayout sets for anything up to two jacks; finalizeNewDrop re-resolves the placement
+        // against the real component size anyway.
+        return {280, 100};
+    if (typeName == "AudioOutput" || typeName == "Audio Output")
         return {280, 100};
     if (typeName == "Attenuverter")
         return {synth::LayoutUtil::kNarrowWidth, synth::LayoutUtil::kNarrowWidth};
@@ -122,6 +135,31 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         return {280, 313};
     if (typeName == "External MIDI")
         return {280, 138};
+    if (typeName == "Track In")
+        // Param-less card (only the inherited bypass, which lives in the header), no jacks: the
+        // 100 px floor in updateLayout is what sets the height. Not in the library — the timeline's
+        // add-track flow places it — so this only ever feeds a programmatic size query.
+        return {280, 100};
+    if (typeName == "Rec Tap")
+        // Like Track In it has no body controls (only the inherited bypass, which lives in the
+        // header), but it has two jacks a side, so the port gutter — not the 100 px floor — sets
+        // the height. Also library-less: the record flow places it. Measured against the real card
+        // by RecordTapTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
+        return {280, 123};
+    if (typeName == "Track Audio")
+        // Same shape as Rec Tap — no body controls, jacks setting the height — but with outputs
+        // only. Library-less like the other two internal nodes: the add-track flow places it.
+        // Measured against the real card by
+        // AudioClipPlaybackTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
+        return {280, 123};
+    if (typeName == "Hosted Plugin")
+        // Bypass and mute live in the header; the only body content is the "Open Editor" button,
+        // one jack a side while empty. The card grows with the loaded plugin's real port count,
+        // like the Macro bank and Audio Input; the estimate is the resting size, and
+        // finalizeNewDrop re-resolves against the real component anyway. Library-less until the
+        // scan list and load UX ship. Measured against the real card by
+        // HostedPluginTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
+        return {280, 123};
     return {280, 360};
 }
 
@@ -3092,6 +3130,25 @@ void GraphEditor::timerCallback() {
     // static patch).
     if (minimap.isVisible())
         minimap.setModel(buildMinimapModel());
+
+#if SYNTH_ENABLE_TIMELINE
+    // Drain the audio thread's UI reflection ring on the same 30 Hz cadence as everything else in
+    // this callback — no separate free-running timer. A drain against an empty ring is just
+    // one prepareToRead() call, so this is effectively free on every tick that has nothing queued.
+    // Reflection never calls anything that repaints on its own: setValue(..., dontSendNotification)
+    // marks the slider dirty and it rides the existing buffered-image repaint, same as any other
+    // control change.
+    audioEngine.getAutomationUiFeed().drain([this](const synth::AutomationUiEvent& event) {
+        for (auto* comp : content.getModules()) {
+            if (comp->getNodeId().uid != event.nodeId)
+                continue;
+            comp->reflectParameterValue(event.param, event.newNormalized);
+            return;
+        }
+        // No live component for this NodeID (module hidden mid-teardown or already deleted) —
+        // the event is simply discarded.
+    });
+#endif
 }
 
 // ============================================================================
@@ -3284,11 +3341,15 @@ void GraphEditor::itemDragEnter(const SourceDetails& dragSourceDetails) {
     juce::Point<int> estSize;
     dragPreviewIsSnippet = synth::SnippetManager::isSnippetPayload(name);
     dragPreviewProbe.reset();
-    if (!dragPreviewIsSnippet) {
+    if (dragPreviewIsSnippet) {
+        estSize = estimateSnippetSize(name);
+    } else if (synth::PluginIdentity::isDragPayload(name)) {
+        // A hosted-plugin payload is not a factory module type: no smart-connection probe (the
+        // plugin isn't loaded yet, so its jacks are unknowable); sized from the Hosted Plugin card.
+        estSize = estimateModuleSize("Hosted Plugin");
+    } else {
         dragPreviewProbe = synth::AIStateMapper::createModule(name);
         estSize = estimateModuleSize(name);
-    } else {
-        estSize = estimateSnippetSize(name);
     }
 
     beginDragPreview(estSize.x, estSize.y, juce::AudioProcessorGraph::NodeID{});
@@ -3336,6 +3397,13 @@ void GraphEditor::itemDropped(const SourceDetails& dragSourceDetails) {
         return;
     }
 
+    // A scanned plugin — same channel again, told apart by its "plugin:" prefix.
+    if (synth::PluginIdentity::isDragPayload(name)) {
+        addHostedPluginAtCanvasPosition(synth::PluginIdentity::fromDragPayload(name), dropPos);
+        endDragPreview();
+        return;
+    }
+
     addModuleAtCanvasPosition(name, dropPos, {});
     endDragPreview();
 }
@@ -3374,6 +3442,23 @@ void GraphEditor::filesDropped(const juce::StringArray& files, int x, int y) {
     }
 
     endDragPreview();
+}
+
+void GraphEditor::addHostedPluginAtCanvasPosition(const synth::PluginIdentity& identity, juce::Point<int> dropPos) {
+    if (!identity.isValid())
+        return;
+
+    // Same configure hook the dropped-sample path uses, and for the same reason: the identity has to
+    // be on the processor BEFORE recordStructuralChange snapshots the graph, or Cmd+Z / redo would
+    // bring back a bare Hosted Plugin that has forgotten which plugin it was.
+    addModuleAtCanvasPosition("Hosted Plugin", dropPos, [identity](juce::AudioProcessor& processor) {
+        if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(&processor))
+            hosted->loadPlugin(identity);
+    });
+}
+
+juce::Point<int> GraphEditor::getViewportCentreInCanvasSpace() const {
+    return getVisibleCanvasRect().getCentre().roundToInt();
 }
 
 void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Point<int> dropPos,
@@ -3455,6 +3540,74 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
             }
         }
     }
+}
+
+void GraphEditor::dropRoutingsOnHiddenJacks(juce::AudioProcessorGraph::NodeID nodeId) {
+    // Jacks that just disappeared take their cables with them. Leaving them connected would mean a
+    // routing that still shows in the mod matrix, still costs a node, and no longer carries
+    // anything (the module silences hidden channels) — with no jack to unplug it from.
+    //
+    // No undo transaction is opened here: the gesture that changed the count (a parameter move, or
+    // a device change, which is not undoable at all) owns the surrounding snapshot.
+    auto& graph = audioEngine.getGraph();
+    auto* node = graph.getNodeForId(nodeId);
+    if (node == nullptr)
+        return;
+
+    auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor());
+    if (mb == nullptr)
+        return;
+
+    const int visible = mb->getVisibleOutputPortCount();
+    std::vector<juce::AudioProcessorGraph::Connection> toRemove;
+
+    for (const auto& c : graph.getConnections()) {
+        if (c.source.nodeID != nodeId || c.source.isMIDI() || c.source.channelIndex < visible)
+            continue;
+
+        if (auto* dstNode = graph.getNodeForId(c.destination.nodeID)) {
+            if (dynamic_cast<AttenuverterModule*>(dstNode->getProcessor()) != nullptr) {
+                audioEngine.removeModRouting(dstNode->nodeID); // drops both legs of the cable
+                continue;
+            }
+        }
+        toRemove.push_back(c);
+    }
+
+    for (const auto& c : toRemove)
+        graph.removeConnection(c);
+}
+
+void GraphEditor::refreshIoModulesAfterDeviceChange() {
+    // MESSAGE THREAD: the audio device changed under us, so every Audio Input card's jack count
+    // may have changed with it. Pushing the engine's prepared channel count into the module here
+    // (rather than waiting for the audio thread to publish it from the next block) is what makes
+    // the resize immediate — and what makes it testable without a device.
+    //
+    // Minimal on purpose: this is only the part that must not wait, because a shrunk device leaves
+    // cables on jacks that no longer exist.
+    auto& graph = audioEngine.getGraph();
+    const int deviceChannels = audioEngine.getDeviceInputChannelCount();
+    bool sawInputModule = false;
+
+    for (auto* node : graph.getNodes()) {
+        if (node == nullptr)
+            continue;
+        auto* input = dynamic_cast<AudioInputModule*>(node->getProcessor());
+        if (input == nullptr)
+            continue;
+
+        input->setDeviceChannelCount(deviceChannels);
+        dropRoutingsOnHiddenJacks(node->nodeID);
+        sawInputModule = true;
+
+        for (auto* comp : content.getModules())
+            if (comp != nullptr && comp->getNodeId() == node->nodeID)
+                comp->refreshPortLayout();
+    }
+
+    if (sawInputModule)
+        content.repaint();
 }
 
 void GraphEditor::applyDualIOToExistingModules(bool dual) {
@@ -3702,6 +3855,28 @@ juce::Point<int> GraphEditor::resolvePlacement(juce::Point<int> desired, int w, 
     }
     auto snapped = synth::LayoutUtil::snap(desired);
     return synth::LayoutUtil::findFreeSlot(snapped, w, h, boxes, selfId);
+}
+
+juce::Point<int> GraphEditor::findLeftEdgeSlotBelowModules(int w, int h) {
+    // Left edge, below everything: a Track In node is the head of a chain the user reads
+    // left-to-right, and stacking new ones downwards keeps successive tracks in track order rather
+    // than scattered wherever a free slot happened to be.
+    int left = synth::LayoutUtil::kArrangeOriginX;
+    int bottom = synth::LayoutUtil::kArrangeOriginY;
+    bool any = false;
+
+    for (auto* comp : content.getModules()) {
+        if (comp == nullptr)
+            continue;
+        const auto bounds = comp->getBounds();
+        left = any ? std::min(left, bounds.getX()) : bounds.getX();
+        bottom = any ? std::max(bottom, bounds.getBottom()) : bounds.getBottom();
+        any = true;
+    }
+
+    const juce::Point<int> desired(left, any ? bottom + synth::LayoutUtil::kArrangeOriginY
+                                             : synth::LayoutUtil::kArrangeOriginY);
+    return resolvePlacement(desired, w, h, juce::AudioProcessorGraph::NodeID{});
 }
 
 // static

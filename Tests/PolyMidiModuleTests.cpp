@@ -1,3 +1,4 @@
+#include "Modules/ADSRModule.h"
 #include "Modules/PolyMidiModule.h"
 #include <gtest/gtest.h>
 #include <vector>
@@ -6,18 +7,35 @@ namespace {
 
 constexpr int kBlockSize = 512;
 constexpr int kNumChannels = 16;
+constexpr double kSampleRate = 44100.0;
+
+// The module's minimum low-gate window on a re-articulation: jmax(16, 1 ms).
+constexpr int kMinGateGap = 44; // 44100 * 0.001
 
 float noteHz(int note) { return static_cast<float>(juce::MidiMessage::getMidiNoteInHertz(note)); }
 
 // The pitch/gate a voice is holding at the end of the last rendered block. Both are 5 ms-smoothed,
 // so reading the final sample of a 512-sample block gives the settled value.
 float voicePitch(const juce::AudioBuffer<float>& b, int voice) { return b.getSample(voice, b.getNumSamples() - 1); }
+float voiceGate(const juce::AudioBuffer<float>& b, int voice) { return b.getSample(voice + 8, b.getNumSamples() - 1); }
+
+// Gate CV of one voice at a sample offset inside the last rendered block.
+float gateAt(const juce::AudioBuffer<float>& b, int voice, int sample) { return b.getSample(voice + 8, sample); }
+
+// First offset at or after `from` where the voice's gate crosses 0.5, or -1.
+int firstGateRise(const juce::AudioBuffer<float>& b, int voice, int from) {
+    for (int s = from; s < b.getNumSamples(); ++s)
+        if (gateAt(b, voice, s) > 0.5f)
+            return s;
+    return -1;
+}
 
 // One MIDI event inside a block.
 struct Event {
     int note;
     int offset; // sample offset within the block
     bool on;
+    float velocity = 0.8f;
 };
 
 void setStealMode(PolyMidiModule& m, PolyMidiModule::StealMode mode) {
@@ -26,10 +44,16 @@ void setStealMode(PolyMidiModule& m, PolyMidiModule::StealMode mode) {
     p->setValueNotifyingHost(p->convertTo0to1(static_cast<float>(static_cast<int>(mode))));
 }
 
+void setVelToGate(PolyMidiModule& m, bool on) {
+    auto* p = dynamic_cast<juce::AudioParameterBool*>(findParameterByID(&m, "velToGate"));
+    ASSERT_NE(p, nullptr);
+    p->setValueNotifyingHost(on ? 1.0f : 0.0f);
+}
+
 void pushBlock(PolyMidiModule& m, juce::AudioBuffer<float>& buffer, const std::vector<Event>& events) {
     juce::MidiBuffer midi;
     for (const auto& e : events)
-        midi.addEvent(e.on ? juce::MidiMessage::noteOn(1, e.note, 0.8f) : juce::MidiMessage::noteOff(1, e.note),
+        midi.addEvent(e.on ? juce::MidiMessage::noteOn(1, e.note, e.velocity) : juce::MidiMessage::noteOff(1, e.note),
                       e.offset);
     m.processBlock(buffer, midi);
 }
@@ -259,3 +283,208 @@ TEST_F(PolyMidiModuleTest, RenderChunk) {
 }
 
 TEST_F(PolyMidiModuleTest, HasSixteenOutputChannels) { EXPECT_EQ(module->getTotalNumOutputChannels(), 16); }
+
+// ===========================================================================
+// Poly note contract — machine-generated MIDI re-articulates.
+//
+// Every path that (re)starts a note on a voice whose gate is still up — same-pitch retrigger, voice
+// steal, and reuse of a just-released voice — must produce a gate edge a downstream envelope can
+// see: an instant drop to 0 at the event sample, then a minimum 1 ms low window before the rise.
+// ===========================================================================
+
+// Defect 1: a repeated pitch used to refresh the voice silently, leaving the gate pinned high.
+TEST_F(PolyMidiModuleTest, SamePitchRetriggerProducesGateEdge) {
+    juce::AudioBuffer<float> buffer(kNumChannels, kBlockSize);
+
+    pushBlock(*module, buffer, {{60, 0, true}});
+    pushBlock(*module, buffer, {}); // ~23 ms in total — the 5 ms gate ramp has long settled
+    ASSERT_NEAR(voiceGate(buffer, 0), 1.0f, 1.0e-4f);
+    const uint8_t maskBefore = module->getActiveVoiceMask();
+
+    constexpr int kEvent = 128;
+    pushBlock(*module, buffer, {{60, kEvent, true}});
+
+    EXPECT_GT(gateAt(buffer, 0, kEvent - 1), 0.9f) << "gate stays high right up to the event sample";
+    EXPECT_FLOAT_EQ(gateAt(buffer, 0, kEvent), 0.0f) << "a retrigger drops the gate instantly, not smoothly";
+    for (int s = kEvent; s < kEvent + kMinGateGap; ++s)
+        ASSERT_LE(gateAt(buffer, 0, s), 0.05f) << "gate must stay low across the whole 1 ms gap, at sample " << s;
+
+    const int rise = firstGateRise(buffer, 0, kEvent);
+    ASSERT_GE(rise, kEvent + kMinGateGap) << "the gate may not reopen before the gap has elapsed";
+    EXPECT_LT(rise - kEvent, static_cast<int>(kSampleRate * 0.010)) << "and must be back up within ~10 ms";
+
+    EXPECT_EQ(module->getActiveVoiceMask(), maskBefore) << "a retrigger reuses the same voice";
+    EXPECT_NEAR(voicePitch(buffer, 0), noteHz(60), 1.0f);
+}
+
+// Defect 2: stealing wrote a new note into a still-active voice, so it glided instead of re-attacking.
+TEST_F(PolyMidiModuleTest, StolenVoiceReattacks) {
+    juce::AudioBuffer<float> buffer(kNumChannels, kBlockSize);
+
+    for (int i = 0; i < 8; ++i)
+        pushBlock(*module, buffer, {{60 + i, 0, true}});
+    ASSERT_EQ(module->getActiveVoiceMask(), 0xFF);
+    ASSERT_NEAR(voiceGate(buffer, 0), 1.0f, 1.0e-4f);
+
+    constexpr int kEvent = 128;
+    pushBlock(*module, buffer, {{72, kEvent, true}}); // steals voice 0 (least recently used)
+
+    EXPECT_FLOAT_EQ(gateAt(buffer, 0, kEvent), 0.0f);
+    for (int s = kEvent; s < kEvent + kMinGateGap; ++s)
+        ASSERT_LE(gateAt(buffer, 0, s), 0.05f) << "stolen voice must hold the gate low, at sample " << s;
+
+    const int rise = firstGateRise(buffer, 0, kEvent);
+    ASSERT_GE(rise, kEvent + kMinGateGap);
+    EXPECT_LT(rise - kEvent, static_cast<int>(kSampleRate * 0.010));
+
+    EXPECT_NEAR(voicePitch(buffer, 0), noteHz(72), 1.0f) << "the stolen voice takes the new pitch";
+    EXPECT_NEAR(voiceGate(buffer, 1), 1.0f, 1.0e-4f) << "voices that were not stolen keep sounding";
+}
+
+// Chord-exceeds-voices policy, pinned: nine simultaneous notes on eight voices in Oldest mode drop
+// the chord's *first* note — stamps are strictly increasing, so note 1 is the oldest by one sample.
+TEST_F(PolyMidiModuleTest, NineNoteChordPolicy) {
+    juce::AudioBuffer<float> buffer(kNumChannels, kBlockSize);
+
+    std::vector<Event> chord;
+    for (int i = 0; i < 9; ++i)
+        chord.push_back({60 + i, 0, true}); // all nine at the same sample offset
+    pushBlock(*module, buffer, chord);
+
+    EXPECT_EQ(module->getActiveVoiceMask(), 0xFF);
+    EXPECT_NEAR(voicePitch(buffer, 0), noteHz(68), 1.0f) << "note 1 is stolen by note 9";
+    for (int v = 1; v < 8; ++v)
+        EXPECT_NEAR(voicePitch(buffer, v), noteHz(60 + v), 1.0f) << "notes 2..8 keep their voices, voice " << v;
+}
+
+// Defect 4: a clip boundary emits note-off and note-on for one pitch at the same sample. The freed
+// voice is reused immediately, so without the enforced gap the edge would smooth away to nothing.
+TEST_F(PolyMidiModuleTest, AdjacentOffOnSamePitchLeavesGap) {
+    juce::AudioBuffer<float> buffer(kNumChannels, kBlockSize);
+
+    pushBlock(*module, buffer, {{60, 0, true}});
+    pushBlock(*module, buffer, {});
+    ASSERT_NEAR(voiceGate(buffer, 0), 1.0f, 1.0e-4f);
+
+    constexpr int kEvent = 128;
+    pushBlock(*module, buffer, {{60, kEvent, false}, {60, kEvent, true}}); // off first, same sample
+
+    EXPECT_FLOAT_EQ(gateAt(buffer, 0, kEvent), 0.0f);
+    for (int s = kEvent; s < kEvent + kMinGateGap; ++s)
+        ASSERT_LE(gateAt(buffer, 0, s), 0.05f) << "off/on at one sample still yields a 1 ms gap, at sample " << s;
+
+    const int rise = firstGateRise(buffer, 0, kEvent);
+    ASSERT_GE(rise, kEvent + kMinGateGap);
+    EXPECT_LT(rise - kEvent, static_cast<int>(kSampleRate * 0.010));
+    EXPECT_EQ(module->getActiveVoiceMask(), 0x01) << "the same voice is re-used, not a second one";
+}
+
+// Default-off keeps the gate a plain 0/1 flag, so presets saved before the parameter existed render
+// byte-identically.
+TEST_F(PolyMidiModuleTest, VelocityToGateOffByDefault) {
+    juce::AudioBuffer<float> buffer(kNumChannels, kBlockSize);
+    pushBlock(*module, buffer, {{60, 0, true, 0.25f}});
+    EXPECT_FLOAT_EQ(voiceGate(buffer, 0), 1.0f);
+}
+
+TEST_F(PolyMidiModuleTest, VelocityHonouredWhenEnabled) {
+    juce::AudioBuffer<float> buffer(kNumChannels, kBlockSize);
+    setVelToGate(*module, true);
+
+    pushBlock(*module, buffer, {{60, 0, true, 0.5f}});
+    EXPECT_NEAR(voiceGate(buffer, 0), 0.5f, 0.01f);
+
+    pushBlock(*module, buffer, {{64, 0, true, 1.0f}});
+    EXPECT_NEAR(voiceGate(buffer, 1), 1.0f, 0.01f);
+    EXPECT_NEAR(voiceGate(buffer, 0), 0.5f, 0.01f) << "a held voice keeps its own level";
+}
+
+// The gap is a repair for a gate that is still up — a voice at rest must not pay for it.
+TEST_F(PolyMidiModuleTest, FreshNoteOnIdleVoiceHasNoArtificialGap) {
+    juce::AudioBuffer<float> buffer(kNumChannels, kBlockSize);
+    pushBlock(*module, buffer, {{60, 0, true}});
+
+    EXPECT_GT(gateAt(buffer, 0, 0), 0.0f) << "an idle voice starts rising on the event sample itself";
+    EXPECT_GT(gateAt(buffer, 0, 2), gateAt(buffer, 0, 0));
+    EXPECT_GT(gateAt(buffer, 0, kMinGateGap - 1), 0.1f) << "no dead time where the gap would have been";
+}
+
+// ===========================================================================
+// End-to-end: the gate edge as a downstream ADSR actually sees it.
+// ===========================================================================
+
+namespace {
+
+void setParam(juce::AudioProcessor& p, const juce::String& id, float value) {
+    auto* param = dynamic_cast<juce::RangedAudioParameter*>(findParameterByID(&p, id));
+    ASSERT_NE(param, nullptr);
+    param->setValueNotifyingHost(param->convertTo0to1(value));
+}
+
+// Runs PolyMidi -> poly ADSR block by block (voice-0 gate CV into the ADSR's gate input) and
+// returns the voice-0 envelope for the whole run.
+std::vector<float> renderPolyIntoAdsr(const std::vector<std::vector<Event>>& blocks) {
+    PolyMidiModule poly;
+    ADSRModule adsr;
+    // Parameters BEFORE prepareToPlay: prepare seeds ADSRModule's sustain smoothing (the TL4-3
+    // zipper fix) from the current parameter value, so setting sustain afterwards would ramp it
+    // 0 -> 1 across the first few blocks and every level assertion below would chase that ramp.
+    setParam(adsr, "poly", 1.0f);
+    setParam(adsr, "attack", 0.01f); // parameter minimum — 441 samples
+    setParam(adsr, "decay", 0.01f);
+    setParam(adsr, "sustain", 1.0f);
+    setParam(adsr, "release", 0.01f);
+    poly.prepareToPlay(kSampleRate, kBlockSize);
+    adsr.prepareToPlay(kSampleRate, kBlockSize);
+
+    juce::AudioBuffer<float> polyBuf(kNumChannels, kBlockSize);
+    juce::AudioBuffer<float> adsrBuf(8, kBlockSize);
+    std::vector<float> env;
+
+    for (const auto& events : blocks) {
+        pushBlock(poly, polyBuf, events);
+        adsrBuf.clear();
+        adsrBuf.copyFrom(0, 0, polyBuf, 8, 0, kBlockSize); // voice-0 gate CV -> ADSR gate input
+        juce::MidiBuffer noMidi;
+        adsr.processBlock(adsrBuf, noMidi);
+        env.insert(env.end(), adsrBuf.getReadPointer(0), adsrBuf.getReadPointer(0) + kBlockSize);
+    }
+    return env;
+}
+
+float minOverBlock(const std::vector<float>& env, int block, int from = 0) {
+    float lowest = 1.0f;
+    for (int s = from; s < kBlockSize; ++s)
+        lowest = std::min(lowest, env[(size_t)(block * kBlockSize + s)]);
+    return lowest;
+}
+
+float endOfBlock(const std::vector<float>& env, int block) { return env[(size_t)((block + 1) * kBlockSize - 1)]; }
+
+} // namespace
+
+// Documents the *real* end-to-end behaviour after ADSRModule gained per-sample Schmitt edge
+// detection (#221): PolyMidi's snap-to-zero re-articulation gap is seen on the exact sample it
+// happens, wherever it falls in the block. The dip is PARTIAL by design — the gap is ~1 ms
+// (44 samples) plus the 5 ms gate-smoothing rise back through the Schmitt threshold, against a
+// 10 ms release — so the envelope re-attacks from roughly two-thirds height, it does not fall to
+// silence. (The pre-#221 ADSR sampled the gate once per block, which made mid-block retriggers
+// invisible; that asymmetry is gone, so this test now pins the SAME contract for both placements.)
+TEST(PolyMidiToAdsrTest, RetriggerReArticulatesAdsrRegardlessOfBlockAlignment) {
+    // Retrigger 8 samples before block 2 ends: the falling edge lands late in block 2, the gate
+    // climbs back over the Schmitt threshold ~146 samples into block 3.
+    const auto spanning = renderPolyIntoAdsr({{{60, 0, true}}, {}, {{60, kBlockSize - 8, true}}, {}, {}});
+    EXPECT_GT(endOfBlock(spanning, 1), 0.9f) << "envelope should be sustaining before the retrigger";
+    const float spanningDip = minOverBlock(spanning, 3);
+    EXPECT_LT(spanningDip, 0.8f) << "the gap must release the envelope — a real re-articulation";
+    EXPECT_GT(spanningDip, 0.3f) << "…but only partially: a ~150-sample gap against a 441-sample release";
+    EXPECT_GT(endOfBlock(spanning, 4), 0.9f) << "and re-attack on the rise — a real retrigger";
+
+    // Same retrigger mid-block: per-sample edge detection sees it identically (the pre-#221
+    // block-sampled ADSR missed this one entirely).
+    const auto midBlock = renderPolyIntoAdsr({{{60, 0, true}}, {}, {{60, 128, true}}, {}, {}});
+    const float midDip = minOverBlock(midBlock, 2);
+    EXPECT_LT(midDip, 0.8f) << "a mid-block gap re-articulates too";
+    EXPECT_GT(midDip, 0.3f);
+    EXPECT_GT(endOfBlock(midBlock, 4), 0.9f);
+}

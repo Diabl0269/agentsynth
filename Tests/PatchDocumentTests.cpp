@@ -5,9 +5,9 @@
 #include "../Source/UI/GraphEditor.h"
 #include <gtest/gtest.h>
 
-// TL0.6 — PatchDocument preserves top-level JSON keys this build doesn't understand (e.g. a
+// PatchDocument preserves top-level JSON keys this build doesn't understand (e.g. a
 // future "timeline") across a save/load round-trip, so an older build never destroys a newer
-// build's data just by re-saving. See docs/plans/timeline-plan.html §6 TL0.6.
+// build's data just by re-saving. See docs/plans/timeline-plan.html §6.
 
 class PatchDocumentTest : public ::testing::Test {};
 

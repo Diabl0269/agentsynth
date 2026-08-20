@@ -64,7 +64,11 @@ AIProvider::RequestId AIIntegrationService::sendMessage(const juce::String& text
         request.back().content = buildPatchAugmentedContent(text);
 
     auto weakThis = juce::WeakReference<AIIntegrationService>(this);
-    auto schema = useStructuredOutput ? AIStateMapper::getPatchSchema() : juce::var();
+    // With the timeline tools on, the output contract grows an OPTIONAL `timelineOps` array —
+    // patch-only responses stay exactly as valid, so nothing changes for pure patch asks.
+    auto schema = useStructuredOutput ? (timelineToolsActive() ? AIStateMapper::getPatchSchemaWithTimelineOps()
+                                                               : AIStateMapper::getPatchSchema())
+                                      : juce::var();
 
     return provider->sendPrompt(
         request,
@@ -110,21 +114,108 @@ void AIIntegrationService::cancelRequest(AIProvider::RequestId requestId) {
 }
 
 juce::String AIIntegrationService::buildPatchAugmentedContent(const juce::String& text) {
+    // graphToJSON builds a fresh DynamicObject tree on every call (not shared with the live graph
+    // or any other caller), so stripping "state" from these nodes in place cannot mutate anything
+    // else. "state" is trusted-path-only (a Hosted Plugin's opaque blob, a Sampler's disk path) —
+    // the model can never author it, so it is pure leakage and token waste over the wire.
     juce::var graphJson = AIStateMapper::graphToJSON(audioGraph);
+    juce::String patchSection;
     if (auto* obj = graphJson.getDynamicObject()) {
         if (auto* nodeArr = obj->getProperty("nodes").getArray()) {
+            for (auto& nodeVar : *nodeArr) {
+                if (auto* nodeObj = nodeVar.getDynamicObject())
+                    nodeObj->removeProperty("state");
+            }
             if (!nodeArr->isEmpty()) {
-                return "Current patch state:\n```json\n" + juce::JSON::toString(graphJson) +
-                       "\n```\n\nUser request: " + text;
+                patchSection = "Current patch state:\n```json\n" + juce::JSON::toString(graphJson) + "\n```";
             }
         }
     }
-    // Structured output was requested but the live graph has no nodes. Silently falling back to
-    // bare `text` gave the model no signal either way about whether a patch already exists, so a
-    // fresh-session "create a bass patch" request would come back asking the user to paste their
-    // (nonexistent) current patch. Say explicitly that the canvas is empty instead.
-    return "Current patch is empty.\n\nUser request: " + text;
+
+    // The timeline sibling of the patch section above, added only when there is an arrangement to
+    // report. See ArrangementContext::summarize() (Source/Timeline/ArrangementContext.h) for the
+    // security model (read-path only; name-only file references; no plugin identifiers).
+    juce::String arrangementSection;
+#if SYNTH_ENABLE_TIMELINE
+    if (timelineDoc != nullptr && transportService != nullptr && !timelineDoc->isEmpty()) {
+        const juce::String summary =
+            ArrangementContext::summarize(*timelineDoc, audioGraph, transportService->getPositionSnapshot());
+        if (summary.isNotEmpty())
+            arrangementSection = "## Arrangement\n" + summary;
+    }
+#endif
+
+    juce::String content;
+    if (patchSection.isNotEmpty())
+        content << patchSection << "\n\n";
+    else
+        // Structured output was requested but the live graph has no nodes. Silently falling back
+        // to bare `text` gave the model no signal either way about whether a patch already exists,
+        // so a fresh-session "create a bass patch" request would come back asking the user to
+        // paste their (nonexistent) current patch. Say explicitly that the canvas is empty.
+        content << "Current patch is empty.\n\n";
+    if (arrangementSection.isNotEmpty())
+        content << arrangementSection << "\n\n";
+#if SYNTH_ENABLE_TIMELINE
+    if (timelineToolsActive()) {
+        const juce::String targets = buildAutomationTargetsSection();
+        if (targets.isNotEmpty())
+            content << targets << "\n\n";
+    }
+#endif
+    content << "User request: " << text;
+    return content;
 }
+
+#if SYNTH_ENABLE_TIMELINE
+juce::String AIIntegrationService::buildAutomationTargetsSection() const {
+    // One line per addressable node: `- "<uuid>" <Display Name>: <paramId> [min..max], ...`.
+    // Float parameters only — that is what an automation lane drives — and only nodes that carry
+    // a uuid (a node without one is not addressable by writeLane at all). Bounded like the
+    // arrangement summary: whole LINES are dropped from the tail past the cap, with a marker, so
+    // a huge patch can't flood the request.
+    constexpr int kMaxChars = 2000;
+
+    juce::StringArray lines;
+    int dropped = 0;
+    int usedChars = 0;
+    for (auto* node : audioGraph.getNodes()) {
+        if (node == nullptr || node->getProcessor() == nullptr)
+            continue;
+        const juce::String uuid = node->properties["uuid"].toString();
+        if (uuid.isEmpty())
+            continue;
+
+        juce::StringArray params;
+        for (auto* p : node->getProcessor()->getParameters()) {
+            auto* f = dynamic_cast<juce::AudioParameterFloat*>(p);
+            if (f == nullptr)
+                continue;
+            const auto& range = f->getNormalisableRange();
+            params.add(f->paramID + " [" + juce::String(range.start, 3) + ".." + juce::String(range.end, 3) + "]");
+        }
+        if (params.isEmpty())
+            continue;
+
+        const juce::String line =
+            "- \"" + uuid + "\" " + node->getProcessor()->getName() + ": " + params.joinIntoString(", ");
+        if (usedChars + line.length() > kMaxChars) {
+            ++dropped;
+            continue;
+        }
+        usedChars += line.length();
+        lines.add(line);
+    }
+
+    if (lines.isEmpty())
+        return {};
+    juce::String section =
+        "## Automation targets (for writeLane: nodeUuid + paramId + raw value range)\n" + lines.joinIntoString("\n");
+    if (dropped > 0)
+        section << "\n... [+" << dropped << " more nodes]";
+    return section;
+}
+#endif
 
 void AIIntegrationService::trimHistory() {
     if (chatHistory.empty())
@@ -450,6 +541,35 @@ juce::String AIIntegrationService::extractJsonFromResponse(const juce::String& r
     return response.trim();
 }
 
+#if SYNTH_ENABLE_TIMELINE
+juce::var AIIntegrationService::extractTimelineOps(const juce::String& response) {
+    const juce::var parsed = juce::JSON::parse(extractJsonFromResponse(response));
+    // Presence, not well-formedness: a malformed "timelineOps" must reach previewTimelineOps() and
+    // be reported, never be quietly dropped as if the model had asked for nothing (the same rule
+    // that keeps applyPatch from swallowing a rejected patch).
+    return TimelineOps::carriesOps(parsed) ? parsed : juce::var();
+}
+
+TimelineOpsResult AIIntegrationService::previewTimelineOps(const juce::var& envelope) const {
+    if (timelineDoc == nullptr)
+        return {false, "This build has no timeline wired in, so timeline changes cannot be checked or applied.", {}};
+
+    return TimelineOps::validate(envelope, *timelineDoc, audioGraph);
+}
+
+TimelineOpsResult AIIntegrationService::applyTimelineOps(const juce::var& envelope) {
+    if (!timelineOpsApply)
+        return {false, "Timeline changes cannot be applied from here.", {}};
+
+    const auto result = timelineOpsApply(envelope);
+    // One log per Apply click — user-click frequency, so it stays within the no-high-frequency
+    // logging rule, and in Debug builds it lands in AIChatComponent's console.
+    juce::Logger::writeToLog(juce::String("applyTimelineOps ") + (result.ok ? "applied: " : "rejected: ") +
+                             result.message);
+    return result;
+}
+#endif
+
 juce::String AIIntegrationService::getPatchContext() {
     juce::var json = AIStateMapper::graphToJSON(audioGraph);
     return juce::JSON::toString(json);
@@ -460,7 +580,21 @@ void AIIntegrationService::clearHistory() {
     initSystemPrompt();
 }
 
-void AIIntegrationService::initSystemPrompt() {
+void AIIntegrationService::initSystemPrompt() { chatHistory.push_back({"system", buildSystemPrompt()}); }
+
+void AIIntegrationService::refreshSystemPrompt() {
+    // Swap the system message in place: a mid-conversation toggle (the timeline preference, or
+    // the timeline context arriving after construction) must not clear the user's chat. With no
+    // system message yet (never initialised — cannot happen in practice, but cheap to honour),
+    // fall back to the normal init.
+    if (!chatHistory.empty() && chatHistory.front().role == "system") {
+        chatHistory.front().content = buildSystemPrompt();
+        return;
+    }
+    initSystemPrompt();
+}
+
+juce::String AIIntegrationService::buildSystemPrompt() const {
     juce::String schema = AIStateMapper::getModuleSchema();
 
     juce::String systemMsg =
@@ -697,7 +831,54 @@ void AIIntegrationService::initSystemPrompt() {
         "Removing a node is not enough on its own — the chain must be rewired around the gap, or the patch "
         "ends up with 501 dangling and nothing reaching Audio Output.";
 
-    chatHistory.push_back({"system", systemMsg});
+#if SYNTH_ENABLE_TIMELINE
+    // The timeline tool section exists only while the runtime switch is on AND a timeline context
+    // is installed — off, this prompt is byte-identical to the pre-timeline one (pinned by
+    // AIIntegrationServiceTest.TimelineToolsToggleGatesThePromptAndSchema).
+    if (timelineToolsActive()) {
+        systemMsg +=
+            "\n\n### TIMELINE & AUTOMATION OPERATIONS (timelineOps):\n"
+            "The user also has a TIMELINE: tracks, MIDI clips with notes, and parameter-automation lanes. "
+            "When they ask for arrangement content — notes/melodies/chords on a track, a new track, or a "
+            "parameter changing OVER TIME (\"automate\", \"sweep\", \"fade\", \"over N bars\") — add a "
+            "top-level `timelineOps` array to your JSON response (alongside `nodes`/`connections`; use empty "
+            "arrays for those when the graph itself needs no change). Beats are quarter-note beats; beat 0 is "
+            "bar 1. The current tracks appear in the \"## Arrangement\" section and the automatable targets "
+            "in the \"## Automation targets\" section of the user's message.\n"
+            "The operations (max 64 per response; ANY invalid op rejects the whole batch, so keep batches "
+            "small and exact):\n"
+            "1. `{\"op\": \"addTrack\", \"kind\": \"midi\"|\"automation\", \"name\": \"...\"}` — a new empty "
+            "track.\n"
+            "2. `{\"op\": \"placeClips\", \"track\": \"<exact MIDI track name>\" or {\"index\": N}, "
+            "\"clips\": [{\"startBeat\": 0, \"lengthBeats\": 4, \"name\": \"...\", \"notes\": [{\"startBeat\": "
+            "0, \"lengthBeats\": 1, \"pitch\": 60, \"velocity\": 100}]}]}` — writes MIDI notes; a note's "
+            "startBeat is relative to ITS CLIP's start, and notes must fit inside the clip.\n"
+            "3. `{\"op\": \"writeLane\", \"nodeUuid\": \"<uuid from Automation targets>\", \"paramId\": "
+            "\"<param id>\", \"points\": [{\"beat\": 0, \"value\": 200}, {\"beat\": 8, \"value\": 8000}]}` — "
+            "parameter automation over time. Values are RAW values inside the parameter's listed range "
+            "(never 0-1 normalised). Points REPLACE any existing points inside the written beat span. Only "
+            "(nodeUuid, paramId) pairs from the Automation targets section resolve — never invent a uuid.\n"
+            "4. `placeMidiClip` (a base64 .mid blob) exists but PREFER placeClips — explicit notes are "
+            "checkable.\n"
+            "The user always sees a preview and must click Apply before anything changes.\n"
+            "\nAutomation example — \"sweep the filter cutoff up over 8 beats\" (Filter uuid \"abc-123\"):\n"
+            "```json\n"
+            "{\"nodes\": [], \"connections\": [], \"timelineOps\": [{\"op\": \"writeLane\", \"nodeUuid\": "
+            "\"abc-123\", \"paramId\": \"cutoff\", \"points\": [{\"beat\": 0, \"value\": 200.0}, {\"beat\": 8, "
+            "\"value\": 8000.0}]}]}\n"
+            "```\n"
+            "Melody example — notes on existing MIDI track \"Lead\":\n"
+            "```json\n"
+            "{\"nodes\": [], \"connections\": [], \"timelineOps\": [{\"op\": \"placeClips\", \"track\": "
+            "\"Lead\", \"clips\": [{\"startBeat\": 0, \"lengthBeats\": 4, \"name\": \"Riff\", \"notes\": ["
+            "{\"startBeat\": 0, \"lengthBeats\": 1, \"pitch\": 60, \"velocity\": 100}, {\"startBeat\": 1, "
+            "\"lengthBeats\": 1, \"pitch\": 63, \"velocity\": 100}, {\"startBeat\": 2, \"lengthBeats\": 2, "
+            "\"pitch\": 67, \"velocity\": 100}]}]}]}\n"
+            "```";
+    }
+#endif
+
+    return systemMsg;
 }
 
 void AIIntegrationService::setModel(const juce::String& name) {

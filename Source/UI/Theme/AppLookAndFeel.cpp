@@ -734,6 +734,23 @@ void AppLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& but
     }
 }
 
+juce::Rectangle<int> AppLookAndFeel::getTooltipBounds(const juce::String& tipText, juce::Point<int> screenPos,
+                                                      juce::Rectangle<int> parentArea) {
+    // The stock LookAndFeel places the tip 24 px right of (or 12 px left of) the cursor, which
+    // reads as detached from small controls like the timeline transport buttons. Keep it hugging
+    // the pointer instead: horizontally centred on it, 14 px below the hotspot (a typical cursor's
+    // height), flipped to just above when there is no room. Measured with the SAME font
+    // drawTooltip() renders with, so the fitted text never clips.
+    const juce::Font font(juce::FontOptions(theme.type.label + 1.0f));
+    const int w = (int)std::ceil(juce::GlyphArrangement::getStringWidth(font, tipText)) + 14;
+    const int h = (int)std::ceil(font.getHeight()) + 8;
+
+    const int x = screenPos.x - w / 2;
+    const bool below = screenPos.y + 14 + h <= parentArea.getBottom();
+    const int y = below ? screenPos.y + 14 : screenPos.y - h - 6;
+    return juce::Rectangle<int>(x, y, w, h).constrainedWithin(parentArea);
+}
+
 void AppLookAndFeel::drawTooltip(juce::Graphics& g, const juce::String& text, int width, int height) {
     const auto& c = theme.colors;
     auto bounds = juce::Rectangle<float>(0, 0, (float)width, (float)height);

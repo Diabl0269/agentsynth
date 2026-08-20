@@ -213,6 +213,10 @@ public:
 
     void prepareToPlay(double sampleRate, int /*samplesPerBlock*/) override {
         currentSampleRate = sampleRate > 0.0 ? sampleRate : 44100.0;
+        // Level multiplies the rendered output, so a per-block automation write is a click.
+        // Snapped to the knob at prepare so a static render is unchanged.
+        smoothedLevel.reset(currentSampleRate, 0.01);
+        smoothedLevel.setCurrentAndTargetValue(levelParam->get());
         resetPlayback();
     }
 
@@ -284,12 +288,16 @@ public:
         // Source-rate correction: a 48k file on a 44.1k device must read slightly faster than 1.0.
         const double rateRatio = sample->sourceSampleRate / currentSampleRate;
         const float midiSemis = midiEverReceived ? (midiNote - (float)rootNoteParam->get()) : 0.0f;
+        // Pitch is a playback *rate* (the read head stays continuous through a change), and Start /
+        // Grain Size / Density / Spray are only consulted when a grain spawns or a loop wraps —
+        // discrete events. None of them can put a step in the rendered signal, so all five are
+        // deliberately read raw. Level is the one that scales every sample, and it is smoothed.
         const float basePitch = pitchParam->get();
         const float baseStart = startParam->get();
         const float baseGrainMs = grainSizeParam->get();
         const float baseDensity = densityParam->get();
         const float baseSpray = sprayParam->get();
-        const float baseLevel = levelParam->get();
+        smoothedLevel.setTargetValue(levelParam->get());
         const bool granular = playModeParam->getIndex() == 1;
         const bool looping = loopParam->get();
 
@@ -321,7 +329,8 @@ public:
                 hasPitchCV ? std::pow(2.0, (double)(basePitch + midiSemis + pitchCache[idx] * 24.0f) / 12.0) * rateRatio
                            : baseIncrement;
             const float position = juce::jlimit(0.0f, 1.0f, baseStart + (hasPosCV ? positionCache[idx] : 0.0f));
-            const float level = juce::jlimit(0.0f, 1.0f, baseLevel + (hasLevelCV ? levelCache[idx] : 0.0f));
+            const float level =
+                juce::jlimit(0.0f, 1.0f, smoothedLevel.getNextValue() + (hasLevelCV ? levelCache[idx] : 0.0f));
 
             float left = 0.0f, right = 0.0f;
 
@@ -501,6 +510,12 @@ private:
         playhead = (double)position * (double)(sampleFrames - 1);
         grainClock = 0.0; // fire the first grain immediately
         envelopeTarget = 1.0f;
+        // A new note starts at the Level knob's CURRENT value rather than ramping up to it from
+        // whatever the last note left behind — the 64-sample fade-in above is what stops the note
+        // start clicking, and a second ramp on top of it would just make the attack lag the knob.
+        // Level smoothing is there for changes DURING a held note (timeline automation), and this
+        // snap does not weaken it.
+        smoothedLevel.setCurrentAndTargetValue(levelParam->get());
     }
 
     void advanceEnvelope() {
@@ -628,6 +643,7 @@ private:
     std::atomic<int> sampleGeneration{0};
 
     double currentSampleRate = 44100.0;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedLevel;
     double playhead = -1.0; // -1 == stopped (Sample mode)
     double grainClock = 0.0;
     float envelope = 0.0f;

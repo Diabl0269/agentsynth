@@ -70,6 +70,13 @@ public:
         applyFilterType(filterTypeParam->getIndex());
         smoothedCutoff.reset(sampleRate, 0.005);
         smoothedCutoff.setCurrentAndTargetValue(*cutoffParam);
+        // Resonance and Drive both scale the ladder's feedback/saturation, so an automated step
+        // lands straight on the output level. 5 ms matches Cutoff — fast enough to feel immediate
+        // on a knob, long enough that a per-block automation write cannot click.
+        smoothedResonance.reset(sampleRate, 0.005);
+        smoothedResonance.setCurrentAndTargetValue(*resonanceParam);
+        smoothedDrive.reset(sampleRate, 0.005);
+        smoothedDrive.setCurrentAndTargetValue(*driveParam);
         prepareOutputLevel(sampleRate);
     }
 
@@ -83,12 +90,12 @@ public:
         }
 
         smoothedCutoff.setTargetValue(*cutoffParam);
+        smoothedResonance.setTargetValue(*resonanceParam);
+        smoothedDrive.setTargetValue(*driveParam);
         applyFilterType(filterTypeParam->getIndex());
-        float baseRes = *resonanceParam;
-        float baseDrive = *driveParam;
 
         modulatedCutoff.store(*cutoffParam, std::memory_order_relaxed);
-        modulatedResonance.store(baseRes, std::memory_order_relaxed);
+        modulatedResonance.store(*resonanceParam, std::memory_order_relaxed);
 
         int numChannels = buffer.getNumChannels();
         int numSamples = buffer.getNumSamples();
@@ -96,9 +103,9 @@ public:
             return;
 
         if (!polyParam->get()) {
-            processMonoMode(buffer, numSamples, numChannels, baseRes, baseDrive);
+            processMonoMode(buffer, numSamples, numChannels);
         } else {
-            processPolyMode(buffer, numSamples, numChannels, baseRes, baseDrive);
+            processPolyMode(buffer, numSamples, numChannels);
         }
 
         // Audio lives on ch0 (mono) / ch0-7 (poly) plus the matching Audio R block at kRightBase;
@@ -227,8 +234,7 @@ public:
 private:
     static constexpr int MAX_VOICES = 8;
 
-    void processMonoMode(juce::AudioBuffer<float>& buffer, int numSamples, int numChannels, float baseRes,
-                         float baseDrive) {
+    void processMonoMode(juce::AudioBuffer<float>& buffer, int numSamples, int numChannels) {
         const float* cvCutoffCh = (numChannels > 1) ? buffer.getReadPointer(1) : nullptr;
         const float* cvResCh = (numChannels > 2) ? buffer.getReadPointer(2) : nullptr;
         const float* cvDriveCh = (numChannels > 3) ? buffer.getReadPointer(3) : nullptr;
@@ -254,6 +260,8 @@ private:
 
         for (int i = 0; i < numSamples; ++i) {
             float baseCutoff = smoothedCutoff.getNextValue();
+            const float baseRes = smoothedResonance.getNextValue();
+            const float baseDrive = smoothedDrive.getNextValue();
             float totalCutoffMod = cvCutoffCh ? cvCutoffCh[i] : 0.0f;
             totalCutoffMod = juce::jlimit(-1.0f, 1.0f, totalCutoffMod);
 
@@ -344,8 +352,17 @@ private:
         }
     }
 
-    void processPolyMode(juce::AudioBuffer<float>& buffer, int numSamples, int numChannels, float baseRes,
-                         float baseDrive) {
+    void processPolyMode(juce::AudioBuffer<float>& buffer, int numSamples, int numChannels) {
+        // Poly mode already resolves cutoff/resonance/drive once per block (one ladder per voice,
+        // coefficients set per block), so the smoothers advance a whole block at a time here
+        // instead of per sample. They still turn an automation step into a ramp across blocks.
+        const float baseCutoffPoly = smoothedCutoff.getCurrentValue();
+        const float baseRes = smoothedResonance.getCurrentValue();
+        const float baseDrive = smoothedDrive.getCurrentValue();
+        smoothedCutoff.skip(numSamples);
+        smoothedResonance.skip(numSamples);
+        smoothedDrive.skip(numSamples);
+
         // Read shared CV from channels 8-10 into pre-allocated cache
         int ns = std::min(numSamples, 4096);
         std::fill_n(cutoffCVCache.data(), ns, 0.0f);
@@ -366,7 +383,7 @@ private:
         float cvRes = juce::jlimit(-1.0f, 1.0f, resCVCache[midSample]);
         float cvDrv = juce::jlimit(-1.0f, 1.0f, driveCVCache[midSample]);
 
-        float baseCutoff = *cutoffParam;
+        float baseCutoff = baseCutoffPoly;
         float f = baseCutoff;
         if (cvCut > 0.0f)
             f = baseCutoff * std::pow(20000.0f / baseCutoff, cvCut);
@@ -450,6 +467,8 @@ private:
     bool isNotchMode = false;
     double lastSampleRate = 44100.0;
     juce::SmoothedValue<float> smoothedCutoff;
+    juce::SmoothedValue<float> smoothedResonance;
+    juce::SmoothedValue<float> smoothedDrive;
     juce::AudioParameterFloat* cutoffParam = nullptr;
     juce::AudioParameterFloat* resonanceParam = nullptr;
     juce::AudioParameterFloat* driveParam = nullptr;

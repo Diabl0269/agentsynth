@@ -2,6 +2,7 @@
 #include "AI/AIStateMapper.h"
 #include "Branding.h"
 #include "PluginEditor.h"
+#include "UserSettings.h"
 
 namespace synth {
 
@@ -24,12 +25,39 @@ AgentSynthAudioProcessor::AgentSynthAudioProcessor()
     // the properties file, which restores the user's persisted theme over this default.
     lookAndFeel.applyTheme(themeManager.getActiveTheme());
 
+    // The identity resolver, installed before anything in the graph can ask for a plugin. This is
+    // the processor's job and not the editor's: setStateInformation runs whether or not the host
+    // ever opens our window, and an identity that cannot resolve leaves a Hosted Plugin node a
+    // placeholder for the rest of the session. The list is whatever the standalone app persisted
+    // after its last scan — nothing here scans (see startPluginScan).
+    appProperties.setStorageParameters(userSettingsOptions());
+    if (auto savedScanList = juce::parseXML(appProperties.getUserSettings()->getValue(kPluginScanListSettingKey)))
+        pluginScanService.loadFromXml(*savedScanList);
+    if (auto* backend = dynamic_cast<DefaultHostedPluginBackend*>(&HostedPluginBackend::getDefault()))
+        backend->setScanService(&pluginScanService);
+
     // Builds the default patch. In HostMode::Hosted this touches no audio device and opens no
     // MIDI input — see AudioEngine::initialise().
     engine.initialise();
 }
 
-AgentSynthAudioProcessor::~AgentSynthAudioProcessor() { engine.shutdown(); }
+AgentSynthAudioProcessor::~AgentSynthAudioProcessor() {
+    // Unhook before the graph goes: the backend holds a bare pointer, and a hosted-plugin node
+    // resolving an identity after this point would read freed memory. Guarded on "still ours" for
+    // the same reason MainComponent's destructor is — a second plugin instance in the same process
+    // will have installed its own service over this one.
+    if (auto* backend = dynamic_cast<DefaultHostedPluginBackend*>(&HostedPluginBackend::getDefault()))
+        if (backend->getScanService() == &pluginScanService)
+            backend->setScanService(nullptr);
+
+    engine.shutdown();
+}
+
+void AgentSynthAudioProcessor::ensureScanServiceInstalled() {
+    if (auto* backend = dynamic_cast<DefaultHostedPluginBackend*>(&HostedPluginBackend::getDefault()))
+        if (backend->getScanService() == nullptr)
+            backend->setScanService(&pluginScanService);
+}
 
 const juce::String AgentSynthAudioProcessor::getName() const { return synth::branding::kProductName; }
 
@@ -51,6 +79,10 @@ void AgentSynthAudioProcessor::changeProgramName(int index, const juce::String& 
 
 void AgentSynthAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {
     engine.prepareForHost(sampleRate, samplesPerBlock, getTotalNumInputChannels(), getTotalNumOutputChannels());
+
+    // The inner graph's latency (a hosted plugin's lookahead, compensated inside the graph) is
+    // invisible to the DAW unless this wrapper reports it as its own.
+    setLatencySamples(engine.getGraphLatencySamples());
 }
 
 void AgentSynthAudioProcessor::releaseResources() { engine.releaseFromHost(); }
@@ -78,6 +110,13 @@ void AgentSynthAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, ju
     // producesMidi() is false, so anything the graph left in the buffer (e.g. a Sequencer's note
     // stream driving the internal oscillators) must not escape to the host.
     midiMessages.clear();
+
+    // A hosted plugin flipping its lookahead mid-session re-derives the inner graph's latency on
+    // the message thread; this compare is how the new figure reaches the DAW without waiting for
+    // the next prepareToPlay. setLatencySamples is allocation-free.
+    const int graphLatency = engine.getGraphLatencySamples();
+    if (graphLatency != getLatencySamples())
+        setLatencySamples(graphLatency);
 }
 
 juce::AudioProcessorEditor* AgentSynthAudioProcessor::createEditor() { return new AgentSynthPluginEditor(*this); }
@@ -117,6 +156,10 @@ void AgentSynthAudioProcessor::setStateInformation(const void* data, int sizeInB
     if (!patch.isObject())
         return;
 
+    // Before anything can apply a Hosted Plugin node's identity — see the helper for the one case
+    // this covers that the constructor cannot.
+    ensureScanServiceInstalled();
+
     // Tear down module components BEFORE the graph is cleared, so no ScopeComponent timer can
     // fire against a freed VisualBuffer. Same ordering contract as GraphEditor::loadPreset and
     // MainComponent::aiPatchAboutToApply — see docs/architecture.md.
@@ -130,7 +173,13 @@ void AgentSynthAudioProcessor::setStateInformation(const void* data, int sizeInB
     // values themselves are our own graphToJSON output: applying them untrusted would run the
     // [0,1] rescale heuristic meant for sloppy model output and silently corrupt exact values
     // (a 0.5 Hz LFO rate on a 0.01–20 Hz range reloads as ~10 Hz). Trusted apply preserves them.
-    if (!AIStateMapper::validatePatch(patch, engine.getGraph(), /*clearExisting=*/true, /*trusted=*/false).ok) {
+    //
+    // allowInternalModuleTypes: the model-authorship restriction does not apply to our OWN saved
+    // graph, which legitimately contains internal nodes (every mod routing is an Attenuverter, and
+    // a timeline patch has a Track In per track). Everything else the gate checks still runs.
+    if (!AIStateMapper::validatePatch(patch, engine.getGraph(), /*clearExisting=*/true, /*trusted=*/false,
+                                      /*allowInternalModuleTypes=*/true)
+             .ok) {
         if (editor != nullptr)
             editor->refreshAfterGraphReplacement();
         return;

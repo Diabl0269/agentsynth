@@ -1,0 +1,16 @@
+{
+  "name": "smpte-midi-blob",
+  "description": "A base64 .mid blob using SMPTE time format (25fps/40 subframes) instead of PPQ - MidiClipFile::importFromStream rejects it outright, so placeMidiClip must too.",
+  "kind": "timelineOps",
+  "expectedValid": false,
+  "expectedMessageContains": "SMPTE",
+  "expectedPreviewContains": "",
+  "payload": {
+    "timelineOps": [
+      { "op": "addTrack", "kind": "midi", "name": "Bass" },
+      { "op": "placeMidiClip", "track": "Bass", "startBeat": 0,
+        "midBase64": "TVRoZAAAAAYAAQAB5yhNVHJrAAAADACQPGRkgDwAAP8vAA=="
+      }
+    ]
+  }
+}
