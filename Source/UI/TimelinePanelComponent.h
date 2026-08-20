@@ -3,6 +3,7 @@
 #include "../Timeline/TimelineDoc.h"
 #include "AutomationLaneEditor.h"
 #include "ClipSelectionModel.h"
+#include "EditTool.h"
 #include "PianoRollComponent.h"
 #include "TimelineClipLaneArea.h"
 #include "TimelinePlayheadOverlay.h"
@@ -10,9 +11,11 @@
 #include "TimelineTrackHeaderComponent.h"
 #include "TimelineTransportBar.h"
 #include "TimelineViewState.h"
+#include <array>
 #include <functional>
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 #include <vector>
 
 class AppUndoManager; // Forward declaration (Source/AppUndoManager.h)
@@ -123,30 +126,78 @@ public:
     // to compare addresses / walk the component tree, never to mutate either sub-component.
     const synth::ui::TimelineClipLaneArea& getClipLaneArea() const noexcept { return clipLaneArea_; }
 
+    // ---- Edit tools (the Cubase-style tool row — see EditTool.h) ----
+    //
+    // ONE active tool for the whole timeline, owned here because the clip lanes and the piano roll
+    // share a rect (only one is ever visible) and a tool row that changed meaning depending on
+    // which editor happened to be showing would be a trap. Setting it pushes the tool into BOTH
+    // editors and lights the matching strip button; the number keys (1/3/4/5/7/8) and the buttons
+    // are the two ways a user reaches it.
+    void setActiveTool(EditTool tool);
+    EditTool getActiveTool() const noexcept { return activeTool_; }
+    /** The strip button for a tool. Never null once the panel is constructed — the six buttons are
+     *  built in the constructor, unconditionally (a headless build simply has no icon to draw in
+     *  them). Exposed so a test can click one rather than synthesise a key press. */
+    juce::DrawableButton* getToolButton(EditTool tool) const noexcept;
+
     // ---- Clip clipboard (Cmd+C/V/D on the TimelineClips surface) ----
     // This panel owns the clipboard because it already owns the selection it copies from — see
     // MainComponent::resolveEditSurface()/perform(), which delegate here exactly the way
     // GraphEditor owns its own module clipboard.
     //
-    // Copies the CURRENTLY SELECTED clips — their notes, lengths, and starts expressed RELATIVE
-    // to the earliest selected clip's start — into an internal clipboard, replacing whatever was
-    // there. Returns false (clipboard left untouched) when nothing is selected or there's no doc.
+    // Copies the CURRENTLY SELECTED clips — WHOLE clips: notes (each with its own muted flag),
+    // name, length, muted flag and every audio field (assetRef, gainDb, the two fades,
+    // sourceStartSeconds), with starts expressed RELATIVE to the earliest selected clip's start —
+    // into an internal clipboard, replacing whatever was there. Returns false (clipboard left
+    // untouched) when nothing is selected or there's no doc.
     bool copySelectedClips();
     // True once copySelectedClips() has captured at least one clip and nothing has cleared it
     // since — getCommandInfo's Paste-active gate for the TimelineClips surface.
     bool canPasteClips() const noexcept { return !clipClipboard_.empty(); }
     // Inserts every clipboard clip back onto ITS ORIGINAL TRACK, re-based so the EARLIEST clip
     // lands at the transport's CURRENT position (snapped via the shared view-state snap and the
-    // transport's live time signature) and every other clip keeps its relative offset. A clip
-    // whose original track no longer exists lands on the doc's first Midi-kind track, or is
-    // skipped entirely when there is none. One recordTimelineChange for the whole paste; the
-    // pasted clips end up selected. Returns false (no-op, clipboard untouched) when the clipboard
-    // is empty, there's no doc, or every clip was skipped.
+    // transport's live time signature) and every other clip keeps its relative offset, with its
+    // notes, name, mute state and audio fields restored.
+    //
+    // The track fallback is KIND-AWARE: the original track is used only if it still exists AND
+    // still plays the clip's payload (an audio clip needs a TrackKind::Audio row, a MIDI clip a
+    // Midi one — TimelineDoc::moveClipToTrack's rule); otherwise the doc's first track of the
+    // required kind; otherwise that clip is skipped. Pasting an audio clip onto a MIDI row would
+    // park an asset somewhere nothing will ever play it.
+    //
+    // Audio fields go back through setClipAsset/setClipGainDb/setClipFades rather than being
+    // written into the struct, so the clipboard's assetRef passes the SAME bundle-relative
+    // validation a loaded file's does — a clipboard is only as trustworthy as whatever filled it.
+    // One recordTimelineChange for the whole paste; the pasted clips end up selected. Returns
+    // false (no-op, clipboard untouched) when the clipboard is empty, there's no doc, or every
+    // clip was skipped.
     bool pasteClipsAtPlayhead();
     // doc_->duplicateClip() per selected clip, batched into one recordTimelineChange however many
     // clips are selected; the new clips end up selected. Returns false when nothing is selected or
     // there's no doc.
     bool duplicateSelectedClips();
+
+    // copySelectedClips() followed by deleting the selection, as ONE recordTimelineChange — so
+    // undo brings a cut back in a single step, and the clipboard survives it. Returns false
+    // (nothing copied, nothing deleted) when the copy half fails.
+    bool cutSelectedClips();
+    // Whether Cut/Copy have anything to act on — the getCommandInfo gate for both.
+    bool canCutClips() const noexcept;
+    // Whether ANY clip is selected. Same answer as canCutClips today; a separate name because the
+    // commands that ask (Duplicate, Repeat) are asking about the selection, not about the
+    // clipboard, and the two should be free to diverge.
+    bool hasClipSelection() const noexcept;
+    // Selects every clip on every track (Cmd+A on the clip-lane surface). Returns false when
+    // there's no doc or the arrangement has no clips at all.
+    bool selectAllClips();
+    // Cubase's "Repeat": `count` back-to-back copies of the selection BLOCK, the first starting
+    // one block-length after the selection's own start, so the copies tile forward without
+    // overlapping the source. The block length is the selection's span (max end - min start), not
+    // each clip's own length — that is what keeps a multi-clip rhythm intact instead of
+    // collapsing it. duplicateClip + moveClipToTrack per copy, ONE recordTimelineChange for the
+    // whole repeat, and the final selection is every clip it created. Returns false when `count`
+    // is < 1, there's no doc/selection, or nothing could be created.
+    bool repeatSelectedClips(int count);
 
     // ---- Piano roll ----
     // Swaps the lanes region (gridLanesBounds_ — the same rect the clip-lane area occupies) to
@@ -311,16 +362,47 @@ private:
     // addNote() reassigns their ids on paste regardless of what's stored here.
     struct ClipboardClip {
         synth::TrackId originalTrack;
+        // The track kind this clip needs on paste, derived at COPY time from the payload
+        // (non-empty assetRef -> Audio, else Midi) rather than from the track it sat on: the
+        // payload is what decides where it can be played, and it is also what
+        // TimelineDoc::moveClipToTrack checks.
+        synth::TrackKind requiredKind = synth::TrackKind::Midi;
         double relativeStartBeat = 0.0;
         double lengthBeats = 4.0;
         juce::String name;
-        std::vector<synth::MidiNote> notes;
+        std::vector<synth::MidiNote> notes; // each note's own muted flag travels with it
+        bool muted = false;
+        // Audio fields — captured and restored so copy/paste of an audio clip yields the same
+        // clip, not a silent husk pointing at nothing (they were dropped before, which is exactly
+        // what "the clipboard drops audio clips" looked like from the outside).
+        juce::String assetRef;
+        double gainDb = 0.0;
+        double fadeInBeats = 0.0;
+        double fadeOutBeats = 0.0;
+        double sourceStartSeconds = 0.0;
     };
     std::vector<ClipboardClip> clipClipboard_;
     // The beatsPerBar TimelineViewState::snapBeat needs for pasteClipsAtPlayhead()'s Snap::Bar
     // case — same formula (and same "4.0 with no transport" fallback) as every other timeline
     // sub-component's own currentBeatsPerBar()/beatsPerBarFrom() helper.
     double currentBeatsPerBarForPaste() const;
+    // The first track of `kind` in doc order, or an invalid id. The paste fallback (see
+    // pasteClipsAtPlayhead) and nothing else.
+    synth::TrackId firstTrackOfKind(synth::TrackKind kind) const;
+
+    // ---- Edit-tool strip ----
+    EditTool activeTool_ = EditTool::Select;
+    // Six radio-group icon buttons, indexed by EditTool. unique_ptrs because juce::DrawableButton
+    // has no default constructor (it needs a name and a style up front).
+    std::array<std::unique_ptr<juce::DrawableButton>, kAllEditTools.size()> toolButtons_;
+    // Re-applies the icons and the active-tool highlight colour from the current LookAndFeel.
+    // Called from the constructor and from lookAndFeelChanged() — a theme switch re-tints every
+    // icon and can move the `toolActive` token, and both live in the LnF rather than in a
+    // per-button copy.
+    void applyToolStripTheme();
+    // The one thing this panel needs to redo on a theme switch (every other colour it uses is read
+    // at paint time through the same dynamic_cast).
+    void lookAndFeelChanged() override;
 
     // The Viewport's content: a plain container whose height is (track count * row height).
     struct TrackHeaderList : juce::Component {

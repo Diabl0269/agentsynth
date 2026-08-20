@@ -4,6 +4,7 @@
 #include "../Transport/TransportService.h"
 #include "Theme/AppLookAndFeel.h"
 #include "TimelineTrackHeaderComponent.h"
+#include "ToolCursors.h"
 #include "TrackColour.h"
 #include <algorithm>
 #include <cmath>
@@ -44,6 +45,37 @@ constexpr const char* kAudioEmptyRowHint = "Drop an audio file \xE2\x80\x94 or a
 constexpr int kMinRowHeightForHint = 24;
 constexpr int kHintPaddingPx = 8;
 constexpr float kHintFontHeight = 11.0f;
+
+// Half-width of the Split tool's preview line's repaint region. The stroke itself is 1 px; the
+// margin is what keeps an antialiased line from leaving a fringe outside the repainted column.
+constexpr int kSplitPreviewMarginPx = 2;
+
+// A muted clip keeps its shape, its selection border and its waveform/notes, and loses only
+// brightness — mute is reversible, so it must not look like damage. The name label dims further
+// than the body (it is the one part a glance reads as "this clip is fine").
+constexpr float kMutedClipLabelAlpha = 0.35f;
+
+// The icon each tool's cursor is rendered from — the SAME already-tinted Drawable the tool
+// strip's button paints, which is what keeps cursor and button in sync across themes (see
+// synth::ui::makeToolCursor).
+synth::theme::Icon iconForTool(synth::ui::EditTool tool) noexcept {
+    using synth::theme::Icon;
+    switch (tool) {
+    case synth::ui::EditTool::Select:
+        return Icon::ToolSelect;
+    case synth::ui::EditTool::Split:
+        return Icon::ToolSplit;
+    case synth::ui::EditTool::Glue:
+        return Icon::ToolGlue;
+    case synth::ui::EditTool::Erase:
+        return Icon::ToolErase;
+    case synth::ui::EditTool::Mute:
+        return Icon::ToolMute;
+    case synth::ui::EditTool::Draw:
+        return Icon::ToolDraw;
+    }
+    return Icon::ToolSelect;
+}
 } // namespace
 
 //==============================================================================
@@ -74,6 +106,13 @@ void TimelineClipLaneArea::refreshFromDoc() {
                 alive.push_back(clip.id);
     }
     selection_.retainOnly(alive);
+    // A rename in flight over a clip this mutation removed has nothing left to commit to — drop
+    // the editor rather than let a later Return call setClipName on a dead id.
+    if (renameEditor_ != nullptr && (doc_ == nullptr || doc_->getClip(renamingClip_) == nullptr))
+        finishRename(false);
+    // The Split tool's hover line is doc geometry too: forget it rather than draw it against a
+    // clip that may have moved or gone.
+    clearToolPreviews();
     // Simplest-correct cache policy (see the class comment) — ANY doc change clears every
     // cached synth::PeaksFile::Data rather than diffing which assetRefs actually moved. Peaks
     // files are small, so the next paint's re-resolve+re-read is cheap; the alternative (per-ref
@@ -131,6 +170,18 @@ double TimelineClipLaneArea::floorSnappedBeatAt(double rawBeat) const {
     if (division <= 0.0)
         return std::max(0.0, rawBeat); // Snap::Off — no grid to floor onto
     return std::max(0.0, std::floor(rawBeat / division) * division);
+}
+
+double TimelineClipLaneArea::ceilSnappedBeatAt(double rawBeat) const {
+    const double division = viewState_.divisionBeats(currentBeatsPerBar());
+    if (division <= 0.0)
+        return std::max(0.0, rawBeat); // Snap::Off — no grid to reach up to
+    return std::max(0.0, std::ceil(rawBeat / division) * division);
+}
+
+double TimelineClipLaneArea::minDrawLengthBeats() const {
+    const double division = viewState_.divisionBeats(currentBeatsPerBar());
+    return division > 0.0 ? division : kMinClipLengthBeats;
 }
 
 std::optional<int> TimelineClipLaneArea::trackIndexAt(juce::Point<int> pos) const {
@@ -256,6 +307,15 @@ TimelineClipLaneArea::Geometry TimelineClipLaneArea::effectiveGeometryFor(const 
     return {clip.startBeat, clip.lengthBeats};
 }
 
+int TimelineClipLaneArea::effectiveRowFor(synth::ClipId id, int trackIndex) const {
+    if (dragMode_ != DragMode::Move || copyDrag_ || previewRowDelta_ == 0)
+        return trackIndex;
+    for (const auto& origin : dragClips_)
+        if (origin.id == id)
+            return trackIndex + previewRowDelta_;
+    return trackIndex;
+}
+
 //==============================================================================
 void TimelineClipLaneArea::paint(juce::Graphics& g) {
     if (doc_ == nullptr)
@@ -279,6 +339,11 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
     if (liveRecording_.active)
         paintLiveRecordingStrip(g);
 
+    // Tool affordances paint LAST, over the clips they describe.
+    paintDragGhosts(g);
+    paintDrawGhost(g);
+    paintSplitPreview(g);
+
     if (dragMode_ == DragMode::Marquee)
         paintMarquee(g);
 }
@@ -286,12 +351,17 @@ void TimelineClipLaneArea::paint(juce::Graphics& g) {
 void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip, const synth::Track& track,
                                      int trackIndex, int rowHeight) {
     const auto geometry = effectiveGeometryFor(clip);
-    const auto rect = computeClipRect(viewState_, trackIndex, geometry.start, geometry.length, rowHeight);
+    const auto rect =
+        computeClipRect(viewState_, effectiveRowFor(clip.id, trackIndex), geometry.start, geometry.length, rowHeight);
     if (rect.getRight() < 0 || rect.getX() > getWidth())
         return; // cheap offscreen cull — same reasoning as the panel's own bar-line loop
 
     const bool selected = selection_.contains(clip.id);
-    const juce::Colour base = synth::ui::resolveTrackColour(track.colourArgb, trackIndex, track.muted);
+    // A clip is dimmed when EITHER its track or the clip itself is muted — the two flags are
+    // independent in the model (see synth::Clip::muted) and OR together here for the same reason
+    // they OR by omission at flatten time: both mean "you will not hear this". Read from the DOC,
+    // never from a TimelineSnapshot, which no longer contains a muted clip at all.
+    const juce::Colour base = synth::ui::resolveTrackColour(track.colourArgb, trackIndex, track.muted || clip.muted);
     const juce::Colour fill = selected ? base.brighter(0.15f) : base; // "slight fill lift" when selected
 
     const auto bodyBounds = rect.toFloat().reduced(1.0f);
@@ -329,7 +399,7 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
     }
 
     if (rect.getWidth() > kMinWidthForName && clip.name.isNotEmpty()) {
-        g.setColour(juce::Colours::black.withAlpha(0.8f));
+        g.setColour(juce::Colours::black.withAlpha(clip.muted ? kMutedClipLabelAlpha : 0.8f));
         g.setFont(juce::Font(11.0f));
         g.drawText(clip.name, rect.reduced(4, 2), juce::Justification::topLeft, true);
     }
@@ -393,6 +463,49 @@ void TimelineClipLaneArea::paintMarquee(juce::Graphics& g) {
     g.fillRect(marqueeRect_);
     g.setColour(juce::Colours::white.withAlpha(0.6f));
     g.drawRect(marqueeRect_, 1);
+}
+
+//==============================================================================
+// Tool affordances: the copy-drag ghosts, the Draw ghost and the Split preview line. All three
+// are outlines rather than fills — they describe a result that does not exist yet, and a filled
+// rectangle would read as a clip that does.
+//==============================================================================
+
+void TimelineClipLaneArea::paintDragGhosts(juce::Graphics& g) {
+    if (dragMode_ != DragMode::Move || !copyDrag_ || doc_ == nullptr)
+        return;
+
+    const int rowHeight = getRowHeight();
+    g.setColour(juce::Colours::white.withAlpha(0.75f));
+    for (const auto& origin : dragClips_) {
+        const auto rect = computeClipRect(viewState_, origin.trackIndex + previewRowDelta_,
+                                          origin.originalStart + previewDeltaBeats_, origin.lengthBeats, rowHeight);
+        if (rect.getRight() < 0 || rect.getX() > getWidth())
+            continue;
+        g.drawRoundedRectangle(rect.toFloat().reduced(1.0f), 3.0f, 1.5f);
+    }
+}
+
+void TimelineClipLaneArea::paintDrawGhost(juce::Graphics& g) {
+    const auto ghost = getDrawGhostRectForTest();
+    if (ghost.isEmpty())
+        return;
+    g.setColour(juce::Colours::white.withAlpha(0.18f));
+    g.fillRoundedRectangle(ghost.toFloat().reduced(1.0f), 3.0f);
+    g.setColour(juce::Colours::white.withAlpha(0.75f));
+    g.drawRoundedRectangle(ghost.toFloat().reduced(1.0f), 3.0f, 1.5f);
+}
+
+void TimelineClipLaneArea::paintSplitPreview(juce::Graphics& g) {
+    if (!splitPreviewClip_.isValid() || doc_ == nullptr)
+        return;
+    const auto bounds = splitPreviewBounds(splitPreviewClip_, splitPreviewBeat_);
+    if (bounds.isEmpty())
+        return;
+
+    const float x = (float)bounds.getCentreX();
+    g.setColour(juce::Colours::white.withAlpha(0.9f));
+    g.drawLine(x, (float)bounds.getY(), x, (float)bounds.getBottom(), 1.0f);
 }
 
 //==============================================================================
@@ -629,6 +742,13 @@ void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
     if (!e.mods.isLeftButtonDown())
         return;
 
+    // Every non-Select tool is a click action (Draw's drag included): none of them selects,
+    // marquees or trims, so they never reach the pointer logic below.
+    if (activeTool_ != EditTool::Select) {
+        handleToolMouseDown(e);
+        return;
+    }
+
     auto hit = hitTestClip(e.getPosition());
     if (!hit) {
         mouseDownPos_ = e.getPosition();
@@ -671,21 +791,46 @@ void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
             previewLength_ = resizeOriginalLength_;
         }
     } else {
-        // Move: same-track only in v1 — the drag is a pure horizontal beat offset, and nothing
-        // here ever reassigns a clip's track. Snapshot every SELECTED clip's origin (not just the
-        // one grabbed) so a multi-selection moves together by one shared delta.
+        // Move: a shared horizontal beat offset PLUS a shared track-row offset (see mouseDrag).
+        // Snapshot every SELECTED clip's origin (not just the one grabbed) so a multi-selection
+        // moves together by one delta rather than each clip snapping independently.
+        //
+        // Alt turns the whole gesture into a copy-drag: the originals stay exactly where they are
+        // (in the doc AND on screen) and the release commits duplicates at the destination. There
+        // is deliberately no Alt-click action — a copy of a clip on top of itself is not something
+        // anyone asks for by clicking.
         dragMode_ = DragMode::Move;
+        copyDrag_ = e.mods.isAltDown();
         dragClips_.clear();
-        for (auto id : selection_.getSelected())
-            if (const auto* clip = doc_->getClip(id))
-                dragClips_.push_back({id, clip->startBeat, clip->lengthBeats});
+        const auto& tracks = doc_->getTracks();
+        for (auto id : selection_.getSelected()) {
+            const auto* clip = doc_->getClip(id);
+            if (clip == nullptr)
+                continue;
+            int trackIndex = 0;
+            for (int i = 0; i < (int)tracks.size(); ++i)
+                for (const auto& candidate : tracks[(std::size_t)i].clips)
+                    if (candidate.id == id)
+                        trackIndex = i;
+            dragClips_.push_back({id, clip->startBeat, clip->lengthBeats, trackIndex});
+        }
         previewDeltaBeats_ = 0.0;
+        previewRowDelta_ = 0;
     }
 
     repaint();
 }
 
 void TimelineClipLaneArea::mouseDrag(const juce::MouseEvent& e) {
+    if (dragMode_ == DragMode::Draw) {
+        updateDrawGesture(e);
+        return;
+    }
+    // Split/Glue/Erase/Mute already acted on the press; dragging one of them does nothing at all
+    // (no marquee, no move) rather than something the icon never promised.
+    if (activeTool_ != EditTool::Select)
+        return;
+
     if (pendingEmptyClick_) {
         // A plain press on empty space that becomes a drag turns into a (non-additive) marquee —
         // there is no drag-to-pan gesture here (scrolling is wheel-only).
@@ -725,6 +870,33 @@ void TimelineClipLaneArea::mouseDrag(const juce::MouseEvent& e) {
         delta = std::max(delta, -minOriginal);
 
         previewDeltaBeats_ = delta;
+
+        // Vertical: one row delta for the WHOLE selection, legal only if every clip's destination
+        // row exists and accepts its payload (TimelineDoc::moveClipToTrack's kind rule — an audio
+        // clip onto an Audio row, a MIDI clip onto a Midi one, neither onto Automation). An
+        // illegal drop clamps back to 0 — a same-lane move, i.e. exactly what this drag did before
+        // it could cross tracks — rather than dropping the clips that would have fitted.
+        const int rowHeight = getRowHeight();
+        int rowDelta =
+            rowHeight > 0 ? (int)std::llround((double)(e.getPosition().y - mouseDownPos_.y) / (double)rowHeight) : 0;
+        if (rowDelta != 0) {
+            const auto& tracks = doc_->getTracks();
+            for (const auto& origin : dragClips_) {
+                const int destRow = origin.trackIndex + rowDelta;
+                const auto* clip = doc_->getClip(origin.id);
+                if (clip == nullptr || !juce::isPositiveAndBelow(destRow, (int)tracks.size())) {
+                    rowDelta = 0;
+                    break;
+                }
+                const auto destKind = tracks[(std::size_t)destRow].kind;
+                const auto neededKind = clip->assetRef.isNotEmpty() ? synth::TrackKind::Audio : synth::TrackKind::Midi;
+                if (destKind != neededKind) {
+                    rowDelta = 0;
+                    break;
+                }
+            }
+        }
+        previewRowDelta_ = rowDelta;
     } else if (dragMode_ == DragMode::ResizeRight) {
         const double rawEnd = resizeOriginalStart_ + resizeOriginalLength_ + deltaBeats;
         const double snappedEnd = viewState_.snapBeat(rawEnd, beatsPerBar);
@@ -741,6 +913,15 @@ void TimelineClipLaneArea::mouseDrag(const juce::MouseEvent& e) {
 }
 
 void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
+    if (dragMode_ == DragMode::Draw) {
+        commitDrawGesture();
+        return;
+    }
+    // The four click tools committed on the press; there is nothing left for the release to do
+    // (and nothing of theirs to reset — they never entered a drag mode).
+    if (activeTool_ != EditTool::Select)
+        return;
+
     if (dragMode_ == DragMode::Marquee) {
         endMarquee();
         dragMode_ = DragMode::None;
@@ -757,17 +938,55 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
     }
 
     if (doc_ != nullptr) {
-        if (dragMode_ == DragMode::Move && std::abs(previewDeltaBeats_) > 1e-9) {
+        const bool moved = std::abs(previewDeltaBeats_) > 1e-9 || previewRowDelta_ != 0;
+        if (dragMode_ == DragMode::Move && moved) {
+            // Destination track ids are resolved BEFORE the mutation: track ids and their order
+            // are stable across the clip moves below, but the clip vectors they hold are not.
             const auto clips = dragClips_;
             const double delta = previewDeltaBeats_;
-            auto mutate = [this, clips, delta] {
-                for (const auto& origin : clips)
-                    doc_->moveClip(origin.id, origin.originalStart + delta);
+            const int rowDelta = previewRowDelta_;
+            const bool copying = copyDrag_;
+            std::vector<synth::TrackId> destTracks;
+            destTracks.reserve(clips.size());
+            const auto& tracks = doc_->getTracks();
+            for (const auto& origin : clips) {
+                const int destRow = origin.trackIndex + rowDelta;
+                destTracks.push_back(juce::isPositiveAndBelow(destRow, (int)tracks.size())
+                                         ? tracks[(std::size_t)destRow].id
+                                         : synth::TrackId{});
+            }
+
+            std::vector<synth::ClipId> newIds;
+            auto mutate = [this, clips, destTracks, delta, copying, &newIds] {
+                for (std::size_t i = 0; i < clips.size(); ++i) {
+                    const auto& origin = clips[i];
+                    const double newStart = origin.originalStart + delta;
+                    if (!destTracks[i].isValid())
+                        continue;
+                    if (!copying) {
+                        // moveClipToTrack onto the clip's OWN track is documented to behave
+                        // exactly like moveClip, so the same-lane drag is unchanged by this path.
+                        doc_->moveClipToTrack(origin.id, destTracks[i], newStart);
+                        continue;
+                    }
+                    // duplicateClip drops the copy immediately after its source; the move is what
+                    // puts it where the user actually dropped it.
+                    const auto dup = doc_->duplicateClip(origin.id);
+                    if (!dup.isValid())
+                        continue;
+                    doc_->moveClipToTrack(dup, destTracks[i], newStart);
+                    newIds.push_back(dup);
+                }
             };
             if (undoManager_)
                 undoManager_->recordTimelineChange(*doc_, mutate);
             else
                 mutate();
+
+            // A copy-drag ends with the COPIES selected — the user's attention is on what they
+            // just made, and the next drag should move it rather than the original.
+            if (copying && !newIds.empty())
+                selection_.setSelection(newIds);
         } else if (dragMode_ == DragMode::ResizeRight && std::abs(previewLength_ - resizeOriginalLength_) > 1e-9) {
             const auto id = activeClip_;
             const double newLength = previewLength_;
@@ -797,10 +1016,18 @@ void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
     dragMode_ = DragMode::None;
     dragClips_.clear();
     previewDeltaBeats_ = 0.0;
+    previewRowDelta_ = 0;
+    copyDrag_ = false;
     repaint();
 }
 
 void TimelineClipLaneArea::mouseDoubleClick(const juce::MouseEvent& e) {
+    // Authoring double-clicks belong to the pointer. With a tool active the first click already
+    // did the tool's job (and Draw already created a clip), so a second one must not also open a
+    // roll or a file chooser.
+    if (activeTool_ != EditTool::Select)
+        return;
+
     if (auto hit = hitTestClip(e.getPosition())) {
         if (onClipDoubleClicked)
             onClipDoubleClicked(hit->id);
@@ -953,11 +1180,29 @@ void TimelineClipLaneArea::filesDropped(const juce::StringArray& files, int x, i
 }
 
 void TimelineClipLaneArea::mouseMove(const juce::MouseEvent& e) {
+    if (activeTool_ != EditTool::Select) {
+        // The tool cursor was set once, on the tool change / on entry — a move never rebuilds or
+        // re-sets it. The only per-move work any tool does is the Split preview, and even that
+        // only repaints when the snapped beat or the hovered clip actually changes.
+        if (activeTool_ == EditTool::Split)
+            updateSplitPreview(e.getPosition());
+        return;
+    }
+
     auto hit = hitTestClip(e.getPosition());
     if (hit && (hit->zone == ClipHit::Zone::LeftEdge || hit->zone == ClipHit::Zone::RightEdge))
         setMouseCursor(juce::MouseCursor::LeftRightResizeCursor);
     else
         setMouseCursor(juce::MouseCursor::NormalCursor);
+}
+
+void TimelineClipLaneArea::mouseEnter(const juce::MouseEvent&) { applyToolCursor(); }
+
+void TimelineClipLaneArea::mouseExit(const juce::MouseEvent&) { clearToolPreviews(); }
+
+void TimelineClipLaneArea::lookAndFeelChanged() {
+    toolCursorsBuilt_ = false; // re-tinted icons -> different cursor images
+    applyToolCursor();
 }
 
 //==============================================================================
@@ -1061,6 +1306,311 @@ void TimelineClipLaneArea::endMarquee() {
 }
 
 //==============================================================================
+// Edit tools: the active tool, its cursor, its gestures and its previews.
+//==============================================================================
+
+void TimelineClipLaneArea::setActiveTool(EditTool tool) {
+    if (activeTool_ == tool)
+        return;
+    activeTool_ = tool;
+
+    // A gesture in flight has no meaning under the new tool — cancel it (nothing is committed,
+    // because every commit happens on mouseUp) rather than letting the next release apply the old
+    // tool's action.
+    dragMode_ = DragMode::None;
+    dragClips_.clear();
+    previewDeltaBeats_ = 0.0;
+    previewRowDelta_ = 0;
+    copyDrag_ = false;
+    pendingEmptyClick_ = false;
+    marqueeRect_ = {};
+    clearToolPreviews();
+
+    applyToolCursor();
+    repaint();
+}
+
+void TimelineClipLaneArea::rebuildToolCursors() {
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    for (auto tool : kAllEditTools) {
+        // getIcon returns nullptr in a headless build (no asset library linked in);
+        // makeToolCursor is documented to fall back to a stock cursor for exactly that case.
+        std::unique_ptr<juce::Drawable> icon = lf != nullptr ? lf->getIcon(iconForTool(tool)) : nullptr;
+        toolCursors_[(std::size_t)tool] = makeToolCursor(tool, icon.get());
+    }
+    toolCursorsBuilt_ = true;
+}
+
+void TimelineClipLaneArea::applyToolCursor() {
+    if (activeTool_ == EditTool::Select) {
+        // The pointer's cursor is owned by mouseMove (edge zones show a resize cursor); resetting
+        // it here just clears whatever tool cursor was showing.
+        setMouseCursor(juce::MouseCursor::NormalCursor);
+        return;
+    }
+    if (!toolCursorsBuilt_)
+        rebuildToolCursors();
+    setMouseCursor(toolCursors_[(std::size_t)activeTool_]);
+}
+
+void TimelineClipLaneArea::handleToolMouseDown(const juce::MouseEvent& e) {
+    if (activeTool_ == EditTool::Draw) {
+        beginDrawGesture(e);
+        return;
+    }
+
+    // The other four act on a clip and only on a clip: a click on empty lane space with Split or
+    // Erase held does nothing at all (it must not fall through to selection either — that would
+    // make an "erase" click look like it selected something).
+    auto hit = hitTestClip(e.getPosition());
+    if (!hit)
+        return;
+
+    const double pointerBeat = viewState_.xToBeat((double)e.getPosition().x);
+    switch (activeTool_) {
+    case EditTool::Split:
+        applyClipContextChoice(hit->id, ClipContextChoice::SplitAtPointer, pointerBeat);
+        break;
+    case EditTool::Glue:
+        applyClipContextChoice(hit->id, ClipContextChoice::GlueWithNext, 0.0);
+        break;
+    case EditTool::Erase:
+        applyClipContextChoice(hit->id, ClipContextChoice::Delete, 0.0);
+        break;
+    case EditTool::Mute:
+        applyClipContextChoice(hit->id, ClipContextChoice::ToggleMute, 0.0);
+        break;
+    case EditTool::Select:
+    case EditTool::Draw:
+        break; // handled above / never reached
+    }
+}
+
+synth::ClipId TimelineClipLaneArea::findGlueTarget(synth::ClipId id) const {
+    if (doc_ == nullptr)
+        return {};
+    const auto* clip = doc_->getClip(id);
+    const auto* track = doc_->getTrackForClip(id);
+    if (clip == nullptr || track == nullptr)
+        return {};
+
+    const double end = clip->startBeat + clip->lengthBeats;
+    synth::ClipId best;
+    double bestStart = 0.0;
+    for (const auto& candidate : track->clips) {
+        if (candidate.id == id || candidate.startBeat < end - 1e-9)
+            continue; // itself, anything before it, and anything overlapping it (joinClips refuses)
+        if (!best.isValid() || candidate.startBeat < bestStart) {
+            best = candidate.id;
+            bestStart = candidate.startBeat;
+        }
+    }
+    return best;
+}
+
+//---- Draw ---------------------------------------------------------------------
+
+void TimelineClipLaneArea::beginDrawGesture(const juce::MouseEvent& e) {
+    if (doc_ == nullptr)
+        return;
+    const auto row = trackIndexAt(e.getPosition());
+    if (!row)
+        return;
+
+    const auto& track = doc_->getTracks()[(std::size_t)*row];
+    if (track.kind != synth::TrackKind::Midi)
+        return; // an audio row's content is an imported asset and an automation row's is
+                // breakpoints — neither is something a pencil can draw
+
+    dragMode_ = DragMode::Draw;
+    drawTrack_ = track.id;
+    drawRow_ = *row;
+    drawAnchorBeat_ = floorSnappedBeatAt(viewState_.xToBeat((double)e.getPosition().x));
+    drawEndBeat_ = drawAnchorBeat_;
+    drawDragged_ = false;
+}
+
+void TimelineClipLaneArea::updateDrawGesture(const juce::MouseEvent& e) {
+    // The end is snapped UP so a drag that has entered a cell always includes the whole cell, and
+    // floored at one division so the smallest possible drag still makes a usable clip.
+    const double raw = viewState_.xToBeat((double)e.getPosition().x);
+    const double end = std::max(ceilSnappedBeatAt(raw), drawAnchorBeat_ + minDrawLengthBeats());
+    if (drawDragged_ && std::abs(end - drawEndBeat_) < 1e-9)
+        return; // same cell: no state change, so no repaint (the ghost is already correct)
+
+    const auto before = getDrawGhostRectForTest();
+    drawEndBeat_ = end;
+    drawDragged_ = true;
+    requestToolPreviewRepaint(before.getUnion(getDrawGhostRectForTest()));
+}
+
+void TimelineClipLaneArea::commitDrawGesture() {
+    const auto ghost = getDrawGhostRectForTest();
+    const bool dragged = drawDragged_ && drawEndBeat_ > drawAnchorBeat_ + 1e-9;
+    const auto track = drawTrack_;
+    const double anchor = drawAnchorBeat_;
+    const double length = drawEndBeat_ - drawAnchorBeat_;
+
+    dragMode_ = DragMode::None;
+    drawDragged_ = false;
+    drawRow_ = -1;
+    drawTrack_ = {};
+    if (!ghost.isEmpty())
+        requestToolPreviewRepaint(ghost);
+
+    if (doc_ == nullptr || !track.isValid())
+        return;
+
+    if (!dragged) {
+        // A pencil CLICK is the same authoring gesture the empty-lane double-click already
+        // performs — one bar, selected, straight into the note editor.
+        createMidiClipAt(track, anchor);
+        return;
+    }
+
+    const auto* trackPtr = doc_->getTrack(track);
+    if (trackPtr == nullptr)
+        return;
+    const juce::String name = "Clip " + juce::String((int)trackPtr->clips.size() + 1);
+
+    synth::ClipId newId;
+    auto mutate = [this, track, anchor, length, name, &newId] { newId = doc_->addClip(track, anchor, length, name); };
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+
+    if (!newId.isValid())
+        return; // rejected (the track is at kMaxClipsPerTrack)
+    selection_.setSelection({newId});
+    repaint();
+}
+
+//---- Previews -----------------------------------------------------------------
+
+void TimelineClipLaneArea::requestToolPreviewRepaint(juce::Rectangle<int> region) { repaint(region); }
+
+juce::Rectangle<int> TimelineClipLaneArea::splitPreviewBounds(synth::ClipId clip, double beat) const {
+    const auto rect = getClipRect(clip);
+    if (rect.isEmpty())
+        return {};
+    const int x = (int)std::llround(viewState_.beatToX(beat));
+    return {x - kSplitPreviewMarginPx, rect.getY(), 2 * kSplitPreviewMarginPx + 1, rect.getHeight()};
+}
+
+void TimelineClipLaneArea::updateSplitPreview(juce::Point<int> pos) {
+    synth::ClipId clip;
+    double beat = 0.0;
+    if (doc_ != nullptr) {
+        if (auto hit = hitTestClip(pos)) {
+            if (const auto* c = doc_->getClip(hit->id)) {
+                const double snapped = snappedBeatAt(viewState_.xToBeat((double)pos.x));
+                // Only a split point strictly inside the clip is previewed — the same test
+                // applyClipContextChoice performs before it splits, so the line is never drawn
+                // where a click would do nothing.
+                if (snapped > c->startBeat && snapped < c->startBeat + c->lengthBeats) {
+                    clip = hit->id;
+                    beat = snapped;
+                }
+            }
+        }
+    }
+
+    if (clip == splitPreviewClip_ && (!clip.isValid() || std::abs(beat - splitPreviewBeat_) < 1e-9))
+        return; // THE gate: pointer movement inside one snap cell repaints nothing
+
+    const auto before =
+        splitPreviewClip_.isValid() ? splitPreviewBounds(splitPreviewClip_, splitPreviewBeat_) : juce::Rectangle<int>();
+    splitPreviewClip_ = clip;
+    splitPreviewBeat_ = beat;
+    const auto after = clip.isValid() ? splitPreviewBounds(clip, beat) : juce::Rectangle<int>();
+    // ONE repaint per change, over the union — so "moved to the next beat" costs exactly one.
+    requestToolPreviewRepaint(before.isEmpty() ? after : (after.isEmpty() ? before : before.getUnion(after)));
+}
+
+void TimelineClipLaneArea::clearToolPreviews() {
+    if (!splitPreviewClip_.isValid())
+        return;
+    const auto before = splitPreviewBounds(splitPreviewClip_, splitPreviewBeat_);
+    splitPreviewClip_ = {};
+    splitPreviewBeat_ = 0.0;
+    if (!before.isEmpty())
+        requestToolPreviewRepaint(before);
+}
+
+std::optional<TimelineClipLaneArea::SplitPreview> TimelineClipLaneArea::getSplitPreviewForTest() const {
+    if (!splitPreviewClip_.isValid())
+        return std::nullopt;
+    return SplitPreview{splitPreviewClip_, splitPreviewBeat_};
+}
+
+juce::Rectangle<int> TimelineClipLaneArea::getDrawGhostRectForTest() const {
+    if (dragMode_ != DragMode::Draw || !drawDragged_ || drawRow_ < 0)
+        return {};
+    return computeClipRect(viewState_, drawRow_, drawAnchorBeat_, drawEndBeat_ - drawAnchorBeat_, getRowHeight());
+}
+
+//---- Inline rename ------------------------------------------------------------
+
+void TimelineClipLaneArea::renameClip(synth::ClipId id, const juce::String& newName) {
+    if (doc_ == nullptr)
+        return;
+    auto mutate = [this, id, newName] { doc_->setClipName(id, newName); };
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+    repaint();
+}
+
+void TimelineClipLaneArea::beginRenameClip(synth::ClipId id) {
+    if (doc_ == nullptr)
+        return;
+
+    // FIRST: any previous rename commits before a new one opens — and it may mutate the doc, so
+    // nothing may hold a Clip pointer across it.
+    finishRename(true);
+
+    const auto* clip = doc_->getClip(id);
+    if (clip == nullptr)
+        return;
+    const auto rect = getClipRect(id);
+    if (rect.isEmpty())
+        return;
+
+    renamingClip_ = id;
+    renameEditor_ = std::make_unique<juce::TextEditor>("clipRenameEditor");
+    renameEditor_->setComponentID("timelineClipRenameEditor");
+    renameEditor_->setMultiLine(false);
+    renameEditor_->setReturnKeyStartsNewLine(false);
+    renameEditor_->setText(clip->name, juce::dontSendNotification);
+    renameEditor_->setBounds(rect.reduced(2).withHeight(std::min(20, std::max(12, rect.getHeight() - 4))));
+    renameEditor_->onReturnKey = [this] { finishRename(true); };
+    renameEditor_->onEscapeKey = [this] { finishRename(false); };
+    // Clicking away is a commit, not a cancel — the same reading every in-place rename in this app
+    // (and every DAW) has. Escape is the cancel.
+    renameEditor_->onFocusLost = [this] { finishRename(true); };
+    addAndMakeVisible(*renameEditor_);
+    renameEditor_->selectAll();
+    renameEditor_->grabKeyboardFocus();
+}
+
+void TimelineClipLaneArea::finishRename(bool commit) {
+    if (renameEditor_ == nullptr)
+        return;
+    // Detach FIRST: deleting the editor takes focus away from it, which fires onFocusLost, which
+    // re-enters here — and finds a null editor, so it stops.
+    auto editor = std::move(renameEditor_);
+    const auto id = renamingClip_;
+    renamingClip_ = {};
+    const juce::String text = editor->getText();
+    editor.reset();
+
+    if (commit)
+        renameClip(id, text); // setClipName rejects a blank name, keeping the old one
+}
+
+//==============================================================================
 void TimelineClipLaneArea::showClipContextMenu(synth::ClipId id, juce::Point<int> localPos) {
     if (doc_ == nullptr)
         return;
@@ -1080,7 +1630,23 @@ void TimelineClipLaneArea::showClipContextMenu(synth::ClipId id, juce::Point<int
         applyClipContextChoice(id, ClipContextChoice::SplitAtPointer, pointerBeat);
     };
     menu.addItem(split);
+
+    // "Glue with next" is offered whenever a legal join target exists (see findGlueTarget) and
+    // greyed out otherwise, rather than hidden — a menu whose items move around is harder to
+    // learn than one whose items grey out.
+    juce::PopupMenu::Item glue("Glue with next");
+    const auto glueTarget = findGlueTarget(id);
+    glue.setEnabled(glueTarget.isValid());
+    glue.action = [this, id] { applyClipContextChoice(id, ClipContextChoice::GlueWithNext, 0.0); };
+    menu.addItem(glue);
+
     menu.addItem("Duplicate", [this, id] { applyClipContextChoice(id, ClipContextChoice::Duplicate, 0.0); });
+    // One toggling item rather than two, labelled for what the click will DO.
+    menu.addItem(clip->muted ? "Unmute" : "Mute",
+                 [this, id] { applyClipContextChoice(id, ClipContextChoice::ToggleMute, 0.0); });
+    // Not a ClipContextChoice: renaming opens an editor rather than mutating, so the headless
+    // seam is renameClip() and the enum case is inert (see ClipContextChoice's own comment).
+    menu.addItem("Rename…", [this, id] { beginRenameClip(id); });
     menu.addItem("Delete", [this, id] { applyClipContextChoice(id, ClipContextChoice::Delete, 0.0); });
 
     // Offered for any audio clip (non-empty assetRef) regardless of whether the asset
@@ -1134,8 +1700,44 @@ void TimelineClipLaneArea::applyClipContextChoice(synth::ClipId id, ClipContextC
             undoManager_->recordTimelineChange(*doc_, mutate);
         else
             mutate();
+        // The id cannot stay selected: a later batched move or Delete would name a freed clip.
+        // (TimelinePanelComponent's refreshFromDoc prunes it too; this keeps a lane area driven
+        // without a panel — every test, and the Erase tool — equally correct.)
+        selection_.remove(id);
         break;
     }
+    case ClipContextChoice::ToggleMute: {
+        const auto* clip = doc_->getClip(id);
+        if (clip == nullptr)
+            return;
+        const bool muted = !clip->muted;
+        auto mutate = [this, id, muted] { doc_->setClipMuted(id, muted); };
+        if (undoManager_)
+            undoManager_->recordTimelineChange(*doc_, mutate);
+        else
+            mutate();
+        break;
+    }
+    case ClipContextChoice::GlueWithNext: {
+        const auto target = findGlueTarget(id);
+        if (!target.isValid())
+            return; // nothing after this clip: no mutation, and therefore no undo entry
+
+        auto mutate = [this, id, target] { doc_->joinClips(id, target); };
+        if (undoManager_)
+            undoManager_->recordTimelineChange(*doc_, mutate);
+        else
+            mutate();
+        // `target` was absorbed into `id` — the survivor keeps its own id, so only the swallowed
+        // one has to leave the selection.
+        selection_.remove(target);
+        break;
+    }
+    case ClipContextChoice::Rename:
+        // Deliberately inert: the rename UI has no headless meaning, and its commit path is
+        // renameClip() (see ClipContextChoice). The case exists so the menu's whole vocabulary is
+        // enumerable — a test can assert this choice mutates nothing.
+        break;
     }
 
     repaint();

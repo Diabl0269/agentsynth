@@ -28,6 +28,7 @@
 
 #include "../Source/AI/AIProvider.h"
 #include "../Source/AI/AIStateMapper.h"
+#include "../Source/AppUndoManager.h"
 #include "../Source/ProjectBundle.h"
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/Transport/TransportService.h"
@@ -1875,4 +1876,291 @@ TEST(TimelinePanelComponentTest, PianoRollOpenInstallsTheRulerMappingOverride) {
 
     panel.closePianoRoll();
     EXPECT_FALSE(panel.getRuler().hasMappingOverrideForTest());
+}
+
+// ============================================================================
+// 7. The edit-tool strip + the clip clipboard/arrangement verbs the app's Cut/Copy/Paste/
+//    Duplicate/Select All/Repeat commands delegate to. Panel level, so ungated (see the file
+//    header). Every fixture sets the view state explicitly — these verbs snap against it.
+// ============================================================================
+
+namespace {
+
+struct ToolPanelFixture {
+    synth::TimelineDoc doc;
+    AppUndoManager undo;
+    synth::ui::TimelinePanelComponent panel;
+
+    ToolPanelFixture() {
+        panel.setSize(1200, 320);
+        auto& state = panel.getViewState();
+        state.pixelsPerBeat = 40.0;
+        state.firstVisibleBeat = 0.0;
+        state.snap = synth::ui::TimelineViewState::Snap::Quarter;
+        state.snapEnabled = true;
+        state.rowHeightScale = 1.0;
+        state.trackScrollY = 0.0;
+        panel.setTimelineDoc(&doc);
+        panel.setUndoManager(&undo);
+        // No transport is wired on purpose: pasteClipsAtPlayhead then reads beat 0, so every
+        // pasted position below is arithmetic rather than a transport race.
+    }
+
+    void select(std::initializer_list<synth::ClipId> ids) { panel.getClipSelection().setSelection(ids); }
+    // Non-const: getClipSelection() only has a non-const overload (the panel owns the model).
+    std::vector<synth::ClipId> selection() { return panel.getClipSelection().getSelected(); }
+};
+
+} // namespace
+
+// ---- Tool strip + number keys ----
+
+TEST(TimelineToolStripTest, NumberKeysPickToolsAndReservedDigitsFallThrough) {
+    ToolPanelFixture f;
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Select) << "Select is the default";
+
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('3')));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Split);
+    EXPECT_EQ(f.panel.getClipLaneArea().getActiveTool(), synth::ui::EditTool::Split)
+        << "the panel's tool is pushed into the lane area";
+
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('8')));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Draw);
+
+    // 2 (Range), 6 (Zoom) and 9 (Play) are reserved for tools we don't ship: unconsumed, so they
+    // keep whatever meaning they have elsewhere, and the active tool is untouched.
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('2')));
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('6')));
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('9')));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Draw);
+
+    // A command-modified digit belongs to the app's menu shortcuts, never to the tool row.
+    EXPECT_FALSE(f.panel.keyPressed(
+        juce::KeyPress('1', juce::ModifierKeys(juce::ModifierKeys::commandModifier), juce::juce_wchar('1'))));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Draw);
+
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('1')));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Select);
+}
+
+TEST(TimelineToolStripTest, ButtonsMirrorTheActiveToolAndCarryTheirShortcutInTheTooltip) {
+    ToolPanelFixture f;
+
+    for (auto tool : synth::ui::kAllEditTools)
+        ASSERT_NE(f.panel.getToolButton(tool), nullptr) << "every tool has a button, headless included";
+
+    EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Split)->getTooltip(), "Split (3)");
+    EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Draw)->getTooltip(), "Draw (8)");
+
+    f.panel.setActiveTool(synth::ui::EditTool::Erase);
+    for (auto tool : synth::ui::kAllEditTools)
+        EXPECT_EQ(f.panel.getToolButton(tool)->getToggleState(), tool == synth::ui::EditTool::Erase)
+            << "exactly one button is lit: " << synth::ui::editToolName(tool);
+}
+
+// ---- Clipboard: the audio-field regression ----
+
+TEST(TimelineClipClipboardTest, CopyPasteRoundTripsEveryAudioFieldAndTheMuteFlag) {
+    ToolPanelFixture f;
+    const auto track = f.doc.addTrack(synth::TrackKind::Audio, "Audio 1");
+    const auto clip = f.doc.addClip(track, 8.0, 4.0, "Take 1");
+    ASSERT_TRUE(clip.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(clip, "Audio/take-1.wav", 1.5));
+    ASSERT_TRUE(f.doc.setClipGainDb(clip, -3.5));
+    ASSERT_TRUE(f.doc.setClipFades(clip, 0.5, 0.25));
+    ASSERT_TRUE(f.doc.setClipMuted(clip, true));
+
+    f.select({clip});
+    ASSERT_TRUE(f.panel.copySelectedClips());
+    ASSERT_TRUE(f.panel.canPasteClips());
+    ASSERT_TRUE(f.panel.pasteClipsAtPlayhead());
+
+    const auto pasted = f.selection();
+    ASSERT_EQ(pasted.size(), 1u);
+    const auto* copy = f.doc.getClip(pasted[0]);
+    ASSERT_NE(copy, nullptr);
+    EXPECT_NE(copy->id, clip);
+    EXPECT_DOUBLE_EQ(copy->startBeat, 0.0) << "re-based onto the (transport-less) playhead at beat 0";
+    EXPECT_DOUBLE_EQ(copy->lengthBeats, 4.0);
+    EXPECT_EQ(copy->name, "Take 1");
+    // The regression itself: every one of these used to be dropped, leaving a silent husk.
+    EXPECT_EQ(copy->assetRef, "Audio/take-1.wav");
+    EXPECT_DOUBLE_EQ(copy->sourceStartSeconds, 1.5);
+    EXPECT_DOUBLE_EQ(copy->gainDb, -3.5);
+    EXPECT_DOUBLE_EQ(copy->fadeInBeats, 0.5);
+    EXPECT_DOUBLE_EQ(copy->fadeOutBeats, 0.25);
+    EXPECT_TRUE(copy->muted);
+    // And it landed on an AUDIO row, which is the only kind that plays an asset.
+    ASSERT_NE(f.doc.getTrackForClip(copy->id), nullptr);
+    EXPECT_EQ(f.doc.getTrackForClip(copy->id)->kind, synth::TrackKind::Audio);
+}
+
+TEST(TimelineClipClipboardTest, PasteFallsBackToTheFirstTrackOfTheRequiredKind) {
+    ToolPanelFixture f;
+    const auto midi = f.doc.addTrack(synth::TrackKind::Midi, "Midi 1");
+    const auto source = f.doc.addTrack(synth::TrackKind::Audio, "Audio source");
+    const auto spare = f.doc.addTrack(synth::TrackKind::Audio, "Audio spare");
+    ASSERT_TRUE(midi.isValid() && spare.isValid());
+    const auto clip = f.doc.addClip(source, 0.0, 4.0, "Take");
+    ASSERT_TRUE(clip.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(clip, "Audio/take-1.wav", 0.0));
+
+    f.select({clip});
+    ASSERT_TRUE(f.panel.copySelectedClips());
+    ASSERT_TRUE(f.doc.removeTrack(source)); // the original row is gone
+
+    ASSERT_TRUE(f.panel.pasteClipsAtPlayhead());
+    ASSERT_EQ(f.doc.getTrack(spare)->clips.size(), 1u)
+        << "an audio clip falls back to the first AUDIO track, never to the MIDI one";
+    EXPECT_TRUE(f.doc.getTrack(midi)->clips.empty());
+    EXPECT_EQ(f.doc.getTrack(spare)->clips[0].assetRef, "Audio/take-1.wav");
+}
+
+TEST(TimelineClipClipboardTest, PasteSkipsAClipWithNoRowOfItsKindLeft) {
+    ToolPanelFixture f;
+    const auto audio = f.doc.addTrack(synth::TrackKind::Audio, "Audio");
+    const auto clip = f.doc.addClip(audio, 0.0, 4.0, "Take");
+    ASSERT_TRUE(clip.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(clip, "Audio/take-1.wav", 0.0));
+
+    f.select({clip});
+    ASSERT_TRUE(f.panel.copySelectedClips());
+    ASSERT_TRUE(f.doc.removeTrack(audio));
+    ASSERT_TRUE(f.doc.addTrack(synth::TrackKind::Midi, "Midi only").isValid());
+
+    EXPECT_FALSE(f.panel.pasteClipsAtPlayhead()) << "nowhere it could play: skipped, not parked on the MIDI row";
+    EXPECT_TRUE(f.doc.getTracks()[0].clips.empty());
+}
+
+TEST(TimelineClipClipboardTest, NoteMuteFlagsSurviveCopyPaste) {
+    ToolPanelFixture f;
+    const auto track = f.doc.addTrack(synth::TrackKind::Midi, "Midi");
+    const auto clip = f.doc.addClip(track, 4.0, 4.0, "Riff");
+    ASSERT_TRUE(clip.isValid());
+
+    synth::MidiNote audible;
+    audible.startBeat = 0.0;
+    audible.pitch = 60;
+    synth::MidiNote silenced;
+    silenced.startBeat = 1.0;
+    silenced.pitch = 64;
+    const auto audibleId = f.doc.addNote(clip, audible);
+    const auto silencedId = f.doc.addNote(clip, silenced);
+    ASSERT_TRUE(audibleId.isValid() && silencedId.isValid());
+    ASSERT_TRUE(f.doc.setNoteMuted(silencedId, true));
+
+    f.select({clip});
+    ASSERT_TRUE(f.panel.copySelectedClips());
+    ASSERT_TRUE(f.panel.pasteClipsAtPlayhead());
+
+    const auto pasted = f.selection();
+    ASSERT_EQ(pasted.size(), 1u);
+    const auto* copy = f.doc.getClip(pasted[0]);
+    ASSERT_NE(copy, nullptr);
+    ASSERT_EQ(copy->notes.size(), 2u);
+    EXPECT_NE(copy->notes[0].id, audibleId) << "pasted notes get fresh ids";
+    EXPECT_FALSE(copy->notes[0].muted);
+    EXPECT_TRUE(copy->notes[1].muted) << "a note's mute is part of the note, so it survives the clipboard";
+}
+
+// ---- Cut / Select All / Repeat ----
+
+TEST(TimelineClipVerbsTest, CutRemovesTheSelectionInOneStepAndLeavesItPasteable) {
+    ToolPanelFixture f;
+    const auto track = f.doc.addTrack(synth::TrackKind::Midi, "Midi");
+    const auto a = f.doc.addClip(track, 0.0, 4.0, "a");
+    const auto b = f.doc.addClip(track, 8.0, 4.0, "b");
+    ASSERT_TRUE(a.isValid() && b.isValid());
+
+    EXPECT_FALSE(f.panel.canCutClips()) << "nothing selected: nothing to cut";
+    f.select({a, b});
+    EXPECT_TRUE(f.panel.canCutClips());
+    EXPECT_TRUE(f.panel.hasClipSelection());
+
+    ASSERT_TRUE(f.panel.cutSelectedClips());
+    EXPECT_TRUE(f.doc.getTrack(track)->clips.empty());
+    EXPECT_TRUE(f.panel.canPasteClips()) << "a cut fills the clipboard — that is what makes it a cut";
+    EXPECT_FALSE(f.panel.hasClipSelection());
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getTrack(track)->clips.size(), 2u) << "both clips came back in ONE undo";
+
+    // And the clipboard survived the cut, so the pasted pair keeps its relative spacing.
+    ASSERT_TRUE(f.panel.pasteClipsAtPlayhead());
+    const auto pasted = f.selection();
+    ASSERT_EQ(pasted.size(), 2u);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(pasted[0])->startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(pasted[1])->startBeat, 8.0);
+}
+
+TEST(TimelineClipVerbsTest, SelectAllSelectsEveryClipOnEveryTrack) {
+    ToolPanelFixture f;
+    const auto midi = f.doc.addTrack(synth::TrackKind::Midi, "Midi");
+    const auto audio = f.doc.addTrack(synth::TrackKind::Audio, "Audio");
+    ASSERT_TRUE(f.doc.addClip(midi, 0.0, 4.0, "a").isValid());
+    ASSERT_TRUE(f.doc.addClip(midi, 8.0, 4.0, "b").isValid());
+    ASSERT_TRUE(f.doc.addClip(audio, 2.0, 4.0, "c").isValid());
+
+    ASSERT_TRUE(f.panel.selectAllClips());
+    EXPECT_EQ(f.panel.getClipSelection().size(), 3);
+
+    // An empty arrangement has nothing to select and says so.
+    ToolPanelFixture empty;
+    ASSERT_TRUE(empty.doc.addTrack(synth::TrackKind::Midi, "Midi").isValid());
+    EXPECT_FALSE(empty.panel.selectAllClips());
+}
+
+TEST(TimelineClipVerbsTest, RepeatTilesTheSelectionBlockInOneUndoStep) {
+    ToolPanelFixture f;
+    const auto track = f.doc.addTrack(synth::TrackKind::Midi, "Midi");
+    const auto clip = f.doc.addClip(track, 0.0, 4.0, "bar");
+    ASSERT_TRUE(clip.isValid());
+    f.select({clip});
+
+    ASSERT_TRUE(f.panel.repeatSelectedClips(3));
+
+    const auto& clips = f.doc.getTrack(track)->clips;
+    ASSERT_EQ(clips.size(), 4u);
+    EXPECT_DOUBLE_EQ(clips[0].startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(clips[1].startBeat, 4.0);
+    EXPECT_DOUBLE_EQ(clips[2].startBeat, 8.0);
+    EXPECT_DOUBLE_EQ(clips[3].startBeat, 12.0);
+    EXPECT_EQ(f.panel.getClipSelection().size(), 3) << "the copies end up selected, not the source";
+    EXPECT_FALSE(f.panel.getClipSelection().contains(clip));
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getTrack(track)->clips.size(), 1u) << "three copies, ONE undo step";
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(TimelineClipVerbsTest, RepeatKeepsAMultiClipBlockIntact) {
+    ToolPanelFixture f;
+    const auto track = f.doc.addTrack(synth::TrackKind::Midi, "Midi");
+    const auto a = f.doc.addClip(track, 0.0, 2.0, "a");
+    const auto b = f.doc.addClip(track, 4.0, 2.0, "b"); // block spans [0, 6)
+    ASSERT_TRUE(a.isValid() && b.isValid());
+    f.select({a, b});
+
+    ASSERT_TRUE(f.panel.repeatSelectedClips(1));
+
+    const auto& clips = f.doc.getTrack(track)->clips;
+    ASSERT_EQ(clips.size(), 4u);
+    EXPECT_DOUBLE_EQ(clips[2].startBeat, 6.0) << "the whole block moves by its span, keeping its internal spacing";
+    EXPECT_DOUBLE_EQ(clips[3].startBeat, 10.0);
+}
+
+TEST(TimelineClipVerbsTest, RepeatRejectsANonPositiveCountAndAnEmptySelection) {
+    ToolPanelFixture f;
+    const auto track = f.doc.addTrack(synth::TrackKind::Midi, "Midi");
+    const auto clip = f.doc.addClip(track, 0.0, 4.0, "bar");
+    ASSERT_TRUE(clip.isValid());
+
+    EXPECT_FALSE(f.panel.repeatSelectedClips(2)) << "nothing selected";
+    f.select({clip});
+    EXPECT_FALSE(f.panel.repeatSelectedClips(0));
+    EXPECT_FALSE(f.panel.repeatSelectedClips(-1));
+    EXPECT_EQ(f.doc.getTrack(track)->clips.size(), 1u);
+    EXPECT_FALSE(f.undo.canUndo());
 }

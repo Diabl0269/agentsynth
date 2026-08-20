@@ -39,6 +39,33 @@ constexpr int kAutomationToolButtonWidth = 24;
 constexpr int kAutomationRecordModeComboWidth = 90;
 constexpr int kAutomationCloseButtonWidth = 24;
 constexpr int kAutomationToolRadioGroupId = 4200;
+
+// The edit-tool strip in the transport bar: six square icon buttons in their own radio group
+// (4300 — distinct from the automation strip's 4200, which is a different set of tools entirely
+// and must not untoggle these).
+constexpr int kEditToolRadioGroupId = 4300;
+constexpr int kEditToolButtonWidth = 24;
+
+// The icon each edit tool's button paints — the SAME glyph synth::ui::makeToolCursor renders the
+// tool's cursor from, so button and cursor can never disagree.
+synth::theme::Icon iconForEditTool(synth::ui::EditTool tool) noexcept {
+    using synth::theme::Icon;
+    switch (tool) {
+    case synth::ui::EditTool::Select:
+        return Icon::ToolSelect;
+    case synth::ui::EditTool::Split:
+        return Icon::ToolSplit;
+    case synth::ui::EditTool::Glue:
+        return Icon::ToolGlue;
+    case synth::ui::EditTool::Erase:
+        return Icon::ToolErase;
+    case synth::ui::EditTool::Mute:
+        return Icon::ToolMute;
+    case synth::ui::EditTool::Draw:
+        return Icon::ToolDraw;
+    }
+    return Icon::ToolSelect;
+}
 } // namespace
 
 //==============================================================================
@@ -89,6 +116,24 @@ TimelinePanelComponent::TimelinePanelComponent() {
         // is the only thing that moves them, so this is where they are redrawn.
         pianoRoll_.repaint();
     };
+
+    // The edit-tool strip, left of the snap controls in the transport bar (see resized()). Radio
+    // buttons rather than a combo: which tool is active has to be readable at a glance mid-edit,
+    // and the six glyphs are the row every DAW user already knows.
+    for (auto tool : kAllEditTools) {
+        auto button = std::make_unique<juce::DrawableButton>(juce::String(editToolName(tool)) + " Tool",
+                                                             juce::DrawableButton::ImageOnButtonBackground);
+        button->setComponentID("timelineTool" + juce::String(editToolName(tool)));
+        button->setTooltip(juce::String(editToolName(tool)) + " (" + juce::String(editToolKeyDigit(tool)) + ")");
+        button->setClickingTogglesState(true);
+        button->setRadioGroupId(kEditToolRadioGroupId);
+        button->onClick = [this, tool] { setActiveTool(tool); };
+        addAndMakeVisible(*button);
+        toolButtons_[(std::size_t)tool] = std::move(button);
+    }
+    // Select is the default, and the strip must say so from the first frame.
+    toolButtons_[(std::size_t)EditTool::Select]->setToggleState(true, juce::dontSendNotification);
+    applyToolStripTheme();
 
     // The snap toggle lives in the transport bar so grid magnetism is discoverable without opening
     // a clip — the same switch the piano roll's header "Q" and the panel-wide Q key flip.
@@ -257,6 +302,50 @@ void TimelinePanelComponent::setUndoManager(AppUndoManager* undoManager) {
     automationEditor_.setUndoManager(undoManager);
 }
 
+//==============================================================================
+// ---- Edit-tool strip ----
+
+juce::DrawableButton* TimelinePanelComponent::getToolButton(EditTool tool) const noexcept {
+    return toolButtons_[(std::size_t)tool].get();
+}
+
+void TimelinePanelComponent::setActiveTool(EditTool tool) {
+    activeTool_ = tool;
+    // Both editors, always — they share the lanes rect and swap at will, so a tool that only
+    // reached the visible one would silently change meaning the moment a clip was opened.
+    clipLaneArea_.setActiveTool(tool);
+    pianoRoll_.setActiveTool(tool);
+    // Every button is set explicitly rather than leaning on the radio group to untoggle its
+    // siblings: this method is also reached from the number keys and from MainComponent, where no
+    // button was clicked at all. dontSendNotification, or setting the state would re-enter here
+    // through the button's own onClick.
+    for (auto candidate : kAllEditTools)
+        if (auto* button = getToolButton(candidate))
+            button->setToggleState(candidate == tool, juce::dontSendNotification);
+}
+
+void TimelinePanelComponent::applyToolStripTheme() {
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    for (auto tool : kAllEditTools) {
+        auto* button = getToolButton(tool);
+        if (button == nullptr)
+            continue;
+        // Null-guarded on BOTH counts: a headless build has no themed LnF, and even with one
+        // getIcon returns nullptr when the asset library isn't linked in. The button stays
+        // imageless but fully functional in either case.
+        if (lf != nullptr) {
+            if (auto icon = lf->getIcon(iconForEditTool(tool)))
+                button->setImages(icon.get());
+            // The active tool's highlight is a BACKGROUND colour, not a different icon tint —
+            // the glyph is the same in both states (see AppLookAndFeel::retintIcons).
+            button->setColour(juce::DrawableButton::backgroundOnColourId, lf->getTheme().colors.toolActive);
+        }
+    }
+}
+
+void TimelinePanelComponent::lookAndFeelChanged() { applyToolStripTheme(); }
+
+//==============================================================================
 void TimelinePanelComponent::openPianoRoll(synth::ClipId id) {
     pianoRoll_.openClip(id);
     if (!pianoRoll_.isOpen())
@@ -388,6 +477,15 @@ void TimelinePanelComponent::applyAutomationRecordModeChoice(int selectedId) {
 //==============================================================================
 // ---- Clip clipboard ----
 
+synth::TrackId TimelinePanelComponent::firstTrackOfKind(synth::TrackKind kind) const {
+    if (doc_ == nullptr)
+        return {};
+    for (const auto& track : doc_->getTracks())
+        if (track.kind == kind)
+            return track.id;
+    return {};
+}
+
 double TimelinePanelComponent::currentBeatsPerBarForPaste() const {
     double beatsPerBar = 4.0;
     if (transport_ != nullptr) {
@@ -431,10 +529,19 @@ bool TimelinePanelComponent::copySelectedClips() {
             continue;
         ClipboardClip entry;
         entry.originalTrack = track->id;
+        // The payload, not the source row, decides where this can be pasted — see
+        // ClipboardClip::requiredKind.
+        entry.requiredKind = clip->assetRef.isNotEmpty() ? synth::TrackKind::Audio : synth::TrackKind::Midi;
         entry.relativeStartBeat = clip->startBeat - earliestStart;
         entry.lengthBeats = clip->lengthBeats;
         entry.name = clip->name;
-        entry.notes = clip->notes;
+        entry.notes = clip->notes; // MidiNote copies carry each note's own muted flag
+        entry.muted = clip->muted;
+        entry.assetRef = clip->assetRef;
+        entry.gainDb = clip->gainDb;
+        entry.fadeInBeats = clip->fadeInBeats;
+        entry.fadeOutBeats = clip->fadeOutBeats;
+        entry.sourceStartSeconds = clip->sourceStartSeconds;
         captured.push_back(std::move(entry));
     }
     if (captured.empty())
@@ -453,31 +560,39 @@ bool TimelinePanelComponent::pasteClipsAtPlayhead() {
         playheadBeat = transport_->getPositionSnapshot().ppq;
     const double snappedPlayhead = viewState_.snapBeat(playheadBeat, currentBeatsPerBarForPaste());
 
-    // Resolved ONCE, before the mutation: the doc's first Midi-kind track, if any — the fallback
-    // target for a clip whose original track no longer exists.
-    synth::TrackId fallbackTrack;
-    for (const auto& track : doc_->getTracks()) {
-        if (track.kind == synth::TrackKind::Midi) {
-            fallbackTrack = track.id;
-            break;
-        }
+    // Resolved ONCE, before the mutation: the target row for every entry, so the loop below does
+    // no lookups against a doc it is halfway through mutating. The original track only counts if
+    // it still plays this clip's payload (see ClipboardClip::requiredKind); otherwise the first
+    // track of the required kind, and otherwise nothing at all.
+    std::vector<synth::TrackId> targets;
+    targets.reserve(clipClipboard_.size());
+    for (const auto& entry : clipClipboard_) {
+        const auto* original = doc_->getTrack(entry.originalTrack);
+        targets.push_back(original != nullptr && original->kind == entry.requiredKind
+                              ? entry.originalTrack
+                              : firstTrackOfKind(entry.requiredKind));
     }
 
     std::vector<synth::ClipId> newIds;
-    auto mutate = [this, snappedPlayhead, fallbackTrack, &newIds] {
-        for (const auto& entry : clipClipboard_) {
-            synth::TrackId targetTrack = entry.originalTrack;
-            if (doc_->getTrack(targetTrack) == nullptr)
-                targetTrack = fallbackTrack;
-            if (!targetTrack.isValid())
-                continue; // no original track and nothing to fall back to — skip this clip
+    auto mutate = [this, snappedPlayhead, &targets, &newIds] {
+        for (std::size_t i = 0; i < clipClipboard_.size(); ++i) {
+            const auto& entry = clipClipboard_[i];
+            if (!targets[i].isValid())
+                continue; // nowhere this clip could play — skip it rather than park it
 
             const double startBeat = std::max(0.0, snappedPlayhead + entry.relativeStartBeat);
-            const auto newId = doc_->addClip(targetTrack, startBeat, entry.lengthBeats, entry.name);
+            const auto newId = doc_->addClip(targets[i], startBeat, entry.lengthBeats, entry.name);
             if (!newId.isValid())
                 continue;
             for (const auto& note : entry.notes)
                 doc_->addNote(newId, note);
+            // Through the setters, not into the struct: setClipAsset is the gate that rejects an
+            // assetRef that is not bundle-relative, and a clipboard is not a trusted source.
+            if (entry.assetRef.isNotEmpty() || entry.sourceStartSeconds != 0.0)
+                doc_->setClipAsset(newId, entry.assetRef, entry.sourceStartSeconds);
+            doc_->setClipGainDb(newId, entry.gainDb);
+            doc_->setClipFades(newId, entry.fadeInBeats, entry.fadeOutBeats);
+            doc_->setClipMuted(newId, entry.muted);
             newIds.push_back(newId);
         }
     };
@@ -523,10 +638,125 @@ bool TimelinePanelComponent::duplicateSelectedClips() {
     return true;
 }
 
+bool TimelinePanelComponent::canCutClips() const noexcept { return doc_ != nullptr && !clipSelection_.isEmpty(); }
+
+bool TimelinePanelComponent::hasClipSelection() const noexcept { return !clipSelection_.isEmpty(); }
+
+bool TimelinePanelComponent::cutSelectedClips() {
+    // The copy half also validates (no doc / nothing selected / every id stale all fail there), so
+    // nothing is deleted unless something was actually captured.
+    if (!copySelectedClips())
+        return false;
+
+    const auto selected = clipSelection_.getSelected();
+    auto mutate = [this, selected] {
+        for (auto id : selected)
+            doc_->removeClip(id);
+    };
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+
+    clipSelection_.clear();
+    clipLaneArea_.repaint();
+    return true;
+}
+
+bool TimelinePanelComponent::selectAllClips() {
+    if (doc_ == nullptr)
+        return false;
+
+    std::vector<synth::ClipId> all;
+    for (const auto& track : doc_->getTracks())
+        for (const auto& clip : track.clips)
+            all.push_back(clip.id);
+    if (all.empty())
+        return false;
+
+    clipSelection_.setSelection(all);
+    clipLaneArea_.repaint();
+    return true;
+}
+
+bool TimelinePanelComponent::repeatSelectedClips(int count) {
+    if (doc_ == nullptr || count < 1)
+        return false;
+
+    // Snapshot the source geometry BEFORE mutating: every duplicate re-seats its track's clip
+    // vector, so a Clip pointer (or a re-read of the selection) taken mid-loop would be stale.
+    struct Source {
+        synth::ClipId id;
+        synth::TrackId track;
+        double startBeat = 0.0;
+    };
+    std::vector<Source> sources;
+    bool haveSpan = false;
+    double spanStart = 0.0, spanEnd = 0.0;
+    for (auto id : clipSelection_.getSelected()) {
+        const auto* clip = doc_->getClip(id);
+        const auto* track = doc_->getTrackForClip(id);
+        if (clip == nullptr || track == nullptr)
+            continue;
+        sources.push_back({id, track->id, clip->startBeat});
+        const double end = clip->startBeat + clip->lengthBeats;
+        spanStart = haveSpan ? std::min(spanStart, clip->startBeat) : clip->startBeat;
+        spanEnd = haveSpan ? std::max(spanEnd, end) : end;
+        haveSpan = true;
+    }
+    if (!haveSpan || !(spanEnd > spanStart))
+        return false;
+
+    const double blockLength = spanEnd - spanStart;
+
+    std::vector<synth::ClipId> newIds;
+    auto mutate = [this, sources, blockLength, count, &newIds] {
+        for (int repeat = 1; repeat <= count; ++repeat) {
+            for (const auto& source : sources) {
+                const auto dup = doc_->duplicateClip(source.id);
+                if (!dup.isValid())
+                    continue;
+                // duplicateClip drops the copy one clip-length after its source; moving it to
+                // (its own start + n block lengths) is what tiles the whole selection forward.
+                // Same track by construction, so the kind check never engages.
+                doc_->moveClipToTrack(dup, source.track, source.startBeat + (double)repeat * blockLength);
+                newIds.push_back(dup);
+            }
+        }
+    };
+
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+
+    if (newIds.empty())
+        return false;
+
+    clipSelection_.setSelection(newIds);
+    clipLaneArea_.repaint();
+    return true;
+}
+
 bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
     if (key == juce::KeyPress::escapeKey && automationStripVisible_) {
         closeAutomationStrip();
         return true;
+    }
+
+    // Number keys pick a tool, BEFORE the letter fallbacks below. Command-modified digits are left
+    // alone (a host/app menu shortcut owns those), and so are the digits EditTool.h deliberately
+    // reserves — 2, 6 and 9 return false here and keep whatever meaning they have elsewhere,
+    // which is the whole reason editToolForKeyChar returns an optional instead of clamping.
+    if (!key.getModifiers().isCommandDown()) {
+        // Text character first (it is what a real keystroke carries, including on a layout where
+        // the digit needs a modifier), falling back to the key CODE — which is what the letter
+        // fallbacks below already match on, and what a hand-built juce::KeyPress(int) carries.
+        const int typed = (int)key.getTextCharacter();
+        if (const auto tool = editToolForKeyChar(typed != 0 ? typed : key.getKeyCode())) {
+            setActiveTool(*tool);
+            return true;
+        }
     }
 
     // Panel-scoped transport/snap keys. These fire when the key was NOT consumed by the focused
@@ -933,6 +1163,13 @@ void TimelinePanelComponent::resized() {
     auto transportBar = transportBarBounds_.withTrimmedTop(kResizeHandleHeight);
     snapCombo_.setBounds(transportBar.removeFromRight(kSnapComboWidth).reduced(2));
     snapToggleButton_.setBounds(transportBar.removeFromRight(kSnapToggleButtonWidth).reduced(2));
+    // The tool strip sits immediately left of the snap controls: both are "how the next edit
+    // behaves" chrome, so they read as one group, and neither pushes the transport controls off
+    // their left-aligned home. Laid out left-to-right in EditTool order (1, 3, 4, 5, 7, 8).
+    auto toolStrip = transportBar.removeFromRight(kEditToolButtonWidth * (int)kAllEditTools.size());
+    for (auto tool : kAllEditTools)
+        if (auto* button = getToolButton(tool))
+            button->setBounds(toolStrip.removeFromLeft(kEditToolButtonWidth).reduced(2));
     transportBar_.setBounds(transportBar);
 }
 

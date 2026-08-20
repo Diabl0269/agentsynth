@@ -3,7 +3,9 @@
 #include "../Timeline/PeaksFile.h"
 #include "../Timeline/TimelineDoc.h"
 #include "ClipSelectionModel.h"
+#include "EditTool.h"
 #include "TimelineViewState.h"
+#include <array>
 #include <functional>
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -71,6 +73,15 @@ public:
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
     void mouseMove(const juce::MouseEvent& e) override;
+    // Both exist only for the tool layer: mouseEnter re-applies the active tool's cursor (it is
+    // NOT set per mouse-move — see setActiveTool), and mouseExit drops the Split tool's hover
+    // preview so a line never survives the pointer leaving the lanes.
+    void mouseEnter(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
+    // Rebuilds the six cached tool cursors from the (re-tinted) icons of the new LookAndFeel and
+    // re-applies the active one — a theme switch is the only thing that changes what a tool
+    // cursor looks like, so it is the only thing that pays for rebuilding them.
+    void lookAndFeelChanged() override;
     // Double-clicking a clip opens the piano roll for it (onClipDoubleClicked with the hit clip's
     // id). Double-clicking EMPTY lane space authors content on the row under the pointer instead:
     // a Midi track gets a one-bar clip at the floor-snapped beat, selected, and fires
@@ -90,6 +101,47 @@ public:
     // read its time signature and must never command it. Non-owning; may be unset, in which case P
     // falls through like any other unhandled key.
     std::function<void(double startBeat, double endBeat)> onLoopRangeRequested;
+
+    // ---- Edit tools (synth::ui::EditTool — the Cubase-style tool row) ----
+
+    // THE tool every pointer gesture in the lanes is interpreted through. TimelinePanelComponent
+    // owns the one active tool for the whole timeline and pushes it in here (and into the piano
+    // roll, which shares this rect); nothing in this class ever changes it by itself.
+    //
+    // EditTool::Select is the tool this component grew up with and keeps ALL of its behaviour:
+    // click/shift-click select, drag-move (now cross-track and Alt-copy capable), edge trims with
+    // their resize cursors, marquee, and both double-click authoring gestures. The other five are
+    // deliberately click-only — a drag with Split/Glue/Erase/Mute held would be a second,
+    // undiscoverable gesture on a tool whose whole point is that one click does one thing — with
+    // Draw the single exception (its drag IS the clip's length).
+    //
+    // Switching tools cancels whatever gesture and preview are in flight rather than trying to
+    // reinterpret them: a half-finished drag has no meaning under a different tool.
+    void setActiveTool(EditTool tool);
+    EditTool getActiveTool() const noexcept { return activeTool_; }
+
+    // The clip the Glue tool (and the "Glue with next" menu item) would join `id` into: the clip
+    // on the SAME track with the smallest startBeat at or after `id`'s end. TimelineDoc::joinClips
+    // treats a gap as legal (it becomes silence) and rejects an overlap, so "the next clip that
+    // does not overlap" is exactly the set of legal targets — picking the abutting clip only would
+    // make the tool silently inert on the very arrangement (clips with gaps) where gluing is most
+    // useful. Returns an invalid ClipId when there is no doc, no such clip, or nothing after it.
+    synth::ClipId findGlueTarget(synth::ClipId id) const;
+
+    // The commit half of the inline rename editor, and the headless seam for it (a live
+    // juce::TextEditor is no more testable than a juce::PopupMenu). One recordTimelineChange;
+    // TimelineDoc::setClipName trims and REJECTS a blank name, so a cleared field keeps the old
+    // one instead of erasing it — that rejection is the whole reason this is a doc call rather
+    // than a local string assignment.
+    void renameClip(synth::ClipId id, const juce::String& newName);
+
+    // Opens the inline editor over `id`'s name area, pre-filled and selected. Return commits
+    // (through renameClip), Escape cancels, and losing focus commits — the same three outcomes
+    // every other in-place rename in this app has. A no-op when `id` does not resolve.
+    void beginRenameClip(synth::ClipId id);
+    // The live editor, or nullptr when no rename is in flight (test hook: a rename is otherwise
+    // only observable as pixels).
+    juce::TextEditor* getRenameEditorForTest() const noexcept { return renameEditor_.get(); }
 
     // ---- Authoring: audio files (double-click an audio row, or drop files on one) ----
 
@@ -231,7 +283,12 @@ public:
     int getLiveStripRepaintCountForTest() const noexcept { return liveStripRepaintCount_; }
 
     // ---- Context-menu hook ("showMenuAsync doesn't run headless" idiom) ----
-    enum class ClipContextChoice { SplitAtPointer, Duplicate, Delete };
+    // Every tool action is ALSO a menu item, so a user who never touches the tool row can still
+    // split, glue, mute and rename — the tools are an accelerator for the menu, not a second set
+    // of capabilities. Rename is the one entry with no headless meaning (it opens a text editor
+    // rather than mutating), so applyClipContextChoice treats it as a no-op and the commit path is
+    // renameClip() — see that method.
+    enum class ClipContextChoice { SplitAtPointer, Duplicate, Delete, ToggleMute, GlueWithNext, Rename };
 
     // Applies one context-menu choice. `pointerBeat` is in absolute (doc) beats, UNSNAPPED — the
     // split case snaps it internally against the current view-state snap + beatsPerBar, exactly
@@ -279,8 +336,36 @@ public:
 
     bool isMarqueeActiveForTest() const noexcept { return dragMode_ == DragMode::Marquee; }
 
+    // ---- Tool-gesture test hooks (preview state is otherwise only observable as pixels) ----
+
+    // The Split tool's hover preview: the hovered clip and the SNAPPED beat the line is drawn at,
+    // or nullopt when nothing is previewed. The pair is the repaint gate — see
+    // requestToolPreviewRepaint.
+    struct SplitPreview {
+        synth::ClipId clip;
+        double beat = 0.0;
+    };
+    std::optional<SplitPreview> getSplitPreviewForTest() const;
+    // The Draw tool's ghost rect while a drag is in flight, or an empty rect.
+    juce::Rectangle<int> getDrawGhostRectForTest() const;
+    // Whether the in-flight Select-tool move drag is an Alt copy-drag (originals stay put, ghosts
+    // move) rather than a plain move.
+    bool isCopyDragForTest() const noexcept { return dragMode_ == DragMode::Move && copyDrag_; }
+    // The track-row offset the in-flight move/copy drag would apply to the whole selection — 0
+    // whenever the drop would be illegal for any clip in it (see mouseDrag's kind check).
+    int getPreviewRowDeltaForTest() const noexcept { return previewRowDelta_; }
+
+protected:
+    // THE paint-count seam for the tool previews (the Split tool's hover line and the Draw tool's
+    // ghost), mirroring PianoRollComponent::requestRepaintStrip / TimelinePlayheadOverlay::
+    // requestRepaintStrip exactly — a test subclasses this and counts. Every repaint a preview
+    // costs goes through it and nowhere else, and it is only ever reached when the previewed STATE
+    // changed (a new snapped beat, a new hovered clip, a new ghost rect): pointer movement inside
+    // one snap cell repaints nothing at all.
+    virtual void requestToolPreviewRepaint(juce::Rectangle<int> region);
+
 private:
-    enum class DragMode { None, Move, ResizeLeft, ResizeRight, Marquee };
+    enum class DragMode { None, Move, ResizeLeft, ResizeRight, Marquee, Draw };
 
     struct ClipHit {
         synth::ClipId id;
@@ -295,18 +380,34 @@ private:
 
     // One dragged clip's ORIGIN (pre-drag) geometry — every preview/commit computation reads from
     // this, never from the accumulating pointer position, so rounding never accumulates frame to
-    // frame (same reasoning as GraphEditor::dragSelectionBy's comment).
+    // frame (same reasoning as GraphEditor::dragSelectionBy's comment). `trackIndex` is captured
+    // for the same reason the start beat is: a cross-track drag applies ONE shared row delta to
+    // every clip, and re-deriving each clip's row mid-drag would read rows the preview has already
+    // moved.
     struct DragOrigin {
         synth::ClipId id;
         double originalStart = 0.0;
         double lengthBeats = 0.0;
+        int trackIndex = 0;
     };
 
     std::optional<ClipHit> hitTestClip(juce::Point<int> pos) const;
     std::vector<std::pair<synth::ClipId, juce::Rectangle<int>>> collectClipRects() const;
     Geometry effectiveGeometryFor(const synth::Clip& clip) const;
+    // The row a clip PAINTS in right now: its own, except while a plain (non-copy) move drag is
+    // previewing a cross-track drop, in which case the whole dragged set previews one row delta
+    // down/up. A copy-drag deliberately does NOT move the original — its destination is drawn as a
+    // separate ghost (see paintDragGhosts).
+    int effectiveRowFor(synth::ClipId id, int trackIndex) const;
     double currentBeatsPerBar() const;
     double snappedBeatAt(double rawBeat) const;
+    // The snap grid line at or AFTER `rawBeat` — floorSnappedBeatAt's mirror, and what the Draw
+    // tool's drag end uses so a drag that has crossed into a cell always includes that whole cell.
+    double ceilSnappedBeatAt(double rawBeat) const;
+    // The smallest length the Draw tool will create: one snap division, or kMinClipLengthBeats
+    // when the grid is off (there is no cell to fill, so this falls back to the same floor every
+    // trim already uses).
+    double minDrawLengthBeats() const;
     // The snap grid line at or BEFORE `rawBeat` (never after it), clamped to >= 0 — what a
     // created clip starts on, so a double-click always lands inside the bar/beat cell it was
     // aimed at rather than the next one. Same grid every drag uses (TimelineViewState::
@@ -333,6 +434,44 @@ private:
     // The audio row `x, y` would drop onto, or -1 (no audio row there, or nothing droppable).
     int dropRowFor(const juce::StringArray& files, int x, int y) const;
     void setFileDropRow(int row);
+
+    // ---- Tool gestures (everything below is inert while EditTool::Select is active) ----
+    // One press with a non-Select tool. Split/Glue/Erase/Mute act immediately on press (a DAW's
+    // tool click is expected to land under the finger, not on release); Draw anchors a drag.
+    // Split/Glue/Erase/Mute all route straight into applyClipContextChoice — the tool and the
+    // menu item are literally the same code path, which is what keeps "the tools are an
+    // accelerator for the menu" true rather than aspirational (and gives each one the same single
+    // recordTimelineChange, wrapped unconditionally: a refused mutation makes the lambda a no-op
+    // and AppUndoManager pushes nothing for one).
+    void handleToolMouseDown(const juce::MouseEvent& e);
+    // Draw: press anchors on the floor-snapped beat of a Midi row (other kinds are inert), drag
+    // grows the ghost, release creates the clip. A press that never dragged falls back to
+    // createMidiClipAt — the same one-bar clip the empty-lane double-click authors.
+    void beginDrawGesture(const juce::MouseEvent& e);
+    void updateDrawGesture(const juce::MouseEvent& e);
+    void commitDrawGesture();
+    // Both preview writers: they compute the new state, compare it with the old, and only then
+    // ask for a repaint (of the union of the two regions, so one change costs exactly one
+    // repaint) — see requestToolPreviewRepaint.
+    void updateSplitPreview(juce::Point<int> pos);
+    void clearToolPreviews();
+    // The rect a split line at (clip, beat) occupies — a few pixels wide so the repaint region
+    // covers the stroke rather than a zero-width column.
+    juce::Rectangle<int> splitPreviewBounds(synth::ClipId clip, double beat) const;
+    void paintSplitPreview(juce::Graphics& g);
+    // The outlined destinations of a copy-drag (the originals keep painting in place).
+    void paintDragGhosts(juce::Graphics& g);
+    void paintDrawGhost(juce::Graphics& g);
+
+    // ---- Tool cursors (built once per theme — never per mouse move) ----
+    void rebuildToolCursors();
+    void applyToolCursor();
+
+    // ---- Inline rename ----
+    // Tears the editor down and, when `commit`, pushes its text through renameClip(). Detaches
+    // the editor BEFORE doing either, so the focus-loss callback that deleting it fires re-enters
+    // to a null editor and stops.
+    void finishRename(bool commit);
 
     void beginMarquee(juce::Point<int> anchor, bool additive);
     void updateMarquee(juce::Point<int> current);
@@ -399,6 +538,36 @@ private:
     // ---- Move preview (one or many clips, one shared snapped delta) ----
     std::vector<DragOrigin> dragClips_;
     double previewDeltaBeats_ = 0.0;
+    // The whole selection's shared row offset, 0 unless EVERY dragged clip's destination row
+    // exists and accepts its payload (TimelineDoc::moveClipToTrack's kind rule). Clamping the
+    // group rather than dropping the clips that would fit is deliberate: a partial drop silently
+    // tears a selection apart.
+    int previewRowDelta_ = 0;
+    // Alt held at mouseDown: the drag previews COPIES (originals paint in place, ghosts move) and
+    // commits duplicateClip + moveClipToTrack per clip instead of moving anything.
+    bool copyDrag_ = false;
+
+    // ---- Edit tool ----
+    EditTool activeTool_ = EditTool::Select;
+    // Six cached cursors, rebuilt only on a theme change (see rebuildToolCursors) — building one
+    // renders an icon into an Image, which is far too much work for a mouse-move.
+    std::array<juce::MouseCursor, kAllEditTools.size()> toolCursors_;
+    bool toolCursorsBuilt_ = false;
+
+    // ---- Split tool hover preview (the (clip, snapped beat) pair IS the repaint gate) ----
+    synth::ClipId splitPreviewClip_;
+    double splitPreviewBeat_ = 0.0;
+
+    // ---- Draw tool gesture ----
+    synth::TrackId drawTrack_;
+    int drawRow_ = -1;
+    double drawAnchorBeat_ = 0.0;
+    double drawEndBeat_ = 0.0;
+    bool drawDragged_ = false;
+
+    // ---- Inline rename ----
+    std::unique_ptr<juce::TextEditor> renameEditor_;
+    synth::ClipId renamingClip_;
 
     // ---- Resize preview (always the single grabbed clip, even inside a wider selection) ----
     double resizeOriginalStart_ = 0.0;
