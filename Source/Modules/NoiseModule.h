@@ -23,6 +23,13 @@ public:
         for (int v = 0; v < MAX_VOICES; ++v) {
             voices[v].reset();
         }
+        // Level is a straight output gain and Color ends in a make-up gain (see generate()), so
+        // both step the output level when written per block. Snapped at prepare, so a static
+        // render is unchanged.
+        smoothedColor.reset(currentSampleRate, 0.01);
+        smoothedColor.setCurrentAndTargetValue(colorParam->get());
+        smoothedLevel.reset(currentSampleRate, 0.01);
+        smoothedLevel.setCurrentAndTargetValue(levelParam->get());
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& /*midiMessages*/) override {
@@ -164,6 +171,22 @@ private:
     // Pre-allocated arrays to avoid heap allocations in audio thread
     std::array<float, 4096> cvColorCache{};
     std::array<float, 4096> cvLevelCache{};
+    // Knob ramps, materialised once per block: poly mode renders one voice after another, so
+    // pulling from the smoothers inside the voice loop would advance them eight times per block.
+    std::array<float, 4096> colorRamp{};
+    std::array<float, 4096> levelRamp{};
+
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedColor;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedLevel;
+
+    void fillKnobRamps(int len) {
+        smoothedColor.setTargetValue(colorParam->get());
+        smoothedLevel.setTargetValue(levelParam->get());
+        for (int i = 0; i < len; ++i) {
+            colorRamp[(size_t)i] = smoothedColor.getNextValue();
+            levelRamp[(size_t)i] = smoothedLevel.getNextValue();
+        }
+    }
 
     static bool isChannelActive(const juce::AudioBuffer<float>& buffer, int ch, int numSamples) {
         if (ch >= buffer.getNumChannels())
@@ -201,16 +224,15 @@ private:
 
         auto* ch0 = buffer.getWritePointer(0);
         int type = typeParam->getIndex();
-        float baseColor = colorParam->get();
-        float baseLevel = levelParam->get();
+        fillKnobRamps(ns);
 
         for (int i = 0; i < numSamples; ++i) {
             int idx = std::min(i, ns - 1);
             float white = (random.nextFloat() * 2.0f) - 1.0f;
-            float color = baseColor;
+            float color = colorRamp[(size_t)idx];
             if (hasColorCV)
                 color = juce::jlimit(-1.0f, 1.0f, color + cvColorCache[idx]);
-            float level = baseLevel;
+            float level = levelRamp[(size_t)idx];
             if (hasLevelCV)
                 level = juce::jlimit(0.0f, 1.0f, level + cvLevelCache[idx]);
 
@@ -245,8 +267,7 @@ private:
             buffer.clear(ch, 0, numSamples);
 
         int type = typeParam->getIndex();
-        float baseColor = colorParam->get();
-        float baseLevel = levelParam->get();
+        fillKnobRamps(ns);
 
         for (int v = 0; v < MAX_VOICES && v < numChannels; ++v) {
             float* output = buffer.getWritePointer(v);
@@ -254,10 +275,10 @@ private:
             for (int s = 0; s < numSamples; ++s) {
                 int idx = std::min(s, ns - 1);
                 float white = (random.nextFloat() * 2.0f) - 1.0f;
-                float color = baseColor;
+                float color = colorRamp[(size_t)idx];
                 if (hasColorCV)
                     color = juce::jlimit(-1.0f, 1.0f, color + cvColorCache[idx]);
-                float level = baseLevel;
+                float level = levelRamp[(size_t)idx];
                 if (hasLevelCV)
                     level = juce::jlimit(0.0f, 1.0f, level + cvLevelCache[idx]);
 

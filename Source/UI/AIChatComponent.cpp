@@ -1,6 +1,7 @@
 #include "AIChatComponent.h"
 #include "../AI/PatchDiff.h"
 #include "../Branding.h"
+#include <thread>
 
 namespace synth {
 
@@ -306,12 +307,76 @@ private:
 };
 
 //==============================================================================
+// PatchCard's sibling, kept to its conventions (header label + a coloured apply button on
+// the header row) with the one honest difference: a timeline suggestion has a validated PREVIEW to
+// show — "Adds midi track "Bass"; places 1 clip (8 notes) at 0-4 on "Bass"" — rather than raw JSON
+// to expand, so the body is that sentence instead of a JSON dump.
+//
+// The apply callback is EMPTY when the envelope failed validation; the card then shows the reason
+// and offers no button, because a suggestion that cannot be applied must still say why (the same
+// rule that stops applyPatch swallowing a rejection) but must not look clickable.
+class AIChatComponent::TimelineCard : public juce::Component {
+public:
+    TimelineCard(const juce::String& preview, std::function<void()> applyCallback)
+        : previewText(preview) {
+
+        addAndMakeVisible(headerLabel);
+        headerLabel.setText("Timeline Changes", juce::dontSendNotification);
+        headerLabel.setFont(juce::Font(14.0f, juce::Font::bold));
+        headerLabel.setColour(juce::Label::textColourId, juce::Colours::lightskyblue);
+
+        if (applyCallback) {
+            applyButton = std::make_unique<juce::TextButton>();
+            applyButton->setButtonText("Apply timeline changes");
+            applyButton->setColour(juce::TextButton::buttonColourId, juce::Colour(0xFF1F4E63));
+            applyButton->onClick = std::move(applyCallback);
+            addAndMakeVisible(*applyButton);
+        }
+
+        addAndMakeVisible(previewLabel);
+        previewLabel.setText(previewText, juce::dontSendNotification);
+        previewLabel.setFont(juce::Font(12.0f));
+        previewLabel.setMinimumHorizontalScale(1.0f);
+        previewLabel.setJustificationType(juce::Justification::topLeft);
+        previewLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.8f));
+    }
+
+    void resized() override {
+        auto b = getLocalBounds().reduced(5);
+        auto header = b.removeFromTop(kHeaderHeight);
+        if (applyButton)
+            applyButton->setBounds(header.removeFromRight(kApplyButtonWidth).reduced(2));
+        headerLabel.setBounds(header);
+        previewLabel.setBounds(b);
+    }
+
+    // Measured against the width the card will actually be laid out at, so the sentence never
+    // renders clipped — the same GlyphArrangement measurement MessageBubble does for its own text.
+    int getRequiredHeight(int width) const {
+        juce::GlyphArrangement ga;
+        ga.addJustifiedText(previewLabel.getFont(), previewText, 0.0f, 0.0f,
+                            static_cast<float>(juce::jmax(40, width - 10)), juce::Justification::left);
+        return kHeaderHeight + juce::jmax(16, static_cast<int>(ga.getBoundingBox(0, -1, true).getHeight())) + 10;
+    }
+
+private:
+    static constexpr int kHeaderHeight = 25;
+    static constexpr int kApplyButtonWidth = 160;
+
+    juce::String previewText;
+    juce::Label headerLabel;
+    juce::Label previewLabel;
+    std::unique_ptr<juce::TextButton> applyButton;
+};
+
+//==============================================================================
 class AIChatComponent::MessageBubble : public juce::Component {
 public:
     MessageBubble(const MessageData& data, std::function<void(const juce::String&)> applyPatch, bool isMerge,
                   std::function<void(const juce::URL&)> urlOpener, const std::vector<PatchChange>& patchDiff,
                   bool patchDiffAvailable, const PatchSummary& patchSummary,
-                  std::function<void(AIChatComponent::PatchRatingUiState, const juce::String&)> onRate) {
+                  std::function<void(AIChatComponent::PatchRatingUiState, const juce::String&)> onRate,
+                  std::function<void(const juce::String&)> applyTimelineOps) {
         role = data.role;
         text = data.text;
         responseMs = data.responseMs;
@@ -326,6 +391,17 @@ public:
                 data.jsonPatch, [applyPatch, json = data.jsonPatch]() { applyPatch(json); }, isMerge, patchDiff,
                 patchDiffAvailable, patchSummary, data.ratingState, data.ratingComment, onRate);
             addAndMakeVisible(*patchCard);
+        }
+
+        // Independent of the patch card above: a response carrying both gets both cards, and
+        // the user applies each on its own terms. No apply callback when the envelope is empty —
+        // that is the rejected case, where the preview holds the reason instead of a summary.
+        if (data.timelineOpsPreview.isNotEmpty()) {
+            std::function<void()> onApply;
+            if (data.timelineOpsJson.isNotEmpty() && applyTimelineOps)
+                onApply = [applyTimelineOps, envelope = data.timelineOpsJson] { applyTimelineOps(envelope); };
+            timelineCard = std::make_unique<TimelineCard>(data.timelineOpsPreview, std::move(onApply));
+            addAndMakeVisible(*timelineCard);
         }
 
         if (data.showUpgradeAction) {
@@ -370,6 +446,11 @@ public:
             b.removeFromBottom(5);
         }
 
+        if (timelineCard) {
+            timelineCard->setBounds(b.removeFromBottom(timelineCard->getRequiredHeight(b.getWidth())));
+            b.removeFromBottom(5);
+        }
+
         if (upgradeButton) {
             upgradeButton->setBounds(b.removeFromBottom(kUpgradeButtonHeight));
             b.removeFromBottom(5);
@@ -392,6 +473,10 @@ public:
             height += 10 + patchCard->getRequiredHeight();
         }
 
+        if (timelineCard) {
+            height += 5 + timelineCard->getRequiredHeight(contentWidth);
+        }
+
         if (upgradeButton) {
             height += 5 + kUpgradeButtonHeight;
         }
@@ -407,6 +492,7 @@ private:
     int responseMs = -1;
     juce::Label textLabel;
     std::unique_ptr<PatchCard> patchCard;
+    std::unique_ptr<TimelineCard> timelineCard;
     std::unique_ptr<juce::TextButton> upgradeButton;
 };
 
@@ -956,8 +1042,40 @@ void AIChatComponent::sendButtonClicked() {
                         }
                     }
 
-                    self->messages.push_back({"assistant", cleanText.trim(), json});
+                    // The timeline half of the SAME response, extracted independently of the
+                    // patch half — a model may send a patch, a timelineOps envelope, or both, and
+                    // "timelineOps" is a sibling key, never nested inside the patch. Offered only
+                    // when a live timeline is wired in, and under the identical posture the patch
+                    // card is under: validate NOW so the user reads a checked summary, apply only
+                    // when they click.
+                    juce::String timelineOpsJson;
+                    juce::String timelineOpsPreview;
+#if SYNTH_ENABLE_TIMELINE
+                    if (self->aiService.hasTimelineContext()) {
+                        const juce::var envelope = AIIntegrationService::extractTimelineOps(response);
+                        if (!envelope.isVoid()) {
+                            const auto preview = self->aiService.previewTimelineOps(envelope);
+                            if (preview.ok) {
+                                timelineOpsJson = juce::JSON::toString(envelope);
+                                timelineOpsPreview = preview.previewText;
+                            } else {
+                                // Shown, never swallowed — but with no Apply button, since there is
+                                // nothing valid to apply.
+                                timelineOpsPreview =
+                                    "These timeline changes were rejected and were NOT applied: " + preview.message;
+                            }
+                        }
+                    }
+#endif
+
+                    self->messages.push_back({"assistant", cleanText.trim(), json, /*isExpanded=*/false,
+                                              /*showUpgradeAction=*/false, timelineOpsJson, timelineOpsPreview});
                     self->messages.back().responseMs = elapsed;
+                    // P6-9: only present on a Pro-plan hosted response whose persistence
+                    // succeeded (see AIResponse::messageId's doc comment) — empty for every other
+                    // case (local Ollama, free plan, no provider), which is exactly what keeps the
+                    // later rating-sync check a no-op for those.
+                    self->messages.back().serverMessageId = aiResponse.messageId;
                     self->attachPatchPreview(self->messages.back());
 
                     // P6-8: local-first — every session writes here regardless of plan, right after
@@ -1125,11 +1243,77 @@ void AIChatComponent::updateChatDisplay() {
                 msg.ratingState = newRating;
                 msg.ratingComment = comment;
                 if (newRating != PatchRatingUiState::None) {
-                    patchFeedbackStore.record(msg.jsonPatch,
-                                              newRating == PatchRatingUiState::Up ? PatchFeedbackStore::Rating::Up
-                                                                                  : PatchFeedbackStore::Rating::Down,
-                                              comment);
+                    // The SERVER conversation id (aiService.getConversationId()), not
+                    // currentLocalConversationId — that's this component's own local-history key,
+                    // a different identifier the server's ownership check would just 404 on.
+                    const juce::String serverConversationId = aiService.getConversationId();
+                    const auto storeRating = newRating == PatchRatingUiState::Up ? PatchFeedbackStore::Rating::Up
+                                                                                 : PatchFeedbackStore::Rating::Down;
+
+                    // Local log: unconditional fallback, regardless of plan/sync outcome.
+                    patchFeedbackStore.record(msg.jsonPatch, storeRating, comment, serverConversationId,
+                                              msg.serverMessageId);
+
+                    // P6-9: additionally sync to the server, fire-and-forget, ONLY when this
+                    // turn's assistant message has a server-assigned id (Pro + persistence
+                    // succeeded when the message was created — see MessageData::serverMessageId)
+                    // AND the account is still signed-in Pro right now AND a usable access token
+                    // is available. No retry/queueing/error surface by design.
+                    if (!msg.serverMessageId.isEmpty() && serverConversationId.isNotEmpty()) {
+                        const AccountSnapshot snapshot =
+                            accountServicePtr != nullptr ? accountServicePtr->getSnapshot() : AccountSnapshot{};
+                        const bool signedIn = accountServicePtr != nullptr && snapshot.state == AccountState::SignedIn;
+                        const bool pro = isProPlan(snapshot);
+                        const juce::String accessToken =
+                            signedIn ? accountServicePtr->getAccessToken() : juce::String();
+
+                        if (signedIn && pro && accessToken.isNotEmpty()) {
+                            const juce::String ratingStr = newRating == PatchRatingUiState::Up ? "up" : "down";
+
+                            // Detached background thread, mirrors CloudHistorySource: capture
+                            // COPIES only (a small, copyable, stateless AuthClient plus plain
+                            // strings), never `this` or any UI state — the thread owns everything
+                            // it touches and outlives this callback with no dangling-reference
+                            // risk.
+                            synth::AuthClient client =
+                                testFeedbackHttpPerformer
+                                    ? synth::AuthClient(synth::branding::kApiBaseUrl, "synth-desktop",
+                                                        testFeedbackHttpPerformer)
+                                    : synth::AuthClient(synth::branding::kApiBaseUrl);
+                            std::thread([client, accessToken, serverConversationId, messageId = msg.serverMessageId,
+                                         ratingStr, comment]() {
+                                std::atomic<bool> cancelled{false};
+                                client.submitMessageFeedback(accessToken, serverConversationId, messageId, ratingStr,
+                                                             comment, cancelled);
+                            }).detach();
+                        }
+                    }
                 }
+            },
+            // Timeline Apply. Deliberately NOT a retry loop like the patch path's: a rejected
+            // envelope never reaches this button (the card offers no button at all in that case),
+            // so the only failures left here are the ones the live doc/graph moved under — worth
+            // reporting, not worth re-asking the model about.
+            [this](const juce::String& envelopeJson) {
+#if SYNTH_ENABLE_TIMELINE
+                juce::Component::SafePointer<AIChatComponent> safeThis(this);
+                const auto result = aiService.applyTimelineOps(juce::JSON::parse(envelopeJson));
+                if (result.ok)
+                    return;
+
+                // Same rule as a rejected patch: an Apply that does nothing and says nothing is
+                // indistinguishable from a broken button.
+                messages.push_back({"assistant",
+                                    "Could not apply these timeline changes: " +
+                                        (result.message.isNotEmpty() ? result.message : juce::String("unknown error")),
+                                    ""});
+                juce::MessageManager::callAsync([safeThis] {
+                    if (auto* self = safeThis.getComponent())
+                        self->updateChatDisplay();
+                });
+#else
+                juce::ignoreUnused(envelopeJson);
+#endif
             });
         messageList.addAndMakeVisible(bubble);
     }

@@ -67,6 +67,14 @@ public:
             voices[v].smoothedFreq.reset(sampleRate, 0.005);
             voices[v].smoothedFreq.setCurrentAndTargetValue(initFreq);
         }
+
+        // Level is a straight output gain, so an automated step is a click. 10 ms is the same
+        // anti-click ramp ModuleBase::prepareOutputLevel uses. Snapped to the current knob value
+        // so a static render is bit-identical to the un-smoothed version.
+        smoothedLevel.reset(sampleRate, 0.01);
+        smoothedLevel.setCurrentAndTargetValue(levelParam->get());
+        smoothedPan.reset(sampleRate, 0.01);
+        smoothedPan.setCurrentAndTargetValue(panParam->get());
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -256,6 +264,24 @@ private:
 
     VoiceState voices[MAX_VOICES];
 
+    /** Fills levelRamp[0..len) with this block's smoothed Level. Poly mode renders one voice
+        after another, so the ramp has to be materialised once up front rather than pulled from
+        the smoother inside a per-voice loop (which would advance it eight times per block). */
+    void fillLevelRamp(int len) {
+        smoothedLevel.setTargetValue(levelParam->get());
+        for (int i = 0; i < len; ++i)
+            levelRamp[(size_t)i] = smoothedLevel.getNextValue();
+    }
+
+    /** Same materialise-once contract as fillLevelRamp, for Pan: placeVoiceInStereo runs once per
+        VOICE, so pulling the smoother inside it would advance it eight times per block. */
+    void fillPanRamp(int len) {
+        len = std::min(len, (int)panRamp.size()); // same clamp contract as the level ramp's caller
+        smoothedPan.setTargetValue(panParam->get());
+        for (int i = 0; i < len; ++i)
+            panRamp[(size_t)i] = smoothedPan.getNextValue();
+    }
+
     // -------------------------------------------------------------------------
     // Mono mode processing (voice 0 only, MIDI driven)
     // -------------------------------------------------------------------------
@@ -340,7 +366,13 @@ private:
         auto* ch0 = buffer.getWritePointer(0);
 
         int unisonCount = unisonParam->get();
+        // Detune is a frequency RATIO, not a level: a step in it changes each unison
+        // oscillator's phase increment while the phase itself stays continuous, so it
+        // cannot produce a discontinuity. Deliberately not smoothed.
         float detuneCents = detuneParam->get();
+
+        const int levelLen = std::max(1, std::min(numSamples, 4096));
+        fillLevelRamp(levelLen);
 
         for (int i = 0; i < numSamples; ++i) {
             float baseFreq = voices[0].smoothedFreq.getNextValue();
@@ -388,7 +420,7 @@ private:
                 voices[0].previousWaveform = waveform;
             }
 
-            float level = levelParam->get();
+            float level = levelRamp[(size_t)std::min(i, levelLen - 1)];
             if (cvLevelCh)
                 level = juce::jlimit(0.0f, 1.0f, level + cvLevelCh[i]);
 
@@ -425,6 +457,7 @@ private:
 
         // Place the finished mono voice across Audio L / Audio R. Done as a post-pass rather than
         // inside the render loop so the generator stays byte-identical to the pre-#219 mono path.
+        fillPanRamp(numSamples);
         placeVoiceInStereo(buffer, /*voiceIndex*/ 0, numSamples, cvPanSaved.get(), numSamples);
 
         // Push to visual buffer
@@ -453,12 +486,14 @@ private:
         if (voiceIndex >= buffer.getNumChannels() || rightCh >= buffer.getNumChannels())
             return;
 
-        const float basePan = panParam->get();
         float* left = buffer.getWritePointer(voiceIndex);
         float* right = buffer.getWritePointer(rightCh);
 
+        // Reads the block's smoothed pan ramp (fillPanRamp — materialised once, before the voice
+        // loop) so an automated Pan step glides instead of clicking (AutomationZipperTest).
+        const int rampLast = std::min(std::max(0, numSamples - 1), (int)panRamp.size() - 1);
         const bool hasCV = (panCV != nullptr && panCVLength > 0);
-        if (!hasCV && basePan == 0.0f) {
+        if (!hasCV && panRamp[0] == 0.0f && panRamp[(size_t)rampLast] == 0.0f) {
             juce::FloatVectorOperations::copy(right, left, numSamples);
             return;
         }
@@ -466,7 +501,8 @@ private:
         for (int i = 0; i < numSamples; ++i) {
             float gainL = 1.0f;
             float gainR = 1.0f;
-            panGains(basePan + (hasCV ? panCV[std::min(i, panCVLength - 1)] : 0.0f), gainL, gainR);
+            panGains(panRamp[(size_t)std::min(i, rampLast)] + (hasCV ? panCV[std::min(i, panCVLength - 1)] : 0.0f),
+                     gainL, gainR);
             const float sample = left[i];
             left[i] = sample * gainL;
             right[i] = sample * gainR;
@@ -543,6 +579,10 @@ private:
 
         bool pitchMod = hasOctCV || hasCoarseCV || hasFineCV;
 
+        // Materialised once, before the voice loop — see fillLevelRamp.
+        fillLevelRamp(ns);
+        fillPanRamp(ns);
+
         // Clear output channels 0..getTotalNumOutputChannels()-1 (==14). This range includes the
         // shared mod-CV input channels (8-12 poly), but clearing them here is SAFE because:
         // (a) those CVs were already cached above (into *CVCache) before this clear; and
@@ -584,8 +624,8 @@ private:
             float freq = juce::jlimit(20.0f, 20000.0f, basePitchHz);
             float baseDt = freq / (float)currentSampleRate;
             int wf = waveformParam->getIndex();
-            float level = levelParam->get();
             int unisonCount = unisonParam->get();
+            // See processMonoMode: Detune is a ratio, phase-continuous, deliberately unsmoothed.
             float detuneCents = detuneParam->get();
 
             if (!pitchMod) {
@@ -634,6 +674,7 @@ private:
                     if (hasWaveCV && voices[v].crossfadeSamplesRemaining > 0)
                         --voices[v].crossfadeSamplesRemaining;
 
+                    const float level = levelRamp[(size_t)idx];
                     float lv = hasLevelCV ? juce::jlimit(0.0f, 1.0f, level + levelCVCache[idx]) : level;
                     output[s] = (sample / (float)unisonCount) * lv;
                 }
@@ -697,6 +738,7 @@ private:
                     if (hasWaveCV && voices[v].crossfadeSamplesRemaining > 0)
                         --voices[v].crossfadeSamplesRemaining;
 
+                    const float level = levelRamp[(size_t)idx];
                     float lv = hasLevelCV ? juce::jlimit(0.0f, 1.0f, level + levelCVCache[idx]) : level;
                     output[s] = (sample / (float)unisonCount) * lv;
                 }
@@ -800,7 +842,12 @@ private:
     std::array<float, 4096> coarseCVCache{};
     std::array<float, 4096> fineCVCache{};
     std::array<float, 4096> levelCVCache{};
+    std::array<float, 4096> levelRamp{};
+    std::array<float, 4096> panRamp{};
     std::array<float, 4096> panCVCache{};
+
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedLevel;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedPan;
 
     juce::AudioParameterChoice* waveformParam = nullptr;
     juce::AudioParameterInt* octaveParam = nullptr;

@@ -25,7 +25,8 @@ public:
     SettingsWindow(juce::AudioDeviceManager& deviceManager, juce::ApplicationProperties& appProperties,
                    synth::AIIntegrationService& aiService, synth::AIChatComponent& aiChatComponent,
                    ShortcutManager& shortcutManager, synth::theme::ThemeManager& themeManager, GraphEditor* graphEditor,
-                   synth::AccountService* accountService = nullptr, bool showAudioTab = true);
+                   synth::AccountService* accountService = nullptr, bool showAudioTab = true,
+                   std::function<void(bool)> onTimelineFeatureToggled = nullptr);
     ~SettingsWindow() override;
 
     void resized() override;

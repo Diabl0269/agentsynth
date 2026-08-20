@@ -44,6 +44,7 @@ enum class PatchValidationError {
     RemoveEntryInvalid,
     RemoveModulationEntryInvalid,
     TimelineNotAllowed,
+    InternalModuleNotAllowed,
 };
 
 /**
@@ -171,9 +172,21 @@ public:
      *              that already exist rather than only nodes newly created by this patch.
      * @param trusted when true, only minimal structural checks are performed (matches legacy
      *              behaviour); when false, the full strict validation runs.
+     *
+     * @param allowInternalModuleTypes only meaningful when `trusted` is false. The strict path
+     *              normally refuses any node whose type is internal-only ("Attenuverter",
+     *              "Mod Slot", "Track In") — that is what makes "non-authorable" mean
+     *              untrusted-UNREACHABLE rather than merely absent from the schema handed to the
+     *              model. But two different callers pass trusted=false: a MODEL-facing one, which
+     *              wants exactly that restriction, and an APP-DATA one gating something this app
+     *              wrote and is about to re-apply trusted (session state, an .agsproj, a snippet
+     *              file — see docs/layout.md §12.5). Our own saves legitimately contain internal
+     *              nodes, so the second kind passes true: it is still gating structure, ids,
+     *              ranges and tampering, just not authorship. Defaults to false so a new
+     *              model-facing caller is protected without having to know this exists.
      */
     static PatchValidationResult validatePatch(const juce::var& json, const juce::AudioProcessorGraph& graph,
-                                               bool clearExisting, bool trusted);
+                                               bool clearExisting, bool trusted, bool allowInternalModuleTypes = false);
 
     /**
      * @brief Gets a Markdown-formatted string of all available modules and their parameters.
@@ -184,6 +197,23 @@ public:
      * @brief Generates a JSON schema for patch validation and structured AI output.
      */
     static juce::var getPatchSchema();
+
+    /**
+     * @brief getPatchSchema() plus an OPTIONAL top-level "timelineOps" array — the local
+     *        (Ollama) structured-output contract while the timeline AI tools are enabled
+     *        (AIIntegrationService::setTimelineToolsEnabled).
+     *
+     * The ops item schema is deliberately PERMISSIVE (one object shape, only "op" required, every
+     * per-op field optional): it is a GRAMMAR that lets the model express any of the four ops, not
+     * a validator — `TimelineOps::validate` is the gate, and it rejects unknown fields, bad
+     * shapes and out-of-range values whole-batch regardless of what the grammar allowed through.
+     * A strict discriminated union here would double-maintain the validator's rules in a dialect
+     * (llama.cpp's grammar compiler) that handles `anyOf` poorly.
+     *
+     * The reserved-fields rule is unchanged: "timeline" (the document dialect), "schemaVersion"
+     * and node "uuid" stay absent — "timelineOps" is the separate door (see TimelineOps).
+     */
+    static juce::var getPatchSchemaWithTimelineOps();
 
     static std::unique_ptr<juce::AudioProcessor> createModule(const juce::String& type);
 

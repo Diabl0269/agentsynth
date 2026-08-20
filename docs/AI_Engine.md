@@ -99,7 +99,9 @@ it, neither corrupts the other's data.
 (`PatchValidationError::TimelineNotAllowed`). The validator lets unknown keys through, so a future
 build that starts honouring timeline data would otherwise silently begin executing provider-authored
 automation against patches accepted today. Refusing now means that door can only be opened by a
-commit that deliberately deletes the check. The trusted path (preset/undo replay) accepts it.
+commit that deliberately deletes the check. The trusted path (preset/undo replay) accepts it. That
+refusal is permanent even now that AI *can* author timeline data: it arrives through a separate,
+separately-gated door — see [§5c, `validateTimeline`](#5c-untrusted-timeline-data-validatetimeline-tl8-1).
 
 `graphToJSON` writes a root `"schemaVersion": 1` (`AIStateMapper::kSchemaVersion`). **Readers treat
 an absent version as 1 and gate no behaviour on it** — the field exists so a genuinely breaking
@@ -287,13 +289,13 @@ anyone who wants to say why; submitting a comment later (Enter or "Save") writes
 rather than mutating the first, since the underlying store is an append-only log, not a keyed
 table.
 
-**This is the client-only half of the roadmap's P6·3.** `Source/AI/PatchFeedbackStore` appends one
-JSON object per line to `<user app data>/Agent Synth/patch_feedback.jsonl` (`{timestamp, rating,
-comment?, patch}` — `patch` is the parsed patch JSON, falling back to a `patchRaw` string if it
-doesn't parse). There is currently nowhere on the server to send this: `packages/conversations`'
-`ConversationMessage` (synth-platform) has no rating field, and the client doesn't hold a
-conversation id to key a rating against until P6·8 ships. Syncing this log to the server is tracked
-separately (P6·9 in `synth-platform/roadmap.json`), gated on P6·8.
+`Source/AI/PatchFeedbackStore` appends one JSON object per line to
+`<user app data>/Agent Synth/patch_feedback.jsonl` (`{timestamp, rating, comment?, conversationId?,
+messageId?, patch}` — `patch` is the parsed patch JSON, falling back to a `patchRaw` string if it
+doesn't parse; `conversationId`/`messageId` are the P6-9 additions below, present only when known).
+This local log is written **unconditionally** on every rating, regardless of plan or whether a
+server sync happens — see "Patch Feedback Sync to Server (P6-9, client side)" below for when a
+rating additionally reaches the server.
 
 The rating lives on `MessageData::ratingState`/`ratingComment` for the session (same
 "not reconstructed on replay" precedent as `showUpgradeAction`, just above) — the durable copy is
@@ -393,6 +395,25 @@ against:
       module goes into `kNonAuthorableModuleTypes` (AIStateMapper.cpp) when it is registered.
       `AIStateMapperTest.AuthorableModuleTypesGolden` pins the exact resulting list, so either kind
       of addition fails the build until the choice is made deliberately.
+
+      The set today: `Attenuverter` / `Mod Slot` (an implementation detail of the `modulations`
+      array), `Track In` (a timeline feed, whose only meaningful state lives outside the patch), and
+      **`Rec Tap`** (TL6-3). Rec Tap's reason is the sharpest of the four: it **names a file path on
+      disk**, so a model that could author one could aim a recording anywhere the app can write —
+      the write-side twin of the `"state"` file-path restriction below.
+
+      **The deny set is enforced by the validator, not just by the schema** (TL7-4's mechanism,
+      landed early with TL3-1's Track In node). `validatePatch(..., trusted=false)` rejects any node
+      whose type is in `kNonAuthorableModuleTypes` with `PatchValidationError::InternalModuleNotAllowed`.
+      Leaving it to the schema enum alone would have made "non-authorable" mean *un-suggested*
+      rather than *unreachable*: the schema is only a grammar for backends that compile it, and a
+      patch can also arrive from a local model or any future caller that never saw it. The **trusted**
+      path is untouched — our own saves must round-trip an Attenuverter or a Track In. Callers that
+      gate app-authored data with `trusted=false` before applying it trusted (session state,
+      `.agsproj`, snippet files — the docs/layout.md §12.5 pairing) pass
+      `allowInternalModuleTypes=true`: they are gating structure, ids, ranges and tampering, not
+      authorship, and our own files legitimately contain internal nodes. The parameter defaults to
+      `false`, so a new model-facing caller gets the restriction without knowing it exists.
     - `node.params` enumerates every **choice** parameter's real options, so a model physically
       cannot emit `"waveform": "White Noise"`. `additionalProperties` stays `true` so numeric
       parameters remain expressible — a grammar restricted to the listed keys would make `cutoff`
@@ -517,6 +538,341 @@ connection errors.
 per-request cost, not a rounding error; it is justified here by `gemma4:e4b-mlx`'s +40pp jump but is a
 genuine net negative for `llama3.2:1b`, which should factor into any future decision to widen this
 example set further or to gate it per-model.
+
+## 5c. Untrusted Timeline Data: `validateTimeline` (TL8-1)
+
+`synth::validateTimeline` (`Source/Timeline/TimelineValidator.h/.cpp`) is the untrusted gate for
+AI/tool-supplied **timeline** JSON — tracks, clips, notes and automation lanes in the dialect
+`TimelineDoc::toVar` writes. It is a separate function from `validatePatch`, with its own error
+enum (`TimelineValidationError`) and its own name table (`timelineValidationErrorName`, same idiom
+as `patchValidationErrorName`).
+
+### The two-door model
+
+There are two ways timeline data could reach the app, and exactly one of them is open:
+
+| Door | Status | Rule |
+| --- | --- | --- |
+| The **patch grammar** — a `"timeline"` key inside a patch suggestion | **Closed, permanently** | `validatePatch(trusted=false)` refuses it (`TimelineNotAllowed`, §"Patch format forward-compatibility"). A patch is applied to the graph; a timeline is not part of a graph. |
+| The **tools** — TL8-4's discrete app-side timeline tools (add-track, place-clips, write-lane) | **Open, guarded** | Each payload goes through `validateTimeline` before it touches `TimelineDoc`. |
+
+TL8-1 is the "deliberate commit that opens the door TL0-4 closed" — through its own guarded
+entrance, *not* by relaxing the patch path. Pinned by
+`TimelineValidatorTest.PatchGrammarStillRefusesTimelineData`, which takes a document this validator
+accepts, smuggles it into a patch, and asserts `validatePatch` still refuses it.
+
+### Contract
+
+-   **Validates strictly, mutates nothing** — not the doc, not the graph, not the input `var`.
+-   The caller applies via `TimelineDoc::fromVar` (all-or-nothing) **only** after this passes.
+-   **A pass means the apply cannot fail.** The last thing the function does is load the document
+    into a throwaway `TimelineDoc` to prove it. A var that satisfies every named check and is still
+    refused by the loader yields `InternalError` — the validator and `fromVar` have drifted, and the
+    caller applies nothing either way. (The one reachable case today is a malformed
+    `nextTrackId`/`nextClipId`/`nextLaneId`/`nextNoteId` counter — the document's own bookkeeping,
+    which a tool payload has no reason to carry.)
+-   **Rejects where the trusted paths repair.** `fromVar` clamps a breakpoint's tension into
+    `[-1, 1]` and its value into the lane's range snapshot, and repairs a broken sort order. None of
+    that happens for untrusted data: a value we would have to correct is a value the sender did not
+    mean, so it is refused with a message that says which one and why.
+-   Only the **first** problem is reported, like `validatePatch` — fixing one class can unmask the
+    next. Every message names the offending track/clip/note/lane so it can be handed back as a
+    correction rather than a complaint.
+
+### The checks
+
+1.  **Structural** — root is an object of the `TimelineDoc` dialect; `version` present, integer, and
+    no newer than `TimelineDoc::kFormatVersion`; `tracks` (if present) an array; ids present,
+    positive and unique per kind; one lane per `(nodeUuid, paramId)` doc-wide.
+    **Unknown top-level keys are refused**, where `PatchDocument` deliberately *preserves* the ones
+    it does not understand. That asymmetry is the point: forward-compatibility is a property a
+    document format needs and an untrusted payload does not, and an ignored key is exactly how a
+    later build starts honouring a field today's gate never inspected.
+2.  **Caps** — the per-container limits are `TimelineDoc`'s own constants, referenced and never
+    duplicated: `kMaxTracks` (256), `kMaxClipsPerTrack` (4096), `kMaxNotesPerClip` (16384),
+    `kMaxLanesPerTrack` (512), `kMaxBreakpointsPerLane` (16384). Two more exist only on this path,
+    because they bound the whole payload rather than one container:
+    `kMaxTotalNotesUntrusted = 65536` (notes summed across every clip) and
+    `kMaxPpqUntrusted = 100000.0` (the largest beat position or length in beats — ~14 hours at
+    120 BPM).
+3.  **Beats** — every `startBeat`, `lengthBeats`, fade and breakpoint beat must be finite, `>= 0`
+    and `<= kMaxPpqUntrusted`; lengths must be `> 0` (`BeatOutOfBounds`).
+4.  **Notes** — pitch `0..127`, velocity `1..127`, channel `1..16`, **rejected** rather than
+    clamped (`NoteOutOfRange`).
+5.  **Lanes** — every `(nodeUuid, paramId)` must resolve against the **live graph**: a node carrying
+    that `uuid` property, holding a `RangedAudioParameter` with that `paramID`. Unresolvable is
+    `UnresolvableBinding` — an orphaned binding is a state the app *recovers from* when a node
+    disappears under an existing lane (TL2-6), not one untrusted input may author from nothing. The
+    same rule applies to a track's non-empty `bindingUuid` (empty is legal: an unbound track).
+    Every breakpoint value must sit inside the **resolved parameter's real range** — *not* the
+    lane's own `RangeSnapshot`, which is data the sender wrote and therefore cannot be the authority
+    on what the parameter accepts. `tension` must be in `[-1, 1]`, `curve` in `0..2`.
+6.  **Assets** — any clip with a non-empty `assetRef` is refused (`AssetNotAllowed`). Stricter than
+    `TimelineDoc::isValidAssetRef`, which only stops a path escaping the bundle: untrusted input may
+    not name an asset **at all**, however well-formed.
+7.  **Record modes** — a lane may only ask for `Read` (1) or `Off` (0). `Touch`/`Latch`/`Write` arm
+    the lane to capture the user's own gestures, which is the user's decision
+    (`RecordModeNotAllowed`).
+8.  **Track kinds** — `Midi` (0), `Audio` (1) and `Automation` (2); reserved kinds 3..15 are refused
+    (`ReservedKindNotAllowed`). An audio *track* is a legal shape — what makes it unauthorable in
+    practice is check 6, since an audio track with no asset-bearing clip is just an empty row.
+
+### Trusted-only forever
+
+Audio assets and the clips that reference them, plugin state blobs, a node's `"state"` object
+(`ModuleBase::setExtraState`), and lane record arming. Each is a capability that reaches outside the
+document — the filesystem, opaque third-party state, or the user's own playing — and none of them
+has an untrusted form. Widening `validateTimeline` to admit one is the same class of mistake as
+relaxing `validatePatch` to raise the AI pass rate.
+
+Tests: `Tests/TimelineValidatorTests.cpp` (table-driven, one deliberate defect per case, every
+`TimelineValidationError` value covered).
+
+## 5d. Arrangement Context: `ArrangementContext::summarize` (TL8-3)
+
+`synth::ArrangementContext::summarize` (`Source/Timeline/ArrangementContext.h/.cpp`) is the
+timeline sibling of the patch-context injection: a compact, token-bounded, read-only text summary
+of the arrangement — tracks, clip windows, note counts and automation lanes — folded into the same
+outgoing AI request the current patch JSON already rides on.
+
+### Where it's built in
+
+`AIIntegrationService::buildPatchAugmentedContent` (the function `sendMessage` calls to build the
+structured-output request) is the one seam patch context reaches the model through today ("Current
+patch state:\n\`\`\`json...\`\`\`"). TL8-3 adds a second, independent section right beside it,
+under its own "## Arrangement" delimiter, gated `#if SYNTH_ENABLE_TIMELINE` and included only when
+`ArrangementContext::summarize` returns non-empty text (an empty/absent timeline adds nothing, the
+same "say nothing rather than say empty" rule the patch section already follows). `AIIntegrationService`
+does not own a `TimelineDoc`/`TransportService` itself — `MainComponent::initialiseCommon` installs
+non-owning pointers to its own (app-lifetime) instances via `setTimelineContext()`, mirroring
+`setProvider()`/`setUndoManager()`.
+
+### Security model — read path only
+
+This is a **read-only summary that never round-trips**: nothing it emits can be replayed back into
+the timeline, and it inherits the same two boundaries `validateTimeline` (§5c) enforces on the
+*write* path, applied here to a text summary instead of a JSON payload:
+
+-   **Never a file path.** An audio clip's `assetRef` is bundle-relative (`Clip::assetRef`); the
+    summary emits only the bare file name (everything after the last `/`) and drops the directory
+    component outright — never a stored-then-redacted path, a name that was never anything but the
+    bare file name to begin with.
+-   **Never a plugin/implementation identifier.** A bound track or lane is named by the bound
+    node's display name (`juce::AudioProcessor::getName()`, the same string its title bar shows) —
+    never a node id, factory type key, or raw uuid. `summarize()` resolves every binding against
+    the **live graph** passed in (not the doc's own cached `orphaned` flags, which may be stale);
+    an unresolvable binding reports `"MISSING"` rather than leaking the uuid it failed to resolve.
+
+### Format and budget
+
+One line per item, in `TimelineDoc`'s own stable order — a header (`"Arrangement: N tracks, bpm B,
+T/S, loop [a, b)"` or `"loop off"`), then per track: kind, name, `armed`/`muted`/`soloed` flags
+(shown only when set), and its binding; a compressed clip line for MIDI tracks (`"3 clips @ 0-8,
+8-12, 16-20 beats; 42 notes total"`), one line per clip for audio tracks (name + beat window + bare
+file name); then one line per automation lane (`"cutoff lane on Filter: 12 points, Read"`).
+`maxChars` (default 2000) is enforced at **track granularity only** — a track is included whole or
+not at all, so the result is never cut mid-line — and a dropped tail is marked deterministically
+with `"… [+K more tracks]"`.
+
+Tests: `Tests/ArrangementContextTests.cpp` (tracks/clips/lanes rendering across bound/unbound/
+orphaned states, track-granularity truncation, the empty-doc case, and the file-path-leak pin;
+plus a seam-level test that the injected request gains an "## Arrangement" section exactly when
+`buildPatchAugmentedContent` should add one).
+
+## 5e. Timeline operations (TL8-4)
+
+`synth::TimelineOps` (`Source/Timeline/TimelineOps.h/.cpp`) is the **write** half of the timeline
+seam: discrete, validated, previewable operations a model may ask for, applied to `TimelineDoc` as
+one undo step. §5c is the gate they go through; §5d is the read-only context that lets a model know
+what to ask for in the first place.
+
+### The envelope
+
+```json
+{ "timelineOps": [
+  { "op": "addTrack",   "kind": "midi", "name": "Bass" },
+  { "op": "placeClips", "track": "Bass",
+    "clips": [ { "startBeat": 0, "lengthBeats": 4, "name": "A",
+                 "notes": [ { "startBeat": 0, "lengthBeats": 1,
+                              "pitch": 36, "velocity": 100, "channel": 1 } ] } ] },
+  { "op": "writeLane",  "nodeUuid": "…", "paramId": "cutoff",
+    "points": [ { "beat": 0, "value": 800, "tension": 0, "curve": 1 } ] },
+  { "op": "placeMidiClip", "track": "Bass", "startBeat": 0,
+    "midBase64": "<base64-encoded Standard MIDI File>" }
+] }
+```
+
+This is the **client** half of the capability. TL8-2 (platform) owns the **server** half — the
+capability schema the model actually emits against, the counterpart of `getPatchSchema` for
+patches. Nothing here trusts that schema: an envelope is re-validated locally whatever produced it.
+
+**The LOCAL (Ollama) path can author this envelope too**, behind
+`AIIntegrationService::setTimelineToolsEnabled` — driven by the runtime "Show timeline
+(experimental)" preference via `MainComponent::applyTimelineFeatureEnabled`, and additionally gated
+on a timeline context being installed (`hasTimelineContext()`). While active, three things change
+and nothing else:
+
+- the system prompt gains a "TIMELINE & AUTOMATION OPERATIONS" section teaching the four ops
+  (swapped into the existing history **in place** — a mid-conversation toggle never clears the
+  chat, and off means byte-identical to the pre-timeline prompt);
+- the structured-output `format` becomes `AIStateMapper::getPatchSchemaWithTimelineOps()` —
+  `getPatchSchema()` plus an OPTIONAL `timelineOps` array whose item schema is deliberately
+  permissive (one object shape, only `"op"` required): it is a grammar that lets the model express
+  the ops, not a validator — `TimelineOps::validate` remains the gate, and the reserved-fields
+  rule (`"timeline"`, `"schemaVersion"`, node `"uuid"` absent) is untouched;
+- the outgoing request grows an `## Automation targets` section
+  (`buildAutomationTargetsSection()`): one line per uuid-bearing node listing its float parameter
+  ids and RAW ranges — the addressing channel `writeLane` needs. Node uuids appear there **on
+  purpose**, despite `ArrangementContext`'s no-uuid rule: that rule keeps identifiers out of the
+  human-readable summary; this section is what makes the grammar usable at all, uuids are random
+  per-node identity (never a path or plugin id), and `validate()` only accepts pairs that resolve
+  against the live graph anyway. Bounded to ~2000 chars, whole lines, with a truncation marker.
+
+Extraction, validation, preview and Apply are unchanged and provider-agnostic either way — they
+act on what a response actually carries, and the user's Apply click stays the write gate.
+Pinned by `AIIntegrationServiceTest.TimelineToolsToggle*` / `AutomationTargetsSection*`.
+
+| Op | What it does | What it deliberately does not do |
+| --- | --- | --- |
+| `addTrack` | Creates the **doc** track. `kind` is `"midi"` or `"automation"`. | No graph node, no Track In wiring — binding a track to a module is a routing decision about the user's own patch, so it stays a user/host gesture. The new track is unbound and the preview says so. `"audio"` is not offered: an audio track needs an asset, and assets are trusted-only. |
+| `placeClips` | Places clips (and their clip-relative notes) on a MIDI track, targeted by exact name or `{"index": N}`. | A name matching no track — or more than one — rejects the whole batch rather than guessing. |
+| `writeLane` | Find-or-creates the lane for `(nodeUuid, paramId)` on the document's Automation track (creating that track if there is none — the TL5-9 rule, exactly as `MainComponent::automateParameter` does it), then REPLACES every point in the written span (min..max beat of the payload, inclusive) in one `editBreakpoints` call. | Never sets a record mode; never widens a range. |
+| `placeMidiClip` | Decodes `midBase64` and parses it with `MidiClipFile::importFromStream` (TL3-4), placing one clip per non-empty imported SMF track on the target MIDI track at `startBeat` (clip length is `ceil` of its last note's end, floored at 1 beat — reusing `MidiClipFile::importIntoTrack`). | No paths, no plugin ids, no code — a `.mid` blob can only ever decode to notes, which is why this is the one op that accepts an opaque binary payload at all. |
+
+### `placeMidiClip` — the `.mid` blob is the safest AI note surface (TL8-5)
+
+Every other op in this grammar is closed field-by-field (§"Capabilities are absent from the
+grammar" below). `placeMidiClip` is the one exception that accepts an opaque, base64-encoded blob —
+and it is safe to accept specifically *because* `MidiClipFile::importFromStream` (TL3-4,
+`Source/Timeline/MidiClipFile.h`) was designed as "the safest future AI patching surface" from the
+start: a Standard MIDI File can only ever decode to notes (`pitch`/`velocity`/`channel`/timing).
+There is no way to encode a file path, a plugin identifier, or code inside one, unlike almost any
+other blob a model could hand back. `placeMidiClip` reuses that exact importer — the same strict
+parser a user's own MIDI-file import goes through — rather than a looser variant for AI input.
+
+Bounds, in the order they're checked:
+
+-   **`midBase64` size**, against `TimelineOps::kMaxMidBlobBytes` (262144) — checked on the
+    STILL-ENCODED string, *before* any decode is attempted, so an oversized blob is rejected as
+    cheaply as any other length check rather than by allocating a decode buffer for it first.
+-   **Decodability** — invalid base64 is rejected outright.
+-   **`MidiClipFile::importFromStream`'s own checks** — not a readable SMF, SMPTE time format (PPQ
+    only), or any one imported track's note count over `TimelineDoc::kMaxNotesPerClip` all reject
+    the op (an import failure never means "import what parsed and drop the rest").
+-   **An empty result** — a blob with no notes in it is refused; there is nothing to place.
+-   **The batch's own note/clip caps** — every note the blob contains still counts toward
+    `kMaxTotalNotesUntrusted` exactly like a `placeClips` note does, and the target track's clip
+    count is still checked against `TimelineDoc::kMaxClipsPerTrack` before anything is placed.
+
+Any failure at any of those steps rejects the WHOLE batch, the same all-or-nothing contract every
+other op has.
+
+### Sibling, never nested
+
+`timelineOps` sits **beside** a patch, never inside one. `validatePatch(trusted=false)` still refuses
+a `"timeline"` key in patch JSON and always will (§5c's two-door model) — `"timelineOps"` is a
+different key, so a single structured response may legitimately carry a patch and an ops envelope
+on the same object, and each is validated and applied by its own gate with its own Apply button.
+Pinned by `TimelineOpsTest.PatchGrammarStillClosed`: the document dialect smuggled in under
+`"timeline"` is refused, while the same intent as a sibling `timelineOps` key is accepted by both
+halves.
+
+### Trust posture — identical to the patch card
+
+`validate()` → preview → the user clicks Apply → `apply()`. Nothing is applied because a model asked
+for it; a person agrees to it first, having read a summary of what it does.
+
+-   `validate()` mutates nothing and returns `previewText`, a deterministic sentence —
+    `Adds midi track "Bass" (unbound - bind it in the timeline panel); places 1 clip (8 notes) at
+    0-4 on "Bass"; writes 12 points to Filter cutoff over beats 0-11`. A bound module is named by
+    its **display name**, never its uuid (§5d's rule, on the write path).
+-   The per-op checks are `validateTimeline`'s, **reused rather than re-stated**: the same caps
+    (`TimelineDoc::kMax*`, `kMaxTotalNotesUntrusted`, `kMaxPpqUntrusted`), the same bounds, and the
+    same rule that untrusted input is **rejected where a trusted path would clamp** — pitch 200 is
+    refused, not rewritten to 127; a breakpoint outside the **live** parameter's range is refused,
+    not pulled inside it. Two more caps bound the batch itself: `kMaxOps` (64) and `kMaxNameChars`
+    (128); a third, `kMaxMidBlobBytes` (262144), bounds only `placeMidiClip`'s `midBase64`.
+-   **Capabilities are absent from the grammar, not refused field by field.** An op has no
+    `assetRef`, no `recordMode`, no `bindingUuid`, and no kind beyond `midi`/`automation`. A `.mid`
+    blob is not an exception to this — it can only ever decode to notes, never a path or an id.
+    Unknown fields *inside* an op are **rejected**, so a future field cannot be smuggled past a gate
+    that never inspected it — the same reasoning as `validateTimeline`'s unknown-top-level-key
+    refusal. Unknown keys at the *envelope root* are ignored, because that is where the sibling
+    patch's own `nodes`/`connections`/`mode` live.
+-   **All-or-nothing, and the preview cannot lie.** `validate()` runs the batch against a throwaway
+    copy of the document (`fromVar(doc.toVar())` — replaying our own serialisation is trusted by
+    definition) and `apply()` runs the *same code* against the real one, so every op sees the effect
+    of the ones before it and no preview can describe an apply that then fails. A rejection means the
+    live doc was never touched at all.
+-   **One undo step.** The whole batch runs inside a single `AppUndoManager::recordTimelineChange`,
+    so however many tracks, clips, notes and breakpoints it touches, one Cmd+Z reverts all of it —
+    the contract `MidiRecorder::stopAndCommit` already relies on for a take's clip plus its notes.
+
+### The chat seam
+
+`AIIntegrationService` (gated `#if SYNTH_ENABLE_TIMELINE`, and only once
+`setTimelineContext()` has wired the live timeline in) gains:
+`extractTimelineOps()` — the same extraction `applyPatch` performs, returning the parsed root when
+it carries a `timelineOps` key (**presence**, not well-formedness, so a malformed envelope is
+surfaced as a visible rejection instead of being silently dropped); `previewTimelineOps()` — the
+validate step; and `applyTimelineOps()`, which routes through a `TimelineOpsApplyCallback` that
+`MainComponent::initialiseCommon` installs. The service holds the doc only as a `const` pointer and
+owns no undo manager for it, so the **host** supplies the write path — which is what puts an
+AI-applied batch on the same shared undo stack as the user's own edits.
+
+`AIChatComponent` renders `TimelineCard` beside `PatchCard`, to the same conventions, with an
+"Apply timeline changes" button. A response carrying both gets both cards; a rejected envelope gets
+the card with the reason and **no button**, because a suggestion that cannot be applied must still
+say why but must not look clickable.
+
+Tests: `Tests/TimelineOpsTests.cpp` (per-op apply, one-step undo, all-or-nothing with the failing
+op named by index, caps/bounds, the ungrammatical capabilities, pinned preview strings, the
+patch-grammar pin, and the service seam end to end).
+
+### Measuring validity: the timeline-ops eval scenarios (TL8-5)
+
+`Tools/TimelineOpsHarness` is the timeline counterpart of `Tools/AIPatchHarness`, adapted to a
+seam that has no live model to replay against: a `timelineOps` envelope's validity is a
+deterministic function of `TimelineOps::validate` and a fixed graph, so what it measures is a fixed
+set of **recorded fixtures** (`Tools/TimelineOpsHarness/Fixtures/*.json`) rather than prompts sent
+to Ollama. The scenario set spans: a valid three-op envelope; a valid `placeMidiClip` carrying a
+real base64 `.mid` (generated once with `MidiClipFile::exportClip`); notes over
+`TimelineDoc::kMaxNotesPerClip`; a `writeLane` value outside the live parameter's range; an unknown
+op field; a SMPTE-format `.mid` blob; a `midBase64` over `kMaxMidBlobBytes`; and the two-door pin —
+a timelineOps-shaped payload smuggled under a patch's `"timeline"` key, checked through
+`AIStateMapper::validatePatch` instead and expected to come back `TimelineNotAllowed`. Each fixture
+pins its expected valid/invalid outcome plus a message (or, for the patch-smuggle fixture, a
+`PatchValidationError` name) the actual result must contain, and the harness prints a
+per-fixture expected-vs-actual table and a summary match rate — gated behind
+`-DENABLE_AI_HARNESS=ON` like its siblings, though (having no live model in the loop) it needs none
+to build or run. `Tests/TimelineOpsFixtureTests.cpp` asserts the identical fixture files as fast
+gtest cases, which is what CI actually gates on.
+
+## 5f. The Agentic Timeline Security Model (TL8-6)
+
+The single statement the per-feature sections above implement. When extending the AI's reach into
+the timeline, this table is the contract to preserve — every row exists because the mechanism next
+to it enforces it, not because a prompt asks nicely.
+
+**What AI output may author:**
+
+| Surface | Mechanism | Bound |
+|---|---|---|
+| MIDI notes | `placeClips` note lists, or `.mid` blobs via `placeMidiClip` (§5e) | note caps, pitch/velocity/channel ranges REJECTED not clamped; blob ≤ 256 KiB, PPQ-only SMF parsed by `MidiClipFile` (a format that structurally cannot carry a path, a plugin id, or code) |
+| Automation lanes | `writeLane` (§5e) | values validated against the **live** parameter's range intersected with the lane snapshot; (nodeUuid, paramId) must resolve against the live graph — untrusted input can never author an orphan |
+| Doc-only tracks | `addTrack` (kinds `midi`/`automation` only) | unbound — wiring a Track In/Track Audio node stays a user gesture |
+
+**What AI output may never touch, and why:**
+
+| Never | Why | Enforced by |
+|---|---|---|
+| Asset references / file paths | an assetRef is a file **read**; honoring one from a model turns a chat reply into arbitrary file access | `AssetNotAllowed` in `validateTimeline` (§5c); unknown-field rejection makes `assetRef` unreachable by grammar in ops (§5e) |
+| Plugin identifiers / state blobs | a plugin blob is a code-execution surface, not a parameter | node `state` is trusted-path-only (`applyExtraStateToProcessor`); internal-only module types rejected untrusted (`InternalModuleNotAllowed`); hosted-plugin types join that list in TL7-4 |
+| Record arming / record modes | untrusted input must not start capturing the user's audio | `RecordModeNotAllowed` (§5c); ops carry no such field by grammar |
+| The patch grammar's `timeline` key | timeline data rides its own validated door, never the patch schema — every property in `getPatchSchema` invites the model to emit it on every request | `TimelineNotAllowed` (permanent, §5c); pinned in both directions by tests and a harness fixture |
+
+Read-path symmetry: what the model *sees* (§5d) follows the same rule — arrangement summaries carry
+bare file names only, never paths or directories.
 
 ## 5. AIChatComponent and Logging
 
@@ -772,6 +1128,69 @@ and out-of-range fallback). `Tests/BrandingTests.cpp` (`resolveApiBaseUrl()`'s D
 `AGENTSYNTH_LOCAL_API_URL` env var override, used to point a local build's auth/entitlement/
 cloud-history traffic at a locally-run `synth-platform` server — see `docs/testing.md` "Testing
 Cloud-Gated Features Locally").
+
+### Patch Feedback Sync to Server (P6-9, client side)
+
+Wires the local P6-3 thumbs log to a new endpoint,
+`POST /v1/conversations/:conversationId/messages/:messageId/feedback` (`{"rating": "up"|"down",
+"comment"?: string}`, Bearer auth), for signed-in Pro users only, and only when a server-side
+message id is available for the rated turn.
+
+**Where the message id comes from.** A hosted (`RemoteProvider`) response that a Pro account
+persisted server-side now also returns an `x-message-id` header alongside the existing
+`x-conversation-id` one — `AIProvider::AIResponse::messageId`, populated in
+`RemoteProvider::processRequest()` the same way `conversationId` is (read via `result.headers`,
+empty when absent). Unlike `conversationId`, this is **not** re-pushed/threaded through
+`AIIntegrationService` state — it's per-turn, so it just flows through the response object to
+`AIChatComponent`'s callback unchanged, which stashes it onto that turn's
+`MessageData::serverMessageId` at the same point `jsonPatch` is set. Only ever populated for a
+live, same-session assistant message; **not** reconstructed by the history-replay loop (same
+"session-scoped" precedent as `ratingState`/`showUpgradeAction`), so rating a message from a
+restored conversation stays local-only — deliberate scope limit, not a gap to fix later.
+
+**The conversation id used for the sync is the SERVER one**, `AIIntegrationService::
+getConversationId()` (a new public getter over the existing `currentConversationId` member) — not
+`AIChatComponent::currentLocalConversationId`, the unrelated key `LocalHistoryStore` uses. Sending
+the wrong one would fail the server's ownership check indistinguishably from a nonexistent id
+(404).
+
+**The rating callback** (`AIChatComponent`'s thumbs handler, same lambda that has always called
+`patchFeedbackStore.record()`) now also, after the local record:
+1. Reads `aiService.getConversationId()`.
+2. If the rated message's `serverMessageId` is non-empty AND that conversation id is non-empty AND
+   the attached `AccountService` reports signed-in AND Pro AND a non-empty access token — fires the
+   sync. Otherwise it's a silent no-op; the local log already has the rating either way.
+3. The sync itself is **fire-and-forget**: a detached background thread (same shape as
+   `CloudHistorySource`'s calls — copies of a small stateless `AuthClient`, the token, and plain
+   strings, never `this` or any UI state) calls the new `AuthClient::submitMessageFeedback(...)`.
+   No retry, no queueing, no UI error surface — a failed sync just means that one rating never
+   reached the server; nothing blocks or spins on it.
+
+`AuthClient::submitMessageFeedback(accessToken, conversationId, messageId, rating, comment,
+cancelled)` mirrors `listConversations()`'s `{ok, transportError}` result-type convention. The
+JSON body omits `comment` entirely when empty, the same convention `PatchFeedbackStore::record()`
+already used for its own local `comment` field. Server responses this client interprets: 200 ok;
+404 (wrong/unowned conversation or message id, indistinguishable from nonexistent) and 400 (bad
+`rating`) surface as `!ok` with a `transportError`; 403 (non-Pro) is unreachable from this client
+since it gates on Pro before ever calling, but the server independently re-checks it regardless —
+same "client only decides what to show, never what to allow" boundary as every other Pro-gated
+endpoint in this file.
+
+Test injection: `AIChatComponent::setFeedbackHttpPerformerForTesting(HttpPerformer)` installs a
+fake transport for the rating callback's locally-constructed `AuthClient`, mirroring
+`setHistorySourcesForTesting()`'s fake-backend idiom but at the `HttpPerformer` layer (this call
+doesn't go through `ConversationHistorySource` at all).
+
+Locked by: `Tests/AuthClientTests.cpp` (`SubmitMessageFeedback*` — request shape, comment
+omission, 404/403/400/transport-failure mapping). `Tests/RemoteProviderTests.cpp`
+(`MessageIdHeaderCapturedFromResponseIntoAIResponse`,
+`MissingConversationIdHeaderLeavesAIResponseFieldEmpty` extended to also assert `messageId`).
+`Tests/PatchFeedbackStoreTests.cpp` (`IncludesConversationAndMessageIdWhenProvided`,
+`OmitsConversationAndMessageIdWhenNotProvided` — old call sites keep the pre-P6-9 line shape
+exactly). `Tests/AIChatComponentTests.cpp`
+(`RatingWithServerMessageIdAndProAccountFiresExactlyOneFeedbackPost`,
+`RatingOnFreePlanAccountDoesNotFireFeedbackPost`,
+`RatingWithNoServerMessageIdDoesNotFireFeedbackPostEvenWhenPro`).
 
 ### Opt-In Prompt Collection for Product Learning (P6-7, client side)
 

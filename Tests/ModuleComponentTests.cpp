@@ -244,6 +244,28 @@ TEST_F(ModuleComponentTest, EstimatedModuleSizesMatchTheRealComponents) {
     }
 }
 
+#if SYNTH_ENABLE_TIMELINE
+// Track In is deliberately absent from the library, so the loop above cannot cover it —
+// but estimateModuleSize is still queried for it programmatically (the timeline's add-track flow
+// places the node), and a stale estimate there misplaces the card. Same assertion, one type.
+TEST_F(ModuleComponentTest, TrackInEstimatedSizeMatchesTheRealComponent) {
+    ModuleLibraryComponent library;
+    EXPECT_FALSE(library.getDraggableModuleNames().contains("Track In"))
+        << "Track In is internal-only and must stay out of the module library";
+
+    auto processor = synth::AIStateMapper::createModule("Track In");
+    ASSERT_NE(processor, nullptr);
+
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    ModuleComponent comp(processor.get(), juce::AudioProcessorGraph::NodeID(1), editor);
+
+    const auto estimate = GraphEditor::estimateModuleSize("Track In");
+    EXPECT_EQ(estimate.x, comp.getWidth());
+    EXPECT_EQ(estimate.y, comp.getHeight());
+}
+#endif // SYNTH_ENABLE_TIMELINE
+
 // Three knobs per row (the body sits below the ports, so it can use nearly the full card width).
 TEST_F(ModuleComponentTest, KnobsAreLaidOutThreePerRow) {
     AudioEngine engine;

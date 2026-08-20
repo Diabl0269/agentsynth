@@ -17,13 +17,18 @@ PatchFeedbackStore::PatchFeedbackStore()
 PatchFeedbackStore::PatchFeedbackStore(juce::File feedbackFile)
     : file(std::move(feedbackFile)) {}
 
-void PatchFeedbackStore::record(const juce::String& patchJson, Rating rating, const juce::String& comment) {
+void PatchFeedbackStore::record(const juce::String& patchJson, Rating rating, const juce::String& comment,
+                                const juce::String& conversationId, const juce::String& messageId) {
     auto* obj = new juce::DynamicObject();
     juce::var root(obj);
     obj->setProperty("timestamp", juce::Time::getCurrentTime().toISO8601(true));
     obj->setProperty("rating", rating == Rating::Up ? "up" : "down");
     if (comment.isNotEmpty())
         obj->setProperty("comment", comment);
+    if (conversationId.isNotEmpty())
+        obj->setProperty("conversationId", conversationId);
+    if (messageId.isNotEmpty())
+        obj->setProperty("messageId", messageId);
 
     juce::var parsedPatch = juce::JSON::parse(patchJson);
     if (!parsedPatch.isVoid())

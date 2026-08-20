@@ -28,6 +28,7 @@ add_executable(Tests
     ModuleBaseTests.cpp
     VisualBufferTests.cpp
     AntiClickTests.cpp
+    AutomationZipperTests.cpp
     MidiKeyboardModuleTests.cpp
     VCAModuleTests.cpp
     LFOModuleTests.cpp
@@ -35,6 +36,32 @@ add_executable(Tests
     SchmittTriggerTests.cpp
     ComparatorModuleTests.cpp
     SequencerModuleTests.cpp
+    TransportServiceTests.cpp
+    TimelineDocTests.cpp
+    TimelineClipEditingTests.cpp
+    TimelineSnapshotTests.cpp
+    AutomationKernelTests.cpp
+    AutomationApplierTests.cpp
+    AutomationRecordTests.cpp
+    AutomationSlicingTests.cpp
+    TimelineUndoTests.cpp
+    TimelineReconciliationTests.cpp
+    TimelineValidatorTests.cpp
+    TimelineOpsTests.cpp
+    TimelineOpsFixtureTests.cpp
+    ArrangementContextTests.cpp
+    TimelineMidiSourceTests.cpp
+    MidiRecorderTests.cpp
+    MidiClipFileTests.cpp
+    PeaksFileTests.cpp
+    RecordTapTests.cpp
+    LatencyAlignmentTests.cpp
+    AudioClipPlaybackTests.cpp
+    HostedPluginTests.cpp
+    PluginScanTests.cpp
+    HostedPluginEditorWindowTests.cpp
+    HostedPluginLaneTests.cpp
+    HostedPluginLatencyTests.cpp
     AIStateMapperTests.cpp
     AIPatchValidationTests.cpp
     AIPatchRetryTests.cpp
@@ -52,6 +79,7 @@ add_executable(Tests
     MainComponentTests.cpp
     GraphEditorTests.cpp
     ModuleComponentTests.cpp
+    AutomationUiReflectionTests.cpp
     AIChatComponentTests.cpp
     PlanBadgeTests.cpp
     PolyMidiModuleTests.cpp
@@ -108,11 +136,39 @@ add_executable(Tests
     MultiSelectTests.cpp
     ClipboardTests.cpp
     PanelAnimationAndLoadingTests.cpp
+    TimelinePanelTests.cpp
+    TimelinePlayheadTests.cpp
+    TimelineTrackHeaderTests.cpp
+    TimelineClipLaneTests.cpp
+    PianoRollTests.cpp
+    FocusArbitrationTests.cpp
+    AutomationEditorTests.cpp
+    TimelineTransportBarTests.cpp
+    TimelineViewStateTests.cpp
     MinimapComponentTests.cpp
     PluginProcessorTests.cpp
+    AudioEngineTransportTests.cpp
+    AudioInputTests.cpp
+    AudioInputModuleTests.cpp
+    FeedbackGuardTests.cpp
+    OfflineTransportDriverTests.cpp
+    BounceExporterTests.cpp
+    MetronomeTests.cpp
+    DeviceChangeTests.cpp
+    TimelineE2ETests.cpp
     PatchDocumentTests.cpp
+    ProjectBundleTests.cpp
+    AssetManagerTests.cpp
     BrandingTests.cpp
     ../Source/MainComponent.cpp
+    ../Source/UI/TimelinePanelComponent.cpp
+    ../Source/UI/TimelineRulerComponent.cpp
+    ../Source/UI/TimelinePlayheadOverlay.cpp
+    ../Source/UI/TimelineTrackHeaderComponent.cpp
+    ../Source/UI/TimelineTransportBar.cpp
+    ../Source/UI/TimelineClipLaneArea.cpp
+    ../Source/UI/PianoRollComponent.cpp
+    ../Source/UI/AutomationLaneEditor.cpp
     ../Source/Plugin/PluginProcessor.cpp
     ../Source/Plugin/PluginEditor.cpp
     ../Source/UI/GraphEditor.cpp
@@ -122,6 +178,7 @@ add_executable(Tests
     ../Source/UI/PlanBadge.cpp
     ../Source/UI/SignInDialog.cpp
     ../Source/UI/ModuleComponent.cpp
+    ../Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
     ../Source/UI/SettingsWindow.cpp
     ../Source/UI/AppearanceSettingsTab.cpp
     ../Source/UI/PreferencesSettingsTab.cpp
@@ -161,6 +218,9 @@ target_include_directories(Tests PRIVATE
 target_compile_definitions(Tests PRIVATE
     JUCE_MODAL_LOOPS_PERMITTED=1
     THEMES_DIR="${CMAKE_SOURCE_DIR}/themes"
+    # Same fixture files TimelineOpsHarness replays — one recorded set, asserted here as
+    # fast gtest cases so CI covers them without building the harness target.
+    TIMELINE_OPS_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/Tools/TimelineOpsHarness/Fixtures"
 )
 
 # Link JUCE specifics if needed

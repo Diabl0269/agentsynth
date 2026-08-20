@@ -70,6 +70,12 @@ public:
         effectiveThreshold.store(thresholdParam->get(), std::memory_order_relaxed);
         triggerHigh.store(false, std::memory_order_relaxed);
         triggerCount.store(0, std::memory_order_relaxed);
+        // Level scales and Offset shifts the emitted CV, so a per-block write to either steps
+        // every destination downstream. Snapped at prepare so static renders are unchanged.
+        smoothedLevel.reset(currentSampleRate, 0.01);
+        smoothedLevel.setCurrentAndTargetValue(levelParam->get());
+        smoothedOffset.reset(currentSampleRate, 0.01);
+        smoothedOffset.setCurrentAndTargetValue(offsetParam->get());
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -98,11 +104,15 @@ public:
         const bool sampleFromInput = sourceParam->getIndex() == 0;
         const bool trackMode = modeParam->getIndex() == 1;
 
+        // Rate is a clock frequency (phase-continuous), Slew a one-pole coefficient and Threshold
+        // a comparator level that only decides *whether* an edge fires — none of the three can put
+        // a step in the emitted CV, so all three are deliberately read raw.
         const float baseRate = rateParam->get();
         const float baseSlew = slewParam->get();
-        const float baseLevel = levelParam->get();
-        const float baseOffset = offsetParam->get();
         const float baseThreshold = thresholdParam->get();
+
+        smoothedLevel.setTargetValue(levelParam->get());
+        smoothedOffset.setTargetValue(offsetParam->get());
 
         const float* triggerIn = numChannels > 1 ? buffer.getReadPointer(1) : nullptr;
         const float* rateCV = numChannels > 2 ? buffer.getReadPointer(2) : nullptr;
@@ -182,11 +192,11 @@ public:
             }
             currentValue = heldValue + (currentValue - heldValue) * slewCoeff;
 
-            float level = baseLevel;
+            float level = smoothedLevel.getNextValue();
             if (levelCV != nullptr)
                 level = juce::jlimit(0.0f, 1.0f, level + levelCV[s]);
 
-            float offset = baseOffset;
+            float offset = smoothedOffset.getNextValue();
             if (offsetCV != nullptr)
                 offset = juce::jlimit(-1.0f, 1.0f, offset + offsetCV[s]);
 
@@ -303,6 +313,8 @@ private:
     float currentValue = 0.0f;
     float cachedSlew = -1.0f;
     float slewCoeff = 0.0f;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedLevel;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedOffset;
     juce::Random random;
     std::atomic<float> lastValue{0.0f};
     std::atomic<float> triggerLevel{0.0f};

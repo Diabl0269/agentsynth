@@ -15,16 +15,21 @@
 #include "../Source/Modules/LFOModule.h"
 #include "../Source/Modules/ModuleBase.h"
 #include "../Source/Modules/OscillatorModule.h"
+#include "../Source/Plugin/Hosting/HostedPluginModule.h"
 #include "../Source/Plugin/PluginEditor.h"
 #include "../Source/Plugin/PluginProcessor.h"
 #include "../Source/UI/Theme/AppLookAndFeel.h"
 #include "../Source/UI/Theme/ThemeManager.h"
+#include "../Source/UserSettings.h"
+#include "StubPluginInstance.h"
+#include <atomic>
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <set>
+#include <thread>
 
 namespace {
 
@@ -85,6 +90,59 @@ bool allZero(const juce::AudioBuffer<float>& buffer) {
     }
     return true;
 }
+
+/** Spins until `predicate` holds or the budget runs out; returns what it ended on. The only way to
+ *  wait on another thread here without a sleep, and bounded so a broken build fails instead of
+ *  hanging the suite. */
+template <typename Predicate>
+bool spinUntil(Predicate predicate, int timeoutMs = 5000) {
+    const auto deadline = juce::Time::getMillisecondCounter() + (juce::uint32)timeoutMs;
+    while (!predicate()) {
+        if (juce::Time::getMillisecondCounter() > deadline)
+            return false;
+        juce::Thread::yield();
+    }
+    return true;
+}
+
+/** Pumps the message loop until `predicate` holds — the bounded-poll idiom from PluginScanTests.
+ *  Needed wherever a plugin instance arrives: every backend (real or stub) posts its creation
+ *  callback rather than calling it, so spinUntil's yield-only loop would never see it. */
+template <typename Predicate>
+bool pumpUntil(Predicate predicate, int timeoutMs = 4000) {
+    const auto deadline = juce::Time::getMillisecondCounter() + (juce::uint32)timeoutMs;
+    do {
+        if (predicate())
+            return true;
+        juce::MessageManager::getInstance()->runDispatchLoopUntil(5);
+    } while (juce::Time::getMillisecondCounter() < deadline);
+    return predicate();
+}
+
+/** Parks the audio thread INSIDE a render pass on demand. Nothing else can hold a pass open from a
+ *  test, and holding one open is the only way to observe whether a setter waited for it. */
+class RenderPassProbeModule : public ModuleBase {
+public:
+    RenderPassProbeModule()
+        : ModuleBase("Render Probe", 2, 2) {}
+
+    void prepareToPlay(double, int) override {}
+
+    void processBlock(juce::AudioBuffer<float>&, juce::MidiBuffer&) override {
+        insidePass.store(true, std::memory_order_release);
+        // Bounded, so a test that never releases fails rather than wedging the audio thread.
+        const auto deadline = juce::Time::getMillisecondCounter() + 5000u;
+        while (!release.load(std::memory_order_acquire) && juce::Time::getMillisecondCounter() < deadline)
+            juce::Thread::yield();
+        passFinished.store(true, std::memory_order_release);
+    }
+
+    ModuleType getModuleType() const override { return ModuleType::VCA; } // unused by these tests
+
+    std::atomic<bool> insidePass{false};
+    std::atomic<bool> release{false};
+    std::atomic<bool> passFinished{false};
+};
 
 } // namespace
 
@@ -198,6 +256,88 @@ TEST(AudioEngineHostedModeTest, EnsureMidiDeviceOpenIsNoOpWhenHosted) {
     EXPECT_NO_THROW(engine.ensureMidiDeviceOpen({}));
     EXPECT_EQ(engine.getDeviceManager().getCurrentAudioDevice(), nullptr);
 
+    engine.shutdown();
+}
+
+// ============================================================================
+// AudioEngine — the borrowed-pointer teardown handshake
+// ============================================================================
+
+TEST(AudioEngineHostedModeTest, BorrowedPointerSetterWaitsForAnInFlightRenderPass) {
+    // The plugin path's teardown race: the engine belongs to the processor and KEEPS RENDERING
+    // after the editor's MainComponent — which owns the MIDI capture sink and the automation
+    // recorder — is destroyed. A setter that only stores the null can return while a block already
+    // inside renderNextBlock is still dereferencing the old pointer, so both setters drain first.
+    AudioEngine engine(AudioEngine::HostMode::Hosted);
+    engine.initialise();
+
+    auto probeNode = engine.getGraph().addNode(std::make_unique<RenderPassProbeModule>());
+    ASSERT_NE(probeNode, nullptr);
+    auto* probe = dynamic_cast<RenderPassProbeModule*>(probeNode->getProcessor());
+    ASSERT_NE(probe, nullptr);
+
+    engine.prepareForHost(44100.0, 256, 0, 2);
+
+    std::thread audioThread([&] {
+        juce::AudioBuffer<float> buffer(2, 256);
+        buffer.clear();
+        juce::MidiBuffer midi;
+        engine.processHostBlock(buffer, midi);
+    });
+
+    ASSERT_TRUE(spinUntil([&] { return probe->insidePass.load(std::memory_order_acquire); }))
+        << "the probe never rendered, so this test would prove nothing";
+
+    // Releases the parked pass 50 ms from now: a setter that does NOT wait returns while the pass
+    // is provably still inside the graph, which is exactly the window the fix closes.
+    std::thread releaser([&] {
+        juce::Thread::sleep(50);
+        probe->release.store(true, std::memory_order_release);
+    });
+
+    engine.setMidiCaptureSink(nullptr);
+    EXPECT_TRUE(probe->passFinished.load(std::memory_order_acquire))
+        << "setMidiCaptureSink returned while a render pass was still in flight — the owner may now "
+           "free a recorder the audio thread is still using";
+
+    releaser.join();
+    audioThread.join();
+    engine.shutdown();
+}
+
+TEST(AudioEngineHostedModeTest, AutomationRecorderSetterDrainsToo) {
+    // The sibling of the test above: both borrowed pointers are read inside the same pass, so both
+    // setters have to make the same promise.
+    AudioEngine engine(AudioEngine::HostMode::Hosted);
+    engine.initialise();
+
+    auto probeNode = engine.getGraph().addNode(std::make_unique<RenderPassProbeModule>());
+    ASSERT_NE(probeNode, nullptr);
+    auto* probe = dynamic_cast<RenderPassProbeModule*>(probeNode->getProcessor());
+    ASSERT_NE(probe, nullptr);
+
+    engine.prepareForHost(44100.0, 256, 0, 2);
+
+    std::thread audioThread([&] {
+        juce::AudioBuffer<float> buffer(2, 256);
+        buffer.clear();
+        juce::MidiBuffer midi;
+        engine.processHostBlock(buffer, midi);
+    });
+
+    ASSERT_TRUE(spinUntil([&] { return probe->insidePass.load(std::memory_order_acquire); }));
+
+    std::thread releaser([&] {
+        juce::Thread::sleep(50);
+        probe->release.store(true, std::memory_order_release);
+    });
+
+    engine.setAutomationRecorder(nullptr);
+    EXPECT_TRUE(probe->passFinished.load(std::memory_order_acquire))
+        << "setAutomationRecorder returned while a render pass was still in flight";
+
+    releaser.join();
+    audioThread.join();
     engine.shutdown();
 }
 
@@ -424,6 +564,47 @@ TEST(MainComponentEngineOwnershipTest, ExternalEngineSurvivesMainComponentDestru
     engine.shutdown();
 }
 
+TEST(MainComponentEngineOwnershipTest, DestructionWhileTheHostKeepsRenderingIsSafe) {
+    // The end-to-end shape of the race the drain closes, and the ASan/TSan probe for it: the host
+    // never stops calling processBlock, and the editor (with the recorder and the capture sink it
+    // owns) is destroyed underneath it.
+    synth::theme::ThemeManager tm;
+    synth::theme::AppLookAndFeel lf;
+
+    AudioEngine engine(AudioEngine::HostMode::Hosted);
+    engine.initialise();
+    engine.prepareForHost(44100.0, 256, 0, 2);
+
+    auto mc = std::make_unique<MainComponent>(tm, lf, engine, std::make_unique<NullAIProvider>());
+
+    std::atomic<bool> stop{false};
+    std::atomic<int> blocksRendered{0};
+    std::thread renderThread([&] {
+        juce::AudioBuffer<float> buffer(2, 256);
+        juce::MidiBuffer midi;
+        while (!stop.load(std::memory_order_acquire)) {
+            buffer.clear();
+            engine.processHostBlock(buffer, midi);
+            blocksRendered.fetch_add(1, std::memory_order_relaxed);
+        }
+    });
+
+    ASSERT_TRUE(spinUntil([&] { return blocksRendered.load(std::memory_order_relaxed) > 4; }))
+        << "the render loop never ran, so this test would prove nothing";
+
+    // The destructor unregisters both borrowed pointers (each draining) and only then lets the
+    // recorder and the capture sink be destroyed.
+    mc.reset();
+
+    const int atTeardown = blocksRendered.load(std::memory_order_relaxed);
+    EXPECT_TRUE(spinUntil([&] { return blocksRendered.load(std::memory_order_relaxed) > atTeardown + 4; }))
+        << "the engine must keep rendering after its editor is gone";
+
+    stop.store(true, std::memory_order_release);
+    renderThread.join();
+    engine.shutdown();
+}
+
 // NOTE on the contrast case ("the owning ctors DO tear their engine down"):
 // Skipped. It cannot be checked without either (a) opening a real audio device — MainComponent's
 // owning constructors hardcode HostMode::Standalone, so exercising that path calls
@@ -434,3 +615,148 @@ TEST(MainComponentEngineOwnershipTest, ExternalEngineSurvivesMainComponentDestru
 // there is no safe point at which a black-box test can observe "the graph was cleared" without
 // reading freed memory. AudioEngine::shutdown() is not virtual/instrumentable, so no test double
 // can intercept the call either. See the report for how this was reasoned through.
+
+// ============================================================================
+// Hosted-plugin identity resolution with NO editor — the DAW-restores-a-session path
+// ============================================================================
+
+namespace {
+
+constexpr const char* kAlphaFile = "/plugins/Alpha.vst3";
+constexpr int kAlphaUid = 0xA1FA;
+
+/** The real backend's resolveIdentity (so the processor's scan service is genuinely in the loop)
+ *  with stub instance creation (CI has no third-party binary to load). Same split as
+ *  PluginScanTests' ScanningStubBackend. */
+class ScanListStubBackend : public synth::DefaultHostedPluginBackend {
+public:
+    using synth::DefaultHostedPluginBackend::createInstanceAsync;
+
+    void createInstanceAsync(const juce::PluginDescription& description, double, int,
+                             InstanceCallback callback) override {
+        if (callback == nullptr)
+            return;
+        lastDescription = description;
+        auto sharedCallback = std::make_shared<InstanceCallback>(std::move(callback));
+        juce::MessageManager::callAsync([sharedCallback] {
+            (*sharedCallback)(std::make_unique<synth::test::StubPluginInstance>(2, 2), juce::String());
+        });
+    }
+
+    juce::PluginDescription lastDescription;
+};
+
+/** What a completed scan leaves in the user setting: juce::KnownPluginList's own XML. */
+juce::String scanListXml() {
+    juce::PluginDescription description;
+    description.name = "Alpha";
+    description.pluginFormatName = "VST3";
+    description.uniqueId = kAlphaUid;
+    description.deprecatedUid = kAlphaUid;
+    description.fileOrIdentifier = kAlphaFile;
+    description.manufacturerName = "Test Labs";
+    description.version = "1.0.0";
+
+    juce::KnownPluginList list;
+    list.addType(description);
+    auto xml = list.createXml();
+    return xml != nullptr ? xml->toString() : juce::String();
+}
+
+synth::HostedPluginModule* findHostedModule(juce::AudioProcessorGraph& graph) {
+    for (auto* node : graph.getNodes())
+        if (auto* module = dynamic_cast<synth::HostedPluginModule*>(node->getProcessor()))
+            return module;
+    return nullptr;
+}
+
+synth::PluginIdentity alphaIdentity() {
+    synth::PluginIdentity identity;
+    identity.format = "VST3";
+    identity.name = "Alpha";
+    identity.uid = kAlphaUid;
+    return identity;
+}
+
+// A session whose patch names the scanned plugin. Hand-written rather than round-tripped so the
+// test does not depend on the very resolution it is checking to author its own input.
+const char* kSessionPatchJson =
+    R"({"nodes":[{"id":1,"type":"Hosted Plugin","state":{"pluginFormat":"VST3","pluginName":"Alpha","pluginUid":41466}}],)"
+    R"("connections":[]})";
+
+} // namespace
+
+/** Seeds the persisted scan list the way a completed standalone scan would, and puts the setting
+ *  back afterwards — this is the real user settings file (same convention as MainComponentTests). */
+class ProcessorScanListTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        properties.setStorageParameters(synth::userSettingsOptions());
+        previousValue = settings().getValue(synth::kPluginScanListSettingKey);
+        settings().setValue(synth::kPluginScanListSettingKey, scanListXml());
+        settings().saveIfNeeded();
+    }
+
+    void TearDown() override {
+        if (previousValue.isEmpty())
+            settings().removeValue(synth::kPluginScanListSettingKey);
+        else
+            settings().setValue(synth::kPluginScanListSettingKey, previousValue);
+        settings().saveIfNeeded();
+    }
+
+    juce::PropertiesFile& settings() { return *properties.getUserSettings(); }
+
+    juce::ApplicationProperties properties;
+    juce::String previousValue;
+};
+
+TEST_F(ProcessorScanListTest, RestoresAHostedPluginWithNoEditorEverOpened) {
+    ScanListStubBackend backend;
+    synth::HostedPluginBackend::ScopedDefault installed(&backend);
+
+    synth::AgentSynthAudioProcessor processor;
+    ASSERT_EQ(processor.getActiveEditor(), nullptr) << "the whole point: no editor, ever";
+
+    // The processor — not MainComponent — restored the list and installed it as the resolver.
+    EXPECT_EQ(backend.getScanService(), &processor.getPluginScanService());
+    EXPECT_EQ(processor.getPluginScanService().getNumKnownPlugins(), 1);
+
+    processor.prepareToPlay(48000.0, 64);
+    processor.setStateInformation(kSessionPatchJson, (int)juce::String(kSessionPatchJson).getNumBytesAsUTF8());
+
+    auto* module = findHostedModule(processor.getAudioEngine().getGraph());
+    ASSERT_NE(module, nullptr) << "the Hosted Plugin node must come back from the session state";
+    EXPECT_EQ(module->getIdentity(), alphaIdentity());
+    ASSERT_TRUE(pumpUntil([&] { return module->hasInstance(); }))
+        << "the identity never resolved: " << module->getStatusMessage();
+    EXPECT_EQ(backend.lastDescription.fileOrIdentifier, kAlphaFile)
+        << "resolution must go through the persisted scan list, path and all";
+}
+
+TEST_F(ProcessorScanListTest, AnEditorAdoptsTheProcessorsResolverInsteadOfReplacingIt) {
+    ScanListStubBackend backend;
+    synth::HostedPluginBackend::ScopedDefault installed(&backend);
+
+    synth::AgentSynthAudioProcessor processor;
+    processor.prepareToPlay(48000.0, 64);
+
+    {
+        // Opening the plugin window: the editor's MainComponent runs on the processor's engine.
+        MainComponent editor(processor.getThemeManager(), processor.getLookAndFeel(), processor.getAudioEngine(),
+                             std::make_unique<NullAIProvider>());
+        EXPECT_EQ(&editor.getPluginScanService(), &processor.getPluginScanService())
+            << "an editor on an external engine must adopt the installed service";
+        EXPECT_EQ(backend.getScanService(), &processor.getPluginScanService());
+        EXPECT_EQ(editor.getModuleLibrary().getPluginCount(), 1) << "...and show its plugins in the sidebar";
+    }
+
+    // Closing the window must not take the session's resolver with it.
+    EXPECT_EQ(backend.getScanService(), &processor.getPluginScanService());
+
+    processor.setStateInformation(kSessionPatchJson, (int)juce::String(kSessionPatchJson).getNumBytesAsUTF8());
+    auto* module = findHostedModule(processor.getAudioEngine().getGraph());
+    ASSERT_NE(module, nullptr);
+    EXPECT_TRUE(pumpUntil([&] { return module->hasInstance(); }))
+        << "resolution must survive an editor being opened and closed: " << module->getStatusMessage();
+}

@@ -1,6 +1,7 @@
 #include "AIStateMapper.h"
 #include "../Modules/ADSRModule.h"
 #include "../Modules/AttenuverterModule.h"
+#include "../Modules/AudioInputModule.h"
 #include "../Modules/ExternalMidiModule.h"
 #include "../Modules/FX/ChorusModule.h"
 
@@ -27,12 +28,16 @@
 #include "../Modules/OscillatorModule.h"
 #include "../Modules/PolyMidiModule.h"
 #include "../Modules/PolySequencerModule.h"
+#include "../Modules/RecordTapModule.h"
 #include "../Modules/SampleHoldModule.h"
 #include "../Modules/SamplerModule.h"
 #include "../Modules/SequencerModule.h"
+#include "../Modules/TimelineAudioSourceModule.h"
+#include "../Modules/TimelineMidiSourceModule.h"
 #include "../Modules/VCAModule.h"
 #include "../Modules/VoiceMixerModule.h"
 #include "../Modules/WavetableOscillatorModule.h"
+#include "../Plugin/Hosting/HostedPluginModule.h"
 #include <cmath>
 #include <functional> // For std::function
 #include <limits>
@@ -50,7 +55,10 @@ using ModuleFactoryFunc = std::function<std::unique_ptr<juce::AudioProcessor>()>
 
 // Factory map for module creation
 static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory = {
-    {"Audio Input", []() { return std::make_unique<AudioGraphIOProcessor>(AudioGraphIOProcessor::audioInputNode); }},
+    // A real module, not the graph's audioInputNode — same factory key and same display name, so
+    // every patch already saved with an "Audio Input" node loads onto the module unchanged. Not
+    // gated on SYNTH_ENABLE_TIMELINE: device input is independent of the timeline feature.
+    {"Audio Input", []() { return std::make_unique<AudioInputModule>(); }},
     {"Audio Output", []() { return std::make_unique<AudioGraphIOProcessor>(AudioGraphIOProcessor::audioOutputNode); }},
     {"Midi Input", []() { return std::make_unique<AudioGraphIOProcessor>(AudioGraphIOProcessor::midiInputNode); }},
     {"Oscillator", []() { return std::make_unique<OscillatorModule>(); }},
@@ -87,7 +95,31 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Comparator", []() { return std::make_unique<ComparatorModule>(); }},
     {"Sampler", []() { return std::make_unique<SamplerModule>(); }},
     {"Wavetable", []() { return std::make_unique<WavetableOscillatorModule>(); }},
-    {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }}};
+    {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }},
+    // A third-party VST3/AU plugin as a module. Deliberately NOT gated on SYNTH_ENABLE_TIMELINE —
+    // hosting is independent of the timeline feature, and a -DSYNTH_ENABLE_TIMELINE=OFF build must
+    // still round-trip a patch that hosts a plugin. In the factory so our own saves reload it (the
+    // node comes back as a placeholder and re-loads its plugin asynchronously);
+    // kNonAuthorableModuleTypes below keeps it away from the model.
+    {"Hosted Plugin", []() { return std::make_unique<HostedPluginModule>(); }},
+#if SYNTH_ENABLE_TIMELINE
+    // The class itself compiles unconditionally (like every other Timeline source); only this
+    // INTEGRATION POINT is gated, so a -DSYNTH_ENABLE_TIMELINE=OFF build cannot create a Track In
+    // node at all — not from a preset, not from undo, not from a patch. It is in the factory
+    // (rather than constructed ad hoc by the add-track flow) purely so our own saves round-trip
+    // it; kNonAuthorableModuleTypes below keeps it away from the model.
+    {"Track In", []() { return std::make_unique<TimelineMidiSourceModule>(); }},
+    // Gated for exactly the same reason as Track In above: the class compiles unconditionally, but
+    // only a timeline build can create the node — from a preset, from undo or from the record
+    // flow. In the factory so our own saves round-trip a patch that has one;
+    // kNonAuthorableModuleTypes below keeps it away from the model.
+    {"Rec Tap", []() { return std::make_unique<RecordTapModule>(); }},
+    // Gated for exactly the same reason as the two above: the class compiles unconditionally, but
+    // only a timeline build can create the node. In the factory so our own saves round-trip a
+    // patch that has one; kNonAuthorableModuleTypes below keeps it away from the model.
+    {"Track Audio", []() { return std::make_unique<TimelineAudioSourceModule>(); }},
+#endif
+};
 
 namespace {
 
@@ -107,6 +139,29 @@ const std::set<juce::String> kNonAuthorableModuleTypes = {
     "Attenuverter",
     // The same AttenuverterModule, registered under the name the modulation UI uses for it.
     "Mod Slot",
+    // The timeline feed. A Track In node's only meaningful state is the identity of the timeline
+    // track bound to it, which lives OUTSIDE the patch — so a model authoring one either creates a
+    // node that plays nothing, or (worse) one that latches onto a track the user owns. The
+    // timeline's own add-track flow is the only thing that may create these.
+    "Track In",
+    // The audio-take tap. It names a FILE PATH on disk — a model that could author one could aim
+    // a recording anywhere the app can write, which is the same class of authority the Sampler's
+    // `"state"` file path is denied on the untrusted path. The record flow is the only thing that
+    // may create these.
+    "Rec Tap",
+    // The audio-track player. Same authority argument as Rec Tap from the other direction: a Track
+    // Audio node plays whatever clips the track bound to it names, so a model authoring one and
+    // latching it onto a track would be choosing what gets read off disk and rendered. The
+    // timeline's own add-track flow is the only thing that may create these.
+    "Track Audio",
+    // A hosted third-party plugin. The strongest case on this list: the node's `"state"` carries
+    // the plugin's own opaque byte blob, which is handed verbatim to
+    // AudioPluginInstance::setStateInformation — i.e. straight into third-party code that will
+    // parse it however it likes. Its identity also selects WHICH binary the host loads. Neither may
+    // ever be chosen by a model, so the type is refused outright on the untrusted path
+    // (PatchValidationError::InternalModuleNotAllowed) rather than sanitised. Only the app's own
+    // load UX may create one.
+    "Hosted Plugin",
 };
 
 bool isInternalOnlyModule(const juce::String& typeName) { return kNonAuthorableModuleTypes.count(typeName) > 0; }
@@ -151,6 +206,17 @@ bool isValidPatchPort(int port) {
     return port >= 0 && port <= AIStateMapper::kMaxPortIndex;
 }
 
+// Mirrors a node's "uuid" property into the processor itself (ModuleBase::setNodeUuid), so the
+// AUDIO thread can read it without touching a juce::NamedValueSet or a juce::String. Called at
+// every one of the three sites that writes the property — keep them paired, or a Track In node
+// silently stops matching its timeline track. See the invariant on ModuleBase::setNodeUuid.
+void mirrorUuidIntoProcessor(juce::AudioProcessorGraph::Node* node, const juce::String& uuid) {
+    if (node == nullptr)
+        return;
+    if (auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor()))
+        mb->setNodeUuid(uuid);
+}
+
 // Adopts a patch node's "uuid" onto the live node — trusted callers only. Untrusted input never
 // dictates identity: a model could otherwise hand two nodes the same uuid, or claim the uuid of a
 // node that automation lanes and track bindings already point at. Nodes created from untrusted
@@ -159,8 +225,10 @@ void adoptUuidIfTrusted(juce::AudioProcessorGraph::Node* node, const juce::Dynam
     if (!trusted || node == nullptr || !nObj->hasProperty("uuid"))
         return;
     const juce::var uuidVar = nObj->getProperty("uuid");
-    if (uuidVar.isString() && uuidVar.toString().isNotEmpty())
+    if (uuidVar.isString() && uuidVar.toString().isNotEmpty()) {
         node->properties.set("uuid", uuidVar.toString());
+        mirrorUuidIntoProcessor(node, uuidVar.toString());
+    }
 }
 
 // Renders whatever the model put in an id field, so the rejection names the offending value even
@@ -256,6 +324,8 @@ juce::String patchValidationErrorName(PatchValidationError error) {
         return "RemoveModulationEntryInvalid";
     case PatchValidationError::TimelineNotAllowed:
         return "TimelineNotAllowed";
+    case PatchValidationError::InternalModuleNotAllowed:
+        return "InternalModuleNotAllowed";
     }
     return "Unknown";
 }
@@ -331,7 +401,7 @@ PatchValidationResult AIStateMapper::validateNodeParams(juce::AudioProcessor* pr
 }
 
 PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const juce::AudioProcessorGraph& graph,
-                                                   bool clearExisting, bool trusted) {
+                                                   bool clearExisting, bool trusted, bool allowInternalModuleTypes) {
     if (!json.isObject())
         return {false, PatchValidationError::NotAnObject, "Root is not an object."};
     auto* rootObj = json.getDynamicObject();
@@ -467,6 +537,19 @@ PatchValidationResult AIStateMapper::validatePatch(const juce::var& json, const 
                 return {false, PatchValidationError::DuplicateNodeId,
                         "Duplicate node id " + juce::String(nodeId) + " within patch."};
             patchNodeIds.insert(nodeId);
+
+            // Internal-only types are refused here, on the validator itself, rather than being
+            // left to the schema's `type` enum. The schema is a hint the backend enforces as a
+            // grammar for OUR provider; a patch can also arrive from a local model, or from any
+            // future caller that never saw the schema — and "non-authorable" has to mean
+            // untrusted-unreachable, not merely un-suggested. The trusted path is untouched — our
+            // own saves must round-trip a Track In node — and a caller gating app-authored data it
+            // is about to apply trusted opts out via allowInternalModuleTypes (see AIStateMapper.h).
+            if (!allowInternalModuleTypes && isInternalOnlyModule(type))
+                return {false, PatchValidationError::InternalModuleNotAllowed,
+                        "Module type \"" + type +
+                            "\" is internal to the app and cannot be created from a patch. Use one of the module "
+                            "types listed in the schema."};
 
             // Resolve the type via the real factory up front, rather than discovering an
             // unknown type mid-apply after other nodes may already have been created.
@@ -705,6 +788,20 @@ juce::String AIStateMapper::getFactoryTypeName(juce::AudioProcessor* processor) 
             return "Comparator";
         case ModuleType::ExternalMidi:
             return "External MIDI";
+        case ModuleType::TimelineMidiSource:
+            return "Track In";
+        case ModuleType::RecordTap:
+            return "Rec Tap";
+        case ModuleType::TimelineAudioSource:
+            return "Track Audio";
+        case ModuleType::AudioInput:
+            // Deliberately the same string JUCE's audioInputNode reported, so old and new saves
+            // are interchangeable on disk.
+            return "Audio Input";
+        case ModuleType::HostedPlugin:
+            // The factory key, NOT the hosted plugin's own name: the type identifies the host
+            // module, and which plugin it hosts is carried by the node's "state".
+            return "Hosted Plugin";
         }
     }
 
@@ -738,6 +835,7 @@ juce::var AIStateMapper::graphToJSON(juce::AudioProcessorGraph& graph) {
             if (uuid.isEmpty()) {
                 uuid = juce::Uuid().toDashedString();
                 node->properties.set("uuid", uuid);
+                mirrorUuidIntoProcessor(node, uuid);
             }
             n->setProperty("uuid", uuid);
 
@@ -1638,6 +1736,7 @@ bool AIStateMapper::applySnapshotPreservingNodes(const juce::var& snapshot, juce
         t.hasLiveId = true;
         t.liveId = node->nodeID;
         node->properties.set("uuid", t.uuid);
+        mirrorUuidIntoProcessor(node.get(), t.uuid);
         applyPositionToNode(node.get(), t.obj);
     }
 
@@ -1840,6 +1939,52 @@ juce::var AIStateMapper::getPatchSchema() {
     schema->setProperty("required", juce::Array<juce::var>({"nodes", "connections"}));
 
     return juce::var(schema.get());
+}
+
+juce::var AIStateMapper::getPatchSchemaWithTimelineOps() {
+    juce::var schema = getPatchSchema();
+    auto* schemaObj = schema.getDynamicObject();
+    jassert(schemaObj != nullptr);
+    auto* properties = schemaObj->getProperty("properties").getDynamicObject();
+    jassert(properties != nullptr);
+
+    // One permissive op shape — see the header comment for why this is a grammar, not a
+    // validator. Field names/types mirror TimelineOps.cpp's readers exactly; "track" is left
+    // untyped because it is legitimately either a string (exact track name) or {"index": N}.
+    const juce::String opsSchemaJson = R"json({
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {
+                "op": {"type": "string", "enum": ["addTrack", "placeClips", "writeLane", "placeMidiClip"]},
+                "kind": {"type": "string", "enum": ["midi", "automation"]},
+                "name": {"type": "string"},
+                "track": {},
+                "clips": {"type": "array", "items": {"type": "object", "properties": {
+                    "startBeat": {"type": "number"}, "lengthBeats": {"type": "number"},
+                    "name": {"type": "string"},
+                    "notes": {"type": "array", "items": {"type": "object", "properties": {
+                        "startBeat": {"type": "number"}, "lengthBeats": {"type": "number"},
+                        "pitch": {"type": "integer"}, "velocity": {"type": "integer"},
+                        "channel": {"type": "integer"}},
+                        "required": ["startBeat", "lengthBeats", "pitch"]}}},
+                    "required": ["startBeat", "lengthBeats", "notes"]}},
+                "nodeUuid": {"type": "string"},
+                "paramId": {"type": "string"},
+                "points": {"type": "array", "items": {"type": "object", "properties": {
+                    "beat": {"type": "number"}, "value": {"type": "number"},
+                    "tension": {"type": "number"}, "curve": {"type": "integer"}},
+                    "required": ["beat", "value"]}},
+                "startBeat": {"type": "number"},
+                "midBase64": {"type": "string"}
+            },
+            "required": ["op"]
+        }
+    })json";
+    properties->setProperty("timelineOps", juce::JSON::parse(opsSchemaJson));
+    // Deliberately NOT added to "required": a patch-only response stays exactly as valid as it
+    // was under getPatchSchema(), and the prompt tells the model when the key is warranted.
+    return schema;
 }
 
 } // namespace synth

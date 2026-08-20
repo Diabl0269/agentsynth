@@ -123,6 +123,11 @@ The following `Metrics` fields are **code-only layout constants** — they contr
 | `librarySidebarWidth` | `200` | Library panel width when visible (px) — code-only |
 | `aiPanelWidth` | `300` | AI panel width when visible (px) — code-only |
 | `iconSize` | `16` | Icon render size in library / status bar contexts (px) — code-only |
+| `timelinePanelHeight` | `220` | Timeline panel **default** height and minimum drag height (px) — the live height is the user's, persisted under the `timelinePanelHeight` setting key (see [`layout.md` §16](layout.md)) — code-only (TL5-1) |
+| `timelineTrackHeaderWidth` | `160` | Timeline track-header column width (px) — code-only (TL5-1) |
+| `timelineTransportBarHeight` | `28` | Timeline transport-bar strip height (px) — code-only (TL5-1) |
+| `timelineRulerHeight` | `24` | Timeline ruler strip height, top of the lanes region (px) — code-only (TL5-2) |
+| `timelineTrackRowHeight` | `56` | Row height shared by the track-header column and the clip-lane area (px) — code-only (TL5-7) |
 
 The following `Metrics` fields are **UI rendering constants** — they control the appearance of UI visual effects and are also **not parsed from user JSON**. A user theme that includes these keys will have them silently ignored.
 

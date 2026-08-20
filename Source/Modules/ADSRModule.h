@@ -37,6 +37,15 @@ public:
         midiGateHeld = false;
         resetMeters();
         effectiveThreshold.store(thresholdParam->get(), std::memory_order_relaxed);
+        // Sustain is the one ADSR parameter that is a LEVEL: juce::ADSR emits it verbatim while
+        // the envelope is held (`case State::sustain: envelopeVal = parameters.sustain`), so a
+        // per-block automation write steps every destination downstream. Attack/Decay/Release are
+        // ramp *rates* — changing one alters the slope of an in-flight ramp, never its value —
+        // and are deliberately left unsmoothed. The smoother advances a whole block at a time
+        // because juce::ADSR only takes its parameters through setParameters(); snapped at prepare
+        // so a static render is bit-identical.
+        smoothedSustain.reset(sampleRate, 0.02);
+        smoothedSustain.setCurrentAndTargetValue(sustainParam->get());
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -56,10 +65,13 @@ public:
             return;
         }
 
+        smoothedSustain.setTargetValue(*sustainParam);
+
         float a = std::max(static_cast<float>(*attackParam), 0.002f);
         float d = *decayParam;
-        float s = *sustainParam;
+        float s = smoothedSustain.getCurrentValue();
         float r = std::max(static_cast<float>(*releaseParam), 0.005f);
+        smoothedSustain.skip(buffer.getNumSamples());
 
         if (a != adsrParams.attack || d != adsrParams.decay || s != adsrParams.sustain || r != adsrParams.release) {
             adsrParams.attack = a;
@@ -257,6 +269,7 @@ private:
 
     juce::ADSR adsrs[MAX_VOICES];
     juce::ADSR::Parameters adsrParams;
+    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedSustain;
     SchmittTrigger gateTriggers[MAX_VOICES];
     bool previousActive[MAX_VOICES] = {};
     bool midiGateHeld = false;

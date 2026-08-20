@@ -20,6 +20,11 @@ enum CommandIDs {
     copySelection,
     pasteSelection,
     duplicateSelection,
+    // Space play/stop. Always registered (even in a SYNTH_ENABLE_TIMELINE=OFF build,
+    // where getCommandInfo reports it inactive) so ShortcutManager's tripwire tests (unique
+    // default, description, command mapping) cover it unconditionally.
+    togglePlayback,
+    toggleTimelinePanel,
     // Not user-rebindable (no ShortcutManager actionId/binding) — Sparkle's own convention is a
     // plain "Check for Updates…" menu item with no keyboard shortcut. macOS only; see
     // Source/Update/UpdateManager.h.
@@ -59,6 +64,10 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return pasteSelection;
     if (actionId == "duplicateSelection")
         return duplicateSelection;
+    if (actionId == "togglePlayback")
+        return togglePlayback;
+    if (actionId == "toggleTimelinePanel")
+        return toggleTimelinePanel;
     return 0;
 }
 } // namespace AppCommands
@@ -147,6 +156,15 @@ public:
         bindings["copySelection"] = juce::KeyPress('c', juce::ModifierKeys::commandModifier, 0);
         bindings["pasteSelection"] = juce::KeyPress('v', juce::ModifierKeys::commandModifier, 0);
         bindings["duplicateSelection"] = juce::KeyPress('d', juce::ModifierKeys::commandModifier, 0);
+        // Bare spacebar, no modifiers — the platform DAW convention for play/stop. Safe to
+        // claim app-wide for the same reason Cmd+C/V is: a focused juce::TextEditor consumes the
+        // spacebar itself (types a space character) before it ever reaches MainComponent::
+        // keyPressed, the sole dispatch point — see docs/shortcuts.md.
+        bindings["togglePlayback"] = juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys::noModifiers, 0);
+        // 't' with plain Cmd is unused by any other binding (Cmd+, / S / O / N / Z / Shift+Z / M /
+        // K / A / L / B, Shift+A, Shift+S, C / V / D) — safe to claim for the timeline panel
+        // toggle.
+        bindings["toggleTimelinePanel"] = juce::KeyPress('t', juce::ModifierKeys::commandModifier, 0);
     }
 
     static juce::String keyPressToDisplayString(const juce::KeyPress& key) {
@@ -190,6 +208,8 @@ public:
             result += "-";
         else if (keyCode == '=')
             result += "=";
+        else if (keyCode == juce::KeyPress::spaceKey)
+            result += "Space";
         else
             result += juce::String::charToString(static_cast<juce::juce_wchar>(keyCode));
 
@@ -229,6 +249,10 @@ public:
             return "Paste Modules";
         if (actionId == "duplicateSelection")
             return "Duplicate Selected Modules";
+        if (actionId == "togglePlayback")
+            return "Toggle Playback";
+        if (actionId == "toggleTimelinePanel")
+            return "Toggle Timeline Panel";
         return actionId;
     }
 
@@ -251,10 +275,12 @@ private:
     std::map<juce::String, juce::KeyPress> bindings;
     juce::ApplicationProperties* appProperties = nullptr;
 
-    juce::StringArray actionIds{"openSettings",  "savePreset",    "openPreset",      "newPatch",
-                                "undo",          "redo",          "toggleModMatrix", "toggleMinimap",
-                                "toggleAiPanel", "autoArrange",   "toggleLibrary",   "selectAllModules",
-                                "saveSnippet",   "copySelection", "pasteSelection",  "duplicateSelection"};
+    juce::StringArray actionIds{"openSettings",       "savePreset",     "openPreset",
+                                "newPatch",           "undo",           "redo",
+                                "toggleModMatrix",    "toggleMinimap",  "toggleAiPanel",
+                                "autoArrange",        "toggleLibrary",  "selectAllModules",
+                                "saveSnippet",        "copySelection",  "pasteSelection",
+                                "duplicateSelection", "togglePlayback", "toggleTimelinePanel"};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShortcutManager)
 };

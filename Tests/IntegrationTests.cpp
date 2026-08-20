@@ -121,8 +121,12 @@ TEST_F(IntegrationTest, SaveLoadRoundTripPreservesState) {
     // Serialize to JSON
     auto json = synth::AIStateMapper::graphToJSON(graph);
 
-    // Round-trip: reload into the same prepared graph (fresh graphs lack IO channel config)
-    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, graph, true));
+    // Round-trip: reload into the same prepared graph (fresh graphs lack IO channel config).
+    // trusted=true because this IS our own graphToJSON output — the untrusted apply path is for
+    // model-authored patches and would both rescale exact values and refuse the preset's internal
+    // Attenuverter nodes. Every real caller replaying a save (PresetManager, undo, session state)
+    // applies trusted; see docs/layout.md §12.5.
+    ASSERT_TRUE(synth::AIStateMapper::applyJSONToGraph(json, graph, /*clearExisting=*/true, /*trusted=*/true));
 
     // Verify node and connection counts match
     EXPECT_EQ(graph.getNumNodes(), originalNodeCount);

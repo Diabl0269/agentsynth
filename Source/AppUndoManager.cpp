@@ -1,5 +1,6 @@
 #include "AppUndoManager.h"
 #include "AI/AIStateMapper.h"
+#include "Timeline/TimelineDoc.h"
 #include "UI/GraphEditor.h"
 
 /**
@@ -9,12 +10,15 @@
 class SnapshotAction : public juce::UndoableAction {
 public:
     SnapshotAction(const juce::var& beforeState, const juce::var& afterState, juce::AudioProcessorGraph& graph,
-                   std::function<void()> preRestore, std::function<void()> postRestore)
+                   std::function<void()> preRestore, std::function<void()> postRestore,
+                   std::function<void()> beforeRestore = {}, std::function<void()> afterRestore = {})
         : beforeState(beforeState)
         , afterState(afterState)
         , graph(graph)
         , preRestore(preRestore)
-        , postRestore(postRestore) {}
+        , postRestore(postRestore)
+        , beforeRestore(std::move(beforeRestore))
+        , afterRestore(std::move(afterRestore)) {}
 
     bool perform() override {
         if (firstPerform) {
@@ -50,6 +54,11 @@ private:
      * destroys and re-creates every ModuleComponent either.
      */
     bool restore(const juce::var& state) {
+        // Unconditional, unlike preRestore below — see AppUndoManager::setRestoreHooks for why the
+        // lazy hook is the wrong place for a programmatic-write guard.
+        if (beforeRestore)
+            beforeRestore();
+
         bool preRestoreFired = false;
         auto firePreRestore = [this, &preRestoreFired] {
             if (preRestoreFired)
@@ -66,6 +75,8 @@ private:
 
         if (postRestore)
             postRestore();
+        if (afterRestore)
+            afterRestore();
         return true;
     }
 
@@ -74,9 +85,77 @@ private:
     juce::AudioProcessorGraph& graph;
     std::function<void()> preRestore;
     std::function<void()> postRestore;
+    std::function<void()> beforeRestore;
+    std::function<void()> afterRestore;
     bool firstPerform = true;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SnapshotAction)
+};
+
+/**
+ * @class TimelineSnapshotAction
+ * @brief Undoable action that restores TimelineDoc state from before/after juce::var snapshots.
+ *
+ * Deliberately a separate action type from SnapshotAction, not a graph-snapshot variant: it carries
+ * only the timeline's JSON, so timeline edits don't inflate the size of every graph undo step (see
+ * AppUndoManager::recordTimelineChange). Both push onto the same juce::UndoManager, so the app has
+ * one undo stack and Cmd+Z stays chronological across the graph and the timeline.
+ *
+ * Unlike SnapshotAction, there is no diffing restore here: TimelineDoc::fromVar is already the doc's
+ * single all-or-nothing load path (its own "restore" primitive), so perform()/undo() just call it
+ * directly. Every var this class is constructed with came from this doc's own toVar() (captured by
+ * recordTimelineChange/recordCombinedChange immediately before/after the mutation they wrap), so
+ * fromVar() of it must always succeed; a failure here means the doc's round-trip contract itself
+ * broke, not a user error — jassert catches that in debug builds, but the bool is still returned so a
+ * release build fails the undo/redo cleanly rather than crashing.
+ */
+class TimelineSnapshotAction : public juce::UndoableAction {
+public:
+    TimelineSnapshotAction(synth::TimelineDoc& doc, const juce::var& beforeState, const juce::var& afterState,
+                           std::function<void()> beforeRestore = {}, std::function<void()> afterRestore = {})
+        : doc(doc)
+        , beforeState(beforeState)
+        , afterState(afterState)
+        , beforeRestore(std::move(beforeRestore))
+        , afterRestore(std::move(afterRestore)) {}
+
+    bool perform() override {
+        if (firstPerform) {
+            firstPerform = false;
+            return true;
+        }
+
+        return restore(afterState);
+    }
+
+    bool undo() override { return restore(beforeState); }
+
+    int getSizeInUnits() override {
+        return static_cast<int>(
+            (juce::JSON::toString(beforeState).length() + juce::JSON::toString(afterState).length()));
+    }
+
+private:
+    bool restore(const juce::var& state) {
+        if (beforeRestore)
+            beforeRestore();
+        const bool ok = doc.fromVar(state);
+        jassert(ok); // a var this class produced must always be accepted by fromVar
+        // Fired even on a failed restore: the owner's pass re-derives orphan flags and republishes,
+        // and doing that against whatever state the doc is really in is always the safe answer.
+        if (afterRestore)
+            afterRestore();
+        return ok;
+    }
+
+    synth::TimelineDoc& doc;
+    juce::var beforeState;
+    juce::var afterState;
+    std::function<void()> beforeRestore;
+    std::function<void()> afterRestore;
+    bool firstPerform = true;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TimelineSnapshotAction)
 };
 
 /**
@@ -207,6 +286,28 @@ private:
 
 AppUndoManager::AppUndoManager() {}
 
+juce::UndoableAction* AppUndoManager::createGraphSnapshotAction(juce::AudioProcessorGraph& graph,
+                                                                const juce::var& beforeState,
+                                                                const juce::var& afterState) {
+    juce::Component::SafePointer<GraphEditor> ge(graphEditor);
+    return new SnapshotAction(
+        beforeState, afterState, graph,
+        [ge] {
+            if (ge)
+                ge->detachAllModuleComponents();
+        },
+        [ge] {
+            if (ge)
+                ge->updateComponents();
+        },
+        [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); });
+}
+
+void AppUndoManager::setRestoreHooks(std::function<void()> beforeRestore, std::function<void()> afterRestore) {
+    beforeRestore_ = std::move(beforeRestore);
+    afterRestore_ = std::move(afterRestore);
+}
+
 void AppUndoManager::recordStructuralChange(juce::AudioProcessorGraph& graph, std::function<void()> mutation) {
     auto beforeState = synth::AIStateMapper::graphToJSON(graph);
 
@@ -216,17 +317,7 @@ void AppUndoManager::recordStructuralChange(juce::AudioProcessorGraph& graph, st
 
     auto afterState = synth::AIStateMapper::graphToJSON(graph);
 
-    juce::Component::SafePointer<GraphEditor> ge(graphEditor);
-    undoManager.perform(new SnapshotAction(
-        beforeState, afterState, graph,
-        [ge] {
-            if (ge)
-                ge->detachAllModuleComponents();
-        },
-        [ge] {
-            if (ge)
-                ge->updateComponents();
-        }));
+    undoManager.perform(createGraphSnapshotAction(graph, beforeState, afterState));
 }
 
 void AppUndoManager::recordParameterChange(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID nodeId,
@@ -261,7 +352,9 @@ bool AppUndoManager::recordAIPatch(juce::AudioProcessorGraph& graph, const juce:
     auto afterState = synth::AIStateMapper::graphToJSON(graph);
 
     undoManager.beginNewTransaction(actionName);
-    undoManager.perform(new SnapshotAction(beforeState, afterState, graph, preRestore, postRestore));
+    undoManager.perform(new SnapshotAction(
+        beforeState, afterState, graph, preRestore, postRestore, [this] { fireBeforeRestore(); },
+        [this] { fireAfterRestore(); }));
     return true;
 }
 
@@ -276,19 +369,60 @@ void AppUndoManager::pushSnapshotFromCapture(juce::AudioProcessorGraph& graph) {
     auto afterState = synth::AIStateMapper::graphToJSON(graph);
 
     if (juce::JSON::toString(capturedBeforeState) != juce::JSON::toString(afterState)) {
-        juce::Component::SafePointer<GraphEditor> ge(graphEditor);
         undoManager.beginNewTransaction();
-        undoManager.perform(new SnapshotAction(
-            capturedBeforeState, afterState, graph,
-            [ge] {
-                if (ge)
-                    ge->detachAllModuleComponents();
-            },
-            [ge] {
-                if (ge)
-                    ge->updateComponents();
-            }));
+        undoManager.perform(createGraphSnapshotAction(graph, capturedBeforeState, afterState));
     }
 
     capturedBeforeState = juce::var();
+}
+
+bool AppUndoManager::recordTimelineChange(synth::TimelineDoc& doc, const std::function<void()>& mutation) {
+    if (!mutation)
+        return false;
+
+    const juce::var beforeState = doc.toVar();
+
+    mutation();
+
+    const juce::var afterState = doc.toVar();
+
+    if (juce::JSON::toString(beforeState) == juce::JSON::toString(afterState))
+        return false; // no-op mutation: don't create an undo step
+
+    undoManager.beginNewTransaction();
+    undoManager.perform(new TimelineSnapshotAction(
+        doc, beforeState, afterState, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); }));
+    return true;
+}
+
+bool AppUndoManager::recordCombinedChange(juce::AudioProcessorGraph& graph, synth::TimelineDoc& doc,
+                                          const std::function<void()>& mutation) {
+    if (!mutation)
+        return false;
+
+    undoManager.beginNewTransaction();
+
+    const juce::var graphBefore = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var timelineBefore = doc.toVar();
+
+    mutation();
+
+    const juce::var graphAfter = synth::AIStateMapper::graphToJSON(graph);
+    const juce::var timelineAfter = doc.toVar();
+
+    const bool graphChanged = juce::JSON::toString(graphBefore) != juce::JSON::toString(graphAfter);
+    const bool timelineChanged = juce::JSON::toString(timelineBefore) != juce::JSON::toString(timelineAfter);
+
+    if (!graphChanged && !timelineChanged)
+        return false; // neither domain changed: no transaction pushed
+
+    // Both perform() calls land in the same transaction (no beginNewTransaction between them), so a
+    // single undo()/redo() reverts or re-applies whichever of the two actually changed, together.
+    if (graphChanged)
+        undoManager.perform(createGraphSnapshotAction(graph, graphBefore, graphAfter));
+    if (timelineChanged)
+        undoManager.perform(new TimelineSnapshotAction(
+            doc, timelineBefore, timelineAfter, [this] { fireBeforeRestore(); }, [this] { fireAfterRestore(); }));
+
+    return true;
 }

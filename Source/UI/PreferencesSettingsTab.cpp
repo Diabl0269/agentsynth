@@ -75,6 +75,26 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     addAndMakeVisible(perModuleDefaultsButton);
     perModuleDefaultsButton.setEnabled(false);
     perModuleDefaultsButton.setTooltip("Per-module I/O default overrides are planned in a follow-up preference.");
+
+    addAndMakeVisible(loopSelectionArmsToggle);
+    loopSelectionArmsToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue("timelineLoopSelectionArms", true), juce::dontSendNotification);
+    loopSelectionArmsToggle.setTooltip(
+        "When on, pressing P in the timeline both places the loop locators around the selection AND switches "
+        "looping on. When off, P only places the locators (use L to toggle looping).");
+    loopSelectionArmsToggle.onClick = [this] { persistLoopSelectionArms(loopSelectionArmsToggle.getToggleState()); };
+
+    addAndMakeVisible(timelineFeatureToggle);
+    // DEFAULT TRUE: existing users already have the timeline visible/hidden per their own
+    // "timelinePanelVisible" choice — this is a higher-level kill switch on top of that, and must
+    // not itself change behaviour for anyone who has never touched it.
+    timelineFeatureToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("timelineFeatureEnabled", true),
+                                         juce::dontSendNotification);
+    timelineFeatureToggle.setTooltip(
+        "When off, the timeline panel, its toolbar button, and Cmd+T / Space are hidden — the "
+        "timeline document and audio-engine playback are untouched, so turning this back on "
+        "restores exactly where you left off.");
+    timelineFeatureToggle.onClick = [this] { persistTimelineFeatureEnabled(timelineFeatureToggle.getToggleState()); };
 }
 
 void PreferencesSettingsTab::paint(juce::Graphics& g) {
@@ -113,6 +133,12 @@ void PreferencesSettingsTab::resized() {
     defaultDualIOToggle.setBounds(bounds.removeFromTop(24));
     bounds.removeFromTop(10);
     perModuleDefaultsButton.setBounds(bounds.removeFromTop(24).removeFromLeft(220));
+    bounds.removeFromTop(10);
+
+    loopSelectionArmsToggle.setBounds(bounds.removeFromTop(24));
+    bounds.removeFromTop(10);
+
+    timelineFeatureToggle.setBounds(bounds.removeFromTop(24));
 }
 
 void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
@@ -147,6 +173,34 @@ bool PreferencesSettingsTab::getDefaultDualIOForNewModules() const { return defa
 void PreferencesSettingsTab::setDefaultDualIOForNewModules(bool enabled) {
     defaultDualIOToggle.setToggleState(enabled, juce::dontSendNotification);
     persistDefaultDualIOForNewModules(enabled);
+}
+
+bool PreferencesSettingsTab::isLoopSelectionArmsEnabled() const { return loopSelectionArmsToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setLoopSelectionArmsEnabled(bool enabled) {
+    loopSelectionArmsToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistLoopSelectionArms(enabled);
+}
+
+void PreferencesSettingsTab::persistLoopSelectionArms(bool enabled) {
+    // Read at use time by TimelinePanelComponent's P handler and MainComponent's
+    // onLoopRangeRequested — nothing live to push here, unlike the GraphEditor settings above.
+    appProperties.getUserSettings()->setValue("timelineLoopSelectionArms", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+}
+
+bool PreferencesSettingsTab::isTimelineFeatureEnabled() const { return timelineFeatureToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setTimelineFeatureEnabled(bool enabled) {
+    timelineFeatureToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistTimelineFeatureEnabled(enabled);
+}
+
+void PreferencesSettingsTab::persistTimelineFeatureEnabled(bool enabled) {
+    appProperties.getUserSettings()->setValue("timelineFeatureEnabled", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (onTimelineFeatureToggled)
+        onTimelineFeatureToggled(enabled);
 }
 
 void PreferencesSettingsTab::persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode) {

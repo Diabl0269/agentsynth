@@ -30,11 +30,22 @@ public:
     void setDoubleClickPortDisconnectEnabled(bool enabled);
     bool getDefaultDualIOForNewModules() const;
     void setDefaultDualIOForNewModules(bool enabled);
+    bool isLoopSelectionArmsEnabled() const;
+    void setLoopSelectionArmsEnabled(bool enabled);
+    bool isTimelineFeatureEnabled() const;
+    void setTimelineFeatureEnabled(bool enabled);
+
+    // Fired from persistTimelineFeatureEnabled() after the value is saved, so a live MainComponent
+    // can hide/show the timeline entry points without waiting for a restart. Null in every context
+    // that doesn't wire it (e.g. a headless test that only checks persistence).
+    std::function<void(bool)> onTimelineFeatureToggled;
 
 private:
     void persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
     void persistDoubleClickPortDisconnect(bool enabled);
     void persistDefaultDualIOForNewModules(bool enabled);
+    void persistLoopSelectionArms(bool enabled);
+    void persistTimelineFeatureEnabled(bool enabled);
 
     juce::ApplicationProperties& appProperties;
     GraphEditor* graphEditor{nullptr}; // weak, owned by MainComponent
@@ -47,6 +58,8 @@ private:
     // and read as a mode picker rather than the on/off it actually is.
     juce::ToggleButton defaultDualIOToggle{"Split Left/Right jacks on new modules"};
     juce::TextButton perModuleDefaultsButton{"Per-module I/O defaults..."};
+    juce::ToggleButton loopSelectionArmsToggle{"Timeline: P (loop selection) also switches looping on"};
+    juce::ToggleButton timelineFeatureToggle{"Show timeline (experimental)"};
 
     // Hairline rules between preference groups, painted in paint() from these bounds.
     std::vector<juce::Rectangle<int>> dividerBounds;

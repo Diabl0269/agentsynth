@@ -1,0 +1,13 @@
+{
+  "name": "unknown-op-field",
+  "description": "An addTrack op carrying a field the grammar does not have - closed-object rejection, not a silently-ignored extra key.",
+  "kind": "timelineOps",
+  "expectedValid": false,
+  "expectedMessageContains": "unknown field \"bindingUuid\"",
+  "expectedPreviewContains": "",
+  "payload": {
+    "timelineOps": [
+      { "op": "addTrack", "kind": "midi", "name": "Bound", "bindingUuid": "osc-uuid" }
+    ]
+  }
+}

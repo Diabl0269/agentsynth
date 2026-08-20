@@ -69,6 +69,15 @@ option(ENABLE_AI_HARNESS "Build the AI patch validity/quality measurement harnes
 # in PR CI is what stops the shared UI/engine code from silently breaking the plugin wrapper.
 # Turn OFF for a faster local iteration loop when you're only working on the standalone app.
 option(ENABLE_PLUGIN "Build the VST3 (+ AU on macOS) audio-plugin targets" ON)
+# TL1-9: the timeline feature's revertibility switch. ON by default (today's normal build). OFF
+# compiles out only the *integration points* — playhead install, the engine's once-per-block
+# transport tick, and the sequencer/poly-sequencer sync dispatch — while the Core Transport classes
+# (TransportService, TempoMap, BlockTimeInfo, OfflineTransportDriver) stay compiled in, inert
+# without the integration. A `-DSYNTH_ENABLE_TIMELINE=OFF` build must reproduce today's app (the
+# transport never ticks, nothing timeline-related is reachable) and still pass the full test suite —
+# see the `build-and-test-timeline-off` CI job, which asserts exactly that on every PR.
+option(SYNTH_ENABLE_TIMELINE
+    "Compile the timeline/transport integration (engine tick, playhead install, sequencer sync). OFF must reproduce today's app and still pass the full suite." ON)
 
 # Product identity — the single place to override branding at configure time
 # (e.g. `cmake -S . -B build -DSYNTH_PRODUCT_NAME=MySynth`). Mirrored in C++ at
@@ -118,12 +127,60 @@ add_library(Core STATIC
     Source/PresetManager.h
     Source/PatchDocument.cpp
     Source/PatchDocument.h
+    Source/ProjectBundle.cpp
+    Source/ProjectBundle.h
     Source/SnippetManager.cpp
     Source/SnippetManager.h
     Source/SettingsMigration.cpp
     Source/SettingsMigration.h
+    # Transport
+    Source/Transport/BlockTimeInfo.h
+    Source/Transport/BounceExporter.cpp
+    Source/Transport/BounceExporter.h
+    Source/Transport/Metronome.cpp
+    Source/Transport/Metronome.h
+    Source/Transport/OfflineTransportDriver.cpp
+    Source/Transport/OfflineTransportDriver.h
+    Source/Transport/TempoMap.h
+    Source/Transport/TransportService.cpp
+    Source/Transport/TransportService.h
+    # Timeline
+    Source/Timeline/ArrangementContext.cpp
+    Source/Timeline/ArrangementContext.h
+    Source/Timeline/AssetManager.cpp
+    Source/Timeline/AssetManager.h
+    Source/Timeline/AudioClipStreamer.cpp
+    Source/Timeline/AudioClipStreamer.h
+    Source/Timeline/AutomationApplier.cpp
+    Source/Timeline/AutomationApplier.h
+    Source/Timeline/AutomationBinding.cpp
+    Source/Timeline/AutomationBinding.h
+    Source/Timeline/AutomationKernel.h
+    Source/Timeline/AutomationRecorder.cpp
+    Source/Timeline/AutomationRecorder.h
+    Source/Timeline/EpochExchange.h
+    Source/Timeline/MidiClipFile.cpp
+    Source/Timeline/MidiClipFile.h
+    Source/Timeline/MidiRecorder.cpp
+    Source/Timeline/MidiRecorder.h
+    Source/Timeline/PeaksFile.cpp
+    Source/Timeline/PeaksFile.h
+    Source/Timeline/TakePlacement.cpp
+    Source/Timeline/TakePlacement.h
+    Source/Timeline/TimelineDoc.cpp
+    Source/Timeline/TimelineDoc.h
+    Source/Timeline/TimelineOps.cpp
+    Source/Timeline/TimelineOps.h
+    Source/Timeline/TimelineReconciler.cpp
+    Source/Timeline/TimelineReconciler.h
+    Source/Timeline/TimelineSnapshot.cpp
+    Source/Timeline/TimelineSnapshot.h
+    Source/Timeline/TimelineSnapshotExchange.h
+    Source/Timeline/TimelineValidator.cpp
+    Source/Timeline/TimelineValidator.h
     # Modules
     Source/Modules/ModuleBase.h
+    Source/Modules/AudioInputModule.h
     Source/Modules/OscillatorModule.h
     Source/Modules/ADSRModule.h
     Source/Modules/FilterModule.h
@@ -143,6 +200,10 @@ add_library(Core STATIC
     Source/Modules/AttenuverterModule.h
     Source/Modules/EnvelopeFollowerModule.h
     Source/Modules/MacroControlModule.h
+    Source/Modules/RecordTapModule.cpp
+    Source/Modules/RecordTapModule.h
+    Source/Modules/TimelineAudioSourceModule.h
+    Source/Modules/TimelineMidiSourceModule.h
     Source/Modules/VisualBuffer.h
     Source/Modules/FX/DelayModule.h
     Source/Modules/FX/DistortionModule.h
@@ -157,6 +218,15 @@ add_library(Core STATIC
     Source/Modules/FX/RingModulatorModule.h
     Source/Modules/FX/ParametricEQModule.h
     Source/Modules/NoiseModule.h
+    # Plugin hosting (TL7-2) — third-party VST3/AU plugins as graph modules. In Core, not in the
+    # AgentSynthPlugin target: this is the app HOSTING plugins, which the headless Tests target
+    # exercises against a stub backend (Tests/StubPluginInstance.h).
+    Source/Plugin/Hosting/HostedPluginBackend.cpp
+    Source/Plugin/Hosting/HostedPluginBackend.h
+    Source/Plugin/Hosting/HostedPluginModule.cpp
+    Source/Plugin/Hosting/HostedPluginModule.h
+    Source/Plugin/Hosting/PluginScanService.cpp
+    Source/Plugin/Hosting/PluginScanService.h
     # AI
     Source/AI/AIProvider.h
     Source/AI/OllamaProvider.h
@@ -232,6 +302,19 @@ target_link_libraries(Core PUBLIC
 
 target_compile_definitions(Core PUBLIC JUCE_WEB_BROWSER=0)
 
+# TL7-1/TL7-2: host third-party plugins. JUCE's built-in hosting only — no new dependency pins, and
+# therefore no new licences to clear (the VST3 and AU host code ships inside juce_audio_processors,
+# which we already link). CLAP is deliberately deferred: it would mean vendoring clap-juce-extensions
+# or the CLAP headers, i.e. exactly the new dependency this decision avoids.
+#
+# PUBLIC, on Core, beside the other JUCE defines: HostedPluginBackend is compiled into Core, and
+# every consumer (AppUI, Tests, the plugin wrapper) must agree on these values or the format list in
+# DefaultHostedPluginBackend's constructor differs between translation units.
+target_compile_definitions(Core PUBLIC JUCE_PLUGINHOST_VST3=1)
+if(APPLE)
+    target_compile_definitions(Core PUBLIC JUCE_PLUGINHOST_AU=1)
+endif()
+
 if(UNIX AND NOT APPLE)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
@@ -284,6 +367,12 @@ juce_add_gui_app(AgentSynth
     BUNDLE_ID "${SYNTH_BUNDLE_ID}"
     BLUETOOTH_PERMISSION_ENABLED TRUE
     BLUETOOTH_PERMISSION_TEXT "We need Bluetooth access to connect to your external MIDI devices."
+    # TL6-1: the Audio tab can now open an input device (opt-in). macOS kills any process that
+    # touches an input stream without NSMicrophoneUsageDescription in its Info.plist, so this is
+    # not optional once inputs are reachable. The plugin target needs no equivalent — the host
+    # owns the device there, and its own entitlement covers it.
+    MICROPHONE_PERMISSION_ENABLED TRUE
+    MICROPHONE_PERMISSION_TEXT "We need audio input access so you can patch a microphone or instrument into the synth."
     PLIST_TO_MERGE "${SYNTH_SPARKLE_PLIST_TO_MERGE}"
 )
 
@@ -363,6 +452,12 @@ juce_add_binary_data(Assets SOURCES
 target_link_libraries(Core PUBLIC Assets)
 target_compile_definitions(Core PUBLIC HAS_FONT_ASSETS=1)
 
+# TL1-9: always defined (never left to #ifdef) so call sites use `#if SYNTH_ENABLE_TIMELINE` —
+# an accidental #ifdef would silently compile the integration back in even with the option OFF.
+# PUBLIC so AppUI, Tests, and the plugin (all of which link Core) see the same value; a mismatch
+# between Core and a consumer would ODR-violate on any type/inline function gated by the macro.
+target_compile_definitions(Core PUBLIC SYNTH_ENABLE_TIMELINE=$<IF:$<BOOL:${SYNTH_ENABLE_TIMELINE}>,1,0>)
+
 # The full editor UI (MainComponent + everything under Source/UI that isn't already in Core).
 # Split out of the AgentSynth app target so the standalone app AND the audio-plugin wrapper build
 # ONE copy of this code from ONE source list — a plugin whose UI drifts from the app's is the
@@ -375,6 +470,27 @@ target_compile_definitions(Core PUBLIC HAS_FONT_ASSETS=1)
 add_library(AppUI STATIC
     Source/MainComponent.cpp
     Source/MainComponent.h
+    Source/UserSettings.h
+    Source/UI/TimelinePanelComponent.h
+    Source/UI/TimelinePanelComponent.cpp
+    Source/UI/TimelineRulerComponent.h
+    Source/UI/TimelineRulerComponent.cpp
+    Source/UI/TimelinePlayheadOverlay.h
+    Source/UI/TimelinePlayheadOverlay.cpp
+    Source/UI/TimelineTrackHeaderComponent.h
+    Source/UI/TimelineTrackHeaderComponent.cpp
+    Source/UI/TimelineTransportBar.h
+    Source/UI/TimelineTransportBar.cpp
+    Source/UI/TimelineClipLaneArea.h
+    Source/UI/TimelineClipLaneArea.cpp
+    Source/UI/ClipSelectionModel.h
+    Source/UI/PianoRollComponent.h
+    Source/UI/PianoRollComponent.cpp
+    Source/UI/NoteSelectionModel.h
+    Source/UI/AutomationLaneEditor.h
+    Source/UI/AutomationLaneEditor.cpp
+    Source/UI/TrackColour.h
+    Source/UI/TimelineViewState.h
     Source/UI/AIChatComponent.cpp
     Source/UI/AccountRow.cpp
     Source/UI/AccountRow.h
@@ -398,6 +514,11 @@ add_library(AppUI STATIC
     Source/UI/ModMatrixComponent.h
     Source/UI/SettingsWindow.cpp
     Source/UI/SettingsWindow.h
+    # Plugin hosting UI (TL7-5) — native editor windows for hosted VST3/AU plugins. In AppUI (a
+    # window), not Core, mirroring HostedPluginModule/HostedPluginBackend's Core placement above.
+    Source/Plugin/Hosting/HostedPluginEditorWindow.cpp
+    Source/Plugin/Hosting/HostedPluginEditorWindow.h
+    Source/Plugin/Hosting/HostedPluginWindowManager.h
     Source/UI/AppearanceSettingsTab.cpp
     Source/UI/AppearanceSettingsTab.h
     Source/UI/PreferencesSettingsTab.cpp
@@ -625,10 +746,14 @@ if(ENABLE_TESTS)
     add_subdirectory(Tests)
 endif()
 
-# Measurement harnesses for AI patch validity and quality. Both need a live Ollama, so neither
-# is ever part of the default build or CI — see their READMEs under Tools/.
+# Measurement harnesses for AI patch/timeline validity and quality. AIPatchHarness/AIEvalHarness
+# need a live Ollama; TimelineOpsHarness replays recorded fixtures instead and needs none, but is
+# gated the same way for consistency (it is a measurement instrument, not something CI gates on —
+# see Tests/TimelineOpsFixtureTests.cpp for the CI-enforced twin). None of the three is ever part
+# of the default build or CI — see their READMEs under Tools/.
 if(ENABLE_AI_HARNESS)
     add_subdirectory(Tools/AIPatchHarness)
     add_subdirectory(Tools/AIEvalHarness)
+    add_subdirectory(Tools/TimelineOpsHarness)
 endif()
 

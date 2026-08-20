@@ -88,8 +88,9 @@ drag so a module does not collide with its own pre-drag position.
 ### 4.1 Algorithm
 
 **Step 1 — Collect arrangeable nodes.**
-All graph nodes whose processor is a `ModuleBase` subclass, plus the two
-`AudioGraphIOProcessor` IO nodes. `AttenuverterModule` nodes are skipped entirely — they are
+All graph nodes whose processor is a `ModuleBase` subclass (which since TL6-2 includes *Audio
+Input*), plus the `AudioGraphIOProcessor` IO nodes — *Audio Output* and, in any patch still
+holding one, a raw `audioInputNode`. `AttenuverterModule` nodes are skipped entirely — they are
 implementation details of the modulation graph and do not appear as visible module cards.
 
 **Step 2 — Build directed edges.**
@@ -166,7 +167,7 @@ The application chrome is carved out of `MainComponent::resized()` — the singl
 │ (200 px) │    Graph canvas      │
 │          │                      │  ← AI panel clips right (width: Metrics::aiPanelWidth = 300 px, or 0 when hidden)
 ├──────────┴──────────────────────┤
-│  [Patch Name]  CPU  Voices  [🔇] │  ← status bar  (height: Metrics::statusBarHeight = 24 px)
+│  [Patch Name]  CPU  RT  Voices  [🔇] │  ← status bar  (height: Metrics::statusBarHeight = 24 px)
 └─────────────────────────────────┘
 ```
 
@@ -224,11 +225,14 @@ The status bar (`Source/UI/StatusBarComponent.h/.cpp`) is a 24 px high strip ren
 **Layout:**
 - Patch name: left-aligned (padded 6 px from left edge)
 - CPU %: centre section, drawn in `theme.colors.warning` when above 80 %, otherwise `textMuted`
+- **Round trip (TL6-8)**: `RT <n> ms`, immediately after the CPU figure (`x = 236`, 90 px wide), `textMuted`. Drawn only while it *fits* before the voice-count slot — a cramped window drops the segment rather than overlapping two readings — and only once a first reading has arrived
 - Voice count: right-aligned before the mute button slot
 - `masterMuteButton_` (`DrawableButton`): positioned in `resized()` at `(w-28, 2, 20, h-4)`
 
 **Update contract:**
 `update(float cpuPct, int voices, const juce::String& patch)` is gated — it only calls `repaint()` when any value changes by a visible amount (cpu delta > 0.5 %, voice count changed, or patch name changed). It contains **zero `writeToLog` calls**.
+
+`updateRoundTripLatency(double milliseconds, bool available)` is a **sibling** setter with its own gate, so a moving CPU figure never repaints on account of an unchanged latency or vice versa. Its diff is on the **rendered string**, which means a latency drifting below the printed resolution costs no repaint at all. It shows `AudioEngine::getRecordingLatencySamples()` (input device + graph + output device — the amount a recorded take is shifted back by; see [`architecture.md`](architecture.md)'s "Latency alignment (TL6-8)"), fed from the same 5 Hz poll. `available == false` — Hosted mode, where the host owns both ends — draws `RT —` rather than a made-up number.
 
 **Polling rate:**
 The status bar polls at 5 Hz, driven by `MainComponent`'s 10 Hz timer via an every-other-tick guard (`statusBarTickCount_`).
@@ -237,6 +241,7 @@ The status bar polls at 5 Hz, driven by `MainComponent`'s 10 Hz timer via an eve
 - `formatCpu(float fraction)` — fraction is 0..1; `0.756f → "75.6%"`
 - `formatVoices(int n)` — `0 → "0 voices"`, `1 → "1 voice"`, `8 → "8 voices"`
 - `formatPatch(const juce::String& s)` — empty or whitespace-only → `"Untitled"`
+- `formatRoundTrip(double ms, bool available)` — `(12.34, true) → "RT 12.3 ms"`; `(anything, false) → "RT —"`; negative input clamps to `0.0`
 
 ### ModuleLibraryComponent section headers
 
@@ -817,7 +822,9 @@ Guidelines to preserve smooth frame rates:
 - **Single re-skin pass on theme switch**: `AppLookAndFeel::applyTheme()` → `sendLookAndFeelChangeMessage()` → one `repaint()`. No timer is started and no continuous repaint is added during or after a theme switch.
 - **`applyToolbarIcons()` is gated**: cloning `Drawable` objects is expensive. The call is restricted to narrow-mode transitions in `MainComponent::resized()` — not executed on every resize frame. See §5 for the gate logic.
 - **Status bar polls at 5 Hz** and repaints only itself (`repaint()` on `StatusBarComponent` only). There are zero `writeToLog` calls in the status-polling path.
-- **All UI animations are time-bounded** (see §11). They run for a finite transition duration and stop when settled. Never add continuous / per-frame animations outside the loading-spinner exception defined in §11.
+- **TL4-5 automation → UI reflection adds no new timer.** `GraphEditor::timerCallback()`'s existing 30 Hz tick drains `AudioEngine::getAutomationUiFeed()` and calls `ModuleComponent::reflectParameterValue()`, which only ever calls `slider->setValue(..., juce::dontSendNotification)` — no direct `repaint()`; the card's own gated 15 Hz timer and buffered-image cache pick the change up on their own schedule, same as any other control change.
+- **All UI animations are time-bounded** (see §11). They run for a finite transition duration and stop when settled. Never add continuous / per-frame animations outside the **two** exceptions defined in §11 (the AI thinking spinner and the timeline playhead), each of which is bounded by an activity, not by a duration.
+- **The timeline panel adds no timer.** Its transport poll rides MainComponent's existing 10 Hz tick, only while the panel is visible, and repaints the ruler only when the ruler's own state (time signature, loop trio) changed. The playhead's 30 Hz strip repaint is the §11 exception and runs only while the transport is playing.
 
 ---
 
@@ -886,15 +893,58 @@ Composes tooltip text with an optional keyboard shortcut hint appended in `[brac
 | **ModuleLibraryComponent rows** | Row hover-highlight; grab/dragging-hand cursor on draggable rows; per-module descriptions via `descriptionFor(name)` surfaced as `setTooltip()`; search-query substring highlight on matching labels | `ModuleLibraryComponent` |
 | **Preset-load feedback** | Status bar text updated during load; no spinner | `MainComponent` → `StatusBarComponent` |
 | **AI request Cancel + spinner** | Cancel button visible while a request is in flight; pulsing "thinking" spinner (time-bounded — stops on completion or cancel, confined to its region) | `AIChatComponent` |
+| **Timeline playhead** | 30 Hz vertical position line, **playing only**, repainting only the strip between its old and new x | `TimelinePlayheadOverlay` (TL5-4) |
 
 ### Time-bounded animation rule
 
-**All animations MUST be time-bounded.** An `AnimationDriver` runs for a finite duration and stops at `t = 1.0`. The single permitted exception is the AI thinking spinner — it pulses only while a network request is in flight and stops immediately on completion or cancel. Its repaint is confined to its own component region.
+**All animations MUST be time-bounded.** An `AnimationDriver` runs for a finite duration and stops at `t = 1.0`.
+
+There are exactly **two** permitted exceptions, and both are bounded by an *activity* rather than by a duration:
+
+| Exception | Runs while | Confined to | Stops |
+|---|---|---|---|
+| AI thinking spinner (`AIChatComponent::SpinnerDot`) | a network request is in flight | its own 8×8 component | on completion or cancel |
+| Timeline playhead (`TimelinePlayheadOverlay`) | the transport is PLAYING | a strip a few px wide, spanning the panel's ruler + lanes | on stop/pause, with one final strip |
 
 Never add:
 - Continuous `timerCallback` repaints on `ModuleComponent` or its children outside the existing gated 15 Hz gate.
 - A free-running `AnimationDriver` (no duration, or duration far longer than the visible transition).
 - Per-frame `repaint()` calls in any path that is always active (not gated to an active transition).
+
+#### The playhead's confinement contract (TL5-4)
+
+A third exception is not granted just because the second was. The playhead earned it by satisfying three clauses, all enforced in code and asserted in `Tests/TimelinePlayheadTests.cpp`:
+
+1. **Playing only.** The 30 Hz `juce::Timer` is started on the play transition and stopped on the stop/pause transition — it never runs while the transport is stopped, so an idle app repaints nothing (`ZeroRepaintsOver100IdleFrames`).
+2. **Strip only.** A frame never repaints the component. It repaints the *union of the old and new line strips* (`kStripHalfWidth` px either side of the line), clipped to the bounds; a frame whose rounded x did not move requests nothing at all (`PlayingRequestsConfinedStrips`).
+3. **Explicit stop.** Stopping emits exactly **one** final strip — so the line settles on the position playback ended at — and then goes silent (`StopEmitsOneFinalStripThenSilence`).
+
+#### The paint-count pattern
+
+`TimelinePlayheadOverlay` routes **every** repaint it asks for through one protected virtual:
+
+```cpp
+protected:
+    virtual void requestRepaintStrip (juce::Rectangle<int> strip);   // default: repaint (strip)
+```
+
+A test subclasses the component and overrides that seam to count calls and record rects, which turns "how many repaints does an idle app cost?" into an ordinary headless assertion — no peer, no message loop, no screenshot diffing:
+
+```cpp
+struct CountingPlayhead : synth::ui::TimelinePlayheadOverlay {
+    using TimelinePlayheadOverlay::TimelinePlayheadOverlay;
+    int requests = 0;
+    void requestRepaintStrip (juce::Rectangle<int> r) override {
+        ++requests;
+        TimelinePlayheadOverlay::requestRepaintStrip (r);
+    }
+    void tick() { timerCallback(); }   // the protected timer callback, driven by hand
+};
+```
+
+**Reuse this pattern for any future timed repaint.** A repaint budget that cannot be asserted is a repaint budget that will regress.
+
+`PianoRollComponent` is the first reuse, and it is a *delegation*, not a fourth exception: the roll maps beats through its own zoom/scroll, so while it is open the overlay confines itself to `getSharedRegion()` (empty while the roll is open — the ruler rows follow the roll's mapping override too, see §16) and hands the roll the drawn beat through `TimelinePlayheadOverlay::LocalPlayheadClient`. The roll draws the line at its own x under an identical `requestRepaintStrip` seam and the identical no-move-no-repaint gate — still one timer for the whole panel, still zero repaints while stopped. See §16 (TL5-8).
 
 ---
 
@@ -948,4 +998,1472 @@ When you change themes, alignment guides update to the new `textMuted` colour au
 
 ---
 
-#
+## 12. Multi-Select, Group Drag, Snippets & Clipboard (issue #156)
+
+### 12.1 Why the gesture is modifier-gated
+
+Drag on empty canvas already meant **pan**, and that predates selection. Rebinding it to
+marquee-select (the Figma/Blender/VCV convention) would have retrained every existing pan habit, so
+the marquee is gated behind **Shift** instead and pan is untouched.
+
+| Gesture | Result |
+|---|---|
+| Drag on empty canvas | Pan — unchanged |
+| **Shift** + drag on empty canvas | Marquee-select, *replacing* the selection |
+| **Cmd/Ctrl + Shift** + drag | Marquee-select, *adding* to the selection |
+| Click a module body | Select just that module |
+| **Shift**/**Cmd** + click a module | Toggle that module's membership (does **not** start a drag) |
+| Drag any selected module | Move the entire selection together |
+| Click empty canvas (no drag) | Clear the selection |
+| Right-click a module | Select it if it wasn't, then open the menu |
+| Right-click empty canvas | Open the canvas menu (Paste Here / Select All) — the selection is **kept**, so the menu can still act on it |
+
+Two details that are easy to get wrong:
+
+- **Deselect-on-click is deferred to mouse-up.** `GraphEditor::mouseDown` only *arms*
+  `pendingEmptyCanvasClick`; the first `mouseDrag` clears it. If the clear happened on mouse-down,
+  every pan would wipe the selection.
+- **A modifier-click never arms the dragger.** `ModuleComponent::bodyDragActive` gates
+  `mouseDrag`/`mouseUp`, because `juce::ComponentDragger::dragComponent` must not run when
+  `startDraggingComponent` was never called.
+
+### 12.2 SelectionModel — `Source/UI/SelectionModel.h`
+
+Header-only, no Component or graph dependency, so the selection rules are testable headlessly
+(`Tests/SelectionModelTests.cpp`).
+
+- `SelectionModel` wraps a `std::set<NodeID>`: `add` / `remove` / `toggle` / `setSelection` /
+  `contains` / `retainOnly`. `NodeID{0}` (the graph's invalid-node sentinel) is rejected outright.
+- `getSelected()` returns **ascending uid order**, never click order — snippet extraction walks that
+  order, and a snippet's node list must not depend on how the user happened to click.
+- `retainOnly(alive)` is the staleness guard. `GraphEditor::pruneSelection()` calls it from
+  `updateComponents()`, which every node-removing path (delete, undo/redo, preset load) already
+  funnels through, so a selection can never name a freed node.
+- `hitTestMarquee` uses **intersection, not containment** — clipping a module's edge selects it.
+  Requiring full enclosure makes a 560 px `kDoubleWidth` Sequencer practically unselectable when
+  zoomed out. A degenerate (zero-area) band selects nothing, so Shift-click on empty canvas
+  deselects rather than grabbing whatever is under the cursor.
+
+The marquee band is stored and painted in **canvas coordinates** (in
+`GraphContentComponent::paintOverChildren`), so it stays locked to the modules it is selecting while
+zoomed or panned.
+
+### 12.3 Selection repaints stay bounded
+
+`ModuleComponent` is `setBufferedToImage(true)`, so repainting every card on every marquee frame
+would re-rasterize the whole canvas — exactly what §10 forbids.
+`GraphEditor::applySelectionChange()` diffs the old and new selection and repaints **only the cards
+whose state flipped**. During a marquee drag that is zero repaints until the band actually crosses a
+module boundary.
+
+The selected treatment itself is not new drawing code: `AppLookAndFeel::drawModulePanel()` always had
+a `selected` parameter (accent border + themed glow) that was hard-coded to `false` pending a
+selection model. `ModuleComponent::paint` now passes `owner.isNodeSelected(nodeId)`.
+
+### 12.4 Group drag resolves as one rigid body
+
+Followers are placed from **their own recorded origin plus the initiator's delta**
+(`selectionDragStartPositions`), never by accumulating per-frame deltas — incremental application
+drifts at non-1.0 zoom and shears the group apart.
+
+`finalizeSelectionDrag()` then treats the selection as a single rigid body:
+
+1. Union every member's bounds into one group box.
+2. `LayoutUtil::snap()` its top-left.
+3. `LayoutUtil::findFreeSlot()` for the whole box against **unselected modules only** — members are
+   moving together and must not be obstacles to one another.
+4. Apply that one offset to every member, and `updateModulePosition()` each so positions reach the
+   node properties and survive a save/reload.
+
+Calling the single-module `finalizeModuleDrag()` per member instead would spiral them away from each
+other and destroy the arrangement the user just made.
+
+`cancelSelectionDrag()` exists for the zero-delta case (a click that never moved). Preset positions
+are not necessarily grid-aligned, so running the finalize path on a drag that did not happen would
+visibly nudge the group.
+
+### 12.5 Snippets — `Source/SnippetManager.{h,cpp}`
+
+A snippet is the **same JSON dialect as a preset** (`AIStateMapper::graphToJSON`) narrowed to a subset
+of nodes. Stored one file per snippet as
+`<userAppData>/<settingsFolder>/Snippets/<name>.agsnip`, mirroring
+`ThemeManager::getUserThemesFolder()`.
+
+Three rules define what a snippet contains:
+
+| Rule | Reason |
+|---|---|
+| Only connections with **both** endpoints selected | A snippet must mean the same thing in every patch it lands in; it cannot assume the destination has the node on the other end. Wires to Audio Output are dropped — re-patch the output after dropping. |
+| **No Attenuverter nodes**; modulation is stored in the `modulations` array | Same representation the AI patch format uses. `applyJSONToGraph` rebuilds the attenuverter chain on insert. |
+| Positions normalised so the selection's top-left is `(0,0)` | `prepareForInsert()` re-offsets by the drop point, so internal layout is preserved wherever it lands. |
+
+Graph I/O nodes (Audio In/Out, MIDI In) are never captured — they are singletons that already exist in
+the target patch.
+
+Extraction **filters `graphToJSON` output** rather than re-deriving the per-node JSON shape, so the
+params encoding, MIDI port sentinel and attenuverter→modulations folding keep exactly one owner.
+
+#### Id renumbering is mandatory
+
+`prepareForInsert()` renumbers snippet ids to a fresh range starting at `nextFreeIdBase(graph)` (max
+existing uid + 1). This is not cosmetic: `applyJSONToGraph` in **merge mode** treats an incoming node
+id that already exists as *"update that node"*, so a colliding id would silently retune an existing
+module of the same type instead of adding a copy.
+
+#### Validate strictly, apply faithfully
+
+`insertSnippet()` deliberately splits the two:
+
+```cpp
+validatePatch(prepared, graph, /*clearExisting=*/false, /*trusted=*/false);   // strict — reject whole
+applyJSONToGraph(prepared, graph, /*clearExisting=*/false, /*trusted=*/true,  // faithful — no rescale
+                 /*autoConnectNewNodes=*/false);                              // exact — no extra wires
+```
+
+- **Strict validation** because a snippet is a file on disk and can be hand-edited, truncated or
+  copied in from elsewhere. A malformed snippet is rejected whole, never applied halfway. This *adds*
+  a validation gate the trusted path would otherwise skip — it does not relax `validatePatch` (see the
+  invariant in `CLAUDE.md`).
+- **Trusted apply** because the untrusted apply path carries an AI-output heuristic: when a
+  parameter's range extends beyond `[0,1]` but the incoming value sits inside it, the value is treated
+  as normalised and rescaled. Snippet values come from `graphToJSON` already denormalised, so that
+  heuristic would corrupt legitimate small values — an LFO `rateHz` of 0.5 Hz (range 0.01–20) would
+  land at roughly 5 Hz. Guarded by
+  `SnippetInsert.PreservesParameterValuesThatLookNormalised`.
+- **`autoConnectNewNodes=false`**, and this one is easy to miss. Merge mode otherwise runs a
+  convenience pass that wires every newly created audio node with no outgoing wire straight to
+  Audio Output, and every new MIDI-accepting node to an existing MIDI source. That is right for an
+  AI merge patch (a model that adds an Oscillator means it to be audible) and **wrong** for a
+  snippet, where the absent wires are as deliberate as the present ones — without the opt-out,
+  dropping a snippet into the patch it came from splices the copy's leaf modules into the live
+  output. Guarded by `SnippetInsert.DoesNotSpliceTheInsertedGroupIntoTheSurroundingPatch` and
+  `…DoesNotAttachInsertedModulesToAnExistingMidiSource`; the AI-side behaviour it preserves is
+  locked by `AIStateMapperTest.MergeAutoConnectsNewAudioNodesToOutputByDefault`.
+
+A snippet is therefore **exactly** its internal wiring: what you selected, nothing the surrounding
+patch happened to be connected to, and nothing added for convenience on the way back in.
+
+#### Wiring
+
+`GraphEditor` owns no file dialogs and `ModuleLibraryComponent` owns no filesystem access;
+`MainComponent` brokers between them via `GraphEditor::onSaveSnippetRequested` /
+`GraphEditor::snippetProvider` and `ModuleLibraryComponent::onSnippetDeleteRequested`.
+
+Snippet drags reuse the **existing** DragAndDrop channel between sidebar and canvas. The payload is
+prefixed (`snippet:<name>`, `SnippetManager::kPayloadPrefix`) so `itemDropped` can tell a group drop
+from a plain module drop. `itemDragEnter` sizes the landing ghost from the snippet's own bounding box
+rather than the single-module estimate table.
+
+Insert is one undoable change (`recordStructuralChange`), and the newly landed group is left
+selected — it is what the user will want to move next.
+
+### 12.6 Copy / Paste / Duplicate — `Source/UI/ModuleClipboard.h`
+
+Cmd+C / Cmd+V / Cmd+D, plus the same three actions on the module and canvas context menus.
+
+**They are snippets that never reach disk.** `copySelection()` calls the same
+`SnippetManager::extractSnippet` the Save-as-Snippet path calls and parks the result in a
+`ModuleClipboard`; paste and duplicate hand it to the same `insertSnippet`. Nothing about the wiring
+rules is re-derived, which is the point — the three §12.5 rules give a paste its behaviour for free:
+
+| Snippet rule | What it means for a paste |
+|---|---|
+| Only connections with **both** endpoints selected | The copies wire to **each other**, never back to the originals. A wire that ran into the group from outside is dropped rather than duplicated onto the copy. |
+| Modulation stored as intent | An LFO→Filter routing between two copied modules comes back as a rebuilt attenuverter chain, not as a second wire onto the original attenuverter. |
+| Origin-relative positions + fresh id range | The group keeps its internal layout, and `applyJSONToGraph`'s merge mode cannot mistake a copy's id for an existing node and silently retune it. |
+
+`autoConnectNewNodes=false` carries over too, so a pasted module never wires itself to Audio Output.
+Guarded by `ClipboardPaste.RewiresInternalConnectionsBetweenTheCopiesNotBackToTheOriginals`,
+`…DropsConnectionsThatLeftTheCopiedSelection`, `…DoesNotSpliceTheCopiesIntoTheSurroundingPatch` and
+`…RebuildsModulationChainsBetweenTheCopies`.
+
+**Non-parameter state is the one difference from a saved snippet.** `extractSnippet` /
+`prepareForInsert` / `insertSnippet` take an `includeExtraState` flag, **off by default**. A `.agsnip`
+is a hand-editable file that inserts on the *trusted* apply path, and `applyExtraStateToProcessor`
+reads `state` as a filename for `SamplerModule` — so a snippet file must not be able to carry one.
+The clipboard has no such exposure: its payload comes straight from the live graph and never leaves
+the process, so it opts in and a duplicated Sampler keeps its sample.
+(`SnippetExtraState.*`, `ClipboardCopy.CarriesNonParameterModuleStateSoADuplicatedSamplerKeepsItsSample`.)
+
+**Placement.** `SnippetManager::selectionOrigin()` returns the top-left corner extraction normalises
+against — the clipboard's anchor. Both paste and duplicate offset from it by
+`ModuleClipboard::kOffsetStep` (40 px = 5 grid units, so an offset copy stays on-grid):
+
+- **Cmd+V** cascades: each successive paste steps one more offset down-right, so repeated pastes fan
+  out instead of stacking on one pixel and looking like nothing happened.
+- **"Paste Here"** (canvas right-click) drops at the click point and re-anchors the cascade there.
+- **Cmd+D** offsets one step from the *current* selection and leaves the clipboard untouched —
+  Cmd+D must not cost the user what they had copied. Since a duplicate leaves the copies selected,
+  repeating it walks a chain across the canvas rather than piling up on one spot.
+
+Neither runs the group through `findFreeSlot`: a fixed offset is predictable (the Figma/Illustrator
+convention), the copy is visibly its own card, and it arrives selected and ready to drag.
+
+Both are one undoable change for the whole group, on the same `recordStructuralChange` path as a
+snippet drop.
+
+**The clipboard is in-app and in-memory only.** It is deliberately not the system clipboard: Cmd+C on
+the canvas must not silently destroy whatever text the user had copied, and text fields keep their
+own copy/paste because JUCE's `TextEditor` consumes Cmd+C/Cmd+V before the key reaches
+`MainComponent::keyPressed`.
+
+---
+
+## 13. Collapsible Library Sections
+
+With a Snippets section added on top of eight module categories, the sidebar overflows its height.
+Every section header is now a disclosure toggle, plus a **COLLAPSE ALL / EXPAND ALL** strip in the top
+24 px (`kTopStripHeight`).
+
+- **One layout pass.** `buildRows()` returns `{entryIndex, y, height}` for the currently visible rows
+  and is used by *both* `paint()` and `getEntryIndexAt()`. These previously duplicated the y-advance
+  arithmetic in two places — a standing invitation for paint and hit-testing to disagree. Guarded by
+  `ModuleLibraryStructure.HitTestingAgreesWithTheRowLayout`.
+- **Rows carry a `RowKind`** (`Header` / `SubHeader` / `Module` / `Snippet` / `Plugin` / `Action` /
+  `EmptyHint`) and their owning `section`, so collapsing is just "skip rows whose section is
+  collapsed". Headers stay visible. The Plugins section sub-groups its rows by format (`VST3`,
+  `AudioUnit`, …) behind a non-clickable `SubHeader` row per format — sorted alphabetically by
+  format, name-sorted within a group, and shown even for a single format — so a scan with more than
+  one plugin format doesn't read as one undifferentiated list; collapsing the section hides its
+  sub-labels along with everything else.
+- **The Snippets section stays visible when empty**, showing a "No snippets yet" hint, so the feature
+  is discoverable before the first snippet exists.
+- **Chevrons are `juce::Path` triangles, not glyphs** — `▾`/`▸` coverage is not guaranteed across the
+  embedded typefaces (see the font limitation in [`theming.md`](theming.md)). The triangle is drawn
+  once (pointing down) and rotated by `-90° × progress`, so it turns with the fold; for a square box
+  the two endpoints are exactly the shapes the old two-state version switched between.
+
+### Fold animation
+
+Collapsing and expanding tween over `kCollapseAnimMs` (150 ms, `easeInOutCubic`) via
+`AnimationDriver` — no free-running repaints, per the animation invariant.
+
+- **`sectionProgress` is purely visual** (0 = open .. 1 = shut). The logical state stays in
+  `collapsedSections` and flips *instantly*, so `isSectionCollapsed()`, `areAllSectionsCollapsed()`,
+  persistence and `onCollapseStateChanged` never lag a frame behind what the user clicked.
+- **One driver for all sections**, so COLLAPSE ALL folds them together instead of racing nine
+  animators. Retargeting mid-flight eases on from the current value rather than snapping back.
+- **Rows are truncated, not squashed.** `buildRows()` gives each section a band of
+  `naturalHeight × (1 - progress)`; rows keep their natural spacing inside it and are clipped at the
+  band's bottom edge (`row.height < kItemHeight` marks a partly clipped row; rows past the band are
+  dropped, so they stop hit-testing). `juce::Graphics::drawText` does not clip on its own, hence the
+  explicit `reduceClipRegion` in `paint()`.
+- **It snaps when not `isShowing()`** — there is no VBlank off screen, so a hidden component would
+  otherwise freeze mid-fold. This is also what keeps the headless tests deterministic.
+  `setCollapsedSections()` (the launch-time restore) always snaps: animating there would look like
+  the sidebar folding itself up on startup.
+- **Collapse state persists** as newline-joined section names under `libraryCollapsedSections` in
+  `juce::ApplicationProperties`. `setCollapsedSections()` skips blank entries, because an unset
+  preference arrives from `StringArray::fromLines("")` as a single empty string, and
+  `onCollapseStateChanged` deliberately does *not* fire from it — that is the restore path, and
+  re-notifying would write back what was just read.
+
+### Scrolling
+
+With every section expanded the rows exceed any realistic panel height, so the sidebar scrolls.
+
+- **No `juce::Viewport`.** The library is a single painted component: rows come from one
+  `buildRows()` pass, and it is also the tooltip client and the drag source. A viewport would split
+  all three across an outer wrapper and an inner content component — and, because
+  `findParentDragContainerFor()` walks to the *nearest* container ancestor, an inner component would
+  bind drags to the sidebar instead of `MainComponent`, breaking drops onto the canvas. Instead a
+  `juce::ScrollBar` drives a `scrollOffset` that `paint()` and hit-testing both apply.
+- **The COLLAPSE ALL strip stays pinned** in the top `kTopStripHeight` px — the one control that
+  shortens an overflowing list must never scroll out of reach. `paint()` therefore clips the rows to
+  below the strip and `setOrigin(0, -scrollOffset)`s them, then draws the strip last over its own
+  background fill.
+- **Two coordinate spaces.** `buildRows()`, `getRowCentreY()` and `getEntryIndexAt()` are all
+  *content*-space; mouse handlers go through `getEntryIndexAtComponentY()`, which rejects the pinned
+  strip and then adds `scrollOffset`. Mixing them up is the failure mode this split exists to
+  prevent — guarded by `ModuleLibraryScroll.HitTestingFollowsTheScrollOffset`.
+- **`updateScrollBar()` runs after anything that changes content height** — resize, collapse,
+  snippet refresh, theme change (the bar's width is the `kScrollbarWidth` token). It shows/hides the
+  bar and re-clamps the offset, so a shrinking list can never leave the view scrolled past its end.
+- **Rows lose the bar's width** (`getRowContentWidth()`) while it is visible, so row text and the
+  snippet count never run under the thumb.
+
+---
+
+## 14. Cable Interaction
+
+### Cables are not graph edges
+
+A **cable** is one wire as the user sees it, which is not the same thing as a
+`juce::AudioProcessorGraph::Connection`:
+
+| Drawn as | Backed by |
+|---|---|
+| Audio / MIDI wire | one graph edge |
+| Attenuverter chain | two edges plus a hidden `AttenuverterModule` node |
+| Poly bus | `voiceCount` parallel edges |
+
+Anything that identifies, hit-tests, colours or removes a cable therefore keys on the logical
+view, not on the raw edge. `GraphEditor::CableId` is that identity
+(`srcUid`/`srcPort`/`dstUid`/`dstPort` plus `attenUid`, non-zero only for an attenuverter chain).
+
+### One enumeration for paint and mouse
+
+`GraphEditor::buildVisibleCables()` returns every drawn cable, in paint order, as
+`VisibleCable` records carrying geometry, signal kind, source category, activity and bypass
+state. **Both** `GraphContentComponent::paint()` and hit-testing consume that one list.
+
+This is load-bearing: computing the drawn curve and the clickable curve separately means they
+drift apart the first time either is tweaked, and clicks silently miss the wire. For the same
+reason the bezier lives in exactly one place, `GraphEditor::buildCablePath()`, which must stay
+identical to `AppLookAndFeel::drawConnectionWire`'s default curve.
+
+### Hit-testing
+
+`GraphEditor::getCableAt(canvasPos, tolerance)` returns the topmost cable within `tolerance`
+canvas px (default `kCableHitTolerance` = 7 px, wider than the wire so thin cables stay
+grabbable). Distance is the perpendicular distance to the bezier, via `juce::Path::getNearestPoint`
+— note that method *returns* the distance **along** the path and writes the nearest point out by
+reference, so the perpendicular distance is `pos.getDistanceFrom(nearestPoint)`.
+
+Ties go to the later cable, matching paint order (mod wires draw over audio wires).
+
+### Hover
+
+`mouseMove` resolves the cable under the cursor and stores only its `CableId`. The canvas
+repaints **only when the hovered cable changes** — never on every mouse move. Hovered cables are
+drawn brighter and one pixel wider by `AppLookAndFeel::drawConnectionWire`'s existing `hovered`
+parameter, and the cursor becomes a pointing hand.
+
+This does not violate the no-continuous-repaint invariant: `GraphEditor` already runs a 30 Hz
+timer that calls `content.repaint()` for the wire-flow animation, so a hover change only marks
+the next frame dirty rather than adding a new repaint source.
+
+Only the `CableId` is retained between frames — geometry is rebuilt each paint anyway, and
+holding a stale `VisibleCable` across a graph edit would dangle conceptually (ports move, nodes
+disappear).
+
+### Right-click menu
+
+Right-clicking a cable opens a menu with **Disconnect Cable**. Before this, the only way to
+remove a connection was to right-click one of its *ports*, which is not where users aim.
+
+`GraphEditor::disconnectCable()` removes every graph edge behind the cable as **one** undoable
+action — the whole attenuverter chain via `AudioEngine::removeModRouting()`, or all `voiceCount`
+parallel edges of a poly bus. One visible wire, one undo step.
+
+### Colouring
+
+See [`docs/theming.md` §11](theming.md#11-cable-colours) for cable colour modes, the
+`cableCategory` palette and the user override layer. `GraphEditor` renders whatever mode and
+overrides it is handed via `setCableColourMode()` / `setCableColourOverrides()`; it never reads
+`ApplicationProperties` itself.
+
+---
+
+## 15. Minimap Overlay (issue #159)
+
+`Source/UI/MinimapComponent.h/.cpp` — `synth::ui::MinimapComponent`, a small always-current
+overview of the graph.
+
+### What it is
+
+An untransformed sibling overlay on `GraphEditor`, the same pattern as `ModMatrixComponent` — it
+does not live inside the panned/zoomed `GraphContentComponent`, so its own bounds are plain screen
+space. Everything it draws is expressed in **canvas coordinates** (the space `ModuleComponent`s and
+cables already live in) and mapped down to the small map area with `computeWorldToMap()`.
+
+### Placement, sizing, auto-hide
+
+Positioned **bottom-left** with a 12 px margin, sized `min(220, w/4) × min(150, h/4)`. Bottom-left
+is deliberate: the mod-matrix panel occupies the right-hand 600 px (§5). Below a 480×360 editor the
+minimap auto-hides — `GraphEditor::resized()` recomputes `minimapVisible && fits` on every layout
+pass against absolute floors (a fraction-of-self test like `w/4 * 2 <= w` is always true, so it
+would never actually hide anything). This never clobbers the user's preference: `minimapVisible`
+still records what they asked for, and reappears the moment the window grows back past the floor.
+
+### What it draws
+
+Renders from a `MinimapModel` snapshot — nodes, cables, and the current viewport rect, all in
+canvas coordinates:
+
+- **Nodes** — filled rounded rects in the module's per-category theme colour
+  (`themeColourForCategory`), clamped to a `kMinNodeSize` (2 px) floor so zoomed-out modules stay
+  visible; selected nodes get an additional `accent` stroke.
+- **Cables** — thin straight lines in the cable's colour at reduced alpha, not the bezier the
+  canvas draws — this is a thumbnail, not a second connection view.
+- **Viewport** — the area outside the currently visible canvas rect is dimmed with a translucent
+  `bg0` wash (an even-odd path fill punches a "hole" over the viewport rect rather than drawing
+  four separate bars); the viewport itself is stroked in `accent`.
+
+`computeWorldBounds()` derives what the map actually shows: the union of every node's bounds and
+the viewport, inflated by an 80 px margin (`kWorldMargin`), and never narrower/shorter than 1200 px
+(`kMinWorldSpan`) per axis, so a single module doesn't blow up to fill the map. All three drawing
+and hit-testing helpers (`computeWorldBounds`, `computeWorldToMap`, `mapToWorld`) are pure static
+functions with no `Component` state — unit-tested directly (`Tests/MinimapComponentTests.cpp`).
+
+### Interaction
+
+Click or drag on the map converts the event position to a canvas point (`mapToWorld`) and fires
+`onNavigate`, which `GraphEditor` wires to `centreViewOn()` — pans so that point is centred; zoom is
+unchanged. Scroll wheel fires `onZoom` with the wheel's `deltaY`, wired to `zoomAroundCentre()`.
+Both the minimap's wheel-zoom and the canvas's own wheel-zoom (`GraphEditor::mouseWheelMove`) share
+one private helper, `applyZoomAt(wheelDelta, screenAnchor)` — the canvas anchors on the mouse
+position, the minimap anchors on the visible area's centre, but the zoom curve and the `[0.1, 2.0]`
+clamp are identical.
+
+Hovering the map shows a tooltip that leads with the show/hide shortcut, the same way the toolbar
+buttons read (`"Hide Minimap  (Cmd+K)  - click or drag to navigate, scroll to zoom"`). The binding
+is rebindable, so `MinimapComponent` does **not** depend on `ShortcutManager`: it exposes
+`setShortcutHint(displayString)` and `MainComponent::applyToolbarIcons()` resolves the current
+binding and pushes it down alongside the toolbar tooltips. Because tooltips embed the resolved
+keypress, `MainComponent::updateCommandShortcuts()` (the `ShortcutManager::onBindingsChanged` hook)
+re-runs `applyToolbarIcons()` — without that, every toolbar hint *and* the minimap's keeps
+advertising the pre-rebind key until some unrelated toggle happens to refresh it.
+
+### Repaint discipline
+
+Follows §10. `setModel()` and `setViewport()` only `repaint()` when the incoming data actually
+differs from the current model (`MinimapModel::operator==`, a field-wise comparison over nodes,
+cables and viewport). `GraphEditor::timerCallback()` — the existing 30 Hz tick that already drives
+the connection-flow animation — pushes a freshly built model via `buildMinimapModel()` **only while
+the minimap is visible**, so a hidden minimap costs nothing: no graph walk, no model diffing.
+`updateTransform()` (called on every pan/zoom frame) pushes **only the viewport rect** via
+`setViewport()`, because panning/zooming changes what's visible, not where modules or cables are —
+rebuilding the full model on every drag frame would re-walk every graph edge for nothing.
+
+### GraphEditor API
+
+| Member | Purpose |
+|---|---|
+| `setMinimapVisible(bool)` | Sets the user preference and re-runs `resized()`'s fits check; also seeds a full model immediately so the map isn't blank until the next 30 Hz tick |
+| `toggleMinimapVisibility()` | `setMinimapVisible(!minimapVisible)` |
+| `isMinimapVisible()` | The user preference (not the fits-adjusted effective visibility) |
+| `getMinimap()` | Direct access to the `MinimapComponent` |
+| `getVisibleCanvasRect()` | The canvas rect currently visible — inverse of the content transform applied to `getLocalBounds()` |
+| `centreViewOn(canvasPoint)` | Pans so `canvasPoint` is centred; zoom unchanged |
+| `zoomAroundCentre(wheelDelta)` | `applyZoomAt` anchored on the visible area's centre |
+| `buildMinimapModel()` | Walks every module and `buildVisibleCables()` into a `MinimapModel` snapshot |
+
+### Toolbar, shortcut, persistence
+
+A toolbar toggle (`ToggleMinimap`, right-hand group, before `ToggleModMatrix`) and the **Cmd+K**
+shortcut (action id `toggleMinimap`; see [`shortcuts.md`](shortcuts.md)) both call
+`GraphEditor::toggleMinimapVisibility()`. Visibility persists under the `minimapVisible` key in
+`juce::ApplicationProperties`, default `true`.
+
+## 16. Timeline panel (TL5-1 through TL5-10)
+
+`Source/UI/TimelinePanelComponent.h/.cpp` — `synth::ui::TimelinePanelComponent`, a bottom-docked
+panel owned by `MainComponent`. This section was written incrementally, one subsection per task
+(TL5-1 laid down the shell; TL5-2 through TL5-9 filled it with real content; TL5-10 added the
+keyboard/focus rule that arbitrates between it and the graph editor) — each subsection below is
+still the reference for its own piece, and this intro is only a map of how they compose.
+
+Region layout, low-rate transport poll aside (see TL5-4 below), everything here is pure
+layout-plus-paint with no timer or animation of its own — one region diagram for the whole panel:
+
+```
++====================================================================+  <- resize grab strip
+| Transport bar strip  (play/stop/record/loop, BPM, time-sig, ruler   |  TL5-5 (+ TL5-2's
+| readout, metronome/count-in .......................... snap combo) |   snap selector)
++---------------------+----------------------------------------------+
+| "+ Track"            | Ruler  (bar/beat ticks, loop brace)          |  TL5-3 (+ TL5-2)
+| Track header column  +----------------------------------------------+
+| (name/colour/M/S/R/  | Clip lanes  <-or->  Piano roll               |  TL5-3 / TL5-7 <-> TL5-8
+|  binding chip),      | (one of the two, same rect, playhead overlay |
+|  scrolls              | drawn on top of either)                     |  TL5-4 (playhead)
+|                       +----------------------------------------------+
+|                       | Automation strip (opens by shrinking the     |  TL5-9 (docked, optional)
+|                       |  region above by its own fixed height)       |
++---------------------+----------------------------------------------+
+```
+
+Keyboard focus is orthogonal to this diagram, not another region: whichever of the graph editor /
+clip lanes / piano roll the user last clicked owns Cmd+C/V/D, per the **Keyboard & focus**
+subsection at the end of this section (TL5-10).
+
+Inside a `SYNTH_ENABLE_TIMELINE` build, Preferences has a runtime kill switch on top of all of
+this: "Show timeline (experimental)" (`PreferencesSettingsTab`, key `timelineFeatureEnabled`,
+default **on**). Turning it off hides the user-facing entry points only — the toolbar button
+(`MainComponent::toggleTimelineButton`), the Cmd+T command, and the Space play/stop transport key
+all become inactive/invisible via `MainComponent::applyTimelineFeatureEnabled()`, which reuses the
+toolbar toggle's own hide path if the panel happens to be open. It deliberately leaves everything
+else alive: the `TimelineDoc`, its audio-thread publishing, and project load/save all keep working
+exactly as before, so turning the preference back on picks up right where the user left off. The
+compile-time `SYNTH_ENABLE_TIMELINE` flag itself stays a build/CI concern — this preference cannot
+turn the feature back on in a flag-OFF build.
+
+### What it is
+
+The always-present scaffold (TL5-1): a themed background (`theme.colors.bg0`-family, same fallback
+pattern as the toolbar/status-bar/sidebar panels), a thin top border separating it from the graph
+editor above, and three child regions laid out in `resized()` — the diagram above is what each one
+now holds; TL5-1 itself left the lanes/ruler area an unfilled centred "Timeline" placeholder, all
+since replaced by the ruler/grid/clips/piano-roll/playhead content the subsections below describe:
+
+- **Transport bar** (top strip, `Metrics::timelineTransportBarHeight`)
+- **Track-header column** (left, `Metrics::timelineTrackHeaderWidth`)
+- **Lanes/ruler area** (remainder)
+
+All three are exposed as public rect getters (`getTransportBarBounds()`, `getTrackHeaderBounds()`,
+`getLanesBounds()`) so every later task and its tests build on the same arithmetic instead of
+re-deriving it. The component owns no timer and no animation of its own (TL5-4's playhead overlay
+and TL5-9's knob-entry-point aside, each scoped to its own subsection below).
+
+### Docking, toggle, shortcut
+
+`MainComponent` carves the panel full-width, directly above the status bar: `resized()` and its
+pure-geometry twin `computePanelBounds()` (§ see `PanelBoundsResult::timelineBounds`) remove it
+from the bottom AFTER the status bar and BEFORE the AI-panel/library removals, so it spans the
+whole window width regardless of which side panels are open.
+
+A toolbar toggle (`ToolbarComponent::Slot::ToggleTimeline`, right-hand group, immediately before
+`ToggleTheme`) and the **Cmd+T** shortcut (action id `toggleTimelinePanel`; see
+[`shortcuts.md`](shortcuts.md)) both flip `MainComponent::isTimelineVisible`. Visibility persists
+under the `timelinePanelVisible` key in `juce::ApplicationProperties`, default `false`.
+
+### Height: user-resizable, persisted
+
+The panel's height is **not** fixed. `Metrics::timelinePanelHeight` (220) is the **default and the
+minimum**, no longer the law:
+
+- **`MainComponent` owns the value** (`timelinePanelHeight_`), and it is the only thing that lays
+  the panel out. `resized()`, `computePanelBounds()` and therefore **both ends of the show/hide
+  slide** all read the member, never the metric directly.
+- **Clamp rule**, applied in `MainComponent::clampTimelinePanelHeight()` on every layout pass, not
+  only when the user drags: `[Metrics::timelinePanelHeight, max(metric, 75% of the window height)]`.
+  Re-clamping per pass is what stops a height saved on a large window from swallowing a smaller
+  window's canvas; on a window so short that 75% falls under the metric, the floor wins. Before the
+  first layout (window height still 0) only the floor applies — otherwise construction would clamp a
+  persisted height away against a window that does not exist yet.
+- **Persistence**: the `timelinePanelHeight` int key (same name as the metric) in
+  `juce::ApplicationProperties`, absent by default — absence is what makes the metric the default.
+  Written **once per gesture**, on drag end, never per pixel.
+- **The grab strip** (`TimelinePanelComponent::kResizeHandleHeight = 5`, `MouseCursor::
+  UpDownResizeCursor`) spans the panel's full width along its top edge, *overlapping* the transport
+  bar strip: `getTransportBarBounds()` still starts at `y == 0` (the three regions tile exactly, as
+  before), but the transport controls inside it are laid out below the strip, so a resize grab never
+  lands on a transport button. Idle it paints exactly the hairline the panel already drew there;
+  hovered or dragging it brightens to the accent colour with a faint wash, and it repaints **only on
+  a hover-state change** (§10–11's repaint discipline).
+- **The panel never resizes itself.** Dragging reports the *desired* height — measured absolutely,
+  from the panel's pinned bottom edge in screen coordinates, so the owner moving the top edge under
+  the cursor can't make the gesture chase itself — through `onResizeHeight` (every drag step,
+  unclamped) and `onResizeHeightCommitted` (once, on mouse-up: the cue to persist). The owner clamps,
+  stores and re-runs its layout on each step, which is what makes the drag live. That is one
+  user-driven layout pass per mouse event, not a free-running animation.
+
+### Animation
+
+The slide in/out reuses the **same** coordinated `AnimationDriver` that already animates the
+library and AI panels (`MainComponent::animatePanelTransition()`, ~190 ms ease-in-out-cubic, one
+shared `VBlankAnimatorUpdater`) — no new animator or timer was added. The transition lambda was
+extended to also lerp the timeline panel's bounds; showing the panel starts it from a zero-height
+rect pinned at its final bottom edge (so it grows upward into place), and hiding it calls
+`setVisible(false)` in `onComplete`, same as the sibling panels.
+
+### Build flag
+
+Everything past the always-present `TimelinePanelComponent` member and `PanelBoundsResult`/
+`computePanelBounds()` plumbing — the toolbar button, the `toggleTimelinePanel` command, and the
+carve itself — is gated `#if SYNTH_ENABLE_TIMELINE`, so a `-DSYNTH_ENABLE_TIMELINE=OFF` build has
+no button, no shortcut effect, and never carves the panel into the layout (see the CMake option's
+own comment in the root `CMakeLists.txt`).
+
+Contents (ruler/grid/snap, track headers, the playhead, the transport bar, clip lanes, the piano
+roll, the automation strip, and finally the keyboard/focus rule tying it to the graph editor) are
+TL5-2 through TL5-10, each documented in its own subsection below.
+
+### TL5-2: ruler, grid, zoom/scroll, snap, loop brace
+
+`Source/UI/TimelineViewState.h` (`synth::ui::TimelineViewState`) is the single pure,
+headless-testable beat<->pixel mapping shared by every consumer: `pixelsPerBeat` (zoom, clamped to
+`[kMinPixelsPerBeat=1.5, kMaxPixelsPerBeat=512]`), `firstVisibleBeat` (horizontal scroll, clamped
+`>= 0`), `beatToX()`/`xToBeat()`, `zoomAroundX(factor, anchorX)` (keeps the beat under `anchorX`
+fixed on screen, clamps preserved — see the comment on why the anchor invariant yields to the
+`firstVisibleBeat >= 0` clamp at extreme zoom-out), `scrollBeats(delta)`, and `snapBeat(beat,
+beatsPerBar)`. No JUCE dependency; `TimelinePanelComponent` owns the one instance and exposes it
+via `getViewState()`.
+
+**Snap** (`TimelineViewState::Snap`) — `Off, Bar, Whole, Half, Quarter, Eighth, Sixteenth`. Every
+non-`Bar`/non-`Off` value is a **note value** (a fraction of a whole note), the DAW-conventional
+reading of the grid selector: `Whole` (combo label `"1"`) = 4 beats — a full 4/4 bar, `Half` = 2,
+`Quarter` (label `"1/4"`, the default) = 1 beat, `Eighth` = 0.5, `Sixteenth` = 0.25. `Bar` snaps to
+multiples of `beatsPerBar` (`tsNum * 4 / tsDen` off the transport's time signature — same formula
+`TransportService::getPosition()` already uses). Ties round up (toward +infinity, beats are never
+negative in practice). On top of the division sits a master switch, `TimelineViewState::snapEnabled`
+— the piano roll's `Q` button and the panel-wide `Q` key toggle it; `divisionBeats()` (the effective
+grid every magnetic edit and grid paint reads) returns 0.0 while it is off, and
+`divisionBeatsRaw()` keeps returning the chosen division (what the roll's one-shot quantise uses).
+Picking a division from the combo flips the switch back on. The snap choice lives in a
+`juce::ComboBox` docked in the transport bar's right-hand side (items `Off/Bar/1/1⁄2/1⁄4/1⁄8/1⁄16`;
+`synth::ui::TimelineTransportBar` fills the rest of that strip, left-aligned — see TL5-5 below) and
+persists under the `"timelineSnap"` int key (plus `"timelineSnapEnabled"` for the switch) in
+`juce::ApplicationProperties`, set via
+`TimelinePanelComponent::setApplicationProperties()` (non-owning pointer setter, same shape as
+`AIChatComponent::setAccountService()`).
+
+`Source/UI/TimelineRulerComponent.h/.cpp` (`synth::ui::TimelineRulerComponent`) is a thin strip
+(`Metrics::timelineRulerHeight = 24`) docked at the top of the lanes region. It owns nothing: a
+`TimelineViewState&` (shared with the panel) and an optional `synth::TransportService*` (setter,
+non-owning, may be null). `paint()` reads `getPositionSnapshot()` once per frame (message thread,
+cheap) for the time signature and loop bounds, draws bar ticks/labels with adaptive density (the
+labelled-bar stride doubles until labels are `>= 40px` apart, so they never overlap; per-beat ticks
+only appear once `pixelsPerBeat >= 8`) and a bracket over `[loopStartPpq, loopEndPpq]`.
+No timer of its own: `repaint()` is called
+after one of its own interactions, or by the panel's 10 Hz poll when the time signature or loop range
+changed from elsewhere (TL5-4, below). The moving position line is the separate
+`TimelinePlayheadOverlay` drawn over it.
+
+**Two interaction zones.** The strip is split horizontally at `height / 2`
+(`TimelineRulerComponent::Zone`): the **top** half owns the loop range, the **bottom** half owns the
+playhead. The boundary row belongs to the playhead (`y < height * 0.5` is the loop zone). Both
+gestures are therefore reachable with no modifier, which is the point — a plain drag anywhere in the
+bottom half scrubs the cursor, which is what people expect a ruler to do.
+
+The zone is decided **once**, from the `mouseDown` y, and latched in `gestureZone_` for the whole
+gesture. A drag routinely leaves the band it started in (and often the strip entirely), and a
+gesture must never change meaning mid-flight.
+
+| Gesture | Effect |
+|---|---|
+| Press in the bottom (playhead) zone | `transport->locateBeat()` to the snapped beat under the cursor — on **press**, not release |
+| Drag in the bottom zone | Keeps seeking as the pointer moves: the cursor follows the mouse (scrub) |
+| Press-drag-release in the top (loop) zone | `transport->setLoop(min, max, true)` to the snapped `[start,end]` range (dragging leftwards normalises) |
+| Click (no drag) in the top zone, **on a dimmed brace** | Re-arms that range (`setLoop(start, end, true)`), bounds untouched — the inverse of the Cmd+click below |
+| Click (no drag) in the top zone, anywhere else | **Nothing.** Deliberate: the loop range is all this half owns, so a stray click can't clear or collapse it |
+| Cmd+click (no drag), either zone | Toggles looping off, keeping the existing bounds |
+
+**Locator visibility.** The brace is drawn whenever a RANGE exists (`loopEnd > loopStart`) —
+**not** only while looping is armed. Disarming greys it out instead of hiding it, so a loop you set
+earlier stays findable (and re-armable) rather than disappearing the moment you switch looping off.
+`TimelineRulerComponent::braceStateFor(looping, start, end)` is the pure rule
+(`BraceState::None / Inactive / Active`) that `paint()` and the `getBraceStateForTest()` seam both
+call, so a drawn brace and an asserted one can't diverge; `braceColourFor()` picks the colour —
+`colors.accent` armed, `colors.textMuted` at 70% alpha disarmed. Muted *text*, not a faded accent:
+the hover band is already accent at 10% alpha, and a dimmed accent brace over it would still read as
+lit. The click target for the re-arm is the brace's whole x-span across the loop half, not the 4 px
+bar it paints (4 px is not a click target).
+
+Both drag paths share the same throttle discipline: a command is posted only when the snapped value
+changed since the last post, never once per pixel of movement (`TransportService`'s command FIFO
+dedupes nothing). `postSeekIfChanged` dedupes on the beat clamped to `>= 0` — the same clamp
+`locateBeat` applies — so dragging left of beat 0 can't re-post identical seeks; `postLoopIfChanged`
+dedupes on the `[start,end]` pair. `mouseUp` calls its zone's poster again, so it is a no-op when the
+last drag update already posted the final value.
+
+**Hover affordance.** `mouseEnter`/`mouseMove` set the hovered zone, `mouseExit` clears it. The
+cursor changes per zone (`PointingHandCursor` over the playhead half, `LeftRightResizeCursor` over
+the loop half) and `paint()` tints the hovered half with `accent` at 10% alpha, under the loop brace
+so the brace stays legible. `repaint()` fires only when the hovered zone actually **changes** — never
+per mouse-move pixel — and there is no timer or animation involved (§11).
+
+**Grid + wheel:** `TimelinePanelComponent::paint()` draws the same bar/beat lines directly into the
+lanes region below the ruler (bar lines at full `colors.border`, beat lines at 35% alpha — no
+dedicated grid tokens exist, and one caller didn't justify adding any). `mouseWheelMove()` is
+implemented once, on the panel, with Cubase-style bindings: **plain vertical wheel scrolls the
+track rows vertically** (`TimelineViewState::trackScrollY`, shared with the header column — a
+scrollbar drag on the header viewport writes the same value back via
+`HeaderViewport::onScrolledY`, and `syncTrackScroll()` is the one re-sync point); **Shift+wheel or
+a trackpad's own `deltaX` scrolls horizontally** (`deltaY` converted to beats at the current zoom —
+a constant *pixel* distance per wheel unit, so the same physical gesture covers less musical time
+zoomed in); **Cmd+wheel** (`mods.isCommandDown()`, already Ctrl-on-other-platforms via JUCE) zooms
+horizontally around the cursor; **Cmd+Shift+wheel** zooms vertically — it scales
+`TimelineViewState::rowHeightScale` within `[0.5, 3.0]`, which multiplies the themed row height in
+BOTH `TimelineClipLaneArea::getRowHeight()` and the panel's `layoutTrackHeaders()`, anchored so the
+row under the pointer stays put. `mouseMagnify()` (trackpad pinch — deliberate enough to need no
+modifier) maps plain pinch to horizontal zoom and Shift+pinch to vertical zoom, on the panel and
+inside the piano roll alike. JUCE bubbles an unhandled wheel event from the ruler child up to the
+panel, so both regions share identical behaviour from one implementation.
+
+### TL5-3: track headers, binding chips, add-track
+
+`Source/UI/TimelineTrackHeaderComponent.h/.cpp` (`synth::ui::TimelineTrackHeaderComponent`) — one
+row per `synth::Track` (`Metrics::timelineTrackRowHeight`, 56 px — shared with the clip-lane area,
+TL5-7 below, so header rows and clip rows always line up), living in the panel's track-header
+column. The column is a fixed
+`"+ Track"` strip (22 px) at the top plus a `juce::Viewport` below it, so a project with more
+tracks than fit **scrolls**; rows are never compressed. Both live inside `getTrackHeaderBounds()`,
+so the panel's three regions still tile exactly.
+
+**The document is the truth.** A header stores no state of its own: it re-reads name, colour,
+mute/solo/arm and binding from the doc in `refreshFromDoc()`, and every edit is written back
+through the doc. Headers are rebuilt/refreshed **only** from `TimelineDoc::Listener::timelineChanged`
+(`TimelinePanelComponent` is the listener) — no timer, no polling. A notification whose track *set*
+is unchanged refreshes the existing rows in place; only an added/removed/reordered track rebuilds
+them, so a mute click doesn't destroy the row the user is typing a name into.
+
+**Row contents:** colour swatch (click cycles the palette), a track-kind badge (`"MIDI"` / `"AUD"` /
+`"AUTO"`, fixed per `TrackKind` — identity chrome, not a control), name label (double-click to
+edit), an `A` button (visible only when `Track::lanes` is non-empty), `M` / `S` / `R` toggles, and
+the binding chip. `R` flips `Track::armed` in the document and nothing else — arming is not
+recording; the record button and `MidiRecorder::startRecording` live on the transport bar (TL5-5,
+below), which looks for the first `armed` track when it starts a take.
+
+**The `A` button** toggles this track's automation lane in the (single, doc-wide) automation strip.
+The header only reports the click via `onAutomationToggleRequested` — it never tracks open/closed
+state itself, since it can't see whether another track's lane is the one currently shown.
+`TimelinePanelComponent::toggleAutomationForTrack` decides: already open on one of this track's own
+lanes closes the strip; anything else (closed, or open on a different track) opens the track's first
+lane.
+
+**Colour** resolves *only* through `synth::ui::resolveTrackColour` (`Source/UI/TrackColour.h`): the
+track's stored `colourArgb` when non-zero, otherwise a deterministic 8-entry palette indexed by the
+track's position; a muted track comes back desaturated and dimmed (same hue). The palette is fixed
+rather than theme-derived because the add-track flow *writes* the resolved colour into the document —
+a theme-dependent value would mean a project opened under another theme came back recoloured. Unlike
+`CableColour.h` there is no persisted override layer: the doc already stores the choice.
+
+**Binding chip semantics** — three states, two of them amber (`theme.colors.warning`):
+
+| Track state | Chip | Meaning |
+|---|---|---|
+| `bindingUuid` resolves | the node's plain display name (e.g. `"Track In"`) | plays through that node |
+| `bindingUuid` empty | `"Unbound"` (amber) | never pointed anywhere; the track plays nowhere |
+| `orphaned` | `"Missing"` (amber) | it WAS bound and the node is gone — retained, never auto-deleted |
+
+An `Automation`-kind track shows **no chip at all** (`setVisible(false)`, decided in
+`refreshFromDoc()`) — that track hosts lanes, and a node binding is meaningless for it; the bottom
+half-row is simply empty. `Midi`/`Audio` tracks are unaffected.
+
+The chip always carries a tooltip explaining what it shows and, when amber, how to fix it; the
+`"#id"` suffix a bound name used to carry unconditionally is now added only in the re-bind menu, and
+only to an option whose display name collides with another live candidate
+(`MainComponent::getAvailableTrackInNodes`) — a lone node's name, on the chip or in the menu, always
+stays plain.
+
+Clicking the chip does two things: it **selects** the bound node in the GraphEditor's
+`SelectionModel` (a highlight only — no canvas scroll, no focus change) and opens a menu listing
+every live node of **the type this track's kind can be fed by** — `Track In` for a MIDI track,
+`Track Audio` for an Audio track (TL6-4) — **not claimed by another track**, plus
+`"New Track In node"` (which likewise creates whichever type the track's kind needs). Offering the
+wrong type would let a user bind a track to a node that structurally cannot play it: both modules
+match on **kind as well as uuid**, so the result would be a track that silently plays nothing.
+Picking one calls `TimelineDoc::setTrackBinding` as one undoable step, then reconciles.
+
+> **A binding is NEVER re-established automatically — least of all by name.** An orphaned track
+> stays orphaned until the user picks a node from that menu. Two nodes can carry the same display
+> name, and a silent re-bind would quietly play a track through someone else's instrument.
+
+**"+ Track"** (TL6-4; it read `"+ MIDI Track"` and added one outright until audio tracks existed,
+and carries the tooltip *"Add a MIDI or Audio track"* so the two-item menu isn't a surprise)
+opens a two-item menu — **MIDI Track** / **Audio Track** — whose ids are
+`TimelinePanelComponent::kAddMidiTrackMenuId` / `kAddAudioTrackMenuId`. Both entries land on
+`TrackHeaderHost` (`addMidiTrack()` / `addAudioTrack()`), and
+`TimelinePanelComponent::applyAddTrackMenuChoice(id)` is the headless seam — the same split the
+binding and context menus use, since a `juce::PopupMenu` never runs in the test binary.
+`MainComponent::simulateAddMidiTrackClick()` / `simulateAddAudioTrackClick()` call straight into it.
+
+**The MIDI entry** is ONE compound undo step (`AppUndoManager::recordCombinedChange`, graph +
+timeline in a single transaction, so one Cmd+Z removes all of it and redo restores it with the same
+node uuid):
+
+1. add a `Midi` track named `Track N` — **the doc side goes first**. `TimelineDoc::addTrack` refuses
+   past `kMaxTracks`, and a node created before that refusal is known stays in the graph with no
+   track to play through: `recordCombinedChange` *records* a mutation, it does not roll one back. A
+   track with no binding yet is never flagged orphaned, so the intermediate state is inert;
+2. create a `Track In` node through `AIStateMapper::createModule` (so it round-trips through
+   `graphToJSON`/`applyJSONToGraph` — that is how undo, redo and `.agsproj` reproduce it), assign a
+   fresh uuid and mirror it into the processor with `ModuleBase::setNodeUuid`, and place it at the
+   canvas' left edge below every existing module (`GraphEditor::findLeftEdgeSlotBelowModules`);
+3. **auto-wire only when unambiguous** — if the patch contains **exactly one** MIDI-driven
+   instrument (module type `Poly MIDI`, `Oscillator`, `Wavetable`, `Sampler`, `Sequencer` or
+   `Poly Sequencer`; MIDI *sources* — `Track In`, `External MIDI`, `MIDI Keyboard` — are excluded),
+   connect `Track In -> that node` on the MIDI channel. With none or several, no wire is drawn: a
+   chip that reads "bound" over an unwired node is fine, the cable is the user's to draw, whereas
+   guessing wrong plays the track through the wrong instrument. Note `acceptsMidi()` cannot be the
+   rule — `ModuleBase` returns `true` for every module in the app;
+4. bind the track to the new node's uuid and give it the palette colour for its index.
+
+**The Audio entry** mirrors it exactly (one compound step, track added first, factory-created node,
+uuid minted and mirrored, placed at the left edge, an `Audio` track named `Audio N` bound to it with
+its palette colour), with one difference in step 3: the auto-wire target is never ambiguous,
+because the master
+bus is a singleton — but there are **two** possible sinks and the order matters. If TL6-3's
+`Rec Tap` has already been spliced in front of Audio Output, wiring straight to the output would
+route the track **around** the tap and quietly leave it out of every subsequent take, so
+`createTrackAudioNode()` prefers the tap when one exists and falls back to Audio Output otherwise.
+That makes both orderings compose: a track added *before* the first take is re-spliced by
+`ensureMasterRecordTap()`, and one added *after* it lands on the tap directly. Both channels are
+wired (`0 → 0`, `1 → 1`).
+
+**Delete track** (right-click a header) is the same compound step in reverse: the track and its
+bound `Track In` / `Track Audio` node go together, and come back together.
+
+Headless test seams (a `juce::PopupMenu` never runs in the test binary): `collectBindingOptions()` /
+`applyBindingMenuChoice(id)` and `applyContextMenuChoice(id)` are the menus' semantics without the
+menu, and `handleChipClick(showMenu=false)` exercises the selection affordance on its own. The row
+talks to the app exclusively through `synth::ui::TrackHeaderHost` (implemented by `MainComponent`),
+so it is fully testable against a stub with no graph — see `Tests/TimelineTrackHeaderTests.cpp`.
+
+### TL5-4: the playhead
+
+`Source/UI/TimelinePlayheadOverlay.h/.cpp` (`synth::ui::TimelinePlayheadOverlay`) — a transparent,
+non-intercepting (`setInterceptsMouseClicks(false, false)`) overlay the panel adds **last** (so it is
+topmost) and sizes to `getLanesBounds()`, i.e. the whole ruler + lanes region. Its local `x == 0` is
+`lanesBounds_.getX()`, which is also the ruler's origin and therefore exactly `TimelineViewState`'s —
+no offset arithmetic anywhere in the overlay. It draws a `kLineWidth = 2 px` vertical line in
+`theme.colors.accent` (literal cyan fallback with no themed LnF), full height.
+
+**This is the second of the two exceptions to the no-unconditional-per-tick-repaint rule.** Its
+confinement contract, the paint-count test pattern it introduces, and why a third exception is not
+free are all in §11 — read that before touching this component.
+
+**Two timers, one of them borrowed:**
+
+| Rate | Owner | What it does |
+|---|---|---|
+| 10 Hz | `MainComponent::timerCallback` (**existing** timer, `#if SYNTH_ENABLE_TIMELINE`, only while `timelinePanel.isVisible()`) | `TimelinePanelComponent::updateFromTransport(snapshot, outputLatencySeconds)` |
+| 30 Hz | `TimelinePlayheadOverlay`'s own `juce::Timer` | re-reads the transport and requests the movement strip — **only while playing** |
+
+The low-rate poll is the **sole** owner of the 30 Hz timer's lifecycle: it sees the play/stop
+transition and calls `startTimerHz`/`stopTimer`. The 30 Hz tick deliberately does *not* stop itself
+when it notices a stopped transport — one owner is easier to reason about, and a tick after playback
+stopped simply finds an unchanged x and requests nothing. Worst case the timer runs for one extra
+poll interval, repainting nothing.
+
+`TimelinePanelComponent::updateFromTransport` has a second job: the ruler paints the time signature
+and the loop brace, and **nothing else repaints it** when those change from outside its own mouse
+gestures (a bundle load, a host tempo map, TL5-5's transport controls). So the poll diffs a small
+`RulerTransportState` (time signature + loop trio — the *position* is deliberately excluded, since
+the playhead is the only thing that moves with it) and repaints the ruler only on a change; a time
+signature change also repaints the panel, whose lanes grid derives its bar spacing from it. The first
+poll seeds the struct instead of counting as a change.
+
+**Latency offset.** The drawn beat is `ppq - outputLatencySeconds * (bpm / 60)`, clamped `>= 0`, so
+the line matches what is being **heard** rather than the block currently being rendered.
+`outputLatencySeconds` comes from the new `AudioEngine::getOutputLatencySamples()` — the open output
+device's `getOutputLatencyInSamples()`, `0` in Hosted mode and `0` when no device is open (every
+headless test). It is report-only, exactly like `getGraphLatencySamples()`. Graph latency is
+deliberately *not* added in: it is patch-dependent, mostly zero, and never compensated anywhere,
+whereas the device buffer is the term that actually separates "rendered" from "heard".
+
+**Zoom/scroll while playing.** The old line position is remembered in **pixel** space
+(`getLastRequestedLineX()`), never re-derived from the old beat. A zoom changes the mapping, so the
+stale pixels that must be repainted are where the line *actually was* — remapping the old beat would
+repaint the wrong place and leave a smear. One zoom therefore costs one wider-than-usual strip, which
+is the correct trade (repainting extra is safe; missing pixels is not). A loop wrap costs the same:
+one strip spanning the jump.
+
+**Stopped** the overlay asks for nothing, but it still *draws*: `paint()` renders the line at the
+current position whenever the panel paints for any other reason. Painting is not what the contract
+restricts; asking for a repaint is.
+
+### TL5-5: the transport bar
+
+`Source/UI/TimelineTransportBar.h/.cpp` (`synth::ui::TimelineTransportBar`) — play/stop, record,
+loop, BPM and time-signature editors, and the bar:beat readout, left-aligned in the transport-bar
+strip (the snap combo stays docked right, TL5-2 above). Buttons are **square** — `min(22 px, the
+strip height after padding)`, centred in their slot — with `kGap = 7px` between them and `kGap * 2`
+between groups; the two editable labels and the readout follow, in that order.
+
+**No SVG assets.** All three buttons are one `GlyphButton` (a `juce::Button` subclass) drawing a
+plain `juce::Path` per glyph in `paintButton` — a triangle/square for play-stop, a circle for
+record, an open arc with an arrowhead for loop. This mirrors the CLAUDE.md rule that themes never
+swap typefaces: a one-off shape for a single caller doesn't earn a new icon asset either.
+
+**Glyph geometry: one centred square, always.** Every glyph is drawn inside the button's shorter
+side, inset by `kGlyphInsetRatio` (24%) on each edge — never a fraction of the *width* applied to
+both axes, which is what flattened all four glyphs once the panel's 5 px resize grab strip left the
+bar ~19 px tall, and is exactly the "really dense" the founder reported. Everything scales off
+that square (the loop arc's stroke and arrowhead, the note's head/stem), so the row stays legible at
+any strip height. `Tests/TimelineTransportBarTests.cpp::GlyphButtonsAreSquareAndSpaced` pins
+squareness and the gaps at both the full and the trimmed strip height.
+
+> **Record-red is deliberately theme-independent.** An engaged record button is
+> `TimelineTransportBar::kRecordRedArgb` (`0xFFE53935`) — a filled red circle, a red border and a
+> faint red wash behind it — **whatever the theme's accent is**, and themes may not override it. A
+> hardware record LED is red on every desk; drawn in a cyan (or green) accent, "armed" stops reading
+> as armed at all. It is the one colour on this bar that is not a theme token — every other lit
+> glyph (play/stop, loop, metronome) still uses `colors.accent`. Idle record is a neutral outline
+> (`colors.textPrimary` at 75%), not a dim red one. `GlyphButton::glyphColour()` is the single
+> source for both the paint and the `getRecordGlyphColourForTest()` seam.
+
+**The transport is the truth, read fresh, not cached.** Every button click and every editor commit
+reads `TransportService::getPositionSnapshot()` **at the moment of the action**, rather than from a
+value this bar remembers between polls:
+
+- **Play/Stop** — one `GlyphButton` whose glyph flips between the two icons on `getToggleState()`.
+  The click reads `getPositionSnapshot().playing` to decide `play()` vs `stop()`, so it works
+  correctly even if nothing has polled `updateFromTransport()` since the last click (no dependency
+  on visual resync happening in between).
+- **Loop** — the click reads the CURRENT `loopStartPpq`/`loopEndPpq` off the snapshot and re-posts
+  `setLoop(start, end, !looping)`. `TransportService`'s own construction default is `[0, 4)`, so "no
+  bounds ever set" and "preserve existing bounds" fall out of the same one-line handler — there is
+  no separate "default bounds" case to maintain.
+- **BPM label** — a `juce::Label` (`setEditable(false, true, false)`, the same double-click-to-edit
+  idiom as the track-name label), whose `onTextChange` calls `transport->setBpm()` — always accepted
+  (clamped to `[TransportService::kMinBpm, kMaxBpm]` inside the service), so there is no revert case.
+  It is also **draggable**: a nested `BpmDragLabel` overrides `mouseDown`/`mouseDrag` to turn
+  vertical movement into a live `setBpm()` call, ±1.0 BPM per 4 px (±0.1 with Cmd held, for fine
+  adjustment), anchored to the snapshot's BPM at `mouseDown` so the gesture is reproducible from the
+  anchor + total delta regardless of how many `mouseDrag` calls land in between. Double-click and
+  drag are independent gestures: JUCE dispatches `mouseDoubleClick` separately from
+  `mouseDown`/`mouseDrag`/`mouseUp`, so overriding the latter three does not disturb `Label`'s own
+  `editDoubleClick` handling.
+- **Time-sig label** — same double-click idiom, parses `"N/D"` and calls `setTimeSignature(n, d)`,
+  which validates numerator `1..64` and a fixed denominator set (`1/2/4/8/16/32`) and returns `false`
+  **without posting anything** on rejection. The label then reverts to whatever the snapshot is
+  CURRENTLY reporting (not a remembered value) — a rejected edit never touched the transport, so the
+  snapshot is already the last known-good time signature.
+- **`updateFromTransport()`** (the drive seam, called from the panel's existing 10 Hz poll) resyncs
+  the play/loop button visuals and the two labels' text from the snapshot — so a Space-bar play
+  triggered elsewhere reflects here within one tick — but skips a label mid-edit
+  (`Label::isBeingEdited()`): `Label::setText()` unconditionally discards an open editor's contents,
+  so a poll landing mid-keystroke would otherwise fight the user's own typing.
+
+**Bar:beat readout** — `TimelineTransportBar::formatBarBeat(ppq, tsNumerator, tsDenominator)` is a
+**static, pure** helper (no `Component`, headless-testable on its own): `"BAR.BEAT.TICKS"`, 1-based
+bar (zero-padded to 3 digits), 1-based beat (unpadded), ticks = 1/960 of a beat (zero-padded to 3
+digits) — `beatsPerBar = tsNum * 4 / tsDen`, the same formula used throughout the timeline panel.
+Pinned examples (see `Tests/TimelineTransportBarTests.cpp::FormatBarBeatTable`): `(0.0, 4/4)` ->
+`"001.1.000"`, `(5.5, 4/4)` -> `"002.2.480"`, `(3.0, 3/4)` -> `"002.1.000"`. Painted in JetBrains
+Mono via `juce::Font(juce::Font::getDefaultMonospacedFontName(), theme.type.value + 1, plain)` —
+`AppLookAndFeel::getTypefaceForFont` resolves the default monospaced font name to
+`theme.type.monoFamily` (JetBrains Mono in every built-in theme), the same indirection
+`AIChatComponent`'s debug console and `SignInDialog`'s code label already use. Repainted **only
+when the formatted string changes** — a plain string-diff cache, not a strip-confinement contract
+like the playhead's (§11): the readout has no timer of its own and moves only when its owner polls
+it, so there is nothing to bound beyond "don't repaint an unchanged tick".
+`getReadoutRepaintCountForTest()` is the test seam, the same counting idiom
+`TimelinePanelComponent::getTransportUpdateCountForTest()` uses.
+
+**Recording is the one control the bar is not authoritative over.** Starting a take needs an armed
+MIDI track, which only `MainComponent` can see (it owns the `TimelineDoc`). The record button's
+click computes `!getToggleState()` and reports that as *intent* through
+`std::function<void(bool)> onRecordToggled` — it never flips its own toggle state. `setRecordingState(bool)`
+is the ONE thing that ever does, called back by the owner with the real outcome. `MainComponent`'s
+implementation (installed in `initialiseCommon()`, `#if SYNTH_ENABLE_TIMELINE`):
+
+- **ON** — iterates `timelineDoc.getTracks()` for the first `armed && kind == TrackKind::Midi`
+  track. None found -> `setRecordingState(false)` + `statusBar.showMessage("Arm a track to
+  record")`, and the transport is left untouched — a rejected request must not have the side effect
+  of starting playback. Found -> **record implies roll** (a DAW convention: the record button starts
+  the transport if it isn't already playing), then `midiRecorder.startRecording(track, currentPpq)`.
+- **OFF** (button click, or the 10 Hz poll noticing `playing -> stopped` while
+  `midiRecorder.isRecording()` — the user hit Space/Stop instead of the record button) — both routes
+  go through one `MainComponent::commitMidiRecording()`: `midiRecorder.stopAndCommit(doc, undo)`,
+  `midiRecorder.hadOverrun()` -> `statusBar.showMessage("Dropped MIDI events during recording")`,
+  then `setRecordingState(false)`. One choke point means the explicit and the auto-commit paths can
+  never diverge — see `docs/architecture.md`'s MidiRecorder wiring entry (hook 5) for the full
+  before/after ordering (armed-check before roll, so a rejected click has zero side effects).
+
+`AudioEngine::setMidiCaptureSink(&midiRecorder)` is the other half of the app-level wiring (feeds
+`MidiRecorder::captureBlock` from `AudioEngine::renderNextBlock`'s one collector-merged buffer) —
+see `Tests/MidiRecorderTests.cpp` for the model-level coverage and
+`Tests/TimelineTransportBarTests.cpp` for the button-to-commit path.
+
+### TL5-6: metronome + count-in
+
+Two more controls join the transport-bar strip, right after the loop button and before the BPM
+label: a metronome toggle and a 3-item count-in selector. Both are `TimelineTransportBar` members —
+not routed through `TimelinePanelComponent`, which has no other reason to know either setting
+exists — and both persist themselves via the bar's own `setApplicationProperties(props)`, restoring
+`"timelineMetronomeEnabled"` (bool, default off) and `"timelineCountInBars"` (int 0–2, default 0)
+and re-persisting on every change, the same restore-then-persist-on-change idiom
+`TimelinePanelComponent` uses for its snap combo. `TimelinePanelComponent::setApplicationProperties`
+is a pure forward to the bar's version for these two keys; `TimelinePanelComponent::setMetronome`
+forwards a `synth::Metronome*` the same way `setTransport` forwards a `TransportService*`.
+
+**Metronome toggle** — one more `GlyphButton` (`Glyph::Metronome`), drawing a plain "quarter note"
+(a filled ellipse notehead + a `juce::Rectangle` stem) rather than a `juce::Path` like its three
+siblings — asset-free for the same CLAUDE.md reason the others are. Unlike Record, there is no
+owner-side veto: the click directly flips both the button's own visual state and
+`synth::Metronome::setEnabled` (via the bar's non-owning `synth::Metronome*`, set through
+`setMetronome()`, mirroring `setTransport`'s null-safe contract) — no intent/outcome split is
+needed. `setMetronome()` and `setApplicationProperties()` may run in either order: whichever runs
+SECOND is what makes the persisted enabled value real, since each applies the last-known value to
+the metronome pointer if the other has already been supplied.
+
+**Count-in selector** — a `juce::ComboBox` ("Off" / "1 bar" / "2 bars", `getCountInBars()` returning
+0/1/2), read by `MainComponent`'s record flow at the moment Record is clicked — never cached
+elsewhere. See `docs/architecture.md`'s Metronome subsection for the full count-in choreography
+(locate-back, forced-on click, the punch-in filter) this selector feeds.
+
+Layout: `metronomeButton_` (a square button, like its three siblings) + `kGap` + `countInCombo_`
+(64 px) + `kGap * 2`, inserted between the loop button and the BPM label — the bar's fixed-width
+strip grows by ~98 px, well inside the timeline panel's normal width.
+
+### TL5-7: clip lanes
+
+`Source/UI/TimelineClipLaneArea.h/.cpp` (`synth::ui::TimelineClipLaneArea`) fills the lanes region
+below the ruler (`getLanesBounds()` minus the ruler strip — the same rect the bar/beat grid is
+painted into) with per-track rows of `synth::Clip` rects: drag to move, drag an edge to trim, a
+context menu to split/duplicate/delete, and marquee (rubber-band) multi-select. Backed by
+`synth::ui::ClipSelectionModel` (`Source/UI/ClipSelectionModel.h`), the clip analogue of
+`SelectionModel` (§12.2) — a `std::set<synth::ClipId>` with the same add/remove/toggle/
+setSelection/retainOnly contract, ordered ascending by id so a batched move or delete always walks
+clips in a stable order regardless of click order.
+
+**Ownership.** `TimelinePanelComponent` owns the `ClipSelectionModel` and the lane area
+(`getClipSelection()` / `getClipLaneArea()`); the lane area holds the selection model and the
+shared `TimelineViewState` by reference, exactly the relationship the ruler already has with the
+view state. `MainComponent` forwards its one `AppUndoManager` in (`TimelinePanelComponent::
+setUndoManager`), the same gated `#if SYNTH_ENABLE_TIMELINE` wiring block that installs the doc,
+transport and track-header host (TL5-3).
+
+**Z-order, and the one relocation this task makes.** `TimelinePanelComponent::paint()` still paints
+the bar/beat grid directly, unchanged — that stays the ONE place the grid is painted. The lane area
+is added as a child positioned over exactly that same rect, *before* the playhead overlay (added
+last). Since JUCE always paints a parent before its children, the result is grid → clips →
+playhead with no extra bookkeeping.
+
+**Row geometry.** `Metrics::timelineTrackRowHeight` (56 px, code-only) is the single row height
+both the track-header column and the clip-lane area lay out at — see TL5-3 above.
+`TimelineTrackHeaderComponent::kRowHeight` is kept as the matching headless literal fallback rather
+than deleted, read by both components' `dynamic_cast<AppLookAndFeel*>`-with-fallback pattern.
+`TimelineClipLaneArea::computeClipRect(viewState, trackIndex, startBeat, lengthBeats, rowHeight)` is
+a pure static function (no doc, no component) — `[beatToX(start), beatToX(start+length)]` × `[row *
+rowHeight, rowHeight]` — so geometry is unit-testable with no component or LookAndFeel at all.
+
+**Rendering.** Every track in doc order gets one row; every clip on it, a rounded rect filled with
+`synth::ui::resolveTrackColour(track.colourArgb, trackIndex, track.muted)` (§TL5-3's resolver,
+reused rather than re-invented), a name (width > ~40 px) and a thin pitch-mapped note preview
+(width > ~24 px, clip-relative note beats offset by the clip's current — possibly mid-drag —
+start). Selected clips get a brighter border and a slight fill lift. Repaints happen only on: doc
+changes (`refreshFromDoc()`, routed in from `TimelinePanelComponent::timelineChanged()`, which also
+calls `ClipSelectionModel::retainOnly` so a clip removed by any path can never stay selected),
+view-state changes (zoom/scroll/snap), and interactions — never a timer.
+
+**Interactions:**
+
+| Gesture | Effect |
+|---|---|
+| Click a clip | Selects it (replacing the selection unless Shift/Cmd/Ctrl, which toggles just that clip) |
+| Click empty lane space | Deferred: only a press that never becomes a drag clears the selection on mouse-up — the same `pendingEmptyCanvasClick` trick `GraphEditor::mouseDown/mouseUp` uses for the canvas, so a drag is never mistaken for a deselect |
+| Drag from empty lane space | Marquee — intersection hit-test (`clipHitTestMarquee`), additive with Shift; there is no drag-to-pan here (scrolling is wheel-only, TL5-2), so a plain drag also starts a (non-additive) marquee |
+| Drag a clip's body | Moves it (and every other selected clip, same-track only) by one Snap-quantised delta shared across the whole selection, computed from the clip that was grabbed and clamped so no clip's start goes below 0 |
+| Drag within 6 px of the right edge | Resizes (trims) the clip's length, Snap-quantised, floored at 1/16 beat |
+| Drag within 6 px of the left edge | Moves the start and shrinks/grows the length so the **end** stays fixed; the clip's notes (clip-relative) travel with it — a deliberate divergence from per-note-anchored trimming, deferred to a later task |
+| Right-click a clip | `PopupMenu`: **Split at pointer** (enabled only when the Snap-quantised pointer lands strictly inside the clip), **Duplicate**, **Delete**, and — for an audio clip only (non-empty `assetRef`), below a separator — **Relink audio…** (TL6-6) — preserves the existing selection, the same rule `GraphEditor`'s cable/canvas menus follow |
+| Double-click a clip | Opens the piano roll on it (`onClipDoubleClicked` → `TimelinePanelComponent::openPianoRoll`) |
+| Double-click empty lane space | Authors content on the row under the pointer — see **Adding content** below (MIDI: a one-bar clip; audio: a file chooser; automation: nothing) |
+| Drop audio files from the OS | Imports the first readable one onto the audio row under the cursor — see **Adding content** |
+| Delete / Backspace | Deletes every selected clip as ONE undo step; returns `false` (key falls through) when the selection is empty |
+| Escape | Clears the selection; returns `false` when it is already empty |
+| P | **Loop the selection** — sets the transport loop to the selected clips' `[min startBeat, max endBeat]` span and arms looping; returns `false` when nothing is selected |
+
+**One undo step per gesture.** Every drag/trim previews locally (a member offset or length, read
+back by `paint()` through `effectiveGeometryFor()`) and commits to the doc exactly once on
+mouse-up, through `AppUndoManager::recordTimelineChange` — a multi-clip move or a multi-clip Delete
+is one `recordTimelineChange` call however many clips it touches, mirroring
+`GraphEditor::dragSelectionBy()`/`finalizeSelectionDrag()` and `deleteSelection()`'s one-transaction
+contract for modules. `showMenuAsync` never runs headlessly, so the context menu's Split/Duplicate/
+Delete actions are exercised in tests through `applyClipContextChoice(ClipId, choice, pointerBeat)`
+— the same menu-without-the-menu idiom `TimelineTrackHeaderComponent::applyBindingMenuChoice`/
+`applyContextMenuChoice` already establish (TL5-3).
+
+**Relink audio… (TL6-6).** Offered whenever the clicked clip's `assetRef` is non-empty, whether the
+asset currently resolves (a plain re-point) or is missing (see `docs/architecture.md`'s
+asset-management section for the missing-asset placeholder this same field drives). Unlike the
+three actions above, this is a plain callback (`onRelinkAudioRequested`) rather than a
+`ClipContextChoice` — it needs a host `juce::FileChooser` and a `synth::AssetManager` import,
+neither of which `TimelineClipLaneArea` has. `MainComponent::promptRelinkClipAsset` opens the
+dialog and calls `relinkClipAsset(id, chosenFile)`; the headless path,
+`MainComponent::relinkClipAssetForTest(id, chosenFile)`, calls the same function directly and
+never goes through the menu (or `showMenuAsync`) at all. The import lands in the current bundle's
+`Audio/`, or — with no bundle yet — the app-data `Recordings/` convention TL6-3 takes use; every
+other clip that shared the OLD ref is rewritten alongside the clicked one, as ONE undo step.
+
+**Adding content.** Recording and the AI tools are not the only ways in: both gestures below author
+content directly, and each is ONE undo step.
+
+*Double-click empty lane space.* The row under the pointer decides what happens. A **Midi** row gets
+a new clip at `floorSnappedBeatAt(x)` — the snap grid line at or *before* the click, never after it,
+so the clip lands in the cell it was aimed at — one bar long (the transport's time signature, 4
+beats with no transport), auto-named `"Clip N"` from the row's clip count, selected, and then fired
+through the SAME `onClipDoubleClicked` hook a clip double-click uses, so the user lands straight in
+the piano roll ready to draw notes. An **Audio** row asks for a file through `audioFileChooser_` — a
+`std::function` seam defaulting to a real async `juce::FileChooser` filtered by
+`juce::AudioFormatManager::getWildcardForAllFormats()`, which a test replaces with a lambda that
+answers synchronously (`juce::FileChooser`, like `showMenuAsync`, never runs in a test process) — and
+reports the choice through `onAudioFileDropped`, exactly as a file drop does. An **Automation** row,
+and a double-click below the last row, do nothing.
+
+*OS file drag-and-drop.* `TimelineClipLaneArea` is a `juce::FileDragAndDropTarget`.
+`isInterestedInFileDrag` is EXTENSION-based (`AudioFormatManager::findFormatForFileExtension`) — no
+dragged file is ever opened — and true when at least one file qualifies. `fileDragMove` highlights
+the **audio** row under the cursor with an accent wash, repainting only the rows involved and only
+when the row actually changes (`fileDragExit`/`filesDropped` clear it); a MIDI row, an automation row
+and the space below the last row neither highlight nor accept a drop. `filesDropped` reports the
+FIRST readable audio file (a multi-file drop makes one clip, not N).
+
+*Who imports.* Neither gesture imports anything here: `onAudioFileDropped(TrackId, snappedBeat,
+File)` hands the decision outwards and `MainComponent::importAudioFileToClip` does the work, for the
+same reason **Relink audio…** does — the lane area owns no `AssetManager` and no bundle root. That
+method reuses `relinkClipAsset`'s policy verbatim: a saved project imports into the bundle's `Audio/`
+(`AssetManager::importAudioFile`), and an unsaved one into the app-data `Recordings/` convention
+`chooseTakeFiles()` writes takes into, so `saveToFile`'s existing `adoptRecordingsAssets` sweep moves
+it into the bundle on the first save. The clip's length is the file's own duration in beats
+(`audioFileLengthInBeats`, at the transport's current bpm), `sourceStartSeconds` is 0, and the clip +
+its asset binding are batched into ONE `recordTimelineChange`. A failed import (unreadable or
+non-audio) reports through the status bar and mutates the document not at all. Headless seam:
+`MainComponent::importAudioFileToClipForTest`.
+
+*Empty-row hint.* A row with no clips paints one dim line, centred, straight from doc state — no
+timer, no animation, `Theme::Colors::textMuted`: **"Double-click to add a clip — or arm (R) and
+record"** on a Midi row, **"Drop an audio file — or arm (R) and record"** on an Audio row, and
+nothing on an Automation row (its content is breakpoints, authored in the automation strip). The line
+is dropped rather than truncated when the row is shorter than 24 px or narrower than the text plus
+its padding.
+
+**Panel-scoped Delete key.** The lane area grabs keyboard focus on `mouseDown` (same as
+`GraphEditor::mouseDown`), so pressing Delete right after a click lands on `TimelineClipLaneArea::
+keyPressed` rather than whichever panel had focus before. This is the *local* half of Delete-key
+arbitration — this section's final **Keyboard & focus** subsection (TL5-10) formalises the
+cross-panel rule that decides which of the graph editor / clip lanes / piano roll a given keypress
+belongs to in the first place.
+
+**P = loop the selection** (Cubase's locators-to-selection) rides on that same local half: an
+unmodified `P` handled in `TimelineClipLaneArea::keyPressed`, **not** a `ShortcutManager` command,
+for exactly the reason Delete/Escape aren't (see [`shortcuts.md`](shortcuts.md) and TL5-10 below) —
+a bare letter in the app-wide table would fire from any panel that doesn't consume it first. The
+lane area owns no transport: `getSelectedClipSpan()` computes `[min startBeat, max endBeat]` across
+the selection (any row, ignoring anything unselected) and hands it outwards through
+`std::function<void(double startBeat, double endBeat)> onLoopRangeRequested`, which
+`MainComponent` wires to `transport.setLoop(start, end, /*enabled=*/true)` — the same
+"the lane decides what, the owner does it" division as `onAudioFileDropped`/`onRelinkAudioRequested`
+above. Nothing selected (or no owner listening) returns `false` so the key keeps its meaning
+elsewhere. The piano-roll surface has no equivalent yet.
+
+Tests: `Tests/TimelineClipLaneTests.cpp` — `ClipSelectionModel`/`clipHitTestMarquee` unit coverage,
+pure-geometry tests for `computeClipRect`, and interaction tests driven by hand-built
+`juce::MouseEvent`s (same pattern as TL5-2's ruler tests in `Tests/TimelinePanelTests.cpp`) against
+a bare `TimelineDoc` + `AppUndoManager` + `TimelineClipLaneArea`, no `MainComponent` needed. The
+authoring gestures are split across three files, each covering the half it owns: the lane area's
+(group 7 there — snapping, one-bar length, one undo step, the injected chooser, drag interest and the
+row highlight, the hint text and its paint), the panel's (`Tests/TimelinePanelTests.cpp` group 6 — a
+new clip really opens the piano roll), and the import's (`Tests/AssetManagerTests.cpp` group 2 —
+saved-bundle vs `Recordings/` destination, length from the file, failure mutating nothing).
+
+### TL5-8: piano roll
+
+`Source/UI/PianoRollComponent.h/.cpp` (`synth::ui::PianoRollComponent`) is a minimal per-clip note
+editor shown INSIDE the timeline panel's lanes region — no separate window. Backed by
+`synth::ui::NoteSelectionModel` (`Source/UI/NoteSelectionModel.h`), `ClipSelectionModel`'s sibling
+keyed on `synth::NoteId` with the identical add/remove/toggle/setSelection/retainOnly contract,
+plus a `noteHitTestMarquee` free function mirroring `clipHitTestMarquee`.
+
+**Entry/exit.** Double-clicking a clip in `TimelineClipLaneArea` fires its `onClipDoubleClicked(ClipId)`
+callback, which `TimelinePanelComponent`'s constructor wires to `openPianoRoll(ClipId)`. That call:
+hides `clipLaneArea_`, shows `pianoRoll_` (same rect — see Z-order below), and calls
+`PianoRollComponent::openClip`, which frames the clip: the pitch scroll centres on its median note
+pitch (60 for an empty clip), and the roll's own horizontal mapping is set so the clip's START sits
+at the keys column's right edge, zoomed so the whole clip fits the grid width (clamped to
+`TimelineViewState`'s pixels-per-beat bounds). A drawn "◀ Clips" back button (top-left of the header strip) and Escape (when
+nothing is selected — a first Escape only clears the selection) both call the roll's own
+`requestClose()`, which closes itself immediately (so `isOpen()` is accurate even with no owner
+wired) and fires `onCloseRequested` — the panel wires this to `closePianoRoll()`, which re-shows
+`clipLaneArea_`. If the edited clip disappears from the doc (any mutation, from any path —
+`TimelinePanelComponent::timelineChanged()` calls `pianoRoll_.refreshFromDoc()` on every doc
+notification, mirroring the clip-lane area's own refresh seam), `refreshFromDoc()` notices the clip
+is gone and closes the roll the same way. Panel API: `openPianoRoll(ClipId)` / `closePianoRoll()` /
+`isPianoRollOpen()`.
+
+**Z-order.** `pianoRoll_` occupies the exact same rect `clipLaneArea_` does (`gridLanesBounds_`),
+added via `addChildComponent` (not `addAndMakeVisible`, so it starts invisible) right after
+`clipLaneArea_` and before `playhead_` — so only one of clip-lane-area/piano-roll is ever visible,
+and the playhead overlay stays topmost and untouched either way (same bounds, same
+`viewState_.beatToX` mapping it always had).
+
+**Coordinate system — the roll owns its own horizontal mapping.** The keys column is a real 44 px
+GUTTER: `PianoRollComponent::beatToX(absBeat)` is `kKeysColumnWidth + (beat - firstVisibleBeat) *
+pixelsPerBeat` against the roll's OWN `TimelineViewState` member (`rollView_`), so `x ==
+kKeysColumnWidth` is the first visible beat and the clip's opening bar is reachable. (It previously
+was not: the column was an opaque strip painted OVER the leftmost 44 px of the shared mapping, with
+clicks there ignored — the first bar of a clip parked at x == 0 was unclickable and half-hidden.)
+The roll's zoom and scroll are its own; the panel-wide `TimelineViewState` is still shared, but for
+exactly ONE thing — the **snap division** (`snapBeat`/`divisionBeats`), so the roll's gridlines, its
+snapped edits and the panel's snap selector can never disagree.
+
+**Playhead delegation** is the consequence, and the rule. `TimelinePlayheadOverlay` maps beats
+through the SHARED view state, so inside the roll's rect its x is simply wrong. Instead of adding a
+second timer, the overlay grew a delegation seam: `TimelinePlayheadOverlay::LocalPlayheadClient`
+(`isLocalPlayheadActive()` + `setPlayheadBeat(absBeat)`), plus `setLocalPlayheadRegion(rect)` — the
+client's rect in the overlay's own coordinates, set by `TimelinePanelComponent::resized()` (the
+sibling offset is only known there). While a client is active the overlay:
+
+- confines `paint()` and every repaint strip to `getSharedRegion()` — everything **above** the
+  client's rows, i.e. the ruler strip only; and
+- hands the client the DRAWN beat (position minus output latency, clamped ≥ 0) on **every**
+  `refreshLine`, *before* its own "did my x move?" gate — a differently-zoomed mapping can move on a
+  frame where the shared one didn't.
+
+`PianoRollComponent` then runs the identical confinement contract on its own side: its
+`requestRepaintStrip(Rectangle<int>)` is the paint-count seam (same pattern, same test style as
+`TimelinePlayheadTests.cpp`), a beat whose rounded x is unchanged requests **nothing** (so a stopped
+transport costs zero repaints), a moved beat requests the union of the old and new strips clipped to
+the grid rect, and the FIRST beat after an open costs exactly one strip (there was no line on screen
+yet). The line is drawn in `paint()` before the keys column and the header, so both clip it exactly
+the way they clip a note that has scrolled off to the left. There is still exactly ONE playhead
+timer in the whole panel — the overlay's, playing-only.
+
+Vertically, pitch maps at `pixelsPerSemitone_` px/semitone (default `kPixelsPerSemitone` = 10,
+Cmd+Shift+wheel scales it within `[kMinPixelsPerSemitone, kMaxPixelsPerSemitone]` = `[4, 40]`);
+`firstVisiblePitch_` names the HIGHEST pitch drawn at the grid's top row, clamped to `[0, 127]`. A
+20 px header strip sits above both the keys column and the grid, housing the back button and a "Q"
+(quantise) button — both plain `juce::Path`/text shapes, never a Unicode glyph through a themed font
+(the same "draw it, don't asset it" rule `TimelineTransportBar`'s `GlyphButton` follows, and the
+reason `TimelineViewState::divisionBeats` below and every label here go through `AppLookAndFeel` —
+see the CLAUDE.md font-swap invariant).
+
+**Gridlines** are drawn from state alone, faintest level first so a bar line always wins a shared
+pixel: the current snap division at alpha 0.14 (only when it is finer than a beat — `Snap::Off` has
+no division at all), beats at 0.30, bars at 0.75. Each level is dropped entirely when its spacing
+falls under `kMinGridLinePixels` (3 px), the same adaptive-density idea the panel's own grid uses.
+`visibleLineRange(spacingBeats)` is the ONE range computation `paintGridLines` and the
+`getGridLineCountForTest` seam both walk, so the assertion can never drift from the paint. Changing
+the snap selector repaints the roll (`TimelinePanelComponent`'s `snapCombo_.onChange`); no timer.
+
+**Rendering.** Row backgrounds alternate white/black-key tint (`colors.bg1` / `colors.surfaceHi`,
+the same tokens `ModuleComponent`'s themed `MidiKeyboardComponent` uses), a C-octave label per
+octave in the keys column (mono font via `juce::Font::getDefaultMonospacedFontName()`, resolved to
+the theme's mono family by `AppLookAndFeel::getTypefaceForFont` — never a raw family string), and
+the clip's span outside `[clipStart, clipEnd)` dimmed. Notes are rounded rects tinted by velocity
+(`colors.midiWire`, brightened by `velocity/127`), selected notes get an accent border. Repaints
+happen only on doc/listener refresh, interaction, and view-state changes — no timer.
+
+**Gestures** (each previews locally — a member delta/length/velocity read back by `paint()` through
+`effectiveGeometryFor()` — and commits ONCE via `AppUndoManager::recordTimelineChange` on mouse-up,
+so a multi-note move/scrub/delete is one undo step):
+
+| Gesture | Effect |
+|---|---|
+| **Single click on empty grid** | DESELECTS (click-through). Creates nothing, writes no undo step. |
+| **Double-click on empty grid** | Creates ONE note: pitch from the row, start snapped, length exactly **one snap division** (1 bar quantise → a 1-bar note; 1/4 → a quarter; 1/16 beat when Snap is Off), velocity 100, channel 1. Selected, one undo step. Snapping up past the clip's end steps back one division rather than creating nothing. |
+| Shift+drag from empty grid | Marquee (intersection hit-test, additive with Cmd/Ctrl) |
+| Click a note | Selects it; **Shift** toggles it in/out of the selection, **Cmd** adds it (never removes — the drag that may follow scrubs the whole selection) |
+| Drag a note's body | Moves it + every other selected note, by one shared snapped beat delta and one shared semitone delta |
+| Drag within 5 px of a note's right edge | Resizes (trims) just that note's length, Snap-quantised, floored at one division (1/16 beat when Snap is Off) — even inside a wider selection |
+| **Double-click a note** | Deletes it, one step (standard DAW idiom — the mirror of double-click-to-create) |
+| Delete / Backspace | Deletes the selection, one step; returns `false` when the selection is empty |
+| Escape | Clears the selection; closes the roll when nothing is selected |
+| Cmd+vertical-drag on a note | Scrubs velocity, ~1/px, clamped to `[1, 127]` independently per note (multi-selection scrubs all by the same delta) |
+| "Q" button (plain click, or the `Q` key) | **Toggles snap** — flips the shared `TimelineViewState::snapEnabled`, so grid magnetism switches off/on everywhere (roll, clip lanes, ruler) while the chosen division survives underneath. Paints lit (accent fill/border) while snap is effective, muted while off. A view-state toggle, never a document edit — no undo step. Fires `onSnapToggled` so the panel persists the choice and repaints the other grid painters. |
+| Shift+click on "Q" (or Shift+`Q`) | **One-shot quantise**: snaps the SELECTED notes' starts to the chosen division (per-note `moveNote`, one mutation lambda — `TimelineDoc::quantiseNotes` has no note-subset overload); with **nothing selected it quantises every note in the clip** via `quantiseNotes` directly. Reads `divisionBeatsRaw()`, so it works even while the snap toggle is off (cleaning up free-hand notes is its whole point). Flashes on every press, and writes NO undo step when the clip is already quantised (`recordTimelineChange` drops no-op mutations). |
+
+**No pencil-by-default any more.** Creating a note is the double-click; a single click on empty grid
+is a plain deselect, and a plain drag from empty grid does nothing at all. Marquee is reached only
+through Shift, decided entirely at `mouseDown`. JUCE dispatches `mouseDoubleClick` from
+`internalMouseUp` — i.e. AFTER the second `mouseDown`/`mouseUp` pair — so the deselect (or the
+select-a-note) has already happened by the time the create/delete runs; the double-click is the last
+word either way.
+
+The Q button's flash is a **one-shot** `juce::Timer` (`kQuantiseFlashMs` = 120; `timerCallback()`
+stops the timer on its first call) repainting only the button's own rect — bounded, never a running
+animation, per the CLAUDE.md repaint invariant. The tooltip is served by `juce::TooltipClient`
+resolved by position (`getTooltipFor(Point<int>)`), since the header's buttons are drawn shapes, not
+child `juce::Button`s.
+
+**Edits stay inside the clip window.** `TimelineDoc` itself only clamps a note's `startBeat >= 0`
+finite — "notes can only exist inside the clip" is this editor's own policy, enforced before every
+write: draw/resize clamp `[start, start+length)` into `[0, clipLength)`; a multi-note move clamps
+its shared delta so the group's earliest start never goes below 0 and its latest end never crosses
+`clipLength` (the same clamp-the-group-together reasoning as `TimelineClipLaneArea::mouseDrag`'s
+Move branch, extended with an upper bound because notes, unlike clips, live inside one). A note
+whose available room shrinks to zero-length is rejected by `TimelineDoc::addNote`'s own validation.
+
+**Wheel.** All four bindings are handled here and NOTHING bubbles to the panel — the roll's
+zoom/scroll are its own, so the shared `TimelineViewState` must not move when the wheel lands inside
+the roll:
+
+| Binding | Effect |
+|---|---|
+| Cmd+wheel | Horizontal zoom around the beat under the cursor (`rollView_.zoomAroundX`, anchor = `x - kKeysColumnWidth`), same `exp(deltaY * 2.0)` factor as the ruler's zoom so the two feel identical |
+| Cmd+Shift+wheel | Vertical zoom — scales `pixelsPerSemitone_` within `[4, 40]`, keeping the pitch under the cursor put |
+| Shift+wheel, or a trackpad's `deltaX` | Horizontal scroll (`kScrollPixelsPerWheelUnit` px per unit, converted to beats at the roll's own zoom) |
+| Plain wheel | Vertical (pitch) scroll, `kPitchScrollSemitonesPerWheelUnit`, clamped to `[0, 127]` |
+
+Zoom is not persisted across opens — `openClip` reframes to the clip every time.
+
+`TimelineViewState::divisionBeats(beatsPerBar)` (factored out of `snapBeat` for this task) exposes
+the EFFECTIVE snap grid as a plain beat value (0.0 while the snap toggle is off);
+`divisionBeatsRaw()` is the chosen division regardless of the toggle — what `performQuantise()`
+feeds `quantiseNotes`/`moveNote`, since neither takes a `TimelineViewState::Snap` directly.
+
+**The ruler above the roll shows the clip's REAL timeline position.** While the roll is open,
+`TimelinePanelComponent::openPianoRoll` installs the roll's own view state into the ruler
+(`TimelineRulerComponent::setMappingOverride(&roll.getRollViewState(), kKeysColumnWidth)` — the
+offset is the keys gutter, which sits right of the ruler's x == 0). Labels, ticks, the loop brace
+AND the ruler's drag-to-loop / drag-to-scrub gestures all map through the override (the snap
+division still comes from the shared state), so opening a clip parked at bar 6 shows "6" at the
+gutter's edge rather than wherever the lanes were scrolled. The roll fires
+`onHorizontalViewChanged` on every zoom/scroll so the panel can repaint the ruler; close restores
+the shared mapping. While the override is live the playhead overlay's shared-mapping line would be
+a lie in the ruler strip too, so the overlay's local-client region covers the ruler rows as well as
+the roll's (`TimelinePanelComponent::resized`) — the roll draws the only playhead line.
+
+Tests: `Tests/PianoRollTests.cpp` — `NoteSelectionModel`/`noteHitTestMarquee` unit coverage (mirrors
+`TimelineClipLaneTests.cpp`'s groups 1–2) and `PianoRollComponent` interaction tests driven by
+hand-built `juce::MouseEvent`s against a bare `TimelineDoc` + `AppUndoManager` +
+`PianoRollComponent`, no `TimelinePanelComponent` needed. The gesture table is pinned test by test
+(single click deselects and creates nothing; double-click creates one note per snap division, at two
+divisions; double-click deletes; click-select-then-drag moves, one step), as are the first-bar
+reachability fix, zoom-around-cursor's fixed point (plus "the shared view state never moves"), the
+gridline-density seam, and the local playhead — the last through `CountingRoll`, a subclass
+overriding `requestRepaintStrip`, exactly as `TimelinePlayheadTests.cpp` does for the overlay.
+Note: `juce::MouseWheelDetails` has no default member initialisers, so wheel tests construct it
+`{}`-initialised or a garbage `deltaX` decides the branch.
+
+### TL5-9: automation strip
+
+A horizontal strip docked at the BOTTOM of the lanes region (`gridLanesBounds_`), toggled open by
+selecting a lane — from the lane picker inside the strip itself, or from ANY generic auto-UI knob's
+right-click menu (`ModuleComponent` → `GraphEditor::onAutomateParameterRequested` →
+`MainComponent::automateParameter`). While open it takes exactly `Metrics::
+timelineAutomationStripHeight` (72, code-only) off the bottom of `gridLanesBounds_`, so
+`TimelineClipLaneArea`/`PianoRollComponent` (and the playhead overlay, trimmed the same amount)
+shrink by that much — never the other way around, and the ruler/track-header column are untouched.
+
+**Strip chrome** (`TimelinePanelComponent`'s own members, laid out in `resized()`): a header row —
+four tool `juce::TextButton`s (glyphs `P` / `✎` / `╱` / `⌫`, radio-grouped so exactly one is down),
+a lane-picker `juce::ComboBox` (every doc lane, labelled `"NodeName · paramId"` via
+`TrackHeaderHost::getNodeDisplayName(lane.nodeUuid)` — falling back to the uuid's first 8
+characters when it doesn't resolve — the SAME interface the track-header binding chip already
+uses, so no second graph-aware seam was added), a record-mode `juce::ComboBox` (Off/Read/Touch/
+Latch/Write, 1-based combo id = `LaneRecordMode` + 1) bound to `TimelineDoc::setLaneRecordMode`
+through `AppUndoManager::recordTimelineChange` (a manual selector change IS a user gesture, unlike
+`AutomationRecorder`'s own programmatic Write-drops-to-Touch-on-stop call — see that setter's
+header comment), and a close `✕` button — above `synth::ui::AutomationLaneEditor`, the curve
+canvas. Panel API: `showAutomationLane(LaneId)` / `closeAutomationStrip()` /
+`isAutomationStripVisible()`; headless hooks `applyAutomationLaneMenuChoice(int)` /
+`applyAutomationRecordModeChoice(int)` (juce::PopupMenu/ComboBox don't run in a test — the same
+"headless hook" idiom every other timeline sub-component's context menu already follows).
+
+**`Source/UI/AutomationLaneEditor.h/.cpp`** (`synth::ui::AutomationLaneEditor`) is the curve canvas,
+editing ONE `synth::AutomationLane` at a time. X is the SAME shared `TimelineViewState` the clip
+lanes use (so it lines up with the playhead pixel-for-pixel — the piano roll is the one surface that
+maps beats through its own zoom/scroll instead; see TL5-8); Y maps the lane's own
+`RangeSnapshot [min..max]` linearly onto the component's height, top = max
+(`valueToY`/`yToValue`). The curve is sampled every ~2 px by building a local
+`TimelineSnapshot::Point[]` from the lane's breakpoints and calling `AutomationKernel::evaluate`
+with a fresh `AutomationCursor` — paint is not hot, so re-deriving this on every repaint (rather
+than caching it) is deliberate: it is the SAME evaluator the audio thread uses, so the canvas can
+never show a shape real playback wouldn't produce.
+
+**Tools** (`AutomationLaneEditor::Tool`, set by the strip's header buttons):
+
+| Tool | Gesture |
+|---|---|
+| Pointer | Drag a HANDLE moves it — beat snapped via the shared view-state snap, value clamped to the lane's range; tension/curve carry over untouched. Drag a SEGMENT (not a handle — hit-tested first) scrubs the segment's LEFT point's tension, ±0.01 per vertical pixel, clamped to `[-1, 1]` (`AutomationKernel`'s own "shape comes from the LEFT point" contract). Double-click empty space adds a point at that (beat, value), Linear/tension 0. |
+| Pencil | Freehand drag collects raw (beat, value) samples (no snapping — that's the point of freehand); on mouse-up they are thinned by `synth::AutomationRecorder::thinPoints` (reused, not re-implemented — its RDP helper is `public static` precisely so a second caller can reach it) at the SAME `kThinningEpsilonFraction` scaled to the lane's own range, and replace whatever existed inside the dragged beat span. |
+| Line | Drag previews a straight line from press to release; mouse-up replaces the dragged span with exactly the two (snapped) endpoints, Linear. |
+| Eraser | Drag removes every handle it touches — collected into a set as the pointer passes over them (dimmed in the preview), deleted on mouse-up. |
+
+Right-click a SEGMENT shows Hold/Linear (ticking the current one), routed through the headless
+`applySegmentCurveChoice(beat, curve)` hook. Right-click a HANDLE shows `{Delete point}`. Escape
+clears in-flight tool-drag state and returns `true`; when idle it returns `false` so the key falls
+through to `TimelinePanelComponent`'s own `keyPressed` (added for this task), which closes the
+strip — the same ancestor-chain fallthrough `TimelineClipLaneArea`/`PianoRollComponent`'s own
+panel-scoped Delete/Escape already relies on, one level further up.
+
+**One gesture, one mutation.** Every preview above is strictly component-local (a handful of
+`preview*_` members, read back by `paint()`) and NEVER touches the doc during `mouseDrag` — commit
+happens exactly once, on mouse-up. The subtlety: `TimelineDoc`'s own single-point mutators
+(`addBreakpoint`/`removeBreakpoint`) each bump the revision counter independently, so a gesture that
+touches several points (Pencil's thin-and-replace, Line's remove-span-then-add-two-endpoints, a
+Pointer move that lands on a different beat, Eraser's multi-point sweep) calling them in a loop
+would cost one revision bump — one audio-thread republish — PER POINT instead of per gesture. TL5-9
+therefore adds one new batched primitive, `TimelineDoc::editBreakpoints(laneId, removeBeats,
+addPoints)`: removes every existing point at a beat in `removeBeats`, then inserts every point in
+`addPoints` (validated/clamped exactly like `addBreakpoint`), as ONE `applyMutation` call however
+many points move either way. Every multi-point gesture above routes through it; only the genuinely
+single-point ones (tension scrub, curve toggle, double-click-add, record-mode select) still call a
+plain single mutator, because those already cost exactly one bump on their own.
+
+**Knob entry point.** `ModuleComponent`'s generic auto-UI slider branches (`createControls()`'s
+float/int cases) attach `this` as a `MouseListener` on the slider (`addMouseListener(this, false)`
+— safe because `this` outlives every child slider, both being torn down together in
+`~ModuleComponent()`). `ModuleComponent::mouseDown` checks `e.eventComponent != this` FIRST (a hit
+on a child fires the SAME override, in the CHILD's local coordinate space, which the body-click
+geometry further down must never see) and, on a right-click, shows `"Automate '<Param>'"` via a
+`juce::Component::SafePointer<ModuleComponent>` (the popup's callback is async — the module can be
+gone by the time it fires) that calls `owner.onAutomateParameterRequested(nodeId, paramId)` — a new
+`GraphEditor` host seam mirroring `onSaveSnippetRequested` exactly (`GraphEditor` owns no
+`TimelineDoc`, so it hands the pair back to the one component that owns both the doc and the
+graph). `MainComponent::automateParameter(nodeId, paramId)` (public — also the test's headless
+hook) resolves the node's uuid (ensure-uuid, mirrored into the processor, the same idiom
+`createTrackInNode()`/`AIStateMapper` use at every uuid writer site), finds the first
+`TrackKind::Automation` track or creates one, binds a lane with the parameter's real
+`NormalisableRange` (`addLane` dedupes doc-wide — a repeat call for an already-automated parameter
+is a no-op that returns the existing lane), opens the timeline panel via the SAME toggle-button
+click path `simulateToggleTimelineClick()` uses if it's hidden, and opens the strip on that lane.
+
+Tests: `Tests/AutomationEditorTests.cpp` — `AutomationLaneEditor` gesture/publish-discipline
+coverage (mirrors the `TimelineClipLaneArea`/`PianoRollComponent` hand-built-`juce::MouseEvent`
+idiom against a bare `TimelineDoc` + `AppUndoManager`), the panel's strip open/close/record-mode
+selector, and a `#if SYNTH_ENABLE_TIMELINE`-gated `MainComponent` integration test for the knob
+entry point.
+
+### TL5-10: keyboard & focus
+
+By TL5-9 the panel has THREE independently-editable surfaces competing for the same physical
+keys: the graph editor, the clip lanes, and the piano roll (each already grabbing keyboard focus on
+its own `mouseDown` — TL5-7/TL5-8's own subsections above). Cmd+C/V/D are global
+`ApplicationCommandManager` commands owned by `MainComponent`, so — unlike Delete/Escape, which
+each surface already intercepts locally via its own `keyPressed` — nothing decided *which*
+surface's selection and clipboard they should act on until this task.
+
+**The one resolver.** `MainComponent::resolveEditSurface() const` is the single focus-ownership
+rule:
+
+```cpp
+enum class EditSurface { Graph, TimelineClips, PianoRoll };
+```
+
+It returns `TimelineClips`/`PianoRoll` when the timeline panel is visible AND real keyboard focus
+(`juce::Component::getCurrentlyFocusedComponent()`) sits inside the clip-lane area / piano roll
+respectively, and `Graph` otherwise — including when the timeline panel is hidden outright,
+regardless of what a stale focus pointer inside it might point at. Nothing new grabs focus for
+this: every surface already does it on `mouseDown` (`GraphEditor::mouseDown` is the idiom's
+original; `TimelineClipLaneArea`, `PianoRollComponent` and `AutomationLaneEditor` all copy it), so
+"the surface you last clicked owns the verbs" falls out of ordinary JUCE focus tracking with no
+extra bookkeeping. Headless tests can't always create a real focus grab (`grabKeyboardFocus()`
+needs a native peer — see `Tests/FocusArbitrationTests.cpp`'s `SurfaceResolverRealFocus`, which
+documents why this repo doesn't attempt one), so `MainComponent::setEditSurfaceOverrideForTest()`
+is consulted FIRST and short-circuits the real-focus check when set.
+
+**Cmd+C/V/D route by surface** — `MainComponent::getCommandInfo`/`perform` branch on
+`resolveEditSurface()` for `AppCommands::copySelection/pasteSelection/duplicateSelection`:
+
+- **Graph** — unchanged: `GraphEditor::copySelection()/pasteClipboard()/duplicateSelection()`
+  against its own `ModuleClipboard`, exactly as before this task.
+- **TimelineClips** — a NEW clip clipboard, owned by `TimelinePanelComponent` (it already owns the
+  clip selection — see TL5-7): `copySelectedClips()` serialises the selected clips (notes, lengths,
+  starts relative to the earliest selected clip) into it; `pasteClipsAtPlayhead()` re-inserts them
+  onto their ORIGINAL tracks (by `TrackId`), re-based so the earliest clip lands at the transport's
+  CURRENT position (snapped via the shared `TimelineViewState`), in ONE
+  `AppUndoManager::recordTimelineChange`; a clip whose original track no longer exists lands on the
+  doc's first `Midi`-kind track, or is skipped if there is none. `duplicateSelectedClips()` calls
+  `TimelineDoc::duplicateClip()` per selected clip, batched the same way. All three leave their
+  result selected, mirroring `GraphEditor`'s own "the copies are what you probably want next"
+  convention.
+- **PianoRoll** — C/V/D are INACTIVE (`getCommandInfo` calls `result.setActive(false)`). A
+  deliberate v1 gap: the roll's own note gestures (draw, drag, double-click-delete, all already one
+  undo step each) cover copy/duplicate/undo well enough that a second clipboard for individual
+  notes wasn't worth building yet.
+
+`getCommandInfo`'s Paste case is active only when the SURFACE-MATCHING clipboard has something in
+it — `GraphEditor::canPaste()` for Graph, `TimelinePanelComponent::canPasteClips()` for
+TimelineClips — so copying modules never makes Paste live on the clip lanes, or vice versa. See
+[`shortcuts.md`](shortcuts.md#surface-routing-tl5-10-who-cmdcvd-act-on) for the user-facing table.
+
+**Space is global.** `AppCommands::togglePlayback` (`ShortcutManager` action id `togglePlayback`,
+default binding: bare spacebar, no modifiers) is deliberately NOT routed by `resolveEditSurface()`
+— it always toggles the transport, from any surface, via
+`TimelinePanelComponent::getTransportBar().getPlayStopButton().triggerClick()` (the SAME choke
+point the transport bar's own click handler uses — see TL5-5 above — so the button's visual state
+and a Space-triggered toggle can never disagree). Safe to claim app-wide for the same reason
+Cmd+C/V is (see `shortcuts.md`): a focused `juce::TextEditor` consumes the spacebar itself (types a
+space character) before `MainComponent::keyPressed`, the sole dispatch point, ever sees it. Inactive
+outright (`getCommandInfo` -> `setActive(false)`) in a `SYNTH_ENABLE_TIMELINE=OFF` build, where
+there is no transport to toggle.
+
+**Delete stays panel-local.** Unlike C/V/D, Delete/Escape were never routed through
+`ShortcutManager`/`ApplicationCommandManager` at all (see `shortcuts.md`'s reasoning) — each
+surface's own `keyPressed` already handles its own selection and falls through (`return false`) on
+an empty one, which is what let an unmodified `Delete` binding be surface-scoped for free since
+before this task. TL5-10 adds no new production code here, only
+`Tests/FocusArbitrationTests.cpp`'s `DeletePerSurface`, which pins that a clips-focused Delete never
+touches the graph, a graph-focused Delete never touches the clips, and an empty selection on either
+falls through rather than eating the key.
+
+Tests: `Tests/FocusArbitrationTests.cpp` — one test per verb x surface (`resolveEditSurface()`
+override coverage, clip copy/paste-at-playhead/duplicate incl. the missing-track fallback, the
+piano-roll inactive gap, Space from every surface, per-surface Delete, and the resolver's real-focus
+fallback behaviour).

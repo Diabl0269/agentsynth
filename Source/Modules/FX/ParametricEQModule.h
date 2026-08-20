@@ -94,20 +94,21 @@ public:
             }
         }
 
-        smoothedBellFreq[0].reset(lastSampleRate, 0.02);
-        smoothedBellFreq[1].reset(lastSampleRate, 0.02);
-        smoothedBellGain[0].reset(lastSampleRate, 0.02);
-        smoothedBellGain[1].reset(lastSampleRate, 0.02);
-        smoothedOutputGain.reset(lastSampleRate, 0.02);
-
-        for (int i = 0; i < kNumBellBands; ++i) {
-            smoothedBellFreq[(size_t)i].setCurrentAndTargetValue(bands[(size_t)kBellBandIndex[i]].freq->get());
-            smoothedBellGain[(size_t)i].setCurrentAndTargetValue(bands[(size_t)kBellBandIndex[i]].gain->get());
+        // Every band's Freq / Gain / Q is smoothed, not just the two CV-driven bells: they all
+        // land in writeBiquad, and swapping a biquad's coefficients wholesale puts a step in the
+        // output. Snapped to the knobs here so a static render is bit-identical.
+        for (int b = 0; b < kNumBands; ++b) {
+            smoothedFreq[(size_t)b].reset(lastSampleRate, 0.02);
+            smoothedGain[(size_t)b].reset(lastSampleRate, 0.02);
+            smoothedQ[(size_t)b].reset(lastSampleRate, 0.02);
+            smoothedFreq[(size_t)b].setCurrentAndTargetValue(bands[(size_t)b].freq->get());
+            smoothedGain[(size_t)b].setCurrentAndTargetValue(bands[(size_t)b].gain->get());
+            smoothedQ[(size_t)b].setCurrentAndTargetValue(bands[(size_t)b].q->get());
         }
+        smoothedOutputGain.reset(lastSampleRate, 0.02);
         smoothedOutputGain.setCurrentAndTargetValue(juce::Decibels::decibelsToGain(outputGainParam->get()));
 
-        updateCoefficients(smoothedBellFreq[0].getCurrentValue(), smoothedBellGain[0].getCurrentValue(),
-                           smoothedBellFreq[1].getCurrentValue(), smoothedBellGain[1].getCurrentValue());
+        updateCoefficients();
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -129,14 +130,19 @@ public:
         if (numSamples == 0 || numAudioCh == 0)
             return;
 
-        // ---- CV (sampled once per block, RMS-gated like the rest of the FX suite) ----
-        // Channels 2-5 modulate the two bell bands: freq then gain, bell 1 then bell 2.
+        // ---- Band targets, plus CV (sampled once per block, RMS-gated like the rest of the FX
+        // suite). Channels 2-5 modulate the two bell bands: freq then gain, bell 1 then bell 2.
+        for (int b = 0; b < kNumBands; ++b) {
+            smoothedFreq[(size_t)b].setTargetValue(bands[(size_t)b].freq->get());
+            smoothedGain[(size_t)b].setTargetValue(bands[(size_t)b].gain->get());
+            smoothedQ[(size_t)b].setTargetValue(bands[(size_t)b].q->get());
+        }
         for (int i = 0; i < kNumBellBands; ++i) {
             const auto& band = bands[(size_t)kBellBandIndex[i]];
             const float cvFreq = readCV(buffer, 2 + i * 2, numSamples);
             const float cvGain = readCV(buffer, 3 + i * 2, numSamples);
-            smoothedBellFreq[(size_t)i].setTargetValue(applyFreqCV(band.freq->get(), cvFreq));
-            smoothedBellGain[(size_t)i].setTargetValue(applyGainCV(band.gain->get(), cvGain));
+            smoothedFreq[(size_t)kBellBandIndex[i]].setTargetValue(applyFreqCV(band.freq->get(), cvFreq));
+            smoothedGain[(size_t)kBellBandIndex[i]].setTargetValue(applyGainCV(band.gain->get(), cvGain));
             // readCV returns exactly 0 for an unpatched (gated) jack, so this also tells the
             // visualiser whether to show the CV-modulated value or the plain knob value.
             bellCVActive[(size_t)i].store(cvFreq != 0.0f || cvGain != 0.0f, std::memory_order_relaxed);
@@ -146,13 +152,13 @@ public:
         // Coefficients update once per block from the smoothed values. With 20 ms smoothing the
         // per-block step is small enough that swapping coefficients wholesale is inaudible, and
         // it keeps the inner loops to a plain biquad.
-        for (int i = 0; i < kNumBellBands; ++i) {
-            smoothedBellFreq[(size_t)i].skip(numSamples);
-            smoothedBellGain[(size_t)i].skip(numSamples);
+        for (int b = 0; b < kNumBands; ++b) {
+            smoothedFreq[(size_t)b].skip(numSamples);
+            smoothedGain[(size_t)b].skip(numSamples);
+            smoothedQ[(size_t)b].skip(numSamples);
         }
 
-        updateCoefficients(smoothedBellFreq[0].getCurrentValue(), smoothedBellGain[0].getCurrentValue(),
-                           smoothedBellFreq[1].getCurrentValue(), smoothedBellGain[1].getCurrentValue());
+        updateCoefficients();
 
         // ---- Filter the audio channels ----
         for (int ch = 0; ch < numAudioCh; ++ch) {
@@ -517,20 +523,16 @@ private:
         return cv[numSamples / 2];
     }
 
-    void updateCoefficients(float bell1Freq, float bell1Gain, float bell2Freq, float bell2Gain) {
+    /** Rewrites every band's biquad from the smoothed (and, for the bells, CV-resolved) values. */
+    void updateCoefficients() {
         float bandFreq[kNumBands];
         float bandGain[kNumBands];
         float bandQ[kNumBands];
         for (int b = 0; b < kNumBands; ++b) {
-            bandFreq[b] = bands[(size_t)b].freq->get();
-            bandGain[b] = bands[(size_t)b].gain->get();
-            bandQ[b] = bands[(size_t)b].q->get();
+            bandFreq[b] = smoothedFreq[(size_t)b].getCurrentValue();
+            bandGain[b] = smoothedGain[(size_t)b].getCurrentValue();
+            bandQ[b] = smoothedQ[(size_t)b].getCurrentValue();
         }
-        // The two bells take their values from the CV-smoothed path instead of the raw parameter.
-        bandFreq[kBellBandIndex[0]] = bell1Freq;
-        bandGain[kBellBandIndex[0]] = bell1Gain;
-        bandFreq[kBellBandIndex[1]] = bell2Freq;
-        bandGain[kBellBandIndex[1]] = bell2Gain;
 
         for (int b = 0; b < kNumBands; ++b) {
             if (coefficients[(size_t)b] == nullptr)
@@ -563,11 +565,18 @@ private:
 
     double lastSampleRate = 44100.0;
 
-    std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative>, kNumBellBands> smoothedBellFreq{
-        {juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative>(500.0f),
-         juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative>(3000.0f)}};
-    std::array<juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>, kNumBellBands> smoothedBellGain{};
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear> smoothedOutputGain{1.0f};
+    // Multiplicative for Freq and Q so the ramp is even in pitch / in shape; the ctor arguments
+    // only have to be non-zero (Multiplicative cannot start at 0) — prepareToPlay snaps them to
+    // the real knob values.
+    using FreqSmoother = juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative>;
+    using GainSmoother = juce::SmoothedValue<float, juce::ValueSmoothingTypes::Linear>;
+
+    std::array<FreqSmoother, kNumBands> smoothedFreq{
+        {FreqSmoother(100.0f), FreqSmoother(500.0f), FreqSmoother(3000.0f), FreqSmoother(8000.0f)}};
+    std::array<GainSmoother, kNumBands> smoothedGain{};
+    std::array<FreqSmoother, kNumBands> smoothedQ{
+        {FreqSmoother(kDefaultQ), FreqSmoother(kDefaultQ), FreqSmoother(kDefaultQ), FreqSmoother(kDefaultQ)}};
+    GainSmoother smoothedOutputGain{1.0f};
 
     std::array<BandParams, kNumBands> bands{};
     juce::AudioParameterFloat* outputGainParam = nullptr;

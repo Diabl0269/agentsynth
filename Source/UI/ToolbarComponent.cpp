@@ -24,6 +24,7 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
         108.0f, // ToggleMinimap ("Hide Minimap"/"Show Minimap")
         104.0f, // ToggleModMatrix
         92.0f,  // ToggleAiPanel
+        112.0f, // ToggleTimeline ("Hide Timeline"/"Show Timeline")
         110.0f  // ToggleTheme
     };
 
@@ -34,8 +35,10 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
     fb.alignItems = juce::FlexBox::AlignItems::center;
 
     // Left group: Library, Save, Load, Settings, Undo, Redo, AutoArrange.
+    // Invisible buttons (e.g. ToggleTimeline while the "Show timeline" preference is off) yield
+    // their slot entirely rather than leaving a reserved gap.
     for (int slot = Library; slot <= AutoArrange; ++slot)
-        if (buttons_[(size_t)slot] != nullptr)
+        if (buttons_[(size_t)slot] != nullptr && buttons_[(size_t)slot]->isVisible())
             fb.items.add(juce::FlexItem(*buttons_[(size_t)slot])
                              .withMinWidth(0.0f)
                              .withWidth(prefFor(slot))
@@ -47,7 +50,7 @@ void ToolbarComponent::layoutButtons(juce::Rectangle<int> bounds) {
 
     // Right group: ToggleMinimap, ToggleModMatrix, ToggleAiPanel, ToggleTheme.
     for (int slot = ToggleMinimap; slot <= ToggleTheme; ++slot)
-        if (buttons_[(size_t)slot] != nullptr)
+        if (buttons_[(size_t)slot] != nullptr && buttons_[(size_t)slot]->isVisible())
             fb.items.add(juce::FlexItem(*buttons_[(size_t)slot])
                              .withMinWidth(0.0f)
                              .withWidth(prefFor(slot))

@@ -554,7 +554,10 @@ TEST_F(SampleHoldModuleTest, LevelScalesHeldValue) {
     gate(b, 10, 50);
     process(b);
 
-    EXPECT_NEAR(b.getSample(0, 200), 0.4f, 1e-4f);
+    // Level is smoothed over 10 ms, and this knob move lands after prepareToPlay, so the
+    // first ~441 samples are the ramp down from the default 1.0. The held value is latched at
+    // sample 10 and never changes again, so probing past the ramp reads the same step.
+    EXPECT_NEAR(b.getSample(0, 500), 0.4f, 1e-4f);
 }
 
 TEST_F(SampleHoldModuleTest, OffsetShiftsHeldValue) {
@@ -567,7 +570,8 @@ TEST_F(SampleHoldModuleTest, OffsetShiftsHeldValue) {
     gate(b, 10, 50);
     process(b);
 
-    EXPECT_NEAR(b.getSample(0, 200), 0.7f, 1e-4f);
+    // See LevelScalesHeldValue: Offset is smoothed over 10 ms, so this probes past the ramp.
+    EXPECT_NEAR(b.getSample(0, 500), 0.7f, 1e-4f);
 }
 
 TEST_F(SampleHoldModuleTest, OutputIsClampedToBipolarRange) {

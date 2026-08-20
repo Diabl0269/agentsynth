@@ -371,7 +371,7 @@ void RemoteProvider::failAllPending(AIErrorKind kind, const juce::String& messag
 }
 
 void RemoteProvider::deliverResult(const Request& req, const juce::String& responseText, bool forceSynchronous,
-                                   const juce::String& conversationId) {
+                                   const juce::String& conversationId, const juce::String& messageId) {
     if (!claimDelivery(req))
         return;
 
@@ -383,6 +383,7 @@ void RemoteProvider::deliverResult(const Request& req, const juce::String& respo
     response.content = responseText;
     response.requestId = juce::String(req.id.value);
     response.conversationId = conversationId;
+    response.messageId = messageId;
 
     if (isTestMode || forceSynchronous) {
         req.callback(response);
@@ -476,8 +477,9 @@ void RemoteProvider::run() {
 }
 
 void RemoteProvider::processRequest(const Request& req) {
-    auto deliverSuccess = [this, &req](const juce::String& responseText, const juce::String& respConversationId) {
-        deliverResult(req, responseText, /*forceSynchronous=*/false, respConversationId);
+    auto deliverSuccess = [this, &req](const juce::String& responseText, const juce::String& respConversationId,
+                                       const juce::String& respMessageId) {
+        deliverResult(req, responseText, /*forceSynchronous=*/false, respConversationId, respMessageId);
     };
     auto deliverErr = [this, &req](AIErrorKind kind, const juce::String& message, int retryAfterSeconds = 0) {
         deliverError(req, kind, message, retryAfterSeconds, /*forceSynchronous=*/false);
@@ -643,7 +645,8 @@ void RemoteProvider::processRequest(const Request& req) {
     if (auto* obj = jsonResponse.getDynamicObject()) {
         if (obj->hasProperty("data")) {
             deliverSuccess(juce::JSON::toString(obj->getProperty("data")),
-                           result.headers.getValue("x-conversation-id", ""));
+                           result.headers.getValue("x-conversation-id", ""),
+                           result.headers.getValue("x-message-id", ""));
             return;
         }
     }

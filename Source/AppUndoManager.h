@@ -4,6 +4,10 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_data_structures/juce_data_structures.h>
 
+namespace synth {
+class TimelineDoc; // Forward declaration (Source/Timeline/TimelineDoc.h)
+}
+
 /**
  * @class AppUndoManager
  * @brief Thin wrapper around juce::UndoManager with convenience methods for
@@ -89,6 +93,73 @@ public:
     void captureBeforeState(juce::AudioProcessorGraph& graph);
     void pushSnapshotFromCapture(juce::AudioProcessorGraph& graph);
 
+    /**
+     * @brief Records a timeline-only mutation (add/remove track, clip, note, lane, breakpoint, ...)
+     *        as an undoable snapshot, on the SAME shared undo stack as the graph's own changes.
+     *
+     * Timeline undo is a deliberately SEPARATE action type (TimelineSnapshotAction) from the graph's
+     * SnapshotAction, carrying only the timeline's before/after JSON. Folding timeline JSON into every
+     * graph snapshot would multiply the size of every existing undo step — parameter tweaks, module
+     * drags, AI patches — that never touch the timeline at all. Both action types are pushed through
+     * this one juce::UndoManager, so the user has ONE undo stack and Cmd+Z stays chronological across
+     * the graph and the timeline, however the two are interleaved.
+     *
+     * Captures doc.toVar() before, runs the mutation, then captures toVar() after; if the two
+     * serialisations are identical (the mutation was rejected by the doc, or was a genuine no-op),
+     * nothing is pushed and this returns false — a no-op mutation must not create an undo step.
+     *
+     * Lifetime note: exactly like SnapshotAction holding the graph, the pushed TimelineSnapshotAction
+     * holds a reference to `doc` for as long as it sits on the undo stack — `doc` must outlive this
+     * AppUndoManager, or clearUndoHistory() must run before the doc is destroyed.
+     *
+     * @param doc Reference to the timeline document.
+     * @param mutation Lambda that performs the actual timeline mutation.
+     * @return true if the mutation changed the doc and an undo entry was pushed, false if it was a no-op.
+     */
+    bool recordTimelineChange(synth::TimelineDoc& doc, const std::function<void()>& mutation);
+
+    /**
+     * @brief Records a mutation that may touch BOTH the graph and the timeline in a single gesture
+     *        (the canonical case: deleting a module a timeline lane is bound to) as ONE undo step.
+     *
+     * Begins a single transaction, captures graph + timeline "before" state, runs the mutation once,
+     * captures both "after" states, then pushes a graph SnapshotAction and/or a TimelineSnapshotAction
+     * — only for the domain(s) that actually changed — inside that one transaction, so a single
+     * undo()/redo() reverts or re-applies both together, never half of the combined edit.
+     *
+     * Reuses the exact same pre/post-restore lambda plumbing recordStructuralChange gives the graph's
+     * SnapshotAction (detach module components before a rebuild, reconcile them afterwards).
+     *
+     * @param graph Reference to the audio processor graph.
+     * @param doc Reference to the timeline document. Same lifetime contract as recordTimelineChange.
+     * @param mutation Lambda that performs the combined mutation.
+     * @return true if either domain changed and a transaction was pushed, false if neither did.
+     */
+    bool recordCombinedChange(juce::AudioProcessorGraph& graph, synth::TimelineDoc& doc,
+                              const std::function<void()>& mutation);
+
+    /**
+     * @brief Hooks fired around EVERY restore this manager performs on undo/redo — the graph's
+     *        SnapshotAction and the timeline's TimelineSnapshotAction alike.
+     *
+     * Distinct from the pre/post-restore lambdas SnapshotAction already carries: those are the
+     * GraphEditor's component lifecycle (detach before processors are freed, reconcile after), and
+     * the "pre" half of that pair deliberately fires LAZILY — a parameter-only undo frees nothing,
+     * so it never runs. These two always fire, in every case, which is what a caller needs for:
+     *
+     *  - `beforeRestore` — opening an AutomationRecorder::ScopedProgrammaticApply, so the parameter
+     *    writes a restore performs are never mistaken for a user's gesture. A parameter-only undo
+     *    is exactly the case that writes parameters, so hanging this off the lazy hook would miss it.
+     *  - `afterRestore` — re-running the timeline's binding reconciliation + publish. A graph
+     *    restore can strand a track/lane binding, and a timeline restore comes back out of
+     *    TimelineDoc::fromVar with every orphan flag reset to false (it is runtime-derived state),
+     *    so BOTH domains need the same pass.
+     *
+     * Installed once by the app-level owner (MainComponent). Actions capture this manager, not the
+     * callbacks, so hooks installed after an action was pushed still apply to it.
+     */
+    void setRestoreHooks(std::function<void()> beforeRestore, std::function<void()> afterRestore);
+
     // Convenience methods that delegate to undoManager
     bool canUndo() const { return undoManager.canUndo(); }
     bool canRedo() const { return undoManager.canRedo(); }
@@ -97,10 +168,31 @@ public:
     void clearUndoHistory() { undoManager.clearUndoHistory(); }
     void beginNewTransaction() { undoManager.beginNewTransaction(); }
 
+    // Called by the undoable actions this manager creates — never by anything else.
+    void fireBeforeRestore() {
+        if (beforeRestore_)
+            beforeRestore_();
+    }
+    void fireAfterRestore() {
+        if (afterRestore_)
+            afterRestore_();
+    }
+
 private:
     GraphEditor* graphEditor = nullptr;
     juce::UndoManager undoManager{30000000, 50}; // 30MB limit, 50 min transactions
     juce::var capturedBeforeState;
+
+    // See setRestoreHooks(). Safe for an action to hold `this` and call through these: every action
+    // lives inside `undoManager`, which is a member destroyed with this object.
+    std::function<void()> beforeRestore_;
+    std::function<void()> afterRestore_;
+
+    // Builds a graph SnapshotAction wired to graphEditor's detach/reattach lifecycle — the
+    // pre/post-restore lambda plumbing recordStructuralChange, pushSnapshotFromCapture, and the
+    // graph half of recordCombinedChange all share, so it isn't duplicated three times.
+    juce::UndoableAction* createGraphSnapshotAction(juce::AudioProcessorGraph& graph, const juce::var& beforeState,
+                                                    const juce::var& afterState);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AppUndoManager)
 };

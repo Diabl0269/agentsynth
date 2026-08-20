@@ -1,7 +1,114 @@
 #include "MainComponent.h"
 #include "AI/AIProviderRegistry.h"
+#include "AI/AIStateMapper.h"
 #include "Branding.h"
+#include "Modules/TimelineAudioSourceModule.h"
+#include "Plugin/Hosting/HostedPluginModule.h"
+#include "ProjectBundle.h"
+#include "Timeline/AssetManager.h"
+#include "Timeline/AutomationBinding.h"
+#include "Timeline/TakePlacement.h"
+#include "Timeline/TimelineReconciler.h"
 #include "UI/SettingsWindow.h"
+#include "UI/TrackColour.h"
+#include <algorithm>
+#include <map>
+#include <set>
+
+namespace {
+
+// The file filter both patch dialogs use. A `.agsproj` project bundle only exists in a build that
+// has the timeline compiled in — offering it otherwise would let a user save a "project" whose
+// timeline half can never be non-empty.
+#if SYNTH_ENABLE_TIMELINE
+constexpr const char* kPatchFileFilter = "*.json;*.agsproj";
+#else
+constexpr const char* kPatchFileFilter = "*.json";
+#endif
+
+#if SYNTH_ENABLE_TIMELINE
+// Where an UNSAVED project's takes go, under <app data>/<settings folder>. Also the reserved
+// prefix such a take's clip assetRef carries — see chooseTakeFiles and ProjectBundle's asset policy.
+constexpr const char* kRecordingsFolderName = "Recordings";
+
+// Upper bound on the take-number search. A folder with 10000 takes in it is a bug report, not a
+// session, and an unbounded loop on a stat() call is not something a UI click should be able to do.
+constexpr int kMaxTakeNumber = 10000;
+
+// Floor on a committed audio clip's length, so a take stopped the instant it started still produces
+// a clip the model accepts (addClip requires a strictly positive length). Same value and same
+// reasoning as synth::MidiRecorder::kMinNoteLengthBeats.
+constexpr double kMinAudioClipLengthBeats = 1.0 / 32.0;
+
+// A clip's assetRef always names the .wav asset — chooseTakeFiles() is what establishes the
+// pairing with its .agpk peaks sidecar: same stem, and either a sibling "Peaks/" directory (a saved
+// bundle: "Audio/take-n.wav" <-> "Peaks/take-n.agpk") or the SAME "Recordings/" directory (an
+// unsaved project, where chooseTakeFiles points audioDir and peaksDir at the same root). Returns
+// the peaks SIDECAR'S ref, in the same bundle/root-relative form the streamer's own
+// resolveAssetRef() understands — so that one function stays the single place a ref becomes a
+// juce::File, for both the audio and the peaks half. Empty in, empty out.
+juce::String peaksRefForAssetRef(const juce::String& assetRef) {
+    if (assetRef.isEmpty())
+        return {};
+
+    juce::String ref = assetRef;
+    const juce::String audioPrefix = juce::String(synth::ProjectBundle::kAudioSubdirName) + "/";
+    if (ref.startsWith(audioPrefix))
+        ref = juce::String(synth::ProjectBundle::kPeaksSubdirName) + "/" + ref.substring(audioPrefix.length());
+
+    return ref.upToLastOccurrenceOf(".", false, false) + ".agpk";
+}
+
+// The add-track flow's auto-wire target set: MIDI-DRIVEN INSTRUMENTS only.
+//
+// juce::AudioProcessor::acceptsMidi() cannot be the rule — ModuleBase overrides it to `true` for
+// EVERY module in this app, so it would match a Reverb. The module type is the rule instead, and
+// the set mirrors AIStateMapper's own midiAcceptingTypes (Oscillator, Sampler, Sequencer, Poly
+// Sequencer, Poly MIDI) plus Wavetable, which consumes note-ons exactly the way Oscillator does.
+//
+// MIDI *sources* are deliberately excluded: Track In itself, External MIDI and MIDI Keyboard
+// generate notes, so wiring a new Track In into one of them is never what the user meant.
+bool isMidiInstrumentNode(juce::AudioProcessor* processor) {
+    auto* module = dynamic_cast<ModuleBase*>(processor);
+    if (module == nullptr)
+        return false;
+
+    switch (module->getModuleType()) {
+    case ModuleType::PolyMidi:
+    case ModuleType::Oscillator:
+    case ModuleType::Wavetable:
+    case ModuleType::Sampler:
+    case ModuleType::Sequencer:
+    case ModuleType::PolySequencer:
+        return true;
+    default:
+        return false;
+    }
+}
+// True when `candidate` IS `ancestor` or sits anywhere inside its component subtree. The
+// "click grabs focus" idiom (GraphEditor::mouseDown and every timeline sub-component that copies
+// it) means the currently-focused component is always either a surface's root component itself or
+// one of its rare children, never a cousin — checking both keeps resolveEditSurface() correct even
+// if a sub-widget ever grows its own focusable child.
+bool isOrIsChildOf(const juce::Component* candidate, const juce::Component& ancestor) noexcept {
+    return candidate != nullptr && (candidate == &ancestor || ancestor.isParentOf(candidate));
+}
+
+#endif // SYNTH_ENABLE_TIMELINE
+
+// Human-readable identity for a graph node — the binding chip's base label and the re-bind menu's
+// starting point. Plain processor name only: appending "#id" unconditionally was itself the source
+// of founder confusion (a chip reading "Track In #16" reads like a module name, not a binding), and
+// the id means nothing outside a menu actually showing two same-named candidates at once.
+// getAvailableTrackInNodes (below) is where that disambiguation happens, over the option list it is
+// building — never here, and never on the chip.
+juce::String describeNodeForBinding(juce::AudioProcessorGraph::Node* node) {
+    if (node == nullptr || node->getProcessor() == nullptr)
+        return {};
+    return node->getProcessor()->getName();
+}
+
+} // namespace
 
 // ---- Primary constructor (injected ThemeManager + LookAndFeel from Main.cpp) ----
 MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLookAndFeel& lf,
@@ -13,12 +120,9 @@ MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLo
     , aiChatComponent(aiService, appProperties)
     , themeManager(&tm)
     , lookAndFeel(&lf) {
-    // Setup ApplicationProperties
-    propertiesOptions.applicationName = synth::branding::kProductName;
-    propertiesOptions.folderName = synth::branding::kSettingsFolderName;
-    propertiesOptions.filenameSuffix = "settings";
-    propertiesOptions.osxLibrarySubFolder = "Application Support";
-    propertiesOptions.storageFormat = juce::PropertiesFile::storeAsXML;
+    // Setup ApplicationProperties — the shared location, never a local copy of the fields (the
+    // plugin processor opens the same file for the scan list; see synth::userSettingsOptions()).
+    propertiesOptions = synth::userSettingsOptions();
     appProperties.setStorageParameters(propertiesOptions);
     shortcutManager.loadFromProperties(appProperties);
 
@@ -43,11 +147,7 @@ MainComponent::MainComponent(synth::theme::ThemeManager& tm, synth::theme::AppLo
     , aiChatComponent(aiService, appProperties)
     , themeManager(&tm)
     , lookAndFeel(&lf) {
-    propertiesOptions.applicationName = synth::branding::kProductName;
-    propertiesOptions.folderName = synth::branding::kSettingsFolderName;
-    propertiesOptions.filenameSuffix = "settings";
-    propertiesOptions.osxLibrarySubFolder = "Application Support";
-    propertiesOptions.storageFormat = juce::PropertiesFile::storeAsXML;
+    propertiesOptions = synth::userSettingsOptions();
     appProperties.setStorageParameters(propertiesOptions);
     shortcutManager.loadFromProperties(appProperties);
 
@@ -73,11 +173,7 @@ MainComponent::MainComponent(std::unique_ptr<synth::AIProvider> provider, synth:
     lookAndFeel = ownedLookAndFeel.get();
 
     // Setup ApplicationProperties (same as primary ctor)
-    propertiesOptions.applicationName = synth::branding::kProductName;
-    propertiesOptions.folderName = synth::branding::kSettingsFolderName;
-    propertiesOptions.filenameSuffix = "settings";
-    propertiesOptions.osxLibrarySubFolder = "Application Support";
-    propertiesOptions.storageFormat = juce::PropertiesFile::storeAsXML;
+    propertiesOptions = synth::userSettingsOptions();
     appProperties.setStorageParameters(propertiesOptions);
     shortcutManager.loadFromProperties(appProperties);
 
@@ -100,6 +196,24 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // initialisers (isLibraryVisible{true}, isAiPanelVisible=false).
     isLibraryVisible = appProperties.getUserSettings()->getBoolValue("librarySidebarVisible", true);
     isAiPanelVisible = appProperties.getUserSettings()->getBoolValue("aiPanelVisible", false);
+#if SYNTH_ENABLE_TIMELINE
+    // Gated with the button/command/carve below — reading this in a flag-OFF build would
+    // let a value persisted by an earlier flag-ON run silently dock the panel with no button or
+    // shortcut left to hide it again.
+    isTimelineVisible = appProperties.getUserSettings()->getBoolValue("timelinePanelVisible", false);
+    // The theme metric is the DEFAULT height, not the law: a height the user dragged wins. Clamped
+    // here and on every resized() — see clampTimelinePanelHeight().
+    timelinePanelHeight_ = clampTimelinePanelHeight(
+        appProperties.getUserSettings()->getIntValue(kTimelinePanelHeightKey, defaultTimelinePanelHeight()));
+    // The Preferences kill switch (PreferencesSettingsTab::isTimelineFeatureEnabled(), same key).
+    // DEFAULT TRUE — an existing install that has never opened Preferences must restore exactly
+    // as before. If a run somehow persisted the panel open while the feature was off (e.g. a
+    // crash between the two writes in applyTimelineFeatureEnabled), never restore a docked panel
+    // with no button/shortcut left to close it.
+    timelineFeatureEnabled = appProperties.getUserSettings()->getBoolValue("timelineFeatureEnabled", true);
+    if (!timelineFeatureEnabled)
+        isTimelineVisible = false;
+#endif
     graphEditor.setAlignmentGuidesEnabled(
         appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true));
     graphEditor.setSmartConnectionMode(GraphEditor::smartConnectionModeFromString(
@@ -186,6 +300,26 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // Regression: see #96 / f7cba4a.
     aiChatComponent.refreshModels();
 
+#if SYNTH_ENABLE_TIMELINE
+    // Gives AIIntegrationService's outgoing-request context builder a way to read the
+    // app's one live TimelineDoc/TransportService — see AIIntegrationService::setTimelineContext().
+    // Both outlive aiService (declaration order: timelineDoc, then audioEngine's referent, then
+    // aiService), so this pointer never dangles for aiService's lifetime.
+    aiService.setTimelineContext(&timelineDoc, &audioEngine.getTransport());
+    // The AI's timeline/automation authoring surface follows the runtime "Show timeline"
+    // preference from first launch, not only from the next Preferences toggle.
+    aiService.setTimelineToolsEnabled(timelineFeatureEnabled);
+
+    // The WRITE half. The service only ever holds the doc as const (it is a context reader),
+    // and it owns no undo manager for the timeline, so the host supplies the apply path — the same
+    // objects every other timeline edit in this class goes through, which is what puts an AI-applied
+    // batch on the one shared undo stack alongside the user's own edits. `this` is safe to capture:
+    // aiService is a member destroyed with us, and it clears the callback with it.
+    aiService.setTimelineOpsApplyCallback([this](const juce::var& envelope) {
+        return synth::TimelineOps::apply(envelope, timelineDoc, audioEngine.getGraph(), undoManager);
+    });
+#endif
+
     // Wire the account row/dialog up BEFORE attemptSilentSignIn() so the wiring is live for any
     // state changes that arrive from it (P3-2: sign-in surface for the AI panel).
     aiChatComponent.setAccountService(&accountService);
@@ -199,6 +333,20 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // GraphEditor owns no file dialogs and the sidebar owns no filesystem access, so
     // MainComponent brokers between them.
     graphEditor.onSaveSnippetRequested = [this] { promptSaveSnippet(); };
+    // Right-click-any-knob -> the automation lane editor. Mirrors onSaveSnippetRequested's
+    // shape exactly — GraphEditor owns no TimelineDoc, so it hands the (nodeId, paramId) pair back
+    // to the one component that owns both the doc and the graph.
+    graphEditor.onAutomateParameterRequested = [this](juce::AudioProcessorGraph::NodeID nodeId,
+                                                      const juce::String& paramId) {
+        automateParameter(nodeId, paramId);
+    };
+    // A hosted-plugin card's "Open Editor" button. Mirrors onAutomateParameterRequested's
+    // shape — GraphEditor owns neither the module lookup nor the window manager.
+    graphEditor.onOpenPluginEditorRequested = [this](juce::AudioProcessorGraph::NodeID nodeId) {
+        if (auto* node = audioEngine.getGraph().getNodeForId(nodeId))
+            if (auto* hostedPlugin = dynamic_cast<synth::HostedPluginModule*>(node->getProcessor()))
+                pluginWindowManager.openEditorFor(hostedPlugin, nodeId);
+    };
     graphEditor.snippetProvider = [this](const juce::String& name) -> juce::var {
         return synth::SnippetManager::loadSnippet(
             synth::SnippetManager::fileForName(synth::SnippetManager::getDefaultSnippetsDirectory(), name));
@@ -217,6 +365,31 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     moduleLibrary.setCollapsedSections(juce::StringArray::fromLines(
         appProperties.getUserSettings()->getValue("libraryCollapsedSections", juce::String())));
     refreshSnippetLibrary();
+
+    // ---- Hosted plugins -----------------------------------------------------------
+    // Restore the saved scan list, install it as the process-wide identity resolver, and wire the
+    // two sidebar callbacks. Nothing here starts a scan: scanning launches child processes and is
+    // only ever done because the user asked (and never at all in a hosted build — see
+    // startPluginScan). The list IS needed in a hosted build, because a DAW session that hosts a
+    // plugin still has to resolve its identity to something.
+    auto* pluginBackend = dynamic_cast<synth::DefaultHostedPluginBackend*>(&synth::HostedPluginBackend::getDefault());
+    if (ownedAudioEngine == nullptr && pluginBackend != nullptr && pluginBackend->getScanService() != nullptr) {
+        // The plugin path with a resolver already installed: it is AgentSynthAudioProcessor's, and
+        // it outlives this editor (a host closes and reopens the window freely). Adopt it instead of
+        // installing ours over it — replacing it would leave the session with a resolver that dies
+        // with the window, which is the bug this branch exists to prevent.
+        activeScanService = pluginBackend->getScanService();
+    } else {
+        if (auto savedScanList = juce::parseXML(appProperties.getUserSettings()->getValue(kPluginScanListKey)))
+            pluginScanService.loadFromXml(*savedScanList);
+        if (pluginBackend != nullptr)
+            pluginBackend->setScanService(&pluginScanService);
+    }
+    moduleLibrary.onScanPluginsRequested = [this] { startPluginScan(); };
+    moduleLibrary.onPluginActivated = [this](const synth::PluginIdentity& identity) {
+        graphEditor.addHostedPluginAtCanvasPosition(identity, graphEditor.getViewportCentreInCanvasSpace());
+    };
+    refreshPluginLibrary();
     // Register commands for the macOS native menu bar (Edit→Undo shows Cmd+Z).
     // Do NOT add commandManager.getKeyMappings() as a KeyListener — it intercepts
     // keys like Cmd+Shift+Z and silently fails to invoke the command, preventing
@@ -234,10 +407,36 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         return !GraphEditor::isSingletonIOModule(name) ||
                !GraphEditor::graphHasModuleNamed(audioEngine.getGraph(), name);
     };
-    graphEditor.onGraphStructureChanged = [this] { moduleLibrary.repaint(); };
+    graphEditor.onGraphStructureChanged = [this] {
+        moduleLibrary.repaint();
+        // Close-on-node-delete. A pure NodeID -> graph lookup — see
+        // HostedPluginWindowManager::pruneClosedNodes for why it must never dereference the module a
+        // removed node used to carry.
+        pluginWindowManager.pruneClosedNodes(audioEngine.getGraph());
+        // The same catch-all, for the other hosted-plugin observer pair. A node that has just
+        // appeared (a library drop, a preset load, an undo restore) needs MainComponent's latency /
+        // publish callbacks installed on it, and this is the one hook every path that adds a node
+        // already runs through. Idempotent — re-assigning the same two slots costs nothing.
+        installHostedPluginObservers();
+        // Safety net for graph changes with no explicit post-apply site of their own — the
+        // canonical one being "the user deleted the Track In node from the canvas", which goes
+        // through recordStructuralChange (a RECORD, not a restore, so the undo hooks don't fire).
+        //
+        // Deliberately reconcile-ONLY, never an unconditional republish: this runs at the end of
+        // every updateComponents(), and building a snapshot each time would be wasteful. A
+        // reconcile that flips a flag is itself a doc mutation, so timelineChanged republishes for
+        // exactly the cases that need it — a binding can only start or stop resolving when a node
+        // appears or disappears, which is also the only way an orphan flag moves.
+        reconcileTimelineBindingsOnly();
+    };
     addAndMakeVisible(aiChatComponent);
     aiChatComponent.setVisible(isAiPanelVisible);
     moduleLibrary.setVisible(isLibraryVisible);
+    // Added unconditionally — isTimelineVisible stays false forever in a flag-OFF build
+    // (the only code that ever flips it, the toggle button's onClick, is gated below), so this is
+    // an inert invisible child there, same as any other never-shown component.
+    addAndMakeVisible(timelinePanel);
+    timelinePanel.setVisible(isTimelineVisible);
     graphEditor.getModMatrix().setVisible(graphEditor.isModMatrixVisible());
 
     // Z-ORDER CONSTRAINT: add the toolbar strip + status bar BEFORE the toolbar buttons.
@@ -255,16 +454,12 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     saveButton.setComponentID("saveButton");
     saveButton.onClick = [this] {
         fileChooser = std::make_unique<juce::FileChooser>(
-            "Save Preset", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory), "*.json");
+            "Save Preset", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory), kPatchFileFilter);
         auto flags = juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles;
         fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc) {
             auto file = fc.getResult();
-            if (file != juce::File{}) {
-                statusBar.showMessage("Saving...");
-                graphEditor.savePreset(file);
-                setCurrentPatchName(file.getFileNameWithoutExtension());
-                statusBar.showMessage("Saved: " + file.getFileNameWithoutExtension());
-            }
+            if (file != juce::File{})
+                saveToFile(file);
         });
     };
 
@@ -290,9 +485,10 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
                 openPresetFromFile();
             } else if (result > 0) {
                 statusBar.showMessage("Loading preset...");
-                // loadFactoryPreset detaches existing components (stopping scope timers) before the graph
-                // is cleared — avoids a use-after-free where a ScopeComponent reads a freed VisualBuffer.
-                graphEditor.loadFactoryPreset(result - 1);
+                // loadFactoryPresetAtIndex detaches existing components (stopping scope timers) before the
+                // graph is cleared — avoids a use-after-free where a ScopeComponent reads a freed
+                // VisualBuffer — and reconciles the timeline's bindings against the new graph.
+                loadFactoryPresetAtIndex(result - 1);
                 setCurrentPatchName(presets[result - 1].name);
                 statusBar.showMessage("Loaded: " + presets[result - 1].name);
             }
@@ -329,7 +525,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         appProperties.getUserSettings()->saveIfNeeded();
         applyToolbarIcons();
 
-        auto fromResult = computePanelBounds(isLibraryVisible, !newVisible); // previous layout
+        auto fromResult = computePanelBounds(isLibraryVisible, !newVisible, isTimelineVisible); // previous layout
         if (newVisible) {
             // Showing: make visible before animating in.
             aiChatComponent.setVisible(true);
@@ -341,12 +537,258 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         // Apply the FINAL layout immediately so headless tests (no VBlank) see correct bounds.
         // The animation below is cosmetic only — it starts from fromResult and converges to the
         // same toResult that resized() already applied.
-        auto toResult = computePanelBounds(isLibraryVisible, newVisible);
+        auto toResult = computePanelBounds(isLibraryVisible, newVisible, isTimelineVisible);
         resized();
         if (!newVisible)
             aiChatComponent.setVisible(false);
-        animatePanelTransition(fromResult, toResult, /*hideLib=*/false, /*hideAi=*/!newVisible);
+        animatePanelTransition(fromResult, toResult, /*hideLib=*/false, /*hideAi=*/!newVisible, /*hideTimeline=*/false);
     };
+
+#if SYNTH_ENABLE_TIMELINE
+    // Bottom-docked timeline panel toggle. Mirrors the AI-panel handler above exactly
+    // (flip + persist BEFORE animating, applyToolbarIcons, from/to computePanelBounds, synchronous
+    // resized() for headless tests, then the shared animated transition) — only the axis differs
+    // (bottom slide instead of a side panel).
+    // Wire the panel to the real transport + persisted settings. Gated with the rest of
+    // this block — a SYNTH_ENABLE_TIMELINE=OFF build never shows/carves the panel, so it has no
+    // need of either.
+    timelinePanel.setTransport(&audioEngine.getTransport());
+    timelinePanel.setMetronome(&audioEngine.getMetronome());
+    timelinePanel.setApplicationProperties(&appProperties);
+
+    // The panel's top-edge drag reports a desired height; THIS component owns it — clamp, lay out
+    // live, and persist once the drag ends (not per pixel).
+    timelinePanel.onResizeHeight = [this](int desiredHeight) {
+        setTimelinePanelHeight(desiredHeight, /*persist=*/false);
+    };
+    timelinePanel.onResizeHeightCommitted = [this](int desiredHeight) {
+        setTimelinePanelHeight(desiredHeight, /*persist=*/true);
+    };
+
+    // This component owns the app's one live TimelineDoc, so it owns the four hooks that
+    // keep the rest of the system in step with it. The full inventory is in docs/architecture.md
+    // ("App wiring") — keep the two in sync.
+    //
+    //  1. PUBLISH-ON-CHANGE: every effective doc mutation notifies us, and we republish the
+    //     snapshot to the audio thread and rebuild the recorder's lane bindings.
+    //  2. RECORDER: attached to (doc, undo, transport) and registered with the engine so the
+    //     applier can see its gesture claims; driven by update() on the existing 10 Hz timer.
+    //  3. RESTORE HOOKS: undo/redo suspends capture for the span of the restore and reconciles
+    //     bindings afterwards (both domains — see AppUndoManager::setRestoreHooks).
+    //  4. PANEL: the track-header column reads the doc and calls back into us (TrackHeaderHost)
+    //     to create, re-bind and delete the Track In nodes its chips name.
+    timelineDoc.addListener(this);
+    automationRecorder.attachTo(timelineDoc, undoManager, audioEngine.getTransport());
+    audioEngine.setAutomationRecorder(&automationRecorder);
+    undoManager.setRestoreHooks(
+        [this] { programmaticApplyScopes.push_back(std::make_unique<ProgrammaticApplyScope>(*this)); },
+        [this] {
+            if (!programmaticApplyScopes.empty())
+                programmaticApplyScopes.pop_back();
+            reconcileTimelineAfterGraphChange();
+        });
+    timelinePanel.setTrackHeaderHost(this);
+    timelinePanel.setTimelineDoc(&timelineDoc);
+    // Same undo stack every graph/timeline mutation already shares — a clip drag/trim/
+    // split/duplicate/delete is one more AppUndoManager::recordTimelineChange call, same as every
+    // other timeline-only edit.
+    timelinePanel.setUndoManager(&undoManager);
+    // The SAME resolution the audio streamer uses (AudioClipStreamer::resolveAssetRef),
+    // re-targeted at the peaks sidecar via peaksRefForAssetRef() — see that function's comment.
+    // One shared resolver: the clip-lane area never re-derives bundle-vs-Recordings root logic.
+    timelinePanel.getClipLaneArea().setPeaksResolver([this](const juce::String& assetRef) -> juce::File {
+        return audioEngine.getAudioClipStreamer().resolveAssetRef(peaksRefForAssetRef(assetRef));
+    });
+    // Same resolution playback uses, answering existence rather than handing back a File —
+    // what paints the missing-asset placeholder instead of an (impossible) waveform.
+    timelinePanel.getClipLaneArea().setAssetExistsResolver([this](const juce::String& assetRef) -> bool {
+        return audioEngine.getAudioClipStreamer().resolveAssetRef(assetRef) != juce::File();
+    });
+    // "Relink audio…" bubbles up here rather than being handled inside the lane area itself
+    // — it needs a host FileChooser and synth::AssetManager import, neither of which that class has.
+    timelinePanel.getClipLaneArea().onRelinkAudioRequested = [this](synth::ClipId id) { promptRelinkClipAsset(id); };
+    // Same division of labour for the authoring gestures: the lane area decides WHICH audio track
+    // and WHICH beat (double-click on an empty audio row, or an OS file drop on one), and this owns
+    // the import + clip creation, because only it knows the bundle root.
+    timelinePanel.getClipLaneArea().onAudioFileDropped = [this](synth::TrackId track, double startBeat,
+                                                                juce::File file) {
+        importAudioFileToClip(track, startBeat, file);
+    };
+    // P on the clip lanes = loop the selection. The lane area knows the span; only this owns the
+    // transport (same division as every other callback above). Whether P also ARMS looping is the
+    // "timelineLoopSelectionArms" preference (default yes; off = place the locators, keep the
+    // current loop state) — the same key TimelinePanelComponent's own P fallback reads.
+    timelinePanel.getClipLaneArea().onLoopRangeRequested = [this](double startBeat, double endBeat) {
+        auto& transport = audioEngine.getTransport();
+        bool arm = true;
+        if (auto* settings = appProperties.getUserSettings())
+            arm = settings->getBoolValue("timelineLoopSelectionArms", true);
+        transport.setLoop(startBeat, endBeat, arm || transport.getPositionSnapshot().looping);
+    };
+    // BEFORE the first publish below — publishTimeline() syncs the clip streamer, and it can
+    // only resolve an asset ref once it knows the roots.
+    refreshAssetRoots();
+    // One publish before anything else happens, so the audio thread starts from this document
+    // rather than from the exchange's never-published empty fallback.
+    publishTimelineAndRebindRecorder();
+
+    // MidiRecorder is now app-wired (docs/architecture.md's hook inventory gains a
+    // fifth entry) — this component owns the one live MidiRecorder, since it is the only thing
+    // that can see both the armed tracks (timelineDoc) and the transport bar's record button.
+    audioEngine.setMidiCaptureSink(&midiRecorder);
+    timelinePanel.getTransportBar().onRecordToggled = [this](bool wantRecording) {
+        if (!wantRecording) {
+            // Both are no-ops unless their own kind of take is in flight, so Record-off can call
+            // them unconditionally and neither path has to know the other exists.
+            commitAudioRecording();
+            commitMidiRecording();
+            return;
+        }
+
+        // Fail fast on no armed track, BEFORE touching the transport — a rejected request must not
+        // have the side effect of starting playback.
+        //
+        // The lookup considers Audio tracks too, and FIRST-ARMED WINS. With one armed track
+        // of each kind the one earlier in the document decides which kind of take this is; there is
+        // deliberately no "record both at once" (two takes, two commits, two undo steps for one
+        // gesture). Automation-kind tracks are not recordable and are skipped.
+        synth::TrackId armedTrack;
+        synth::TrackKind armedKind = synth::TrackKind::Midi;
+        for (const auto& track : timelineDoc.getTracks()) {
+            if (track.armed && (track.kind == synth::TrackKind::Midi || track.kind == synth::TrackKind::Audio)) {
+                armedTrack = track.id;
+                armedKind = track.kind;
+                break;
+            }
+        }
+        if (!armedTrack.isValid()) {
+            timelinePanel.getTransportBar().setRecordingState(false);
+            statusBar.showMessage("Arm a track to record");
+            return;
+        }
+
+        // An audio take's tap and its destination files are resolved BEFORE the transport
+        // moves, for the same reason the armed-track check is — a request that cannot be honoured
+        // must not leave the transport rolling.
+        const bool isAudioTake = (armedKind == synth::TrackKind::Audio);
+        AudioTake take;
+        RecordTapModule* tapModule = nullptr;
+        if (isAudioTake) {
+            auto* tapNode = ensureMasterRecordTap();
+            tapModule = tapNode != nullptr ? dynamic_cast<RecordTapModule*>(tapNode->getProcessor()) : nullptr;
+            if (tapModule == nullptr) {
+                timelinePanel.getTransportBar().setRecordingState(false);
+                statusBar.showMessage("Can't record audio: no Audio Output in the patch");
+                return;
+            }
+            take.track = armedTrack;
+            take.tapNode = tapNode->nodeID;
+            if (!chooseTakeFiles(take)) {
+                timelinePanel.getTransportBar().setRecordingState(false);
+                statusBar.showMessage("Can't record audio: could not create the take file");
+                return;
+            }
+        }
+
+        // Record implies roll (DAW convention): starting a take also starts the transport if it
+        // isn't already running.
+        auto& transport = audioEngine.getTransport();
+        const auto snap = transport.getPositionSnapshot();
+        const int countInBars = timelinePanel.getTransportBar().getCountInBars();
+
+        // Count-in pre-roll, only from a full stop — a record engaged while already playing
+        // gets no pre-roll (the user is already mid-performance) and no forced click, matching
+        // today's plain "record implies roll" behaviour exactly.
+        double punchInBeat = snap.ppq;
+        if (!snap.playing && countInBars > 0) {
+            const double beatsPerBar =
+                (double)snap.timeSigNumerator * 4.0 / (double)std::max(1, snap.timeSigDenominator);
+            const double preRollStart = std::max(0.0, punchInBeat - (double)countInBars * beatsPerBar);
+            transport.locateBeat(preRollStart);
+            // Forced audible through the pre-roll regardless of the user's own metronome toggle;
+            // cleared by the 10 Hz poll once the transport reaches punchInBeat (see timerCallback)
+            // and unconditionally by commitMidiRecording() on stop.
+            audioEngine.getMetronome().setForcedOn(true);
+            transport.play();
+        } else {
+            if (!snap.playing)
+                transport.play();
+            punchInBeat = transport.getPositionSnapshot().ppq;
+        }
+
+        if (isAudioTake) {
+            // The capture starts HERE, at record-on — not on the 10 Hz poll, which is what
+            // used to cost a take up to ~100 ms of head. The count-in's pre-roll is therefore
+            // RECORDED, and excluded from the committed clip by a trim (see commitAudioRecording);
+            // the tap itself reports the exact transport sample its frame 0 landed on, so the clip's
+            // placement is sample arithmetic rather than a poll observation.
+            //
+            // Deliberately AFTER the locate/play posted above, not before: those are transport
+            // commands that take effect at the top of a block, and a frame captured before a locate
+            // belongs to the OLD position — which would break the one thing the anchor promises,
+            // that take frame `f` sits at `captureStart + f`. Starting after them can cost at most
+            // the one block that may already be in flight (~10 ms at 512/48k), and that block is
+            // pre-roll, honestly accounted for either way.
+            const double rate = snap.sampleRate > 0.0 ? snap.sampleRate : 44100.0;
+            if (!tapModule->startCapture(take.wavFile, take.peaksFile, rate, RecordTapModule::kNumChannels)) {
+                // The tap vanished, or the file could not be opened. Nothing to salvage.
+                timelinePanel.getTransportBar().setRecordingState(false);
+                audioEngine.getMetronome().setForcedOn(false);
+                statusBar.showMessage("Can't record audio: the take file could not be opened");
+                return;
+            }
+            take.punchInBeat = punchInBeat;
+            take.capturing = true;
+            // Frozen NOW, not re-read at commit time — see the AudioTake field comments.
+            take.captureSampleRate = rate;
+            take.captureBpm = snap.bpm > 0.0 ? snap.bpm : 120.0;
+            take.captureRecordingLatencySamples = audioEngine.getRecordingLatencySamples();
+            audioTake_ = take;
+        } else {
+            // punchInBeat is BOTH the recorder's own bookkeeping and the audio-thread filter
+            // threshold — captureBlock() drops everything before it, so the pre-roll bars the
+            // performer plays along with the click are heard but never committed.
+            midiRecorder.startRecording(armedTrack, punchInBeat);
+        }
+
+        timelinePanel.getTransportBar().setRecordingState(true);
+    };
+
+    addAndMakeVisible(toggleTimelineButton);
+    toggleTimelineButton.setComponentID("toggleTimeline");
+    toggleTimelineButton.onClick = [this] {
+        const bool newVisible = !isTimelineVisible;
+        isTimelineVisible = newVisible;
+        // Persist BEFORE animation so a crash during layout doesn't lose the user's choice.
+        appProperties.getUserSettings()->setValue("timelinePanelVisible", isTimelineVisible ? "1" : "0");
+        appProperties.getUserSettings()->saveIfNeeded();
+        applyToolbarIcons();
+
+        auto fromResult = computePanelBounds(isLibraryVisible, isAiPanelVisible, !newVisible); // previous layout
+        if (newVisible) {
+            // Showing: make visible before animating in, sliding up from a zero-height rect
+            // pinned at the panel's final y (bottom edge fixed, height 0 -> timelinePanelHeight_,
+            // i.e. the user's current height, not the theme metric).
+            timelinePanel.setVisible(true);
+            if (fromResult.timelineBounds.isEmpty()) {
+                auto finalBounds = computePanelBounds(isLibraryVisible, isAiPanelVisible, true).timelineBounds;
+                fromResult.timelineBounds =
+                    juce::Rectangle<int>(finalBounds.getX(), finalBounds.getBottom(), finalBounds.getWidth(), 0);
+            }
+        }
+        // Apply the FINAL layout immediately so headless tests (no VBlank) see correct bounds.
+        // The animation below is cosmetic only — it starts from fromResult and converges to the
+        // same toResult that resized() already applied.
+        auto toResult = computePanelBounds(isLibraryVisible, isAiPanelVisible, newVisible);
+        resized();
+        if (!newVisible)
+            timelinePanel.setVisible(false);
+        animatePanelTransition(fromResult, toResult, /*hideLib=*/false, /*hideAi=*/false, /*hideTimeline=*/!newVisible);
+    };
+    // Initial visibility from the Preferences kill switch read above — a fresh DrawableButton
+    // defaults visible, so an existing-off-preference install must not flash the button on launch.
+    toggleTimelineButton.setVisible(timelineFeatureEnabled);
+#endif
 
     addAndMakeVisible(toggleMinimapButton);
     toggleMinimapButton.setComponentID("toggleMinimap");
@@ -383,7 +825,13 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         auto* settingsComp =
             new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent,
                                shortcutManager, *themeManager, &graphEditor, &accountService,
-                               /*showAudioTab=*/!audioEngine.isHosted());
+                               /*showAudioTab=*/!audioEngine.isHosted(),
+#if SYNTH_ENABLE_TIMELINE
+                               [this](bool enabled) { applyTimelineFeatureEnabled(enabled); }
+#else
+                               nullptr
+#endif
+            );
         settingsComp->setSize(500, 450);
 
         juce::DialogWindow::LaunchOptions options;
@@ -402,7 +850,13 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // Calling setSize() before setButtons() leaves all buttons with zero bounds on first launch.
     toolbar.setButtons({&toggleLibraryButton, &newButton, &saveButton, &loadButton, &settingsButton, &undoButton,
                         &redoButton, &autoArrangeButton, &toggleMinimapButton, &toggleModMatrixButton,
-                        &toggleAiPanelButton, &themeToggleButton});
+                        &toggleAiPanelButton,
+#if SYNTH_ENABLE_TIMELINE
+                        &toggleTimelineButton,
+#else
+                        nullptr, // ToggleTimeline slot: no button in a flag-OFF build
+#endif
+                        &themeToggleButton});
 
     // Now that buttons are registered, trigger the first layout pass. resized() calls
     // toolbar.layoutButtons() which positions the buttons using their registered pointers.
@@ -418,6 +872,47 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // One unconditional icon/text pass at startup (subsequent calls only fire on narrow-mode flips).
     applyToolbarIcons();
     setCurrentPatchName("Default");
+
+    // Runtime timeline enable/disable: push the persisted preference onto the engine's
+    // transport toggle. No settings-UI toggle exists yet, so this only ever reads the default.
+    // Guarded the same way the engine-lifecycle
+    // block below is: on the plugin path the processor owns the engine across editor open/close, so
+    // this app's local settings file doesn't apply to it yet either.
+    if (ownedAudioEngine != nullptr) {
+        audioEngine.setTransportEnabled(appProperties.getUserSettings()->getBoolValue("timelineEnabled", true));
+    }
+
+    // Audio device state. Guarded like the block above: on the plugin path the host owns
+    // the device (there is not even an Audio tab), so this app's settings file has no say over it.
+    //
+    // ORDERING CONTRACT: both halves must be in place BEFORE audioEngine.initialise() below — the
+    // saved state because initialise() is what restores it, the callback because opening a device
+    // can itself broadcast a change. MainComponent owns the ApplicationProperties round trip and
+    // the engine owns the device: Core never reads or writes settings.
+    if (ownedAudioEngine != nullptr) {
+        const juce::String savedDeviceXml =
+            appProperties.getUserSettings()->getValue("audioDeviceState", juce::String());
+        if (savedDeviceXml.isNotEmpty()) {
+            if (auto parsed = juce::parseXML(savedDeviceXml))
+                audioEngine.setSavedDeviceState(std::move(parsed));
+        }
+
+        audioEngine.onDeviceStateChanged = [this](std::unique_ptr<juce::XmlElement> state) {
+            // BEFORE the null check below: a device change that JUCE does not consider
+            // an explicit setup still changes how many input channels exist, and the Audio Input
+            // card's jacks (plus any cable on a jack that just vanished) have to follow it.
+            graphEditor.refreshIoModulesAfterDeviceChange();
+
+            // Null until the user has explicitly chosen a device setup — see the declaration of
+            // onDeviceStateChanged. Persisting nothing then is the point: the absent key is what
+            // keeps the next launch on the inputs-off defaults.
+            if (state == nullptr)
+                return;
+            appProperties.getUserSettings()->setValue("audioDeviceState",
+                                                      state->toString(juce::XmlElement::TextFormat().singleLine()));
+            appProperties.saveIfNeeded();
+        };
+    }
 
     // Engine lifecycle is the owner's job. On the plugin path the processor already called
     // initialise() (and will call shutdown()), and its graph may already hold host-restored
@@ -460,16 +955,62 @@ void MainComponent::applyStoredDualIOPreferenceToPatch() {
 }
 
 MainComponent::~MainComponent() {
+    // Every plugin editor window must die before the graph/engine below do — see
+    // HostedPluginWindowManager's class comment (this explicit call is one of two independent
+    // safeguards; declaration order is the other).
+    pluginWindowManager.closeAll();
+
+    // Uninstall what installHostedPluginObservers() installed. Both callbacks capture
+    // `this`, and on the plugin path the engine — and every hosted module in its graph — OUTLIVES
+    // this editor-owned component (hosts close and reopen editors freely), so a latency change or
+    // publish after this destructor would otherwise call through freed memory inside the host.
+    for (auto* node : audioEngine.getGraph().getNodes()) {
+        if (node == nullptr)
+            continue;
+        if (auto* hosted = dynamic_cast<synth::HostedPluginModule*>(node->getProcessor())) {
+            hosted->onLatencyChanged = nullptr;
+            hosted->onInstancePublished = nullptr;
+        }
+    }
+
+    // The process-wide backend holds a bare pointer to our scan service, so unhook it before
+    // anything else that could resolve an identity — a hosted-plugin restore after this point would
+    // otherwise go through freed memory. Guarded on "still ours" because a second MainComponent
+    // (tests construct several) will have replaced it — and because on the plugin path the installed
+    // service is the PROCESSOR's, adopted rather than owned, and must survive this editor closing.
+    if (auto* backend = dynamic_cast<synth::DefaultHostedPluginBackend*>(&synth::HostedPluginBackend::getDefault()))
+        if (backend->getScanService() == &pluginScanService)
+            backend->setScanService(nullptr);
+    pluginScanService.cancelScan();
+
     // Unsubscribe before the manager (or our owned copy) is torn down.
     if (themeManager != nullptr)
         themeManager->removeChangeListener(this);
     stopTimer();
     aiService.removeListener(this);
+#if SYNTH_ENABLE_TIMELINE
+    // Order matters: stop listening to the doc first (nothing may republish while we tear down),
+    // drop the panel's view of it, unhook the engine from the recorder's audio-visible state, and
+    // only then detach the recorder — which commits anything still in flight into the doc and the
+    // undo manager, both of which are still alive here (and outlive this body; see the declaration
+    // order note in MainComponent.h). Finally drop the undo hooks: they reach back into members
+    // that are about to go.
+    timelineDoc.removeListener(this);
+    timelinePanel.setTimelineDoc(nullptr);
+    audioEngine.setAutomationRecorder(nullptr);
+    audioEngine.setMidiCaptureSink(nullptr);
+    automationRecorder.detach();
+    undoManager.setRestoreHooks({}, {});
+#endif
     graphEditor.detachAllModuleComponents();
     // Only tear down an engine we own. On the plugin path the processor's engine must survive
     // the editor being closed and reopened.
-    if (ownedAudioEngine != nullptr)
+    if (ownedAudioEngine != nullptr) {
+        // Drop the device-state callback first — it captures `this`, and shutdown() is the
+        // call that unsubscribes the engine from its device manager.
+        audioEngine.onDeviceStateChanged = nullptr;
         audioEngine.shutdown();
+    }
 }
 
 // ---- Theme change callback: re-skin pass ----
@@ -488,6 +1029,109 @@ void MainComponent::timerCallback() {
     undoButton.setEnabled(undoManager.canUndo());
     redoButton.setEnabled(undoManager.canRedo());
 
+#if SYNTH_ENABLE_TIMELINE
+    // Message-thread driver, on the timer we already run: drains the gesture ring and polls
+    // the transport (Write spans open on play; every open span commits on stop). Allocation-free
+    // and — like everything else in this callback — completely silent.
+    automationRecorder.update();
+
+    // Mirrors AutomationRecorder's own playing->stopped edge detection (see its update()) —
+    // a MIDI take still open when the transport stops (the user hit Space/Stop rather than the
+    // record button itself) commits exactly the same way an explicit Record-off click does. Read
+    // unconditionally (cheap, lock-free) rather than only when the panel is visible: recording must
+    // not depend on the timeline panel staying open.
+    const auto position = audioEngine.getTransport().getPositionSnapshot();
+    if (wasTransportPlaying_ && !position.playing && midiRecorder.isRecording())
+        commitMidiRecording();
+
+    // The audio half of the same rule — COMMIT ON STOP, mirroring the MIDI one above: a take
+    // still open when the transport stops (the user hit Space rather than the record button) commits
+    // down the same path. Capture itself starts at the Record-on click, not here; the pre-roll is
+    // trimmed at commit time from the tap's own sample-accurate anchor.
+    if (wasTransportPlaying_ && !position.playing && audioTake_.capturing)
+        commitAudioRecording();
+
+    // A device/sample-rate change strands whatever take was rolling — unlike the two commit-
+    // on-stop checks above, the transport typically keeps PLAYING right through a format change (see
+    // TransportService::prepare), so neither of those edge-triggered checks would ever fire. Consumed
+    // once here (exchange-back-to-false, same contract as consumeFeedbackGuardTripped) and routed
+    // through the SAME commit choke points a manual Record-off or a transport stop already use — see
+    // AudioEngine::handleStreamFormatChange, which is what actually sets the flag, at the moment of
+    // the change. At most one of the two checks below ever fires: recording never runs both an audio
+    // and a MIDI take at once (first-armed-wins — see onRecordToggled).
+    if (audioEngine.consumeFormatChangedDuringCapture()) {
+        if (audioTake_.capturing)
+            commitAudioRecording();
+        if (midiRecorder.isRecording())
+            commitMidiRecording();
+        statusBar.showMessage("Recording stopped: audio device changed");
+    }
+
+    wasTransportPlaying_ = position.playing;
+
+    // Clears the count-in pre-roll's forced-on click once the transport reaches the punch-in
+    // point. Gated on isRecording() so this never fires outside an actual take; idempotent
+    // otherwise (setForcedOn(false) on an already-off metronome is a no-op), so polling it every
+    // tick while recording costs nothing once the pre-roll has already ended. An audio take's
+    // pre-roll rides the same rule, ending at its own punch-in beat.
+    if ((midiRecorder.isRecording() && position.ppq >= midiRecorder.getPunchInBeat()) ||
+        (audioTake_.capturing && position.ppq >= audioTake_.punchInBeat))
+        audioEngine.getMetronome().setForcedOn(false);
+
+    // The input-monitoring gate's poll-side half. Any Audio-kind track armed -> monitoring
+    // should be on; none armed -> off. A guard trip (audioEngine.consumeFeedbackGuardTripped(),
+    // consumed exactly once here) latches monitoring off for as long as the SAME arm state
+    // persists — disarming every Audio track and re-arming one is the explicit reset gesture, and
+    // that is exactly the false->true edge of "is any Audio track armed" below. See
+    // docs/architecture.md's "Input monitoring & feedback guard".
+    bool anyAudioTrackArmed = false;
+    for (const auto& track : timelineDoc.getTracks()) {
+        if (track.kind == synth::TrackKind::Audio && track.armed) {
+            anyAudioTrackArmed = true;
+            break;
+        }
+    }
+    if (anyAudioTrackArmed && !wasAnyAudioTrackArmed_)
+        feedbackGuardLatched_ = false; // the reset gesture: disarmed, then armed again
+    wasAnyAudioTrackArmed_ = anyAudioTrackArmed;
+
+    if (audioEngine.consumeFeedbackGuardTripped()) {
+        feedbackGuardLatched_ = true;
+        statusBar.showMessage("Input muted — sustained clipping (feedback protection)");
+    }
+
+    audioEngine.setInputMonitoringEnabled(anyAudioTrackArmed && !feedbackGuardLatched_);
+
+    // The timeline panel's low-rate transport poll, on the same existing timer — no new
+    // timer, and nothing at all when the panel is hidden (a collapsed timeline must cost exactly
+    // what it did before). This is what starts/stops the playhead's playing-only 30 Hz strip
+    // repaint; see docs/layout.md §11.
+    if (timelinePanel.isVisible()) {
+        // Device-buffer latency only. The graph's own reported latency is deliberately left out:
+        // it is report-only, patch-dependent and mostly zero, whereas the output buffer is the term
+        // that actually separates "rendered" from "heard".
+        const double sampleRate = position.sampleRate > 0.0 ? position.sampleRate : 44100.0;
+        const double outputLatencySeconds = (double)audioEngine.getOutputLatencySamples() / sampleRate;
+        timelinePanel.updateFromTransport(position, outputLatencySeconds);
+
+        // The clip lane's growing recording strip, on the same poll. Cheap and a no-op when
+        // nothing is capturing — synth::ui::TimelineClipLaneArea::updateLiveRecording() internally
+        // repaints only when new peak buckets actually arrived (see its own comment), never merely
+        // because the transport tick moved.
+        synth::ui::TimelineClipLaneArea::LiveRecordingInfo liveInfo;
+        if (audioTake_.capturing) {
+            if (auto* tap = findMasterRecordTap()) {
+                liveInfo.active = true;
+                liveInfo.track = audioTake_.track;
+                liveInfo.punchBeat = audioTake_.punchInBeat;
+                liveInfo.currentBeat = position.ppq;
+                liveInfo.tap = tap;
+            }
+        }
+        timelinePanel.getClipLaneArea().updateLiveRecording(liveInfo);
+    }
+#endif
+
     // Status bar polls at 5 Hz (every 2nd tick of the 10 Hz timer). update() is gated — it
     // only repaints the status bar when a displayed value actually changes. ZERO logging.
     if (++statusBarTickCount_ >= 2) {
@@ -496,16 +1140,80 @@ void MainComponent::timerCallback() {
         // getCpuUsage() would report a constant 0. Show 0 rather than a misleading reading.
         const float cpu = audioEngine.isHosted() ? 0.0f : (float)(audioEngine.getDeviceManager().getCpuUsage() * 100.0);
         statusBar.update(cpu, audioEngine.getDisplayVoiceCount(), currentPatchName_);
+
+        // The round-trip readout, on the same 5 Hz tick.
+        updateRoundTripLatencyReadout();
     }
+}
+
+void MainComponent::updateRoundTripLatencyReadout() {
+    // Gated by its own string diff inside StatusBarComponent — so calling it more
+    // often than the 5 Hz poll (a hosted plugin's latency change does) costs nothing when
+    // the number has not moved. Hosted mode has no device of ours to report a round trip for (the
+    // host owns both ends), so it shows the placeholder rather than a made-up 0.0 ms.
+    const double statusRate = audioEngine.getTransport().getPositionSnapshot().sampleRate;
+    const double roundTripMs =
+        statusRate > 0.0 ? 1000.0 * (double)audioEngine.getRecordingLatencySamples() / statusRate : 0.0;
+    statusBar.updateRoundTripLatency(roundTripMs, !audioEngine.isHosted());
+}
+
+// ---- Hosted-plugin latency compensation ----
+
+void MainComponent::installHostedPluginObservers() {
+    for (auto* node : audioEngine.getGraph().getNodes()) {
+        if (node == nullptr)
+            continue;
+        auto* hosted = dynamic_cast<synth::HostedPluginModule*>(node->getProcessor());
+        if (hosted == nullptr)
+            continue;
+
+        // Two SEPARATE slots, neither of them onInstanceChanged — that one belongs to
+        // HostedPluginEditorWindow and reassigning it here would close the user's plugin
+        // window on the next graph change.
+        hosted->onLatencyChanged = [this] { rebuildGraphForLatencyChange(); };
+        hosted->onInstancePublished = [this] {
+            // A lane bound to a hosted-plugin parameter cannot resolve until the instance exists,
+            // so re-run the reconcile when an async load completes — otherwise the lane sits
+            // orphaned until some unrelated graph edit happens to trigger the next pass.
+            reconcileTimelineBindingsOnly();
+            // ...and a publish takes the node's latency 0 -> N, so the graph's compensation delays
+            // are stale for exactly the same reason a runtime change leaves them stale.
+            rebuildGraphForLatencyChange();
+        };
+    }
+}
+
+void MainComponent::rebuildGraphForLatencyChange() {
+    // juce::AudioProcessorGraph bakes {bus layout, latencySamples} per node into
+    // its render sequence and only re-derives the parallel-path compensation delays when that
+    // sequence is rebuilt — so without this, a plugin reporting 512 samples of lookahead is simply
+    // uncompensated and its branch of the patch drifts against every parallel one. rebuild() is
+    // public, message-thread-safe (it dispatches to the message thread if called from anywhere
+    // else) and a no-op when nothing about the sequence actually changed.
+    //
+    // Host-agnostic: in a plugin build this is our own INNER graph, which we own in both modes.
+    audioEngine.getGraph().rebuild();
+
+    // The graph term of AudioEngine::getRecordingLatencySamples() just moved, so the status bar's
+    // number is wrong until its next poll. Same feed as that poll, not a second one.
+    updateRoundTripLatencyReadout();
 }
 
 void MainComponent::aiPatchAboutToApply() {
     // Runs synchronously before the AI patch clears/rebuilds the graph. Detach module components now so
     // their ScopeComponent timers stop and no component references a soon-to-be-freed VisualBuffer.
     graphEditor.detachAllModuleComponents();
+    // Everything the apply writes into parameters is programmatic. Assignment closes any scope an
+    // earlier, failed apply abandoned (see the member's comment).
+    aiApplyScope = std::make_unique<ProgrammaticApplyScope>(*this);
 }
 
 void MainComponent::aiPatchApplied() {
+    aiApplyScope.reset();
+    // The graph is fully applied by the time this fires (on the initial apply AND on undo/redo,
+    // which reuse this pair as their restore hooks), so bindings can be reconciled straight away —
+    // no need to wait for the async updateComponents() below.
+    reconcileTimelineAfterGraphChange();
     setCurrentPatchName("AI Patch");
     juce::Component::SafePointer<MainComponent> safeThis(this);
     juce::MessageManager::callAsync([safeThis]() {
@@ -518,23 +1226,131 @@ void MainComponent::simulateLoadFactoryPresetForTest(int index) {
     auto presets = synth::PresetManager::getPresetList();
     if (index < 0 || index >= presets.size())
         return;
-    graphEditor.loadFactoryPreset(index);
+    loadFactoryPresetAtIndex(index);
     setCurrentPatchName(presets[index].name);
+}
+
+void MainComponent::loadFactoryPresetAtIndex(int index) {
+    ProgrammaticApplyScope guard(*this);
+    graphEditor.loadFactoryPreset(index);
+    reconcileTimelineAfterGraphChange();
 }
 
 void MainComponent::openPresetFromFile() {
     fileChooser = std::make_unique<juce::FileChooser>(
-        "Load Preset", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory), "*.json");
+        "Load Preset", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory), kPatchFileFilter);
+    // A `.agsproj` bundle is a DIRECTORY, not a file, so the browser has to allow picking one; a
+    // plain `.json` preset is still an ordinary file pick. openFromFile() branches on what comes
+    // back, so the two cases never depend on which flag the platform's dialog honoured.
     auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
+#if SYNTH_ENABLE_TIMELINE
+    flags |= juce::FileBrowserComponent::canSelectDirectories;
+#endif
     fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc) {
         auto file = fc.getResult();
-        if (file != juce::File{}) {
-            statusBar.showMessage("Loading preset...");
-            graphEditor.loadPreset(file);
-            setCurrentPatchName(file.getFileNameWithoutExtension());
-            statusBar.showMessage("Loaded: " + file.getFileNameWithoutExtension());
-        }
+        if (file != juce::File{})
+            openFromFile(file);
     });
+}
+
+// ---- Save / open: one `.json` preset path, one `.agsproj` bundle path ----
+
+void MainComponent::saveToFile(const juce::File& file) {
+    statusBar.showMessage("Saving...");
+
+#if SYNTH_ENABLE_TIMELINE
+    if (file.getFileExtension() == synth::ProjectBundle::kBundleExtension) {
+        // Adopt any Recordings/-convention takes (recorded before this project had ever
+        // been saved) into THIS bundle's own Audio/ BEFORE serialising below, so project.json is
+        // written with the post-adoption refs — the reserved Recordings/ prefix must never end up
+        // inside a saved bundle. A plain, direct doc mutation: saving must never create undo
+        // history (see synth::AssetManager::adoptRecordingsAssets's own comment). Safe to call
+        // every save, including a resave with nothing left to adopt (a no-op — see that method).
+        const auto recordingsRoot = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                        .getChildFile(synth::branding::kSettingsFolderName)
+                                        .getChildFile(kRecordingsFolderName);
+        synth::AssetManager::adoptRecordingsAssets(timelineDoc, recordingsRoot, file);
+
+        // The bundle carries the graph AND the timeline; PatchDocument comes from the graph editor
+        // so the unknown-top-level-key stash a plain preset load filled is re-merged here too.
+        const auto result =
+            synth::ProjectBundle::save(file, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument());
+        if (!result.ok) {
+            statusBar.showMessage("Save failed: " + result.message);
+            return;
+        }
+        // From here on this document IS a bundle, so the next take is written into it
+        // (Audio/ + Peaks/) rather than into app data.
+        currentBundleDir_ = file;
+        refreshAssetRoots(); // Clip playback resolves against the bundle we just became
+        setCurrentPatchName(file.getFileNameWithoutExtension());
+        statusBar.showMessage("Saved: " + file.getFileNameWithoutExtension());
+        return;
+    }
+#endif
+
+    // Plain preset save — byte-identical to what it has always written.
+    graphEditor.savePreset(file);
+    setCurrentPatchName(file.getFileNameWithoutExtension());
+    statusBar.showMessage("Saved: " + file.getFileNameWithoutExtension());
+}
+
+bool MainComponent::openFromFile(const juce::File& file) {
+    statusBar.showMessage("Loading preset...");
+
+#if SYNTH_ENABLE_TIMELINE
+    if (file.isDirectory() || file.getFileExtension() == synth::ProjectBundle::kBundleExtension) {
+        if (!synth::ProjectBundle::isBundle(file)) {
+            statusBar.showMessage("Not a project bundle: " + file.getFileName());
+            return false;
+        }
+
+        ProgrammaticApplyScope guard(*this);
+        // Detach BEFORE the load frees the current graph's processors — the same ordering
+        // GraphEditor::loadPreset uses, and for the same reason (a live ScopeComponent timer would
+        // otherwise read a freed VisualBuffer).
+        graphEditor.detachAllModuleComponents();
+
+        // The roots move to the new bundle BEFORE the load, not after it. ProjectBundle::load moves
+        // the timeline into the live doc, and that fires timelineChanged synchronously — publishing
+        // to the engine and the clip streamer while the load is still running. With the old roots
+        // still installed, that publish resolves this bundle's clip refs against the PREVIOUS
+        // bundle's Audio/ folder: the wrong file, or silence. Takes recorded from here on belong to
+        // this bundle for the same reason.
+        const juce::File previousBundleDir = currentBundleDir_;
+        currentBundleDir_ = file;
+        refreshAssetRoots();
+
+        const auto result =
+            synth::ProjectBundle::load(file, audioEngine.getGraph(), timelineDoc, graphEditor.getPatchDocument());
+        // Reconcile the view whatever happened: on failure the load left the graph exactly as it
+        // was, and the components still have to come back after the detach above.
+        graphEditor.updateComponents();
+        if (!result.ok) {
+            // load() is all-or-nothing, so a failure has to leave the previous project intact —
+            // roots included, or the still-open document would start resolving its clips against a
+            // bundle it was never part of.
+            currentBundleDir_ = previousBundleDir;
+            refreshAssetRoots();
+            statusBar.showMessage("Load failed: " + result.message);
+            return false;
+        }
+
+        // ProjectBundle::load already reconciled once; this republishes the freshly loaded document
+        // (and rebinds the recorder) against the graph as it now stands.
+        reconcileTimelineAfterGraphChange();
+        setCurrentPatchName(file.getFileNameWithoutExtension());
+        statusBar.showMessage("Loaded: " + file.getFileNameWithoutExtension());
+        return true;
+    }
+#endif
+
+    ProgrammaticApplyScope guard(*this);
+    graphEditor.loadPreset(file);
+    reconcileTimelineAfterGraphChange();
+    setCurrentPatchName(file.getFileNameWithoutExtension());
+    statusBar.showMessage("Loaded: " + file.getFileNameWithoutExtension());
+    return true;
 }
 
 //==============================================================================
@@ -549,7 +1365,14 @@ void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
                        AppCommands::newPatch, AppCommands::undo, AppCommands::redo, AppCommands::toggleModMatrix,
                        AppCommands::toggleMinimap, AppCommands::toggleAiPanel, AppCommands::autoArrange,
                        AppCommands::toggleLibrary, AppCommands::selectAllModules, AppCommands::saveSnippet,
-                       AppCommands::copySelection, AppCommands::pasteSelection, AppCommands::duplicateSelection});
+                       AppCommands::copySelection, AppCommands::pasteSelection, AppCommands::duplicateSelection,
+                       // Registered unconditionally (like every command above) so a
+                       // SYNTH_ENABLE_TIMELINE=OFF build still reports it — inactive — rather than
+                       // dropping it from the Settings shortcut list entirely.
+                       AppCommands::togglePlayback});
+#if SYNTH_ENABLE_TIMELINE
+    commands.add(AppCommands::toggleTimelinePanel);
+#endif
 #if JUCE_MAC
     commands.add(AppCommands::checkForUpdates);
 #endif
@@ -638,25 +1461,93 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
     }
     case AppCommands::copySelection: {
         result.setInfo("Copy", "Copy the selected modules", "Edit", 0);
+        // Routed by resolveEditSurface() — Graph's own behaviour (below) is unchanged; the
+        // timeline surfaces gate on the clip-clipboard's own selection/piano-roll-is-inactive rule.
+#if SYNTH_ENABLE_TIMELINE
+        switch (resolveEditSurface()) {
+        case EditSurface::TimelineClips:
+            result.setActive(timelinePanel.getClipSelection().size() > 0);
+            break;
+        case EditSurface::PianoRoll:
+            result.setActive(false); // v1 deliberate gap — the roll's own editing verbs suffice
+            break;
+        case EditSurface::Graph:
+            result.setActive(graphEditor.getSelectionCount() > 0);
+            break;
+        }
+#else
         result.setActive(graphEditor.getSelectionCount() > 0);
+#endif
         auto kp = shortcutManager.getBinding("copySelection");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
     case AppCommands::pasteSelection: {
         result.setInfo("Paste", "Paste the copied modules onto the canvas", "Edit", 0);
+#if SYNTH_ENABLE_TIMELINE
+        switch (resolveEditSurface()) {
+        case EditSurface::TimelineClips:
+            result.setActive(timelinePanel.canPasteClips());
+            break;
+        case EditSurface::PianoRoll:
+            result.setActive(false);
+            break;
+        case EditSurface::Graph:
+            result.setActive(graphEditor.canPaste());
+            break;
+        }
+#else
         result.setActive(graphEditor.canPaste());
+#endif
         auto kp = shortcutManager.getBinding("pasteSelection");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
     case AppCommands::duplicateSelection: {
         result.setInfo("Duplicate", "Duplicate the selected modules in place", "Edit", 0);
+#if SYNTH_ENABLE_TIMELINE
+        switch (resolveEditSurface()) {
+        case EditSurface::TimelineClips:
+            result.setActive(timelinePanel.getClipSelection().size() > 0);
+            break;
+        case EditSurface::PianoRoll:
+            result.setActive(false);
+            break;
+        case EditSurface::Graph:
+            result.setActive(graphEditor.getSelectionCount() > 0);
+            break;
+        }
+#else
         result.setActive(graphEditor.getSelectionCount() > 0);
+#endif
         auto kp = shortcutManager.getBinding("duplicateSelection");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
+    case AppCommands::togglePlayback: {
+        result.setInfo("Toggle Playback", "Play or stop the timeline transport", "Transport", 0);
+        // Space is GLOBAL — no resolveEditSurface() branch, unlike C/V/D above. Inactive
+        // outright in a SYNTH_ENABLE_TIMELINE=OFF build, where there is no transport to toggle,
+        // and inactive when the "Show timeline (experimental)" preference has hidden the
+        // transport too — the transport isn't reachable while hidden, which is intended.
+#if SYNTH_ENABLE_TIMELINE
+        result.setActive(timelineFeatureEnabled);
+#else
+        result.setActive(false);
+#endif
+        auto kp = shortcutManager.getBinding("togglePlayback");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+#if SYNTH_ENABLE_TIMELINE
+    case AppCommands::toggleTimelinePanel: {
+        result.setInfo("Toggle Timeline Panel", "Toggle the bottom-docked timeline panel", "View", 0);
+        result.setActive(timelineFeatureEnabled);
+        auto kp = shortcutManager.getBinding("toggleTimelinePanel");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+#endif
 #if JUCE_MAC
     case AppCommands::checkForUpdates: {
         result.setInfo("Check for Updates…", "Check for a newer version of the app", "Help", 0);
@@ -682,11 +1573,26 @@ bool MainComponent::perform(const InvocationInfo& info) {
     case AppCommands::openPreset:
         openPresetFromFile();
         return true;
-    case AppCommands::newPatch:
+    case AppCommands::newPatch: {
+        ProgrammaticApplyScope guard(*this);
+        // Two undo steps, deliberately: GraphEditor::newPatch() owns the graph's own
+        // recordStructuralChange, and folding the timeline into it would mean either nesting
+        // transactions or duplicating the clear. The timeline is cleared FIRST so the graph's step
+        // is the newer one — Cmd+Z brings the canvas back, Cmd+Z again brings the timeline back,
+        // and the post-restore reconcile re-derives the bindings after each.
+        clearTimelineForNewPatch();
         graphEditor.newPatch();
+#if SYNTH_ENABLE_TIMELINE
+        // A new document is not the old bundle, so the next take goes to app data rather
+        // than into a bundle this patch no longer belongs to.
+        currentBundleDir_ = juce::File();
+        refreshAssetRoots(); // No bundle any more, so no bundle-relative ref resolves
+#endif
+        reconcileTimelineAfterGraphChange();
         setCurrentPatchName("Untitled");
         statusBar.showMessage("New patch");
         return true;
+    }
     case AppCommands::undo:
         if (undoManager.canUndo())
             undoManager.undo();
@@ -722,6 +1628,24 @@ bool MainComponent::perform(const InvocationInfo& info) {
     // there is nothing to act on, and ApplicationCommandTarget::tryToInvoke refuses an inactive
     // command outright, so the menu row greys out and the key never gets this far.
     case AppCommands::copySelection: {
+#if SYNTH_ENABLE_TIMELINE
+        // Routed by the SAME resolveEditSurface() getCommandInfo just consulted — the
+        // command manager already refused an inactive PianoRoll invocation (see
+        // ApplicationCommandTarget::tryToInvoke), so the PianoRoll case below is belt-and-suspenders
+        // for a caller that invokes perform() directly.
+        switch (resolveEditSurface()) {
+        case EditSurface::TimelineClips:
+            if (timelinePanel.copySelectedClips())
+                statusBar.showMessage("Copied " + juce::String(timelinePanel.getClipSelection().size()) + " clips");
+            else
+                statusBar.showMessage("Nothing to copy - select one or more clips first");
+            return true;
+        case EditSurface::PianoRoll:
+            return true; // v1 deliberate no-op — see getCommandInfo's setActive(false) above
+        case EditSurface::Graph:
+            break;
+        }
+#endif
         if (graphEditor.copySelection())
             statusBar.showMessage("Copied " + juce::String(graphEditor.getClipboardModuleCount()) + " modules");
         else
@@ -729,6 +1653,20 @@ bool MainComponent::perform(const InvocationInfo& info) {
         return true;
     }
     case AppCommands::pasteSelection: {
+#if SYNTH_ENABLE_TIMELINE
+        switch (resolveEditSurface()) {
+        case EditSurface::TimelineClips:
+            if (timelinePanel.pasteClipsAtPlayhead())
+                statusBar.showMessage("Pasted " + juce::String(timelinePanel.getClipSelection().size()) + " clips");
+            else
+                statusBar.showMessage("Nothing to paste - copy some clips first");
+            return true;
+        case EditSurface::PianoRoll:
+            return true;
+        case EditSurface::Graph:
+            break;
+        }
+#endif
         // Counted AFTER the fact: both leave the new copies selected, so the selection is the
         // authoritative count of what actually landed (ineligible nodes never make it in).
         if (graphEditor.pasteClipboard())
@@ -738,12 +1676,40 @@ bool MainComponent::perform(const InvocationInfo& info) {
         return true;
     }
     case AppCommands::duplicateSelection: {
+#if SYNTH_ENABLE_TIMELINE
+        switch (resolveEditSurface()) {
+        case EditSurface::TimelineClips:
+            if (timelinePanel.duplicateSelectedClips())
+                statusBar.showMessage("Duplicated " + juce::String(timelinePanel.getClipSelection().size()) + " clips");
+            else
+                statusBar.showMessage("Nothing to duplicate - select one or more clips first");
+            return true;
+        case EditSurface::PianoRoll:
+            return true;
+        case EditSurface::Graph:
+            break;
+        }
+#endif
         if (graphEditor.duplicateSelection())
             statusBar.showMessage("Duplicated " + juce::String(graphEditor.getSelectionCount()) + " modules");
         else
             statusBar.showMessage("Nothing to duplicate - select one or more modules first");
         return true;
     }
+    case AppCommands::togglePlayback:
+#if SYNTH_ENABLE_TIMELINE
+        // Reuses the transport bar's own play/stop choke point (reads the transport's CURRENT
+        // playing state at click time) rather than re-deciding play-vs-stop here, so the bar's
+        // button visual and a Space-bar toggle can never disagree — same triggerClick() idiom as
+        // toggleModMatrix/toggleMinimap/toggleAiPanel above.
+        timelinePanel.getTransportBar().getPlayStopButton().triggerClick();
+#endif
+        return true;
+#if SYNTH_ENABLE_TIMELINE
+    case AppCommands::toggleTimelinePanel:
+        toggleTimelineButton.triggerClick();
+        return true;
+#endif
 #if JUCE_MAC
     case AppCommands::checkForUpdates:
         updateManager.checkForUpdates();
@@ -760,6 +1726,67 @@ void MainComponent::updateCommandShortcuts() {
     // every toolbar hint — and the minimap's — keeps advertising the old binding until some
     // unrelated toggle happens to refresh it.
     applyToolbarIcons();
+}
+
+// ---- Hosted plugins ----
+
+void MainComponent::refreshPluginLibrary() {
+    moduleLibrary.setPlugins(getPluginScanService().getKnownPluginIdentities());
+}
+
+void MainComponent::savePluginScanList() {
+    if (auto xml = getPluginScanService().toXml()) {
+        appProperties.getUserSettings()->setValue(kPluginScanListKey, xml->toString());
+        appProperties.saveIfNeeded();
+    }
+}
+
+void MainComponent::startPluginScan() {
+    // Never inside a host. The scan re-launches `currentExecutableFile`, which in a VST3/AU build is
+    // the HOST's binary — one extra copy of the DAW per candidate plugin. The host owns plugin
+    // discovery in that world anyway. The scan LIST is still loaded and installed in hosted mode
+    // (see the constructor): a session that hosts a plugin has to be able to resolve its identity,
+    // it just cannot rebuild the list from here.
+    if (audioEngine.isHosted()) {
+        statusBar.showMessage("Plugin scanning is only available in the standalone app");
+        return;
+    }
+
+    if (getPluginScanService().isScanning()) {
+        statusBar.showMessage("Already scanning for plugins...");
+        return;
+    }
+
+    statusBar.showMessage("Scanning for plugins...");
+
+    // Both callbacks arrive on the message thread (PluginScanService posts them), so touching the
+    // status bar and the sidebar from here is safe. Progress is one message per plugin, not per
+    // frame — a scan is seconds-per-plugin, so this is nowhere near the high-frequency logging /
+    // repaint traps.
+    getPluginScanService().scanAsync(
+        synth::hostedPluginFormatNames(),
+        [this](const juce::String& fileOrIdentifier, int scanned, int total) {
+            // Trailing segment, not File::getFileName(): an AudioUnit's identifier is not a path.
+            statusBar.showMessage("Scanning plugins " + juce::String(scanned) + "/" + juce::String(total) + ": " +
+                                  fileOrIdentifier.fromLastOccurrenceOf("/", false, false));
+        },
+        [this](const synth::PluginScanService::Result& result) {
+            savePluginScanList();
+            refreshPluginLibrary();
+
+            if (result.cancelled) {
+                statusBar.showMessage("Plugin scan cancelled");
+                return;
+            }
+
+            const int found = getPluginScanService().getNumKnownPlugins();
+            juce::String message = "Found " + juce::String(found) + " plugin" + (found == 1 ? "" : "s");
+            if (result.added > 0)
+                message += " (" + juce::String(result.added) + " new)";
+            if (result.failed > 0)
+                message += "; " + juce::String(result.failed) + " could not be loaded and were skipped";
+            statusBar.showMessage(message);
+        });
 }
 
 // ---- Snippets (issue #156) ----
@@ -817,6 +1844,26 @@ void MainComponent::promptSaveSnippet() {
                             false);
 }
 
+// ---- Keyboard/focus arbitration ----
+MainComponent::EditSurface MainComponent::resolveEditSurface() const {
+    if (editSurfaceOverrideForTest_.has_value())
+        return *editSurfaceOverrideForTest_;
+
+#if SYNTH_ENABLE_TIMELINE
+    // A hidden panel never owns the verbs, whatever a stale focus pointer inside it points at —
+    // check visibility BEFORE even asking what's focused.
+    if (isTimelineVisible) {
+        if (auto* focused = juce::Component::getCurrentlyFocusedComponent()) {
+            if (isOrIsChildOf(focused, timelinePanel.getPianoRoll()))
+                return EditSurface::PianoRoll;
+            if (isOrIsChildOf(focused, timelinePanel.getClipLaneArea()))
+                return EditSurface::TimelineClips;
+        }
+    }
+#endif
+    return EditSurface::Graph;
+}
+
 bool MainComponent::keyPressed(const juce::KeyPress& key) {
     auto action = shortcutManager.getActionForKeyPress(key);
     if (action.isEmpty())
@@ -856,6 +1903,17 @@ void MainComponent::resized() {
 
     statusBar.setBounds(bounds.removeFromBottom(sbH));
 
+#if SYNTH_ENABLE_TIMELINE
+    // Full-width panel carved AFTER the status bar and BEFORE the AI/library removals, so
+    // it sits directly above the status bar spanning the whole window width.
+    if (isTimelineVisible) {
+        // Re-clamped every pass: the window may have shrunk since the height was set (or persisted
+        // on a larger one), and the canvas must stay usable.
+        timelinePanelHeight_ = clampTimelinePanelHeight(timelinePanelHeight_);
+        timelinePanel.setBounds(bounds.removeFromBottom(timelinePanelHeight_));
+    }
+#endif
+
     // Skip removeFromLeft/Right when hidden so we never setBounds to a zero-width rect.
     if (isAiPanelVisible)
         aiChatComponent.setBounds(bounds.removeFromRight(aiW));
@@ -894,6 +1952,11 @@ void MainComponent::applyToolbarIcons() {
     setIcon(toggleModMatrixButton, Icon::ToggleMatrix);
     setIcon(toggleMinimapButton, Icon::ToggleMinimap);
     setIcon(toggleAiPanelButton, Icon::ToggleAI);
+#if SYNTH_ENABLE_TIMELINE
+    // No dedicated timeline glyph exists yet — reuse TransportPlay, otherwise unused this
+    // phase ("scaffolding only — no DrawableButton wired"; see IconLibrary.h).
+    setIcon(toggleTimelineButton, Icon::TransportPlay);
+#endif
     setIcon(themeToggleButton, Icon::ThemeToggle);
 
     // Master-mute uses the transport-stop glyph (no real play/stop transport this phase).
@@ -914,6 +1977,9 @@ void MainComponent::applyToolbarIcons() {
     toggleMinimapButton.setButtonText(iconOnly ? ""
                                                : (graphEditor.isMinimapVisible() ? "Hide Minimap" : "Show Minimap"));
     toggleAiPanelButton.setButtonText(iconOnly ? "" : (isAiPanelVisible ? "Hide AI" : "Show AI"));
+#if SYNTH_ENABLE_TIMELINE
+    toggleTimelineButton.setButtonText(iconOnly ? "" : (isTimelineVisible ? "Hide Timeline" : "Show Timeline"));
+#endif
     toggleLibraryButton.setButtonText(iconOnly ? "" : (isLibraryVisible ? "Hide Library" : "Show Library"));
     themeToggleButton.setButtonText(
         iconOnly ? ""
@@ -947,12 +2013,18 @@ void MainComponent::applyToolbarIcons() {
     const juce::String aiBase = isAiPanelVisible ? "Hide AI Panel" : "Show AI Panel";
     toggleAiPanelButton.setTooltip(hint(aiBase, "toggleAiPanel"));
 
+#if SYNTH_ENABLE_TIMELINE
+    const juce::String timelineBase = isTimelineVisible ? "Hide Timeline" : "Show Timeline";
+    toggleTimelineButton.setTooltip(hint(timelineBase, "toggleTimelinePanel"));
+#endif
+
     const juce::String libBase = isLibraryVisible ? "Hide Library" : "Show Library";
     toggleLibraryButton.setTooltip(hint(libBase, "toggleLibrary"));
 }
 
 // ---- Pure panel-bounds geometry helper ----
-MainComponent::PanelBoundsResult MainComponent::computePanelBounds(bool libVisible, bool aiVisible) const {
+MainComponent::PanelBoundsResult MainComponent::computePanelBounds(bool libVisible, bool aiVisible,
+                                                                   bool timelineVisible) const {
     int tbH = 36, sbH = 24;
     int libW = libVisible ? 200 : 0;
     int aiW = aiVisible ? 300 : 0;
@@ -969,6 +2041,14 @@ MainComponent::PanelBoundsResult MainComponent::computePanelBounds(bool libVisib
     bounds.removeFromBottom(sbH); // status bar
 
     PanelBoundsResult result;
+#if SYNTH_ENABLE_TIMELINE
+    // Carved AFTER the status bar and BEFORE the AI/library removals — full-width, directly
+    // above the status bar (see resized(), which carves in the same order).
+    if (timelineVisible)
+        result.timelineBounds = bounds.removeFromBottom(clampTimelinePanelHeight(timelinePanelHeight_));
+#else
+    (void)timelineVisible;
+#endif
     if (aiVisible)
         result.aiPanelBounds = bounds.removeFromRight(aiW);
     if (libVisible)
@@ -977,16 +2057,57 @@ MainComponent::PanelBoundsResult MainComponent::computePanelBounds(bool libVisib
     return result;
 }
 
+// ---- Timeline panel height (user-resizable, persisted) ----
+
+int MainComponent::defaultTimelinePanelHeight() const {
+    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        return lf->getTheme().metrics.timelinePanelHeight;
+    return 220; // headless literal fallback, same pattern as resized()
+}
+
+int MainComponent::clampTimelinePanelHeight(int desiredHeight) const {
+    const int minHeight = defaultTimelinePanelHeight();
+    // Window not laid out yet: only the floor applies, so a persisted height survives construction
+    // and is capped by the first real resized() instead.
+    const int maxHeight =
+        getHeight() > 0 ? std::max(minHeight, (getHeight() * 3) / 4) : std::max(minHeight, desiredHeight);
+    return juce::jlimit(minHeight, maxHeight, desiredHeight);
+}
+
+void MainComponent::setTimelinePanelHeight(int desiredHeight, bool persist) {
+#if SYNTH_ENABLE_TIMELINE
+    const int clamped = clampTimelinePanelHeight(desiredHeight);
+    if (clamped != timelinePanelHeight_) {
+        timelinePanelHeight_ = clamped;
+        // One layout pass per drag callback — user-driven, so it is not a free-running repaint.
+        resized();
+    }
+    if (persist) {
+        appProperties.getUserSettings()->setValue(kTimelinePanelHeightKey, timelinePanelHeight_);
+        appProperties.saveIfNeeded();
+    }
+#else
+    (void)desiredHeight;
+    (void)persist;
+#endif
+}
+
 // ---- Animated panel transition ----
 void MainComponent::animatePanelTransition(const PanelBoundsResult& fromResult, const PanelBoundsResult& toResult,
-                                           bool hideLibraryOnComplete, bool hideAiPanelOnComplete) {
+                                           bool hideLibraryOnComplete, bool hideAiPanelOnComplete,
+                                           bool hideTimelineOnComplete) {
     // Snapshot from-bounds for the lambdas.
     libraryAnimFrom = fromResult.libraryBounds.isEmpty() ? toResult.libraryBounds : fromResult.libraryBounds;
     aiPanelAnimFrom = fromResult.aiPanelBounds.isEmpty() ? toResult.aiPanelBounds : fromResult.aiPanelBounds;
+    // timelineBounds stays the default-constructed empty rect in a flag-OFF build (the
+    // carve that would populate it is gated in computePanelBounds()), so this — and every other
+    // timeline-specific line below — is inert there rather than needing its own #if.
+    timelineAnimFrom = fromResult.timelineBounds.isEmpty() ? toResult.timelineBounds : fromResult.timelineBounds;
     graphEditorAnimFrom = fromResult.graphEditorBounds;
 
     const auto libTo = toResult.libraryBounds.isEmpty() ? libraryAnimFrom : toResult.libraryBounds;
     const auto aiTo = toResult.aiPanelBounds.isEmpty() ? aiPanelAnimFrom : toResult.aiPanelBounds;
+    const auto timelineTo = toResult.timelineBounds.isEmpty() ? timelineAnimFrom : toResult.timelineBounds;
     const auto graphTo = toResult.graphEditorBounds;
 
     // Stop both animators first — we're doing a single coordinated anim on aiPanelAnim,
@@ -997,31 +2118,39 @@ void MainComponent::animatePanelTransition(const PanelBoundsResult& fromResult, 
     // Capture for lambdas.
     auto libFrom = libraryAnimFrom;
     auto aipFrom = aiPanelAnimFrom;
+    auto tlFrom = timelineAnimFrom;
     auto graphFrom = graphEditorAnimFrom;
 
-    // Single animator drives all three panels.
+    // Single animator drives all four panels.
     aiPanelAnim.start(
         vblankUpdater,
         190.0, // ~190 ms — within the 160–220 ms spec
         synth::ui::easeInOutCubic,
-        [this, libFrom, libTo, aipFrom, aiTo, graphFrom, graphTo](float t) {
+        [this, libFrom, libTo, aipFrom, aiTo, tlFrom, timelineTo, graphFrom, graphTo](float t) {
             if (!libFrom.isEmpty() || !libTo.isEmpty())
                 moduleLibrary.setBounds(synth::ui::AnimationDriver::lerpBounds(libFrom, libTo, t));
             if (!aipFrom.isEmpty() || !aiTo.isEmpty())
                 aiChatComponent.setBounds(synth::ui::AnimationDriver::lerpBounds(aipFrom, aiTo, t));
+            if (!tlFrom.isEmpty() || !timelineTo.isEmpty())
+                timelinePanel.setBounds(synth::ui::AnimationDriver::lerpBounds(tlFrom, timelineTo, t));
             graphEditor.setBounds(synth::ui::AnimationDriver::lerpBounds(graphFrom, graphTo, t));
         },
-        [this, hideLibraryOnComplete, hideAiPanelOnComplete, libTo, aiTo, graphTo]() {
+        [this, hideLibraryOnComplete, hideAiPanelOnComplete, hideTimelineOnComplete, libTo, aiTo, timelineTo,
+         graphTo]() {
             // Snap to exact final bounds and apply visibility.
             if (!libTo.isEmpty())
                 moduleLibrary.setBounds(libTo);
             if (!aiTo.isEmpty())
                 aiChatComponent.setBounds(aiTo);
+            if (!timelineTo.isEmpty())
+                timelinePanel.setBounds(timelineTo);
             graphEditor.setBounds(graphTo);
             if (hideLibraryOnComplete)
                 moduleLibrary.setVisible(false);
             if (hideAiPanelOnComplete)
                 aiChatComponent.setVisible(false);
+            if (hideTimelineOnComplete)
+                timelinePanel.setVisible(false);
         });
 }
 
@@ -1038,7 +2167,7 @@ void MainComponent::setLibraryVisible(bool v) {
         ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding("toggleLibrary"))));
 
     // Compute from/to layouts.
-    auto fromResult = computePanelBounds(!v, isAiPanelVisible); // previous layout
+    auto fromResult = computePanelBounds(!v, isAiPanelVisible, isTimelineVisible); // previous layout
     if (v) {
         // Showing: make visible at the from-position before animating.
         moduleLibrary.setVisible(true);
@@ -1047,7 +2176,7 @@ void MainComponent::setLibraryVisible(bool v) {
                 juce::Rectangle<int>(fromResult.graphEditorBounds.getX(), fromResult.graphEditorBounds.getY(), 0,
                                      fromResult.graphEditorBounds.getHeight());
     }
-    auto toResult = computePanelBounds(v, isAiPanelVisible);
+    auto toResult = computePanelBounds(v, isAiPanelVisible, isTimelineVisible);
 
     // Apply the FINAL layout immediately so headless tests (no VBlank) see correct bounds.
     // The animation below is cosmetic only — it starts from fromResult and converges to the
@@ -1056,7 +2185,7 @@ void MainComponent::setLibraryVisible(bool v) {
     if (!v)
         moduleLibrary.setVisible(false);
 
-    animatePanelTransition(fromResult, toResult, /*hideLib=*/!v, /*hideAi=*/false);
+    animatePanelTransition(fromResult, toResult, /*hideLib=*/!v, /*hideAi=*/false, /*hideTimeline=*/false);
 }
 
 // ---- Alignment guides toggle (UI Phase 7 - Item 4) ----
@@ -1069,4 +2198,966 @@ void MainComponent::setAlignmentGuidesEnabled(bool enabled) {
 void MainComponent::setCurrentPatchName(const juce::String& name) {
     currentPatchName_ = name;
     statusBar.repaint();
+}
+
+// =============================================================================
+// Timeline app wiring
+//
+// Every body below is gated INSIDE, so a SYNTH_ENABLE_TIMELINE=OFF build compiles them as no-ops
+// and no call site in this file needs an #if of its own.
+// =============================================================================
+
+#if SYNTH_ENABLE_TIMELINE
+void MainComponent::applyTimelineFeatureEnabled(bool enabled) {
+    // Disabling while the panel is visible: hide it through the SAME path the toolbar toggle
+    // uses (persistence + layout + animation all stay consistent with a manual click), rather
+    // than reaching into isTimelineVisible/appProperties/resized() directly here and duplicating
+    // that logic — same idiom as the two existing "force-open" call sites in this file.
+    if (!enabled && isTimelineVisible && toggleTimelineButton.onClick)
+        toggleTimelineButton.onClick();
+
+    toggleTimelineButton.setVisible(enabled);
+    timelineFeatureEnabled = enabled;
+    resized();
+
+    // The AI's timeline/automation authoring follows the same switch: off means the local model's
+    // prompt, schema and targets context revert to the pure patch surface (see
+    // AIIntegrationService::setTimelineToolsEnabled — extraction/apply stay wired, gated by the
+    // user's own Apply click either way).
+    aiService.setTimelineToolsEnabled(enabled);
+}
+#endif
+
+void MainComponent::timelineChanged(const synth::TimelineDoc&) { publishTimelineAndRebindRecorder(); }
+
+void MainComponent::publishTimelineAndRebindRecorder() {
+#if SYNTH_ENABLE_TIMELINE
+    audioEngine.publishTimeline(timelineDoc);
+
+    // The recorder's binding table is rebuilt with the SAME resolution AudioEngine::publishTimeline
+    // runs for the applier's table — uuid -> node (built once, not per lane), then paramId ->
+    // parameter — because a lane the applier can play back is exactly a lane the recorder must be
+    // able to capture into. Anything unresolvable is simply left unbound (an orphaned lane is
+    // retained in the doc, it just automates nothing).
+    automationRecorder.unbindAll();
+
+    std::map<juce::String, juce::AudioProcessorGraph::Node*> nodesByUuid;
+    for (auto* node : audioEngine.getGraph().getNodes()) {
+        if (node == nullptr)
+            continue;
+        const juce::String uuid = node->properties["uuid"].toString();
+        if (uuid.isNotEmpty())
+            nodesByUuid.emplace(uuid, node);
+    }
+
+    for (const auto& track : timelineDoc.getTracks()) {
+        for (const auto& lane : track.lanes) {
+            if (lane.nodeUuid.isEmpty() || lane.paramId.isEmpty())
+                continue;
+            const auto found = nodesByUuid.find(lane.nodeUuid);
+            if (found == nodesByUuid.end())
+                continue;
+            // The shared resolver, exactly like the applier's own binding build — a lane the
+            // audio thread can play back is exactly a lane the recorder must be able to capture into.
+            const auto resolved =
+                synth::resolveLaneParameter(found->second->getProcessor(), lane.paramId, lane.paramIndexHint);
+            if (auto* param = resolved.liveParameter())
+                automationRecorder.bindLane(lane.id, param, found->second);
+        }
+    }
+#endif
+}
+
+void MainComponent::reconcileTimelineAfterGraphChange() {
+#if SYNTH_ENABLE_TIMELINE
+    // reconcileBindings routes through the doc's single mutation choke point when (and only when) a
+    // flag actually flips, which fires timelineChanged and therefore publishes. Publishing again
+    // here would be a wasted snapshot build, so this only publishes for the "nothing flipped" case
+    // — where the graph still changed under us and the recorder's bindings must be re-resolved.
+    if (!synth::TimelineReconciler::reconcile(timelineDoc, audioEngine.getGraph()))
+        publishTimelineAndRebindRecorder();
+#endif
+}
+
+void MainComponent::reconcileTimelineBindingsOnly() {
+#if SYNTH_ENABLE_TIMELINE
+    synth::TimelineReconciler::reconcile(timelineDoc, audioEngine.getGraph());
+#endif
+}
+
+void MainComponent::commitMidiRecording() {
+#if SYNTH_ENABLE_TIMELINE
+    // stopAndCommit()'s own return just says whether a clip was created (an empty take commits
+    // nothing) — not something either caller (the transport bar's Record-off click, and the 10 Hz
+    // poll's auto-commit-on-stop) needs to react to differently, so it is deliberately ignored here.
+    midiRecorder.stopAndCommit(timelineDoc, undoManager);
+    if (midiRecorder.hadOverrun())
+        statusBar.showMessage("Dropped MIDI events during recording");
+    timelinePanel.getTransportBar().setRecordingState(false);
+    // Every stop (explicit or auto-committed) ends any in-flight count-in pre-roll —
+    // unconditional and idempotent, so a take that was never in a pre-roll to begin with just
+    // clears an already-false flag.
+    audioEngine.getMetronome().setForcedOn(false);
+#endif
+}
+
+// ---- Audio recording ----
+
+juce::AudioProcessorGraph::Node* MainComponent::ensureMasterRecordTap() {
+#if SYNTH_ENABLE_TIMELINE
+    auto& graph = audioEngine.getGraph();
+
+    // Already spliced in? THE master tap is a singleton by construction — this function is the only
+    // thing that ever creates one — so the first Rec Tap found is it.
+    for (auto* node : graph.getNodes())
+        if (node != nullptr && dynamic_cast<RecordTapModule*>(node->getProcessor()) != nullptr)
+            return node;
+
+    // The node the tap goes in FRONT of. Still a bare juce::AudioGraphIOProcessor (unlike Audio
+    // Input), so it is identified by name exactly like every other lookup in the app.
+    juce::AudioProcessorGraph::Node* outputNode = nullptr;
+    for (auto* node : graph.getNodes())
+        if (node != nullptr && node->getProcessor() != nullptr && node->getProcessor()->getName() == "Audio Output")
+            outputNode = node;
+    if (outputNode == nullptr)
+        return nullptr; // nothing to record: there is no master bus
+
+    juce::AudioProcessorGraph::Node* created = nullptr;
+    // ONE compound undo step for the node, its position, and the whole re-splice. recordCombinedChange
+    // pushes only the domain(s) that actually changed, so this is a single graph SnapshotAction —
+    // the timeline is untouched here (the clip is a separate step, committed when the take ends).
+    undoManager.recordCombinedChange(graph, timelineDoc, [&] {
+        // Through the factory, not constructed ad hoc: that is what makes the node round-trip
+        // through graphToJSON/applyJSONToGraph, which is how undo, redo and .agsproj save all
+        // reproduce it. Same reasoning as createTrackInNode().
+        auto processor = synth::AIStateMapper::createModule("Rec Tap");
+        if (processor == nullptr)
+            return;
+        auto node = graph.addNode(std::move(processor));
+        if (node == nullptr)
+            return;
+        created = node.get();
+
+        // Ensure-uuid, mirrored into the processor in the same breath — the pairing every uuid
+        // writer site keeps (see ModuleBase::setNodeUuid).
+        const juce::String uuid = juce::Uuid().toDashedString();
+        node->properties.set("uuid", uuid);
+        if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
+            module->setNodeUuid(uuid);
+
+        const auto size = GraphEditor::estimateModuleSize("Rec Tap");
+        const auto position = graphEditor.findLeftEdgeSlotBelowModules(size.x, size.y);
+        node->properties.set("x", position.x);
+        node->properties.set("y", position.y);
+
+        // THE SPLICE. Everything that fed the output's audio channels now feeds the tap's matching
+        // input, and the tap's outputs feed the output. Collected first and mutated afterwards
+        // because removeConnection invalidates the list we would otherwise be iterating.
+        //
+        // MIDI connections into the output are left alone (a tap carries audio, not MIDI), and so
+        // is anything on a channel the tap does not have — re-routing an 8-channel master through a
+        // stereo tap would silently drop six channels.
+        std::vector<juce::AudioProcessorGraph::Connection> intoOutput;
+        for (const auto& connection : graph.getConnections()) {
+            if (connection.destination.nodeID != outputNode->nodeID)
+                continue;
+            const int channel = connection.destination.channelIndex;
+            if (channel < 0 || channel >= RecordTapModule::kNumChannels)
+                continue;
+            intoOutput.push_back(connection);
+        }
+        for (const auto& connection : intoOutput) {
+            graph.removeConnection(connection);
+            graph.addConnection({connection.source, {node->nodeID, connection.destination.channelIndex}});
+        }
+        for (int channel = 0; channel < RecordTapModule::kNumChannels; ++channel)
+            graph.addConnection({{node->nodeID, channel}, {outputNode->nodeID, channel}});
+    });
+
+    graphEditor.updateComponents();
+    return created;
+#else
+    return nullptr;
+#endif
+}
+
+RecordTapModule* MainComponent::findMasterRecordTap() const {
+#if SYNTH_ENABLE_TIMELINE
+    auto& graph = const_cast<MainComponent*>(this)->audioEngine.getGraph();
+    if (auto* node = graph.getNodeForId(audioTake_.tapNode))
+        if (auto* tap = dynamic_cast<RecordTapModule*>(node->getProcessor()))
+            return tap;
+
+    // The id no longer resolves — an undo/redo mid-take rebuilds the graph and renumbers nodes.
+    // The tap is a singleton, so a scan still identifies it unambiguously.
+    for (auto* node : graph.getNodes())
+        if (node != nullptr)
+            if (auto* tap = dynamic_cast<RecordTapModule*>(node->getProcessor()))
+                return tap;
+#endif
+    return nullptr;
+}
+
+bool MainComponent::chooseTakeFiles(AudioTake& take) const {
+#if SYNTH_ENABLE_TIMELINE
+    juce::File audioDir;
+    juce::File peaksDir;
+    juce::String refPrefix;
+
+    if (currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_)) {
+        audioDir = currentBundleDir_.getChildFile(synth::ProjectBundle::kAudioSubdirName);
+        peaksDir = currentBundleDir_.getChildFile(synth::ProjectBundle::kPeaksSubdirName);
+        refPrefix = juce::String(synth::ProjectBundle::kAudioSubdirName) + "/";
+    } else {
+        // An UNSAVED project has no bundle to write into, so takes land in app data and the clip's
+        // assetRef carries the reserved "Recordings/" prefix, which resolves against
+        // <app data>/<settings folder> rather than a bundle root. saveToFile() runs
+        // synth::AssetManager::adoptRecordingsAssets BEFORE ProjectBundle::save, which
+        // moves these into the bundle on the first save and rewrites the refs to "Audio/..." — a
+        // project.json never carries a "Recordings/" ref. Until saved, the ref is still
+        // bundle-RELATIVE in form (isValidAssetRef accepts it), which is what keeps the one path
+        // rule — no absolute paths, ever — true for both cases.
+        auto root = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                        .getChildFile(synth::branding::kSettingsFolderName)
+                        .getChildFile(kRecordingsFolderName);
+        audioDir = root;
+        peaksDir = root;
+        refPrefix = juce::String(kRecordingsFolderName) + "/";
+    }
+
+    if (!audioDir.exists() && !audioDir.createDirectory().wasOk())
+        return false;
+    if (!peaksDir.exists() && !peaksDir.createDirectory().wasOk())
+        return false;
+
+    // First free take number in whichever folder pair this is. Both files are checked so a take
+    // never half-overwrites an earlier one.
+    for (int n = 1; n <= kMaxTakeNumber; ++n) {
+        const juce::String stem = "take-" + juce::String(n);
+        const auto wav = audioDir.getChildFile(stem + ".wav");
+        const auto peaks = peaksDir.getChildFile(stem + ".agpk");
+        if (wav.exists() || peaks.exists())
+            continue;
+        take.wavFile = wav;
+        take.peaksFile = peaks;
+        take.assetRef = refPrefix + stem + ".wav";
+        return true;
+    }
+    return false;
+#else
+    juce::ignoreUnused(take);
+    return false;
+#endif
+}
+
+void MainComponent::commitAudioRecording() {
+#if SYNTH_ENABLE_TIMELINE
+    if (!audioTake_.capturing)
+        return;
+
+    // Cleared FIRST: every path out of here means the take is over, and leaving the state set would
+    // let the 10 Hz poll re-enter this on the next tick.
+    const AudioTake take = audioTake_;
+    audioTake_ = {};
+
+    RecordTapModule::TakeResult result;
+    if (auto* tap = findMasterRecordTap())
+        result = tap->stopCapture();
+
+    timelinePanel.getTransportBar().setRecordingState(false);
+    // Every stop (explicit or auto-committed) ends any in-flight count-in pre-roll — unconditional
+    // and idempotent, exactly like commitMidiRecording's own call.
+    audioEngine.getMetronome().setForcedOn(false);
+
+    // Nothing captured: record was disengaged during the count-in, or the tap never armed. No clip
+    // and no undo step, mirroring MidiRecorder's "an empty take commits nothing" contract.
+    if (!result.ok || result.lengthSamples <= 0)
+        return;
+
+    // Where the take lands. Samples -> beats through the transport's tempo. The rate,
+    // bpm and round-trip latency used here are the ones FROZEN at record-on (take.captureSampleRate /
+    // captureBpm / captureRecordingLatencySamples), not read live off the transport/engine — a
+    // device/sample-rate change mid-take forces an early commit (see
+    // AudioEngine::handleStreamFormatChange), and by the time that commit reaches here the engine may
+    // already be on the NEW rate while every anchor field above (captureStartTimelineSample, the WAV
+    // itself) is still in the OLD one. Reading live values would silently convert an OLD-rate sample
+    // count with a NEW-rate samples-per-beat, which is wrong by exactly the rate ratio. The frozen
+    // fields make this correct unconditionally: for the ordinary take (no rate change), they equal
+    // the live values anyway. The whole of the arithmetic lives in synth::computeTakePlacement so it
+    // can be asserted to the sample without going through this component. See
+    // Source/Timeline/TakePlacement.h.
+    synth::TakePlacementInput placementInput;
+    placementInput.takeLengthSamples = result.lengthSamples;
+    placementInput.captureStartValid = result.captureStartValid;
+    placementInput.captureStartTimelineSample = result.captureStartTimelineSample;
+    placementInput.captureStartBlockOffset = result.captureStartBlockOffset;
+    placementInput.punchInBeat = take.punchInBeat;
+    placementInput.recordingLatencySamples = take.captureRecordingLatencySamples;
+    placementInput.sampleRate = take.captureSampleRate > 0.0 ? take.captureSampleRate : 44100.0;
+    placementInput.bpm = take.captureBpm > 0.0 ? take.captureBpm : 120.0;
+    placementInput.minClipLengthBeats = kMinAudioClipLengthBeats;
+
+    const auto placement = synth::computeTakePlacement(placementInput);
+    // Everything recorded sits before the punch (record disengaged during the count-in): the file
+    // stays, the clip is not created — the same "an empty take commits nothing" rule as above.
+    if (!placement.hasContent)
+        return;
+
+    // ONE undo step for the clip AND its asset binding: recordTimelineChange snapshots the doc
+    // before and after the whole lambda, so the two mutations inside are a single entry.
+    undoManager.recordTimelineChange(timelineDoc, [&] {
+        const auto clip = timelineDoc.addClip(take.track, placement.clipStartBeat, placement.clipLengthBeats, "Take");
+        if (!clip.isValid())
+            return; // the track went away, or it is at kMaxClipsPerTrack: a no-op commit
+        // The pre-roll (and the latency shift's overhang at timeline 0) is excluded by the WINDOW,
+        // not by rewriting the WAV: the file keeps every frame that was captured.
+        timelineDoc.setClipAsset(clip, take.assetRef, placement.sourceStartSeconds);
+    });
+
+    if (result.overran)
+        statusBar.showMessage("Dropped audio during recording");
+#endif
+}
+
+void MainComponent::clearTimelineForNewPatch() {
+#if SYNTH_ENABLE_TIMELINE
+    if (timelineDoc.isEmpty())
+        return; // clear() on an empty doc is a genuine no-op — no undo step for it either
+    undoManager.recordTimelineChange(timelineDoc, [this] { timelineDoc.clear(); });
+#endif
+}
+
+juce::AudioProcessorGraph::Node* MainComponent::findNodeByUuid(const juce::String& uuid) const {
+    if (uuid.isEmpty())
+        return nullptr;
+    for (auto* node : audioEngine.getGraph().getNodes())
+        if (node != nullptr && node->properties["uuid"].toString() == uuid)
+            return node;
+    return nullptr;
+}
+
+juce::String MainComponent::createTrackInNode() {
+#if SYNTH_ENABLE_TIMELINE
+    auto& graph = audioEngine.getGraph();
+
+    // Through the factory, not constructed ad hoc: that is what makes the node round-trip through
+    // graphToJSON/applyJSONToGraph, which is how undo, redo and .agsproj save all reproduce it.
+    auto processor = synth::AIStateMapper::createModule("Track In");
+    if (processor == nullptr)
+        return {};
+
+    auto node = graph.addNode(std::move(processor));
+    if (node == nullptr)
+        return {};
+
+    // Ensure-uuid, mirrored into the processor in the same breath. The Track In module strcmps its
+    // own uuid against the snapshot's bindingUuid on the AUDIO thread, so the node property and the
+    // processor's copy must never diverge — the same pairing AIStateMapper keeps at each of its
+    // three uuid writer sites (see ModuleBase::setNodeUuid).
+    const juce::String uuid = juce::Uuid().toDashedString();
+    node->properties.set("uuid", uuid);
+    if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
+        module->setNodeUuid(uuid);
+
+    const auto size = GraphEditor::estimateModuleSize("Track In");
+    const auto position = graphEditor.findLeftEdgeSlotBelowModules(size.x, size.y);
+    node->properties.set("x", position.x);
+    node->properties.set("y", position.y);
+
+    // Auto-wire ONLY when the answer is unambiguous: exactly one MIDI instrument in the patch. With
+    // none, or with two, no wire is drawn — a chip that reads "bound" over an unwired node is fine
+    // (the cable is the user's to draw), whereas guessing wrong silently plays a track through the
+    // wrong instrument.
+    juce::AudioProcessorGraph::Node* target = nullptr;
+    int candidates = 0;
+    for (auto* other : graph.getNodes()) {
+        if (other == nullptr || other == node.get() || !isMidiInstrumentNode(other->getProcessor()))
+            continue;
+        ++candidates;
+        target = other;
+    }
+    if (candidates == 1 && target != nullptr)
+        graph.addConnection({{node->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                             {target->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
+
+    graphEditor.updateComponents();
+    return uuid;
+#else
+    return {};
+#endif
+}
+
+juce::String MainComponent::createTrackAudioNode() {
+#if SYNTH_ENABLE_TIMELINE
+    auto& graph = audioEngine.getGraph();
+
+    // Through the factory, for the same reason createTrackInNode() is: that is what makes the node
+    // round-trip through graphToJSON/applyJSONToGraph, which is how undo, redo and .agsproj save all
+    // reproduce it.
+    auto processor = synth::AIStateMapper::createModule("Track Audio");
+    if (processor == nullptr)
+        return {};
+
+    auto node = graph.addNode(std::move(processor));
+    if (node == nullptr)
+        return {};
+
+    // Ensure-uuid, mirrored into the processor in the same breath. The Track Audio module strcmps
+    // its own uuid against the snapshot's bindingUuid on the AUDIO thread, so the node property and
+    // the processor's copy must never diverge (see ModuleBase::setNodeUuid).
+    const juce::String uuid = juce::Uuid().toDashedString();
+    node->properties.set("uuid", uuid);
+    if (auto* module = dynamic_cast<ModuleBase*>(node->getProcessor()))
+        module->setNodeUuid(uuid);
+
+    const auto size = GraphEditor::estimateModuleSize("Track Audio");
+    const auto position = graphEditor.findLeftEdgeSlotBelowModules(size.x, size.y);
+    node->properties.set("x", position.x);
+    node->properties.set("y", position.y);
+
+    // Auto-wire into the MASTER BUS. Unlike Track In's "exactly one MIDI instrument" rule this is
+    // never ambiguous — the master bus is a singleton — but there are two possible sinks and the
+    // order matters: if a Rec Tap has already been spliced in front of Audio Output, wiring
+    // straight to the output would route this track AROUND the tap and quietly leave it out of every
+    // subsequent take. Preferring the tap when one exists makes the two orderings compose: an audio
+    // track added before the first take is re-spliced by ensureMasterRecordTap(), and one added
+    // after it lands on the tap directly.
+    juce::AudioProcessorGraph::Node* sink = nullptr;
+    for (auto* other : graph.getNodes())
+        if (other != nullptr && dynamic_cast<RecordTapModule*>(other->getProcessor()) != nullptr)
+            sink = other;
+    if (sink == nullptr)
+        for (auto* other : graph.getNodes())
+            if (other != nullptr && other->getProcessor() != nullptr &&
+                other->getProcessor()->getName() == "Audio Output")
+                sink = other;
+
+    if (sink != nullptr)
+        for (int channel = 0; channel < TimelineAudioSourceModule::kNumChannels; ++channel)
+            graph.addConnection({{node->nodeID, channel}, {sink->nodeID, channel}});
+
+    graphEditor.updateComponents();
+    return uuid;
+#else
+    return {};
+#endif
+}
+
+void MainComponent::refreshAssetRoots() {
+#if SYNTH_ENABLE_TIMELINE
+    // The bundle root is the open .agsproj directory, or invalid when this document has never been
+    // saved (in which case only "Recordings/" refs can resolve — see ProjectBundle's asset policy).
+    const juce::File bundleRoot =
+        (currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_)) ? currentBundleDir_
+                                                                                                 : juce::File();
+    // The SAME folder chooseTakeFiles() writes unsaved-project takes into — kept in one expression
+    // on each side rather than a shared helper so a change to either is visible at the other.
+    const juce::File recordingsRoot = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                          .getChildFile(synth::branding::kSettingsFolderName)
+                                          .getChildFile(kRecordingsFolderName);
+
+    audioEngine.getAudioClipStreamer().setAssetRoots(bundleRoot, recordingsRoot);
+#endif
+}
+
+void MainComponent::promptRelinkClipAsset(synth::ClipId id) {
+#if SYNTH_ENABLE_TIMELINE
+    fileChooser = std::make_unique<juce::FileChooser>(
+        "Relink Audio", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),
+        "*.wav;*.aiff;*.aif;*.flac;*.ogg");
+    fileChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                             [this, id](const juce::FileChooser& fc) {
+                                 auto file = fc.getResult();
+                                 if (file != juce::File{})
+                                     relinkClipAsset(id, file);
+                             });
+#else
+    juce::ignoreUnused(id);
+#endif
+}
+
+void MainComponent::relinkClipAsset(synth::ClipId id, const juce::File& chosenFile) {
+#if SYNTH_ENABLE_TIMELINE
+    const auto* clip = timelineDoc.getClip(id);
+    if (clip == nullptr || clip->assetRef.isEmpty())
+        return;
+    const juce::String oldRef = clip->assetRef;
+
+    juce::String error;
+    juce::String newRef;
+    if (currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_)) {
+        newRef = synth::AssetManager::importAudioFile(chosenFile, currentBundleDir_, &error);
+    } else {
+        // No bundle yet (unsaved project) — the SAME app-data Recordings/ convention
+        // chooseTakeFiles() uses for a take recorded before the first save.
+        const auto recordingsRoot = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                        .getChildFile(synth::branding::kSettingsFolderName)
+                                        .getChildFile(kRecordingsFolderName);
+        const auto name = synth::AssetManager::importAudioFileToDirectory(chosenFile, recordingsRoot, &error);
+        if (name.isNotEmpty())
+            newRef = juce::String(kRecordingsFolderName) + "/" + name;
+    }
+
+    if (newRef.isEmpty()) {
+        statusBar.showMessage("Relink failed: " + error);
+        return;
+    }
+
+    // Snapshot every clip sharing the OLD ref BEFORE mutating anything — a TimelineDoc reference
+    // does not survive a mutation (see TimelineDoc::getClip's own contract), so the ids and each
+    // clip's OWN sourceStartSeconds are captured first rather than iterating getTracks() while
+    // calling setClipAsset on it.
+    struct Target {
+        synth::ClipId id;
+        double sourceStartSeconds;
+    };
+    std::vector<Target> targets;
+    for (const auto& track : timelineDoc.getTracks())
+        for (const auto& c : track.clips)
+            if (c.assetRef == oldRef)
+                targets.push_back({c.id, c.sourceStartSeconds});
+
+    // Every sharing clip moves to the new ref together, as ONE undo step — the whole point of a
+    // relink is that duplicated/copy-pasted clips naming the same asset get fixed as a unit, never
+    // half-relinked. The old file is never touched, let alone deleted.
+    undoManager.recordTimelineChange(timelineDoc, [&] {
+        for (const auto& target : targets)
+            timelineDoc.setClipAsset(target.id, newRef, target.sourceStartSeconds);
+    });
+
+    statusBar.showMessage("Relinked to " + newRef);
+#else
+    juce::ignoreUnused(id, chosenFile);
+#endif
+}
+
+double MainComponent::audioFileLengthInBeats(const juce::File& file) const {
+#if SYNTH_ENABLE_TIMELINE
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
+    if (reader == nullptr || reader->sampleRate <= 0.0 || reader->lengthInSamples <= 0)
+        return 0.0;
+
+    const double seconds = (double)reader->lengthInSamples / reader->sampleRate;
+    const auto snap = audioEngine.getTransport().getPositionSnapshot();
+    const double bpm = snap.bpm > 0.0 ? snap.bpm : 120.0;
+    return seconds * bpm / 60.0;
+#else
+    juce::ignoreUnused(file);
+    return 0.0;
+#endif
+}
+
+void MainComponent::importAudioFileToClip(synth::TrackId track, double startBeat, const juce::File& sourceFile) {
+#if SYNTH_ENABLE_TIMELINE
+    const auto* trackPtr = timelineDoc.getTrack(track);
+    if (trackPtr == nullptr || trackPtr->kind != synth::TrackKind::Audio)
+        return;
+
+    // The SAME import policy relinkClipAsset() uses — a saved project imports into the bundle's
+    // Audio/, an unsaved one into the app-data Recordings/ convention chooseTakeFiles() writes takes
+    // into, which saveToFile() sweeps into the bundle via
+    // synth::AssetManager::adoptRecordingsAssets before it ever writes project.json.
+    juce::String error;
+    juce::String newRef;
+    if (currentBundleDir_ != juce::File() && synth::ProjectBundle::isBundle(currentBundleDir_)) {
+        newRef = synth::AssetManager::importAudioFile(sourceFile, currentBundleDir_, &error);
+    } else {
+        const auto recordingsRoot = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                        .getChildFile(synth::branding::kSettingsFolderName)
+                                        .getChildFile(kRecordingsFolderName);
+        const auto name = synth::AssetManager::importAudioFileToDirectory(sourceFile, recordingsRoot, &error);
+        if (name.isNotEmpty())
+            newRef = juce::String(kRecordingsFolderName) + "/" + name;
+    }
+
+    if (newRef.isEmpty()) {
+        // Reported and abandoned BEFORE any mutation: a failed import leaves no clip behind.
+        statusBar.showMessage("Import failed: " + error);
+        return;
+    }
+
+    // The clip is as long as the file (never as long as some default), floored at the same minimum
+    // an audio take uses so a sub-frame file still produces a grabbable clip.
+    const double lengthBeats = std::max(kMinAudioClipLengthBeats, audioFileLengthInBeats(sourceFile));
+
+    // ONE undo step for the clip AND its asset binding, exactly like commitAudioRecording().
+    undoManager.recordTimelineChange(timelineDoc, [&] {
+        const auto clip =
+            timelineDoc.addClip(track, std::max(0.0, startBeat), lengthBeats, sourceFile.getFileNameWithoutExtension());
+        if (!clip.isValid())
+            return; // the track went away, or it is at kMaxClipsPerTrack
+        timelineDoc.setClipAsset(clip, newRef, 0.0);
+    });
+
+    statusBar.showMessage("Imported " + newRef);
+#else
+    juce::ignoreUnused(track, startBeat, sourceFile);
+#endif
+}
+
+int MainComponent::cleanUnusedAssets() {
+#if SYNTH_ENABLE_TIMELINE
+    if (currentBundleDir_ == juce::File() || !synth::ProjectBundle::isBundle(currentBundleDir_))
+        return 0; // nothing to sweep outside a saved bundle
+    return synth::AssetManager::cleanUnusedAssets(timelineDoc, currentBundleDir_);
+#else
+    return 0;
+#endif
+}
+
+void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
+#if SYNTH_ENABLE_TIMELINE
+    // The knob menu's "Automate" would force-open the timeline panel — while the runtime "Show
+    // timeline" preference has the feature hidden, say so instead of overriding the user's choice.
+    if (!timelineFeatureEnabled) {
+        statusBar.showMessage("Timeline is disabled - enable it in Settings > Preferences to automate parameters");
+        return;
+    }
+
+    auto* node = audioEngine.getGraph().getNodeForId(nodeId);
+    auto* module = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
+    if (module == nullptr) {
+        statusBar.showMessage("Can't automate: module not found");
+        return;
+    }
+
+    // Ensure-uuid, mirrored into the processor in the same breath — the same idiom
+    // createTrackInNode() and AIStateMapper use at every uuid writer site (see
+    // ModuleBase::setNodeUuid). getNodeUuid() is the audio-safe mirror; the node property is the
+    // canonical copy addLane keys on.
+    juce::String uuid = node->properties["uuid"].toString();
+    if (uuid.isEmpty()) {
+        uuid = juce::Uuid().toDashedString();
+        node->properties.set("uuid", uuid);
+        module->setNodeUuid(uuid);
+    }
+
+    juce::RangedAudioParameter* param = nullptr;
+    for (auto* p : node->getProcessor()->getParameters()) {
+        auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(p);
+        if (ranged != nullptr && ranged->paramID == paramId) {
+            param = ranged;
+            break;
+        }
+    }
+    if (param == nullptr) {
+        statusBar.showMessage("Can't automate: parameter not found");
+        return;
+    }
+
+    // find-or-create the doc's ONE Automation-kind track, then bind the lane — both in the SAME
+    // mutation lambda, so creating the track (when this is the first automated parameter in the
+    // whole patch) and binding the lane is ONE undo step, not two. addLane dedupes doc-wide, so a
+    // repeat call for a parameter that already has a lane mutates nothing and this is a no-op.
+    synth::LaneId laneId;
+    const juce::String uuidCopy = uuid;
+    auto mutate = [this, &laneId, uuidCopy, paramId, param] {
+        synth::TrackId trackId;
+        for (const auto& track : timelineDoc.getTracks()) {
+            if (track.kind == synth::TrackKind::Automation) {
+                trackId = track.id;
+                break;
+            }
+        }
+        if (!trackId.isValid())
+            trackId = timelineDoc.addTrack(synth::TrackKind::Automation, "Automation");
+        if (!trackId.isValid())
+            return; // kMaxTracks reached — nothing to bind onto
+
+        synth::AutomationLane::RangeSnapshot range;
+        range.minValue = param->getNormalisableRange().start;
+        range.maxValue = param->getNormalisableRange().end;
+        range.defaultValue = param->convertFrom0to1(param->getDefaultValue());
+        laneId = timelineDoc.addLane(trackId, uuidCopy, paramId, range);
+    };
+    undoManager.recordTimelineChange(timelineDoc, mutate);
+    if (!laneId.isValid())
+        return;
+
+    // Reuse the toggle path exactly (same call simulateToggleTimelineClick() makes) rather than
+    // duplicating what it does to isTimelineVisible/persistence/layout.
+    if (!isTimelineVisible && toggleTimelineButton.onClick)
+        toggleTimelineButton.onClick();
+    timelinePanel.showAutomationLane(laneId);
+#else
+    juce::ignoreUnused(nodeId, paramId);
+#endif
+}
+
+// ---- TrackHeaderHost ----
+
+std::vector<synth::ui::TrackHeaderHost::BindingOption>
+MainComponent::getAvailableTrackInNodes(synth::TrackId forTrack) {
+    std::vector<BindingOption> options;
+#if SYNTH_ENABLE_TIMELINE
+    // A Track In node feeds exactly one track, so anything another track already claims is off the
+    // menu. This track's own current binding stays on it (ticked), so the menu always shows where
+    // it points today.
+    std::set<juce::String> claimedByOtherTracks;
+    for (const auto& track : timelineDoc.getTracks())
+        if (!(track.id == forTrack) && track.bindingUuid.isNotEmpty())
+            claimedByOtherTracks.insert(track.bindingUuid);
+
+    // Which NODE TYPE can feed this track depends on the track's kind — a MIDI track wants a
+    // Track In, an audio track wants a Track Audio. Offering the wrong one would let a user bind a
+    // track to a node that structurally cannot play it (the modules match on kind as well as uuid,
+    // so the result would be a track that silently plays nothing).
+    const auto* track = timelineDoc.getTrack(forTrack);
+    const ModuleType wantedType = (track != nullptr && track->kind == synth::TrackKind::Audio)
+                                      ? ModuleType::TimelineAudioSource
+                                      : ModuleType::TimelineMidiSource;
+
+    std::vector<juce::AudioProcessorGraph::Node*> candidates;
+    for (auto* node : audioEngine.getGraph().getNodes()) {
+        if (node == nullptr)
+            continue;
+        auto* module = dynamic_cast<ModuleBase*>(node->getProcessor());
+        if (module == nullptr || module->getModuleType() != wantedType)
+            continue;
+
+        const juce::String uuid = node->properties["uuid"].toString();
+        if (uuid.isEmpty() || claimedByOtherTracks.count(uuid) > 0)
+            continue;
+
+        candidates.push_back(node);
+    }
+
+    // "#id" is disambiguation, not identity: an option earns the suffix only when some OTHER
+    // candidate in this same menu carries the same plain name. Two passes because no candidate
+    // knows it needs one until the whole list is known.
+    std::map<juce::String, int> nameOccurrences;
+    for (auto* node : candidates)
+        ++nameOccurrences[describeNodeForBinding(node)];
+
+    for (auto* node : candidates) {
+        const juce::String uuid = node->properties["uuid"].toString();
+        const juce::String name = describeNodeForBinding(node);
+        const juce::String display =
+            nameOccurrences[name] > 1 ? name + " #" + juce::String((int)node->nodeID.uid) : name;
+        options.push_back({uuid, display});
+    }
+#else
+    juce::ignoreUnused(forTrack);
+#endif
+    return options;
+}
+
+juce::String MainComponent::getNodeDisplayName(const juce::String& uuid) {
+    return describeNodeForBinding(findNodeByUuid(uuid));
+}
+
+void MainComponent::bindTrackTo(synth::TrackId track, const juce::String& uuid) {
+#if SYNTH_ENABLE_TIMELINE
+    if (uuid.isEmpty())
+        return;
+    // A user gesture, so it goes on the undo stack (unlike reconciliation, which derives runtime
+    // state and is deliberately not undoable).
+    undoManager.recordTimelineChange(timelineDoc, [this, track, uuid] { timelineDoc.setTrackBinding(track, uuid); });
+    // Derive the orphan flag against the live graph immediately, so the chip stops reading
+    // "Missing" the moment the user picks a node rather than at the next graph change.
+    reconcileTimelineAfterGraphChange();
+#else
+    juce::ignoreUnused(track, uuid);
+#endif
+}
+
+void MainComponent::createAndBindTrackInNode(synth::TrackId track) {
+#if SYNTH_ENABLE_TIMELINE
+    // Kind-aware for the same reason getAvailableTrackInNodes() is — the chip's "new node"
+    // entry must create the node type the track can actually be fed by.
+    const auto* existing = timelineDoc.getTrack(track);
+    const bool wantsAudio = existing != nullptr && existing->kind == synth::TrackKind::Audio;
+
+    undoManager.recordCombinedChange(audioEngine.getGraph(), timelineDoc, [this, track, wantsAudio] {
+        const juce::String uuid = wantsAudio ? createTrackAudioNode() : createTrackInNode();
+        if (uuid.isNotEmpty())
+            timelineDoc.setTrackBinding(track, uuid);
+    });
+    reconcileTimelineAfterGraphChange();
+#else
+    juce::ignoreUnused(track);
+#endif
+}
+
+void MainComponent::selectNodeInGraph(const juce::String& uuid) {
+    if (auto* node = findNodeByUuid(uuid))
+        graphEditor.selectModule(node->nodeID, /*additive=*/false);
+}
+
+void MainComponent::deleteTrack(synth::TrackId track) {
+#if SYNTH_ENABLE_TIMELINE
+    const auto* existing = timelineDoc.getTrack(track);
+    if (existing == nullptr)
+        return;
+    const juce::String uuid = existing->bindingUuid;
+
+    // ONE undo step covering both domains: the track and the node that fed it disappear together,
+    // and come back together.
+    undoManager.recordCombinedChange(audioEngine.getGraph(), timelineDoc, [this, track, uuid] {
+        if (auto* node = findNodeByUuid(uuid)) {
+            // Mirrors GraphEditor::requestDeleteModule: drop the mod-matrix rows before the node
+            // (and the connections into it) go, then reconcile the canvas.
+            graphEditor.getModMatrix().clearRows();
+            audioEngine.getGraph().removeNode(node->nodeID);
+            graphEditor.updateComponents();
+        }
+        timelineDoc.removeTrack(track);
+    });
+    reconcileTimelineAfterGraphChange();
+#else
+    juce::ignoreUnused(track);
+#endif
+}
+
+void MainComponent::performTrackEdit(const std::function<void()>& mutation) {
+    if (!mutation)
+        return;
+#if SYNTH_ENABLE_TIMELINE
+    // recordTimelineChange pushes nothing when the mutation turns out to be a no-op, so a header
+    // that writes the value already in the doc costs no undo step.
+    undoManager.recordTimelineChange(timelineDoc, mutation);
+#else
+    mutation();
+#endif
+}
+
+void MainComponent::addMidiTrack() {
+#if SYNTH_ENABLE_TIMELINE
+    const int index = (int)timelineDoc.getTracks().size();
+
+    // ONE compound undo step: the Track In node, its auto-wire, the track, its binding and its
+    // colour are a single gesture, so a single Cmd+Z removes all of it.
+    const bool pushed = undoManager.recordCombinedChange(audioEngine.getGraph(), timelineDoc, [this, index] {
+        // Doc side FIRST. addTrack refuses at kMaxTracks, and a node created before that refusal
+        // stays in the graph with no track to feed — recordCombinedChange RECORDS the mutation, it
+        // does not undo it. A track with no binding yet is never flagged orphaned, so the order
+        // costs nothing.
+        const auto trackId = timelineDoc.addTrack(synth::TrackKind::Midi, "Track " + juce::String(index + 1));
+        if (!trackId.isValid())
+            return; // at kMaxTracks: nothing added, and no node created
+        const juce::String uuid = createTrackInNode();
+        if (uuid.isNotEmpty())
+            timelineDoc.setTrackBinding(trackId, uuid);
+        timelineDoc.setTrackColour(trackId, synth::ui::trackPaletteColour(index).getARGB());
+    });
+
+    reconcileTimelineAfterGraphChange();
+    statusBar.showMessage(pushed ? "Added Track " + juce::String(index + 1) : "Could not add a track");
+#endif
+}
+
+void MainComponent::addAudioTrack() {
+#if SYNTH_ENABLE_TIMELINE
+    const int index = (int)timelineDoc.getTracks().size();
+
+    // The exact mirror of addMidiTrack(): ONE compound undo step covering the Track Audio node, its
+    // auto-wire into the master bus, the track, its binding and its colour, so a single Cmd+Z
+    // removes all of it.
+    const bool pushed = undoManager.recordCombinedChange(audioEngine.getGraph(), timelineDoc, [this, index] {
+        // Doc side FIRST, for the reason addMidiTrack() spells out: a node created before the
+        // kMaxTracks refusal would be left orphaned in the graph.
+        const auto trackId = timelineDoc.addTrack(synth::TrackKind::Audio, "Audio " + juce::String(index + 1));
+        if (!trackId.isValid())
+            return; // at kMaxTracks: nothing added, and no node created
+        const juce::String uuid = createTrackAudioNode();
+        if (uuid.isNotEmpty())
+            timelineDoc.setTrackBinding(trackId, uuid);
+        timelineDoc.setTrackColour(trackId, synth::ui::trackPaletteColour(index).getARGB());
+    });
+
+    reconcileTimelineAfterGraphChange();
+    statusBar.showMessage(pushed ? "Added Audio " + juce::String(index + 1) : "Could not add a track");
+#endif
+}
+
+// The automation strip lane picker's "Add lane..." entries — the minimal creation surface
+// for a hosted plugin's own parameters, which have no ModuleComponent knob to right-click (the
+// plugin has its own editor; see docs/modulation.md's Hosted Plugin table). Every live
+// HostedPluginModule with a published instance offers every parameter that doesn't already have a
+// lane; a bare or still-loading one offers nothing, same as it renders nothing elsewhere in the UI.
+std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> MainComponent::getAvailablePluginLaneOptions() const {
+    std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> options;
+#if SYNTH_ENABLE_TIMELINE
+    for (auto* node : audioEngine.getGraph().getNodes()) {
+        if (node == nullptr)
+            continue;
+        auto* hosted = dynamic_cast<synth::HostedPluginModule*>(node->getProcessor());
+        if (hosted == nullptr || !hosted->hasInstance())
+            continue;
+
+        const juce::String uuid = node->properties["uuid"].toString();
+        if (uuid.isEmpty())
+            continue; // ensure-uuid runs at automate time, same as automateParameter() — nothing to offer yet
+
+        const juce::String moduleLabel = describeNodeForBinding(node);
+        for (const auto& param : hosted->getInstanceParameters()) {
+            if (timelineDoc.getLaneForParam(uuid, param.paramId) != nullptr)
+                continue; // already automated
+            synth::ui::TrackHeaderHost::PluginLaneOption option;
+            option.nodeUuid = uuid;
+            option.paramId = param.paramId;
+            option.paramIndex = param.index;
+            option.label = moduleLabel + " \xC2\xB7 " + param.displayName;
+            options.push_back(std::move(option));
+        }
+    }
+#endif
+    return options;
+}
+
+synth::LaneId MainComponent::addPluginAutomationLane(const synth::ui::TrackHeaderHost::PluginLaneOption& option) {
+#if SYNTH_ENABLE_TIMELINE
+    if (option.nodeUuid.isEmpty() || option.paramId.isEmpty())
+        return {};
+
+    auto* node = findNodeByUuid(option.nodeUuid);
+    auto* hosted = node != nullptr ? dynamic_cast<synth::HostedPluginModule*>(node->getProcessor()) : nullptr;
+    if (hosted == nullptr)
+        return {}; // the node disappeared (or stopped being a plugin) between offering and choosing
+
+    // Hosted-plugin parameters are always normalised (a hosted AudioProcessorParameter has no
+    // NormalisableRange, and JUCE's own host contract is 0..1 regardless of format) — the lane's
+    // RangeSnapshot IS {0, 1, default}, never something read off a live NormalisableRange.
+    const auto resolved = synth::resolveLaneParameter(hosted, option.paramId, option.paramIndex);
+    if (!resolved.resolved())
+        return {}; // the parameter vanished between offering and choosing
+
+    synth::LaneId laneId;
+    const juce::String uuidCopy = option.nodeUuid;
+    const juce::String paramIdCopy = option.paramId;
+    const int paramIndexCopy = option.paramIndex;
+    auto mutate = [this, &laneId, uuidCopy, paramIdCopy, paramIndexCopy, &resolved] {
+        synth::TrackId trackId;
+        for (const auto& track : timelineDoc.getTracks()) {
+            if (track.kind == synth::TrackKind::Automation) {
+                trackId = track.id;
+                break;
+            }
+        }
+        if (!trackId.isValid())
+            trackId = timelineDoc.addTrack(synth::TrackKind::Automation, "Automation");
+        if (!trackId.isValid())
+            return;
+
+        synth::AutomationLane::RangeSnapshot range;
+        const auto bounds = synth::laneValueBoundsFor(resolved);
+        range.minValue = static_cast<float>(bounds.minValue);
+        range.maxValue = static_cast<float>(bounds.maxValue);
+        range.defaultValue = static_cast<float>(synth::laneDefaultValueFor(resolved));
+        laneId = timelineDoc.addLane(trackId, uuidCopy, paramIdCopy, range, paramIndexCopy);
+    };
+    undoManager.recordTimelineChange(timelineDoc, mutate);
+    if (!laneId.isValid())
+        return {};
+
+    if (!isTimelineVisible && toggleTimelineButton.onClick)
+        toggleTimelineButton.onClick();
+    timelinePanel.showAutomationLane(laneId);
+    return laneId;
+#else
+    juce::ignoreUnused(option);
+    return {};
+#endif
 }

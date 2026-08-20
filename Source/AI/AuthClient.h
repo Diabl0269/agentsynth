@@ -160,6 +160,13 @@ public:
         juce::String transportError;
     };
 
+    /** Result of POST /v1/conversations/:conversationId/messages/:messageId/feedback (P6-9). No
+        response body worth parsing on success — `ok` is the whole story. */
+    struct SubmitMessageFeedbackResult {
+        bool ok = false;
+        juce::String transportError;
+    };
+
     explicit AuthClient(juce::String host = "http://localhost:8787", juce::String clientId = "synth-desktop",
                         juce::String deviceId = "");
 
@@ -211,6 +218,18 @@ public:
         every conversation owned by the signed-in account. */
     DeleteAllConversationsResult deleteAllConversations(const juce::String& accessToken,
                                                         const std::atomic<bool>& cancelled) const;
+
+    /** POST /v1/conversations/:conversationId/messages/:messageId/feedback with
+        `Authorization: Bearer <accessToken>` and a JSON `{"rating": rating, "comment"?: comment}`
+        body (P6-9). `rating` is "up" or "down"; `comment` is omitted from the body entirely when
+        empty, same convention as PatchFeedbackStore::record()'s local log. Server-side this is
+        Pro-gated (403 for a non-Pro account) and returns 404 when the conversation/message id is
+        wrong or not owned by this user — this client has no plan awareness of its own (same as
+        every other AuthClient method), so callers are expected to gate on Pro before calling. */
+    SubmitMessageFeedbackResult submitMessageFeedback(const juce::String& accessToken,
+                                                      const juce::String& conversationId, const juce::String& messageId,
+                                                      const juce::String& rating, const juce::String& comment,
+                                                      const std::atomic<bool>& cancelled) const;
 
     /** POST /v1/auth/revoke. Fire-and-forget: the endpoint always answers 200 with an empty body,
         so the return value only reflects whether the transport succeeded — callers are not
