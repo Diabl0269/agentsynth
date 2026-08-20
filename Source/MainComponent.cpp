@@ -1366,6 +1366,11 @@ void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
                        AppCommands::toggleMinimap, AppCommands::toggleAiPanel, AppCommands::autoArrange,
                        AppCommands::toggleLibrary, AppCommands::selectAllModules, AppCommands::saveSnippet,
                        AppCommands::copySelection, AppCommands::pasteSelection, AppCommands::duplicateSelection,
+                       AppCommands::cutSelection,
+                       // Registered unconditionally alongside togglePlayback below even though only
+                       // the timeline surfaces implement it — a SYNTH_ENABLE_TIMELINE=OFF build
+                       // reports it inactive rather than dropping the row from Settings.
+                       AppCommands::repeatSelection,
                        // Registered unconditionally (like every command above) so a
                        // SYNTH_ENABLE_TIMELINE=OFF build still reports it — inactive — rather than
                        // dropping it from the Settings shortcut list entirely.
@@ -1447,7 +1452,12 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         break;
     }
     case AppCommands::selectAllModules: {
-        result.setInfo("Select All Modules", "Select every module on the canvas", "Edit", 0);
+        // Still AppCommands::selectAllModules / actionId "selectAllModules" — the NAME is frozen so
+        // a persisted user binding keeps resolving, but the verb now means "select everything in
+        // the focused editor" and routes like Cmd+C/V/D below. Deliberately left always-active on
+        // every surface: unlike the clipboard verbs it needs no pre-existing selection, and each
+        // surface's own selectAll* returns false harmlessly when there is nothing to select.
+        result.setInfo("Select All", "Select everything in the focused editor", "Edit", 0);
         auto kp = shortcutManager.getBinding("selectAllModules");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
@@ -1460,16 +1470,16 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         break;
     }
     case AppCommands::copySelection: {
-        result.setInfo("Copy", "Copy the selected modules", "Edit", 0);
-        // Routed by resolveEditSurface() — Graph's own behaviour (below) is unchanged; the
-        // timeline surfaces gate on the clip-clipboard's own selection/piano-roll-is-inactive rule.
+        result.setInfo("Copy", "Copy the selection in the focused editor", "Edit", 0);
+        // Routed by resolveEditSurface() — Graph's own behaviour (below) is unchanged; each
+        // timeline surface gates on its own selection.
 #if SYNTH_ENABLE_TIMELINE
         switch (resolveEditSurface()) {
         case EditSurface::TimelineClips:
             result.setActive(timelinePanel.getClipSelection().size() > 0);
             break;
         case EditSurface::PianoRoll:
-            result.setActive(false); // v1 deliberate gap — the roll's own editing verbs suffice
+            result.setActive(timelinePanel.getPianoRoll().hasNoteSelection());
             break;
         case EditSurface::Graph:
             result.setActive(graphEditor.getSelectionCount() > 0);
@@ -1483,14 +1493,17 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         break;
     }
     case AppCommands::pasteSelection: {
-        result.setInfo("Paste", "Paste the copied modules onto the canvas", "Edit", 0);
+        result.setInfo("Paste", "Paste into the focused editor", "Edit", 0);
 #if SYNTH_ENABLE_TIMELINE
         switch (resolveEditSurface()) {
         case EditSurface::TimelineClips:
             result.setActive(timelinePanel.canPasteClips());
             break;
         case EditSurface::PianoRoll:
-            result.setActive(false);
+            // canPasteNotes() is BOTH halves: a non-empty note clipboard AND an open clip. A roll
+            // with nothing open has nowhere to put the block, so the row greys out rather than
+            // silently discarding a paste.
+            result.setActive(timelinePanel.getPianoRoll().canPasteNotes());
             break;
         case EditSurface::Graph:
             result.setActive(graphEditor.canPaste());
@@ -1504,14 +1517,14 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         break;
     }
     case AppCommands::duplicateSelection: {
-        result.setInfo("Duplicate", "Duplicate the selected modules in place", "Edit", 0);
+        result.setInfo("Duplicate", "Duplicate the selection in the focused editor", "Edit", 0);
 #if SYNTH_ENABLE_TIMELINE
         switch (resolveEditSurface()) {
         case EditSurface::TimelineClips:
             result.setActive(timelinePanel.getClipSelection().size() > 0);
             break;
         case EditSurface::PianoRoll:
-            result.setActive(false);
+            result.setActive(timelinePanel.getPianoRoll().hasNoteSelection());
             break;
         case EditSurface::Graph:
             result.setActive(graphEditor.getSelectionCount() > 0);
@@ -1521,6 +1534,53 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.setActive(graphEditor.getSelectionCount() > 0);
 #endif
         auto kp = shortcutManager.getBinding("duplicateSelection");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case AppCommands::cutSelection: {
+        result.setInfo("Cut", "Cut the selection in the focused editor", "Edit", 0);
+        // Same enablement predicate Copy uses on every surface — a cut is a copy that also
+        // deletes, so anything copyable is cuttable and the two rows can never disagree.
+#if SYNTH_ENABLE_TIMELINE
+        switch (resolveEditSurface()) {
+        case EditSurface::TimelineClips:
+            result.setActive(timelinePanel.canCutClips());
+            break;
+        case EditSurface::PianoRoll:
+            result.setActive(timelinePanel.getPianoRoll().hasNoteSelection());
+            break;
+        case EditSurface::Graph:
+            result.setActive(graphEditor.getSelectionCount() > 0);
+            break;
+        }
+#else
+        result.setActive(graphEditor.getSelectionCount() > 0);
+#endif
+        auto kp = shortcutManager.getBinding("cutSelection");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case AppCommands::repeatSelection: {
+        result.setInfo("Repeat", "Repeat the selection a number of times", "Edit", 0);
+        // The ONLY edit verb that is inactive on the Graph surface: "repeat N times, each copy one
+        // block further along" is a time-axis idea, and a spatial canvas has no such axis — the
+        // graph's answer to "another one of these" is Duplicate. See performRepeatSelection.
+#if SYNTH_ENABLE_TIMELINE
+        switch (resolveEditSurface()) {
+        case EditSurface::TimelineClips:
+            result.setActive(timelinePanel.hasClipSelection());
+            break;
+        case EditSurface::PianoRoll:
+            result.setActive(timelinePanel.getPianoRoll().hasNoteSelection());
+            break;
+        case EditSurface::Graph:
+            result.setActive(false);
+            break;
+        }
+#else
+        result.setActive(false);
+#endif
+        auto kp = shortcutManager.getBinding("repeatSelection");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
@@ -1616,10 +1676,32 @@ bool MainComponent::perform(const InvocationInfo& info) {
     case AppCommands::toggleLibrary:
         setLibraryVisible(!isLibraryVisible);
         return true;
-    case AppCommands::selectAllModules:
+    case AppCommands::selectAllModules: {
+        // Routed by the same resolveEditSurface() the clipboard verbs use. The command id and
+        // actionId keep their historical "…Modules" names (persisted bindings resolve by string),
+        // but the behaviour is per-surface: Cmd+Shift+A means "everything in whatever I'm editing".
+#if SYNTH_ENABLE_TIMELINE
+        switch (resolveEditSurface()) {
+        case EditSurface::TimelineClips:
+            if (timelinePanel.selectAllClips())
+                statusBar.showMessage("Selected " + juce::String(timelinePanel.getClipSelection().size()) + " clips");
+            else
+                statusBar.showMessage("Nothing to select - the arrangement has no clips");
+            return true;
+        case EditSurface::PianoRoll:
+            if (timelinePanel.getPianoRoll().selectAllNotes())
+                statusBar.showMessage("Selected every note in the clip");
+            else
+                statusBar.showMessage("Nothing to select - the clip has no notes");
+            return true;
+        case EditSurface::Graph:
+            break;
+        }
+#endif
         graphEditor.selectAllModules();
         statusBar.showMessage("Selected " + juce::String(graphEditor.getSelectionCount()) + " modules");
         return true;
+    }
     case AppCommands::saveSnippet:
         promptSaveSnippet();
         return true;
@@ -1641,7 +1723,11 @@ bool MainComponent::perform(const InvocationInfo& info) {
                 statusBar.showMessage("Nothing to copy - select one or more clips first");
             return true;
         case EditSurface::PianoRoll:
-            return true; // v1 deliberate no-op — see getCommandInfo's setActive(false) above
+            if (timelinePanel.getPianoRoll().copySelectedNotes())
+                statusBar.showMessage("Copied the selected notes");
+            else
+                statusBar.showMessage("Nothing to copy - select one or more notes first");
+            return true;
         case EditSurface::Graph:
             break;
         }
@@ -1662,6 +1748,17 @@ bool MainComponent::perform(const InvocationInfo& info) {
                 statusBar.showMessage("Nothing to paste - copy some clips first");
             return true;
         case EditSurface::PianoRoll:
+            // PRIMING, not a side effect: the roll anchors a paste on the last beat something
+            // PUSHED into it via setPlayheadBeat, and a stopped transport never pushes one (the
+            // playhead only animates while playing). Read the transport's live position here — the
+            // same source pasteClipsAtPlayhead reads for the clip surface — so a paste with the
+            // transport parked lands under the playhead the user can actually see, rather than at
+            // whatever beat the last playback happened to stop pushing at.
+            timelinePanel.getPianoRoll().setPlayheadBeat(audioEngine.getTransport().getPositionSnapshot().ppq);
+            if (timelinePanel.getPianoRoll().pasteNotesAtPlayhead())
+                statusBar.showMessage("Pasted notes at the playhead");
+            else
+                statusBar.showMessage("Nothing to paste - copy some notes first");
             return true;
         case EditSurface::Graph:
             break;
@@ -1685,6 +1782,10 @@ bool MainComponent::perform(const InvocationInfo& info) {
                 statusBar.showMessage("Nothing to duplicate - select one or more clips first");
             return true;
         case EditSurface::PianoRoll:
+            if (timelinePanel.getPianoRoll().duplicateSelectedNotes())
+                statusBar.showMessage("Duplicated the selected notes");
+            else
+                statusBar.showMessage("Nothing to duplicate - select one or more notes first");
             return true;
         case EditSurface::Graph:
             break;
@@ -1696,6 +1797,44 @@ bool MainComponent::perform(const InvocationInfo& info) {
             statusBar.showMessage("Nothing to duplicate - select one or more modules first");
         return true;
     }
+    case AppCommands::cutSelection: {
+#if SYNTH_ENABLE_TIMELINE
+        switch (resolveEditSurface()) {
+        case EditSurface::TimelineClips:
+            // The panel's own verb: copy + delete inside ONE recordTimelineChange. Never wrap it —
+            // a second transaction around it would make Cmd+Z a two-step undo for one gesture.
+            if (timelinePanel.cutSelectedClips())
+                statusBar.showMessage("Cut clips");
+            else
+                statusBar.showMessage("Nothing to cut - select one or more clips first");
+            return true;
+        case EditSurface::PianoRoll:
+            if (timelinePanel.getPianoRoll().cutSelectedNotes())
+                statusBar.showMessage("Cut notes");
+            else
+                statusBar.showMessage("Nothing to cut - select one or more notes first");
+            return true;
+        case EditSurface::Graph:
+            break;
+        }
+#endif
+        // The graph has no cut verb of its own, so it is composed here from the two that exist —
+        // copySelection() fills the clipboard WITHOUT touching the graph or the undo stack, and
+        // deleteSelection() then does the whole removal inside its own single
+        // recordStructuralChange (the same transaction Delete and the canvas menu already use). So
+        // a cut is exactly one graph-undo step, and the copy half survives the undo.
+        const int cutCount = graphEditor.getSelectionCount();
+        if (graphEditor.copySelection()) {
+            graphEditor.deleteSelection();
+            statusBar.showMessage("Cut " + juce::String(cutCount) + " modules");
+        } else {
+            statusBar.showMessage("Nothing to cut - select one or more modules first");
+        }
+        return true;
+    }
+    case AppCommands::repeatSelection:
+        promptRepeatSelection();
+        return true;
     case AppCommands::togglePlayback:
 #if SYNTH_ENABLE_TIMELINE
         // Reuses the transport bar's own play/stop choke point (reads the transport's CURRENT
@@ -1840,6 +1979,88 @@ void MainComponent::promptSaveSnippet() {
                                 } else {
                                     self->statusBar.showMessage("Could not save snippet \"" + name + "\"");
                                 }
+                            }),
+                            false);
+}
+
+// ---- Repeat ----
+
+bool MainComponent::performRepeatSelection(int count) {
+    // Clamped here as well as in the dialog: this is the public door (tests, and any future
+    // scripting caller), and neither of those goes through the AlertWindow's own validation.
+    const int repeats = juce::jlimit(kMinRepeatCount, kMaxRepeatCount, count);
+
+#if SYNTH_ENABLE_TIMELINE
+    switch (resolveEditSurface()) {
+    case EditSurface::TimelineClips:
+        // Both surface verbs own their single recordTimelineChange for the WHOLE repeat — one
+        // Cmd+Z undoes all N copies, so nothing here may open a transaction of its own.
+        return timelinePanel.repeatSelectedClips(repeats);
+    case EditSurface::PianoRoll:
+        return timelinePanel.getPianoRoll().repeatSelectedNotes(repeats);
+    case EditSurface::Graph:
+        break;
+    }
+#else
+    juce::ignoreUnused(repeats);
+#endif
+    // Graph: deliberately unsupported. Repeat tiles copies along a time axis the canvas doesn't
+    // have; Duplicate is the graph's equivalent gesture, and getCommandInfo already reports the
+    // command inactive here so the key never reaches this line in normal use.
+    return false;
+}
+
+void MainComponent::promptRepeatSelection() {
+    juce::String subject;
+#if SYNTH_ENABLE_TIMELINE
+    switch (resolveEditSurface()) {
+    case EditSurface::TimelineClips:
+        if (timelinePanel.hasClipSelection())
+            subject = "selected clips";
+        break;
+    case EditSurface::PianoRoll:
+        if (timelinePanel.getPianoRoll().hasNoteSelection())
+            subject = "selected notes";
+        break;
+    case EditSurface::Graph:
+        break;
+    }
+#endif
+
+    if (subject.isEmpty()) {
+        statusBar.showMessage("Repeat works on the timeline - select some clips or notes first");
+        return;
+    }
+
+    auto* window =
+        new juce::AlertWindow("Repeat", "How many copies of the " + subject + "?", juce::AlertWindow::NoIcon);
+    window->addTextEditor("count", juce::String(kMinRepeatCount), "Repeats:");
+    window->addButton("Repeat", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    // SafePointer + a unique_ptr taken inside the callback — promptSaveSnippet's modal idiom
+    // exactly; see its comment for why the dialog can outlive this component.
+    juce::Component::SafePointer<MainComponent> safeThis(this);
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create([safeThis, window](int result) {
+                                std::unique_ptr<juce::AlertWindow> owned(window);
+                                if (result != 1)
+                                    return;
+
+                                auto* self = safeThis.getComponent();
+                                if (self == nullptr)
+                                    return;
+
+                                // getIntValue() returns 0 for anything unparseable, which the
+                                // clamp turns into the minimum — an empty or garbage field
+                                // repeats once rather than failing with a modal error.
+                                const int requested = owned->getTextEditorContents("count").getIntValue();
+                                const int repeats = juce::jlimit(kMinRepeatCount, kMaxRepeatCount, requested);
+                                if (self->performRepeatSelection(repeats))
+                                    self->statusBar.showMessage("Repeated " + juce::String(repeats) +
+                                                                (repeats == 1 ? " time" : " times"));
+                                else
+                                    self->statusBar.showMessage("Nothing was repeated");
                             }),
                             false);
 }

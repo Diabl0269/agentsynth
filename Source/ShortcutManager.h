@@ -20,6 +20,12 @@ enum CommandIDs {
     copySelection,
     pasteSelection,
     duplicateSelection,
+    cutSelection,
+    // Repeat-with-a-count. Only the two timeline surfaces implement it (see
+    // MainComponent::performRepeatSelection) but the command is registered unconditionally, the
+    // same way togglePlayback below is, so the Settings shortcut list and ShortcutManager's
+    // tripwire tests cover it in every build configuration.
+    repeatSelection,
     // Space play/stop. Always registered (even in a SYNTH_ENABLE_TIMELINE=OFF build,
     // where getCommandInfo reports it inactive) so ShortcutManager's tripwire tests (unique
     // default, description, command mapping) cover it unconditionally.
@@ -64,6 +70,10 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return pasteSelection;
     if (actionId == "duplicateSelection")
         return duplicateSelection;
+    if (actionId == "cutSelection")
+        return cutSelection;
+    if (actionId == "repeatSelection")
+        return repeatSelection;
     if (actionId == "togglePlayback")
         return togglePlayback;
     if (actionId == "toggleTimelinePanel")
@@ -156,6 +166,15 @@ public:
         bindings["copySelection"] = juce::KeyPress('c', juce::ModifierKeys::commandModifier, 0);
         bindings["pasteSelection"] = juce::KeyPress('v', juce::ModifierKeys::commandModifier, 0);
         bindings["duplicateSelection"] = juce::KeyPress('d', juce::ModifierKeys::commandModifier, 0);
+        // Cmd+X completes that trio — the platform-standard cut, free here on both counts: no other
+        // binding in this table claims 'x' with any modifier set, and no component keyPressed()
+        // override hardcodes a bare 'x' either (the panel-local letters are Q/L/P, the roll's is Q,
+        // and the lane area's is P). Same TextEditor-consumes-it-first safety as Cmd+C/V above.
+        bindings["cutSelection"] = juce::KeyPress('x', juce::ModifierKeys::commandModifier, 0);
+        // Cmd+R for Repeat, Cubase/Logic's own binding for the same verb. Also free on both
+        // counts — nothing in this table uses 'r', and no keyPressed() override matches an 'r'
+        // (checked against the panel's Q/L/P, the roll's Q and the lane area's P).
+        bindings["repeatSelection"] = juce::KeyPress('r', juce::ModifierKeys::commandModifier, 0);
         // Bare spacebar, no modifiers — the platform DAW convention for play/stop. Safe to
         // claim app-wide for the same reason Cmd+C/V is: a focused juce::TextEditor consumes the
         // spacebar itself (types a space character) before it ever reaches MainComponent::
@@ -239,8 +258,11 @@ public:
             return "Auto Arrange";
         if (actionId == "toggleLibrary")
             return "Toggle Module Library";
+        // Kept as "selectAllModules" (both the actionId string and the AppCommands name) so a
+        // binding a user already persisted under that key keeps working — the label is what
+        // widened when the command grew per-surface routing, not the identity.
         if (actionId == "selectAllModules")
-            return "Select All Modules";
+            return "Select All in Focused Editor";
         if (actionId == "saveSnippet")
             return "Save Selection as Snippet";
         if (actionId == "copySelection")
@@ -249,6 +271,10 @@ public:
             return "Paste Modules";
         if (actionId == "duplicateSelection")
             return "Duplicate Selected Modules";
+        if (actionId == "cutSelection")
+            return "Cut Selection";
+        if (actionId == "repeatSelection")
+            return "Repeat Selection";
         if (actionId == "togglePlayback")
             return "Toggle Playback";
         if (actionId == "toggleTimelinePanel")
@@ -275,12 +301,26 @@ private:
     std::map<juce::String, juce::KeyPress> bindings;
     juce::ApplicationProperties* appProperties = nullptr;
 
-    juce::StringArray actionIds{"openSettings",       "savePreset",     "openPreset",
-                                "newPatch",           "undo",           "redo",
-                                "toggleModMatrix",    "toggleMinimap",  "toggleAiPanel",
-                                "autoArrange",        "toggleLibrary",  "selectAllModules",
-                                "saveSnippet",        "copySelection",  "pasteSelection",
-                                "duplicateSelection", "togglePlayback", "toggleTimelinePanel"};
+    juce::StringArray actionIds{"openSettings",
+                                "savePreset",
+                                "openPreset",
+                                "newPatch",
+                                "undo",
+                                "redo",
+                                "toggleModMatrix",
+                                "toggleMinimap",
+                                "toggleAiPanel",
+                                "autoArrange",
+                                "toggleLibrary",
+                                "selectAllModules",
+                                "saveSnippet",
+                                "copySelection",
+                                "pasteSelection",
+                                "duplicateSelection",
+                                "cutSelection",
+                                "repeatSelection",
+                                "togglePlayback",
+                                "toggleTimelinePanel"};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShortcutManager)
 };

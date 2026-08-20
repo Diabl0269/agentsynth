@@ -104,6 +104,24 @@ public:
     // default) falls through to that check.
     void setEditSurfaceOverrideForTest(std::optional<EditSurface> surface) { editSurfaceOverrideForTest_ = surface; }
 
+    /** The repeat verb's ACTUAL work, split out from the command so it can be driven without the
+     *  count dialog — tests call it directly, and a future scripting/AI caller gets the same door.
+     *  Routed by the same resolveEditSurface() every other edit verb uses: TimelineClips repeats
+     *  the clip selection, PianoRoll repeats the note selection, and Graph is deliberately
+     *  unsupported (there is no "one block length further along" on a spatial canvas — Duplicate
+     *  is the graph's answer, which is why getCommandInfo reports the command inactive there).
+     *  `count` is clamped to [kMinRepeatCount, kMaxRepeatCount]; the callee owns its own undo
+     *  transaction, so this must never be wrapped in another one.
+     *  @return whatever the surface's verb returned — true when something was actually created. */
+    bool performRepeatSelection(int count);
+
+    /** Repeat's count bounds, shared by the dialog's clamp and performRepeatSelection's own. 64 is
+     *  a deliberate ceiling rather than a technical one: every copy is a real doc mutation inside a
+     *  single undo transaction, and a mistyped four-digit count would otherwise stall the message
+     *  thread building clips nobody asked for. */
+    static constexpr int kMinRepeatCount = 1;
+    static constexpr int kMaxRepeatCount = 64;
+
     // P4-6: pure decision function for the AI provider id used when no "aiProvider" key is
     // persisted yet. A brand new install (no pre-existing settings file at all) defaults to
     // "remote" (hosted); an install that has launched before but never touched AI settings — the
@@ -238,6 +256,12 @@ public:
     /** Asks for a name and saves the canvas selection as a snippet. No-op (with a status-bar
      *  note) when nothing is selected. */
     void promptSaveSnippet();
+
+    /** Asks for a repeat count (async juce::AlertWindow, exactly promptSaveSnippet's modal idiom)
+     *  and hands it to performRepeatSelection(). No-op (with a status-bar note) when the focused
+     *  surface has nothing selected. Kept separate from performRepeatSelection so nothing but the
+     *  keyboard/menu path ever has to pump a modal loop. */
+    void promptRepeatSelection();
 
     ModuleLibraryComponent& getModuleLibrary() { return moduleLibrary; }
 
