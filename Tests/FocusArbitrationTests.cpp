@@ -636,6 +636,31 @@ TEST_F(FocusArbitrationTest, RepeatSelectionTilesClips) {
     EXPECT_EQ(doc.getTrack(trackA)->clips.size(), 1u) << "one undo step for the whole repeat";
 }
 
+TEST_F(FocusArbitrationTest, RepeatSelectionClampsToTheMaxRepeatCount) {
+    MainComponent mc(std::make_unique<FocusMockProvider>());
+    pinSnapOff(mc);
+    auto& doc = mc.getTimelineDoc();
+    const auto trackA = doc.addTrack(synth::TrackKind::Midi, "A");
+    const auto clip1 = doc.addClip(trackA, 0.0, 4.0, "C1");
+    ASSERT_TRUE(clip1.isValid());
+
+    auto& panel = mc.getTimelinePanel();
+    panel.getClipSelection().setSelection({clip1});
+    mc.setEditSurfaceOverrideForTest(MainComponent::EditSurface::TimelineClips);
+
+    ASSERT_TRUE(mc.performRepeatSelection(1000));
+    ASSERT_EQ(doc.getTrack(trackA)->clips.size(), 65u) << "the source plus a clamped 64 copies";
+
+    const auto created = panel.getClipSelection().getSelected();
+    EXPECT_EQ(created.size(), 64u) << "the count is clamped, not the requested 1000";
+
+    auto& um = mc.getUndoManager();
+    ASSERT_TRUE(um.canUndo());
+    um.undo();
+    EXPECT_EQ(doc.getTrack(trackA)->clips.size(), 1u) << "one undo step for the whole (clamped) repeat";
+    EXPECT_FALSE(um.canUndo());
+}
+
 TEST_F(FocusArbitrationTest, RepeatSelectionRepeatsNotes) {
     MainComponent mc(std::make_unique<FocusMockProvider>());
     pinSnapOff(mc);

@@ -610,6 +610,27 @@ TEST(TimelineClipToolTest, SplitToolClickOnEmptyLaneSpaceDoesNothing) {
     EXPECT_TRUE(f.selection.isEmpty()) << "a tool click must not select either";
 }
 
+TEST(TimelineClipToolTest, SplitToolClickAtTheClipBoundaryDoesNothing) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = f.doc.addClip(track, 0.0, 8.0, "c"); // x in [0, 320)
+    ASSERT_TRUE(clip.isValid());
+    f.lane.setActiveTool(EditTool::Split);
+    const auto revisionBefore = f.doc.getRevision();
+
+    // x = 1 -> beat 0.025 -> snapped to 0.0, exactly the clip's own start: not strictly inside.
+    clickWithTool(f.lane, {1.0f, f.rowCentreY(0)});
+    EXPECT_EQ(f.doc.getRevision(), revisionBefore);
+    EXPECT_FALSE(f.undo.canUndo());
+    EXPECT_EQ(f.doc.getTrack(track)->clips.size(), 1u);
+
+    // x = 319 -> beat 7.975 -> snapped to 8.0, exactly the clip's own end: not strictly inside.
+    clickWithTool(f.lane, {319.0f, f.rowCentreY(0)});
+    EXPECT_EQ(f.doc.getRevision(), revisionBefore);
+    EXPECT_FALSE(f.undo.canUndo());
+    EXPECT_EQ(f.doc.getTrack(track)->clips.size(), 1u);
+}
+
 // -------------------------------------------------------------- Glue tool --
 
 TEST(TimelineClipToolTest, GlueToolJoinsWithTheNextClipAcrossAGap) {
@@ -633,6 +654,23 @@ TEST(TimelineClipToolTest, GlueToolJoinsWithTheNextClipAcrossAGap) {
     f.undo.undo();
     EXPECT_EQ(f.doc.getTrack(track)->clips.size(), 2u);
     EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(TimelineClipToolTest, GlueToolPrunesTheSwallowedClipFromTheSelection) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto a = f.doc.addClip(track, 0.0, 4.0, "a");
+    const auto b = f.doc.addClip(track, 6.0, 4.0, "b"); // gap [4, 6): legal, becomes silence
+    ASSERT_TRUE(a.isValid() && b.isValid());
+    EXPECT_EQ(f.lane.findGlueTarget(a), b);
+    f.selection.setSelection({a, b});
+    f.lane.setActiveTool(EditTool::Glue);
+
+    clickWithTool(f.lane, clipCentre(f.lane, a));
+
+    ASSERT_EQ(f.doc.getTrack(track)->clips.size(), 1u);
+    EXPECT_TRUE(f.selection.contains(a)) << "the survivor stays selected";
+    EXPECT_FALSE(f.selection.contains(b)) << "the absorbed clip leaves the selection";
 }
 
 TEST(TimelineClipToolTest, GlueToolWithNothingAfterItLeavesNoUndoEntry) {
@@ -953,6 +991,34 @@ TEST(TimelineClipToolTest, AudioClipDragsOntoAnotherAudioTrack) {
     EXPECT_EQ(moved.assetRef, "Audio/take-1.wav");
     EXPECT_DOUBLE_EQ(moved.sourceStartSeconds, 1.5);
     EXPECT_DOUBLE_EQ(moved.gainDb, -3.0);
+}
+
+TEST(TimelineClipToolTest, MixedKindGroupDragClampsTheWholeGroupToItsOriginalTracks) {
+    ToolLaneFixture f;
+    const auto midiTrack = f.doc.addTrack(TrackKind::Midi, "Midi");
+    const auto audioTrack = f.doc.addTrack(TrackKind::Audio, "Audio1");
+    const auto audioTrack2 = f.doc.addTrack(TrackKind::Audio, "Audio2");
+    const auto midiClip = f.doc.addClip(midiTrack, 0.0, 4.0, "m");
+    const auto audioClip = f.doc.addClip(audioTrack, 0.0, 4.0, "a");
+    ASSERT_TRUE(midiClip.isValid() && audioClip.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(audioClip, "Audio/take.wav", 0.0));
+    // Selected together: the MIDI clip's one-row-down destination (the Audio track) is a kind
+    // mismatch, which clamps the row delta for the WHOLE group, even though the audio clip's own
+    // one-row-down destination (the second Audio track) would have been legal on its own.
+    f.selection.setSelection({midiClip, audioClip});
+
+    const auto anchor = clipCentre(f.lane, midiClip);
+    const juce::Point<float> dropped(anchor.x, anchor.y + f.rowHeightF()); // one row down, no horizontal move
+    f.lane.mouseDown(toolClick(f.lane, anchor));
+    f.lane.mouseDrag(toolDrag(f.lane, dropped, anchor));
+    EXPECT_EQ(f.lane.getPreviewRowDeltaForTest(), 0) << "one mismatched clip in the group clamps them all";
+    f.lane.mouseUp(toolDrag(f.lane, dropped, anchor));
+
+    ASSERT_EQ(f.doc.getTrack(midiTrack)->clips.size(), 1u);
+    EXPECT_DOUBLE_EQ(f.doc.getTrack(midiTrack)->clips[0].startBeat, 0.0);
+    ASSERT_EQ(f.doc.getTrack(audioTrack)->clips.size(), 1u);
+    EXPECT_DOUBLE_EQ(f.doc.getTrack(audioTrack)->clips[0].startBeat, 0.0);
+    EXPECT_TRUE(f.doc.getTrack(audioTrack2)->clips.empty()) << "neither clip crossed tracks";
 }
 
 // -------------------------------------------------------------- Rename ------
