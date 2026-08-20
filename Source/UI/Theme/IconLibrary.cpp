@@ -86,6 +86,13 @@ std::pair<const void*, int> IconLibrary::binaryDataForIcon(Icon id) {
         // Minimap toggle (issue #159).
         {BinaryData::toggleminimap_svg, BinaryData::toggleminimap_svgSize},
         {BinaryData::moduledualio_svg, BinaryData::moduledualio_svgSize},
+        // Timeline edit-tool strip (Cubase-style tools; see Source/UI/EditTool.h).
+        {BinaryData::toolselect_svg, BinaryData::toolselect_svgSize},
+        {BinaryData::toolsplit_svg, BinaryData::toolsplit_svgSize},
+        {BinaryData::toolglue_svg, BinaryData::toolglue_svgSize},
+        {BinaryData::toolerase_svg, BinaryData::toolerase_svgSize},
+        {BinaryData::toolmute_svg, BinaryData::toolmute_svgSize},
+        {BinaryData::tooldraw_svg, BinaryData::tooldraw_svgSize},
     };
     static_assert(std::size(kTable) == (size_t)Icon::kCount,
                   "kTable size does not match Icon::kCount — update binaryDataForIcon lookup table");

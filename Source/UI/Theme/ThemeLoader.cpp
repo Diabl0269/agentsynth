@@ -371,6 +371,12 @@ std::optional<Theme> ThemeLoader::parseTheme(const juce::var& json, const juce::
             return std::nullopt;
         colors.modRingNegative = *v;
     }
+    {
+        auto v = parseColourKey(colorsVar, "toolActive", false, defaults.toolActive);
+        if (!v)
+            return std::nullopt;
+        colors.toolActive = *v;
+    }
 
     theme.colors = colors;
 
@@ -497,6 +503,7 @@ juce::var ThemeLoader::themeToJson(const Theme& theme) {
         colors->setProperty("meterFill", colourToHex(c.meterFill));
         colors->setProperty("modRingPositive", colourToHex(c.modRingPositive));
         colors->setProperty("modRingNegative", colourToHex(c.modRingNegative));
+        colors->setProperty("toolActive", colourToHex(c.toolActive));
 
         // Cable category palette, emitted as a nested object so the round-trip matches the
         // parse shape above.

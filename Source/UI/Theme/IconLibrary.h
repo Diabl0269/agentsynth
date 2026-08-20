@@ -49,6 +49,15 @@ enum class Icon : int {
     ToggleMinimap,
     // Module header: split one Audio jack into Left/Right (Dual I/O).
     ModuleDualIO,
+    // Timeline edit-tool strip (Cubase-style tools; see Source/UI/EditTool.h). Index-order here
+    // has no relationship to EditTool's enumerator order — this table is looked up by the UI
+    // layer via a small tool->Icon mapping, not by casting one enum to the other.
+    ToolSelect,
+    ToolSplit,
+    ToolGlue,
+    ToolErase,
+    ToolMute,
+    ToolDraw,
     kCount
 };
 

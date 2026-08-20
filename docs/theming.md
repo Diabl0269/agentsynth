@@ -63,6 +63,7 @@ shorthand, each digit doubled, full alpha).
 | `meterFill` | `#FF00D1FF` | Output meter fill (top of gradient) |
 | `modRingPositive` | `#FF00E5FF` | Modulation ring, positive modulation |
 | `modRingNegative` | `#FFFF6E00` | Modulation ring, negative modulation |
+| `toolActive` | `#FF00D1FF` | Timeline edit-tool strip — active-tool button highlight. Defaults to the same literal as `accent`'s Obsidian default (no token in this table dynamically re-reads another token's *live* value at construction — `accent2` is the closest precedent and it likewise just repeats `accent`'s literal — so this is a static default, not a derived one) |
 
 **Required minimum:** `bg0`, `surface`, `accent`, `textPrimary`, `audioWire`, `modWire`.
 All other colour tokens are optional and fall back to the Obsidian defaults listed above.
@@ -192,7 +193,7 @@ Agent Synth uses SVG `Drawable` icons — **not** an icon or glyph font. This av
 
 ### Icon enum
 
-30 icons are defined in `synth::theme::Icon` (in `Source/UI/Theme/IconLibrary.h`):
+36 icons are defined in `synth::theme::Icon` (in `Source/UI/Theme/IconLibrary.h`):
 
 ```
 TransportPlay    TransportStop    ActionUndo       ActionRedo
@@ -203,6 +204,8 @@ CatSources       CatSequencing    CatEnvelopes     CatFilters
 CatModulationFX  CatTimeFX        CatDynamics      CatUtility
 WaveformSine     WaveformSaw      WaveformSquare   WaveformTriangle
 ToggleMinimap    ModuleDualIO
+ToolSelect       ToolSplit        ToolGlue         ToolErase
+ToolMute         ToolDraw
 ```
 
 **`Icon::TransportPlay` is scaffolding** — the SVG asset is present and the enum value exists, but no `DrawableButton` is wired to it. It is tinted to `textMuted` and reserved for a future transport affordance.
@@ -212,6 +215,8 @@ The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `W
 **`Icon::ToggleMinimap`** (index 28) is the toolbar toggle for the Graph Editor minimap overlay — see [`layout.md` §15](layout.md#15-minimap-overlay-issue-159).
 
 **`Icon::ModuleDualIO`** (index 29) is the module-header toggle that splits a collapsed `"Audio"` jack into separate Left/Right jacks. There is no universal stereo-split glyph; this one is a Y-fork into two jacks. The button's tooltip carries the Dual I/O on/off copy. See [`fx_modules.md` § Stereo I/O](fx_modules.md#stereo-io-dual-io-toggle).
+
+**`Icon::ToolSelect` … `Icon::ToolDraw`** (indices 30–35) are the six glyphs for the timeline edit-tool strip (`synth::ui::EditTool` — Select, Split, Glue, Erase, Mute, Draw; see [`Source/UI/EditTool.h`](../Source/UI/EditTool.h)): a pointer arrow, scissors, a glue bottle, an angled eraser block, a crossed-out speaker (visually distinct from `ModuleMute` — that one is an outlined speaker with a small corner X; this one is a solid-filled speaker with a single strike-through slash), and a pencil at ~45°. `Source/UI/ToolCursors.h`'s `makeToolCursor()` renders these same tinted Drawables into the custom per-tool mouse cursor shown over the clip lanes / piano roll, rather than shipping a second cursor-only asset — see that header's doc comment for the per-tool hotspot table.
 
 ### Token → tint map
 
@@ -225,6 +230,7 @@ The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `W
 | `ModuleDualIO` | `textMuted` |
 | `TransportPlay` | `textMuted` (scaffolding; no DrawableButton consumer) |
 | All toolbar actions + transport stop + toggles | `textPrimary` |
+| `ToolSelect` … `ToolDraw` (edit-tool strip) | `textPrimary` — active-tool highlight is a separate `toolActive`-coloured button state, not a different icon tint |
 | Category icons (`CatSources` … `CatUtility`) | `textMuted` |
 | `WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle` | `textPrimary` (consumer: Oscillator waveform combo via `drawPopupMenuItem`/`drawComboBox`) |
 

@@ -236,6 +236,16 @@ void AppLookAndFeel::retintIcons() {
     iconLibrary_.setTintColour(Icon::WaveformSaw, c.textPrimary);
     iconLibrary_.setTintColour(Icon::WaveformSquare, c.textPrimary);
     iconLibrary_.setTintColour(Icon::WaveformTriangle, c.textPrimary);
+
+    // Timeline edit-tool strip glyphs: primary chrome, same tint as the other toolbar action
+    // icons above. Which tool is the ACTIVE one is a per-button highlight painted with the
+    // `toolActive` token, not a different icon tint — the glyph itself never changes colour.
+    iconLibrary_.setTintColour(Icon::ToolSelect, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::ToolSplit, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::ToolGlue, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::ToolErase, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::ToolMute, c.textPrimary);
+    iconLibrary_.setTintColour(Icon::ToolDraw, c.textPrimary);
 }
 
 void AppLookAndFeel::refreshTypefaces() {
