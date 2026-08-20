@@ -14,8 +14,9 @@ namespace {
 void __cdecl handleShutdownRequest() { juce::JUCEApplicationBase::quit(); }
 
 // Always safe to shut down: there's no unsaved-document state in this app that would make a
-// silent, WinSparkle-driven quit unsafe.
-int __cdecl handleCanShutdown() { return TRUE; }
+// silent, WinSparkle-driven quit unsafe. Returns a plain 1 rather than the Win32 TRUE macro —
+// neither <winsparkle.h> nor the JUCE headers pull in <windows.h>, so TRUE is undeclared here.
+int __cdecl handleCanShutdown() { return 1; }
 } // namespace
 
 class UpdateManager::Impl {
