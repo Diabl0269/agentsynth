@@ -1233,6 +1233,20 @@ silent sign-in attempt produces. `accountService` is default-constructed (produc
 a token from a real sign-in could see different behavior when a different (e.g. unsigned/ad-hoc)
 build reads that Keychain item — no test seam for this exists yet; out of scope for P3-2.
 
+### Refresh Token Rotation: Persist Before Use
+
+Every device-flow sign-in and every silent refresh returns a **new** refresh token, and the auth
+service revokes the whole token family if a consumed token is ever presented again. Both flows
+therefore funnel through `AccountService::completeSignIn()` (`Source/AI/AccountService.cpp`),
+which saves the new refresh token to the `TokenStore` and checks that the save succeeded
+**before** exposing the new access token or notifying listeners — a `tokenStore->save()` failure
+aborts the sign-in with an error snapshot rather than continuing with a token that exists only in
+memory. Reversing that order opens a crash window that leaves a dead (already-consumed) token in
+the keychain: the next launch presents it, the family is revoked, and the user is silently signed
+out with nothing to explain why. `completeSignIn()` also discards the token pair when a
+cancel/sign-out/shutdown landed during the network round trip, so a cancelled flow can't sign the
+user back in a moment later.
+
 ### AI Provider Registry
 
 Providers are registered once, in `synth::AIProviderRegistry::createDefault()`
