@@ -104,4 +104,29 @@ TEST_F(PatchFeedbackStoreTest, IncludesTimestamp) {
     EXPECT_TRUE(entry->getProperty("timestamp").toString().isNotEmpty());
 }
 
+// P6-9: conversationId/messageId are the server-side ids a rating corresponds to, when known.
+TEST_F(PatchFeedbackStoreTest, IncludesConversationAndMessageIdWhenProvided) {
+    PatchFeedbackStore store(tempFile);
+    store.record(R"({"nodes":[]})", PatchFeedbackStore::Rating::Up, "great patch", "conv-123", "msg-456");
+
+    auto entryVar = juce::JSON::parse(lines()[0]);
+    auto* entry = entryVar.getDynamicObject();
+    ASSERT_NE(entry, nullptr);
+    EXPECT_EQ(entry->getProperty("conversationId").toString(), "conv-123");
+    EXPECT_EQ(entry->getProperty("messageId").toString(), "msg-456");
+}
+
+// Old call sites (no conversationId/messageId args) and offline/free-tier entries must keep the
+// exact pre-P6-9 shape — no empty-string "conversationId"/"messageId" fields ever appear.
+TEST_F(PatchFeedbackStoreTest, OmitsConversationAndMessageIdWhenNotProvided) {
+    PatchFeedbackStore store(tempFile);
+    store.record(R"({"nodes":[]})", PatchFeedbackStore::Rating::Down);
+
+    auto entryVar = juce::JSON::parse(lines()[0]);
+    auto* entry = entryVar.getDynamicObject();
+    ASSERT_NE(entry, nullptr);
+    EXPECT_FALSE(entry->hasProperty("conversationId"));
+    EXPECT_FALSE(entry->hasProperty("messageId"));
+}
+
 } // namespace synth

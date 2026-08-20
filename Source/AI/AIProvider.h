@@ -80,6 +80,13 @@ public:
         // AIIntegrationService::sendMessage). Empty when the backend didn't persist (free plan,
         // or a provider with no notion of server-side history at all).
         juce::String conversationId;
+
+        // Set from the `x-message-id` response header (P6-9) — identifies the newly-created
+        // assistant/patch message row, present under the exact same condition as
+        // `conversationId` above (Pro plan, persistence succeeded). Empty otherwise. This is what
+        // lets a later thumbs rating on this turn sync to the server; see
+        // AIChatComponent::MessageData::serverMessageId.
+        juce::String messageId;
     };
 
     using CompletionCallback = std::function<void(const AIResponse& response)>;

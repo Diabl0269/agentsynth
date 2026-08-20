@@ -287,13 +287,13 @@ anyone who wants to say why; submitting a comment later (Enter or "Save") writes
 rather than mutating the first, since the underlying store is an append-only log, not a keyed
 table.
 
-**This is the client-only half of the roadmap's P6·3.** `Source/AI/PatchFeedbackStore` appends one
-JSON object per line to `<user app data>/Agent Synth/patch_feedback.jsonl` (`{timestamp, rating,
-comment?, patch}` — `patch` is the parsed patch JSON, falling back to a `patchRaw` string if it
-doesn't parse). There is currently nowhere on the server to send this: `packages/conversations`'
-`ConversationMessage` (synth-platform) has no rating field, and the client doesn't hold a
-conversation id to key a rating against until P6·8 ships. Syncing this log to the server is tracked
-separately (P6·9 in `synth-platform/roadmap.json`), gated on P6·8.
+`Source/AI/PatchFeedbackStore` appends one JSON object per line to
+`<user app data>/Agent Synth/patch_feedback.jsonl` (`{timestamp, rating, comment?, conversationId?,
+messageId?, patch}` — `patch` is the parsed patch JSON, falling back to a `patchRaw` string if it
+doesn't parse; `conversationId`/`messageId` are the P6-9 additions below, present only when known).
+This local log is written **unconditionally** on every rating, regardless of plan or whether a
+server sync happens — see "Patch Feedback Sync to Server (P6-9, client side)" below for when a
+rating additionally reaches the server.
 
 The rating lives on `MessageData::ratingState`/`ratingComment` for the session (same
 "not reconstructed on replay" precedent as `showUpgradeAction`, just above) — the durable copy is
@@ -772,6 +772,69 @@ and out-of-range fallback). `Tests/BrandingTests.cpp` (`resolveApiBaseUrl()`'s D
 `AGENTSYNTH_LOCAL_API_URL` env var override, used to point a local build's auth/entitlement/
 cloud-history traffic at a locally-run `synth-platform` server — see `docs/testing.md` "Testing
 Cloud-Gated Features Locally").
+
+### Patch Feedback Sync to Server (P6-9, client side)
+
+Wires the local P6-3 thumbs log to a new endpoint,
+`POST /v1/conversations/:conversationId/messages/:messageId/feedback` (`{"rating": "up"|"down",
+"comment"?: string}`, Bearer auth), for signed-in Pro users only, and only when a server-side
+message id is available for the rated turn.
+
+**Where the message id comes from.** A hosted (`RemoteProvider`) response that a Pro account
+persisted server-side now also returns an `x-message-id` header alongside the existing
+`x-conversation-id` one — `AIProvider::AIResponse::messageId`, populated in
+`RemoteProvider::processRequest()` the same way `conversationId` is (read via `result.headers`,
+empty when absent). Unlike `conversationId`, this is **not** re-pushed/threaded through
+`AIIntegrationService` state — it's per-turn, so it just flows through the response object to
+`AIChatComponent`'s callback unchanged, which stashes it onto that turn's
+`MessageData::serverMessageId` at the same point `jsonPatch` is set. Only ever populated for a
+live, same-session assistant message; **not** reconstructed by the history-replay loop (same
+"session-scoped" precedent as `ratingState`/`showUpgradeAction`), so rating a message from a
+restored conversation stays local-only — deliberate scope limit, not a gap to fix later.
+
+**The conversation id used for the sync is the SERVER one**, `AIIntegrationService::
+getConversationId()` (a new public getter over the existing `currentConversationId` member) — not
+`AIChatComponent::currentLocalConversationId`, the unrelated key `LocalHistoryStore` uses. Sending
+the wrong one would fail the server's ownership check indistinguishably from a nonexistent id
+(404).
+
+**The rating callback** (`AIChatComponent`'s thumbs handler, same lambda that has always called
+`patchFeedbackStore.record()`) now also, after the local record:
+1. Reads `aiService.getConversationId()`.
+2. If the rated message's `serverMessageId` is non-empty AND that conversation id is non-empty AND
+   the attached `AccountService` reports signed-in AND Pro AND a non-empty access token — fires the
+   sync. Otherwise it's a silent no-op; the local log already has the rating either way.
+3. The sync itself is **fire-and-forget**: a detached background thread (same shape as
+   `CloudHistorySource`'s calls — copies of a small stateless `AuthClient`, the token, and plain
+   strings, never `this` or any UI state) calls the new `AuthClient::submitMessageFeedback(...)`.
+   No retry, no queueing, no UI error surface — a failed sync just means that one rating never
+   reached the server; nothing blocks or spins on it.
+
+`AuthClient::submitMessageFeedback(accessToken, conversationId, messageId, rating, comment,
+cancelled)` mirrors `listConversations()`'s `{ok, transportError}` result-type convention. The
+JSON body omits `comment` entirely when empty, the same convention `PatchFeedbackStore::record()`
+already used for its own local `comment` field. Server responses this client interprets: 200 ok;
+404 (wrong/unowned conversation or message id, indistinguishable from nonexistent) and 400 (bad
+`rating`) surface as `!ok` with a `transportError`; 403 (non-Pro) is unreachable from this client
+since it gates on Pro before ever calling, but the server independently re-checks it regardless —
+same "client only decides what to show, never what to allow" boundary as every other Pro-gated
+endpoint in this file.
+
+Test injection: `AIChatComponent::setFeedbackHttpPerformerForTesting(HttpPerformer)` installs a
+fake transport for the rating callback's locally-constructed `AuthClient`, mirroring
+`setHistorySourcesForTesting()`'s fake-backend idiom but at the `HttpPerformer` layer (this call
+doesn't go through `ConversationHistorySource` at all).
+
+Locked by: `Tests/AuthClientTests.cpp` (`SubmitMessageFeedback*` — request shape, comment
+omission, 404/403/400/transport-failure mapping). `Tests/RemoteProviderTests.cpp`
+(`MessageIdHeaderCapturedFromResponseIntoAIResponse`,
+`MissingConversationIdHeaderLeavesAIResponseFieldEmpty` extended to also assert `messageId`).
+`Tests/PatchFeedbackStoreTests.cpp` (`IncludesConversationAndMessageIdWhenProvided`,
+`OmitsConversationAndMessageIdWhenNotProvided` — old call sites keep the pre-P6-9 line shape
+exactly). `Tests/AIChatComponentTests.cpp`
+(`RatingWithServerMessageIdAndProAccountFiresExactlyOneFeedbackPost`,
+`RatingOnFreePlanAccountDoesNotFireFeedbackPost`,
+`RatingWithNoServerMessageIdDoesNotFireFeedbackPostEvenWhenPro`).
 
 ### Opt-In Prompt Collection for Product Learning (P6-7, client side)
 
