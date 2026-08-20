@@ -147,7 +147,7 @@ public:
      *  tool is active.
      *
      *  Select keeps the whole pre-existing gesture table (click-select, drag-move, right-edge
-     *  resize, Cmd velocity scrub, Shift marquee, double-click create/delete). The other five
+     *  resize, Cmd velocity scrub, drag-from-empty marquee, double-click create/delete). The other five
      *  tools REPLACE it: they act on a single click and none of them starts a move/resize/scrub/
      *  marquee, so a mis-aimed drag with the Erase tool can never silently move a note instead.
      *  Switching tool also abandons any gesture already in flight — it belonged to the old tool. */
@@ -455,6 +455,26 @@ private:
     bool nudgeSelectedNotes(int direction);
     bool transposeSelectedNotes(int semitones);
 
+    // ---- Alt+Left/Right note navigation (selection only — never a mutation, never an undo step) ----
+    // Selects the note next to the current selection in the clip's CANONICAL order — (startBeat,
+    // then pitch, then id), which is the order TimelineDoc keeps Clip::notes in, so this walks that
+    // vector by index rather than re-deriving an order that could drift from the doc's.
+    //
+    // The anchor is the edge of the selection the walk is heading TOWARDS: forward starts from the
+    // selection's LAST note, backward from its FIRST. That is what makes a multi-selection collapse
+    // onto the neighbour just outside the block (and makes repeated presses sweep the clip) instead
+    // of landing back inside it. Alt is the modifier because plain arrows already nudge, Shift+Up/
+    // Down is the octave transpose, and Cmd+arrow carries OS jump-to-boundary meaning.
+    //
+    // @return false ONLY when there is nothing to navigate from (roll closed, or nothing selected in
+    // this clip) — that is the key's fall-through cue. At either END of the clip the selection is
+    // kept and true is still returned, the same "the key WAS applicable" contract a fully clamped
+    // nudge honours.
+    bool selectAdjacentNote(bool forward);
+    // Minimal HORIZONTAL scroll so `note` is inside the grid region; a no-op (and no repaint) when
+    // it already is. Vertical scroll is deliberately not touched — see the definition.
+    void scrollNoteIntoView(const synth::MidiNote& note);
+
     void performQuantise();
     void flashQuantiseButton();
     void timerCallback() override; // one-shot: ends the quantise flash and stops itself
@@ -524,11 +544,18 @@ private:
     double drawLengthBeats_ = 0.0;
     int drawPitch_ = 60;
 
-    // ---- Marquee (Shift+drag on empty grid only — see mouseDown's comment) ----
+    // ---- Marquee (any drag that STARTED on empty grid — see mouseDown's comment) ----
     juce::Point<int> marqueeAnchor_;
     juce::Rectangle<int> marqueeRect_;
     bool marqueeAdditive_ = false;
     std::vector<synth::NoteId> marqueeBaseSelection_;
+
+    // Deferred-deselect, the same trick TimelineClipLaneArea::pendingEmptyClick_ (and, before it,
+    // GraphEditor's pendingEmptyCanvasClick) uses: a PLAIN press on empty grid is ambiguous at
+    // mouse-down time — it becomes a replace-marquee if it ever moves, and a deselect if it does
+    // not — so neither is committed until mouseDrag or mouseUp says which one happened. Only the
+    // Select tool ever sets it, and setActiveTool clears it with the rest of the in-flight gesture.
+    bool pendingEmptyClick_ = false;
 
     // ---- Local playhead (fed by TimelinePlayheadOverlay; no timer of our own) ----
     double playheadBeat_ = 0.0;

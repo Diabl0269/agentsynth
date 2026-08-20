@@ -116,6 +116,7 @@ and every module (`GraphEditor::selectAllModules()`) on Graph. Unlike the clipbo
 | ←/→ | Piano roll, notes selected | Nudge the whole selection by one grid division (one snap cell; a sixteenth when snap is off) |
 | ↑/↓ | Piano roll, notes selected | Transpose the whole selection by one semitone |
 | Shift+↑/↓ | Piano roll, notes selected | Transpose the whole selection by one octave (12 semitones) |
+| Alt+←/→ | Piano roll, notes selected | Navigate BETWEEN notes: select the previous/next note in the clip's canonical (start, pitch) order, collapsing a multi-selection onto the outer neighbour; scrolls an off-screen target into view. Selection-only — never a document edit. Alt+↑/↓ is reserved |
 
 Arrow keys and the tool digits are deliberately split across two components with opposite rules:
 `PianoRollComponent::keyPressed()` consumes an arrow **only when something is selected** (an

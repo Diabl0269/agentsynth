@@ -88,6 +88,7 @@ PianoRollComponent::PianoRollComponent(TimelineViewState& viewState)
 
 void PianoRollComponent::openClip(synth::ClipId id) {
     dragMode_ = DragMode::None;
+    pendingEmptyClick_ = false;
     selection_.clear();
     // The line has to be re-announced against the new framing before it is drawn again.
     hasPlayheadX_ = false;
@@ -123,6 +124,7 @@ void PianoRollComponent::closeRoll() {
     clipId_ = {};
     selection_.clear();
     dragMode_ = DragMode::None;
+    pendingEmptyClick_ = false;
     hasPlayheadX_ = false;
     hasSplitPreview_ = false;
     splitPreviewNote_ = {};
@@ -831,6 +833,7 @@ void PianoRollComponent::setActiveTool(EditTool tool) {
     // Any gesture already in flight belonged to the OLD tool — finishing it under the new one
     // would commit an edit the user has just said they no longer want to make.
     dragMode_ = DragMode::None;
+    pendingEmptyClick_ = false;
     dragNotes_.clear();
     previewDeltaBeats_ = 0.0;
     previewDeltaPitch_ = 0;
@@ -1404,6 +1407,74 @@ bool PianoRollComponent::transposeSelectedNotes(int semitones) {
     return true;
 }
 
+bool PianoRollComponent::selectAdjacentNote(bool forward) {
+    const auto* clip = doc_ != nullptr && clipId_.isValid() ? doc_->getClip(clipId_) : nullptr;
+    if (clip == nullptr || clip->notes.empty())
+        return false;
+
+    // clip->notes IS the canonical order — TimelineDoc maintains (startBeat, pitch, id) on every
+    // mutation and re-establishes it on load — so "the note after this one" is literally the next
+    // index. Sorting a copy here would be a SECOND definition of that order, free to drift from the
+    // doc's; walking the vector cannot.
+    const int count = (int)clip->notes.size();
+    int anchor = -1;
+    for (int i = 0; i < count; ++i) {
+        if (!selection_.contains(clip->notes[(std::size_t)i].id))
+            continue;
+        // Anchor on the edge of the selection we are walking TOWARDS: the last selected note going
+        // forward, the first going back. Anchoring on the other edge would step back INTO a
+        // multi-selection instead of past it.
+        anchor = i;
+        if (!forward)
+            break;
+    }
+    if (anchor < 0)
+        return false; // nothing selected in this clip: the key falls through to the panel
+
+    const int target = anchor + (forward ? 1 : -1);
+    if (target < 0 || target >= count)
+        return true; // at the end of the run: selection kept, key still consumed
+
+    const auto& note = clip->notes[(std::size_t)target];
+    selection_.setSelection({note.id});
+    scrollNoteIntoView(note);
+    repaint(); // the selection DID change (target != anchor), so this is state-gated
+    return true;
+}
+
+void PianoRollComponent::scrollNoteIntoView(const synth::MidiNote& note) {
+    const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
+    if (clip == nullptr || rollView_.pixelsPerBeat <= 0.0)
+        return;
+    const double gridWidth = (double)std::max(0, getWidth() - kKeysColumnWidth);
+    if (gridWidth <= 0.0)
+        return;
+
+    const double visibleBeats = gridWidth / rollView_.pixelsPerBeat;
+    const double startAbs = clip->startBeat + note.startBeat;
+    const double endAbs = startAbs + note.lengthBeats;
+
+    // MINIMAL scroll, and horizontal only. Off to the left: bring the note's leading edge to the
+    // grid's left edge. Off to the right: bring its trailing edge to the right edge — except when
+    // the note is wider than the whole view, where std::min picks the leading edge instead (seeing
+    // where a note starts beats seeing where it ends). Zoom is never touched: a navigation must not
+    // silently reframe the clip.
+    //
+    // The PITCH scroll is deliberately left alone. Alt+Up/Down is reserved for a future binding, and
+    // yanking the vertical view on a horizontal walk would lose the user's place in the roll.
+    double first = rollView_.firstVisibleBeat;
+    if (startAbs < first)
+        first = startAbs;
+    else if (endAbs > first + visibleBeats)
+        first = std::min(startAbs, endAbs - visibleBeats);
+
+    // setHorizontalView repaints once and notifies the ruler's mapping override; calling it only on
+    // a real change is what keeps an on-screen navigation at zero extra repaints. No animation —
+    // this is a keyboard jump, not a gesture.
+    if (std::abs(first - rollView_.firstVisibleBeat) > kBeatEpsilon)
+        setHorizontalView(rollView_.pixelsPerBeat, first);
+}
+
 bool PianoRollComponent::isQuantiseEnabled() const {
     // Raw division on purpose: the one-shot quantise works from the CHOSEN grid even while the
     // magnetism switch is off (that is its whole point — clean up notes drawn free-hand).
@@ -1489,6 +1560,7 @@ juce::String PianoRollComponent::getTooltip() { return getTooltipFor(getMouseXYR
 void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
     grabKeyboardFocus();
     dragMode_ = DragMode::None;
+    pendingEmptyClick_ = false;
 
     if (doc_ == nullptr || !clipId_.isValid() || doc_->getClip(clipId_) == nullptr)
         return;
@@ -1545,20 +1617,34 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
         return;
     }
 
-    // Empty grid. Shift arms the marquee; anything else is a plain click-through that DESELECTS.
-    // Creating a note is the double-click (mouseDoubleClick) — a single click never draws.
-    if (e.mods.isShiftDown()) {
-        beginMarquee(pos, e.mods.isCommandDown() || e.mods.isCtrlDown());
+    // Empty grid. EVERY drag from here marquees — multi-select is the plain gesture in the roll,
+    // unlike the graph editor where plain drag has to stay free for panning. Shift / Cmd / Ctrl only
+    // change WHAT the marquee does with the existing selection: plain REPLACES it, a modifier keeps
+    // it and ADDS to it.
+    //
+    // A press that never becomes a drag is still the old plain click-through that DESELECTS, and at
+    // mouse-down time the two are indistinguishable — hence the deferral (pendingEmptyClick_,
+    // promoted to a marquee by mouseDrag, resolved to a deselect by mouseUp). Creating a note is
+    // the double-click (mouseDoubleClick) — a single click never draws.
+    mouseDownPos_ = pos;
+    if (e.mods.isShiftDown() || e.mods.isCommandDown() || e.mods.isCtrlDown()) {
+        beginMarquee(pos, /*additive*/ true);
         return;
     }
-
-    if (!selection_.isEmpty()) {
-        selection_.clear();
-        repaint();
-    }
+    pendingEmptyClick_ = true;
 }
 
 void PianoRollComponent::mouseDrag(const juce::MouseEvent& e) {
+    if (pendingEmptyClick_) {
+        // The press mouseDown could not classify has now moved: it was a marquee, not a deselect.
+        // Plain drag REPLACES the selection (the modifier variants armed themselves additively at
+        // mouse-down and never reach here), and it anchors on the PRESS point, not on this event's
+        // position — a marquee that started where the finger went down is the only one that can
+        // enclose what the user swept over.
+        pendingEmptyClick_ = false;
+        beginMarquee(mouseDownPos_, /*additive*/ false);
+    }
+
     if (dragMode_ == DragMode::Marquee) {
         updateMarquee(e.getPosition());
         return;
@@ -1652,7 +1738,20 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent&) {
     if (dragMode_ == DragMode::Marquee) {
         endMarquee();
         dragMode_ = DragMode::None;
+        pendingEmptyClick_ = false;
         repaint();
+        return;
+    }
+
+    if (pendingEmptyClick_) {
+        // Press+release on empty grid without ever crossing the drag threshold: the deselect the
+        // press deferred. Selection is not document state, so this writes nothing and pushes no
+        // undo step — and an already-empty selection repaints nothing at all.
+        pendingEmptyClick_ = false;
+        if (!selection_.isEmpty()) {
+            selection_.clear();
+            repaint();
+        }
         return;
     }
 
@@ -1729,6 +1828,7 @@ void PianoRollComponent::mouseDoubleClick(const juce::MouseEvent& e) {
     // JUCE dispatches this AFTER the second mouseDown/mouseUp pair, so whatever those did (select a
     // note, deselect on empty grid) has already happened — this is the last word either way.
     dragMode_ = DragMode::None;
+    pendingEmptyClick_ = false;
 
     if (auto hit = hitTestNote(pos)) {
         const auto id = hit->id;
@@ -1877,17 +1977,29 @@ bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {
         return true;
     }
 
-    // Arrow keys edit the SELECTION and nothing else: with nothing selected they fall through, so
-    // the panel (and the graph behind it) keep whatever those keys mean there. Matched on the key
-    // CODE because juce::KeyPress::operator==(int) also requires no modifiers, which would miss
-    // Shift+Up. Digit keys are deliberately NOT handled here at all — tool switching belongs to
-    // the panel (see setActiveTool).
+    // Arrow keys act on the SELECTION and nothing else: with nothing selected they fall through, so
+    // the panel (and the graph behind it) keep whatever those keys mean there. Plain/Shift arrows
+    // EDIT the selected notes (nudge, transpose); Alt+Left/Right only MOVES the selection between
+    // notes. Matched on the key CODE because juce::KeyPress::operator==(int) also requires no
+    // modifiers, which would miss Shift+Up. Digit keys are deliberately NOT handled here at all —
+    // tool switching belongs to the panel (see setActiveTool).
     const int code = key.getKeyCode();
-    if (code == juce::KeyPress::leftKey || code == juce::KeyPress::rightKey)
+    const auto mods = key.getModifiers();
+    if (code == juce::KeyPress::leftKey || code == juce::KeyPress::rightKey) {
+        // Alt+Left/Right NAVIGATES between notes instead of moving them — selection only, so it
+        // touches neither the doc nor the undo stack (see selectAdjacentNote for the anchor rule and
+        // for why Alt rather than plain, Shift or Cmd).
+        if (mods.isAltDown())
+            return selectAdjacentNote(code == juce::KeyPress::rightKey);
         return nudgeSelectedNotes(code == juce::KeyPress::rightKey ? 1 : -1);
+    }
     if (code == juce::KeyPress::upKey || code == juce::KeyPress::downKey) {
+        // Alt+Up/Down is RESERVED: left unhandled (rather than folded into the transpose) so the
+        // combination is still free for whatever the vertical half of navigation turns out to be.
+        if (mods.isAltDown())
+            return false;
         // Shift is the octave jump, the same 12-semitone convention every DAW uses.
-        const int step = key.getModifiers().isShiftDown() ? 12 : 1;
+        const int step = mods.isShiftDown() ? 12 : 1;
         return transposeSelectedNotes(code == juce::KeyPress::upKey ? step : -step);
     }
 

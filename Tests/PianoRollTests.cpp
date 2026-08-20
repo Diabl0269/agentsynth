@@ -7,7 +7,7 @@
 //      synth::NoteId.
 //   2. synth::ui::noteHitTestMarquee — mirrors clipHitTestMarquee's coverage.
 //   3. synth::ui::PianoRollComponent — open/close lifecycle, the gesture table (single click
-//      deselects, DOUBLE-click creates/deletes, drag moves/resizes, Shift+drag marquees), note
+//      deselects, DOUBLE-click creates/deletes, drag moves/resizes, drag-from-empty marquees), note
 //      length following the snap division, clip-window clamping, the roll's own mapping (first bar
 //      reachable, zoom around the cursor, gridline density), the local playhead's strip-confined
 //      repaint seam, the Q button, and a snapshot smoke test. Driven by hand-built
@@ -20,6 +20,12 @@
 //      cross-clip paste the member clipboard exists for.
 //   6. ARROW-key editing — grid nudge, semitone/octave transpose, group clamping, and the
 //      fall-through contract when nothing is selected.
+//   7. MARQUEE multi-select — the plain (unmodified) drag from empty grid that replaces the
+//      selection, its additive modifier variants, and the deferred plain CLICK that must still just
+//      deselect rather than sweeping a zero-size marquee.
+//   8. Alt+Left/Right note NAVIGATION — walking the doc's canonical note order, collapsing a
+//      multi-selection, the ends of the run, and the minimal scroll that brings an off-screen note
+//      into view.
 //
 // Every test in 4-6 configures snap explicitly (never inherits a default), because these are
 // grid-sensitive assertions and a machine-local snap preference must never be able to decide
@@ -385,13 +391,16 @@ TEST(PianoRollEditingTest, SingleClickOnEmptyGridDeselectsAndCreatesNothing) {
     EXPECT_TRUE(f.roll.getSelectionForTest().isEmpty()) << "it deselects instead";
     EXPECT_FALSE(f.undo.canUndo()) << "and writes no undo step";
 
-    // A drag from empty grid (no Shift) is equally inert — no note, no marquee.
+    // A drag from empty grid CREATES nothing either — it marquees (section 7 owns that behaviour;
+    // this arrangement used to assert the drag was inert, back when the marquee needed Shift).
     const juce::Point<float> dragged(empty.x + 120.0f, empty.y);
     f.roll.mouseDown(leftClick(f.roll, empty));
     f.roll.mouseDrag(leftDrag(f.roll, dragged, empty));
+    EXPECT_TRUE(f.roll.isMarqueeActiveForTest()) << "a plain drag from empty grid multi-selects";
     f.roll.mouseUp(leftDrag(f.roll, dragged, empty));
     EXPECT_EQ(f.doc.getClip(clipId)->notes.size(), 1u);
     EXPECT_FALSE(f.roll.isMarqueeActiveForTest());
+    EXPECT_FALSE(f.undo.canUndo()) << "selecting is never a document edit";
 }
 
 // The new note is exactly ONE snap division long: quantise 1 bar -> a 1-bar note, 1/4 -> a quarter.
@@ -1363,11 +1372,19 @@ TEST(PianoRollToolTest, NonSelectToolsNeverMoveResizeOrMarquee) {
     EXPECT_DOUBLE_EQ(note->lengthBeats, 1.0) << "no resize";
     EXPECT_TRUE(note->muted);
 
-    // Shift+drag on empty grid arms no marquee under a non-Select tool.
+    // No drag on empty grid arms a marquee under a non-Select tool — PLAIN included, which is the
+    // one that matters now that plain drag is the Select tool's marquee gesture (section 7). Shift
+    // is checked alongside it because it used to be the only combination that could arm one at all.
     const auto emptyAnchor = pointAt(f.roll, 9.0, 55);
-    f.roll.mouseDown(leftClick(f.roll, emptyAnchor, juce::ModifierKeys::shiftModifier));
-    EXPECT_FALSE(f.roll.isMarqueeActiveForTest());
-    f.roll.mouseUp(leftClick(f.roll, emptyAnchor, juce::ModifierKeys::shiftModifier));
+    const juce::Point<float> emptyTo(emptyAnchor.x + 120.0f, emptyAnchor.y + 20.0f);
+    for (const int modifier : {0, (int)juce::ModifierKeys::shiftModifier}) {
+        f.roll.mouseDown(leftClick(f.roll, emptyAnchor, modifier));
+        EXPECT_FALSE(f.roll.isMarqueeActiveForTest()) << "modifier " << modifier;
+        f.roll.mouseDrag(leftDrag(f.roll, emptyTo, emptyAnchor, modifier));
+        EXPECT_FALSE(f.roll.isMarqueeActiveForTest()) << "modifier " << modifier << " after dragging";
+        f.roll.mouseUp(leftDrag(f.roll, emptyTo, emptyAnchor, modifier));
+    }
+    EXPECT_EQ(f.doc.getClip(clipId)->notes.size(), 1u) << "and the Mute tool drew nothing either";
 }
 
 // Switching back to Select restores the whole original gesture table, double-click included.
@@ -1817,5 +1834,349 @@ TEST(PianoRollArrowKeyTest, ArrowKeysFallThroughWhenNothingIsSelected) {
     EXPECT_FALSE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::rightKey)));
     EXPECT_FALSE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::upKey)));
     EXPECT_FALSE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::downKey)));
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+// ============================================================================
+// 7. Marquee multi-select from empty grid
+// ============================================================================
+//
+// The roll's marquee arms on a PLAIN drag: unlike GraphEditor, where plain drag has to stay free
+// for panning (hence Shift there), nothing else in the roll wants that gesture. The modifier
+// variants survive with a different job — they no longer ARM the marquee, they make it additive.
+//
+// Every test here builds its notes BEFORE f.open(), so openClip's pitch centring has already
+// settled by the time pointAt() is asked where a row is.
+
+namespace {
+
+// The three-note bed sections 7's marquee tests sweep: two notes close together near the start
+// (the marquee's targets) and one far to the right that a sweep must never touch — which is what
+// makes "replace" and "additive" tell each other apart.
+struct MarqueeBed {
+    ClipId clipId;
+    NoteId near1, near2, far1;
+};
+
+MarqueeBed makeMarqueeBed(PianoRollFixture& f) {
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    MarqueeBed bed;
+    bed.clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    bed.near1 = f.doc.addNote(bed.clipId, makeNote(1.0, 60, 1.0));
+    bed.near2 = f.doc.addNote(bed.clipId, makeNote(3.0, 62, 1.0));
+    bed.far1 = f.doc.addNote(bed.clipId, makeNote(10.0, 60, 1.0));
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(bed.clipId);
+    return bed;
+}
+
+// Presses on empty grid at beat 0.2 / four semitones above middle, sweeps right and down past both
+// near notes, and releases — the whole gesture, so a caller only states the modifier it used.
+void sweepOverNearNotes(PianoRollFixture& f, int extraFlags = 0) {
+    const auto anchor = pointAt(f.roll, 0.2, 64);
+    const auto to = pointAt(f.roll, 5.0, 58);
+    f.roll.mouseDown(leftClick(f.roll, anchor, extraFlags));
+    f.roll.mouseDrag(leftDrag(f.roll, to, anchor, extraFlags));
+    EXPECT_TRUE(f.roll.isMarqueeActiveForTest()) << "the drag armed a marquee";
+    f.roll.mouseUp(leftDrag(f.roll, to, anchor, extraFlags));
+    EXPECT_FALSE(f.roll.isMarqueeActiveForTest()) << "and the release ended it";
+}
+
+} // namespace
+
+TEST(PianoRollMarqueeTest, PlainDragFromEmptyGridSelectsWhatItSweepsAndReplacesTheSelection) {
+    PianoRollFixture f;
+    const auto bed = makeMarqueeBed(f);
+    ASSERT_TRUE(bed.near1.isValid());
+    ASSERT_TRUE(bed.near2.isValid());
+    ASSERT_TRUE(bed.far1.isValid());
+
+    // A pre-existing selection OUTSIDE the swept band is what proves "replace": if the plain drag
+    // were additive, far1 would still be selected afterwards.
+    f.roll.getSelectionForTest().setSelection({bed.far1});
+
+    sweepOverNearNotes(f);
+
+    const auto& sel = f.roll.getSelectionForTest();
+    EXPECT_EQ(sel.size(), 2);
+    EXPECT_TRUE(sel.contains(bed.near1));
+    EXPECT_TRUE(sel.contains(bed.near2));
+    EXPECT_FALSE(sel.contains(bed.far1)) << "a plain marquee REPLACES the selection";
+    EXPECT_FALSE(f.undo.canUndo()) << "selecting is never a document edit";
+}
+
+TEST(PianoRollMarqueeTest, ShiftAndCommandDragsStayAdditive) {
+    for (const int modifier : {(int)juce::ModifierKeys::shiftModifier, (int)juce::ModifierKeys::commandModifier,
+                               (int)(juce::ModifierKeys::shiftModifier | juce::ModifierKeys::commandModifier)}) {
+        PianoRollFixture f;
+        const auto bed = makeMarqueeBed(f);
+        f.roll.getSelectionForTest().setSelection({bed.far1});
+
+        sweepOverNearNotes(f, modifier);
+
+        const auto& sel = f.roll.getSelectionForTest();
+        EXPECT_EQ(sel.size(), 3) << "modifier " << modifier;
+        EXPECT_TRUE(sel.contains(bed.near1));
+        EXPECT_TRUE(sel.contains(bed.near2));
+        EXPECT_TRUE(sel.contains(bed.far1)) << "a modifier marquee ADDS to the existing selection";
+        EXPECT_FALSE(f.undo.canUndo());
+    }
+}
+
+// The deferred-click half of the promotion: a press that never moves must resolve to the plain
+// deselect it always was, NOT to a zero-size marquee that clears the selection by sweeping nothing.
+// The two outcomes look identical here on purpose — the assertion that separates them is that no
+// marquee was ever armed, at mouse-down or at mouse-up.
+TEST(PianoRollMarqueeTest, PlainClickOnEmptyGridStillJustDeselects) {
+    PianoRollFixture f;
+    const auto bed = makeMarqueeBed(f);
+    f.roll.getSelectionForTest().setSelection({bed.near1, bed.far1});
+
+    const auto empty = pointAt(f.roll, 6.0, 58);
+    f.roll.mouseDown(leftClick(f.roll, empty));
+    EXPECT_FALSE(f.roll.isMarqueeActiveForTest()) << "mouse-down alone commits to nothing";
+    EXPECT_EQ(f.roll.getSelectionForTest().size(), 2) << "and deselects nothing yet either";
+
+    f.roll.mouseUp(leftClick(f.roll, empty));
+    EXPECT_TRUE(f.roll.getSelectionForTest().isEmpty()) << "the release resolves it to a deselect";
+    EXPECT_FALSE(f.roll.isMarqueeActiveForTest());
+    EXPECT_FALSE(f.undo.canUndo()) << "and writes no undo step";
+}
+
+// Regression: the marquee only ever arms from EMPTY grid. A plain drag that starts ON a note is
+// still a move, which is the gesture the plain-drag marquee could most easily have swallowed.
+TEST(PianoRollMarqueeTest, PlainDragStartingOnANoteStillMovesIt) {
+    PianoRollFixture f;
+    const auto bed = makeMarqueeBed(f);
+
+    const auto anchor = centreOf(f.roll.getNoteRect(bed.near1));
+    const juce::Point<float> to(anchor.x + 40.0f, anchor.y); // +1 beat at 40 px/beat
+    f.roll.mouseDown(leftClick(f.roll, anchor));
+    f.roll.mouseDrag(leftDrag(f.roll, to, anchor));
+    EXPECT_FALSE(f.roll.isMarqueeActiveForTest()) << "a drag from a note is a move, not a sweep";
+    f.roll.mouseUp(leftDrag(f.roll, to, anchor));
+
+    EXPECT_DOUBLE_EQ(f.doc.getNote(bed.near1)->startBeat, 2.0);
+    EXPECT_TRUE(f.roll.getSelectionForTest().contains(bed.near1));
+    EXPECT_TRUE(f.undo.canUndo()) << "the move IS a document edit";
+}
+
+// Regression: only the Select tool owns the empty-grid drag. Draw still draws with it.
+TEST(PianoRollMarqueeTest, DrawToolsEmptyGridDragStillDrawsANote) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+    f.roll.setActiveTool(EditTool::Draw);
+
+    const int pitch = f.roll.getFirstVisiblePitchForTest() - 3;
+    const auto anchor = pointAt(f.roll, 2.1, pitch);
+    const auto to = pointAt(f.roll, 4.0, pitch);
+    f.roll.mouseDown(leftClick(f.roll, anchor));
+    f.roll.mouseDrag(leftDrag(f.roll, to, anchor));
+    EXPECT_FALSE(f.roll.isMarqueeActiveForTest()) << "the pencil never marquees";
+    f.roll.mouseUp(leftDrag(f.roll, to, anchor));
+
+    ASSERT_EQ(f.doc.getClip(clipId)->notes.size(), 1u);
+    const auto& drawn = f.doc.getClip(clipId)->notes[0];
+    EXPECT_DOUBLE_EQ(drawn.startBeat, 2.0) << "the pencil FLOORS to the grid cell it points at";
+    EXPECT_DOUBLE_EQ(drawn.lengthBeats, 2.0);
+    EXPECT_EQ(drawn.pitch, pitch);
+}
+
+// ============================================================================
+// 8. Alt+Left/Right note navigation
+// ============================================================================
+//
+// Selection-only: no test in this section may ever see the doc change or the undo stack grow.
+
+namespace {
+
+juce::KeyPress altArrow(int keyCode) { return juce::KeyPress(keyCode, juce::ModifierKeys::altModifier, 0); }
+
+// Four notes whose canonical (startBeat, pitch, id) order is A, B, C, D — deliberately ADDED in a
+// different order, so a walk that followed insertion (or id) order instead of the doc's would fail.
+struct NavBed {
+    ClipId clipId;
+    NoteId a, b, c, d;
+};
+
+NavBed makeNavBed(PianoRollFixture& f) {
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    NavBed bed;
+    bed.clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    bed.b = f.doc.addNote(bed.clipId, makeNote(0.0, 64, 1.0)); // same start as A, higher pitch
+    bed.d = f.doc.addNote(bed.clipId, makeNote(2.0, 60, 1.0));
+    bed.a = f.doc.addNote(bed.clipId, makeNote(0.0, 60, 1.0));
+    bed.c = f.doc.addNote(bed.clipId, makeNote(1.0, 62, 1.0));
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(bed.clipId);
+    return bed;
+}
+
+// The selection is a single note, and it is this one — the assertion every navigation test ends on,
+// because "collapses to a single note" and "picks the right one" are one claim here, not two.
+//
+// Returns an AssertionResult rather than EXPECT-ing inline so a caller can attach its own "why THIS
+// note" rationale with <<, and so a failure names the ids involved instead of pointing at this
+// helper's line.
+::testing::AssertionResult onlySelected(PianoRollFixture& f, NoteId expected) {
+    const auto selected = f.roll.getSelectionForTest().getSelected();
+    if (selected.size() != 1u)
+        return ::testing::AssertionFailure() << "expected exactly one selected note, got " << selected.size()
+                                             << " (navigation must COLLAPSE a multi-selection)";
+    if (selected[0] != expected)
+        return ::testing::AssertionFailure()
+               << "selected note is id " << selected[0].value << ", expected id " << expected.value;
+    return ::testing::AssertionSuccess();
+}
+
+} // namespace
+
+TEST(PianoRollNavigationTest, AltRightWalksTheDocsCanonicalNoteOrder) {
+    PianoRollFixture f;
+    const auto bed = makeNavBed(f);
+    ASSERT_TRUE(bed.a.isValid());
+
+    // Sanity: the doc really does hold them in (startBeat, pitch, id) order, which is the order the
+    // walk below is asserting — not the order they were added in.
+    const auto& notes = f.doc.getClip(bed.clipId)->notes;
+    ASSERT_EQ(notes.size(), 4u);
+    EXPECT_EQ(notes[0].id, bed.a);
+    EXPECT_EQ(notes[1].id, bed.b);
+    EXPECT_EQ(notes[2].id, bed.c);
+    EXPECT_EQ(notes[3].id, bed.d);
+
+    f.roll.getSelectionForTest().setSelection({bed.a});
+
+    // A -> B is the same-start, different-pitch step: the one an order keyed on startBeat alone
+    // could not make.
+    EXPECT_TRUE(f.roll.keyPressed(altArrow(juce::KeyPress::rightKey)));
+    EXPECT_TRUE(onlySelected(f, bed.b));
+    EXPECT_TRUE(f.roll.keyPressed(altArrow(juce::KeyPress::rightKey)));
+    EXPECT_TRUE(onlySelected(f, bed.c));
+    EXPECT_TRUE(f.roll.keyPressed(altArrow(juce::KeyPress::rightKey)));
+    EXPECT_TRUE(onlySelected(f, bed.d));
+
+    EXPECT_FALSE(f.undo.canUndo()) << "navigation is selection, not document state";
+    EXPECT_DOUBLE_EQ(f.doc.getNote(bed.a)->startBeat, 0.0) << "and it never moves a note";
+}
+
+TEST(PianoRollNavigationTest, AltLeftWalksBackThroughTheSameOrder) {
+    PianoRollFixture f;
+    const auto bed = makeNavBed(f);
+    f.roll.getSelectionForTest().setSelection({bed.d});
+
+    EXPECT_TRUE(f.roll.keyPressed(altArrow(juce::KeyPress::leftKey)));
+    EXPECT_TRUE(onlySelected(f, bed.c));
+    EXPECT_TRUE(f.roll.keyPressed(altArrow(juce::KeyPress::leftKey)));
+    EXPECT_TRUE(onlySelected(f, bed.b));
+    EXPECT_TRUE(f.roll.keyPressed(altArrow(juce::KeyPress::leftKey)));
+    EXPECT_TRUE(onlySelected(f, bed.a));
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+// The anchor rule, which is the whole reason a multi-selection cannot be walked "from the
+// selection": forward anchors on the LAST selected note, backward on the FIRST, so the step always
+// lands OUTSIDE the block instead of back inside it.
+TEST(PianoRollNavigationTest, NavigatingFromAMultiSelectionCollapsesOntoTheOuterNeighbour) {
+    PianoRollFixture f;
+    const auto bed = makeNavBed(f);
+
+    f.roll.getSelectionForTest().setSelection({bed.b, bed.c});
+    EXPECT_TRUE(f.roll.keyPressed(altArrow(juce::KeyPress::rightKey)));
+    EXPECT_TRUE(onlySelected(f, bed.d)) << "forward anchors on the selection's LAST note";
+
+    f.roll.getSelectionForTest().setSelection({bed.b, bed.c});
+    EXPECT_TRUE(f.roll.keyPressed(altArrow(juce::KeyPress::leftKey)));
+    EXPECT_TRUE(onlySelected(f, bed.a)) << "backward anchors on its FIRST";
+}
+
+// At either end the key is still CONSUMED and the selection kept — the same contract a fully
+// clamped nudge honours (see NudgeClampsTheWholeGroupAtBothClipEdges).
+TEST(PianoRollNavigationTest, AtEitherEndTheSelectionIsKeptAndTheKeyIsStillConsumed) {
+    PianoRollFixture f;
+    const auto bed = makeNavBed(f);
+
+    f.roll.getSelectionForTest().setSelection({bed.d});
+    EXPECT_TRUE(f.roll.keyPressed(altArrow(juce::KeyPress::rightKey)));
+    EXPECT_TRUE(onlySelected(f, bed.d));
+
+    f.roll.getSelectionForTest().setSelection({bed.a});
+    EXPECT_TRUE(f.roll.keyPressed(altArrow(juce::KeyPress::leftKey)));
+    EXPECT_TRUE(onlySelected(f, bed.a));
+
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(PianoRollNavigationTest, AltArrowsFallThroughWithNothingSelected) {
+    PianoRollFixture f;
+    const auto bed = makeNavBed(f);
+    ASSERT_TRUE(bed.clipId.isValid());
+    ASSERT_TRUE(f.roll.getSelectionForTest().isEmpty());
+
+    // There is plenty to navigate TO — what is missing is somewhere to navigate FROM, and that is
+    // what makes the key fall through to the panel instead of picking a note arbitrarily.
+    EXPECT_FALSE(f.roll.keyPressed(altArrow(juce::KeyPress::rightKey)));
+    EXPECT_FALSE(f.roll.keyPressed(altArrow(juce::KeyPress::leftKey)));
+    EXPECT_TRUE(f.roll.getSelectionForTest().isEmpty());
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+// Regression: adding Alt must not have changed what the UNmodified arrows do, and Alt+Up/Down stays
+// reserved rather than quietly becoming a second transpose.
+TEST(PianoRollNavigationTest, PlainArrowsStillNudgeAndAltUpDownIsLeftUnhandled) {
+    PianoRollFixture f;
+    const auto bed = makeNavBed(f);
+    f.roll.getSelectionForTest().setSelection({bed.c});
+
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::rightKey)));
+    EXPECT_DOUBLE_EQ(f.doc.getNote(bed.c)->startBeat, 2.0) << "a plain arrow still nudges by the grid";
+    EXPECT_TRUE(onlySelected(f, bed.c)) << "and never changes WHICH notes are selected";
+
+    EXPECT_FALSE(f.roll.keyPressed(altArrow(juce::KeyPress::upKey)));
+    EXPECT_FALSE(f.roll.keyPressed(altArrow(juce::KeyPress::downKey)));
+    EXPECT_EQ(f.doc.getNote(bed.c)->pitch, 62) << "Alt+Up/Down transposes nothing";
+    EXPECT_TRUE(onlySelected(f, bed.c)) << "and navigates nowhere";
+}
+
+// Navigating off-screen scrolls the roll's OWN horizontal mapping by the minimum that makes the
+// target visible — no zoom change, and nothing at all when the target is already on screen.
+TEST(PianoRollNavigationTest, NavigatingToAnOffScreenNoteScrollsItIntoView) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 64.0, "Clip");
+    const auto nearId = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0));
+    const auto farId = f.doc.addNote(clipId, makeNote(40.0, 60, 1.0));
+    ASSERT_TRUE(nearId.isValid());
+    ASSERT_TRUE(farId.isValid());
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId, /*pixelsPerBeat*/ 40.0);
+
+    // 900 px wide, 44 of them the keys gutter -> 856 px of grid -> 21.4 beats visible at this zoom.
+    const double visibleBeats = (double)(900 - PianoRollComponent::kKeysColumnWidth) / f.roll.getPixelsPerBeat();
+    ASSERT_DOUBLE_EQ(f.roll.getFirstVisibleBeat(), 0.0);
+
+    f.roll.getSelectionForTest().setSelection({nearId});
+    EXPECT_TRUE(f.roll.keyPressed(altArrow(juce::KeyPress::rightKey)));
+    EXPECT_TRUE(onlySelected(f, farId));
+    // Minimal scroll RIGHT: the note's trailing edge (beat 41) sits exactly on the grid's right edge.
+    EXPECT_NEAR(f.roll.getFirstVisibleBeat(), 41.0 - visibleBeats, 1e-9);
+    EXPECT_DOUBLE_EQ(f.roll.getPixelsPerBeat(), 40.0) << "a navigation never reframes the zoom";
+
+    // …and back LEFT: the note's leading edge (beat 1) sits exactly on the grid's left edge.
+    EXPECT_TRUE(f.roll.keyPressed(altArrow(juce::KeyPress::leftKey)));
+    EXPECT_TRUE(onlySelected(f, nearId));
+    EXPECT_NEAR(f.roll.getFirstVisibleBeat(), 1.0, 1e-9);
+
+    // An ON-screen step moves the view by nothing at all.
+    const auto midId = f.doc.addNote(clipId, makeNote(5.0, 60, 1.0));
+    ASSERT_TRUE(midId.isValid());
+    const double before = f.roll.getFirstVisibleBeat();
+    EXPECT_TRUE(f.roll.keyPressed(altArrow(juce::KeyPress::rightKey)));
+    EXPECT_TRUE(onlySelected(f, midId));
+    EXPECT_DOUBLE_EQ(f.roll.getFirstVisibleBeat(), before);
+
     EXPECT_FALSE(f.undo.canUndo());
 }

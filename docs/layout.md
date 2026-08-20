@@ -2114,9 +2114,13 @@ row, a MIDI clip only onto `TrackKind::Midi`, neither onto `Automation`. An ille
 clip in the set clamps the whole group's row delta back to 0 — a same-lane move, i.e. exactly what
 this drag did before it could cross tracks — rather than dropping only the clips that would have fit
 and silently tearing the selection apart. `getPreviewRowDeltaForTest()` is the row delta the
-in-flight drag would apply; a copy-drag never moves the originals (`isCopyDragForTest()`), so its
-destinations paint as outlined ghosts (`paintDragGhosts`) while the source clips keep painting where
-they are.
+in-flight drag would apply; a copy-drag never moves the originals on EITHER axis
+(`effectiveGeometryFor` and `effectiveRowFor` share the same `copyDrag_` guard — they must agree or
+the original slides while its row holds), so the destinations paint as translucent ghosts
+(`paintDragGhosts`: source-track colour at 0.4 alpha plus a 1 px outline, no name label — a real
+blur would be per-frame image filtering, which §10–11 rules out) while the source clips keep
+painting where they are. Ghost geometry comes from one helper (`dragGhostRectFor`) shared with
+`getDragGhostRectsForTest()`, the same single-enumeration reasoning as `buildVisibleCables()`.
 
 **Inline rename.** `beginRenameClip(ClipId)` (reached from the context menu's **Rename…**) opens a
 `juce::TextEditor` over the clip's name area, pre-filled and `selectAll()`ed: Return commits through
@@ -2365,7 +2369,7 @@ so a multi-note move/scrub/delete is one undo step):
 |---|---|
 | **Single click on empty grid** | DESELECTS (click-through). Creates nothing, writes no undo step. |
 | **Double-click on empty grid** | Creates ONE note: pitch from the row, start snapped, length exactly **one snap division** (1 bar quantise → a 1-bar note; 1/4 → a quarter; 1/16 beat when Snap is Off), velocity 100, channel 1. Selected, one undo step. Snapping up past the clip's end steps back one division rather than creating nothing. |
-| Shift+drag from empty grid | Marquee (intersection hit-test, additive with Cmd/Ctrl) |
+| **Drag from empty grid** | Marquee (intersection hit-test) — a plain drag REPLACES the selection; Shift or Cmd/Ctrl makes it additive. A press that never crosses the drag threshold is still just the deselect click above (same deferred-click promotion the clip lanes use), and there is nothing to retrain because the roll has no drag-to-pan (scrolling is wheel-only) |
 | Click a note | Selects it; **Shift** toggles it in/out of the selection, **Cmd** adds it (never removes — the drag that may follow scrubs the whole selection) |
 | Drag a note's body | Moves it + every other selected note, by one shared snapped beat delta and one shared semitone delta |
 | Drag within 5 px of a note's right edge | Resizes (trims) just that note's length, Snap-quantised, floored at one division (1/16 beat when Snap is Off) — even inside a wider selection |
@@ -2448,7 +2452,17 @@ clip's length, the same "clamp the group together" rule the drag gestures use.
 into `[0, 127]` as a group so a chord transposes as a chord and never collapses at the pitch
 extremes: Up/Down is one semitone, **Shift**+Up/Down is a full octave (12 semitones), the same
 octave-jump convention every DAW uses. Both return `true` (consumed) even when the clamp left
-nothing to move — the key WAS applicable, it just had nowhere left to go. Tool-switching digit keys
+nothing to move — the key WAS applicable, it just had nowhere left to go. **Alt+Left/Right
+navigates BETWEEN notes** instead of moving them: `selectAdjacentNote(forward)` walks
+`Clip::notes`' canonical (startBeat, pitch, id) order by index — no second ordering is defined that
+could drift from the doc's comparator — anchoring forward on the selection's LAST selected note and
+backward on its FIRST, and collapses to a single-note selection on the neighbour just outside the
+block, so repeated presses sweep the clip. At either end the selection is kept and the key still
+consumed (the same rule as a fully-clamped nudge); selection-only, so no undo step ever; an
+off-screen target scrolls into view minimally via `setHorizontalView` (horizontal only — Alt+Up/Down
+stays unhandled/reserved, and yanking the vertical view on a horizontal walk would lose the user's
+place). Alt was chosen over Cmd/Shift: plain arrows already nudge, Shift+Up/Down is the octave, and
+Cmd+arrows carry OS-level jump-to-boundary semantics. Tool-switching digit keys
 are deliberately **not** handled here at all (see the edit-tool strip subsection above) — that
 binding belongs to the panel, so the roll and the panel can never disagree about which tool is
 active.
