@@ -92,16 +92,22 @@ Automated (`build-artifacts.yml`):
   release's macOS zip, runs Sparkle's `generate_appcast` tool against it (signing with
   `SPARKLE_PRIVATE_KEY`, `--download-url-prefix` pointing at that same release's GitHub asset URLs),
   and uploads the resulting `appcast.xml` back onto the release as an asset.
+- Publishing that `appcast.xml` to `https://agentsynth.app/updates/appcast.xml` — the `SUFeedURL`
+  baked into the app (`SYNTH_UPDATE_FEED_URL` in `CMakeLists.txt`) — is automated too, but the
+  workflow lives in the **synth-platform** repo, not here: this repo has no Cloudflare credentials,
+  so `synth-platform/.github/workflows/deploy-web.yml` polls this repo's Releases API every 30
+  minutes (this repo's releases are all `prerelease: true`, so it lists releases and picks the
+  newest with an `appcast.xml` asset rather than using `/releases/latest`, which excludes
+  prereleases and 404s), and redeploys `apps/web` — with the fetched appcast dropped at
+  `dist/updates/appcast.xml` — only when the appcast actually changed. A push to that repo's
+  `apps/web` always redeploys regardless. The zip itself still stays on GitHub Releases
+  (`--download-url-prefix` points there directly, so only the small `appcast.xml` file needed a
+  second home).
 
-**Not automated**: deploying `appcast.xml` to `https://agentsynth.app/updates/appcast.xml` — the
-`SUFeedURL` baked into the app (`SYNTH_UPDATE_FEED_URL` in `CMakeLists.txt`). The zip itself stays
-on GitHub Releases (`--download-url-prefix` points there directly, so only the small `appcast.xml`
-file needs hosting elsewhere); publishing that one file to agentsynth.app still needs a manual step
-or a future automated one (P5·1 marketing site / P5·4 both touch that domain's Cloudflare Pages
-deployment, which this repo has no credentials for). Until that's wired up, "Check for Updates"
-starts (once a key exists) but the feed check itself 404s — Sparkle's default UX for that is a
-silent no-op on a background check and a plain "couldn't check" alert only if the user explicitly
-clicks the menu item, so this fails safely rather than looking broken.
+**Not automated**: nothing on the appcast-publishing path anymore (P5·7, done 2026-08-20). "Check
+for Updates" now round-trips against a real, live feed once a key exists; the 404-then-silent-no-op
+behavior described in earlier drafts of this doc no longer applies to that step. What's still
+missing is WinSparkle (P5·6, see below) — the feed above only ever contains a macOS item.
 
 ## What's not built yet
 
@@ -154,7 +160,6 @@ against the same zip but with a different, throwaway key (`generate_keys --accou
 first), or hand-edit the `<sparkle:edSignature>` in the generated `appcast.xml`. Confirm Sparkle
 refuses the update instead of installing it.
 
-**5. End-to-end against the real deployment** — once the appcast is actually hosted at
-`https://agentsynth.app/updates/appcast.xml` (see "what's not built yet" above) and a signed
-release exists, repeat step 3 against production. This can't be verified until then; treat it as
-the acceptance test for whichever task wires up that deployment.
+**5. End-to-end against the real deployment** — `https://agentsynth.app/updates/appcast.xml` is
+live (P5·7); with a real key and a signed release, repeat step 3 against production instead of a
+local server.
