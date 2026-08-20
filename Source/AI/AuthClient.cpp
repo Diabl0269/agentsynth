@@ -591,6 +591,39 @@ AuthClient::DeleteAllConversationsResult AuthClient::deleteAllConversations(cons
     return result;
 }
 
+AuthClient::SubmitMessageFeedbackResult
+AuthClient::submitMessageFeedback(const juce::String& accessToken, const juce::String& conversationId,
+                                  const juce::String& messageId, const juce::String& rating,
+                                  const juce::String& comment, const std::atomic<bool>& cancelled) const {
+    SubmitMessageFeedbackResult result;
+
+    juce::StringPairArray headers;
+    headers.set("Authorization", "Bearer " + accessToken);
+    headers.set("Content-Type", "application/json");
+
+    juce::DynamicObject::Ptr bodyObj = new juce::DynamicObject();
+    bodyObj->setProperty("rating", rating);
+    if (comment.isNotEmpty())
+        bodyObj->setProperty("comment", comment);
+    const juce::String body = juce::JSON::toString(juce::var(bodyObj.get()));
+
+    const juce::String url = host + "/v1/conversations/" + conversationId + "/messages/" + messageId + "/feedback";
+    const auto http = performHttp("POST", url, headers, body, kRequestTimeoutMs, cancelled);
+
+    if (http.transportFailed || http.timedOut) {
+        result.transportError = http.errorMessage.isNotEmpty() ? http.errorMessage : "Error: request failed.";
+        return result;
+    }
+
+    if (http.httpStatus != 200) {
+        result.transportError = "Error: POST " + url + " failed (HTTP " + juce::String(http.httpStatus) + ").";
+        return result;
+    }
+
+    result.ok = true;
+    return result;
+}
+
 bool AuthClient::revoke(const juce::String& token, const std::atomic<bool>& cancelled) const {
     juce::StringPairArray headers;
     headers.set("Content-Type", "application/x-www-form-urlencoded");

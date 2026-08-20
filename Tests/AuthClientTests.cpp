@@ -825,6 +825,114 @@ TEST(AuthClientTest, DeleteAllConversationsTransportFailure) {
 }
 
 // ============================================================================
+// submitMessageFeedback (P6-9)
+// ============================================================================
+
+TEST(AuthClientTest, SubmitMessageFeedbackSendsPostWithCorrectPathHeadersAndBody) {
+    juce::String capturedMethod;
+    juce::String capturedUrl;
+    juce::StringPairArray capturedHeaders;
+    juce::String capturedBody;
+
+    auto performer = [&](const juce::String& method, const juce::String& url, const juce::StringPairArray& headers,
+                         const juce::String& body, int, const std::atomic<bool>&) -> synth::AuthClient::HttpResult {
+        capturedMethod = method;
+        capturedUrl = url;
+        capturedHeaders = headers;
+        capturedBody = body;
+        return makeStatus(200, "");
+    };
+
+    synth::AuthClient client{kHost, kClientId, performer};
+    const auto result =
+        client.submitMessageFeedback("access-token-123", "conv-1", "msg-1", "up", "great patch", kNeverCancelled);
+
+    ASSERT_TRUE(result.ok);
+    EXPECT_EQ(capturedMethod, juce::String("POST"));
+    EXPECT_EQ(capturedUrl, kHost + "/v1/conversations/conv-1/messages/msg-1/feedback");
+    EXPECT_EQ(capturedHeaders.getValue("Authorization", ""), juce::String("Bearer access-token-123"));
+
+    const auto parsedBody = juce::JSON::parse(capturedBody);
+    auto* bodyObj = parsedBody.getDynamicObject();
+    ASSERT_NE(bodyObj, nullptr);
+    EXPECT_EQ(bodyObj->getProperty("rating").toString(), juce::String("up"));
+    EXPECT_EQ(bodyObj->getProperty("comment").toString(), juce::String("great patch"));
+}
+
+TEST(AuthClientTest, SubmitMessageFeedbackOmitsCommentFieldWhenEmpty) {
+    juce::String capturedBody;
+    auto performer = [&](const juce::String&, const juce::String&, const juce::StringPairArray&,
+                         const juce::String& body, int, const std::atomic<bool>&) -> synth::AuthClient::HttpResult {
+        capturedBody = body;
+        return makeStatus(200, "");
+    };
+
+    synth::AuthClient client{kHost, kClientId, performer};
+    const auto result =
+        client.submitMessageFeedback("access-token-123", "conv-1", "msg-1", "down", "", kNeverCancelled);
+
+    ASSERT_TRUE(result.ok);
+    const auto parsedBody = juce::JSON::parse(capturedBody);
+    auto* bodyObj = parsedBody.getDynamicObject();
+    ASSERT_NE(bodyObj, nullptr);
+    EXPECT_EQ(bodyObj->getProperty("rating").toString(), juce::String("down"));
+    EXPECT_FALSE(bodyObj->hasProperty("comment"));
+}
+
+TEST(AuthClientTest, SubmitMessageFeedbackNotFound) {
+    auto performer = [](const juce::String&, const juce::String&, const juce::StringPairArray&, const juce::String&,
+                        int, const std::atomic<bool>&) -> synth::AuthClient::HttpResult {
+        return makeStatus(404, R"({"error":{"code":"NOT_FOUND"}})");
+    };
+
+    synth::AuthClient client{kHost, kClientId, performer};
+    const auto result =
+        client.submitMessageFeedback("access-token-123", "no-such-conv", "no-such-msg", "up", "", kNeverCancelled);
+
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(result.transportError.isNotEmpty());
+}
+
+TEST(AuthClientTest, SubmitMessageFeedbackForbiddenWhenNotPro) {
+    auto performer = [](const juce::String&, const juce::String&, const juce::StringPairArray&, const juce::String&,
+                        int, const std::atomic<bool>&) -> synth::AuthClient::HttpResult {
+        return makeStatus(403, R"({"error":{"code":"FORBIDDEN"}})");
+    };
+
+    synth::AuthClient client{kHost, kClientId, performer};
+    const auto result = client.submitMessageFeedback("access-token-123", "conv-1", "msg-1", "up", "", kNeverCancelled);
+
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(result.transportError.isNotEmpty());
+}
+
+TEST(AuthClientTest, SubmitMessageFeedbackInvalidRating) {
+    auto performer = [](const juce::String&, const juce::String&, const juce::StringPairArray&, const juce::String&,
+                        int, const std::atomic<bool>&) -> synth::AuthClient::HttpResult {
+        return makeStatus(400, R"({"error":{"code":"BAD_REQUEST"}})");
+    };
+
+    synth::AuthClient client{kHost, kClientId, performer};
+    const auto result =
+        client.submitMessageFeedback("access-token-123", "conv-1", "msg-1", "sideways", "", kNeverCancelled);
+
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(result.transportError.isNotEmpty());
+}
+
+TEST(AuthClientTest, SubmitMessageFeedbackTransportFailure) {
+    auto performer = [](const juce::String&, const juce::String&, const juce::StringPairArray&, const juce::String&,
+                        int,
+                        const std::atomic<bool>&) -> synth::AuthClient::HttpResult { return makeTransportFailure(); };
+
+    synth::AuthClient client{kHost, kClientId, performer};
+    const auto result = client.submitMessageFeedback("access-token-123", "conv-1", "msg-1", "up", "", kNeverCancelled);
+
+    EXPECT_FALSE(result.ok);
+    EXPECT_TRUE(result.transportError.isNotEmpty());
+}
+
+// ============================================================================
 // revoke / logout — fire-and-forget
 // ============================================================================
 

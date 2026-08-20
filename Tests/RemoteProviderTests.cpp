@@ -495,6 +495,33 @@ TEST_F(RemoteProviderTest, ConversationIdHeaderCapturedFromResponseIntoAIRespons
     EXPECT_EQ(result.conversationId, juce::String("conv-server-issued"));
 }
 
+// P6-9's sibling to the test above: a response's x-message-id header is surfaced on
+// AIResponse::messageId, present under the exact same server-side condition (Pro plan,
+// persistence succeeded) as x-conversation-id.
+TEST_F(RemoteProviderTest, MessageIdHeaderCapturedFromResponseIntoAIResponse) {
+    juce::StringPairArray responseHeaders;
+    responseHeaders.set("x-conversation-id", "conv-server-issued");
+    responseHeaders.set("x-message-id", "msg-server-issued");
+
+    auto performer = [&](const juce::String&, const juce::StringPairArray&, const juce::String&, int,
+                         const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
+        return makeStatus(200, R"({"data":{}})", responseHeaders);
+    };
+
+    synth::RemoteProvider provider{kMockHost, performer};
+    provider.setTestMode(true);
+
+    MockPromptCallback callback;
+    provider.sendPrompt(
+        {{"user", "hi"}}, [&callback](const synth::AIProvider::AIResponse& r) { callback(r); }, makeSchema());
+    auto result = callback.getResult();
+    provider.stopThread(5000);
+
+    ASSERT_TRUE(result.success);
+    EXPECT_EQ(result.conversationId, juce::String("conv-server-issued"));
+    EXPECT_EQ(result.messageId, juce::String("msg-server-issued"));
+}
+
 // The free-plan case (P6-8): the server sends no header at all when it didn't persist. Must not
 // be confused with an empty-but-present header — both collapse to an empty conversationId, which
 // is exactly the "nothing to resend" state AIIntegrationService's capture gate checks for.
@@ -515,6 +542,7 @@ TEST_F(RemoteProviderTest, MissingConversationIdHeaderLeavesAIResponseFieldEmpty
 
     ASSERT_TRUE(result.success);
     EXPECT_TRUE(result.conversationId.isEmpty());
+    EXPECT_TRUE(result.messageId.isEmpty());
 }
 
 TEST_F(RemoteProviderTest, UnparseableSuccessBodyMapsToSchema) {

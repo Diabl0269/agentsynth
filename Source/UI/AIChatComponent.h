@@ -108,6 +108,15 @@ public:
     // setPatchFeedbackFileForTesting.
     void setLocalHistoryDirectoryForTesting(const juce::File& dir) { localHistoryDirOverride = dir; }
 
+    // Testing hook (P6-9): installs a fake AuthClient::HttpPerformer for the rating callback's
+    // feedback-sync POST, so a test can assert on the request the detached background thread sends
+    // without ever opening a real socket. Mirrors setHistorySourcesForTesting's fake-transport
+    // idiom, but at the HttpPerformer layer rather than ConversationHistorySource, since this call
+    // constructs its own AuthClient directly.
+    void setFeedbackHttpPerformerForTesting(synth::AuthClient::HttpPerformer performer) {
+        testFeedbackHttpPerformer = std::move(performer);
+    }
+
     // Testing hook: replaces the real local/cloud history backends (historyButtonClicked() would
     // otherwise construct a LocalHistorySource against the real directory, and a CloudHistorySource
     // that makes a real HTTP call) with fakes, so tests can assert which backend a given
@@ -293,9 +302,18 @@ private:
     // setUrlOpenerForTesting() so no test ever launches a real browser.
     std::function<void(const juce::URL&)> urlOpener = [](const juce::URL& u) { u.launchInDefaultBrowser(); };
 
-    // P6-3: local, append-only feedback log — see PatchFeedbackStore's doc comment for why this
-    // is client-only for now (no server endpoint exists yet to sync to).
+    // P6-3: local, append-only feedback log. Always written unconditionally (offline, signed-out,
+    // and free-tier fallback); P6-9 additionally syncs to the server from the rating callback below
+    // when a server message id is available and the account is signed-in Pro — see
+    // PatchFeedbackStore::record()'s doc comment for the local log's own shape.
     PatchFeedbackStore patchFeedbackStore;
+
+    // P6-9: test injection for the feedback-sync POST the rating callback fires on a detached
+    // background thread (mirrors CloudHistorySource's HTTP-transport shape, but this call goes
+    // straight through a locally-constructed AuthClient rather than a ConversationHistorySource,
+    // since it isn't a history operation). Empty (falsy) in production, where a real AuthClient
+    // with the default libcurl-backed performer is used instead.
+    synth::AuthClient::HttpPerformer testFeedbackHttpPerformer;
 
     void updateChatDisplay();
     void scrollToBottom();
@@ -334,6 +352,14 @@ private:
         // showUpgradeAction just above — the durable record lives in patchFeedbackStore, not here.
         PatchRatingUiState ratingState = PatchRatingUiState::None;
         juce::String ratingComment;
+
+        // P6-9: server-assigned id for this assistant/patch message, from AIResponse::messageId
+        // (x-message-id header — Pro plan + persistence succeeded only). Only ever set for a live,
+        // same-session assistant message just returned by sendMessage() — NOT reconstructed by the
+        // history-replay loop, same "session-scoped" precedent as ratingState/showUpgradeAction
+        // above. A rating on a restored conversation therefore stays local-only; this is a
+        // deliberate scope limit (P6-9 does not sync ratings on restored history), not a bug.
+        juce::String serverMessageId;
 
         // Patch diff preview, computed ONCE (attachPatchPreview()) at the point this message is
         // created, not on every updateChatDisplay() re-render — see that method's doc comment.
