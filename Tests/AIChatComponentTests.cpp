@@ -246,6 +246,40 @@ private:
     juce::String currentModel;
 };
 
+// P6-9: like MockPatchProvider (a single fenced ```json patch, so PatchCard/thumbs render), but
+// the response also carries a fixed conversationId + messageId, mirroring a Pro-plan hosted
+// backend whose persistence succeeded — the one condition that makes the rating callback's
+// server-sync path fire at all (see MessageData::serverMessageId).
+class MockPatchProviderWithServerIds : public synth::AIProvider {
+public:
+    juce::String getProviderName() const override { return "MockPatchProviderWithServerIds"; }
+
+    void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
+        callback({"MockModel"}, true);
+    }
+
+    RequestId sendPrompt(const std::vector<synth::AIProvider::Message>&, CompletionCallback callback,
+                         const juce::var& = juce::var(), std::function<void(const juce::String&)> = {}) override {
+        AIResponse response;
+        response.success = true;
+        response.content = "```json\n"
+                           R"({"nodes":[{"id":1,"type":"Oscillator"},{"id":2,"type":"Audio Output"}],)"
+                           R"("connections":[{"src":1,"srcPort":0,"dst":2,"dstPort":0}]})"
+                           "\n```";
+        response.conversationId = "server-conv-1";
+        response.messageId = "server-msg-1";
+        callback(response);
+        return {};
+    }
+
+    void cancel(RequestId) override {}
+    void setModel(const juce::String& name) override { currentModel = name; }
+    juce::String getCurrentModel() const override { return currentModel; }
+
+private:
+    juce::String currentModel;
+};
+
 // Finds the juce::Viewport AIChatComponent adds as a direct child and returns its viewed
 // component (messageList) — the parent of every rendered MessageBubble. MessageBubble itself is a
 // private nested type, but its base juce::Component* children (labels, buttons) are inspectable
@@ -1581,6 +1615,196 @@ TEST_F(AIChatComponentTest, NewChatClearsCloudConversationIdToo) {
     ASSERT_FALSE(provider->setConversationIdCalls.empty());
     EXPECT_TRUE(provider->setConversationIdCalls.back().isEmpty())
         << "New Chat must clear the cloud conversation id, not just the local one";
+}
+
+// ---- P6-9: rating sync to the server -------------------------------------------------------
+
+namespace {
+
+// Observation state for a fake feedback HttpPerformer, held via shared_ptr so it stays alive for
+// the detached background thread the rating callback fires — the thread's copy of the lambda (and
+// therefore this shared_ptr) can easily outlive the TEST_F stack frame, so nothing here may be
+// captured by reference. waitUntil() below pumps the message loop until callCount confirms the
+// call actually landed before any assertion reads the captured fields.
+struct CapturedFeedbackRequest {
+    std::atomic<int> callCount{0};
+    juce::String method;
+    juce::String url;
+    juce::StringPairArray headers;
+    juce::String body;
+};
+
+synth::AuthClient::HttpPerformer makeFeedbackPerformer(std::shared_ptr<CapturedFeedbackRequest> captured,
+                                                       int httpStatus = 200) {
+    return [captured, httpStatus](const juce::String& method, const juce::String& url,
+                                  const juce::StringPairArray& headers, const juce::String& body, int,
+                                  const std::atomic<bool>&) -> synth::AuthClient::HttpResult {
+        captured->method = method;
+        captured->url = url;
+        captured->headers = headers;
+        captured->body = body;
+        synth::AuthClient::HttpResult result;
+        result.httpStatus = httpStatus;
+        captured->callCount.fetch_add(1); // last write: callCount is the "call landed" signal
+        return result;
+    };
+}
+
+// Finds and clicks the thumbs-up button, driving the rating callback exactly like a real click.
+void clickThumbsUp(synth::AIChatComponent& chatComponent) {
+    auto* messageList = findMessageList(chatComponent);
+    ASSERT_NE(messageList, nullptr);
+    auto* goodButton =
+        findDescendantWithText<juce::TextButton>(messageList, juce::String::fromUTF8("\xF0\x9F\x91\x8D"));
+    ASSERT_NE(goodButton, nullptr);
+    goodButton->onClick();
+}
+
+} // namespace
+
+TEST_F(AIChatComponentTest, RatingWithServerMessageIdAndProAccountFiresExactlyOneFeedbackPost) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<MockPatchProviderWithServerIds>());
+
+    juce::ApplicationProperties props;
+    configureTestAppProperties(props);
+    synth::AIChatComponent chatComponent(service, props);
+    chatComponent.setSize(400, 600);
+
+    auto feedbackFile = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                            .getChildFile("AIChatComponentTest_" + juce::Uuid().toString())
+                            .getChildFile("patch_feedback.jsonl");
+    chatComponent.setPatchFeedbackFileForTesting(feedbackFile);
+
+    auto tokenStore = std::make_unique<synth::InMemoryTokenStore>();
+    tokenStore->save("stored-refresh-token");
+    synth::AccountService accountService("http://mock-host:8787", makeSignInPerformer("pro"), std::move(tokenStore));
+    chatComponent.setAccountService(&accountService);
+    signInWithPlan(accountService, "pro");
+
+    auto captured = std::make_shared<CapturedFeedbackRequest>();
+    chatComponent.setFeedbackHttpPerformerForTesting(makeFeedbackPerformer(captured));
+
+    juce::TextEditor* inputField = nullptr;
+    for (auto* child : chatComponent.getChildren())
+        if (auto* editor = dynamic_cast<juce::TextEditor*>(child))
+            inputField = editor;
+    ASSERT_NE(inputField, nullptr);
+    inputField->setText("give me a patch");
+    chatComponent.triggerSend();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+
+    clickThumbsUp(chatComponent);
+
+    ASSERT_TRUE(waitUntil([&] { return captured->callCount.load() >= 1; }))
+        << "feedback POST never landed on the background thread";
+    EXPECT_EQ(captured->callCount.load(), 1);
+    EXPECT_EQ(captured->method, juce::String("POST"));
+    EXPECT_EQ(captured->url, juce::String(synth::branding::kApiBaseUrl) +
+                                 "/v1/conversations/server-conv-1/messages/server-msg-1/feedback");
+    EXPECT_EQ(captured->headers.getValue("Authorization", ""), juce::String("Bearer at1"));
+
+    const auto parsedBody = juce::JSON::parse(captured->body);
+    auto* bodyObj = parsedBody.getDynamicObject();
+    ASSERT_NE(bodyObj, nullptr);
+    EXPECT_EQ(bodyObj->getProperty("rating").toString(), juce::String("up"));
+
+    chatComponent.setAccountService(nullptr);
+    feedbackFile.getParentDirectory().deleteRecursively();
+}
+
+TEST_F(AIChatComponentTest, RatingOnFreePlanAccountDoesNotFireFeedbackPost) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<MockPatchProviderWithServerIds>());
+
+    juce::ApplicationProperties props;
+    configureTestAppProperties(props);
+    synth::AIChatComponent chatComponent(service, props);
+    chatComponent.setSize(400, 600);
+
+    auto feedbackFile = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                            .getChildFile("AIChatComponentTest_" + juce::Uuid().toString())
+                            .getChildFile("patch_feedback.jsonl");
+    chatComponent.setPatchFeedbackFileForTesting(feedbackFile);
+
+    auto tokenStore = std::make_unique<synth::InMemoryTokenStore>();
+    tokenStore->save("stored-refresh-token");
+    synth::AccountService accountService("http://mock-host:8787", makeSignInPerformer("free"), std::move(tokenStore));
+    chatComponent.setAccountService(&accountService);
+    signInWithPlan(accountService, "free");
+
+    auto captured = std::make_shared<CapturedFeedbackRequest>();
+    chatComponent.setFeedbackHttpPerformerForTesting(makeFeedbackPerformer(captured));
+
+    juce::TextEditor* inputField = nullptr;
+    for (auto* child : chatComponent.getChildren())
+        if (auto* editor = dynamic_cast<juce::TextEditor*>(child))
+            inputField = editor;
+    ASSERT_NE(inputField, nullptr);
+    inputField->setText("give me a patch");
+    chatComponent.triggerSend();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+
+    // MockPatchProviderWithServerIds still returns a conversationId/messageId even against a Free
+    // account here (a real hosted backend never would — see AIResponse::conversationId's doc
+    // comment) so this test isolates ONLY the plan gate: serverMessageId is non-empty, yet the
+    // account being Free must still suppress the POST.
+    clickThumbsUp(chatComponent);
+
+    // Give a wrongly-fired background thread a real chance to land before asserting its absence.
+    juce::Thread::sleep(200);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    EXPECT_EQ(captured->callCount.load(), 0);
+
+    chatComponent.setAccountService(nullptr);
+    feedbackFile.getParentDirectory().deleteRecursively();
+}
+
+TEST_F(AIChatComponentTest, RatingWithNoServerMessageIdDoesNotFireFeedbackPostEvenWhenPro) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    // Plain MockPatchProvider: success, but no conversationId/messageId — mirrors a local Ollama
+    // response, or any response with no server-side persistence.
+    service.setProvider(std::make_unique<MockPatchProvider>());
+
+    juce::ApplicationProperties props;
+    configureTestAppProperties(props);
+    synth::AIChatComponent chatComponent(service, props);
+    chatComponent.setSize(400, 600);
+
+    auto feedbackFile = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                            .getChildFile("AIChatComponentTest_" + juce::Uuid().toString())
+                            .getChildFile("patch_feedback.jsonl");
+    chatComponent.setPatchFeedbackFileForTesting(feedbackFile);
+
+    auto tokenStore = std::make_unique<synth::InMemoryTokenStore>();
+    tokenStore->save("stored-refresh-token");
+    synth::AccountService accountService("http://mock-host:8787", makeSignInPerformer("pro"), std::move(tokenStore));
+    chatComponent.setAccountService(&accountService);
+    signInWithPlan(accountService, "pro");
+
+    auto captured = std::make_shared<CapturedFeedbackRequest>();
+    chatComponent.setFeedbackHttpPerformerForTesting(makeFeedbackPerformer(captured));
+
+    juce::TextEditor* inputField = nullptr;
+    for (auto* child : chatComponent.getChildren())
+        if (auto* editor = dynamic_cast<juce::TextEditor*>(child))
+            inputField = editor;
+    ASSERT_NE(inputField, nullptr);
+    inputField->setText("give me a patch");
+    chatComponent.triggerSend();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+
+    clickThumbsUp(chatComponent);
+
+    juce::Thread::sleep(200);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    EXPECT_EQ(captured->callCount.load(), 0);
+
+    chatComponent.setAccountService(nullptr);
+    feedbackFile.getParentDirectory().deleteRecursively();
 }
 
 #if SYNTH_ENABLE_TIMELINE

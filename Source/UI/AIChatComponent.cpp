@@ -1,6 +1,7 @@
 #include "AIChatComponent.h"
 #include "../AI/PatchDiff.h"
 #include "../Branding.h"
+#include <thread>
 
 namespace synth {
 
@@ -1106,6 +1107,11 @@ void AIChatComponent::sendButtonClicked() {
                 self->messages.push_back({"assistant", cleanText.trim(), json, /*isExpanded=*/false,
                                           /*showUpgradeAction=*/false, timelineOpsJson, timelineOpsPreview});
                 self->messages.back().responseMs = elapsed;
+                // P6-9: only present on a Pro-plan hosted response whose persistence
+                // succeeded (see AIResponse::messageId's doc comment) — empty for every other
+                // case (local Ollama, free plan, no provider), which is exactly what keeps the
+                // later rating-sync check a no-op for those.
+                self->messages.back().serverMessageId = aiResponse.messageId;
                 self->attachPatchPreview(self->messages.back());
 
                 // P6-8: local-first — every session writes here regardless of plan, right after
@@ -1281,10 +1287,51 @@ void AIChatComponent::updateChatDisplay() {
                 msg.ratingState = newRating;
                 msg.ratingComment = comment;
                 if (newRating != PatchRatingUiState::None) {
-                    patchFeedbackStore.record(msg.jsonPatch,
-                                              newRating == PatchRatingUiState::Up ? PatchFeedbackStore::Rating::Up
-                                                                                  : PatchFeedbackStore::Rating::Down,
-                                              comment);
+                    // The SERVER conversation id (aiService.getConversationId()), not
+                    // currentLocalConversationId — that's this component's own local-history key,
+                    // a different identifier the server's ownership check would just 404 on.
+                    const juce::String serverConversationId = aiService.getConversationId();
+                    const auto storeRating = newRating == PatchRatingUiState::Up ? PatchFeedbackStore::Rating::Up
+                                                                                 : PatchFeedbackStore::Rating::Down;
+
+                    // Local log: unconditional fallback, regardless of plan/sync outcome.
+                    patchFeedbackStore.record(msg.jsonPatch, storeRating, comment, serverConversationId,
+                                              msg.serverMessageId);
+
+                    // P6-9: additionally sync to the server, fire-and-forget, ONLY when this
+                    // turn's assistant message has a server-assigned id (Pro + persistence
+                    // succeeded when the message was created — see MessageData::serverMessageId)
+                    // AND the account is still signed-in Pro right now AND a usable access token
+                    // is available. No retry/queueing/error surface by design.
+                    if (!msg.serverMessageId.isEmpty() && serverConversationId.isNotEmpty()) {
+                        const AccountSnapshot snapshot =
+                            accountServicePtr != nullptr ? accountServicePtr->getSnapshot() : AccountSnapshot{};
+                        const bool signedIn = accountServicePtr != nullptr && snapshot.state == AccountState::SignedIn;
+                        const bool pro = isProPlan(snapshot);
+                        const juce::String accessToken =
+                            signedIn ? accountServicePtr->getAccessToken() : juce::String();
+
+                        if (signedIn && pro && accessToken.isNotEmpty()) {
+                            const juce::String ratingStr = newRating == PatchRatingUiState::Up ? "up" : "down";
+
+                            // Detached background thread, mirrors CloudHistorySource: capture
+                            // COPIES only (a small, copyable, stateless AuthClient plus plain
+                            // strings), never `this` or any UI state — the thread owns everything
+                            // it touches and outlives this callback with no dangling-reference
+                            // risk.
+                            synth::AuthClient client =
+                                testFeedbackHttpPerformer
+                                    ? synth::AuthClient(synth::branding::kApiBaseUrl, "synth-desktop",
+                                                        testFeedbackHttpPerformer)
+                                    : synth::AuthClient(synth::branding::kApiBaseUrl);
+                            std::thread([client, accessToken, serverConversationId, messageId = msg.serverMessageId,
+                                         ratingStr, comment]() {
+                                std::atomic<bool> cancelled{false};
+                                client.submitMessageFeedback(accessToken, serverConversationId, messageId, ratingStr,
+                                                             comment, cancelled);
+                            }).detach();
+                        }
+                    }
                 }
             },
             // Timeline Apply. Deliberately NOT a retry loop like the patch path's: a rejected
