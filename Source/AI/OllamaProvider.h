@@ -6,6 +6,7 @@
 #include <juce_events/juce_events.h>
 #include <map>
 #include <memory>
+#include <optional>
 #include <thread>
 #include <vector>
 
@@ -93,11 +94,24 @@ public:
 
     void setTestMode(bool testMode) { isTestMode = testMode; }
 
+    /** Optional knobs for reproducible structured-output requests (P6-13 corruption
+        investigation). Unset fields are omitted from the request body entirely, which is
+        exactly today's behavior — no production caller sets these, so this is opt-in only,
+        used by Tools/AIEvalHarness to pin sampling and to test disabling Ollama's `think`
+        (reasoning) mode as a candidate fix for reasoning text leaking into constrained JSON. */
+    struct SamplingOptions {
+        std::optional<bool> think;
+        std::optional<double> temperature;
+        std::optional<int> seed;
+    };
+    void setSamplingOptions(SamplingOptions options) { samplingOptions = options; }
+
 private:
     juce::String ollamaHost;
     juce::String currentModel;
     InputStreamFactory createStream; // Member variable for the stream factory
     bool isTestMode = false;
+    SamplingOptions samplingOptions; // all fields unset by default; see setSamplingOptions()
     std::thread discoveryThread;
     // Guards against (a) blocking the caller (we never join on the message thread)
     // and (b) ever having two discovery workers alive at once. Set true before a
