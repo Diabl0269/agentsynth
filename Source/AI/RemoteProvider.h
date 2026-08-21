@@ -14,7 +14,8 @@ namespace synth {
 /**
  * @class RemoteProvider
  * @brief AIProvider implementation talking to a local instance of the synth-platform inference
- *        service (`POST {host}/v1/capability/patch.generate`) over libcurl.
+ *        service (`POST {host}/v1/capability/<name>` — patch.generate via sendPrompt(),
+ *        timeline.generate via sendCapabilityRequest()) over libcurl.
  *
  * Mirrors OllamaProvider's worker-thread/queue/cancellation architecture (see that class for the
  * full rationale — the machinery here is deliberately the same shape, just simplified where
@@ -71,6 +72,28 @@ public:
     RequestId sendPrompt(const std::vector<Message>& conversation, CompletionCallback callback,
                          const juce::var& responseSchema = juce::var(),
                          std::function<void(const juce::String& delta)> onDelta = {}) override;
+
+    /** Queues a structured capability request (`POST {host}/v1/capability/<capability>`) whose
+        body the caller authored field-by-field — the non-conversational sibling of sendPrompt(),
+        added for timeline.generate (arrange mode).
+
+        `body` must be a JSON object var with a non-empty string "userPrompt" property (every
+        capability's input schema requires one); anything else fails fast with a typed Schema
+        error, no network hit — the same precedent as sendPrompt()'s void-schema rejection.
+        The provider adds "productName" itself (it owns branding, callers don't restate it) and
+        sends the same Authorization / X-Device-Id / x-conversation-id headers as sendPrompt(),
+        so entitlement enforcement and error mapping are IDENTICAL across capabilities — one
+        status→AIErrorKind mapping in processRequest() serves both.
+
+        The body is serialized to its final JSON string here, on the calling thread, before the
+        request is queued: a juce::var's DynamicObject is ref-counted and shared, and handing one
+        to the worker would make body lifetime/mutation a cross-thread contract. A string has no
+        such contract.
+
+        Same delivery guarantees as sendPrompt(): the callback fires exactly once, cancellation
+        goes through the same cancel(). */
+    RequestId sendCapabilityRequest(const juce::String& capability, const juce::var& body,
+                                    CompletionCallback callback) override;
 
     /** Abandons a queued or in-flight request. See OllamaProvider::cancel() for the full contract
         this mirrors: exactly-once callback, no-op on an unknown/completed id, and a queued request
@@ -143,6 +166,15 @@ private:
         AIProvider::CompletionCallback callback;
         juce::var responseSchema;
         std::shared_ptr<RequestState> state; // null only for a default-constructed Request
+
+        // Which /v1/capability/<name> endpoint this request targets. Empty for the legacy
+        // sendPrompt() path, which processRequest() treats as patch.generate with the body built
+        // from `conversation` — sendCapabilityRequest() sets both fields instead and leaves
+        // `conversation` empty. `capabilityBodyJson` is the COMPLETE, final body (productName
+        // included), serialized on the enqueuing thread — see sendCapabilityRequest()'s doc
+        // comment for why a string crosses the thread boundary rather than a juce::var.
+        juce::String capability;
+        juce::String capabilityBodyJson;
     };
 
     // Monotonically increasing; only ever accessed from sendPrompt() callers, so a plain
@@ -169,6 +201,13 @@ private:
 
     void run() override;
     void processRequest(const Request& req);
+
+    /** Shared enqueue path for sendPrompt()/sendCapabilityRequest(): assigns id/state under the
+        queue lock, applies the caller's pre-computed validation verdict (`validationMessage`
+        empty = valid), registers the request and wakes/starts the worker, or delivers the
+        rejection synchronously. The shutting-down check stays in here, under the lock, so the
+        two senders cannot drift on the one ordering that matters. */
+    RequestId enqueueOrReject(Request&& request, AIErrorKind validationKind, const juce::String& validationMessage);
 
     /** Starts a worker for a queue that currently has none. Returns false if no worker could be
         started, in which case the caller MUST fail the queue. */

@@ -50,6 +50,45 @@ public:
     void sendButtonClicked();
     void triggerSend() { sendButtonClicked(); }
 
+    /**
+     * @brief Syncs the Patch/Arrange mode selector's visibility to its gate: the timeline
+     *        feature preference is on (areTimelineToolsEnabled — the same switch
+     *        MainComponent::applyTimelineFeatureEnabled drives — plus a live timeline context).
+     *
+     * Deliberately PROVIDER-AGNOSTIC (the local/remote parity rule): arrange mode works on both
+     * transports (see AIIntegrationService::sendArrangeMessage), so the provider never gates the
+     * UI. Called from refreshModels() (a convenient known resync point) and by MainComponent
+     * whenever the timeline preference toggles — the service has no listener mechanism for that
+     * switch, so the owner that flips it re-syncs this, the same ownership shape as the
+     * refreshModels() re-call documented in CLAUDE.md. Hiding the selector also resets it to
+     * Patch: an invisible control must not keep steering requests. Always hides in a
+     * SYNTH_ENABLE_TIMELINE=OFF build.
+     */
+    void refreshModeControls();
+
+    // Testing hooks for the mode selector — mirror simulateCancelClick()'s "drive the real
+    // member synchronously" convention.
+    bool isModeSelectorVisibleForTesting() const { return modeSelector.isVisible(); }
+    void setArrangeModeForTesting(bool arrange) {
+        modeSelector.setSelectedId(arrange ? kModeSelectorArrangeId : kModeSelectorPatchId, juce::dontSendNotification);
+    }
+
+    // Testing hooks: the timeline half of the most recent assistant message ("" when it carries
+    // none). Json is empty-but-preview-populated for an envelope that failed validation — the
+    // rejection is shown, with nothing appliable behind it.
+    juce::String getLastTimelineOpsJsonForTesting() const {
+        for (auto it = messages.rbegin(); it != messages.rend(); ++it)
+            if (it->role == "assistant")
+                return it->timelineOpsJson;
+        return {};
+    }
+    juce::String getLastTimelineOpsPreviewForTesting() const {
+        for (auto it = messages.rbegin(); it != messages.rend(); ++it)
+            if (it->role == "assistant")
+                return it->timelineOpsPreview;
+        return {};
+    }
+
     // Decides whether an outgoing message should carry the live patch JSON + structured-output
     // schema (see AIIntegrationService::sendMessage). Pure and free-standing (no UI state) so it
     // can be unit-tested directly: any message naming a real module/effect type, or using a
@@ -268,6 +307,20 @@ private:
     juce::TextButton newChatButton;
     juce::TextButton historyButton; // P6-8: opens the history list/restore/clear popup
     juce::ComboBox modelPicker;
+
+    // Patch/Arrange request routing — see refreshModeControls() for the visibility gates and
+    // arrangeModeActive() for how sendButtonClicked() consumes it. Item ids, not indices, so a
+    // future third mode can't silently renumber these two.
+    juce::ComboBox modeSelector;
+    static constexpr int kModeSelectorPatchId = 1;
+    static constexpr int kModeSelectorArrangeId = 2;
+
+    // True when an outgoing send should route to timeline.generate (arrange mode): the selector
+    // is VISIBLE (both gates hold) and set to Arrange. Visibility is part of the condition on
+    // purpose — a hidden selector's stale selection must never steer a request.
+    bool arrangeModeActive() const {
+        return modeSelector.isVisible() && modeSelector.getSelectedId() == kModeSelectorArrangeId;
+    }
 
     // P4-6 privacy disclosure: visible only while the active provider is hosted (RemoteProvider).
     // Zero-height/invisible otherwise, same contract as accountRow/planBadge below it in the

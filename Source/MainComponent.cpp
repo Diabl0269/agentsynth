@@ -309,6 +309,11 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // The AI's timeline/automation authoring surface follows the runtime "Show timeline"
     // preference from first launch, not only from the next Preferences toggle.
     aiService.setTimelineToolsEnabled(timelineFeatureEnabled);
+    // The chat's Patch/Arrange selector reads this switch but gets no notification of it — the
+    // refreshModels() call above ran BEFORE the switch (and before the timeline context existed),
+    // so its gate check saw "off". Re-sync now that both are installed; same ownership shape as
+    // the refreshModels() ordering contract itself.
+    aiChatComponent.refreshModeControls();
 
     // The WRITE half. The service only ever holds the doc as const (it is a context reader),
     // and it owns no undo manager for the timeline, so the host supplies the apply path — the same
@@ -2225,6 +2230,9 @@ void MainComponent::applyTimelineFeatureEnabled(bool enabled) {
     // AIIntegrationService::setTimelineToolsEnabled — extraction/apply stay wired, gated by the
     // user's own Apply click either way).
     aiService.setTimelineToolsEnabled(enabled);
+    // The chat's Patch/Arrange selector follows it too; the service has no listener for this
+    // switch, so the owner that flipped it re-syncs the selector.
+    aiChatComponent.refreshModeControls();
 }
 #endif
 
