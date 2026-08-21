@@ -327,6 +327,12 @@ private:
     // switch so popup glyphs match the new theme tint.
     void refreshWaveformComboIcons();
 
+    // Push active-theme colours onto the on-screen MidiKeyboardComponent (if any).
+    // MidiKeyboard ColourIds live in juce_audio_utils, which Core does not link, so they
+    // cannot be set from AppLookAndFeel::applyTheme — this is the only theming seam.
+    // Called from createControls() and again from lookAndFeelChanged() on every theme switch.
+    void applyKeyboardThemeColours();
+
     // Refresh icon images whenever the LookAndFeel is changed (e.g. theme switch).
     void lookAndFeelChanged() override;
 
