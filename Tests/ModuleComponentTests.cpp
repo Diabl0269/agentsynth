@@ -1002,8 +1002,7 @@ TEST_F(ModuleComponentTest, MidiKeyboardKeysFollowThemeChange) {
 
     lf.applyTheme(synth::theme::makeNeon());
     moduleComponent.sendLookAndFeelChange();
-    EXPECT_EQ(keys->findColour(juce::MidiKeyboardComponent::whiteNoteColourId),
-              synth::theme::makeNeon().colors.bg1);
+    EXPECT_EQ(keys->findColour(juce::MidiKeyboardComponent::whiteNoteColourId), synth::theme::makeNeon().colors.bg1);
     EXPECT_EQ(keys->findColour(juce::MidiKeyboardComponent::blackNoteColourId),
               synth::theme::makeNeon().colors.surfaceHi);
     EXPECT_EQ(keys->findColour(juce::MidiKeyboardComponent::keyDownOverlayColourId),
