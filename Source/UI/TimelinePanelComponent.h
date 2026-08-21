@@ -73,9 +73,11 @@ public:
     // bubbles an unhandled wheel event from the ruler child up to this override.
     //
     // Every branch reads the wheel through synth::ui::ScrollPolicy: the modifier-decided branches
-    // (both zooms) take dominantWheelDelta(), so they survive macOS folding Shift+wheel into
-    // deltaX, and the plain-scroll branches take scrollAmount(delta, scrollInverted_), which is the
-    // juce::Viewport sign convention plus this panel's own inversion preference.
+    // (both zooms) take dominantWheelDelta() for MAGNITUDE and wheelGestureIsUpward() for
+    // DIRECTION, so they survive macOS folding Shift+wheel into deltaX and stay "up zooms in"
+    // regardless of the OS's natural-scrolling setting (XORed against zoomScrollInverted_ — see its
+    // setter); the plain-scroll branches take scrollAmount(delta, scrollInverted_), which is the
+    // juce::Viewport sign convention plus this panel's own (separate) inversion preference.
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
 
     // Non-owning; may be null (tests, or before MainComponent finishes wiring). Forwarded to the
@@ -295,15 +297,15 @@ public:
      *          re-arms and re-persists, it just reports no change). */
     bool setSnapValue(TimelineViewState::Snap value);
 
-    /** Steps the grid one division through the MUSICAL values only — Bar, 1, 1/2, 1/4, 1/8, 1/16 —
-     *  with `direction` > 0 going FINER (toward 1/16) and < 0 going COARSER (toward Bar). Zero is a
-     *  no-op.
+    /** Steps the grid one division through the MUSICAL values only — Bar, 1, 1/2, 1/4, 1/8, 1/16,
+     *  1/32, 1/64, 1/128 — with `direction` > 0 going FINER (toward 1/128) and < 0 going COARSER
+     *  (toward Bar). Zero is a no-op.
      *
      *  Two rules, both chosen for how they feel under a held-down key rather than for symmetry:
      *
-     *  - CLAMPED at both ends, never wrapping. Leaning on "finer" and parking at 1/16 is what the
+     *  - CLAMPED at both ends, never wrapping. Leaning on "finer" and parking at 1/128 is what the
      *    hand expects; wrapping silently back to Bar mid-flow moves every subsequent edit onto a
-     *    16x coarser grid, and the user finds out from the result, not from the keypress.
+     *    64x coarser grid, and the user finds out from the result, not from the keypress.
      *  - Snap::Off is never a stop on the cycle — turning magnetism off stays the Q key's job. So
      *    cycling FROM Off (in either direction, one simple rule) enters at
      *    TimelineViewState::lastMusicalSnap, the last division the user actually chose, falling
@@ -331,9 +333,22 @@ public:
      *  deliberate flip and not a re-application of the OS setting). Default false = "natural" =
      *  the juce::Viewport convention every other scrolling surface in the app already follows.
      *  Not persisted here: the owner (Preferences) decides whether a preference exists, the same
-     *  way it owns the timeline's other opt-in behaviours. */
-    void setScrollInverted(bool inverted) noexcept { scrollInverted_ = inverted; }
+     *  way it owns the timeline's other opt-in behaviours. Forwarded to the piano roll (see
+     *  setTransport/setUndoManager above for the same "one preference, every surface that scrolls"
+     *  idiom) so a clip-lane scroll and a roll scroll never disagree about which way is "natural". */
+    void setScrollInverted(bool inverted) noexcept;
     bool isScrollInverted() const noexcept { return scrollInverted_; }
+
+    /** App-level ZOOM-direction preference for the Cmd/Cmd+Shift wheel-zoom gestures (horizontal
+     *  and vertical) — independent of setScrollInverted above, which governs the PLAIN-scroll
+     *  branches only. Default false = "up zooms in": mouseWheelMove derives the physical gesture
+     *  direction via synth::ui::wheelGestureIsUpward (isReversed-aware, unlike a raw delta sign —
+     *  see ScrollPolicy.h) and XORs it with this flag, so flipping the preference flips the sense
+     *  of BOTH axes at once rather than requiring two separate settings. Forwarded to the piano
+     *  roll for the same reason setScrollInverted is. Not persisted here — see setScrollInverted's
+     *  comment. */
+    void setZoomScrollInverted(bool inverted) noexcept;
+    bool isZoomScrollInverted() const noexcept { return zoomScrollInverted_; }
 
     /** The user's bindings for this panel's OWN keys: the six tool digits, the snap toggle, the loop
      *  toggle and loop-the-selection. Non-owning and may stay null — with no manager installed
@@ -612,6 +627,9 @@ private:
     // App-level scroll inversion — see setScrollInverted(). Every plain-scroll branch in
     // mouseWheelMove goes through synth::ui::scrollAmount with this flag.
     bool scrollInverted_ = false;
+    // App-level ZOOM-scroll inversion — see setZoomScrollInverted(). Both Cmd-modified zoom
+    // branches in mouseWheelMove XOR this against synth::ui::wheelGestureIsUpward(wheel).
+    bool zoomScrollInverted_ = false;
 
     // Non-owning, may stay null (see setShortcutManager). const because this panel only ever READS
     // bindings — rebinding belongs to Settings.

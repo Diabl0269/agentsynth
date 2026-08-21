@@ -786,8 +786,11 @@ TEST(TimelinePanelSnapApiTest, SetSnapValueSyncsTheComboAndPersistsThroughTheExi
         s->getFile().deleteFile();
 }
 
-// The cycle walks Bar -> 1 -> 1/2 -> 1/4 -> 1/8 -> 1/16 and CLAMPS at both ends: it never wraps and
-// never lands on Off (that is the Q key's job).
+// The cycle walks Bar -> 1 -> 1/2 -> 1/4 -> 1/8 -> 1/16 -> 1/32 -> 1/64 -> 1/128 and CLAMPS at both
+// ends: it never wraps and never lands on Off (that is the Q key's job). The finest stop moved from
+// Sixteenth to HundredTwentyEighth when the three finer divisions were added — see
+// TimelineViewState::Snap's class comment for why they were appended after Sixteenth rather than
+// inserted in note-value order.
 TEST(TimelinePanelSnapApiTest, CycleWalksTheMusicalDivisionsAndClampsAtBothEnds) {
     using Snap = synth::ui::TimelineViewState::Snap;
     synth::ui::TimelinePanelComponent panel; // no ApplicationProperties: nothing reads or writes settings
@@ -804,17 +807,18 @@ TEST(TimelinePanelSnapApiTest, CycleWalksTheMusicalDivisionsAndClampsAtBothEnds)
     EXPECT_FALSE(panel.cycleSnapValue(-1)) << "clamped at Bar — no wrap, and never Off";
     EXPECT_EQ(panel.getViewState().snap, Snap::Bar);
 
-    // Finer, all the way up the list.
-    for (auto expected : {Snap::Whole, Snap::Half, Snap::Quarter, Snap::Eighth, Snap::Sixteenth}) {
+    // Finer, all the way up the list, now through the three new fine divisions.
+    for (auto expected : {Snap::Whole, Snap::Half, Snap::Quarter, Snap::Eighth, Snap::Sixteenth, Snap::ThirtySecond,
+                          Snap::SixtyFourth, Snap::HundredTwentyEighth}) {
         EXPECT_TRUE(panel.cycleSnapValue(1));
         EXPECT_EQ(panel.getViewState().snap, expected);
     }
-    EXPECT_FALSE(panel.cycleSnapValue(1)) << "clamped at 1/16 — a held key parks here";
-    EXPECT_EQ(panel.getViewState().snap, Snap::Sixteenth);
-    EXPECT_EQ(panel.getSnapCombo().getSelectedId(), (int)Snap::Sixteenth + 1);
+    EXPECT_FALSE(panel.cycleSnapValue(1)) << "clamped at 1/128 — a held key parks here";
+    EXPECT_EQ(panel.getViewState().snap, Snap::HundredTwentyEighth);
+    EXPECT_EQ(panel.getSnapCombo().getSelectedId(), (int)Snap::HundredTwentyEighth + 1);
 
     EXPECT_FALSE(panel.cycleSnapValue(0)) << "no direction, no move";
-    EXPECT_EQ(panel.getViewState().snap, Snap::Sixteenth);
+    EXPECT_EQ(panel.getViewState().snap, Snap::HundredTwentyEighth);
 }
 
 // From Off, BOTH directions re-enter at the last division the user actually chose — with the view
@@ -838,6 +842,90 @@ TEST(TimelinePanelSnapApiTest, CyclingFromOffReEntersAtTheLastMusicalDivision) {
     fresh.getViewState().snap = Snap::Off; // straight assignment: never went through setSnap()
     EXPECT_TRUE(fresh.cycleSnapValue(1));
     EXPECT_EQ(fresh.getViewState().snap, Snap::Quarter);
+}
+
+// ---- The three finest divisions (1/32, 1/64, 1/128) added alongside Sixteenth ----
+
+// A note value is a fraction of a whole note (4 beats — see TimelineViewState::divisionBeatsRaw's
+// header comment), so 1/32 is an eighth of a beat, 1/64 a sixteenth, 1/128 a thirty-second — each
+// half the one before it, same as Eighth->Sixteenth already was.
+TEST(TimelinePanelSnapApiTest, DivisionBeatsForTheThreeNewFineSnaps) {
+    using Snap = synth::ui::TimelineViewState::Snap;
+    synth::ui::TimelinePanelComponent panel;
+    auto& state = panel.getViewState();
+
+    state.snap = Snap::ThirtySecond;
+    EXPECT_DOUBLE_EQ(state.divisionBeats(4.0), 0.125);
+    EXPECT_DOUBLE_EQ(state.divisionBeatsRaw(4.0), 0.125);
+
+    state.snap = Snap::SixtyFourth;
+    EXPECT_DOUBLE_EQ(state.divisionBeats(4.0), 0.0625);
+    EXPECT_DOUBLE_EQ(state.divisionBeatsRaw(4.0), 0.0625);
+
+    state.snap = Snap::HundredTwentyEighth;
+    EXPECT_DOUBLE_EQ(state.divisionBeats(4.0), 0.03125);
+    EXPECT_DOUBLE_EQ(state.divisionBeatsRaw(4.0), 0.03125);
+
+    // beatsPerBar is irrelevant below Snap::Bar — same contract every other musical division has.
+    EXPECT_DOUBLE_EQ(state.divisionBeats(3.0), 0.03125);
+}
+
+// The combo's ids follow the (int)snap + 1 convention all the way through the new entries, and
+// picking one from the combo reaches the view state through the same setSnapValue path as every
+// other division.
+TEST(TimelinePanelSnapComboTest, ComboShowsAndSetsTheThreeNewFineDivisions) {
+    using Snap = synth::ui::TimelineViewState::Snap;
+    synth::ui::TimelinePanelComponent panel;
+    auto& combo = panel.getSnapCombo();
+
+    EXPECT_EQ(combo.getItemText(combo.indexOfItemId((int)Snap::ThirtySecond + 1)), "1/32");
+    EXPECT_EQ(combo.getItemText(combo.indexOfItemId((int)Snap::SixtyFourth + 1)), "1/64");
+    EXPECT_EQ(combo.getItemText(combo.indexOfItemId((int)Snap::HundredTwentyEighth + 1)), "1/128");
+
+    combo.setSelectedId((int)Snap::SixtyFourth + 1, juce::sendNotificationSync);
+    EXPECT_EQ(panel.getViewState().snap, Snap::SixtyFourth);
+
+    EXPECT_TRUE(panel.setSnapValue(Snap::HundredTwentyEighth));
+    EXPECT_EQ(combo.getSelectedId(), (int)Snap::HundredTwentyEighth + 1) << "the combo mirrors the view state";
+}
+
+// Same persistence path as SnapChoicePersists above, exercised at one of the new fine divisions —
+// the jlimit clamp in setApplicationProperties() had to move to HundredTwentyEighth alongside the
+// combo/cycle bounds, and this is what proves a restored fine value survives it rather than being
+// silently clamped back down to Sixteenth.
+TEST(TimelinePanelSnapComboTest, AFineSnapPersistsAndRestoresThroughTheExistingPath) {
+    using Snap = synth::ui::TimelineViewState::Snap;
+
+    juce::PropertiesFile::Options opts;
+    opts.applicationName = "Agent Synth Timeline Fine Snap Test";
+    opts.folderName = "Agent Synth Timeline Fine Snap Test";
+    opts.filenameSuffix = "settings";
+    opts.osxLibrarySubFolder = "Application Support";
+    opts.storageFormat = juce::PropertiesFile::storeAsXML;
+
+    // Hermetic regardless of a previous run — same idiom as SnapChoicePersists above.
+    {
+        juce::ApplicationProperties initial;
+        initial.setStorageParameters(opts);
+        if (auto* s = initial.getUserSettings())
+            s->getFile().deleteFile();
+    }
+
+    juce::ApplicationProperties props;
+    props.setStorageParameters(opts);
+
+    synth::ui::TimelinePanelComponent panel;
+    panel.setApplicationProperties(&props);
+    ASSERT_TRUE(panel.setSnapValue(Snap::HundredTwentyEighth));
+
+    synth::ui::TimelinePanelComponent panel2;
+    panel2.setApplicationProperties(&props);
+    EXPECT_EQ(panel2.getViewState().snap, Snap::HundredTwentyEighth);
+    EXPECT_EQ(panel2.getSnapCombo().getSelectedId(), (int)Snap::HundredTwentyEighth + 1);
+
+    // Reset the persisted keys, per this file's pattern, so no other test inherits them.
+    if (auto* s = props.getUserSettings())
+        s->getFile().deleteFile();
 }
 
 // ---- zoomTimelineHorizontal / zoomTimelineVertical: the same paths the wheel/pinch use ----
@@ -985,6 +1073,107 @@ TEST(TimelinePanelInteractionTest, ScrollInversionFlipsBothAxesAroundTheViewport
     panel.mouseWheelMove(makeClickEvent(panel, {400.0f, 100.0f}), wheel);
     EXPECT_GT(state.trackScrollY, 200.0);
     EXPECT_NEAR(state.trackScrollY - 200.0, 200.0 - naturalY, 1e-9);
+}
+
+// ---- Zoom-scroll direction (synth::ui::wheelGestureIsUpward) ----
+//
+// UP ZOOMS IN by default, and that must hold under BOTH natural-scrolling conventions: JUCE's
+// isReversed flag flips which raw delta sign is "up" (see ScrollPolicy.h's wheelGestureIsUpward
+// comment), so a raw-delta-sign zoom — what mouseWheelMove did before this test was added — would
+// silently reverse itself depending on the OS's natural-scrolling setting. None of the OLDER
+// zoom-wheel tests above (WheelScrollsAndCmdWheelZooms, ModifierZoomSurvivesTheShiftAxisSwap) had
+// to change for this: they only ever drive a positive deltaY with isReversed left at its default
+// (false), which is "up" under both the old raw-sign reading and the new gesture-based one, and
+// none of them assert a direction anyway — WheelScrollsAndCmdWheelZooms asserts the anchor
+// invariant, ModifierZoomSurvivesTheShiftAxisSwap asserts the axis-swap guard fires at all.
+TEST(TimelinePanelInteractionTest, ZoomUpZoomsInOnBothNaturalScrollConventions) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 220);
+    for (int i = 0; i < 24; ++i)
+        doc.addTrack(synth::TrackKind::Midi, "T" + juce::String(i));
+
+    auto& state = panel.getViewState();
+    ASSERT_FALSE(panel.isZoomScrollInverted()) << "up-zooms-in is the default";
+    const auto cmd = juce::ModifierKeys(juce::ModifierKeys::commandModifier);
+    const auto cmdShift = juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier);
+    const juce::Point<float> cursor(300.0f, 12.0f);
+
+    // isReversed == false: physically "up" is a POSITIVE delta.
+    state.pixelsPerBeat = 24.0;
+    state.rowHeightScale = 1.0;
+    juce::MouseWheelDetails naturalUp{};
+    naturalUp.deltaY = 0.5f; // isReversed defaults false
+    panel.mouseWheelMove(makeClickEvent(panel, cursor, cmd), naturalUp);
+    EXPECT_GT(state.pixelsPerBeat, 24.0) << "up zooms IN horizontally";
+    panel.mouseWheelMove(makeClickEvent(panel, cursor, cmdShift), naturalUp);
+    EXPECT_GT(state.rowHeightScale, 1.0) << "up zooms IN vertically";
+
+    // isReversed == true: the SAME physical gesture now arrives as a NEGATIVE delta, so the raw
+    // sign flipped — but the outcome must not: it is still an upward gesture, so it still zooms IN.
+    state.pixelsPerBeat = 24.0;
+    state.rowHeightScale = 1.0;
+    juce::MouseWheelDetails reversedUp{};
+    reversedUp.deltaY = -0.5f;
+    reversedUp.isReversed = true;
+    panel.mouseWheelMove(makeClickEvent(panel, cursor, cmd), reversedUp);
+    EXPECT_GT(state.pixelsPerBeat, 24.0) << "the same physical 'up' zooms IN regardless of isReversed";
+    panel.mouseWheelMove(makeClickEvent(panel, cursor, cmdShift), reversedUp);
+    EXPECT_GT(state.rowHeightScale, 1.0);
+}
+
+// setZoomScrollInverted(true) flips the sense of BOTH zoom axes at once — one preference behind
+// both Cmd branches, not two — while leaving the magnitude/sensitivity curve (and the unrelated
+// setScrollInverted preference) alone.
+TEST(TimelinePanelInteractionTest, SetZoomScrollInvertedFlipsBothZoomAxes) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 220);
+    for (int i = 0; i < 24; ++i)
+        doc.addTrack(synth::TrackKind::Midi, "T" + juce::String(i));
+
+    auto& state = panel.getViewState();
+    const auto cmd = juce::ModifierKeys(juce::ModifierKeys::commandModifier);
+    const auto cmdShift = juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier);
+    const juce::Point<float> cursor(300.0f, 12.0f);
+    juce::MouseWheelDetails up{};
+    up.deltaY = 0.5f;
+
+    panel.setZoomScrollInverted(true);
+    EXPECT_TRUE(panel.isZoomScrollInverted());
+
+    state.pixelsPerBeat = 24.0;
+    state.rowHeightScale = 1.0;
+    panel.mouseWheelMove(makeClickEvent(panel, cursor, cmd), up);
+    EXPECT_LT(state.pixelsPerBeat, 24.0) << "inverted: up now zooms OUT horizontally";
+    panel.mouseWheelMove(makeClickEvent(panel, cursor, cmdShift), up);
+    EXPECT_LT(state.rowHeightScale, 1.0) << "inverted: up now zooms OUT vertically";
+
+    // A separate preference — flipping zoom must not have touched plain-scroll direction.
+    EXPECT_FALSE(panel.isScrollInverted());
+}
+
+// The panel forwards BOTH scroll-direction preferences to the piano roll: it runs its OWN
+// plain-scroll and Cmd-wheel-zoom branches (PianoRollComponent::mouseWheelMove), so a preference
+// set from the panel chrome (or Preferences) has to reach it directly — TimelineViewState, shared
+// between the two surfaces, carries no scroll/zoom preferences to piggyback on.
+TEST(TimelinePanelInteractionTest, ScrollAndZoomInversionForwardToThePianoRoll) {
+    synth::ui::TimelinePanelComponent panel;
+    ASSERT_FALSE(panel.getPianoRoll().isScrollInverted());
+    ASSERT_FALSE(panel.getPianoRoll().isZoomScrollInverted());
+
+    panel.setScrollInverted(true);
+    EXPECT_TRUE(panel.getPianoRoll().isScrollInverted());
+
+    panel.setZoomScrollInverted(true);
+    EXPECT_TRUE(panel.getPianoRoll().isZoomScrollInverted());
+
+    panel.setScrollInverted(false);
+    panel.setZoomScrollInverted(false);
+    EXPECT_FALSE(panel.getPianoRoll().isScrollInverted());
+    EXPECT_FALSE(panel.getPianoRoll().isZoomScrollInverted());
 }
 
 // ============================================================================

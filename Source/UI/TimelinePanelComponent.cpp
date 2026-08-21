@@ -117,6 +117,9 @@ TimelinePanelComponent::TimelinePanelComponent() {
     snapCombo_.addItem("1/4", 5);
     snapCombo_.addItem("1/8", 6);
     snapCombo_.addItem("1/16", 7);
+    snapCombo_.addItem("1/32", 8);
+    snapCombo_.addItem("1/64", 9);
+    snapCombo_.addItem("1/128", 10);
     snapCombo_.setSelectedId((int)viewState_.snap + 1, juce::dontSendNotification);
     // A pick from the combo is just setSnapValue() with the id decoded — the shortcut layer, the
     // grid cycle and this menu therefore share ONE writer (which is also the one place the choice
@@ -778,8 +781,10 @@ bool TimelinePanelComponent::matchesAction(const juce::KeyPress& key, const juce
     // An invalid binding is "this action has no key": either the user cleared it, or this build's
     // ShortcutManager has never heard of the id (getBinding answers an unknown id with a
     // default-constructed KeyPress). Falling back to `fallback` here would resurrect a key the user
-    // deliberately unbound, so it deliberately does not.
-    return binding.isValid() && key == binding;
+    // deliberately unbound, so it deliberately does not. keyPressMatches rather than == so a user
+    // rebind onto a Shift-chorded symbol key survives the macOS peer delivering the SHIFTED
+    // character as the key code (see ShortcutManager::keyPressMatches).
+    return ShortcutManager::keyPressMatches(binding, key);
 }
 
 bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
@@ -995,7 +1000,7 @@ void TimelinePanelComponent::setApplicationProperties(juce::ApplicationPropertie
         return;
 
     int saved = appProperties_->getUserSettings()->getIntValue(kTimelineSnapPropertyKey, (int)viewState_.snap);
-    saved = juce::jlimit((int)TimelineViewState::Snap::Off, (int)TimelineViewState::Snap::Sixteenth, saved);
+    saved = juce::jlimit((int)TimelineViewState::Snap::Off, (int)TimelineViewState::Snap::HundredTwentyEighth, saved);
     // setSnap (not a bare assignment) so a restored musical division is also where cycleSnapValue's
     // from-Off rule resumes — a restored Snap::Off leaves lastMusicalSnap at its default, which is
     // exactly the documented fallback.
@@ -1040,10 +1045,10 @@ bool TimelinePanelComponent::cycleSnapValue(int direction) {
     }
 
     // Snap is declared coarsest -> finest (see TimelineViewState), so the step is a clamped +-1 on
-    // the enum's own int. CLAMPED, never wrapped: parking on 1/16 under a held key is far less
+    // the enum's own int. CLAMPED, never wrapped: parking on 1/128 under a held key is far less
     // surprising than silently landing back on Bar.
     const int stepped =
-        juce::jlimit((int)Snap::Bar, (int)Snap::Sixteenth, (int)viewState_.snap + (direction > 0 ? 1 : -1));
+        juce::jlimit((int)Snap::Bar, (int)Snap::HundredTwentyEighth, (int)viewState_.snap + (direction > 0 ? 1 : -1));
     return setSnapValue((Snap)stepped);
 }
 
@@ -1063,6 +1068,19 @@ void TimelinePanelComponent::persistSnapChoice() {
     appProperties_->saveIfNeeded();
 }
 
+void TimelinePanelComponent::setScrollInverted(bool inverted) noexcept {
+    scrollInverted_ = inverted;
+    // Keep the roll in step — see this setter's header comment. It runs its OWN plain-scroll
+    // branches (PianoRollComponent::mouseWheelMove), so a preference set on the panel chrome must
+    // reach it directly rather than through anything shared like TimelineViewState.
+    pianoRoll_.setScrollInverted(inverted);
+}
+
+void TimelinePanelComponent::setZoomScrollInverted(bool inverted) noexcept {
+    zoomScrollInverted_ = inverted;
+    pianoRoll_.setZoomScrollInverted(inverted); // same forwarding reason as setScrollInverted above
+}
+
 //==============================================================================
 void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) {
     // Reproject into the ruler's coordinate space regardless of whether the event originated on
@@ -1078,16 +1096,25 @@ void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juc
     // The two ZOOM branches are decided by their MODIFIERS, so they must not read a single axis:
     // macOS folds Shift+wheel into deltaX, which would leave Cmd+Shift+wheel reading deltaY == 0
     // and doing nothing at all. dominantWheelDelta() is that guard (see ScrollPolicy.h).
-    const double zoomDelta = (double)dominantWheelDelta(wheel);
+    //
+    // Direction is read from the PHYSICAL gesture (wheelGestureIsUpward, isReversed-aware), not
+    // from the delta's raw sign: "up zooms in" must mean the same finger motion whether or not the
+    // OS has natural scrolling on, exactly the reasoning ScrollPolicy.h documents for that helper.
+    // zoomScrollInverted_ XORs on top, the same second-deliberate-flip idiom scrollInverted_ already
+    // applies to plain scrolling below. Magnitude is the dominant axis's unsigned size, so today's
+    // exponential sensitivity curve is unchanged — only the sign moved from "the delta" to "the
+    // gesture direction, then the preference".
+    const bool zoomingIn = wheelGestureIsUpward(wheel) != zoomScrollInverted_;
+    const double zoomMagnitude = std::abs((double)dominantWheelDelta(wheel)) * kZoomWheelSensitivity;
+    const double zoomFactor = std::exp(zoomingIn ? zoomMagnitude : -zoomMagnitude);
 
     if (e.mods.isCommandDown() && e.mods.isShiftDown()) {
-        zoomTrackRows(std::exp(zoomDelta * kZoomWheelSensitivity),
-                      (double)e.getEventRelativeTo(&clipLaneArea_).position.y);
+        zoomTrackRows(zoomFactor, (double)e.getEventRelativeTo(&clipLaneArea_).position.y);
         return;
     }
 
     if (e.mods.isCommandDown()) {
-        zoomHorizontalAroundX(std::exp(zoomDelta * kZoomWheelSensitivity), anchorX);
+        zoomHorizontalAroundX(zoomFactor, anchorX);
         return;
     }
 

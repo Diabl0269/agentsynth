@@ -1021,17 +1021,25 @@ TEST_F(FocusArbitrationTest, SnapCommandsDriveThePanelsSharedGrid) {
     EXPECT_EQ(view.snap, Snap::Quarter);
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapSetSixteenth, false));
     EXPECT_EQ(view.snap, Snap::Sixteenth);
+    // The finer half of the row (Ctrl+Shift+6/7/8), folded into the same perform arm.
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapSetThirtySecond, false));
+    EXPECT_EQ(view.snap, Snap::ThirtySecond);
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapSetSixtyFourth, false));
+    EXPECT_EQ(view.snap, Snap::SixtyFourth);
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapSetHundredTwentyEighth, false));
+    EXPECT_EQ(view.snap, Snap::HundredTwentyEighth);
 
-    // Cycle: +1 goes FINER, -1 COARSER, and both CLAMP rather than wrapping.
+    // Cycle: +1 goes FINER, -1 COARSER, and both CLAMP rather than wrapping. The finest division is
+    // now 1/128, so that is where a held key parks.
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapCycleNext, false));
-    EXPECT_EQ(view.snap, Snap::Sixteenth) << "already at the finest division - clamped, never wrapped to Bar";
+    EXPECT_EQ(view.snap, Snap::HundredTwentyEighth) << "already at the finest division - clamped, never wrapped to Bar";
 
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapCyclePrev, false));
-    EXPECT_EQ(view.snap, Snap::Eighth);
+    EXPECT_EQ(view.snap, Snap::SixtyFourth);
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapCyclePrev, false));
-    EXPECT_EQ(view.snap, Snap::Quarter);
+    EXPECT_EQ(view.snap, Snap::ThirtySecond);
     ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapCycleNext, false));
-    EXPECT_EQ(view.snap, Snap::Eighth);
+    EXPECT_EQ(view.snap, Snap::SixtyFourth);
 
     // The grid is SHARED, not per-surface: which timeline surface has focus must not change where a
     // grid command lands.
@@ -1123,7 +1131,8 @@ TEST_F(FocusArbitrationTest, GridAndTimelineZoomCommandsAreInactiveWhileThePanel
 
     for (auto cmdId :
          {AppCommands::snapSetWhole, AppCommands::snapSetHalf, AppCommands::snapSetQuarter, AppCommands::snapSetEighth,
-          AppCommands::snapSetSixteenth, AppCommands::snapCyclePrev, AppCommands::snapCycleNext}) {
+          AppCommands::snapSetSixteenth, AppCommands::snapSetThirtySecond, AppCommands::snapSetSixtyFourth,
+          AppCommands::snapSetHundredTwentyEighth, AppCommands::snapCyclePrev, AppCommands::snapCycleNext}) {
         EXPECT_FALSE(commandIsActive(mc, cmdId)) << "command " << (int)cmdId;
         EXPECT_FALSE(cm.invokeDirectly(cmdId, false)) << "command " << (int)cmdId;
     }
@@ -1181,6 +1190,124 @@ TEST_F(FocusArbitrationTest, NaturalScrollingPreferenceReachesTheTimelineAndTheR
     juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
     EXPECT_FALSE(mc.getTimelinePanel().isScrollInverted());
     EXPECT_FALSE(mc.getTimelinePanel().getPianoRoll().isScrollInverted());
+}
+
+// ============================================================================
+// 14. "Scroll up zooms in" — the same settings-file path, the other wheel flag
+// ============================================================================
+
+TEST_F(FocusArbitrationTest, ZoomScrollPreferenceReachesTheTimelineAndTheRoll) {
+    // BOTH wheel keys are guarded, not just the one under test: the independence assertion below
+    // reads the plain-scroll flag, and that would otherwise report whatever this developer's real
+    // settings file happens to say (the documented local-vs-CI trap this file's guard exists for).
+    PersistedKeysGuard guard({MainComponent::kZoomScrollUpZoomsInKey, MainComponent::kNaturalScrollingKey});
+
+    MainComponent mc(std::make_unique<FocusMockProvider>());
+    mc.setSize(1200, 800);
+
+    // Default ON ("up zooms in") means NOT inverted — what both wheel-zoom surfaces already did
+    // before the preference existed.
+    mc.getAppPropertiesForTest().getUserSettings()->removeValue(MainComponent::kZoomScrollUpZoomsInKey);
+    mc.getAppPropertiesForTest().getUserSettings()->removeValue(MainComponent::kNaturalScrollingKey);
+    mc.applyNaturalScrollingPreference();
+    mc.applyZoomScrollPreference();
+    EXPECT_FALSE(mc.getTimelinePanel().isZoomScrollInverted());
+    EXPECT_FALSE(mc.getTimelinePanel().getPianoRoll().isZoomScrollInverted())
+        << "the panel forwards to the roll - one writer, two surfaces";
+
+    PreferencesSettingsTab prefs(mc.getAppPropertiesForTest());
+    EXPECT_TRUE(prefs.isZoomScrollUpZoomsInEnabled()) << "default ON";
+
+    prefs.setZoomScrollUpZoomsInEnabled(false);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    EXPECT_TRUE(mc.getTimelinePanel().isZoomScrollInverted());
+    EXPECT_TRUE(mc.getTimelinePanel().getPianoRoll().isZoomScrollInverted());
+    // The two wheel preferences are independent: inverting the zoom must not touch plain scrolling.
+    EXPECT_FALSE(mc.getTimelinePanel().isScrollInverted());
+
+    prefs.setZoomScrollUpZoomsInEnabled(true);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    EXPECT_FALSE(mc.getTimelinePanel().isZoomScrollInverted());
+    EXPECT_FALSE(mc.getTimelinePanel().getPianoRoll().isZoomScrollInverted());
+}
+
+// ============================================================================
+// 15. REAL-KEYBOARD dispatch: the shifted-symbol key codes the macOS peer delivers
+//
+// The one test in this file that goes through MainComponent::keyPressed with the key code a REAL
+// keystroke carries rather than the one the binding stores. juce_NSViewComponentPeer_mac.mm's
+// getKeyCodeFromEvent() builds the code from [ev charactersIgnoringModifiers][0] and — as its own
+// comment concedes — only compensates for Shift by upper-casing LETTERS, so Ctrl+Shift+1 arrives as
+// KeyPress('!', ctrl|shift). Every other grid test invokes the command directly or constructs the
+// digit, which is exactly why this whole block shipped dead: the fix is
+// ShortcutManager::keyPressMatches, and this is the end-to-end proof that it reaches perform().
+// ============================================================================
+
+// MainComponent::keyPressed dispatches its command ASYNCHRONOUSLY (invokeDirectly(cmd, true) — the
+// real key handler must not run a command re-entrantly mid-key-event), so a test that drives
+// keyPressed directly has to pump the message loop before asserting the command's effect.
+static bool pressAndPump(MainComponent& mc, const juce::KeyPress& key) {
+    const bool consumed = mc.keyPressed(key);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    return consumed;
+}
+
+TEST_F(FocusArbitrationTest, ShiftedSymbolKeyCodesFromTheRealKeyboardReachTheGridCommands) {
+    PersistedKeysGuard guard({"timelineSnap", "timelineSnapEnabled"});
+
+    using Snap = synth::ui::TimelineViewState::Snap;
+    MainComponent mc(std::make_unique<FocusMockProvider>());
+    mc.setSize(1200, 800);
+    mc.simulateToggleTimelineClick();
+    ASSERT_TRUE(mc.isTimelineConfiguredVisible()) << "precondition: the grid commands are panel-gated";
+
+    auto& view = mc.getTimelinePanel().getViewState();
+    view.setSnap(Snap::Quarter);
+
+    const int ctrlShift = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier;
+
+    // THE reported bug: the user pressed Ctrl+Shift+1 and nothing happened.
+    EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('!', juce::ModifierKeys(ctrlShift), '!')));
+    EXPECT_EQ(view.snap, Snap::Whole);
+
+    // The three new divisions, by the shifted glyphs 6/7/8 actually produce.
+    EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('^', juce::ModifierKeys(ctrlShift), '^')));
+    EXPECT_EQ(view.snap, Snap::ThirtySecond);
+    EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('&', juce::ModifierKeys(ctrlShift), '&')));
+    EXPECT_EQ(view.snap, Snap::SixtyFourth);
+    EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('*', juce::ModifierKeys(ctrlShift), '*')));
+    EXPECT_EQ(view.snap, Snap::HundredTwentyEighth);
+
+    // The digit form still dispatches too — a layout (or a platform) that DOES ignore Shift properly
+    // must keep working, since the normalization is an addition to exact matching, not a replacement.
+    EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('5', juce::ModifierKeys(ctrlShift), '5')));
+    EXPECT_EQ(view.snap, Snap::Sixteenth);
+
+    // And the bare tool digits are NOT reachable this way: '&' with no modifiers matches nothing (the
+    // normalization needs Shift on both sides), so keyPressed finds no command and reports unhandled.
+    EXPECT_FALSE(pressAndPump(mc, juce::KeyPress('&', juce::ModifierKeys::noModifiers, '&')));
+    EXPECT_EQ(view.snap, Snap::Sixteenth) << "and nothing moved the grid either";
+}
+
+// The vertical zoom pair was dead in the app for exactly the same reason: Cmd+Shift+'=' arrives as
+// '+'. Routed per focused surface, so this drives the piano roll's own mapping.
+TEST_F(FocusArbitrationTest, ShiftedPunctuationReachesTheVerticalZoomCommands) {
+    MainComponent mc(std::make_unique<FocusMockProvider>());
+    mc.setSize(1200, 800);
+    mc.simulateToggleTimelineClick();
+    ASSERT_TRUE(mc.isTimelineConfiguredVisible());
+    mc.setEditSurfaceOverrideForTest(MainComponent::EditSurface::PianoRoll);
+
+    auto& roll = mc.getTimelinePanel().getPianoRoll();
+    const double semisBefore = roll.getPixelsPerSemitone();
+    const int cmdShift = juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier;
+
+    EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('+', juce::ModifierKeys(cmdShift), '+')));
+    EXPECT_GT(roll.getPixelsPerSemitone(), semisBefore);
+    const double afterIn = roll.getPixelsPerSemitone();
+
+    EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('_', juce::ModifierKeys(cmdShift), '_')));
+    EXPECT_LT(roll.getPixelsPerSemitone(), afterIn) << "'_' is Cmd+Shift+'-', the zoom-OUT half of the pair";
 }
 
 #endif // SYNTH_ENABLE_TIMELINE

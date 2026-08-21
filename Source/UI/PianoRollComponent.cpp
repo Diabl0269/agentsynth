@@ -1897,10 +1897,13 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
     const auto pos = e.getPosition();
 
     if (command && shift) {
-        // Vertical zoom. The amount comes from dominantWheelDelta, NOT from wheel.deltaY: macOS
-        // folds a Shift-held wheel gesture into deltaX, so reading deltaY here meant this branch
-        // received exactly 0.0 and the vertical zoom was dead on the platform it was written on.
-        zoomVerticalAroundY(std::exp((double)dominantWheelDelta(wheel) * kZoomWheelSensitivity), (double)pos.y);
+        // Vertical zoom. Direction is the PHYSICAL gesture (up zooms in by default — see
+        // wheelZoomFactor below), not the raw delta sign, so it reads the same whether or not the
+        // OS has natural scrolling on. The amount comes from dominantWheelDelta, NOT from
+        // wheel.deltaY: macOS folds a Shift-held wheel gesture into deltaX, so reading deltaY here
+        // meant this branch received exactly 0.0 and the vertical zoom was dead on the platform it
+        // was written on.
+        zoomVerticalAroundY(wheelZoomFactor(wheel), (double)pos.y);
         return;
     }
 
@@ -1908,10 +1911,11 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
         // Horizontal zoom around the beat under the cursor, through the roll's OWN mapping — the
         // shared TimelineViewState must not move (the lanes behind us keep their own zoom). Same
         // exponential factor the panel's ruler zoom uses, so the two feel identical. Same dominant-
-        // axis read as above: a modifier-decided branch must never depend on which axis the OS
-        // parked the gesture on.
-        zoomHorizontalAroundX(std::exp((double)dominantWheelDelta(wheel) * kZoomWheelSensitivity),
-                              std::max(0.0, (double)pos.x - (double)kKeysColumnWidth));
+        // axis read and the same up-zooms-in direction convention as the vertical branch above
+        // (wheelZoomFactor) — a modifier-decided branch must never depend on which axis the OS
+        // parked the gesture on, and the two zoom branches must never disagree about which way is
+        // "in".
+        zoomHorizontalAroundX(wheelZoomFactor(wheel), std::max(0.0, (double)pos.x - (double)kKeysColumnWidth));
         return;
     }
 
@@ -1981,6 +1985,19 @@ void PianoRollComponent::zoomVerticalAroundY(double factor, double anchorY) {
     repaint();
 }
 
+double PianoRollComponent::wheelZoomFactor(const juce::MouseWheelDetails& wheel) const noexcept {
+    // wheelGestureIsUpward already recovers the PHYSICAL direction from isReversed XOR the delta's
+    // sign (see ScrollPolicy.h) — "up" here means the same finger motion regardless of the OS's
+    // natural-scrolling setting. zoomScrollInverted_ is the app-level preference stacked on top,
+    // independent of scrollInverted_ (that one only ever governs the plain-scroll branches, which
+    // deliberately keep following the OS convention instead — see mouseWheelMove).
+    const bool zoomIn = wheelGestureIsUpward(wheel) != zoomScrollInverted_;
+    // Magnitude only — the sign now comes entirely from zoomIn above, not from dominantWheelDelta's
+    // own sign, otherwise isReversed (folded into the delta already) would double-count direction.
+    const double magnitude = std::abs(dominantWheelDelta(wheel)) * kZoomWheelSensitivity;
+    return std::exp(zoomIn ? magnitude : -magnitude);
+}
+
 void PianoRollComponent::zoomHorizontal(double factor) {
     // The view centre, expressed in the same grid-relative coordinate the Cmd+wheel branch hands
     // over (x - kKeysColumnWidth), so both paths run identical anchor math.
@@ -2017,7 +2034,12 @@ bool PianoRollComponent::matchesAction(const juce::KeyPress& key, const juce::St
     // ShortcutManager has never heard of the id (getBinding answers an unknown id with a
     // default-constructed KeyPress). Falling back to `fallback` here would resurrect a key the user
     // deliberately unbound, so it deliberately does not.
-    return binding.isValid() && key == binding;
+    //
+    // Routed through ShortcutManager::keyPressMatches rather than raw juce::KeyPress::operator==:
+    // macOS delivers a Shift-chorded symbol key as the SHIFTED CHARACTER ('!' not '1', '+' not '='),
+    // never the base key plus a Shift modifier flag, so exact equality would silently never match a
+    // user rebind onto such a chord — keyPressMatches shift-normalizes exactly that case.
+    return binding.isValid() && ShortcutManager::keyPressMatches(binding, key);
 }
 
 bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {

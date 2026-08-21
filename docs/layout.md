@@ -1622,10 +1622,14 @@ fixed on screen, clamps preserved — see the comment on why the anchor invarian
 beatsPerBar)`. No JUCE dependency; `TimelinePanelComponent` owns the one instance and exposes it
 via `getViewState()`.
 
-**Snap** (`TimelineViewState::Snap`) — `Off, Bar, Whole, Half, Quarter, Eighth, Sixteenth`. Every
+**Snap** (`TimelineViewState::Snap`) — `Off, Bar, Whole, Half, Quarter, Eighth, Sixteenth,
+ThirtySecond, SixtyFourth, HundredTwentyEighth`. Every
 non-`Bar`/non-`Off` value is a **note value** (a fraction of a whole note), the DAW-conventional
 reading of the grid selector: `Whole` (combo label `"1"`) = 4 beats — a full 4/4 bar, `Half` = 2,
-`Quarter` (label `"1/4"`, the default) = 1 beat, `Eighth` = 0.5, `Sixteenth` = 0.25. `Bar` snaps to
+`Quarter` (label `"1/4"`, the default) = 1 beat, `Eighth` = 0.5, `Sixteenth` = 0.25, down through
+`"1/32"` = 0.125, `"1/64"` = 0.0625 and `"1/128"` = 0.03125 (the three finest were APPENDED after
+`Sixteenth` — the enum's int is persisted, so inserting in note-value order would silently
+reinterpret every saved grid choice). `Bar` snaps to
 multiples of `beatsPerBar` (`tsNum * 4 / tsDen` off the transport's time signature — same formula
 `TransportService::getPosition()` already uses). Ties round up (toward +infinity, beats are never
 negative in practice). On top of the division sits a master switch, `TimelineViewState::snapEnabled`
@@ -1779,6 +1783,17 @@ pitch at the TOP row and pitch grows upward — a view moving down therefore DEC
 why that branch negates the result (see TL5-8 below); the horizontal axis on both surfaces needs no
 such remapping, since a view moving right IS a larger `firstVisibleBeat`.
 
+**Zoom-scroll direction** (`Settings → Preferences → "Scroll up zooms in"`, default ON, key
+`zoomScrollUpZoomsIn`) is a separate preference from Natural scrolling, because zoom-on-wheel cares
+about the FINGER rather than the content: `ScrollPolicy.h`'s `wheelGestureIsUpward()` recovers the
+physical gesture direction by XOR-ing the dominant delta's sign with `isReversed` (the one place
+`isReversed` IS consulted — a plain scroll must not do this, per the paragraph above), so "scroll up
+enlarges" means the same physical motion whether or not the OS has natural scrolling on. Both
+editors' Cmd/Cmd+Shift wheel-zoom branches compute `zoomIn = wheelGestureIsUpward(wheel) !=
+zoomScrollInverted_`, with magnitude still `|dominantWheelDelta|` through the existing sensitivity
+curve. `MainComponent::applyZoomScrollPreference()` propagates over the same settings-file
+`ChangeBroadcaster` path; the panel forwards both scroll preferences to its piano roll.
+
 **Keyboard zoom** (Cmd+=/Cmd+- horizontal, Cmd+Shift+=/Cmd+Shift+- vertical) reaches the SAME
 `zoomTimelineHorizontal`/`zoomTimelineVertical` (panel) or `zoomHorizontal`/`zoomVertical` (roll)
 entry points the wheel/pinch gestures do, anchored at the visible centre rather than a cursor
@@ -1787,9 +1802,9 @@ position, and is routed per focused surface by `MainComponent::resolveEditSurfac
 exception.
 
 **The timeline's grid division** is likewise reachable from the keyboard, alongside the mouse's
-snap combo (above): Ctrl+Shift+1..5 set it outright (`TimelinePanelComponent::setSnapValue`),
-Ctrl+Shift+Left/Right step it by one (`cycleSnapValue`, clamped coarsest↔finest, never wrapped —
-holding the key parks on `Bar` or `Sixteenth` rather than surprising the user by wrapping around;
+snap combo (above): Ctrl+Shift+1..8 set it outright (`TimelinePanelComponent::setSnapValue`, 1
+through 1/128), Ctrl+Shift+Left/Right step it by one (`cycleSnapValue`, clamped coarsest↔finest,
+never wrapped — holding the key parks on `Bar` or `1/128` rather than surprising the user by wrapping around;
 from `Off` both directions re-enter at the last musical division the user actually chose). Real
 Ctrl, not Cmd, even on macOS — see [`shortcuts.md`](shortcuts.md#timeline) for why that's
 deliberate. Every set/cycle call is a view-state-only change (nothing on the undo stack) that goes

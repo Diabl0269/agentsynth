@@ -174,8 +174,21 @@ and, for the loop-selection key, `TimelineClipLaneArea::keyPressed()` too):
 | Ctrl+Shift+3 | Set Grid to 1/4 |
 | Ctrl+Shift+4 | Set Grid to 1/8 |
 | Ctrl+Shift+5 | Set Grid to 1/16 |
+| Ctrl+Shift+6 | Set Grid to 1/32 |
+| Ctrl+Shift+7 | Set Grid to 1/64 |
+| Ctrl+Shift+8 | Set Grid to 1/128 |
 | Ctrl+Shift+Left | Grid Coarser (step toward Bar) |
-| Ctrl+Shift+Right | Grid Finer (step toward 1/16) |
+| Ctrl+Shift+Right | Grid Finer (step toward 1/128) |
+
+**Shift-chorded symbol keys and the macOS peer.** These commands only work on a real Mac keyboard
+because binding lookups go through `ShortcutManager::keyPressMatches`, not exact `KeyPress`
+equality: JUCE's macOS peer builds a key code from `charactersIgnoringModifiers`, which — per its
+own source comment — does *not* ignore Shift, so Ctrl+Shift+1 arrives as `!` and Cmd+Shift+`=`
+arrives as `+`. The matcher folds both sides through a US-layout unshift map when both carry Shift
+(other layouts degrade to exact match). Conflict detection deliberately stays exact so two
+different stored chords never merge. Headless tests construct `KeyPress('1', mods)` directly and
+would never catch this class of bug — `FocusArbitrationTest.ShiftedSymbolKeyCodesFromTheRealKeyboardReachTheGridCommands`
+pins the real-event form instead.
 
 **Ctrl, not Cmd — deliberately, including on macOS.** `ShortcutManager::resetToDefaults` binds
 these with `juce::ModifierKeys::ctrlModifier`, a REAL Ctrl rather than `commandModifier`. On macOS
@@ -191,9 +204,9 @@ parameterised command** — `juce::ApplicationCommandManager` has no notion of a
 row and a key binding are per-command; "set the grid to 1/8" has to BE a command to be rebindable or
 show up in a menu at all.
 
-**Cycle rules** (`TimelinePanelComponent::cycleSnapValue`): the six musical divisions (`Bar` through
-`Sixteenth`) are declared coarsest→finest, so a cycle step is a **clamped** ±1 on that ordering —
-never wrapped. Holding the key parks on `Bar` or `Sixteenth` rather than silently wrapping back
+**Cycle rules** (`TimelinePanelComponent::cycleSnapValue`): the nine musical divisions (`Bar`
+through `HundredTwentyEighth`) are declared coarsest→finest, so a cycle step is a **clamped** ±1 on
+that ordering — never wrapped. Holding the key parks on `Bar` or `1/128` rather than silently wrapping back
 around, which would be far more surprising under a held key. From `Snap::Off` there is no position
 for "one step finer/coarser" to be relative to, so **both directions re-enter at the last musical
 division the user actually chose** (`Bar` if there wasn't one yet) — picking a direction to "end" at

@@ -179,6 +179,22 @@ public:
      *  called for an unrelated settings write costs a bool read. */
     void applyNaturalScrollingPreference();
 
+    /** The Preferences "Scroll up zooms in" key. DEFAULT TRUE — "up zooms in" is what both
+     *  wheel-zoom surfaces already did before the preference existed, so an install that never opens
+     *  Preferences is unaffected. Owned here for the same reason kNaturalScrollingKey is: the tab
+     *  writes it, MainComponent is what applies it. */
+    static constexpr const char* kZoomScrollUpZoomsInKey = "zoomScrollUpZoomsIn";
+
+    /** Re-reads kZoomScrollUpZoomsInKey and pushes `!upZoomsIn` into the timeline panel, which
+     *  forwards it to the piano roll. A SIBLING of applyNaturalScrollingPreference rather than an
+     *  extension of it, because the two preferences are genuinely independent: plain-scroll direction
+     *  and wheel-ZOOM direction are separate flags on both surfaces (see
+     *  TimelinePanelComponent::setZoomScrollInverted), and a user who inverts one has said nothing
+     *  about the other. Shares that function's propagation path exactly — the settings-file
+     *  ChangeBroadcaster — so both are called from the constructor and from
+     *  changeListenerCallback, and both are idempotent. */
+    void applyZoomScrollPreference();
+
     /** Per-press zoom step for the four zoom commands. 1.25 is the same "a quarter bigger" feel a
      *  couple of wheel notches gives, and the out factor is its exact reciprocal so in-then-out
      *  returns to where you started rather than drifting. */

@@ -1308,7 +1308,9 @@ bool TimelineClipLaneArea::keyPressed(const juce::KeyPress& key) {
         if (shortcuts_ == nullptr)
             return key == fallback;
         const auto binding = shortcuts_->getBinding("timelineLoopSelection");
-        return binding.isValid() && key == binding;
+        // keyPressMatches rather than == so a rebind onto a Shift-chorded symbol key survives the
+        // macOS peer delivering the SHIFTED character as the key code.
+        return ShortcutManager::keyPressMatches(binding, key);
     };
 
     if (matchesLoopSelection()) {

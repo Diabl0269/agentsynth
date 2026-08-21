@@ -63,10 +63,26 @@ struct TimelineViewState {
     // (1 beat), "1/16" is a sixteenth (0.25 beat). A beat is always a quarter note here
     // (TransportService's own convention), so these are fixed beat counts; only Snap::Bar consults
     // the time signature.
-    // The order is load-bearing: Bar..Sixteenth are declared COARSEST to FINEST, which is what lets
-    // TimelinePanelComponent::cycleSnapValue step the grid with a clamped +-1 on the underlying int
-    // instead of carrying a second table that could drift out of sync with this list.
-    enum class Snap : int { Off = 0, Bar, Whole, Half, Quarter, Eighth, Sixteenth };
+    // The order is load-bearing: Bar..HundredTwentyEighth are declared COARSEST to FINEST, which is
+    // what lets TimelinePanelComponent::cycleSnapValue step the grid with a clamped +-1 on the
+    // underlying int instead of carrying a second table that could drift out of sync with this
+    // list. The three finest values were appended AFTER Sixteenth rather than inserted in strict
+    // note-value order for a reason that outweighs alphabetising the enum: `snap` is persisted as a
+    // raw int (see TimelinePanelComponent::kTimelineSnapPropertyKey), so an existing installation's
+    // saved value must keep meaning the same division after an upgrade — inserting here would shift
+    // every later enumerator's int and silently reinterpret it as a different, unrelated division.
+    enum class Snap : int {
+        Off = 0,
+        Bar,
+        Whole,
+        Half,
+        Quarter,
+        Eighth,
+        Sixteenth,
+        ThirtySecond,
+        SixtyFourth,
+        HundredTwentyEighth
+    };
     Snap snap = Snap::Quarter;
 
     // The last non-Off division that was chosen, so "cycle the grid finer/coarser" has somewhere
@@ -112,6 +128,12 @@ struct TimelineViewState {
             return 0.5;
         case Snap::Sixteenth:
             return 0.25;
+        case Snap::ThirtySecond:
+            return 0.125;
+        case Snap::SixtyFourth:
+            return 0.0625;
+        case Snap::HundredTwentyEighth:
+            return 0.03125;
         }
         return 0.0;
     }

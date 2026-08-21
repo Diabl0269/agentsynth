@@ -111,6 +111,13 @@ public:
     // `deltaX`, so the modifier-decided branches (both zooms) must take the DOMINANT axis or go
     // silently dead under Shift; and the plain-scroll branches route their sign through
     // scrollAmount() so "natural" here means exactly what it means in a juce::Viewport.
+    //
+    // The two zoom branches are a DIFFERENT preference from the scroll branches: direction there
+    // comes from synth::ui::wheelGestureIsUpward (the PHYSICAL gesture, recovered from isReversed
+    // XOR the delta's sign — see ScrollPolicy.h), not from the delta's raw sign, so "wheel up zooms
+    // in" is the same finger motion regardless of the OS's natural-scrolling setting.
+    // zoomScrollInverted_ (setZoomScrollInverted) flips that outcome; it is independent of
+    // scrollInverted_, which only ever governs the plain-scroll branches below.
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
     // Trackpad pinch: plain = horizontal zoom around the pinch point, Shift = vertical zoom —
     // the same pair TimelinePanelComponent::mouseMagnify binds for the lanes.
@@ -167,6 +174,15 @@ public:
      *  NATURAL: identical to what a juce::Viewport does with the same gesture, on both axes. */
     void setScrollInverted(bool inverted) noexcept { scrollInverted_ = inverted; }
     bool isScrollInverted() const noexcept { return scrollInverted_; }
+
+    /** The app-level "invert my zoom wheel direction" preference — a SEPARATE flag from
+     *  scrollInverted_ above, because zoom and plain scroll answer to different conventions: scroll
+     *  follows the OS's natural-scrolling setting (already folded into the deltas), while zoom
+     *  follows the PHYSICAL gesture (synth::ui::wheelGestureIsUpward) regardless of it. false, the
+     *  default, means wheel UP zooms IN — for both the Cmd+wheel (horizontal) and Cmd+Shift+wheel
+     *  (vertical) branches, which always agree with each other. */
+    void setZoomScrollInverted(bool inverted) noexcept { zoomScrollInverted_ = inverted; }
+    bool isZoomScrollInverted() const noexcept { return zoomScrollInverted_; }
 
     /** Zoom the roll's own horizontal mapping by `factor` (> 1 in, < 1 out) around the CENTRE of the
      *  visible grid, using the same anchored math the Cmd+wheel branch uses — so a menu/keyboard
@@ -519,14 +535,17 @@ private:
 
     // ---- Rebindable surface keys ----
     // True when `key` is what the user has bound to `actionId`. With no ShortcutManager installed
-    // this is plain equality against `fallback` (the hardcoded default). With one installed the
-    // manager is the ONLY source: an unset/unknown/invalid binding matches nothing, and `fallback`
-    // is not consulted — see setShortcutManager for why the two are never mixed.
+    // this is plain equality against `fallback` (the hardcoded default) — juce::KeyPress::operator==
+    // unchanged, which is what makes Left, Shift+Left and Alt+Left three different actions while
+    // letter keys still compare case-insensitively (so Shift+Q matches a 'q' binding). With one
+    // installed the manager is the ONLY source: an unset/unknown/invalid binding matches nothing,
+    // and `fallback` is not consulted — see setShortcutManager for why the two are never mixed.
     //
-    // juce::KeyPress::operator== is the matcher rather than a keycode comparison, so the modifiers
-    // have to agree exactly (which is what makes Left, Shift+Left and Alt+Left three different
-    // actions) while letter keys still compare case-insensitively (so Shift+Q matches a 'q'
-    // binding).
+    // That installed-manager path is routed through ShortcutManager::keyPressMatches rather than
+    // raw juce::KeyPress::operator==: macOS delivers a Shift-chorded symbol key as the SHIFTED
+    // CHARACTER ('!' not '1', '+' not '='), never the base key plus a Shift modifier flag, so exact
+    // equality would silently never match a user rebind onto such a chord. keyPressMatches
+    // shift-normalizes exactly that case.
     bool matchesAction(const juce::KeyPress& key, const juce::String& actionId, const juce::KeyPress& fallback) const;
 
     // ---- Anchored zoom, shared by the wheel, the pinch and the public zoom API ----
@@ -534,6 +553,13 @@ private:
     // coordinate rollView_ maps; `anchorY` is a component y.
     void zoomHorizontalAroundX(double factor, double anchorGridX);
     void zoomVerticalAroundY(double factor, double anchorY);
+
+    // The exp() factor for a Cmd/Cmd+Shift wheel zoom, shared by both mouseWheelMove branches so
+    // they can never disagree about which way is "in". Sign comes from the PHYSICAL gesture
+    // direction (synth::ui::wheelGestureIsUpward) XOR zoomScrollInverted_; magnitude comes from
+    // std::abs(dominantWheelDelta(wheel)) * kZoomWheelSensitivity — the exact amount each branch
+    // used before, just no longer signed by the raw delta.
+    double wheelZoomFactor(const juce::MouseWheelDetails& wheel) const noexcept;
 
     void performQuantise();
     void flashQuantiseButton();
@@ -581,6 +607,9 @@ private:
     const ShortcutManager* shortcuts_ = nullptr;
     // App-level scroll-direction preference; false == natural == the juce::Viewport convention.
     bool scrollInverted_ = false;
+    // App-level ZOOM-direction preference; false == wheel up zooms in. A separate flag from
+    // scrollInverted_ — see setZoomScrollInverted.
+    bool zoomScrollInverted_ = false;
 
     synth::ClipId clipId_;
     NoteSelectionModel selection_;

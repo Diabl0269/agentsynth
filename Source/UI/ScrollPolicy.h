@@ -43,4 +43,19 @@ inline float dominantWheelDelta(const juce::MouseWheelDetails& wheel) noexcept {
  */
 inline float scrollAmount(float delta, bool invertScroll) noexcept { return invertScroll ? delta : -delta; }
 
+/**
+ * True when the PHYSICAL gesture moved upward (wheel rolled away / two fingers pushed up).
+ *
+ * Zoom-on-scroll cares about the FINGER, not the content: "scroll up zooms in" must mean the same
+ * physical motion whether or not the OS has natural scrolling on. The deltas alone cannot say
+ * (fact 1 above — they are pre-flipped so plain scrolling feels native either way), but
+ * `isReversed` reports which convention produced them, so XOR-ing the sign back out recovers the
+ * physical direction: isReversed == false ⇒ up is a positive delta; isReversed == true ⇒ up is a
+ * negative one (juce_MouseEvent.h documents exactly this pairing on deltaY).
+ */
+inline bool wheelGestureIsUpward(const juce::MouseWheelDetails& wheel) noexcept {
+    const float delta = dominantWheelDelta(wheel);
+    return wheel.isReversed ? (delta < 0.0f) : (delta > 0.0f);
+}
+
 } // namespace synth::ui

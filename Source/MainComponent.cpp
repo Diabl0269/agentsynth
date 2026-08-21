@@ -110,12 +110,12 @@ juce::String describeNodeForBinding(juce::AudioProcessorGraph::Node* node) {
 
 // ---- Command <-> ShortcutManager action id, for the two blocks handled as case-fallthrough runs ----
 //
-// The seven grid commands and the four zoom commands share one getCommandInfo case each (their
+// The ten grid commands and the four zoom commands share one getCommandInfo case each (their
 // enablement rule is per BLOCK, not per command), so the block needs to recover which action id it
 // is reporting for — that is what supplies the row's label and its default keypress. Written as a
-// lookup rather than eleven near-identical cases so a renamed id is one edit, and so a command that
-// grows an id without a description shows up as the id itself in Settings rather than compiling to
-// a blank row.
+// lookup rather than fourteen near-identical cases so a renamed id is one edit, and so a command
+// that grows an id without a description shows up as the id itself in Settings rather than compiling
+// to a blank row.
 juce::String snapActionIdForCommand(juce::CommandID commandID) {
     switch (commandID) {
     case AppCommands::snapSetWhole:
@@ -128,6 +128,12 @@ juce::String snapActionIdForCommand(juce::CommandID commandID) {
         return "snapSetEighth";
     case AppCommands::snapSetSixteenth:
         return "snapSetSixteenth";
+    case AppCommands::snapSetThirtySecond:
+        return "snapSetThirtySecond";
+    case AppCommands::snapSetSixtyFourth:
+        return "snapSetSixtyFourth";
+    case AppCommands::snapSetHundredTwentyEighth:
+        return "snapSetHundredTwentyEighth";
     case AppCommands::snapCyclePrev:
         return "snapCyclePrev";
     case AppCommands::snapCycleNext:
@@ -158,6 +164,12 @@ juce::String snapDivisionLabel(synth::ui::TimelineViewState::Snap snap) {
         return "1/8";
     case Snap::Sixteenth:
         return "1/16";
+    case Snap::ThirtySecond:
+        return "1/32";
+    case Snap::SixtyFourth:
+        return "1/64";
+    case Snap::HundredTwentyEighth:
+        return "1/128";
     }
     return "Off";
 }
@@ -319,6 +331,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     if (auto* settings = appProperties.getUserSettings())
         settings->addChangeListener(this);
     applyNaturalScrollingPreference();
+    applyZoomScrollPreference();
 
     // Cable colour config (issue #157). Restored HERE rather than only in AppearanceSettingsTab:
     // that tab is built lazily when the Settings window opens, so leaving it to the tab would
@@ -1126,6 +1139,7 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
     // the whole window), and a theme switch must not re-read preferences.
     if (source != nullptr && source == appProperties.getUserSettings()) {
         applyNaturalScrollingPreference();
+        applyZoomScrollPreference();
         return;
     }
 
@@ -1491,13 +1505,14 @@ void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
                        AppCommands::togglePlayback,
                        // The grid block and both zoom pairs follow the same rule: registered in
                        // every build configuration, reported inactive where there is nothing to act
-                       // on (see getCommandInfo). The seven grid commands act on the timeline's
+                       // on (see getCommandInfo). The ten grid commands act on the timeline's
                        // shared snap value, so they are inactive whenever the panel is not on
                        // screen; the four zoom commands route per focused surface.
                        AppCommands::snapSetWhole, AppCommands::snapSetHalf, AppCommands::snapSetQuarter,
-                       AppCommands::snapSetEighth, AppCommands::snapSetSixteenth, AppCommands::snapCyclePrev,
-                       AppCommands::snapCycleNext, AppCommands::zoomInHorizontal, AppCommands::zoomOutHorizontal,
-                       AppCommands::zoomInVertical, AppCommands::zoomOutVertical});
+                       AppCommands::snapSetEighth, AppCommands::snapSetSixteenth, AppCommands::snapSetThirtySecond,
+                       AppCommands::snapSetSixtyFourth, AppCommands::snapSetHundredTwentyEighth,
+                       AppCommands::snapCyclePrev, AppCommands::snapCycleNext, AppCommands::zoomInHorizontal,
+                       AppCommands::zoomOutHorizontal, AppCommands::zoomInVertical, AppCommands::zoomOutVertical});
 #if SYNTH_ENABLE_TIMELINE
     commands.add(AppCommands::toggleTimelinePanel);
 #endif
@@ -1722,7 +1737,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
-    // ---- Grid division: five absolute setters plus the two-step cycle ----
+    // ---- Grid division: eight absolute setters plus the two-step cycle ----
     // One block, one enablement rule: the grid is a property of the timeline's view state, so these
     // are active exactly when the panel is on screen. Not routed by resolveEditSurface() — the snap
     // value is SHARED by the clip lanes and the piano roll (one grid, whichever is in the lane
@@ -1732,6 +1747,9 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
     case AppCommands::snapSetQuarter:
     case AppCommands::snapSetEighth:
     case AppCommands::snapSetSixteenth:
+    case AppCommands::snapSetThirtySecond:
+    case AppCommands::snapSetSixtyFourth:
+    case AppCommands::snapSetHundredTwentyEighth:
     case AppCommands::snapCyclePrev:
     case AppCommands::snapCycleNext: {
         const auto actionId = snapActionIdForCommand(commandID);
@@ -2027,14 +2045,20 @@ bool MainComponent::perform(const InvocationInfo& info) {
     case AppCommands::snapSetHalf:
     case AppCommands::snapSetQuarter:
     case AppCommands::snapSetEighth:
-    case AppCommands::snapSetSixteenth: {
+    case AppCommands::snapSetSixteenth:
+    case AppCommands::snapSetThirtySecond:
+    case AppCommands::snapSetSixtyFourth:
+    case AppCommands::snapSetHundredTwentyEighth: {
 #if SYNTH_ENABLE_TIMELINE
         using Snap = synth::ui::TimelineViewState::Snap;
-        const Snap value = info.commandID == AppCommands::snapSetWhole     ? Snap::Whole
-                           : info.commandID == AppCommands::snapSetHalf    ? Snap::Half
-                           : info.commandID == AppCommands::snapSetQuarter ? Snap::Quarter
-                           : info.commandID == AppCommands::snapSetEighth  ? Snap::Eighth
-                                                                           : Snap::Sixteenth;
+        const Snap value = info.commandID == AppCommands::snapSetWhole          ? Snap::Whole
+                           : info.commandID == AppCommands::snapSetHalf         ? Snap::Half
+                           : info.commandID == AppCommands::snapSetQuarter      ? Snap::Quarter
+                           : info.commandID == AppCommands::snapSetEighth       ? Snap::Eighth
+                           : info.commandID == AppCommands::snapSetSixteenth    ? Snap::Sixteenth
+                           : info.commandID == AppCommands::snapSetThirtySecond ? Snap::ThirtySecond
+                           : info.commandID == AppCommands::snapSetSixtyFourth  ? Snap::SixtyFourth
+                                                                                : Snap::HundredTwentyEighth;
         timelinePanel.setSnapValue(value);
         statusBar.showMessage("Grid: " + snapDivisionLabel(value));
 #endif
@@ -2725,6 +2749,20 @@ void MainComponent::applyNaturalScrollingPreference() {
                          appProperties.getUserSettings()->getBoolValue(kNaturalScrollingKey, true);
     timelinePanel.setScrollInverted(!natural);
     timelinePanel.getPianoRoll().setScrollInverted(!natural);
+}
+
+void MainComponent::applyZoomScrollPreference() {
+    // Same shape as applyNaturalScrollingPreference above, and ungated for the same reason: the panel
+    // is an unconditional member, inert in a SYNTH_ENABLE_TIMELINE=OFF build.
+    //
+    // Phrased POSITIVELY in Preferences ("Scroll up zooms in", default on) while the components carry
+    // the INVERSION flag, so this is the one place the polarity flips — exactly the natural-scrolling
+    // idiom next door. ONE call, to the panel: setZoomScrollInverted forwards to the piano roll
+    // itself (see its header comment), so reaching into getPianoRoll() here would be a second writer
+    // for the same flag and the two could drift.
+    const bool upZoomsIn = appProperties.getUserSettings() == nullptr ||
+                           appProperties.getUserSettings()->getBoolValue(kZoomScrollUpZoomsInKey, true);
+    timelinePanel.setZoomScrollInverted(!upZoomsIn);
 }
 
 void MainComponent::timelineChanged(const synth::TimelineDoc&) { publishTimelineAndRebindRecorder(); }

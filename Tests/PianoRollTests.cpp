@@ -30,8 +30,9 @@
 //      hardcoded defaults, including the "an unbound action has no key" rule and the two keys
 //      (Escape, Delete) that stay fixed on purpose.
 //  10. WHEEL/ZOOM policy — the macOS Shift axis swap that used to kill Cmd+Shift+wheel, the
-//      natural-vs-inverted scroll sign on both axes, and the anchored zoomHorizontal/zoomVertical
-//      commands.
+//      natural-vs-inverted scroll sign on both scroll axes, the anchored zoomHorizontal/zoomVertical
+//      commands, and the wheel-zoom DIRECTION convention (wheel UP — the physical gesture,
+//      independent of isReversed — zooms IN by default; setZoomScrollInverted flips it).
 //
 // Every test in 4-6 and 9 configures snap explicitly (never inherits a default), because these are
 // grid-sensitive assertions and a machine-local snap preference must never be able to decide
@@ -844,6 +845,31 @@ TEST(PianoRollInteractionTest, FirstBarIsReachableRightOfTheKeysColumn) {
     const auto rect = f.roll.getNoteRect(clip->notes[0].id);
     EXPECT_GE(rect.getX(), PianoRollComponent::kKeysColumnWidth) << "and it draws RIGHT OF the keys gutter";
     EXPECT_EQ(rect.getX(), (int)std::llround(f.roll.beatToX(4.0)));
+}
+
+// ---- Fine-snap sanity: a new note is exactly ONE division long (see computeNewNoteAnchor), and
+// nothing floors or rejects a division as fine as 1/128 (0.03125 beats). TimelineDoc::addNote only
+// rejects a NON-POSITIVE/non-finite length (isFinitePositive: `> 0.0`, no minimum), and
+// computeNewNoteAnchor only falls back to kMinNoteLengthBeats when the grid is OFF (`grid > 0.0 ?
+// grid : kMinNoteLengthBeats`) — a real division smaller than kMinNoteLengthBeats is used AS IS.
+TEST(PianoRollInteractionTest, NoteCreatedAtOneHundredTwentyEighthGridHasExactlyThatLength) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+
+    // Set directly on the shared view state, per the class comment: it is consulted for the snap
+    // division ONLY.
+    f.state.snap = TimelineViewState::Snap::HundredTwentyEighth;
+    f.state.snapEnabled = true;
+
+    const int pitch = f.roll.getFirstVisiblePitchForTest() - 2;
+    const juce::Point<float> pos((float)f.roll.beatToX(2.0), (float)f.roll.yForPitch(pitch) + 5.0f);
+    f.roll.mouseDoubleClick(leftClick(f.roll, pos));
+
+    const auto* clip = f.doc.getClip(clipId);
+    ASSERT_EQ(clip->notes.size(), 1u);
+    EXPECT_DOUBLE_EQ(clip->notes[0].lengthBeats, 0.03125);
 }
 
 // Cmd+wheel zooms the roll's own mapping around the cursor: the beat under the pointer does not
@@ -2619,4 +2645,141 @@ TEST(PianoRollZoomApiTest, ZoomVerticalKeepsTheCentrePitchAndClampsAtBothEnds) {
 
     EXPECT_DOUBLE_EQ(f.state.pixelsPerBeat, 40.0) << "vertical zoom is the roll's alone";
     EXPECT_FALSE(f.undo.canUndo()) << "every zoom here is view-only";
+}
+
+// ============================================================================
+// 11. Wheel-zoom DIRECTION convention: UP (the PHYSICAL gesture) zooms IN by default
+// ============================================================================
+// wheelGestureIsUpward (ScrollPolicy.h) recovers the physical direction from `isReversed` XOR the
+// delta's sign, so "wheel up zooms in" must read identically whichever way the OS's natural-
+// scrolling setting has pre-flipped the delta. These tests exercise BOTH isReversed encodings of
+// "up" and "down" against both wheel-zoom branches, setZoomScrollInverted_'s effect, and that the
+// resulting factor depends only on |delta| and physical direction — never on isReversed itself.
+//
+// The section 10 axis-swap tests above (CmdWheelZoomsAroundTheCursorBeat,
+// CmdShiftWheelZoomsPitchRowsWithinClamps, and the two …EvenWhenTheGestureArrivesOnDeltaX tests) all
+// construct their wheels with isReversed left at its value-initialised `false`, so their expected
+// GT/LT directions are unaffected by this change (wheelGestureIsUpward(false, +delta) ==
+// (dominantWheelDelta(wheel) > 0), the same sign the old raw-delta code read) — they are left as
+// they were, deliberately not touched here.
+
+namespace {
+// Builds a wheel gesture for the PHYSICAL direction `up`, under a given isReversed encoding — the
+// same algebra wheelGestureIsUpward itself runs: isReversed==false needs a POSITIVE delta to read as
+// "up"; isReversed==true needs a NEGATIVE one. Letting a test pick `up` directly (rather than a raw
+// delta sign) is the point: two calls with the same `up` and different `isReversed` must be
+// answered identically by mouseWheelMove, which is exactly what these tests check.
+juce::MouseWheelDetails physicalWheelGesture(float magnitude, bool up, bool isReversed) {
+    juce::MouseWheelDetails wheel{};               // value-initialised: the struct has no default member initialisers
+    const bool positiveDelta = (up != isReversed); // XOR
+    wheel.deltaY = positiveDelta ? magnitude : -magnitude;
+    wheel.isReversed = isReversed;
+    return wheel;
+}
+} // namespace
+
+TEST(PianoRollWheelZoomDirectionTest, HorizontalWheelUpZoomsInAndDownZoomsOutRegardlessOfIsReversed) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 4.0, 8.0, "Clip");
+    f.open(clipId);
+    const auto mods = juce::ModifierKeys::commandModifier;
+    const float anchorX = 300.0f;
+
+    f.roll.mouseWheelMove(leftClick(f.roll, {anchorX, 90.0f}, mods), physicalWheelGesture(0.5f, /*up*/ true, false));
+    EXPECT_GT(f.roll.getPixelsPerBeat(), 40.0) << "up, isReversed=false (+delta) zooms in";
+    f.roll.setHorizontalView(40.0, 4.0);
+
+    f.roll.mouseWheelMove(leftClick(f.roll, {anchorX, 90.0f}, mods), physicalWheelGesture(0.5f, /*up*/ true, true));
+    EXPECT_GT(f.roll.getPixelsPerBeat(), 40.0) << "up, isReversed=true (-delta) also zooms in — same physical gesture";
+    f.roll.setHorizontalView(40.0, 4.0);
+
+    f.roll.mouseWheelMove(leftClick(f.roll, {anchorX, 90.0f}, mods), physicalWheelGesture(0.5f, /*up*/ false, false));
+    EXPECT_LT(f.roll.getPixelsPerBeat(), 40.0) << "down, isReversed=false (-delta) zooms out";
+    f.roll.setHorizontalView(40.0, 4.0);
+
+    f.roll.mouseWheelMove(leftClick(f.roll, {anchorX, 90.0f}, mods), physicalWheelGesture(0.5f, /*up*/ false, true));
+    EXPECT_LT(f.roll.getPixelsPerBeat(), 40.0) << "down, isReversed=true (+delta) also zooms out";
+}
+
+TEST(PianoRollWheelZoomDirectionTest, VerticalWheelUpZoomsInAndDownZoomsOutRegardlessOfIsReversed) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+    ASSERT_DOUBLE_EQ(f.roll.getPixelsPerSemitone(), PianoRollComponent::kPixelsPerSemitone);
+    const auto mods = juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier;
+
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, mods), physicalWheelGesture(0.4f, /*up*/ true, false));
+    EXPECT_GT(f.roll.getPixelsPerSemitone(), PianoRollComponent::kPixelsPerSemitone) << "up, isReversed=false zooms in";
+    f.roll.setPixelsPerSemitone(PianoRollComponent::kPixelsPerSemitone);
+
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, mods), physicalWheelGesture(0.4f, /*up*/ true, true));
+    EXPECT_GT(f.roll.getPixelsPerSemitone(), PianoRollComponent::kPixelsPerSemitone)
+        << "up, isReversed=true also zooms in";
+    f.roll.setPixelsPerSemitone(PianoRollComponent::kPixelsPerSemitone);
+
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, mods), physicalWheelGesture(0.4f, /*up*/ false, false));
+    EXPECT_LT(f.roll.getPixelsPerSemitone(), PianoRollComponent::kPixelsPerSemitone)
+        << "down, isReversed=false zooms out";
+    f.roll.setPixelsPerSemitone(PianoRollComponent::kPixelsPerSemitone);
+
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, mods), physicalWheelGesture(0.4f, /*up*/ false, true));
+    EXPECT_LT(f.roll.getPixelsPerSemitone(), PianoRollComponent::kPixelsPerSemitone)
+        << "down, isReversed=true also zooms out";
+}
+
+// setZoomScrollInverted is the zoom-only preference, independent of setScrollInverted (which the
+// PitchScrollFollowsTheGestureByDefaultAndFlipsWhenInverted / HorizontalScrollFollowsThe…
+// tests above cover for the plain-scroll branches) — it flips BOTH wheel-zoom branches together.
+TEST(PianoRollWheelZoomDirectionTest, SetZoomScrollInvertedFlipsBothWheelZoomBranches) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 4.0, 8.0, "Clip");
+    f.open(clipId);
+    ASSERT_FALSE(f.roll.isZoomScrollInverted()) << "natural (up zooms in) is the default";
+    f.roll.setZoomScrollInverted(true);
+    EXPECT_TRUE(f.roll.isZoomScrollInverted());
+
+    const auto cmdMods = juce::ModifierKeys::commandModifier;
+    const auto cmdShiftMods = juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier;
+
+    // Horizontal (Cmd+wheel): physical up now zooms OUT, down now zooms IN.
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, cmdMods), physicalWheelGesture(0.5f, /*up*/ true, false));
+    EXPECT_LT(f.roll.getPixelsPerBeat(), 40.0) << "inverted: up zooms out";
+    f.roll.setHorizontalView(40.0, 4.0);
+
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, cmdMods), physicalWheelGesture(0.5f, /*up*/ false, false));
+    EXPECT_GT(f.roll.getPixelsPerBeat(), 40.0) << "inverted: down zooms in";
+    f.roll.setHorizontalView(40.0, 4.0);
+
+    // Vertical (Cmd+Shift+wheel): the same flip, so the two branches never disagree.
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, cmdShiftMods),
+                          physicalWheelGesture(0.4f, /*up*/ true, false));
+    EXPECT_LT(f.roll.getPixelsPerSemitone(), PianoRollComponent::kPixelsPerSemitone) << "inverted: up zooms out";
+    f.roll.setPixelsPerSemitone(PianoRollComponent::kPixelsPerSemitone);
+
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, cmdShiftMods),
+                          physicalWheelGesture(0.4f, /*up*/ false, false));
+    EXPECT_GT(f.roll.getPixelsPerSemitone(), PianoRollComponent::kPixelsPerSemitone) << "inverted: down zooms in";
+}
+
+// The zoom factor must depend on |delta| and physical direction alone — never on isReversed's own
+// value, which is only a SIGN-recovery input, not a second source of magnitude or direction.
+TEST(PianoRollWheelZoomDirectionTest, MagnitudeMatchesRegardlessOfIsReversedSignForTheSamePhysicalGesture) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 4.0, 8.0, "Clip");
+    f.open(clipId);
+    const auto mods = juce::ModifierKeys::commandModifier;
+
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, mods), physicalWheelGesture(0.5f, /*up*/ true, false));
+    const double afterNatural = f.roll.getPixelsPerBeat();
+    f.roll.setHorizontalView(40.0, 4.0);
+
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, mods), physicalWheelGesture(0.5f, /*up*/ true, true));
+    const double afterReversed = f.roll.getPixelsPerBeat();
+
+    EXPECT_DOUBLE_EQ(afterNatural, afterReversed)
+        << "same physical gesture, same |delta| -> the exact same zoom factor regardless of isReversed";
 }

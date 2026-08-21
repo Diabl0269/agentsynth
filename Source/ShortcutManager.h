@@ -32,8 +32,8 @@ enum CommandIDs {
     // default, description, command mapping) cover it unconditionally.
     togglePlayback,
     toggleTimelinePanel,
-    // ---- Grid division, set outright (Ctrl+Shift+1..5) ----
-    // Five commands rather than one parameterised command because juce::ApplicationCommandManager
+    // ---- Grid division, set outright (Ctrl+Shift+1..8) ----
+    // Eight commands rather than one parameterised command because juce::ApplicationCommandManager
     // has no notion of an argument: a menu row and a key binding are per-command, so "set the grid
     // to 1/8" has to BE a command to be rebindable or to appear in the shortcut list at all.
     snapSetWhole,
@@ -41,6 +41,13 @@ enum CommandIDs {
     snapSetQuarter,
     snapSetEighth,
     snapSetSixteenth,
+    // The finer half of the row, APPENDED here (never interleaved) so the three ids read in the same
+    // coarse-to-fine order as the digits they bind to. Nothing persists a raw juce::CommandID — the
+    // shortcut table keys off the action id STRING — so appending is free even though it renumbers
+    // every enumerator below.
+    snapSetThirtySecond,
+    snapSetSixtyFourth,
+    snapSetHundredTwentyEighth,
     // Step the grid coarser/finer (see TimelinePanelComponent::cycleSnapValue).
     snapCyclePrev,
     snapCycleNext,
@@ -113,6 +120,12 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return snapSetEighth;
     if (actionId == "snapSetSixteenth")
         return snapSetSixteenth;
+    if (actionId == "snapSetThirtySecond")
+        return snapSetThirtySecond;
+    if (actionId == "snapSetSixtyFourth")
+        return snapSetSixtyFourth;
+    if (actionId == "snapSetHundredTwentyEighth")
+        return snapSetHundredTwentyEighth;
     if (actionId == "snapCyclePrev")
         return snapCyclePrev;
     if (actionId == "snapCycleNext")
@@ -197,9 +210,53 @@ public:
     juce::StringArray getActionsForKeyPress(const juce::KeyPress& key) const {
         juce::StringArray matches;
         for (const auto& actionId : actionIds)
-            if (bindingMatches(getBinding(actionId), key))
+            if (keyPressMatches(getBinding(actionId), key))
                 matches.add(actionId);
         return matches;
+    }
+
+    /** THE one "did this keystroke fire that binding?" rule, shared by this class and by every
+     *  component that resolves a surface action for itself (PianoRollComponent::matchesAction,
+     *  TimelinePanelComponent::matchesAction). True when:
+     *
+     *   - the two are equal — key code compared case-insensitively, modifiers compared EXACTLY,
+     *     which is what keeps Left / Shift+Left / Alt+Left three separate bindings and what keeps
+     *     Ctrl+Shift+1 from ever matching a bare 1; OR
+     *   - BOTH sides carry Shift and their key codes share a US-layout unshifted base — '!' and '1'
+     *     are one physical key, so Ctrl+Shift+'!' fires the binding stored as Ctrl+Shift+'1'.
+     *
+     *  An invalid binding (an action the user cleared, or an id this build has never heard of)
+     *  matches nothing.
+     *
+     *  WHY THE SECOND BRANCH EXISTS — the bug it fixes. On macOS,
+     *  juce_NSViewComponentPeer_mac.mm's getKeyCodeFromEvent() derives a KeyPress's key code from
+     *  `[ev charactersIgnoringModifiers]`, and its own comment concedes: "Unfortunately,
+     *  charactersIgnoringModifiers does not ignore the shift key" — it compensates ONLY by
+     *  upper-casing letters. So a Shift-chorded digit or symbol reaches keyPressed carrying the
+     *  SHIFTED character as its key code: Ctrl+Shift+1 arrives as KeyPress('!', ctrl|shift) and
+     *  never equalled the stored '1'. That killed the entire Ctrl+Shift+digit grid block AND both
+     *  Cmd+Shift zoom keys (Cmd+Shift+'=' arrives as '+') in the real app, while every headless test
+     *  stayed green — a test builds KeyPress('1', mods) directly and never goes through the peer.
+     *
+     *  LIMITATION, stated plainly: the table below is the US ANSI layout. Doing this properly needs
+     *  the platform VIRTUAL key code, which identifies the physical key independently of layout and
+     *  which juce::KeyPress does not carry — the peer has already collapsed the event to a character
+     *  before any of our code sees it. On a layout where Shift+3 is not '#' (UK, French, German…)
+     *  the affected chord falls back to exact match, i.e. exactly the behaviour it had before this
+     *  function existed: nothing gets worse, and the layouts covered are the overwhelming majority.
+     *  Bare (unshifted) keys and every letter are unaffected on every layout. */
+    static bool keyPressMatches(const juce::KeyPress& binding, const juce::KeyPress& pressed) {
+        if (!binding.isValid())
+            return false;
+        // Modifiers are never normalized — only the key CODE is. That is what keeps the bare tool
+        // digits clear of the Ctrl+Shift grid commands they share key codes with.
+        if (binding.getModifiers() != pressed.getModifiers())
+            return false;
+        if (towlower(binding.getKeyCode()) == towlower(pressed.getKeyCode()))
+            return true;
+        if (!binding.getModifiers().isShiftDown() || !pressed.getModifiers().isShiftDown())
+            return false;
+        return usLayoutUnshiftedBase(binding.getKeyCode()) == usLayoutUnshiftedBase(pressed.getKeyCode());
     }
 
     juce::String getActionForKeyPress(const juce::KeyPress& key) const {
@@ -225,7 +282,7 @@ public:
         for (auto& [otherId, binding] : bindings) {
             if (otherId == actionId || getCategory(otherId) != category)
                 continue;
-            if (bindingMatches(binding, key))
+            if (bindingsCollide(binding, key))
                 return otherId;
         }
         return {};
@@ -325,7 +382,18 @@ public:
         bindings["snapSetQuarter"] = juce::KeyPress('3', juce::ModifierKeys(ctrlShift), 0);
         bindings["snapSetEighth"] = juce::KeyPress('4', juce::ModifierKeys(ctrlShift), 0);
         bindings["snapSetSixteenth"] = juce::KeyPress('5', juce::ModifierKeys(ctrlShift), 0);
-        // Same modifier family as the five above (they are the same verb, stepped instead of
+        // 6/7/8 continue the row for the finer grid. Clear of everything on both counts:
+        //  - Ctrl+Shift+digit appears nowhere else in this table (the Cmd+Shift General bindings are
+        //    all letters plus the two zoom punctuation keys), so no binding-vs-binding conflict; and
+        //  - the tool digits that share these key codes — bare 7 (Mute) and bare 8 (Draw); bare 6 is
+        //    one of the three EditTool.h deliberately leaves unclaimed — carry NO modifiers, and
+        //    modifier equality is exact on the binding side (keyPressMatches only normalizes the key
+        //    CODE, never the modifier set), so Ctrl+Shift+7 can no more reach the Mute tool than
+        //    Ctrl+Shift+1 could reach Select.
+        bindings["snapSetThirtySecond"] = juce::KeyPress('6', juce::ModifierKeys(ctrlShift), 0);
+        bindings["snapSetSixtyFourth"] = juce::KeyPress('7', juce::ModifierKeys(ctrlShift), 0);
+        bindings["snapSetHundredTwentyEighth"] = juce::KeyPress('8', juce::ModifierKeys(ctrlShift), 0);
+        // Same modifier family as the eight above (they are the same verb, stepped instead of
         // absolute), on the horizontal arrows: coarser is left, finer is right, which matches the
         // snap combo reading coarsest-to-finest top-to-bottom. The piano roll's arrow bindings are
         // bare/Shift/Alt, so Ctrl+Shift is clear of all six of them as well.
@@ -494,6 +562,12 @@ public:
             return "Set Grid to 1/8";
         if (actionId == "snapSetSixteenth")
             return "Set Grid to 1/16";
+        if (actionId == "snapSetThirtySecond")
+            return "Set Grid to 1/32";
+        if (actionId == "snapSetSixtyFourth")
+            return "Set Grid to 1/64";
+        if (actionId == "snapSetHundredTwentyEighth")
+            return "Set Grid to 1/128";
         if (actionId == "snapCyclePrev")
             return "Grid Coarser";
         if (actionId == "snapCycleNext")
@@ -634,6 +708,9 @@ private:
             {"snapSetQuarter", ShortcutCategory::Timeline},
             {"snapSetEighth", ShortcutCategory::Timeline},
             {"snapSetSixteenth", ShortcutCategory::Timeline},
+            {"snapSetThirtySecond", ShortcutCategory::Timeline},
+            {"snapSetSixtyFourth", ShortcutCategory::Timeline},
+            {"snapSetHundredTwentyEighth", ShortcutCategory::Timeline},
             {"snapCyclePrev", ShortcutCategory::Timeline},
             {"snapCycleNext", ShortcutCategory::Timeline},
             // Piano roll — consulted by PianoRollComponent::keyPressed only.
@@ -650,13 +727,57 @@ private:
         return table;
     }
 
-    /** The one key-equality rule this class uses. Case-insensitive on the key code and EXACT on the
-     *  modifiers — which is what keeps Left, Shift+Left and Alt+Left three separate bindings, and
-     *  what keeps Ctrl+Shift+1 from ever matching a bare 1. An invalid binding (an action the user
-     *  cleared) matches nothing. */
-    static bool bindingMatches(const juce::KeyPress& binding, const juce::KeyPress& key) {
+    /** BINDING-vs-BINDING equality, for conflict detection only — case-insensitive on the key code
+     *  and EXACT on the modifiers. Deliberately NOT keyPressMatches: that function's shifted-symbol
+     *  normalization exists to rescue a real KEYSTROKE from the macOS peer (see its comment), and
+     *  applying it here would merge two different STORED chords — a user who deliberately put one
+     *  action on Cmd+Shift+'=' and another on Cmd+Shift+'+' would be told they collide, and the
+     *  Settings tab's auto-swap would then quietly steal one of them. An invalid binding (an action
+     *  the user cleared) collides with nothing. */
+    static bool bindingsCollide(const juce::KeyPress& binding, const juce::KeyPress& key) {
         return binding.isValid() && towlower(binding.getKeyCode()) == towlower(key.getKeyCode()) &&
                binding.getModifiers() == key.getModifiers();
+    }
+
+    /** The US-ANSI unshifted character on the same physical key as `keyCode`: the digit row, plus
+     *  the two punctuation keys the zoom pair uses. Anything else — every letter included, since the
+     *  macOS peer already upper-cases those and key-code comparison is case-insensitive — comes back
+     *  unchanged, and so do the extended keys (arrows and friends live above 0x10000).
+     *
+     *  keyPressMatches folds BOTH of its arguments through this, which is what makes the
+     *  normalization bidirectional: a binding stored WITH the shifted character still matches a
+     *  press that arrives as the base character. That direction is not hypothetical — the Settings
+     *  tab records the juce::KeyPress it is handed, so every chord a user rebound on macOS while
+     *  this bug was live was persisted as the shifted glyph. */
+    static int usLayoutUnshiftedBase(int keyCode) {
+        switch (keyCode) {
+        case '!':
+            return '1';
+        case '@':
+            return '2';
+        case '#':
+            return '3';
+        case '$':
+            return '4';
+        case '%':
+            return '5';
+        case '^':
+            return '6';
+        case '&':
+            return '7';
+        case '*':
+            return '8';
+        case '(':
+            return '9';
+        case ')':
+            return '0';
+        case '+':
+            return '=';
+        case '_':
+            return '-';
+        default:
+            return keyCode;
+        }
     }
 
     std::map<juce::String, juce::KeyPress> bindings;
