@@ -130,3 +130,63 @@ TEST(FrequencyResponseTest, PaintSmoke) {
                 hasOpaque = true;
     EXPECT_TRUE(hasOpaque) << "painted image should have at least one opaque pixel";
 }
+
+// ---------------------------------------------------------------------------
+// plotDb — peaks capped, deep roll-off left unclamped (no floor stroke)
+// ---------------------------------------------------------------------------
+
+TEST(FrequencyResponseTest, PlotDbCapsPeaksButLeavesDeepCuts) {
+    EXPECT_FLOAT_EQ(FrequencyResponseComponent::plotDb(60.0f), FrequencyResponseComponent::maxDb);
+    EXPECT_LT(FrequencyResponseComponent::plotDb(-80.0f), FrequencyResponseComponent::minDb);
+    EXPECT_FLOAT_EQ(FrequencyResponseComponent::plotDb(0.0f), 0.0f);
+}
+
+TEST(FrequencyResponseTest, DbBelowWindowMapsPastBottom) {
+    // Contract paired with the unclamped path stroke: values below minDb must map to y > height
+    // so the curve exits the view instead of pinning to the bottom edge.
+    constexpr float height = 200.0f;
+    EXPECT_GT(FrequencyResponseComponent::dbToYStatic(-80.0f, height), height);
+}
+
+TEST(FrequencyResponseTest, TimerRunsOnlyWhileVisible) {
+    FilterModule filter;
+    FrequencyResponseComponent comp(filter);
+    // Components default to visible, but the timer is gated on visibilityChanged — force a
+    // hidden→shown transition so the start path is exercised the same way the Filter card does.
+    comp.setVisible(false);
+    EXPECT_FALSE(comp.isTimerRunning()) << "hidden-by-default contract: no timer while hidden";
+
+    comp.setVisible(true);
+    EXPECT_TRUE(comp.isTimerRunning());
+
+    comp.setVisible(false);
+    EXPECT_FALSE(comp.isTimerRunning());
+}
+
+TEST(FrequencyResponseTest, LowpassRollOffDoesNotStrokeBottomEdge) {
+    // Regression for the resonant-LPF "floor line": clamping the path to y=h left an opaque
+    // accent stroke along the bottom-right after the roll-off. After the fix the path exits the
+    // clip region, so the bottom row in the right quarter must not be a bright accent stroke.
+    FilterModule filter;
+    FrequencyResponseComponent comp(filter);
+    constexpr int W = 400;
+    constexpr int H = 200;
+    comp.setBounds(0, 0, W, H);
+    comp.timerCallback(); // recompute magnitudes from defaults (LPF24 @ 440 Hz)
+
+    juce::Image img(juce::Image::ARGB, W, H, true);
+    juce::Graphics g(img);
+    comp.paint(g);
+
+    const juce::Colour accent(0xff00b4d8);
+    int brightBottom = 0;
+    for (int x = W * 3 / 4; x < W; ++x) {
+        const auto p = img.getPixelAt(x, H - 1);
+        const int dr = std::abs((int)p.getRed() - (int)accent.getRed());
+        const int dg = std::abs((int)p.getGreen() - (int)accent.getGreen());
+        const int db = std::abs((int)p.getBlue() - (int)accent.getBlue());
+        if (p.getAlpha() > 200 && (dr + dg + db) < 40)
+            ++brightBottom;
+    }
+    EXPECT_LT(brightBottom, 8) << "bottom-right must not carry an opaque accent floor stroke";
+}

@@ -142,6 +142,7 @@ private:
     std::unique_ptr<ScopeComponent> scopeComponent;
     std::unique_ptr<juce::ToggleButton> scopeToggle;
     std::unique_ptr<FrequencyResponseComponent> freqResponseComponent;
+    std::unique_ptr<juce::ToggleButton> freqResponseToggle;
     std::unique_ptr<EQCurveComponent> eqCurveComponent;
     std::unique_ptr<juce::ToggleButton> spectrumToggle;
     // Pop-out EQ editor. The dialog self-deletes when closed, so we only hold a SafePointer and
