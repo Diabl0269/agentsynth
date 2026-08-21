@@ -34,6 +34,10 @@ public:
     void setLoopSelectionArmsEnabled(bool enabled);
     bool isTimelineFeatureEnabled() const;
     void setTimelineFeatureEnabled(bool enabled);
+    bool isNaturalScrollingEnabled() const;
+    void setNaturalScrollingEnabled(bool enabled);
+    bool isZoomScrollUpZoomsInEnabled() const;
+    void setZoomScrollUpZoomsInEnabled(bool enabled);
 
     // Fired from persistTimelineFeatureEnabled() after the value is saved, so a live MainComponent
     // can hide/show the timeline entry points without waiting for a restart. Null in every context
@@ -46,6 +50,8 @@ private:
     void persistDefaultDualIOForNewModules(bool enabled);
     void persistLoopSelectionArms(bool enabled);
     void persistTimelineFeatureEnabled(bool enabled);
+    void persistNaturalScrolling(bool enabled);
+    void persistZoomScrollUpZoomsIn(bool enabled);
 
     juce::ApplicationProperties& appProperties;
     GraphEditor* graphEditor{nullptr}; // weak, owned by MainComponent
@@ -60,6 +66,16 @@ private:
     juce::TextButton perModuleDefaultsButton{"Per-module I/O defaults..."};
     juce::ToggleButton loopSelectionArmsToggle{"Timeline: P (loop selection) also switches looping on"};
     juce::ToggleButton timelineFeatureToggle{"Show timeline (experimental)"};
+    juce::ToggleButton naturalScrollingToggle{"Natural scrolling"};
+    // The one preference whose label needs a second line to explain WHICH surfaces it touches — a
+    // bare "Natural scrolling" toggle in an app that also has a pannable canvas would read as
+    // applying to everything.
+    juce::Label naturalScrollingHint;
+    // Sits directly under the natural-scrolling pair because it is the same gesture with a modifier
+    // held, and users reach for both in the same visit. Independent of it, though: this one governs
+    // the Cmd / Cmd+Shift wheel-ZOOM branches only, which is what its own caption spells out.
+    juce::ToggleButton zoomScrollUpZoomsInToggle{"Scroll up zooms in"};
+    juce::Label zoomScrollUpZoomsInHint;
 
     // Hairline rules between preference groups, painted in paint() from these bounds.
     std::vector<juce::Rectangle<int>> dividerBounds;

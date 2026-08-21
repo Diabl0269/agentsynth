@@ -1285,6 +1285,48 @@ With every section expanded the rows exceed any realistic panel height, so the s
 - **Rows lose the bar's width** (`getRowContentWidth()`) while it is visible, so row text and the
   snippet count never run under the thumb.
 
+### Keyboard Shortcuts settings tab mirrors this pattern
+
+`Source/UI/ShortcutsSettingsTab.h/.cpp` — the Settings "Keyboard Shortcuts" tab — grew the same
+collapsible-section idiom once its row count passed 49 (see [`shortcuts.md`](shortcuts.md)): one
+collapsible section per `ShortcutCategory`, a search field above them, and a top strip whose label
+flips between "COLLAPSE ALL"/"EXPAND ALL", deliberately lifted from `ModuleLibraryComponent` so the
+app's two collapsible lists behave identically — clickable header rows with a chevron, a
+collapsed-set keyed by the header's identity, the same strip idiom.
+
+Two things it deliberately does NOT copy from the library sidebar, both because the two components
+live in different contexts:
+
+- **No fold animation.** The library's accordion is a VBlank-driven `AnimationDriver` over a
+  hand-laid-out row list; here the rows are real child components inside a `juce::Viewport`, so
+  animating a fold would mean animating child bounds every frame for no benefit inside a modal
+  settings dialog. Collapsing is instant.
+- **No persistence of the collapse state.** This tab is constructed fresh every time the Settings
+  window opens and nothing has asked for the folds to survive that, so keeping the set in memory
+  costs no new settings key to migrate (contrast the library sidebar's `libraryCollapsedSections`
+  persistence above).
+
+**Search matches BOTH the action's description and its current binding text** ("cmd" finds every
+Cmd shortcut, "transpose" finds the piano-roll block — searching only the description would make
+the list useless for the commonest question, "what is on Shift+Q?"). An active filter FORCES a
+matching section open without touching its collapse flag (`sectionIsExpanded`), so a match can
+never be trapped inside a fold, and clearing the query restores exactly the folds the user had; a
+section with no surviving row is dropped entirely rather than left as a lone header over empty
+space (`sectionIsVisible`) — the same rule `ModuleLibraryComponent::buildRows` applies.
+
+**Row indexing is a contract, sections or no sections:** row `i` is always
+`ShortcutManager::getActionIds()[i]` — the section headers are separate widgets, never entries in
+the row vectors, and `ShortcutManager`'s action table keeps each category's ids CONTIGUOUS so a
+section is always one unbroken run (`ShortcutsSettingsTabTests` pins row `i` to `ids[i]`). One
+layout pass (`rebuildLayout()`) is what paints the rows, hit-tests the header clicks, and positions
+the child bounds, so the three can never disagree about where a row is — the same "one enumeration"
+rule `buildRows()`/`buildVisibleCables()` follow elsewhere in this doc. Group-separator hairlines
+use `kDividerAlpha = 0.10` here — drawn from the text colour at low alpha rather than a theme token,
+so they read on both light and dark themes with no token of their own — and `PreferencesSettingsTab`
+keeps its own separate constant (`0.12`, softened from an earlier `0.18` that read as table borders
+and boxed each preference in) in step with this one by comment rather than by a shared header, since
+a one-line float is not worth a dependency between two settings tabs.
+
 ---
 
 ## 14. Cable Interaction
@@ -1583,10 +1625,14 @@ fixed on screen, clamps preserved — see the comment on why the anchor invarian
 beatsPerBar)`. No JUCE dependency; `TimelinePanelComponent` owns the one instance and exposes it
 via `getViewState()`.
 
-**Snap** (`TimelineViewState::Snap`) — `Off, Bar, Whole, Half, Quarter, Eighth, Sixteenth`. Every
+**Snap** (`TimelineViewState::Snap`) — `Off, Bar, Whole, Half, Quarter, Eighth, Sixteenth,
+ThirtySecond, SixtyFourth, HundredTwentyEighth`. Every
 non-`Bar`/non-`Off` value is a **note value** (a fraction of a whole note), the DAW-conventional
 reading of the grid selector: `Whole` (combo label `"1"`) = 4 beats — a full 4/4 bar, `Half` = 2,
-`Quarter` (label `"1/4"`, the default) = 1 beat, `Eighth` = 0.5, `Sixteenth` = 0.25. `Bar` snaps to
+`Quarter` (label `"1/4"`, the default) = 1 beat, `Eighth` = 0.5, `Sixteenth` = 0.25, down through
+`"1/32"` = 0.125, `"1/64"` = 0.0625 and `"1/128"` = 0.03125 (the three finest were APPENDED after
+`Sixteenth` — the enum's int is persisted, so inserting in note-value order would silently
+reinterpret every saved grid choice). `Bar` snaps to
 multiples of `beatsPerBar` (`tsNum * 4 / tsDen` off the transport's time signature — same formula
 `TransportService::getPosition()` already uses). Ties round up (toward +infinity, beats are never
 negative in practice). On top of the division sits a master switch, `TimelineViewState::snapEnabled`
@@ -1605,13 +1651,31 @@ persists under the `"timelineSnap"` int key (plus `"timelineSnapEnabled"` for th
 (`Metrics::timelineRulerHeight = 24`) docked at the top of the lanes region. It owns nothing: a
 `TimelineViewState&` (shared with the panel) and an optional `synth::TransportService*` (setter,
 non-owning, may be null). `paint()` reads `getPositionSnapshot()` once per frame (message thread,
-cheap) for the time signature and loop bounds, draws bar ticks/labels with adaptive density (the
-labelled-bar stride doubles until labels are `>= 40px` apart, so they never overlap; per-beat ticks
-only appear once `pixelsPerBeat >= 8`) and a bracket over `[loopStartPpq, loopEndPpq]`.
-No timer of its own: `repaint()` is called
-after one of its own interactions, or by the panel's 10 Hz poll when the time signature or loop range
-changed from elsewhere (TL5-4, below). The moving position line is the separate
-`TimelinePlayheadOverlay` drawn over it.
+cheap) for the time signature and loop bounds, and draws three adaptive-density bands as you zoom
+in — Cubase's own progression, and the SNAP division has no say in any of them (a 1/16 snap on a
+zoomed-out arrangement must not turn the strip into a grey smear):
+
+1. **far out** — bar lines + bar numbers only; the labelled-bar stride itself doubles (by powers of
+   two) until labelled bars are `>= 40px` (`kMinLabelSpacingPx`, `.cpp`-local) apart, so bar labels
+   never overlap regardless of zoom;
+2. **mid** — short, half-height beat ticks appear between the bar lines once `pixelsPerBeat >= 8`
+   (`kMinBeatTickSpacingPx`);
+3. **close in** — those beat ticks also earn a small, dim `"bar.beat"` sub-label (`"80.2"`, 1-based
+   on both halves, faded to 65% alpha and two points smaller than the bar number) once
+   `pixelsPerBeat >= 48` (`kMinBeatLabelSpacingPx`).
+
+`rulerTickPlanFor(pixelsPerBeat, beatsPerBar)` (`Source/UI/TimelineRulerComponent.h`) is the ONE
+pure decision behind bands 2–3 (`RulerTickPlan{drawBeatTicks, drawBeatLabels}`) — a label implies a
+tick by construction (a label with no tick to sit against would float), and a bar of one beat or
+fewer draws no ticks at all (there is nothing non-bar to mark). `paint()` calls it once per frame,
+never re-derives it inside the per-bar loop, and the same helper drives
+`Tests/TimelinePanelTests.cpp`'s `TimelineRulerTickPlanTest` suite directly against the two
+thresholds — deterministic and font-independent by design (no measured text width anywhere in the
+decision), so the guard means the same thing on every platform. A bracket over `[loopStartPpq,
+loopEndPpq]` completes the strip. No timer of its own: `repaint()` is called after one of its own
+interactions, or by the panel's 10 Hz poll when the time signature or loop range changed from
+elsewhere (TL5-4, below). The moving position line is the separate `TimelinePlayheadOverlay` drawn
+over it.
 
 **Two interaction zones.** The strip is split horizontally at `height / 2`
 (`TimelineRulerComponent::Zone`): the **top** half owns the loop range, the **bottom** half owns the
@@ -1656,23 +1720,99 @@ the loop half) and `paint()` tints the hovered half with `accent` at 10% alpha, 
 so the brace stays legible. `repaint()` fires only when the hovered zone actually **changes** — never
 per mouse-move pixel — and there is no timer or animation involved (§11).
 
-**Grid + wheel:** `TimelinePanelComponent::paint()` draws the same bar/beat lines directly into the
-lanes region below the ruler (bar lines at full `colors.border`, beat lines at 35% alpha — no
-dedicated grid tokens exist, and one caller didn't justify adding any). `mouseWheelMove()` is
-implemented once, on the panel, with Cubase-style bindings: **plain vertical wheel scrolls the
-track rows vertically** (`TimelineViewState::trackScrollY`, shared with the header column — a
-scrollbar drag on the header viewport writes the same value back via
-`HeaderViewport::onScrolledY`, and `syncTrackScroll()` is the one re-sync point); **Shift+wheel or
-a trackpad's own `deltaX` scrolls horizontally** (`deltaY` converted to beats at the current zoom —
-a constant *pixel* distance per wheel unit, so the same physical gesture covers less musical time
-zoomed in); **Cmd+wheel** (`mods.isCommandDown()`, already Ctrl-on-other-platforms via JUCE) zooms
-horizontally around the cursor; **Cmd+Shift+wheel** zooms vertically — it scales
-`TimelineViewState::rowHeightScale` within `[0.5, 3.0]`, which multiplies the themed row height in
-BOTH `TimelineClipLaneArea::getRowHeight()` and the panel's `layoutTrackHeaders()`, anchored so the
-row under the pointer stays put. `mouseMagnify()` (trackpad pinch — deliberate enough to need no
-modifier) maps plain pinch to horizontal zoom and Shift+pinch to vertical zoom, on the panel and
-inside the piano roll alike. JUCE bubbles an unhandled wheel event from the ruler child up to the
-panel, so both regions share identical behaviour from one implementation.
+**Grid.** `TimelinePanelComponent::paint()` draws the SAME bar/beat/subdivision hierarchy directly
+into the lanes region below the ruler, from the shared three-level policy in
+`Source/UI/TimelineClipLaneArea.h` (`GridLineLevel::{Subdivision, Beat, Bar}`,
+`gridLineColourFor`/`gridLevelIsReadable`) — `PianoRollComponent` paints its own grid from the SAME
+policy (TL5-8, below), so the two surfaces can never drift apart in what's visible at a given zoom.
+Per-level alpha is monotonic (`Subdivision` 0.28, `Beat` 0.50, `Bar` 0.85) and each line is lifted
+halfway (`kGridLineContrastMix = 0.5`) from the theme's `border` token toward the background's
+CONTRASTING colour (`background.contrasting(1.0f)` — black or white) before that alpha is applied:
+raising alpha alone can't fix a dark theme, where `border` is already only a shade or two off `bg0`,
+so even alpha 1.0 would read as barely-there; mixing toward the contrasting extreme is what makes
+the line a LINE while keeping the theme's own hue in it, with no new token to re-skin. A whole level
+is DROPPED rather than drawn as a wall of touching pixels once its spacing falls under
+`kMinGridLinePixels = 3.0` px (`gridLevelIsReadable`) — the same "no grid is better than a smear"
+call the ruler's own adaptive density makes above, and Cubase's own rule. Beat lines gate at
+`pixelsPerBeat >= 8` (`kMinBeatLinePixelsPerBeat`, `TimelinePanelComponent.cpp` — the same threshold
+the ruler's beat ticks use); the subdivision level draws only when the current snap DIVISION is
+finer than a beat, the beat level is ALSO drawn (the hierarchy stays monotonic — a subdivision may
+never outlive its parent beat level, which the ~8px/~3px gap between the two gates would otherwise
+allow), and it clears its own density guard.
+
+**Wheel, scroll direction, and keyboard zoom/grid commands.** `mouseWheelMove()` is implemented once
+on the panel (JUCE bubbles an unhandled wheel event from the ruler child up to it, so both regions
+share identical behaviour from one implementation) with Cubase-style bindings: **plain vertical
+wheel scrolls the track rows vertically** (`TimelineViewState::trackScrollY`, shared with the header
+column — a scrollbar drag on the header viewport writes the same value back via
+`HeaderViewport::onScrolledY`, and `syncTrackScroll()` is the one re-sync point); **Shift+wheel or a
+trackpad's own `deltaX` scrolls horizontally** (converted to beats at the current zoom — a constant
+*pixel* distance per wheel unit, so the same physical gesture covers less musical time zoomed in);
+**Cmd+wheel** zooms horizontally around the cursor; **Cmd+Shift+wheel** zooms vertically, scaling
+`TimelineViewState::rowHeightScale` within `[0.5, 3.0]` (multiplies the themed row height in BOTH
+`TimelineClipLaneArea::getRowHeight()` and the panel's `layoutTrackHeaders()`, anchored so the row
+under the pointer stays put). `mouseMagnify()` (trackpad pinch — deliberate enough to need no
+modifier) maps plain pinch to horizontal zoom and Shift+pinch to vertical, on the panel and inside
+the piano roll alike.
+
+**The two zoom-decided branches read `synth::ui::dominantWheelDelta(wheel)`
+(`Source/UI/ScrollPolicy.h`), never a single axis.** macOS folds a Shift-held wheel gesture into
+`deltaX` (the OS's own axis swap), so a branch that is selected by its MODIFIERS and reads only
+`deltaY` — Cmd+Shift+wheel here, and its Cmd+Shift+wheel twin in the piano roll below — would
+receive exactly `0.0` under that fold and silently do nothing; `dominantWheelDelta` (`deltaY != 0 ?
+deltaY : deltaX`) is the one-line guard both zoom branches share, verified against
+`juce_MouseEvent.h`/`juce_Viewport.cpp` rather than assumed. A plain-scroll branch, by contrast,
+reads the axis the gesture actually ARRIVED on (`std::abs(deltaX) > std::abs(deltaY) ? deltaX :
+deltaY`) — a Shift+wheel the OS left on `deltaY` and a trackpad's own sideways `deltaX` are both
+still "the amount to move by," so picking the dominant one there instead would be wrong.
+
+**Natural scrolling** (`Settings → Preferences → "Natural scrolling"`, default ON) is the one
+plain-scroll preference layered on top of the OS's own setting, and is where
+`Source/UI/ScrollPolicy.h`'s `scrollAmount(delta, invertScroll)` matters: JUCE's wheel deltas are
+already OS-direction-adjusted (`MouseWheelDetails::isReversed` only REPORTS whether the OS has
+"natural" scrolling on — the delta itself is pre-flipped so `juce::Viewport` can always apply
+`viewPosition -= delta` and feel native on every platform), so "natural" for every scrolling surface
+in this app means copying that Viewport convention, never re-reading `isReversed` to flip anything a
+second time. `scrollAmount`'s `invertScroll` is the APP-LEVEL preference stacked on top:
+`TimelinePanelComponent::setScrollInverted`/`PianoRollComponent::setScrollInverted` (both driven by
+`MainComponent::applyNaturalScrollingPreference()`, installed as a `juce::ChangeListener` on
+`appProperties.getUserSettings()` itself — a `juce::PropertiesFile` IS a `ChangeBroadcaster`, so a
+settings-file write reaches both surfaces with no dedicated callback wired through the Settings
+tab). One preference, not two — a user who wants the wheel flipped wants it flipped everywhere it
+scrolls. It affects ONLY the timeline panel and the piano roll; the graph canvas pans rather than
+scrolling and is unaffected. The piano roll's pitch axis needs one more mapping on top of
+`scrollAmount` (screen-oriented: +y means the view moves DOWN), since `firstVisiblePitch_` is the
+pitch at the TOP row and pitch grows upward — a view moving down therefore DECREASES it, which is
+why that branch negates the result (see TL5-8 below); the horizontal axis on both surfaces needs no
+such remapping, since a view moving right IS a larger `firstVisibleBeat`.
+
+**Zoom-scroll direction** (`Settings → Preferences → "Scroll up zooms in"`, default ON, key
+`zoomScrollUpZoomsIn`) is a separate preference from Natural scrolling, because zoom-on-wheel cares
+about the FINGER rather than the content: `ScrollPolicy.h`'s `wheelGestureIsUpward()` recovers the
+physical gesture direction by XOR-ing the dominant delta's sign with `isReversed` (the one place
+`isReversed` IS consulted — a plain scroll must not do this, per the paragraph above), so "scroll up
+enlarges" means the same physical motion whether or not the OS has natural scrolling on. Both
+editors' Cmd/Cmd+Shift wheel-zoom branches compute `zoomIn = wheelGestureIsUpward(wheel) !=
+zoomScrollInverted_`, with magnitude still `|dominantWheelDelta|` through the existing sensitivity
+curve. `MainComponent::applyZoomScrollPreference()` propagates over the same settings-file
+`ChangeBroadcaster` path; the panel forwards both scroll preferences to its piano roll.
+
+**Keyboard zoom** (Cmd+=/Cmd+- horizontal, Cmd+Shift+=/Cmd+Shift+- vertical) reaches the SAME
+`zoomTimelineHorizontal`/`zoomTimelineVertical` (panel) or `zoomHorizontal`/`zoomVertical` (roll)
+entry points the wheel/pinch gestures do, anchored at the visible centre rather than a cursor
+position, and is routed per focused surface by `MainComponent::resolveEditSurface()` — see
+[`shortcuts.md`](shortcuts.md#zoom) for the full per-surface table and the Graph-is-horizontal-only
+exception.
+
+**The timeline's grid division** is likewise reachable from the keyboard, alongside the mouse's
+snap combo (above): Ctrl+Shift+1..8 set it outright (`TimelinePanelComponent::setSnapValue`, 1
+through 1/128), Ctrl+Shift+Left/Right step it by one (`cycleSnapValue`, clamped coarsest↔finest,
+never wrapped — holding the key parks on `Bar` or `1/128` rather than surprising the user by wrapping around;
+from `Off` both directions re-enter at the last musical division the user actually chose). Real
+Ctrl, not Cmd, even on macOS — see [`shortcuts.md`](shortcuts.md#timeline) for why that's
+deliberate. Every set/cycle call is a view-state-only change (nothing on the undo stack) that goes
+through `setSnapValue`, the panel's ONE writer for the shared snap value, so the combo, these
+commands and the cycle keys share one persist-and-repaint path.
 
 ### TL5-3: track headers, binding chips, add-track
 
@@ -1982,6 +2122,74 @@ Layout: `metronomeButton_` (a square button, like its three siblings) + `kGap` +
 (64 px) + `kGap * 2`, inserted between the loop button and the BPM label — the bar's fixed-width
 strip grows by ~98 px, well inside the timeline panel's normal width.
 
+### Edit-tool strip (Select / Split / Glue / Erase / Mute / Draw)
+
+`Source/UI/EditTool.h` declares the Cubase-style tool row shared by the clip lanes (TL5-7) and the
+piano roll (TL5-8): `enum class EditTool { Select, Split, Glue, Erase, Mute, Draw }`, plus
+`kAllEditTools` (an `std::array<EditTool, 6>` in that order), `editToolKeyDigit(tool)` and
+`editToolName(tool)`. It is deliberately JUCE-free — gesture routing in both editors and the
+strip's button wiring all switch on it, and `editToolForKeyChar(int keyChar)` is what
+`TimelinePanelComponent::keyPressed()` consults for the number-key mapping, so tool switching is
+testable with no UI at all.
+
+**One active tool, owned by `TimelinePanelComponent`.** The clip lanes and the piano roll share the
+same lanes rect and only one is ever visible, so a tool row that changed meaning depending on which
+editor happened to be showing would be a trap. `setActiveTool(EditTool)` pushes the tool into
+**both** `TimelineClipLaneArea::setActiveTool` and `PianoRollComponent::setActiveTool` unconditionally
+(dontSendNotification on every strip button, set explicitly rather than via the radio group, since
+this method is also reached from a number key or from a test — no button was necessarily clicked)
+and lights the matching strip button; number keys and clicking a button are the only two ways a
+user reaches it. Switching tools cancels whatever gesture/preview is already in flight in either
+editor rather than trying to reinterpret it under the new tool — a half-finished drag has no
+meaning under a different tool.
+
+**Numbering follows Cubase**, so the muscle memory transfers: **1** Select, **3** Split, **4** Glue,
+**5** Erase, **7** Mute, **8** Draw. **2** (Range Selection), **6** (Zoom) and **9** (Play/Scrub) are
+Cubase tools this app doesn't ship yet, and the gaps are reserved **on purpose**:
+`editToolForKeyChar` returns `std::nullopt` for them rather than clamping to a shipped tool, so
+`TimelinePanelComponent::keyPressed()` leaves those three digits unconsumed and whatever they mean
+elsewhere (nothing, today) is untouched. Shipping one of the missing three later costs no rebind —
+the digit is already reserved for exactly that tool.
+
+**All six tool digits are rebindable**, unlike the reserved 2/6/9 gaps above, which aren't bindings
+at all. Each digit is a `ShortcutManager` action (`timelineToolSelect`, `timelineToolSplit`, …,
+Timeline category) resolved directly by `TimelinePanelComponent::keyPressed()` — a *surface* action,
+never dispatched through `ApplicationCommandManager` — so with a manager installed, an unbound tool
+digit has no key at all, and a rebind takes effect immediately with no risk of colliding with the
+Ctrl+Shift+digit grid-set commands (TL5-2 above): the two live in the same category, but modifier
+equality is exact, so a bare digit can never match a Ctrl+Shift one. Only a build with NO manager
+installed (headless tests, an embedding with no settings store) falls back to the hardcoded digits
+above via `editToolForKeyChar`. See [`shortcuts.md`](shortcuts.md#command-vs-surface-actions) for
+the full command-vs-surface split and the tripwire test that guards it.
+
+**The strip itself** is six `juce::DrawableButton`s (`ImageOnButtonBackground`), built unconditionally
+in `TimelinePanelComponent`'s constructor (a headless build simply has no icon to draw in them —
+`getToolButton(tool)` is never null once the panel exists), one shared radio group id so clicking one
+un-toggles the rest, each with a tooltip that carries the digit (`"Split (3)"`, etc. —
+`editToolName(tool) + " (" + editToolKeyDigit(tool) + ")"`). Laid out left-to-right in `kAllEditTools`
+order (1, 3, 4, 5, 7, 8) immediately left of the snap combo/toggle in the transport bar — both are
+"how the next edit behaves" chrome, so they read as one group without pushing the transport controls
+off their left-aligned home. `applyToolStripTheme()` (constructor + `lookAndFeelChanged()`) re-applies
+each icon from `AppLookAndFeel::getIcon` and sets the active-tool highlight as a **background colour**
+(`colors.toolActive`, not a different icon tint — the glyph reads the same lit or not; see
+[`theming.md`](theming.md)), null-guarded on both a headless LnF and a headless icon library.
+
+**Custom per-tool cursors** (`Source/UI/ToolCursors.h`, `makeToolCursor(EditTool, const
+juce::Drawable*)`) render the SAME already-tinted `Icon::Tool*` drawable the strip button paints
+into a 24×24 `juce::Image` and wrap it in a `juce::MouseCursor`, so the cursor can never drift out of
+sync with whatever theme is active — there is no separate cursor-only asset or tint step to go stale.
+Hotspots are not uniform: **Select** hotspots at the arrow's tip `(4, 2)` and **Draw** at the pencil's
+tip `(3, 21)` (both icons have an obvious off-centre working point, the way every DAW places a click
+point there); **Split/Glue/Erase/Mute** hotspot at the icon's geometric centre `(12, 12)` (a
+scissors' cut happens where the blades cross — the centre — and glue/erase/mute act on whatever is
+directly under the pointer, so there is no other candidate point). Headless-safe by construction: a
+null icon (asset library not linked in) falls back to a stock cursor per tool — `NormalCursor` for
+Select, `CrosshairCursor` for Draw and for the remaining four (no single stock cursor reads as
+"split" or "mute", so the crosshair at least telegraphs "a non-Select tool is active"). Both
+`TimelineClipLaneArea` and `PianoRollComponent` cache their own six cursors
+(`rebuildToolCursors()`), rebuilt only on a theme change — never per mouse-move, since building one
+renders an icon into an `Image`.
+
 ### TL5-7: clip lanes
 
 `Source/UI/TimelineClipLaneArea.h/.cpp` (`synth::ui::TimelineClipLaneArea`) fills the lanes region
@@ -2015,25 +2223,35 @@ a pure static function (no doc, no component) — `[beatToX(start), beatToX(star
 rowHeight, rowHeight]` — so geometry is unit-testable with no component or LookAndFeel at all.
 
 **Rendering.** Every track in doc order gets one row; every clip on it, a rounded rect filled with
-`synth::ui::resolveTrackColour(track.colourArgb, trackIndex, track.muted)` (§TL5-3's resolver,
-reused rather than re-invented), a name (width > ~40 px) and a thin pitch-mapped note preview
-(width > ~24 px, clip-relative note beats offset by the clip's current — possibly mid-drag —
-start). Selected clips get a brighter border and a slight fill lift. Repaints happen only on: doc
-changes (`refreshFromDoc()`, routed in from `TimelinePanelComponent::timelineChanged()`, which also
-calls `ClipSelectionModel::retainOnly` so a clip removed by any path can never stay selected),
-view-state changes (zoom/scroll/snap), and interactions — never a timer.
+`synth::ui::resolveTrackColour(track.colourArgb, trackIndex, track.muted || clip.muted)` (§TL5-3's
+resolver, reused rather than re-invented — dimmed when **either** flag is set, since the two are
+independent in the model: a clip the user muted individually dims exactly like one sitting on a
+muted track), a name (width > ~40 px) and a thin pitch-mapped note preview (width > ~24 px,
+clip-relative note beats offset by the clip's current — possibly mid-drag — start). A muted clip
+keeps its shape, its selection border and its waveform/notes, and loses only the fill/border
+brightness and its name label's alpha (`kMutedClipLabelAlpha`) — painted straight from
+`synth::Clip::muted` on the doc, **never** from a `TimelineSnapshot`, which no longer contains a
+muted clip at all (see `docs/architecture.md`'s TimelineSnapshot section). Selected clips get a
+brighter border and a slight fill lift. Repaints happen only on: doc changes (`refreshFromDoc()`,
+routed in from `TimelinePanelComponent::timelineChanged()`, which also calls
+`ClipSelectionModel::retainOnly` so a clip removed by any path can never stay selected), view-state
+changes (zoom/scroll/snap), and interactions — never a timer.
 
-**Interactions:**
+**Interactions (Select tool).** Everything below is `EditTool::Select`'s gesture table — the tool
+this component grew up with, and the only one that drags, resizes, marquees or double-click-authors
+(see **Edit tools** further below for what the other five tools do instead; switching away from
+Select disables all of this):
 
 | Gesture | Effect |
 |---|---|
 | Click a clip | Selects it (replacing the selection unless Shift/Cmd/Ctrl, which toggles just that clip) |
 | Click empty lane space | Deferred: only a press that never becomes a drag clears the selection on mouse-up — the same `pendingEmptyCanvasClick` trick `GraphEditor::mouseDown/mouseUp` uses for the canvas, so a drag is never mistaken for a deselect |
 | Drag from empty lane space | Marquee — intersection hit-test (`clipHitTestMarquee`), additive with Shift; there is no drag-to-pan here (scrolling is wheel-only, TL5-2), so a plain drag also starts a (non-additive) marquee |
-| Drag a clip's body | Moves it (and every other selected clip, same-track only) by one Snap-quantised delta shared across the whole selection, computed from the clip that was grabbed and clamped so no clip's start goes below 0 |
+| Drag a clip's body | Moves it (and every other selected clip) by one Snap-quantised beat delta shared across the whole selection, computed from the clip that was grabbed and clamped so no clip's start goes below 0, **plus** one shared track-row delta (see **Cross-track drag** below) — no longer same-track-only |
+| **Alt** + drag a clip's body | Copy-drag: the originals stay exactly where they are (doc and screen both); release commits a `duplicateClip` + `moveClipToTrack` per dragged clip at the destination, and the **copies** end up selected. There is no Alt-**click** action — copying a clip onto itself isn't something anyone asks for by clicking |
 | Drag within 6 px of the right edge | Resizes (trims) the clip's length, Snap-quantised, floored at 1/16 beat |
 | Drag within 6 px of the left edge | Moves the start and shrinks/grows the length so the **end** stays fixed; the clip's notes (clip-relative) travel with it — a deliberate divergence from per-note-anchored trimming, deferred to a later task |
-| Right-click a clip | `PopupMenu`: **Split at pointer** (enabled only when the Snap-quantised pointer lands strictly inside the clip), **Duplicate**, **Delete**, and — for an audio clip only (non-empty `assetRef`), below a separator — **Relink audio…** (TL6-6) — preserves the existing selection, the same rule `GraphEditor`'s cable/canvas menus follow |
+| Right-click a clip | `PopupMenu`: **Split at pointer** (enabled only when the Snap-quantised pointer lands strictly inside the clip), **Glue with next** (enabled only when a legal join target exists — greyed out, not hidden, so the menu's items never move around), **Duplicate**, **Mute**/**Unmute** (one toggling item, labelled for what the click will do), **Rename…** (opens the inline editor — see below), **Delete**, and — for an audio clip only (non-empty `assetRef`), below a separator — **Relink audio…** (TL6-6) — preserves the existing selection, the same rule `GraphEditor`'s cable/canvas menus follow |
 | Double-click a clip | Opens the piano roll on it (`onClipDoubleClicked` → `TimelinePanelComponent::openPianoRoll`) |
 | Double-click empty lane space | Authors content on the row under the pointer — see **Adding content** below (MIDI: a one-bar clip; audio: a file chooser; automation: nothing) |
 | Drop audio files from the OS | Imports the first readable one onto the audio row under the cursor — see **Adding content** |
@@ -2041,15 +2259,84 @@ view-state changes (zoom/scroll/snap), and interactions — never a timer.
 | Escape | Clears the selection; returns `false` when it is already empty |
 | P | **Loop the selection** — sets the transport loop to the selected clips' `[min startBeat, max endBeat]` span and arms looping; returns `false` when nothing is selected |
 
+**Cross-track drag.** A plain (non-copy) move drag previews **one shared track-row delta** for the
+WHOLE dragged set, derived from the vertical drag distance (`round(dy / rowHeight)`), legal only if
+**every** dragged clip's destination row exists and accepts its payload — `TimelineDoc::
+moveClipToTrack`'s kind rule: an audio clip (non-empty `assetRef`) only onto a `TrackKind::Audio`
+row, a MIDI clip only onto `TrackKind::Midi`, neither onto `Automation`. An illegal drop for **any**
+clip in the set clamps the whole group's row delta back to 0 — a same-lane move, i.e. exactly what
+this drag did before it could cross tracks — rather than dropping only the clips that would have fit
+and silently tearing the selection apart. `getPreviewRowDeltaForTest()` is the row delta the
+in-flight drag would apply; a copy-drag never moves the originals on EITHER axis
+(`effectiveGeometryFor` and `effectiveRowFor` share the same `copyDrag_` guard — they must agree or
+the original slides while its row holds), so the destinations paint as translucent ghosts
+(`paintDragGhosts`: source-track colour at 0.4 alpha plus a 1 px outline, no name label — a real
+blur would be per-frame image filtering, which §10–11 rules out) while the source clips keep
+painting where they are. Ghost geometry comes from one helper (`dragGhostRectFor`) shared with
+`getDragGhostRectsForTest()`, the same single-enumeration reasoning as `buildVisibleCables()`.
+
+**Inline rename.** `beginRenameClip(ClipId)` (reached from the context menu's **Rename…**) opens a
+`juce::TextEditor` over the clip's name area, pre-filled and `selectAll()`ed: Return commits through
+`renameClip()` (which calls `TimelineDoc::setClipName` — trims, rejects a blank result, one undo
+step), Escape cancels, and losing focus **commits** (the same three outcomes every other in-place
+rename in this app has — clicking away is a commit, not a cancel). Any rename already in flight
+commits first if a second one opens, and the editor detaches itself **before** either outcome runs,
+so the `onFocusLost` callback its own teardown fires re-enters to a null editor and stops rather than
+double-committing. `getRenameEditorForTest()` is the test seam (a live `juce::TextEditor` is no more
+testable than a `juce::PopupMenu`).
+
 **One undo step per gesture.** Every drag/trim previews locally (a member offset or length, read
 back by `paint()` through `effectiveGeometryFor()`) and commits to the doc exactly once on
 mouse-up, through `AppUndoManager::recordTimelineChange` — a multi-clip move or a multi-clip Delete
 is one `recordTimelineChange` call however many clips it touches, mirroring
 `GraphEditor::dragSelectionBy()`/`finalizeSelectionDrag()` and `deleteSelection()`'s one-transaction
-contract for modules. `showMenuAsync` never runs headlessly, so the context menu's Split/Duplicate/
-Delete actions are exercised in tests through `applyClipContextChoice(ClipId, choice, pointerBeat)`
-— the same menu-without-the-menu idiom `TimelineTrackHeaderComponent::applyBindingMenuChoice`/
-`applyContextMenuChoice` already establish (TL5-3).
+contract for modules. `showMenuAsync` never runs headlessly, so the context menu's Split/Glue/
+Duplicate/Mute/Delete actions are exercised in tests through `applyClipContextChoice(ClipId, choice,
+pointerBeat)` — the same menu-without-the-menu idiom `TimelineTrackHeaderComponent::
+applyBindingMenuChoice`/`applyContextMenuChoice` already establish (TL5-3). `ClipContextChoice` also
+carries `Rename`, which is deliberately **inert** in this function — renaming opens a
+`juce::TextEditor` rather than mutating the doc, so its commit path is `renameClip()` and this enum
+case exists only so the menu's whole vocabulary is enumerable (a test can assert the choice mutates
+nothing).
+
+**Edit tools (Split / Glue / Erase / Mute / Draw).** `handleToolMouseDown()` routes every non-Select
+tool: Split/Glue/Erase/Mute act **immediately on press** (a DAW's tool click is expected to land
+under the finger, not on release) and hit-test a clip first — a click on empty lane space with any
+of these four held does nothing at all, deliberately, rather than falling through to a selection
+change (which would make an Erase click look like it selected something). All four route straight
+into `applyClipContextChoice` — **the tool and the menu item are the same code path**, which is what
+keeps "the tools are an accelerator for the menu" literally true: `Split` → `SplitAtPointer` at the
+Snap-quantised pointer beat, `Glue` → `GlueWithNext` against `findGlueTarget(id)` (the clip on the
+SAME track with the smallest `startBeat` at or after `id`'s end — a gap is a legal join target,
+since `TimelineDoc::joinClips` treats a gap as silence and only rejects an overlap; picking the
+abutting clip only would make the tool silently inert on the very arrangement, clips with gaps,
+where gluing is most useful), `Erase` → `Delete`, `Mute` → `ToggleMute`. None of the four ever starts
+a drag, a marquee, a trim or the double-click authoring gestures — every mouse-move and mouse-up is
+a no-op while one of them is active, so a mis-aimed drag can never silently move or trim a clip
+instead of doing the click action.
+
+**Draw** is the one exception with a drag: press anchors on the **floor-snapped** beat of the row
+under the pointer (`floorSnappedBeatAt` — the grid line at or *before* the click, so the clip lands
+in the cell it was aimed at) on a **Midi** row only (an Audio row's content is an imported asset and
+an Automation row's is breakpoints — neither is something a pencil can draw); drag grows a ghost
+rect to the **ceil-snapped** beat under the pointer (`ceilSnappedBeatAt`, floored at one snap
+division — or `kMinClipLengthBeats` with Snap off — so a drag that has entered a cell always
+includes the whole cell); release commits. A press that never dragged falls back to
+`createMidiClipAt` — the SAME one-bar-clip authoring gesture the empty-lane double-click uses (see
+**Adding content** below), so a plain pencil click and a plain double-click land in the same place.
+
+**Split/Draw preview seams — repaint only on a state change.** Both previews are gated on the
+previewed STATE changing, never on raw pointer movement, mirroring the paint-count discipline
+`TimelinePlayheadOverlay::requestRepaintStrip` established: `updateSplitPreview(pos)` recomputes the
+hovered clip + snapped beat, compares against the cached pair, and only then calls the virtual
+`requestToolPreviewRepaint(region)` with the union of the old and new preview rects — pointer
+movement inside one snap cell over the same clip costs zero repaints. `updateDrawGesture`/
+`commitDrawGesture` follow the identical rule for the Draw ghost rect. `requestToolPreviewRepaint`
+is the ONE seam both previews cost through (`getSplitPreviewForTest()` / `getDrawGhostRectForTest()`
+expose the state itself, so a test can assert on it without decoding pixels) — a test subclass
+overrides it and counts, the same pattern `PianoRollComponent::requestRepaintPreviewStrip` and the
+playhead overlay's own seam use. `mouseEnter` re-applies the active tool's cursor and `mouseExit`
+drops the Split preview, so a hover line never survives the pointer leaving the lanes.
 
 **Relink audio… (TL6-6).** Offered whenever the clicked clip's `assetRef` is non-empty, whether the
 asset currently resolves (a plain re-point) or is missing (see `docs/architecture.md`'s
@@ -2133,6 +2420,12 @@ authoring gestures are split across three files, each covering the half it owns:
 row highlight, the hint text and its paint), the panel's (`Tests/TimelinePanelTests.cpp` group 6 — a
 new clip really opens the piano roll), and the import's (`Tests/AssetManagerTests.cpp` group 2 —
 saved-bundle vs `Recordings/` destination, length from the file, failure mutating nothing).
+`Tests/TimelineClipEditingTests.cpp` covers the edit-tool layer added on top: each tool's
+click-acts-immediately behaviour and its empty-space no-op, `findGlueTarget`'s gap-bridging,
+Alt-copy vs plain move, the cross-track kind check (legal drop, illegal drop clamping the whole
+group back to 0), the split/draw preview seams' repaint-only-on-change discipline (via a counting
+subclass overriding `requestToolPreviewRepaint`), the inline rename's commit/cancel/focus-loss
+paths, and the clip clipboard's audio-field round trip (see the clip clipboard subsection below).
 
 ### TL5-8: piano roll
 
@@ -2206,12 +2499,17 @@ reason `TimelineViewState::divisionBeats` below and every label here go through 
 see the CLAUDE.md font-swap invariant).
 
 **Gridlines** are drawn from state alone, faintest level first so a bar line always wins a shared
-pixel: the current snap division at alpha 0.14 (only when it is finer than a beat — `Snap::Off` has
-no division at all), beats at 0.30, bars at 0.75. Each level is dropped entirely when its spacing
-falls under `kMinGridLinePixels` (3 px), the same adaptive-density idea the panel's own grid uses.
-`visibleLineRange(spacingBeats)` is the ONE range computation `paintGridLines` and the
-`getGridLineCountForTest` seam both walk, so the assertion can never drift from the paint. Changing
-the snap selector repaints the roll (`TimelinePanelComponent`'s `snapCombo_.onChange`); no timer.
+pixel — and from the SAME `GridLineLevel`/`gridLineColourFor`/`gridLevelIsReadable` policy
+(`Source/UI/TimelineClipLaneArea.h`, TL5-2 above) the clip lanes paint their own grid from, so the
+two surfaces can never disagree on what's visible or how dark it is at a given zoom: the current
+snap division (`GridLineLevel::Subdivision`, alpha 0.28 — only when it is finer than a beat,
+`Snap::Off` has no division at all), beats (`Beat`, 0.50), bars (`Bar`, 0.85), each lifted halfway
+toward the background's contrasting colour before that alpha applies. Each level is dropped
+entirely when its spacing falls under `kMinGridLinePixels` (3 px, `gridLevelIsReadable`), the same
+adaptive-density idea the panel's own grid uses. `visibleLineRange(spacingBeats)` is the ONE range
+computation `paintGridLines` and the `getGridLineCountForTest` seam both walk, so the assertion can
+never drift from the paint. Changing the snap selector repaints the roll (`TimelinePanelComponent`'s
+`snapCombo_.onChange`); no timer.
 
 **Rendering.** Row backgrounds alternate white/black-key tint (`colors.bg1` / `colors.surfaceHi`,
 the same tokens `ModuleComponent`'s themed `MidiKeyboardComponent` uses), a C-octave label per
@@ -2221,7 +2519,7 @@ the clip's span outside `[clipStart, clipEnd)` dimmed. Notes are rounded rects t
 (`colors.midiWire`, brightened by `velocity/127`), selected notes get an accent border. Repaints
 happen only on doc/listener refresh, interaction, and view-state changes — no timer.
 
-**Gestures** (each previews locally — a member delta/length/velocity read back by `paint()` through
+**Gestures (Select tool)** — everything below is `EditTool::Select`'s table; the other five tools replace it entirely (see **Edit tools** further below) (each previews locally — a member delta/length/velocity read back by `paint()` through
 `effectiveGeometryFor()` — and commits ONCE via `AppUndoManager::recordTimelineChange` on mouse-up,
 so a multi-note move/scrub/delete is one undo step):
 
@@ -2229,7 +2527,7 @@ so a multi-note move/scrub/delete is one undo step):
 |---|---|
 | **Single click on empty grid** | DESELECTS (click-through). Creates nothing, writes no undo step. |
 | **Double-click on empty grid** | Creates ONE note: pitch from the row, start snapped, length exactly **one snap division** (1 bar quantise → a 1-bar note; 1/4 → a quarter; 1/16 beat when Snap is Off), velocity 100, channel 1. Selected, one undo step. Snapping up past the clip's end steps back one division rather than creating nothing. |
-| Shift+drag from empty grid | Marquee (intersection hit-test, additive with Cmd/Ctrl) |
+| **Drag from empty grid** | Marquee (intersection hit-test) — a plain drag REPLACES the selection; Shift or Cmd/Ctrl makes it additive. A press that never crosses the drag threshold is still just the deselect click above (same deferred-click promotion the clip lanes use), and there is nothing to retrain because the roll has no drag-to-pan (scrolling is wheel-only) |
 | Click a note | Selects it; **Shift** toggles it in/out of the selection, **Cmd** adds it (never removes — the drag that may follow scrubs the whole selection) |
 | Drag a note's body | Moves it + every other selected note, by one shared snapped beat delta and one shared semitone delta |
 | Drag within 5 px of a note's right edge | Resizes (trims) just that note's length, Snap-quantised, floored at one division (1/16 beat when Snap is Off) — even inside a wider selection |
@@ -2239,6 +2537,93 @@ so a multi-note move/scrub/delete is one undo step):
 | Cmd+vertical-drag on a note | Scrubs velocity, ~1/px, clamped to `[1, 127]` independently per note (multi-selection scrubs all by the same delta) |
 | "Q" button (plain click, or the `Q` key) | **Toggles snap** — flips the shared `TimelineViewState::snapEnabled`, so grid magnetism switches off/on everywhere (roll, clip lanes, ruler) while the chosen division survives underneath. Paints lit (accent fill/border) while snap is effective, muted while off. A view-state toggle, never a document edit — no undo step. Fires `onSnapToggled` so the panel persists the choice and repaints the other grid painters. |
 | Shift+click on "Q" (or Shift+`Q`) | **One-shot quantise**: snaps the SELECTED notes' starts to the chosen division (per-note `moveNote`, one mutation lambda — `TimelineDoc::quantiseNotes` has no note-subset overload); with **nothing selected it quantises every note in the clip** via `quantiseNotes` directly. Reads `divisionBeatsRaw()`, so it works even while the snap toggle is off (cleaning up free-hand notes is its whole point). Flashes on every press, and writes NO undo step when the clip is already quantised (`recordTimelineChange` drops no-op mutations). |
+
+**Edit tools (Split / Glue / Erase / Mute / Draw).** `handleToolMouseDown(pos)` routes every
+non-Select tool exactly the way `TimelineClipLaneArea::handleToolMouseDown` does for clips: Split/
+Glue/Erase/Mute act on a single click and hit-test a note first (a click on empty grid with one of
+these four held does nothing — no deselect, no marquee). `performSplit(id, pos)` cuts at the
+snapped, CLIP-relative beat under the pointer via `splitBeatFor`, which returns `nullopt` (no-op)
+unless the cut leaves at least `kMinNoteLengthBeats` on BOTH sides — a split that would leave a
+sliver on either side would silently mean "resize to nothing" instead of "split". `performGlue(id)`
+absorbs the next note of the **same pitch** via `glueCandidateFor` — the smallest `startBeat` at or
+after the clicked note's own end; gaps ARE bridged (the glued note runs from the clicked note's
+start to the absorbed note's end), which is what makes gluing a staccato pair into one sustained
+note possible at all. `performErase(id)` deletes it. `performMuteToggle(id)` flips `MidiNote::
+muted` (`TimelineDoc::setNoteMuted`) — a muted note paints **outline-only** (no fill, dimmed border)
+straight from the doc's flag, the note-level twin of the clip lane's dimmed-fill treatment; a note
+inside a muted clip already contributes nothing to the run (`TimelineSnapshot` excludes the whole
+clip), so a note's own mute only matters inside an unmuted clip. **Draw** anchors on the
+floor-snapped beat of a mousedown, grows a length preview on drag (`getDrawPreviewLengthForTest()`),
+and on release either creates the dragged-length note or — for a press that never dragged — falls
+back to the SAME one-note-per-division gesture the Select tool's double-click-on-empty-grid
+performs. The Split tool's hover preview (the clip-relative cut beat under the pointer) repaints
+only through its own seam, `requestRepaintPreviewStrip` (see below), never the playhead's
+`requestRepaintStrip` — a hover that repainted the playhead's strip would be a bug, not a rounding
+difference, which is why the two are separate virtuals a test can count independently.
+
+**Note clipboard.** `PianoRollComponent` owns its OWN clipboard (`ClipboardNote`, distinct from
+`TimelineClipLaneArea`'s clip clipboard) as a MEMBER — it deliberately outlives `openClip()`, so
+"copy here, open another clip, paste there" works. Each entry stores its offset **relative to the
+earliest selected note** (not an absolute or clip-relative beat), which is what lets a copied block
+survive being pasted into a different clip at a different position: the block keeps its internal
+shape and only its anchor moves. Every field a note carries is captured, `muted` included — a muted
+note pastes back muted, the same way a split or a duplicate carries the flag.
+
+- `copySelectedNotes()` captures the selection; `canPasteNotes()` is true only with a non-empty
+  clipboard AND an open clip (a roll with nothing open has nowhere to put the block).
+- `pasteNotesAtPlayhead()` anchors the block at the snapped, CLIP-relative playhead position when
+  it lands inside `[0, clip length)`, else at `0.0` — a playhead parked outside the edited clip
+  still pastes something visible rather than nothing. `MainComponent::perform` **primes** the
+  playhead immediately before pasting (`setPlayheadBeat(transport.getPositionSnapshot().ppq)`): the
+  roll only has a playhead position because the overlay PUSHES one via `setPlayheadBeat` while
+  playing, so a stopped transport would otherwise paste at whatever beat playback last stopped
+  pushing rather than under the position the user can actually see. `buildPastedNotes` applies the
+  same clip-window policy every edit here does: a note landing at/after the clip's end is skipped,
+  one that would overrun it is clamped, and one with less than `kMinNoteLengthBeats` of room left is
+  skipped rather than shrunk below the editor's floor.
+- `duplicateSelectedNotes()` copies the selection to immediately after its own span (`max end - min
+  start`, same pitches), one undo step, selects the copies — and does **not** touch the clipboard
+  (duplicating isn't copying; stomping a clipboard the user filled deliberately would be a
+  surprise).
+- `cutSelectedNotes()` is copy then delete, one undo step (the clipboard is filled first, so a cut
+  is always paste-able).
+- `selectAllNotes()` selects every note in the open clip.
+- `repeatSelectedNotes(count)` places `count` copies of the selection block, each one span further
+  along, **clipped at the clip's end**: placement stops at the first block that would fall entirely
+  outside the clip rather than piling every remaining copy onto the last beat. One undo step; every
+  created note ends up selected.
+
+All six mirror `TimelineClipLaneArea`'s clip clipboard verbs one-for-one (see the TL5-7 subsection
+above) — the two clipboards are entirely separate stores, so copying clips never makes Paste live
+on the roll or vice versa; see [`shortcuts.md`](shortcuts.md) for the surface-routing table that
+picks which one Cmd+C/V/D/X act on.
+
+**Arrow-key editing.** `PianoRollComponent::keyPressed()` handles Left/Right/Up/Down directly
+(matched on key CODE, since `juce::KeyPress::operator==(int)` also requires no modifiers, which
+would miss Shift+Up) and returns `false` — falls through — when the selection is empty, so the keys
+keep whatever meaning they have elsewhere with nothing selected. `nudgeSelectedNotes(direction)`
+moves the WHOLE selection by one shared grid-division delta (the current snap division, or
+`kMinNoteLengthBeats` with Snap off) — never per-note, which would silently reshape a chord —
+clamped so the group's earliest start never goes below 0 and its latest end never crosses the
+clip's length, the same "clamp the group together" rule the drag gestures use.
+`transposeSelectedNotes(semitones)` moves every selected note by one shared semitone delta, clamped
+into `[0, 127]` as a group so a chord transposes as a chord and never collapses at the pitch
+extremes: Up/Down is one semitone, **Shift**+Up/Down is a full octave (12 semitones), the same
+octave-jump convention every DAW uses. Both return `true` (consumed) even when the clamp left
+nothing to move — the key WAS applicable, it just had nowhere left to go. **Alt+Left/Right
+navigates BETWEEN notes** instead of moving them: `selectAdjacentNote(forward)` walks
+`Clip::notes`' canonical (startBeat, pitch, id) order by index — no second ordering is defined that
+could drift from the doc's comparator — anchoring forward on the selection's LAST selected note and
+backward on its FIRST, and collapses to a single-note selection on the neighbour just outside the
+block, so repeated presses sweep the clip. At either end the selection is kept and the key still
+consumed (the same rule as a fully-clamped nudge); selection-only, so no undo step ever; an
+off-screen target scrolls into view minimally via `setHorizontalView` (horizontal only — Alt+Up/Down
+stays unhandled/reserved, and yanking the vertical view on a horizontal walk would lose the user's
+place). Alt was chosen over Cmd/Shift: plain arrows already nudge, Shift+Up/Down is the octave, and
+Cmd+arrows carry OS-level jump-to-boundary semantics. Tool-switching digit keys
+are deliberately **not** handled here at all (see the edit-tool strip subsection above) — that
+binding belongs to the panel, so the roll and the panel can never disagree about which tool is
+active.
 
 **No pencil-by-default any more.** Creating a note is the double-click; a single click on empty grid
 is a plain deselect, and a plain drag from empty grid does nothing at all. Marquee is reached only
@@ -2267,12 +2652,18 @@ the roll:
 
 | Binding | Effect |
 |---|---|
-| Cmd+wheel | Horizontal zoom around the beat under the cursor (`rollView_.zoomAroundX`, anchor = `x - kKeysColumnWidth`), same `exp(deltaY * 2.0)` factor as the ruler's zoom so the two feel identical |
+| Cmd+wheel | Horizontal zoom around the beat under the cursor (`rollView_.zoomAroundX`, anchor = `x - kKeysColumnWidth`), same `exp(dominantWheelDelta(wheel) * 2.0)` factor as the panel's own zoom so the two feel identical |
 | Cmd+Shift+wheel | Vertical zoom — scales `pixelsPerSemitone_` within `[4, 40]`, keeping the pitch under the cursor put |
-| Shift+wheel, or a trackpad's `deltaX` | Horizontal scroll (`kScrollPixelsPerWheelUnit` px per unit, converted to beats at the roll's own zoom) |
-| Plain wheel | Vertical (pitch) scroll, `kPitchScrollSemitonesPerWheelUnit`, clamped to `[0, 127]` |
+| Shift+wheel, or a trackpad's `deltaX` | Horizontal scroll (`kScrollPixelsPerWheelUnit` px per unit, converted to beats at the roll's own zoom), inverted by the same `scrollInverted_`/**Natural scrolling** preference as the panel (TL5-2 above) |
+| Plain wheel | Vertical (pitch) scroll, `kPitchScrollSemitonesPerWheelUnit`, clamped to `[0, 127]`, likewise inverted by `scrollInverted_` — and the one axis that needs its own sign flip on top of `scrollAmount()`, since `firstVisiblePitch_` is the pitch at the TOP row and pitch grows upward while the screen convention is "+y moves the view down" (TL5-2's Natural-scrolling paragraph has the full reasoning) |
 
-Zoom is not persisted across opens — `openClip` reframes to the clip every time.
+Both zoom rows read `dominantWheelDelta` rather than `wheel.deltaY` directly, for the identical
+reason the panel's own Cmd+Shift+wheel branch does (TL5-2 above): macOS folds a Shift-held wheel
+gesture into `deltaX`, so a branch chosen by its modifiers must never assume the OS parked the
+gesture on `deltaY`. Cmd+=/Cmd+- and Cmd+Shift+=/Cmd+Shift+- reach the same `zoomHorizontal`/
+`zoomVertical` entry points (anchored at the grid's visible centre rather than the cursor) when the
+roll is the focused surface — see [`shortcuts.md`](shortcuts.md#zoom). Zoom is not persisted across
+opens — `openClip` reframes to the clip every time.
 
 `TimelineViewState::divisionBeats(beatsPerBar)` (factored out of `snapBeat` for this task) exposes
 the EFFECTIVE snap grid as a plain beat value (0.0 while the snap toggle is off);
@@ -2302,6 +2693,7 @@ gridline-density seam, and the local playhead — the last through `CountingRoll
 overriding `requestRepaintStrip`, exactly as `TimelinePlayheadTests.cpp` does for the overlay.
 Note: `juce::MouseWheelDetails` has no default member initialisers, so wheel tests construct it
 `{}`-initialised or a garbage `deltaX` decides the branch.
+The edit-tool/clipboard/arrow-key layer is covered in the same file: each tool's click-acts-immediately behaviour, `splitBeatFor`'s both-sides-must-fit rule, `glueCandidateFor`'s gap-bridging, the outline-only muted-note paint, the Draw tool's drag-vs-click fallback, the note clipboard's cross-clip survival and its clip-window clamps on paste/repeat, and the arrow keys' shared-delta clamp with an empty selection falling through.
 
 ### TL5-9: automation strip
 
@@ -2421,30 +2813,60 @@ needs a native peer — see `Tests/FocusArbitrationTests.cpp`'s `SurfaceResolver
 documents why this repo doesn't attempt one), so `MainComponent::setEditSurfaceOverrideForTest()`
 is consulted FIRST and short-circuits the real-focus check when set.
 
-**Cmd+C/V/D route by surface** — `MainComponent::getCommandInfo`/`perform` branch on
-`resolveEditSurface()` for `AppCommands::copySelection/pasteSelection/duplicateSelection`:
+**Cmd+C/V/D/X and Cmd+R route by surface** — `MainComponent::getCommandInfo`/`perform` branch on
+`resolveEditSurface()` for `AppCommands::copySelection/pasteSelection/duplicateSelection/
+cutSelection/repeatSelection`:
 
-- **Graph** — unchanged: `GraphEditor::copySelection()/pasteClipboard()/duplicateSelection()`
-  against its own `ModuleClipboard`, exactly as before this task.
-- **TimelineClips** — a NEW clip clipboard, owned by `TimelinePanelComponent` (it already owns the
-  clip selection — see TL5-7): `copySelectedClips()` serialises the selected clips (notes, lengths,
-  starts relative to the earliest selected clip) into it; `pasteClipsAtPlayhead()` re-inserts them
-  onto their ORIGINAL tracks (by `TrackId`), re-based so the earliest clip lands at the transport's
-  CURRENT position (snapped via the shared `TimelineViewState`), in ONE
-  `AppUndoManager::recordTimelineChange`; a clip whose original track no longer exists lands on the
-  doc's first `Midi`-kind track, or is skipped if there is none. `duplicateSelectedClips()` calls
-  `TimelineDoc::duplicateClip()` per selected clip, batched the same way. All three leave their
-  result selected, mirroring `GraphEditor`'s own "the copies are what you probably want next"
-  convention.
-- **PianoRoll** — C/V/D are INACTIVE (`getCommandInfo` calls `result.setActive(false)`). A
-  deliberate v1 gap: the roll's own note gestures (draw, drag, double-click-delete, all already one
-  undo step each) cover copy/duplicate/undo well enough that a second clipboard for individual
-  notes wasn't worth building yet.
+- **Graph** — Copy/Paste/Duplicate unchanged: `GraphEditor::copySelection()/pasteClipboard()/
+  duplicateSelection()` against its own `ModuleClipboard`. Cut is **composed** from the two that
+  already exist (`copySelection()` fills the clipboard without touching the graph or the undo
+  stack, then `deleteSelection()` removes the selection inside its own `recordStructuralChange`),
+  so it costs exactly one graph-undo step and the copy half survives the undo. Repeat is
+  **inactive** here — always — because "N copies, each one selection-span further along" is a
+  time-axis idea and a spatial canvas has no such axis; Duplicate is the graph's answer to "another
+  one of these".
+- **TimelineClips** — the clip clipboard, owned by `TimelinePanelComponent` (it already owns the
+  clip selection — see TL5-7): `copySelectedClips()` serialises the selected clips — notes (each
+  with its own `muted` flag), name, length, `muted`, and every audio field (`assetRef`, `gainDb`,
+  both fades, `sourceStartSeconds`) — starts relative to the earliest selected clip, into it;
+  `pasteClipsAtPlayhead()` re-inserts them onto their ORIGINAL tracks (by `TrackId`), re-based so
+  the earliest clip lands at the transport's CURRENT position (snapped via the shared
+  `TimelineViewState`), in ONE `AppUndoManager::recordTimelineChange`; the track fallback is
+  **kind-aware** (`TimelineDoc::moveClipToTrack`'s rule) — a clip lands back only on a track that
+  still plays its payload, else the doc's first track of the required kind, else it is skipped.
+  Audio fields go back through `setClipAsset`/`setClipGainDb`/`setClipFades` rather than a raw
+  struct write, so a clipboard `assetRef` is re-validated exactly like a freshly-loaded file's — a
+  clipboard is only as trustworthy as whatever filled it (this closes a bug: the clipboard used to
+  silently drop a copied audio clip's asset). `duplicateSelectedClips()` calls
+  `TimelineDoc::duplicateClip()` per selected clip, batched the same way. `cutSelectedClips()` is
+  copy then delete the selection, as ONE `recordTimelineChange` (never wrapped a second time — that
+  would make Cmd+Z a two-step undo for one gesture). `repeatSelectedClips(count)` makes `count`
+  back-to-back copies of the selection's own span (`max end - min start`, not each clip's own
+  length, so a multi-clip rhythm tiles intact), the first starting one span-length after the
+  selection's start, batched into one undo step. All four leave their result selected, mirroring
+  `GraphEditor`'s own "the copies are what you probably want next" convention.
+- **PianoRoll** — the roll's OWN note clipboard (see the TL5-8 subsection's **Note clipboard**
+  above) closes what was previously a deliberate v1 gap: Copy/Paste/Duplicate/Cut/Repeat all act on
+  notes now. Paste **primes** the roll's playhead from the live transport
+  (`timelinePanel.getPianoRoll().setPlayheadBeat(audioEngine.getTransport().
+  getPositionSnapshot().ppq)`) immediately before pasting — priming, not a side effect, since the
+  roll only has a playhead position because the overlay pushes one while playing, and a stopped
+  transport never does.
 
 `getCommandInfo`'s Paste case is active only when the SURFACE-MATCHING clipboard has something in
 it — `GraphEditor::canPaste()` for Graph, `TimelinePanelComponent::canPasteClips()` for
-TimelineClips — so copying modules never makes Paste live on the clip lanes, or vice versa. See
-[`shortcuts.md`](shortcuts.md#surface-routing-tl5-10-who-cmdcvd-act-on) for the user-facing table.
+TimelineClips, `PianoRollComponent::canPasteNotes()` for PianoRoll (both halves: a non-empty
+clipboard AND an open clip) — so copying modules never makes Paste live on the clip lanes or the
+roll, or vice versa. Cut shares Copy's enablement predicate on every surface (a cut is a copy that
+also deletes). Repeat's predicate is `hasClipSelection()`/`hasNoteSelection()` on the timeline
+surfaces and unconditionally `setActive(false)` on Graph. `Cmd+Shift+A` (`AppCommands`/actionId
+`selectAllModules`, kept for a persisted binding's sake even though the verb widened) is routed by
+the SAME resolver: `TimelinePanelComponent::selectAllClips()` on TimelineClips,
+`PianoRollComponent::selectAllNotes()` on PianoRoll, `GraphEditor::selectAllModules()` on Graph —
+unlike the clipboard verbs it is **always active**, since each surface's own `selectAll*` just
+returns `false` harmlessly when there's nothing to select. See
+[`shortcuts.md`](shortcuts.md#surface-routing-tl5-10-who-cmdcvdxr-and-cmdshifta-act-on) for the
+user-facing table.
 
 **Space is global.** `AppCommands::togglePlayback` (`ShortcutManager` action id `togglePlayback`,
 default binding: bare spacebar, no modifiers) is deliberately NOT routed by `resolveEditSurface()`

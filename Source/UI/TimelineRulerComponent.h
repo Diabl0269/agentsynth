@@ -25,6 +25,41 @@ class TransportService;
 // drawn over this strip and the lanes below it — see TimelinePlayheadOverlay.
 namespace synth::ui {
 
+// ---- Adaptive ruler density (pure; paint() and the tests below share it) ----
+//
+// Cubase's ruler shows three bands as you zoom in, and the SNAP division has no say in any of them
+// — the ruler is a bars/beats reference, not a picture of the current grid (a 1/16 snap on a
+// zoomed-out arrangement would otherwise turn the strip into a grey smear). The bands:
+//   1. far out  — bar lines + bar numbers only (bar numbers themselves thin out by powers of two,
+//                 see paint()'s labelEveryNBars);
+//   2. mid      — short beat ticks appear between the bar lines;
+//   3. close in — those beats also get a small dim "bar.beat" label ("80.2", "80.3").
+//
+// The two thresholds below are the band edges, in pixels per BEAT (a beat is always a quarter note
+// here). Deterministic and font-independent — the same reason the bar-label stride is computed from
+// a constant rather than from measured text: the guard tests must mean the same thing on every
+// platform.
+constexpr double kMinBeatTickSpacingPx = 8.0;   // under this, beat ticks are noise beside the bar lines
+constexpr double kMinBeatLabelSpacingPx = 48.0; // "80.2" needs this much room before it earns its place
+
+struct RulerTickPlan {
+    bool drawBeatTicks = false;
+    bool drawBeatLabels = false;
+};
+
+/** What the ruler draws BETWEEN bar lines at this zoom. `beatsPerBar` matters only for the
+ *  degenerate one-beat-or-shorter bar: there are then no non-bar beats to mark at all, and drawing
+ *  a "tick" on top of every bar line would just thicken it. Labels imply ticks by construction —
+ *  a label with no tick to sit against would float. */
+inline RulerTickPlan rulerTickPlanFor(double pixelsPerBeat, double beatsPerBar) noexcept {
+    RulerTickPlan plan;
+    if (!(pixelsPerBeat > 0.0) || !(beatsPerBar > 1.0))
+        return plan;
+    plan.drawBeatTicks = pixelsPerBeat >= kMinBeatTickSpacingPx;
+    plan.drawBeatLabels = plan.drawBeatTicks && pixelsPerBeat >= kMinBeatLabelSpacingPx;
+    return plan;
+}
+
 class TimelineRulerComponent : public juce::Component {
 public:
     // Which interaction the pointer's height in the strip selects. Top half drives the loop

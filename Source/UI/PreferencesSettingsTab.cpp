@@ -15,6 +15,25 @@ int comboIdFromMode(GraphEditor::SmartConnectionMode mode) {
     }
 }
 
+// Settings key for the scroll-direction preference. Duplicated rather than shared with
+// MainComponent::kNaturalScrollingKey (which is what READS it) for the same reason
+// "timelineLoopSelectionArms" is duplicated between here and TimelinePanelComponent: a one-line
+// string constant is not worth a header dependency from a settings tab onto MainComponent. DEFAULT
+// TRUE — natural is what every scrolling surface in the app already does, so an install that never
+// opens this tab is unaffected.
+constexpr const char* kNaturalScrollingKey = "naturalScrolling";
+
+// The wheel-ZOOM direction preference, duplicated from MainComponent::kZoomScrollUpZoomsInKey for
+// exactly the reason kNaturalScrollingKey above is. DEFAULT TRUE — "up zooms in" is what both
+// wheel-zoom surfaces did before this preference existed, so an install that never opens this tab is
+// unaffected.
+constexpr const char* kZoomScrollUpZoomsInKey = "zoomScrollUpZoomsIn";
+
+// Group-separator alpha. Softened from 0.18: at that contrast the hairlines read as table borders
+// and boxed each preference in, which is the same complaint that produced the gentler rule under
+// the Keyboard Shortcuts tab's section headers (see its kDividerAlpha — keep the two in step).
+constexpr float kDividerAlpha = 0.12f;
+
 GraphEditor::SmartConnectionMode modeFromComboId(int id) {
     switch (id) {
     case 1:
@@ -95,6 +114,41 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         "timeline document and audio-engine playback are untouched, so turning this back on "
         "restores exactly where you left off.");
     timelineFeatureToggle.onClick = [this] { persistTimelineFeatureEnabled(timelineFeatureToggle.getToggleState()); };
+
+    addAndMakeVisible(naturalScrollingToggle);
+    // DEFAULT TRUE: "natural" is the juce::Viewport convention every scrolling surface in the app
+    // already follows, so an install that never touches this preference behaves exactly as before.
+    naturalScrollingToggle.setToggleState(appProperties.getUserSettings()->getBoolValue(kNaturalScrollingKey, true),
+                                          juce::dontSendNotification);
+    naturalScrollingToggle.setTooltip("On (the default) scrolls the way the rest of the app and your OS do. Turn it "
+                                      "off to invert the wheel and trackpad in the timeline and the piano roll.");
+    naturalScrollingToggle.onClick = [this] { persistNaturalScrolling(naturalScrollingToggle.getToggleState()); };
+
+    addAndMakeVisible(naturalScrollingHint);
+    naturalScrollingHint.setText("Affects the timeline and the piano roll. The graph canvas pans instead of "
+                                 "scrolling and is unaffected.",
+                                 juce::dontSendNotification);
+    naturalScrollingHint.setFont(juce::Font(juce::FontOptions(11.5f)));
+    naturalScrollingHint.setColour(juce::Label::textColourId, findColour(juce::Label::textColourId).withAlpha(0.65f));
+
+    addAndMakeVisible(zoomScrollUpZoomsInToggle);
+    // DEFAULT TRUE, and deliberately the same idiom as the row above: "up zooms in" is what both
+    // wheel-zoom surfaces already did, so nobody's gesture changes until they ask for it here.
+    zoomScrollUpZoomsInToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue(kZoomScrollUpZoomsInKey, true), juce::dontSendNotification);
+    zoomScrollUpZoomsInToggle.setTooltip("On (the default) zooms IN when you scroll up with Cmd (or Cmd+Shift) held. "
+                                         "Turn it off if you expect scrolling up to zoom out.");
+    zoomScrollUpZoomsInToggle.onClick = [this] {
+        persistZoomScrollUpZoomsIn(zoomScrollUpZoomsInToggle.getToggleState());
+    };
+
+    addAndMakeVisible(zoomScrollUpZoomsInHint);
+    zoomScrollUpZoomsInHint.setText("Affects Cmd (horizontal) and Cmd+Shift (vertical) wheel-zoom in the timeline and "
+                                    "the piano roll. Plain scrolling follows the setting above.",
+                                    juce::dontSendNotification);
+    zoomScrollUpZoomsInHint.setFont(juce::Font(juce::FontOptions(11.5f)));
+    zoomScrollUpZoomsInHint.setColour(juce::Label::textColourId,
+                                      findColour(juce::Label::textColourId).withAlpha(0.65f));
 }
 
 void PreferencesSettingsTab::paint(juce::Graphics& g) {
@@ -102,7 +156,7 @@ void PreferencesSettingsTab::paint(juce::Graphics& g) {
 
     // Group separators. Drawn from the text colour at low alpha rather than a theme token so the
     // rule stays legible on both light and dark themes without needing one of its own.
-    g.setColour(findColour(juce::Label::textColourId).withAlpha(0.18f));
+    g.setColour(findColour(juce::Label::textColourId).withAlpha(kDividerAlpha));
     for (const auto& divider : dividerBounds)
         g.fillRect(divider);
 }
@@ -139,6 +193,17 @@ void PreferencesSettingsTab::resized() {
     bounds.removeFromTop(10);
 
     timelineFeatureToggle.setBounds(bounds.removeFromTop(24));
+    addDivider();
+
+    naturalScrollingToggle.setBounds(bounds.removeFromTop(24));
+    // Indented under the toggle it explains, so the hint reads as a caption rather than as another
+    // preference row.
+    naturalScrollingHint.setBounds(bounds.removeFromTop(18).withTrimmedLeft(24));
+    // Same group (no divider): both are wheel-direction preferences, and separating them would imply
+    // the zoom one is unrelated to the row it qualifies.
+    bounds.removeFromTop(10);
+    zoomScrollUpZoomsInToggle.setBounds(bounds.removeFromTop(24));
+    zoomScrollUpZoomsInHint.setBounds(bounds.removeFromTop(18).withTrimmedLeft(24));
 }
 
 void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
@@ -201,6 +266,39 @@ void PreferencesSettingsTab::persistTimelineFeatureEnabled(bool enabled) {
     appProperties.getUserSettings()->saveIfNeeded();
     if (onTimelineFeatureToggled)
         onTimelineFeatureToggled(enabled);
+}
+
+bool PreferencesSettingsTab::isNaturalScrollingEnabled() const { return naturalScrollingToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setNaturalScrollingEnabled(bool enabled) {
+    naturalScrollingToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistNaturalScrolling(enabled);
+}
+
+void PreferencesSettingsTab::persistNaturalScrolling(bool enabled) {
+    appProperties.getUserSettings()->setValue(kNaturalScrollingKey, enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    // No live push from here, unlike the GraphEditor settings below: juce::PropertiesFile is a
+    // ChangeBroadcaster, and MainComponent listens to it precisely so a scroll-direction change
+    // reaches the timeline and the piano roll without this tab having to know they exist (see
+    // MainComponent::applyNaturalScrollingPreference). That is also why there is no
+    // onNaturalScrollingToggled callback for SettingsWindow to wire — one constructor argument per
+    // preference does not scale, and the "Show timeline" kill switch already needs the one it has.
+}
+
+bool PreferencesSettingsTab::isZoomScrollUpZoomsInEnabled() const { return zoomScrollUpZoomsInToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setZoomScrollUpZoomsInEnabled(bool enabled) {
+    zoomScrollUpZoomsInToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistZoomScrollUpZoomsIn(enabled);
+}
+
+void PreferencesSettingsTab::persistZoomScrollUpZoomsIn(bool enabled) {
+    appProperties.getUserSettings()->setValue(kZoomScrollUpZoomsInKey, enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    // No live push from here either: the SAME juce::PropertiesFile ChangeBroadcaster path
+    // persistNaturalScrolling documents above carries it, landing in
+    // MainComponent::applyZoomScrollPreference.
 }
 
 void PreferencesSettingsTab::persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode) {

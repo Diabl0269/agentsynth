@@ -34,6 +34,14 @@ namespace synth {
 //     NUL-terminated. uuids are 36 chars and paramIds are short, so this never bites in practice;
 //     the audio thread does strcmp against a char array and never touches a juce::String (whose
 //     copy is refcounted and therefore not audio-safe).
+//   - MUTED content is EXCLUDED here, at flatten time, not skipped downstream. A muted clip
+//     contributes nothing at all (no note events, no AudioClipInfo entry — it is as if it were not
+//     in the document), and a muted note inside an unmuted clip is dropped from the run. Doing it
+//     once here is what keeps every consumer — TimelineMidiSource, the AudioClipStreamer's
+//     assignment table, the offline bounce — free of any notion of mute: they cannot forget to
+//     honour a flag they never see. Track-level mute is the deliberate exception and stays a
+//     FIELD on TrackInfo, because solo/mute interact per block and a soloed-elsewhere track has to
+//     keep its notes flattened to be un-silenced later.
 //   - An AUDIO track contributes an audioClips run and NO notes; a MIDI track contributes
 //     notes and NO audio clips. One Clip type covers both kinds in the doc (see synth::Clip), and
 //     the track's TrackKind is what decides which half is flattened — so a stray note on an audio

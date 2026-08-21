@@ -52,6 +52,12 @@ struct Colors {
     juce::Colour meterFill{0xff00D1FF};       // output meter fill (top of gradient)
     juce::Colour modRingPositive{0xff00E5FF}; // mod ring, positive modulation
     juce::Colour modRingNegative{0xffFF6E00}; // mod ring, negative modulation
+    // Active-tool highlight in the timeline edit-tool strip (Select/Split/Glue/Erase/Mute/Draw
+    // — see Source/UI/EditTool.h). Defaults to the same literal as `accent`'s Obsidian default:
+    // there is no existing precedent in this struct for one token defaulting FROM another at
+    // construction time (accent2 merely repeats accent's literal too), so this follows that same
+    // static-literal convention rather than introducing a new "derives from" mechanism.
+    juce::Colour toolActive{0xff00D1FF}; // active edit-tool button highlight
 
     // Cable colours for CableColourMode::BySourceCategory, indexed by synth::ui::ModuleCategory
     // (Sources, Sequencing, Envelopes & Control, Filters, Modulation FX, Time FX, Dynamics,

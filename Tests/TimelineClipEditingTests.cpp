@@ -1,8 +1,22 @@
 // Note identity + the note-editing/clip-operations API on TimelineDoc: removeNote/moveNote/
 // resizeNote/setNoteVelocity/quantiseNotes and splitClip/joinClips/duplicateClip.
+//
+// Plus (second half of the file) the CLIP-LANE EDIT TOOLS those doc operations back — Split, Glue,
+// Erase, Mute and Draw driven through synth::ui::TimelineClipLaneArea with synthetic mouse events,
+// the Select tool's Alt-copy and cross-track drags, the Split tool's hover preview repaint budget,
+// and the inline rename's commit path. Every one of those tests configures the view state (snap
+// division, snap switch, zoom, scroll) EXPLICITLY: a tool's whole behaviour is defined against the
+// grid, so inheriting a default — let alone a persisted user setting — would make the file's
+// results machine-dependent.
+#include "../Source/AppUndoManager.h"
+#include "../Source/UI/ClipSelectionModel.h"
+#include "../Source/UI/EditTool.h"
+#include "../Source/UI/TimelineClipLaneArea.h"
+#include "../Source/UI/TimelineViewState.h"
 #include "Timeline/TimelineDoc.h"
 #include <algorithm>
 #include <gtest/gtest.h>
+#include <juce_gui_basics/juce_gui_basics.h>
 #include <limits>
 #include <vector>
 
@@ -477,4 +491,764 @@ TEST_F(TimelineClipEditingTest, FromVarRejectsMissingNoteId) {
         "notes":[{"startBeat":0.0,"lengthBeats":1.0,"pitch":60,"velocity":100,"channel":1}]}]}]})";
     EXPECT_FALSE(doc.fromVar(juce::JSON::parse(text)));
     EXPECT_TRUE(doc.isEmpty());
+}
+
+// ============================================================================
+// Clip-lane EDIT TOOLS (synth::ui::TimelineClipLaneArea)
+// ============================================================================
+
+namespace {
+
+using synth::ui::EditTool;
+using synth::ui::TimelineClipLaneArea;
+using synth::ui::TimelineViewState;
+
+// 40 px/beat, 1-beat snap grid, nothing scrolled, no vertical zoom — every coordinate below is
+// derived from these, and every one of them is set explicitly (see the file header).
+struct ToolLaneFixture {
+    TimelineDoc doc;
+    TimelineViewState state;
+    synth::ui::ClipSelectionModel selection;
+    AppUndoManager undo;
+    TimelineClipLaneArea lane{state, selection};
+
+    ToolLaneFixture() {
+        state.pixelsPerBeat = 40.0;
+        state.firstVisibleBeat = 0.0;
+        state.snap = TimelineViewState::Snap::Quarter; // a quarter note == 1 beat
+        state.snapEnabled = true;
+        state.rowHeightScale = 1.0;
+        state.trackScrollY = 0.0;
+        lane.setTimelineDoc(&doc);
+        lane.setUndoManager(&undo);
+        lane.setSize(1200, 400);
+    }
+
+    // The vertical centre of track row `index`, headless (no themed LookAndFeel => the row height
+    // is TimelineTrackHeaderComponent::kRowHeight).
+    float rowCentreY(int index) const {
+        const int rowHeight = lane.getRowHeight();
+        return (float)(index * rowHeight + rowHeight / 2);
+    }
+    float rowHeightF() const { return (float)lane.getRowHeight(); }
+};
+
+// Hand-built MouseEvents, same pattern as TimelineClipLaneTests.cpp/GraphEditorTests.cpp — no OS
+// mouse source exists headlessly, and `mouseWasDragged` is the constructor's own bool.
+juce::MouseEvent makeToolMouseEvent(juce::Component& comp, juce::Point<float> position, juce::ModifierKeys mods,
+                                    bool mouseWasDragged, juce::Point<float> mouseDownPos) {
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), position, mods, 0.0f, 0.0f, 0.0f, 0.0f,
+                            0.0f, &comp, &comp, juce::Time::getCurrentTime(), mouseDownPos,
+                            juce::Time::getCurrentTime(), 1, mouseWasDragged);
+}
+
+juce::MouseEvent toolClick(juce::Component& comp, juce::Point<float> pos, int extraFlags = 0) {
+    return makeToolMouseEvent(comp, pos, juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier | extraFlags), false,
+                              pos);
+}
+
+juce::MouseEvent toolDrag(juce::Component& comp, juce::Point<float> pos, juce::Point<float> anchor,
+                          int extraFlags = 0) {
+    return makeToolMouseEvent(comp, pos, juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier | extraFlags), true,
+                              anchor);
+}
+
+juce::MouseEvent hoverAt(juce::Component& comp, juce::Point<float> pos) {
+    return makeToolMouseEvent(comp, pos, juce::ModifierKeys(), false, pos);
+}
+
+juce::Point<float> clipCentre(const TimelineClipLaneArea& lane, ClipId id) {
+    const auto rect = lane.getClipRect(id);
+    return {(float)rect.getCentreX(), (float)rect.getCentreY()};
+}
+
+// One press-release with no movement — what "clicking with a tool" means for Split/Glue/Erase/
+// Mute (they all act on the press; the release is what proves it does not act twice).
+void clickWithTool(TimelineClipLaneArea& lane, juce::Point<float> pos, int extraFlags = 0) {
+    lane.mouseDown(toolClick(lane, pos, extraFlags));
+    lane.mouseUp(toolClick(lane, pos, extraFlags));
+}
+
+} // namespace
+
+// ------------------------------------------------------------- Split tool --
+
+TEST(TimelineClipToolTest, SplitToolClickSplitsAtTheSnappedBeat) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = f.doc.addClip(track, 0.0, 8.0, "c"); // x in [0, 320)
+    ASSERT_TRUE(clip.isValid());
+    f.lane.setActiveTool(EditTool::Split);
+
+    // x = 140 -> beat 3.5 -> snapped (ties round up) to 4.0.
+    clickWithTool(f.lane, {140.0f, f.rowCentreY(0)});
+
+    const auto& clips = f.doc.getTrack(track)->clips;
+    ASSERT_EQ(clips.size(), 2u);
+    EXPECT_DOUBLE_EQ(clips[0].startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(clips[0].lengthBeats, 4.0);
+    EXPECT_DOUBLE_EQ(clips[1].startBeat, 4.0);
+    EXPECT_DOUBLE_EQ(clips[1].lengthBeats, 4.0);
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getTrack(track)->clips.size(), 1u);
+    EXPECT_FALSE(f.undo.canUndo()) << "one click was ONE undo step";
+}
+
+TEST(TimelineClipToolTest, SplitToolClickOnEmptyLaneSpaceDoesNothing) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    ASSERT_TRUE(f.doc.addClip(track, 0.0, 4.0, "c").isValid());
+    f.lane.setActiveTool(EditTool::Split);
+    const auto revisionBefore = f.doc.getRevision();
+
+    clickWithTool(f.lane, {900.0f, f.rowCentreY(0)}); // far right of the clip
+
+    EXPECT_EQ(f.doc.getRevision(), revisionBefore);
+    EXPECT_FALSE(f.undo.canUndo());
+    EXPECT_TRUE(f.selection.isEmpty()) << "a tool click must not select either";
+}
+
+TEST(TimelineClipToolTest, SplitToolClickAtTheClipBoundaryDoesNothing) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = f.doc.addClip(track, 0.0, 8.0, "c"); // x in [0, 320)
+    ASSERT_TRUE(clip.isValid());
+    f.lane.setActiveTool(EditTool::Split);
+    const auto revisionBefore = f.doc.getRevision();
+
+    // x = 1 -> beat 0.025 -> snapped to 0.0, exactly the clip's own start: not strictly inside.
+    clickWithTool(f.lane, {1.0f, f.rowCentreY(0)});
+    EXPECT_EQ(f.doc.getRevision(), revisionBefore);
+    EXPECT_FALSE(f.undo.canUndo());
+    EXPECT_EQ(f.doc.getTrack(track)->clips.size(), 1u);
+
+    // x = 319 -> beat 7.975 -> snapped to 8.0, exactly the clip's own end: not strictly inside.
+    clickWithTool(f.lane, {319.0f, f.rowCentreY(0)});
+    EXPECT_EQ(f.doc.getRevision(), revisionBefore);
+    EXPECT_FALSE(f.undo.canUndo());
+    EXPECT_EQ(f.doc.getTrack(track)->clips.size(), 1u);
+}
+
+// -------------------------------------------------------------- Glue tool --
+
+TEST(TimelineClipToolTest, GlueToolJoinsWithTheNextClipAcrossAGap) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto a = f.doc.addClip(track, 0.0, 4.0, "a");
+    const auto b = f.doc.addClip(track, 6.0, 4.0, "b"); // gap [4, 6): legal, becomes silence
+    ASSERT_TRUE(a.isValid() && b.isValid());
+    EXPECT_EQ(f.lane.findGlueTarget(a), b);
+    f.lane.setActiveTool(EditTool::Glue);
+
+    clickWithTool(f.lane, clipCentre(f.lane, a));
+
+    ASSERT_EQ(f.doc.getTrack(track)->clips.size(), 1u);
+    const auto* joined = f.doc.getClip(a);
+    ASSERT_NE(joined, nullptr);
+    EXPECT_DOUBLE_EQ(joined->startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(joined->lengthBeats, 10.0);
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getTrack(track)->clips.size(), 2u);
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(TimelineClipToolTest, GlueToolPrunesTheSwallowedClipFromTheSelection) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto a = f.doc.addClip(track, 0.0, 4.0, "a");
+    const auto b = f.doc.addClip(track, 6.0, 4.0, "b"); // gap [4, 6): legal, becomes silence
+    ASSERT_TRUE(a.isValid() && b.isValid());
+    EXPECT_EQ(f.lane.findGlueTarget(a), b);
+    f.selection.setSelection({a, b});
+    f.lane.setActiveTool(EditTool::Glue);
+
+    clickWithTool(f.lane, clipCentre(f.lane, a));
+
+    ASSERT_EQ(f.doc.getTrack(track)->clips.size(), 1u);
+    EXPECT_TRUE(f.selection.contains(a)) << "the survivor stays selected";
+    EXPECT_FALSE(f.selection.contains(b)) << "the absorbed clip leaves the selection";
+}
+
+TEST(TimelineClipToolTest, GlueToolWithNothingAfterItLeavesNoUndoEntry) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto only = f.doc.addClip(track, 0.0, 4.0, "only");
+    ASSERT_TRUE(only.isValid());
+    EXPECT_FALSE(f.lane.findGlueTarget(only).isValid());
+    f.lane.setActiveTool(EditTool::Glue);
+    const auto revisionBefore = f.doc.getRevision();
+
+    clickWithTool(f.lane, clipCentre(f.lane, only));
+
+    EXPECT_EQ(f.doc.getRevision(), revisionBefore);
+    EXPECT_FALSE(f.undo.canUndo()) << "a refused glue must not push an empty undo step";
+}
+
+TEST(TimelineClipToolTest, GlueTargetSkipsAnOverlappingClip) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto a = f.doc.addClip(track, 0.0, 4.0, "a");
+    ASSERT_TRUE(f.doc.addClip(track, 2.0, 4.0, "overlapping").isValid()); // joinClips refuses this
+    const auto after = f.doc.addClip(track, 8.0, 2.0, "after");
+    ASSERT_TRUE(a.isValid() && after.isValid());
+
+    EXPECT_EQ(f.lane.findGlueTarget(a), after) << "the first NON-overlapping clip is the target";
+}
+
+// ------------------------------------------------------------- Erase tool --
+
+TEST(TimelineClipToolTest, EraseToolClickDeletesTheClipItHits) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto a = f.doc.addClip(track, 0.0, 4.0, "a");
+    const auto b = f.doc.addClip(track, 8.0, 4.0, "b");
+    ASSERT_TRUE(a.isValid() && b.isValid());
+    // Selection-independent: b is selected, and clicking a still erases a.
+    f.selection.setSelection({b});
+    f.lane.setActiveTool(EditTool::Erase);
+
+    clickWithTool(f.lane, clipCentre(f.lane, a));
+
+    EXPECT_EQ(f.doc.getClip(a), nullptr);
+    ASSERT_NE(f.doc.getClip(b), nullptr);
+    EXPECT_TRUE(f.selection.contains(b));
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getTrack(track)->clips.size(), 2u);
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+// -------------------------------------------------------------- Mute tool --
+
+TEST(TimelineClipToolTest, MuteToolClickTogglesTheClipFlagBothWays) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = f.doc.addClip(track, 0.0, 4.0, "c");
+    ASSERT_TRUE(clip.isValid());
+    ASSERT_FALSE(f.doc.getClip(clip)->muted);
+    f.lane.setActiveTool(EditTool::Mute);
+
+    clickWithTool(f.lane, clipCentre(f.lane, clip));
+    EXPECT_TRUE(f.doc.getClip(clip)->muted) << "one press, one toggle — the release must not toggle back";
+
+    clickWithTool(f.lane, clipCentre(f.lane, clip));
+    EXPECT_FALSE(f.doc.getClip(clip)->muted);
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_TRUE(f.doc.getClip(clip)->muted) << "each toggle is its own undo step";
+}
+
+// -------------------------------------------------------------- Draw tool --
+
+TEST(TimelineClipToolTest, DrawToolDragCreatesAClipOfTheDraggedLength) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    f.lane.setActiveTool(EditTool::Draw);
+
+    const juce::Point<float> anchor(40.0f, f.rowCentreY(0));   // beat 1.0, floor-snapped to 1.0
+    const juce::Point<float> release(200.0f, f.rowCentreY(0)); // beat 5.0, ceil-snapped to 5.0
+    f.lane.mouseDown(toolClick(f.lane, anchor));
+    f.lane.mouseDrag(toolDrag(f.lane, release, anchor));
+    EXPECT_FALSE(f.lane.getDrawGhostRectForTest().isEmpty()) << "the drag previews a ghost";
+    f.lane.mouseUp(toolDrag(f.lane, release, anchor));
+
+    const auto& clips = f.doc.getTrack(track)->clips;
+    ASSERT_EQ(clips.size(), 1u);
+    EXPECT_DOUBLE_EQ(clips[0].startBeat, 1.0);
+    EXPECT_DOUBLE_EQ(clips[0].lengthBeats, 4.0);
+    EXPECT_TRUE(f.selection.contains(clips[0].id));
+    EXPECT_TRUE(f.lane.getDrawGhostRectForTest().isEmpty()) << "the ghost is gone once the clip is real";
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_TRUE(f.doc.getTrack(track)->clips.empty());
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(TimelineClipToolTest, DrawToolPlainClickCreatesTheOneBarClip) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    ClipId opened;
+    f.lane.onClipDoubleClicked = [&opened](ClipId id) { opened = id; };
+    f.lane.setActiveTool(EditTool::Draw);
+
+    clickWithTool(f.lane, {40.0f, f.rowCentreY(0)}); // beat 1.0, no drag
+
+    const auto& clips = f.doc.getTrack(track)->clips;
+    ASSERT_EQ(clips.size(), 1u);
+    EXPECT_DOUBLE_EQ(clips[0].startBeat, 1.0);
+    EXPECT_DOUBLE_EQ(clips[0].lengthBeats, 4.0) << "one bar at the no-transport 4/4 fallback";
+    EXPECT_EQ(opened, clips[0].id) << "the pencil click lands in the note editor, like the double-click";
+}
+
+TEST(TimelineClipToolTest, DrawToolIsInertOnAnAudioRow) {
+    ToolLaneFixture f;
+    const auto audio = f.doc.addTrack(TrackKind::Audio, "A");
+    ASSERT_TRUE(audio.isValid());
+    f.lane.setActiveTool(EditTool::Draw);
+    const auto revisionBefore = f.doc.getRevision();
+
+    const juce::Point<float> anchor(40.0f, f.rowCentreY(0));
+    const juce::Point<float> release(200.0f, f.rowCentreY(0));
+    f.lane.mouseDown(toolClick(f.lane, anchor));
+    f.lane.mouseDrag(toolDrag(f.lane, release, anchor));
+    f.lane.mouseUp(toolDrag(f.lane, release, anchor));
+
+    EXPECT_TRUE(f.doc.getTrack(audio)->clips.empty()) << "a pencil cannot draw an asset";
+    EXPECT_EQ(f.doc.getRevision(), revisionBefore);
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+// ------------------------------------------------ Split tool hover preview --
+
+namespace {
+// The repaint-count seam, same subclass-and-count idiom PianoRollComponent's playhead strip uses.
+class CountingToolLane : public TimelineClipLaneArea {
+public:
+    using TimelineClipLaneArea::TimelineClipLaneArea;
+    int previewRepaints = 0;
+
+protected:
+    void requestToolPreviewRepaint(juce::Rectangle<int> region) override {
+        ++previewRepaints;
+        TimelineClipLaneArea::requestToolPreviewRepaint(region);
+    }
+};
+} // namespace
+
+TEST(TimelineClipToolTest, SplitPreviewRepaintsOnlyWhenTheSnappedBeatChanges) {
+    TimelineDoc doc;
+    TimelineViewState state;
+    state.pixelsPerBeat = 40.0;
+    state.firstVisibleBeat = 0.0;
+    state.snap = TimelineViewState::Snap::Quarter;
+    state.snapEnabled = true;
+    state.rowHeightScale = 1.0;
+    state.trackScrollY = 0.0;
+    synth::ui::ClipSelectionModel selection;
+    CountingToolLane lane{state, selection};
+    lane.setTimelineDoc(&doc);
+    lane.setSize(1200, 400);
+
+    const auto track = doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = doc.addClip(track, 0.0, 8.0, "c"); // x in [0, 320)
+    ASSERT_TRUE(clip.isValid());
+    lane.setActiveTool(EditTool::Split);
+    lane.previewRepaints = 0;
+
+    const float y = (float)(lane.getRowHeight() / 2);
+
+    lane.mouseMove(hoverAt(lane, {100.0f, y})); // beat 2.5 -> snapped 3.0
+    ASSERT_TRUE(lane.getSplitPreviewForTest().has_value());
+    EXPECT_DOUBLE_EQ(lane.getSplitPreviewForTest()->beat, 3.0);
+    EXPECT_EQ(lane.previewRepaints, 1);
+
+    // Both of these still snap to 3.0 — the preview is unchanged, so nothing repaints.
+    lane.mouseMove(hoverAt(lane, {105.0f, y})); // beat 2.625
+    lane.mouseMove(hoverAt(lane, {125.0f, y})); // beat 3.125
+    EXPECT_EQ(lane.previewRepaints, 1) << "movement inside one snap cell must cost zero repaints";
+    EXPECT_DOUBLE_EQ(lane.getSplitPreviewForTest()->beat, 3.0);
+
+    lane.mouseMove(hoverAt(lane, {140.0f, y})); // beat 3.5 -> snapped 4.0
+    EXPECT_EQ(lane.previewRepaints, 2) << "crossing into the next cell costs exactly one";
+    EXPECT_DOUBLE_EQ(lane.getSplitPreviewForTest()->beat, 4.0);
+
+    // Leaving the lanes drops the line (one more repaint, over where it was).
+    lane.mouseExit(hoverAt(lane, {140.0f, y}));
+    EXPECT_FALSE(lane.getSplitPreviewForTest().has_value());
+    EXPECT_EQ(lane.previewRepaints, 3);
+}
+
+// ------------------------------------------------------- Alt-drag copy ------
+
+TEST(TimelineClipToolTest, AltDragCopiesTheSelectionInOneUndoStep) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = f.doc.addClip(track, 0.0, 4.0, "c");
+    ASSERT_TRUE(clip.isValid());
+    ASSERT_TRUE(f.doc.addNote(clip, makeNote(1.0, 64)).isValid());
+    f.selection.setSelection({clip});
+
+    const auto anchor = clipCentre(f.lane, clip);
+    const juce::Point<float> dragged(anchor.x + 80.0f, anchor.y); // +2.0 beats at 40 px/beat
+    const int alt = juce::ModifierKeys::altModifier;
+
+    f.lane.mouseDown(toolClick(f.lane, anchor, alt));
+    f.lane.mouseDrag(toolDrag(f.lane, dragged, anchor, alt));
+    EXPECT_TRUE(f.lane.isCopyDragForTest());
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clip)->startBeat, 0.0) << "the original must not move mid-drag";
+    f.lane.mouseUp(toolDrag(f.lane, dragged, anchor, alt));
+
+    const auto& clips = f.doc.getTrack(track)->clips;
+    ASSERT_EQ(clips.size(), 2u);
+    EXPECT_DOUBLE_EQ(clips[0].startBeat, 0.0) << "the original stayed exactly where it was";
+    EXPECT_DOUBLE_EQ(clips[1].startBeat, 2.0);
+    EXPECT_EQ(clips[1].notes.size(), 1u) << "a copy is a deep copy";
+
+    const auto selected = f.selection.getSelected();
+    ASSERT_EQ(selected.size(), 1u);
+    EXPECT_EQ(selected[0], clips[1].id) << "the COPY ends up selected";
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getTrack(track)->clips.size(), 1u);
+    EXPECT_FALSE(f.undo.canUndo()) << "the whole copy-drag was ONE undo step";
+}
+
+TEST(TimelineClipToolTest, AltClickWithoutADragCopiesNothing) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = f.doc.addClip(track, 0.0, 4.0, "c");
+    ASSERT_TRUE(clip.isValid());
+    f.selection.setSelection({clip});
+
+    clickWithTool(f.lane, clipCentre(f.lane, clip), juce::ModifierKeys::altModifier);
+
+    EXPECT_EQ(f.doc.getTrack(track)->clips.size(), 1u);
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+// The user-visible half of the Alt copy-drag, and the one the doc assertions above could not
+// see: what is on SCREEN between mouseDown and mouseUp. The originals must not move on either
+// axis (the doc is untouched mid-drag either way, so only the effective geometry can prove it),
+// and the ghosts must carry the delta instead.
+TEST(TimelineClipToolTest, AltDragLeavesEveryOriginalInPlaceWhileTheGhostsCarryTheDelta) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto first = f.doc.addClip(track, 0.0, 4.0, "a");
+    const auto second = f.doc.addClip(track, 8.0, 2.0, "b");
+    ASSERT_TRUE(first.isValid());
+    ASSERT_TRUE(second.isValid());
+    f.selection.setSelection({first, second});
+
+    const auto anchor = clipCentre(f.lane, first);
+    const juce::Point<float> dragged(anchor.x + 80.0f, anchor.y); // +2.0 beats at 40 px/beat
+    const int alt = juce::ModifierKeys::altModifier;
+
+    f.lane.mouseDown(toolClick(f.lane, anchor, alt));
+    f.lane.mouseDrag(toolDrag(f.lane, dragged, anchor, alt));
+    ASSERT_TRUE(f.lane.isCopyDragForTest());
+
+    // Both originals paint at their DOC geometry — this is the regression: before the fix the
+    // start followed previewDeltaBeats_ while only the row was copy-guarded, so the original
+    // slid sideways under the pointer and the gesture read as a move.
+    const auto firstGeometry = f.lane.getEffectiveGeometryForTest(first);
+    ASSERT_TRUE(firstGeometry.has_value());
+    EXPECT_DOUBLE_EQ(firstGeometry->first, 0.0) << "an Alt-dragged original must not move mid-drag";
+    EXPECT_DOUBLE_EQ(firstGeometry->second, 4.0);
+    const auto secondGeometry = f.lane.getEffectiveGeometryForTest(second);
+    ASSERT_TRUE(secondGeometry.has_value());
+    EXPECT_DOUBLE_EQ(secondGeometry->first, 8.0) << "every original in the selection, not just the grabbed one";
+    EXPECT_DOUBLE_EQ(secondGeometry->second, 2.0);
+
+    // The ghosts are what moved — one per dragged clip, each at origin + the shared delta.
+    const int rowHeight = f.lane.getRowHeight();
+    const auto ghosts = f.lane.getDragGhostRectsForTest();
+    ASSERT_EQ(ghosts.size(), 2u);
+    EXPECT_EQ(ghosts[0], synth::ui::TimelineClipLaneArea::computeClipRect(f.state, 0, 2.0, 4.0, rowHeight));
+    EXPECT_EQ(ghosts[1], synth::ui::TimelineClipLaneArea::computeClipRect(f.state, 0, 10.0, 2.0, rowHeight));
+
+    f.lane.mouseUp(toolDrag(f.lane, dragged, anchor, alt));
+    EXPECT_TRUE(f.lane.getDragGhostRectsForTest().empty()) << "the ghosts end with the gesture";
+}
+
+TEST(TimelineClipToolTest, AltDragAcrossRowsPutsOnlyTheGhostOnTheDestinationRow) {
+    ToolLaneFixture f;
+    const auto upper = f.doc.addTrack(TrackKind::Midi, "Upper");
+    ASSERT_TRUE(f.doc.addTrack(TrackKind::Midi, "Lower").isValid());
+    const auto clip = f.doc.addClip(upper, 0.0, 4.0, "c");
+    ASSERT_TRUE(clip.isValid());
+    f.selection.setSelection({clip});
+
+    const auto anchor = clipCentre(f.lane, clip);
+    const juce::Point<float> dragged(anchor.x + 80.0f, anchor.y + f.rowHeightF()); // one row down, +2 beats
+    const int alt = juce::ModifierKeys::altModifier;
+
+    f.lane.mouseDown(toolClick(f.lane, anchor, alt));
+    f.lane.mouseDrag(toolDrag(f.lane, dragged, anchor, alt));
+    ASSERT_TRUE(f.lane.isCopyDragForTest());
+    EXPECT_EQ(f.lane.getPreviewRowDeltaForTest(), 1);
+
+    const auto geometry = f.lane.getEffectiveGeometryForTest(clip);
+    ASSERT_TRUE(geometry.has_value());
+    EXPECT_DOUBLE_EQ(geometry->first, 0.0) << "the vertical half of the drag must not move the original either";
+
+    const auto ghosts = f.lane.getDragGhostRectsForTest();
+    ASSERT_EQ(ghosts.size(), 1u);
+    EXPECT_EQ(ghosts[0], synth::ui::TimelineClipLaneArea::computeClipRect(f.state, 1, 2.0, 4.0, f.lane.getRowHeight()))
+        << "the ghost is the only thing on the destination row";
+}
+
+// The other side of the same guard: a PLAIN move-drag still previews on the original, which is
+// what makes a normal drag look like the clip following the pointer.
+TEST(TimelineClipToolTest, PlainMoveDragStillPreviewsTheDeltaOnTheOriginal) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = f.doc.addClip(track, 0.0, 4.0, "c");
+    ASSERT_TRUE(clip.isValid());
+    f.selection.setSelection({clip});
+
+    const auto anchor = clipCentre(f.lane, clip);
+    const juce::Point<float> dragged(anchor.x + 80.0f, anchor.y);
+
+    f.lane.mouseDown(toolClick(f.lane, anchor));
+    f.lane.mouseDrag(toolDrag(f.lane, dragged, anchor));
+    EXPECT_FALSE(f.lane.isCopyDragForTest());
+
+    const auto geometry = f.lane.getEffectiveGeometryForTest(clip);
+    ASSERT_TRUE(geometry.has_value());
+    EXPECT_DOUBLE_EQ(geometry->first, 2.0) << "a plain drag previews on the clip itself";
+    EXPECT_DOUBLE_EQ(geometry->second, 4.0);
+    EXPECT_TRUE(f.lane.getDragGhostRectsForTest().empty()) << "and draws no ghosts at all";
+
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clip)->startBeat, 0.0) << "the DOC still only changes on mouseUp";
+    f.lane.mouseUp(toolDrag(f.lane, dragged, anchor));
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clip)->startBeat, 2.0);
+}
+
+// ------------------------------------------------------- Cross-track drag ---
+
+TEST(TimelineClipToolTest, CrossTrackDragMovesTheClipToTheRowBelow) {
+    ToolLaneFixture f;
+    const auto upper = f.doc.addTrack(TrackKind::Midi, "Upper");
+    const auto lower = f.doc.addTrack(TrackKind::Midi, "Lower");
+    const auto clip = f.doc.addClip(upper, 0.0, 4.0, "c");
+    ASSERT_TRUE(clip.isValid());
+    const auto note = f.doc.addNote(clip, makeNote(1.0, 64, 2.0, 90, 3));
+    ASSERT_TRUE(note.isValid());
+    f.selection.setSelection({clip});
+
+    const auto anchor = clipCentre(f.lane, clip);
+    const juce::Point<float> dropped(anchor.x + 80.0f, anchor.y + f.rowHeightF()); // one row down, +2 beats
+    f.lane.mouseDown(toolClick(f.lane, anchor));
+    f.lane.mouseDrag(toolDrag(f.lane, dropped, anchor));
+    EXPECT_EQ(f.lane.getPreviewRowDeltaForTest(), 1);
+    f.lane.mouseUp(toolDrag(f.lane, dropped, anchor));
+
+    EXPECT_TRUE(f.doc.getTrack(upper)->clips.empty());
+    ASSERT_EQ(f.doc.getTrack(lower)->clips.size(), 1u);
+    const auto& moved = f.doc.getTrack(lower)->clips[0];
+    EXPECT_EQ(moved.id, clip) << "a cross-track move keeps the clip's identity";
+    EXPECT_DOUBLE_EQ(moved.startBeat, 2.0);
+    EXPECT_DOUBLE_EQ(moved.lengthBeats, 4.0);
+    EXPECT_EQ(moved.name, "c");
+    ASSERT_EQ(moved.notes.size(), 1u);
+    EXPECT_EQ(moved.notes[0].id, note);
+    EXPECT_DOUBLE_EQ(moved.notes[0].startBeat, 1.0) << "notes are clip-relative, so they travel untouched";
+    EXPECT_EQ(moved.notes[0].velocity, 90);
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getTrack(upper)->clips.size(), 1u);
+}
+
+TEST(TimelineClipToolTest, CrossTrackDragOntoAKindMismatchClampsToTheSameLane) {
+    ToolLaneFixture f;
+    const auto midi = f.doc.addTrack(TrackKind::Midi, "Midi");
+    const auto audio = f.doc.addTrack(TrackKind::Audio, "Audio");
+    const auto clip = f.doc.addClip(midi, 0.0, 4.0, "c"); // no assetRef -> a MIDI clip
+    ASSERT_TRUE(clip.isValid());
+    f.selection.setSelection({clip});
+
+    const auto anchor = clipCentre(f.lane, clip);
+    const juce::Point<float> dropped(anchor.x + 80.0f, anchor.y + f.rowHeightF()); // onto the Audio row
+    f.lane.mouseDown(toolClick(f.lane, anchor));
+    f.lane.mouseDrag(toolDrag(f.lane, dropped, anchor));
+    EXPECT_EQ(f.lane.getPreviewRowDeltaForTest(), 0) << "an illegal drop clamps the row delta, it does not refuse";
+    f.lane.mouseUp(toolDrag(f.lane, dropped, anchor));
+
+    EXPECT_TRUE(f.doc.getTrack(audio)->clips.empty());
+    ASSERT_EQ(f.doc.getTrack(midi)->clips.size(), 1u);
+    EXPECT_DOUBLE_EQ(f.doc.getTrack(midi)->clips[0].startBeat, 2.0) << "the horizontal half of the drag still lands";
+}
+
+TEST(TimelineClipToolTest, AudioClipDragsOntoAnotherAudioTrack) {
+    ToolLaneFixture f;
+    const auto first = f.doc.addTrack(TrackKind::Audio, "A1");
+    const auto second = f.doc.addTrack(TrackKind::Audio, "A2");
+    const auto clip = f.doc.addClip(first, 0.0, 4.0, "take");
+    ASSERT_TRUE(clip.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(clip, "Audio/take-1.wav", 1.5));
+    ASSERT_TRUE(f.doc.setClipGainDb(clip, -3.0));
+    f.selection.setSelection({clip});
+
+    const auto anchor = clipCentre(f.lane, clip);
+    const juce::Point<float> dropped(anchor.x, anchor.y + f.rowHeightF());
+    f.lane.mouseDown(toolClick(f.lane, anchor));
+    f.lane.mouseDrag(toolDrag(f.lane, dropped, anchor));
+    f.lane.mouseUp(toolDrag(f.lane, dropped, anchor));
+
+    ASSERT_EQ(f.doc.getTrack(second)->clips.size(), 1u);
+    const auto& moved = f.doc.getTrack(second)->clips[0];
+    EXPECT_EQ(moved.assetRef, "Audio/take-1.wav");
+    EXPECT_DOUBLE_EQ(moved.sourceStartSeconds, 1.5);
+    EXPECT_DOUBLE_EQ(moved.gainDb, -3.0);
+}
+
+TEST(TimelineClipToolTest, MixedKindGroupDragClampsTheWholeGroupToItsOriginalTracks) {
+    ToolLaneFixture f;
+    const auto midiTrack = f.doc.addTrack(TrackKind::Midi, "Midi");
+    const auto audioTrack = f.doc.addTrack(TrackKind::Audio, "Audio1");
+    const auto audioTrack2 = f.doc.addTrack(TrackKind::Audio, "Audio2");
+    const auto midiClip = f.doc.addClip(midiTrack, 0.0, 4.0, "m");
+    const auto audioClip = f.doc.addClip(audioTrack, 0.0, 4.0, "a");
+    ASSERT_TRUE(midiClip.isValid() && audioClip.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(audioClip, "Audio/take.wav", 0.0));
+    // Selected together: the MIDI clip's one-row-down destination (the Audio track) is a kind
+    // mismatch, which clamps the row delta for the WHOLE group, even though the audio clip's own
+    // one-row-down destination (the second Audio track) would have been legal on its own.
+    f.selection.setSelection({midiClip, audioClip});
+
+    const auto anchor = clipCentre(f.lane, midiClip);
+    const juce::Point<float> dropped(anchor.x, anchor.y + f.rowHeightF()); // one row down, no horizontal move
+    f.lane.mouseDown(toolClick(f.lane, anchor));
+    f.lane.mouseDrag(toolDrag(f.lane, dropped, anchor));
+    EXPECT_EQ(f.lane.getPreviewRowDeltaForTest(), 0) << "one mismatched clip in the group clamps them all";
+    f.lane.mouseUp(toolDrag(f.lane, dropped, anchor));
+
+    ASSERT_EQ(f.doc.getTrack(midiTrack)->clips.size(), 1u);
+    EXPECT_DOUBLE_EQ(f.doc.getTrack(midiTrack)->clips[0].startBeat, 0.0);
+    ASSERT_EQ(f.doc.getTrack(audioTrack)->clips.size(), 1u);
+    EXPECT_DOUBLE_EQ(f.doc.getTrack(audioTrack)->clips[0].startBeat, 0.0);
+    EXPECT_TRUE(f.doc.getTrack(audioTrack2)->clips.empty()) << "neither clip crossed tracks";
+}
+
+// -------------------------------------------------------------- Rename ------
+
+TEST(TimelineClipToolTest, RenameCommitsAndABlankNameKeepsTheOldOne) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = f.doc.addClip(track, 0.0, 4.0, "Original");
+    ASSERT_TRUE(clip.isValid());
+
+    f.lane.renameClip(clip, "  Chorus  ");
+    EXPECT_EQ(f.doc.getClip(clip)->name, "Chorus") << "setClipName trims";
+    ASSERT_TRUE(f.undo.canUndo());
+
+    f.lane.renameClip(clip, "   ");
+    EXPECT_EQ(f.doc.getClip(clip)->name, "Chorus") << "a blank name is refused, not stored";
+
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getClip(clip)->name, "Original") << "the refusal pushed no second undo step";
+}
+
+TEST(TimelineClipToolTest, RenameContextChoiceIsInert) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto clip = f.doc.addClip(track, 0.0, 4.0, "Original");
+    ASSERT_TRUE(clip.isValid());
+    const auto revisionBefore = f.doc.getRevision();
+
+    // The enum entry exists so the menu's vocabulary is enumerable; the editor it opens is the
+    // real path, and renameClip() above is its commit half.
+    f.lane.applyClipContextChoice(clip, TimelineClipLaneArea::ClipContextChoice::Rename, 0.0);
+
+    EXPECT_EQ(f.doc.getRevision(), revisionBefore);
+    EXPECT_EQ(f.doc.getClip(clip)->name, "Original");
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(TimelineClipToolTest, MuteAndGlueAreReachableFromTheContextMenuHook) {
+    ToolLaneFixture f;
+    const auto track = f.doc.addTrack(TrackKind::Midi, "T");
+    const auto a = f.doc.addClip(track, 0.0, 4.0, "a");
+    const auto b = f.doc.addClip(track, 4.0, 4.0, "b");
+    ASSERT_TRUE(a.isValid() && b.isValid());
+
+    f.lane.applyClipContextChoice(a, TimelineClipLaneArea::ClipContextChoice::ToggleMute, 0.0);
+    EXPECT_TRUE(f.doc.getClip(a)->muted);
+
+    f.lane.applyClipContextChoice(a, TimelineClipLaneArea::ClipContextChoice::GlueWithNext, 0.0);
+    ASSERT_EQ(f.doc.getTrack(track)->clips.size(), 1u);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(a)->lengthBeats, 8.0);
+    EXPECT_TRUE(f.doc.getClip(a)->muted) << "the survivor's mute flag survives with it";
+}
+
+// ---------------------------------------------- the shared time-grid colour policy --
+//
+// synth::ui::gridLineAlphaFor / gridLineColourFor / gridLevelIsReadable (TimelineClipLaneArea.h) are
+// the ONE policy both grid painters read — TimelinePanelComponent for the lanes and
+// PianoRollComponent for the roll. They are pure, so the two properties that actually matter (a
+// monotonic hierarchy and the density guard) are asserted directly here rather than screenshotted.
+
+TEST(TimelineGridHierarchyTest, AlphaHierarchyIsMonotonicAndBarIsStrongest) {
+    using synth::ui::gridLineAlphaFor;
+    using synth::ui::GridLineLevel;
+
+    const float sub = gridLineAlphaFor(GridLineLevel::Subdivision);
+    const float beat = gridLineAlphaFor(GridLineLevel::Beat);
+    const float bar = gridLineAlphaFor(GridLineLevel::Bar);
+
+    EXPECT_GT(beat, sub) << "a beat line must read as stronger than a snap subdivision";
+    EXPECT_GT(bar, beat) << "and a bar line stronger than a beat";
+    EXPECT_LE(bar, 1.0f);
+}
+
+// The regression this policy exists for: the sub-beat level used to be a 0.14 hairline, invisible on
+// every dark theme. It is a HINT, not a whisper — pinned well clear of zero so a future tweak cannot
+// quietly walk it back there.
+TEST(TimelineGridHierarchyTest, SubdivisionAlphaIsAVisibleHintNotAHairline) {
+    using synth::ui::gridLineAlphaFor;
+    using synth::ui::GridLineLevel;
+
+    EXPECT_GE(gridLineAlphaFor(GridLineLevel::Subdivision), 0.2f);
+    EXPECT_LT(gridLineAlphaFor(GridLineLevel::Subdivision), gridLineAlphaFor(GridLineLevel::Bar));
+}
+
+// Density guard: a level whose lines would land closer than kMinGridLinePixels apart is dropped
+// wholesale rather than drawn as a solid block that swamps the beat and bar lines above it.
+TEST(TimelineGridHierarchyTest, DensityGuardDropsLevelsTighterThanTheMinimumSpacing) {
+    using synth::ui::gridLevelIsReadable;
+    using synth::ui::kMinGridLinePixels;
+
+    // Exactly at the threshold is readable; a hair under it is not.
+    EXPECT_TRUE(gridLevelIsReadable(1.0, kMinGridLinePixels));
+    EXPECT_FALSE(gridLevelIsReadable(1.0, kMinGridLinePixels - 0.01));
+
+    // A sixteenth grid: fine at 40 px/beat (10 px apart), gone at the minimum zoom (0.375 px apart).
+    EXPECT_TRUE(gridLevelIsReadable(0.25, 40.0));
+    EXPECT_FALSE(gridLevelIsReadable(0.25, synth::ui::TimelineViewState::kMinPixelsPerBeat));
+
+    // Snap::Off reports a 0.0 division, and a garbage spacing must not sneak past either.
+    EXPECT_FALSE(gridLevelIsReadable(0.0, 512.0));
+    EXPECT_FALSE(gridLevelIsReadable(-1.0, 512.0));
+    EXPECT_FALSE(gridLevelIsReadable(std::numeric_limits<double>::quiet_NaN(), 512.0));
+    EXPECT_FALSE(gridLevelIsReadable(1.0, std::numeric_limits<double>::quiet_NaN()));
+}
+
+// Raising alpha alone cannot rescue a dark theme, where the `border` token is a shade off the
+// background: the line is lifted TOWARDS the background's contrasting end first. Asserted in both
+// directions, because a light theme has to get darker lines, not brighter ones.
+TEST(TimelineGridHierarchyTest, GridLineColourLiftsAwayFromTheBackgroundOnDarkAndLightThemes) {
+    using synth::ui::gridLineAlphaFor;
+    using synth::ui::gridLineColourFor;
+    using synth::ui::GridLineLevel;
+
+    const juce::Colour darkBg(0xff101014);
+    const juce::Colour darkBorder(0xff1e1e24); // a real dark-theme border: barely off the background
+
+    const auto barOnDark = gridLineColourFor(GridLineLevel::Bar, darkBorder, darkBg);
+    EXPECT_GT(barOnDark.getBrightness(), darkBorder.getBrightness())
+        << "on a dark theme the line has to get brighter than the token it came from";
+    // juce::Colour stores alpha as a uint8, so the round-trip is only accurate to 1/255.
+    EXPECT_NEAR(barOnDark.getFloatAlpha(), gridLineAlphaFor(GridLineLevel::Bar), 1.0f / 255.0f);
+
+    const juce::Colour lightBg(0xfff5f5f7);
+    const juce::Colour lightBorder(0xffe2e2e6);
+    const auto barOnLight = gridLineColourFor(GridLineLevel::Bar, lightBorder, lightBg);
+    EXPECT_LT(barOnLight.getBrightness(), lightBorder.getBrightness())
+        << "and darker on a light one — contrast, not brightness";
+
+    // The hierarchy survives the colour derivation: same base, same background, monotonic alpha.
+    const auto subOnDark = gridLineColourFor(GridLineLevel::Subdivision, darkBorder, darkBg);
+    const auto beatOnDark = gridLineColourFor(GridLineLevel::Beat, darkBorder, darkBg);
+    EXPECT_LT(subOnDark.getFloatAlpha(), beatOnDark.getFloatAlpha());
+    EXPECT_LT(beatOnDark.getFloatAlpha(), barOnDark.getFloatAlpha());
+    EXPECT_EQ(subOnDark.withAlpha(1.0f), barOnDark.withAlpha(1.0f)) << "one colour, three opacities";
 }

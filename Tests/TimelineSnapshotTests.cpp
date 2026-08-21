@@ -227,6 +227,81 @@ TEST(TimelineSnapshotTest, OverlongAssetRefIsDroppedNotTruncated) {
 }
 
 // ============================================================================
+// Flatten policy: mute
+// ============================================================================
+// Mute is resolved HERE, once, rather than by each consumer. These two tests are the contract
+// that lets TimelineMidiSource and the AudioClipStreamer's assignment table stay unaware that
+// mute exists: muted content is simply absent from the snapshot they read.
+
+TEST(TimelineSnapshotTest, MutedClipsAndNotesAreExcludedFromTheFlatten) {
+    TimelineDoc doc;
+    const auto lead = doc.addTrack(TrackKind::Midi, "Lead");
+
+    const auto audible = doc.addClip(lead, 0.0, 4.0, "Audible");
+    doc.addNote(audible, makeNote(0.0, 60));
+    const auto silentNote = doc.addNote(audible, makeNote(1.0, 62));
+    doc.addNote(audible, makeNote(2.0, 64));
+
+    const auto silentClip = doc.addClip(lead, 8.0, 4.0, "Silent");
+    doc.addNote(silentClip, makeNote(0.0, 70));
+    doc.addNote(silentClip, makeNote(1.0, 71));
+
+    ASSERT_TRUE(doc.setClipMuted(silentClip, true));
+    ASSERT_TRUE(doc.setNoteMuted(silentNote, true));
+
+    const auto snapshot = TimelineSnapshot::buildFrom(doc);
+    ASSERT_NE(snapshot, nullptr);
+    EXPECT_TRUE(snapshot->selfCheck());
+    ASSERT_EQ(snapshot->tracks.size(), 1u);
+
+    // Two notes survive: the muted clip contributes nothing at all, and the muted note is gone
+    // from the run rather than emitted at velocity 0 or with a zero length.
+    ASSERT_EQ(snapshot->tracks[0].numNotes, 2)
+        << "a muted clip must contribute no notes, and a muted note must be skipped";
+    EXPECT_EQ(snapshot->notes[0].pitch, 60);
+    EXPECT_EQ(snapshot->notes[1].pitch, 64);
+    for (const auto& note : snapshot->notes)
+        EXPECT_LT(note.startBeat, 8.0) << "no event may come from the muted clip";
+
+    // Un-muting restores exactly what was hidden — mute never destroyed anything.
+    ASSERT_TRUE(doc.setClipMuted(silentClip, false));
+    ASSERT_TRUE(doc.setNoteMuted(silentNote, false));
+    const auto restored = TimelineSnapshot::buildFrom(doc);
+    EXPECT_TRUE(restored->selfCheck());
+    ASSERT_EQ(restored->tracks[0].numNotes, 5);
+    EXPECT_EQ(restored->notes[1].pitch, 62) << "the previously muted note is back in sorted position";
+    EXPECT_DOUBLE_EQ(restored->notes[3].startBeat, 8.0);
+}
+
+TEST(TimelineSnapshotTest, MutedAudioClipGetsNoAudioClipInfo) {
+    // No AudioClipInfo means the streamer never even assigns the clip a stream, so a muted take
+    // costs no ring and touches no file — the exclusion is cheaper than a gain of zero would be.
+    TimelineDoc doc;
+    const auto takes = doc.addTrack(TrackKind::Audio, "Takes");
+
+    const auto audible = doc.addClip(takes, 0.0, 4.0, "Keeper");
+    ASSERT_TRUE(doc.setClipAsset(audible, "Audio/keeper.wav", 0.0));
+    const auto silent = doc.addClip(takes, 8.0, 4.0, "Reject");
+    ASSERT_TRUE(doc.setClipAsset(silent, "Audio/reject.wav", 0.0));
+    ASSERT_TRUE(doc.setClipMuted(silent, true));
+
+    const auto snapshot = TimelineSnapshot::buildFrom(doc);
+    ASSERT_NE(snapshot, nullptr);
+    EXPECT_TRUE(snapshot->selfCheck());
+    ASSERT_EQ(snapshot->audioClips.size(), 1u) << "a muted audio clip must not reach the snapshot at all";
+    EXPECT_EQ(snapshot->tracks[0].numAudioClips, 1);
+    EXPECT_EQ(snapshot->audioClips[0].clipId, audible.value);
+    EXPECT_STREQ(snapshot->audioClips[0].assetRef, "Audio/keeper.wav");
+
+    ASSERT_TRUE(doc.setClipMuted(silent, false));
+    const auto restored = TimelineSnapshot::buildFrom(doc);
+    EXPECT_TRUE(restored->selfCheck());
+    ASSERT_EQ(restored->audioClips.size(), 2u);
+    EXPECT_EQ(restored->tracks[0].numAudioClips, 2);
+    EXPECT_STREQ(restored->audioClips[1].assetRef, "Audio/reject.wav");
+}
+
+// ============================================================================
 // Exchange: publication
 // ============================================================================
 

@@ -23,8 +23,14 @@ TimelinePlayheadOverlay::TimelinePlayheadOverlay(TimelineViewState& viewState)
 
 //==============================================================================
 double TimelinePlayheadOverlay::getDrawnBeat() const noexcept {
+    // Draw where the audio being HEARD is, not where the block being rendered is — but only while
+    // something IS being heard. Stopped, the raw position is the truth: a ruler click that snapped
+    // exactly onto a bar must draw exactly ON that bar line, and applying the output-latency shift
+    // here parked the line a few pixels to its left (~29 ms of device latency at a typical zoom),
+    // which reads as a snapping bug rather than as the latency compensation it is.
+    if (!snapshot_.playing)
+        return std::max(0.0, snapshot_.ppq);
     const double beatsPerSecond = std::max(0.0, snapshot_.bpm) / 60.0;
-    // Draw where the audio being HEARD is, not where the block being rendered is.
     return std::max(0.0, snapshot_.ppq - outputLatencySeconds_ * beatsPerSecond);
 }
 

@@ -9,8 +9,16 @@ namespace synth::ui {
 namespace {
 // Adaptive density thresholds (paint()). Deterministic and cheap — no font-width measurement —
 // so behaviour is identical across platforms/fonts, which is what the guard tests below rely on.
-constexpr double kMinLabelSpacingPx = 40.0;       // never draw two bar labels closer than this
-constexpr double kMinBeatTickPixelsPerBeat = 8.0; // below this, per-beat ticks would just be noise
+constexpr double kMinLabelSpacingPx = 40.0; // never draw two bar labels closer than this
+// The beat-tick / beat-label band edges live in the header next to rulerTickPlanFor(), so the tests
+// assert against the same constants paint() reads.
+constexpr float kBarLabelFontHeight = 11.0f;
+// Sub-labels are the same row, two points smaller and faded: the bar number has to stay the thing
+// the eye lands on when scanning the strip.
+constexpr float kBeatLabelFontHeight = 9.0f;
+constexpr float kBeatLabelAlpha = 0.65f;
+constexpr int kBarLabelWidth = 40;
+constexpr int kBeatLabelWidth = 34;
 constexpr float kLoopBraceHeight = 4.0f;
 constexpr float kLoopBraceTickHeight = 8.0f;
 // Hover affordance: just enough tint to read which half is armed, not enough to fight the ticks.
@@ -261,36 +269,60 @@ void TimelineRulerComponent::paint(juce::Graphics& g) {
     while (barWidthPx * (double)labelEveryNBars < kMinLabelSpacingPx)
         labelEveryNBars *= 2;
 
-    const bool drawBeatTicks = mapPixelsPerBeat() >= kMinBeatTickPixelsPerBeat;
+    // ONE decision per paint, from the pure helper the tests drive directly (see
+    // rulerTickPlanFor) — never re-derived inside the loop.
+    const auto tickPlan = rulerTickPlanFor(mapPixelsPerBeat(), beatsPerBar);
     const int beatsPerBarRounded = std::max(1, (int)std::llround(beatsPerBar));
 
     const juce::int64 firstBar = (juce::int64)std::floor(startBeat / beatsPerBar) - 1;
     const juce::int64 lastBar = (juce::int64)std::ceil(endBeat / beatsPerBar) + 1;
 
-    g.setFont(juce::Font(11.0f));
+    // Both fonts built once per paint, outside the bar sweep — the loop itself allocates nothing.
+    const juce::Font barFont{juce::FontOptions(kBarLabelFontHeight)};
+    const juce::Font beatFont{juce::FontOptions(kBeatLabelFontHeight)};
+    const juce::Colour beatLabelColour = textMuted.withAlpha(kBeatLabelAlpha);
+
+    g.setFont(barFont);
     for (juce::int64 bar = firstBar; bar <= lastBar; ++bar) {
         const double barBeat = (double)bar * beatsPerBar;
         const double x = mapBeatToX(barBeat);
-        if (x < -1.0 || x > widthPx + 1.0)
-            continue;
+        // Cull only the bar line and its number — never the whole bar. A bar whose line has
+        // scrolled off the left edge still owns beat ticks/labels that ARE on screen; a whole-bar
+        // `continue` here left the ruler blank to the left of the first visible bar line while
+        // scrolling (the lanes-grid painter had the same bug, fixed the same way). The tick loop
+        // below culls per tick.
+        if (x >= -1.0 && x <= widthPx + 1.0) {
+            g.setColour(border);
+            g.drawVerticalLine((int)std::llround(x), 0.0f, (float)bounds.getHeight());
 
-        g.setColour(border);
-        g.drawVerticalLine((int)std::llround(x), 0.0f, (float)bounds.getHeight());
-
-        if (bar >= 0 && (bar % labelEveryNBars) == 0) {
-            g.setColour(textMuted);
-            g.drawText(juce::String(bar + 1), (int)std::llround(x) + 3, 0, 40, bounds.getHeight(),
-                       juce::Justification::centredLeft, false);
+            if (bar >= 0 && (bar % labelEveryNBars) == 0) {
+                g.setColour(textMuted);
+                g.drawText(juce::String(bar + 1), (int)std::llround(x) + 3, 0, kBarLabelWidth, bounds.getHeight(),
+                           juce::Justification::centredLeft, false);
+            }
         }
 
-        if (drawBeatTicks) {
+        if (tickPlan.drawBeatTicks) {
             for (int beatInBar = 1; beatInBar < beatsPerBarRounded; ++beatInBar) {
                 const double beatX = mapBeatToX(barBeat + (double)beatInBar);
                 if (beatX < 0.0 || beatX > widthPx)
                     continue;
+                // Half-height and faded: a beat tick must read as subordinate to the full-height
+                // bar line it sits between, at a glance and without reading the labels.
                 g.setColour(border.withAlpha(0.4f));
                 g.drawVerticalLine((int)std::llround(beatX), (float)bounds.getHeight() * 0.5f,
                                    (float)bounds.getHeight());
+
+                // "bar.beat" (Cubase's "80.2"), 1-based on both halves so it matches the bar
+                // numbers above and the transport bar's own readout. Only once there is real room
+                // — see rulerTickPlanFor.
+                if (tickPlan.drawBeatLabels && bar >= 0) {
+                    g.setFont(beatFont);
+                    g.setColour(beatLabelColour);
+                    g.drawText(juce::String(bar + 1) + "." + juce::String(beatInBar + 1), (int)std::llround(beatX) + 3,
+                               0, kBeatLabelWidth, bounds.getHeight(), juce::Justification::centredLeft, false);
+                    g.setFont(barFont);
+                }
             }
         }
     }

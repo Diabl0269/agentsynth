@@ -1,16 +1,19 @@
 #pragma once
 
 #include "../Timeline/TimelineDoc.h"
+#include "EditTool.h"
 #include "NoteSelectionModel.h"
 #include "TimelinePlayheadOverlay.h"
 #include "TimelineViewState.h"
+#include <array>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
 #include <utility>
 #include <vector>
 
-class AppUndoManager; // Forward declaration (Source/AppUndoManager.h)
+class AppUndoManager;  // Forward declaration (Source/AppUndoManager.h)
+class ShortcutManager; // Forward declaration (Source/ShortcutManager.h)
 
 namespace synth {
 class TransportService; // Forward declaration (Source/Transport/TransportService.h)
@@ -43,6 +46,13 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 //
 // Notes are clip-relative in the doc (MidiNote::startBeat); every doc read/write here converts to
 // absolute beats via clip->startBeat and back.
+//
+// The panel's edit-tool strip pushes the active tool in (setActiveTool). Select is the whole
+// gesture table above; Split / Glue / Erase / Mute / Draw replace it with single-click actions and
+// disable move, resize, velocity scrub and marquee entirely — see setActiveTool for why. The note
+// CLIPBOARD (copy/cut/paste/duplicate/repeat) lives here too rather than in the panel, because a
+// copied block is anchored on its own earliest note and is therefore paste-able into any clip: the
+// roll keeps it across openClip so "copy in one clip, paste in another" works.
 //
 // See docs/layout.md §16 (TL5-8) for the gesture table.
 namespace synth::ui {
@@ -95,10 +105,33 @@ public:
     // plain wheel      -> vertical (pitch) scroll
     // Nothing bubbles to the panel: the roll's zoom/scroll are its own, so the shared
     // TimelineViewState must not move when the wheel lands here.
+    //
+    // EVERY branch reads its amount through synth::ui::ScrollPolicy (ScrollPolicy.h) rather than a
+    // raw delta member, for the two reasons spelled out there: macOS folds Shift+wheel into
+    // `deltaX`, so the modifier-decided branches (both zooms) must take the DOMINANT axis or go
+    // silently dead under Shift; and the plain-scroll branches route their sign through
+    // scrollAmount() so "natural" here means exactly what it means in a juce::Viewport.
+    //
+    // The two zoom branches are a DIFFERENT preference from the scroll branches: direction there
+    // comes from synth::ui::wheelGestureIsUpward (the PHYSICAL gesture, recovered from isReversed
+    // XOR the delta's sign — see ScrollPolicy.h), not from the delta's raw sign, so "wheel up zooms
+    // in" is the same finger motion regardless of the OS's natural-scrolling setting.
+    // zoomScrollInverted_ (setZoomScrollInverted) flips that outcome; it is independent of
+    // scrollInverted_, which only ever governs the plain-scroll branches below.
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
     // Trackpad pinch: plain = horizontal zoom around the pinch point, Shift = vertical zoom —
     // the same pair TimelinePanelComponent::mouseMagnify binds for the lanes.
     void mouseMagnify(const juce::MouseEvent& e, float scaleFactor) override;
+    // Hover-only work: the Split tool's cut-position preview and the Select tool's resize-zone
+    // cursor. BOTH are gated on a state change (the snapped cut beat / the hovered note, and the
+    // "is the pointer in a resize zone" boolean), so a mouse moving inside one note at one snap
+    // division costs zero repaints and zero cursor churn — see the repaint invariant in CLAUDE.md.
+    void mouseMove(const juce::MouseEvent& e) override;
+    void mouseEnter(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
+    // Theme switch: the tool cursors are rendered FROM the themed icons, so the cache is dropped
+    // and the active tool's cursor re-applied here rather than rebuilt per mouse move.
+    void lookAndFeelChanged() override;
 
     // Panel-scoped Delete/Escape. Returns false (key falls through) when there is nothing to act
     // on, the same TimelineClipLaneArea contract.
@@ -118,6 +151,121 @@ public:
     // Only consulted for Snap::Bar's beatsPerBar, same reasoning as
     // TimelineClipLaneArea::setTransport.
     void setTransport(synth::TransportService* transport) noexcept { transport_ = transport; }
+
+    /** The user's keyboard bindings for this surface's OWN keys (nudge, transpose, note navigation,
+     *  quantise, snap toggle). Non-owning and may stay null — with no manager installed keyPressed()
+     *  uses the hardcoded defaults below, which is what every headless test and every embedding that
+     *  has no settings store gets.
+     *
+     *  Resolution is strict when a manager IS installed: an action whose binding is unset or invalid
+     *  (including an id this ShortcutManager has never heard of) has NO key, rather than quietly
+     *  falling back to its default. Mixing the two would mean a user who deliberately cleared a
+     *  binding still had the factory key working, which is exactly the bug rebinding exists to fix.
+     *
+     *  Escape and Delete/Backspace are NOT resolved through here — they are platform conventions
+     *  (cancel, delete the selection), not app shortcuts, and every surface in the app answers them
+     *  identically. The tool DIGITS are not here either: they belong to the panel (see
+     *  setActiveTool). */
+    void setShortcutManager(const ShortcutManager* manager) noexcept { shortcuts_ = manager; }
+    const ShortcutManager* getShortcutManager() const noexcept { return shortcuts_; }
+
+    /** The app-level "invert my scroll wheel" preference, stacked ON TOP of the OS setting (which
+     *  JUCE has already folded into the deltas — see ScrollPolicy.h). false, the default, is
+     *  NATURAL: identical to what a juce::Viewport does with the same gesture, on both axes. */
+    void setScrollInverted(bool inverted) noexcept { scrollInverted_ = inverted; }
+    bool isScrollInverted() const noexcept { return scrollInverted_; }
+
+    /** The app-level "invert my zoom wheel direction" preference — a SEPARATE flag from
+     *  scrollInverted_ above, because zoom and plain scroll answer to different conventions: scroll
+     *  follows the OS's natural-scrolling setting (already folded into the deltas), while zoom
+     *  follows the PHYSICAL gesture (synth::ui::wheelGestureIsUpward) regardless of it. false, the
+     *  default, means wheel UP zooms IN — for both the Cmd+wheel (horizontal) and Cmd+Shift+wheel
+     *  (vertical) branches, which always agree with each other. */
+    void setZoomScrollInverted(bool inverted) noexcept { zoomScrollInverted_ = inverted; }
+    bool isZoomScrollInverted() const noexcept { return zoomScrollInverted_; }
+
+    /** Zoom the roll's own horizontal mapping by `factor` (> 1 in, < 1 out) around the CENTRE of the
+     *  visible grid, using the same anchored math the Cmd+wheel branch uses — so a menu/keyboard
+     *  zoom and a wheel zoom land in the same place, just with a different anchor. Clamped to
+     *  TimelineViewState's pixels-per-beat bounds. View-only: no doc mutation, no undo step. A
+     *  non-finite or non-positive factor is ignored. */
+    void zoomHorizontal(double factor);
+
+    /** The vertical equivalent: scales pixelsPerSemitone_ (clamped to [kMinPixelsPerSemitone,
+     *  kMaxPixelsPerSemitone]) while keeping the pitch at the grid's vertical centre put. Same
+     *  view-only, no-undo contract. */
+    void zoomVertical(double factor);
+
+    // ---- Edit tools (Cubase-style; see EditTool.h) ----
+
+    /** The active tool. TimelinePanelComponent owns the choice (one strip drives whichever editor
+     *  is currently swapped into the lane rect) and pushes it here; the roll never switches tool by
+     *  itself. In particular keyPressed() deliberately does NOT consume the tool digits — they
+     *  bubble to the panel, which owns that binding, so the two can never disagree about which
+     *  tool is active.
+     *
+     *  Select keeps the whole pre-existing gesture table (click-select, drag-move, right-edge
+     *  resize, Cmd velocity scrub, drag-from-empty marquee, double-click create/delete). The other five
+     *  tools REPLACE it: they act on a single click and none of them starts a move/resize/scrub/
+     *  marquee, so a mis-aimed drag with the Erase tool can never silently move a note instead.
+     *  Switching tool also abandons any gesture already in flight — it belonged to the old tool. */
+    void setActiveTool(EditTool tool);
+    EditTool getActiveTool() const noexcept { return activeTool_; }
+
+    // ---- Note clipboard ----
+
+    /** One copied note, stored RELATIVE to the earliest note in the copied block rather than in
+     *  absolute (or even clip-relative) beats. That is what lets a copy survive being pasted into a
+     *  different clip at a different position — the block keeps its internal shape and only its
+     *  anchor moves. Every field a note carries is captured, `muted` included: a muted note pastes
+     *  back muted, the same way a split or a duplicate carries the flag (see MidiNote::muted). */
+    struct ClipboardNote {
+        double offsetFromEarliest = 0.0;
+        double lengthBeats = 1.0;
+        int pitch = 60;
+        int velocity = 100;
+        int channel = 1;
+        bool muted = false;
+    };
+
+    /** Captures the current selection into the clipboard. The clipboard is a MEMBER of the roll,
+     *  not of a gesture: it deliberately outlives openClip(), so "copy here, open another clip,
+     *  paste there" works — which is the whole point of anchoring entries on the earliest note.
+     *  @return false (clipboard untouched) when nothing is selected. */
+    bool copySelectedNotes();
+
+    /** True when pasteNotesAtPlayhead() would have somewhere to put something: a non-empty
+     *  clipboard AND an open clip. The command wiring uses this for its menu-item enablement. */
+    bool canPasteNotes() const noexcept;
+
+    /** Pastes the clipboard block into the OPEN clip, anchored at the playhead: the anchor is the
+     *  snapped, clip-relative playhead position when that lands inside [0, clip length), and 0.0
+     *  otherwise (a playhead parked outside the edited clip still pastes something visible rather
+     *  than nothing at all). Notes landing at/after the clip's end are skipped and a note's length
+     *  is clamped to the clip's end; see buildPastedNotes for the exact rules. One undo step
+     *  however many notes land, and the pasted notes become the selection.
+     *  @return false when nothing could be placed. */
+    bool pasteNotesAtPlayhead();
+
+    /** Copies the selection to immediately after its own span (span = max end - min start), same
+     *  pitches, one undo step, and selects the copies. Does NOT touch the clipboard — duplicating
+     *  is not a copy, and stomping a clipboard the user filled deliberately would be a surprise. */
+    bool duplicateSelectedNotes();
+
+    /** Copy + delete as ONE undo step (the clipboard is filled first, so a cut is always
+     *  pasteable). @return false when nothing is selected. */
+    bool cutSelectedNotes();
+
+    /** Selects every note in the open clip. @return false when there is nothing to select. */
+    bool selectAllNotes();
+
+    /** `count` back-to-back copies of the selection block, each one span further along, clipped at
+     *  the clip's end: placement STOPS at the first block that falls entirely outside the clip
+     *  rather than piling every remaining copy onto the last beat. One undo step for the whole
+     *  repeat; every created note ends up selected. */
+    bool repeatSelectedNotes(int count);
+
+    bool hasNoteSelection() const noexcept { return !selection_.isEmpty(); }
 
     // ---- Entry/exit (panel API surface: openPianoRoll/closePianoRoll/isPianoRollOpen forward
     // straight to these three) ----
@@ -185,6 +333,10 @@ public:
     bool isLocalPlayheadActive() const override { return isOpen(); }
     void setPlayheadBeat(double absoluteBeat) override;
 
+    // The last absolute beat the overlay handed over. Exposed because paste targets it (see
+    // pasteNotesAtPlayhead) — the roll has no transport of its own to ask.
+    double getPlayheadBeat() const noexcept { return playheadBeat_; }
+
     // The x the local playhead line is drawn at right now, in this component's coordinates.
     int getPlayheadLineX() const noexcept;
     bool hasPlayheadPosition() const noexcept { return hasPlayheadX_; }
@@ -221,14 +373,30 @@ public:
     int yForPitch(int pitch) const noexcept;
     int pitchForY(int y) const noexcept;
 
+    // Split-tool hover preview state (the cut beat is CLIP-relative), and the clipboard's depth —
+    // all three are pure state a test can assert on without going near paint().
+    bool hasSplitPreviewForTest() const noexcept { return hasSplitPreview_; }
+    double getSplitPreviewBeatForTest() const noexcept { return splitPreviewBeat_; }
+    synth::NoteId getSplitPreviewNoteForTest() const noexcept { return splitPreviewNote_; }
+    int getClipboardSizeForTest() const noexcept { return (int)noteClipboard_.size(); }
+    // The Draw tool's in-flight preview length (0.0 when no draw gesture is running).
+    double getDrawPreviewLengthForTest() const noexcept {
+        return dragMode_ == DragMode::DrawNew ? drawLengthBeats_ : 0.0;
+    }
+
 protected:
     // THE paint-count seam for the local playhead line, mirroring
     // TimelinePlayheadOverlay::requestRepaintStrip exactly (a test subclasses and counts). Every
     // repaint the playhead costs here goes through it and nowhere else.
     virtual void requestRepaintStrip(juce::Rectangle<int> strip);
 
+    // The SAME seam for the Split tool's hover preview, kept separate from the playhead's so a
+    // test can count the two independently (a hover that repainted the playhead's strip would be
+    // a bug, not a rounding difference). Called ONLY when the previewed cut actually moved.
+    virtual void requestRepaintPreviewStrip(juce::Rectangle<int> strip);
+
 private:
-    enum class DragMode { None, Move, Resize, Marquee, VelocityScrub };
+    enum class DragMode { None, Move, Resize, Marquee, VelocityScrub, DrawNew };
 
     struct NoteHit {
         synth::NoteId id;
@@ -275,11 +443,123 @@ private:
     // Double-click on empty grid: adds ONE note, snapped, exactly one snap division long (or
     // kMinNoteLengthBeats when Snap is Off), selected, in one undo step.
     void createNoteAt(juce::Point<int> pos);
+    // Where a new note would go for a click at `pos`, with everything both creators share: the
+    // one-division length, the "snapping up past the clip's end steps back a division instead of
+    // creating nothing" rule, and the clip-window clamp. `floorToGrid` is what separates the two
+    // callers — the Select tool's double-click snaps to the NEAREST division (it is aiming at a
+    // grid line), while the Draw tool's pencil FLOORS (it is filling the grid cell it is pointing
+    // at, which is what every DAW pencil does).
+    // @return false when no note could fit (no clip, or no room left inside it).
+    bool computeNewNoteAnchor(juce::Point<int> pos, bool floorToGrid, double& startOut, double& lengthOut,
+                              int& pitchOut) const;
+    // addNote + select + repaint, wrapped in ONE undo step. Shared by createNoteAt and the Draw
+    // tool's release.
+    void commitNewNote(double startBeat, double lengthBeats, int pitch);
     void beginMoveOrResize(const NoteHit& hit, juce::Point<int> pos);
     void beginVelocityScrub(juce::Point<int> pos);
     void beginMarquee(juce::Point<int> anchor, bool additive);
     void updateMarquee(juce::Point<int> current);
     void endMarquee();
+
+    // ---- Tool gestures (everything below acts on a single click; see setActiveTool) ----
+
+    // Routes a mouse-down for any tool other than Select. Returns with the gesture already done
+    // (Split/Glue/Erase/Mute act immediately) or with the Draw gesture armed.
+    void handleToolMouseDown(juce::Point<int> pos);
+    // The snapped, CLIP-relative beat a Split click at this x would cut `note` at, or nullopt when
+    // that beat is not strictly inside it — a cut has to leave at least kMinNoteLengthBeats on BOTH
+    // sides, otherwise "split" would silently mean "resize to nothing".
+    std::optional<double> splitBeatFor(const synth::MidiNote& note, int x) const;
+    void performSplit(synth::NoteId id, juce::Point<int> pos);
+    // The next note of the SAME pitch that a Glue click on `id` would absorb: the smallest
+    // startBeat at or after the clicked note's END. Gaps ARE bridged (the glued note runs from the
+    // clicked note's start to the absorbed note's end) — Cubase's behaviour, and the only one that
+    // makes gluing a staccato pair into one sustained note possible at all.
+    std::optional<synth::NoteId> glueCandidateFor(const synth::MidiNote& note) const;
+    void performGlue(synth::NoteId id);
+    void performErase(synth::NoteId id);
+    void performMuteToggle(synth::NoteId id);
+
+    // ---- Split-tool hover preview ----
+    void updateSplitPreview(juce::Point<int> pos);
+    void clearSplitPreview();
+    juce::Rectangle<int> splitPreviewStrip() const;
+
+    // ---- Tool cursors (built once per theme, never per mouse move) ----
+    void rebuildToolCursors();
+    juce::MouseCursor cursorForActiveTool();
+    void applyToolCursor();
+    void updateHoverCursor(juce::Point<int> pos);
+
+    // ---- Clipboard plumbing ----
+    // The selection as clipboard entries (offsets relative to the earliest selected note), plus
+    // that earliest start and the block's span (max end - min start). Empty when nothing is
+    // selected or the ids no longer resolve.
+    std::vector<ClipboardNote> captureSelectionEntries(double& earliestStartOut, double& spanBeatsOut) const;
+    // Turns one entry block anchored at `anchorBeat` into concrete notes, appended to `out`,
+    // applying the clip-window policy: a note starting at/after the clip's end is SKIPPED, a note
+    // whose length would overrun the end is clamped to it, and a note with less than
+    // kMinNoteLengthBeats of room left is skipped rather than shrunk below the editor's minimum.
+    // @return true if the block contributed at least one note — false is the repeat loop's cue to
+    // stop placing further blocks.
+    bool buildPastedNotes(const std::vector<ClipboardNote>& entries, double anchorBeat,
+                          std::vector<synth::MidiNote>& out) const;
+    // ONE undo step for the whole batch; the created notes become the selection.
+    bool commitPastedNotes(const std::vector<synth::MidiNote>& notes);
+
+    // ---- Arrow-key editing ----
+    // One SHARED delta for the whole selection, clamped so the group stays inside the clip window
+    // / inside [0, 127] — never per-note clamping, which would silently reshape a chord.
+    bool nudgeSelectedNotes(int direction);
+    bool transposeSelectedNotes(int semitones);
+
+    // ---- Alt+Left/Right note navigation (selection only — never a mutation, never an undo step) ----
+    // Selects the note next to the current selection in the clip's CANONICAL order — (startBeat,
+    // then pitch, then id), which is the order TimelineDoc keeps Clip::notes in, so this walks that
+    // vector by index rather than re-deriving an order that could drift from the doc's.
+    //
+    // The anchor is the edge of the selection the walk is heading TOWARDS: forward starts from the
+    // selection's LAST note, backward from its FIRST. That is what makes a multi-selection collapse
+    // onto the neighbour just outside the block (and makes repeated presses sweep the clip) instead
+    // of landing back inside it. Alt is the modifier because plain arrows already nudge, Shift+Up/
+    // Down is the octave transpose, and Cmd+arrow carries OS jump-to-boundary meaning.
+    //
+    // @return false ONLY when there is nothing to navigate from (roll closed, or nothing selected in
+    // this clip) — that is the key's fall-through cue. At either END of the clip the selection is
+    // kept and true is still returned, the same "the key WAS applicable" contract a fully clamped
+    // nudge honours.
+    bool selectAdjacentNote(bool forward);
+    // Minimal HORIZONTAL scroll so `note` is inside the grid region; a no-op (and no repaint) when
+    // it already is. Vertical scroll is deliberately not touched — see the definition.
+    void scrollNoteIntoView(const synth::MidiNote& note);
+
+    // ---- Rebindable surface keys ----
+    // True when `key` is what the user has bound to `actionId`. With no ShortcutManager installed
+    // this is plain equality against `fallback` (the hardcoded default) — juce::KeyPress::operator==
+    // unchanged, which is what makes Left, Shift+Left and Alt+Left three different actions while
+    // letter keys still compare case-insensitively (so Shift+Q matches a 'q' binding). With one
+    // installed the manager is the ONLY source: an unset/unknown/invalid binding matches nothing,
+    // and `fallback` is not consulted — see setShortcutManager for why the two are never mixed.
+    //
+    // That installed-manager path is routed through ShortcutManager::keyPressMatches rather than
+    // raw juce::KeyPress::operator==: macOS delivers a Shift-chorded symbol key as the SHIFTED
+    // CHARACTER ('!' not '1', '+' not '='), never the base key plus a Shift modifier flag, so exact
+    // equality would silently never match a user rebind onto such a chord. keyPressMatches
+    // shift-normalizes exactly that case.
+    bool matchesAction(const juce::KeyPress& key, const juce::String& actionId, const juce::KeyPress& fallback) const;
+
+    // ---- Anchored zoom, shared by the wheel, the pinch and the public zoom API ----
+    // `anchorGridX` is measured from the GRID's left edge (x - kKeysColumnWidth), which is the
+    // coordinate rollView_ maps; `anchorY` is a component y.
+    void zoomHorizontalAroundX(double factor, double anchorGridX);
+    void zoomVerticalAroundY(double factor, double anchorY);
+
+    // The exp() factor for a Cmd/Cmd+Shift wheel zoom, shared by both mouseWheelMove branches so
+    // they can never disagree about which way is "in". Sign comes from the PHYSICAL gesture
+    // direction (synth::ui::wheelGestureIsUpward) XOR zoomScrollInverted_; magnitude comes from
+    // std::abs(dominantWheelDelta(wheel)) * kZoomWheelSensitivity — the exact amount each branch
+    // used before, just no longer signed by the raw delta.
+    double wheelZoomFactor(const juce::MouseWheelDetails& wheel) const noexcept;
 
     void performQuantise();
     void flashQuantiseButton();
@@ -289,10 +569,16 @@ private:
     void paintKeysColumn(juce::Graphics& g);
     void paintHeader(juce::Graphics& g);
     void paintGrid(juce::Graphics& g);
-    void paintGridLines(juce::Graphics& g, juce::Colour lineColour);
+    // `lineColour` is the theme token the grid is derived from (Colors::border) and `background` is
+    // what sits behind it (Colors::bg0) — both handed to the shared three-level colour policy
+    // (synth::ui::gridLineColourFor, in TimelineClipLaneArea.h), which is why the background is a
+    // parameter rather than something this function re-reads from the LookAndFeel.
+    void paintGridLines(juce::Graphics& g, juce::Colour lineColour, juce::Colour background);
     void paintNote(juce::Graphics& g, const synth::MidiNote& note);
     void paintPlayhead(juce::Graphics& g);
     void paintMarquee(juce::Graphics& g);
+    void paintDrawPreview(juce::Graphics& g);
+    void paintSplitPreview(juce::Graphics& g);
 
     // [first, last] multiples of `spacingBeats` visible in the grid region — empty (last < first)
     // when the lines would be closer together than kMinGridLinePixels. paintGridLines and
@@ -316,6 +602,14 @@ private:
     synth::TimelineDoc* doc_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
     synth::TransportService* transport_ = nullptr;
+    // Non-owning, may stay null (see setShortcutManager). const because the roll only ever READS
+    // bindings — rebinding is the Settings window's job.
+    const ShortcutManager* shortcuts_ = nullptr;
+    // App-level scroll-direction preference; false == natural == the juce::Viewport convention.
+    bool scrollInverted_ = false;
+    // App-level ZOOM-direction preference; false == wheel up zooms in. A separate flag from
+    // scrollInverted_ — see setZoomScrollInverted.
+    bool zoomScrollInverted_ = false;
 
     synth::ClipId clipId_;
     NoteSelectionModel selection_;
@@ -343,11 +637,23 @@ private:
     // ---- Velocity-scrub preview (one or many notes, one shared delta) ----
     int previewDeltaVelocity_ = 0;
 
-    // ---- Marquee (Shift+drag on empty grid only — see mouseDown's comment) ----
+    // ---- Draw-tool preview (a note that does not exist in the doc yet) ----
+    double drawStartBeat_ = 0.0; // clip-relative
+    double drawLengthBeats_ = 0.0;
+    int drawPitch_ = 60;
+
+    // ---- Marquee (any drag that STARTED on empty grid — see mouseDown's comment) ----
     juce::Point<int> marqueeAnchor_;
     juce::Rectangle<int> marqueeRect_;
     bool marqueeAdditive_ = false;
     std::vector<synth::NoteId> marqueeBaseSelection_;
+
+    // Deferred-deselect, the same trick TimelineClipLaneArea::pendingEmptyClick_ (and, before it,
+    // GraphEditor's pendingEmptyCanvasClick) uses: a PLAIN press on empty grid is ambiguous at
+    // mouse-down time — it becomes a replace-marquee if it ever moves, and a deselect if it does
+    // not — so neither is committed until mouseDrag or mouseUp says which one happened. Only the
+    // Select tool ever sets it, and setActiveTool clears it with the rest of the in-flight gesture.
+    bool pendingEmptyClick_ = false;
 
     // ---- Local playhead (fed by TimelinePlayheadOverlay; no timer of our own) ----
     double playheadBeat_ = 0.0;
@@ -355,6 +661,25 @@ private:
     bool hasPlayheadX_ = false;
 
     bool quantiseFlash_ = false;
+
+    // ---- Edit tool + its cursor cache ----
+    EditTool activeTool_ = EditTool::Select;
+    // Indexed by (size_t)EditTool. Built once (lazily, and again after a theme switch) because
+    // rasterising six icons into six juce::Images on every mouse move would be exactly the kind of
+    // per-frame work the repaint invariant exists to prevent.
+    std::array<juce::MouseCursor, kAllEditTools.size()> toolCursors_;
+    bool toolCursorsBuilt_ = false;
+    // Select-tool only: whether the resize-zone cursor is the one currently installed, so a hover
+    // that stays inside (or outside) the zone does no work at all.
+    bool showingResizeCursor_ = false;
+
+    // ---- Split-tool hover preview (the cut line drawn on the hovered note) ----
+    synth::NoteId splitPreviewNote_;
+    double splitPreviewBeat_ = 0.0; // clip-relative
+    bool hasSplitPreview_ = false;
+
+    // ---- Note clipboard: a MEMBER, so a copy survives switching clips (see copySelectedNotes) ----
+    std::vector<ClipboardNote> noteClipboard_;
 
     juce::Rectangle<int> backButtonBounds_;
     juce::Rectangle<int> quantiseButtonBounds_;

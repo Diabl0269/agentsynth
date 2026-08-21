@@ -28,6 +28,7 @@
 
 #include "../Source/AI/AIProvider.h"
 #include "../Source/AI/AIStateMapper.h"
+#include "../Source/AppUndoManager.h"
 #include "../Source/ProjectBundle.h"
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/Transport/TransportService.h"
@@ -736,6 +737,445 @@ TEST(TimelinePanelSnapComboTest, SnapChoicePersists) {
         s->getFile().deleteFile();
 }
 
+// ---- setSnapValue / cycleSnapValue: the view-state verbs behind the snap shortcuts ----
+
+// setSnapValue is the ONE writer the combo, the shortcut layer and cycleSnapValue share: it moves
+// the view state, mirrors the combo, re-arms the master switch (same meaning a combo pick has) and
+// persists through the existing persistSnapChoice() path.
+TEST(TimelinePanelSnapApiTest, SetSnapValueSyncsTheComboAndPersistsThroughTheExistingPath) {
+    using Snap = synth::ui::TimelineViewState::Snap;
+
+    juce::PropertiesFile::Options opts;
+    opts.applicationName = "Agent Synth Timeline Snap Api Test";
+    opts.folderName = "Agent Synth Timeline Snap Api Test";
+    opts.filenameSuffix = "settings";
+    opts.osxLibrarySubFolder = "Application Support";
+    opts.storageFormat = juce::PropertiesFile::storeAsXML;
+
+    // Hermetic regardless of a previous run — same idiom as SnapChoicePersists above.
+    {
+        juce::ApplicationProperties initial;
+        initial.setStorageParameters(opts);
+        if (auto* s = initial.getUserSettings())
+            s->getFile().deleteFile();
+    }
+
+    juce::ApplicationProperties props;
+    props.setStorageParameters(opts);
+
+    synth::ui::TimelinePanelComponent panel;
+    panel.setApplicationProperties(&props);
+    ASSERT_EQ(panel.getViewState().snap, Snap::Quarter); // documented default, freshly-deleted file
+
+    EXPECT_TRUE(panel.setSnapValue(Snap::Eighth));
+    EXPECT_EQ(panel.getViewState().snap, Snap::Eighth);
+    EXPECT_EQ(panel.getSnapCombo().getSelectedId(), (int)Snap::Eighth + 1) << "the combo mirrors the view state";
+    EXPECT_TRUE(panel.getViewState().snapEnabled);
+    ASSERT_NE(props.getUserSettings(), nullptr);
+    EXPECT_EQ(props.getUserSettings()->getIntValue("timelineSnap", -1), (int)Snap::Eighth);
+
+    // Turn magnetism off (the Q button — the shared switch), then re-pick the SAME division: no
+    // change is reported, but it still re-arms, exactly like re-picking from the combo.
+    panel.getSnapToggleButton().onClick();
+    ASSERT_FALSE(panel.getViewState().snapEnabled);
+    EXPECT_FALSE(panel.setSnapValue(Snap::Eighth));
+    EXPECT_TRUE(panel.getViewState().snapEnabled);
+
+    // Reset the persisted keys so the next run (and every other test) starts from nothing.
+    if (auto* s = props.getUserSettings())
+        s->getFile().deleteFile();
+}
+
+// The cycle walks Bar -> 1 -> 1/2 -> 1/4 -> 1/8 -> 1/16 -> 1/32 -> 1/64 -> 1/128 and CLAMPS at both
+// ends: it never wraps and never lands on Off (that is the Q key's job). The finest stop moved from
+// Sixteenth to HundredTwentyEighth when the three finer divisions were added — see
+// TimelineViewState::Snap's class comment for why they were appended after Sixteenth rather than
+// inserted in note-value order.
+TEST(TimelinePanelSnapApiTest, CycleWalksTheMusicalDivisionsAndClampsAtBothEnds) {
+    using Snap = synth::ui::TimelineViewState::Snap;
+    synth::ui::TimelinePanelComponent panel; // no ApplicationProperties: nothing reads or writes settings
+    panel.getViewState().setSnap(Snap::Quarter);
+    panel.getViewState().snapEnabled = true;
+
+    // Coarser, down to the Bar end, then one more press that must change nothing.
+    EXPECT_TRUE(panel.cycleSnapValue(-1));
+    EXPECT_EQ(panel.getViewState().snap, Snap::Half);
+    EXPECT_TRUE(panel.cycleSnapValue(-1));
+    EXPECT_EQ(panel.getViewState().snap, Snap::Whole);
+    EXPECT_TRUE(panel.cycleSnapValue(-1));
+    EXPECT_EQ(panel.getViewState().snap, Snap::Bar);
+    EXPECT_FALSE(panel.cycleSnapValue(-1)) << "clamped at Bar — no wrap, and never Off";
+    EXPECT_EQ(panel.getViewState().snap, Snap::Bar);
+
+    // Finer, all the way up the list, now through the three new fine divisions.
+    for (auto expected : {Snap::Whole, Snap::Half, Snap::Quarter, Snap::Eighth, Snap::Sixteenth, Snap::ThirtySecond,
+                          Snap::SixtyFourth, Snap::HundredTwentyEighth}) {
+        EXPECT_TRUE(panel.cycleSnapValue(1));
+        EXPECT_EQ(panel.getViewState().snap, expected);
+    }
+    EXPECT_FALSE(panel.cycleSnapValue(1)) << "clamped at 1/128 — a held key parks here";
+    EXPECT_EQ(panel.getViewState().snap, Snap::HundredTwentyEighth);
+    EXPECT_EQ(panel.getSnapCombo().getSelectedId(), (int)Snap::HundredTwentyEighth + 1);
+
+    EXPECT_FALSE(panel.cycleSnapValue(0)) << "no direction, no move";
+    EXPECT_EQ(panel.getViewState().snap, Snap::HundredTwentyEighth);
+}
+
+// From Off, BOTH directions re-enter at the last division the user actually chose — with the view
+// state's default as the fallback when nothing was ever chosen.
+TEST(TimelinePanelSnapApiTest, CyclingFromOffReEntersAtTheLastMusicalDivision) {
+    using Snap = synth::ui::TimelineViewState::Snap;
+    synth::ui::TimelinePanelComponent panel;
+    panel.getViewState().snapEnabled = true;
+
+    ASSERT_TRUE(panel.setSnapValue(Snap::Eighth)); // the "last musical" value from here on
+    ASSERT_TRUE(panel.setSnapValue(Snap::Off));
+    EXPECT_TRUE(panel.cycleSnapValue(1));
+    EXPECT_EQ(panel.getViewState().snap, Snap::Eighth) << "finer-from-Off resumes where the user was";
+
+    ASSERT_TRUE(panel.setSnapValue(Snap::Off));
+    EXPECT_TRUE(panel.cycleSnapValue(-1));
+    EXPECT_EQ(panel.getViewState().snap, Snap::Eighth) << "coarser-from-Off follows the same one rule";
+
+    // A panel that never had a musical division picked falls back to the view state's default.
+    synth::ui::TimelinePanelComponent fresh;
+    fresh.getViewState().snap = Snap::Off; // straight assignment: never went through setSnap()
+    EXPECT_TRUE(fresh.cycleSnapValue(1));
+    EXPECT_EQ(fresh.getViewState().snap, Snap::Quarter);
+}
+
+// ---- The three finest divisions (1/32, 1/64, 1/128) added alongside Sixteenth ----
+
+// A note value is a fraction of a whole note (4 beats — see TimelineViewState::divisionBeatsRaw's
+// header comment), so 1/32 is an eighth of a beat, 1/64 a sixteenth, 1/128 a thirty-second — each
+// half the one before it, same as Eighth->Sixteenth already was.
+TEST(TimelinePanelSnapApiTest, DivisionBeatsForTheThreeNewFineSnaps) {
+    using Snap = synth::ui::TimelineViewState::Snap;
+    synth::ui::TimelinePanelComponent panel;
+    auto& state = panel.getViewState();
+
+    state.snap = Snap::ThirtySecond;
+    EXPECT_DOUBLE_EQ(state.divisionBeats(4.0), 0.125);
+    EXPECT_DOUBLE_EQ(state.divisionBeatsRaw(4.0), 0.125);
+
+    state.snap = Snap::SixtyFourth;
+    EXPECT_DOUBLE_EQ(state.divisionBeats(4.0), 0.0625);
+    EXPECT_DOUBLE_EQ(state.divisionBeatsRaw(4.0), 0.0625);
+
+    state.snap = Snap::HundredTwentyEighth;
+    EXPECT_DOUBLE_EQ(state.divisionBeats(4.0), 0.03125);
+    EXPECT_DOUBLE_EQ(state.divisionBeatsRaw(4.0), 0.03125);
+
+    // beatsPerBar is irrelevant below Snap::Bar — same contract every other musical division has.
+    EXPECT_DOUBLE_EQ(state.divisionBeats(3.0), 0.03125);
+}
+
+// The combo's ids follow the (int)snap + 1 convention all the way through the new entries, and
+// picking one from the combo reaches the view state through the same setSnapValue path as every
+// other division.
+TEST(TimelinePanelSnapComboTest, ComboShowsAndSetsTheThreeNewFineDivisions) {
+    using Snap = synth::ui::TimelineViewState::Snap;
+    synth::ui::TimelinePanelComponent panel;
+    auto& combo = panel.getSnapCombo();
+
+    EXPECT_EQ(combo.getItemText(combo.indexOfItemId((int)Snap::ThirtySecond + 1)), "1/32");
+    EXPECT_EQ(combo.getItemText(combo.indexOfItemId((int)Snap::SixtyFourth + 1)), "1/64");
+    EXPECT_EQ(combo.getItemText(combo.indexOfItemId((int)Snap::HundredTwentyEighth + 1)), "1/128");
+
+    combo.setSelectedId((int)Snap::SixtyFourth + 1, juce::sendNotificationSync);
+    EXPECT_EQ(panel.getViewState().snap, Snap::SixtyFourth);
+
+    EXPECT_TRUE(panel.setSnapValue(Snap::HundredTwentyEighth));
+    EXPECT_EQ(combo.getSelectedId(), (int)Snap::HundredTwentyEighth + 1) << "the combo mirrors the view state";
+}
+
+// Same persistence path as SnapChoicePersists above, exercised at one of the new fine divisions —
+// the jlimit clamp in setApplicationProperties() had to move to HundredTwentyEighth alongside the
+// combo/cycle bounds, and this is what proves a restored fine value survives it rather than being
+// silently clamped back down to Sixteenth.
+TEST(TimelinePanelSnapComboTest, AFineSnapPersistsAndRestoresThroughTheExistingPath) {
+    using Snap = synth::ui::TimelineViewState::Snap;
+
+    juce::PropertiesFile::Options opts;
+    opts.applicationName = "Agent Synth Timeline Fine Snap Test";
+    opts.folderName = "Agent Synth Timeline Fine Snap Test";
+    opts.filenameSuffix = "settings";
+    opts.osxLibrarySubFolder = "Application Support";
+    opts.storageFormat = juce::PropertiesFile::storeAsXML;
+
+    // Hermetic regardless of a previous run — same idiom as SnapChoicePersists above.
+    {
+        juce::ApplicationProperties initial;
+        initial.setStorageParameters(opts);
+        if (auto* s = initial.getUserSettings())
+            s->getFile().deleteFile();
+    }
+
+    juce::ApplicationProperties props;
+    props.setStorageParameters(opts);
+
+    synth::ui::TimelinePanelComponent panel;
+    panel.setApplicationProperties(&props);
+    ASSERT_TRUE(panel.setSnapValue(Snap::HundredTwentyEighth));
+
+    synth::ui::TimelinePanelComponent panel2;
+    panel2.setApplicationProperties(&props);
+    EXPECT_EQ(panel2.getViewState().snap, Snap::HundredTwentyEighth);
+    EXPECT_EQ(panel2.getSnapCombo().getSelectedId(), (int)Snap::HundredTwentyEighth + 1);
+
+    // Reset the persisted keys, per this file's pattern, so no other test inherits them.
+    if (auto* s = props.getUserSettings())
+        s->getFile().deleteFile();
+}
+
+// ---- zoomTimelineHorizontal / zoomTimelineVertical: the same paths the wheel/pinch use ----
+
+TEST(TimelinePanelZoomApiTest, HorizontalZoomKeepsTheVisibleCentreBeatAndClamps) {
+    using View = synth::ui::TimelineViewState;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 220);
+
+    auto& state = panel.getViewState();
+    state.pixelsPerBeat = 24.0;
+    state.firstVisibleBeat = 100.0;
+
+    // The panel anchors a keyboard zoom on the middle of the ruler strip, whose local x == 0 is the
+    // view state's own origin.
+    const double centreX = (double)panel.getRuler().getWidth() * 0.5;
+    const double centreBeat = state.xToBeat(centreX);
+
+    panel.zoomTimelineHorizontal(2.0);
+    EXPECT_DOUBLE_EQ(state.pixelsPerBeat, 48.0);
+    EXPECT_NEAR(state.xToBeat(centreX), centreBeat, 1e-6) << "the centre beat stays under the centre pixel";
+
+    for (int i = 0; i < 20; ++i)
+        panel.zoomTimelineHorizontal(2.0);
+    EXPECT_DOUBLE_EQ(state.pixelsPerBeat, View::kMaxPixelsPerBeat);
+
+    for (int i = 0; i < 40; ++i)
+        panel.zoomTimelineHorizontal(0.5);
+    EXPECT_DOUBLE_EQ(state.pixelsPerBeat, View::kMinPixelsPerBeat);
+
+    // Garbage factors are ignored rather than propagated into the mapping.
+    const double settled = state.pixelsPerBeat;
+    panel.zoomTimelineHorizontal(0.0);
+    panel.zoomTimelineHorizontal(-2.0);
+    EXPECT_DOUBLE_EQ(state.pixelsPerBeat, settled);
+}
+
+TEST(TimelinePanelZoomApiTest, VerticalZoomScalesTheRowHeightWithinItsClampsAndRelaysTheHeaders) {
+    using View = synth::ui::TimelineViewState;
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 220);
+    for (int i = 0; i < 24; ++i)
+        doc.addTrack(synth::TrackKind::Midi, "T" + juce::String(i));
+
+    auto& state = panel.getViewState();
+    state.rowHeightScale = 1.0;
+    state.trackScrollY = 0.0;
+    ASSERT_NE(panel.getTrackHeaderAt(0), nullptr);
+    const int rowHeightBefore = panel.getTrackHeaderAt(0)->getHeight();
+
+    panel.zoomTimelineVertical(1.5);
+    EXPECT_GT(state.rowHeightScale, 1.0);
+    EXPECT_GT(panel.getTrackHeaderAt(0)->getHeight(), rowHeightBefore)
+        << "the header column is relaid out by the same path the wheel zoom uses";
+
+    for (int i = 0; i < 10; ++i)
+        panel.zoomTimelineVertical(2.0);
+    EXPECT_DOUBLE_EQ(state.rowHeightScale, View::kMaxRowHeightScale);
+
+    for (int i = 0; i < 20; ++i)
+        panel.zoomTimelineVertical(0.5);
+    EXPECT_DOUBLE_EQ(state.rowHeightScale, View::kMinRowHeightScale);
+
+    const double settled = state.rowHeightScale;
+    panel.zoomTimelineVertical(0.0);
+    panel.zoomTimelineVertical(-2.0);
+    EXPECT_DOUBLE_EQ(state.rowHeightScale, settled);
+}
+
+// ---- Wheel policy (synth::ui::ScrollPolicy) ----
+
+// Both ZOOM branches are chosen by their modifiers, so they must read the dominant axis: macOS
+// folds Shift+wheel into deltaX, which used to leave Cmd+Shift+wheel reading deltaY == 0 and doing
+// nothing at all.
+TEST(TimelinePanelInteractionTest, ModifierZoomSurvivesTheShiftAxisSwap) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 220);
+    for (int i = 0; i < 24; ++i)
+        doc.addTrack(synth::TrackKind::Midi, "T" + juce::String(i));
+
+    auto& state = panel.getViewState();
+    state.pixelsPerBeat = 24.0;
+    state.firstVisibleBeat = 500.0;
+    state.rowHeightScale = 1.0;
+
+    // Cmd + a deltaX-ONLY wheel: horizontal zoom still happens.
+    juce::MouseWheelDetails xOnly{};
+    xOnly.deltaX = 0.5f;
+    panel.mouseWheelMove(
+        makeClickEvent(panel, {300.0f, 12.0f}, juce::ModifierKeys(juce::ModifierKeys::commandModifier)), xOnly);
+    EXPECT_GT(state.pixelsPerBeat, 24.0);
+
+    // Cmd+Shift + a deltaX-only wheel: the row-height zoom that the axis swap used to kill.
+    panel.mouseWheelMove(
+        makeClickEvent(panel, {300.0f, 100.0f},
+                       juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier)),
+        xOnly);
+    EXPECT_GT(state.rowHeightScale, 1.0);
+}
+
+// Plain scroll follows juce::Viewport's sign convention (origin -= delta) by default, and
+// setScrollInverted(true) flips both axes by exactly the same amount.
+TEST(TimelinePanelInteractionTest, ScrollInversionFlipsBothAxesAroundTheViewportConvention) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 220);
+    for (int i = 0; i < 24; ++i)
+        doc.addTrack(synth::TrackKind::Midi, "T" + juce::String(i));
+
+    auto& state = panel.getViewState();
+    state.pixelsPerBeat = 24.0;
+    ASSERT_FALSE(panel.isScrollInverted()) << "natural is the default";
+
+    juce::MouseWheelDetails wheel{};
+    wheel.deltaY = 0.5f;
+    const auto shift = juce::ModifierKeys(juce::ModifierKeys::shiftModifier);
+
+    // Horizontal (Shift+wheel). Start well clear of the firstVisibleBeat >= 0 clamp so both
+    // directions have room.
+    state.firstVisibleBeat = 500.0;
+    panel.mouseWheelMove(makeClickEvent(panel, {400.0f, 100.0f}, shift), wheel);
+    const double naturalBeat = state.firstVisibleBeat;
+    EXPECT_LT(naturalBeat, 500.0);
+
+    state.firstVisibleBeat = 500.0;
+    panel.setScrollInverted(true);
+    panel.mouseWheelMove(makeClickEvent(panel, {400.0f, 100.0f}, shift), wheel);
+    EXPECT_GT(state.firstVisibleBeat, 500.0);
+    EXPECT_NEAR(state.firstVisibleBeat - 500.0, 500.0 - naturalBeat, 1e-9) << "same distance, opposite sign";
+
+    // Vertical (plain wheel). Park mid-range so neither direction is swallowed by a clamp.
+    panel.setScrollInverted(false);
+    state.trackScrollY = 200.0;
+    panel.mouseWheelMove(makeClickEvent(panel, {400.0f, 100.0f}), wheel);
+    const double naturalY = state.trackScrollY;
+    EXPECT_LT(naturalY, 200.0);
+
+    state.trackScrollY = 200.0;
+    panel.setScrollInverted(true);
+    panel.mouseWheelMove(makeClickEvent(panel, {400.0f, 100.0f}), wheel);
+    EXPECT_GT(state.trackScrollY, 200.0);
+    EXPECT_NEAR(state.trackScrollY - 200.0, 200.0 - naturalY, 1e-9);
+}
+
+// ---- Zoom-scroll direction (synth::ui::wheelGestureIsUpward) ----
+//
+// UP ZOOMS IN by default, and that must hold under BOTH natural-scrolling conventions: JUCE's
+// isReversed flag flips which raw delta sign is "up" (see ScrollPolicy.h's wheelGestureIsUpward
+// comment), so a raw-delta-sign zoom — what mouseWheelMove did before this test was added — would
+// silently reverse itself depending on the OS's natural-scrolling setting. None of the OLDER
+// zoom-wheel tests above (WheelScrollsAndCmdWheelZooms, ModifierZoomSurvivesTheShiftAxisSwap) had
+// to change for this: they only ever drive a positive deltaY with isReversed left at its default
+// (false), which is "up" under both the old raw-sign reading and the new gesture-based one, and
+// none of them assert a direction anyway — WheelScrollsAndCmdWheelZooms asserts the anchor
+// invariant, ModifierZoomSurvivesTheShiftAxisSwap asserts the axis-swap guard fires at all.
+TEST(TimelinePanelInteractionTest, ZoomUpZoomsInOnBothNaturalScrollConventions) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 220);
+    for (int i = 0; i < 24; ++i)
+        doc.addTrack(synth::TrackKind::Midi, "T" + juce::String(i));
+
+    auto& state = panel.getViewState();
+    ASSERT_FALSE(panel.isZoomScrollInverted()) << "up-zooms-in is the default";
+    const auto cmd = juce::ModifierKeys(juce::ModifierKeys::commandModifier);
+    const auto cmdShift = juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier);
+    const juce::Point<float> cursor(300.0f, 12.0f);
+
+    // isReversed == false: physically "up" is a POSITIVE delta.
+    state.pixelsPerBeat = 24.0;
+    state.rowHeightScale = 1.0;
+    juce::MouseWheelDetails naturalUp{};
+    naturalUp.deltaY = 0.5f; // isReversed defaults false
+    panel.mouseWheelMove(makeClickEvent(panel, cursor, cmd), naturalUp);
+    EXPECT_GT(state.pixelsPerBeat, 24.0) << "up zooms IN horizontally";
+    panel.mouseWheelMove(makeClickEvent(panel, cursor, cmdShift), naturalUp);
+    EXPECT_GT(state.rowHeightScale, 1.0) << "up zooms IN vertically";
+
+    // isReversed == true: the SAME physical gesture now arrives as a NEGATIVE delta, so the raw
+    // sign flipped — but the outcome must not: it is still an upward gesture, so it still zooms IN.
+    state.pixelsPerBeat = 24.0;
+    state.rowHeightScale = 1.0;
+    juce::MouseWheelDetails reversedUp{};
+    reversedUp.deltaY = -0.5f;
+    reversedUp.isReversed = true;
+    panel.mouseWheelMove(makeClickEvent(panel, cursor, cmd), reversedUp);
+    EXPECT_GT(state.pixelsPerBeat, 24.0) << "the same physical 'up' zooms IN regardless of isReversed";
+    panel.mouseWheelMove(makeClickEvent(panel, cursor, cmdShift), reversedUp);
+    EXPECT_GT(state.rowHeightScale, 1.0);
+}
+
+// setZoomScrollInverted(true) flips the sense of BOTH zoom axes at once — one preference behind
+// both Cmd branches, not two — while leaving the magnitude/sensitivity curve (and the unrelated
+// setScrollInverted preference) alone.
+TEST(TimelinePanelInteractionTest, SetZoomScrollInvertedFlipsBothZoomAxes) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 220);
+    for (int i = 0; i < 24; ++i)
+        doc.addTrack(synth::TrackKind::Midi, "T" + juce::String(i));
+
+    auto& state = panel.getViewState();
+    const auto cmd = juce::ModifierKeys(juce::ModifierKeys::commandModifier);
+    const auto cmdShift = juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier);
+    const juce::Point<float> cursor(300.0f, 12.0f);
+    juce::MouseWheelDetails up{};
+    up.deltaY = 0.5f;
+
+    panel.setZoomScrollInverted(true);
+    EXPECT_TRUE(panel.isZoomScrollInverted());
+
+    state.pixelsPerBeat = 24.0;
+    state.rowHeightScale = 1.0;
+    panel.mouseWheelMove(makeClickEvent(panel, cursor, cmd), up);
+    EXPECT_LT(state.pixelsPerBeat, 24.0) << "inverted: up now zooms OUT horizontally";
+    panel.mouseWheelMove(makeClickEvent(panel, cursor, cmdShift), up);
+    EXPECT_LT(state.rowHeightScale, 1.0) << "inverted: up now zooms OUT vertically";
+
+    // A separate preference — flipping zoom must not have touched plain-scroll direction.
+    EXPECT_FALSE(panel.isScrollInverted());
+}
+
+// The panel forwards BOTH scroll-direction preferences to the piano roll: it runs its OWN
+// plain-scroll and Cmd-wheel-zoom branches (PianoRollComponent::mouseWheelMove), so a preference
+// set from the panel chrome (or Preferences) has to reach it directly — TimelineViewState, shared
+// between the two surfaces, carries no scroll/zoom preferences to piggyback on.
+TEST(TimelinePanelInteractionTest, ScrollAndZoomInversionForwardToThePianoRoll) {
+    synth::ui::TimelinePanelComponent panel;
+    ASSERT_FALSE(panel.getPianoRoll().isScrollInverted());
+    ASSERT_FALSE(panel.getPianoRoll().isZoomScrollInverted());
+
+    panel.setScrollInverted(true);
+    EXPECT_TRUE(panel.getPianoRoll().isScrollInverted());
+
+    panel.setZoomScrollInverted(true);
+    EXPECT_TRUE(panel.getPianoRoll().isZoomScrollInverted());
+
+    panel.setScrollInverted(false);
+    panel.setZoomScrollInverted(false);
+    EXPECT_FALSE(panel.getPianoRoll().isScrollInverted());
+    EXPECT_FALSE(panel.getPianoRoll().isZoomScrollInverted());
+}
+
 // ============================================================================
 // 4. Track headers + the app-level timeline wiring.
 // ============================================================================
@@ -1402,11 +1842,53 @@ TEST(TimelineRulerComponentTest, SnapshotSmokeAtTwoZoomsWithNullTransport) {
     EXPECT_EQ(zoomedOut.getWidth(), 800);
     EXPECT_EQ(zoomedOut.getHeight(), 24);
 
+    // Also the widest band: at kMaxPixelsPerBeat the strip draws beat ticks AND their "bar.beat"
+    // sub-labels, so this snapshot covers that paint path too.
     state.pixelsPerBeat = synth::ui::TimelineViewState::kMaxPixelsPerBeat;
+    ASSERT_TRUE(synth::ui::rulerTickPlanFor(state.pixelsPerBeat, 4.0).drawBeatLabels);
     const juce::Image zoomedIn = ruler.createComponentSnapshot(ruler.getLocalBounds());
     EXPECT_FALSE(zoomedIn.isNull());
     EXPECT_EQ(zoomedIn.getWidth(), 800);
     EXPECT_EQ(zoomedIn.getHeight(), 24);
+}
+
+// The ruler's three density bands, asserted through the pure helper paint() itself calls — no
+// painting, no font measurement, so the thresholds mean the same thing on every platform. The SNAP
+// division is deliberately absent from all of this: the strip is a bars/beats reference, not a
+// picture of the current grid.
+TEST(TimelineRulerTickPlanTest, TooDenseForBeatTicksDrawsNeitherTicksNorLabels) {
+    const auto plan = synth::ui::rulerTickPlanFor(synth::ui::kMinBeatTickSpacingPx - 0.5, 4.0);
+    EXPECT_FALSE(plan.drawBeatTicks);
+    EXPECT_FALSE(plan.drawBeatLabels);
+    // The threshold itself is inclusive — and is comfortably above the ~6 px the ticks need to read
+    // as separate marks.
+    EXPECT_GE(synth::ui::kMinBeatTickSpacingPx, 6.0);
+    EXPECT_TRUE(synth::ui::rulerTickPlanFor(synth::ui::kMinBeatTickSpacingPx, 4.0).drawBeatTicks);
+}
+
+TEST(TimelineRulerTickPlanTest, MiddleBandDrawsTicksWithoutLabels) {
+    for (const double pixelsPerBeat :
+         {synth::ui::kMinBeatTickSpacingPx, 24.0, synth::ui::kMinBeatLabelSpacingPx - 0.5}) {
+        const auto plan = synth::ui::rulerTickPlanFor(pixelsPerBeat, 4.0);
+        EXPECT_TRUE(plan.drawBeatTicks) << "pixelsPerBeat " << pixelsPerBeat;
+        EXPECT_FALSE(plan.drawBeatLabels) << "pixelsPerBeat " << pixelsPerBeat;
+    }
+}
+
+TEST(TimelineRulerTickPlanTest, WideBandDrawsTicksAndBarDotBeatLabels) {
+    for (const double pixelsPerBeat : {synth::ui::kMinBeatLabelSpacingPx, 200.0}) {
+        const auto plan = synth::ui::rulerTickPlanFor(pixelsPerBeat, 4.0);
+        EXPECT_TRUE(plan.drawBeatTicks) << "pixelsPerBeat " << pixelsPerBeat;
+        EXPECT_TRUE(plan.drawBeatLabels) << "a label always sits against a tick";
+    }
+}
+
+TEST(TimelineRulerTickPlanTest, ABarOfOneBeatOrLessHasNoBeatsToMark) {
+    // Every "beat" would land on a bar line, so a tick there would only thicken it.
+    EXPECT_FALSE(synth::ui::rulerTickPlanFor(200.0, 1.0).drawBeatTicks);
+    EXPECT_FALSE(synth::ui::rulerTickPlanFor(200.0, 0.0).drawBeatLabels);
+    // And a degenerate zoom is inert rather than undefined.
+    EXPECT_FALSE(synth::ui::rulerTickPlanFor(0.0, 4.0).drawBeatTicks);
 }
 
 // ============================================================================
@@ -1875,4 +2357,439 @@ TEST(TimelinePanelComponentTest, PianoRollOpenInstallsTheRulerMappingOverride) {
 
     panel.closePianoRoll();
     EXPECT_FALSE(panel.getRuler().hasMappingOverrideForTest());
+}
+
+// ============================================================================
+// 7. The edit-tool strip + the clip clipboard/arrangement verbs the app's Cut/Copy/Paste/
+//    Duplicate/Select All/Repeat commands delegate to. Panel level, so ungated (see the file
+//    header). Every fixture sets the view state explicitly — these verbs snap against it.
+// ============================================================================
+
+namespace {
+
+struct ToolPanelFixture {
+    synth::TimelineDoc doc;
+    AppUndoManager undo;
+    synth::ui::TimelinePanelComponent panel;
+
+    ToolPanelFixture() {
+        panel.setSize(1200, 320);
+        auto& state = panel.getViewState();
+        state.pixelsPerBeat = 40.0;
+        state.firstVisibleBeat = 0.0;
+        state.snap = synth::ui::TimelineViewState::Snap::Quarter;
+        state.snapEnabled = true;
+        state.rowHeightScale = 1.0;
+        state.trackScrollY = 0.0;
+        panel.setTimelineDoc(&doc);
+        panel.setUndoManager(&undo);
+        // No transport is wired on purpose: pasteClipsAtPlayhead then reads beat 0, so every
+        // pasted position below is arithmetic rather than a transport race.
+    }
+
+    void select(std::initializer_list<synth::ClipId> ids) { panel.getClipSelection().setSelection(ids); }
+    // Non-const: getClipSelection() only has a non-const overload (the panel owns the model).
+    std::vector<synth::ClipId> selection() { return panel.getClipSelection().getSelected(); }
+};
+
+} // namespace
+
+// ---- Tool strip + number keys ----
+
+TEST(TimelineToolStripTest, NumberKeysPickToolsAndReservedDigitsFallThrough) {
+    ToolPanelFixture f;
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Select) << "Select is the default";
+
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('3')));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Split);
+    EXPECT_EQ(f.panel.getClipLaneArea().getActiveTool(), synth::ui::EditTool::Split)
+        << "the panel's tool is pushed into the lane area";
+
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('8')));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Draw);
+
+    // 2 (Range), 6 (Zoom) and 9 (Play) are reserved for tools we don't ship: unconsumed, so they
+    // keep whatever meaning they have elsewhere, and the active tool is untouched.
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('2')));
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('6')));
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('9')));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Draw);
+
+    // A command-modified digit belongs to the app's menu shortcuts, never to the tool row.
+    EXPECT_FALSE(f.panel.keyPressed(
+        juce::KeyPress('1', juce::ModifierKeys(juce::ModifierKeys::commandModifier), juce::juce_wchar('1'))));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Draw);
+
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('1')));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Select);
+}
+
+// The digits are rebindable now: with a ShortcutManager installed they resolve through
+// "timelineToolSelect"/"timelineToolSplit"/... instead of synth::ui::editToolForKeyChar. Two halves
+// to pin — the rebind takes effect AND the old key stops working, which is the half that silently
+// regresses if a fallback creeps back in.
+TEST(TimelineToolStripTest, ToolDigitsFollowARebindAndTheOldDigitStopsWorking) {
+    ToolPanelFixture f;
+    ShortcutManager shortcuts; // defaults only; never loadFromProperties, so nothing is persisted
+    f.panel.setShortcutManager(&shortcuts);
+
+    // Baseline: the factory digits still work through the manager.
+    ASSERT_TRUE(f.panel.keyPressed(juce::KeyPress('3')));
+    ASSERT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Split);
+    ASSERT_TRUE(f.panel.keyPressed(juce::KeyPress('1')));
+    ASSERT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Select);
+
+    // Move Split onto a letter no other Timeline binding uses.
+    shortcuts.setBinding("timelineToolSplit", juce::KeyPress('j', juce::ModifierKeys::noModifiers, 0));
+
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('j')));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Split);
+
+    f.panel.setActiveTool(synth::ui::EditTool::Select);
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('3'))) << "the old digit must fall through, not still pick Split";
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Select);
+
+    // Every OTHER digit is untouched by the one rebind.
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('8')));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Draw);
+
+    // Clearing a binding means NO key, never a fall back to the factory digit — the strict
+    // resolution contract (see TimelinePanelComponent::setShortcutManager).
+    shortcuts.setBinding("timelineToolDraw", juce::KeyPress());
+    f.panel.setActiveTool(synth::ui::EditTool::Select);
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('8')));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Select);
+
+    // The Ctrl+Shift+digit grid commands share the tool digits' key codes and must never be mistaken
+    // for them — juce::KeyPress equality is exact on modifiers.
+    const int ctrlShift = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier;
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('1', juce::ModifierKeys(ctrlShift), 0)));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Select);
+
+    // Detach: with no manager the hardcoded Cubase digits are back, unchanged.
+    f.panel.setShortcutManager(nullptr);
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('3')));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Split);
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('2'))) << "2/6/9 stay reserved on the fallback path";
+}
+
+// The panel's three letter keys go through the same resolution. Q is shared with the piano roll
+// ("timelineSnapToggle" — one binding, one key, whichever surface has focus).
+TEST(TimelineToolStripTest, PanelLetterKeysResolveThroughTheShortcutManager) {
+    ToolPanelFixture f;
+    ShortcutManager shortcuts;
+    f.panel.setShortcutManager(&shortcuts);
+
+    auto& view = f.panel.getViewState();
+    const bool snapBefore = view.snapEnabled;
+    ASSERT_TRUE(f.panel.keyPressed(juce::KeyPress('q')));
+    EXPECT_EQ(view.snapEnabled, !snapBefore);
+
+    shortcuts.setBinding("timelineSnapToggle", juce::KeyPress('y', juce::ModifierKeys::noModifiers, 0));
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('q'))) << "the old key falls through";
+    EXPECT_EQ(view.snapEnabled, !snapBefore) << "and did not toggle again";
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('y')));
+    EXPECT_EQ(view.snapEnabled, snapBefore);
+
+    // Shift+Q is the ROLL's quantise, a different action: it must not reach the panel's snap toggle
+    // (the pre-shortcut code matched Q on the key code alone, ignoring modifiers entirely).
+    f.panel.setShortcutManager(nullptr);
+    const bool snapNow = view.snapEnabled;
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('q', juce::ModifierKeys::shiftModifier, 0)));
+    EXPECT_EQ(view.snapEnabled, snapNow);
+}
+
+// TimelineClipLaneArea resolves its own P through the SAME action id the panel's fallback uses, so
+// the two can never end up on different keys.
+TEST(TimelineToolStripTest, ClipLanePLoopSelectionFollowsTheShortcutManager) {
+    ToolPanelFixture f;
+    ShortcutManager shortcuts;
+    auto& lane = f.panel.getClipLaneArea();
+    lane.setShortcutManager(&shortcuts);
+
+    const auto track = f.doc.addTrack(synth::TrackKind::Midi, "A");
+    const auto clip = f.doc.addClip(track, 4.0, 4.0, "C1");
+    ASSERT_TRUE(clip.isValid());
+    f.select({clip});
+
+    int calls = 0;
+    double gotStart = -1.0;
+    double gotEnd = -1.0;
+    lane.onLoopRangeRequested = [&](double start, double end) {
+        ++calls;
+        gotStart = start;
+        gotEnd = end;
+    };
+
+    EXPECT_TRUE(lane.keyPressed(juce::KeyPress('p')));
+    EXPECT_EQ(calls, 1);
+    EXPECT_DOUBLE_EQ(gotStart, 4.0);
+    EXPECT_DOUBLE_EQ(gotEnd, 8.0);
+
+    shortcuts.setBinding("timelineLoopSelection", juce::KeyPress('u', juce::ModifierKeys::noModifiers, 0));
+    EXPECT_FALSE(lane.keyPressed(juce::KeyPress('p')));
+    EXPECT_EQ(calls, 1) << "the old key must not still fire the callback";
+    EXPECT_TRUE(lane.keyPressed(juce::KeyPress('u')));
+    EXPECT_EQ(calls, 2);
+
+    // Delete/Escape are FIXED, never resolved through the manager — clearing every binding must not
+    // disturb them.
+    for (const auto& actionId : shortcuts.getActionIds())
+        shortcuts.setBinding(actionId, juce::KeyPress());
+    EXPECT_TRUE(lane.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey))) << "a non-empty selection consumes Escape";
+    f.select({clip});
+    EXPECT_TRUE(lane.keyPressed(juce::KeyPress(juce::KeyPress::deleteKey)));
+    EXPECT_EQ(f.doc.getClip(clip), nullptr);
+}
+
+TEST(TimelineToolStripTest, ButtonsMirrorTheActiveToolAndCarryTheirShortcutInTheTooltip) {
+    ToolPanelFixture f;
+
+    for (auto tool : synth::ui::kAllEditTools)
+        ASSERT_NE(f.panel.getToolButton(tool), nullptr) << "every tool has a button, headless included";
+
+    EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Split)->getTooltip(), "Split (3)");
+    EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Draw)->getTooltip(), "Draw (8)");
+
+    f.panel.setActiveTool(synth::ui::EditTool::Erase);
+    for (auto tool : synth::ui::kAllEditTools)
+        EXPECT_EQ(f.panel.getToolButton(tool)->getToggleState(), tool == synth::ui::EditTool::Erase)
+            << "exactly one button is lit: " << synth::ui::editToolName(tool);
+}
+
+// ---- Keyboard-focus routing (the "Cmd+X works everywhere but the tracks" regression) ----
+//
+// MainComponent::resolveEditSurface() reads the REAL focused component, so which component owns
+// focus is what decides where Cmd+X/C/V/D — and the lane's own Delete/Escape/P — are routed. The
+// two guards below pin the two halves of that: the lane can receive focus at all, and no tool
+// button takes it away. Neither is observable through the editSurfaceOverrideForTest_ path the
+// routing tests use, which is precisely why the hole shipped.
+
+TEST(TimelineToolStripTest, ClipLaneAcceptsKeyboardFocusSoSurfaceVerbsCanRoute) {
+    ToolPanelFixture f;
+    EXPECT_TRUE(f.panel.getClipLaneArea().getWantsKeyboardFocus())
+        << "juce::grabKeyboardFocus() (called from TimelineClipLaneArea::mouseDown) is a no-op "
+           "without this, so clicking a clip would leave focus wherever it was and every "
+           "per-surface verb would fall through to the graph";
+}
+
+TEST(TimelineToolStripTest, ToolButtonsNeverGrabKeyboardFocusFromTheEditSurfaces) {
+    ToolPanelFixture f;
+    for (auto tool : synth::ui::kAllEditTools) {
+        auto* button = f.panel.getToolButton(tool);
+        ASSERT_NE(button, nullptr);
+        EXPECT_FALSE(button->getWantsKeyboardFocus())
+            << "juce::Button opts into focus by default: " << synth::ui::editToolName(tool);
+        EXPECT_FALSE(button->getMouseClickGrabsKeyboardFocus())
+            << "picking a tool must not move focus off the clip lane, or the next Cmd+X goes to "
+               "the graph: "
+            << synth::ui::editToolName(tool);
+    }
+}
+
+// ---- Clipboard: the audio-field regression ----
+
+TEST(TimelineClipClipboardTest, CopyPasteRoundTripsEveryAudioFieldAndTheMuteFlag) {
+    ToolPanelFixture f;
+    const auto track = f.doc.addTrack(synth::TrackKind::Audio, "Audio 1");
+    const auto clip = f.doc.addClip(track, 8.0, 4.0, "Take 1");
+    ASSERT_TRUE(clip.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(clip, "Audio/take-1.wav", 1.5));
+    ASSERT_TRUE(f.doc.setClipGainDb(clip, -3.5));
+    ASSERT_TRUE(f.doc.setClipFades(clip, 0.5, 0.25));
+    ASSERT_TRUE(f.doc.setClipMuted(clip, true));
+
+    f.select({clip});
+    ASSERT_TRUE(f.panel.copySelectedClips());
+    ASSERT_TRUE(f.panel.canPasteClips());
+    ASSERT_TRUE(f.panel.pasteClipsAtPlayhead());
+
+    const auto pasted = f.selection();
+    ASSERT_EQ(pasted.size(), 1u);
+    const auto* copy = f.doc.getClip(pasted[0]);
+    ASSERT_NE(copy, nullptr);
+    EXPECT_NE(copy->id, clip);
+    EXPECT_DOUBLE_EQ(copy->startBeat, 0.0) << "re-based onto the (transport-less) playhead at beat 0";
+    EXPECT_DOUBLE_EQ(copy->lengthBeats, 4.0);
+    EXPECT_EQ(copy->name, "Take 1");
+    // The regression itself: every one of these used to be dropped, leaving a silent husk.
+    EXPECT_EQ(copy->assetRef, "Audio/take-1.wav");
+    EXPECT_DOUBLE_EQ(copy->sourceStartSeconds, 1.5);
+    EXPECT_DOUBLE_EQ(copy->gainDb, -3.5);
+    EXPECT_DOUBLE_EQ(copy->fadeInBeats, 0.5);
+    EXPECT_DOUBLE_EQ(copy->fadeOutBeats, 0.25);
+    EXPECT_TRUE(copy->muted);
+    // And it landed on an AUDIO row, which is the only kind that plays an asset.
+    ASSERT_NE(f.doc.getTrackForClip(copy->id), nullptr);
+    EXPECT_EQ(f.doc.getTrackForClip(copy->id)->kind, synth::TrackKind::Audio);
+}
+
+TEST(TimelineClipClipboardTest, PasteFallsBackToTheFirstTrackOfTheRequiredKind) {
+    ToolPanelFixture f;
+    const auto midi = f.doc.addTrack(synth::TrackKind::Midi, "Midi 1");
+    const auto source = f.doc.addTrack(synth::TrackKind::Audio, "Audio source");
+    const auto spare = f.doc.addTrack(synth::TrackKind::Audio, "Audio spare");
+    ASSERT_TRUE(midi.isValid() && spare.isValid());
+    const auto clip = f.doc.addClip(source, 0.0, 4.0, "Take");
+    ASSERT_TRUE(clip.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(clip, "Audio/take-1.wav", 0.0));
+
+    f.select({clip});
+    ASSERT_TRUE(f.panel.copySelectedClips());
+    ASSERT_TRUE(f.doc.removeTrack(source)); // the original row is gone
+
+    ASSERT_TRUE(f.panel.pasteClipsAtPlayhead());
+    ASSERT_EQ(f.doc.getTrack(spare)->clips.size(), 1u)
+        << "an audio clip falls back to the first AUDIO track, never to the MIDI one";
+    EXPECT_TRUE(f.doc.getTrack(midi)->clips.empty());
+    EXPECT_EQ(f.doc.getTrack(spare)->clips[0].assetRef, "Audio/take-1.wav");
+}
+
+TEST(TimelineClipClipboardTest, PasteSkipsAClipWithNoRowOfItsKindLeft) {
+    ToolPanelFixture f;
+    const auto audio = f.doc.addTrack(synth::TrackKind::Audio, "Audio");
+    const auto clip = f.doc.addClip(audio, 0.0, 4.0, "Take");
+    ASSERT_TRUE(clip.isValid());
+    ASSERT_TRUE(f.doc.setClipAsset(clip, "Audio/take-1.wav", 0.0));
+
+    f.select({clip});
+    ASSERT_TRUE(f.panel.copySelectedClips());
+    ASSERT_TRUE(f.doc.removeTrack(audio));
+    ASSERT_TRUE(f.doc.addTrack(synth::TrackKind::Midi, "Midi only").isValid());
+
+    EXPECT_FALSE(f.panel.pasteClipsAtPlayhead()) << "nowhere it could play: skipped, not parked on the MIDI row";
+    EXPECT_TRUE(f.doc.getTracks()[0].clips.empty());
+}
+
+TEST(TimelineClipClipboardTest, NoteMuteFlagsSurviveCopyPaste) {
+    ToolPanelFixture f;
+    const auto track = f.doc.addTrack(synth::TrackKind::Midi, "Midi");
+    const auto clip = f.doc.addClip(track, 4.0, 4.0, "Riff");
+    ASSERT_TRUE(clip.isValid());
+
+    synth::MidiNote audible;
+    audible.startBeat = 0.0;
+    audible.pitch = 60;
+    synth::MidiNote silenced;
+    silenced.startBeat = 1.0;
+    silenced.pitch = 64;
+    const auto audibleId = f.doc.addNote(clip, audible);
+    const auto silencedId = f.doc.addNote(clip, silenced);
+    ASSERT_TRUE(audibleId.isValid() && silencedId.isValid());
+    ASSERT_TRUE(f.doc.setNoteMuted(silencedId, true));
+
+    f.select({clip});
+    ASSERT_TRUE(f.panel.copySelectedClips());
+    ASSERT_TRUE(f.panel.pasteClipsAtPlayhead());
+
+    const auto pasted = f.selection();
+    ASSERT_EQ(pasted.size(), 1u);
+    const auto* copy = f.doc.getClip(pasted[0]);
+    ASSERT_NE(copy, nullptr);
+    ASSERT_EQ(copy->notes.size(), 2u);
+    EXPECT_NE(copy->notes[0].id, audibleId) << "pasted notes get fresh ids";
+    EXPECT_FALSE(copy->notes[0].muted);
+    EXPECT_TRUE(copy->notes[1].muted) << "a note's mute is part of the note, so it survives the clipboard";
+}
+
+// ---- Cut / Select All / Repeat ----
+
+TEST(TimelineClipVerbsTest, CutRemovesTheSelectionInOneStepAndLeavesItPasteable) {
+    ToolPanelFixture f;
+    const auto track = f.doc.addTrack(synth::TrackKind::Midi, "Midi");
+    const auto a = f.doc.addClip(track, 0.0, 4.0, "a");
+    const auto b = f.doc.addClip(track, 8.0, 4.0, "b");
+    ASSERT_TRUE(a.isValid() && b.isValid());
+
+    EXPECT_FALSE(f.panel.canCutClips()) << "nothing selected: nothing to cut";
+    f.select({a, b});
+    EXPECT_TRUE(f.panel.canCutClips());
+    EXPECT_TRUE(f.panel.hasClipSelection());
+
+    ASSERT_TRUE(f.panel.cutSelectedClips());
+    EXPECT_TRUE(f.doc.getTrack(track)->clips.empty());
+    EXPECT_TRUE(f.panel.canPasteClips()) << "a cut fills the clipboard — that is what makes it a cut";
+    EXPECT_FALSE(f.panel.hasClipSelection());
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getTrack(track)->clips.size(), 2u) << "both clips came back in ONE undo";
+
+    // And the clipboard survived the cut, so the pasted pair keeps its relative spacing.
+    ASSERT_TRUE(f.panel.pasteClipsAtPlayhead());
+    const auto pasted = f.selection();
+    ASSERT_EQ(pasted.size(), 2u);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(pasted[0])->startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(pasted[1])->startBeat, 8.0);
+}
+
+TEST(TimelineClipVerbsTest, SelectAllSelectsEveryClipOnEveryTrack) {
+    ToolPanelFixture f;
+    const auto midi = f.doc.addTrack(synth::TrackKind::Midi, "Midi");
+    const auto audio = f.doc.addTrack(synth::TrackKind::Audio, "Audio");
+    ASSERT_TRUE(f.doc.addClip(midi, 0.0, 4.0, "a").isValid());
+    ASSERT_TRUE(f.doc.addClip(midi, 8.0, 4.0, "b").isValid());
+    ASSERT_TRUE(f.doc.addClip(audio, 2.0, 4.0, "c").isValid());
+
+    ASSERT_TRUE(f.panel.selectAllClips());
+    EXPECT_EQ(f.panel.getClipSelection().size(), 3);
+
+    // An empty arrangement has nothing to select and says so.
+    ToolPanelFixture empty;
+    ASSERT_TRUE(empty.doc.addTrack(synth::TrackKind::Midi, "Midi").isValid());
+    EXPECT_FALSE(empty.panel.selectAllClips());
+}
+
+TEST(TimelineClipVerbsTest, RepeatTilesTheSelectionBlockInOneUndoStep) {
+    ToolPanelFixture f;
+    const auto track = f.doc.addTrack(synth::TrackKind::Midi, "Midi");
+    const auto clip = f.doc.addClip(track, 0.0, 4.0, "bar");
+    ASSERT_TRUE(clip.isValid());
+    f.select({clip});
+
+    ASSERT_TRUE(f.panel.repeatSelectedClips(3));
+
+    const auto& clips = f.doc.getTrack(track)->clips;
+    ASSERT_EQ(clips.size(), 4u);
+    EXPECT_DOUBLE_EQ(clips[0].startBeat, 0.0);
+    EXPECT_DOUBLE_EQ(clips[1].startBeat, 4.0);
+    EXPECT_DOUBLE_EQ(clips[2].startBeat, 8.0);
+    EXPECT_DOUBLE_EQ(clips[3].startBeat, 12.0);
+    EXPECT_EQ(f.panel.getClipSelection().size(), 3) << "the copies end up selected, not the source";
+    EXPECT_FALSE(f.panel.getClipSelection().contains(clip));
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getTrack(track)->clips.size(), 1u) << "three copies, ONE undo step";
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+TEST(TimelineClipVerbsTest, RepeatKeepsAMultiClipBlockIntact) {
+    ToolPanelFixture f;
+    const auto track = f.doc.addTrack(synth::TrackKind::Midi, "Midi");
+    const auto a = f.doc.addClip(track, 0.0, 2.0, "a");
+    const auto b = f.doc.addClip(track, 4.0, 2.0, "b"); // block spans [0, 6)
+    ASSERT_TRUE(a.isValid() && b.isValid());
+    f.select({a, b});
+
+    ASSERT_TRUE(f.panel.repeatSelectedClips(1));
+
+    const auto& clips = f.doc.getTrack(track)->clips;
+    ASSERT_EQ(clips.size(), 4u);
+    EXPECT_DOUBLE_EQ(clips[2].startBeat, 6.0) << "the whole block moves by its span, keeping its internal spacing";
+    EXPECT_DOUBLE_EQ(clips[3].startBeat, 10.0);
+}
+
+TEST(TimelineClipVerbsTest, RepeatRejectsANonPositiveCountAndAnEmptySelection) {
+    ToolPanelFixture f;
+    const auto track = f.doc.addTrack(synth::TrackKind::Midi, "Midi");
+    const auto clip = f.doc.addClip(track, 0.0, 4.0, "bar");
+    ASSERT_TRUE(clip.isValid());
+
+    EXPECT_FALSE(f.panel.repeatSelectedClips(2)) << "nothing selected";
+    f.select({clip});
+    EXPECT_FALSE(f.panel.repeatSelectedClips(0));
+    EXPECT_FALSE(f.panel.repeatSelectedClips(-1));
+    EXPECT_EQ(f.doc.getTrack(track)->clips.size(), 1u);
+    EXPECT_FALSE(f.undo.canUndo());
 }

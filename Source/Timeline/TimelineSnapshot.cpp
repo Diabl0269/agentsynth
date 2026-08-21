@@ -78,6 +78,11 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
 
         if (track.kind == TrackKind::Midi) {
             for (const auto& clip : track.clips) {
+                // A muted clip is excluded whole, before anything else is looked at — see the
+                // flatten policy on TimelineSnapshot.
+                if (clip.muted)
+                    continue;
+
                 const double clipEnd = clip.startBeat + clip.lengthBeats;
                 const auto runStart = snapshot->notes.size();
 
@@ -86,6 +91,12 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
                     // end means every remaining note is too.
                     if (note.startBeat >= clip.lengthBeats)
                         break;
+                    // A muted note is skipped, never emitted silent: dropping it keeps the run
+                    // free of events no consumer would know to ignore. `continue`, not `break` —
+                    // mute is not part of the sort key, so a muted note says nothing about the
+                    // ones after it.
+                    if (note.muted)
+                        continue;
 
                     NoteEvent event;
                     event.startBeat = clip.startBeat + note.startBeat;
@@ -118,6 +129,11 @@ std::unique_ptr<TimelineSnapshot> TimelineSnapshot::buildFrom(const TimelineDoc&
 
         if (track.kind == TrackKind::Audio) {
             for (const auto& clip : track.clips) {
+                // Same exclusion as the note half: a muted clip gets no AudioClipInfo entry at
+                // all, so the streamer never even assigns it a stream, let alone reads its file.
+                if (clip.muted)
+                    continue;
+
                 AudioClipInfo clipInfo;
                 clipInfo.clipId = clip.id.value;
                 clipInfo.startBeat = clip.startBeat;

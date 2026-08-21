@@ -475,6 +475,15 @@ juce_add_binary_data(Assets SOURCES
     # Minimap toggle (issue #159).
     assets/icons/toggle-minimap.svg
     assets/icons/module-dual-io.svg
+    # Timeline edit-tool strip (Cubase-style tools; see EditTool.h) — 6 SVGs, BinaryData
+    # symbols: toolselect_svg, toolsplit_svg, toolglue_svg, toolerase_svg, toolmute_svg,
+    # tooldraw_svg.
+    assets/icons/tool-select.svg
+    assets/icons/tool-split.svg
+    assets/icons/tool-glue.svg
+    assets/icons/tool-erase.svg
+    assets/icons/tool-mute.svg
+    assets/icons/tool-draw.svg
 )
 
 # The themed LookAndFeel lives in Core and pulls typefaces from BinaryData;

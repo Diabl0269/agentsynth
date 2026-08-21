@@ -244,7 +244,16 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
     // shortcut table — Sparkle's own convention is a menu-only "Check for Updates…" item with no
     // keyboard shortcut, so the "keypress fires and nothing happens" risk this invariant guards
     // against doesn't apply to it.
-    auto expectedActions = shortcuts.getActionIds();
+    //
+    // Only COMMAND-mapped actions count. The table also holds SURFACE actions — the timeline's own
+    // keys and the whole piano-roll block, which the components resolve for themselves rather than
+    // dispatching through the command manager (see AppCommands::kNoCommand). They must not inflate
+    // the expected total, and filtering on the command mapping rather than on a hand-kept id list
+    // keeps the "a new command is covered automatically" property this test exists for.
+    juce::StringArray expectedActions;
+    for (const auto& actionId : shortcuts.getActionIds())
+        if (AppCommands::getCommandForAction(actionId) != AppCommands::kNoCommand)
+            expectedActions.add(actionId);
 #if !SYNTH_ENABLE_TIMELINE
     // toggleTimelinePanel keeps its shortcut-table row in every build (rebindable defaults are
     // compile-independent) but registers no command when the flag is off — the panel it drives is

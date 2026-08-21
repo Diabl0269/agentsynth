@@ -604,11 +604,22 @@ TEST_F(LatencyFlowTest, PlayheadUsesOutputLatencyOnlyNotTheRecordingSum) {
     driveBlock(engine, 0, -1, 0.0f); // drains the locate; the transport is stopped, so it stays put
     ASSERT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 4.0);
 
+    // The latency shift is a WHILE-PLAYING behaviour now (stopped, the line draws the raw
+    // position — see TimelinePlayheadTests' LatencyOffsetShiftsTheLineOnlyWhilePlaying), and
+    // play() itself only takes effect at sample 0 of the next callback, so one block must render
+    // before the snapshot reports playing. The expectations are derived from the ADVANCED position
+    // rather than the 4.0 the locate parked on, so the block size never leaks into the arithmetic;
+    // the output-only-vs-recording-sum distinction this test owns is unchanged.
+    ASSERT_TRUE(transport.play());
+    driveBlock(engine, 0, -1, 0.0f);
+    ASSERT_TRUE(transport.getPositionSnapshot().playing);
+    const double ppqNow = transport.getPositionSnapshot().ppq;
+
     mc.timerCallback();
 
     auto& view = panel.getViewState();
-    const int outputOnlyX = (int)std::llround(view.beatToX(4.0 - 1.0));
-    const int recordingSumX = (int)std::llround(view.beatToX(4.0 - 1.5));
+    const int outputOnlyX = (int)std::llround(view.beatToX(ppqNow - 1.0));
+    const int recordingSumX = (int)std::llround(view.beatToX(ppqNow - 1.5));
     EXPECT_EQ(panel.getPlayhead().getLineX(), outputOnlyX) << "the playhead shows what is HEARD: output latency only";
     EXPECT_NE(panel.getPlayhead().getLineX(), recordingSumX)
         << "the recording sum belongs to take placement, not to the drawn line";

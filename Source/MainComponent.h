@@ -104,6 +104,24 @@ public:
     // default) falls through to that check.
     void setEditSurfaceOverrideForTest(std::optional<EditSurface> surface) { editSurfaceOverrideForTest_ = surface; }
 
+    /** The repeat verb's ACTUAL work, split out from the command so it can be driven without the
+     *  count dialog — tests call it directly, and a future scripting/AI caller gets the same door.
+     *  Routed by the same resolveEditSurface() every other edit verb uses: TimelineClips repeats
+     *  the clip selection, PianoRoll repeats the note selection, and Graph is deliberately
+     *  unsupported (there is no "one block length further along" on a spatial canvas — Duplicate
+     *  is the graph's answer, which is why getCommandInfo reports the command inactive there).
+     *  `count` is clamped to [kMinRepeatCount, kMaxRepeatCount]; the callee owns its own undo
+     *  transaction, so this must never be wrapped in another one.
+     *  @return whatever the surface's verb returned — true when something was actually created. */
+    bool performRepeatSelection(int count);
+
+    /** Repeat's count bounds, shared by the dialog's clamp and performRepeatSelection's own. 64 is
+     *  a deliberate ceiling rather than a technical one: every copy is a real doc mutation inside a
+     *  single undo transaction, and a mistyped four-digit count would otherwise stall the message
+     *  thread building clips nobody asked for. */
+    static constexpr int kMinRepeatCount = 1;
+    static constexpr int kMaxRepeatCount = 64;
+
     // P4-6: pure decision function for the AI provider id used when no "aiProvider" key is
     // persisted yet. A brand new install (no pre-existing settings file at all) defaults to
     // "remote" (hosted); an install that has launched before but never touched AI settings — the
@@ -147,6 +165,41 @@ public:
     void applyTimelineFeatureEnabled(bool enabled);
     bool isTimelineFeatureEnabledForTest() const { return timelineFeatureEnabled; }
 #endif
+
+    /** The Preferences "Natural scrolling" key. DEFAULT TRUE (natural) — the value every scrolling
+     *  surface in the app already behaves as, so an install that never opens Preferences is
+     *  unaffected. Owned here rather than by the tab because MainComponent is what applies it. */
+    static constexpr const char* kNaturalScrollingKey = "naturalScrolling";
+
+    /** Re-reads kNaturalScrollingKey and pushes `!natural` into the two surfaces that have an
+     *  inversion flag (the timeline panel and its piano roll — the graph canvas pans rather than
+     *  scrolls). Called once at startup and again on every settings-file change, which is how a
+     *  Preferences toggle reaches the panel live: PreferencesSettingsTab writes the key, the
+     *  PropertiesFile broadcasts, and changeListenerCallback lands here. Idempotent, so being
+     *  called for an unrelated settings write costs a bool read. */
+    void applyNaturalScrollingPreference();
+
+    /** The Preferences "Scroll up zooms in" key. DEFAULT TRUE — "up zooms in" is what both
+     *  wheel-zoom surfaces already did before the preference existed, so an install that never opens
+     *  Preferences is unaffected. Owned here for the same reason kNaturalScrollingKey is: the tab
+     *  writes it, MainComponent is what applies it. */
+    static constexpr const char* kZoomScrollUpZoomsInKey = "zoomScrollUpZoomsIn";
+
+    /** Re-reads kZoomScrollUpZoomsInKey and pushes `!upZoomsIn` into the timeline panel, which
+     *  forwards it to the piano roll. A SIBLING of applyNaturalScrollingPreference rather than an
+     *  extension of it, because the two preferences are genuinely independent: plain-scroll direction
+     *  and wheel-ZOOM direction are separate flags on both surfaces (see
+     *  TimelinePanelComponent::setZoomScrollInverted), and a user who inverts one has said nothing
+     *  about the other. Shares that function's propagation path exactly — the settings-file
+     *  ChangeBroadcaster — so both are called from the constructor and from
+     *  changeListenerCallback, and both are idempotent. */
+    void applyZoomScrollPreference();
+
+    /** Per-press zoom step for the four zoom commands. 1.25 is the same "a quarter bigger" feel a
+     *  couple of wheel notches gives, and the out factor is its exact reciprocal so in-then-out
+     *  returns to where you started rather than drifting. */
+    static constexpr double kZoomInFactor = 1.25;
+    static constexpr double kZoomOutFactor = 1.0 / kZoomInFactor;
     bool isTimelineConfiguredVisible() const { return isTimelineVisible; }
     synth::ui::TimelinePanelComponent& getTimelinePanel() { return timelinePanel; }
 
@@ -238,6 +291,12 @@ public:
     /** Asks for a name and saves the canvas selection as a snippet. No-op (with a status-bar
      *  note) when nothing is selected. */
     void promptSaveSnippet();
+
+    /** Asks for a repeat count (async juce::AlertWindow, exactly promptSaveSnippet's modal idiom)
+     *  and hands it to performRepeatSelection(). No-op (with a status-bar note) when the focused
+     *  surface has nothing selected. Kept separate from performRepeatSelection so nothing but the
+     *  keyboard/menu path ever has to pump a modal loop. */
+    void promptRepeatSelection();
 
     ModuleLibraryComponent& getModuleLibrary() { return moduleLibrary; }
 

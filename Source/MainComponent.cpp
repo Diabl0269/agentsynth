@@ -108,6 +108,98 @@ juce::String describeNodeForBinding(juce::AudioProcessorGraph::Node* node) {
     return node->getProcessor()->getName();
 }
 
+// ---- Command <-> ShortcutManager action id, for the two blocks handled as case-fallthrough runs ----
+//
+// The ten grid commands and the four zoom commands share one getCommandInfo case each (their
+// enablement rule is per BLOCK, not per command), so the block needs to recover which action id it
+// is reporting for — that is what supplies the row's label and its default keypress. Written as a
+// lookup rather than fourteen near-identical cases so a renamed id is one edit, and so a command
+// that grows an id without a description shows up as the id itself in Settings rather than compiling
+// to a blank row.
+juce::String snapActionIdForCommand(juce::CommandID commandID) {
+    switch (commandID) {
+    case AppCommands::snapSetWhole:
+        return "snapSetWhole";
+    case AppCommands::snapSetHalf:
+        return "snapSetHalf";
+    case AppCommands::snapSetQuarter:
+        return "snapSetQuarter";
+    case AppCommands::snapSetEighth:
+        return "snapSetEighth";
+    case AppCommands::snapSetSixteenth:
+        return "snapSetSixteenth";
+    case AppCommands::snapSetThirtySecond:
+        return "snapSetThirtySecond";
+    case AppCommands::snapSetSixtyFourth:
+        return "snapSetSixtyFourth";
+    case AppCommands::snapSetHundredTwentyEighth:
+        return "snapSetHundredTwentyEighth";
+    case AppCommands::snapCyclePrev:
+        return "snapCyclePrev";
+    case AppCommands::snapCycleNext:
+        return "snapCycleNext";
+    default:
+        return {};
+    }
+}
+
+#if SYNTH_ENABLE_TIMELINE
+// The note-value name for a grid division — the SAME strings TimelinePanelComponent's snap combo
+// shows ("Off", "Bar", "1", "1/2", …), so the status-bar report after a grid shortcut and the
+// selector the user can see never disagree about what the grid is called.
+juce::String snapDivisionLabel(synth::ui::TimelineViewState::Snap snap) {
+    using Snap = synth::ui::TimelineViewState::Snap;
+    switch (snap) {
+    case Snap::Off:
+        return "Off";
+    case Snap::Bar:
+        return "Bar";
+    case Snap::Whole:
+        return "1";
+    case Snap::Half:
+        return "1/2";
+    case Snap::Quarter:
+        return "1/4";
+    case Snap::Eighth:
+        return "1/8";
+    case Snap::Sixteenth:
+        return "1/16";
+    case Snap::ThirtySecond:
+        return "1/32";
+    case Snap::SixtyFourth:
+        return "1/64";
+    case Snap::HundredTwentyEighth:
+        return "1/128";
+    }
+    return "Off";
+}
+#endif
+
+// GraphEditor's public zoom entry point (zoomAroundCentre) takes a WHEEL DELTA, because that is
+// what its one zoom implementation was written against — it applies zoomLevel *= (1 + step * delta)
+// with step == 0.1. The timeline surfaces take a multiplicative factor instead, so the zoom commands
+// speak in factors and convert here, in ONE place, rather than each call site carrying a magic
+// delta. Keep `kGraphZoomWheelStep` in step with GraphEditor::applyZoomAt if that formula changes:
+// the consequence of drift is only that a canvas zoom step stops matching a timeline zoom step, but
+// it is invisible until someone measures it.
+constexpr double kGraphZoomWheelStep = 0.1;
+float graphZoomWheelDeltaFor(double factor) { return (float)((factor - 1.0) / kGraphZoomWheelStep); }
+
+juce::String zoomActionIdForCommand(juce::CommandID commandID) {
+    switch (commandID) {
+    case AppCommands::zoomInHorizontal:
+        return "zoomInHorizontal";
+    case AppCommands::zoomOutHorizontal:
+        return "zoomOutHorizontal";
+    case AppCommands::zoomInVertical:
+        return "zoomInVertical";
+    case AppCommands::zoomOutVertical:
+        return "zoomOutVertical";
+    default:
+        return {};
+    }
+}
+
 } // namespace
 
 // ---- Primary constructor (injected ThemeManager + LookAndFeel from Main.cpp) ----
@@ -229,6 +321,17 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // Minimap overlay visibility (issue #159), defaults to visible.
     const bool minimapVisible = appProperties.getUserSettings()->getBoolValue("minimapVisible", true);
     graphEditor.setMinimapVisible(minimapVisible);
+
+    // Scroll direction, and the LIVE path for it. juce::PropertiesFile is a ChangeBroadcaster that
+    // fires on every value written, so subscribing here is what lets a Preferences toggle reach the
+    // timeline and the piano roll without a restart — and without SettingsWindow having to grow yet
+    // another constructor callback to hand down (the "Show timeline" kill switch already needs one,
+    // and one wire per preference does not scale). changeListenerCallback dispatches on the source,
+    // so a settings write never triggers the theme re-skin and vice versa.
+    if (auto* settings = appProperties.getUserSettings())
+        settings->addChangeListener(this);
+    applyNaturalScrollingPreference();
+    applyZoomScrollPreference();
 
     // Cable colour config (issue #157). Restored HERE rather than only in AppearanceSettingsTab:
     // that tab is built lazily when the Settings window opens, so leaving it to the tab would
@@ -560,6 +663,17 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     timelinePanel.setTransport(&audioEngine.getTransport());
     timelinePanel.setMetronome(&audioEngine.getMetronome());
     timelinePanel.setApplicationProperties(&appProperties);
+
+    // The user's bindings for the three surfaces that resolve their OWN keys (see
+    // PianoRollComponent::setShortcutManager for the strict-resolution contract). All three are
+    // installed together and MUST stay together: with a manager installed, resolution is strict —
+    // an action id missing from ShortcutManager::resetToDefaults() has NO key at all rather than
+    // falling back to its hardcoded default, so installing the manager before registering an id
+    // makes that key silently inert. ShortcutManagerTest's surface-id tripwire pins the id list
+    // these three consult against the defaults table for exactly that reason.
+    timelinePanel.setShortcutManager(&shortcutManager);
+    timelinePanel.getPianoRoll().setShortcutManager(&shortcutManager);
+    timelinePanel.getClipLaneArea().setShortcutManager(&shortcutManager);
 
     // The panel's top-edge drag reports a desired height; THIS component owns it — clamp, lay out
     // live, and persist once the drag ends (not per pixel).
@@ -991,6 +1105,11 @@ MainComponent::~MainComponent() {
     // Unsubscribe before the manager (or our owned copy) is torn down.
     if (themeManager != nullptr)
         themeManager->removeChangeListener(this);
+    // Same reason: the settings file outlives this component on the plugin path (it is a shared
+    // location — see synth::userSettingsOptions()), so a write from any other holder after this
+    // point would call back into freed memory.
+    if (auto* settings = appProperties.getUserSettings())
+        settings->removeChangeListener(this);
     stopTimer();
     aiService.removeListener(this);
 #if SYNTH_ENABLE_TIMELINE
@@ -1018,8 +1137,17 @@ MainComponent::~MainComponent() {
     }
 }
 
-// ---- Theme change callback: re-skin pass ----
-void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* /*source*/) {
+// ---- Change callbacks: theme re-skin, and the live settings-file path ----
+void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
+    // Dispatch on the source, not "assume theme": two broadcasters reach here now. A settings write
+    // must NOT trigger a full re-skin (persisting a panel height or a snap division would re-theme
+    // the whole window), and a theme switch must not re-read preferences.
+    if (source != nullptr && source == appProperties.getUserSettings()) {
+        applyNaturalScrollingPreference();
+        applyZoomScrollPreference();
+        return;
+    }
+
     // Push new theme values into the LookAndFeel (colours / treatment / metrics), then
     // propagate lookAndFeelChanged() + a single repaint so every widget re-skins.
     lookAndFeel->applyTheme(themeManager->getActiveTheme());
@@ -1371,10 +1499,25 @@ void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
                        AppCommands::toggleMinimap, AppCommands::toggleAiPanel, AppCommands::autoArrange,
                        AppCommands::toggleLibrary, AppCommands::selectAllModules, AppCommands::saveSnippet,
                        AppCommands::copySelection, AppCommands::pasteSelection, AppCommands::duplicateSelection,
+                       AppCommands::cutSelection,
+                       // Registered unconditionally alongside togglePlayback below even though only
+                       // the timeline surfaces implement it — a SYNTH_ENABLE_TIMELINE=OFF build
+                       // reports it inactive rather than dropping the row from Settings.
+                       AppCommands::repeatSelection,
                        // Registered unconditionally (like every command above) so a
                        // SYNTH_ENABLE_TIMELINE=OFF build still reports it — inactive — rather than
                        // dropping it from the Settings shortcut list entirely.
-                       AppCommands::togglePlayback});
+                       AppCommands::togglePlayback,
+                       // The grid block and both zoom pairs follow the same rule: registered in
+                       // every build configuration, reported inactive where there is nothing to act
+                       // on (see getCommandInfo). The ten grid commands act on the timeline's
+                       // shared snap value, so they are inactive whenever the panel is not on
+                       // screen; the four zoom commands route per focused surface.
+                       AppCommands::snapSetWhole, AppCommands::snapSetHalf, AppCommands::snapSetQuarter,
+                       AppCommands::snapSetEighth, AppCommands::snapSetSixteenth, AppCommands::snapSetThirtySecond,
+                       AppCommands::snapSetSixtyFourth, AppCommands::snapSetHundredTwentyEighth,
+                       AppCommands::snapCyclePrev, AppCommands::snapCycleNext, AppCommands::zoomInHorizontal,
+                       AppCommands::zoomOutHorizontal, AppCommands::zoomInVertical, AppCommands::zoomOutVertical});
 #if SYNTH_ENABLE_TIMELINE
     commands.add(AppCommands::toggleTimelinePanel);
 #endif
@@ -1452,7 +1595,12 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         break;
     }
     case AppCommands::selectAllModules: {
-        result.setInfo("Select All Modules", "Select every module on the canvas", "Edit", 0);
+        // Still AppCommands::selectAllModules / actionId "selectAllModules" — the NAME is frozen so
+        // a persisted user binding keeps resolving, but the verb now means "select everything in
+        // the focused editor" and routes like Cmd+C/V/D below. Deliberately left always-active on
+        // every surface: unlike the clipboard verbs it needs no pre-existing selection, and each
+        // surface's own selectAll* returns false harmlessly when there is nothing to select.
+        result.setInfo("Select All", "Select everything in the focused editor", "Edit", 0);
         auto kp = shortcutManager.getBinding("selectAllModules");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
@@ -1465,16 +1613,16 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         break;
     }
     case AppCommands::copySelection: {
-        result.setInfo("Copy", "Copy the selected modules", "Edit", 0);
-        // Routed by resolveEditSurface() — Graph's own behaviour (below) is unchanged; the
-        // timeline surfaces gate on the clip-clipboard's own selection/piano-roll-is-inactive rule.
+        result.setInfo("Copy", "Copy the selection in the focused editor", "Edit", 0);
+        // Routed by resolveEditSurface() — Graph's own behaviour (below) is unchanged; each
+        // timeline surface gates on its own selection.
 #if SYNTH_ENABLE_TIMELINE
         switch (resolveEditSurface()) {
         case EditSurface::TimelineClips:
             result.setActive(timelinePanel.getClipSelection().size() > 0);
             break;
         case EditSurface::PianoRoll:
-            result.setActive(false); // v1 deliberate gap — the roll's own editing verbs suffice
+            result.setActive(timelinePanel.getPianoRoll().hasNoteSelection());
             break;
         case EditSurface::Graph:
             result.setActive(graphEditor.getSelectionCount() > 0);
@@ -1488,14 +1636,17 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         break;
     }
     case AppCommands::pasteSelection: {
-        result.setInfo("Paste", "Paste the copied modules onto the canvas", "Edit", 0);
+        result.setInfo("Paste", "Paste into the focused editor", "Edit", 0);
 #if SYNTH_ENABLE_TIMELINE
         switch (resolveEditSurface()) {
         case EditSurface::TimelineClips:
             result.setActive(timelinePanel.canPasteClips());
             break;
         case EditSurface::PianoRoll:
-            result.setActive(false);
+            // canPasteNotes() is BOTH halves: a non-empty note clipboard AND an open clip. A roll
+            // with nothing open has nowhere to put the block, so the row greys out rather than
+            // silently discarding a paste.
+            result.setActive(timelinePanel.getPianoRoll().canPasteNotes());
             break;
         case EditSurface::Graph:
             result.setActive(graphEditor.canPaste());
@@ -1509,14 +1660,14 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         break;
     }
     case AppCommands::duplicateSelection: {
-        result.setInfo("Duplicate", "Duplicate the selected modules in place", "Edit", 0);
+        result.setInfo("Duplicate", "Duplicate the selection in the focused editor", "Edit", 0);
 #if SYNTH_ENABLE_TIMELINE
         switch (resolveEditSurface()) {
         case EditSurface::TimelineClips:
             result.setActive(timelinePanel.getClipSelection().size() > 0);
             break;
         case EditSurface::PianoRoll:
-            result.setActive(false);
+            result.setActive(timelinePanel.getPianoRoll().hasNoteSelection());
             break;
         case EditSurface::Graph:
             result.setActive(graphEditor.getSelectionCount() > 0);
@@ -1526,6 +1677,53 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.setActive(graphEditor.getSelectionCount() > 0);
 #endif
         auto kp = shortcutManager.getBinding("duplicateSelection");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case AppCommands::cutSelection: {
+        result.setInfo("Cut", "Cut the selection in the focused editor", "Edit", 0);
+        // Same enablement predicate Copy uses on every surface — a cut is a copy that also
+        // deletes, so anything copyable is cuttable and the two rows can never disagree.
+#if SYNTH_ENABLE_TIMELINE
+        switch (resolveEditSurface()) {
+        case EditSurface::TimelineClips:
+            result.setActive(timelinePanel.canCutClips());
+            break;
+        case EditSurface::PianoRoll:
+            result.setActive(timelinePanel.getPianoRoll().hasNoteSelection());
+            break;
+        case EditSurface::Graph:
+            result.setActive(graphEditor.getSelectionCount() > 0);
+            break;
+        }
+#else
+        result.setActive(graphEditor.getSelectionCount() > 0);
+#endif
+        auto kp = shortcutManager.getBinding("cutSelection");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    case AppCommands::repeatSelection: {
+        result.setInfo("Repeat", "Repeat the selection a number of times", "Edit", 0);
+        // The ONLY edit verb that is inactive on the Graph surface: "repeat N times, each copy one
+        // block further along" is a time-axis idea, and a spatial canvas has no such axis — the
+        // graph's answer to "another one of these" is Duplicate. See performRepeatSelection.
+#if SYNTH_ENABLE_TIMELINE
+        switch (resolveEditSurface()) {
+        case EditSurface::TimelineClips:
+            result.setActive(timelinePanel.hasClipSelection());
+            break;
+        case EditSurface::PianoRoll:
+            result.setActive(timelinePanel.getPianoRoll().hasNoteSelection());
+            break;
+        case EditSurface::Graph:
+            result.setActive(false);
+            break;
+        }
+#else
+        result.setActive(false);
+#endif
+        auto kp = shortcutManager.getBinding("repeatSelection");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
@@ -1541,6 +1739,60 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.setActive(false);
 #endif
         auto kp = shortcutManager.getBinding("togglePlayback");
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    // ---- Grid division: eight absolute setters plus the two-step cycle ----
+    // One block, one enablement rule: the grid is a property of the timeline's view state, so these
+    // are active exactly when the panel is on screen. Not routed by resolveEditSurface() — the snap
+    // value is SHARED by the clip lanes and the piano roll (one grid, whichever is in the lane
+    // rect), so "which timeline surface has focus" is not a question these need to ask.
+    case AppCommands::snapSetWhole:
+    case AppCommands::snapSetHalf:
+    case AppCommands::snapSetQuarter:
+    case AppCommands::snapSetEighth:
+    case AppCommands::snapSetSixteenth:
+    case AppCommands::snapSetThirtySecond:
+    case AppCommands::snapSetSixtyFourth:
+    case AppCommands::snapSetHundredTwentyEighth:
+    case AppCommands::snapCyclePrev:
+    case AppCommands::snapCycleNext: {
+        const auto actionId = snapActionIdForCommand(commandID);
+        result.setInfo(ShortcutManager::getActionDescription(actionId), "Set the timeline's snap grid", "Timeline", 0);
+#if SYNTH_ENABLE_TIMELINE
+        result.setActive(isTimelineVisible);
+#else
+        result.setActive(false);
+#endif
+        auto kp = shortcutManager.getBinding(actionId);
+        result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
+        break;
+    }
+    // ---- Zoom: routed per focused surface, like the clipboard verbs ----
+    case AppCommands::zoomInHorizontal:
+    case AppCommands::zoomOutHorizontal:
+    case AppCommands::zoomInVertical:
+    case AppCommands::zoomOutVertical: {
+        const auto actionId = zoomActionIdForCommand(commandID);
+        const bool vertical = commandID == AppCommands::zoomInVertical || commandID == AppCommands::zoomOutVertical;
+        result.setInfo(ShortcutManager::getActionDescription(actionId), "Zoom the focused editor", "View", 0);
+        // The graph canvas zooms UNIFORMLY (GraphEditor::zoomAroundCentre — one zoomLevel, no
+        // separate axes), so the horizontal pair drives it and the vertical pair is inactive there
+        // rather than silently doing the same thing twice under a different key.
+        switch (resolveEditSurface()) {
+        case EditSurface::Graph:
+            result.setActive(!vertical);
+            break;
+        case EditSurface::TimelineClips:
+        case EditSurface::PianoRoll:
+#if SYNTH_ENABLE_TIMELINE
+            result.setActive(isTimelineVisible);
+#else
+            result.setActive(false);
+#endif
+            break;
+        }
+        auto kp = shortcutManager.getBinding(actionId);
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
@@ -1621,10 +1873,32 @@ bool MainComponent::perform(const InvocationInfo& info) {
     case AppCommands::toggleLibrary:
         setLibraryVisible(!isLibraryVisible);
         return true;
-    case AppCommands::selectAllModules:
+    case AppCommands::selectAllModules: {
+        // Routed by the same resolveEditSurface() the clipboard verbs use. The command id and
+        // actionId keep their historical "…Modules" names (persisted bindings resolve by string),
+        // but the behaviour is per-surface: Cmd+Shift+A means "everything in whatever I'm editing".
+#if SYNTH_ENABLE_TIMELINE
+        switch (resolveEditSurface()) {
+        case EditSurface::TimelineClips:
+            if (timelinePanel.selectAllClips())
+                statusBar.showMessage("Selected " + juce::String(timelinePanel.getClipSelection().size()) + " clips");
+            else
+                statusBar.showMessage("Nothing to select - the arrangement has no clips");
+            return true;
+        case EditSurface::PianoRoll:
+            if (timelinePanel.getPianoRoll().selectAllNotes())
+                statusBar.showMessage("Selected every note in the clip");
+            else
+                statusBar.showMessage("Nothing to select - the clip has no notes");
+            return true;
+        case EditSurface::Graph:
+            break;
+        }
+#endif
         graphEditor.selectAllModules();
         statusBar.showMessage("Selected " + juce::String(graphEditor.getSelectionCount()) + " modules");
         return true;
+    }
     case AppCommands::saveSnippet:
         promptSaveSnippet();
         return true;
@@ -1646,7 +1920,11 @@ bool MainComponent::perform(const InvocationInfo& info) {
                 statusBar.showMessage("Nothing to copy - select one or more clips first");
             return true;
         case EditSurface::PianoRoll:
-            return true; // v1 deliberate no-op — see getCommandInfo's setActive(false) above
+            if (timelinePanel.getPianoRoll().copySelectedNotes())
+                statusBar.showMessage("Copied the selected notes");
+            else
+                statusBar.showMessage("Nothing to copy - select one or more notes first");
+            return true;
         case EditSurface::Graph:
             break;
         }
@@ -1667,6 +1945,17 @@ bool MainComponent::perform(const InvocationInfo& info) {
                 statusBar.showMessage("Nothing to paste - copy some clips first");
             return true;
         case EditSurface::PianoRoll:
+            // PRIMING, not a side effect: the roll anchors a paste on the last beat something
+            // PUSHED into it via setPlayheadBeat, and a stopped transport never pushes one (the
+            // playhead only animates while playing). Read the transport's live position here — the
+            // same source pasteClipsAtPlayhead reads for the clip surface — so a paste with the
+            // transport parked lands under the playhead the user can actually see, rather than at
+            // whatever beat the last playback happened to stop pushing at.
+            timelinePanel.getPianoRoll().setPlayheadBeat(audioEngine.getTransport().getPositionSnapshot().ppq);
+            if (timelinePanel.getPianoRoll().pasteNotesAtPlayhead())
+                statusBar.showMessage("Pasted notes at the playhead");
+            else
+                statusBar.showMessage("Nothing to paste - copy some notes first");
             return true;
         case EditSurface::Graph:
             break;
@@ -1690,6 +1979,10 @@ bool MainComponent::perform(const InvocationInfo& info) {
                 statusBar.showMessage("Nothing to duplicate - select one or more clips first");
             return true;
         case EditSurface::PianoRoll:
+            if (timelinePanel.getPianoRoll().duplicateSelectedNotes())
+                statusBar.showMessage("Duplicated the selected notes");
+            else
+                statusBar.showMessage("Nothing to duplicate - select one or more notes first");
             return true;
         case EditSurface::Graph:
             break;
@@ -1701,6 +1994,44 @@ bool MainComponent::perform(const InvocationInfo& info) {
             statusBar.showMessage("Nothing to duplicate - select one or more modules first");
         return true;
     }
+    case AppCommands::cutSelection: {
+#if SYNTH_ENABLE_TIMELINE
+        switch (resolveEditSurface()) {
+        case EditSurface::TimelineClips:
+            // The panel's own verb: copy + delete inside ONE recordTimelineChange. Never wrap it —
+            // a second transaction around it would make Cmd+Z a two-step undo for one gesture.
+            if (timelinePanel.cutSelectedClips())
+                statusBar.showMessage("Cut clips");
+            else
+                statusBar.showMessage("Nothing to cut - select one or more clips first");
+            return true;
+        case EditSurface::PianoRoll:
+            if (timelinePanel.getPianoRoll().cutSelectedNotes())
+                statusBar.showMessage("Cut notes");
+            else
+                statusBar.showMessage("Nothing to cut - select one or more notes first");
+            return true;
+        case EditSurface::Graph:
+            break;
+        }
+#endif
+        // The graph has no cut verb of its own, so it is composed here from the two that exist —
+        // copySelection() fills the clipboard WITHOUT touching the graph or the undo stack, and
+        // deleteSelection() then does the whole removal inside its own single
+        // recordStructuralChange (the same transaction Delete and the canvas menu already use). So
+        // a cut is exactly one graph-undo step, and the copy half survives the undo.
+        const int cutCount = graphEditor.getSelectionCount();
+        if (graphEditor.copySelection()) {
+            graphEditor.deleteSelection();
+            statusBar.showMessage("Cut " + juce::String(cutCount) + " modules");
+        } else {
+            statusBar.showMessage("Nothing to cut - select one or more modules first");
+        }
+        return true;
+    }
+    case AppCommands::repeatSelection:
+        promptRepeatSelection();
+        return true;
     case AppCommands::togglePlayback:
 #if SYNTH_ENABLE_TIMELINE
         // Reuses the transport bar's own play/stop choke point (reads the transport's CURRENT
@@ -1710,6 +2041,90 @@ bool MainComponent::perform(const InvocationInfo& info) {
         timelinePanel.getTransportBar().getPlayStopButton().triggerClick();
 #endif
         return true;
+    // ---- Grid division ----
+    // Every one of these goes through TimelinePanelComponent::setSnapValue / cycleSnapValue, which
+    // is the panel's ONE writer for the shared snap value: the combo, these commands and the grid
+    // cycle therefore share one persist and one set of repaints (see that method's comment). View
+    // state only — nothing on the undo stack.
+    case AppCommands::snapSetWhole:
+    case AppCommands::snapSetHalf:
+    case AppCommands::snapSetQuarter:
+    case AppCommands::snapSetEighth:
+    case AppCommands::snapSetSixteenth:
+    case AppCommands::snapSetThirtySecond:
+    case AppCommands::snapSetSixtyFourth:
+    case AppCommands::snapSetHundredTwentyEighth: {
+#if SYNTH_ENABLE_TIMELINE
+        using Snap = synth::ui::TimelineViewState::Snap;
+        const Snap value = info.commandID == AppCommands::snapSetWhole          ? Snap::Whole
+                           : info.commandID == AppCommands::snapSetHalf         ? Snap::Half
+                           : info.commandID == AppCommands::snapSetQuarter      ? Snap::Quarter
+                           : info.commandID == AppCommands::snapSetEighth       ? Snap::Eighth
+                           : info.commandID == AppCommands::snapSetSixteenth    ? Snap::Sixteenth
+                           : info.commandID == AppCommands::snapSetThirtySecond ? Snap::ThirtySecond
+                           : info.commandID == AppCommands::snapSetSixtyFourth  ? Snap::SixtyFourth
+                                                                                : Snap::HundredTwentyEighth;
+        timelinePanel.setSnapValue(value);
+        statusBar.showMessage("Grid: " + snapDivisionLabel(value));
+#endif
+        return true;
+    }
+    case AppCommands::snapCyclePrev:
+    case AppCommands::snapCycleNext: {
+#if SYNTH_ENABLE_TIMELINE
+        const int direction = info.commandID == AppCommands::snapCycleNext ? 1 : -1;
+        timelinePanel.cycleSnapValue(direction);
+        // Reports where the grid ENDED UP, not which way it was asked to move: the cycle clamps at
+        // both ends, so a held key parked on 1/16 says so instead of implying it moved again.
+        statusBar.showMessage("Grid: " + snapDivisionLabel(timelinePanel.getViewState().snap));
+#endif
+        return true;
+    }
+    // ---- Zoom ----
+    case AppCommands::zoomInHorizontal:
+    case AppCommands::zoomOutHorizontal:
+    case AppCommands::zoomInVertical:
+    case AppCommands::zoomOutVertical: {
+        const bool zoomIn =
+            info.commandID == AppCommands::zoomInHorizontal || info.commandID == AppCommands::zoomInVertical;
+        const bool vertical =
+            info.commandID == AppCommands::zoomInVertical || info.commandID == AppCommands::zoomOutVertical;
+        const double factor = zoomIn ? kZoomInFactor : kZoomOutFactor;
+
+        switch (resolveEditSurface()) {
+#if SYNTH_ENABLE_TIMELINE
+        case EditSurface::PianoRoll:
+            if (vertical)
+                timelinePanel.getPianoRoll().zoomVertical(factor);
+            else
+                timelinePanel.getPianoRoll().zoomHorizontal(factor);
+            statusBar.showMessage(vertical ? "Piano roll: vertical zoom" : "Piano roll: zoom");
+            return true;
+        case EditSurface::TimelineClips:
+            if (vertical)
+                timelinePanel.zoomTimelineVertical(factor);
+            else
+                timelinePanel.zoomTimelineHorizontal(factor);
+            statusBar.showMessage(vertical ? "Timeline: track height" : "Timeline: zoom");
+            return true;
+#else
+        case EditSurface::PianoRoll:
+        case EditSurface::TimelineClips:
+            return true;
+#endif
+        case EditSurface::Graph:
+            break;
+        }
+
+        // The canvas has ONE zoom level (see getCommandInfo), so only the horizontal pair reaches
+        // it. GraphEditor's public zoom takes a wheel DELTA rather than a factor — see
+        // graphZoomWheelDeltaFor() for the conversion and why it lives in one place.
+        if (vertical)
+            return true; // reported inactive on Graph; belt-and-suspenders for a direct perform()
+        graphEditor.zoomAroundCentre(graphZoomWheelDeltaFor(factor));
+        statusBar.showMessage("Canvas: zoom");
+        return true;
+    }
 #if SYNTH_ENABLE_TIMELINE
     case AppCommands::toggleTimelinePanel:
         toggleTimelineButton.triggerClick();
@@ -1849,6 +2264,88 @@ void MainComponent::promptSaveSnippet() {
                             false);
 }
 
+// ---- Repeat ----
+
+bool MainComponent::performRepeatSelection(int count) {
+    // Clamped here as well as in the dialog: this is the public door (tests, and any future
+    // scripting caller), and neither of those goes through the AlertWindow's own validation.
+    const int repeats = juce::jlimit(kMinRepeatCount, kMaxRepeatCount, count);
+
+#if SYNTH_ENABLE_TIMELINE
+    switch (resolveEditSurface()) {
+    case EditSurface::TimelineClips:
+        // Both surface verbs own their single recordTimelineChange for the WHOLE repeat — one
+        // Cmd+Z undoes all N copies, so nothing here may open a transaction of its own.
+        return timelinePanel.repeatSelectedClips(repeats);
+    case EditSurface::PianoRoll:
+        return timelinePanel.getPianoRoll().repeatSelectedNotes(repeats);
+    case EditSurface::Graph:
+        break;
+    }
+#else
+    juce::ignoreUnused(repeats);
+#endif
+    // Graph: deliberately unsupported. Repeat tiles copies along a time axis the canvas doesn't
+    // have; Duplicate is the graph's equivalent gesture, and getCommandInfo already reports the
+    // command inactive here so the key never reaches this line in normal use.
+    return false;
+}
+
+void MainComponent::promptRepeatSelection() {
+    juce::String subject;
+#if SYNTH_ENABLE_TIMELINE
+    switch (resolveEditSurface()) {
+    case EditSurface::TimelineClips:
+        if (timelinePanel.hasClipSelection())
+            subject = "selected clips";
+        break;
+    case EditSurface::PianoRoll:
+        if (timelinePanel.getPianoRoll().hasNoteSelection())
+            subject = "selected notes";
+        break;
+    case EditSurface::Graph:
+        break;
+    }
+#endif
+
+    if (subject.isEmpty()) {
+        statusBar.showMessage("Repeat works on the timeline - select some clips or notes first");
+        return;
+    }
+
+    auto* window =
+        new juce::AlertWindow("Repeat", "How many copies of the " + subject + "?", juce::AlertWindow::NoIcon);
+    window->addTextEditor("count", juce::String(kMinRepeatCount), "Repeats:");
+    window->addButton("Repeat", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    // SafePointer + a unique_ptr taken inside the callback — promptSaveSnippet's modal idiom
+    // exactly; see its comment for why the dialog can outlive this component.
+    juce::Component::SafePointer<MainComponent> safeThis(this);
+
+    window->enterModalState(true, juce::ModalCallbackFunction::create([safeThis, window](int result) {
+                                std::unique_ptr<juce::AlertWindow> owned(window);
+                                if (result != 1)
+                                    return;
+
+                                auto* self = safeThis.getComponent();
+                                if (self == nullptr)
+                                    return;
+
+                                // getIntValue() returns 0 for anything unparseable, which the
+                                // clamp turns into the minimum — an empty or garbage field
+                                // repeats once rather than failing with a modal error.
+                                const int requested = owned->getTextEditorContents("count").getIntValue();
+                                const int repeats = juce::jlimit(kMinRepeatCount, kMaxRepeatCount, requested);
+                                if (self->performRepeatSelection(repeats))
+                                    self->statusBar.showMessage("Repeated " + juce::String(repeats) +
+                                                                (repeats == 1 ? " time" : " times"));
+                                else
+                                    self->statusBar.showMessage("Nothing was repeated");
+                            }),
+                            false);
+}
+
 // ---- Keyboard/focus arbitration ----
 MainComponent::EditSurface MainComponent::resolveEditSurface() const {
     if (editSurfaceOverrideForTest_.has_value())
@@ -1870,13 +2367,24 @@ MainComponent::EditSurface MainComponent::resolveEditSurface() const {
 }
 
 bool MainComponent::keyPressed(const juce::KeyPress& key) {
-    auto action = shortcutManager.getActionForKeyPress(key);
-    if (action.isEmpty())
-        return false;
-    auto cmdId = AppCommands::getCommandForAction(action);
-    if (cmdId == 0)
-        return false;
-    return commandManager.invokeDirectly(cmdId, true);
+    // The LAST stop for a key: JUCE bubbles an unhandled keyPressed up the parent chain, so
+    // everything the focused surface wanted has already had its turn. Only COMMAND actions are
+    // dispatched from here.
+    //
+    // The shortcut table now also holds SURFACE actions — bare arrows, Q/L/P, the tool digits —
+    // which the components resolve themselves. Those must fall through this handler untouched: a
+    // bare Left arrow that reached us means no surface claimed it, and turning it into a command
+    // invocation (there is none) or swallowing it (returning true) would both be wrong. So the
+    // resolution is "the first action bound to this key that HAS a command", not "the first action
+    // bound to this key" — otherwise a surface id sharing a key with a command in another category
+    // would shadow it, silently, in whichever order the table happened to list them.
+    for (const auto& action : shortcutManager.getActionsForKeyPress(key)) {
+        const auto cmdId = AppCommands::getCommandForAction(action);
+        if (cmdId == AppCommands::kNoCommand)
+            continue;
+        return commandManager.invokeDirectly(cmdId, true);
+    }
+    return false;
 }
 
 void MainComponent::resized() {
@@ -2235,6 +2743,35 @@ void MainComponent::applyTimelineFeatureEnabled(bool enabled) {
     aiChatComponent.refreshModeControls();
 }
 #endif
+
+void MainComponent::applyNaturalScrollingPreference() {
+    // NOT gated on SYNTH_ENABLE_TIMELINE: the panel and its roll are unconditional members (inert
+    // in an OFF build), and pushing a flag into an inert component is cheaper than an #if plus a
+    // second call site.
+    //
+    // The preference is phrased POSITIVELY ("Natural scrolling", default on) because that is how
+    // the OS phrases it, while the components carry the inversion flag — so this is the one place
+    // the polarity is flipped. Both surfaces get the same value: one preference, not two, because a
+    // user who wants their wheel flipped wants it flipped everywhere.
+    const bool natural = appProperties.getUserSettings() == nullptr ||
+                         appProperties.getUserSettings()->getBoolValue(kNaturalScrollingKey, true);
+    timelinePanel.setScrollInverted(!natural);
+    timelinePanel.getPianoRoll().setScrollInverted(!natural);
+}
+
+void MainComponent::applyZoomScrollPreference() {
+    // Same shape as applyNaturalScrollingPreference above, and ungated for the same reason: the panel
+    // is an unconditional member, inert in a SYNTH_ENABLE_TIMELINE=OFF build.
+    //
+    // Phrased POSITIVELY in Preferences ("Scroll up zooms in", default on) while the components carry
+    // the INVERSION flag, so this is the one place the polarity flips — exactly the natural-scrolling
+    // idiom next door. ONE call, to the panel: setZoomScrollInverted forwards to the piano roll
+    // itself (see its header comment), so reaching into getPianoRoll() here would be a second writer
+    // for the same flag and the two could drift.
+    const bool upZoomsIn = appProperties.getUserSettings() == nullptr ||
+                           appProperties.getUserSettings()->getBoolValue(kZoomScrollUpZoomsInKey, true);
+    timelinePanel.setZoomScrollInverted(!upZoomsIn);
+}
 
 void MainComponent::timelineChanged(const synth::TimelineDoc&) { publishTimelineAndRebindRecorder(); }
 
