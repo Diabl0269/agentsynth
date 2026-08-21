@@ -26,12 +26,21 @@
 //   8. Alt+Left/Right note NAVIGATION — walking the doc's canonical note order, collapsing a
 //      multi-selection, the ends of the run, and the minimal scroll that brings an off-screen note
 //      into view.
+//   9. REBINDABLE surface keys — the same actions resolved through a ShortcutManager instead of the
+//      hardcoded defaults, including the "an unbound action has no key" rule and the two keys
+//      (Escape, Delete) that stay fixed on purpose.
+//  10. WHEEL/ZOOM policy — the macOS Shift axis swap that used to kill Cmd+Shift+wheel, the
+//      natural-vs-inverted scroll sign on both axes, and the anchored zoomHorizontal/zoomVertical
+//      commands.
 //
-// Every test in 4-6 configures snap explicitly (never inherits a default), because these are
+// Every test in 4-6 and 9 configures snap explicitly (never inherits a default), because these are
 // grid-sensitive assertions and a machine-local snap preference must never be able to decide
-// whether they pass.
+// whether they pass. Section 10 pins the view instead (zoom and scroll origin, via
+// PianoRollFixture::open) for the same reason: a wheel assertion measured in beats depends on
+// pixels-per-beat, so it is stated rather than inherited.
 
 #include "../Source/AppUndoManager.h"
+#include "../Source/ShortcutManager.h"
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/UI/EditTool.h"
 #include "../Source/UI/NoteSelectionModel.h"
@@ -2179,4 +2188,435 @@ TEST(PianoRollNavigationTest, NavigatingToAnOffScreenNoteScrollsItIntoView) {
     EXPECT_DOUBLE_EQ(f.roll.getFirstVisibleBeat(), before);
 
     EXPECT_FALSE(f.undo.canUndo());
+}
+
+// ============================================================================
+// 9. Rebindable surface keys (ShortcutManager-resolved)
+// ============================================================================
+
+namespace {
+
+juce::KeyPress plainPress(int keyCode) { return juce::KeyPress(keyCode, juce::ModifierKeys::noModifiers, 0); }
+juce::KeyPress shiftPress(int keyCode) { return juce::KeyPress(keyCode, juce::ModifierKeys::shiftModifier, 0); }
+
+// Every action id the roll resolves. A test pins ALL of them to an explicitly invalid KeyPress
+// first, then spells out only the one or two it cares about — so nothing here can be rescued (or
+// broken) by whatever ShortcutManager::resetToDefaults() happens to know about these ids in any
+// given build. That matters because the defaults land in ShortcutManager in a separate phase.
+const char* const kRollActionIds[] = {"pianoRollNudgeLeft",         "pianoRollNudgeRight",
+                                      "pianoRollTransposeUp",       "pianoRollTransposeDown",
+                                      "pianoRollTransposeOctaveUp", "pianoRollTransposeOctaveDown",
+                                      "pianoRollNavPrevNote",       "pianoRollNavNextNote",
+                                      "pianoRollQuantise",          "timelineSnapToggle"};
+
+void clearRollBindings(ShortcutManager& mgr) {
+    for (const char* id : kRollActionIds)
+        mgr.setBinding(id, juce::KeyPress());
+}
+
+// One selected note at beat 2 of a 16-beat clip, snap pinned to quarters — the bed every key test
+// below nudges, transposes or navigates from.
+struct KeyBed {
+    ClipId clipId;
+    NoteId note;
+};
+
+KeyBed makeKeyBed(PianoRollFixture& f, double startBeat = 2.0) {
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    KeyBed bed;
+    bed.clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    bed.note = f.doc.addNote(bed.clipId, makeNote(startBeat, 60, 1.0));
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(bed.clipId);
+    f.roll.getSelectionForTest().setSelection({bed.note});
+    return bed;
+}
+
+} // namespace
+
+// The no-manager path is the one every other test in this file exercises implicitly; asserted here
+// explicitly so a regression in matchesAction's fallback branch fails with an obvious name.
+TEST(PianoRollShortcutTest, WithNoShortcutManagerTheHardcodedDefaultsStillApply) {
+    PianoRollFixture f;
+    const auto bed = makeKeyBed(f);
+    ASSERT_EQ(f.roll.getShortcutManager(), nullptr);
+
+    EXPECT_TRUE(f.roll.keyPressed(plainPress(juce::KeyPress::rightKey)));
+    EXPECT_DOUBLE_EQ(f.doc.getNote(bed.note)->startBeat, 3.0);
+    EXPECT_TRUE(f.roll.keyPressed(plainPress(juce::KeyPress::leftKey)));
+    EXPECT_DOUBLE_EQ(f.doc.getNote(bed.note)->startBeat, 2.0);
+
+    EXPECT_TRUE(f.roll.keyPressed(plainPress(juce::KeyPress::upKey)));
+    EXPECT_EQ(f.doc.getNote(bed.note)->pitch, 61);
+    EXPECT_TRUE(f.roll.keyPressed(shiftPress(juce::KeyPress::upKey)));
+    EXPECT_EQ(f.doc.getNote(bed.note)->pitch, 73) << "Shift+Up is still the octave";
+    EXPECT_TRUE(f.roll.keyPressed(shiftPress(juce::KeyPress::downKey)));
+    EXPECT_TRUE(f.roll.keyPressed(plainPress(juce::KeyPress::downKey)));
+    EXPECT_EQ(f.doc.getNote(bed.note)->pitch, 60);
+
+    ASSERT_TRUE(f.state.snapEnabled);
+    EXPECT_TRUE(f.roll.keyPressed(plainPress('q'))) << "bare Q is still the snap toggle";
+    EXPECT_FALSE(f.state.snapEnabled);
+}
+
+// Rebinding one action moves the gesture WHOLESALE: the factory key stops doing anything (it is no
+// longer bound to anything the roll asks about) and the new key does the nudge.
+TEST(PianoRollShortcutTest, RebindingNudgeRightMovesTheGestureToTheNewKey) {
+    PianoRollFixture f;
+    const auto bed = makeKeyBed(f);
+
+    ShortcutManager mgr;
+    clearRollBindings(mgr);
+    mgr.setBinding("pianoRollNudgeRight", plainPress('l'));
+    f.roll.setShortcutManager(&mgr);
+    EXPECT_EQ(f.roll.getShortcutManager(), &mgr);
+
+    EXPECT_FALSE(f.roll.keyPressed(plainPress(juce::KeyPress::rightKey)))
+        << "the old key is not bound to this action any more, so it must fall through";
+    EXPECT_DOUBLE_EQ(f.doc.getNote(bed.note)->startBeat, 2.0);
+    EXPECT_FALSE(f.undo.canUndo()) << "and it must not have written a document edit either";
+
+    EXPECT_TRUE(f.roll.keyPressed(plainPress('l')));
+    EXPECT_DOUBLE_EQ(f.doc.getNote(bed.note)->startBeat, 3.0);
+    EXPECT_TRUE(f.undo.canUndo());
+
+    // Dropping the manager restores the defaults — the fallback is not a one-time decision.
+    f.roll.setShortcutManager(nullptr);
+    EXPECT_TRUE(f.roll.keyPressed(plainPress(juce::KeyPress::rightKey)));
+    EXPECT_DOUBLE_EQ(f.doc.getNote(bed.note)->startBeat, 4.0);
+}
+
+// With a manager installed, an action whose binding is unset/invalid has NO key at all — it must
+// not quietly fall back to its hardcoded default (that would resurrect a key the user cleared).
+// The same rule covers an id this ShortcutManager has never heard of, which is what getBinding
+// answers with an invalid KeyPress.
+TEST(PianoRollShortcutTest, AnUnboundActionHasNoKeyAndNeverFallsBackToItsDefault) {
+    EXPECT_FALSE(ShortcutManager().getBinding("someActionNobodyRegistered").isValid())
+        << "the contract this test depends on: an unknown id resolves to an INVALID KeyPress";
+
+    PianoRollFixture f;
+    const auto bed = makeKeyBed(f);
+    const bool snapBefore = f.state.snapEnabled;
+
+    ShortcutManager mgr;
+    clearRollBindings(mgr);
+    f.roll.setShortcutManager(&mgr);
+
+    EXPECT_FALSE(f.roll.keyPressed(plainPress(juce::KeyPress::rightKey)));
+    EXPECT_FALSE(f.roll.keyPressed(plainPress(juce::KeyPress::leftKey)));
+    EXPECT_FALSE(f.roll.keyPressed(plainPress(juce::KeyPress::upKey)));
+    EXPECT_FALSE(f.roll.keyPressed(plainPress(juce::KeyPress::downKey)));
+    EXPECT_FALSE(f.roll.keyPressed(shiftPress(juce::KeyPress::upKey)));
+    EXPECT_FALSE(f.roll.keyPressed(shiftPress(juce::KeyPress::downKey)));
+    EXPECT_FALSE(f.roll.keyPressed(altArrow(juce::KeyPress::rightKey)));
+    EXPECT_FALSE(f.roll.keyPressed(altArrow(juce::KeyPress::leftKey)));
+    EXPECT_FALSE(f.roll.keyPressed(plainPress('q')));
+    EXPECT_FALSE(f.roll.keyPressed(shiftPress('q')));
+
+    EXPECT_DOUBLE_EQ(f.doc.getNote(bed.note)->startBeat, 2.0);
+    EXPECT_EQ(f.doc.getNote(bed.note)->pitch, 60);
+    EXPECT_EQ(f.state.snapEnabled, snapBefore);
+    EXPECT_FALSE(f.undo.canUndo());
+    EXPECT_FALSE(f.roll.isQuantiseFlashingForTest()) << "an unbound Q never even flashes the button";
+}
+
+// The snap toggle and the one-shot quantise are two independent bindings, and the quantise action
+// is resolved FIRST — so a user who mirrors the factory pair (X / Shift+X) onto another letter gets
+// the same behaviour rather than the toggle swallowing both.
+TEST(PianoRollShortcutTest, SnapToggleAndQuantiseFollowTheirOwnBindings) {
+    PianoRollFixture f;
+    const auto bed = makeKeyBed(f, /*startBeat*/ 1.1); // off-grid, so a quantise is observable
+    f.roll.getSelectionForTest().clear();              // quantise-all, no selection needed
+
+    ShortcutManager mgr;
+    clearRollBindings(mgr);
+    mgr.setBinding("timelineSnapToggle", plainPress('g'));
+    mgr.setBinding("pianoRollQuantise", shiftPress('g'));
+    f.roll.setShortcutManager(&mgr);
+
+    int toggles = 0;
+    f.roll.onSnapToggled = [&] { ++toggles; };
+    ASSERT_TRUE(f.state.snapEnabled);
+
+    EXPECT_FALSE(f.roll.keyPressed(plainPress('q'))) << "Q is no longer either of these actions";
+    EXPECT_FALSE(f.roll.keyPressed(shiftPress('q')));
+    EXPECT_EQ(toggles, 0);
+    EXPECT_DOUBLE_EQ(f.doc.getNote(bed.note)->startBeat, 1.1);
+
+    EXPECT_TRUE(f.roll.keyPressed(plainPress('g')));
+    EXPECT_FALSE(f.state.snapEnabled);
+    EXPECT_EQ(toggles, 1);
+    EXPECT_DOUBLE_EQ(f.doc.getNote(bed.note)->startBeat, 1.1) << "a snap toggle never moves a note";
+
+    EXPECT_TRUE(f.roll.keyPressed(shiftPress('g')));
+    EXPECT_DOUBLE_EQ(f.doc.getNote(bed.note)->startBeat, 1.0) << "Shift+G quantised, from the RAW division";
+    EXPECT_FALSE(f.state.snapEnabled) << "and never flipped the switch";
+    EXPECT_EQ(toggles, 1);
+}
+
+// Rebinding the octave transpose alone must not shadow (or be shadowed by) the semitone one — the
+// two are separate actions, and Shift+Up is only "the octave" because that is its DEFAULT.
+TEST(PianoRollShortcutTest, RebindingTheOctaveTransposeLeavesTheSemitoneOneAlone) {
+    PianoRollFixture f;
+    const auto bed = makeKeyBed(f);
+
+    ShortcutManager mgr;
+    clearRollBindings(mgr);
+    mgr.setBinding("pianoRollTransposeUp", plainPress(juce::KeyPress::upKey));
+    mgr.setBinding("pianoRollTransposeOctaveUp", plainPress('u'));
+    f.roll.setShortcutManager(&mgr);
+
+    EXPECT_FALSE(f.roll.keyPressed(shiftPress(juce::KeyPress::upKey)))
+        << "Shift+Up is bound to nothing now, and must NOT decay into the plain transpose";
+    EXPECT_EQ(f.doc.getNote(bed.note)->pitch, 60);
+
+    EXPECT_TRUE(f.roll.keyPressed(plainPress(juce::KeyPress::upKey)));
+    EXPECT_EQ(f.doc.getNote(bed.note)->pitch, 61);
+    EXPECT_TRUE(f.roll.keyPressed(plainPress('u')));
+    EXPECT_EQ(f.doc.getNote(bed.note)->pitch, 73);
+}
+
+// Alt+Left/Right stay resolvable too — and navigation is still selection-only, never an undo step.
+TEST(PianoRollShortcutTest, NoteNavigationIsRebindableAndStillNeverTouchesTheDoc) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    const auto first = f.doc.addNote(clipId, makeNote(0.0, 60, 1.0));
+    const auto second = f.doc.addNote(clipId, makeNote(2.0, 60, 1.0));
+    ASSERT_TRUE(first.isValid());
+    ASSERT_TRUE(second.isValid());
+    setSnap(f, TimelineViewState::Snap::Quarter);
+    f.open(clipId);
+    f.roll.getSelectionForTest().setSelection({first});
+
+    ShortcutManager mgr;
+    clearRollBindings(mgr);
+    mgr.setBinding("pianoRollNavNextNote", plainPress(']'));
+    mgr.setBinding("pianoRollNavPrevNote", plainPress('['));
+    f.roll.setShortcutManager(&mgr);
+
+    EXPECT_FALSE(f.roll.keyPressed(altArrow(juce::KeyPress::rightKey)));
+    EXPECT_TRUE(onlySelected(f, first));
+
+    EXPECT_TRUE(f.roll.keyPressed(plainPress(']')));
+    EXPECT_TRUE(onlySelected(f, second));
+    EXPECT_TRUE(f.roll.keyPressed(plainPress('[')));
+    EXPECT_TRUE(onlySelected(f, first));
+    EXPECT_FALSE(f.undo.canUndo()) << "navigation is selection-only";
+}
+
+// Escape and Delete/Backspace are platform conventions, not app shortcuts: they answer identically
+// with a manager installed and every roll action explicitly unbound.
+TEST(PianoRollShortcutTest, EscapeAndDeleteStayFixedRegardlessOfTheManager) {
+    PianoRollFixture f;
+    const auto bed = makeKeyBed(f);
+
+    ShortcutManager mgr;
+    clearRollBindings(mgr);
+    f.roll.setShortcutManager(&mgr);
+
+    bool closeRequested = false;
+    f.roll.onCloseRequested = [&] { closeRequested = true; };
+
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_TRUE(f.roll.getSelectionForTest().isEmpty()) << "first Escape clears the selection";
+    EXPECT_TRUE(f.roll.isOpen());
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey)));
+    EXPECT_FALSE(f.roll.isOpen());
+    EXPECT_TRUE(closeRequested);
+
+    f.roll.openClip(bed.clipId);
+    f.roll.getSelectionForTest().setSelection({bed.note});
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::deleteKey)));
+    EXPECT_EQ(f.doc.getNote(bed.note), nullptr);
+    EXPECT_TRUE(f.undo.canUndo()) << "and it is still one undo step";
+}
+
+// ============================================================================
+// 10. Wheel policy (ScrollPolicy.h) and the anchored zoom commands
+// ============================================================================
+
+namespace {
+
+// The macOS axis swap, reproduced exactly: the OS moves a Shift-held wheel gesture into deltaX and
+// leaves deltaY at 0. Any branch that reads deltaY alone receives nothing at all.
+juce::MouseWheelDetails wheelOnX(float deltaX) {
+    juce::MouseWheelDetails wheel{}; // value-initialised: the struct has no default member initialisers
+    wheel.deltaX = deltaX;
+    wheel.deltaY = 0.0f;
+    return wheel;
+}
+
+juce::MouseWheelDetails wheelOnY(float deltaY) {
+    juce::MouseWheelDetails wheel{};
+    wheel.deltaY = deltaY;
+    return wheel;
+}
+
+} // namespace
+
+// THE regression this fixes: Cmd+Shift+wheel was reading wheel.deltaY, which macOS zeroes under
+// Shift, so the vertical zoom was dead on the platform it was written on. dominantWheelDelta picks
+// up whichever axis the gesture landed on.
+TEST(PianoRollWheelTest, CmdShiftWheelZoomsVerticallyEvenWhenTheGestureArrivesOnDeltaX) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+    ASSERT_DOUBLE_EQ(f.roll.getPixelsPerSemitone(), PianoRollComponent::kPixelsPerSemitone);
+
+    const int mods = juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier;
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, mods), wheelOnX(0.4f));
+    EXPECT_GT(f.roll.getPixelsPerSemitone(), PianoRollComponent::kPixelsPerSemitone)
+        << "reading deltaY alone here would have been a no-op";
+
+    // And the opposite gesture cancels it exactly (the factor is exponential in the delta).
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, mods), wheelOnX(-0.4f));
+    EXPECT_NEAR(f.roll.getPixelsPerSemitone(), PianoRollComponent::kPixelsPerSemitone, 1.0e-9);
+
+    EXPECT_DOUBLE_EQ(f.state.pixelsPerBeat, 40.0) << "a vertical zoom never touches the shared view state";
+}
+
+// Same robustness for the horizontal-zoom branch: it is chosen by the modifier, so it must not care
+// which axis carried the gesture either.
+TEST(PianoRollWheelTest, CmdWheelZoomsHorizontallyEvenWhenTheGestureArrivesOnDeltaX) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 4.0, 8.0, "Clip");
+    f.open(clipId);
+
+    const float anchorX = 300.0f;
+    const double beatUnderCursor = f.roll.xToBeat((double)anchorX);
+    f.roll.mouseWheelMove(leftClick(f.roll, {anchorX, 90.0f}, juce::ModifierKeys::commandModifier), wheelOnX(0.5f));
+
+    EXPECT_GT(f.roll.getPixelsPerBeat(), 40.0);
+    EXPECT_NEAR(f.roll.xToBeat((double)anchorX), beatUnderCursor, 1.0e-9)
+        << "still anchored on the beat under the cursor";
+}
+
+// Plain wheel = pitch scroll. Natural (the default) matches what a juce::Viewport does with the same
+// gesture: firstVisiblePitch_ is the TOP row's pitch, so scrolling towards the top of the content
+// RAISES it. setScrollInverted flips exactly that, and nothing else.
+TEST(PianoRollWheelTest, PitchScrollFollowsTheGestureByDefaultAndFlipsWhenInverted) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+    ASSERT_FALSE(f.roll.isScrollInverted()) << "natural is the default";
+
+    const int base = f.roll.getFirstVisiblePitchForTest();
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}), wheelOnY(0.5f));
+    const int natural = f.roll.getFirstVisiblePitchForTest();
+    EXPECT_GT(natural, base) << "a +deltaY gesture scrolls towards HIGHER pitches";
+
+    // Undo it, then run the identical gesture inverted: it must land the same distance the other way.
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}), wheelOnY(-0.5f));
+    ASSERT_EQ(f.roll.getFirstVisiblePitchForTest(), base);
+
+    f.roll.setScrollInverted(true);
+    EXPECT_TRUE(f.roll.isScrollInverted());
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}), wheelOnY(0.5f));
+    const int inverted = f.roll.getFirstVisiblePitchForTest();
+    EXPECT_LT(inverted, base) << "the same gesture now scrolls the other way";
+    EXPECT_EQ(base - inverted, natural - base) << "and by exactly the same number of rows";
+}
+
+// Shift+wheel (and a trackpad's own deltaX) = horizontal scroll, through the roll's OWN scroll
+// origin. Same natural-by-default / invert-on-request contract as the pitch axis.
+TEST(PianoRollWheelTest, HorizontalScrollFollowsTheGestureByDefaultAndFlipsWhenInverted) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 4.0, 16.0, "Clip");
+    f.open(clipId); // 40 px/beat, beat 4 at the gutter
+    ASSERT_DOUBLE_EQ(f.roll.getFirstVisibleBeat(), 4.0);
+
+    // 200 px per wheel unit at 40 px/beat -> 5 beats per unit, so half a unit is 2.5 beats.
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, juce::ModifierKeys::shiftModifier), wheelOnY(-0.5f));
+    EXPECT_NEAR(f.roll.getFirstVisibleBeat(), 6.5, 1.0e-9) << "a -delta gesture scrolls the view RIGHT";
+    EXPECT_DOUBLE_EQ(f.state.firstVisibleBeat, 0.0) << "the lanes behind the roll keep their own scroll";
+
+    f.roll.setScrollInverted(true);
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}, juce::ModifierKeys::shiftModifier), wheelOnY(-0.5f));
+    EXPECT_NEAR(f.roll.getFirstVisibleBeat(), 4.0, 1.0e-9) << "the same gesture now scrolls the view LEFT";
+
+    // A bare trackpad deltaX (no Shift at all) is the same branch and obeys the same flag.
+    f.roll.setScrollInverted(false);
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}), wheelOnX(-0.5f));
+    EXPECT_NEAR(f.roll.getFirstVisibleBeat(), 6.5, 1.0e-9);
+    f.roll.setScrollInverted(true);
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}), wheelOnX(-0.5f));
+    EXPECT_NEAR(f.roll.getFirstVisibleBeat(), 4.0, 1.0e-9);
+}
+
+// zoomHorizontal is the command-friendly form of the Cmd+wheel zoom: same anchored math, anchored on
+// the view centre instead of the cursor.
+TEST(PianoRollZoomApiTest, ZoomHorizontalKeepsTheCentreBeatAndClampsAtBothEnds) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 4.0, 32.0, "Clip");
+    f.open(clipId, /*pixelsPerBeat*/ 40.0);
+
+    // 900 px wide, 44 of them the keys gutter -> the grid's centre sits at x == 44 + 428.
+    const double centreX = (double)PianoRollComponent::kKeysColumnWidth + (900.0 - 44.0) * 0.5;
+    const double centreBeat = f.roll.xToBeat(centreX);
+
+    int viewChanges = 0;
+    f.roll.onHorizontalViewChanged = [&] { ++viewChanges; };
+
+    f.roll.zoomHorizontal(2.0);
+    EXPECT_DOUBLE_EQ(f.roll.getPixelsPerBeat(), 80.0);
+    EXPECT_NEAR(f.roll.xToBeat(centreX), centreBeat, 1.0e-9) << "the centre beat is the zoom's fixed point";
+    EXPECT_GT(viewChanges, 0) << "the ruler mirrors the roll's mapping, so it has to be told";
+
+    f.roll.zoomHorizontal(0.5);
+    EXPECT_DOUBLE_EQ(f.roll.getPixelsPerBeat(), 40.0) << "equal-and-opposite factors cancel";
+    EXPECT_NEAR(f.roll.xToBeat(centreX), centreBeat, 1.0e-9);
+
+    // A factor that cannot mean anything is ignored rather than clamped to something.
+    f.roll.zoomHorizontal(0.0);
+    f.roll.zoomHorizontal(-2.0);
+    f.roll.zoomHorizontal(std::nan(""));
+    EXPECT_DOUBLE_EQ(f.roll.getPixelsPerBeat(), 40.0);
+
+    for (int i = 0; i < 20; ++i)
+        f.roll.zoomHorizontal(4.0);
+    EXPECT_DOUBLE_EQ(f.roll.getPixelsPerBeat(), TimelineViewState::kMaxPixelsPerBeat);
+
+    for (int i = 0; i < 40; ++i)
+        f.roll.zoomHorizontal(0.25);
+    EXPECT_DOUBLE_EQ(f.roll.getPixelsPerBeat(), TimelineViewState::kMinPixelsPerBeat);
+}
+
+TEST(PianoRollZoomApiTest, ZoomVerticalKeepsTheCentrePitchAndClampsAtBothEnds) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+    ASSERT_DOUBLE_EQ(f.roll.getPixelsPerSemitone(), PianoRollComponent::kPixelsPerSemitone);
+
+    // 160 px tall, 20 of them the header -> the grid's centre row sits at y == 20 + 70.
+    const int centreY = PianoRollComponent::kHeaderHeight + (160 - PianoRollComponent::kHeaderHeight) / 2;
+    const int centrePitch = f.roll.pitchForY(centreY);
+
+    f.roll.zoomVertical(2.0);
+    EXPECT_DOUBLE_EQ(f.roll.getPixelsPerSemitone(), 20.0);
+    // firstVisiblePitch_ is an int, so the anchor holds to within one row by design — the same
+    // tolerance the wheel and pinch zooms accept.
+    EXPECT_LE(std::abs(f.roll.pitchForY(centreY) - centrePitch), 1) << "the centre pitch stays put";
+
+    f.roll.zoomVertical(0.0);
+    f.roll.zoomVertical(-2.0);
+    f.roll.zoomVertical(std::nan(""));
+    EXPECT_DOUBLE_EQ(f.roll.getPixelsPerSemitone(), 20.0) << "a meaningless factor is ignored";
+
+    for (int i = 0; i < 20; ++i)
+        f.roll.zoomVertical(2.0);
+    EXPECT_DOUBLE_EQ(f.roll.getPixelsPerSemitone(), PianoRollComponent::kMaxPixelsPerSemitone);
+
+    for (int i = 0; i < 40; ++i)
+        f.roll.zoomVertical(0.5);
+    EXPECT_DOUBLE_EQ(f.roll.getPixelsPerSemitone(), PianoRollComponent::kMinPixelsPerSemitone);
+
+    EXPECT_DOUBLE_EQ(f.state.pixelsPerBeat, 40.0) << "vertical zoom is the roll's alone";
+    EXPECT_FALSE(f.undo.canUndo()) << "every zoom here is view-only";
 }

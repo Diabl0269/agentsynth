@@ -1,7 +1,13 @@
 #include "PianoRollComponent.h"
 #include "../AppUndoManager.h"
+#include "../ShortcutManager.h"
 #include "../Transport/TransportService.h"
+#include "ScrollPolicy.h"
 #include "Theme/AppLookAndFeel.h"
+// For the SHARED three-level grid colour policy (GridLineLevel / gridLineColourFor /
+// gridLevelIsReadable). The lane header is where it lives because the timeline's own vertical grid
+// is painted by TimelinePanelComponent over that component's rect — see the comment block there.
+#include "TimelineClipLaneArea.h"
 #include "ToolCursors.h"
 #include <algorithm>
 #include <cmath>
@@ -20,9 +26,21 @@ constexpr double kZoomWheelSensitivity = 2.0;
 constexpr double kScrollPixelsPerWheelUnit = 200.0;
 constexpr double kPitchScrollSemitonesPerWheelUnit = 3.0;
 
-// Below this spacing a level of gridlines is dropped entirely — the same adaptive-density idea the
-// panel's own bar/beat grid uses, applied per level (bars, beats, snap division).
-constexpr double kMinGridLinePixels = 3.0;
+// The per-level gridline density guard now lives with the rest of the grid's colour/visibility
+// policy in TimelineClipLaneArea.h (synth::ui::kMinGridLinePixels / gridLevelIsReadable), shared
+// with the surface that paints the timeline lanes' grid so the two can never disagree about when a
+// level is too dense to read.
+
+// ---- Default surface-key bindings (used when no ShortcutManager is installed) ----
+// One table so the fallbacks and the ShortcutManager action ids sit side by side and cannot drift:
+// every entry is BOTH the id keyPressed() resolves and the key it falls back to. A sibling phase
+// adds the same ids (and the same defaults) to ShortcutManager::resetToDefaults(); nothing here
+// requires that to have happened, because getBinding() answers an unknown id with an invalid
+// KeyPress and an invalid binding simply matches nothing.
+juce::KeyPress plainKey(int keyCode) noexcept { return juce::KeyPress(keyCode, juce::ModifierKeys::noModifiers, 0); }
+juce::KeyPress modKey(int keyCode, int modifierFlags) noexcept {
+    return juce::KeyPress(keyCode, juce::ModifierKeys(modifierFlags), 0);
+}
 
 bool isBlackKeyPitchClass(int pitchClass) noexcept {
     switch (pitchClass) {
@@ -316,10 +334,10 @@ void PianoRollComponent::paint(juce::Graphics& g) {
 
 PianoRollComponent::LineRange PianoRollComponent::visibleLineRange(double spacingBeats) const noexcept {
     LineRange range;
-    if (!std::isfinite(spacingBeats) || spacingBeats <= 0.0)
+    // The shared density guard: too dense to read means this level is dropped entirely, never
+    // drawn as a wall of touching pixels (see gridLevelIsReadable).
+    if (!gridLevelIsReadable(spacingBeats, rollView_.pixelsPerBeat))
         return range;
-    if (spacingBeats * rollView_.pixelsPerBeat < kMinGridLinePixels)
-        return range; // too dense to read — this level is dropped entirely
 
     const auto grid = gridRegion();
     if (grid.isEmpty())
@@ -337,15 +355,21 @@ int PianoRollComponent::getGridLineCountForTest(double spacingBeats) const noexc
     return visibleLineRange(spacingBeats).count();
 }
 
-void PianoRollComponent::paintGridLines(juce::Graphics& g, juce::Colour lineColour) {
+void PianoRollComponent::paintGridLines(juce::Graphics& g, juce::Colour lineColour, juce::Colour background) {
     const auto grid = gridRegion();
     const float top = (float)grid.getY();
     const float bottom = (float)grid.getBottom();
 
     // Faintest level first so a bar line always wins a pixel it shares with a beat or sub-beat line.
-    const auto drawLevel = [&](double spacingBeats, float alpha) {
+    // Every level's colour comes from the ONE shared policy (TimelineClipLaneArea.h) rather than a
+    // local alpha, so bar >= beat >= subdivision holds here and on the lanes by construction, and
+    // the sub-beat level is a readable hint rather than the near-invisible hairline it used to be on
+    // dark themes.
+    const auto drawLevel = [&](double spacingBeats, GridLineLevel level) {
         const auto range = visibleLineRange(spacingBeats);
-        g.setColour(lineColour.withAlpha(alpha));
+        if (range.count() == 0)
+            return;
+        g.setColour(gridLineColourFor(level, lineColour, background));
         for (long long i = range.first; i <= range.last; ++i) {
             const int x = (int)std::llround(beatToX((double)i * spacingBeats));
             if (x < grid.getX() || x > grid.getRight())
@@ -354,11 +378,15 @@ void PianoRollComponent::paintGridLines(juce::Graphics& g, juce::Colour lineColo
         }
     };
 
+    // BEAT lines are drawn unconditionally (subject only to the density guard), including when the
+    // snap division is COARSER than a beat — Snap::Bar/Whole/Half must not cost the user the beat
+    // grid they read tempo from. The subdivision level is the snap division and only exists when it
+    // is finer than a beat; visibleLineRange drops it when its lines would land under ~3 px apart.
     const double division = currentGridBeats(); // 0.0 == Snap::Off: no sub-beat level to draw
     if (division > 0.0 && division < 1.0)
-        drawLevel(division, 0.14f);
-    drawLevel(1.0, 0.30f);
-    drawLevel(currentBeatsPerBar(), 0.75f);
+        drawLevel(division, GridLineLevel::Subdivision);
+    drawLevel(1.0, GridLineLevel::Beat);
+    drawLevel(currentBeatsPerBar(), GridLineLevel::Bar);
 }
 
 void PianoRollComponent::paintGrid(juce::Graphics& g) {
@@ -392,9 +420,11 @@ void PianoRollComponent::paintGrid(juce::Graphics& g) {
         g.drawHorizontalLine(y, 0.0f, (float)width);
     }
 
-    // Vertical lines at the CURRENT snap division (faint), beats (medium) and bars (strong) — pure
-    // state, redrawn whenever the snap selector changes because the panel repaints us then.
-    paintGridLines(g, rowSep);
+    // Vertical lines at the CURRENT snap division (lightest), beats (medium) and bars (strongest) —
+    // pure state, redrawn whenever the snap selector changes because the panel repaints us then.
+    // dimColour is bg0, the same fill paint() puts down behind everything, and is what the shared
+    // policy contrasts the lines against.
+    paintGridLines(g, rowSep, dimColour);
 
     const auto* clip = doc_->getClip(clipId_);
     if (clip == nullptr)
@@ -1867,37 +1897,39 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
     const auto pos = e.getPosition();
 
     if (command && shift) {
-        // Vertical zoom, keeping the pitch under the cursor put. firstVisiblePitch_ is an int, so
-        // the anchor holds to within one row — enough for a wheel gesture.
-        const double rowsAbove = ((double)pos.y - (double)kHeaderHeight) / pixelsPerSemitone_;
-        const double anchorPitch = (double)firstVisiblePitch_ - rowsAbove;
-        setPixelsPerSemitone(pixelsPerSemitone_ * std::exp((double)wheel.deltaY * kZoomWheelSensitivity));
-        const double newRowsAbove = ((double)pos.y - (double)kHeaderHeight) / pixelsPerSemitone_;
-        firstVisiblePitch_ = juce::jlimit(0, 127, (int)std::llround(anchorPitch + newRowsAbove));
-        repaint();
+        // Vertical zoom. The amount comes from dominantWheelDelta, NOT from wheel.deltaY: macOS
+        // folds a Shift-held wheel gesture into deltaX, so reading deltaY here meant this branch
+        // received exactly 0.0 and the vertical zoom was dead on the platform it was written on.
+        zoomVerticalAroundY(std::exp((double)dominantWheelDelta(wheel) * kZoomWheelSensitivity), (double)pos.y);
         return;
     }
 
     if (command) {
         // Horizontal zoom around the beat under the cursor, through the roll's OWN mapping — the
         // shared TimelineViewState must not move (the lanes behind us keep their own zoom). Same
-        // exponential factor the panel's ruler zoom uses, so the two feel identical.
-        const double anchorGridX = std::max(0.0, (double)pos.x - (double)kKeysColumnWidth);
-        rollView_.zoomAroundX(std::exp((double)wheel.deltaY * kZoomWheelSensitivity), anchorGridX);
-        repaint();
-        if (onHorizontalViewChanged)
-            onHorizontalViewChanged();
+        // exponential factor the panel's ruler zoom uses, so the two feel identical. Same dominant-
+        // axis read as above: a modifier-decided branch must never depend on which axis the OS
+        // parked the gesture on.
+        zoomHorizontalAroundX(std::exp((double)dominantWheelDelta(wheel) * kZoomWheelSensitivity),
+                              std::max(0.0, (double)pos.x - (double)kKeysColumnWidth));
         return;
     }
 
-    // Shift+wheel is horizontal scroll; so is a trackpad's own horizontal delta. Some platforms
-    // already swap the axes under Shift, so take whichever delta actually carries the gesture.
+    // Shift+wheel is horizontal scroll; so is a trackpad's own horizontal delta.
     const bool horizontal = shift || std::abs(wheel.deltaX) > std::abs(wheel.deltaY);
     if (horizontal) {
-        const double delta =
-            std::abs(wheel.deltaX) > std::abs(wheel.deltaY) ? (double)wheel.deltaX : (double)wheel.deltaY;
-        if (delta != 0.0) {
-            rollView_.scrollBeats(-delta * kScrollPixelsPerWheelUnit / rollView_.pixelsPerBeat);
+        // Which axis the gesture ARRIVED on, not "the dominant delta": a Shift+wheel the OS left on
+        // deltaY and a trackpad's own sideways deltaX are both horizontal scrolls, and either one is
+        // the amount to move by. Spelled identically to TimelinePanelComponent::mouseWheelMove's
+        // horizontal branch on purpose — the roll and the lanes must answer the same gesture the
+        // same way, and this is the one line where they could silently drift.
+        const float delta = std::abs(wheel.deltaX) > std::abs(wheel.deltaY) ? wheel.deltaX : wheel.deltaY;
+        // scrollAmount is in SCREEN orientation: +x means the view moves RIGHT. Time runs left to
+        // right here, so "the view moves right" is literally a larger firstVisibleBeat — this axis
+        // needs no mapping of its own.
+        const double amountPx = (double)scrollAmount(delta, scrollInverted_) * kScrollPixelsPerWheelUnit;
+        if (amountPx != 0.0) {
+            rollView_.scrollBeats(amountPx / rollView_.pixelsPerBeat);
             repaint();
             if (onHorizontalViewChanged)
                 onHorizontalViewChanged();
@@ -1906,48 +1938,111 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
     }
 
     if (wheel.deltaY != 0.0f) {
-        const int deltaRows = (int)std::llround(-(double)wheel.deltaY * kPitchScrollSemitonesPerWheelUnit);
-        firstVisiblePitch_ = juce::jlimit(0, 127, firstVisiblePitch_ + deltaRows);
-        repaint();
+        // The pitch axis DOES need a mapping, and ScrollPolicy.h asks for it to be spelled out
+        // here: scrollAmount is screen-oriented (+y = the view moves DOWN), while
+        // firstVisiblePitch_ is the pitch of the TOP row and pitch grows UPWARD. A view moving down
+        // therefore DECREASES it — hence the negation. Net effect at the default (natural): a
+        // gesture that a juce::Viewport would answer by scrolling towards the top of its content
+        // shows higher pitches here, which is the same thing.
+        const double amountY = (double)scrollAmount(dominantWheelDelta(wheel), scrollInverted_);
+        const int deltaRows = (int)std::llround(-amountY * kPitchScrollSemitonesPerWheelUnit);
+        // Gated on the CLAMPED result, not on the delta: a wheel that keeps pushing past pitch 127
+        // (or a gesture too small to round to a whole row) must cost zero repaints.
+        const int next = juce::jlimit(0, 127, firstVisiblePitch_ + deltaRows);
+        if (next != firstVisiblePitch_) {
+            firstVisiblePitch_ = next;
+            repaint();
+        }
     }
 }
 
-void PianoRollComponent::mouseMagnify(const juce::MouseEvent& e, float scaleFactor) {
-    // Trackpad pinch, same pair as the panel's: plain = horizontal zoom around the pinch point
-    // (through the roll's OWN mapping), Shift = vertical (pixels-per-semitone) zoom.
-    if (!std::isfinite(scaleFactor) || scaleFactor <= 0.0f)
+//==============================================================================
+// ---- Anchored zoom (one implementation; the wheel, the pinch and the public API share it) ----
+
+void PianoRollComponent::zoomHorizontalAroundX(double factor, double anchorGridX) {
+    if (!std::isfinite(factor) || factor <= 0.0)
         return;
-    const auto pos = e.getPosition();
-    if (e.mods.isShiftDown()) {
-        const double rowsAbove = ((double)pos.y - (double)kHeaderHeight) / pixelsPerSemitone_;
-        const double anchorPitch = (double)firstVisiblePitch_ - rowsAbove;
-        setPixelsPerSemitone(pixelsPerSemitone_ * (double)scaleFactor);
-        const double newRowsAbove = ((double)pos.y - (double)kHeaderHeight) / pixelsPerSemitone_;
-        firstVisiblePitch_ = juce::jlimit(0, 127, (int)std::llround(anchorPitch + newRowsAbove));
-        repaint();
-        return;
-    }
-    rollView_.zoomAroundX((double)scaleFactor, std::max(0.0, (double)pos.x - (double)kKeysColumnWidth));
+    rollView_.zoomAroundX(factor, anchorGridX);
     repaint();
     if (onHorizontalViewChanged)
         onHorizontalViewChanged();
 }
 
+void PianoRollComponent::zoomVerticalAroundY(double factor, double anchorY) {
+    if (!std::isfinite(factor) || factor <= 0.0 || !std::isfinite(anchorY))
+        return;
+    // firstVisiblePitch_ is an int, so the anchor holds to within one row — enough for a wheel
+    // gesture, a pinch, or a zoom command.
+    const double rowsAbove = (anchorY - (double)kHeaderHeight) / pixelsPerSemitone_;
+    const double anchorPitch = (double)firstVisiblePitch_ - rowsAbove;
+    setPixelsPerSemitone(pixelsPerSemitone_ * factor);
+    const double newRowsAbove = (anchorY - (double)kHeaderHeight) / pixelsPerSemitone_;
+    firstVisiblePitch_ = juce::jlimit(0, 127, (int)std::llround(anchorPitch + newRowsAbove));
+    repaint();
+}
+
+void PianoRollComponent::zoomHorizontal(double factor) {
+    // The view centre, expressed in the same grid-relative coordinate the Cmd+wheel branch hands
+    // over (x - kKeysColumnWidth), so both paths run identical anchor math.
+    zoomHorizontalAroundX(factor, (double)gridRegion().getWidth() * 0.5);
+}
+
+void PianoRollComponent::zoomVertical(double factor) {
+    const auto grid = gridRegion();
+    zoomVerticalAroundY(factor, (double)grid.getY() + (double)grid.getHeight() * 0.5);
+}
+
+void PianoRollComponent::mouseMagnify(const juce::MouseEvent& e, float scaleFactor) {
+    // Trackpad pinch, same pair as the panel's: plain = horizontal zoom around the pinch point
+    // (through the roll's OWN mapping), Shift = vertical (pixels-per-semitone) zoom.
+    // A pinch carries no wheel deltas at all, so there is no axis to disambiguate here — it goes
+    // straight to the same anchored-zoom helpers the Cmd+wheel branches use.
+    if (!std::isfinite(scaleFactor) || scaleFactor <= 0.0f)
+        return;
+    const auto pos = e.getPosition();
+    if (e.mods.isShiftDown()) {
+        zoomVerticalAroundY((double)scaleFactor, (double)pos.y);
+        return;
+    }
+    zoomHorizontalAroundX((double)scaleFactor, std::max(0.0, (double)pos.x - (double)kKeysColumnWidth));
+}
+
 //==============================================================================
+bool PianoRollComponent::matchesAction(const juce::KeyPress& key, const juce::String& actionId,
+                                       const juce::KeyPress& fallback) const {
+    if (shortcuts_ == nullptr)
+        return key == fallback;
+    const auto binding = shortcuts_->getBinding(actionId);
+    // An invalid binding is "this action has no key": either the user cleared it, or this build's
+    // ShortcutManager has never heard of the id (getBinding answers an unknown id with a
+    // default-constructed KeyPress). Falling back to `fallback` here would resurrect a key the user
+    // deliberately unbound, so it deliberately does not.
+    return binding.isValid() && key == binding;
+}
+
 bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {
-    // Q = toggle grid magnetism; Shift+Q = one-shot quantise (same pair as the header button's
-    // click / Shift+click). Handled here so it works while the roll has focus; the panel handles
-    // the same key for every other focus target inside the timeline. Matched on the key CODE
-    // (JUCE letter key codes are the uppercase character), so the Shift variant still matches.
-    if (key.getKeyCode() == 'Q' || key.getKeyCode() == 'q') {
+    // Shift+Q = one-shot quantise; Q = toggle grid magnetism (same pair as the header button's
+    // Shift+click / click). Handled here so both work while the roll has focus; the panel handles
+    // the same keys for every other focus target inside the timeline.
+    //
+    // Quantise is tested FIRST because it is the more specific of the two: with the defaults the
+    // snap toggle is a bare Q and quantise is Shift+Q, and a user is free to rebind them into any
+    // other pair. The snap toggle shares "timelineSnapToggle" with the panel — one binding, one key,
+    // whichever surface has focus.
+    if (matchesAction(key, "pianoRollQuantise", modKey('q', juce::ModifierKeys::shiftModifier))) {
         flashQuantiseButton();
-        if (key.getModifiers().isShiftDown())
-            performQuantise();
-        else
-            toggleSnap();
+        performQuantise();
+        return true;
+    }
+    if (matchesAction(key, "timelineSnapToggle", plainKey('q'))) {
+        flashQuantiseButton();
+        toggleSnap();
         return true;
     }
 
+    // Escape and Delete/Backspace are FIXED, never manager-resolved: "cancel" and "delete the
+    // selection" are platform conventions every surface in the app answers identically, not app
+    // shortcuts a user would expect to find in a rebinding list.
     if (key == juce::KeyPress::escapeKey) {
         if (!selection_.isEmpty()) {
             selection_.clear();
@@ -1977,31 +2072,42 @@ bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {
         return true;
     }
 
-    // Arrow keys act on the SELECTION and nothing else: with nothing selected they fall through, so
-    // the panel (and the graph behind it) keep whatever those keys mean there. Plain/Shift arrows
-    // EDIT the selected notes (nudge, transpose); Alt+Left/Right only MOVES the selection between
-    // notes. Matched on the key CODE because juce::KeyPress::operator==(int) also requires no
-    // modifiers, which would miss Shift+Up. Digit keys are deliberately NOT handled here at all —
-    // tool switching belongs to the panel (see setActiveTool).
-    const int code = key.getKeyCode();
-    const auto mods = key.getModifiers();
-    if (code == juce::KeyPress::leftKey || code == juce::KeyPress::rightKey) {
-        // Alt+Left/Right NAVIGATES between notes instead of moving them — selection only, so it
-        // touches neither the doc nor the undo stack (see selectAdjacentNote for the anchor rule and
-        // for why Alt rather than plain, Shift or Cmd).
-        if (mods.isAltDown())
-            return selectAdjacentNote(code == juce::KeyPress::rightKey);
-        return nudgeSelectedNotes(code == juce::KeyPress::rightKey ? 1 : -1);
-    }
-    if (code == juce::KeyPress::upKey || code == juce::KeyPress::downKey) {
-        // Alt+Up/Down is RESERVED: left unhandled (rather than folded into the transpose) so the
-        // combination is still free for whatever the vertical half of navigation turns out to be.
-        if (mods.isAltDown())
-            return false;
-        // Shift is the octave jump, the same 12-semitone convention every DAW uses.
-        const int step = mods.isShiftDown() ? 12 : 1;
-        return transposeSelectedNotes(code == juce::KeyPress::upKey ? step : -step);
-    }
+    // The rest of the surface's keys act on the SELECTION and nothing else: with nothing selected
+    // they fall through (return false), so the panel — and the graph behind it — keep whatever those
+    // keys mean there. Nudge/transpose EDIT the selected notes; the two navigation actions only MOVE
+    // the selection between notes.
+    //
+    // Each one is resolved through matchesAction, so the defaults listed below are exactly that:
+    // defaults. The order matters only where one default is a modified form of another (Shift+Up vs
+    // Up, Alt+Left vs Left) — the more specific action is tested first so a user who rebinds only
+    // one of a pair cannot end up with the other swallowing it. juce::KeyPress equality is exact on
+    // modifiers, which is what keeps Left, Shift+Left and Alt+Left three separate actions.
+    //
+    // Alt+Up/Down stays RESERVED: no action claims it, so it falls through for whatever the vertical
+    // half of navigation turns out to be. Digit keys are deliberately absent too — tool switching
+    // belongs to the panel (see setActiveTool).
+    if (matchesAction(key, "pianoRollNavNextNote", modKey(juce::KeyPress::rightKey, juce::ModifierKeys::altModifier)))
+        return selectAdjacentNote(true);
+    if (matchesAction(key, "pianoRollNavPrevNote", modKey(juce::KeyPress::leftKey, juce::ModifierKeys::altModifier)))
+        return selectAdjacentNote(false);
+
+    if (matchesAction(key, "pianoRollNudgeRight", plainKey(juce::KeyPress::rightKey)))
+        return nudgeSelectedNotes(1);
+    if (matchesAction(key, "pianoRollNudgeLeft", plainKey(juce::KeyPress::leftKey)))
+        return nudgeSelectedNotes(-1);
+
+    // Shift is the octave jump, the same 12-semitone convention every DAW uses — a separate action
+    // rather than a modifier read off the plain one, so it can be rebound on its own.
+    if (matchesAction(key, "pianoRollTransposeOctaveUp",
+                      modKey(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier)))
+        return transposeSelectedNotes(12);
+    if (matchesAction(key, "pianoRollTransposeOctaveDown",
+                      modKey(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier)))
+        return transposeSelectedNotes(-12);
+    if (matchesAction(key, "pianoRollTransposeUp", plainKey(juce::KeyPress::upKey)))
+        return transposeSelectedNotes(1);
+    if (matchesAction(key, "pianoRollTransposeDown", plainKey(juce::KeyPress::downKey)))
+        return transposeSelectedNotes(-1);
 
     return false;
 }

@@ -12,7 +12,8 @@
 #include <utility>
 #include <vector>
 
-class AppUndoManager; // Forward declaration (Source/AppUndoManager.h)
+class AppUndoManager;  // Forward declaration (Source/AppUndoManager.h)
+class ShortcutManager; // Forward declaration (Source/ShortcutManager.h)
 
 namespace synth {
 class TransportService; // Forward declaration (Source/Transport/TransportService.h)
@@ -104,6 +105,12 @@ public:
     // plain wheel      -> vertical (pitch) scroll
     // Nothing bubbles to the panel: the roll's zoom/scroll are its own, so the shared
     // TimelineViewState must not move when the wheel lands here.
+    //
+    // EVERY branch reads its amount through synth::ui::ScrollPolicy (ScrollPolicy.h) rather than a
+    // raw delta member, for the two reasons spelled out there: macOS folds Shift+wheel into
+    // `deltaX`, so the modifier-decided branches (both zooms) must take the DOMINANT axis or go
+    // silently dead under Shift; and the plain-scroll branches route their sign through
+    // scrollAmount() so "natural" here means exactly what it means in a juce::Viewport.
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
     // Trackpad pinch: plain = horizontal zoom around the pinch point, Shift = vertical zoom —
     // the same pair TimelinePanelComponent::mouseMagnify binds for the lanes.
@@ -137,6 +144,41 @@ public:
     // Only consulted for Snap::Bar's beatsPerBar, same reasoning as
     // TimelineClipLaneArea::setTransport.
     void setTransport(synth::TransportService* transport) noexcept { transport_ = transport; }
+
+    /** The user's keyboard bindings for this surface's OWN keys (nudge, transpose, note navigation,
+     *  quantise, snap toggle). Non-owning and may stay null — with no manager installed keyPressed()
+     *  uses the hardcoded defaults below, which is what every headless test and every embedding that
+     *  has no settings store gets.
+     *
+     *  Resolution is strict when a manager IS installed: an action whose binding is unset or invalid
+     *  (including an id this ShortcutManager has never heard of) has NO key, rather than quietly
+     *  falling back to its default. Mixing the two would mean a user who deliberately cleared a
+     *  binding still had the factory key working, which is exactly the bug rebinding exists to fix.
+     *
+     *  Escape and Delete/Backspace are NOT resolved through here — they are platform conventions
+     *  (cancel, delete the selection), not app shortcuts, and every surface in the app answers them
+     *  identically. The tool DIGITS are not here either: they belong to the panel (see
+     *  setActiveTool). */
+    void setShortcutManager(const ShortcutManager* manager) noexcept { shortcuts_ = manager; }
+    const ShortcutManager* getShortcutManager() const noexcept { return shortcuts_; }
+
+    /** The app-level "invert my scroll wheel" preference, stacked ON TOP of the OS setting (which
+     *  JUCE has already folded into the deltas — see ScrollPolicy.h). false, the default, is
+     *  NATURAL: identical to what a juce::Viewport does with the same gesture, on both axes. */
+    void setScrollInverted(bool inverted) noexcept { scrollInverted_ = inverted; }
+    bool isScrollInverted() const noexcept { return scrollInverted_; }
+
+    /** Zoom the roll's own horizontal mapping by `factor` (> 1 in, < 1 out) around the CENTRE of the
+     *  visible grid, using the same anchored math the Cmd+wheel branch uses — so a menu/keyboard
+     *  zoom and a wheel zoom land in the same place, just with a different anchor. Clamped to
+     *  TimelineViewState's pixels-per-beat bounds. View-only: no doc mutation, no undo step. A
+     *  non-finite or non-positive factor is ignored. */
+    void zoomHorizontal(double factor);
+
+    /** The vertical equivalent: scales pixelsPerSemitone_ (clamped to [kMinPixelsPerSemitone,
+     *  kMaxPixelsPerSemitone]) while keeping the pitch at the grid's vertical centre put. Same
+     *  view-only, no-undo contract. */
+    void zoomVertical(double factor);
 
     // ---- Edit tools (Cubase-style; see EditTool.h) ----
 
@@ -475,6 +517,24 @@ private:
     // it already is. Vertical scroll is deliberately not touched — see the definition.
     void scrollNoteIntoView(const synth::MidiNote& note);
 
+    // ---- Rebindable surface keys ----
+    // True when `key` is what the user has bound to `actionId`. With no ShortcutManager installed
+    // this is plain equality against `fallback` (the hardcoded default). With one installed the
+    // manager is the ONLY source: an unset/unknown/invalid binding matches nothing, and `fallback`
+    // is not consulted — see setShortcutManager for why the two are never mixed.
+    //
+    // juce::KeyPress::operator== is the matcher rather than a keycode comparison, so the modifiers
+    // have to agree exactly (which is what makes Left, Shift+Left and Alt+Left three different
+    // actions) while letter keys still compare case-insensitively (so Shift+Q matches a 'q'
+    // binding).
+    bool matchesAction(const juce::KeyPress& key, const juce::String& actionId, const juce::KeyPress& fallback) const;
+
+    // ---- Anchored zoom, shared by the wheel, the pinch and the public zoom API ----
+    // `anchorGridX` is measured from the GRID's left edge (x - kKeysColumnWidth), which is the
+    // coordinate rollView_ maps; `anchorY` is a component y.
+    void zoomHorizontalAroundX(double factor, double anchorGridX);
+    void zoomVerticalAroundY(double factor, double anchorY);
+
     void performQuantise();
     void flashQuantiseButton();
     void timerCallback() override; // one-shot: ends the quantise flash and stops itself
@@ -483,7 +543,11 @@ private:
     void paintKeysColumn(juce::Graphics& g);
     void paintHeader(juce::Graphics& g);
     void paintGrid(juce::Graphics& g);
-    void paintGridLines(juce::Graphics& g, juce::Colour lineColour);
+    // `lineColour` is the theme token the grid is derived from (Colors::border) and `background` is
+    // what sits behind it (Colors::bg0) — both handed to the shared three-level colour policy
+    // (synth::ui::gridLineColourFor, in TimelineClipLaneArea.h), which is why the background is a
+    // parameter rather than something this function re-reads from the LookAndFeel.
+    void paintGridLines(juce::Graphics& g, juce::Colour lineColour, juce::Colour background);
     void paintNote(juce::Graphics& g, const synth::MidiNote& note);
     void paintPlayhead(juce::Graphics& g);
     void paintMarquee(juce::Graphics& g);
@@ -512,6 +576,11 @@ private:
     synth::TimelineDoc* doc_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
     synth::TransportService* transport_ = nullptr;
+    // Non-owning, may stay null (see setShortcutManager). const because the roll only ever READS
+    // bindings — rebinding is the Settings window's job.
+    const ShortcutManager* shortcuts_ = nullptr;
+    // App-level scroll-direction preference; false == natural == the juce::Viewport convention.
+    bool scrollInverted_ = false;
 
     synth::ClipId clipId_;
     NoteSelectionModel selection_;

@@ -6,6 +6,7 @@
 #include "EditTool.h"
 #include "TimelineViewState.h"
 #include <array>
+#include <cmath>
 #include <functional>
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -59,6 +60,77 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // OUTWARDS through onAudioFileDropped. This class never imports anything itself — it owns no
 // AssetManager and no bundle knowledge, exactly like onRelinkAudioRequested.
 namespace synth::ui {
+
+//==============================================================================
+// ---- The vertical time grid's THREE-LEVEL colour policy (shared, pure) ----
+//
+// Cubase's hierarchy: a bar line is unmistakable, a beat line is clearly there, and the current
+// snap subdivision is a quiet-but-readable hint. Before this existed each surface picked its own
+// alphas independently and the sub-beat level ended up a near-invisible hairline on every dark
+// theme — the whole reason it is a shared, testable function rather than three magic numbers at
+// three paint sites.
+//
+// It lives HERE, in the lane header, because the timeline's own vertical grid is painted by
+// TimelinePanelComponent::paint() (this component is a transparent child sitting directly over
+// that rect — see the class comment above; "no second place ever paints the grid" still holds).
+// synth::ui::PianoRollComponent, which owns its own mapping and therefore genuinely does paint its
+// own grid, includes this header for the same policy so the two surfaces can never drift.
+//
+// Nothing here is per-frame work: both painters already walk their visible line ranges from view
+// state alone, and these are constant-time colour choices made inside that existing walk.
+
+/** Which level of the time grid a vertical line belongs to, weakest to strongest. Ordered so the
+ *  enum's own ordering IS the visual hierarchy — a test can assert monotonicity by walking it. */
+enum class GridLineLevel { Subdivision = 0, Beat, Bar };
+
+/** Below this spacing a whole LEVEL of gridlines is dropped rather than drawn as a wall of
+ *  touching pixels — Cubase does exactly the same, and the alternative (drawing them anyway) is
+ *  strictly worse than no grid at all, because a solid block of subdivision lines swamps the beat
+ *  and bar lines it is supposed to sit under. 3 px is the point where two adjacent lines still read
+ *  as two lines on a 1x display. */
+constexpr double kMinGridLinePixels = 3.0;
+
+/** True when lines `spacingBeats` apart at `pixelsPerBeat` are still readable — the density guard
+ *  above. A non-positive or non-finite spacing (Snap::Off has no subdivision at all) never
+ *  draws. */
+inline bool gridLevelIsReadable(double spacingBeats, double pixelsPerBeat) noexcept {
+    if (!std::isfinite(spacingBeats) || !std::isfinite(pixelsPerBeat) || spacingBeats <= 0.0)
+        return false;
+    return spacingBeats * pixelsPerBeat >= kMinGridLinePixels;
+}
+
+/** One level's opacity. Monotonic by construction (Bar >= Beat >= Subdivision) and deliberately
+ *  well clear of zero at the bottom: the subdivision level is a HINT, not a hairline, and the bug
+ *  this replaced was a 0.14 alpha applied to a token that is itself only a shade off the
+ *  background. */
+inline float gridLineAlphaFor(GridLineLevel level) noexcept {
+    switch (level) {
+    case GridLineLevel::Subdivision:
+        return 0.28f;
+    case GridLineLevel::Beat:
+        return 0.50f;
+    case GridLineLevel::Bar:
+        return 0.85f;
+    }
+    return 0.28f;
+}
+
+/** How far a grid line is lifted from its theme token towards the background's contrasting end.
+ *  Raising alpha alone cannot fix a dark theme: `border` there is a dark grey a shade or two off
+ *  bg0/bg1, so even at alpha 1.0 it is nearly the background. Mixing halfway to the contrasting
+ *  extreme (white on a dark theme, black on a light one) is what makes the line a LINE, while
+ *  keeping the theme's own hue in it rather than introducing a new token nobody can re-skin. */
+constexpr float kGridLineContrastMix = 0.5f;
+
+/** The exact colour a grid line of `level` is drawn in.
+ *  @param base       the theme token the surface already uses for its grid (Theme::Colors::border
+ *                    on both the piano roll and the lanes) — no new token is introduced.
+ *  @param background what that surface fills behind the grid (bg0 on both), consulted only to
+ *                    decide which way "more contrast" points. */
+inline juce::Colour gridLineColourFor(GridLineLevel level, juce::Colour base, juce::Colour background) noexcept {
+    // contrasting(1.0f) is JUCE's "clearly visible against this colour" — black or white.
+    return base.interpolatedWith(background.contrasting(1.0f), kGridLineContrastMix).withAlpha(gridLineAlphaFor(level));
+}
 
 class TimelineClipLaneArea
     : public juce::Component
