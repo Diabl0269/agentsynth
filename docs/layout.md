@@ -1282,6 +1282,48 @@ With every section expanded the rows exceed any realistic panel height, so the s
 - **Rows lose the bar's width** (`getRowContentWidth()`) while it is visible, so row text and the
   snippet count never run under the thumb.
 
+### Keyboard Shortcuts settings tab mirrors this pattern
+
+`Source/UI/ShortcutsSettingsTab.h/.cpp` — the Settings "Keyboard Shortcuts" tab — grew the same
+collapsible-section idiom once its row count passed 49 (see [`shortcuts.md`](shortcuts.md)): one
+collapsible section per `ShortcutCategory`, a search field above them, and a top strip whose label
+flips between "COLLAPSE ALL"/"EXPAND ALL", deliberately lifted from `ModuleLibraryComponent` so the
+app's two collapsible lists behave identically — clickable header rows with a chevron, a
+collapsed-set keyed by the header's identity, the same strip idiom.
+
+Two things it deliberately does NOT copy from the library sidebar, both because the two components
+live in different contexts:
+
+- **No fold animation.** The library's accordion is a VBlank-driven `AnimationDriver` over a
+  hand-laid-out row list; here the rows are real child components inside a `juce::Viewport`, so
+  animating a fold would mean animating child bounds every frame for no benefit inside a modal
+  settings dialog. Collapsing is instant.
+- **No persistence of the collapse state.** This tab is constructed fresh every time the Settings
+  window opens and nothing has asked for the folds to survive that, so keeping the set in memory
+  costs no new settings key to migrate (contrast the library sidebar's `libraryCollapsedSections`
+  persistence above).
+
+**Search matches BOTH the action's description and its current binding text** ("cmd" finds every
+Cmd shortcut, "transpose" finds the piano-roll block — searching only the description would make
+the list useless for the commonest question, "what is on Shift+Q?"). An active filter FORCES a
+matching section open without touching its collapse flag (`sectionIsExpanded`), so a match can
+never be trapped inside a fold, and clearing the query restores exactly the folds the user had; a
+section with no surviving row is dropped entirely rather than left as a lone header over empty
+space (`sectionIsVisible`) — the same rule `ModuleLibraryComponent::buildRows` applies.
+
+**Row indexing is a contract, sections or no sections:** row `i` is always
+`ShortcutManager::getActionIds()[i]` — the section headers are separate widgets, never entries in
+the row vectors, and `ShortcutManager`'s action table keeps each category's ids CONTIGUOUS so a
+section is always one unbroken run (`ShortcutsSettingsTabTests` pins row `i` to `ids[i]`). One
+layout pass (`rebuildLayout()`) is what paints the rows, hit-tests the header clicks, and positions
+the child bounds, so the three can never disagree about where a row is — the same "one enumeration"
+rule `buildRows()`/`buildVisibleCables()` follow elsewhere in this doc. Group-separator hairlines
+use `kDividerAlpha = 0.10` here — drawn from the text colour at low alpha rather than a theme token,
+so they read on both light and dark themes with no token of their own — and `PreferencesSettingsTab`
+keeps its own separate constant (`0.12`, softened from an earlier `0.18` that read as table borders
+and boxed each preference in) in step with this one by comment rather than by a shared header, since
+a one-line float is not worth a dependency between two settings tabs.
+
 ---
 
 ## 14. Cable Interaction
@@ -1602,13 +1644,31 @@ persists under the `"timelineSnap"` int key (plus `"timelineSnapEnabled"` for th
 (`Metrics::timelineRulerHeight = 24`) docked at the top of the lanes region. It owns nothing: a
 `TimelineViewState&` (shared with the panel) and an optional `synth::TransportService*` (setter,
 non-owning, may be null). `paint()` reads `getPositionSnapshot()` once per frame (message thread,
-cheap) for the time signature and loop bounds, draws bar ticks/labels with adaptive density (the
-labelled-bar stride doubles until labels are `>= 40px` apart, so they never overlap; per-beat ticks
-only appear once `pixelsPerBeat >= 8`) and a bracket over `[loopStartPpq, loopEndPpq]`.
-No timer of its own: `repaint()` is called
-after one of its own interactions, or by the panel's 10 Hz poll when the time signature or loop range
-changed from elsewhere (TL5-4, below). The moving position line is the separate
-`TimelinePlayheadOverlay` drawn over it.
+cheap) for the time signature and loop bounds, and draws three adaptive-density bands as you zoom
+in — Cubase's own progression, and the SNAP division has no say in any of them (a 1/16 snap on a
+zoomed-out arrangement must not turn the strip into a grey smear):
+
+1. **far out** — bar lines + bar numbers only; the labelled-bar stride itself doubles (by powers of
+   two) until labelled bars are `>= 40px` (`kMinLabelSpacingPx`, `.cpp`-local) apart, so bar labels
+   never overlap regardless of zoom;
+2. **mid** — short, half-height beat ticks appear between the bar lines once `pixelsPerBeat >= 8`
+   (`kMinBeatTickSpacingPx`);
+3. **close in** — those beat ticks also earn a small, dim `"bar.beat"` sub-label (`"80.2"`, 1-based
+   on both halves, faded to 65% alpha and two points smaller than the bar number) once
+   `pixelsPerBeat >= 48` (`kMinBeatLabelSpacingPx`).
+
+`rulerTickPlanFor(pixelsPerBeat, beatsPerBar)` (`Source/UI/TimelineRulerComponent.h`) is the ONE
+pure decision behind bands 2–3 (`RulerTickPlan{drawBeatTicks, drawBeatLabels}`) — a label implies a
+tick by construction (a label with no tick to sit against would float), and a bar of one beat or
+fewer draws no ticks at all (there is nothing non-bar to mark). `paint()` calls it once per frame,
+never re-derives it inside the per-bar loop, and the same helper drives
+`Tests/TimelinePanelTests.cpp`'s `TimelineRulerTickPlanTest` suite directly against the two
+thresholds — deterministic and font-independent by design (no measured text width anywhere in the
+decision), so the guard means the same thing on every platform. A bracket over `[loopStartPpq,
+loopEndPpq]` completes the strip. No timer of its own: `repaint()` is called after one of its own
+interactions, or by the panel's 10 Hz poll when the time signature or loop range changed from
+elsewhere (TL5-4, below). The moving position line is the separate `TimelinePlayheadOverlay` drawn
+over it.
 
 **Two interaction zones.** The strip is split horizontally at `height / 2`
 (`TimelineRulerComponent::Zone`): the **top** half owns the loop range, the **bottom** half owns the
@@ -1653,23 +1713,88 @@ the loop half) and `paint()` tints the hovered half with `accent` at 10% alpha, 
 so the brace stays legible. `repaint()` fires only when the hovered zone actually **changes** — never
 per mouse-move pixel — and there is no timer or animation involved (§11).
 
-**Grid + wheel:** `TimelinePanelComponent::paint()` draws the same bar/beat lines directly into the
-lanes region below the ruler (bar lines at full `colors.border`, beat lines at 35% alpha — no
-dedicated grid tokens exist, and one caller didn't justify adding any). `mouseWheelMove()` is
-implemented once, on the panel, with Cubase-style bindings: **plain vertical wheel scrolls the
-track rows vertically** (`TimelineViewState::trackScrollY`, shared with the header column — a
-scrollbar drag on the header viewport writes the same value back via
-`HeaderViewport::onScrolledY`, and `syncTrackScroll()` is the one re-sync point); **Shift+wheel or
-a trackpad's own `deltaX` scrolls horizontally** (`deltaY` converted to beats at the current zoom —
-a constant *pixel* distance per wheel unit, so the same physical gesture covers less musical time
-zoomed in); **Cmd+wheel** (`mods.isCommandDown()`, already Ctrl-on-other-platforms via JUCE) zooms
-horizontally around the cursor; **Cmd+Shift+wheel** zooms vertically — it scales
-`TimelineViewState::rowHeightScale` within `[0.5, 3.0]`, which multiplies the themed row height in
-BOTH `TimelineClipLaneArea::getRowHeight()` and the panel's `layoutTrackHeaders()`, anchored so the
-row under the pointer stays put. `mouseMagnify()` (trackpad pinch — deliberate enough to need no
-modifier) maps plain pinch to horizontal zoom and Shift+pinch to vertical zoom, on the panel and
-inside the piano roll alike. JUCE bubbles an unhandled wheel event from the ruler child up to the
-panel, so both regions share identical behaviour from one implementation.
+**Grid.** `TimelinePanelComponent::paint()` draws the SAME bar/beat/subdivision hierarchy directly
+into the lanes region below the ruler, from the shared three-level policy in
+`Source/UI/TimelineClipLaneArea.h` (`GridLineLevel::{Subdivision, Beat, Bar}`,
+`gridLineColourFor`/`gridLevelIsReadable`) — `PianoRollComponent` paints its own grid from the SAME
+policy (TL5-8, below), so the two surfaces can never drift apart in what's visible at a given zoom.
+Per-level alpha is monotonic (`Subdivision` 0.28, `Beat` 0.50, `Bar` 0.85) and each line is lifted
+halfway (`kGridLineContrastMix = 0.5`) from the theme's `border` token toward the background's
+CONTRASTING colour (`background.contrasting(1.0f)` — black or white) before that alpha is applied:
+raising alpha alone can't fix a dark theme, where `border` is already only a shade or two off `bg0`,
+so even alpha 1.0 would read as barely-there; mixing toward the contrasting extreme is what makes
+the line a LINE while keeping the theme's own hue in it, with no new token to re-skin. A whole level
+is DROPPED rather than drawn as a wall of touching pixels once its spacing falls under
+`kMinGridLinePixels = 3.0` px (`gridLevelIsReadable`) — the same "no grid is better than a smear"
+call the ruler's own adaptive density makes above, and Cubase's own rule. Beat lines gate at
+`pixelsPerBeat >= 8` (`kMinBeatLinePixelsPerBeat`, `TimelinePanelComponent.cpp` — the same threshold
+the ruler's beat ticks use); the subdivision level draws only when the current snap DIVISION is
+finer than a beat, the beat level is ALSO drawn (the hierarchy stays monotonic — a subdivision may
+never outlive its parent beat level, which the ~8px/~3px gap between the two gates would otherwise
+allow), and it clears its own density guard.
+
+**Wheel, scroll direction, and keyboard zoom/grid commands.** `mouseWheelMove()` is implemented once
+on the panel (JUCE bubbles an unhandled wheel event from the ruler child up to it, so both regions
+share identical behaviour from one implementation) with Cubase-style bindings: **plain vertical
+wheel scrolls the track rows vertically** (`TimelineViewState::trackScrollY`, shared with the header
+column — a scrollbar drag on the header viewport writes the same value back via
+`HeaderViewport::onScrolledY`, and `syncTrackScroll()` is the one re-sync point); **Shift+wheel or a
+trackpad's own `deltaX` scrolls horizontally** (converted to beats at the current zoom — a constant
+*pixel* distance per wheel unit, so the same physical gesture covers less musical time zoomed in);
+**Cmd+wheel** zooms horizontally around the cursor; **Cmd+Shift+wheel** zooms vertically, scaling
+`TimelineViewState::rowHeightScale` within `[0.5, 3.0]` (multiplies the themed row height in BOTH
+`TimelineClipLaneArea::getRowHeight()` and the panel's `layoutTrackHeaders()`, anchored so the row
+under the pointer stays put). `mouseMagnify()` (trackpad pinch — deliberate enough to need no
+modifier) maps plain pinch to horizontal zoom and Shift+pinch to vertical, on the panel and inside
+the piano roll alike.
+
+**The two zoom-decided branches read `synth::ui::dominantWheelDelta(wheel)`
+(`Source/UI/ScrollPolicy.h`), never a single axis.** macOS folds a Shift-held wheel gesture into
+`deltaX` (the OS's own axis swap), so a branch that is selected by its MODIFIERS and reads only
+`deltaY` — Cmd+Shift+wheel here, and its Cmd+Shift+wheel twin in the piano roll below — would
+receive exactly `0.0` under that fold and silently do nothing; `dominantWheelDelta` (`deltaY != 0 ?
+deltaY : deltaX`) is the one-line guard both zoom branches share, verified against
+`juce_MouseEvent.h`/`juce_Viewport.cpp` rather than assumed. A plain-scroll branch, by contrast,
+reads the axis the gesture actually ARRIVED on (`std::abs(deltaX) > std::abs(deltaY) ? deltaX :
+deltaY`) — a Shift+wheel the OS left on `deltaY` and a trackpad's own sideways `deltaX` are both
+still "the amount to move by," so picking the dominant one there instead would be wrong.
+
+**Natural scrolling** (`Settings → Preferences → "Natural scrolling"`, default ON) is the one
+plain-scroll preference layered on top of the OS's own setting, and is where
+`Source/UI/ScrollPolicy.h`'s `scrollAmount(delta, invertScroll)` matters: JUCE's wheel deltas are
+already OS-direction-adjusted (`MouseWheelDetails::isReversed` only REPORTS whether the OS has
+"natural" scrolling on — the delta itself is pre-flipped so `juce::Viewport` can always apply
+`viewPosition -= delta` and feel native on every platform), so "natural" for every scrolling surface
+in this app means copying that Viewport convention, never re-reading `isReversed` to flip anything a
+second time. `scrollAmount`'s `invertScroll` is the APP-LEVEL preference stacked on top:
+`TimelinePanelComponent::setScrollInverted`/`PianoRollComponent::setScrollInverted` (both driven by
+`MainComponent::applyNaturalScrollingPreference()`, installed as a `juce::ChangeListener` on
+`appProperties.getUserSettings()` itself — a `juce::PropertiesFile` IS a `ChangeBroadcaster`, so a
+settings-file write reaches both surfaces with no dedicated callback wired through the Settings
+tab). One preference, not two — a user who wants the wheel flipped wants it flipped everywhere it
+scrolls. It affects ONLY the timeline panel and the piano roll; the graph canvas pans rather than
+scrolling and is unaffected. The piano roll's pitch axis needs one more mapping on top of
+`scrollAmount` (screen-oriented: +y means the view moves DOWN), since `firstVisiblePitch_` is the
+pitch at the TOP row and pitch grows upward — a view moving down therefore DECREASES it, which is
+why that branch negates the result (see TL5-8 below); the horizontal axis on both surfaces needs no
+such remapping, since a view moving right IS a larger `firstVisibleBeat`.
+
+**Keyboard zoom** (Cmd+=/Cmd+- horizontal, Cmd+Shift+=/Cmd+Shift+- vertical) reaches the SAME
+`zoomTimelineHorizontal`/`zoomTimelineVertical` (panel) or `zoomHorizontal`/`zoomVertical` (roll)
+entry points the wheel/pinch gestures do, anchored at the visible centre rather than a cursor
+position, and is routed per focused surface by `MainComponent::resolveEditSurface()` — see
+[`shortcuts.md`](shortcuts.md#zoom) for the full per-surface table and the Graph-is-horizontal-only
+exception.
+
+**The timeline's grid division** is likewise reachable from the keyboard, alongside the mouse's
+snap combo (above): Ctrl+Shift+1..5 set it outright (`TimelinePanelComponent::setSnapValue`),
+Ctrl+Shift+Left/Right step it by one (`cycleSnapValue`, clamped coarsest↔finest, never wrapped —
+holding the key parks on `Bar` or `Sixteenth` rather than surprising the user by wrapping around;
+from `Off` both directions re-enter at the last musical division the user actually chose). Real
+Ctrl, not Cmd, even on macOS — see [`shortcuts.md`](shortcuts.md#timeline) for why that's
+deliberate. Every set/cycle call is a view-state-only change (nothing on the undo stack) that goes
+through `setSnapValue`, the panel's ONE writer for the shared snap value, so the combo, these
+commands and the cycle keys share one persist-and-repaint path.
 
 ### TL5-3: track headers, binding chips, add-track
 
@@ -2006,8 +2131,18 @@ Cubase tools this app doesn't ship yet, and the gaps are reserved **on purpose**
 `editToolForKeyChar` returns `std::nullopt` for them rather than clamping to a shipped tool, so
 `TimelinePanelComponent::keyPressed()` leaves those three digits unconsumed and whatever they mean
 elsewhere (nothing, today) is untouched. Shipping one of the missing three later costs no rebind —
-the digit is already reserved for exactly that tool. See [`shortcuts.md`](shortcuts.md) for the
-full non-rebindability rationale (same class of binding as Delete/Escape/Q/L/P).
+the digit is already reserved for exactly that tool.
+
+**All six tool digits are rebindable**, unlike the reserved 2/6/9 gaps above, which aren't bindings
+at all. Each digit is a `ShortcutManager` action (`timelineToolSelect`, `timelineToolSplit`, …,
+Timeline category) resolved directly by `TimelinePanelComponent::keyPressed()` — a *surface* action,
+never dispatched through `ApplicationCommandManager` — so with a manager installed, an unbound tool
+digit has no key at all, and a rebind takes effect immediately with no risk of colliding with the
+Ctrl+Shift+digit grid-set commands (TL5-2 above): the two live in the same category, but modifier
+equality is exact, so a bare digit can never match a Ctrl+Shift one. Only a build with NO manager
+installed (headless tests, an embedding with no settings store) falls back to the hardcoded digits
+above via `editToolForKeyChar`. See [`shortcuts.md`](shortcuts.md#command-vs-surface-actions) for
+the full command-vs-surface split and the tripwire test that guards it.
 
 **The strip itself** is six `juce::DrawableButton`s (`ImageOnButtonBackground`), built unconditionally
 in `TimelinePanelComponent`'s constructor (a headless build simply has no icon to draw in them —
@@ -2346,12 +2481,17 @@ reason `TimelineViewState::divisionBeats` below and every label here go through 
 see the CLAUDE.md font-swap invariant).
 
 **Gridlines** are drawn from state alone, faintest level first so a bar line always wins a shared
-pixel: the current snap division at alpha 0.14 (only when it is finer than a beat — `Snap::Off` has
-no division at all), beats at 0.30, bars at 0.75. Each level is dropped entirely when its spacing
-falls under `kMinGridLinePixels` (3 px), the same adaptive-density idea the panel's own grid uses.
-`visibleLineRange(spacingBeats)` is the ONE range computation `paintGridLines` and the
-`getGridLineCountForTest` seam both walk, so the assertion can never drift from the paint. Changing
-the snap selector repaints the roll (`TimelinePanelComponent`'s `snapCombo_.onChange`); no timer.
+pixel — and from the SAME `GridLineLevel`/`gridLineColourFor`/`gridLevelIsReadable` policy
+(`Source/UI/TimelineClipLaneArea.h`, TL5-2 above) the clip lanes paint their own grid from, so the
+two surfaces can never disagree on what's visible or how dark it is at a given zoom: the current
+snap division (`GridLineLevel::Subdivision`, alpha 0.28 — only when it is finer than a beat,
+`Snap::Off` has no division at all), beats (`Beat`, 0.50), bars (`Bar`, 0.85), each lifted halfway
+toward the background's contrasting colour before that alpha applies. Each level is dropped
+entirely when its spacing falls under `kMinGridLinePixels` (3 px, `gridLevelIsReadable`), the same
+adaptive-density idea the panel's own grid uses. `visibleLineRange(spacingBeats)` is the ONE range
+computation `paintGridLines` and the `getGridLineCountForTest` seam both walk, so the assertion can
+never drift from the paint. Changing the snap selector repaints the roll (`TimelinePanelComponent`'s
+`snapCombo_.onChange`); no timer.
 
 **Rendering.** Row backgrounds alternate white/black-key tint (`colors.bg1` / `colors.surfaceHi`,
 the same tokens `ModuleComponent`'s themed `MidiKeyboardComponent` uses), a C-octave label per
@@ -2494,12 +2634,18 @@ the roll:
 
 | Binding | Effect |
 |---|---|
-| Cmd+wheel | Horizontal zoom around the beat under the cursor (`rollView_.zoomAroundX`, anchor = `x - kKeysColumnWidth`), same `exp(deltaY * 2.0)` factor as the ruler's zoom so the two feel identical |
+| Cmd+wheel | Horizontal zoom around the beat under the cursor (`rollView_.zoomAroundX`, anchor = `x - kKeysColumnWidth`), same `exp(dominantWheelDelta(wheel) * 2.0)` factor as the panel's own zoom so the two feel identical |
 | Cmd+Shift+wheel | Vertical zoom — scales `pixelsPerSemitone_` within `[4, 40]`, keeping the pitch under the cursor put |
-| Shift+wheel, or a trackpad's `deltaX` | Horizontal scroll (`kScrollPixelsPerWheelUnit` px per unit, converted to beats at the roll's own zoom) |
-| Plain wheel | Vertical (pitch) scroll, `kPitchScrollSemitonesPerWheelUnit`, clamped to `[0, 127]` |
+| Shift+wheel, or a trackpad's `deltaX` | Horizontal scroll (`kScrollPixelsPerWheelUnit` px per unit, converted to beats at the roll's own zoom), inverted by the same `scrollInverted_`/**Natural scrolling** preference as the panel (TL5-2 above) |
+| Plain wheel | Vertical (pitch) scroll, `kPitchScrollSemitonesPerWheelUnit`, clamped to `[0, 127]`, likewise inverted by `scrollInverted_` — and the one axis that needs its own sign flip on top of `scrollAmount()`, since `firstVisiblePitch_` is the pitch at the TOP row and pitch grows upward while the screen convention is "+y moves the view down" (TL5-2's Natural-scrolling paragraph has the full reasoning) |
 
-Zoom is not persisted across opens — `openClip` reframes to the clip every time.
+Both zoom rows read `dominantWheelDelta` rather than `wheel.deltaY` directly, for the identical
+reason the panel's own Cmd+Shift+wheel branch does (TL5-2 above): macOS folds a Shift-held wheel
+gesture into `deltaX`, so a branch chosen by its modifiers must never assume the OS parked the
+gesture on `deltaY`. Cmd+=/Cmd+- and Cmd+Shift+=/Cmd+Shift+- reach the same `zoomHorizontal`/
+`zoomVertical` entry points (anchored at the grid's visible centre rather than the cursor) when the
+roll is the focused surface — see [`shortcuts.md`](shortcuts.md#zoom). Zoom is not persisted across
+opens — `openClip` reframes to the clip every time.
 
 `TimelineViewState::divisionBeats(beatsPerBar)` (factored out of `snapBeat` for this task) exposes
 the EFFECTIVE snap grid as a plain beat value (0.0 while the snap toggle is off);
