@@ -153,8 +153,7 @@ const std::vector<Scenario>& scenarios() {
 // against kBasicPatch so "## Automation targets" has a real uuid to write a lane against.
 const std::vector<Scenario>& timelineScenarios() {
     static const std::vector<Scenario> s = {
-        {"add-lead-track", "Add a MIDI track called Lead and put a simple four-note melody on it", true,
-         kBasicPatch},
+        {"add-lead-track", "Add a MIDI track called Lead and put a simple four-note melody on it", true, kBasicPatch},
         {"add-bass-track", "Create a track called Bass with a short repeating bassline", true, kBasicPatch},
         {"sweep-cutoff", "Automate the filter cutoff to sweep up over 8 beats", true, kBasicPatch},
         {"fade-in", "Automate the VCA level to fade in over the first 4 bars", true, kBasicPatch},
@@ -190,8 +189,8 @@ struct SamplingArgs {
 // stack a user actually hits rather than an approximation of it. Both branches setTestMode(true)
 // on the concrete type (not virtual on AIProvider) before it's upcast, so the callback below
 // fires synchronously with no message loop running here.
-std::unique_ptr<synth::AIProvider> makeProvider(ProviderKind kind, const juce::String& host,
-                                                const juce::String& model, const SamplingArgs& sampling) {
+std::unique_ptr<synth::AIProvider> makeProvider(ProviderKind kind, const juce::String& host, const juce::String& model,
+                                                const SamplingArgs& sampling) {
     if (kind == ProviderKind::remote) {
         auto provider = std::make_unique<synth::RemoteProvider>(host);
         provider->setTestMode(true);
