@@ -125,6 +125,8 @@ virtual LogicalPort mapOutputChannel(int rawChannel) const;
 
 Poly-capable modules override these to describe fans. The default base implementation clamps any out-of-range channel to the last visible jack and marks `isPolyGroupHead` based on whether `rawChannel < getVisible*PortCount()`.
 
+That fallback has a trap once a module's visible jack count grows: any raw channel below `getVisible*PortCount()` that no override claims is reported as its own `isPolyGroupHead`, so an unclaimed channel becomes a phantom second head on a real jack and `getJackTargets` hands out a duplicate wire for it. A module that adds visible jacks must override the mapping for every raw channel it exposes rather than inherit the fallback.
+
 ### `JackTarget` / `getJackTargets`
 
 The inverse of `mapInput/OutputChannel` — given a visible jack, returns every poly-group head anchored to it:

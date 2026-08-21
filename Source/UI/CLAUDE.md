@@ -1,0 +1,8 @@
+# UI & theming invariants (Source/UI/)
+
+Mechanism and history live in the linked docs.
+
+- **No unconditional per-tick repaint** — `ModuleComponent` is buffered-to-image with a gated 15 Hz timer; the 30 Hz GraphEditor animation composites cached images; a theme switch is exactly one re-skin pass. All animations use `AnimationDriver` (VBlank-driven, time-bounded). Exactly two exceptions: the AI thinking spinner (in-flight only, region-confined) and the timeline playhead (strip-confined, playing-only). → [`docs/layout.md §10–11`](../../docs/layout.md)
+- **A cable is not a graph edge** — one drawn wire can be 1 edge, 2 edges + a hidden attenuverter node, or N poly-bus edges. Never identify, hit-test, colour or delete a cable by `AudioProcessorGraph::Connection`; go through `GraphEditor::buildVisibleCables()`, the single enumeration feeding both `paint()` and hit-testing. Wire colour resolves only via `synth::ui::resolveCableColour` — reading a `*Wire` theme token at a paint site breaks user colour overrides. → [`docs/layout.md §14`](../../docs/layout.md) · [`docs/theming.md §11`](../../docs/theming.md)
+- **Themes don't swap fonts** — all built-ins share Inter + JetBrains Mono; swapping the embedded typeface *family* at runtime corrupts text (JUCE 8 + CoreText). Themes differ by colour/treatment/glow only. → [`docs/theming.md`](../../docs/theming.md)
+- **No high-frequency logging** — a global `juce::Logger` (Debug builds) pipes `writeToLog` into a UI-thread console; never add per-sample / per-frame / per-parameter / per-connection logs (one caused a multi-second freeze; guarded by `AIStateMapperTest.PresetLoadDoesNotSpamLogger`). → [`docs/AI_Engine.md`](../../docs/AI_Engine.md)
