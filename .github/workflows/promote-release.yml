@@ -49,7 +49,17 @@ jobs:
           # actually consume once this tag becomes /releases/latest — a tag missing
           # either would promote cleanly and then 404 for real users. Fail loudly
           # instead: see docs/distribution.md for what to do (re-run the build).
-          for asset in appcast.xml SHA256SUMS.txt; do
+          #
+          # appcast-windows.xml (P5-6) is required ONLY once WinSparkle's key pair actually exists
+          # — build-artifacts.yml's publish-appcast-windows job skips cleanly (doesn't attach the
+          # asset at all) until then, same as publish-appcast does for Sparkle before its own key
+          # existed. Requiring it unconditionally would block every promotion, mac-only releases
+          # included, for as long as no one has generated a WinSparkle key — see docs/distribution.md.
+          required_assets="appcast.xml SHA256SUMS.txt"
+          if [ -n "${{ vars.WINSPARKLE_PUBLIC_KEY }}" ]; then
+            required_assets="$required_assets appcast-windows.xml"
+          fi
+          for asset in $required_assets; do
             if ! echo "$release_json" | jq -e --arg a "$asset" '.assets[] | select(.name == $a)' > /dev/null; then
               echo "::error::$TAG is missing the '$asset' release asset — refusing to promote." >&2
               exit 1

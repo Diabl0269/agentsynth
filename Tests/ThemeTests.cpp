@@ -151,7 +151,7 @@ TEST(ThemeLookAndFeelTest, ApplyThemeSetsEveryColourId) {
     EXPECT_EQ(lf.findColour(juce::TabbedButtonBar::frontTextColourId), c.textPrimary);
     EXPECT_EQ(lf.findColour(juce::TabbedButtonBar::tabOutlineColourId), c.border);
     // MidiKeyboardComponent ColourIds (juce_audio_utils) are not linked into Core;
-    // the on-screen keyboard keeps JUCE defaults for now (see AppLookAndFeel::applyTheme).
+    // ModuleComponent::applyKeyboardThemeColours themes the on-screen keyboard instead.
 }
 
 // ---------------------------------------------------------------------------

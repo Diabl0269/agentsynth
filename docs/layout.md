@@ -662,7 +662,9 @@ Not a component — the pure log-frequency / dB coordinate maths shared by the t
 
 ### FrequencyResponseComponent (`Source/UI/FrequencyResponseComponent.h`)
 
-Serum-style frequency-response curve with an optional FFT spectrum overlay, used by `FilterModule` cards.
+Serum-style frequency-response curve with an optional FFT spectrum overlay, used by `FilterModule` cards. **Hidden by default** on the card — a "Show Response" toggle reveals it (same opt-in pattern as "Show Scope"); the nested "Show Spectrum" control only appears while the response view is open. The component's 30 Hz timer starts in `visibilityChanged` only while visible, so a closed Filter card pays no animation cost.
+
+The stroked path is **not** clamped to the bottom of the view: magnitudes may fall below `minDb` (`plotDb` only caps peaks at `maxDb`), and `paint` lets those points map to `y > height` so a steep LPF roll-off exits the clip region instead of drawing a horizontal floor along the right edge.
 
 **Phase 4 paint additions:**
 - Hz axis labels at 100 Hz, 1 kHz, 10 kHz — drawn 3 px right of each vertical frequency gridline (10 kHz label is right-justified to stay within bounds at narrow widths)
@@ -677,8 +679,9 @@ Serum-style frequency-response curve with an optional FFT spectrum overlay, used
 | `formatHzLabel` | `static juce::String formatHzLabel(float hz)` | `100 → "100Hz"`, `1000 → "1kHz"`, `10000 → "10kHz"` |
 | `freqToXStatic` | `static float freqToXStatic(float freq, float width)` | Log-scaled freq → x pixel; mirrors private `freqToX` (minFreq=20, maxFreq=20000) |
 | `dbToYStatic` | `static float dbToYStatic(float db, float height)` | dB → y pixel; mirrors private `dbToY` (minDb=−40, maxDb=50) |
+| `plotDb` | `static float plotDb(float db)` | Caps at `maxDb`; leaves values below `minDb` unclamped so the stroke can leave the view |
 
-All four now forward to `synth::ui::FrequencyGrid`; they stay as the component's public API so existing callers and tests are unaffected.
+All axis helpers forward to `synth::ui::FrequencyGrid`; they stay as the component's public API so existing callers and tests are unaffected.
 
 ### EQCurveComponent (`Source/UI/EQCurveComponent.h`)
 

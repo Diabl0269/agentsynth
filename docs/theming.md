@@ -508,7 +508,7 @@ The following stock-widget overrides are now fully implemented in `AppLookAndFee
 - **ListBox** — ColourId mappings (`backgroundColourId`, `textColourId`, `outlineColourId`) added in `applyTheme()`
 - **TabbedButtonBar** — `tabOutlineColourId` added in `applyTheme()`
 
-> **MidiKeyboardComponent limitation:** `juce_audio_utils` is not linked into `Core` (it would bloat the headless test binary). As a result, `MidiKeyboardComponent` inherits JUCE default colours and cannot be themed from `AppLookAndFeel`. This is a known and accepted limitation.
+> **MidiKeyboardComponent ColourIds:** `juce_audio_utils` is not linked into `Core` (it would bloat the headless test binary), so `AppLookAndFeel::applyTheme()` cannot map `MidiKeyboardComponent` ColourIds. The on-screen keyboard is themed instead by `ModuleComponent::applyKeyboardThemeColours()` — at card construction and again from `lookAndFeelChanged()` on every theme switch — using the same tokens (`bg1` / `surfaceHi` / `border` / `accent` / `textPrimary`) the piano-roll key column uses.
 
 ### Phase 5 completions
 

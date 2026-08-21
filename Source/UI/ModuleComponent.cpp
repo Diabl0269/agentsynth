@@ -77,10 +77,29 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
         freqResponseComponent = std::make_unique<FrequencyResponseComponent>(*filterMod);
         addAndMakeVisible(freqResponseComponent.get());
 
+        // Same pattern as the scope: hidden by default so a Filter card does not pay for a
+        // 30 Hz response/spectrum timer until the user asks for it.
+        freqResponseToggle = std::make_unique<juce::ToggleButton>("Show Response");
+        freqResponseToggle->setToggleState(false, juce::dontSendNotification);
+        freqResponseComponent->setVisible(false);
+        freqResponseToggle->onClick = [this] {
+            const bool show = freqResponseToggle->getToggleState();
+            freqResponseComponent->setVisible(show);
+            if (spectrumToggle != nullptr) {
+                spectrumToggle->setVisible(show);
+                if (!show) {
+                    spectrumToggle->setToggleState(false, juce::dontSendNotification);
+                    freqResponseComponent->setShowSpectrum(false);
+                }
+            }
+            updateLayout();
+        };
+        addAndMakeVisible(freqResponseToggle.get());
+
         spectrumToggle = std::make_unique<juce::ToggleButton>("Show Spectrum");
         spectrumToggle->setToggleState(false, juce::dontSendNotification);
         spectrumToggle->onClick = [this] { freqResponseComponent->setShowSpectrum(spectrumToggle->getToggleState()); };
-        addAndMakeVisible(spectrumToggle.get());
+        addChildComponent(spectrumToggle.get()); // hidden until the response view is shown
     }
 
     if (auto* eqMod = dynamic_cast<ParametricEQModule*>(module)) {
@@ -155,6 +174,7 @@ void ModuleComponent::detachFromProcessor() {
     // values and FFT samples, so they must go before the module pointer is dropped.
     eqCurveComponent.reset();
     freqResponseComponent.reset();
+    freqResponseToggle.reset();
     spectrumToggle.reset();
     eqPopOutButton.reset();
     openPluginEditorButton.reset();
@@ -302,9 +322,28 @@ void ModuleComponent::refreshWaveformComboIcons() {
     }
 }
 
+void ModuleComponent::applyKeyboardThemeColours() {
+    if (keyboardComponent == nullptr)
+        return;
+
+    using synth::theme::AppLookAndFeel;
+    auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
+    if (lf == nullptr)
+        return;
+
+    const auto& c = lf->getTheme().colors;
+    keyboardComponent->setColour(juce::MidiKeyboardComponent::whiteNoteColourId, c.bg1);
+    keyboardComponent->setColour(juce::MidiKeyboardComponent::blackNoteColourId, c.surfaceHi);
+    keyboardComponent->setColour(juce::MidiKeyboardComponent::keySeparatorLineColourId, c.border);
+    keyboardComponent->setColour(juce::MidiKeyboardComponent::mouseOverKeyOverlayColourId, c.accent.withAlpha(0.3f));
+    keyboardComponent->setColour(juce::MidiKeyboardComponent::keyDownOverlayColourId, c.accent);
+    keyboardComponent->setColour(juce::MidiKeyboardComponent::textLabelColourId, c.textPrimary);
+}
+
 void ModuleComponent::lookAndFeelChanged() {
     applyHeaderButtonIcons();
     refreshWaveformComboIcons();
+    applyKeyboardThemeColours();
 }
 
 void ModuleComponent::timerCallback() {
@@ -389,7 +428,8 @@ void ModuleComponent::timerCallback() {
     // intentionally omitted.  FrequencyResponseComponent, EQCurveComponent and ScopeComponent
     // manage their own repaints via their own timers and only invalidate when their data
     // changes.  Forcing a full parent repaint every tick because a child is visible caused a
-    // repaint storm on every Filter module (freqResponseComponent is always visible).
+    // repaint storm on every Filter module (the response view used to be always-on; it is now
+    // opt-in via "Show Response", and its timer stops while hidden).
 
     if (needsRepaint) {
         lastPaintedRMS = cachedRMS;
@@ -403,22 +443,7 @@ void ModuleComponent::createControls() {
         keyboardComponent = std::make_unique<juce::MidiKeyboardComponent>(
             midiKeyboard->getKeyboardState(), juce::MidiKeyboardComponent::horizontalKeyboard);
 
-        // Theme the keyboard component
-        using synth::theme::AppLookAndFeel;
-        auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
-        if (lf != nullptr) {
-            keyboardComponent->setColour(juce::MidiKeyboardComponent::whiteNoteColourId, lf->getTheme().colors.bg1);
-            keyboardComponent->setColour(juce::MidiKeyboardComponent::blackNoteColourId,
-                                         lf->getTheme().colors.surfaceHi);
-            keyboardComponent->setColour(juce::MidiKeyboardComponent::keySeparatorLineColourId,
-                                         lf->getTheme().colors.border);
-            keyboardComponent->setColour(juce::MidiKeyboardComponent::mouseOverKeyOverlayColourId,
-                                         lf->getTheme().colors.accent.withAlpha(0.3f));
-            keyboardComponent->setColour(juce::MidiKeyboardComponent::keyDownOverlayColourId,
-                                         lf->getTheme().colors.accent);
-            keyboardComponent->setColour(juce::MidiKeyboardComponent::textLabelColourId,
-                                         lf->getTheme().colors.textPrimary);
-        }
+        applyKeyboardThemeColours();
         keyboardComponent->setWantsKeyboardFocus(true);
         addAndMakeVisible(keyboardComponent.get());
     } else if (auto* extMidi = dynamic_cast<ExternalMidiModule*>(module)) {
@@ -1692,13 +1717,19 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
         y += knobRows * (kLabelHeight + kKnobHeight);
     }
 
-    if (freqResponseComponent) {
+    if (freqResponseToggle) {
+        if (apply)
+            freqResponseToggle->setBounds(narrowX, y, narrowW, kRowHeight);
+        y += kRowHeight + 2;
+    }
+
+    if (freqResponseComponent && freqResponseComponent->isVisible()) {
         if (apply)
             freqResponseComponent->setBounds(contentX, y, contentW, 120);
         y += 128;
     }
 
-    if (spectrumToggle) {
+    if (spectrumToggle && spectrumToggle->isVisible()) {
         if (apply)
             spectrumToggle->setBounds(narrowX, y, narrowW, kRowHeight);
         y += kRowHeight + 2;

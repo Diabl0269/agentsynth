@@ -63,49 +63,50 @@ AIProvider::RequestId AIIntegrationService::sendMessage(const juce::String& text
     if (useStructuredOutput && !request.empty())
         request.back().content = buildPatchAugmentedContent(text);
 
-    auto weakThis = juce::WeakReference<AIIntegrationService>(this);
     // With the timeline tools on, the output contract grows an OPTIONAL `timelineOps` array —
     // patch-only responses stay exactly as valid, so nothing changes for pure patch asks.
     auto schema = useStructuredOutput ? (timelineToolsActive() ? AIStateMapper::getPatchSchemaWithTimelineOps()
                                                                : AIStateMapper::getPatchSchema())
                                       : juce::var();
 
-    return provider->sendPrompt(
-        request,
-        [weakThis, callback](const AIProvider::AIResponse& response) {
-            if (weakThis.get() == nullptr)
-                return; // Service was destroyed
+    return provider->sendPrompt(request, wrapCompletionForHistory(std::move(callback)), schema);
+}
 
-            auto* self = weakThis.get();
+AIProvider::CompletionCallback AIIntegrationService::wrapCompletionForHistory(AIProvider::CompletionCallback callback) {
+    auto weakThis = juce::WeakReference<AIIntegrationService>(this);
+    return [weakThis, callback](const AIProvider::AIResponse& response) {
+        if (weakThis.get() == nullptr)
+            return; // Service was destroyed
 
-            // A cancelled request produced no assistant turn. Recording one would put words in the
-            // model's mouth that the user never saw and — because chatHistory is replayed as
-            // context — feed that invention back on every later message. The user's own turn
-            // stays: they did say it, and it is still on screen.
-            if (response.error.kind != AIProvider::AIErrorKind::Cancelled && response.success) {
-                self->chatHistory.push_back({"assistant", response.content});
-                self->trimHistory();
+        auto* self = weakThis.get();
 
-                // Capture a persisted-conversation id from a Pro-plan hosted backend and re-push
-                // it so the NEXT call in this session continues the same server-side thread. A
-                // free-plan response carries no id (see AIProvider::AIResponse::conversationId's
-                // doc comment) — this is a no-op for that case, not a special branch.
-                //
-                // Same thread-context as the chatHistory mutation just above (this callback can
-                // run on a provider worker thread in test/forceSynchronous mode, or via
-                // MessageManager::callAsync in production): safe because no caller starts request
-                // N+1 while N's callback is still landing — AIChatComponent disables Send for the
-                // whole in-flight window (isWaitingForResponse), so there is never a concurrent
-                // processRequest() reading currentConversationId while this write happens.
-                if (response.conversationId.isNotEmpty())
-                    self->setConversationId(response.conversationId);
-            }
+        // A cancelled request produced no assistant turn. Recording one would put words in the
+        // model's mouth that the user never saw and — because chatHistory is replayed as
+        // context — feed that invention back on every later message. The user's own turn
+        // stays: they did say it, and it is still on screen.
+        if (response.error.kind != AIProvider::AIErrorKind::Cancelled && response.success) {
+            self->chatHistory.push_back({"assistant", response.content});
+            self->trimHistory();
 
-            if (callback) {
-                callback(response);
-            }
-        },
-        schema);
+            // Capture a persisted-conversation id from a Pro-plan hosted backend and re-push
+            // it so the NEXT call in this session continues the same server-side thread. A
+            // free-plan response carries no id (see AIProvider::AIResponse::conversationId's
+            // doc comment) — this is a no-op for that case, not a special branch.
+            //
+            // Same thread-context as the chatHistory mutation just above (this callback can
+            // run on a provider worker thread in test/forceSynchronous mode, or via
+            // MessageManager::callAsync in production): safe because no caller starts request
+            // N+1 while N's callback is still landing — AIChatComponent disables Send for the
+            // whole in-flight window (isWaitingForResponse), so there is never a concurrent
+            // processRequest() reading currentConversationId while this write happens.
+            if (response.conversationId.isNotEmpty())
+                self->setConversationId(response.conversationId);
+        }
+
+        if (callback) {
+            callback(response);
+        }
+    };
 }
 
 void AIIntegrationService::cancelRequest(AIProvider::RequestId requestId) {
@@ -168,17 +169,12 @@ juce::String AIIntegrationService::buildPatchAugmentedContent(const juce::String
 }
 
 #if SYNTH_ENABLE_TIMELINE
-juce::String AIIntegrationService::buildAutomationTargetsSection() const {
-    // One line per addressable node: `- "<uuid>" <Display Name>: <paramId> [min..max], ...`.
+std::vector<AIIntegrationService::AutomationTargetInfo> AIIntegrationService::enumerateAutomationTargets() const {
     // Float parameters only — that is what an automation lane drives — and only nodes that carry
-    // a uuid (a node without one is not addressable by writeLane at all). Bounded like the
-    // arrangement summary: whole LINES are dropped from the tail past the cap, with a marker, so
-    // a huge patch can't flood the request.
-    constexpr int kMaxChars = 2000;
-
-    juce::StringArray lines;
-    int dropped = 0;
-    int usedChars = 0;
+    // a uuid (a node without one is not addressable by writeLane at all). See the header doc
+    // comment: this ONE enumeration feeds both the local model's text section and the remote
+    // timeline.generate body, so the criteria live here and nowhere else.
+    std::vector<AutomationTargetInfo> targets;
     for (auto* node : audioGraph.getNodes()) {
         if (node == nullptr || node->getProcessor() == nullptr)
             continue;
@@ -186,19 +182,43 @@ juce::String AIIntegrationService::buildAutomationTargetsSection() const {
         if (uuid.isEmpty())
             continue;
 
-        juce::StringArray params;
         for (auto* p : node->getProcessor()->getParameters()) {
             auto* f = dynamic_cast<juce::AudioParameterFloat*>(p);
             if (f == nullptr)
                 continue;
             const auto& range = f->getNormalisableRange();
-            params.add(f->paramID + " [" + juce::String(range.start, 3) + ".." + juce::String(range.end, 3) + "]");
+            // getDefaultValue() is normalised (AudioProcessorParameter contract) and only public
+            // on the BASE class — AudioParameterFloat re-privatises it — hence the call through
+            // `p`. The model needs the default in the parameter's own units, same as min/max.
+            targets.push_back({uuid, node->getProcessor()->getName(), f->paramID, range.start, range.end,
+                               f->convertFrom0to1(p->getDefaultValue())});
         }
-        if (params.isEmpty())
-            continue;
+    }
+    return targets;
+}
 
-        const juce::String line =
-            "- \"" + uuid + "\" " + node->getProcessor()->getName() + ": " + params.joinIntoString(", ");
+juce::String AIIntegrationService::buildAutomationTargetsSection() const {
+    // One line per addressable node: `- "<uuid>" <Display Name>: <paramId> [min..max], ...`.
+    // Bounded like the arrangement summary: whole LINES are dropped from the tail past the cap,
+    // with a marker, so a huge patch can't flood the request.
+    constexpr int kMaxChars = 2000;
+
+    const auto targets = enumerateAutomationTargets();
+
+    juce::StringArray lines;
+    int dropped = 0;
+    int usedChars = 0;
+    // Group consecutive targets by node: enumerateAutomationTargets() emits in graph order, and
+    // a uuid is per-node identity, so one node's parameters are always one contiguous run.
+    for (size_t i = 0; i < targets.size();) {
+        const juce::String uuid = targets[i].nodeUuid;
+        const juce::String nodeName = targets[i].nodeName;
+        juce::StringArray params;
+        for (; i < targets.size() && targets[i].nodeUuid == uuid; ++i)
+            params.add(targets[i].paramId + " [" + juce::String(targets[i].min, 3) + ".." +
+                       juce::String(targets[i].max, 3) + "]");
+
+        const juce::String line = "- \"" + uuid + "\" " + nodeName + ": " + params.joinIntoString(", ");
         if (usedChars + line.length() > kMaxChars) {
             ++dropped;
             continue;
@@ -214,6 +234,118 @@ juce::String AIIntegrationService::buildAutomationTargetsSection() const {
     if (dropped > 0)
         section << "\n... [+" << dropped << " more nodes]";
     return section;
+}
+
+juce::var AIIntegrationService::buildArrangeRequestBody(const juce::String& text) const {
+    juce::DynamicObject::Ptr body = new juce::DynamicObject();
+
+    // The RAW user text — see the header doc comment for why this is never pre-wrapped the way
+    // buildPatchAugmentedContent() wraps the patch path's last message.
+    body->setProperty("userPrompt", text);
+
+    // Required key, allowed empty (the schema's own words: "a caller with nothing to say should
+    // say so explicitly rather than have the field quietly go missing").
+    juce::String arrangement;
+    if (timelineDoc != nullptr && transportService != nullptr && !timelineDoc->isEmpty())
+        arrangement = ArrangementContext::summarize(*timelineDoc, audioGraph, transportService->getPositionSnapshot());
+    body->setProperty("arrangementContext", arrangement);
+
+    juce::Array<juce::var> paramTargets;
+    for (const auto& t : enumerateAutomationTargets()) {
+        if (paramTargets.size() >= kMaxRemoteParamTargets)
+            break; // server cap — see kMaxRemoteParamTargets' doc comment
+        juce::DynamicObject::Ptr target = new juce::DynamicObject();
+        target->setProperty("nodeUuid", t.nodeUuid);
+        target->setProperty("nodeName", t.nodeName);
+        target->setProperty("paramId", t.paramId);
+        target->setProperty("min", t.min);
+        target->setProperty("max", t.max);
+        target->setProperty("default", t.defaultValue);
+        paramTargets.add(juce::var(target.get()));
+    }
+    body->setProperty("paramTargets", paramTargets);
+
+    // One {name, kind, index} per live track, in doc order — index is the track's position in
+    // that order, which is exactly how a placeClips/writeLane op addresses it. TimelineDoc's
+    // kMaxTracks equals the server's TIMELINE_OPS_MAX_TRACKS (256), so no cap is needed here:
+    // a doc that exists cannot describe more tracks than the schema accepts.
+    juce::Array<juce::var> availableTracks;
+    if (timelineDoc != nullptr) {
+        int index = 0;
+        for (const auto& track : timelineDoc->getTracks()) {
+            juce::DynamicObject::Ptr trackObj = new juce::DynamicObject();
+            trackObj->setProperty("name", track.name);
+            trackObj->setProperty("kind", track.kind == TrackKind::Midi    ? "midi"
+                                          : track.kind == TrackKind::Audio ? "audio"
+                                                                           : "automation");
+            trackObj->setProperty("index", index++);
+            availableTracks.add(juce::var(trackObj.get()));
+        }
+    }
+    body->setProperty("availableTracks", availableTracks);
+
+    return juce::var(body.get());
+}
+
+AIProvider::RequestId AIIntegrationService::sendArrangeMessage(const juce::String& text,
+                                                               AIProvider::CompletionCallback callback) {
+    // Same history contract as sendMessage(): the stored history keeps the user's original text;
+    // the structured request fields are ephemeral, built for the wire and never retained.
+    chatHistory.push_back({"user", text});
+    trimHistory();
+
+    if (!provider) {
+        if (callback) {
+            AIProvider::AIResponse response;
+            response.success = false;
+            response.error.kind = AIProvider::AIErrorKind::Schema; // no provider configured — client precondition
+            response.error.message = "Error: No AI provider selected.";
+            callback(response);
+        }
+        return {};
+    }
+
+    // One intent, two transports (the local/remote parity rule): a hosted provider has a
+    // dedicated capability whose input is the structured fields; a local provider gets the SAME
+    // fields composed into the outgoing message (buildArrangeAugmentedContent mirrors the
+    // server's own section layout) with an envelope-only response schema. Both providers answer
+    // with the identical timelineOps envelope, so the downstream extract → validate → card flow
+    // cannot tell them apart — the transport difference is absorbed HERE, never surfaced as a
+    // behaviour difference.
+    if (provider->isHosted())
+        return provider->sendCapabilityRequest("timeline.generate", buildArrangeRequestBody(text),
+                                               wrapCompletionForHistory(std::move(callback)));
+
+    // Same splice-into-the-request-copy shape as sendMessage(): chatHistory keeps the user's raw
+    // text; the composed arrange context exists only on the wire.
+    std::vector<AIProvider::Message> request = chatHistory;
+    if (!request.empty())
+        request.back().content = buildArrangeAugmentedContent(text);
+
+    return provider->sendPrompt(request, wrapCompletionForHistory(std::move(callback)),
+                                AIStateMapper::getTimelineOpsEnvelopeSchema());
+}
+
+juce::String AIIntegrationService::buildArrangeAugmentedContent(const juce::String& text) const {
+    // Composed from the SAME fields the hosted request sends (buildArrangeRequestBody), in the
+    // SAME section order the server's buildTimelineUserMessage uses (synth-platform
+    // timeline-generate/capability.ts: arrangement context when non-empty, then tracks, then
+    // targets, then the prompt) — one source of truth for what an arrange request tells the
+    // model, however it travels. The one addition is the trailing instruction: the server swaps
+    // in a dedicated arrange system prompt, which a mid-conversation local request cannot do, so
+    // that steering rides in the message instead (the envelope-only schema enforces the shape
+    // regardless; the line is for answer quality, not for safety).
+    const juce::var body = buildArrangeRequestBody(text);
+
+    juce::String content;
+    const juce::String arrangement = body["arrangementContext"].toString();
+    if (arrangement.trim().isNotEmpty())
+        content << "Arrangement context:\n" << arrangement << "\n\n";
+    content << "Project tracks:\n```json\n" << juce::JSON::toString(body["availableTracks"]) << "\n```\n\n";
+    content << "Automation targets:\n```json\n" << juce::JSON::toString(body["paramTargets"]) << "\n```\n\n";
+    content << text << "\n\n";
+    content << "Respond ONLY with a JSON object containing a \"timelineOps\" array. No patch, no prose.";
+    return content;
 }
 #endif
 

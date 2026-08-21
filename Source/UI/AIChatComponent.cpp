@@ -608,6 +608,19 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
         appProperties.getUserSettings()->saveIfNeeded();
     };
 
+    // Patch/Arrange mode selector — an EXPLICIT routing control (never a keyword heuristic:
+    // shouldUseStructuredOutput() stays a patch-path concern), provider-agnostic per the
+    // local/remote parity rule. Starts invisible; visible only while the timeline feature is
+    // active — see refreshModeControls(), called from refreshModels() below and re-called by
+    // MainComponent when the timeline preference toggles. Selection is session-scoped,
+    // defaulting to Patch.
+    addChildComponent(modeSelector);
+    modeSelector.addItem("Patch", kModeSelectorPatchId);
+    modeSelector.addItem("Arrange", kModeSelectorArrangeId);
+    modeSelector.setSelectedId(kModeSelectorPatchId, juce::dontSendNotification);
+    modeSelector.setTooltip("Patch: create or modify the synth patch. "
+                            "Arrange: add tracks, notes and automation on the timeline.");
+
     // Starts invisible (same contract as accountRow/planBadge) — updateHostedModeNotice(), called
     // from refreshModels() below, sets its real visibility once a provider is known.
     addChildComponent(hostedModeNotice);
@@ -842,10 +855,14 @@ void AIChatComponent::resized() {
 
     inputField.setBounds(inputRow);
 
-    // Middle row (above input): Model Picker
+    // Middle row (above input): Model Picker (+ Patch/Arrange selector while its gates hold)
     bottomArea.removeFromBottom(5);
     auto modelRow = bottomArea.removeFromBottom(25);
     modelPicker.setBounds(modelRow.removeFromLeft(200));
+    if (modeSelector.isVisible()) {
+        modelRow.removeFromLeft(5);
+        modeSelector.setBounds(modelRow.removeFromLeft(110));
+    }
 #ifndef NDEBUG
     toggleDebugButton.setBounds(modelRow.removeFromRight(60));
 #endif
@@ -950,7 +967,14 @@ void AIChatComponent::sendButtonClicked() {
 
     inputField.clear();
 
-    bool useStructuredOutput = shouldUseStructuredOutput(text, AIStateMapper::moduleFactoryTypeNames());
+    // EXPLICIT routing, decided by the user's mode selector alone — arrange mode is never
+    // inferred from the message text. (arrangeModeActive() is always false when the selector is
+    // hidden, including in a SYNTH_ENABLE_TIMELINE=OFF build.) In arrange mode the patch-path
+    // keyword heuristic is bypassed entirely: the request carries no patch schema and the
+    // response is a timelineOps envelope, not a patch.
+    const bool arrangeMode = arrangeModeActive();
+
+    bool useStructuredOutput = !arrangeMode && shouldUseStructuredOutput(text, AIStateMapper::moduleFactoryTypeNames());
 
     // Add user message to local state immediately
     messages.push_back({"user", text, ""});
@@ -989,122 +1013,142 @@ void AIChatComponent::sendButtonClicked() {
     if (accountServicePtr == nullptr || !isProPlan(accountServicePtr->getSnapshot()))
         aiService.setConversationId({});
 
-    const auto requestId = aiService.sendMessage(
-        text,
-        [this, useStructuredOutput](const AIProvider::AIResponse& aiResponse) {
-            juce::Component::SafePointer<AIChatComponent> safeThis(this);
-            juce::MessageManager::callAsync([safeThis, aiResponse, useStructuredOutput]() {
-                if (safeThis.getComponent() == nullptr)
-                    return;
-                auto* self = safeThis.getComponent();
+    AIProvider::CompletionCallback completion = [this, useStructuredOutput,
+                                                 arrangeMode](const AIProvider::AIResponse& aiResponse) {
+        juce::Component::SafePointer<AIChatComponent> safeThis(this);
+        juce::MessageManager::callAsync([safeThis, aiResponse, useStructuredOutput, arrangeMode]() {
+            if (safeThis.getComponent() == nullptr)
+                return;
+            auto* self = safeThis.getComponent();
 
-                if (!self->isWaitingForResponse) {
-                    return;
-                } // Ignore late responses if a timeout already occurred
+            if (!self->isWaitingForResponse) {
+                return;
+            } // Ignore late responses if a timeout already occurred
 
-                // The request is finished, so there is nothing left to cancel. Clearing the handle
-                // before teardown keeps cancelRequest() from asking the provider to cancel a
-                // completed id.
-                self->activeRequestId = {};
-                self->cancelRequest(); // stops timer, spinner, cancel btn, restores input
+            // The request is finished, so there is nothing left to cancel. Clearing the handle
+            // before teardown keeps cancelRequest() from asking the provider to cancel a
+            // completed id.
+            self->activeRequestId = {};
+            self->cancelRequest(); // stops timer, spinner, cancel btn, restores input
 
-                // The user already got their "Cancelled." bubble from handleUserCancel(); the
-                // provider is just confirming. An error bubble here would contradict it.
-                if (aiResponse.error.kind == AIProvider::AIErrorKind::Cancelled)
-                    return;
+            // The user already got their "Cancelled." bubble from handleUserCancel(); the
+            // provider is just confirming. An error bubble here would contradict it.
+            if (aiResponse.error.kind == AIProvider::AIErrorKind::Cancelled)
+                return;
 
-                const int elapsed = (int)(juce::Time::getMillisecondCounter() - self->requestStartMs);
+            const int elapsed = (int)(juce::Time::getMillisecondCounter() - self->requestStartMs);
 
-                if (aiResponse.success) {
-                    const juce::String& response = aiResponse.content;
-                    juce::String json;
-                    juce::String cleanText = response;
+            if (aiResponse.success) {
+                const juce::String& response = aiResponse.content;
+                juce::String json;
+                juce::String cleanText = response;
 
-                    // 1. Try to find JSON between backticks
-                    juce::StringArray jsonBlocks = extractJSONBlocks(response);
-                    if (!jsonBlocks.isEmpty()) {
-                        json = jsonBlocks[0]; // Use the first block found
-                        // Attempt to remove the JSON block from the cleanText
-                        int start = response.indexOf("```json");
-                        if (start != -1) {
-                            int end = response.indexOf(start + 7, "```");
-                            if (end != -1) {
-                                cleanText = response.substring(0, start) + response.substring(end + 3);
-                            }
-                        }
-                    } else if (useStructuredOutput) {
-                        // 2. If we requested structured output, the WHOLE response should be JSON
-                        // Verify if it's actually JSON
-                        juce::var parsed = juce::JSON::parse(response);
-                        if (!parsed.isVoid()) {
-                            json = response.trim();
-                            cleanText = "I've created a new patch based on your request.";
+                // 1. Try to find JSON between backticks
+                juce::StringArray jsonBlocks = extractJSONBlocks(response);
+                if (!jsonBlocks.isEmpty()) {
+                    json = jsonBlocks[0]; // Use the first block found
+                    // Attempt to remove the JSON block from the cleanText
+                    int start = response.indexOf("```json");
+                    if (start != -1) {
+                        int end = response.indexOf(start + 7, "```");
+                        if (end != -1) {
+                            cleanText = response.substring(0, start) + response.substring(end + 3);
                         }
                     }
-
-                    // The timeline half of the SAME response, extracted independently of the
-                    // patch half — a model may send a patch, a timelineOps envelope, or both, and
-                    // "timelineOps" is a sibling key, never nested inside the patch. Offered only
-                    // when a live timeline is wired in, and under the identical posture the patch
-                    // card is under: validate NOW so the user reads a checked summary, apply only
-                    // when they click.
-                    juce::String timelineOpsJson;
-                    juce::String timelineOpsPreview;
-#if SYNTH_ENABLE_TIMELINE
-                    if (self->aiService.hasTimelineContext()) {
-                        const juce::var envelope = AIIntegrationService::extractTimelineOps(response);
-                        if (!envelope.isVoid()) {
-                            const auto preview = self->aiService.previewTimelineOps(envelope);
-                            if (preview.ok) {
-                                timelineOpsJson = juce::JSON::toString(envelope);
-                                timelineOpsPreview = preview.previewText;
-                            } else {
-                                // Shown, never swallowed — but with no Apply button, since there is
-                                // nothing valid to apply.
-                                timelineOpsPreview =
-                                    "These timeline changes were rejected and were NOT applied: " + preview.message;
-                            }
-                        }
+                } else if (useStructuredOutput) {
+                    // 2. If we requested structured output, the WHOLE response should be JSON
+                    // Verify if it's actually JSON
+                    juce::var parsed = juce::JSON::parse(response);
+                    if (!parsed.isVoid()) {
+                        json = response.trim();
+                        cleanText = "I've created a new patch based on your request.";
                     }
-#endif
-
-                    self->messages.push_back({"assistant", cleanText.trim(), json, /*isExpanded=*/false,
-                                              /*showUpgradeAction=*/false, timelineOpsJson, timelineOpsPreview});
-                    self->messages.back().responseMs = elapsed;
-                    // P6-9: only present on a Pro-plan hosted response whose persistence
-                    // succeeded (see AIResponse::messageId's doc comment) — empty for every other
-                    // case (local Ollama, free plan, no provider), which is exactly what keeps the
-                    // later rating-sync check a no-op for those.
-                    self->messages.back().serverMessageId = aiResponse.messageId;
-                    self->attachPatchPreview(self->messages.back());
-
-                    // P6-8: local-first — every session writes here regardless of plan, right after
-                    // the assistant turn lands and `messages` reflects the full exchange. Not in
-                    // AIIntegrationService::sendMessage()'s own callback: that one can run on a
-                    // provider worker thread and only has aiService.chatHistory (unsplit
-                    // text+patch), not this component's own text/jsonPatch-split `messages`.
-                    self->saveCurrentConversationLocally();
-                } else if (aiResponse.error.kind == AIProvider::AIErrorKind::Quota) {
-                    // The server's message is already a complete, user-facing sentence — no
-                    // "Error: " prefix, same precedent as TrialExhausted/ServiceCapacityExceeded.
-                    // showUpgradeAction=true adds the Upgrade-to-Pro button (see MessageBubble).
-                    self->messages.push_back({"assistant", aiResponse.error.message, "", false,
-                                              /*showUpgradeAction=*/true});
-                    self->messages.back().responseMs = elapsed;
-                    // The user may have just paid mid-session — check again so a retry right after
-                    // upgrading reflects the new plan without restarting the app.
-                    if (self->accountServicePtr != nullptr)
-                        self->accountServicePtr->refreshEntitlement();
-                } else {
-                    self->messages.push_back({"assistant", "Error: " + aiResponse.error.message, ""});
-                    self->messages.back().responseMs = elapsed;
                 }
 
-                self->updateChatDisplay();
-                self->inputField.grabKeyboardFocus();
-            });
-        },
-        useStructuredOutput);
+                // The timeline half of the SAME response, extracted independently of the
+                // patch half — a model may send a patch, a timelineOps envelope, or both, and
+                // "timelineOps" is a sibling key, never nested inside the patch. Offered only
+                // when a live timeline is wired in, and under the identical posture the patch
+                // card is under: validate NOW so the user reads a checked summary, apply only
+                // when they click.
+                juce::String timelineOpsJson;
+                juce::String timelineOpsPreview;
+#if SYNTH_ENABLE_TIMELINE
+                if (self->aiService.hasTimelineContext()) {
+                    const juce::var envelope = AIIntegrationService::extractTimelineOps(response);
+                    if (!envelope.isVoid()) {
+                        const auto preview = self->aiService.previewTimelineOps(envelope);
+                        if (preview.ok) {
+                            timelineOpsJson = juce::JSON::toString(envelope);
+                            timelineOpsPreview = preview.previewText;
+                        } else {
+                            // Shown, never swallowed — but with no Apply button, since there is
+                            // nothing valid to apply.
+                            timelineOpsPreview =
+                                "These timeline changes were rejected and were NOT applied: " + preview.message;
+                        }
+                    }
+                }
+#endif
+
+                // Arrange mode's whole response body IS the envelope JSON (timeline.generate's
+                // output schema) — the timeline card below is the real rendering, so the
+                // bubble carries a sentence rather than raw JSON. A rejected envelope still
+                // reads as a rejection: the card shows the validator's message. If no envelope
+                // was found at all, cleanText keeps the raw body — visible is debuggable,
+                // the same never-swallow rule the card itself follows.
+                if (arrangeMode) {
+                    if (timelineOpsJson.isNotEmpty())
+                        cleanText = "Here are the timeline changes I suggest.";
+                    else if (timelineOpsPreview.isNotEmpty())
+                        cleanText = "I couldn't produce valid timeline changes for that request.";
+                }
+
+                self->messages.push_back({"assistant", cleanText.trim(), json, /*isExpanded=*/false,
+                                          /*showUpgradeAction=*/false, timelineOpsJson, timelineOpsPreview});
+                self->messages.back().responseMs = elapsed;
+                // P6-9: only present on a Pro-plan hosted response whose persistence
+                // succeeded (see AIResponse::messageId's doc comment) — empty for every other
+                // case (local Ollama, free plan, no provider), which is exactly what keeps the
+                // later rating-sync check a no-op for those.
+                self->messages.back().serverMessageId = aiResponse.messageId;
+                self->attachPatchPreview(self->messages.back());
+
+                // P6-8: local-first — every session writes here regardless of plan, right after
+                // the assistant turn lands and `messages` reflects the full exchange. Not in
+                // AIIntegrationService::sendMessage()'s own callback: that one can run on a
+                // provider worker thread and only has aiService.chatHistory (unsplit
+                // text+patch), not this component's own text/jsonPatch-split `messages`.
+                self->saveCurrentConversationLocally();
+            } else if (aiResponse.error.kind == AIProvider::AIErrorKind::Quota) {
+                // The server's message is already a complete, user-facing sentence — no
+                // "Error: " prefix, same precedent as TrialExhausted/ServiceCapacityExceeded.
+                // showUpgradeAction=true adds the Upgrade-to-Pro button (see MessageBubble).
+                self->messages.push_back({"assistant", aiResponse.error.message, "", false,
+                                          /*showUpgradeAction=*/true});
+                self->messages.back().responseMs = elapsed;
+                // The user may have just paid mid-session — check again so a retry right after
+                // upgrading reflects the new plan without restarting the app.
+                if (self->accountServicePtr != nullptr)
+                    self->accountServicePtr->refreshEntitlement();
+            } else {
+                self->messages.push_back({"assistant", "Error: " + aiResponse.error.message, ""});
+                self->messages.back().responseMs = elapsed;
+            }
+
+            self->updateChatDisplay();
+            self->inputField.grabKeyboardFocus();
+        });
+    };
+
+#if SYNTH_ENABLE_TIMELINE
+    // Arrange mode routes to the hosted timeline.generate capability; everything downstream of
+    // the response (extraction, preview card, user-gated Apply) is the same seam either way.
+    const auto requestId = arrangeMode ? aiService.sendArrangeMessage(text, std::move(completion))
+                                       : aiService.sendMessage(text, std::move(completion), useStructuredOutput);
+#else
+    const auto requestId = aiService.sendMessage(text, std::move(completion), useStructuredOutput);
+#endif
 
     // Only record the handle if we are still waiting. A provider that answers synchronously (test
     // doubles, or the "no provider selected" path) has already run the teardown above by now, and
@@ -1363,8 +1407,11 @@ juce::String AIChatComponent::getWaitingStatusText() const {
 
 void AIChatComponent::refreshModels() {
     // Provider identity (unlike its model list) is known synchronously right after
-    // setProvider() — no need to wait for the fetch below to resolve.
+    // setProvider() — no need to wait for the fetch below to resolve. The mode selector's gates
+    // don't read the provider (parity rule), but this is still a convenient known resync point
+    // for owners that call refreshModels() after wiring things up.
     updateHostedModeNotice();
+    refreshModeControls();
 
     // refreshModels() is called repeatedly over the component's lifetime (once at
     // construction with no provider yet, again after MainComponent installs one, and
@@ -1426,6 +1473,30 @@ void AIChatComponent::updateHostedModeNotice() {
             hostedModeNotice.setColour(juce::Label::textColourId, lf->getTheme().colors.textMuted);
     }
     hostedModeNotice.setVisible(hosted);
+    resized();
+}
+
+void AIChatComponent::refreshModeControls() {
+#if SYNTH_ENABLE_TIMELINE
+    // PROVIDER-AGNOSTIC on purpose (the local/remote parity rule): arrange mode is served by
+    // whichever transport the active provider has (AIIntegrationService::sendArrangeMessage), so
+    // the selector's gate is the timeline preference alone — never the provider.
+    // hasTimelineContext() rides along with the preference switch: with no live doc installed
+    // there is nothing to summarise, validate against, or apply to, so offering Arrange would
+    // only manufacture the "cannot be checked or applied" failure previewTimelineOps() reports.
+    // In the real app the context is installed whenever the feature is on (MainComponent wires
+    // both), so this is one gate in practice and a safety net in tests.
+    const bool show = aiService.areTimelineToolsEnabled() && aiService.hasTimelineContext();
+#else
+    const bool show = false;
+#endif
+
+    if (modeSelector.isVisible() == show)
+        return;
+
+    modeSelector.setVisible(show);
+    if (!show)
+        modeSelector.setSelectedId(kModeSelectorPatchId, juce::dontSendNotification);
     resized();
 }
 

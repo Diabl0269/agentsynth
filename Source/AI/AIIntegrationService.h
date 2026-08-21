@@ -129,6 +129,66 @@ public:
 
     /** @brief Applies a previously previewed envelope through the host callback. One undo step. */
     TimelineOpsResult applyTimelineOps(const juce::var& envelope);
+
+    /**
+     * @brief Hard cap on how many paramTargets one arrange request offers — mirrors the server's
+     *        MAX_PARAM_TARGETS (synth-platform automation-generate/capability.ts): a longer list
+     *        would be rejected with a 400 before any model ever saw it. Targets past the cap are
+     *        dropped from the tail, in graph order — the same "bound the request, never fail it"
+     *        posture as buildAutomationTargetsSection()'s character cap.
+     */
+    static constexpr int kMaxRemoteParamTargets = 64;
+
+    /**
+     * @brief Sends an arrange-mode request — ONE intent served by whichever transport the active
+     *        provider has (the local/remote parity rule: the transport difference is absorbed
+     *        here, never surfaced as a behaviour difference).
+     *
+     * Hosted provider: the `timeline.generate` capability, with the structured request body from
+     * buildArrangeRequestBody(). Local provider: sendPrompt() with the SAME fields composed into
+     * the outgoing message (buildArrangeAugmentedContent, mirroring the server's own section
+     * layout) and AIStateMapper::getTimelineOpsEnvelopeSchema() as the response contract. Either
+     * way the answer is a `{"timelineOps": [...]}` envelope, which the existing
+     * extraction/preview/apply flow (extractTimelineOps → previewTimelineOps → the chat card's
+     * user-gated Apply) consumes unchanged — this method adds ways to ASK, never a second way to
+     * APPLY.
+     *
+     * Same history contract as sendMessage(): the user's raw text is recorded as the user turn
+     * (the composed arrange context exists only on the wire), a successful response's content as
+     * the assistant turn, and a Pro-plan conversation id is captured/re-pushed identically.
+     *
+     * No client-side retry on a validation rejection: the server runs its own bounded
+     * repair-retry inside the capability, and for the local model the envelope-only grammar plays
+     * the same role — an envelope that still fails TimelineOps::validate is surfaced to the user
+     * as the card's rejection message.
+     *
+     * With no provider installed, fails synchronously with the same typed error as sendMessage().
+     * On a hosted provider without a capability endpoint (a test double), the
+     * AIProvider::sendCapabilityRequest default delivers a typed Schema error.
+     */
+    AIProvider::RequestId sendArrangeMessage(const juce::String& text, AIProvider::CompletionCallback callback);
+
+    /**
+     * @brief Builds the `timeline.generate` request body for `text` — everything the input schema
+     *        wants except productName, which the provider adds (it owns branding).
+     *
+     * Fields (see TimelineGenerateInputSchema, synth-platform timeline-generate/capability.ts):
+     *  - `userPrompt`: the RAW user text. Deliberately NOT pre-wrapped with patch/arrangement
+     *    context the way buildPatchAugmentedContent() does — timeline.generate composes its
+     *    context sections server-side from the structured fields below, unconditionally, so
+     *    pre-wrapping would duplicate every section in the model input.
+     *  - `arrangementContext`: ArrangementContext::summarize() of the live doc; "" when the doc
+     *    is empty or no timeline context is installed (the schema requires the key but allows
+     *    empty — "a caller with nothing to say should say so explicitly").
+     *  - `paramTargets`: the SAME (uuid-bearing node, float param, real range) enumeration
+     *    buildAutomationTargetsSection() renders as text, as structured objects
+     *    {nodeUuid, nodeName, paramId, min, max, default}, capped at kMaxRemoteParamTargets.
+     *  - `availableTracks`: one {name, kind, index} per live TimelineDoc track, in doc order.
+     *
+     * Public for the same reason extractTimelineOps() is: tests and harnesses reproduce the real
+     * request rather than approximating it.
+     */
+    juce::var buildArrangeRequestBody(const juce::String& text) const;
 #endif
 
     /**
@@ -358,6 +418,31 @@ private:
     // file path, plugin identifier or factory key — and validate() only accepts pairs that resolve
     // against the live graph anyway.
     juce::String buildAutomationTargetsSection() const;
+
+    // One automatable parameter on one addressable node — the shared enumeration behind BOTH
+    // renderings of the same inventory: buildAutomationTargetsSection() (the local model's text
+    // section) and buildArrangeRequestBody()'s paramTargets (timeline.generate's structured
+    // field). One enumeration, two renderings, so the two surfaces can never disagree about which
+    // parameters are automatable. min/max/defaultValue are in the parameter's OWN units (the
+    // model writes raw values; TimelineOps::validate re-checks against the live range anyway).
+    struct AutomationTargetInfo {
+        juce::String nodeUuid;
+        juce::String nodeName; // display name (AudioProcessor::getName()), same as the text section
+        juce::String paramId;
+        float min = 0.0f;
+        float max = 0.0f;
+        float defaultValue = 0.0f;
+    };
+
+    // Uuid-bearing nodes only (a node without one is not addressable by writeLane), float
+    // parameters only (that is what an automation lane drives), real ranges from the parameter's
+    // own NormalisableRange. Graph order, unbounded — each caller applies its own cap.
+    std::vector<AutomationTargetInfo> enumerateAutomationTargets() const;
+
+    // The LOCAL transport's rendering of an arrange request: buildArrangeRequestBody()'s fields
+    // composed into one message, section-for-section the way the server's
+    // buildTimelineUserMessage composes them for the hosted transport. See sendArrangeMessage().
+    juce::String buildArrangeAugmentedContent(const juce::String& text) const;
 #endif
 
     // True while the timeline tool surface should be offered to the model: the switch is on AND
@@ -381,6 +466,15 @@ private:
      * @brief Builds the patch-augmented request content for a user message, without mutating chatHistory.
      */
     juce::String buildPatchAugmentedContent(const juce::String& text);
+
+    /**
+     * @brief Wraps a caller's completion callback with the shared success bookkeeping every
+     *        outgoing request needs: append the assistant turn to chatHistory (never for a
+     *        cancelled request — see the comment inside) and capture/re-push a Pro-plan
+     *        conversation id. Shared by sendMessage() and sendArrangeMessage() so the two paths
+     *        cannot drift on history or conversation-id behaviour.
+     */
+    AIProvider::CompletionCallback wrapCompletionForHistory(AIProvider::CompletionCallback callback);
 
     /**
      * @brief Trims chatHistory to the system prompt plus the most recent kMaxHistoryTurns pairs,

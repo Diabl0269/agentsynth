@@ -55,7 +55,8 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Filter")
         // +1 knob row: the Level knob took it from 3 sliders to 4 (issue #122).
         // +20 in #219: the Audio L/R input pair adds a jack row to the port gutter.
-        return {280, 583};
+        // −128: frequency-response chart is opt-in via "Show Response" (was always reserved).
+        return {280, 455};
     if (typeName == "LFO")
         return {280, 353};
     if (typeName == "VCA")

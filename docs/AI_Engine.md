@@ -1567,8 +1567,9 @@ apart. **Do not "fix" this into a parser** that splits `userPrompt` into `curren
 `userPrompt` — it would just reimplement, and risk diverging from, wrapping the service already
 does.
 
-**Conversational mode is out of scope.** The service exposes only `patch.generate`; there is no
-plain-chat capability. `AIIntegrationService::sendMessage()` calls `sendPrompt()` with a void
+**Conversational mode is out of scope.** The service exposes no plain-chat capability (its
+capabilities are `patch.generate` and `timeline.generate` — see "Remote capabilities beyond
+patch.generate" below). `AIIntegrationService::sendMessage()` calls `sendPrompt()` with a void
 `responseSchema` for ordinary chat turns, so `RemoteProvider::sendPrompt()` fails fast — no
 network call — with `AIErrorKind::Schema` when `responseSchema.isVoid()`, mirroring
 `OllamaProvider`'s "no model selected" fail-fast precedent. It also fails fast the same way for an
@@ -1613,6 +1614,105 @@ delivers `Cancelled` immediately (identical to `OllamaProvider::cancel()`'s queu
 `cancel()` on an in-flight request just sets the flag — the worker's own progress callback notices
 it inside `curl_easy_perform()` and unwinds on its own. A `CURL*` handle is never touched from any
 thread other than the one running `curl_easy_perform()` for it.
+
+### Remote capabilities beyond patch.generate: timeline.generate (arrange mode)
+
+The service exposes more than one capability, and they differ in **input shape**: `patch.generate`
+takes a prompt (the `sendPrompt()` path above), while `timeline.generate`
+(`synth-platform/packages/capabilities/src/timeline-generate/capability.ts`) takes structured
+fields that have no home in a conversation. `AIProvider::sendCapabilityRequest(capability, body,
+callback)` is the non-conversational sibling: the **caller** authors the body field by field, the
+provider adds what *it* owns (`productName`, the `Authorization`/`X-Device-Id`/`x-conversation-id`
+headers) and posts to `POST {host}/v1/capability/<capability>`. The default implementation on
+`AIProvider` fails synchronously with a typed `Schema` error, so providers with no capability
+endpoint (local Ollama, test doubles) never need to know the method exists. Inside
+`RemoteProvider` a capability request rides the SAME queue/cancel/delivery machinery and — the
+part that matters — the same one status→`AIErrorKind` mapping above, which is what keeps
+quota/trial/capacity enforcement byte-identical across capabilities (locked by
+`RemoteProviderTest.CapabilityQuotaExceededMapsToQuotaWithServerMessageIntact` /
+`CapabilityTrialExhaustedMapsToDistinctKindWithServerMessageIntact`). The body is serialized to
+its final JSON string on the *enqueuing* thread (`Request::capabilityBodyJson`) so no ref-counted
+`juce::var` ever crosses to the worker.
+
+**The arrange path, end to end — one intent, two transports.** `AIChatComponent` shows a
+Patch/Arrange selector in the model row, visible while the timeline feature preference is on
+(`areTimelineToolsEnabled()` + a live `setTimelineContext()`). The gate is deliberately
+**provider-agnostic** — the local/remote parity rule: arrange mode works on both transports, so
+the provider never gates the UI. Routing is the selector's call **alone — never a keyword
+heuristic**; `shouldUseStructuredOutput()` stays a patch-path concern. The selector's gate
+re-syncs at `refreshModels()` (a convenient known resync point) and at
+`AIChatComponent::refreshModeControls()` called by `MainComponent::applyTimelineFeatureEnabled` /
+`initialiseCommon` (the service has no listener for the preference switch, so the owner that
+flips it re-syncs the selector). Hiding the selector resets it to Patch — an invisible control
+must not keep steering requests.
+
+An Arrange send goes through `AIIntegrationService::sendArrangeMessage()`, which absorbs the
+transport difference so it is never a behaviour difference:
+
+- **Hosted provider** → `sendCapabilityRequest("timeline.generate", …)` with the structured
+  input body below.
+- **Local provider (Ollama)** → `sendPrompt()` with the SAME fields composed into the outgoing
+  message (`buildArrangeAugmentedContent()`, section-for-section the way the server's own
+  `buildTimelineUserMessage()` composes them: arrangement context when non-empty, then tracks,
+  then targets, then the prompt — plus one trailing steering line, standing in for the dedicated
+  arrange system prompt the server swaps in and a mid-conversation local request cannot), and
+  `AIStateMapper::getTimelineOpsEnvelopeSchema()` as the response contract: an envelope-ONLY
+  grammar sharing the ops item schema with `getPatchSchemaWithTimelineOps` (one source, cannot
+  drift), with `timelineOps` **required** — an arrange answer with no ops is not an answer. The
+  history splice matches `sendMessage()`: chatHistory keeps the raw user text, the composed
+  context exists only on the wire.
+
+Either way the answer is the same `{"timelineOps": [...]}` envelope, and everything downstream is
+shared. The structured input (`buildArrangeRequestBody()` — public, so tests reproduce the real
+request):
+
+- `userPrompt` — the **raw** user text. Deliberately NOT pre-wrapped the way
+  `buildPatchAugmentedContent()` wraps the patch path's last message: `timeline.generate`'s own
+  `buildTimelineUserMessage()` composes the context sections server-side from the structured
+  fields below **unconditionally**, so pre-wrapping would put every section in the model input
+  twice. (Contrast with the patch path's wrap-once equivalence argument above — same goal,
+  opposite conclusion, because the two capabilities wrap differently server-side.)
+- `arrangementContext` — `ArrangementContext::summarize()` (§5d); `""` for an empty doc (the
+  schema requires the key but allows it empty).
+- `paramTargets` — `{nodeUuid, nodeName, paramId, min, max, default}` per automatable parameter,
+  from `enumerateAutomationTargets()`: the SAME enumeration `buildAutomationTargetsSection()`
+  renders as text for the local model, so the two surfaces cannot disagree about what is
+  automatable. Capped at `kMaxRemoteParamTargets` (64, mirroring the server's
+  `MAX_PARAM_TARGETS` — a longer list is a 400 before any model sees it).
+- `availableTracks` — `{name, kind, index}` per live `TimelineDoc` track, in doc order.
+  `TimelineDoc::kMaxTracks` equals the server's `TIMELINE_OPS_MAX_TRACKS` (256), so no cap is
+  needed.
+
+History and conversation-id bookkeeping are shared with `sendMessage()` via
+`wrapCompletionForHistory()` — one wrapper, so the two send paths cannot drift.
+
+**The response re-enters the existing seam unchanged.** `timeline.generate` answers
+`{"data": {"timelineOps": [...]}}`; `RemoteProvider` re-serializes `data` as `AIResponse::content`
+exactly as for a patch, and the §5e flow — `extractTimelineOps()` → `TimelineOps::validate` →
+`TimelineCard` preview → the user's Apply — consumes it with **no remote-specific branch**. Arrange
+mode adds a second way to *ask*, never a second way to *apply*; both doors' validators are
+untouched (the two-door model of §5c stands). A response that fails `TimelineOps::validate` shows
+the rejection in the card with no Apply button, and there is **no client retry loop**: the server
+already runs its own bounded repair-retry inside the capability (`generateStructured`), so a
+rejection here is information for the user, not a trigger for another round trip.
+
+**Why the client never calls `automation.generate`.** It is a strict subset of
+`timeline.generate` in both directions: its input schema is what `TimelineGenerateInputSchema`
+`.extend()`s (minus `availableTracks`, with `paramTargets` required non-empty), and its output
+envelope is `writeLane`-only — anything it can say, `timeline.generate` can say, and the client's
+single gate (`TimelineOps::validate`) accepts both. A second client path would mean a second body
+builder, a second routing branch and a second test surface for zero user-visible gain; the
+narrower capability exists server-side for clients that only automate. If a dedicated
+automation-only surface ever becomes worth it client-side, the seam is ready:
+`sendCapabilityRequest("automation.generate", …)` with the same body minus `availableTracks`.
+
+Tests: `Tests/RemoteProviderTests.cpp` (capability URL/body/headers, fail-fast validation, the
+entitlement-error pass-through, envelope re-serialization), `Tests/AIIntegrationServiceTests.cpp`
+(`Arrange*` — request-body shape, the 64-target cap, empty-timeline explicitness, the shared
+history/conversation-id contract, the local transport's composed message + envelope-only schema +
+raw-text history, typed no-provider and hosted-without-capability failures), and
+`Tests/AIChatComponentTests.cpp` (`Arrange*` — provider-agnostic selector gating, explicit
+routing on both transports, and the card flow for a validated and a rejected canned envelope).
 
 **HTTP transport seam.** `RemoteProvider::HttpPerformer` (`RemoteProvider.h`) parallels
 `OllamaProvider::InputStreamFactory`: a constructor taking just a host installs the real

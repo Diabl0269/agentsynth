@@ -234,6 +234,61 @@ RemoteProvider::RequestId RemoteProvider::sendPrompt(const std::vector<Message>&
     juce::ignoreUnused(onDelta);
 
     Request request{RequestId{}, conversation, std::move(callback), responseSchema, nullptr};
+
+    AIErrorKind validationKind = AIErrorKind::None;
+    juce::String validationMessage;
+    if (responseSchema.isVoid()) {
+        // The remote service exposes no plain-chat capability to call — sendPrompt() is always a
+        // structured patch.generate request. Fail fast, no network hit — mirrors OllamaProvider's
+        // "no model selected" precedent. (Structured non-conversational requests go through
+        // sendCapabilityRequest() instead.)
+        validationKind = AIErrorKind::Schema;
+        validationMessage =
+            "RemoteProvider only supports structured patch generation; the service has no conversational "
+            "capability yet.";
+    } else if (conversation.empty() || conversation.back().content.trim().isEmpty()) {
+        validationKind = AIErrorKind::Schema;
+        validationMessage = "Error: Cannot send an empty prompt to the Remote provider.";
+    }
+
+    return enqueueOrReject(std::move(request), validationKind, validationMessage);
+}
+
+RemoteProvider::RequestId RemoteProvider::sendCapabilityRequest(const juce::String& capability, const juce::var& body,
+                                                                CompletionCallback callback) {
+    Request request{RequestId{}, {}, std::move(callback), juce::var(), nullptr};
+    request.capability = capability;
+
+    AIErrorKind validationKind = AIErrorKind::None;
+    juce::String validationMessage;
+
+    auto* bodyObj = body.getDynamicObject();
+    if (capability.trim().isEmpty()) {
+        validationKind = AIErrorKind::Schema;
+        validationMessage = "Error: Cannot send a capability request with no capability name.";
+    } else if (bodyObj == nullptr || !body["userPrompt"].isString() || body["userPrompt"].toString().trim().isEmpty()) {
+        // Every capability's input schema requires a non-empty userPrompt — reject here, with no
+        // network hit, the same way sendPrompt() rejects a blank last message.
+        validationKind = AIErrorKind::Schema;
+        validationMessage = "Error: A capability request body must be an object with a non-empty \"userPrompt\".";
+    } else {
+        // Final body = the caller's fields plus productName (the provider owns branding, callers
+        // never restate it — same division as the patch path). Serialized HERE, on the calling
+        // thread, into Request::capabilityBodyJson — see the header doc comment for why a string
+        // crosses to the worker rather than a ref-counted juce::var. The caller's object is read,
+        // never mutated.
+        juce::DynamicObject::Ptr finalBody = new juce::DynamicObject();
+        for (const auto& prop : bodyObj->getProperties())
+            finalBody->setProperty(prop.name, prop.value);
+        finalBody->setProperty("productName", juce::String(synth::branding::kProductName));
+        request.capabilityBodyJson = juce::JSON::toString(juce::var(finalBody.get()));
+    }
+
+    return enqueueOrReject(std::move(request), validationKind, validationMessage);
+}
+
+RemoteProvider::RequestId RemoteProvider::enqueueOrReject(Request&& request, AIErrorKind validationKind,
+                                                          const juce::String& validationMessage) {
     bool rejected = false;
     bool mustStartWorker = false;
     AIErrorKind rejectionKind = AIErrorKind::Cancelled;
@@ -247,19 +302,10 @@ RemoteProvider::RequestId RemoteProvider::sendPrompt(const std::vector<Message>&
 
         if (isShuttingDown) {
             rejected = true;
-        } else if (responseSchema.isVoid()) {
-            // The remote service currently exposes only patch.generate (structured output); there
-            // is no plain-chat capability to call. Fail fast, no network hit — mirrors
-            // OllamaProvider's "no model selected" precedent.
+        } else if (validationMessage.isNotEmpty()) {
             rejected = true;
-            rejectionKind = AIErrorKind::Schema;
-            rejectionMessage =
-                "RemoteProvider only supports structured patch generation; the service has no conversational "
-                "capability yet.";
-        } else if (conversation.empty() || conversation.back().content.trim().isEmpty()) {
-            rejected = true;
-            rejectionKind = AIErrorKind::Schema;
-            rejectionMessage = "Error: Cannot send an empty prompt to the Remote provider.";
+            rejectionKind = validationKind;
+            rejectionMessage = validationMessage;
         } else {
             // Registered under the same lock as the queue push, so a cancel() racing this call
             // either does not see the request at all or sees it in both places.
@@ -494,26 +540,44 @@ void RemoteProvider::processRequest(const Request& req) {
         return;
     }
 
-    // Build the request body: {"productName": ..., "userPrompt": ...}. currentPatch and
-    // promptVersion are deliberately OMITTED entirely (not sent as null).
-    //
-    // Why this is safe: AIIntegrationService::buildPatchAugmentedContent() already renders the
-    // current graph state into the LAST conversation message as
-    // "Current patch state:\n```json\n<JSON>\n```\n\nUser request: <text>" whenever the graph is
-    // non-empty, or leaves it as plain text otherwise. The service's own buildUserMessage()
-    // (synth-platform/packages/capabilities/src/patch-generate/capability.ts) performs the EXACT
-    // SAME wrapping server-side, from a separate currentPatch + userPrompt pair, and only wraps
-    // when currentPatch is present. Sending the client's already-wrapped text as userPrompt alone,
-    // with currentPatch omitted, therefore produces byte-identical model input to the "proper"
-    // structured split — without any fragile re-parsing of the wrapper on this side. Do not
-    // "fix" this into a parser that splits userPrompt back into currentPatch/userPrompt.
-    const juce::String userPrompt = req.conversation.back().content;
+    // A capability request (sendCapabilityRequest) arrives with its endpoint name and its final
+    // body already decided — the enqueuing thread serialized it, this thread only sends it.
+    const bool isCapabilityRequest = req.capability.isNotEmpty();
 
-    juce::DynamicObject::Ptr body = new juce::DynamicObject();
-    body->setProperty("productName", juce::String(synth::branding::kProductName));
-    body->setProperty("userPrompt", userPrompt);
+    juce::String jsonBody;
+    if (isCapabilityRequest) {
+        jsonBody = req.capabilityBodyJson;
+    } else {
+        // Legacy sendPrompt() path: build the patch.generate body {"productName": ...,
+        // "userPrompt": ...}. currentPatch and promptVersion are deliberately OMITTED entirely
+        // (not sent as null).
+        //
+        // Why this is safe: AIIntegrationService::buildPatchAugmentedContent() already renders the
+        // current graph state into the LAST conversation message as
+        // "Current patch state:\n```json\n<JSON>\n```\n\nUser request: <text>" whenever the graph
+        // is non-empty, or leaves it as plain text otherwise. The service's own buildUserMessage()
+        // (synth-platform/packages/capabilities/src/patch-generate/capability.ts) performs the
+        // EXACT SAME wrapping server-side, from a separate currentPatch + userPrompt pair, and
+        // only wraps when currentPatch is present. Sending the client's already-wrapped text as
+        // userPrompt alone, with currentPatch omitted, therefore produces byte-identical model
+        // input to the "proper" structured split — without any fragile re-parsing of the wrapper
+        // on this side. Do not "fix" this into a parser that splits userPrompt back into
+        // currentPatch/userPrompt.
+        //
+        // timeline.generate is DIFFERENT on exactly this point: its server-side
+        // buildTimelineUserMessage() composes the context sections (arrangement, tracks, targets)
+        // from the structured fields unconditionally, so its userPrompt must stay the RAW user
+        // text — pre-wrapping it patch-style would put every section in the model input twice.
+        // That is why arrange mode goes through sendCapabilityRequest() with structured fields
+        // rather than through this path.
+        const juce::String userPrompt = req.conversation.back().content;
 
-    const juce::String jsonBody = juce::JSON::toString(juce::var(body.get()));
+        juce::DynamicObject::Ptr body = new juce::DynamicObject();
+        body->setProperty("productName", juce::String(synth::branding::kProductName));
+        body->setProperty("userPrompt", userPrompt);
+
+        jsonBody = juce::JSON::toString(juce::var(body.get()));
+    }
 
     juce::StringPairArray requestHeaders;
     requestHeaders.set("Content-Type", "application/json");
@@ -529,7 +593,10 @@ void RemoteProvider::processRequest(const Request& req) {
     if (conversationId.isNotEmpty())
         requestHeaders.set("x-conversation-id", conversationId);
 
-    const juce::String url = remoteHost + "/v1/capability/patch.generate";
+    // One URL scheme for every capability; one status→error mapping below serves them all, which
+    // is what keeps entitlement errors (quota/trial/capacity) byte-identical across capabilities.
+    const juce::String url =
+        remoteHost + "/v1/capability/" + (isCapabilityRequest ? req.capability : juce::String("patch.generate"));
 
     // req.state is only ever null for a default-constructed Request, which is never what the
     // worker pulls off pendingRequests (every enqueued Request gets a freshly made RequestState).

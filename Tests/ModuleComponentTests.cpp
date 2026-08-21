@@ -4,6 +4,7 @@
 #include "../Source/Modules/LFOModule.h"
 #include "../Source/Modules/MacroControlModule.h"
 #include "../Source/Modules/MathModule.h"
+#include "../Source/Modules/MidiKeyboardModule.h"
 #include "../Source/Modules/OscillatorModule.h"
 #include "../Source/Modules/SamplerModule.h"
 #include "../Source/Modules/VCAModule.h"
@@ -13,8 +14,11 @@
 #include "../Source/UI/LayoutUtil.h"
 #include "../Source/UI/ModuleComponent.h"
 #include "../Source/UI/ModuleLibraryComponent.h"
+#include "../Source/UI/Theme/AppLookAndFeel.h"
+#include "../Source/UI/Theme/BuiltInThemes.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
+#include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 class ModuleComponentTest : public ::testing::Test {
@@ -969,4 +973,44 @@ TEST_F(ModuleComponentTest, WavetableCardPaintsAndTicksWithoutCrashing) {
     juce::Graphics g(img);
     EXPECT_NO_THROW(moduleComponent.paint(g));
     EXPECT_TRUE(img.isValid());
+}
+
+// Theme switch must recolour the on-screen MidiKeyboardComponent. Colours are set on the
+// component itself (not via AppLookAndFeel ColourIds — juce_audio_utils is not linked into
+// Core), so lookAndFeelChanged() has to push them again or the keys keep the previous theme.
+TEST_F(ModuleComponentTest, MidiKeyboardKeysFollowThemeChange) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    MidiKeyboardModule keyboard;
+    ModuleComponent moduleComponent(&keyboard, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    juce::MidiKeyboardComponent* keys = nullptr;
+    for (int i = 0; i < moduleComponent.getNumChildComponents(); ++i)
+        if (auto* kb = dynamic_cast<juce::MidiKeyboardComponent*>(moduleComponent.getChildComponent(i)))
+            keys = kb;
+    ASSERT_NE(keys, nullptr) << "MIDI Keyboard card must host a MidiKeyboardComponent";
+
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
+    moduleComponent.setLookAndFeel(&lf);
+    EXPECT_EQ(keys->findColour(juce::MidiKeyboardComponent::whiteNoteColourId),
+              synth::theme::makeObsidian().colors.bg1);
+    EXPECT_EQ(keys->findColour(juce::MidiKeyboardComponent::blackNoteColourId),
+              synth::theme::makeObsidian().colors.surfaceHi);
+    EXPECT_EQ(keys->findColour(juce::MidiKeyboardComponent::keyDownOverlayColourId),
+              synth::theme::makeObsidian().colors.accent);
+
+    lf.applyTheme(synth::theme::makeNeon());
+    moduleComponent.sendLookAndFeelChange();
+    EXPECT_EQ(keys->findColour(juce::MidiKeyboardComponent::whiteNoteColourId), synth::theme::makeNeon().colors.bg1);
+    EXPECT_EQ(keys->findColour(juce::MidiKeyboardComponent::blackNoteColourId),
+              synth::theme::makeNeon().colors.surfaceHi);
+    EXPECT_EQ(keys->findColour(juce::MidiKeyboardComponent::keyDownOverlayColourId),
+              synth::theme::makeNeon().colors.accent);
+    EXPECT_EQ(keys->findColour(juce::MidiKeyboardComponent::keySeparatorLineColourId),
+              synth::theme::makeNeon().colors.border);
+    EXPECT_EQ(keys->findColour(juce::MidiKeyboardComponent::textLabelColourId),
+              synth::theme::makeNeon().colors.textPrimary);
+
+    moduleComponent.setLookAndFeel(nullptr);
 }

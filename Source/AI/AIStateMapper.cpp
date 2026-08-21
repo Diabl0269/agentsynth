@@ -1879,30 +1879,26 @@ juce::var AIStateMapper::getPatchSchema() {
     return schema;
 }
 
-juce::var AIStateMapper::getPatchSchemaWithTimelineOps() {
-    juce::var schema = getPatchSchema();
-    auto* schemaObj = schema.getDynamicObject();
-    jassert(schemaObj != nullptr);
-    auto* properties = schemaObj->getProperty("properties").getDynamicObject();
-    jassert(properties != nullptr);
-
-    // One permissive op shape — see the header comment for why this is a grammar, not a
-    // validator. Field names/types mirror TimelineOps.cpp's readers exactly. "track" was
-    // previously `{}` ("anything goes"), which is a confirmed Ollama grammar-compiler bug: an
-    // empty-schema subschema gets mangled into a garbage wrapped object instead of passing the
-    // value through unconstrained (same defect class documented in synth-platform's
-    // packages/inference/src/index.ts for the sibling `params` shape; `params` in getPatchSchema()
-    // above never hit this because its `additionalProperties: true` is a JSON Schema *boolean*,
-    // not `{}`). The natural fix would be `"oneOf": [string, {"index": integer}]` to match
-    // resolveTrack() (TimelineOps.cpp:210-256) exactly, but this header's own doc comment already
-    // rules that out: llama.cpp's grammar compiler (which Ollama's structured output sits on)
-    // "handles anyOf poorly" — the same family as oneOf. So this narrows to `"type": "string"`
-    // only, the common case (address a track by its exact name). TRADEOFF, documented rather than
-    // silently picked: TimelineOps::resolveTrack()'s `{"index": N}` disambiguation path for two
-    // tracks sharing a name is not expressible through this local grammar — a duplicate-name op
-    // gets TimelineOps::validate's clear rejection message instead of succeeding, which the model
-    // can act on (e.g. rename) but not resolve via index. Still strictly better than `{}`, which
-    // was mangled on essentially every emission, string or object alike.
+namespace {
+// One permissive op shape, shared by BOTH structured-output contracts that can carry ops
+// (getPatchSchemaWithTimelineOps and getTimelineOpsEnvelopeSchema) so the grammar cannot drift
+// between them — this is a grammar, not a validator; TimelineOps::validate is still the real
+// gate. Field names/types mirror TimelineOps.cpp's readers exactly. "track" is `{"type":
+// "string"}`, not `{}` ("anything goes"): an empty-schema subschema is a confirmed Ollama
+// grammar-compiler bug (P6-13) that mangles output into garbage instead of passing the value
+// through unconstrained (same defect class documented in synth-platform's
+// packages/inference/src/index.ts for the sibling `params` shape; `params` in getPatchSchema()
+// above never hit this because its `additionalProperties: true` is a JSON Schema *boolean*, not
+// `{}`). The natural fix would be `"oneOf": [string, {"index": integer}]` to match
+// resolveTrack() (TimelineOps.cpp:210-256) exactly, but llama.cpp's grammar compiler (which
+// Ollama's structured output sits on) handles anyOf/oneOf poorly, so this narrows to
+// `"type": "string"` only — the common case of addressing a track by its exact name. TRADEOFF,
+// documented rather than silently picked: TimelineOps::resolveTrack()'s `{"index": N}`
+// disambiguation path for two tracks sharing a name is not expressible through this grammar — a
+// duplicate-name op gets TimelineOps::validate's rejection message instead of succeeding, which
+// the model can act on (e.g. rename) but not resolve via index. Still strictly better than `{}`,
+// which was mangled on essentially every emission, string or object alike.
+juce::var timelineOpsArraySchema() {
     const juce::String opsSchemaJson = R"json({
         "type": "array",
         "items": {
@@ -1933,10 +1929,35 @@ juce::var AIStateMapper::getPatchSchemaWithTimelineOps() {
             "required": ["op"]
         }
     })json";
-    properties->setProperty("timelineOps", juce::JSON::parse(opsSchemaJson));
+    return juce::JSON::parse(opsSchemaJson);
+}
+} // namespace
+
+juce::var AIStateMapper::getPatchSchemaWithTimelineOps() {
+    juce::var schema = getPatchSchema();
+    auto* schemaObj = schema.getDynamicObject();
+    jassert(schemaObj != nullptr);
+    auto* properties = schemaObj->getProperty("properties").getDynamicObject();
+    jassert(properties != nullptr);
+
+    properties->setProperty("timelineOps", timelineOpsArraySchema());
     // Deliberately NOT added to "required": a patch-only response stays exactly as valid as it
     // was under getPatchSchema(), and the prompt tells the model when the key is warranted.
     return schema;
+}
+
+juce::var AIStateMapper::getTimelineOpsEnvelopeSchema() {
+    juce::DynamicObject::Ptr properties = new juce::DynamicObject();
+    properties->setProperty("timelineOps", timelineOpsArraySchema());
+
+    juce::DynamicObject::Ptr schema = new juce::DynamicObject();
+    schema->setProperty("type", "object");
+    schema->setProperty("properties", juce::var(properties.get()));
+    // Required here, unlike getPatchSchemaWithTimelineOps: an arrange-mode answer that carries
+    // no ops is not an answer, and the grammar refusing it beats a prose apology the extraction
+    // step would drop.
+    schema->setProperty("required", juce::Array<juce::var>({"timelineOps"}));
+    return juce::var(schema.get());
 }
 
 } // namespace synth
