@@ -1401,11 +1401,15 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
         for (juce::int64 bar = firstBar; bar <= lastBar; ++bar) {
             const double barBeat = (double)bar * beatsPerBar;
             const double x = viewState_.beatToX(barBeat);
-            if (x < -1.0 || x > widthPx + 1.0)
-                continue;
-
-            g.setColour(barColour);
-            g.drawVerticalLine(xOrigin + (int)std::llround(x), (float)top, (float)bottom);
+            // Cull only the BAR LINE itself when it sits outside the view — never the whole bar.
+            // A bar whose own line has scrolled off the left edge still owns beats and
+            // subdivisions that ARE on screen; a whole-bar `continue` here is exactly the bug
+            // where every grid line left of the first visible bar line vanished while scrolling.
+            // The beat/subdivision loops below cull per line.
+            if (x >= -1.0 && x <= widthPx + 1.0) {
+                g.setColour(barColour);
+                g.drawVerticalLine(xOrigin + (int)std::llround(x), (float)top, (float)bottom);
+            }
 
             if (drawBeatLines) {
                 for (int beatInBar = 1; beatInBar < beatsPerBarRounded; ++beatInBar) {

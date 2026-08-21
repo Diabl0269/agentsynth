@@ -286,16 +286,20 @@ void TimelineRulerComponent::paint(juce::Graphics& g) {
     for (juce::int64 bar = firstBar; bar <= lastBar; ++bar) {
         const double barBeat = (double)bar * beatsPerBar;
         const double x = mapBeatToX(barBeat);
-        if (x < -1.0 || x > widthPx + 1.0)
-            continue;
+        // Cull only the bar line and its number — never the whole bar. A bar whose line has
+        // scrolled off the left edge still owns beat ticks/labels that ARE on screen; a whole-bar
+        // `continue` here left the ruler blank to the left of the first visible bar line while
+        // scrolling (the lanes-grid painter had the same bug, fixed the same way). The tick loop
+        // below culls per tick.
+        if (x >= -1.0 && x <= widthPx + 1.0) {
+            g.setColour(border);
+            g.drawVerticalLine((int)std::llround(x), 0.0f, (float)bounds.getHeight());
 
-        g.setColour(border);
-        g.drawVerticalLine((int)std::llround(x), 0.0f, (float)bounds.getHeight());
-
-        if (bar >= 0 && (bar % labelEveryNBars) == 0) {
-            g.setColour(textMuted);
-            g.drawText(juce::String(bar + 1), (int)std::llround(x) + 3, 0, kBarLabelWidth, bounds.getHeight(),
-                       juce::Justification::centredLeft, false);
+            if (bar >= 0 && (bar % labelEveryNBars) == 0) {
+                g.setColour(textMuted);
+                g.drawText(juce::String(bar + 1), (int)std::llround(x) + 3, 0, kBarLabelWidth, bounds.getHeight(),
+                           juce::Justification::centredLeft, false);
+            }
         }
 
         if (tickPlan.drawBeatTicks) {

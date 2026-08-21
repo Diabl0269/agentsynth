@@ -31,10 +31,10 @@ when reasoning about a key that "does nothing."
 | Cmd+Shift+Z | Redo |
 | Cmd+M | Toggle Mod Matrix |
 | Cmd+K | Toggle Minimap |
-| Cmd+A | Toggle AI Panel |
+| Cmd+Shift+A | Toggle AI Panel (moved off Cmd+A so Select All could take the platform-standard chord) |
 | Cmd+B | Toggle Module Library |
 | Cmd+T | Toggle Timeline Panel (`SYNTH_ENABLE_TIMELINE` builds only — see [`layout.md §16`](layout.md)) |
-| Cmd+Shift+A | Select All in Focused Editor (actionId/`AppCommands` name still `selectAllModules` — see "Surface routing" below) |
+| Cmd+A | Select All in Focused Editor (actionId/`AppCommands` name still `selectAllModules` — see "Surface routing" below) |
 | Cmd+Shift+S | Save Selection as Snippet |
 | Cmd+C | Copy (Selected Modules, or — see "Surface routing" below — the timeline's selected clips/notes) |
 | Cmd+V | Paste (Modules, or the copied clips/notes) |
@@ -53,8 +53,13 @@ Preferences → "Show timeline (experimental)" is turned off — the runtime kil
 intended, not a bug. The grid and zoom commands below are likewise inactive whenever the panel
 itself isn't open (`isTimelineVisible`), the same as any other timeline-only command.
 
-`Cmd+Shift+A` / `Cmd+Shift+S` use the Shift variants because `Cmd+A` (Toggle AI Panel) and `Cmd+S`
-(Save Preset) are already bound. Like every row above, both are rebindable in Settings.
+`Cmd+A` is the platform-standard Select All (the way Cubase and every text field read it), so it
+owns the bare chord and the AI panel sits on `Cmd+Shift+A`; `Cmd+Shift+S` keeps its Shift variant
+because `Cmd+S` (Save Preset) is bound. A real Ctrl+A for the AI panel was considered and rejected:
+on Windows/Linux JUCE's `commandModifier` IS Ctrl, so Ctrl+A and Cmd+A would be the same chord
+there and the two commands would collide. Like every row above, all of these are rebindable in
+Settings — and note that a machine which already persisted the old bindings keeps them until
+"Reset to Defaults" (bindings are stored per actionId, defaults only fill the gaps).
 
 `Cmd+C` / `Cmd+V` (and, by the same reasoning, Space) are safe to claim app-wide because JUCE's
 `TextEditor` consumes them itself while it has focus — Cmd+C/V by copying/pasting text, Space by
@@ -68,9 +73,9 @@ an empty clipboard on the acting surface — see below), which greys the menu ro
 `ApplicationCommandTarget::tryToInvoke` refuse the key outright; Repeat is inactive with no
 selection AND always inactive on the Graph surface.
 
-### Surface routing (TL5-10): who Cmd+C/V/D/X/R and Cmd+Shift+A act on
+### Surface routing (TL5-10): who Cmd+C/V/D/X/R and Cmd+A act on
 
-Cmd+C/V/D/X/R and Cmd+Shift+A are global commands (`MainComponent::getAllCommands`/
+Cmd+C/V/D/X/R and Cmd+A are global commands (`MainComponent::getAllCommands`/
 `getCommandInfo`/`perform`), but "the canvas" is not the only editable surface once the timeline
 panel is open — the clip lanes and the piano roll are too. `MainComponent::resolveEditSurface()`
 is the **one** focus-ownership rule that decides which surface's clipboard and selection these
@@ -110,7 +115,7 @@ also deletes, so anything copyable is cuttable). Repeat is active whenever the a
 selection (`hasClipSelection()` / `hasNoteSelection()`) and — uniquely among these verbs — is
 **always inactive on Graph**, regardless of selection.
 
-`Cmd+Shift+A` (`selectAllModules` — the actionId and `AppCommands` name are frozen so a persisted
+`Cmd+A` (`selectAllModules` — the actionId and `AppCommands` name are frozen so a persisted
 user binding keeps resolving, even though the verb widened) is routed by the same
 `resolveEditSurface()`: it selects every clip (`TimelinePanelComponent::selectAllClips()`) on
 TimelineClips, every note in the open clip (`PianoRollComponent::selectAllNotes()`) on PianoRoll,

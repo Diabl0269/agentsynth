@@ -655,10 +655,21 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
 void PianoRollComponent::paintMarquee(juce::Graphics& g) {
     if (marqueeRect_.isEmpty())
         return;
-    g.setColour(juce::Colours::white.withAlpha(0.12f));
-    g.fillRect(marqueeRect_);
-    g.setColour(juce::Colours::white.withAlpha(0.6f));
-    g.drawRect(marqueeRect_, 1);
+
+    // SAME token recipe as GraphEditor's module-marquee band (GraphEditor.cpp
+    // GraphEditor::Content::paint, "Marquee selection band", issue #156) and
+    // TimelineClipLaneArea::paintMarquee: accent fill at low alpha + a brighter accent border at
+    // the theme's guideLineWidth. Previously a flat white at low alpha, easy to lose against a
+    // light theme's background; this keeps all three marquees moving together on a theme change.
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colours::cyan;
+    const float lineWidth = lf != nullptr ? lf->getTheme().metrics.guideLineWidth : 1.5f;
+
+    const auto bandF = marqueeRect_.toFloat();
+    g.setColour(accentColour.withAlpha(0.12f));
+    g.fillRect(bandF);
+    g.setColour(accentColour.withAlpha(0.80f));
+    g.drawRect(bandF, lineWidth);
 }
 
 //==============================================================================

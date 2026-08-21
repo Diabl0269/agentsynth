@@ -407,6 +407,9 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
         else
             paintMissingAssetPlaceholder(g, clip, rect);
     } else if (rect.getWidth() > kMinWidthForNotePreview) {
+        // Fixed white, not a theme token: these lines sit on `fill`, which is resolveTrackColour's
+        // arbitrary per-track/per-user hue, not a theme colour — the contrast they need to read
+        // against is unrelated to which app theme is active, only to that one clip's colour.
         g.setColour(juce::Colours::white.withAlpha(0.55f));
         for (const auto& note : clip.notes) {
             const double noteStartBeat = geometry.start + note.startBeat; // notes are clip-relative
@@ -424,6 +427,9 @@ void TimelineClipLaneArea::paintClip(juce::Graphics& g, const synth::Clip& clip,
     }
 
     if (rect.getWidth() > kMinWidthForName && clip.name.isNotEmpty()) {
+        // Fixed black, not a theme token, for the same reason as the note-preview lines above: the
+        // label sits on `fill` (an arbitrary per-track hue), so its contrast need is independent of
+        // which app theme is active.
         g.setColour(juce::Colours::black.withAlpha(clip.muted ? kMutedClipLabelAlpha : 0.8f));
         g.setFont(juce::Font(11.0f));
         g.drawText(clip.name, rect.reduced(4, 2), juce::Justification::topLeft, true);
@@ -484,10 +490,23 @@ void TimelineClipLaneArea::paintFileDropHighlight(juce::Graphics& g, juce::Recta
 void TimelineClipLaneArea::paintMarquee(juce::Graphics& g) {
     if (marqueeRect_.isEmpty())
         return;
-    g.setColour(juce::Colours::white.withAlpha(0.12f));
-    g.fillRect(marqueeRect_);
-    g.setColour(juce::Colours::white.withAlpha(0.6f));
-    g.drawRect(marqueeRect_, 1);
+
+    // SAME token recipe as GraphEditor's module-marquee band (GraphEditor.cpp
+    // GraphEditor::Content::paint, "Marquee selection band", issue #156) and
+    // PianoRollComponent::paintMarquee: accent fill at low alpha + a brighter accent border at the
+    // theme's guideLineWidth. Previously a flat white at low alpha — indistinguishable from the
+    // module marquee's own placeholder look before it too was themed, and nearly invisible on a
+    // light theme. Keeping all three on one recipe means a theme change (or a user accent
+    // override) moves all three marquees together rather than leaving one behind.
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    const juce::Colour accentColour = lf != nullptr ? lf->getTheme().colors.accent : juce::Colour(0xff00D1FF);
+    const float lineWidth = lf != nullptr ? lf->getTheme().metrics.guideLineWidth : 1.5f;
+
+    const auto bandF = marqueeRect_.toFloat();
+    g.setColour(accentColour.withAlpha(0.12f));
+    g.fillRect(bandF);
+    g.setColour(accentColour.withAlpha(0.80f));
+    g.drawRect(bandF, lineWidth);
 }
 
 //==============================================================================
@@ -539,6 +558,10 @@ void TimelineClipLaneArea::paintDragGhosts(juce::Graphics& g) {
         // pointer crossed rows would read as the clip having already landed there. Muted state
         // comes along for the same reason it does in paintClip() — a copy of a muted clip is
         // still muted when it lands.
+        // Not a theme fallback (this is resolveTrackColour territory, which this file leaves
+        // alone) — just a defensive default for the "should never happen" case of a source track
+        // that vanished mid-drag, so an out-of-range index still paints something rather than
+        // reading tracks[] out of bounds.
         juce::Colour base = juce::Colours::white;
         if (juce::isPositiveAndBelow(origin.trackIndex, (int)tracks.size())) {
             const auto& track = tracks[(std::size_t)origin.trackIndex];
@@ -559,9 +582,18 @@ void TimelineClipLaneArea::paintDrawGhost(juce::Graphics& g) {
     const auto ghost = getDrawGhostRectForTest();
     if (ghost.isEmpty())
         return;
-    g.setColour(juce::Colours::white.withAlpha(0.18f));
+
+    // Themed via the same dynamic_cast<AppLookAndFeel*> idiom as paintFileDropHighlight below: a
+    // ghost that has no clip/track of its own to borrow a colour from (see this section's header
+    // comment) borrows the theme's accent instead — previously a flat white literal, which stayed
+    // legible on Obsidian's dark bg0 by accident but would wash out on a light theme.
+    juce::Colour accent(0xff00D1FF);
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        accent = lf->getTheme().colors.accent;
+
+    g.setColour(accent.withAlpha(0.18f));
     g.fillRoundedRectangle(ghost.toFloat().reduced(1.0f), 3.0f);
-    g.setColour(juce::Colours::white.withAlpha(0.75f));
+    g.setColour(accent.withAlpha(0.75f));
     g.drawRoundedRectangle(ghost.toFloat().reduced(1.0f), 3.0f, 1.5f);
 }
 
@@ -572,8 +604,15 @@ void TimelineClipLaneArea::paintSplitPreview(juce::Graphics& g) {
     if (bounds.isEmpty())
         return;
 
+    // Themed the same way PianoRollComponent::paintSplitPreview is: the split line has no clip of
+    // its own to borrow a colour from, so — like paintDrawGhost above — it borrows the theme's
+    // accent instead of a flat white literal.
+    juce::Colour accent(0xff00D1FF);
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        accent = lf->getTheme().colors.accent;
+
     const float x = (float)bounds.getCentreX();
-    g.setColour(juce::Colours::white.withAlpha(0.9f));
+    g.setColour(accent.withAlpha(0.9f));
     g.drawLine(x, (float)bounds.getY(), x, (float)bounds.getBottom(), 1.0f);
 }
 
@@ -619,6 +658,8 @@ void TimelineClipLaneArea::paintWaveform(juce::Graphics& g, const synth::Clip& c
     }
 
     const auto range = bucketRangeForClip(*data, clip.lengthBeats, clip.sourceStartSeconds, bpm, sampleRate);
+    // Black at low alpha, not a theme token — a shadow-style darkening of whatever `fill` already
+    // is (the module cards' drop shadows are composed the same way), not a colour of its own.
     g.setColour(juce::Colours::black.withAlpha(0.4f));
     paintWaveformColumns(g, rect, data->buckets, data->numChannels, range.firstBucket, range.bucketCount);
 }
@@ -666,6 +707,9 @@ void TimelineClipLaneArea::paintMissingAssetPlaceholder(juce::Graphics& g, const
 
     if (rect.getWidth() > kMinWidthForName) {
         const juce::String fileName = clip.assetRef.fromLastOccurrenceOf("/", false, false);
+        // Fixed white, not a theme token: it sits on the black-dimmed + hatched overlay painted
+        // above (dark regardless of theme or track colour), unlike paintClip's own name label,
+        // which is fixed black because ITS background is the undimmed, arbitrarily-hued fill.
         g.setColour(juce::Colours::white.withAlpha(0.9f));
         g.setFont(juce::Font(10.0f));
         g.drawText("missing: " + fileName, rect.reduced(4, 2), juce::Justification::bottomLeft, true);
@@ -772,11 +816,19 @@ void TimelineClipLaneArea::paintLiveRecordingStrip(juce::Graphics& g) {
     if (liveStripRect_.isEmpty())
         return;
 
+    // Themed via the same accent idiom as paintDrawGhost/paintSplitPreview above: still
+    // deliberately NOT the destination track's colour (kept distinct from a committed clip's
+    // fill, as the comment below always said), but no longer a flat white literal that could wash
+    // out against a light theme's background.
+    juce::Colour accent(0xff00D1FF);
+    if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        accent = lf->getTheme().colors.accent;
+
     const auto bodyBounds = liveStripRect_.toFloat().reduced(1.0f);
-    g.setColour(juce::Colours::white.withAlpha(0.12f)); // translucent — visibly "in progress",
-                                                        // distinct from a committed clip's fill
+    g.setColour(accent.withAlpha(0.12f)); // translucent — visibly "in progress", distinct from a
+                                          // committed clip's fill
     g.fillRoundedRectangle(bodyBounds, 3.0f);
-    g.setColour(juce::Colours::white.withAlpha(0.4f));
+    g.setColour(accent.withAlpha(0.4f));
     g.drawRoundedRectangle(bodyBounds, 3.0f, 1.0f);
 
     if (liveStripRect_.getWidth() <= kMinWidthForWaveform || livePeaks_.empty())
@@ -786,7 +838,7 @@ void TimelineClipLaneArea::paintLiveRecordingStrip(juce::Graphics& g) {
     // startCapture() call site in MainComponent — so this is not a guess specific to this class.
     const int numChannels = RecordTapModule::kNumChannels;
     const int bucketCount = (int)(livePeaks_.size() / (std::size_t)numChannels);
-    g.setColour(juce::Colours::white.withAlpha(0.7f));
+    g.setColour(accent.withAlpha(0.7f));
     paintWaveformColumns(g, liveStripRect_, livePeaks_, numChannels, 0, bucketCount);
 }
 

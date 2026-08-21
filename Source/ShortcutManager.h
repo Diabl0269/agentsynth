@@ -303,15 +303,21 @@ public:
         // 'k' with plain Cmd is unused by any other binding (Cmd+, / S / O / N / Z / Shift+Z / M
         // / A / L / B, Shift+A, Shift+S) — safe to claim for the minimap toggle (issue #159).
         bindings["toggleMinimap"] = juce::KeyPress('k', juce::ModifierKeys::commandModifier, 0);
-        bindings["toggleAiPanel"] = juce::KeyPress('a', juce::ModifierKeys::commandModifier, 0);
+        // Cmd+Shift+A, not Cmd+A: the platform-standard Select All owns the bare chord (every DAW
+        // reads Cmd+A as "select everything here"), so the AI panel takes the Shift variant. A real
+        // Ctrl+A was considered and rejected — on Windows/Linux JUCE's commandModifier IS the Ctrl
+        // key, so "Ctrl+A for the panel, Cmd+A for select-all" would be the SAME chord there and
+        // the two commands would collide on every non-Mac platform.
+        bindings["toggleAiPanel"] =
+            juce::KeyPress('a', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
         bindings["toggleLibrary"] = juce::KeyPress('b', juce::ModifierKeys::commandModifier, 0);
         // 't' with plain Cmd is unused by any other binding (Cmd+, / S / O / N / Z / Shift+Z / M /
         // K / A / L / B, Shift+A, Shift+S, C / V / D) — safe to claim for the timeline panel
         // toggle.
         bindings["toggleTimelinePanel"] = juce::KeyPress('t', juce::ModifierKeys::commandModifier, 0);
-        // Cmd+A and Cmd+S are already taken (toggleAiPanel / savePreset), hence the Shift variants.
-        bindings["selectAllModules"] =
-            juce::KeyPress('a', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+        // The platform-standard Select All chord (Cubase, and every text field, read Cmd+A this
+        // way); it routes per focused editor. The AI panel moved to Cmd+Shift+A to free it (above).
+        bindings["selectAllModules"] = juce::KeyPress('a', juce::ModifierKeys::commandModifier, 0);
         // The platform-standard trio. Safe to claim app-wide because JUCE's TextEditor consumes
         // Cmd+C/Cmd+V itself while it has focus, so these only reach the canvas when no text field
         // is being edited — see MainComponent::keyPressed, which is the sole dispatch point.
