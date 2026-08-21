@@ -22,6 +22,8 @@
 
         ./build/Tools/AIEvalHarness/AIEvalHarness [--provider ollama|remote] [--model M]
                                                    [--runs N] [--host URL] [--json OUT]
+                                                   [--mode patch|timeline]
+                                                   [--think true|false] [--temperature X] [--seed N]
 
     --provider ollama (default) talks to Ollama's own /api/chat directly, same as before.
     --provider remote talks to a local synth-platform inference service instead
@@ -30,6 +32,18 @@
     report only in this mode, not something sent over the wire. This is what lets a model be
     scored through the exact stack a user hits (client -> service -> Ollama/Groq) instead of an
     approximation of it.
+
+    --mode timeline (requires -DSYNTH_ENABLE_TIMELINE=ON) replays a separate scenario set that
+    exercises getPatchSchemaWithTimelineOps() instead of getPatchSchema() — the same request path
+    (OllamaProvider::processRequest -> `format` field), just the extended schema. This exists to
+    verify structured-output corruption fixes (P6-13) against BOTH schemas the client actually
+    sends locally, not just the plain patch one — they are not separate decoding surfaces.
+
+    --think/--temperature/--seed are --provider ollama only (ignored, with a warning, for
+    --provider remote) and are for REPRODUCIBILITY of a corruption investigation, not production
+    defaults: all three are unset by default, which sends exactly the request body this harness
+    always has. Pass --think false to test disabling Ollama's reasoning-model `think` field as a
+    candidate fix for reasoning text leaking into constrained JSON output.
 
     Exit code is 0 whenever the run completed, whatever the pass rate — the scorecard is the
     output, not a pass/fail verdict.
@@ -47,6 +61,7 @@
 #include <juce_events/juce_events.h>
 
 #include <cstdio>
+#include <optional>
 #include <vector>
 
 namespace {
@@ -132,6 +147,27 @@ const std::vector<Scenario>& scenarios() {
     return s;
 }
 
+#if SYNTH_ENABLE_TIMELINE
+// A separate, small scenario set exercising getPatchSchemaWithTimelineOps() (AIStateMapper.cpp)
+// instead of getPatchSchema() — same request path, extended schema (P6-13). All merge-mode
+// against kBasicPatch so "## Automation targets" has a real uuid to write a lane against.
+const std::vector<Scenario>& timelineScenarios() {
+    static const std::vector<Scenario> s = {
+        {"add-lead-track", "Add a MIDI track called Lead and put a simple four-note melody on it", true, kBasicPatch},
+        {"add-bass-track", "Create a track called Bass with a short repeating bassline", true, kBasicPatch},
+        {"sweep-cutoff", "Automate the filter cutoff to sweep up over 8 beats", true, kBasicPatch},
+        {"fade-in", "Automate the VCA level to fade in over the first 4 bars", true, kBasicPatch},
+        {"two-tracks", "Create two tracks, Lead and Pad, each with a short pattern", true, kBasicPatch},
+        {"drum-pattern", "Add a track called Drums and place a simple four-on-the-floor pattern on it", true,
+         kBasicPatch},
+        {"resonance-sweep", "Sweep the filter resonance down over the first 4 bars", true, kBasicPatch},
+        {"brighten-and-automate", "Make it brighter and automate a slow filter opening across 16 beats", true,
+         kBasicPatch},
+    };
+    return s;
+}
+#endif
+
 juce::String argValue(const juce::StringArray& args, const juce::String& flag, const juce::String& fallback) {
     int i = args.indexOf(flag);
     if (i >= 0 && i + 1 < args.size())
@@ -141,12 +177,20 @@ juce::String argValue(const juce::StringArray& args, const juce::String& flag, c
 
 enum class ProviderKind { ollama, remote };
 
+// P6-13 reproducibility knobs — see the file header comment. Every field unset (the default)
+// means "send exactly what this harness always sent."
+struct SamplingArgs {
+    std::optional<bool> think;
+    std::optional<double> temperature;
+    std::optional<int> seed;
+};
+
 // Builds the exact AIProvider a live Apply/Merge click would use, so this harness measures the
 // stack a user actually hits rather than an approximation of it. Both branches setTestMode(true)
 // on the concrete type (not virtual on AIProvider) before it's upcast, so the callback below
 // fires synchronously with no message loop running here.
-std::unique_ptr<synth::AIProvider> makeProvider(ProviderKind kind, const juce::String& host,
-                                                const juce::String& model) {
+std::unique_ptr<synth::AIProvider> makeProvider(ProviderKind kind, const juce::String& host, const juce::String& model,
+                                                const SamplingArgs& sampling) {
     if (kind == ProviderKind::remote) {
         auto provider = std::make_unique<synth::RemoteProvider>(host);
         provider->setTestMode(true);
@@ -157,6 +201,7 @@ std::unique_ptr<synth::AIProvider> makeProvider(ProviderKind kind, const juce::S
     auto provider = std::make_unique<synth::OllamaProvider>(host);
     provider->setTestMode(true);
     provider->setModel(model);
+    provider->setSamplingOptions({sampling.think, sampling.temperature, sampling.seed});
     return provider;
 }
 
@@ -169,10 +214,17 @@ struct Outcome {
     // Only meaningful when appliedAfterRetry is true — there is no graph worth scoring otherwise.
     bool evaluated = false;
     synth::PatchEvalResult eval;
+
+    // Only populated when timelineMode is true. A malformed/corrupted "timelineOps" is the P6-13
+    // signal this harness's --mode timeline exists to surface, mirroring how a corrupted
+    // "waveform" choice value already surfaces as applyError above.
+    bool timelineOpsPresent = false;
+    bool timelineOpsOk = false;
+    juce::String timelineOpsError;
 };
 
 Outcome runScenario(const Scenario& scenario, ProviderKind providerKind, const juce::String& host,
-                    const juce::String& model) {
+                    const juce::String& model, const SamplingArgs& sampling, bool timelineMode) {
     Outcome outcome;
 
     juce::AudioProcessorGraph graph;
@@ -188,7 +240,18 @@ Outcome runScenario(const Scenario& scenario, ProviderKind providerKind, const j
     }
 
     synth::AIIntegrationService service(graph);
-    service.setProvider(makeProvider(providerKind, host, model));
+    service.setProvider(makeProvider(providerKind, host, model, sampling));
+
+#if SYNTH_ENABLE_TIMELINE
+    synth::TimelineDoc timelineDoc;
+    synth::TransportService transport;
+    if (timelineMode) {
+        service.setTimelineContext(&timelineDoc, &transport);
+        service.setTimelineToolsEnabled(true);
+    }
+#else
+    juce::ignoreUnused(timelineMode);
+#endif
 
     juce::WaitableEvent done;
     juce::String responseText;
@@ -215,6 +278,18 @@ Outcome runScenario(const Scenario& scenario, ProviderKind providerKind, const j
         return outcome;
     }
     outcome.responded = true;
+
+#if SYNTH_ENABLE_TIMELINE
+    if (timelineMode) {
+        const juce::var envelope = synth::AIIntegrationService::extractTimelineOps(responseText);
+        if (!envelope.isVoid()) {
+            outcome.timelineOpsPresent = true;
+            const auto tlResult = service.previewTimelineOps(envelope);
+            outcome.timelineOpsOk = tlResult.ok;
+            outcome.timelineOpsError = tlResult.message;
+        }
+    }
+#endif
 
     juce::WaitableEvent applied;
     service.applyPatchWithRetry(responseText, scenario.mergeMode, [&](bool ok, const juce::String& error) {
@@ -260,18 +335,57 @@ int main(int argc, char* argv[]) {
     const int runs = juce::jmax(1, argValue(args, "--runs", "1").getIntValue());
     const juce::String jsonOut = argValue(args, "--json", "");
 
-    std::printf("AIEvalHarness  provider=%s  host=%s  model=%s  runs=%d  scenarios=%d\n", providerFlag.toRawUTF8(),
-                host.toRawUTF8(), model.toRawUTF8(), runs, (int)scenarios().size());
+    const juce::String modeFlag = argValue(args, "--mode", "patch");
+    if (modeFlag != "patch" && modeFlag != "timeline") {
+        std::fprintf(stderr, "unknown --mode \"%s\" (expected \"patch\" or \"timeline\")\n", modeFlag.toRawUTF8());
+        return 1;
+    }
+    const bool timelineMode = modeFlag == "timeline";
+#if !SYNTH_ENABLE_TIMELINE
+    if (timelineMode) {
+        std::fprintf(stderr, "--mode timeline needs a -DSYNTH_ENABLE_TIMELINE=ON build\n");
+        return 1;
+    }
+#endif
+
+    SamplingArgs sampling;
+    const juce::String thinkFlag = argValue(args, "--think", "");
+    if (thinkFlag.isNotEmpty()) {
+        if (thinkFlag != "true" && thinkFlag != "false") {
+            std::fprintf(stderr, "unknown --think \"%s\" (expected \"true\" or \"false\")\n", thinkFlag.toRawUTF8());
+            return 1;
+        }
+        sampling.think = (thinkFlag == "true");
+    }
+    const juce::String temperatureFlag = argValue(args, "--temperature", "");
+    if (temperatureFlag.isNotEmpty())
+        sampling.temperature = temperatureFlag.getDoubleValue();
+    const juce::String seedFlag = argValue(args, "--seed", "");
+    if (seedFlag.isNotEmpty())
+        sampling.seed = seedFlag.getIntValue();
+    if (providerKind == ProviderKind::remote && (sampling.think || sampling.temperature || sampling.seed))
+        std::fprintf(stderr, "warning: --think/--temperature/--seed are --provider ollama only; ignored here\n");
+
+#if SYNTH_ENABLE_TIMELINE
+    const auto& activeScenarios = timelineMode ? timelineScenarios() : scenarios();
+#else
+    const auto& activeScenarios = scenarios();
+#endif
+
+    std::printf("AIEvalHarness  provider=%s  host=%s  model=%s  runs=%d  mode=%s  scenarios=%d\n",
+                providerFlag.toRawUTF8(), host.toRawUTF8(), model.toRawUTF8(), runs, modeFlag.toRawUTF8(),
+                (int)activeScenarios.size());
     std::printf("%-20s %-6s %s\n", "scenario", "run", "outcome");
     std::printf("--------------------------------------------------------------------\n");
 
     int total = 0, providerErrors = 0, notApplied = 0, applied = 0;
     int passOutput = 0, passConnects = 0, passParams = 0, passAll = 0;
+    int timelineOpsSeen = 0, timelineOpsCorrupted = 0;
     juce::Array<juce::var> records;
 
     for (int run = 1; run <= runs; ++run) {
-        for (const auto& scenario : scenarios()) {
-            const auto outcome = runScenario(scenario, providerKind, host, model);
+        for (const auto& scenario : activeScenarios) {
+            const auto outcome = runScenario(scenario, providerKind, host, model, sampling, timelineMode);
             ++total;
 
             juce::String label;
@@ -294,6 +408,13 @@ int main(int argc, char* argv[]) {
                     ++passAll;
                 label = e.passed() ? "PASS" : ("FAIL " + e.detail);
             }
+            if (outcome.timelineOpsPresent) {
+                ++timelineOpsSeen;
+                if (!outcome.timelineOpsOk) {
+                    ++timelineOpsCorrupted;
+                    label += " | TIMELINEOPS-REJECTED " + outcome.timelineOpsError;
+                }
+            }
 
             std::printf("%-20s %-6d %s\n", scenario.name, run, label.toRawUTF8());
             std::fflush(stdout);
@@ -310,6 +431,10 @@ int main(int argc, char* argv[]) {
                 rec->setProperty("sourceReachesOutput", outcome.eval.sourceReachesOutput);
                 rec->setProperty("allParamsInRange", outcome.eval.allParamsInRange);
                 rec->setProperty("detail", outcome.eval.detail);
+            }
+            if (outcome.timelineOpsPresent) {
+                rec->setProperty("timelineOpsOk", outcome.timelineOpsOk);
+                rec->setProperty("timelineOpsError", outcome.timelineOpsError);
             }
             records.add(juce::var(rec.get()));
         }
@@ -335,6 +460,11 @@ int main(int argc, char* argv[]) {
     std::printf("  all params in range:         %3d  (%.1f%%)\n", passParams,
                 applied > 0 ? 100.0 * passParams / applied : 0.0);
     std::printf("  ALL THREE (overall pass):    %3d  (%.1f%%)\n", passAll, rate);
+    if (timelineMode) {
+        std::printf("\ntimelineOps present in response: %d / %d\n", timelineOpsSeen, applied + notApplied);
+        std::printf("timelineOps corrupted/rejected:  %3d  (%.1f%%)\n", timelineOpsCorrupted,
+                    timelineOpsSeen > 0 ? 100.0 * timelineOpsCorrupted / timelineOpsSeen : 0.0);
+    }
     std::printf("===============================================\n");
 
     if (jsonOut.isNotEmpty()) {
@@ -342,10 +472,21 @@ int main(int argc, char* argv[]) {
         root->setProperty("provider", providerFlag);
         root->setProperty("model", model);
         root->setProperty("runs", runs);
+        root->setProperty("mode", modeFlag);
+        if (sampling.think.has_value())
+            root->setProperty("think", *sampling.think);
+        if (sampling.temperature.has_value())
+            root->setProperty("temperature", *sampling.temperature);
+        if (sampling.seed.has_value())
+            root->setProperty("seed", *sampling.seed);
         root->setProperty("applied", applied);
         root->setProperty("passAll", passAll);
         root->setProperty("providerErrors", providerErrors);
         root->setProperty("notApplied", notApplied);
+        if (timelineMode) {
+            root->setProperty("timelineOpsSeen", timelineOpsSeen);
+            root->setProperty("timelineOpsCorrupted", timelineOpsCorrupted);
+        }
         root->setProperty("records", records);
         juce::File(jsonOut).replaceWithText(juce::JSON::toString(juce::var(root.get()), true));
         std::printf("wrote %s\n", jsonOut.toRawUTF8());

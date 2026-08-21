@@ -23,6 +23,33 @@ cmake --build build --target AIEvalHarness
 | `--runs` | `1` | How many times to replay the whole scenario set. |
 | `--host` | `http://localhost:11434` (`ollama`) / `http://localhost:8787` (`remote`) | Base URL of the provider being measured. |
 | `--json` | *(none)* | Write per-attempt records to this file for later analysis. |
+| `--mode` | `patch` | `patch` replays the 40 golden prompts against `getPatchSchema()`. `timeline` (needs `-DSYNTH_ENABLE_TIMELINE=ON`) replays a separate 8-prompt set against `getPatchSchemaWithTimelineOps()` instead — same request path, the extended schema. See P6-13 below. |
+| `--think` | *(unset)* | `--provider ollama` only. `true`/`false` — sets Ollama's `think` request field. Unset sends today's exact request body (no `think` key at all). |
+| `--temperature` | *(unset)* | `--provider ollama` only. Nests under the request's `options.temperature`. |
+| `--seed` | *(unset)* | `--provider ollama` only. Nests under the request's `options.seed` — pin this alongside `--temperature 0` for a reproducible before/after comparison. |
+
+### P6-13: structured-output corruption investigation
+
+`--think`/`--temperature`/`--seed`/`--mode timeline` exist to reproduce and compare fixes for a
+corruption bug where local Ollama structured-output decoding leaked model reasoning text into a
+constrained JSON string value (root-caused in `docs/AI_Engine.md`'s "P6-13" section — see that doc
+for the confirmed `{}`-open-schema defect and the `think`-field investigation). `--mode timeline`'s
+summary reports `timelineOps present in response` / `timelineOps corrupted/rejected` — validated
+via `AIIntegrationService::previewTimelineOps()` (checked, never applied), the timeline
+counterpart of the `applyError` corruption proxy the plain patch mode already surfaces (a
+corrupted choice value shows up there as `"Invalid value for choice parameter …"`).
+
+```bash
+# baseline: today's exact request shape, unpinned
+./build/Tools/AIEvalHarness/AIEvalHarness --model gpt-oss:20b --json eval-results/baseline.json
+
+# candidate fix, same prompts, pinned sampling for a fair comparison
+./build/Tools/AIEvalHarness/AIEvalHarness --model gpt-oss:20b --think false --seed 42 --temperature 0 \
+  --json eval-results/think-false.json
+
+# same comparison against the timelineOps-extended schema
+./build/Tools/AIEvalHarness/AIEvalHarness --model gpt-oss:20b --mode timeline --json eval-results/baseline-timeline.json
+```
 
 ## Scoring a model through the service (`--provider remote`)
 

@@ -1,4 +1,6 @@
 #include "AIStateMapper.h"
+#include "generated/PatchEnvelopeSchema.g.h"
+
 #include "../Modules/ADSRModule.h"
 #include "../Modules/AttenuverterModule.h"
 #include "../Modules/AudioInputModule.h"
@@ -1841,112 +1843,61 @@ juce::var AIStateMapper::getPatchSchema() {
     // `format` — every property in it is an invitation to emit that property, and all three are
     // ours to write, never the model's (uuid is identity, timeline is refused outright by
     // validatePatch). Pinned by AIStateMapperTest.SchemaOmitsReservedFields.
-    juce::DynamicObject::Ptr schema = new juce::DynamicObject();
-    schema->setProperty("type", "object");
+    //
+    // The envelope (property names, required/optional shape) is generated from synth-platform's
+    // Zod source (packages/contracts/src/patch.ts's PatchSchema) — see
+    // Source/AI/generated/PatchEnvelopeSchema.g.h's header comment for the regen/vendor flow
+    // (P6-13). Two things it can't carry, layered on here instead: the "type" enum and the
+    // per-choice-parameter enums inside "params", both sourced from THIS build's live module
+    // registry (moduleFactory), which synth-platform has no way to see.
+    juce::var schema = juce::JSON::parse(juce::String(synth::generated::kPatchEnvelopeSchemaJson));
+    jassert(!schema.isVoid());
 
-    juce::DynamicObject::Ptr properties = new juce::DynamicObject();
+    auto* properties = schema.getDynamicObject()->getProperty("properties").getDynamicObject();
+    jassert(properties != nullptr);
+    auto* nodeItems = properties->getProperty("nodes").getDynamicObject()->getProperty("items").getDynamicObject();
+    jassert(nodeItems != nullptr);
+    auto* nodeProperties = nodeItems->getProperty("properties").getDynamicObject();
+    jassert(nodeProperties != nullptr);
 
-    // 1. Nodes
-    juce::DynamicObject::Ptr nodes = new juce::DynamicObject();
-    nodes->setProperty("type", "array");
-    juce::DynamicObject::Ptr nodeItems = new juce::DynamicObject();
-    nodeItems->setProperty("type", "object");
-    juce::DynamicObject::Ptr nodeProperties = new juce::DynamicObject();
-
-    nodeProperties->setProperty("id", juce::JSON::parse("{\"type\": \"integer\"}"));
-
-    juce::DynamicObject::Ptr typeDef = new juce::DynamicObject();
-    typeDef->setProperty("type", "string");
+    auto* typeDef = nodeProperties->getProperty("type").getDynamicObject();
+    jassert(typeDef != nullptr);
     typeDef->setProperty("enum", juce::var(authorableModuleTypeEnum()));
-    nodeProperties->setProperty("type", juce::var(typeDef.get()));
 
-    // `additionalProperties` stays open on purpose: only choice parameters can be enumerated,
-    // and numeric ones (cutoff, rateHz, …) must still be expressible.
-    juce::DynamicObject::Ptr paramsDef = new juce::DynamicObject();
-    paramsDef->setProperty("type", "object");
+    // `additionalProperties` stays open (true, from the generated envelope) on purpose: only
+    // choice parameters can be enumerated, and numeric ones (cutoff, rateHz, …) must still be
+    // expressible.
+    auto* paramsDef = nodeProperties->getProperty("params").getDynamicObject();
+    jassert(paramsDef != nullptr);
     paramsDef->setProperty("properties", choiceParamProperties());
-    paramsDef->setProperty("additionalProperties", true);
-    nodeProperties->setProperty("params", juce::var(paramsDef.get()));
-
-    nodeItems->setProperty("properties", juce::var(nodeProperties.get()));
-    nodeItems->setProperty("required", juce::Array<juce::var>({"id", "type"}));
-    nodes->setProperty("items", juce::var(nodeItems.get()));
-    properties->setProperty("nodes", juce::var(nodes.get()));
-
-    // 2. Connections
-    juce::DynamicObject::Ptr connections = new juce::DynamicObject();
-    connections->setProperty("type", "array");
-    juce::DynamicObject::Ptr connItems = new juce::DynamicObject();
-    connItems->setProperty("type", "object");
-    juce::DynamicObject::Ptr connProperties = new juce::DynamicObject();
-
-    connProperties->setProperty("src", juce::JSON::parse("{\"type\": \"integer\"}"));
-    connProperties->setProperty("srcPort", juce::JSON::parse("{\"type\": \"integer\"}"));
-    connProperties->setProperty("dst", juce::JSON::parse("{\"type\": \"integer\"}"));
-    connProperties->setProperty("dstPort", juce::JSON::parse("{\"type\": \"integer\"}"));
-
-    connItems->setProperty("properties", juce::var(connProperties.get()));
-    connItems->setProperty("required", juce::Array<juce::var>({"src", "srcPort", "dst", "dstPort"}));
-    connections->setProperty("items", juce::var(connItems.get()));
-    properties->setProperty("connections", juce::var(connections.get()));
-
-    // 3. Mode (optional)
-    properties->setProperty("mode", juce::JSON::parse("{\"type\": \"string\", \"enum\": [\"replace\", \"merge\"]}"));
-
-    // 4. Remove (optional)
-    juce::DynamicObject::Ptr removeArr = new juce::DynamicObject();
-    removeArr->setProperty("type", "array");
-    removeArr->setProperty("items", juce::JSON::parse("{\"type\": \"integer\"}"));
-    properties->setProperty("remove", juce::var(removeArr.get()));
-
-    // 5. Modulations (optional)
-    juce::DynamicObject::Ptr modulations = new juce::DynamicObject();
-    modulations->setProperty("type", "array");
-    juce::DynamicObject::Ptr modItems = new juce::DynamicObject();
-    modItems->setProperty("type", "object");
-    juce::DynamicObject::Ptr modProperties = new juce::DynamicObject();
-    modProperties->setProperty("source", juce::JSON::parse("{\"type\": \"integer\"}"));
-    modProperties->setProperty("sourcePort", juce::JSON::parse("{\"type\": \"integer\"}"));
-    modProperties->setProperty("dest", juce::JSON::parse("{\"type\": \"integer\"}"));
-    modProperties->setProperty("destPort", juce::JSON::parse("{\"type\": \"integer\"}"));
-    modProperties->setProperty("amount", juce::JSON::parse("{\"type\": \"number\"}"));
-    modProperties->setProperty("bypass", juce::JSON::parse("{\"type\": \"boolean\"}"));
-    modItems->setProperty("properties", juce::var(modProperties.get()));
-    modItems->setProperty("required", juce::Array<juce::var>({"source", "dest", "destPort"}));
-    modulations->setProperty("items", juce::var(modItems.get()));
-    properties->setProperty("modulations", juce::var(modulations.get()));
-
-    // 6. RemoveModulations (optional)
-    juce::DynamicObject::Ptr removeModulations = new juce::DynamicObject();
-    removeModulations->setProperty("type", "array");
-    juce::DynamicObject::Ptr rmModItems = new juce::DynamicObject();
-    rmModItems->setProperty("type", "object");
-    juce::DynamicObject::Ptr rmModProperties = new juce::DynamicObject();
-    rmModProperties->setProperty("source", juce::JSON::parse("{\"type\": \"integer\"}"));
-    rmModProperties->setProperty("dest", juce::JSON::parse("{\"type\": \"integer\"}"));
-    rmModProperties->setProperty("destPort", juce::JSON::parse("{\"type\": \"integer\"}"));
-    rmModItems->setProperty("properties", juce::var(rmModProperties.get()));
-    rmModItems->setProperty("required", juce::Array<juce::var>({"source", "dest", "destPort"}));
-    removeModulations->setProperty("items", juce::var(rmModItems.get()));
-    properties->setProperty("removeModulations", juce::var(removeModulations.get()));
 
     // Note: there is deliberately no "parameterChoices" property here. It used to be carried in
     // this schema "for AI reference", but this schema is the *output* contract handed to the
     // provider as `format` — every property in it is something the model is invited to emit, not
     // documentation it can read. The choice lists now do their real work as enums inside
     // node.params (above), and remain human-readable in the system prompt via getModuleSchema().
-    schema->setProperty("properties", juce::var(properties.get()));
-    schema->setProperty("required", juce::Array<juce::var>({"nodes", "connections"}));
-
-    return juce::var(schema.get());
+    return schema;
 }
 
 namespace {
 // One permissive op shape, shared by BOTH structured-output contracts that can carry ops
 // (getPatchSchemaWithTimelineOps and getTimelineOpsEnvelopeSchema) so the grammar cannot drift
-// between them — see getPatchSchemaWithTimelineOps' header comment for why this is a grammar,
-// not a validator. Field names/types mirror TimelineOps.cpp's readers exactly; "track" is left
-// untyped because it is legitimately either a string (exact track name) or {"index": N}.
+// between them — this is a grammar, not a validator; TimelineOps::validate is still the real
+// gate. Field names/types mirror TimelineOps.cpp's readers exactly. "track" is `{"type":
+// "string"}`, not `{}` ("anything goes"): an empty-schema subschema is a confirmed Ollama
+// grammar-compiler bug (P6-13) that mangles output into garbage instead of passing the value
+// through unconstrained (same defect class documented in synth-platform's
+// packages/inference/src/index.ts for the sibling `params` shape; `params` in getPatchSchema()
+// above never hit this because its `additionalProperties: true` is a JSON Schema *boolean*, not
+// `{}`). The natural fix would be `"oneOf": [string, {"index": integer}]` to match
+// resolveTrack() (TimelineOps.cpp:210-256) exactly, but llama.cpp's grammar compiler (which
+// Ollama's structured output sits on) handles anyOf/oneOf poorly, so this narrows to
+// `"type": "string"` only — the common case of addressing a track by its exact name. TRADEOFF,
+// documented rather than silently picked: TimelineOps::resolveTrack()'s `{"index": N}`
+// disambiguation path for two tracks sharing a name is not expressible through this grammar — a
+// duplicate-name op gets TimelineOps::validate's rejection message instead of succeeding, which
+// the model can act on (e.g. rename) but not resolve via index. Still strictly better than `{}`,
+// which was mangled on essentially every emission, string or object alike.
 juce::var timelineOpsArraySchema() {
     const juce::String opsSchemaJson = R"json({
         "type": "array",
@@ -1956,7 +1907,7 @@ juce::var timelineOpsArraySchema() {
                 "op": {"type": "string", "enum": ["addTrack", "placeClips", "writeLane", "placeMidiClip"]},
                 "kind": {"type": "string", "enum": ["midi", "automation"]},
                 "name": {"type": "string"},
-                "track": {},
+                "track": {"type": "string"},
                 "clips": {"type": "array", "items": {"type": "object", "properties": {
                     "startBeat": {"type": "number"}, "lengthBeats": {"type": "number"},
                     "name": {"type": "string"},

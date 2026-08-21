@@ -553,6 +553,19 @@ void OllamaProvider::processRequest(const Request& req) {
     if (!req.responseSchema.isVoid())
         body->setProperty("format", req.responseSchema);
 
+    // Opt-in reproducibility/experiment knobs (P6-13) — omitted entirely when unset, which is
+    // exactly today's request shape, so no production caller is affected.
+    if (samplingOptions.think.has_value())
+        body->setProperty("think", *samplingOptions.think);
+    if (samplingOptions.temperature.has_value() || samplingOptions.seed.has_value()) {
+        juce::DynamicObject::Ptr options = new juce::DynamicObject();
+        if (samplingOptions.temperature.has_value())
+            options->setProperty("temperature", *samplingOptions.temperature);
+        if (samplingOptions.seed.has_value())
+            options->setProperty("seed", *samplingOptions.seed);
+        body->setProperty("options", juce::var(options.get()));
+    }
+
     juce::String jsonString = juce::JSON::toString(juce::var(body.get()));
 
     int httpStatus = 0;

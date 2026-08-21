@@ -542,6 +542,76 @@ TEST_F(OllamaProviderTest, SendPromptIncludesSelectedModelInRequestBody) {
     EXPECT_EQ(parsedBody.getProperty("model", juce::var()).toString(), juce::String("mock-model:latest"));
 }
 
+// P6-13: unset SamplingOptions must leave the request body exactly as before this feature
+// existed — no production caller opts in, so this is the "no behavior change" half of the
+// contract. Mirrors SendPromptIncludesSelectedModelInRequestBody's capture pattern.
+TEST_F(OllamaProviderTest, SendPromptOmitsSamplingOptionsWhenUnset) {
+    juce::String capturedPostData;
+    auto capturingFactory =
+        [&capturedPostData](
+            const juce::URL& url, const juce::URL::InputStreamOptions& options,
+            const synth::OllamaProvider::StreamPublisher& publish) -> std::unique_ptr<juce::InputStream> {
+        juce::ignoreUnused(options, publish);
+        capturedPostData = url.getPostData();
+        juce::String jsonResponse =
+            R"({"model":"mock-model","message":{"role":"assistant","content":"Mocked AI response."}})";
+        return std::make_unique<MockInputStream>(jsonResponse, false);
+    };
+
+    synth::OllamaProvider provider{"http://mock-host:11434", capturingFactory};
+    provider.setTestMode(true);
+    provider.setModel("mock-model:latest");
+
+    std::vector<synth::AIProvider::Message> conversation = {{"user", "Hello AI"}};
+    MockPromptCallback callback;
+    provider.sendPrompt(conversation,
+                        [&callback](const synth::AIProvider::AIResponse& response) { callback(response); });
+    callback.getResult();
+    provider.stopThread(5000);
+
+    juce::var parsedBody = juce::JSON::parse(capturedPostData);
+    ASSERT_TRUE(parsedBody.isObject());
+    EXPECT_FALSE(parsedBody.hasProperty("think"));
+    EXPECT_FALSE(parsedBody.hasProperty("options"));
+}
+
+// P6-13: explicit values are opt-in wiring for Tools/AIEvalHarness's reproducibility knobs —
+// think is top-level (Ollama's reasoning-model switch), temperature/seed nest under "options"
+// (Ollama's sampling parameters).
+TEST_F(OllamaProviderTest, SendPromptIncludesSamplingOptionsWhenSet) {
+    juce::String capturedPostData;
+    auto capturingFactory =
+        [&capturedPostData](
+            const juce::URL& url, const juce::URL::InputStreamOptions& options,
+            const synth::OllamaProvider::StreamPublisher& publish) -> std::unique_ptr<juce::InputStream> {
+        juce::ignoreUnused(options, publish);
+        capturedPostData = url.getPostData();
+        juce::String jsonResponse =
+            R"({"model":"mock-model","message":{"role":"assistant","content":"Mocked AI response."}})";
+        return std::make_unique<MockInputStream>(jsonResponse, false);
+    };
+
+    synth::OllamaProvider provider{"http://mock-host:11434", capturingFactory};
+    provider.setTestMode(true);
+    provider.setModel("mock-model:latest");
+    provider.setSamplingOptions({/*think=*/false, /*temperature=*/0.0, /*seed=*/42});
+
+    std::vector<synth::AIProvider::Message> conversation = {{"user", "Hello AI"}};
+    MockPromptCallback callback;
+    provider.sendPrompt(conversation,
+                        [&callback](const synth::AIProvider::AIResponse& response) { callback(response); });
+    callback.getResult();
+    provider.stopThread(5000);
+
+    juce::var parsedBody = juce::JSON::parse(capturedPostData);
+    ASSERT_TRUE(parsedBody.isObject());
+    EXPECT_EQ(static_cast<bool>(parsedBody.getProperty("think", juce::var())), false);
+    juce::var options = parsedBody.getProperty("options", juce::var());
+    ASSERT_TRUE(options.isObject());
+    EXPECT_DOUBLE_EQ(static_cast<double>(options.getProperty("temperature", juce::var())), 0.0);
+    EXPECT_EQ(static_cast<int>(options.getProperty("seed", juce::var())), 42);
+}
+
 // REGRESSION LOCK (request-loss race): a request that is enqueued while the worker
 // thread is winding down must still get a callback. The old run() left its loop the
 // moment the queue drained or an exit was signalled, while sendPrompt() only started a

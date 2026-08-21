@@ -427,6 +427,27 @@ cmake --build build --target AIEvalHarness
 The structural checks themselves (`evaluatePatch()`) have no model dependency and are covered by
 `Tests/PatchEvalTests.cpp` in the regular suite — only the golden-prompt replay needs Ollama.
 
+**P6-13 reproducibility/investigation flags**, `--provider ollama` only (all unset by default —
+this is for comparing corruption/rejection rates before and after a candidate fix, not a
+production knob):
+
+```bash
+# pin sampling so a before/after comparison isn't confounded by run-to-run variance
+./build/Tools/AIEvalHarness/AIEvalHarness --model gpt-oss:20b --think false --seed 42 --temperature 0 \
+  --json eval-results/my-run.json
+
+# exercise getPatchSchemaWithTimelineOps() instead of getPatchSchema() — same request path
+# (OllamaProvider::processRequest -> `format` field), the extended schema. Needs
+# -DSYNTH_ENABLE_TIMELINE=ON.
+./build/Tools/AIEvalHarness/AIEvalHarness --model gpt-oss:20b --mode timeline --json eval-results/my-timeline-run.json
+```
+
+`--mode timeline`'s summary reports `timelineOps present in response` and
+`timelineOps corrupted/rejected` — the latter via
+`AIIntegrationService::extractTimelineOps()` + `previewTimelineOps()` (validated, never applied),
+the timeline-side equivalent of the `applyError` corruption proxy the plain patch mode already
+surfaces (a corrupted choice value shows up there as `"Invalid value for choice parameter …"`).
+
 Note that `evaluatePatch` is not only a scoring function: `AIIntegrationService::applyPatch` gates on
 `sourceReachesOutput` and surfaces `detail` to the user via `getLastPatchError()`, so those strings are
 a contract two `AIIntegrationServiceTest` cases assert verbatim. `SamplerAloneDoesNotCountAsAReachableSource`

@@ -1326,6 +1326,106 @@ Locked by `OllamaProviderTest.SendPromptWithNoModelFailsWithoutHittingNetwork` a
 `OllamaProviderTest.SendPromptIncludesSelectedModelInRequestBody` in
 `Tests/OllamaProviderTests.cpp`.
 
+### P6-13: Structured-Output Corruption, the Envelope Codegen, and the `params-openness` Tradeoff
+
+Two corrupted local Ollama patch-generation samples with gpt-oss-20b showed a JSON key (meant to
+be `"waveform": "Saw"`) replaced with garbage containing leaked model reasoning text.
+**Reproduced live** (`eval-results/p6-13-baseline-patch-2026-08-21.json`, `poly-pad` scenario:
+`"filterType": "LPF24", "poly": true } },?? Wait. The earlier error shows stray quotes. We must
+correct JSON.` — leaked self-correction text inside a JSON key string) at a 17.5% rejection rate
+(7/40) against gpt-oss:20b, unpinned sampling, the pre-P6-13 hand-written schema. **This exact
+corruption is still open** — neither angle investigated below explains or fixes it; both are real,
+separately-useful findings. See `Tools/AIEvalHarness/README.md` for how to reproduce.
+
+**Confirmed: the `{}` open-schema bug.** synth-platform's `packages/inference/src/index.ts`
+documents a proven Ollama grammar-compiler defect — an "anything goes" subschema spelled as `{}`
+(the empty-object JSON Schema, as opposed to the boolean `true`) gets mangled into a garbage
+wrapped object instead of passing the value through unconstrained, confirmed on gpt-oss:20b and
+gemma4:12b-it-qat. `AIStateMapper::getPatchSchemaWithTimelineOps()`'s `"track"` field
+(`Source/AI/AIStateMapper.cpp`) had exactly that shape; it is now `"type": "string"` (narrowed, not
+`oneOf`/`anyOf` — see the doc comment there for why: this header's own note that llama.cpp's
+grammar compiler "handles anyOf poorly" rules that out too). `getPatchSchema()`'s own `params`
+field never hit this — its `additionalProperties: true` was already the JSON Schema boolean, not
+`{}`.
+
+**Reproducibility knobs.** `OllamaProvider::setSamplingOptions()` adds optional `think` /
+`temperature` / `seed` fields to the request body (all omitted when unset — no production caller
+sets these, so this is opt-in only). `Tools/AIEvalHarness` exposes them as `--think`/
+`--temperature`/`--seed`, plus a `--mode timeline` that replays a separate scenario set through
+`getPatchSchemaWithTimelineOps()` instead of `getPatchSchema()` — same request path
+(`OllamaProvider::processRequest` → `format` field), just the extended schema, so a corruption fix
+gets verified against both local structured-output schemas the client actually sends, not just the
+plain patch one.
+
+**Tested and refuted: `think: false`.** The leading hypothesis going in — that Ollama routes
+reasoning tokens into a `message.content`-adjacent `thinking` field only when `think` is
+explicitly set, and that leaving it unset was the leak — was wrong, and expensively so.
+`--think false --seed 42 --temperature 0` against the exact same 40 prompts: **0/40 applied,
+every single response failed with `"Root is not an object"`** (`eval-results/p6-13-think-false-
+2026-08-21.json`), down from the baseline's 33/40. `think: false` does not stop gpt-oss-20b's
+"harmony" format from reasoning — it removes the channel a reasoning model needs to route that
+reasoning into, and the model appears to emit that reasoning as (or in place of) `content`
+instead, unparseable as JSON at all rather than merely corrupted in one key. **Do not set `think:
+false` for this model** — this finding exists specifically so a future session doesn't re-attempt
+the same fix.
+
+A direct `curl` against `/api/chat` with a small hand-written schema (`{"waveform": {"enum":
+["Sine","Saw","Square"]}}`) confirmed `format` genuinely constrains decoding on this setup — a
+clean `{"waveform":"Sine"}` back, not prompt-compliance fallback. So the corruption is not "the
+grammar isn't binding at all"; it is specific to the larger, real patch schema under longer
+generation (many optional properties, real conversation context) in a way a trivial schema doesn't
+trigger — genuinely still open, and the next angle worth trying (context length, prompt structure,
+or a non-reasoning instruct model as the task's angle (c) suggested) is a new investigation, not
+this task's to finish.
+
+**Confirmed clean: the new envelope + the `track` fix, live.** `--mode timeline` (default,
+unpinned sampling, current post-rewrite schema) — the only path that exercises both P6-13 changes
+together against a real model — passed 8/8 scenarios, `timelineOps` present in all 8 responses,
+**0/8 corrupted/rejected** (`eval-results/p6-13-baseline-timeline-2026-08-21.json`). This isolates
+two things at once: the new, stricter generated envelope (`additionalProperties: false` on every
+nested object, where the hand-written schema had none) does not itself break generation under
+normal sampling — which is what makes the `think:false` run's 0/40 attributable to `think:false`
+and not to the schema rewrite — and the `track` field fix holds under real model output, not just
+the unit test asserting its shape.
+
+**Envelope codegen.** `AIStateMapper::getPatchSchema()` no longer hand-builds the schema field by
+field. It parses `synth::generated::kPatchEnvelopeSchemaJson`
+(`Source/AI/generated/PatchEnvelopeSchema.g.h`) — a header **vendored from the synth-platform
+repo**, generated from `packages/contracts/src/patch.ts`'s `PatchSchema` (the same Zod source
+`generate-cpp.ts` already used for the client's typed C++ structs) — then layers on the two things
+that source can't know: the `"type"` enum and the per-choice-parameter `enum`s inside `params`,
+both read from *this build's* live module registry (`moduleFactory`, built by instantiating every
+registered `AudioProcessor` and reading `AudioParameterChoice::choices`). This is a deliberate
+split, not an oversight: `packages/contracts/src/patch.ts`'s own doc comment says node `type` stays
+`z.string()` because "per-module constraints are layered on by the client, not this envelope" — the
+server has no module registry to enumerate against.
+
+Regenerate after editing `patch.ts`: `pnpm --filter @platform/contracts codegen:envelope-schema`
+in synth-platform, then copy `packages/contracts/generated/PatchEnvelopeSchema.g.h` into this
+repo's `Source/AI/generated/PatchEnvelopeSchema.g.h` verbatim and commit both — there is no
+CMake→pnpm/tsx build dependency (this repo's cache/build invariants rule that out), so this is a
+manual copy-and-commit step, same discipline as `Patch.g.h`'s cross-repo flow. The generated schema
+is rendered **flat/inlined** (`$refStrategy: "none"`, no `$ref`/`definitions`) rather than reusing
+`buildPatchJsonSchema()`'s named-definitions rendering used for the hosted Groq/Cerebras path —
+`$ref` indirection is untested territory for llama.cpp's grammar compiler, and the hand-written
+schema it replaces has never needed anything but a flat shape.
+
+**The `params`-openness tradeoff, stated plainly.** The hosted schema's `params` must stay open
+(`additionalProperties: true`) because numeric parameter values can't be fully enumerated — that
+requirement is unconditional, not something this fix can trade away, and `true` (not `{}`) already
+satisfies it safely. Where a real conflict *would* exist — a field that legitimately needs to be
+open-shaped for Ollama specifically but can't be — the resolution is a per-provider variant (open
+for hosted providers, a narrower client-only form for Ollama), exactly what happened to the
+timeline-ops `"track"` field above. `getPatchSchemaWithTimelineOps()` itself stays a client-side
+C++ extension on top of the generated envelope — synth-platform has its own hosted
+`buildTimelineOpsJsonSchema()` (`packages/contracts/src/timeline-ops.ts`) for a *different*
+capability (`POST /v1/capability/timeline.generate`), but unifying the client's local schema
+against it is out of this task's scope and tracked as a separate follow-up.
+
+Locked by `AIStateMapperTest.TimelineOpsTrackFieldIsNotOpenSchema`,
+`OllamaProviderTest.SendPromptOmitsSamplingOptionsWhenUnset` and
+`OllamaProviderTest.SendPromptIncludesSamplingOptionsWhenSet`.
+
 ### OllamaProvider: Worker-Thread Contract — Never Silence
 
 **Every request accepted by `sendPrompt()` eventually gets its callback invoked**, with the
