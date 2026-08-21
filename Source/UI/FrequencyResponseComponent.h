@@ -18,16 +18,29 @@ public:
         magnitudes.resize(numPoints, 0.0f);
         fftData.resize(fftSize * 2, 0.0f);
         spectrumMagnitudes.resize(numPoints, -80.0f);
-        startTimerHz(30);
+        // Timer starts only while showing — the Filter card hides this view by default, and a
+        // free-running 30 Hz tick on every Filter instance would be wasted work (and a repaint
+        // source) for a component the user has not opened.
     }
 
     ~FrequencyResponseComponent() override { stopTimer(); }
+
+    void visibilityChanged() override {
+        if (isVisible())
+            startTimerHz(30);
+        else
+            stopTimer();
+    }
 
     void setShowSpectrum(bool show) {
         showSpectrum = show;
         repaint();
     }
     bool getShowSpectrum() const { return showSpectrum; }
+
+    // Caps peaks at maxDb but leaves deep roll-off unclamped so paint can send the path below
+    // the view (no horizontal floor stroke along the bottom edge).
+    static float plotDb(float db) noexcept { return juce::jmin(maxDb, db); }
 
     // ---------- pure static helpers (unit-testable without constructing the GUI) ----------
     // The axis maths lives in synth::ui::FrequencyGrid so this view and EQCurveComponent
@@ -183,7 +196,10 @@ public:
             }
         }
 
-        // Build the path from magnitude data
+        // Build the path from magnitude data. Y is intentionally unclamped: once the response
+        // falls past minDb the path continues below the component and is clipped by the paint
+        // clip region. Clamping to h used to leave a flat "floor" stroke across the right side
+        // of a resonant low-pass (and any other steep roll-off).
         juce::Path curvePath;
         juce::Path fillPath;
 
@@ -192,7 +208,6 @@ public:
             float freq = indexToFreq(i);
             float x = freqToX(freq, w);
             float y = dbToY(magnitudes[i], h);
-            y = juce::jlimit(0.0f, h, y);
 
             if (first) {
                 curvePath.startNewSubPath(x, y);
@@ -335,7 +350,7 @@ private:
             float freq = indexToFreq(i);
             float mag = computeMagnitude(freq, cutoff, Q, filterType);
             float db = 20.0f * std::log10(std::max(mag, 0.0001f));
-            magnitudes[i] = juce::jlimit(minDb, maxDb, db);
+            magnitudes[i] = plotDb(db);
         }
     }
 
