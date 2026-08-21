@@ -206,22 +206,29 @@ TEST(TimelinePlayheadTest, StopEmitsOneFinalStripThenSilence) {
     EXPECT_EQ(f.playhead.requests, 1) << "and then goes completely silent";
 }
 
-// The drawn position is offset backwards by the output latency so the line matches what is HEARD.
-TEST(TimelinePlayheadTest, LatencyOffsetShiftsTheLine) {
+// The drawn position is offset backwards by the output latency so the line matches what is HEARD —
+// but only WHILE PLAYING. Stopped, nothing is sounding, so the raw position is the truth: a ruler
+// click that snapped exactly onto a bar must draw exactly ON that bar line (the always-on offset
+// used to park it a few pixels left, which read as a snapping bug).
+TEST(TimelinePlayheadTest, LatencyOffsetShiftsTheLineOnlyWhilePlaying) {
     Fixture f;
 
-    const auto atBeat4 = snapshotAt(4.0, /*playing=*/false);
+    const auto playingAtBeat4 = snapshotAt(4.0, /*playing=*/true);
 
-    f.playhead.updateFromTransport(atBeat4, 0.0);
+    f.playhead.updateFromTransport(playingAtBeat4, 0.0);
     const int xNoLatency = f.playhead.getLineX();
     EXPECT_EQ(xNoLatency, 400);
 
     // 50 ms at 120 BPM (2 beats/second) is 0.1 beat — exactly 10 px at 100 px/beat.
-    f.playhead.updateFromTransport(atBeat4, 0.05);
+    f.playhead.updateFromTransport(playingAtBeat4, 0.05);
     EXPECT_EQ(xNoLatency - f.playhead.getLineX(), 10);
 
+    // Stopped, the same latency shifts NOTHING: the line sits on the exact position.
+    f.playhead.updateFromTransport(snapshotAt(4.0, /*playing=*/false), 0.05);
+    EXPECT_EQ(f.playhead.getLineX(), 400);
+
     // The offset never drags the line before the start of the timeline.
-    f.playhead.updateFromTransport(snapshotAt(0.0, /*playing=*/false), 0.5);
+    f.playhead.updateFromTransport(snapshotAt(0.0, /*playing=*/true), 0.5);
     EXPECT_EQ(f.playhead.getLineX(), 0);
 }
 

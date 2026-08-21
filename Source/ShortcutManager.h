@@ -303,13 +303,18 @@ public:
         // 'k' with plain Cmd is unused by any other binding (Cmd+, / S / O / N / Z / Shift+Z / M
         // / A / L / B, Shift+A, Shift+S) — safe to claim for the minimap toggle (issue #159).
         bindings["toggleMinimap"] = juce::KeyPress('k', juce::ModifierKeys::commandModifier, 0);
-        // Cmd+Shift+A, not Cmd+A: the platform-standard Select All owns the bare chord (every DAW
-        // reads Cmd+A as "select everything here"), so the AI panel takes the Shift variant. A real
-        // Ctrl+A was considered and rejected — on Windows/Linux JUCE's commandModifier IS the Ctrl
-        // key, so "Ctrl+A for the panel, Cmd+A for select-all" would be the SAME chord there and
-        // the two commands would collide on every non-Mac platform.
+        // The platform-standard Select All owns the bare Cmd+A chord (every DAW reads it that
+        // way), so the AI panel moves off it. On macOS it takes a REAL Ctrl+A — Ctrl is a distinct
+        // physical modifier there, so the chord is free. On Windows/Linux JUCE's commandModifier
+        // IS the Ctrl key, so Ctrl+A and Cmd+A would be the SAME chord (and would trip
+        // EveryDefaultBindingIsUnique in Linux CI); those platforms take Cmd+Shift+A instead. One
+        // of the very few per-platform defaults in this table — rebindable like everything else.
+#if JUCE_MAC
+        bindings["toggleAiPanel"] = juce::KeyPress('a', juce::ModifierKeys::ctrlModifier, 0);
+#else
         bindings["toggleAiPanel"] =
             juce::KeyPress('a', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+#endif
         bindings["toggleLibrary"] = juce::KeyPress('b', juce::ModifierKeys::commandModifier, 0);
         // 't' with plain Cmd is unused by any other binding (Cmd+, / S / O / N / Z / Shift+Z / M /
         // K / A / L / B, Shift+A, Shift+S, C / V / D) — safe to claim for the timeline panel

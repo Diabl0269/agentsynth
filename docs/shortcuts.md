@@ -31,7 +31,7 @@ when reasoning about a key that "does nothing."
 | Cmd+Shift+Z | Redo |
 | Cmd+M | Toggle Mod Matrix |
 | Cmd+K | Toggle Minimap |
-| Cmd+Shift+A | Toggle AI Panel (moved off Cmd+A so Select All could take the platform-standard chord) |
+| Ctrl+A (macOS) / Cmd+Shift+A (elsewhere) | Toggle AI Panel — moved off Cmd+A so Select All could take the platform-standard chord. One of the very few per-platform defaults: on macOS Ctrl is a real separate modifier, on Windows/Linux JUCE's Cmd IS Ctrl so Ctrl+A would collide with Select All |
 | Cmd+B | Toggle Module Library |
 | Cmd+T | Toggle Timeline Panel (`SYNTH_ENABLE_TIMELINE` builds only — see [`layout.md §16`](layout.md)) |
 | Cmd+A | Select All in Focused Editor (actionId/`AppCommands` name still `selectAllModules` — see "Surface routing" below) |
@@ -54,10 +54,10 @@ intended, not a bug. The grid and zoom commands below are likewise inactive when
 itself isn't open (`isTimelineVisible`), the same as any other timeline-only command.
 
 `Cmd+A` is the platform-standard Select All (the way Cubase and every text field read it), so it
-owns the bare chord and the AI panel sits on `Cmd+Shift+A`; `Cmd+Shift+S` keeps its Shift variant
-because `Cmd+S` (Save Preset) is bound. A real Ctrl+A for the AI panel was considered and rejected:
-on Windows/Linux JUCE's `commandModifier` IS Ctrl, so Ctrl+A and Cmd+A would be the same chord
-there and the two commands would collide. Like every row above, all of these are rebindable in
+owns the bare chord and the AI panel sits on a REAL `Ctrl+A` on macOS (Ctrl is a distinct physical
+modifier there) and on `Cmd+Shift+A` everywhere else: on Windows/Linux JUCE's `commandModifier` IS
+Ctrl, so a Ctrl+A default there would be the same chord as Select All and the two commands would
+collide. `Cmd+Shift+S` keeps its Shift variant because `Cmd+S` (Save Preset) is bound. Like every row above, all of these are rebindable in
 Settings — and note that a machine which already persisted the old bindings keeps them until
 "Reset to Defaults" (bindings are stored per actionId, defaults only fill the gaps).
 
