@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Guidance for Claude Code (claude.ai/code) in this repository. Keep this file **lean** — it is the orientation layer (commands, conventions, critical traps). Detailed reference lives in `docs/` (map below); when you change behavior, update the relevant doc, not this file.
+Guidance for Claude Code (claude.ai/code) in this repository. Keep this file **lean** — it is always loaded, so it holds only commands, conventions, and a tripwire index of the critical traps. The rules themselves live in per-directory `CLAUDE.md` files (`Source/`, `Source/Modules/`, `Source/Timeline/`, `Source/AI/`, `Source/UI/`, `Source/Plugin/`, `.github/`), auto-loaded when you work under that directory; the mechanism and history live in `docs/` (map below). When you change behavior, update the relevant doc, not this file.
 
 ## Project
 
@@ -47,50 +47,53 @@ Every implementation plan **must** include:
 
 ## Critical invariants (break these and you ship bugs)
 
-Each bullet is the trap and the rule; the linked doc carries the full mechanism and history. Keep it that way: a new invariant gets 1–3 sentences here and its detail in the doc.
-
-### Audio engine & DSP
+Three rules stated in full because they're cheap to follow and catastrophic to miss:
 
 - **Bypass/mute contract** — in every signal-processing `processBlock`, use **two separate branches**: `isBypassed()` → dry pass-through (return early WITHOUT touching audio channels; clear only CV channels ≥2 so mod CV doesn't leak as audio); `isMuted()` → `buffer.clear()` then return. Never `if (isBypassed() || isMuted()) buffer.clear()` — that mutes on bypass. **Exception:** modules with no dry audio path (pure sources like Oscillator / Poly MIDI; audio-in/CV-out taps like Envelope Follower / Comparator) clear on bypass, still as two branches. → [`docs/architecture.md`](docs/architecture.md)
-- **`AudioEngine::HostMode::Hosted` never touches hardware** — no audio device, no MIDI input (the host owns both; opening MIDI directly double-triggers notes). Drive it only through `prepareForHost`/`processHostBlock`/`releaseFromHost`. → [`docs/architecture.md`](docs/architecture.md)
-- **The device callback's render buffer is not the device's output pointers** — one buffer of `max(numIn, numOut)` channels serves both the Audio Input and Audio Output nodes (the graph renders in place), so device input is copied in before the graph runs and uncovered channels come from a scratch buffer sized in `audioDeviceAboutToStart` — the callback must never allocate. Audio input stays **opt-in**: absent saved state means `initialiseWithDefaultDevices(0, 2)`, and the restore path requests **0** input channels so a saved setup never switches a microphone on uninvited. Core never touches `ApplicationProperties`; state flows out via `onDeviceStateChanged`. → [`docs/architecture.md`](docs/architecture.md)
-- **A device/sample-rate change goes through ONE hook, and a take never spans it** — `AudioEngine::handleStreamFormatChange` (called from both `audioDeviceAboutToStart` and `prepareForHost`) is where every prepare-path consumer is added, in order, transport first — never duplicated per call site. It invalidates all clip streams (a rate change is a discontinuity the ring's self-healing miss can't detect). An in-flight take is finalized at the boundary, never continued: `MainComponent::AudioTake` freezes `captureSampleRate`/`captureBpm`/`captureRecordingLatencySamples` at record-on; reading them live at commit mixes two real rates under one declared one. → [`docs/architecture.md`](docs/architecture.md)
-- **Audio clips STREAM, and only the prefetch thread may touch a reader** — nothing on the audio path may open, read or map a file, and nothing pulls a clip into RAM whole (that is `SamplerModule`'s model, wrong here). Every `juce::AudioFormatReader` is owned exclusively by the prefetch thread; the message thread only publishes an assignment table. The ring's fill/publish order is load-bearing — read the doc before touching it. An offline bounce steers only `wantedFrame`, via `waitUntilPrimed` with nothing rendering, and counts a timeout as a reported dropout — never by reading a file from the render loop. → [`docs/architecture.md`](docs/architecture.md) · [`docs/modules.md`](docs/modules.md)
-
-### Modules & channels
-
-- **A second audio leg goes on a new `kRightBase` block, never on ch1** — on the voice modules ch1 is already a CV input, so relabelling it "Right" repoints every saved patch that modulates it. Wavetable/Oscillator/Filter/VCA put `Audio R` on a dedicated block above the mod-CV inputs: keep the declared output count above every CV input index, bound end-of-block CV clears at `kRightBase` (not `getNumChannels()`), and use `ModuleBase::panGains` (balance law, unity centre — equal-power would quieten every mono patch by 3 dB). Dual I/O "off" on these modules exposes the **left leg only** and must DROP cables on the hidden right block. Pair legs via `ModuleBase::rightAudioLegChannel()`, never by assuming ch1. And when a module's visible jack count grows, override the default port map — the fallback marks unclaimed channels as phantom poly heads and `getJackTargets` duplicates wires. → [`docs/modules.md`](docs/modules.md) · [`docs/fx_modules.md`](docs/fx_modules.md)
-- **A module's channel count is fixed for its lifetime** — JUCE settles the bus layout in the `ModuleBase` constructor; renegotiating drops every existing connection. Variable-port modules (Macro bank, Audio Input, Hosted Plugin) declare their **maximum** and vary only `getVisibleInput/OutputPortCount()`, clearing hidden channels each block; when the visible count shrinks, drop routings on the now-hidden jacks (`GraphEditor::dropRoutingsOnHiddenJacks`). A hosted plugin wider than `kMaxPluginChannels` is **refused with a message, never truncated**. → [`docs/modules.md`](docs/modules.md)
-- **Every Wavetable warp mode must prove it doesn't alias** — warps run *after* mip selection, so a new mode needs one of the two documented defences (a `warpRateFactor` entry or the `warpNeedsOversampling` flag) **and** an entry in the parameterised `WavetableWarpAliasTest` / `WavetableWarpBoundsTest` suites, which iterate `Warp::Count` so an unhandled mode fails the test run instead of shipping. → [`docs/modules.md`](docs/modules.md)
-
-### Timeline & threading
-
-- **Timeline data crosses threads only via an `EpochExchange`** — `AudioEngine::renderPass` is the one site that opens the snapshot and binding exchanges, exactly once each per render pass; never cache a returned reference across passes (epoch reclamation makes it a use-after-free). Modules read via `getPlayHead()` downcast to `synth::TransportService*` (same block-only lifetime; can be null). `AudioEngine::publishTimeline` is the only publisher — **snapshot first, bindings second** — and must be re-called after any graph change. Every `TimelineDoc` edit goes through its mutation API, never a direct field write. → [`docs/architecture.md`](docs/architecture.md)
-- **`MainComponent` owns the app's live `TimelineDoc`, and every graph change has to tell it** — publish-to-the-audio-thread happens at ONE seam (`MainComponent::timelineChanged`, which also rebinds the `AutomationRecorder`); any path that adds/removes/replaces nodes must run the reconcile pass afterwards, and a new "replace the graph" path means a new entry in the hook inventory table in [`docs/architecture.md` §8](docs/architecture.md). An orphaned track binding is never re-established automatically — the user picks a node from the chip menu. → [`docs/layout.md §16`](docs/layout.md)
-- **A node's uuid must be mirrored into its processor at every write site** — `node->properties` is message-thread-only, so every `properties.set("uuid", ...)` pairs with `ModuleBase::setNodeUuid` (`mirrorUuidIntoProcessor` in `AIStateMapper.cpp`; `MainComponent`'s add-track flow). The lock-free `getNodeUuid()` is only sound because the uuid is written once, before the node is audio-visible — never rewrite or clear it. → [`docs/architecture.md`](docs/architecture.md)
-- **A hosted plugin's automation lanes never bind by index alone** — every lane-resolution call site shares ONE resolver, `synth::resolveLaneParameter` (`Source/Timeline/AutomationBinding.h`): exact id match wins; a stored `paramIndexHint` rescues only a parameter with no stable id at all; a hinted index that names a *different*, still-identified parameter **orphans** the lane rather than silently rebinding. → [`docs/modulation.md`](docs/modulation.md) · [`docs/modules.md`](docs/modules.md)
-
-### AI & trust boundaries
-
 - **Never relax `validatePatch` to raise the AI pass rate** — it is the security boundary for untrusted model output. Fix validity on the *generation* side, most upstream first: schema → bounded retry → narrow repair → prompt; measure with `Tools/AIPatchHarness` first. A node's `"state"` object (`ModuleBase::setExtraState`) is applied on the **trusted path only** — honouring it for provider output makes a patch suggestion an arbitrary file read. → [`docs/AI_Engine.md`](docs/AI_Engine.md)
-- **`applyJSONToGraph` merge mode adds wires you didn't ask for** — with `clearExisting=false` it auto-connects new nodes to Audio Output / a MIDI source (an affordance for AI patches); any caller reproducing an *exact* sub-graph (snippet insert, copy/paste, duplicate) must pass `autoConnectNewNodes=false`. → [`docs/layout.md §12.5`](docs/layout.md)
 - **`trusted=true` on `applyJSONToGraph` is about parameter fidelity, not skipping checks** — the untrusted path rescales in-`[0,1]` values against wider ranges (a heuristic for models), which corrupts app-authored values like a 0.5 Hz LFO rate. Replaying our own `graphToJSON` output applies trusted; if it came off disk, run `validatePatch(..., trusted=false)` as a separate gate first (`SnippetManager::insertSnippet` / `ProjectBundle::load` are the reference pairing). → [`docs/layout.md §12.5`](docs/layout.md)
-- **Patch format forward-compatibility: reserved fields stay reserved** — `"timeline"` stays refused on the untrusted path; params stay a flat scalar map (time-varying data belongs under `"timeline"`); `schemaVersion` is never bumped for additive changes; per-node `uuid` is trusted-only; unknown top-level keys survive save/load inert. AI-authored timeline data (TL8) enters through a **separate door**, `synth::validateTimeline` — extend that, never weaken the `"timeline"` refusal. → [`docs/AI_Engine.md`](docs/AI_Engine.md)
-- **Conversation-history persistence is resolved server-side from the entitlement, never trusted from a client header** — the client only decides which UI to *show* (`isProPlan(AccountSnapshot)`); the server checks the signed-in account's plan on every request. Same class of boundary as `trusted=true` above. → [`docs/AI_Engine.md`](docs/AI_Engine.md)
-- **Persist a rotated refresh token before using the access token that came with it** — every `AccountService` sign-in/refresh returns a *new* refresh token, and the auth service revokes the whole family if a consumed one reappears. Save it to the `TokenStore` and confirm success **before** exposing the access token or notifying listeners (`AccountService::completeSignIn` is the one funnel). → [`docs/AI_Engine.md`](docs/AI_Engine.md)
-- **AI model discovery ordering** — `AIChatComponent`'s ctor-time `refreshModels()` is a no-op with no provider installed; any owner that installs one afterward MUST call `refreshModels()` again post-`setProvider()`, or every `/api/chat` gets a 400. → [`docs/AI_Engine.md`](docs/AI_Engine.md)
 
-### UI & theming
+Everything else below is a tripwire index. The full rule lives in the named area `CLAUDE.md` (auto-loaded when you work under that directory); the mechanism and history live in the linked doc — **read it before touching the area**. A new invariant gets one line here, its rule in the area file, and its detail in the doc.
 
-- **No unconditional per-tick repaint** — `ModuleComponent` is buffered-to-image with a gated 15 Hz timer; the 30 Hz GraphEditor animation composites cached images; a theme switch is exactly one re-skin pass. All animations use `AnimationDriver` (VBlank-driven, time-bounded). Exactly two exceptions: the AI thinking spinner (in-flight only, region-confined) and the timeline playhead (strip-confined, playing-only). → [`docs/layout.md §10–11`](docs/layout.md)
-- **A cable is not a graph edge** — one drawn wire can be 1 edge, 2 edges + a hidden attenuverter node, or N poly-bus edges. Never identify, hit-test, colour or delete a cable by `AudioProcessorGraph::Connection`; go through `GraphEditor::buildVisibleCables()`, the single enumeration feeding both `paint()` and hit-testing. Wire colour resolves only via `synth::ui::resolveCableColour` — reading a `*Wire` theme token at a paint site breaks user colour overrides. → [`docs/layout.md §14`](docs/layout.md) · [`docs/theming.md §11`](docs/theming.md)
-- **Themes don't swap fonts** — all built-ins share Inter + JetBrains Mono; swapping the embedded typeface *family* at runtime corrupts text (JUCE 8 + CoreText). Themes differ by colour/treatment/glow only. → [`docs/theming.md`](docs/theming.md)
-- **A plugin editor must never call `Desktop::setDefaultLookAndFeel`** — it's process-global inside the host. Scope with `setLookAndFeel(&processor.getLookAndFeel())`; `ThemeManager`/`AppLookAndFeel` belong to the processor, since hosts recreate the editor repeatedly. → [`docs/architecture.md`](docs/architecture.md)
-- **No high-frequency logging** — a global `juce::Logger` (Debug builds) pipes `writeToLog` into a UI-thread console; never add per-sample / per-frame / per-parameter / per-connection logs (one caused a multi-second freeze; guarded by `AIStateMapperTest.PresetLoadDoesNotSpamLogger`). → [`docs/AI_Engine.md`](docs/AI_Engine.md)
+**Engine & threading** (`Source/CLAUDE.md`):
 
-### CI
+- `HostMode::Hosted` never opens an audio device or MIDI input. → [`docs/architecture.md`](docs/architecture.md)
+- The device callback's render buffer is shared in-place with the graph; never allocate in the callback; audio input stays opt-in (restore requests 0 inputs). → [`docs/architecture.md`](docs/architecture.md)
+- A device/sample-rate change goes through the ONE hook (`AudioEngine::handleStreamFormatChange`), and a recording take never spans it. → [`docs/architecture.md`](docs/architecture.md)
+- Timeline data crosses threads only via `EpochExchange`: opened once per render pass, published snapshot-first/bindings-second, republished after any graph change. → [`docs/architecture.md`](docs/architecture.md)
+- Every graph change must reach `MainComponent::timelineChanged` / the reconcile pass (hook inventory: [`docs/architecture.md` §8](docs/architecture.md)). → [`docs/layout.md §16`](docs/layout.md)
+- Every node-uuid write mirrors into the processor via `ModuleBase::setNodeUuid`; written once, never rewritten. → [`docs/architecture.md`](docs/architecture.md)
 
-- **CI cache is load-bearing and fails silently** — four rules: `CMAKE_<LANG>_COMPILER_LAUNCHER` is **per language** (a language without its own launcher silently never reaches ccache; `scripts/ci-cache-check.sh` audits the generated ninja files for this); `ci.yml` keeps its `push: main` trigger (caches are ref-scoped — without a main-scoped cache no PR can restore one); `build/_deps` is keyed on `cmake/DependencyVersions.cmake` only, never `CMakeLists.txt` (pin new dependencies there); `CCACHE_DIR` is set explicitly per job. The Timeline-OFF job restores `build/_deps` but **never saves it** and owns its own `-timeline-off-` ccache namespace — keep both properties. → [`docs/testing.md`](docs/testing.md)
+**Modules & channels** (`Source/Modules/CLAUDE.md`):
+
+- A second audio leg goes on a new `kRightBase` block, never ch1; pan is a balance law (unity centre); Dual I/O "off" drops cables on the hidden right block. → [`docs/modules.md`](docs/modules.md)
+- A module's channel count is fixed for its lifetime; variable-port modules declare their maximum and vary only the visible count; an over-wide hosted plugin is refused, never truncated. → [`docs/modules.md`](docs/modules.md)
+- Every Wavetable warp mode must prove it doesn't alias (a documented defence + a parameterised-test entry). → [`docs/modules.md`](docs/modules.md)
+
+**Timeline** (`Source/Timeline/CLAUDE.md`):
+
+- Audio clips STREAM; only the prefetch thread may touch a reader; nothing on the audio path opens a file. → [`docs/architecture.md`](docs/architecture.md)
+- Hosted-plugin automation lanes resolve only through `synth::resolveLaneParameter`, never by index alone. → [`docs/modulation.md`](docs/modulation.md)
+
+**AI & trust boundaries** (`Source/AI/CLAUDE.md`):
+
+- `applyJSONToGraph` merge mode auto-connects new nodes; exact-sub-graph callers pass `autoConnectNewNodes=false`. → [`docs/layout.md §12.5`](docs/layout.md)
+- Patch-format reserved fields stay reserved (`"timeline"` refused untrusted; flat scalar params; `uuid` trusted-only). → [`docs/AI_Engine.md`](docs/AI_Engine.md)
+- Conversation-history persistence is resolved server-side from the entitlement, never trusted from a client header. → [`docs/AI_Engine.md`](docs/AI_Engine.md)
+- Persist a rotated refresh token before using the access token that came with it (`AccountService::completeSignIn` is the funnel). → [`docs/AI_Engine.md`](docs/AI_Engine.md)
+- Installing an AI provider after construction requires calling `refreshModels()` again, or every `/api/chat` gets a 400. → [`docs/AI_Engine.md`](docs/AI_Engine.md)
+
+**UI & theming** (`Source/UI/CLAUDE.md`, `Source/Plugin/CLAUDE.md`):
+
+- No unconditional per-tick repaint; all animations use `AnimationDriver`; exactly two blessed exceptions. → [`docs/layout.md §10–11`](docs/layout.md)
+- A cable is not a graph edge — enumerate via `GraphEditor::buildVisibleCables()`, colour via `synth::ui::resolveCableColour`. → [`docs/layout.md §14`](docs/layout.md)
+- Themes never swap font families (JUCE 8 + CoreText corrupts text); colour/treatment/glow only. → [`docs/theming.md`](docs/theming.md)
+- A plugin editor never calls `Desktop::setDefaultLookAndFeel` — it's process-global inside the host. → [`docs/architecture.md`](docs/architecture.md)
+- No per-sample / per-frame / per-parameter logging — a global Logger pipes into a UI-thread console. → [`docs/AI_Engine.md`](docs/AI_Engine.md)
+
+**CI** (`.github/CLAUDE.md`):
+
+- The CI cache is load-bearing and fails silently: per-language compiler launchers, keep the `push: main` trigger, key `build/_deps` on `cmake/DependencyVersions.cmake` only (pin new dependencies there), explicit `CCACHE_DIR` per job. → [`docs/testing.md`](docs/testing.md)
 
 ## Docs map
 
