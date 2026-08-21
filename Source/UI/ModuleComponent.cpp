@@ -302,9 +302,28 @@ void ModuleComponent::refreshWaveformComboIcons() {
     }
 }
 
+void ModuleComponent::applyKeyboardThemeColours() {
+    if (keyboardComponent == nullptr)
+        return;
+
+    using synth::theme::AppLookAndFeel;
+    auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
+    if (lf == nullptr)
+        return;
+
+    const auto& c = lf->getTheme().colors;
+    keyboardComponent->setColour(juce::MidiKeyboardComponent::whiteNoteColourId, c.bg1);
+    keyboardComponent->setColour(juce::MidiKeyboardComponent::blackNoteColourId, c.surfaceHi);
+    keyboardComponent->setColour(juce::MidiKeyboardComponent::keySeparatorLineColourId, c.border);
+    keyboardComponent->setColour(juce::MidiKeyboardComponent::mouseOverKeyOverlayColourId, c.accent.withAlpha(0.3f));
+    keyboardComponent->setColour(juce::MidiKeyboardComponent::keyDownOverlayColourId, c.accent);
+    keyboardComponent->setColour(juce::MidiKeyboardComponent::textLabelColourId, c.textPrimary);
+}
+
 void ModuleComponent::lookAndFeelChanged() {
     applyHeaderButtonIcons();
     refreshWaveformComboIcons();
+    applyKeyboardThemeColours();
 }
 
 void ModuleComponent::timerCallback() {
@@ -403,22 +422,7 @@ void ModuleComponent::createControls() {
         keyboardComponent = std::make_unique<juce::MidiKeyboardComponent>(
             midiKeyboard->getKeyboardState(), juce::MidiKeyboardComponent::horizontalKeyboard);
 
-        // Theme the keyboard component
-        using synth::theme::AppLookAndFeel;
-        auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
-        if (lf != nullptr) {
-            keyboardComponent->setColour(juce::MidiKeyboardComponent::whiteNoteColourId, lf->getTheme().colors.bg1);
-            keyboardComponent->setColour(juce::MidiKeyboardComponent::blackNoteColourId,
-                                         lf->getTheme().colors.surfaceHi);
-            keyboardComponent->setColour(juce::MidiKeyboardComponent::keySeparatorLineColourId,
-                                         lf->getTheme().colors.border);
-            keyboardComponent->setColour(juce::MidiKeyboardComponent::mouseOverKeyOverlayColourId,
-                                         lf->getTheme().colors.accent.withAlpha(0.3f));
-            keyboardComponent->setColour(juce::MidiKeyboardComponent::keyDownOverlayColourId,
-                                         lf->getTheme().colors.accent);
-            keyboardComponent->setColour(juce::MidiKeyboardComponent::textLabelColourId,
-                                         lf->getTheme().colors.textPrimary);
-        }
+        applyKeyboardThemeColours();
         keyboardComponent->setWantsKeyboardFocus(true);
         addAndMakeVisible(keyboardComponent.get());
     } else if (auto* extMidi = dynamic_cast<ExternalMidiModule*>(module)) {

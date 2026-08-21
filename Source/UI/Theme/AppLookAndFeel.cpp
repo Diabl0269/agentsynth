@@ -171,7 +171,8 @@ void AppLookAndFeel::applyTheme(const Theme& newTheme) {
     setColour(juce::TabbedButtonBar::tabOutlineColourId, c.border);
 
     // MidiKeyboardComponent ColourIds live in juce_audio_utils, which Core does
-    // not link; the on-screen keyboard keeps JUCE defaults for now (themed in a later phase).
+    // not link; ModuleComponent::applyKeyboardThemeColours themes the on-screen
+    // keyboard from the active Theme instead (create + lookAndFeelChanged).
 
     // ---- typefaces + default font ----
     if (familyChanged || uiTypeface == nullptr)
