@@ -12,12 +12,15 @@
 #include "../Source/AudioEngine.h"
 #include "../Source/MainComponent.h"
 #include "../Source/Timeline/TimelineDoc.h"
+#include "../Source/UI/PreferencesSettingsTab.h"
 #include "../Source/UI/Theme/AppLookAndFeel.h"
 #include "../Source/UI/Theme/ThemeManager.h"
 #include <algorithm>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
+#include <utility>
+#include <vector>
 
 namespace {
 
@@ -42,6 +45,65 @@ void resetTimelinePanelVisibleKey() {
         s->saveIfNeeded();
     }
 }
+
+// The one on-disk settings file every MainComponent in this process opens (see
+// synth::userSettingsOptions) — factored out of resetTimelinePanelVisibleKey so the guard below can
+// reach the same file.
+juce::PropertiesFile::Options userSettingsTestOptions() {
+    juce::PropertiesFile::Options opts;
+    opts.applicationName = "Agent Synth";
+    opts.folderName = "Agent Synth";
+    opts.filenameSuffix = "settings";
+    opts.osxLibrarySubFolder = "Application Support";
+    opts.storageFormat = juce::PropertiesFile::storeAsXML;
+    return opts;
+}
+
+// Saves the named settings keys on construction and restores them EXACTLY on destruction, including
+// the case where a key did not exist at all.
+//
+// Needed because the commands under test persist as a side effect: setSnapValue() writes
+// "timelineSnap"/"timelineSnapEnabled", and the Preferences toggle writes "naturalScrolling" — all
+// into the REAL user settings file this machine's app reads. Clearing them afterwards would not be
+// enough: it would silently change the developer's own preferences (and, for the snap keys, flip the
+// documented CopyPasteClipsRebasedAtPlayhead local-vs-CI behaviour), so the original values go back.
+//
+// Both the read and the write use their own short-lived juce::ApplicationProperties, exactly as
+// resetTimelinePanelVisibleKey does: a PropertiesFile saves its WHOLE in-memory property set, so a
+// long-lived instance held across the test would write back a snapshot taken before the test and
+// clobber every unrelated key the test happened to touch.
+class PersistedKeysGuard {
+public:
+    explicit PersistedKeysGuard(juce::StringArray keys) {
+        juce::ApplicationProperties props;
+        props.setStorageParameters(userSettingsTestOptions());
+        auto* settings = props.getUserSettings();
+        for (const auto& key : keys) {
+            std::optional<juce::String> value;
+            if (settings != nullptr && settings->containsKey(key))
+                value = settings->getValue(key);
+            saved_.emplace_back(key, value);
+        }
+    }
+
+    ~PersistedKeysGuard() {
+        juce::ApplicationProperties props;
+        props.setStorageParameters(userSettingsTestOptions());
+        auto* settings = props.getUserSettings();
+        if (settings == nullptr)
+            return;
+        for (const auto& [key, value] : saved_) {
+            if (value.has_value())
+                settings->setValue(key, *value);
+            else
+                settings->removeValue(key);
+        }
+        settings->saveIfNeeded();
+    }
+
+private:
+    std::vector<std::pair<juce::String, std::optional<juce::String>>> saved_;
+};
 
 // A provider that never touches the network — this file only exercises the graph/timeline/command
 // plumbing, never the AI chat itself. Mirrors NullAIProvider (PluginProcessorTests.cpp) exactly.
@@ -876,3 +938,249 @@ TEST_F(FocusArbitrationTest, SurfaceResolverRealFocus) {
         << "a hidden panel never owns the verbs, whatever the focused component is";
 #endif
 }
+
+// ============================================================================
+// 9. Surface actions must fall THROUGH the global handler
+//
+// The shortcut table now holds bare arrows, Q/L/P and the tool digits — rebindable, but resolved by
+// the component that owns the key rather than dispatched as commands. MainComponent::keyPressed is
+// the last stop for every key, so it has to ignore them: a bare Left that got this far means no
+// surface claimed it, and both possible mistakes are silent. Swallowing it (returning true) breaks
+// whatever the parent chain would have done next; trying to dispatch it looks up a command that does
+// not exist. This is the test that would have caught either.
+// ============================================================================
+
+TEST_F(FocusArbitrationTest, BareArrowKeyFallsThroughTheGlobalHandlerUntouched) {
+    MainComponent mc(std::make_unique<FocusMockProvider>());
+    mc.setEditSurfaceOverrideForTest(MainComponent::EditSurface::Graph);
+
+    auto& editor = mc.getGraphEditor();
+    auto& graph = mc.getAudioEngine().getGraph();
+    auto& shortcuts = mc.getShortcutManager();
+
+    const juce::KeyPress bareLeft(juce::KeyPress::leftKey, juce::ModifierKeys::noModifiers, 0);
+
+    // Precondition, and the whole point: the key IS bound — to a surface action with no command. A
+    // key that were simply unbound would make the assertion below pass for the wrong reason.
+    ASSERT_TRUE(shortcuts.getActionsForKeyPress(bareLeft).contains("pianoRollNudgeLeft"));
+    ASSERT_EQ(AppCommands::getCommandForAction("pianoRollNudgeLeft"), AppCommands::kNoCommand);
+
+    auto node = graph.addNode(synth::AIStateMapper::createModule("Oscillator"));
+    ASSERT_NE(node, nullptr);
+    editor.setSelectedNodes({node->nodeID});
+    const int nodesBefore = graph.getNumNodes();
+    const int selectionBefore = editor.getSelectionCount();
+
+    EXPECT_FALSE(mc.keyPressed(bareLeft)) << "an unclaimed surface key must fall through, not be swallowed";
+    EXPECT_EQ(graph.getNumNodes(), nodesBefore) << "nothing was invoked";
+    EXPECT_EQ(editor.getSelectionCount(), selectionBefore) << "and nothing was cleared either";
+
+    // Same for the other five piano-roll arrows and for the bare tool digits, so a future rename
+    // cannot leave one of them dispatching.
+    for (const auto& kp : {juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::noModifiers, 0),
+                           juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::noModifiers, 0),
+                           juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::noModifiers, 0),
+                           juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier, 0),
+                           juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::altModifier, 0),
+                           juce::KeyPress('3', juce::ModifierKeys::noModifiers, 0),
+                           juce::KeyPress('q', juce::ModifierKeys::noModifiers, 0),
+                           juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0)})
+        EXPECT_FALSE(mc.keyPressed(kp)) << ShortcutManager::keyPressToDisplayString(kp).toStdString();
+}
+
+#if SYNTH_ENABLE_TIMELINE
+
+// ============================================================================
+// 10. Grid (snap) commands — one shared value, gated on the panel being on screen
+// ============================================================================
+
+TEST_F(FocusArbitrationTest, SnapCommandsDriveThePanelsSharedGrid) {
+    // setSnapValue()/cycleSnapValue() persist, so the two keys they write are restored afterwards.
+    PersistedKeysGuard guard({"timelineSnap", "timelineSnapEnabled"});
+
+    using Snap = synth::ui::TimelineViewState::Snap;
+    MainComponent mc(std::make_unique<FocusMockProvider>());
+    mc.setSize(1200, 800);
+    mc.simulateToggleTimelineClick();
+    ASSERT_TRUE(mc.isTimelineConfiguredVisible());
+
+    auto& cm = mc.getCommandManager();
+    auto& view = mc.getTimelinePanel().getViewState();
+
+    // Absolute setters. Each also re-arms the master snap switch — asking for a division means
+    // "snap to THIS", the same thing the snap combo does.
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapSetEighth, false));
+    EXPECT_EQ(view.snap, Snap::Eighth);
+    EXPECT_TRUE(view.snapEnabled);
+
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapSetWhole, false));
+    EXPECT_EQ(view.snap, Snap::Whole);
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapSetHalf, false));
+    EXPECT_EQ(view.snap, Snap::Half);
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapSetQuarter, false));
+    EXPECT_EQ(view.snap, Snap::Quarter);
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapSetSixteenth, false));
+    EXPECT_EQ(view.snap, Snap::Sixteenth);
+
+    // Cycle: +1 goes FINER, -1 COARSER, and both CLAMP rather than wrapping.
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapCycleNext, false));
+    EXPECT_EQ(view.snap, Snap::Sixteenth) << "already at the finest division - clamped, never wrapped to Bar";
+
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapCyclePrev, false));
+    EXPECT_EQ(view.snap, Snap::Eighth);
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapCyclePrev, false));
+    EXPECT_EQ(view.snap, Snap::Quarter);
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapCycleNext, false));
+    EXPECT_EQ(view.snap, Snap::Eighth);
+
+    // The grid is SHARED, not per-surface: which timeline surface has focus must not change where a
+    // grid command lands.
+    for (auto surface : {MainComponent::EditSurface::Graph, MainComponent::EditSurface::TimelineClips,
+                         MainComponent::EditSurface::PianoRoll}) {
+        mc.setEditSurfaceOverrideForTest(surface);
+        ASSERT_TRUE(cm.invokeDirectly(AppCommands::snapSetQuarter, false)) << "surface " << (int)surface;
+        EXPECT_EQ(view.snap, Snap::Quarter) << "surface " << (int)surface;
+    }
+}
+
+// ============================================================================
+// 11. Zoom commands — routed by resolveEditSurface(), like the clipboard verbs
+// ============================================================================
+
+TEST_F(FocusArbitrationTest, ZoomCommandsRoutePerFocusedSurface) {
+    MainComponent mc(std::make_unique<FocusMockProvider>());
+    mc.setSize(1200, 800);
+    mc.simulateToggleTimelineClick();
+    ASSERT_TRUE(mc.isTimelineConfiguredVisible());
+
+    auto& cm = mc.getCommandManager();
+    auto& panel = mc.getTimelinePanel();
+    auto& roll = panel.getPianoRoll();
+
+    // ---- Piano roll: its OWN mapping, on both axes ----
+    mc.setEditSurfaceOverrideForTest(MainComponent::EditSurface::PianoRoll);
+    const double rollBeatsBefore = roll.getPixelsPerBeat();
+    const double rollSemisBefore = roll.getPixelsPerSemitone();
+    const double panelBeatsUntouched = panel.getViewState().pixelsPerBeat;
+
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::zoomInHorizontal, false));
+    EXPECT_GT(roll.getPixelsPerBeat(), rollBeatsBefore);
+    EXPECT_DOUBLE_EQ(roll.getPixelsPerSemitone(), rollSemisBefore) << "horizontal zoom must not touch the row height";
+    EXPECT_DOUBLE_EQ(panel.getViewState().pixelsPerBeat, panelBeatsUntouched)
+        << "the roll has its own zoom - the panel's shared mapping must not move";
+
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::zoomInVertical, false));
+    EXPECT_GT(roll.getPixelsPerSemitone(), rollSemisBefore);
+
+    // In-then-out returns to where it started: the out factor is the exact reciprocal.
+    const double afterIn = roll.getPixelsPerBeat();
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::zoomOutHorizontal, false));
+    EXPECT_LT(roll.getPixelsPerBeat(), afterIn);
+    EXPECT_NEAR(roll.getPixelsPerBeat(), rollBeatsBefore, 1.0e-9);
+
+    // ---- Clip lanes: the panel's shared view state ----
+    mc.setEditSurfaceOverrideForTest(MainComponent::EditSurface::TimelineClips);
+    const double panelBeatsBefore = panel.getViewState().pixelsPerBeat;
+    const double panelRowScaleBefore = panel.getViewState().rowHeightScale;
+    const double rollUntouched = roll.getPixelsPerBeat();
+
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::zoomInHorizontal, false));
+    EXPECT_GT(panel.getViewState().pixelsPerBeat, panelBeatsBefore);
+    EXPECT_DOUBLE_EQ(roll.getPixelsPerBeat(), rollUntouched);
+
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::zoomInVertical, false));
+    EXPECT_GT(panel.getViewState().rowHeightScale, panelRowScaleBefore);
+
+    // ---- Graph: ONE uniform zoom, so the horizontal pair drives it and the vertical pair is
+    // reported inactive rather than silently doing the same thing under a second key ----
+    mc.setEditSurfaceOverrideForTest(MainComponent::EditSurface::Graph);
+    const float canvasWidthBefore = mc.getGraphEditor().getVisibleCanvasRect().getWidth();
+    ASSERT_GT(canvasWidthBefore, 0.0f) << "precondition: the canvas has real bounds";
+
+    EXPECT_TRUE(commandIsActive(mc, AppCommands::zoomInHorizontal));
+    EXPECT_FALSE(commandIsActive(mc, AppCommands::zoomInVertical)) << "the canvas has no second axis";
+    EXPECT_FALSE(commandIsActive(mc, AppCommands::zoomOutVertical));
+
+    ASSERT_TRUE(cm.invokeDirectly(AppCommands::zoomInHorizontal, false));
+    EXPECT_LT(mc.getGraphEditor().getVisibleCanvasRect().getWidth(), canvasWidthBefore)
+        << "zooming in shows LESS canvas";
+
+    EXPECT_FALSE(cm.invokeDirectly(AppCommands::zoomInVertical, false));
+}
+
+// ============================================================================
+// 12. The whole block is inactive while the timeline is hidden
+// ============================================================================
+
+TEST_F(FocusArbitrationTest, GridAndTimelineZoomCommandsAreInactiveWhileThePanelIsHidden) {
+    MainComponent mc(std::make_unique<FocusMockProvider>());
+    mc.setSize(1200, 800);
+    ASSERT_FALSE(mc.isTimelineConfiguredVisible()) << "the panel starts hidden by default";
+
+    auto& cm = mc.getCommandManager();
+    auto& view = mc.getTimelinePanel().getViewState();
+    const auto snapBefore = view.snap;
+
+    for (auto cmdId :
+         {AppCommands::snapSetWhole, AppCommands::snapSetHalf, AppCommands::snapSetQuarter, AppCommands::snapSetEighth,
+          AppCommands::snapSetSixteenth, AppCommands::snapCyclePrev, AppCommands::snapCycleNext}) {
+        EXPECT_FALSE(commandIsActive(mc, cmdId)) << "command " << (int)cmdId;
+        EXPECT_FALSE(cm.invokeDirectly(cmdId, false)) << "command " << (int)cmdId;
+    }
+    EXPECT_EQ(view.snap, snapBefore) << "a refused command must not have persisted a grid change";
+
+    // Zoom follows the surface, so with the panel hidden resolveEditSurface() is Graph: the
+    // horizontal pair stays live (it zooms the canvas) and the vertical pair does not.
+    ASSERT_EQ(mc.resolveEditSurface(), MainComponent::EditSurface::Graph);
+    EXPECT_TRUE(commandIsActive(mc, AppCommands::zoomInHorizontal));
+    EXPECT_FALSE(commandIsActive(mc, AppCommands::zoomInVertical));
+
+    // ...and a stale focus override cannot revive them either — the same "hidden panel never owns
+    // the verbs" rule getCommandInfo applies to the clipboard verbs.
+    mc.setEditSurfaceOverrideForTest(MainComponent::EditSurface::TimelineClips);
+    EXPECT_FALSE(commandIsActive(mc, AppCommands::zoomInHorizontal));
+    EXPECT_FALSE(commandIsActive(mc, AppCommands::zoomInVertical));
+}
+
+// ============================================================================
+// 13. "Natural scrolling" — the Preferences toggle reaches both surfaces live
+//
+// The propagation path has no direct wire: the tab writes the settings key, juce::PropertiesFile
+// broadcasts the change, and MainComponent's changeListenerCallback re-reads it. This drives the
+// REAL chain (tab -> file -> listener) rather than calling the applier, because the wire is the part
+// that can break — a missing addChangeListener, or a changeListenerCallback that stopped
+// dispatching on the source, would both leave the applier itself perfectly correct.
+// ============================================================================
+
+TEST_F(FocusArbitrationTest, NaturalScrollingPreferenceReachesTheTimelineAndTheRoll) {
+    PersistedKeysGuard guard({MainComponent::kNaturalScrollingKey});
+
+    MainComponent mc(std::make_unique<FocusMockProvider>());
+    mc.setSize(1200, 800);
+
+    // Default ON (natural) means NOT inverted on either surface — the juce::Viewport convention the
+    // rest of the app already follows.
+    mc.getAppPropertiesForTest().getUserSettings()->removeValue(MainComponent::kNaturalScrollingKey);
+    mc.applyNaturalScrollingPreference();
+    EXPECT_FALSE(mc.getTimelinePanel().isScrollInverted());
+    EXPECT_FALSE(mc.getTimelinePanel().getPianoRoll().isScrollInverted());
+
+    // The live path: a tab built on the SAME juce::ApplicationProperties instance MainComponent
+    // listens to (which is exactly what SettingsWindow hands it).
+    PreferencesSettingsTab prefs(mc.getAppPropertiesForTest());
+    EXPECT_TRUE(prefs.isNaturalScrollingEnabled()) << "default ON";
+
+    prefs.setNaturalScrollingEnabled(false);
+    // ChangeBroadcaster posts its notification, so the loop has to turn once — the same idiom the
+    // triggerClick() tests above use.
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    EXPECT_TRUE(mc.getTimelinePanel().isScrollInverted());
+    EXPECT_TRUE(mc.getTimelinePanel().getPianoRoll().isScrollInverted());
+
+    prefs.setNaturalScrollingEnabled(true);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
+    EXPECT_FALSE(mc.getTimelinePanel().isScrollInverted());
+    EXPECT_FALSE(mc.getTimelinePanel().getPianoRoll().isScrollInverted());
+}
+
+#endif // SYNTH_ENABLE_TIMELINE

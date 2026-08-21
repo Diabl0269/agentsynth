@@ -1,5 +1,6 @@
 #include "TimelinePanelComponent.h"
 #include "../AppUndoManager.h"
+#include "../ShortcutManager.h"
 #include "../Transport/TransportService.h"
 #include "ScrollPolicy.h"
 #include "Theme/AppLookAndFeel.h"
@@ -67,6 +68,15 @@ synth::theme::Icon iconForEditTool(synth::ui::EditTool tool) noexcept {
     }
     return Icon::ToolSelect;
 }
+
+// A bare (unmodified) keypress — the shape every one of this panel's own default bindings has.
+juce::KeyPress plainKey(int keyCode) noexcept { return juce::KeyPress(keyCode, juce::ModifierKeys::noModifiers, 0); }
+
+// The ShortcutManager action id that picks `tool`. Derived from editToolName() rather than written
+// out as a second table, so adding a tool cannot leave a digit unbound here while EditTool.h,
+// the button strip and the tooltips all already know about it — the ids in
+// ShortcutManager::resetToDefaults() are exactly "timelineTool" + this name.
+juce::String toolActionIdFor(synth::ui::EditTool tool) { return "timelineTool" + juce::String(editToolName(tool)); }
 } // namespace
 
 //==============================================================================
@@ -760,44 +770,65 @@ bool TimelinePanelComponent::repeatSelectedClips(int count) {
     return true;
 }
 
+bool TimelinePanelComponent::matchesAction(const juce::KeyPress& key, const juce::String& actionId,
+                                           const juce::KeyPress& fallback) const {
+    if (shortcuts_ == nullptr)
+        return key == fallback;
+    const auto binding = shortcuts_->getBinding(actionId);
+    // An invalid binding is "this action has no key": either the user cleared it, or this build's
+    // ShortcutManager has never heard of the id (getBinding answers an unknown id with a
+    // default-constructed KeyPress). Falling back to `fallback` here would resurrect a key the user
+    // deliberately unbound, so it deliberately does not.
+    return binding.isValid() && key == binding;
+}
+
 bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
     if (key == juce::KeyPress::escapeKey && automationStripVisible_) {
         closeAutomationStrip();
         return true;
     }
 
-    // Number keys pick a tool, BEFORE the letter fallbacks below. Command-modified digits are left
-    // alone (a host/app menu shortcut owns those), and so are the digits EditTool.h deliberately
-    // reserves — 2, 6 and 9 return false here and keep whatever meaning they have elsewhere,
-    // which is the whole reason editToolForKeyChar returns an optional instead of clamping.
-    if (!key.getModifiers().isCommandDown()) {
-        // Text character first (it is what a real keystroke carries, including on a layout where
-        // the digit needs a modifier), falling back to the key CODE — which is what the letter
-        // fallbacks below already match on, and what a hand-built juce::KeyPress(int) carries.
+    // Number keys pick a tool, BEFORE the letter keys below.
+    //
+    // With a ShortcutManager installed each digit is one rebindable action ("timelineToolSplit" and
+    // friends), resolved through matchesAction — so an unset id has no key, and Ctrl+Shift+1 (the
+    // grid command) can never be mistaken for a bare 1, because juce::KeyPress equality is exact on
+    // modifiers.
+    //
+    // With NO manager (headless tests, embeddings with no settings store) the pre-shortcut behaviour
+    // is kept verbatim: the digits come off editToolForKeyChar, command-modified digits are left
+    // alone (a host/app menu shortcut owns those), and the digits EditTool.h reserves — 2, 6 and 9 —
+    // return false and keep whatever meaning they have elsewhere. That fallback reads the TEXT
+    // CHARACTER first, which is what a real keystroke carries on a layout where the digit needs a
+    // modifier; the manager path cannot do that, since a modifier there is part of the binding.
+    if (shortcuts_ != nullptr) {
+        for (auto tool : kAllEditTools) {
+            if (matchesAction(key, toolActionIdFor(tool), plainKey('0' + editToolKeyDigit(tool)))) {
+                setActiveTool(tool);
+                return true;
+            }
+        }
+    } else if (!key.getModifiers().isCommandDown()) {
         const int typed = (int)key.getTextCharacter();
         if (const auto tool = editToolForKeyChar(typed != 0 ? typed : key.getKeyCode())) {
-            setActiveTool(*tool);
+            setActiveTool(tool.value());
             return true;
         }
     }
 
     // Panel-scoped transport/snap keys. These fire when the key was NOT consumed by the focused
     // child (JUCE bubbles unhandled keys up the parent chain), so they cover every focus target
-    // inside the timeline — track headers, the lanes, the roll (which consumes Q itself). Matched
-    // on the key CODE (JUCE letter key codes are the uppercase character), tolerating either case.
-    const auto isKey = [&key](juce::juce_wchar letter) {
-        return key.getKeyCode() == (int)letter ||
-               key.getKeyCode() == (int)juce::CharacterFunctions::toLowerCase(letter);
-    };
+    // inside the timeline — track headers, the lanes, the roll (which consumes Q itself).
 
     // Q = toggle grid magnetism (Shift+Q one-shot quantise lives on the roll, where the notes are).
-    if (isKey('Q')) {
+    // Shares "timelineSnapToggle" with the roll: one binding, one key, whichever surface has focus.
+    if (matchesAction(key, "timelineSnapToggle", plainKey('q'))) {
         setSnapEnabled(!viewState_.snapEnabled);
         return true;
     }
 
     // L = toggle looping, keeping the existing bounds — exactly the transport bar's loop button.
-    if (isKey('L') && transport_ != nullptr) {
+    if (matchesAction(key, "timelineToggleLoop", plainKey('l')) && transport_ != nullptr) {
         const auto snap = transport_->getPositionSnapshot();
         transport_->setLoop(snap.loopStartPpq, snap.loopEndPpq, !snap.looping);
         ruler_.repaint();
@@ -807,7 +838,7 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
     // P = loop the selection. With the roll open the "selection" is the edited clip; otherwise the
     // lane area already handles P itself when focused — this is the fallback for other focus
     // targets inside the panel (same span, same setLoop the lane's callback performs).
-    if (isKey('P') && transport_ != nullptr) {
+    if (matchesAction(key, "timelineLoopSelection", plainKey('p')) && transport_ != nullptr) {
         std::optional<std::pair<double, double>> span;
         if (pianoRoll_.isOpen() && doc_ != nullptr) {
             if (const auto* clip = doc_->getClip(pianoRoll_.getClipId()))

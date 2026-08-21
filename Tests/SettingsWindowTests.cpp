@@ -8,6 +8,7 @@
 #include "../Source/UI/AIChatComponent.h"
 #include "../Source/UI/PreferencesSettingsTab.h"
 #include "../Source/UI/SettingsWindow.h"
+#include "../Source/UI/ShortcutsSettingsTab.h"
 #include "../Source/UI/Theme/ThemeManager.h"
 #include <chrono>
 #include <gtest/gtest.h>
@@ -433,9 +434,15 @@ TEST_F(SettingsWindowTest, GeneralTabShowsShortcuts) {
 
     auto* generalTab = settingsWindow.getTabs().getTabContentComponent(2);
     ASSERT_NE(generalTab, nullptr);
-    // The General tab should have child labels for shortcuts (title label + 5 desc labels + 5 bind buttons + reset
-    // button = 12)
-    EXPECT_GE(generalTab->getNumChildComponents(), 11);
+    // The rows now live inside a Viewport under collapsible category sections, so counting the
+    // tab's DIRECT children no longer proves any shortcut is shown. Assert the same intent through
+    // the tab's own observables instead: every category section is laid out, and the first row is
+    // actually visible (sections start expanded).
+    auto* shortcuts = dynamic_cast<ShortcutsSettingsTab*>(generalTab);
+    ASSERT_NE(shortcuts, nullptr);
+    for (auto category : ShortcutManager::getCategoryOrder())
+        EXPECT_TRUE(shortcuts->isSectionVisible(category)) << "category " << (int)category << " has no section header";
+    EXPECT_TRUE(shortcuts->isRowVisible(0));
 }
 
 // ============================================================================

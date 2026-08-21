@@ -2235,6 +2235,124 @@ TEST(TimelineToolStripTest, NumberKeysPickToolsAndReservedDigitsFallThrough) {
     EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Select);
 }
 
+// The digits are rebindable now: with a ShortcutManager installed they resolve through
+// "timelineToolSelect"/"timelineToolSplit"/... instead of synth::ui::editToolForKeyChar. Two halves
+// to pin — the rebind takes effect AND the old key stops working, which is the half that silently
+// regresses if a fallback creeps back in.
+TEST(TimelineToolStripTest, ToolDigitsFollowARebindAndTheOldDigitStopsWorking) {
+    ToolPanelFixture f;
+    ShortcutManager shortcuts; // defaults only; never loadFromProperties, so nothing is persisted
+    f.panel.setShortcutManager(&shortcuts);
+
+    // Baseline: the factory digits still work through the manager.
+    ASSERT_TRUE(f.panel.keyPressed(juce::KeyPress('3')));
+    ASSERT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Split);
+    ASSERT_TRUE(f.panel.keyPressed(juce::KeyPress('1')));
+    ASSERT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Select);
+
+    // Move Split onto a letter no other Timeline binding uses.
+    shortcuts.setBinding("timelineToolSplit", juce::KeyPress('j', juce::ModifierKeys::noModifiers, 0));
+
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('j')));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Split);
+
+    f.panel.setActiveTool(synth::ui::EditTool::Select);
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('3'))) << "the old digit must fall through, not still pick Split";
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Select);
+
+    // Every OTHER digit is untouched by the one rebind.
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('8')));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Draw);
+
+    // Clearing a binding means NO key, never a fall back to the factory digit — the strict
+    // resolution contract (see TimelinePanelComponent::setShortcutManager).
+    shortcuts.setBinding("timelineToolDraw", juce::KeyPress());
+    f.panel.setActiveTool(synth::ui::EditTool::Select);
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('8')));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Select);
+
+    // The Ctrl+Shift+digit grid commands share the tool digits' key codes and must never be mistaken
+    // for them — juce::KeyPress equality is exact on modifiers.
+    const int ctrlShift = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier;
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('1', juce::ModifierKeys(ctrlShift), 0)));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Select);
+
+    // Detach: with no manager the hardcoded Cubase digits are back, unchanged.
+    f.panel.setShortcutManager(nullptr);
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('3')));
+    EXPECT_EQ(f.panel.getActiveTool(), synth::ui::EditTool::Split);
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('2'))) << "2/6/9 stay reserved on the fallback path";
+}
+
+// The panel's three letter keys go through the same resolution. Q is shared with the piano roll
+// ("timelineSnapToggle" — one binding, one key, whichever surface has focus).
+TEST(TimelineToolStripTest, PanelLetterKeysResolveThroughTheShortcutManager) {
+    ToolPanelFixture f;
+    ShortcutManager shortcuts;
+    f.panel.setShortcutManager(&shortcuts);
+
+    auto& view = f.panel.getViewState();
+    const bool snapBefore = view.snapEnabled;
+    ASSERT_TRUE(f.panel.keyPressed(juce::KeyPress('q')));
+    EXPECT_EQ(view.snapEnabled, !snapBefore);
+
+    shortcuts.setBinding("timelineSnapToggle", juce::KeyPress('y', juce::ModifierKeys::noModifiers, 0));
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('q'))) << "the old key falls through";
+    EXPECT_EQ(view.snapEnabled, !snapBefore) << "and did not toggle again";
+    EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('y')));
+    EXPECT_EQ(view.snapEnabled, snapBefore);
+
+    // Shift+Q is the ROLL's quantise, a different action: it must not reach the panel's snap toggle
+    // (the pre-shortcut code matched Q on the key code alone, ignoring modifiers entirely).
+    f.panel.setShortcutManager(nullptr);
+    const bool snapNow = view.snapEnabled;
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('q', juce::ModifierKeys::shiftModifier, 0)));
+    EXPECT_EQ(view.snapEnabled, snapNow);
+}
+
+// TimelineClipLaneArea resolves its own P through the SAME action id the panel's fallback uses, so
+// the two can never end up on different keys.
+TEST(TimelineToolStripTest, ClipLanePLoopSelectionFollowsTheShortcutManager) {
+    ToolPanelFixture f;
+    ShortcutManager shortcuts;
+    auto& lane = f.panel.getClipLaneArea();
+    lane.setShortcutManager(&shortcuts);
+
+    const auto track = f.doc.addTrack(synth::TrackKind::Midi, "A");
+    const auto clip = f.doc.addClip(track, 4.0, 4.0, "C1");
+    ASSERT_TRUE(clip.isValid());
+    f.select({clip});
+
+    int calls = 0;
+    double gotStart = -1.0;
+    double gotEnd = -1.0;
+    lane.onLoopRangeRequested = [&](double start, double end) {
+        ++calls;
+        gotStart = start;
+        gotEnd = end;
+    };
+
+    EXPECT_TRUE(lane.keyPressed(juce::KeyPress('p')));
+    EXPECT_EQ(calls, 1);
+    EXPECT_DOUBLE_EQ(gotStart, 4.0);
+    EXPECT_DOUBLE_EQ(gotEnd, 8.0);
+
+    shortcuts.setBinding("timelineLoopSelection", juce::KeyPress('u', juce::ModifierKeys::noModifiers, 0));
+    EXPECT_FALSE(lane.keyPressed(juce::KeyPress('p')));
+    EXPECT_EQ(calls, 1) << "the old key must not still fire the callback";
+    EXPECT_TRUE(lane.keyPressed(juce::KeyPress('u')));
+    EXPECT_EQ(calls, 2);
+
+    // Delete/Escape are FIXED, never resolved through the manager — clearing every binding must not
+    // disturb them.
+    for (const auto& actionId : shortcuts.getActionIds())
+        shortcuts.setBinding(actionId, juce::KeyPress());
+    EXPECT_TRUE(lane.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey))) << "a non-empty selection consumes Escape";
+    f.select({clip});
+    EXPECT_TRUE(lane.keyPressed(juce::KeyPress(juce::KeyPress::deleteKey)));
+    EXPECT_EQ(f.doc.getClip(clip), nullptr);
+}
+
 TEST(TimelineToolStripTest, ButtonsMirrorTheActiveToolAndCarryTheirShortcutInTheTooltip) {
     ToolPanelFixture f;
 

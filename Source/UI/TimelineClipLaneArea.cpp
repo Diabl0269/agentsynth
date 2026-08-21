@@ -1,6 +1,7 @@
 #include "TimelineClipLaneArea.h"
 #include "../AppUndoManager.h"
 #include "../Modules/RecordTapModule.h"
+#include "../ShortcutManager.h"
 #include "../Transport/TransportService.h"
 #include "Theme/AppLookAndFeel.h"
 #include "TimelineTrackHeaderComponent.h"
@@ -1297,10 +1298,20 @@ std::optional<std::pair<double, double>> TimelineClipLaneArea::getSelectedClipSp
 }
 
 bool TimelineClipLaneArea::keyPressed(const juce::KeyPress& key) {
-    // P = loop the selection (Cubase's locators-to-selection). Surface-local like Delete/Escape,
-    // NOT a ShortcutManager command: no selection (or no owner listening) returns false so a plain
-    // P keeps whatever meaning it has elsewhere.
-    if (key == juce::KeyPress('p')) {
+    // P = loop the selection (Cubase's locators-to-selection). Rebindable through
+    // "timelineLoopSelection" but NOT a command: it is resolved right here, on the surface that
+    // knows the span, so no selection (or no owner listening) returns false and the key keeps
+    // whatever meaning it has elsewhere. With no ShortcutManager installed this is the hardcoded
+    // bare P; with one installed an unset binding means no key at all (see setShortcutManager).
+    const auto matchesLoopSelection = [this, &key] {
+        const juce::KeyPress fallback('p', juce::ModifierKeys::noModifiers, 0);
+        if (shortcuts_ == nullptr)
+            return key == fallback;
+        const auto binding = shortcuts_->getBinding("timelineLoopSelection");
+        return binding.isValid() && key == binding;
+    };
+
+    if (matchesLoopSelection()) {
         const auto span = getSelectedClipSpan();
         if (!span || !onLoopRangeRequested)
             return false;

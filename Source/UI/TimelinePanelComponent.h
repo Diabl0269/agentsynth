@@ -18,7 +18,8 @@
 #include <memory>
 #include <vector>
 
-class AppUndoManager; // Forward declaration (Source/AppUndoManager.h)
+class AppUndoManager;  // Forward declaration (Source/AppUndoManager.h)
+class ShortcutManager; // Forward declaration (Source/ShortcutManager.h)
 
 namespace synth {
 class TransportService;
@@ -334,6 +335,22 @@ public:
     void setScrollInverted(bool inverted) noexcept { scrollInverted_ = inverted; }
     bool isScrollInverted() const noexcept { return scrollInverted_; }
 
+    /** The user's bindings for this panel's OWN keys: the six tool digits, the snap toggle, the loop
+     *  toggle and loop-the-selection. Non-owning and may stay null — with no manager installed
+     *  keyPressed() falls back to the hardcoded Cubase defaults, which is what every headless test
+     *  and every embedding without a settings store gets.
+     *
+     *  Resolution is strict once a manager IS installed, exactly as on PianoRollComponent: an action
+     *  whose binding is unset or invalid (including an id this ShortcutManager has never heard of)
+     *  has NO key rather than falling back to its default. Mixing the two would mean a binding the
+     *  user deliberately cleared still fired on its factory key.
+     *
+     *  Escape is not resolved through here (it is a platform convention, not an app shortcut), and
+     *  neither is anything the app dispatches as a command — Cmd+C/V/X/D, Space, and the grid
+     *  commands all reach MainComponent, which owns that half. */
+    void setShortcutManager(const ShortcutManager* manager) noexcept { shortcuts_ = manager; }
+    const ShortcutManager* getShortcutManager() const noexcept { return shortcuts_; }
+
     TimelineViewState& getViewState() noexcept { return viewState_; }
     TimelineRulerComponent& getRuler() noexcept { return ruler_; }
     TimelinePlayheadOverlay& getPlayhead() noexcept { return playhead_; }
@@ -595,6 +612,16 @@ private:
     // App-level scroll inversion — see setScrollInverted(). Every plain-scroll branch in
     // mouseWheelMove goes through synth::ui::scrollAmount with this flag.
     bool scrollInverted_ = false;
+
+    // Non-owning, may stay null (see setShortcutManager). const because this panel only ever READS
+    // bindings — rebinding belongs to Settings.
+    const ShortcutManager* shortcuts_ = nullptr;
+    // True when `key` is what the user has bound to `actionId`. With no manager installed this is
+    // `key == fallback`; with one installed the fallback is not consulted at all. The same three
+    // lines PianoRollComponent::matchesAction runs — deliberately duplicated rather than shared,
+    // because factoring it out would mean a header both surfaces include just to hold a two-branch
+    // comparison, and the contract (not the code) is the thing that has to stay identical.
+    bool matchesAction(const juce::KeyPress& key, const juce::String& actionId, const juce::KeyPress& fallback) const;
     // Pushes trackScrollY into the header viewport and repaints the lanes — the ONE place the two
     // columns are brought back in step after any scroll/zoom writer.
     void syncTrackScroll();

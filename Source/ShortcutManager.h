@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <vector>
 
 namespace AppCommands {
 enum CommandIDs {
@@ -31,11 +32,35 @@ enum CommandIDs {
     // default, description, command mapping) cover it unconditionally.
     togglePlayback,
     toggleTimelinePanel,
+    // ---- Grid division, set outright (Ctrl+Shift+1..5) ----
+    // Five commands rather than one parameterised command because juce::ApplicationCommandManager
+    // has no notion of an argument: a menu row and a key binding are per-command, so "set the grid
+    // to 1/8" has to BE a command to be rebindable or to appear in the shortcut list at all.
+    snapSetWhole,
+    snapSetHalf,
+    snapSetQuarter,
+    snapSetEighth,
+    snapSetSixteenth,
+    // Step the grid coarser/finer (see TimelinePanelComponent::cycleSnapValue).
+    snapCyclePrev,
+    snapCycleNext,
+    // ---- Zoom, routed per focused surface (see MainComponent::resolveEditSurface) ----
+    zoomInHorizontal,
+    zoomOutHorizontal,
+    zoomInVertical,
+    zoomOutVertical,
     // Not user-rebindable (no ShortcutManager actionId/binding) — Sparkle's own convention is a
     // plain "Check for Updates…" menu item with no keyboard shortcut. macOS only; see
     // Source/Update/UpdateManager.h.
     checkForUpdates
 };
+
+/** What getCommandForAction() answers for a SURFACE action — an id that is rebindable and appears
+ *  in the Settings list, but is consulted directly by a component's keyPressed() rather than
+ *  dispatched through the command manager. Zero is juce::ApplicationCommandManager's own "not a
+ *  command" value, so every existing `== 0` check keeps working; the name exists so call sites read
+ *  as a deliberate check rather than as a magic number. */
+inline constexpr juce::CommandID kNoCommand = 0;
 
 inline juce::CommandID getCommandForAction(const juce::String& actionId) {
     if (actionId == "openSettings")
@@ -78,13 +103,57 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
         return togglePlayback;
     if (actionId == "toggleTimelinePanel")
         return toggleTimelinePanel;
-    return 0;
+    if (actionId == "snapSetWhole")
+        return snapSetWhole;
+    if (actionId == "snapSetHalf")
+        return snapSetHalf;
+    if (actionId == "snapSetQuarter")
+        return snapSetQuarter;
+    if (actionId == "snapSetEighth")
+        return snapSetEighth;
+    if (actionId == "snapSetSixteenth")
+        return snapSetSixteenth;
+    if (actionId == "snapCyclePrev")
+        return snapCyclePrev;
+    if (actionId == "snapCycleNext")
+        return snapCycleNext;
+    if (actionId == "zoomInHorizontal")
+        return zoomInHorizontal;
+    if (actionId == "zoomOutHorizontal")
+        return zoomOutHorizontal;
+    if (actionId == "zoomInVertical")
+        return zoomInVertical;
+    if (actionId == "zoomOutVertical")
+        return zoomOutVertical;
+    // Every SURFACE action lands here — see kNoCommand.
+    return kNoCommand;
 }
 } // namespace AppCommands
 
+/** Which part of the app an action belongs to. Two jobs, and it is worth being explicit that they
+ *  are the same list for a reason:
+ *
+ *  1. The Settings tab groups its rows into collapsible sections by category, so a user hunting for
+ *     "the piano roll's transpose key" has one place to look instead of a 49-row flat list.
+ *  2. Conflict detection is SCOPED to a category (see ShortcutManager::getConflictingAction). The
+ *     surfaces never have keyboard focus at the same time, so a bare P meaning "loop the selection"
+ *     in the timeline is not in competition with a bare P anywhere else — reporting that as a
+ *     collision would force the bare-key DAW conventions (Q/L/P, the tool digits, the arrow keys)
+ *     into modifier combinations nobody uses.
+ *
+ *  General is the residual, and deliberately wide: anything routed by
+ *  MainComponent::resolveEditSurface() (copy/paste/cut/duplicate/repeat/select-all, and both zoom
+ *  pairs) is General because it means something on EVERY surface — one key, whichever editor has
+ *  focus. Graph holds only the verbs that have no meaning anywhere else. */
+enum class ShortcutCategory { General, Graph, Timeline, PianoRoll };
+
 class ShortcutManager {
 public:
-    ShortcutManager() { resetToDefaults(); }
+    ShortcutManager() {
+        for (const auto& entry : getActionTable())
+            actionIds.add(entry.id);
+        resetToDefaults();
+    }
 
     void loadFromProperties(juce::ApplicationProperties& props) {
         appProperties = &props;
@@ -119,21 +188,44 @@ public:
         return it != bindings.end() ? it->second : juce::KeyPress();
     }
 
+    /** EVERY action bound to `key`, in getActionIds() order. Plural because one keypress can now
+     *  legitimately name more than one action: a bare Left arrow is the piano roll's nudge AND
+     *  nothing else, but the general shape ("a surface action and a command action could share a
+     *  key across categories") is exactly what category-scoped conflict checking permits. Callers
+     *  that dispatch commands walk this and take the first entry with a real command — see
+     *  MainComponent::keyPressed. */
+    juce::StringArray getActionsForKeyPress(const juce::KeyPress& key) const {
+        juce::StringArray matches;
+        for (const auto& actionId : actionIds)
+            if (bindingMatches(getBinding(actionId), key))
+                matches.add(actionId);
+        return matches;
+    }
+
     juce::String getActionForKeyPress(const juce::KeyPress& key) const {
-        for (auto& [actionId, binding] : bindings) {
-            if (towlower(binding.getKeyCode()) == towlower(key.getKeyCode()) &&
-                binding.getModifiers() == key.getModifiers())
-                return actionId;
-        }
-        return {};
+        const auto matches = getActionsForKeyPress(key);
+        return matches.isEmpty() ? juce::String() : matches[0];
     }
 
     void setBinding(const juce::String& actionId, const juce::KeyPress& key) { bindings[actionId] = key; }
 
+    /** The action already using `key` IN THE SAME CATEGORY as `actionId`, or an empty string.
+     *
+     *  Category-scoped on purpose (see ShortcutCategory): two surfaces that can never hold keyboard
+     *  focus simultaneously may share a key, and the bare-key DAW conventions depend on it — the
+     *  timeline's Q/L/P and tool digits, and the piano roll's arrows, would otherwise all read as
+     *  collisions with each other and with any future surface. WITHIN a category the check is as
+     *  strict as it ever was: a second General Cmd+X still reports the first one, which is what the
+     *  Settings tab's auto-swap acts on.
+     *
+     *  An unknown `actionId` is treated as General, so a stray id can never silently claim a key
+     *  that a real General action already owns. */
     juce::String getConflictingAction(const juce::String& actionId, const juce::KeyPress& key) const {
+        const auto category = getCategory(actionId);
         for (auto& [otherId, binding] : bindings) {
-            if (otherId != actionId && towlower(binding.getKeyCode()) == towlower(key.getKeyCode()) &&
-                binding.getModifiers() == key.getModifiers())
+            if (otherId == actionId || getCategory(otherId) != category)
+                continue;
+            if (bindingMatches(binding, key))
                 return otherId;
         }
         return {};
@@ -141,6 +233,8 @@ public:
 
     void resetToDefaults() {
         bindings.clear();
+
+        // ---- General ----
         bindings["openSettings"] = juce::KeyPress(',', juce::ModifierKeys::commandModifier, 0);
         bindings["savePreset"] = juce::KeyPress('s', juce::ModifierKeys::commandModifier, 0);
         bindings["openPreset"] = juce::KeyPress('o', juce::ModifierKeys::commandModifier, 0);
@@ -153,13 +247,14 @@ public:
         // / A / L / B, Shift+A, Shift+S) — safe to claim for the minimap toggle (issue #159).
         bindings["toggleMinimap"] = juce::KeyPress('k', juce::ModifierKeys::commandModifier, 0);
         bindings["toggleAiPanel"] = juce::KeyPress('a', juce::ModifierKeys::commandModifier, 0);
-        bindings["autoArrange"] = juce::KeyPress('l', juce::ModifierKeys::commandModifier, 0);
         bindings["toggleLibrary"] = juce::KeyPress('b', juce::ModifierKeys::commandModifier, 0);
+        // 't' with plain Cmd is unused by any other binding (Cmd+, / S / O / N / Z / Shift+Z / M /
+        // K / A / L / B, Shift+A, Shift+S, C / V / D) — safe to claim for the timeline panel
+        // toggle.
+        bindings["toggleTimelinePanel"] = juce::KeyPress('t', juce::ModifierKeys::commandModifier, 0);
         // Cmd+A and Cmd+S are already taken (toggleAiPanel / savePreset), hence the Shift variants.
         bindings["selectAllModules"] =
             juce::KeyPress('a', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
-        bindings["saveSnippet"] =
-            juce::KeyPress('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
         // The platform-standard trio. Safe to claim app-wide because JUCE's TextEditor consumes
         // Cmd+C/Cmd+V itself while it has focus, so these only reach the canvas when no text field
         // is being edited — see MainComponent::keyPressed, which is the sole dispatch point.
@@ -180,10 +275,80 @@ public:
         // spacebar itself (types a space character) before it ever reaches MainComponent::
         // keyPressed, the sole dispatch point — see docs/shortcuts.md.
         bindings["togglePlayback"] = juce::KeyPress(juce::KeyPress::spaceKey, juce::ModifierKeys::noModifiers, 0);
-        // 't' with plain Cmd is unused by any other binding (Cmd+, / S / O / N / Z / Shift+Z / M /
-        // K / A / L / B, Shift+A, Shift+S, C / V / D) — safe to claim for the timeline panel
-        // toggle.
-        bindings["toggleTimelinePanel"] = juce::KeyPress('t', juce::ModifierKeys::commandModifier, 0);
+        // Cmd+= / Cmd+- : the platform zoom pair (every browser, every editor). Free on both counts
+        // — '=' and '-' appear nowhere else in this table, and no component keyPressed() override
+        // matches either character. Cmd+Shift is the VERTICAL axis, mirroring the wheel bindings the
+        // timeline panel and the piano roll already ship (Cmd+wheel = horizontal, Cmd+Shift+wheel =
+        // vertical), so the keyboard and the wheel teach the same modifier.
+        //
+        // Deliberately Cmd (not the Ctrl the snap block below uses): zoom is General — it routes to
+        // whichever surface has focus, including the graph canvas — and a General action should use
+        // the platform's own accelerator.
+        bindings["zoomInHorizontal"] = juce::KeyPress('=', juce::ModifierKeys::commandModifier, 0);
+        bindings["zoomOutHorizontal"] = juce::KeyPress('-', juce::ModifierKeys::commandModifier, 0);
+        bindings["zoomInVertical"] =
+            juce::KeyPress('=', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+        bindings["zoomOutVertical"] =
+            juce::KeyPress('-', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+
+        // ---- Graph ----
+        bindings["autoArrange"] = juce::KeyPress('l', juce::ModifierKeys::commandModifier, 0);
+        bindings["saveSnippet"] =
+            juce::KeyPress('s', juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier, 0);
+
+        // ---- Timeline ----
+        // The bare-key DAW conventions. All three are already what TimelinePanelComponent's
+        // keyPressed() hardcoded before it started resolving them through here, so the defaults are
+        // a no-op for anyone who has already learned them. timelineSnapToggle is shared with the
+        // piano roll on purpose: one binding, one key, whichever surface has focus.
+        bindings["timelineSnapToggle"] = juce::KeyPress('q', juce::ModifierKeys::noModifiers, 0);
+        bindings["timelineToggleLoop"] = juce::KeyPress('l', juce::ModifierKeys::noModifiers, 0);
+        bindings["timelineLoopSelection"] = juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0);
+        // Cubase's tool row (see synth::ui::EditTool for why 2, 6 and 9 stay unclaimed). Bare
+        // digits: category scoping is what makes that safe next to the Ctrl+Shift+digit grid block
+        // below — and modifier equality is exact, so Ctrl+Shift+1 can never match a bare 1.
+        bindings["timelineToolSelect"] = juce::KeyPress('1', juce::ModifierKeys::noModifiers, 0);
+        bindings["timelineToolSplit"] = juce::KeyPress('3', juce::ModifierKeys::noModifiers, 0);
+        bindings["timelineToolGlue"] = juce::KeyPress('4', juce::ModifierKeys::noModifiers, 0);
+        bindings["timelineToolErase"] = juce::KeyPress('5', juce::ModifierKeys::noModifiers, 0);
+        bindings["timelineToolMute"] = juce::KeyPress('7', juce::ModifierKeys::noModifiers, 0);
+        bindings["timelineToolDraw"] = juce::KeyPress('8', juce::ModifierKeys::noModifiers, 0);
+        // REAL ctrlModifier, not commandModifier. On macOS the Ctrl+digit space is genuinely free
+        // (Cmd+digit is reserved by hosts and by the native menu bar), which is what the user asked
+        // for; on Windows/Linux juce::ModifierKeys::commandModifier IS ctrlModifier, so these read
+        // as Ctrl+Shift+digit on every platform and the table needs no per-platform branch. The
+        // digit key codes are what keeps them clear of the Cmd+Shift General bindings, which use
+        // letters and the two zoom punctuation keys.
+        const int ctrlShift = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier;
+        bindings["snapSetWhole"] = juce::KeyPress('1', juce::ModifierKeys(ctrlShift), 0);
+        bindings["snapSetHalf"] = juce::KeyPress('2', juce::ModifierKeys(ctrlShift), 0);
+        bindings["snapSetQuarter"] = juce::KeyPress('3', juce::ModifierKeys(ctrlShift), 0);
+        bindings["snapSetEighth"] = juce::KeyPress('4', juce::ModifierKeys(ctrlShift), 0);
+        bindings["snapSetSixteenth"] = juce::KeyPress('5', juce::ModifierKeys(ctrlShift), 0);
+        // Same modifier family as the five above (they are the same verb, stepped instead of
+        // absolute), on the horizontal arrows: coarser is left, finer is right, which matches the
+        // snap combo reading coarsest-to-finest top-to-bottom. The piano roll's arrow bindings are
+        // bare/Shift/Alt, so Ctrl+Shift is clear of all six of them as well.
+        bindings["snapCyclePrev"] = juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys(ctrlShift), 0);
+        bindings["snapCycleNext"] = juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys(ctrlShift), 0);
+
+        // ---- Piano roll ----
+        // Exactly the defaults PianoRollComponent::keyPressed() falls back to when no manager is
+        // installed — see its matchesAction(). Registering them here is what makes them rebindable;
+        // MISSING one from this table would make that key INERT the moment a manager is installed,
+        // which is what ShortcutManagerTest's surface-id tripwire exists to catch.
+        bindings["pianoRollNudgeLeft"] = juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::noModifiers, 0);
+        bindings["pianoRollNudgeRight"] = juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::noModifiers, 0);
+        bindings["pianoRollTransposeUp"] = juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::noModifiers, 0);
+        bindings["pianoRollTransposeDown"] =
+            juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::noModifiers, 0);
+        bindings["pianoRollTransposeOctaveUp"] =
+            juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier, 0);
+        bindings["pianoRollTransposeOctaveDown"] =
+            juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier, 0);
+        bindings["pianoRollNavPrevNote"] = juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::altModifier, 0);
+        bindings["pianoRollNavNextNote"] = juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::altModifier, 0);
+        bindings["pianoRollQuantise"] = juce::KeyPress('q', juce::ModifierKeys::shiftModifier, 0);
     }
 
     static juce::String keyPressToDisplayString(const juce::KeyPress& key) {
@@ -229,6 +394,18 @@ public:
             result += "=";
         else if (keyCode == juce::KeyPress::spaceKey)
             result += "Space";
+        // The extended keys, which are NOT characters: JUCE encodes them above 0x10000
+        // (extendedKeyModifier), so charToString would render a stray glyph rather than a name. The
+        // arrows earn their place here because six piano-roll actions and both grid-cycle commands
+        // bind to them, and the Settings tab's search matches against this very string.
+        else if (keyCode == juce::KeyPress::leftKey)
+            result += "Left";
+        else if (keyCode == juce::KeyPress::rightKey)
+            result += "Right";
+        else if (keyCode == juce::KeyPress::upKey)
+            result += "Up";
+        else if (keyCode == juce::KeyPress::downKey)
+            result += "Down";
         else
             result += juce::String::charToString(static_cast<juce::juce_wchar>(keyCode));
 
@@ -279,7 +456,108 @@ public:
             return "Toggle Playback";
         if (actionId == "toggleTimelinePanel")
             return "Toggle Timeline Panel";
+        if (actionId == "zoomInHorizontal")
+            return "Zoom In";
+        if (actionId == "zoomOutHorizontal")
+            return "Zoom Out";
+        if (actionId == "zoomInVertical")
+            return "Zoom In Vertically";
+        if (actionId == "zoomOutVertical")
+            return "Zoom Out Vertically";
+        if (actionId == "timelineSnapToggle")
+            return "Toggle Snap";
+        if (actionId == "timelineToggleLoop")
+            return "Toggle Looping";
+        if (actionId == "timelineLoopSelection")
+            return "Loop the Selection";
+        if (actionId == "timelineToolSelect")
+            return "Select Tool";
+        if (actionId == "timelineToolSplit")
+            return "Split Tool";
+        if (actionId == "timelineToolGlue")
+            return "Glue Tool";
+        if (actionId == "timelineToolErase")
+            return "Erase Tool";
+        if (actionId == "timelineToolMute")
+            return "Mute Tool";
+        if (actionId == "timelineToolDraw")
+            return "Draw Tool";
+        // Labelled with the same note values the snap combo shows ("1", "1/2", …) rather than
+        // "Whole"/"Half", so the shortcut list and the selector name the grid identically.
+        if (actionId == "snapSetWhole")
+            return "Set Grid to 1";
+        if (actionId == "snapSetHalf")
+            return "Set Grid to 1/2";
+        if (actionId == "snapSetQuarter")
+            return "Set Grid to 1/4";
+        if (actionId == "snapSetEighth")
+            return "Set Grid to 1/8";
+        if (actionId == "snapSetSixteenth")
+            return "Set Grid to 1/16";
+        if (actionId == "snapCyclePrev")
+            return "Grid Coarser";
+        if (actionId == "snapCycleNext")
+            return "Grid Finer";
+        if (actionId == "pianoRollNudgeLeft")
+            return "Nudge Notes Left";
+        if (actionId == "pianoRollNudgeRight")
+            return "Nudge Notes Right";
+        if (actionId == "pianoRollTransposeUp")
+            return "Transpose Up a Semitone";
+        if (actionId == "pianoRollTransposeDown")
+            return "Transpose Down a Semitone";
+        if (actionId == "pianoRollTransposeOctaveUp")
+            return "Transpose Up an Octave";
+        if (actionId == "pianoRollTransposeOctaveDown")
+            return "Transpose Down an Octave";
+        if (actionId == "pianoRollNavPrevNote")
+            return "Select Previous Note";
+        if (actionId == "pianoRollNavNextNote")
+            return "Select Next Note";
+        if (actionId == "pianoRollQuantise")
+            return "Quantise Selected Notes";
         return actionId;
+    }
+
+    /** The category `actionId` belongs to. An id this build has never heard of answers General,
+     *  which is the conservative choice: General is the widest conflict scope, so an unknown id can
+     *  never quietly duplicate a real app-wide binding. */
+    static ShortcutCategory getCategory(const juce::String& actionId) {
+        for (const auto& entry : getActionTable())
+            if (actionId == entry.id)
+                return entry.category;
+        return ShortcutCategory::General;
+    }
+
+    static juce::String getCategoryName(ShortcutCategory category) {
+        switch (category) {
+        case ShortcutCategory::Graph:
+            return "Graph Editor";
+        case ShortcutCategory::Timeline:
+            return "Timeline";
+        case ShortcutCategory::PianoRoll:
+            return "Piano Roll";
+        case ShortcutCategory::General:
+            break;
+        }
+        return "General";
+    }
+
+    /** Sections are drawn in this order, and getActionIds() is grouped the same way — see
+     *  getActionTable(). */
+    static const std::vector<ShortcutCategory>& getCategoryOrder() {
+        static const std::vector<ShortcutCategory> order{ShortcutCategory::General, ShortcutCategory::Graph,
+                                                         ShortcutCategory::Timeline, ShortcutCategory::PianoRoll};
+        return order;
+    }
+
+    /** The ids in `category`, in getActionIds() order (stable — it is the table's order). */
+    static juce::StringArray getActionIdsInCategory(ShortcutCategory category) {
+        juce::StringArray ids;
+        for (const auto& entry : getActionTable())
+            if (entry.category == category)
+                ids.add(entry.id);
+        return ids;
     }
 
     static juce::KeyPress parseKeyPress(const juce::String& encoded) {
@@ -298,29 +576,95 @@ public:
     std::function<void()> onBindingsChanged;
 
 private:
+    /** One row per rebindable action: the persisted id, and the category that decides both its
+     *  Settings section and its conflict scope. THE source of truth for both the id list and the
+     *  categories — a new action is one line here plus a default binding, a description and (for a
+     *  command action) an AppCommands entry.
+     *
+     *  ORDER IS LOAD-BEARING, twice over. It is getActionIds()' order, which ShortcutsSettingsTab
+     *  indexes its rows by (and ShortcutsSettingsTabTests pins row i to ids[i]), and the categories
+     *  must therefore stay CONTIGUOUS — the tab draws one section header per run of same-category
+     *  rows, so an id filed out of place would split its section in two. */
+    struct ActionEntry {
+        const char* id;
+        ShortcutCategory category;
+    };
+
+    static const std::vector<ActionEntry>& getActionTable() {
+        static const std::vector<ActionEntry> table{
+            // General — app-wide, plus everything routed per focused surface.
+            {"openSettings", ShortcutCategory::General},
+            {"savePreset", ShortcutCategory::General},
+            {"openPreset", ShortcutCategory::General},
+            {"newPatch", ShortcutCategory::General},
+            {"undo", ShortcutCategory::General},
+            {"redo", ShortcutCategory::General},
+            {"toggleModMatrix", ShortcutCategory::General},
+            {"toggleMinimap", ShortcutCategory::General},
+            {"toggleAiPanel", ShortcutCategory::General},
+            {"toggleLibrary", ShortcutCategory::General},
+            {"toggleTimelinePanel", ShortcutCategory::General},
+            {"selectAllModules", ShortcutCategory::General},
+            {"copySelection", ShortcutCategory::General},
+            {"pasteSelection", ShortcutCategory::General},
+            {"duplicateSelection", ShortcutCategory::General},
+            {"cutSelection", ShortcutCategory::General},
+            {"repeatSelection", ShortcutCategory::General},
+            {"togglePlayback", ShortcutCategory::General},
+            {"zoomInHorizontal", ShortcutCategory::General},
+            {"zoomOutHorizontal", ShortcutCategory::General},
+            {"zoomInVertical", ShortcutCategory::General},
+            {"zoomOutVertical", ShortcutCategory::General},
+            // Graph — the two verbs that mean nothing on any other surface.
+            {"autoArrange", ShortcutCategory::Graph},
+            {"saveSnippet", ShortcutCategory::Graph},
+            // Timeline — the panel's own keys (consulted by TimelinePanelComponent /
+            // TimelineClipLaneArea) plus the grid commands, which act on the shared snap value.
+            {"timelineSnapToggle", ShortcutCategory::Timeline},
+            {"timelineToggleLoop", ShortcutCategory::Timeline},
+            {"timelineLoopSelection", ShortcutCategory::Timeline},
+            {"timelineToolSelect", ShortcutCategory::Timeline},
+            {"timelineToolSplit", ShortcutCategory::Timeline},
+            {"timelineToolGlue", ShortcutCategory::Timeline},
+            {"timelineToolErase", ShortcutCategory::Timeline},
+            {"timelineToolMute", ShortcutCategory::Timeline},
+            {"timelineToolDraw", ShortcutCategory::Timeline},
+            {"snapSetWhole", ShortcutCategory::Timeline},
+            {"snapSetHalf", ShortcutCategory::Timeline},
+            {"snapSetQuarter", ShortcutCategory::Timeline},
+            {"snapSetEighth", ShortcutCategory::Timeline},
+            {"snapSetSixteenth", ShortcutCategory::Timeline},
+            {"snapCyclePrev", ShortcutCategory::Timeline},
+            {"snapCycleNext", ShortcutCategory::Timeline},
+            // Piano roll — consulted by PianoRollComponent::keyPressed only.
+            {"pianoRollNudgeLeft", ShortcutCategory::PianoRoll},
+            {"pianoRollNudgeRight", ShortcutCategory::PianoRoll},
+            {"pianoRollTransposeUp", ShortcutCategory::PianoRoll},
+            {"pianoRollTransposeDown", ShortcutCategory::PianoRoll},
+            {"pianoRollTransposeOctaveUp", ShortcutCategory::PianoRoll},
+            {"pianoRollTransposeOctaveDown", ShortcutCategory::PianoRoll},
+            {"pianoRollNavPrevNote", ShortcutCategory::PianoRoll},
+            {"pianoRollNavNextNote", ShortcutCategory::PianoRoll},
+            {"pianoRollQuantise", ShortcutCategory::PianoRoll},
+        };
+        return table;
+    }
+
+    /** The one key-equality rule this class uses. Case-insensitive on the key code and EXACT on the
+     *  modifiers — which is what keeps Left, Shift+Left and Alt+Left three separate bindings, and
+     *  what keeps Ctrl+Shift+1 from ever matching a bare 1. An invalid binding (an action the user
+     *  cleared) matches nothing. */
+    static bool bindingMatches(const juce::KeyPress& binding, const juce::KeyPress& key) {
+        return binding.isValid() && towlower(binding.getKeyCode()) == towlower(key.getKeyCode()) &&
+               binding.getModifiers() == key.getModifiers();
+    }
+
     std::map<juce::String, juce::KeyPress> bindings;
     juce::ApplicationProperties* appProperties = nullptr;
 
-    juce::StringArray actionIds{"openSettings",
-                                "savePreset",
-                                "openPreset",
-                                "newPatch",
-                                "undo",
-                                "redo",
-                                "toggleModMatrix",
-                                "toggleMinimap",
-                                "toggleAiPanel",
-                                "autoArrange",
-                                "toggleLibrary",
-                                "selectAllModules",
-                                "saveSnippet",
-                                "copySelection",
-                                "pasteSelection",
-                                "duplicateSelection",
-                                "cutSelection",
-                                "repeatSelection",
-                                "togglePlayback",
-                                "toggleTimelinePanel"};
+    // Built from getActionTable() in the constructor, so the order and the categories can never
+    // drift apart.
+    juce::StringArray actionIds;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShortcutManager)
 };

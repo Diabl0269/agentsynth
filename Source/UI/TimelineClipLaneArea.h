@@ -18,6 +18,7 @@
 
 class AppUndoManager;  // Forward declaration (Source/AppUndoManager.h)
 class RecordTapModule; // Forward declaration (Source/Modules/RecordTapModule.h)
+class ShortcutManager; // Forward declaration (Source/ShortcutManager.h)
 
 namespace synth {
 class TransportService; // Forward declaration (Source/Transport/TransportService.h)
@@ -273,6 +274,17 @@ public:
     // before. Returns false when there is nothing to act on so the key falls through — this is
     // only the local half of cross-panel key arbitration.
     bool keyPressed(const juce::KeyPress& key) override;
+
+    /** The user's binding for the one rebindable key this component owns: P, loop the selection
+     *  ("timelineLoopSelection" — the SAME action id TimelinePanelComponent's own P fallback
+     *  resolves, so the two can never end up on different keys). Non-owning and may stay null, in
+     *  which case P is the hardcoded default; installed, resolution is strict (an unset binding
+     *  means no key), exactly as on PianoRollComponent::setShortcutManager.
+     *
+     *  Delete/Backspace and Escape stay FIXED and are deliberately absent from the shortcut table —
+     *  they are platform conventions every surface in the app answers identically. */
+    void setShortcutManager(const ShortcutManager* manager) noexcept { shortcuts_ = manager; }
+    const ShortcutManager* getShortcutManager() const noexcept { return shortcuts_; }
 
     // The selected clips' [min startBeat, max endBeat] span in absolute doc beats, or nullopt when
     // nothing selected resolves to a clip. What P hands to onLoopRangeRequested.
@@ -612,6 +624,8 @@ private:
     synth::TimelineDoc* doc_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
     synth::TransportService* transport_ = nullptr;
+    // Non-owning, may stay null (see setShortcutManager). const — this component only reads.
+    const ShortcutManager* shortcuts_ = nullptr;
 
     DragMode dragMode_ = DragMode::None;
     synth::ClipId activeClip_;

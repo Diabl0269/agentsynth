@@ -165,6 +165,25 @@ public:
     void applyTimelineFeatureEnabled(bool enabled);
     bool isTimelineFeatureEnabledForTest() const { return timelineFeatureEnabled; }
 #endif
+
+    /** The Preferences "Natural scrolling" key. DEFAULT TRUE (natural) — the value every scrolling
+     *  surface in the app already behaves as, so an install that never opens Preferences is
+     *  unaffected. Owned here rather than by the tab because MainComponent is what applies it. */
+    static constexpr const char* kNaturalScrollingKey = "naturalScrolling";
+
+    /** Re-reads kNaturalScrollingKey and pushes `!natural` into the two surfaces that have an
+     *  inversion flag (the timeline panel and its piano roll — the graph canvas pans rather than
+     *  scrolls). Called once at startup and again on every settings-file change, which is how a
+     *  Preferences toggle reaches the panel live: PreferencesSettingsTab writes the key, the
+     *  PropertiesFile broadcasts, and changeListenerCallback lands here. Idempotent, so being
+     *  called for an unrelated settings write costs a bool read. */
+    void applyNaturalScrollingPreference();
+
+    /** Per-press zoom step for the four zoom commands. 1.25 is the same "a quarter bigger" feel a
+     *  couple of wheel notches gives, and the out factor is its exact reciprocal so in-then-out
+     *  returns to where you started rather than drifting. */
+    static constexpr double kZoomInFactor = 1.25;
+    static constexpr double kZoomOutFactor = 1.0 / kZoomInFactor;
     bool isTimelineConfiguredVisible() const { return isTimelineVisible; }
     synth::ui::TimelinePanelComponent& getTimelinePanel() { return timelinePanel; }
 
