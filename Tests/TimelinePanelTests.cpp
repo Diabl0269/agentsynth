@@ -737,6 +737,256 @@ TEST(TimelinePanelSnapComboTest, SnapChoicePersists) {
         s->getFile().deleteFile();
 }
 
+// ---- setSnapValue / cycleSnapValue: the view-state verbs behind the snap shortcuts ----
+
+// setSnapValue is the ONE writer the combo, the shortcut layer and cycleSnapValue share: it moves
+// the view state, mirrors the combo, re-arms the master switch (same meaning a combo pick has) and
+// persists through the existing persistSnapChoice() path.
+TEST(TimelinePanelSnapApiTest, SetSnapValueSyncsTheComboAndPersistsThroughTheExistingPath) {
+    using Snap = synth::ui::TimelineViewState::Snap;
+
+    juce::PropertiesFile::Options opts;
+    opts.applicationName = "Agent Synth Timeline Snap Api Test";
+    opts.folderName = "Agent Synth Timeline Snap Api Test";
+    opts.filenameSuffix = "settings";
+    opts.osxLibrarySubFolder = "Application Support";
+    opts.storageFormat = juce::PropertiesFile::storeAsXML;
+
+    // Hermetic regardless of a previous run — same idiom as SnapChoicePersists above.
+    {
+        juce::ApplicationProperties initial;
+        initial.setStorageParameters(opts);
+        if (auto* s = initial.getUserSettings())
+            s->getFile().deleteFile();
+    }
+
+    juce::ApplicationProperties props;
+    props.setStorageParameters(opts);
+
+    synth::ui::TimelinePanelComponent panel;
+    panel.setApplicationProperties(&props);
+    ASSERT_EQ(panel.getViewState().snap, Snap::Quarter); // documented default, freshly-deleted file
+
+    EXPECT_TRUE(panel.setSnapValue(Snap::Eighth));
+    EXPECT_EQ(panel.getViewState().snap, Snap::Eighth);
+    EXPECT_EQ(panel.getSnapCombo().getSelectedId(), (int)Snap::Eighth + 1) << "the combo mirrors the view state";
+    EXPECT_TRUE(panel.getViewState().snapEnabled);
+    ASSERT_NE(props.getUserSettings(), nullptr);
+    EXPECT_EQ(props.getUserSettings()->getIntValue("timelineSnap", -1), (int)Snap::Eighth);
+
+    // Turn magnetism off (the Q button — the shared switch), then re-pick the SAME division: no
+    // change is reported, but it still re-arms, exactly like re-picking from the combo.
+    panel.getSnapToggleButton().onClick();
+    ASSERT_FALSE(panel.getViewState().snapEnabled);
+    EXPECT_FALSE(panel.setSnapValue(Snap::Eighth));
+    EXPECT_TRUE(panel.getViewState().snapEnabled);
+
+    // Reset the persisted keys so the next run (and every other test) starts from nothing.
+    if (auto* s = props.getUserSettings())
+        s->getFile().deleteFile();
+}
+
+// The cycle walks Bar -> 1 -> 1/2 -> 1/4 -> 1/8 -> 1/16 and CLAMPS at both ends: it never wraps and
+// never lands on Off (that is the Q key's job).
+TEST(TimelinePanelSnapApiTest, CycleWalksTheMusicalDivisionsAndClampsAtBothEnds) {
+    using Snap = synth::ui::TimelineViewState::Snap;
+    synth::ui::TimelinePanelComponent panel; // no ApplicationProperties: nothing reads or writes settings
+    panel.getViewState().setSnap(Snap::Quarter);
+    panel.getViewState().snapEnabled = true;
+
+    // Coarser, down to the Bar end, then one more press that must change nothing.
+    EXPECT_TRUE(panel.cycleSnapValue(-1));
+    EXPECT_EQ(panel.getViewState().snap, Snap::Half);
+    EXPECT_TRUE(panel.cycleSnapValue(-1));
+    EXPECT_EQ(panel.getViewState().snap, Snap::Whole);
+    EXPECT_TRUE(panel.cycleSnapValue(-1));
+    EXPECT_EQ(panel.getViewState().snap, Snap::Bar);
+    EXPECT_FALSE(panel.cycleSnapValue(-1)) << "clamped at Bar — no wrap, and never Off";
+    EXPECT_EQ(panel.getViewState().snap, Snap::Bar);
+
+    // Finer, all the way up the list.
+    for (auto expected : {Snap::Whole, Snap::Half, Snap::Quarter, Snap::Eighth, Snap::Sixteenth}) {
+        EXPECT_TRUE(panel.cycleSnapValue(1));
+        EXPECT_EQ(panel.getViewState().snap, expected);
+    }
+    EXPECT_FALSE(panel.cycleSnapValue(1)) << "clamped at 1/16 — a held key parks here";
+    EXPECT_EQ(panel.getViewState().snap, Snap::Sixteenth);
+    EXPECT_EQ(panel.getSnapCombo().getSelectedId(), (int)Snap::Sixteenth + 1);
+
+    EXPECT_FALSE(panel.cycleSnapValue(0)) << "no direction, no move";
+    EXPECT_EQ(panel.getViewState().snap, Snap::Sixteenth);
+}
+
+// From Off, BOTH directions re-enter at the last division the user actually chose — with the view
+// state's default as the fallback when nothing was ever chosen.
+TEST(TimelinePanelSnapApiTest, CyclingFromOffReEntersAtTheLastMusicalDivision) {
+    using Snap = synth::ui::TimelineViewState::Snap;
+    synth::ui::TimelinePanelComponent panel;
+    panel.getViewState().snapEnabled = true;
+
+    ASSERT_TRUE(panel.setSnapValue(Snap::Eighth)); // the "last musical" value from here on
+    ASSERT_TRUE(panel.setSnapValue(Snap::Off));
+    EXPECT_TRUE(panel.cycleSnapValue(1));
+    EXPECT_EQ(panel.getViewState().snap, Snap::Eighth) << "finer-from-Off resumes where the user was";
+
+    ASSERT_TRUE(panel.setSnapValue(Snap::Off));
+    EXPECT_TRUE(panel.cycleSnapValue(-1));
+    EXPECT_EQ(panel.getViewState().snap, Snap::Eighth) << "coarser-from-Off follows the same one rule";
+
+    // A panel that never had a musical division picked falls back to the view state's default.
+    synth::ui::TimelinePanelComponent fresh;
+    fresh.getViewState().snap = Snap::Off; // straight assignment: never went through setSnap()
+    EXPECT_TRUE(fresh.cycleSnapValue(1));
+    EXPECT_EQ(fresh.getViewState().snap, Snap::Quarter);
+}
+
+// ---- zoomTimelineHorizontal / zoomTimelineVertical: the same paths the wheel/pinch use ----
+
+TEST(TimelinePanelZoomApiTest, HorizontalZoomKeepsTheVisibleCentreBeatAndClamps) {
+    using View = synth::ui::TimelineViewState;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 220);
+
+    auto& state = panel.getViewState();
+    state.pixelsPerBeat = 24.0;
+    state.firstVisibleBeat = 100.0;
+
+    // The panel anchors a keyboard zoom on the middle of the ruler strip, whose local x == 0 is the
+    // view state's own origin.
+    const double centreX = (double)panel.getRuler().getWidth() * 0.5;
+    const double centreBeat = state.xToBeat(centreX);
+
+    panel.zoomTimelineHorizontal(2.0);
+    EXPECT_DOUBLE_EQ(state.pixelsPerBeat, 48.0);
+    EXPECT_NEAR(state.xToBeat(centreX), centreBeat, 1e-6) << "the centre beat stays under the centre pixel";
+
+    for (int i = 0; i < 20; ++i)
+        panel.zoomTimelineHorizontal(2.0);
+    EXPECT_DOUBLE_EQ(state.pixelsPerBeat, View::kMaxPixelsPerBeat);
+
+    for (int i = 0; i < 40; ++i)
+        panel.zoomTimelineHorizontal(0.5);
+    EXPECT_DOUBLE_EQ(state.pixelsPerBeat, View::kMinPixelsPerBeat);
+
+    // Garbage factors are ignored rather than propagated into the mapping.
+    const double settled = state.pixelsPerBeat;
+    panel.zoomTimelineHorizontal(0.0);
+    panel.zoomTimelineHorizontal(-2.0);
+    EXPECT_DOUBLE_EQ(state.pixelsPerBeat, settled);
+}
+
+TEST(TimelinePanelZoomApiTest, VerticalZoomScalesTheRowHeightWithinItsClampsAndRelaysTheHeaders) {
+    using View = synth::ui::TimelineViewState;
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 220);
+    for (int i = 0; i < 24; ++i)
+        doc.addTrack(synth::TrackKind::Midi, "T" + juce::String(i));
+
+    auto& state = panel.getViewState();
+    state.rowHeightScale = 1.0;
+    state.trackScrollY = 0.0;
+    ASSERT_NE(panel.getTrackHeaderAt(0), nullptr);
+    const int rowHeightBefore = panel.getTrackHeaderAt(0)->getHeight();
+
+    panel.zoomTimelineVertical(1.5);
+    EXPECT_GT(state.rowHeightScale, 1.0);
+    EXPECT_GT(panel.getTrackHeaderAt(0)->getHeight(), rowHeightBefore)
+        << "the header column is relaid out by the same path the wheel zoom uses";
+
+    for (int i = 0; i < 10; ++i)
+        panel.zoomTimelineVertical(2.0);
+    EXPECT_DOUBLE_EQ(state.rowHeightScale, View::kMaxRowHeightScale);
+
+    for (int i = 0; i < 20; ++i)
+        panel.zoomTimelineVertical(0.5);
+    EXPECT_DOUBLE_EQ(state.rowHeightScale, View::kMinRowHeightScale);
+
+    const double settled = state.rowHeightScale;
+    panel.zoomTimelineVertical(0.0);
+    panel.zoomTimelineVertical(-2.0);
+    EXPECT_DOUBLE_EQ(state.rowHeightScale, settled);
+}
+
+// ---- Wheel policy (synth::ui::ScrollPolicy) ----
+
+// Both ZOOM branches are chosen by their modifiers, so they must read the dominant axis: macOS
+// folds Shift+wheel into deltaX, which used to leave Cmd+Shift+wheel reading deltaY == 0 and doing
+// nothing at all.
+TEST(TimelinePanelInteractionTest, ModifierZoomSurvivesTheShiftAxisSwap) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 220);
+    for (int i = 0; i < 24; ++i)
+        doc.addTrack(synth::TrackKind::Midi, "T" + juce::String(i));
+
+    auto& state = panel.getViewState();
+    state.pixelsPerBeat = 24.0;
+    state.firstVisibleBeat = 500.0;
+    state.rowHeightScale = 1.0;
+
+    // Cmd + a deltaX-ONLY wheel: horizontal zoom still happens.
+    juce::MouseWheelDetails xOnly{};
+    xOnly.deltaX = 0.5f;
+    panel.mouseWheelMove(
+        makeClickEvent(panel, {300.0f, 12.0f}, juce::ModifierKeys(juce::ModifierKeys::commandModifier)), xOnly);
+    EXPECT_GT(state.pixelsPerBeat, 24.0);
+
+    // Cmd+Shift + a deltaX-only wheel: the row-height zoom that the axis swap used to kill.
+    panel.mouseWheelMove(
+        makeClickEvent(panel, {300.0f, 100.0f},
+                       juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier)),
+        xOnly);
+    EXPECT_GT(state.rowHeightScale, 1.0);
+}
+
+// Plain scroll follows juce::Viewport's sign convention (origin -= delta) by default, and
+// setScrollInverted(true) flips both axes by exactly the same amount.
+TEST(TimelinePanelInteractionTest, ScrollInversionFlipsBothAxesAroundTheViewportConvention) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 220);
+    for (int i = 0; i < 24; ++i)
+        doc.addTrack(synth::TrackKind::Midi, "T" + juce::String(i));
+
+    auto& state = panel.getViewState();
+    state.pixelsPerBeat = 24.0;
+    ASSERT_FALSE(panel.isScrollInverted()) << "natural is the default";
+
+    juce::MouseWheelDetails wheel{};
+    wheel.deltaY = 0.5f;
+    const auto shift = juce::ModifierKeys(juce::ModifierKeys::shiftModifier);
+
+    // Horizontal (Shift+wheel). Start well clear of the firstVisibleBeat >= 0 clamp so both
+    // directions have room.
+    state.firstVisibleBeat = 500.0;
+    panel.mouseWheelMove(makeClickEvent(panel, {400.0f, 100.0f}, shift), wheel);
+    const double naturalBeat = state.firstVisibleBeat;
+    EXPECT_LT(naturalBeat, 500.0);
+
+    state.firstVisibleBeat = 500.0;
+    panel.setScrollInverted(true);
+    panel.mouseWheelMove(makeClickEvent(panel, {400.0f, 100.0f}, shift), wheel);
+    EXPECT_GT(state.firstVisibleBeat, 500.0);
+    EXPECT_NEAR(state.firstVisibleBeat - 500.0, 500.0 - naturalBeat, 1e-9) << "same distance, opposite sign";
+
+    // Vertical (plain wheel). Park mid-range so neither direction is swallowed by a clamp.
+    panel.setScrollInverted(false);
+    state.trackScrollY = 200.0;
+    panel.mouseWheelMove(makeClickEvent(panel, {400.0f, 100.0f}), wheel);
+    const double naturalY = state.trackScrollY;
+    EXPECT_LT(naturalY, 200.0);
+
+    state.trackScrollY = 200.0;
+    panel.setScrollInverted(true);
+    panel.mouseWheelMove(makeClickEvent(panel, {400.0f, 100.0f}), wheel);
+    EXPECT_GT(state.trackScrollY, 200.0);
+    EXPECT_NEAR(state.trackScrollY - 200.0, 200.0 - naturalY, 1e-9);
+}
+
 // ============================================================================
 // 4. Track headers + the app-level timeline wiring.
 // ============================================================================
@@ -1403,11 +1653,53 @@ TEST(TimelineRulerComponentTest, SnapshotSmokeAtTwoZoomsWithNullTransport) {
     EXPECT_EQ(zoomedOut.getWidth(), 800);
     EXPECT_EQ(zoomedOut.getHeight(), 24);
 
+    // Also the widest band: at kMaxPixelsPerBeat the strip draws beat ticks AND their "bar.beat"
+    // sub-labels, so this snapshot covers that paint path too.
     state.pixelsPerBeat = synth::ui::TimelineViewState::kMaxPixelsPerBeat;
+    ASSERT_TRUE(synth::ui::rulerTickPlanFor(state.pixelsPerBeat, 4.0).drawBeatLabels);
     const juce::Image zoomedIn = ruler.createComponentSnapshot(ruler.getLocalBounds());
     EXPECT_FALSE(zoomedIn.isNull());
     EXPECT_EQ(zoomedIn.getWidth(), 800);
     EXPECT_EQ(zoomedIn.getHeight(), 24);
+}
+
+// The ruler's three density bands, asserted through the pure helper paint() itself calls — no
+// painting, no font measurement, so the thresholds mean the same thing on every platform. The SNAP
+// division is deliberately absent from all of this: the strip is a bars/beats reference, not a
+// picture of the current grid.
+TEST(TimelineRulerTickPlanTest, TooDenseForBeatTicksDrawsNeitherTicksNorLabels) {
+    const auto plan = synth::ui::rulerTickPlanFor(synth::ui::kMinBeatTickSpacingPx - 0.5, 4.0);
+    EXPECT_FALSE(plan.drawBeatTicks);
+    EXPECT_FALSE(plan.drawBeatLabels);
+    // The threshold itself is inclusive — and is comfortably above the ~6 px the ticks need to read
+    // as separate marks.
+    EXPECT_GE(synth::ui::kMinBeatTickSpacingPx, 6.0);
+    EXPECT_TRUE(synth::ui::rulerTickPlanFor(synth::ui::kMinBeatTickSpacingPx, 4.0).drawBeatTicks);
+}
+
+TEST(TimelineRulerTickPlanTest, MiddleBandDrawsTicksWithoutLabels) {
+    for (const double pixelsPerBeat :
+         {synth::ui::kMinBeatTickSpacingPx, 24.0, synth::ui::kMinBeatLabelSpacingPx - 0.5}) {
+        const auto plan = synth::ui::rulerTickPlanFor(pixelsPerBeat, 4.0);
+        EXPECT_TRUE(plan.drawBeatTicks) << "pixelsPerBeat " << pixelsPerBeat;
+        EXPECT_FALSE(plan.drawBeatLabels) << "pixelsPerBeat " << pixelsPerBeat;
+    }
+}
+
+TEST(TimelineRulerTickPlanTest, WideBandDrawsTicksAndBarDotBeatLabels) {
+    for (const double pixelsPerBeat : {synth::ui::kMinBeatLabelSpacingPx, 200.0}) {
+        const auto plan = synth::ui::rulerTickPlanFor(pixelsPerBeat, 4.0);
+        EXPECT_TRUE(plan.drawBeatTicks) << "pixelsPerBeat " << pixelsPerBeat;
+        EXPECT_TRUE(plan.drawBeatLabels) << "a label always sits against a tick";
+    }
+}
+
+TEST(TimelineRulerTickPlanTest, ABarOfOneBeatOrLessHasNoBeatsToMark) {
+    // Every "beat" would land on a bar line, so a tick there would only thicken it.
+    EXPECT_FALSE(synth::ui::rulerTickPlanFor(200.0, 1.0).drawBeatTicks);
+    EXPECT_FALSE(synth::ui::rulerTickPlanFor(200.0, 0.0).drawBeatLabels);
+    // And a degenerate zoom is inert rather than undefined.
+    EXPECT_FALSE(synth::ui::rulerTickPlanFor(0.0, 4.0).drawBeatTicks);
 }
 
 // ============================================================================

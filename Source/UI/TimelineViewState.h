@@ -63,8 +63,27 @@ struct TimelineViewState {
     // (1 beat), "1/16" is a sixteenth (0.25 beat). A beat is always a quarter note here
     // (TransportService's own convention), so these are fixed beat counts; only Snap::Bar consults
     // the time signature.
+    // The order is load-bearing: Bar..Sixteenth are declared COARSEST to FINEST, which is what lets
+    // TimelinePanelComponent::cycleSnapValue step the grid with a clamped +-1 on the underlying int
+    // instead of carrying a second table that could drift out of sync with this list.
     enum class Snap : int { Off = 0, Bar, Whole, Half, Quarter, Eighth, Sixteenth };
     Snap snap = Snap::Quarter;
+
+    // The last non-Off division that was chosen, so "cycle the grid finer/coarser" has somewhere
+    // musical to land when the current value is Off — see cycleSnapValue's from-Off rule.
+    // Deliberately NOT persisted: it is a within-session convenience, and a fresh launch that
+    // restored Snap::Off should re-enter the cycle at the documented default rather than at
+    // whatever division a session weeks ago happened to end on.
+    Snap lastMusicalSnap = Snap::Quarter;
+
+    // The one writer for `snap` that keeps lastMusicalSnap in step. Direct assignment to `snap`
+    // stays legal (tests and the doc-load path set it wholesale), it just doesn't feed the cycle's
+    // memory — which is exactly right for a value the user never picked.
+    void setSnap(Snap value) noexcept {
+        snap = value;
+        if (value != Snap::Off)
+            lastMusicalSnap = value;
+    }
 
     // Master snap switch, toggled by the piano roll's Q button and the panel-wide Q key. When off,
     // divisionBeats()/snapBeat() behave exactly like Snap::Off (no grid, raw beats pass through)

@@ -70,6 +70,11 @@ public:
     // already abstracts this) = zoom around the cursor. Implemented once here (rather than
     // separately on the ruler) so the ruler and the lanes grid share identical behaviour — JUCE
     // bubbles an unhandled wheel event from the ruler child up to this override.
+    //
+    // Every branch reads the wheel through synth::ui::ScrollPolicy: the modifier-decided branches
+    // (both zooms) take dominantWheelDelta(), so they survive macOS folding Shift+wheel into
+    // deltaX, and the plain-scroll branches take scrollAmount(delta, scrollInverted_), which is the
+    // juce::Viewport sign convention plus this panel's own inversion preference.
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override;
 
     // Non-owning; may be null (tests, or before MainComponent finishes wiring). Forwarded to the
@@ -271,6 +276,63 @@ public:
     // still tile the panel exactly (see TimelinePanelComponentTest.PanelRegionsTile).
     juce::Rectangle<int> getTrackHeaderBounds() const noexcept { return trackHeaderBounds_; }
     juce::Rectangle<int> getLanesBounds() const noexcept { return lanesBounds_; }
+
+    // ---- Snap / zoom / scroll: the view-state verbs the shortcut layer drives ----
+    //
+    // Everything in this block is VIEW state: no TimelineDoc mutation, nothing on the undo stack.
+    // Undoing a zoom is not a thing any DAW does, and putting one on the stack would bury the
+    // user's last real edit under a pile of scrolls.
+
+    /** Sets the grid division. Means the same thing as picking it from the snap combo — which is
+     *  exactly what it IS now: the combo's onChange delegates here, so the combo, the shortcut
+     *  layer and cycleSnapValue() below share one path to the view state, one persist and one set
+     *  of repaints. Like the combo, it re-arms the master snap switch (see setSnapEnabled): asking
+     *  for a division means "snap to THIS", and choosing Snap::Off is how you ask for no grid from
+     *  here. Also feeds TimelineViewState::lastMusicalSnap, which is what cycleSnapValue's from-Off
+     *  rule reads.
+     *  @return true when the division actually changed (a re-pick of the current one still
+     *          re-arms and re-persists, it just reports no change). */
+    bool setSnapValue(TimelineViewState::Snap value);
+
+    /** Steps the grid one division through the MUSICAL values only — Bar, 1, 1/2, 1/4, 1/8, 1/16 —
+     *  with `direction` > 0 going FINER (toward 1/16) and < 0 going COARSER (toward Bar). Zero is a
+     *  no-op.
+     *
+     *  Two rules, both chosen for how they feel under a held-down key rather than for symmetry:
+     *
+     *  - CLAMPED at both ends, never wrapping. Leaning on "finer" and parking at 1/16 is what the
+     *    hand expects; wrapping silently back to Bar mid-flow moves every subsequent edit onto a
+     *    16x coarser grid, and the user finds out from the result, not from the keypress.
+     *  - Snap::Off is never a stop on the cycle — turning magnetism off stays the Q key's job. So
+     *    cycling FROM Off (in either direction, one simple rule) enters at
+     *    TimelineViewState::lastMusicalSnap, the last division the user actually chose, falling
+     *    back to Snap::Bar if there somehow isn't one. "Either direction" is deliberate: from Off
+     *    there is no current position for "one finer" to be relative to, so the only honest answer
+     *    is "back where you were".
+     *
+     *  @return true when the division changed. */
+    bool cycleSnapValue(int direction);
+
+    /** Horizontal zoom by `factor` (> 1 in, < 1 out) around the CENTRE of the visible lanes, so a
+     *  keyboard zoom keeps the music in front of you put. Runs through the same
+     *  TimelineViewState::zoomAroundX + repaint path as Cmd+wheel and the trackpad pinch — one
+     *  path, so a shortcut zoom and a wheel zoom can never drift apart in clamping or in what they
+     *  repaint. A non-finite or non-positive factor is ignored. */
+    void zoomTimelineHorizontal(double factor);
+
+    /** Vertical (track row height) zoom by `factor`, anchored on the middle row of the visible
+     *  lanes. Same zoomTrackRows path — including the header-column relayout and the scroll
+     *  re-clamp — that Cmd+Shift+wheel and Shift+pinch use. */
+    void zoomTimelineVertical(double factor);
+
+    /** App-level scroll-direction preference, stacked on top of whatever the OS already did to the
+     *  wheel deltas (see ScrollPolicy.h — JUCE hands us pre-flipped deltas, so this is a second,
+     *  deliberate flip and not a re-application of the OS setting). Default false = "natural" =
+     *  the juce::Viewport convention every other scrolling surface in the app already follows.
+     *  Not persisted here: the owner (Preferences) decides whether a preference exists, the same
+     *  way it owns the timeline's other opt-in behaviours. */
+    void setScrollInverted(bool inverted) noexcept { scrollInverted_ = inverted; }
+    bool isScrollInverted() const noexcept { return scrollInverted_; }
 
     TimelineViewState& getViewState() noexcept { return viewState_; }
     TimelineRulerComponent& getRuler() noexcept { return ruler_; }
@@ -521,6 +583,18 @@ private:
     double maxTrackScrollPx() const;
     void scrollTrackRows(double deltaPx);
     void zoomTrackRows(double factor, double anchorLaneY);
+    // The ONE horizontal-zoom writer: Cmd+wheel, trackpad pinch and zoomTimelineHorizontal() all
+    // land here, so the clamp behaviour and the repaint set are shared rather than copied three
+    // times. anchorX is in the ruler's coordinate space (== TimelineViewState's x origin).
+    void zoomHorizontalAroundX(double factor, double anchorX);
+    // The lanes-region anchors a keyboard zoom uses: the centre of what is on screen, in the same
+    // coordinate spaces the wheel/pinch handlers feed their anchors from.
+    double visibleCentreXInRuler() const noexcept;
+    double visibleCentreYInLanes() const noexcept;
+
+    // App-level scroll inversion — see setScrollInverted(). Every plain-scroll branch in
+    // mouseWheelMove goes through synth::ui::scrollAmount with this flag.
+    bool scrollInverted_ = false;
     // Pushes trackScrollY into the header viewport and repaints the lanes — the ONE place the two
     // columns are brought back in step after any scroll/zoom writer.
     void syncTrackScroll();

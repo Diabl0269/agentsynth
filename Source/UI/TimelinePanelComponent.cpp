@@ -1,6 +1,7 @@
 #include "TimelinePanelComponent.h"
 #include "../AppUndoManager.h"
 #include "../Transport/TransportService.h"
+#include "ScrollPolicy.h"
 #include "Theme/AppLookAndFeel.h"
 #include <algorithm>
 #include <cmath>
@@ -107,15 +108,10 @@ TimelinePanelComponent::TimelinePanelComponent() {
     snapCombo_.addItem("1/8", 6);
     snapCombo_.addItem("1/16", 7);
     snapCombo_.setSelectedId((int)viewState_.snap + 1, juce::dontSendNotification);
-    snapCombo_.onChange = [this] {
-        viewState_.snap = (TimelineViewState::Snap)(snapCombo_.getSelectedId() - 1);
-        // Picking a division is an explicit "snap to THIS" — flip the master switch back on so
-        // the choice takes effect immediately (choosing "Off" from the combo already means off).
-        setSnapEnabled(true);
-        // The roll's gridlines and its new-note length both come from the division — a snap change
-        // is the only thing that moves them, so this is where they are redrawn.
-        pianoRoll_.repaint();
-    };
+    // A pick from the combo is just setSnapValue() with the id decoded — the shortcut layer, the
+    // grid cycle and this menu therefore share ONE writer (which is also the one place the choice
+    // is persisted and the grid painters are repainted).
+    snapCombo_.onChange = [this] { setSnapValue((TimelineViewState::Snap)(snapCombo_.getSelectedId() - 1)); };
 
     // The edit-tool strip, left of the snap controls in the transport bar (see resized()). Radio
     // buttons rather than a combo: which tool is active has to be readable at a glance mid-edit,
@@ -969,7 +965,10 @@ void TimelinePanelComponent::setApplicationProperties(juce::ApplicationPropertie
 
     int saved = appProperties_->getUserSettings()->getIntValue(kTimelineSnapPropertyKey, (int)viewState_.snap);
     saved = juce::jlimit((int)TimelineViewState::Snap::Off, (int)TimelineViewState::Snap::Sixteenth, saved);
-    viewState_.snap = (TimelineViewState::Snap)saved;
+    // setSnap (not a bare assignment) so a restored musical division is also where cycleSnapValue's
+    // from-Off rule resumes — a restored Snap::Off leaves lastMusicalSnap at its default, which is
+    // exactly the documented fallback.
+    viewState_.setSnap((TimelineViewState::Snap)saved);
     snapCombo_.setSelectedId(saved + 1, juce::dontSendNotification);
     viewState_.snapEnabled =
         appProperties_->getUserSettings()->getBoolValue(kTimelineSnapEnabledPropertyKey, viewState_.snapEnabled);
@@ -978,6 +977,43 @@ void TimelinePanelComponent::setApplicationProperties(juce::ApplicationPropertie
     // A pure forward — the transport bar owns and persists its own two keys. See this
     // method's header comment.
     transportBar_.setApplicationProperties(props);
+}
+
+bool TimelinePanelComponent::setSnapValue(TimelineViewState::Snap value) {
+    const bool changed = viewState_.snap != value;
+    viewState_.setSnap(value);
+    // The combo REFLECTS the view state; it never owns it. dontSendNotification so a programmatic
+    // set can't re-enter onChange (which would call straight back into here).
+    snapCombo_.setSelectedId((int)value + 1, juce::dontSendNotification);
+    // Picking a division is an explicit "snap to THIS" — flip the master switch back on so the
+    // choice takes effect immediately (choosing Snap::Off already means "no grid"). This is also
+    // the single persist + ruler/grid repaint path; see setSnapEnabled below.
+    setSnapEnabled(true);
+    // The roll's gridlines and its new-note length both come from the division — a snap change is
+    // the only thing that moves them, so this is where they are redrawn.
+    pianoRoll_.repaint();
+    return changed;
+}
+
+bool TimelinePanelComponent::cycleSnapValue(int direction) {
+    using Snap = TimelineViewState::Snap;
+    if (direction == 0)
+        return false;
+
+    // From Off there is no position for "one step finer" to be relative to, so both directions
+    // re-enter at the last division the user actually chose (Bar if there wasn't one). See the
+    // header for why this beats picking an end.
+    if (viewState_.snap == Snap::Off) {
+        const Snap entry = viewState_.lastMusicalSnap != Snap::Off ? viewState_.lastMusicalSnap : Snap::Bar;
+        return setSnapValue(entry);
+    }
+
+    // Snap is declared coarsest -> finest (see TimelineViewState), so the step is a clamped +-1 on
+    // the enum's own int. CLAMPED, never wrapped: parking on 1/16 under a held key is far less
+    // surprising than silently landing back on Bar.
+    const int stepped =
+        juce::jlimit((int)Snap::Bar, (int)Snap::Sixteenth, (int)viewState_.snap + (direction > 0 ? 1 : -1));
+    return setSnapValue((Snap)stepped);
 }
 
 void TimelinePanelComponent::setSnapEnabled(bool enabled) {
@@ -1007,44 +1043,85 @@ void TimelinePanelComponent::mouseWheelMove(const juce::MouseEvent& e, const juc
     // Cubase-style bindings: Cmd = horizontal zoom, Cmd+Shift = vertical zoom (row height),
     // Shift or a trackpad's own deltaX = horizontal scroll, plain vertical wheel = vertical
     // track scroll (headers + lanes together).
+    //
+    // The two ZOOM branches are decided by their MODIFIERS, so they must not read a single axis:
+    // macOS folds Shift+wheel into deltaX, which would leave Cmd+Shift+wheel reading deltaY == 0
+    // and doing nothing at all. dominantWheelDelta() is that guard (see ScrollPolicy.h).
+    const double zoomDelta = (double)dominantWheelDelta(wheel);
+
     if (e.mods.isCommandDown() && e.mods.isShiftDown()) {
-        zoomTrackRows(std::exp((double)wheel.deltaY * kZoomWheelSensitivity),
+        zoomTrackRows(std::exp(zoomDelta * kZoomWheelSensitivity),
                       (double)e.getEventRelativeTo(&clipLaneArea_).position.y);
         return;
     }
 
     if (e.mods.isCommandDown()) {
-        viewState_.zoomAroundX(std::exp((double)wheel.deltaY * kZoomWheelSensitivity), anchorX);
-        ruler_.repaint();
-        repaint();
+        zoomHorizontalAroundX(std::exp(zoomDelta * kZoomWheelSensitivity), anchorX);
         return;
     }
 
+    // Plain scroll. scrollAmount() converts a wheel delta into the amount to ADD to a view origin
+    // with juce::Viewport's sign convention (natural), plus this panel's inversion preference —
+    // and both of these origins DO grow the Viewport way (firstVisibleBeat is the beat at x == 0,
+    // trackScrollY the pixels scrolled off the top), so no extra axis mapping is needed here.
     const bool horizontal = e.mods.isShiftDown() || std::abs(wheel.deltaX) > std::abs(wheel.deltaY);
     if (horizontal) {
-        const double delta =
-            std::abs(wheel.deltaX) > std::abs(wheel.deltaY) ? (double)wheel.deltaX : (double)wheel.deltaY;
-        viewState_.scrollBeats(-delta * kScrollPixelsPerWheelUnit / viewState_.pixelsPerBeat);
+        // Which axis the gesture arrived on, NOT "the dominant delta": a Shift+wheel that the OS
+        // left on deltaY and a trackpad's own sideways deltaX are both horizontal scrolls, and
+        // either one is the amount to move by.
+        const float delta = std::abs(wheel.deltaX) > std::abs(wheel.deltaY) ? wheel.deltaX : wheel.deltaY;
+        const double deltaPx = (double)scrollAmount(delta, scrollInverted_) * kScrollPixelsPerWheelUnit;
+        viewState_.scrollBeats(deltaPx / viewState_.pixelsPerBeat);
         ruler_.repaint();
         repaint();
         return;
     }
 
-    scrollTrackRows(-(double)wheel.deltaY * kScrollPixelsPerWheelUnit);
+    scrollTrackRows((double)scrollAmount(wheel.deltaY, scrollInverted_) * kScrollPixelsPerWheelUnit);
 }
 
 void TimelinePanelComponent::mouseMagnify(const juce::MouseEvent& e, float scaleFactor) {
     // Trackpad pinch: deliberate enough that it needs no modifier. Plain pinch = horizontal zoom
     // around the pinch point; Shift+pinch = vertical (row height) zoom.
-    if (!std::isfinite(scaleFactor) || scaleFactor <= 0.0f)
-        return;
     if (e.mods.isShiftDown()) {
+        if (!std::isfinite(scaleFactor) || scaleFactor <= 0.0f)
+            return;
         zoomTrackRows((double)scaleFactor, (double)e.getEventRelativeTo(&clipLaneArea_).position.y);
         return;
     }
-    viewState_.zoomAroundX((double)scaleFactor, (double)e.getEventRelativeTo(&ruler_).position.x);
+    zoomHorizontalAroundX((double)scaleFactor, (double)e.getEventRelativeTo(&ruler_).position.x);
+}
+
+//==============================================================================
+void TimelinePanelComponent::zoomHorizontalAroundX(double factor, double anchorX) {
+    if (!std::isfinite(factor) || factor <= 0.0)
+        return;
+    viewState_.zoomAroundX(factor, anchorX);
     ruler_.repaint();
     repaint();
+}
+
+double TimelinePanelComponent::visibleCentreXInRuler() const noexcept {
+    // The ruler's local x == 0 IS TimelineViewState's origin (see resized()), so its half-width is
+    // the beat-space centre of what is on screen — the same anchor a wheel zoom would pass if the
+    // pointer happened to sit in the middle of the strip.
+    return (double)ruler_.getWidth() * 0.5;
+}
+
+double TimelinePanelComponent::visibleCentreYInLanes() const noexcept {
+    // clipLaneArea_ fills gridLanesBounds_ exactly, and zoomTrackRows' anchor is in that
+    // component's coordinates — so the middle visible row is simply half its height.
+    return (double)gridLanesBounds_.getHeight() * 0.5;
+}
+
+void TimelinePanelComponent::zoomTimelineHorizontal(double factor) {
+    zoomHorizontalAroundX(factor, visibleCentreXInRuler());
+}
+
+void TimelinePanelComponent::zoomTimelineVertical(double factor) {
+    if (!std::isfinite(factor) || factor <= 0.0)
+        return;
+    zoomTrackRows(factor, visibleCentreYInLanes());
 }
 
 int TimelinePanelComponent::currentRowHeight() const {
@@ -1219,10 +1296,12 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
     g.setColour(border);
     g.drawHorizontalLine(0, 0.0f, (float)getWidth());
 
-    // Bar/beat grid across the lanes region (below the ruler), using the SAME shared
-    // TimelineViewState the ruler paints from — bar lines stronger, beat lines fainter. No
-    // dedicated grid colour tokens exist yet (checked Theme::Colors — nothing grid-specific), so
-    // this reuses `border` at two alpha levels rather than adding new tokens for one caller.
+    // Bar/beat/subdivision grid across the lanes region (below the ruler), using the SAME shared
+    // TimelineViewState the ruler paints from. Colours come from the shared three-level policy in
+    // TimelineClipLaneArea.h (gridLineColourFor / gridLevelIsReadable) — the piano roll paints its
+    // grid from the same policy, so the two surfaces can't drift apart in visibility. The policy
+    // lifts `border` toward the background's contrasting colour before applying the per-level
+    // alpha, because on dark themes `border` alone sits too close to bg0 to read at any alpha.
     if (gridLanesBounds_.getWidth() > 0 && gridLanesBounds_.getHeight() > 0) {
         synth::TransportService* transport = ruler_.getTransport();
         double beatsPerBar = 4.0;
@@ -1247,13 +1326,27 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
         const int bottom = gridLanesBounds_.getBottom();
         const int xOrigin = gridLanesBounds_.getX();
 
+        // The current snap division paints as a third, lightest level BETWEEN the beat lines —
+        // only when it is finer than a beat and wide enough on screen to read as a grid rather
+        // than as noise (gridLevelIsReadable's ~3 px density guard, the same rule Cubase applies).
+        // Requiring drawBeatLines keeps the hierarchy monotonic: a subdivision may never be
+        // visible while its parent beat level is hidden (possible otherwise, because the beat
+        // gate is ~8 px/beat while the readability guard is ~3 px/line).
+        const double division = viewState_.divisionBeats(beatsPerBar);
+        const bool drawSubdivisionLines = drawBeatLines && division > 0.0 && division < 1.0 &&
+                                          synth::ui::gridLevelIsReadable(division, viewState_.pixelsPerBeat);
+
+        const auto barColour = synth::ui::gridLineColourFor(synth::ui::GridLineLevel::Bar, border, bg);
+        const auto beatColour = synth::ui::gridLineColourFor(synth::ui::GridLineLevel::Beat, border, bg);
+        const auto subColour = synth::ui::gridLineColourFor(synth::ui::GridLineLevel::Subdivision, border, bg);
+
         for (juce::int64 bar = firstBar; bar <= lastBar; ++bar) {
             const double barBeat = (double)bar * beatsPerBar;
             const double x = viewState_.beatToX(barBeat);
             if (x < -1.0 || x > widthPx + 1.0)
                 continue;
 
-            g.setColour(border);
+            g.setColour(barColour);
             g.drawVerticalLine(xOrigin + (int)std::llround(x), (float)top, (float)bottom);
 
             if (drawBeatLines) {
@@ -1261,8 +1354,22 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
                     const double beatX = viewState_.beatToX(barBeat + (double)beatInBar);
                     if (beatX < 0.0 || beatX > widthPx)
                         continue;
-                    g.setColour(border.withAlpha(0.35f));
+                    g.setColour(beatColour);
                     g.drawVerticalLine(xOrigin + (int)std::llround(beatX), (float)top, (float)bottom);
+                }
+            }
+
+            if (drawSubdivisionLines) {
+                g.setColour(subColour);
+                for (double beatInBar = division; beatInBar < beatsPerBar - division * 0.5; beatInBar += division) {
+                    // Skip positions that already got a bar/beat line — a subdivision line under
+                    // a stronger one would just anti-alias the stronger line's edge.
+                    if (std::abs(beatInBar - (double)std::llround(beatInBar)) < division * 0.25)
+                        continue;
+                    const double subX = viewState_.beatToX(barBeat + beatInBar);
+                    if (subX < 0.0 || subX > widthPx)
+                        continue;
+                    g.drawVerticalLine(xOrigin + (int)std::llround(subX), (float)top, (float)bottom);
                 }
             }
         }
