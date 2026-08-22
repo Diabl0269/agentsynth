@@ -249,18 +249,31 @@ Theme makeDaylight() {
     t.isDark = false;
 
     // Colors - Clean, modern light theme with indigo accent
-    t.colors.bg0 = juce::Colour(0xffE9ECEF);          // page/window background
-    t.colors.bg1 = juce::Colour(0xffF8F9FA);          // canvas background
-    t.colors.surface = juce::Colour(0xffFFFFFF);      // module cards / panels
-    t.colors.surfaceHi = juce::Colour(0xffF1F3F5);    // raised surface
-    t.colors.border = juce::Colour(0xffCED4DA);       // hairline borders
-    t.colors.accent = juce::Colour(0xff4C6EF5);       // primary accent (indigo)
-    t.colors.accent2 = juce::Colour(0xff15AABF);      // secondary accent (cyan)
-    t.colors.audioWire = juce::Colour(0xff212529);    // audio signal wires (dark for contrast)
-    t.colors.modWire = juce::Colour(0xff4C6EF5);      // modulation CV wires
-    t.colors.pitchWire = juce::Colour(0xff15AABF);    // poly pitch wires
-    t.colors.gateWire = juce::Colour(0xffFD7E14);     // poly gate wires
-    t.colors.polyBusWire = juce::Colour(0xff3B5BD5);  // poly bus wires
+    t.colors.bg0 = juce::Colour(0xffE9ECEF);       // page/window background
+    t.colors.bg1 = juce::Colour(0xffF8F9FA);       // canvas background
+    t.colors.surface = juce::Colour(0xffFFFFFF);   // module cards / panels
+    t.colors.surfaceHi = juce::Colour(0xffF1F3F5); // raised surface
+    t.colors.border = juce::Colour(0xffCED4DA);    // hairline borders
+    t.colors.accent = juce::Colour(0xff4C6EF5);    // primary accent (indigo)
+    t.colors.accent2 = juce::Colour(0xff15AABF);   // secondary accent (cyan)
+    t.colors.audioWire = juce::Colour(0xff212529); // audio signal wires (dark for contrast)
+    // MIDI must read unmistakably PURPLE at 2px next to the indigo modWire — 0xff6D28D9 was tried
+    // first and reads near-navy at wire width on a light canvas.
+    t.colors.midiWire = juce::Colour(0xff9333EA);    // MIDI wires (royal purple, ~5:1 on bg1/surface)
+    t.colors.modWire = juce::Colour(0xff4C6EF5);     // modulation CV wires
+    t.colors.pitchWire = juce::Colour(0xff15AABF);   // poly pitch wires
+    t.colors.gateWire = juce::Colour(0xffFD7E14);    // poly gate wires
+    t.colors.polyBusWire = juce::Colour(0xff3B5BD5); // poly bus wires
+    t.colors.cableCategory = {
+        juce::Colour(0xff956F23), // Sources
+        juce::Colour(0xff4F8627), // Sequencing
+        juce::Colour(0xff278657), // Envelopes & Control
+        juce::Colour(0xff27749B), // Filters
+        juce::Colour(0xff8E296D), // Modulation FX
+        juce::Colour(0xff257E77), // Time FX
+        juce::Colour(0xff9B2730), // Dynamics
+        juce::Colour(0xff606B80)  // Utility
+    };
     t.colors.textPrimary = juce::Colour(0xff212529);  // primary text (dark grey/black)
     t.colors.textMuted = juce::Colour(0xff6C757D);    // secondary text
     t.colors.textDisabled = juce::Colour(0xffADB5BD); // disabled text

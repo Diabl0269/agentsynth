@@ -46,6 +46,8 @@ void ModMatrixComponent::paint(juce::Graphics& g) {
         lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::white.withAlpha(0.6f);
     const juce::Colour textDisabledColour =
         lf != nullptr ? lf->getTheme().colors.textDisabled : juce::Colours::white.withAlpha(0.3f);
+    const juce::Colour borderColour =
+        lf != nullptr ? lf->getTheme().colors.border : juce::Colours::white.withAlpha(0.08f);
 
     g.fillAll(bgColour); // Solid dark background
 
@@ -67,22 +69,33 @@ void ModMatrixComponent::paint(juce::Graphics& g) {
     g.setColour(textMutedColour);
     g.setFont(juce::Font(12.0f, juce::Font::bold));
 
-    float w = (float)area.getWidth();
-    // Headers offset by 30px for the row numbers
-    g.drawText("SOURCE", juce::Rectangle<float>(30, (float)headerArea.getY(), (w - 30) * 0.3f, 30.0f),
+    const float rowNumColW = (float)kRowNumColW;
+    const float w = (float)area.getWidth();
+    const float sourceColW = (w - rowNumColW) * kSourceColFrac;
+    const float destColW = (w - rowNumColW) * kDestColFrac;
+    // Headers offset by kRowNumColW for the row numbers; the AMOUNT column deliberately stops
+    // short of the row's bypass/delete icon columns, leaving that header cell blank.
+    g.drawText("SOURCE", juce::Rectangle<float>(rowNumColW, (float)headerArea.getY(), sourceColW, 30.0f),
                juce::Justification::centred, true);
     g.drawText("DESTINATION",
-               juce::Rectangle<float>(30 + (w - 30) * 0.3f, (float)headerArea.getY(), (w - 30) * 0.35f, 30.0f),
+               juce::Rectangle<float>(rowNumColW + sourceColW, (float)headerArea.getY(), destColW, 30.0f),
                juce::Justification::centred, true);
     g.drawText("AMOUNT",
-               juce::Rectangle<float>(30 + (w - 30) * 0.65f, (float)headerArea.getY(), (w - 30) * 0.25f, 30.0f),
+               juce::Rectangle<float>(rowNumColW + sourceColW + destColW, (float)headerArea.getY(),
+                                      (w - rowNumColW) * 0.25f, 30.0f),
                juce::Justification::centred, true);
+
+    // Footer separator: hairline above the add/flat-toggle controls, matching the header band's
+    // painted treatment so the row list reads as visually distinct from the footer chrome.
+    auto footerArea = area.removeFromBottom(40);
+    g.setColour(borderColour);
+    g.fillRect(footerArea.getX(), footerArea.getY(), footerArea.getWidth(), 1);
 
     if (rows.empty()) {
         g.setColour(textDisabledColour);
         g.setFont(juce::Font(14.0f, juce::Font::italic));
-        g.drawText("No modulations active.\nClick '+ Add Modulation' to start.", getLocalBounds(),
-                   juce::Justification::centred, true);
+        g.drawText("No modulations active.\nClick '+ Add Modulation' to start.", area, juce::Justification::centred,
+                   true);
     }
 }
 
@@ -92,8 +105,8 @@ void ModMatrixComponent::resized() {
     area.removeFromTop(30);                  // Column Headers
 
     auto footer = area.removeFromBottom(40);
-    addButton.setBounds(footer.removeFromRight(150).reduced(5));
-    flatToggle.setBounds(footer.removeFromLeft(120).reduced(5));
+    addButton.setBounds(footer.removeFromRight(150).reduced(kGutter));
+    flatToggle.setBounds(footer.removeFromLeft(120).reduced(kGutter));
 
     viewport.setBounds(area);
 
@@ -153,6 +166,18 @@ void ModMatrixComponent::updateRowsFromGraph() {
         }
     }
 
+    // Refresh combo items if the number of nodes in graph changed. This must happen BEFORE the
+    // refresh pass below: populateCombos() clears the combo boxes (deselecting them), so a
+    // selection applied first would be wiped and every row's label would go blank until the
+    // next update call.
+    int currentNodeCount = audioEngine.getGraph().getNumNodes();
+    if (currentNodeCount != lastNodeCount) {
+        audioEngine.updateModuleNames();
+        for (auto& row : rows)
+            row->populateCombos();
+        lastNodeCount = currentNodeCount;
+    }
+
     // Assign indices for display
     for (int i = 0; i < (int)rows.size(); ++i) {
         rows[i]->setRowIndex(i);
@@ -163,15 +188,6 @@ void ModMatrixComponent::updateRowsFromGraph() {
                 break;
             }
         }
-    }
-
-    // Refresh combo items if the number of nodes in graph changed
-    int currentNodeCount = audioEngine.getGraph().getNumNodes();
-    if (currentNodeCount != lastNodeCount) {
-        audioEngine.updateModuleNames();
-        for (auto& row : rows)
-            row->populateCombos();
-        lastNodeCount = currentNodeCount;
     }
 
     if (componentsChanged) {
@@ -195,12 +211,19 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
     addAndMakeVisible(sourceCombo);
     addAndMakeVisible(destCombo);
     addAndMakeVisible(amountSlider);
-    addAndMakeVisible(bypassToggle);
-    addAndMakeVisible(deleteButton);
+    addAndMakeVisible(amountValueLabel);
+
+    bypassToggle = std::make_unique<juce::DrawableButton>("Bypass", juce::DrawableButton::ImageFitted);
+    deleteButton = std::make_unique<juce::DrawableButton>("Delete", juce::DrawableButton::ImageFitted);
+    addAndMakeVisible(*bypassToggle);
+    addAndMakeVisible(*deleteButton);
 
     amountSlider.setSliderStyle(juce::Slider::LinearHorizontal);
     amountSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     amountSlider.setRange(-1.0, 1.0);
+    amountSlider.onValueChange = [this] {
+        amountValueLabel.setText(juce::String(amountSlider.getValue(), 2), juce::dontSendNotification);
+    };
 
     // Slider colours from theme tokens when the themed LnF is installed; otherwise leave the
     // ColourId defaults (the LnF maps them in applyTheme(), so explicit literals are not needed).
@@ -209,11 +232,14 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
         amountSlider.setColour(juce::Slider::thumbColourId, colors.knobPointer);
         amountSlider.setColour(juce::Slider::trackColourId, colors.accent);
         amountSlider.setColour(juce::Slider::backgroundColourId, colors.surface);
+        amountValueLabel.setColour(juce::Label::textColourId, colors.textPrimary);
     }
+    amountValueLabel.setJustificationType(juce::Justification::centredRight);
+    amountValueLabel.setFont(12.0f);
 
     sourceCombo.addListener(this);
     destCombo.addListener(this);
-    deleteButton.onClick = [this] {
+    deleteButton->onClick = [this] {
         if (owner.undoManager) {
             owner.undoManager->recordStructuralChange(owner.audioEngine.getGraph(),
                                                       [this] { owner.audioEngine.removeModRouting(attenuverterId); });
@@ -222,17 +248,18 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
         }
     };
 
-    bypassToggle.setClickingTogglesState(true);
-    bypassToggle.setTooltip("Bypass modulation");
-    // Keep only the semantic on-colour from the theme (bypass-active = warning). The off-state,
-    // text and base colours re-skin via the LnF ColourId mapping. When unthemed, leave defaults.
+    bypassToggle->setClickingTogglesState(true);
+    bypassToggle->setTooltip("Bypass modulation");
+    deleteButton->setTooltip("Remove this modulation routing");
+    // Keep only the semantic on-colour from the theme (bypass-active = warning). The off-state
+    // and base colours re-skin via the LnF ColourId mapping. When unthemed, leave defaults.
     if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&owner.getLookAndFeel())) {
         const auto& colors = lf->getTheme().colors;
-        bypassToggle.setColour(juce::TextButton::buttonOnColourId, colors.warning);
-        bypassToggle.setColour(juce::TextButton::textColourOnId, colors.bg0);
+        bypassToggle->setColour(juce::DrawableButton::backgroundOnColourId, colors.warning.withAlpha(0.35f));
     }
-    bypassToggle.setComponentID("modBypass");
-    deleteButton.setComponentID("modDelete");
+    bypassToggle->setComponentID("modBypass");
+    deleteButton->setComponentID("modDelete");
+    applyButtonIcons();
 
     // Attach to attenuverter params
     if (auto* node = owner.audioEngine.getGraph().getNodeForId(attenuverterId)) {
@@ -243,12 +270,15 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
         const auto& params = node->getProcessor()->getParameters();
         if (params.size() > 0) {
             if (auto* bParam = dynamic_cast<juce::AudioParameterBool*>(params[0])) {
-                bypassAttachment = std::make_unique<juce::ButtonParameterAttachment>(*bParam, bypassToggle);
+                bypassAttachment = std::make_unique<juce::ButtonParameterAttachment>(*bParam, *bypassToggle);
             }
         }
         if (params.size() > 1) {
             if (auto* param = dynamic_cast<juce::AudioParameterFloat*>(params[1])) {
                 amountAttachment = std::make_unique<juce::SliderParameterAttachment>(*param, amountSlider);
+                // SliderParameterAttachment's constructor moves the slider to the current value but
+                // does not fire onValueChange itself, so the readout would start blank without this.
+                amountValueLabel.setText(juce::String(amountSlider.getValue(), 2), juce::dontSendNotification);
             }
         }
 
@@ -261,18 +291,21 @@ ModMatrixComponent::ModRow::ModRow(ModMatrixComponent& o, juce::AudioProcessorGr
 }
 
 void ModMatrixComponent::ModRow::resized() {
-    auto area = getLocalBounds().reduced(2);
+    const int gutter = ModMatrixComponent::kGutter;
+    auto area = getLocalBounds().reduced(gutter / 2);
 
-    // Space for row number
-    area.removeFromLeft(30);
+    // Space for row number — matches ModMatrixComponent::paint()'s header column offset.
+    area.removeFromLeft(ModMatrixComponent::kRowNumColW);
 
-    // Proportional layout
+    // Proportional layout — fractions shared with the header labels in ModMatrixComponent::paint().
     int totalWidth = area.getWidth();
-    sourceCombo.setBounds(area.removeFromLeft(totalWidth * 0.3f).reduced(2));
-    destCombo.setBounds(area.removeFromLeft(totalWidth * 0.35f).reduced(2));
-    deleteButton.setBounds(area.removeFromRight(30).reduced(2));
-    bypassToggle.setBounds(area.removeFromRight(30).reduced(2));
-    amountSlider.setBounds(area.reduced(2));
+    sourceCombo.setBounds(
+        area.removeFromLeft((int)(totalWidth * ModMatrixComponent::kSourceColFrac)).reduced(gutter / 2));
+    destCombo.setBounds(area.removeFromLeft((int)(totalWidth * ModMatrixComponent::kDestColFrac)).reduced(gutter / 2));
+    deleteButton->setBounds(area.removeFromRight(30).reduced(gutter / 2));
+    bypassToggle->setBounds(area.removeFromRight(30).reduced(gutter / 2));
+    amountValueLabel.setBounds(area.removeFromRight(36).reduced(gutter / 2));
+    amountSlider.setBounds(area.reduced(gutter / 2));
 }
 
 void ModMatrixComponent::ModRow::paint(juce::Graphics& g) {
@@ -299,7 +332,31 @@ void ModMatrixComponent::ModRow::paint(juce::Graphics& g) {
     // --- Row number label ---
     g.setColour(lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::white.withAlpha(0.6f));
     g.setFont(12.0f);
-    g.drawText(juce::String(rowIndex + 1), 0, 0, 30, getHeight(), juce::Justification::centred);
+    g.drawText(juce::String(rowIndex + 1), 0, 0, ModMatrixComponent::kRowNumColW, getHeight(),
+               juce::Justification::centred);
+
+    // --- Bottom hairline separator ---
+    g.setColour(lf != nullptr ? lf->getTheme().colors.border : juce::Colours::white.withAlpha(0.08f));
+    g.fillRect(0, getHeight() - 1, getWidth(), 1);
+}
+
+void ModMatrixComponent::ModRow::lookAndFeelChanged() { applyButtonIcons(); }
+
+void ModMatrixComponent::ModRow::applyButtonIcons() {
+    // Headless-safe: when our themed LnF is not installed (unit tests), buttons remain blank
+    // (no image set). The DrawableButton still exists and functions correctly without an image.
+    auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&owner.getLookAndFeel());
+    if (lf == nullptr)
+        return;
+
+    if (bypassToggle) {
+        if (auto d = lf->getIcon(synth::theme::Icon::ModuleBypass))
+            bypassToggle->setImages(d.get());
+    }
+    if (deleteButton) {
+        if (auto d = lf->getIcon(synth::theme::Icon::ModuleDelete))
+            deleteButton->setImages(d.get());
+    }
 }
 
 void ModMatrixComponent::ModRow::mouseEnter(const juce::MouseEvent& /*e*/) { owner.setHoveredRow(rowIndex); }
@@ -428,7 +485,11 @@ void ModMatrixComponent::ModRow::populateCombos() {
                         juce::PopupMenu instSourceSub;
                         for (int i = 0; i < module->getTotalNumOutputChannels(); ++i) {
                             int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)i);
-                            instSourceSub.addItem(itemId, "Out " + juce::String(i + 1));
+                            // The closed-combobox label is resolved purely from this leaf item's own
+                            // text (JUCE never concatenates ancestor submenu titles), so the module
+                            // name must live here too, or a multi-output module's box shows a bare
+                            // "Out N" with no way to tell which module it is.
+                            instSourceSub.addItem(itemId, displayName + " \u00B7 Out " + juce::String(i + 1));
                             sourceCombo.addItem(displayName + " Out " + juce::String(i + 1), itemId);
                         }
                         catSourceSub.addSubMenu(displayName, instSourceSub);
@@ -441,7 +502,10 @@ void ModMatrixComponent::ModRow::populateCombos() {
                     juce::PopupMenu instDestSub;
                     for (const auto& target : targets) {
                         int itemId = (int)((node->nodeID.uid << 8) | (uint32_t)target.channelIndex);
-                        instDestSub.addItem(itemId, target.name);
+                        // Same fix as the source leaves above: the closed combo box's label comes
+                        // only from this item's own text, never from the submenu title, so the
+                        // module name has to be baked in here too.
+                        instDestSub.addItem(itemId, displayName + " \u00B7 " + target.name);
                         destCombo.addItem(displayName + ": " + target.name, itemId);
                     }
                     catDestSub.addSubMenu(displayName, instDestSub);

@@ -10,6 +10,7 @@
 #include "GraphEditor.h"
 #include "LayoutUtil.h"
 #include "Theme/AppLookAndFeel.h"
+#include "ZoomFrozenCachedImage.h"
 #include <cmath>
 
 // ---- Default body-layout metrics (see layoutDefaultContent) ----------------------------------
@@ -149,7 +150,14 @@ ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGr
     createWavetableControls();
 
     setTitle(module->getName());
-    setBufferedToImage(true);
+    // Buffered to image (docs/layout.md §10) through our own cache so a zoom gesture can pin the
+    // raster scale — see ZoomFrozenCachedImage. Do NOT add setBufferedToImage() back anywhere on
+    // this component: JUCE asserts if a custom cache is already installed (juce_Component.cpp:567).
+    {
+        auto cache = std::make_unique<synth::ui::ZoomFrozenCachedImage>(*this);
+        rasterCache = cache.get();
+        setCachedComponentImage(cache.release()); // Component takes ownership
+    }
     createControls();
     createWavetableTabs(); // after createControls(): it groups the sliders/combos that call made
     applyHeaderButtonIcons();
@@ -668,9 +676,9 @@ constexpr int kTextBoxWidth = 50;
 constexpr int kTextBoxHeight = 20;
 constexpr int kKnobRow = kKnobLabelHeight + kSliderHeight;
 
-// getPortCenter puts input i at y = 30 (header) + 20 (MIDI-out offset) + i*20 + 20, and each
+// getPortCenter puts input i at y = 38 (header) + 20 (MIDI-out offset) + i*20 + 20, and each
 // label is drawn 10px above its jack with height 20 — so the last one ends 10px below its centre.
-constexpr int kPortFirstY = 70;
+constexpr int kPortFirstY = 78;
 constexpr int kPortStep = 20;
 constexpr int kPortLabelBottom = kPortFirstY + (kNumVisibleInputs - 1) * kPortStep + 16;
 
@@ -723,6 +731,13 @@ void ModuleComponent::reflectParameterValue(const juce::AudioProcessorParameter*
         return;
     }
 }
+
+void ModuleComponent::setRasterFrozen(bool frozen) {
+    if (rasterCache != nullptr)
+        rasterCache->setFrozen(frozen);
+}
+
+bool ModuleComponent::isRasterFrozen() const noexcept { return rasterCache != nullptr && rasterCache->isFrozen(); }
 
 // Right-click-any-knob -> "Automate '<Param>'". `param` may be null (a control this
 // component built without a real RangedAudioParameter behind it, e.g. the ExternalMidiModule
@@ -1514,7 +1529,7 @@ void ModuleComponent::updateLayout() {
 }
 
 int ModuleComponent::getContentTopY() {
-    int y = 30; // below the title bar
+    int y = 38; // below the title bar (header hairline at 24 + 8px breathing room + jack radius)
     if (module->acceptsMidi())
         y += 30; // the "Midi In"/"Midi Out" row
 
@@ -1685,7 +1700,7 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
 
     for (int i = 0; i < toggles.size(); ++i) {
         if (apply)
-            toggles[i]->setBounds(narrowX, y, narrowW, kRowHeight);
+            toggles[i]->setBounds(contentX, y, contentW, kRowHeight);
         y += kRowHeight + 2;
     }
 
@@ -1719,7 +1734,7 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
 
     if (freqResponseToggle) {
         if (apply)
-            freqResponseToggle->setBounds(narrowX, y, narrowW, kRowHeight);
+            freqResponseToggle->setBounds(contentX, y, contentW, kRowHeight);
         y += kRowHeight + 2;
     }
 
@@ -1731,13 +1746,13 @@ int ModuleComponent::layoutDefaultContent(bool apply) {
 
     if (spectrumToggle && spectrumToggle->isVisible()) {
         if (apply)
-            spectrumToggle->setBounds(narrowX, y, narrowW, kRowHeight);
+            spectrumToggle->setBounds(contentX, y, contentW, kRowHeight);
         y += kRowHeight + 2;
     }
 
     if (scopeToggle) {
         if (apply)
-            scopeToggle->setBounds(narrowX, y, narrowW, kRowHeight);
+            scopeToggle->setBounds(contentX, y, contentW, kRowHeight);
         y += kRowHeight + 2;
     }
 
@@ -1835,7 +1850,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
                                // MIDI Output (Top Right if produces midi)
     if (module->producesMidi()) {
         g.setColour(audioJackColour);
-        auto p = juce::Point<int>(getWidth() - 10, 30); // Top right, below header
+        auto p = juce::Point<int>(getWidth() - 10, 38); // Top right, below header
         g.fillEllipse(p.x - 5, p.y - 5, 10, 10);
         g.setColour(labelColour);
         g.drawText("Midi Out", p.x - 65, p.y - 5, 60, 10, juce::Justification::right, false);
@@ -1843,7 +1858,7 @@ void ModuleComponent::paint(juce::Graphics& g) {
     // MIDI Input (Top Left if accepts midi components)
     if (module->acceptsMidi()) {
         g.setColour(audioJackColour);
-        auto p = juce::Point<int>(10, 30); // Top left near header
+        auto p = juce::Point<int>(10, 38); // Top left near header
         g.fillEllipse(p.x - 5, p.y - 5, 10, 10);
         g.setColour(labelColour);
         g.drawText("Midi In", p.x + 10, p.y - 5, 60, 10, juce::Justification::left, false);
@@ -2023,12 +2038,12 @@ juce::Point<int> ModuleComponent::getPortCenter(int index, bool isInput) {
     }
 
     int yStep = 20;
-    int headerHeight = 30;
+    int headerHeight = 38;
 
     int portOffset = 0;
     if (module->producesMidi()) {
         portOffset = 20; // Additional offset for all ports if MIDI out is present, to avoid collision with MIDI Out at
-                         // (getWidth() - 10, 30)
+                         // (getWidth() - 10, 38)
     }
 
     // Clamp index to visible jack range so wires never terminate at a phantom y
@@ -2079,7 +2094,7 @@ std::optional<ModuleComponent::Port> ModuleComponent::getPortForPoint(juce::Poin
 
     // Check for MIDI Output at fixed top-right position
     if (module->producesMidi()) {
-        auto p = juce::Point<int>(getWidth() - 10, 30); // Matches paint()
+        auto p = juce::Point<int>(getWidth() - 10, 38); // Matches paint()
         if (localPoint.getDistanceFrom(p) < 10) {
             return Port{{p.x - 5, p.y - 5, 10, 10},
                         juce::AudioProcessorGraph::midiChannelIndex,
@@ -2090,7 +2105,7 @@ std::optional<ModuleComponent::Port> ModuleComponent::getPortForPoint(juce::Poin
 
     // MIDI Input detection (Top Left)
     if (module->acceptsMidi()) {
-        auto p = juce::Point<int>(10, 30); // Top left near header
+        auto p = juce::Point<int>(10, 38); // Top left near header
         if (localPoint.getDistanceFrom(p) < 10) {
             return Port{
                 {p.x - 5, p.y - 5, 10, 10}, juce::AudioProcessorGraph::midiChannelIndex, true, true}; // MIDI Input

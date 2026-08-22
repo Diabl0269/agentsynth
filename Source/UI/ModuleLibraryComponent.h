@@ -250,11 +250,17 @@ public:
     void toggleAllSections() { setAllSectionsCollapsed(!areAllSectionsCollapsed()); }
 
     void setAllSectionsCollapsed(bool collapsed) {
-        std::set<juce::String> next;
-        if (collapsed) {
-            for (const auto& entry : entries)
-                if (entry.kind == RowKind::Header)
-                    next.insert(entry.text);
+        // Starts from the CURRENT set rather than an empty one, so a subsection key (a plugin
+        // format group, keyed independently via subsectionKey()) survives a collapse-all /
+        // expand-all untouched — only top-level header keys are added or removed here.
+        std::set<juce::String> next = collapsedSections;
+        for (const auto& entry : entries) {
+            if (entry.kind != RowKind::Header)
+                continue;
+            if (collapsed)
+                next.insert(entry.text);
+            else
+                next.erase(entry.text);
         }
         if (next == collapsedSections)
             return;
@@ -350,6 +356,15 @@ public:
     // -------------------------------------------------------------------------
     // Pure static helpers — callable headlessly (no GUI / MessageManager needed)
     // -------------------------------------------------------------------------
+
+    /** Composite collapse-state key for a plugin-format sub-group (e.g. "VST3" under Plugins),
+     *  kept independent from the top-level header key so folding a format group never touches
+     *  (or is touched by) the Plugins header's own fold. The separator never round-trips through
+     *  the UI — it only appears inside collapsedSections / sectionProgress map keys and the
+     *  opaque StringArray persistence in MainComponent, which is already schema-free. */
+    static juce::String subsectionKey(const juce::String& section, const juce::String& subHeader) {
+        return section + " :: " + subHeader;
+    }
 
     /** Returns a one-line description for a known module name, or a generic
      *  fallback string for unknown names. */
@@ -514,18 +529,71 @@ public:
             rows.push_back({(int)i, y, kHeaderHeight});
             y += kHeaderHeight;
 
-            const int naturalHeight = (int)visibleChildren.size() * kItemHeight;
+            // Pass A (subsection-local): fold each plugin-format sub-group independently of the
+            // header's own fold, splitting visibleChildren into segments at each SubHeader. A
+            // segment with no SubHeader (e.g. the leading "Scan for plugins..." Action row) keeps
+            // every row at its natural kItemHeight. When no subsection is ever collapsed this
+            // degenerates to one localHeight==kItemHeight entry per visible child, in the same
+            // order — which is what keeps Pass B byte-identical to the old single-pass layout.
+            struct LocalRow {
+                size_t entryIndex;
+                int localHeight;
+            };
+            std::vector<LocalRow> localRows;
+            localRows.reserve(visibleChildren.size());
+            size_t vc = 0;
+            while (vc < visibleChildren.size()) {
+                const size_t entryIdx = visibleChildren[vc];
+                if (entries[entryIdx].kind != RowKind::SubHeader) {
+                    localRows.push_back({entryIdx, kItemHeight});
+                    ++vc;
+                    continue;
+                }
+
+                // The sub-header row itself is never folded by its own progress — only the
+                // section header above it can hide it.
+                localRows.push_back({entryIdx, kItemHeight});
+
+                const size_t childStart = vc + 1;
+                size_t childEnd = childStart;
+                while (childEnd < visibleChildren.size() &&
+                       entries[visibleChildren[childEnd]].kind != RowKind::SubHeader)
+                    ++childEnd;
+                const int childCount = (int)(childEnd - childStart);
+
+                const juce::String subKey = subsectionKey(entries[i].text, entries[entryIdx].text);
+                const float subProgress = filtering ? 0.0f : getSectionProgress(subKey);
+                const int subNatural = childCount * kItemHeight;
+                const int subBand = juce::roundToInt((float)subNatural * (1.0f - subProgress));
+
+                for (int c = 0; c < childCount; ++c) {
+                    const int localTop = c * kItemHeight;
+                    const int localHeight = juce::jlimit(0, kItemHeight, subBand - localTop);
+                    if (localHeight > 0)
+                        localRows.push_back({visibleChildren[childStart + (size_t)c], localHeight});
+                }
+
+                vc = childEnd;
+            }
+
+            // Pass B (header-level): identical shape to the old single-pass algorithm, generalized
+            // to sum/advance over Pass A's local heights instead of a flat kItemHeight per row.
+            int naturalHeight = 0;
+            for (const auto& localRow : localRows)
+                naturalHeight += localRow.localHeight;
             // Search forces matching sections open without touching collapse progress, so typing
             // does not fire the accordion (or persist a fold the user never asked for).
             const float progress = filtering ? 0.0f : getSectionProgress(entries[i].text);
             const int bandHeight = juce::roundToInt((float)naturalHeight * (1.0f - progress));
             const int bandTop = y;
 
-            for (size_t c = 0; c < visibleChildren.size(); ++c) {
-                const int rowTop = bandTop + (int)c * kItemHeight;
-                const int visibleHeight = juce::jlimit(0, kItemHeight, bandTop + bandHeight - rowTop);
+            int consumed = 0;
+            for (const auto& localRow : localRows) {
+                const int rowTop = bandTop + consumed;
+                const int visibleHeight = juce::jlimit(0, localRow.localHeight, bandTop + bandHeight - rowTop);
                 if (visibleHeight > 0)
-                    rows.push_back({(int)visibleChildren[c], rowTop, visibleHeight});
+                    rows.push_back({(int)localRow.entryIndex, rowTop, visibleHeight});
+                consumed += localRow.localHeight;
             }
 
             y = bandTop + bandHeight;
@@ -585,6 +653,17 @@ public:
         // change the bar's footprint and the width left for row text.
         applySearchEditorColours();
         updateScrollBar();
+    }
+
+    void parentHierarchyChanged() override {
+        // getLookAndFeel() is only guaranteed to reflect the FINAL (persisted) theme once this
+        // component is actually parented — MainComponent applies the persisted theme in its ctor
+        // BODY, after this component (a plain member) was already default-constructed against
+        // whatever theme was active at that earlier point (see MainComponent.cpp's ordering
+        // contract). Re-pull colours the moment we're parented, which always happens after that
+        // point. If a future change parents this component before the persisted-theme applyTheme()
+        // call, this fix would need to move too.
+        applySearchEditorColours();
     }
 
     void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override {
@@ -688,11 +767,17 @@ public:
 
                 // Sub-group label inside a section (e.g. "VST3" / "AudioUnit" under Plugins) — painted
                 // in the same muted style as a Header but smaller and indented, so it reads as a
-                // sub-level without competing with the section title. Non-clickable, no hover state.
+                // sub-level without competing with the section title. Clicking it folds just that
+                // format group, via the same chevron-plus-fold affordance as a Header (scaled down
+                // since it is a lesser hierarchy level), independently of the section's own fold.
                 if (entry.kind == RowKind::SubHeader) {
+                    const float chevronProgress =
+                        isSearchActive() ? 0.0f : getSectionProgress(subsectionKey(entry.section, entry.text));
+                    drawChevron(g, juce::Rectangle<float>(20.0f, (float)row.y + 8.0f, 6.0f, 6.0f), chevronProgress,
+                                mutedColour.withAlpha(0.6f));
                     g.setColour(mutedColour.withAlpha(0.6f));
                     g.setFont(juce::Font(juce::FontOptions(10.5f)));
-                    g.drawText(entry.text.toUpperCase(), 28, row.y, contentWidth - 40, kItemHeight - 4,
+                    g.drawText(entry.text.toUpperCase(), 32, row.y, contentWidth - 44, kItemHeight - 4,
                                juce::Justification::centredLeft);
                     continue;
                 }
@@ -788,7 +873,8 @@ public:
         // An unavailable row is not draggable, so it must not advertise the grab hand.
         if (hoveredIndex >= 0 && isDraggableEntry(hoveredIndex) && isEntryEnabled(hoveredIndex))
             setMouseCursor(juce::MouseCursor::DraggingHandCursor);
-        else if (topStripHovered || isHeaderEntry(entryUnderMouse) || isActionEntry(hoveredIndex))
+        else if (topStripHovered || isHeaderEntry(entryUnderMouse) || isSubHeaderEntry(entryUnderMouse) ||
+                 isActionEntry(hoveredIndex))
             setMouseCursor(juce::MouseCursor::PointingHandCursor);
         else
             setMouseCursor(juce::MouseCursor::NormalCursor);
@@ -823,8 +909,13 @@ public:
             return;
         }
 
-        if (entry.kind == RowKind::EmptyHint || entry.kind == RowKind::SubHeader)
+        if (entry.kind == RowKind::EmptyHint)
             return;
+
+        if (entry.kind == RowKind::SubHeader) {
+            toggleSection(subsectionKey(entry.section, entry.text));
+            return;
+        }
 
         // Click-activated rows (the scan command, and plugin rows, which support BOTH click-to-add
         // and drag-to-place) defer to mouseUp/mouseDrag. Module and snippet rows keep starting their
@@ -969,9 +1060,16 @@ private:
     float targetProgressFor(const juce::String& header) const { return isSectionCollapsed(header) ? 1.0f : 0.0f; }
 
     void snapSectionProgressToTargets() {
-        for (const auto& entry : entries)
+        for (const auto& entry : entries) {
+            juce::String key;
             if (entry.kind == RowKind::Header)
-                sectionProgress[entry.text] = targetProgressFor(entry.text);
+                key = entry.text;
+            else if (entry.kind == RowKind::SubHeader)
+                key = subsectionKey(entry.section, entry.text);
+            else
+                continue;
+            sectionProgress[key] = targetProgressFor(key);
+        }
     }
 
     /** Tweens every section from where it is now to where the logical state says it should be.
@@ -992,14 +1090,20 @@ private:
             vblankUpdater.emplace(this);
 
         // Snapshot the *current* values, so retargeting mid-flight eases on from where it is
-        // rather than snapping back to the start.
+        // rather than snapping back to the start. Headers and sub-headers (plugin format groups)
+        // ride the same single driver, keyed by their own collapse-state key.
         std::map<juce::String, float> from;
         std::map<juce::String, float> to;
         for (const auto& entry : entries) {
-            if (entry.kind != RowKind::Header)
+            juce::String key;
+            if (entry.kind == RowKind::Header)
+                key = entry.text;
+            else if (entry.kind == RowKind::SubHeader)
+                key = subsectionKey(entry.section, entry.text);
+            else
                 continue;
-            from[entry.text] = getSectionProgress(entry.text);
-            to[entry.text] = targetProgressFor(entry.text);
+            from[key] = getSectionProgress(key);
+            to[key] = targetProgressFor(key);
         }
 
         collapseAnim.start(
@@ -1068,6 +1172,10 @@ private:
 
     bool isHeaderEntry(int index) const {
         return index >= 0 && index < (int)entries.size() && entries[(size_t)index].kind == RowKind::Header;
+    }
+
+    bool isSubHeaderEntry(int index) const {
+        return index >= 0 && index < (int)entries.size() && entries[(size_t)index].kind == RowKind::SubHeader;
     }
 
     static synth::PluginIdentity identityForEntry(const Entry& entry) {

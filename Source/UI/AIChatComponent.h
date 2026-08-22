@@ -147,6 +147,17 @@ public:
     // Compact wait-time label for the AI role row ("340ms", "1.2s", "1m 5s").
     static juce::String formatResponseTime(int ms);
 
+    // Height (in px) needed to render `text` word-wrapped at `width` using `font`, measured with
+    // a juce::GlyphArrangement (the same wrapping primitive drawFittedText()/drawLabel() use
+    // under the hood), rounded up so a bounding box that lands exactly on a line boundary still
+    // gets the extra line rather than one short. Never less than one line's height. Shared by
+    // every element in this panel whose text length varies at runtime — PatchCard's diff/status
+    // box, hostedModeNotice, downgradeStripLabel — so none of them estimate their own height from
+    // a fixed single-line constant or a naive line count (the bug that clipped the "Preview
+    // unavailable..." status line and truncated the downgrade notice). Public + static, mirroring
+    // formatResponseTime()'s testable-helper precedent above.
+    static int computeWrappedTextHeight(const juce::Font& font, const juce::String& text, int width);
+
     // Testing hook: text of the in-flight "AI is thinking..." status label, or empty when not waiting.
     juce::String getWaitingStatusText() const;
 

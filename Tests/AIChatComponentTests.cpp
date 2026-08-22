@@ -8,6 +8,7 @@
 #include "../Source/Branding.h"
 #include "../Source/UI/AIChatComponent.h"
 #include "../Source/UI/AccountRow.h"
+#include <cmath>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -229,6 +230,39 @@ public:
 private:
     juce::String currentModel;
     int requestTimeoutMs = 240000;
+};
+
+// A fenced ```json block that PARSES fine but names a module type that doesn't exist —
+// AIStateMapper::applyJSONToGraph() (untrusted) rejects it, so AIIntegrationService::
+// computePatchPreview() reports diffAvailable=false and PatchCard falls back to its
+// "Preview unavailable - this patch may be rejected when applied." status line. Used to
+// reproduce the bug where that status line's real (wrapped) height was estimated from a fixed
+// line count rather than measured, and got clipped inside diffDisplay.
+class MockInvalidPatchProvider : public synth::AIProvider {
+public:
+    juce::String getProviderName() const override { return "MockInvalidPatchProvider"; }
+
+    void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
+        callback({"MockModel"}, true);
+    }
+
+    RequestId sendPrompt(const std::vector<synth::AIProvider::Message>&, CompletionCallback callback,
+                         const juce::var& = juce::var(), std::function<void(const juce::String&)> = {}) override {
+        AIResponse response;
+        response.success = true;
+        response.content = "```json\n"
+                           R"({"nodes":[{"id":1,"type":"TotallyNotARealModuleType"}],"connections":[]})"
+                           "\n```";
+        callback(response);
+        return {};
+    }
+
+    void cancel(RequestId) override {}
+    void setModel(const juce::String& name) override { currentModel = name; }
+    juce::String getCurrentModel() const override { return currentModel; }
+
+private:
+    juce::String currentModel;
 };
 
 // Every response carries a fixed conversationId (mirrors a Pro-plan hosted backend persisting the
@@ -1904,6 +1938,132 @@ TEST_F(AIChatComponentTest, RatingWithNoServerMessageIdDoesNotFireFeedbackPostEv
 
     chatComponent.setAccountService(nullptr);
     feedbackFile.getParentDirectory().deleteRecursively();
+}
+
+// ============================================================================
+// UX polish: bubble/card wrapped-height regressions (AIChatComponent::computeWrappedTextHeight())
+// ============================================================================
+
+// Direct, headless coverage of the pure helper every variable-length text element in this panel
+// now shares (PatchCard's diff/status box, hostedModeNotice, downgradeStripLabel) — see its header
+// doc comment. A width wide enough for one line must need roughly one line of height; forcing the
+// same text to wrap at a much narrower width must need several times that. The bug this replaced
+// was a FIXED single-line/line-count estimate that never grew with the actual wrapped height.
+TEST(AIChatComponentLayoutHelperTest, ComputeWrappedTextHeightGrowsWhenTextIsForcedToWrap) {
+    const juce::Font font(14.0f);
+    const juce::String longText = "Preview unavailable - this patch may be rejected when applied.";
+
+    const int oneLineHeight = synth::AIChatComponent::computeWrappedTextHeight(font, longText, 2000);
+    const int wrappedHeight = synth::AIChatComponent::computeWrappedTextHeight(font, longText, 80);
+
+    EXPECT_LE(oneLineHeight, (int)std::ceil(font.getHeight()) + 4);
+    EXPECT_GT(wrappedHeight, oneLineHeight * 2)
+        << "a long line forced to wrap across several rows at a narrow width must reserve "
+           "several times a single line's height, not the same fixed estimate";
+}
+
+TEST(AIChatComponentLayoutHelperTest, ComputeWrappedTextHeightIsNeverLessThanOneLine) {
+    const juce::Font font(12.0f);
+    EXPECT_GE(synth::AIChatComponent::computeWrappedTextHeight(font, "", 200), (int)font.getHeight());
+    EXPECT_GE(synth::AIChatComponent::computeWrappedTextHeight(font, "short", 200), (int)font.getHeight());
+}
+
+// Full-integration regression for the "Preview unavailable..." clipping bug: a real PatchCard
+// (reached only through the private MessageBubble it's nested inside) whose diffAvailable is
+// false must reserve enough height in the rendered TextEditor to show that status line in full,
+// not a fixed single-line box.
+TEST_F(AIChatComponentTest, PatchCardPreviewUnavailableStatusIsNotClipped) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<MockInvalidPatchProvider>());
+
+    juce::ApplicationProperties props;
+    configureTestAppProperties(props);
+    synth::AIChatComponent chatComponent(service, props);
+    // Narrow panel so the status line is forced to wrap across more than one row inside
+    // PatchCard's diff/status TextEditor — the case a line-count estimate used to clip.
+    chatComponent.setSize(260, 600);
+
+    juce::TextEditor* inputField = nullptr;
+    for (auto* child : chatComponent.getChildren())
+        if (auto* editor = dynamic_cast<juce::TextEditor*>(child))
+            inputField = editor;
+    ASSERT_NE(inputField, nullptr);
+    inputField->setText("give me a patch");
+    chatComponent.triggerSend();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+
+    auto* messageList = findMessageList(chatComponent);
+    ASSERT_NE(messageList, nullptr);
+
+    // findDescendantWithText() only covers Label/TextButton, and the status line renders inside a
+    // juce::TextEditor — walk the tree directly for it.
+    juce::TextEditor* statusEditor = nullptr;
+    std::function<void(juce::Component*)> findStatusEditor = [&](juce::Component* c) {
+        if (c == nullptr || statusEditor != nullptr)
+            return;
+        if (auto* editor = dynamic_cast<juce::TextEditor*>(c);
+            editor != nullptr && editor->getText().contains("Preview unavailable")) {
+            statusEditor = editor;
+            return;
+        }
+        for (auto* child : c->getChildren())
+            findStatusEditor(child);
+    };
+    findStatusEditor(messageList);
+    ASSERT_NE(statusEditor, nullptr);
+
+    const int wrappedHeight = synth::AIChatComponent::computeWrappedTextHeight(
+        statusEditor->getFont(), statusEditor->getText(), statusEditor->getWidth());
+    EXPECT_GE(statusEditor->getHeight(), wrappedHeight)
+        << "the status box must be tall enough to show its full wrapped text, not a fixed "
+           "single-line estimate";
+    // Confirms the width really did force a wrap (otherwise the assertion above would pass
+    // trivially even under the old, buggy line-count estimate).
+    EXPECT_GT(wrappedHeight, (int)std::ceil(statusEditor->getFont().getHeight()) + 4);
+}
+
+// Full-integration regression for the bottom-bar hint-reservation bug: downgradeStripLabel's text
+// embeds a variable-length date and can wrap at this panel's width, and a fixed single-line
+// reservation truncated it. AIChatComponent::resized() must reserve at least the label's own
+// measured wrapped height.
+TEST_F(AIChatComponentTest, BottomBarReservesFullHeightForWrappedDowngradeNotice) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<MockChatProvider>());
+    juce::ApplicationProperties props;
+    configureTestAppProperties(props);
+    synth::AIChatComponent chatComponent(service, props);
+    // Narrow panel so the downgrade sentence is forced to wrap.
+    chatComponent.setSize(260, 600);
+
+    auto tokenStore = std::make_unique<synth::InMemoryTokenStore>();
+    tokenStore->save("stored-refresh-token");
+    synth::AccountService accountService("https://mock-host:8787", makeSignInPerformer("free"), std::move(tokenStore));
+    chatComponent.setAccountService(&accountService);
+    signInWithPlan(accountService, "free");
+
+    auto localFake = std::make_unique<FakeHistorySource>();
+    auto cloudFake = std::make_unique<FakeHistorySource>();
+    cloudFake->deletionScheduledAtToReport = "2026-09-15T00:00:00.000Z";
+    chatComponent.setHistorySourcesForTesting(std::move(localFake), std::move(cloudFake));
+
+    chatComponent.simulateHistoryButtonClick();
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(100);
+
+    auto* downgradeLabel = findDirectChildLabelContaining(chatComponent, "lapsed");
+    ASSERT_NE(downgradeLabel, nullptr);
+    ASSERT_TRUE(downgradeLabel->isVisible());
+
+    const int wrappedHeight = synth::AIChatComponent::computeWrappedTextHeight(
+        downgradeLabel->getFont(), downgradeLabel->getText(), downgradeLabel->getWidth());
+    EXPECT_GE(downgradeLabel->getHeight(), wrappedHeight)
+        << "the downgrade notice must reserve its full wrapped height, not a fixed one-line guess";
+    EXPECT_GT(wrappedHeight, (int)std::ceil(downgradeLabel->getFont().getHeight()) + 4)
+        << "the notice's text must actually need more than one line at this width, or the "
+           "assertion above passes trivially";
+
+    chatComponent.setAccountService(nullptr);
 }
 
 #if SYNTH_ENABLE_TIMELINE

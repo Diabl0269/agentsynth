@@ -160,7 +160,7 @@ Cmd+Z once restores every module to its pre-arrange position.
 The application chrome is carved out of `MainComponent::resized()` — the single canonical layout method. It slices top→bottom:
 
 ```
-┌─────────────────────────────────┐  ← toolbar strip  (height: Metrics::toolbarHeight = 36 px)
+┌─────────────────────────────────┐  ← toolbar strip  (height: Metrics::toolbarHeight = 44 px)
 │  [Lib] [Save][Load][Cfg][⟲][⟳][⬜]   ···   [Matrix][AI]  │
 ├──────────┬──────────────────────┤
 │  Library │                      │  ← library sidebar  (width: Metrics::librarySidebarWidth = 200 px, or 0 when hidden)
@@ -198,13 +198,39 @@ if (toolbarNarrowMode_ != prevNarrow)
 
 `applyToolbarIcons()` is also called unconditionally once at the end of `initialiseCommon()` and after every theme switch (via `changeListenerCallback`).
 
+**Sub-group visual grouping**: `ToolbarComponent`'s local `groupOf(slot)` helper maps each `Slot`
+to the sub-group it documents, and `layoutButtons()` inserts a 12px spacer `FlexItem` at every
+sub-group boundary within the left/right loops; `paint()` draws a 1px border-token hairline at the
+midpoint of each intra-section sub-group gap (using the buttons' own post-layout bounds, guarded on
+non-null && `isVisible()`), excluding the left/right section boundary (the existing `withFlex(1.0)`
+spacer). No-ops when the `LookAndFeel` isn't the themed `AppLookAndFeel` (headless test runner).
+
+**Toggle pills**: `applyToolbarIcons()` and `MainComponent::setLibraryVisible()` both call
+`setToggleState(..., juce::dontSendNotification)` on their panel-toggle button (Library, Minimap,
+ModMatrix, AiPanel, Timeline under its `#if` guard) so the button's toggle state always matches
+panel visibility — always `dontSendNotification`, never `setClickingTogglesState`, so a button's
+own `onClick` never double-fires. The pill's
+hover/press/toggled-on paint states are fully owned by `AppLookAndFeel::drawDrawableButton`
+rather than delegated to `LookAndFeel_V4::drawDrawableButton` — the stock `LookAndFeel_V2` base
+does an unconditional flat `g.fillAll()` keyed only on toggle state, with no hover/press
+distinction and no rounding. The toggled-on state is a ~13/15/20% (rest/hover/press) accent wash
+with a 0.35-alpha 1px stroke — an "active" tint, not a filled button — and icon+label colour steps
+through a `textMuted → textPrimary (hover/press) → accent (on)` / `textDisabled` ladder: the label
+in `drawDrawableButton` (fixed 11px, bottom-docked with a 6px pad, replacing the stock formula
+that starved it at `min(16, 25%·height)`), the icon via tinted `Drawable` clones built in
+`MainComponent::applyToolbarIcons()` (`retintIcons()` tints the base `textMuted`; hover/on
+variants are `replaceColour`'d and wired through `setImages`' state slots). A uniform
+`DrawableButton::setEdgeIndent(8)` on all toolbar buttons is what keeps icon optical size
+(~17-19px) consistent regardless of button width — height, not width, is the binding constraint
+in `getImageBounds()`.
+
 ### Metrics layout tokens (code-only)
 
 The following `Metrics` struct fields govern chrome layout. They are **not parsed from user JSON** — a user theme may not override them. `ThemeLoader` silently ignores them (unknown-key forward-compatibility). Their values come from the C++ struct defaults only.
 
 | Token | Value | Meaning |
 |---|---|---|
-| `toolbarHeight` | 36 | Toolbar strip height (px) |
+| `toolbarHeight` | 44 | Toolbar strip height (px) — sized so an ~18px icon and an 11px label fit with real breathing room (36px starved the label to ~7-9px via `DrawableButton`'s built-in geometry) |
 | `statusBarHeight` | 24 | Status bar strip height (px) |
 | `controlPadding` | 4 | Inset around toolbar buttons (px) |
 | `minWindowWidth` | 480 | Narrow-mode breakpoint (= minimum window width) |
@@ -273,6 +299,13 @@ Typing a query (trimmed, case-insensitive substring):
 
 Escape clears the field. `getDraggableModuleNames()` is unfiltered — callers that instantiate via the factory must not see a search-shrunk catalogue.
 
+The search field's `TextEditor` colours are re-applied in `parentHierarchyChanged()`, in addition
+to `lookAndFeelChanged()`. `MainComponent`'s ctor applies the persisted theme in its ctor *body*,
+after `moduleLibrary` (a plain member) was already default-constructed against whatever theme was
+active before that — so without this, the field showed stale colours until the next theme switch.
+`parentHierarchyChanged()` fires when `MainComponent::initialiseCommon()` calls
+`addAndMakeVisible(moduleLibrary)`, which always runs after that ctor-body `applyTheme()` call.
+
 ### ModMatrixComponent chrome
 
 `Source/UI/ModMatrixComponent.h/.cpp` paints rows with the following visual rules:
@@ -282,6 +315,28 @@ Escape clears the field. `getDraggableModuleNames()` is unfiltered — callers t
 - **Hover highlight**: the currently hovered row is tinted with `theme.colors.accent.withAlpha(0.10f)`, overriding the zebra base
 - **Hover tracking**: `ModRow::mouseEnter` calls `owner.setHoveredRow(rowIndex)`; `ModRow::mouseExit` calls `owner.setHoveredRow(-1)` only when that row still owns the hover, avoiding races when the cursor moves between rows. The `hoveredRow_` member defaults to `-1` (no hover)
 - **Static helper**: `static bool isZebraRow(int rowIndex) noexcept` — exposed for unit tests
+- **Column alignment**: header labels and `ModRow`'s combo columns share `kRowNumColW`(30) /
+  `kSourceColFrac`(0.30f) / `kDestColFrac`(0.35f) / `kGutter`(8) constants on `ModMatrixComponent`,
+  so they can't drift apart
+- **Row separator**: a 1px `theme.colors.border` hairline is painted at the bottom of every row (in
+  addition to zebra/hover), and above the footer band
+- **Grouped-menu labels bake in the module name**: the closed `ComboBox`'s label resolves ONLY from
+  the matching leaf item's own text (JUCE never concatenates ancestor submenu titles), so a
+  multi-output/multi-target module's nested source/dest submenu leaves are text like
+  `"<Module> · Out N"` / `"<Module> · <target>"`, not a bare `"Out 2"`. `updateRowsFromGraph()`
+  re-populates every row's combos (`populateCombos()`) BEFORE re-applying its selection
+  (`refresh()`), because `populateCombos()` clears the combo box as a side effect of rebuilding it.
+- **Bypass/delete controls are `DrawableButton`** (`Icon::ModuleBypass`/`Icon::ModuleDelete`,
+  `ImageFitted`), not `TextButton` — retinted via `ModRow::applyButtonIcons()`, called from the
+  constructor and from `ModRow::lookAndFeelChanged()`, mirroring
+  `ModuleComponent::applyHeaderButtonIcons()`. The bypass-active state uses
+  `juce::DrawableButton::backgroundOnColourId` (a `TextButton`-only id would be ignored by
+  `DrawableButton`'s look-and-feel path).
+- **Amount readout**: a small `amountValueLabel` next to the amount slider shows the current value
+  to 2 decimals, updated via the slider's `onValueChange` plus one explicit push right after
+  `SliderParameterAttachment` construction (its constructor does not itself fire `onValueChange`).
+- The empty-state message ("No modulations active…") now draws inside the post-header/footer
+  `area` rect, not `getLocalBounds()`, so it no longer overlaps the title/header bands.
 
 ### ModuleComponent header button layout
 
@@ -297,6 +352,10 @@ The header area of each module card (`Source/UI/ModuleComponent.cpp`) contains `
 `requestDeleteModule(NodeID)` is the canonical delete entry point — `deleteButton.onClick` delegates here.
 
 `applyHeaderButtonIcons()` retints the header buttons from the active `AppLookAndFeel`. It is null-guarded: when the LnF cast fails (headless tests), the function returns early and buttons remain imageless but functional. `lookAndFeelChanged()` calls `applyHeaderButtonIcons()` so icons update on theme switch.
+
+The header title text itself is drawn by `AppLookAndFeel::drawModulePanel()` with an asymmetric
+inset — `header.withTrimmedLeft(22.0f)` — so the activity LED (`fillEllipse(6, 8, 8, 8)`, x = [6,14])
+never overlaps the title, regardless of whether the LED is currently lit.
 
 ### Panel collapse and persistence
 
@@ -343,20 +402,45 @@ content was drawn on top of the lowest port labels.
 | `kWaveformHeight` | 72 | Sampler waveform overview |
 | `kPortLabelClearance` | 15 | gap below the lowest jack before body content starts |
 
+Generic bool-parameter toggles, and the `freqResponse`/`spectrum`/`scope` show/hide toggles, lay
+out at full `contentX`/`contentW` (flush-left with the knob grid), not the centred
+`narrowX`/`narrowW` band — a toggle's label reads better flush-left than centred in a narrow
+column.
+
 **Body content always starts below every jack.** `getContentTopY()` derives that y from
 `getPortCenter()` — the same function that anchors wires — rather than recomputing the port
 geometry, so content can never land on a port label again. Because the body is below the ports, it
 does not need the narrow gutters that used to keep it clear of the port labels, which is what makes
 three knobs per row fit inside the 280 px card.
 
-Three columns instead of two removes a knob row from most modules. Measured heights before → after:
-Oscillator 530 → 449, Filter 570 → 487, LFO 440 → 353, Sampler 750 → 657. A few short modules got
-*taller* (VCA 200 → 245, Noise 250 → 293, Poly MIDI 100 → 123) — those are the overlap fix, not
-padding: their content used to start at y=60 while the first jack sits at y=70.
+The header-to-first-port gap also grew from 1 px to 9 px (base header offset constant `30 → 38` in
+both `getContentTopY()` and `getPortCenter()`), giving the MIDI In/Out row breathing room under the
+header hairline — every height below already includes that +8 px.
 
-`GraphEditor::estimateModuleSize()` mirrors these heights for the library drag ghost.
-`ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents` constructs every library-offered
-type and fails if the table drifts, so the ghost cannot lie about where a module will land.
+Three columns instead of two removes a knob row from most modules; the header-offset shift above
+adds a further +8 px on top. Measured heights (`GraphEditor::estimateModuleSize()` mirrors these
+for the library drag ghost; `ModuleComponentTest.EstimatedModuleSizesMatchTheRealComponents`
+constructs every library-offered type and fails if this table drifts from what
+`layoutDefaultContent()` actually produces):
+
+| Module | Height (px) | Module | Height (px) |
+|---|---|---|---|
+| Oscillator | 553 | Sample & Hold | 571 |
+| Filter | 463 | Comparator | 205 |
+| LFO | 361 | Sampler | 665 |
+| VCA | 273 | Chorus / Phaser / Flanger | 297 |
+| ADSR | 359 | Bitcrusher | 343 |
+| Poly MIDI | 205 | Pitch Shifter | 487 |
+| Distortion | 343 | Compressor | 257 |
+| Ring Modulator | 411 | Limiter | 181 |
+| Delay | 257 | Voice Mixer | 321 |
+| Reverb | 257 | External MIDI | 146 |
+| Noise | 301 | Rec Tap / Track Audio / Hosted Plugin | 131 |
+| Envelope Follower | 315 | Math | 259 |
+
+Unchanged: Sequencer / PolySequencer 406, MidiKeyboard 150, Macros (tracks its `Knobs` count),
+Attenuverter (square, `kNarrowWidth`), Wavetable 554, Parametric EQ 592, AudioInput / AudioOutput
+(100 px floor).
 
 ### Modules that resize at runtime
 
@@ -609,7 +693,7 @@ same for library-sidebar drag-ins, using `estimateModuleSize()` for the ghost fo
 `itemDropped` now calls `finalizeModuleDrag(newComp)` on the newly created `ModuleComponent`
 after `updateComponents()` builds it. This means the final position uses the module's **real
 component size** (not the size estimate) for the anti-overlap collision test, so tall modules
-like Oscillator (530 px) or Filter (570 px) always land correctly even if the ghost preview used
+like Oscillator (553 px) or Sampler (665 px) always land correctly even if the ghost preview used
 a slightly different footprint.
 
 ---
@@ -820,7 +904,8 @@ The final size is pinned by `EstimatedModuleSizesMatchTheRealComponents`; `Wavet
 
 Guidelines to preserve smooth frame rates:
 
-- **`ModuleComponent` uses `setBufferedToImage(true)`**. Each module card is composited as a cached image. The `GraphEditor` 30 Hz connection animation blits these cached images rather than re-running JUCE text layout and parameter read on every animation frame. **Do not reintroduce unconditional `repaint()` calls in `timerCallback` on module components or their always-visible children.**
+- **`ModuleComponent` is buffered to an image via `synth::ui::ZoomFrozenCachedImage`** (`Source/UI/ZoomFrozenCachedImage.h`), NOT raw `setBufferedToImage(true)`. JUCE's standard cached image keys on the *accumulated* device scale (`zoomLevel × deviceScale`), so every wheel tick used to re-rasterize every visible card. During a zoom gesture, `GraphEditor` freezes each card's raster scale (`setModuleRasterFrozen(true)`) — the existing image is resampled, not re-rendered — and thaws `kZoomSettleMs` (140 ms) after the last zoom event with exactly one crisp re-render. Never call `setBufferedToImage()` on `ModuleComponent` — JUCE asserts and silently deletes the custom cache. The `GraphEditor` 30 Hz connection animation blits these cached images rather than re-running JUCE text layout and parameter read on every animation frame. **Do not reintroduce unconditional `repaint()` calls in `timerCallback` on module components or their always-visible children.**
+- **`buildVisibleCables()` is memoized.** `GraphEditor::repaintCanvas()` is the single "canvas changed" seam that drops the memo and repaints (`content.repaint()`); any new repaint of the canvas content must go through `repaintCanvas()`, never `content.repaint()` directly.
 - **Gated 15 Hz repaint**: `ModuleComponent::timerCallback` repaints only when the display needs to change — specifically when RMS level changes, active modulation routing changes, or the sequencer step index changes. The timer runs at 15 Hz (`startTimerHz(15)`).
 - **Single re-skin pass on theme switch**: `AppLookAndFeel::applyTheme()` → `sendLookAndFeelChangeMessage()` → one `repaint()`. No timer is started and no continuous repaint is added during or after a theme switch.
 - **`applyToolbarIcons()` is gated**: cloning `Drawable` objects is expensive. The call is restricted to narrow-mode transitions in `MainComponent::resized()` — not executed on every resize frame. See §5 for the gate logic.
@@ -897,6 +982,8 @@ Composes tooltip text with an optional keyboard shortcut hint appended in `[brac
 | **Preset-load feedback** | Status bar text updated during load; no spinner | `MainComponent` → `StatusBarComponent` |
 | **AI request Cancel + spinner** | Cancel button visible while a request is in flight; pulsing "thinking" spinner (time-bounded — stops on completion or cancel, confined to its region) | `AIChatComponent` |
 | **Timeline playhead** | 30 Hz vertical position line, **playing only**, repainting only the strip between its old and new x | `TimelinePlayheadOverlay` (TL5-4) |
+| **Zoom settle debounce** | `zoomSettleAnim`: a DEBOUNCE `AnimationDriver` (140 ms, `kZoomSettleMs`), no-op `onUpdate` — zero repaints while running, all the work happens in `onComplete` (thaws the frozen card rasters) | `GraphEditor` |
+| **Toolbar toggle pill** | Instant state change (accent pill when on), no timer/animation — driven by `applyToolbarIcons()`'s / `setLibraryVisible()`'s `setToggleState(dontSendNotification)` calls | `ToolbarComponent` |
 
 ### Time-bounded animation rule
 
@@ -908,6 +995,11 @@ There are exactly **two** permitted exceptions, and both are bounded by an *acti
 |---|---|---|---|
 | AI thinking spinner (`AIChatComponent::SpinnerDot`) | a network request is in flight | its own 8×8 component | on completion or cancel |
 | Timeline playhead (`TimelinePlayheadOverlay`) | the transport is PLAYING | a strip a few px wide, spanning the panel's ruler + lanes | on stop/pause, with one final strip |
+
+`zoomSettleAnim` (§10) is **not** a third exception: it is a normal time-bounded `AnimationDriver`
+that restarts on every zoom event (the restart-on-event IS the debounce) and its `onUpdate` is a
+no-op, so it fires zero repaints of its own — only `onComplete` does one-time work (thawing the
+raster freeze).
 
 Never add:
 - Continuous `timerCallback` repaints on `ModuleComponent` or its children outside the existing gated 15 Hz gate.
@@ -972,7 +1064,7 @@ Agent Synth provides **Figma-style smart alignment guides** while dragging modul
 
 ### Configuration
 
-A toggle is available in `Settings → Appearance → Show Alignment Guides`. It persists as `alignmentGuidesEnabled` in `juce::ApplicationProperties`.
+A toggle is available in `Settings → Preferences → Show Alignment Guides`. It persists as `alignmentGuidesEnabled` in `juce::ApplicationProperties`.
 
 | Toggle State | Effect |
 |---|---|
@@ -1225,10 +1317,18 @@ Every section header is now a disclosure toggle, plus a **COLLAPSE ALL / EXPAND 
 - **Rows carry a `RowKind`** (`Header` / `SubHeader` / `Module` / `Snippet` / `Plugin` / `Action` /
   `EmptyHint`) and their owning `section`, so collapsing is just "skip rows whose section is
   collapsed". Headers stay visible. The Plugins section sub-groups its rows by format (`VST3`,
-  `AudioUnit`, …) behind a non-clickable `SubHeader` row per format — sorted alphabetically by
-  format, name-sorted within a group, and shown even for a single format — so a scan with more than
-  one plugin format doesn't read as one undifferentiated list; collapsing the section hides its
+  `AudioUnit`, …) behind a `SubHeader` row per format — sorted alphabetically by format,
+  name-sorted within a group, and shown even for a single format — so a scan with more than one
+  plugin format doesn't read as one undifferentiated list; collapsing the section hides its
   sub-labels along with everything else.
+- **`SubHeader` rows are independently collapsible**, keyed as `<Section> :: <SubHeader>` composite
+  strings via `ModuleLibraryComponent::subsectionKey(section, subHeader)` (a public static helper),
+  kept separate from the section's own `Header` key so folding a format group never touches (or is
+  touched by) the section header's fold. A `SubHeader`'s fold rides the same single
+  `AnimationDriver` as header folds, and persists through the same opaque `collapsedSections`
+  StringArray as header keys — no schema change. `setAllSectionsCollapsed()` (COLLAPSE ALL / EXPAND
+  ALL) starts from the current `collapsedSections` set and only adds/removes top-level `Header`
+  keys, so a subsection fold survives a Collapse All / Expand All untouched.
 - **The Snippets section stays visible when empty**, showing a "No snippets yet" hint, so the feature
   is discoverable before the first snippet exists.
 - **Chevrons are `juce::Path` triangles, not glyphs** — `▾`/`▸` coverage is not guaranteed across the
@@ -1350,12 +1450,19 @@ view, not on the raw edge. `GraphEditor::CableId` is that identity
 
 `GraphEditor::buildVisibleCables()` returns every drawn cable, in paint order, as
 `VisibleCable` records carrying geometry, signal kind, source category, activity and bypass
-state. **Both** `GraphContentComponent::paint()` and hit-testing consume that one list.
+state. **Both** `GraphContentComponent::paint()` and hit-testing consume that one list — they
+share the same literal `std::vector`, not two independently-built ones.
 
 This is load-bearing: computing the drawn curve and the clickable curve separately means they
 drift apart the first time either is tweaked, and clicks silently miss the wire. For the same
 reason the bezier lives in exactly one place, `GraphEditor::buildCablePath()`, which must stay
-identical to `AppLookAndFeel::drawConnectionWire`'s default curve.
+identical to `AppLookAndFeel::drawConnectionWire`'s default curve. Cable geometry is canvas-space,
+so zoom/pan alone can never move a cable — only a graph edit invalidates it.
+
+`buildVisibleCables()` returns a **memoized `const&`**: it is rebuilt only when
+`GraphEditor::repaintCanvas()` invalidates the memo (see §10), not on every call. The returned
+reference must never be stored across a `repaintCanvas()`, a `timerCallback()` or a graph edit —
+any of those can invalidate and rebuild the backing vector.
 
 ### Hit-testing
 
@@ -1482,7 +1589,7 @@ rebuilding the full model on every drag frame would re-walk every graph edge for
 | `getVisibleCanvasRect()` | The canvas rect currently visible — inverse of the content transform applied to `getLocalBounds()` |
 | `centreViewOn(canvasPoint)` | Pans so `canvasPoint` is centred; zoom unchanged |
 | `zoomAroundCentre(wheelDelta)` | `applyZoomAt` anchored on the visible area's centre |
-| `buildMinimapModel()` | Walks every module and `buildVisibleCables()` into a `MinimapModel` snapshot |
+| `buildMinimapModel()` | Walks every module, and reuses the `buildVisibleCables()` memo (no separate enumeration walk) for the cable list, into a `MinimapModel` snapshot |
 
 ### Toolbar, shortcut, persistence
 

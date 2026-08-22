@@ -51,18 +51,22 @@
 // fails if this table drifts from what layoutDefaultContent() actually produces.
 juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Oscillator")
-        return {280, 545}; // +96 in #219: an Audio R output jack row and the Pan knob row
+        return {280, 553}; // +96 in #219: an Audio R output jack row and the Pan knob row
+                           // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Filter")
         // +1 knob row: the Level knob took it from 3 sliders to 4 (issue #122).
         // +20 in #219: the Audio L/R input pair adds a jack row to the port gutter.
         // −128: frequency-response chart is opt-in via "Show Response" (was always reserved).
-        return {280, 455};
+        // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
+        return {280, 463};
     if (typeName == "LFO")
-        return {280, 353};
+        return {280, 361}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "VCA")
-        return {280, 265}; // +20 in #219: the Audio L/R input pair adds a jack row
+        return {280, 273}; // +20 in #219: the Audio L/R input pair adds a jack row
+                           // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "ADSR" || typeName == "Amp Env" || typeName == "Filter Env")
-        return {280, 351}; // sliders below 2 jacks + threshold control + Poly toggle
+        return {280, 359}; // sliders below 2 jacks + threshold control + Poly toggle
+                           // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName.containsIgnoreCase("Sequencer") && !typeName.containsIgnoreCase("Poly"))
         // +26 (one toggle row) for the Sync to Transport switch, appended below the step grid.
         return {synth::LayoutUtil::kDoubleWidth, 406};
@@ -74,16 +78,18 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         return {synth::LayoutUtil::kDoubleWidth, 150};
     if (typeName == "Poly MIDI" || typeName == "PolyMidi")
         // +48 (one combo row) from the issue #198 Voice Steal selector, then +26 (one toggle row)
-        // for the Vel → Gate switch.
-        return {280, 197};
+        // for the Vel → Gate switch. +8: header-to-first-port gap grew 1px -> 9px (base 30->38).
+        return {280, 205};
     if (typeName == "Distortion")
-        return {280, 335};
+        return {280, 343}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Ring Modulator")
-        return {280, 403};
+        return {280, 411}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Delay")
-        return {280, 249}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
+        return {280, 257}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
+                           // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Reverb")
-        return {280, 249}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
+        return {280, 257}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
+                           // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "AudioInput" || typeName == "Audio Input")
         // Height tracks the DEVICE's input channel count at runtime (one jack per channel, up to
         // AudioInputModule::kMaxChannels — eight jacks measure 217px, pinned by
@@ -97,45 +103,47 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Attenuverter")
         return {synth::LayoutUtil::kNarrowWidth, synth::LayoutUtil::kNarrowWidth};
     if (typeName == "Noise")
-        return {280, 293};
+        return {280, 301}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Envelope Follower")
         // Noise's control count (3 floats + a choice) plus a taller port gutter for 4 input jacks.
-        return {280, 307};
+        // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
+        return {280, 315};
     if (typeName == "Math")
-        return {280, 251};
+        return {280, 259}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Sample & Hold")
-        return {280, 563};
+        return {280, 571}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Comparator")
-        return {280, 197};
+        return {280, 205}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Macros")
         // Height tracks the bank's "Knobs" count at runtime; the drop estimate uses the default.
         return {synth::LayoutUtil::kSingleWidth,
                 synth::LayoutUtil::macroBankHeight(MacroControlModule::kDefaultMacros)};
     if (typeName == "Sampler")
-        return {280, 657};
+        return {280, 665}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Wavetable")
         // Double-width since issue #180. The 16 CV jacks run in two left-hand columns and the 23
         // controls are paged behind a tab strip (only Position and Warp stay pinned), so neither
         // the gutter nor the control count sets the height on its own.
         return {synth::LayoutUtil::kDoubleWidth, 554};
     if (typeName == "Chorus" || typeName == "Phaser" || typeName == "Flanger")
-        return {280, 289};
+        return {280, 297}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Bitcrusher")
-        return {280, 335};
+        return {280, 343}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Pitch Shifter")
-        return {280, 479}; // Dual I/O off: one Audio jack + Level knob row
+        return {280, 487}; // Dual I/O off: one Audio jack + Level knob row
+                           // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Parametric EQ")
         // Double-width card: a 150px response curve set between the port-label gutters, then a
         // 4-column band grid (on/off + Freq/Gain/Q). Mirrors parametricEQHeight().
         return {synth::LayoutUtil::kDoubleWidth, 592};
     if (typeName == "Compressor")
-        return {280, 249};
+        return {280, 257}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Limiter")
-        return {280, 173};
+        return {280, 181}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Voice Mixer")
-        return {280, 313};
+        return {280, 321}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "External MIDI")
-        return {280, 138};
+        return {280, 146}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Track In")
         // Param-less card (only the inherited bypass, which lives in the header), no jacks: the
         // 100 px floor in updateLayout is what sets the height. Not in the library — the timeline's
@@ -146,13 +154,15 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         // header), but it has two jacks a side, so the port gutter — not the 100 px floor — sets
         // the height. Also library-less: the record flow places it. Measured against the real card
         // by RecordTapTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
-        return {280, 123};
+        // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
+        return {280, 131};
     if (typeName == "Track Audio")
         // Same shape as Rec Tap — no body controls, jacks setting the height — but with outputs
         // only. Library-less like the other two internal nodes: the add-track flow places it.
         // Measured against the real card by
         // AudioClipPlaybackTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
-        return {280, 123};
+        // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
+        return {280, 131};
     if (typeName == "Hosted Plugin")
         // Bypass and mute live in the header; the only body content is the "Open Editor" button,
         // one jack a side while empty. The card grows with the loaded plugin's real port count,
@@ -160,7 +170,8 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
         // finalizeNewDrop re-resolves against the real component anyway. Library-less until the
         // scan list and load UX ship. Measured against the real card by
         // HostedPluginTest.AbsentFromTheLibraryWithAPinnedSizeEstimate.
-        return {280, 123};
+        // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
+        return {280, 131};
     return {280, 360};
 }
 
@@ -252,7 +263,21 @@ synth::ui::ModuleCategory categoryForNode(juce::AudioProcessorGraph::Node* node)
 }
 } // namespace
 
-std::vector<GraphEditor::VisibleCable> GraphEditor::buildVisibleCables() {
+const std::vector<GraphEditor::VisibleCable>& GraphEditor::buildVisibleCables() {
+    if (!cablesCacheValid) {
+        cablesCache = rebuildVisibleCables();
+        cablesCacheValid = true;
+        ++cableRebuildCount;
+    }
+    return cablesCache;
+}
+
+void GraphEditor::repaintCanvas() {
+    cablesCacheValid = false;
+    content.repaint();
+}
+
+std::vector<GraphEditor::VisibleCable> GraphEditor::rebuildVisibleCables() {
     std::vector<VisibleCable> cables;
     auto& graph = audioEngine.getGraph();
     auto& moduleComponents = content.getModules();
@@ -302,7 +327,11 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::buildVisibleCables() {
     }
 
     // ---- Pass 1: raw graph edges (audio, MIDI, attenuverter chains) ----
-    for (auto& connection : graph.getConnections()) {
+    // Hoisted once: getConnections() returns std::vector<Connection> BY VALUE, so calling it again
+    // inside the attenuverter scan below would copy the whole edge list per attenuverter-terminated
+    // edge (O(E^2) with allocation). Reuse this copy for both passes.
+    const auto connections = graph.getConnections();
+    for (auto& connection : connections) {
         auto* node1 = graph.getNodeForId(connection.source.nodeID);
         auto* node2 = graph.getNodeForId(connection.destination.nodeID);
         if (!node1 || !node2)
@@ -353,7 +382,7 @@ std::vector<GraphEditor::VisibleCable> GraphEditor::buildVisibleCables() {
         if (dynamic_cast<AttenuverterModule*>(node2->getProcessor()) != nullptr) {
             juce::AudioProcessorGraph::Node* realDstNode = nullptr;
             int realDstPort = 0;
-            for (auto& c : graph.getConnections()) {
+            for (auto& c : connections) {
                 if (c.source.nodeID == node2->nodeID) {
                     realDstNode = graph.getNodeForId(c.destination.nodeID);
                     realDstPort = c.destination.channelIndex;
@@ -473,12 +502,12 @@ void GraphEditor::setCableColourMode(synth::ui::CableColourMode mode) {
     if (cableColourMode == mode)
         return;
     cableColourMode = mode;
-    content.repaint();
+    repaintCanvas();
 }
 
 void GraphEditor::setCableColourOverrides(const synth::ui::CableColourOverrides& overrides) {
     cableColourOverrides = overrides;
-    content.repaint();
+    repaintCanvas();
 }
 
 void GraphEditor::disconnectCable(const VisibleCable& cable) {
@@ -492,7 +521,7 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
             undoManager->recordStructuralChange(graph, [this, attenId] { audioEngine.removeModRouting(attenId); });
         else
             audioEngine.removeModRouting(attenId);
-        content.repaint();
+        repaintCanvas();
         return;
     }
 
@@ -540,7 +569,7 @@ void GraphEditor::disconnectCable(const VisibleCable& cable) {
         removeEdges();
 
     hoveredCableId.reset();
-    content.repaint();
+    repaintCanvas();
 }
 
 void GraphEditor::GraphContentComponent::paint(juce::Graphics& g) {
@@ -891,7 +920,7 @@ void GraphEditor::beginConnectionDrag(ModuleComponent* sourceModule, int channel
     dragSourceIsInput = isInput;
     dragSourceIsMidi = isMidi;
     dragCurrentPos = screenPos;
-    content.repaint();
+    repaintCanvas();
 }
 
 void GraphEditor::dragConnection(juce::Point<int> screenPos) {
@@ -912,7 +941,7 @@ void GraphEditor::dragConnection(juce::Point<int> screenPos) {
         comp->setModDropTargetChannel(target);
     }
 
-    content.repaint();
+    repaintCanvas();
 }
 
 void GraphEditor::clearModDropTargets() {
@@ -1014,7 +1043,7 @@ void GraphEditor::endConnectionDrag(juce::Point<int> screenPos) {
     isDraggingConnection = false;
     dragSourceModule = nullptr;
     clearModDropTargets();
-    content.repaint();
+    repaintCanvas();
 }
 
 GraphEditor::SmartConnectionMode GraphEditor::smartConnectionModeFromString(const juce::String& s) {
@@ -1430,7 +1459,7 @@ void GraphEditor::refreshSmartSuggestions() {
 
     if (!dragPreviewActive || dragPreviewGhost.isEmpty() || !shouldOfferSmartConnections()) {
         if (previous != smartSuggestions)
-            content.repaint();
+            repaintCanvas();
         return;
     }
 
@@ -1447,7 +1476,7 @@ void GraphEditor::refreshSmartSuggestions() {
     }
     if (ghostProc == nullptr) {
         if (previous != smartSuggestions)
-            content.repaint();
+            repaintCanvas();
         return;
     }
 
@@ -1686,7 +1715,7 @@ void GraphEditor::refreshSmartSuggestions() {
         smartSuggestions.push_back(*best);
 
     if (smartSuggestions != previous)
-        content.repaint();
+        repaintCanvas();
 }
 
 void GraphEditor::applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostNodeId, bool recordUndo) {
@@ -1712,6 +1741,10 @@ void GraphEditor::applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostN
 }
 
 void GraphEditor::detachAllModuleComponents() {
+    // A teardown can't be allowed to leave the settle animator holding a SafePointer to a card
+    // set that no longer applies. Harmless either way (SafePointer guards it), but keeps the
+    // zoomGestureActive state machine honest.
+    endZoomGesture();
     for (auto* comp : content.getModules())
         comp->detachFromProcessor();
     content.getModules().clear(); // Remove after detach so ~ModuleComponent doesn't double-detach freed params
@@ -1722,6 +1755,10 @@ void GraphEditor::detachAllModuleComponents() {
 void GraphEditor::updateComponents() {
     auto& graph = audioEngine.getGraph();
     auto& modules = content.getModules();
+
+    // Nodes appear/disappear here, so the cable memo can go stale from this call alone (a repaint
+    // is not guaranteed to follow immediately).
+    cablesCacheValid = false;
 
     // Any reconcile can follow a node removal (delete, undo/redo, preset load). Drop selected ids
     // whose nodes are gone BEFORE anything reads the selection again.
@@ -1803,6 +1840,11 @@ void GraphEditor::updateComponents() {
     if (onGraphStructureChanged)
         onGraphStructureChanged();
 
+    // A card created mid-gesture (e.g. paste/duplicate while zooming) must join the freeze, or it
+    // rasterizes once at the pre-gesture scale and then again at thaw instead of just once.
+    if (zoomGestureActive)
+        setModuleRasterFrozen(true);
+
     repaint();
 }
 
@@ -1844,6 +1886,11 @@ void GraphEditor::paintOverChildren(juce::Graphics& g) {
 }
 
 void GraphEditor::resized() {
+    // Mitigates the case where a zoom gesture's settle animator never completes (no VBlank, e.g.
+    // the window is hidden mid-gesture): a resize is a good proxy for "something else is about to
+    // repaint everything anyway", so thaw now rather than leave every card soft indefinitely.
+    endZoomGesture();
+
     // Only set the mod-matrix bounds when we are not in the middle of an animated show/hide.
     // If an animation is running, it owns the bounds until it completes; we update the target
     // but don't interrupt the tween.
@@ -1875,6 +1922,12 @@ void GraphEditor::resized() {
     }
 
     updateTransform();
+}
+
+void GraphEditor::lookAndFeelChanged() {
+    // Same rationale as resized(): a theme swap re-skins/re-rasters everything anyway, so a zoom
+    // gesture straddling a theme change must not leave cards frozen at the old scale afterwards.
+    endZoomGesture();
 }
 
 void GraphEditor::toggleModMatrixVisibility() {
@@ -1956,6 +2009,42 @@ void GraphEditor::applyZoomAt(float wheelDelta, juce::Point<float> screenAnchor)
     }
 
     updateTransform();
+
+    // Only a real scale change costs a re-raster; a clamped wheel tick at the 0.1/2.0 limits
+    // must not keep the cards soft forever.
+    if (oldZoom != zoomLevel)
+        beginOrRefreshZoomGesture();
+}
+
+void GraphEditor::setModuleRasterFrozen(bool frozen) {
+    for (auto* comp : content.getModules())
+        if (comp != nullptr)
+            comp->setRasterFrozen(frozen);
+}
+
+void GraphEditor::beginOrRefreshZoomGesture() {
+    if (!zoomGestureActive) {
+        zoomGestureActive = true;
+        setModuleRasterFrozen(true);
+    }
+    // start() stops+replaces any running animator, so every zoom event restarts the settle
+    // window: this IS the debounce. onUpdate is a no-op — the driver adds no repaint source.
+    juce::Component::SafePointer<GraphEditor> safeThis(this);
+    zoomSettleAnim.start(
+        vblankUpdater, kZoomSettleMs, [](float t) { return t; }, [](float) {},
+        [safeThis] {
+            if (auto* self = safeThis.getComponent())
+                self->endZoomGesture();
+        });
+}
+
+void GraphEditor::endZoomGesture() {
+    if (!zoomGestureActive)
+        return;
+    zoomGestureActive = false;
+    // Thawing each card drops its image and repaints it, so the crisp pass costs exactly one
+    // rasterization per visible card for the whole gesture.
+    setModuleRasterFrozen(false);
 }
 
 void GraphEditor::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) {
@@ -2044,7 +2133,7 @@ void GraphEditor::mouseMove(const juce::MouseEvent& e) {
 
     hoveredCableId = newId;
     setMouseCursor(newId.has_value() ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
-    content.repaint();
+    repaintCanvas();
 }
 
 void GraphEditor::mouseExit(const juce::MouseEvent&) {
@@ -2052,7 +2141,7 @@ void GraphEditor::mouseExit(const juce::MouseEvent&) {
         return;
     hoveredCableId.reset();
     setMouseCursor(juce::MouseCursor::NormalCursor);
-    content.repaint();
+    repaintCanvas();
 }
 
 void GraphEditor::mouseDown(const juce::MouseEvent& e) {
@@ -2131,7 +2220,7 @@ void GraphEditor::mouseDrag(const juce::MouseEvent& e) {
                     float currentVal = p->get(); // -1 to 1
                     currentVal = juce::jlimit(-1.0f, 1.0f, currentVal + delta);
                     p->setValueNotifyingHost(p->convertTo0to1(currentVal));
-                    content.repaint();
+                    repaintCanvas();
                 }
             }
             lastMousePos = e.getPosition();
@@ -2249,7 +2338,7 @@ void GraphEditor::pruneSelection() {
         alive.push_back(node->nodeID);
 
     if (selection.retainOnly(alive))
-        content.repaint();
+        repaintCanvas();
 }
 
 void GraphEditor::deleteSelection() {
@@ -2299,7 +2388,7 @@ void GraphEditor::updateMarquee(juce::Point<int> canvasCurrent) {
     auto hits = synth::ui::hitTestMarquee(marqueeRect, collectModuleBoxes(false, false));
     applySelectionChange(marqueeAdditive ? synth::ui::unionSelection(marqueeBaseSelection, hits) : hits);
 
-    content.repaint();
+    repaintCanvas();
 }
 
 void GraphEditor::endMarquee() {
@@ -2309,7 +2398,7 @@ void GraphEditor::endMarquee() {
     marqueeAdditive = false;
     marqueeRect = {};
     marqueeBaseSelection.clear();
-    content.repaint();
+    repaintCanvas();
 }
 
 // ---- Group drag ----
@@ -2378,7 +2467,7 @@ void GraphEditor::finalizeSelectionDrag() {
 
     selectionDragActive = false;
     selectionDragStartPositions.clear();
-    content.repaint();
+    repaintCanvas();
 }
 
 void GraphEditor::cancelSelectionDrag() {
@@ -2583,7 +2672,7 @@ void GraphEditor::mouseDoubleClick(const juce::MouseEvent& e) {
         } else {
             audioEngine.removeModRouting(attenId);
         }
-        content.repaint();
+        repaintCanvas();
     }
 }
 
@@ -3124,7 +3213,7 @@ void GraphEditor::timerCallback() {
     content.connectionAnimPhase += 0.02f;
     if (content.connectionAnimPhase >= 1.0f)
         content.connectionAnimPhase -= 1.0f;
-    content.repaint();
+    repaintCanvas();
 
     // Minimap (issue #159): only build the model while visible, and only when it's needed —
     // setModel() itself only repaints when the model actually changed (no repaint storm on a
@@ -3169,7 +3258,7 @@ void GraphEditor::beginDragPreview(int w, int h, juce::AudioProcessorGraph::Node
         dragPreviewIsSnippet = false;
         dragPreviewProbe.reset();
     }
-    content.repaint();
+    repaintCanvas();
 }
 
 void GraphEditor::updateDragPreview(juce::Point<int> desiredTopLeftCanvas) {
@@ -3201,7 +3290,7 @@ void GraphEditor::updateDragPreview(juce::Point<int> desiredTopLeftCanvas) {
 
     if (existingBoxes.empty()) {
         refreshSmartSuggestions();
-        content.repaint(); // Still need to clear any old guides
+        repaintCanvas(); // Still need to clear any old guides
         return;
     }
 
@@ -3319,7 +3408,7 @@ void GraphEditor::updateDragPreview(juce::Point<int> desiredTopLeftCanvas) {
     }
 
     refreshSmartSuggestions();
-    content.repaint();
+    repaintCanvas();
 }
 
 void GraphEditor::endDragPreview() {
@@ -3329,7 +3418,7 @@ void GraphEditor::endDragPreview() {
     clearSmartSuggestions();
     dragPreviewIsSnippet = false;
     dragPreviewProbe.reset();
-    content.repaint();
+    repaintCanvas();
 }
 
 bool GraphEditor::isInterestedInDragSource(const SourceDetails& dragSourceDetails) { return true; }
@@ -3608,7 +3697,7 @@ void GraphEditor::refreshIoModulesAfterDeviceChange() {
     }
 
     if (sawInputModule)
-        content.repaint();
+        repaintCanvas();
 }
 
 void GraphEditor::applyDualIOToExistingModules(bool dual) {
@@ -3843,7 +3932,7 @@ void GraphEditor::handleModuleResized(ModuleComponent* moduleComp) {
         }
     }
 
-    content.repaint();
+    repaintCanvas();
 }
 
 juce::Point<int> GraphEditor::resolvePlacement(juce::Point<int> desired, int w, int h,
@@ -3902,7 +3991,7 @@ void GraphEditor::finalizeModuleDrag(ModuleComponent* module) {
     if (shouldOfferSmartConnections() && !smartSuggestions.empty())
         applySmartSuggestions(module->getNodeId(), /*recordUndo=*/false);
 
-    content.repaint();
+    repaintCanvas();
 }
 
 void GraphEditor::animateDropLanding(ModuleComponent* module, juce::Point<int> fromPos, juce::Point<int> toPos) {
@@ -3930,7 +4019,7 @@ void GraphEditor::animateDropLanding(ModuleComponent* module, juce::Point<int> f
                                                               juce::Rectangle<int>(toPos.x, toPos.y, 0, 0), t)
                            .getTopLeft();
             safeModule->setTopLeftPosition(pos);
-            safeEditor->content.repaint();
+            safeEditor->repaintCanvas();
         },
         [safeEditor, safeModule, toPos]() {
             // Settle at exact final position and persist to graph properties.
@@ -3938,7 +4027,7 @@ void GraphEditor::animateDropLanding(ModuleComponent* module, juce::Point<int> f
                 return;
             safeModule->setTopLeftPosition(toPos);
             safeEditor->updateModulePosition(safeModule);
-            safeEditor->content.repaint();
+            safeEditor->repaintCanvas();
         });
 }
 

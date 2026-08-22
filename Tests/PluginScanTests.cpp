@@ -804,6 +804,83 @@ TEST(PluginScanTest, LibraryPluginsSectionSubGroupsRowsByFormat) {
     EXPECT_EQ(library.getPluginIdentity(auSubHeader), PluginIdentity{});
 }
 
+TEST(PluginScanTest, SubHeaderTogglesIndependentlyOfHeader) {
+    ModuleLibraryComponent library;
+    library.setSize(200, 1200);
+
+    PluginIdentity vst3Alpha;
+    vst3Alpha.format = "VST3";
+    vst3Alpha.name = "Alpha";
+    vst3Alpha.uid = 1;
+    PluginIdentity auBeta;
+    auBeta.format = "AudioUnit";
+    auBeta.name = "Beta";
+    auBeta.uid = 2;
+    library.setPlugins({vst3Alpha, auBeta});
+
+    const int vst3SubHeader = entryIndexForText(library, "VST3");
+    ASSERT_GE(vst3SubHeader, 0);
+    const int y = library.getRowCentreY(vst3SubHeader);
+    ASSERT_GT(y, 0);
+
+    // Click the VST3 sub-header row — mirrors real usage, going through mouseDown rather than
+    // reaching into the collapse-state key directly.
+    juce::MouseInputSource src = juce::Desktop::getInstance().getMainMouseSource();
+    juce::MouseEvent evt(src, juce::Point<float>(30.0f, (float)y), juce::ModifierKeys(), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                         &library, &library, juce::Time::getCurrentTime(), juce::Point<float>(30.0f, (float)y),
+                         juce::Time::getCurrentTime(), 1, false);
+    library.mouseDown(evt);
+
+    // Only the VST3 format's plugin rows disappear from the visible layout...
+    EXPECT_EQ(library.getRowCentreY(entryIndexForText(library, "Alpha")), -1);
+    // ...while the AudioUnit group and the Plugins header itself stay expanded.
+    EXPECT_GT(library.getRowCentreY(entryIndexForText(library, "Beta")), 0);
+    EXPECT_GT(library.getRowCentreY(entryIndexForText(library, "AudioUnit")), 0);
+    EXPECT_FALSE(library.isSectionCollapsed(ModuleLibraryComponent::kPluginsHeader));
+
+    // The sub-header row itself never disappears — only its own header can hide it.
+    EXPECT_GT(library.getRowCentreY(vst3SubHeader), 0);
+
+    // No focus-grabbing side effect (regression guard for #232).
+    EXPECT_FALSE(library.getWantsKeyboardFocus());
+}
+
+TEST(PluginScanTest, SubHeaderCollapseSurvivesCollapseAll) {
+    ModuleLibraryComponent library;
+    library.setSize(200, 1200);
+
+    PluginIdentity vst3Alpha;
+    vst3Alpha.format = "VST3";
+    vst3Alpha.name = "Alpha";
+    vst3Alpha.uid = 1;
+    PluginIdentity auBeta;
+    auBeta.format = "AudioUnit";
+    auBeta.name = "Beta";
+    auBeta.uid = 2;
+    library.setPlugins({vst3Alpha, auBeta});
+
+    const int vst3SubHeader = entryIndexForText(library, "VST3");
+    ASSERT_GE(vst3SubHeader, 0);
+    const int y = library.getRowCentreY(vst3SubHeader);
+    ASSERT_GT(y, 0);
+
+    juce::MouseInputSource src = juce::Desktop::getInstance().getMainMouseSource();
+    juce::MouseEvent evt(src, juce::Point<float>(30.0f, (float)y), juce::ModifierKeys(), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                         &library, &library, juce::Time::getCurrentTime(), juce::Point<float>(30.0f, (float)y),
+                         juce::Time::getCurrentTime(), 1, false);
+    library.mouseDown(evt);
+    EXPECT_EQ(library.getRowCentreY(entryIndexForText(library, "Alpha")), -1);
+
+    library.toggleAllSections(); // collapse everything
+    library.toggleAllSections(); // ...then expand everything
+
+    // The VST3 sub-header's own fold — set by the user before collapse-all ran — must come back
+    // exactly as left, not reset by setAllSectionsCollapsed()'s header-only sweep.
+    EXPECT_EQ(library.getRowCentreY(entryIndexForText(library, "Alpha")), -1)
+        << "the user's own sub-header fold must survive a collapse-all/expand-all round trip";
+    EXPECT_GT(library.getRowCentreY(entryIndexForText(library, "Beta")), 0);
+}
+
 TEST(PluginScanTest, LibrarySnippetsEmptyHintIsUnaffectedByThePluginsSection) {
     // The Plugins section uses its own row kind precisely so it does not perturb the Snippets
     // section's single EmptyHint row (or any of the counts built on it).

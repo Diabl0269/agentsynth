@@ -907,6 +907,22 @@ default. Previously these were two independent, hardcoded constants (a 120 s UI 
 a local Ollama model on modest hardware could legitimately finish, always producing a misleading
 "timed out" error. They are now the same configurable value everywhere.
 
+### Bubble sizing and wrapped-height measurement
+
+Each `MessageBubble` caps at `kBubbleWidthFraction` (0.8) of the message list width, with the
+remaining gutter left on the side opposite the sender — user bubbles hug the right edge, assistant
+bubbles the left (`MessageBubble::isUserRole()`, read by `AIChatComponent`'s layout loop). Bubble
+fill/border/role/timestamp colours resolve through theme tokens (`accent`/`surfaceHi`/`border`/
+`textMuted`) via `dynamic_cast<AppLookAndFeel*>(&getLookAndFeel())`, never raw `juce::Colours`.
+
+`AIChatComponent::computeWrappedTextHeight(font, text, width)` is the **required pattern** for any
+chat-panel element whose text length varies at runtime — it measures the actual wrapped height via
+`juce::GlyphArrangement` rather than estimating from a fixed line count or a fixed single-line
+height, which is what let a long wrapped line (e.g. a "Preview unavailable…" status, or a long
+`hostedModeNotice`/`downgradeStripLabel`) get clipped. `PatchCard`/`TimelineCard::getRequiredHeight(width)`
+take the render width as a parameter for the same reason: the height calculation and the actual
+render width must always agree.
+
 ### Debug Logger Registration (Debug builds only)
 
 In **Debug builds only**, `AIChatComponent` registers itself as the global `juce::Logger` by calling `juce::Logger::setCurrentLogger(this)` inside the `#else` branch of an `#ifdef NDEBUG` guard in the constructor. The debug console (`TextEditor`) and the "Debug" toggle button are also created and wired there. The destructor unregisters under `#ifndef NDEBUG`:

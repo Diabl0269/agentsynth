@@ -1,6 +1,5 @@
 #include "AppearanceSettingsTab.h"
-#include "GraphEditor.h"   // For setAlignmentGuidesEnabled callback
-#include "MainComponent.h" // For setAlignmentGuidesEnabled callback
+#include "GraphEditor.h"
 
 using synth::theme::Theme;
 using synth::theme::ThemeManager;
@@ -112,7 +111,10 @@ public:
         const float w = (float)getWidth() / (float)n;
         for (int i = 0; i < n; ++i) {
             juce::Rectangle<float> cell((float)i * w, 0.0f, w, (float)getHeight());
-            auto swatch = cell.reduced(3.0f).removeFromTop(18.0f);
+            auto reducedCell = cell.reduced(3.0f);
+            // 16px chip (down from 18) frees a couple more px for the label strip below, which is
+            // the thing that was actually cramped.
+            auto swatch = reducedCell.removeFromTop(16.0f);
 
             g.setColour(owner.getCableSwatchColour(i));
             g.fillRoundedRectangle(swatch, 3.0f);
@@ -121,9 +123,12 @@ public:
             g.setColour(pinned ? juce::Colours::white.withAlpha(0.9f) : juce::Colours::black.withAlpha(0.4f));
             g.drawRoundedRectangle(swatch, 3.0f, pinned ? 1.8f : 1.0f);
 
-            g.setColour(juce::Colours::lightgrey);
+            // Secondary text under a colour chip — textMuted is the token meant for exactly that,
+            // not a hardcoded literal (the black/white pin ring above stays literal on purpose: it
+            // has to read against ANY swatch colour the user might pick, not just the theme's).
+            g.setColour(owner.themeManager.getActiveTheme().colors.textMuted);
             g.setFont(juce::Font(juce::FontOptions(9.5f)));
-            g.drawFittedText(owner.getCableSwatchLabel(i), cell.removeFromBottom(22.0f).toNearestInt(),
+            g.drawFittedText(owner.getCableSwatchLabel(i), reducedCell.removeFromBottom(28.0f).toNearestInt(),
                              juce::Justification::centredTop, 2, 0.8f);
         }
     }
@@ -154,6 +159,17 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     : themeManager(manager)
     , appProperties(props) {
     listModel = std::make_unique<ThemeListModel>(themeManager, *this);
+
+    // Section headers. Same font for all three (13pt bold, matching modeLabel's existing weight)
+    // so "Theme" / "Theme Gallery" / "Cables" read as one family of group titles.
+    auto sectionHeaderFont = juce::Font(juce::FontOptions(13.0f, juce::Font::bold));
+    addAndMakeVisible(themeSectionLabel);
+    themeSectionLabel.setText("Theme", juce::dontSendNotification);
+    themeSectionLabel.setFont(sectionHeaderFont);
+
+    addAndMakeVisible(themeGallerySectionLabel);
+    themeGallerySectionLabel.setText("Theme Gallery", juce::dontSendNotification);
+    themeGallerySectionLabel.setFont(sectionHeaderFont);
 
     // Mode selector
     addAndMakeVisible(modeLabel);
@@ -232,7 +248,13 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     addAndMakeVisible(themeList);
     themeList.setModel(listModel.get());
     themeList.setRowHeight(48);
-    themeList.setColour(juce::ListBox::backgroundColourId, juce::Colours::transparentBlack);
+    // A real fill (instead of transparentBlack) is what makes the list read as a distinct,
+    // framed, scrollable surface rather than blending into the rest of the tab — the themed
+    // ListBox scrollbar (AppLookAndFeel::drawScrollbar) was nearly invisible against nothing.
+    themeList.setColour(juce::ListBox::backgroundColourId,
+                        themeManager.getActiveTheme().colors.surface.withAlpha(0.5f));
+    themeList.setColour(juce::ListBox::outlineColourId, themeManager.getActiveTheme().colors.border);
+    themeList.setOutlineThickness(1);
 
     addAndMakeVisible(openFolderButton);
     openFolderButton.onClick = [this] { themeManager.getUserThemesFolder().revealToUser(); };
@@ -244,24 +266,14 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
         themeList.repaint();
     };
 
-    addAndMakeVisible(alignmentGuideToggle);
-    alignmentGuideToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true),
-                                        juce::dontSendNotification);
-    alignmentGuideToggle.onClick = [this] {
-        appProperties.getUserSettings()->setValue("alignmentGuidesEnabled",
-                                                  alignmentGuideToggle.getToggleState() ? "1" : "0");
-        appProperties.getUserSettings()->saveIfNeeded();
-        if (graphEditor)
-            graphEditor->setAlignmentGuidesEnabled(alignmentGuideToggle.getToggleState());
-    };
-
     // ---- Cable colours (issue #157) ----
     cableColourMode = synth::ui::loadCableColourMode(*appProperties.getUserSettings());
     cableColourOverrides = synth::ui::loadCableColourOverrides(*appProperties.getUserSettings());
 
     addAndMakeVisible(cablesTitleLabel);
     cablesTitleLabel.setText("Cables", juce::dontSendNotification);
-    cablesTitleLabel.setFont(juce::Font(juce::FontOptions(15.0f, juce::Font::bold)));
+    // Same section-header style as "Theme" / "Theme Gallery" above, not a one-off 15pt.
+    cablesTitleLabel.setFont(sectionHeaderFont);
 
     addAndMakeVisible(cableModeLabel);
     cableModeLabel.setText("Colour by", juce::dontSendNotification);
@@ -296,10 +308,28 @@ AppearanceSettingsTab::~AppearanceSettingsTab() { themeManager.removeChangeListe
 
 void AppearanceSettingsTab::paint(juce::Graphics& g) {
     g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
+
+    // Group separators — same alpha-on-text-colour hairline as PreferencesSettingsTab, so both
+    // tabs' dividers look and behave identically.
+    g.setColour(findColour(juce::Label::textColourId).withAlpha(0.18f));
+    for (const auto& divider : dividerBounds)
+        g.fillRect(divider);
 }
 
 void AppearanceSettingsTab::resized() {
     auto bounds = getLocalBounds().reduced(12);
+    dividerBounds.clear();
+
+    // Each group is followed by a hairline rule, matching PreferencesSettingsTab's addDivider().
+    auto addDivider = [this, &bounds] {
+        bounds.removeFromTop(10);
+        dividerBounds.push_back(bounds.removeFromTop(1));
+        bounds.removeFromTop(10);
+    };
+
+    // ---- 1. Theme ----
+    themeSectionLabel.setBounds(bounds.removeFromTop(20));
+    bounds.removeFromTop(6);
 
     auto modeRow = bounds.removeFromTop(24);
     modeLabel.setBounds(modeRow.removeFromLeft(140));
@@ -314,31 +344,50 @@ void AppearanceSettingsTab::resized() {
     auto lightRow = bounds.removeFromTop(24);
     defaultLightLabel.setBounds(lightRow.removeFromLeft(140));
     defaultLightCombo.setBounds(lightRow.removeFromLeft(160));
-    bounds.removeFromTop(10);
+    addDivider();
 
-    auto buttonRow = bounds.removeFromBottom(30);
+    // ---- Fixed-height controls below the gallery, computed up front so the gallery gets
+    // whatever is left over rather than being squeezed by a bottom-up layout pass. ----
+    constexpr int kButtonRowHeight = 30;
+    constexpr int kCablesHeaderHeight = 20;
+    constexpr int kCableModeRowHeight = 26;
+    constexpr int kCableSwatchRowHeight = 56;
+    constexpr int kResetButtonHeight = 26;
+    constexpr int kGap = 10;
+    const int fixedHeightBelowGallery = kGap                                 // divider gap before button row
+                                        + 1                                  // divider itself
+                                        + kGap                               // divider gap after
+                                        + kButtonRowHeight + kGap + 1 + kGap // divider after button row
+                                        + kCablesHeaderHeight + 6 + kCableModeRowHeight + 6 + kCableSwatchRowHeight +
+                                        6 + kResetButtonHeight;
+
+    // ---- 2. Theme Gallery (framed, gets the remaining flexible space) ----
+    themeGallerySectionLabel.setBounds(bounds.removeFromTop(20));
+    bounds.removeFromTop(6);
+    const int galleryHeight = juce::jmax(80, bounds.getHeight() - fixedHeightBelowGallery);
+    themeList.setBounds(bounds.removeFromTop(galleryHeight));
+    addDivider();
+
+    // ---- 3. Theme actions ----
+    auto buttonRow = bounds.removeFromTop(kButtonRowHeight);
     openFolderButton.setBounds(buttonRow.removeFromLeft(160));
     buttonRow.removeFromLeft(8);
     reloadButton.setBounds(buttonRow.removeFromLeft(130));
+    addDivider();
 
-    // ---- Cables section, stacked above the theme buttons ----
-    bounds.removeFromBottom(10);
-    resetCableColoursButton.setBounds(bounds.removeFromBottom(26).removeFromLeft(170));
-    bounds.removeFromBottom(4);
-    cableSwatchRow->setBounds(bounds.removeFromBottom(42));
-    bounds.removeFromBottom(4);
-    {
-        auto modeRow = bounds.removeFromBottom(26);
-        cableModeLabel.setBounds(modeRow.removeFromLeft(70));
-        cableModeCombo.setBounds(modeRow.removeFromLeft(180));
-    }
-    cablesTitleLabel.setBounds(bounds.removeFromBottom(22));
+    // ---- 4. Cables ----
+    cablesTitleLabel.setBounds(bounds.removeFromTop(kCablesHeaderHeight));
+    bounds.removeFromTop(6);
 
-    // Alignment guide toggle (under the theme list title area).
-    bounds.removeFromBottom(8);
-    alignmentGuideToggle.setBounds(bounds.removeFromTop(24));
+    auto cableModeRow = bounds.removeFromTop(kCableModeRowHeight);
+    cableModeLabel.setBounds(cableModeRow.removeFromLeft(70));
+    cableModeCombo.setBounds(cableModeRow.removeFromLeft(180));
+    bounds.removeFromTop(6);
 
-    themeList.setBounds(bounds);
+    cableSwatchRow->setBounds(bounds.removeFromTop(kCableSwatchRowHeight));
+    bounds.removeFromTop(6);
+
+    resetCableColoursButton.setBounds(bounds.removeFromTop(kResetButtonHeight).removeFromLeft(170));
 }
 
 juce::String AppearanceSettingsTab::getSelectedThemeId() const {
@@ -392,6 +441,11 @@ void AppearanceSettingsTab::changeListenerCallback(juce::ChangeBroadcaster* sour
     const int activeRow = activeRowIndex(themeManager);
     if (activeRow >= 0)
         themeList.selectRow(activeRow);
+    // The gallery's frame fill/outline is derived from the active theme, so it must be refreshed
+    // along with the rows on any theme change, not just at construction.
+    themeList.setColour(juce::ListBox::backgroundColourId,
+                        themeManager.getActiveTheme().colors.surface.withAlpha(0.5f));
+    themeList.setColour(juce::ListBox::outlineColourId, themeManager.getActiveTheme().colors.border);
     themeList.updateContent();
     themeList.repaint();
 

@@ -609,3 +609,63 @@ TEST_F(ModMatrixTest, HoverResetsAfterRowRemoval) {
 
     EXPECT_EQ(matrix.getHoveredRow(), -1);
 }
+
+// ---------------------------------------------------------------------------
+// Grouped-menu label bug: the closed combobox's text comes only from the matching leaf
+// item's own text (JUCE never concatenates ancestor submenu titles into it), so the leaf
+// text baked into the nested source/destination menus must be self-disambiguating.
+// ---------------------------------------------------------------------------
+
+TEST_F(ModMatrixTest, GroupedSourceLabelIncludesModuleName) {
+    ModMatrixComponent matrix(engine);
+
+    auto& graph = engine.getGraph();
+    graph.clear();
+
+    // Oscillator exposes many output channels, so channel 1 (0-based, "Out 2") lands in the
+    // grouped menu's multi-output branch rather than the single-output shortcut.
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    ASSERT_NE(oscNode, nullptr);
+    ASSERT_NE(filterNode, nullptr);
+
+    engine.addModRouting(oscNode->nodeID, 1, filterNode->nodeID, 1); // Out 2 -> Cutoff
+
+    matrix.setBounds(0, 0, 600, 400);
+    matrix.updateRowsFromGraph();
+
+    auto* osc = dynamic_cast<OscillatorModule*>(oscNode->getProcessor());
+    ASSERT_NE(osc, nullptr);
+    juce::String oscName = osc->getName();
+
+    // Default menu mode is grouped (isSourceMenuFlat is false unless setFlatSourceMenu(true) is
+    // called) — this is the exact bug scenario, not the already-correct flat branch.
+    juce::String label = matrix.getRowSourceComboTextForTest(0);
+    EXPECT_TRUE(label.contains(oscName)) << "label was: " << label;
+    EXPECT_TRUE(label.contains("Out 2")) << "label was: " << label;
+}
+
+TEST_F(ModMatrixTest, GroupedDestinationLabelIncludesModuleName) {
+    ModMatrixComponent matrix(engine);
+
+    auto& graph = engine.getGraph();
+    graph.clear();
+
+    auto lfoNode = graph.addNode(std::make_unique<LFOModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    ASSERT_NE(lfoNode, nullptr);
+    ASSERT_NE(filterNode, nullptr);
+
+    engine.addModRouting(lfoNode->nodeID, 0, filterNode->nodeID, 1); // LFO -> Filter Cutoff
+
+    matrix.setBounds(0, 0, 600, 400);
+    matrix.updateRowsFromGraph();
+
+    auto* filter = dynamic_cast<FilterModule*>(filterNode->getProcessor());
+    ASSERT_NE(filter, nullptr);
+    juce::String filterName = filter->getName();
+
+    juce::String label = matrix.getRowDestComboTextForTest(0);
+    EXPECT_TRUE(label.contains(filterName)) << "label was: " << label;
+    EXPECT_TRUE(label.contains("Cutoff")) << "label was: " << label;
+}

@@ -94,7 +94,10 @@ struct Metrics {
     float cornerRadiusSmall{4.0f}; // pill / small element radius
 
     // --- Chrome layout constants (code-only; not parsed from user JSON) ---
-    int toolbarHeight{36};        // code-only; not parsed from user JSON
+    // 44 (was 36): the old height only left room for a 9px icon-band trim and ~7px label text
+    // (LookAndFeel_V2::drawDrawableButton's fixed min(16, 25%-of-height) split) — a few extra
+    // px buys a readable ~11px label and a consistent ~18px icon via DrawableButton::edgeIndent.
+    int toolbarHeight{44};        // code-only; not parsed from user JSON
     int statusBarHeight{24};      // code-only; not parsed from user JSON
     int controlPadding{4};        // code-only; not parsed from user JSON
     int minWindowWidth{480};      // code-only; not parsed from user JSON
