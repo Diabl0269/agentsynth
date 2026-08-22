@@ -2188,6 +2188,210 @@ TEST_F(GraphEditorTest, BuildMinimapModelReturnsOneNodePerModuleAndMatchingViewp
     EXPECT_TRUE(model.viewport == editor.getVisibleCanvasRect());
 }
 
+// --- Zoom-perf: cable memoization + zoom-gesture raster freeze --------------
+
+namespace {
+struct OscFilterVcaChain {
+    ModuleComponent* osc = nullptr;
+    ModuleComponent* filter = nullptr;
+    ModuleComponent* vca = nullptr;
+};
+
+// Oscillator -> Filter and Oscillator -> VCA: 3 modules, 2 plain audio cables. Both cables leave
+// the same source so no channel/poly mapping quirks are in play — just geometry to memoize.
+OscFilterVcaChain buildOscFilterVcaChain(AudioEngine& engine, GraphEditor& editor) {
+    auto& graph = engine.getGraph();
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    auto vcaNode = graph.addNode(std::make_unique<VCAModule>());
+    graph.addConnection({{oscNode->nodeID, 0}, {filterNode->nodeID, 0}});
+    graph.addConnection({{oscNode->nodeID, 0}, {vcaNode->nodeID, 0}});
+    editor.updateComponents();
+
+    OscFilterVcaChain result;
+    if (auto* content = editor.getChildComponent(0)) {
+        for (auto* child : content->getChildren()) {
+            if (auto* mc = dynamic_cast<ModuleComponent*>(child)) {
+                if (mc->getModule() == oscNode->getProcessor())
+                    result.osc = mc;
+                else if (mc->getModule() == filterNode->getProcessor())
+                    result.filter = mc;
+                else if (mc->getModule() == vcaNode->getProcessor())
+                    result.vca = mc;
+            }
+        }
+    }
+    // Explicit bounds (as the Dual I/O cable tests do above): a card's default constructed size
+    // is enough to have real ports, but a known, non-overlapping layout keeps geometry legible.
+    if (result.osc != nullptr)
+        result.osc->setBounds(0, 0, 200, 200);
+    if (result.filter != nullptr)
+        result.filter->setBounds(300, 0, 200, 200);
+    if (result.vca != nullptr)
+        result.vca->setBounds(300, 300, 200, 200);
+    return result;
+}
+} // namespace
+
+// Cable geometry is canvas-space (zoom/pan-invariant): a zoom gesture must reuse the memoized
+// list rather than rebuilding it, and the geometry it returns must not move at all.
+TEST_F(GraphEditorTest, ZoomDoesNotRebuildTheCableList) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+    auto chain = buildOscFilterVcaChain(engine, editor);
+    ASSERT_NE(chain.osc, nullptr);
+    ASSERT_NE(chain.filter, nullptr);
+    ASSERT_NE(chain.vca, nullptr);
+
+    const std::vector<GraphEditor::VisibleCable> before = editor.buildVisibleCables();
+    ASSERT_EQ(before.size(), 2u);
+    const int rebuildBefore = editor.getCableRebuildCountForTest();
+
+    for (int i = 0; i < 20; ++i) {
+        editor.zoomAroundCentre(0.05f);
+        const auto& after = editor.buildVisibleCables();
+        ASSERT_EQ(after.size(), before.size());
+        for (size_t j = 0; j < after.size(); ++j) {
+            EXPECT_FLOAT_EQ(after[j].p1.x, before[j].p1.x);
+            EXPECT_FLOAT_EQ(after[j].p1.y, before[j].p1.y);
+            EXPECT_FLOAT_EQ(after[j].p2.x, before[j].p2.x);
+            EXPECT_FLOAT_EQ(after[j].p2.y, before[j].p2.y);
+        }
+    }
+    EXPECT_EQ(editor.getCableRebuildCountForTest(), rebuildBefore)
+        << "zoom must never touch the cable memo — zoom cannot move a cable";
+}
+
+// The 30 Hz tick is the ONLY thing that must keep the memo fresh absent an explicit graph edit
+// (it is what re-reads activity/bypass values onto existing cables).
+TEST_F(GraphEditorTest, TheThirtyHzTickInvalidatesTheCableCache) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+    buildOscFilterVcaChain(engine, editor);
+
+    editor.buildVisibleCables();
+    const int before = editor.getCableRebuildCountForTest();
+    editor.timerCallback();
+    editor.buildVisibleCables();
+    EXPECT_EQ(editor.getCableRebuildCountForTest(), before + 1);
+}
+
+// paint() and hit-testing must read the literal same list — the strengthened §14 invariant.
+TEST_F(GraphEditorTest, PaintAndHitTestShareOneBuild) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+    buildOscFilterVcaChain(engine, editor);
+
+    const auto& cables = editor.buildVisibleCables();
+    ASSERT_FALSE(cables.empty());
+    const auto first = cables.front();
+    const int rebuildAfterFirstBuild = editor.getCableRebuildCountForTest();
+
+    // A point that lies exactly ON the drawn bezier, regardless of the card layout above.
+    const auto path = GraphEditor::buildCablePath(first.p1, first.p2);
+    const auto midpoint = path.getPointAlongPath(path.getLength() * 0.5f);
+
+    const auto hit = editor.getCableAt(midpoint);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_TRUE(hit->id == first.id);
+    EXPECT_EQ(editor.getCableRebuildCountForTest(), rebuildAfterFirstBuild)
+        << "getCableAt must reuse the memoized list, not rebuild it";
+}
+
+// A graph edit (disconnect, or a node add via updateComponents()) invalidates the memo
+// immediately — the NEXT build reflects it, but nothing rebuilds until asked.
+TEST_F(GraphEditorTest, AGraphEditInvalidatesImmediately) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+    buildOscFilterVcaChain(engine, editor);
+
+    const std::vector<GraphEditor::VisibleCable> before = editor.buildVisibleCables();
+    ASSERT_EQ(before.size(), 2u);
+    const auto toRemove = before.front();
+    const int rebuildBeforeDisconnect = editor.getCableRebuildCountForTest();
+
+    editor.disconnectCable(toRemove);
+    // Invalidated, not yet rebuilt: repaintCanvas() only drops the memo.
+    EXPECT_EQ(editor.getCableRebuildCountForTest(), rebuildBeforeDisconnect);
+
+    const auto& afterDisconnect = editor.buildVisibleCables();
+    EXPECT_EQ(editor.getCableRebuildCountForTest(), rebuildBeforeDisconnect + 1);
+    EXPECT_EQ(afterDisconnect.size(), 1u);
+    for (const auto& c : afterDisconnect)
+        EXPECT_FALSE(c.id == toRemove.id);
+
+    // Same shape for updateComponents(): a node appearing invalidates immediately too.
+    const int rebuildBeforeAdd = editor.getCableRebuildCountForTest();
+    engine.getGraph().addNode(std::make_unique<VCAModule>());
+    editor.updateComponents();
+    EXPECT_EQ(editor.getCableRebuildCountForTest(), rebuildBeforeAdd);
+    editor.buildVisibleCables();
+    EXPECT_EQ(editor.getCableRebuildCountForTest(), rebuildBeforeAdd + 1);
+}
+
+// A zoom gesture freezes every card's raster scale; settling (here, forced via the test seam
+// since the VBlank driver never ticks headless) thaws every card again.
+TEST_F(GraphEditorTest, ZoomFreezesEveryCardThenSettleThaws) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+    buildOscFilterVcaChain(engine, editor);
+
+    EXPECT_FALSE(editor.isZoomGestureActive());
+    editor.zoomAroundCentre(0.1f);
+    EXPECT_TRUE(editor.isZoomGestureActive());
+    ASSERT_FALSE(editor.getModuleComponents().isEmpty());
+    for (auto* mc : editor.getModuleComponents())
+        EXPECT_TRUE(mc->isRasterFrozen());
+
+    editor.settleZoomNowForTest();
+    EXPECT_FALSE(editor.isZoomGestureActive());
+    for (auto* mc : editor.getModuleComponents())
+        EXPECT_FALSE(mc->isRasterFrozen());
+}
+
+// A card created mid-gesture (paste/duplicate/drop while zooming) must join the freeze, or it
+// rasterizes once at the pre-gesture scale and again at thaw instead of exactly once overall.
+TEST_F(GraphEditorTest, ACardCreatedMidGestureJoinsTheFreeze) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+    auto chain = buildOscFilterVcaChain(engine, editor);
+
+    editor.zoomAroundCentre(0.1f);
+    ASSERT_TRUE(editor.isZoomGestureActive());
+
+    auto newNode = engine.getGraph().addNode(std::make_unique<VCAModule>());
+    editor.updateComponents();
+
+    ModuleComponent* newComp = nullptr;
+    for (auto* mc : editor.getModuleComponents())
+        if (mc->getModule() == newNode->getProcessor())
+            newComp = mc;
+    ASSERT_NE(newComp, nullptr);
+    EXPECT_TRUE(newComp->isRasterFrozen());
+}
+
+// A wheel tick clamped at the [0.1, 2.0] ceiling/floor must not start (or refresh) a gesture, or
+// cards at the extremes of the zoom range would be left soft forever (oldZoom == zoomLevel guard).
+TEST_F(GraphEditorTest, AClampedZoomTickDoesNotStartAGesture) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    for (int i = 0; i < 200; ++i)
+        editor.zoomAroundCentre(10.0f); // drive to the 2.0 ceiling
+    editor.settleZoomNowForTest();
+    ASSERT_FALSE(editor.isZoomGestureActive());
+
+    editor.zoomAroundCentre(0.1f); // already clamped: must be a no-op on zoomLevel
+    EXPECT_FALSE(editor.isZoomGestureActive());
+}
+
 // --- Smart connections -------------------------------------------------------
 
 static int countAudioConnectionsBetween(juce::AudioProcessorGraph& graph, juce::AudioProcessorGraph::NodeID a,

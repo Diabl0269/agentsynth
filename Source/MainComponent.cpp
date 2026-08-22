@@ -2477,6 +2477,17 @@ void MainComponent::applyToolbarIcons() {
         if (auto d = lf->getIcon(Icon::TransportStop))
             statusBar.getMasterMuteButton().setImages(d.get());
 
+    // Toggle-pill state for AppLookAndFeel::drawDrawableButton (hover/press/toggled-on fill).
+    // dontSendNotification: onClick already flips the visibility flag by hand; sendNotification
+    // would re-fire the button's own listener and double-toggle.
+    toggleLibraryButton.setToggleState(isLibraryVisible, juce::dontSendNotification);
+    toggleMinimapButton.setToggleState(graphEditor.isMinimapVisible(), juce::dontSendNotification);
+    toggleModMatrixButton.setToggleState(graphEditor.isModMatrixVisible(), juce::dontSendNotification);
+    toggleAiPanelButton.setToggleState(isAiPanelVisible, juce::dontSendNotification);
+#if SYNTH_ENABLE_TIMELINE
+    toggleTimelineButton.setToggleState(isTimelineVisible, juce::dontSendNotification);
+#endif
+
     // Text: cleared in narrow mode; stateful for the toggles in wide mode.
     newButton.setButtonText(iconOnly ? "" : "New");
     saveButton.setButtonText(iconOnly ? "" : "Save");
@@ -2672,9 +2683,10 @@ void MainComponent::setLibraryVisible(bool v) {
     isLibraryVisible = v;
     appProperties.getUserSettings()->setValue("librarySidebarVisible", v ? "1" : "0");
     appProperties.getUserSettings()->saveIfNeeded();
-    // Refresh the toggle button's wide-mode label and tooltip.
+    // Refresh the toggle button's wide-mode label, toggled-pill state and tooltip.
     if (!toolbarNarrowMode_)
         toggleLibraryButton.setButtonText(v ? "Hide Library" : "Show Library");
+    toggleLibraryButton.setToggleState(v, juce::dontSendNotification);
     toggleLibraryButton.setTooltip(synth::ui::formatShortcutHint(
         v ? "Hide Library" : "Show Library",
         ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding("toggleLibrary"))));

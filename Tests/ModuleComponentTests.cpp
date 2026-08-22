@@ -187,7 +187,7 @@ TEST_F(ModuleComponentTest, SamplerHasLoadButtonWaveformAndKnownHeight) {
     EXPECT_TRUE(foundNameLabel) << "an empty Sampler should say so rather than showing a blank label";
 
     EXPECT_EQ(moduleComponent.getWidth(), 280);
-    EXPECT_EQ(moduleComponent.getHeight(), 657)
+    EXPECT_EQ(moduleComponent.getHeight(), 665)
         << "keep estimateModuleSize(\"Sampler\") in GraphEditor.cpp in sync with this";
 
     EXPECT_NO_THROW(moduleComponent.timerCallback());
@@ -221,6 +221,31 @@ TEST_F(ModuleComponentTest, BodyContentClearsEveryPortLabel) {
         ++checked;
     }
     EXPECT_GT(checked, 0) << "expected some body content to check";
+}
+
+// Regression guard for the "MIDI row too close under the header" complaint: the header's bottom
+// hairline is drawn at a fixed y=24 (the headerHeight literal ModuleComponent::paint() passes to
+// drawModulePanel()), and the MIDI-in dot used to sit only 1px below it. Pins the breathing-room
+// fix (header offset base 30->38) numerically instead of relying on a visual check alone.
+TEST_F(ModuleComponentTest, MidiInDotClearsHeaderHairlineWithBreathingRoom) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    MathModule math; // accepts MIDI via ModuleBase's default (not overridden by MathModule)
+    ASSERT_TRUE(math.acceptsMidi());
+    ModuleComponent moduleComponent(&math, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    // Hit-test near the documented MIDI-in position rather than hardcoding its bounds, so this
+    // keeps working if the x/y literals ever move together again.
+    auto port = moduleComponent.getPortForPoint({10, 38});
+    ASSERT_TRUE(port.has_value()) << "expected a MIDI input port near (10, 38)";
+    EXPECT_TRUE(port->isMidi);
+    EXPECT_TRUE(port->isInput);
+
+    constexpr int headerHairlineY = 24; // literal passed to drawModulePanel() in ModuleComponent::paint()
+    constexpr int kMinClearance = 6;
+    EXPECT_GE(port->area.getY() - headerHairlineY, kMinClearance)
+        << "MIDI dot top edge (" << port->area.getY() << ") sits too close under the header hairline ("
+        << headerHairlineY << ")";
 }
 
 // The drag ghost shown while dragging out of the library must match the component the drop actually

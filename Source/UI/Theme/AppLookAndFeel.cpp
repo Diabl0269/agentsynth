@@ -135,6 +135,11 @@ void AppLookAndFeel::applyTheme(const Theme& newTheme) {
 
     setColour(juce::DrawableButton::textColourId, c.textPrimary);
     setColour(juce::DrawableButton::textColourOnId, c.textPrimary);
+    // Background/backgroundOn are unused by our custom drawDrawableButton (which computes its
+    // own hover/press/toggled fill below) but are still set so any stock JUCE draw path that
+    // bypasses this LookAndFeel falls back to something sane rather than an undefined default.
+    setColour(juce::DrawableButton::backgroundColourId, juce::Colours::transparentBlack);
+    setColour(juce::DrawableButton::backgroundOnColourId, c.accent.withAlpha(0.22f));
 
     setColour(juce::ToggleButton::textColourId, c.textPrimary);
     setColour(juce::ToggleButton::tickColourId, c.accent);
@@ -436,9 +441,50 @@ void AppLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& button,
 
 void AppLookAndFeel::drawDrawableButton(juce::Graphics& g, juce::DrawableButton& button,
                                         bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) {
+    // LookAndFeel_V2::drawDrawableButton (the base every V4 build still falls through to) paints
+    // its background with an unconditional g.fillAll() keyed only on toggle state - no hover/press
+    // distinction and no rounding - so it cannot host the themed pill this component needs. We
+    // fully own the background+text paint here instead (the icon itself is drawn separately by
+    // DrawableButton::paintButton, not by this LookAndFeel hook, so it is unaffected).
+    const auto& c = theme.colors;
+    const auto& m = theme.metrics;
+
+    const bool isOn = button.getToggleState();
+    const auto bounds = button.getLocalBounds().toFloat().reduced(1.0f);
+
+    juce::Colour fill = juce::Colours::transparentBlack;
+    if (shouldDrawButtonAsDown)
+        fill = isOn ? c.accent.withAlpha(0.30f) : c.surfaceHi.withAlpha(0.9f);
+    else if (shouldDrawButtonAsHighlighted)
+        fill = isOn ? c.accent.withAlpha(0.26f) : c.surface.withAlpha(0.7f);
+    else if (isOn)
+        fill = c.accent.withAlpha(0.22f);
+
+    if (!fill.isTransparent()) {
+        g.setColour(fill);
+        g.fillRoundedRectangle(bounds, m.pillRadius);
+    }
+
+    if (isOn) {
+        g.setColour(c.accent.withAlpha(0.6f));
+        g.drawRoundedRectangle(bounds, m.pillRadius, m.borderWidth);
+    }
+
     button.setColour(juce::DrawableButton::textColourId, findColour(juce::DrawableButton::textColourId));
     button.setColour(juce::DrawableButton::textColourOnId, findColour(juce::DrawableButton::textColourOnId));
-    LookAndFeel_V4::drawDrawableButton(g, button, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
+
+    // Mirrors LookAndFeel_V2::drawDrawableButton's text-label geometry (ImageAboveTextLabel only).
+    const int textH = (button.getStyle() == juce::DrawableButton::ImageAboveTextLabel)
+                          ? juce::jmin(16, button.proportionOfHeight(0.25f))
+                          : 0;
+
+    if (textH > 0) {
+        g.setFont((float)textH);
+        g.setColour(button.findColour(isOn ? juce::DrawableButton::textColourOnId : juce::DrawableButton::textColourId)
+                        .withMultipliedAlpha(button.isEnabled() ? 1.0f : 0.4f));
+        g.drawFittedText(button.getButtonText(), 2, button.getHeight() - textH - 1, button.getWidth() - 4, textH,
+                         juce::Justification::centred, 1);
+    }
 }
 
 void AppLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool isButtonDown, int /*buttonX*/,
@@ -970,8 +1016,12 @@ void AppLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<float> b
         juce::String tracked;
         for (auto ch : title.toUpperCase())
             tracked << juce::String::charToString(ch) << " ";
-        g.drawText(tracked.trimEnd(), header.reduced(10.0f, 0.0f).toNearestInt(), juce::Justification::centredLeft,
-                   true);
+        // Asymmetric inset: 22px on the left clears the activity LED (fillEllipse(6,8,8,8) in
+        // ModuleComponent::paint(), right edge 14) plus an 8px grid-aligned gap, regardless of
+        // whether the LED is currently lit — so the title never shifts when RMS crosses the
+        // lit/unlit threshold.
+        g.drawText(tracked.trimEnd(), header.withTrimmedLeft(22.0f).withTrimmedRight(10.0f).toNearestInt(),
+                   juce::Justification::centredLeft, true);
     }
 
     // ---- Border + selection ----

@@ -1,6 +1,6 @@
 # Theming Guide
 
-Agent Synth ships with three built-in themes and a JSON-based theming system that lets you create
+Agent Synth ships with four built-in themes and a JSON-based theming system that lets you create
 and share your own visual styles.
 
 ---
@@ -14,6 +14,7 @@ and share your own visual styles.
 | **Obsidian Studio** | Flat | Dark, restrained — sharp edges, subtle shadows |
 | **Neon Lab** | Glass | Translucent surfaces, neon glow, glassmorphism |
 | **Warm Console** | Textured | Amber tones, brushed-metal striation overlay |
+| **Daylight Studio** | Flat | Light, clean — indigo accent, subtle drop shadow (`id: "daylight"`, `isDark: false`) |
 
 **User themes** live in the user themes folder as `*.gtheme.json` files. They are loaded at
 launch and whenever you press **Reload Themes** in the Appearance tab.
@@ -481,9 +482,9 @@ automatically.
 | `assets/fonts/*.ttf` | Embedded font files (SIL OFL). Only the app target links them; tests use JUCE default fonts. |
 | User themes folder (see section 4) | `*.gtheme.json` files placed here are loaded at startup and on "Reload Themes". |
 
-**At startup**: built-in themes are registered first (obsidian/neon/warm), then user themes are
-loaded from the folder. If two user themes share the same `id`, the second file overwrites the
-first in the list.
+**At startup**: built-in themes are registered first (obsidian/neon/warm/daylight), then user
+themes are loaded from the folder. If two user themes share the same `id`, the second file
+overwrites the first in the list.
 
 **On reload** (pressing "Reload Themes"): previously-loaded user themes are cleared; built-ins
 are preserved. Then the folder is re-scanned. If the active theme was a user theme that has since
@@ -496,8 +497,9 @@ second file is created.
 **Theme switch performance**: a theme change triggers exactly one re-skin pass —
 `applyTheme()` remaps all JUCE ColourIds, then `sendLookAndFeelChangeMessage()` propagates
 `lookAndFeelChanged()` to all child components, then a single `repaint()` is requested.
-Because module cards use `setBufferedToImage(true)`, only their cached images are invalidated
-and re-rendered once. There is no animation loop or per-tick repaint added.
+Because module cards are buffered via `synth::ui::ZoomFrozenCachedImage` (see
+[`docs/layout.md` §10](layout.md#10-ui-rendering-performance)), only their cached images are
+invalidated and re-rendered once. There is no animation loop or per-tick repaint added.
 
 ---
 
@@ -599,6 +601,19 @@ until someone updated a table. With categories, a new module inherits its group'
 
 The mode is a canvas-wide setting under **Settings → Appearance → Cables**, persisted as
 `cableColour.mode`.
+
+### Every built-in theme must set every wire token
+
+Every built-in theme (`Source/UI/Theme/BuiltInThemes.cpp`, and by extension any future
+theme-construction helper) MUST explicitly set all six wire tokens (`audioWire`, `midiWire`,
+`modWire`, `pitchWire`, `gateWire`, `polyBusWire`) and the full 8-entry `cableCategory` array. A
+field the constructor doesn't set silently falls back to `Theme.h`'s Obsidian (dark) defaults —
+exactly the bug that shipped in `makeDaylight()`: it set every wire token except `midiWire` and
+never set `cableCategory`, so both fell back to Obsidian's dark-tuned values (a lavender MIDI wire
+that washes out on Daylight's near-white background). Guarded by
+`Tests/CableColourTests.cpp`'s `EveryBuiltInThemeWireIsLegibleAgainstItsOwnCanvas` (WCAG contrast
+floor against both `bg1` and `surface`, every built-in theme) and
+`DaylightMidiAndCategoryColoursAreFixedNotInherited` (pinned regression for this specific bug).
 
 ### User overrides
 

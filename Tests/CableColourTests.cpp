@@ -13,6 +13,7 @@
 #include "../Source/UI/ModuleLibraryComponent.h"
 #include "../Source/UI/Theme/BuiltInThemes.h"
 #include "../Source/UI/Theme/ThemeLoader.h"
+#include <cmath>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <set>
@@ -45,6 +46,31 @@ std::unique_ptr<juce::PropertiesFile> makeProps(const juce::String& name) {
 }
 
 class DummyDragSource : public juce::Component {};
+
+// WCAG relative luminance / contrast ratio, used by the theme legibility tests below. Pure
+// arithmetic over sRGB channel values — no GUI, no LookAndFeel.
+double relativeLuminance(juce::Colour c) {
+    auto channel = [](float v) { return v <= 0.03928f ? v / 12.92f : std::pow((v + 0.055f) / 1.055f, 2.4f); };
+    return 0.2126 * channel(c.getFloatRed()) + 0.7152 * channel(c.getFloatGreen()) + 0.0722 * channel(c.getFloatBlue());
+}
+
+double contrastRatio(juce::Colour a, juce::Colour b) {
+    const auto l1 = relativeLuminance(a);
+    const auto l2 = relativeLuminance(b);
+    const auto hi = std::max(l1, l2);
+    const auto lo = std::min(l1, l2);
+    return (hi + 0.05) / (lo + 0.05);
+}
+
+// The bar every wire/category colour must clear against BOTH canvas surfaces (bg1 and the
+// module-card surface) on every built-in theme. Computed empirically, not guessed: the true
+// floor across all four built-ins turns out to be Daylight's own gateWire (~2.44:1 against
+// bg1) rather than anything MIDI-related — Daylight's light background makes every wire token
+// harder to clear than the dark themes manage. 2.4 sits just under that with a small margin, so
+// this test cannot by itself distinguish the pre-fix midiWire (~2.45:1, i.e. inside the same
+// margin as gateWire) from a legible one — that is exactly why the pinned regression test below
+// checks the fix directly instead of relying on the floor alone.
+constexpr double kMinLegibleContrast = 2.4;
 
 } // namespace
 
@@ -311,6 +337,51 @@ TEST(CableColourThemeTest, MissingCableKeysFallBackToDefaults) {
     EXPECT_EQ(parsed->colors.midiWire, defaults.midiWire);
     for (int i = 0; i < synth::theme::kCableCategoryCount; ++i)
         EXPECT_EQ(parsed->colors.cableCategory[(size_t)i], defaults.cableCategory[(size_t)i]);
+}
+
+TEST(CableColourThemeTest, EveryBuiltInThemeWireIsLegibleAgainstItsOwnCanvas) {
+    // Guards against a theme silently inheriting a wire/category token tuned for a different
+    // (e.g. dark) background — the Daylight midiWire regression this file exists to catch.
+    for (const auto& t : synth::theme::builtInThemes()) {
+        for (int i = 0; i < kCableSignalCount; ++i) {
+            const auto s = (CableSignal)i;
+            const auto colour = themeColourForSignal(t.colors, s);
+            EXPECT_GE(contrastRatio(colour, t.colors.bg1), kMinLegibleContrast)
+                << t.name << ": " << cableSignalLabel(s) << " wire vs bg1";
+            EXPECT_GE(contrastRatio(colour, t.colors.surface), kMinLegibleContrast)
+                << t.name << ": " << cableSignalLabel(s) << " wire vs surface";
+        }
+        for (int i = 0; i < synth::theme::kCableCategoryCount; ++i) {
+            const auto colour = t.colors.cableCategory[(size_t)i];
+            EXPECT_GE(contrastRatio(colour, t.colors.bg1), kMinLegibleContrast)
+                << t.name << ": category " << i << " vs bg1";
+            EXPECT_GE(contrastRatio(colour, t.colors.surface), kMinLegibleContrast)
+                << t.name << ": category " << i << " vs surface";
+        }
+    }
+}
+
+TEST(CableColourThemeTest, DaylightMidiAndCategoryColoursAreFixedNotInherited) {
+    // Pinned regression for the bug itself: makeDaylight() used to set every wire token except
+    // midiWire and never touch cableCategory at all, so both silently fell back to Theme.h's
+    // dark-theme defaults (Obsidian's). This checks the fix directly rather than relying on the
+    // contrast floor above, which (see kMinLegibleContrast) is too close to Daylight's own
+    // gateWire to separate a legible midiWire from the pre-fix lavender on its own.
+    const auto daylight = synth::theme::makeDaylight();
+    const synth::theme::Colors defaults; // == Obsidian's values
+
+    bool categoryDiffersFromDefault = false;
+    for (int i = 0; i < synth::theme::kCableCategoryCount; ++i) {
+        if (daylight.colors.cableCategory[(size_t)i] != defaults.cableCategory[(size_t)i]) {
+            categoryDiffersFromDefault = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(categoryDiffersFromDefault) << "Daylight's cableCategory must not be the inherited dark-theme default";
+
+    EXPECT_NE(daylight.colors.midiWire, defaults.midiWire) << "Daylight's midiWire must not be the inherited lavender";
+    EXPECT_GE(contrastRatio(daylight.colors.midiWire, daylight.colors.bg1), kMinLegibleContrast);
+    EXPECT_GE(contrastRatio(daylight.colors.midiWire, daylight.colors.surface), kMinLegibleContrast);
 }
 
 TEST(CableColourThemeTest, PartialCableCategoryObjectOnlyOverridesNamedKeys) {

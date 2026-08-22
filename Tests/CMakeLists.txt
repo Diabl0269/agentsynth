@@ -78,6 +78,7 @@ add_executable(Tests
     LocalHistoryStoreTests.cpp
     MainComponentTests.cpp
     GraphEditorTests.cpp
+    ZoomFrozenCachedImageTests.cpp
     ModuleComponentTests.cpp
     AutomationUiReflectionTests.cpp
     AIChatComponentTests.cpp

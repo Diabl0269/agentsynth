@@ -18,6 +18,10 @@
 
 class GraphEditor; // Forward declaration
 
+namespace synth::ui {
+class ZoomFrozenCachedImage; // Forward declaration — see ZoomFrozenCachedImage.h
+}
+
 class ModuleComponent
     : public juce::Component
     , public juce::Timer
@@ -112,7 +116,19 @@ public:
      *  a control for (custom chrome, or a stale event for the wrong node) is a silent no-op. */
     void reflectParameterValue(const juce::AudioProcessorParameter* param, float normalized);
 
+    /** Pins/unpins this card's raster scale for the duration of a canvas zoom gesture.
+     *  Owned by GraphEditor; never call from the card itself. */
+    void setRasterFrozen(bool frozen);
+    bool isRasterFrozen() const noexcept;
+    const synth::ui::ZoomFrozenCachedImage* getRasterCacheForTest() const noexcept { return rasterCache; }
+
 private:
+    // Non-owning: the juce::Component base owns this via setCachedComponentImage(). See
+    // ZoomFrozenCachedImage.h — installed instead of setBufferedToImage(true) so a canvas zoom
+    // gesture can pin the raster scale. Never call setBufferedToImage() on a ModuleComponent again:
+    // JUCE asserts (and silently deletes this cache) if a CachedComponentImage is already installed.
+    synth::ui::ZoomFrozenCachedImage* rasterCache = nullptr;
+
     juce::AudioProcessor* module;
     juce::AudioProcessorGraph::NodeID nodeId;
     GraphEditor& owner;

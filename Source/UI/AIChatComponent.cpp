@@ -1,6 +1,7 @@
 #include "AIChatComponent.h"
 #include "../AI/PatchDiff.h"
 #include "../Branding.h"
+#include <cmath>
 #include <thread>
 
 namespace synth {
@@ -97,11 +98,22 @@ public:
         , onRate(std::move(onRateCallback))
         , currentRating(initialRating) {
 
+        // Patch-name accent: success (green) for a brand-new patch, warning (amber) for an
+        // in-place update — theme tokens, not raw hex, so the label stays readable against
+        // BOTH a dark and a light bubble background (the raw lightgreen/lightyellow this
+        // replaced went unreadably low-contrast on a light theme's grey bubble fill). Falls back
+        // to the same literals only if no AppLookAndFeel is attached yet (e.g. constructed before
+        // this component's owner is parented into a themed window).
+        using synth::theme::AppLookAndFeel;
+        auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
+        const juce::Colour accentColour =
+            lf != nullptr ? (isMerge ? lf->getTheme().colors.warning : lf->getTheme().colors.success)
+                          : (isMerge ? juce::Colours::lightyellow : juce::Colours::lightgreen);
+
         addAndMakeVisible(headerLabel);
         headerLabel.setText(isMerge ? "Patch Update" : "New Patch", juce::dontSendNotification);
         headerLabel.setFont(juce::Font(14.0f, juce::Font::bold));
-        headerLabel.setColour(juce::Label::textColourId,
-                              isMerge ? juce::Colours::lightyellow : juce::Colours::lightgreen);
+        headerLabel.setColour(juce::Label::textColourId, accentColour);
 
         addAndMakeVisible(expandButton);
         expandButton.setButtonText("View JSON");
@@ -148,7 +160,6 @@ public:
         diffDisplay.setColour(juce::TextEditor::backgroundColourId, juce::Colours::black.withAlpha(0.3f));
 
         if (!diffAvailable) {
-            diffLineCount = 1;
             diffDisplay.setText("Preview unavailable - this patch may be rejected when applied.");
         } else if (isMerge) {
             // Grouped by Kind (adds, then removes, then param changes, then connection
@@ -158,10 +169,8 @@ public:
             // is the same pattern flushDebugLog() uses for insertTextAtCaret, minus the colouring).
             auto grouped = groupChangesByKind(changes);
             if (grouped.empty()) {
-                diffLineCount = 1;
                 diffDisplay.setText("No changes.");
             } else {
-                diffLineCount = (int)grouped.size();
                 for (size_t i = 0; i < grouped.size(); ++i) {
                     diffDisplay.setColour(juce::TextEditor::textColourId, colourForKind(grouped[i].kind));
                     diffDisplay.insertTextAtCaret(grouped[i].describe());
@@ -180,9 +189,15 @@ public:
             if (summary.connectionCount > 0)
                 lines.add(juce::String(summary.connectionCount) +
                           (summary.connectionCount == 1 ? " connection" : " connections"));
-            diffLineCount = lines.size();
             diffDisplay.setText(lines.joinIntoString("\n"));
         }
+        // Captured AFTER diffDisplay is populated (getText() ignores the per-segment colouring
+        // above, which is fine — this is only ever used to MEASURE wrapped height, not to
+        // re-render). diffAreaHeight() measures this instead of a diffLineCount*rowHeight
+        // estimate: a single long status/preview line (e.g. "Preview unavailable...") WRAPS
+        // inside diffDisplay's fixed width, and a line-count estimate doesn't know that and
+        // clips it.
+        diffText = diffDisplay.getText();
 
         addAndMakeVisible(jsonDisplay);
         jsonDisplay.setMultiLine(true);
@@ -193,15 +208,21 @@ public:
     }
 
     void resized() override {
-        auto b = getLocalBounds().reduced(5);
-        auto header = b.removeFromTop(25);
-        headerLabel.setBounds(header.removeFromLeft(120));
+        auto b = getLocalBounds().reduced(kCardPadding);
 
-        auto buttons = header.removeFromRight(180);
-        applyButton.setBounds(buttons.removeFromRight(80).reduced(2));
-        expandButton.setBounds(buttons.removeFromRight(90).reduced(2));
+        headerLabel.setBounds(b.removeFromTop(kHeaderLabelHeight));
+        b.removeFromTop(kRowGap);
 
-        b.removeFromTop(5);
+        // View JSON / Apply get their OWN row rather than sharing the header label's row: at a
+        // narrow bubble width (see AIChatComponent's ~80%-width bubble gutter) squeezing both
+        // buttons alongside the label left "Hide JSON" less than its own text width to render in,
+        // so it showed as "View J...". A full-width row gives each button room regardless of how
+        // narrow the bubble is.
+        auto buttonRow = b.removeFromTop(kButtonRowHeight);
+        expandButton.setBounds(buttonRow.removeFromLeft(kExpandButtonWidth).reduced(2));
+        buttonRow.removeFromLeft(kRowGap);
+        applyButton.setBounds(buttonRow.removeFromRight(kApplyButtonWidth).reduced(2));
+        b.removeFromTop(kRowGap);
 
         // Feedback rows: thumbs are always visible on a patch card, on their own row now that
         // they're single glyphs rather than "Good"/"Bad" labels. The comment field/send button
@@ -215,16 +236,16 @@ public:
         commentSaveButton.setVisible(showComment);
         commentField.setVisible(showComment);
         if (showComment) {
-            b.removeFromTop(4);
+            b.removeFromTop(kRowGap);
             auto commentRow = b.removeFromTop(kFeedbackRowHeight);
             commentSaveButton.setBounds(commentRow.removeFromRight(55).reduced(2));
             commentField.setBounds(commentRow.reduced(2));
         }
-        b.removeFromTop(5);
+        b.removeFromTop(kRowGap);
 
         if (isExpanded) {
-            diffDisplay.setBounds(b.removeFromTop(diffAreaHeight()));
-            b.removeFromTop(5);
+            diffDisplay.setBounds(b.removeFromTop(diffAreaHeight(b.getWidth())));
+            b.removeFromTop(kRowGap);
             jsonDisplay.setVisible(true);
             jsonDisplay.setBounds(b);
         } else {
@@ -233,11 +254,17 @@ public:
         }
     }
 
-    int getRequiredHeight() const {
+    // `width` must be the width this card will actually be laid out at (MessageBubble passes the
+    // same contentWidth it uses for its own text measurement) — diffAreaHeight() below measures
+    // the diff/status text's WRAPPED height at that width, so this and resized() must agree on it
+    // or the reserved height drifts from what actually renders.
+    int getRequiredHeight(int width) const {
         bool showComment = currentRating != AIChatComponent::PatchRatingUiState::None;
-        int height = 35 + kFeedbackRowHeight + (showComment ? 4 + kFeedbackRowHeight : 0) + 5 + diffAreaHeight();
+        int height = kCardPadding * 2 + kHeaderLabelHeight + kRowGap + kButtonRowHeight + kRowGap + kFeedbackRowHeight +
+                     (showComment ? kRowGap + kFeedbackRowHeight : 0) + kRowGap +
+                     diffAreaHeight(width - kCardPadding * 2);
         if (isExpanded)
-            height += 5 + kRawJsonHeight;
+            height += kRowGap + kRawJsonHeight;
         return height;
     }
 
@@ -264,17 +291,28 @@ public:
     }
 
     void updateThumbColours() {
-        auto neutral = juce::Colours::darkgrey;
+        using synth::theme::AppLookAndFeel;
+        auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
+        const juce::Colour neutral = lf != nullptr ? lf->getTheme().colors.surfaceHi : juce::Colours::darkgrey;
+        const juce::Colour upSelected = lf != nullptr ? lf->getTheme().colors.success : juce::Colours::darkgreen;
+        const juce::Colour downSelected = lf != nullptr ? lf->getTheme().colors.error : juce::Colour(0xFF8B3A3A);
         thumbsUpButton.setColour(juce::TextButton::buttonColourId,
-                                 currentRating == AIChatComponent::PatchRatingUiState::Up ? juce::Colours::darkgreen
-                                                                                          : neutral);
+                                 currentRating == AIChatComponent::PatchRatingUiState::Up ? upSelected : neutral);
         thumbsDownButton.setColour(juce::TextButton::buttonColourId,
-                                   currentRating == AIChatComponent::PatchRatingUiState::Down ? juce::Colour(0xFF8B3A3A)
-                                                                                              : neutral);
+                                   currentRating == AIChatComponent::PatchRatingUiState::Down ? downSelected : neutral);
     }
 
 private:
-    static constexpr int kLineHeight = 16;
+    // 8px-grid spacing/padding used throughout this card's layout.
+    static constexpr int kCardPadding = 8;
+    static constexpr int kRowGap = 8;
+    static constexpr int kHeaderLabelHeight = 20;
+    static constexpr int kButtonRowHeight = 28;
+    // Wide enough for "Hide JSON" (the longer of the toggle's two labels) with real breathing
+    // room, at this card's bold-ish default button font — the fixed-180px-shared-with-header-label
+    // math this replaced could squeeze this below its own text width on a narrow bubble.
+    static constexpr int kExpandButtonWidth = 96;
+    static constexpr int kApplyButtonWidth = 88;
     static constexpr int kMinDiffHeight = 24;
     // Caps how tall a very long diff can grow the card; the "View JSON" toggle (which also shows
     // the diff area above the raw JSON, both individually scrollable TextEditors) is the escape
@@ -284,8 +322,20 @@ private:
     // unbroken line this used to hold.
     static constexpr int kRawJsonHeight = 240;
     static constexpr int kFeedbackRowHeight = 24;
+    // diffDisplay's own left/right internal margins (juce::TextEditor reserves a small inset
+    // beyond whatever it's given via setBounds) — subtracted before measuring wrapped height so
+    // the estimate is never narrower than what the TextEditor actually renders into.
+    static constexpr int kDiffTextInset = 12;
 
-    int diffAreaHeight() const { return juce::jlimit(kMinDiffHeight, kMaxDiffHeight, diffLineCount * kLineHeight + 8); }
+    // Measures diffText's ACTUAL wrapped height at `width` (see AIChatComponent::
+    // computeWrappedTextHeight()) rather than a line-count*rowHeight estimate — a long single
+    // logical line (the "Preview unavailable..." status message) wraps inside diffDisplay's
+    // fixed width, and an estimate that only counts logical lines doesn't see that and clips it.
+    int diffAreaHeight(int width) const {
+        const int measured = AIChatComponent::computeWrappedTextHeight(diffDisplay.getFont(), diffText,
+                                                                       juce::jmax(20, width - kDiffTextInset));
+        return juce::jlimit(kMinDiffHeight, kMaxDiffHeight, measured + 8);
+    }
 
     std::function<void(AIChatComponent::PatchRatingUiState, const juce::String&)> onRate;
     AIChatComponent::PatchRatingUiState currentRating = AIChatComponent::PatchRatingUiState::None;
@@ -293,7 +343,9 @@ private:
     juce::String patchJson;
     std::function<void()> onApply;
     bool isExpanded = false;
-    int diffLineCount = 1;
+    // The plain text diffDisplay holds, captured once at construction — see its assignment site's
+    // doc comment. Used only to measure diffAreaHeight(); never re-rendered from this.
+    juce::String diffText;
 
     juce::Label headerLabel;
     juce::TextButton expandButton;
@@ -320,10 +372,19 @@ public:
     TimelineCard(const juce::String& preview, std::function<void()> applyCallback)
         : previewText(preview) {
 
+        // Theme tokens, not raw hex — the previous juce::Colours::white.withAlpha(0.8f) preview
+        // text was near-invisible on a light theme's light bubble fill, the same class of bug
+        // PatchCard's headerLabel had (see its constructor's doc comment).
+        using synth::theme::AppLookAndFeel;
+        auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
+        const juce::Colour headerColour = lf != nullptr ? lf->getTheme().colors.accent2 : juce::Colours::lightskyblue;
+        const juce::Colour previewColour =
+            lf != nullptr ? lf->getTheme().colors.textPrimary : juce::Colours::white.withAlpha(0.8f);
+
         addAndMakeVisible(headerLabel);
         headerLabel.setText("Timeline Changes", juce::dontSendNotification);
         headerLabel.setFont(juce::Font(14.0f, juce::Font::bold));
-        headerLabel.setColour(juce::Label::textColourId, juce::Colours::lightskyblue);
+        headerLabel.setColour(juce::Label::textColourId, headerColour);
 
         if (applyCallback) {
             applyButton = std::make_unique<juce::TextButton>();
@@ -338,7 +399,7 @@ public:
         previewLabel.setFont(juce::Font(12.0f));
         previewLabel.setMinimumHorizontalScale(1.0f);
         previewLabel.setJustificationType(juce::Justification::topLeft);
-        previewLabel.setColour(juce::Label::textColourId, juce::Colours::white.withAlpha(0.8f));
+        previewLabel.setColour(juce::Label::textColourId, previewColour);
     }
 
     void resized() override {
@@ -413,72 +474,102 @@ public:
         }
     }
 
+    // AIChatComponent::resized() reads this to decide which side of the message list gets the
+    // gutter (user bubbles hug the right edge, assistant bubbles the left) — see its layout loop.
+    bool isUserRole() const { return role == "user"; }
+
     void paint(juce::Graphics& g) override {
         auto b = getLocalBounds().reduced(2).toFloat();
         bool isUser = (role == "user");
 
-        juce::Colour baseColour = isUser ? juce::Colours::blue : juce::Colours::darkgrey.brighter(0.2f);
+        using synth::theme::AppLookAndFeel;
+        auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
+        // Theme tokens instead of raw blue/darkgrey: the assistant bubble in particular used to be
+        // a flat literal grey regardless of theme, which read as a low-contrast block on a light
+        // theme. accent tints the user bubble, surfaceHi (the "raised surface" token) tints the
+        // assistant one, both still faded through the same alpha gradient as before.
+        const juce::Colour baseColour = lf != nullptr
+                                            ? (isUser ? lf->getTheme().colors.accent : lf->getTheme().colors.surfaceHi)
+                                            : (isUser ? juce::Colours::blue : juce::Colours::darkgrey.brighter(0.2f));
+        const juce::Colour borderColour =
+            lf != nullptr ? lf->getTheme().colors.border : juce::Colours::white.withAlpha(0.15f);
+        const juce::Colour roleColour = lf != nullptr
+                                            ? (isUser ? lf->getTheme().colors.accent : lf->getTheme().colors.textMuted)
+                                            : (isUser ? juce::Colours::lightblue : juce::Colours::grey);
+        const juce::Colour timestampColour = lf != nullptr ? lf->getTheme().colors.textMuted : juce::Colours::grey;
+
         juce::ColourGradient grad(baseColour.withAlpha(0.3f), b.getX(), b.getY(), baseColour.withAlpha(0.1f),
                                   b.getRight(), b.getBottom(), false);
 
         g.setGradientFill(grad);
         g.fillRoundedRectangle(b, 10.0f);
 
-        g.setColour(juce::Colours::white.withAlpha(0.15f));
+        g.setColour(borderColour);
         g.drawRoundedRectangle(b, 10.0f, 1.0f);
 
-        // Role indicator (+ optional elapsed-wait marker on assistant bubbles)
-        auto roleBand = b.removeFromTop(12).reduced(5, 0);
-        g.setColour(isUser ? juce::Colours::lightblue : juce::Colours::grey);
+        // Role indicator (+ optional elapsed-wait marker on assistant bubbles). Reserved within
+        // the SAME outer padding + role-band height resized() clears for textLabel below, so the
+        // role text and the message text never overlap.
+        auto content = getLocalBounds().reduced(kOuterPadding);
+        auto roleBand = content.removeFromTop(kRoleBandHeight).toFloat();
+        g.setColour(roleColour);
         g.setFont(juce::Font(10.0f, juce::Font::italic));
-        g.drawText(isUser ? "YOU" : "AI", roleBand, juce::Justification::left);
+        g.drawText(isUser ? "YOU" : "AI", roleBand, juce::Justification::centredLeft);
 
         if (!isUser && responseMs >= 0) {
-            g.drawText(AIChatComponent::formatResponseTime(responseMs), roleBand, juce::Justification::right);
+            g.setColour(timestampColour);
+            g.drawText(AIChatComponent::formatResponseTime(responseMs), roleBand, juce::Justification::centredRight);
         }
     }
 
     void resized() override {
-        auto b = getLocalBounds().reduced(10);
+        auto b = getLocalBounds().reduced(kOuterPadding);
+
+        // Headroom for the role label/timestamp paint() draws above — see its matching
+        // getLocalBounds().reduced(kOuterPadding) + removeFromTop(kRoleBandHeight). Without this,
+        // textLabel started at the same y the role band paints into and clipped/overlapped it.
+        b.removeFromTop(kRoleBandHeight + kRoleContentGap);
 
         if (patchCard) {
-            patchCard->setBounds(b.removeFromBottom(patchCard->getRequiredHeight()));
-            b.removeFromBottom(5);
+            patchCard->setBounds(b.removeFromBottom(patchCard->getRequiredHeight(b.getWidth())));
+            b.removeFromBottom(kRoleContentGap);
         }
 
         if (timelineCard) {
             timelineCard->setBounds(b.removeFromBottom(timelineCard->getRequiredHeight(b.getWidth())));
-            b.removeFromBottom(5);
+            b.removeFromBottom(kRoleContentGap);
         }
 
         if (upgradeButton) {
             upgradeButton->setBounds(b.removeFromBottom(kUpgradeButtonHeight));
-            b.removeFromBottom(5);
+            b.removeFromBottom(kRoleContentGap);
         }
 
         textLabel.setBounds(b);
     }
 
     int getRequiredHeight(int width) {
-        int contentWidth = width - 20; // Margin
+        int contentWidth = width - kOuterPadding * 2;
         juce::Font font = textLabel.getFont();
 
         juce::GlyphArrangement ga;
         ga.addJustifiedText(font, text, 0.0f, 0.0f, (float)contentWidth, juce::Justification::left);
 
         int textHeight = (int)ga.getBoundingBox(0, -1, true).getHeight();
-        int height = textHeight + 25; // Base height for text + role label
+        // Outer padding (top+bottom) + the role band + the gap below it, on top of the wrapped
+        // message text — see resized()'s matching reservation.
+        int height = textHeight + kOuterPadding * 2 + kRoleBandHeight + kRoleContentGap;
 
         if (patchCard) {
-            height += 10 + patchCard->getRequiredHeight();
+            height += kRoleContentGap + patchCard->getRequiredHeight(contentWidth);
         }
 
         if (timelineCard) {
-            height += 5 + timelineCard->getRequiredHeight(contentWidth);
+            height += kRoleContentGap + timelineCard->getRequiredHeight(contentWidth);
         }
 
         if (upgradeButton) {
-            height += 5 + kUpgradeButtonHeight;
+            height += kRoleContentGap + kUpgradeButtonHeight;
         }
 
         return juce::jmax(40, height);
@@ -486,6 +577,11 @@ public:
 
 private:
     static constexpr int kUpgradeButtonHeight = 28;
+    // 8px-grid outer padding (replaces the old ad hoc reduced(10)/reduced(2) mismatch between
+    // paint() and resized() that let the role label overlap the message text).
+    static constexpr int kOuterPadding = 8;
+    static constexpr int kRoleBandHeight = 16;
+    static constexpr int kRoleContentGap = 8;
 
     juce::String role;
     juce::String text;
@@ -796,33 +892,55 @@ void AIChatComponent::cancelRequest() {
 void AIChatComponent::resized() {
     auto b = getLocalBounds().reduced(10);
 
+    // 8px-grid gap used for every row boundary in the bottom-chrome stack below, so accountRow /
+    // planBadge / upsellButton / the notice strips / the model row all sit a consistent distance
+    // apart instead of the ad hoc mix of 4/5px gaps this used to be.
+    constexpr int kChromeGap = 8;
+    // Width every full-row chrome element below renders at — captured once, before any height
+    // (only) slicing, since Rectangle::removeFromTop/removeFromBottom never change the width.
+    // Needed up front so hostedModeNotice/downgradeStripLabel can measure their OWN (dynamically
+    // set, possibly multi-line) text at the width they'll actually render into before reserving
+    // height for it.
+    const int chromeWidth = b.getWidth();
+
     // Top row: New Chat, History
     auto topArea = b.removeFromTop(40);
     newChatButton.setBounds(topArea.removeFromLeft(100));
-    topArea.removeFromLeft(5);
+    topArea.removeFromLeft(kChromeGap);
     historyButton.setBounds(topArea.removeFromLeft(80));
 
     // Account row: reserved directly above the model-picker row, inside the bottom chrome.
     // Zero height (and invisible) when no AccountService is attached, so every panel/test that
     // never calls setAccountService() sees byte-identical layout to before this feature.
     const int accountRowHeight = accountRow.getPreferredHeight();
-    const int accountRowGap = accountRowHeight > 0 ? 5 : 0;
+    const int accountRowGap = accountRowHeight > 0 ? kChromeGap : 0;
 
     // Plan badge: same zero-height-when-absent contract as accountRow — reserved only once an
     // AccountService is attached AND its entitlement is known (SignedOut/SigningIn/unknown all
     // collapse to 0, same as accountRow collapsing to 0 with no service).
     const int planBadgeHeight = planBadge.getPreferredHeight();
-    const int planBadgeGap = planBadgeHeight > 0 ? 5 : 0;
+    const int planBadgeGap = planBadgeHeight > 0 ? kChromeGap : 0;
 
     // Hosted-mode privacy notice: same zero-height-when-absent contract, reserved only while the
-    // active provider is hosted (see updateHostedModeNotice()).
-    const int hostedNoticeHeight = hostedModeNotice.isVisible() ? 18 : 0;
-    const int hostedNoticeGap = hostedNoticeHeight > 0 ? 5 : 0;
+    // active provider is hosted (see updateHostedModeNotice()). Height is MEASURED, not a fixed
+    // one-line guess — its text is a full sentence that can wrap at this panel's width, and a
+    // fixed height silently truncated it (drawFittedText() derives how many lines it's allowed to
+    // wrap across from the label's own height — see AppLookAndFeel::drawLabel()).
+    const int hostedNoticeHeight =
+        hostedModeNotice.isVisible()
+            ? computeWrappedTextHeight(hostedModeNotice.getFont(), hostedModeNotice.getText(), chromeWidth)
+            : 0;
+    const int hostedNoticeGap = hostedNoticeHeight > 0 ? kChromeGap : 0;
 
     // P6-8 downgrade notice: same zero-height-when-absent contract, reserved only once
-    // updateDowngradeStrip() has something true to say (see its doc comment).
-    const int downgradeStripHeight = downgradeStripLabel.isVisible() ? 18 : 0;
-    const int downgradeStripGap = downgradeStripHeight > 0 ? 5 : 0;
+    // updateDowngradeStrip() has something true to say (see its doc comment). Same measured-not-
+    // guessed height as hostedModeNotice just above — this one's text also embeds a variable-
+    // length date, so a fixed height clipped it whenever the rendered sentence wrapped.
+    const int downgradeStripHeight =
+        downgradeStripLabel.isVisible()
+            ? computeWrappedTextHeight(downgradeStripLabel.getFont(), downgradeStripLabel.getText(), chromeWidth)
+            : 0;
+    const int downgradeStripGap = downgradeStripHeight > 0 ? kChromeGap : 0;
 
     // P6-8 upsell strip: just the "Upgrade to Pro" button now (its explanatory text moved to
     // historyButton's tooltip — see the member doc comment), so it only needs a single comfortable
@@ -830,15 +948,19 @@ void AIChatComponent::resized() {
     // contract, but starts VISIBLE by default (see the member doc comment) — most callers (including
     // every existing test that never attaches an AccountService) will therefore reserve this space,
     // unlike the other three rows in this stack.
-    const int upsellStripHeight = upsellButton.isVisible() ? 28 : 0;
-    const int upsellStripGap = upsellStripHeight > 0 ? 5 : 0;
+    const int upsellStripHeight = upsellButton.isVisible() ? 32 : 0;
+    const int upsellStripGap = upsellStripHeight > 0 ? kChromeGap : 0;
 
-    auto bottomArea = b.removeFromBottom(70 + accountRowHeight + accountRowGap + planBadgeHeight + planBadgeGap +
-                                         hostedNoticeHeight + hostedNoticeGap + downgradeStripHeight +
-                                         downgradeStripGap + upsellStripHeight + upsellStripGap);
+    // Input row (40) + its gap + the model row (24), all on the 8px grid.
+    constexpr int kInputRowHeight = 40;
+    constexpr int kModelRowHeight = 24;
+    auto bottomArea =
+        b.removeFromBottom(kInputRowHeight + kChromeGap + kModelRowHeight + accountRowHeight + accountRowGap +
+                           planBadgeHeight + planBadgeGap + hostedNoticeHeight + hostedNoticeGap +
+                           downgradeStripHeight + downgradeStripGap + upsellStripHeight + upsellStripGap);
 
     // Bottom row: Input + Send (+ Cancel when waiting + spinner dot)
-    auto inputRow = bottomArea.removeFromBottom(40);
+    auto inputRow = bottomArea.removeFromBottom(kInputRowHeight);
 
     // Cancel button occupies the same slot as Send — only one is visible at a time.
     // We size both identically so the layout is stable regardless of visibility.
@@ -846,7 +968,7 @@ void AIChatComponent::resized() {
     sendButton.setBounds(sendCancelBounds);
     cancelButton.setBounds(sendCancelBounds);
 
-    inputRow.removeFromRight(10);
+    inputRow.removeFromRight(kChromeGap);
 
     // Spinner dot: 8×8, vertically centred on the right edge of the input area.
     const int spinnerSize = 8;
@@ -856,11 +978,11 @@ void AIChatComponent::resized() {
     inputField.setBounds(inputRow);
 
     // Middle row (above input): Model Picker (+ Patch/Arrange selector while its gates hold)
-    bottomArea.removeFromBottom(5);
-    auto modelRow = bottomArea.removeFromBottom(25);
+    bottomArea.removeFromBottom(kChromeGap);
+    auto modelRow = bottomArea.removeFromBottom(kModelRowHeight);
     modelPicker.setBounds(modelRow.removeFromLeft(200));
     if (modeSelector.isVisible()) {
-        modelRow.removeFromLeft(5);
+        modelRow.removeFromLeft(kChromeGap);
         modeSelector.setBounds(modelRow.removeFromLeft(110));
     }
 #ifndef NDEBUG
@@ -904,23 +1026,33 @@ void AIChatComponent::resized() {
 
     viewport.setBounds(b);
 
-    // Layout message bubbles and loader
+    // Layout message bubbles and loader.
     int y = 0;
-    int width = viewport.getMaximumVisibleWidth();
+    const int listWidth = viewport.getMaximumVisibleWidth();
+    // Each bubble gets a max width of ~80% of the list, with the rest left as a gutter on the
+    // OPPOSITE side from its role — user bubbles hug the right edge, assistant bubbles the left —
+    // so a conversation reads as two columns instead of every bubble spanning edge-to-edge with no
+    // visual sense of who's speaking.
+    constexpr float kBubbleWidthFraction = 0.8f;
+    const int bubbleWidth = juce::jmin(listWidth, juce::jmax(160, (int)((float)listWidth * kBubbleWidthFraction)));
     for (auto* child : messageList.getChildren()) {
         int h = 0;
+        int w = listWidth;
+        int x = 0;
         if (auto* bubble = dynamic_cast<MessageBubble*>(child)) {
-            h = bubble->getRequiredHeight(width);
+            w = bubbleWidth;
+            x = bubble->isUserRole() ? listWidth - w : 0;
+            h = bubble->getRequiredHeight(w);
         } else if (dynamic_cast<juce::Label*>(child)) {
             h = 24;
         }
 
         if (h > 0) {
-            child->setBounds(0, y, width, h);
+            child->setBounds(x, y, w, h);
             y += h + 10;
         }
     }
-    messageList.setSize(width, juce::jmax(viewport.getHeight(), y));
+    messageList.setSize(listWidth, juce::jmax(viewport.getHeight(), y));
 }
 
 void AIChatComponent::paint(juce::Graphics& g) {
@@ -1391,6 +1523,17 @@ juce::String AIChatComponent::formatResponseTime(int ms) {
     const int minutes = totalSeconds / 60;
     const int seconds = totalSeconds % 60;
     return juce::String(minutes) + "m " + juce::String(seconds) + "s";
+}
+
+int AIChatComponent::computeWrappedTextHeight(const juce::Font& font, const juce::String& text, int width) {
+    if (text.isEmpty())
+        return (int)std::ceil(font.getHeight());
+
+    juce::GlyphArrangement ga;
+    ga.addJustifiedText(font, text, 0.0f, 0.0f, (float)juce::jmax(20, width), juce::Justification::left);
+    const int wrapped = (int)std::ceil(ga.getBoundingBox(0, -1, true).getHeight());
+    // +2px slack for the line-boundary rounding case described in the header doc comment.
+    return juce::jmax((int)std::ceil(font.getHeight()), wrapped) + 2;
 }
 
 int AIChatComponent::getLastAssistantResponseMs() const {

@@ -431,7 +431,7 @@ TEST(AudioInputModuleTest, DeviceShrinkDropsHiddenRoutings) {
     for (auto* comp : editor.getModuleComponents())
         if (comp != nullptr && comp->getNodeId() == in->nodeID)
             tallHeight = comp->getHeight();
-    EXPECT_EQ(tallHeight, 217) << "eight jacks measure 217px — the port gutter alone sets the card height, since the "
+    EXPECT_EQ(tallHeight, 225) << "eight jacks measure 225px — the port gutter alone sets the card height, since the "
                                   "module has no controls (see GraphEditor::estimateModuleSize's note)";
 
     // The user switches to a 2-in device. Channel 3's jack no longer exists, so its cable cannot be

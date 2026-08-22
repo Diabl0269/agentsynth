@@ -309,6 +309,48 @@ TEST(ModuleLibraryPersistence, UnknownSectionNamesAreHarmless) {
     EXPECT_NO_THROW(comp.buildRows());
 }
 
+TEST(ModuleLibraryPersistence, SubHeaderCollapseKeyRoundTrips) {
+    // A plugin format group's collapse-state key is a composite string ("Plugins :: AudioUnit"),
+    // opaque to MainComponent's newline-joined persistence — no schema change needed on that side.
+    ModuleLibraryComponent restored;
+    restored.setSize(200, 1200);
+
+    synth::PluginIdentity vst3Alpha;
+    vst3Alpha.format = "VST3";
+    vst3Alpha.name = "Alpha";
+    vst3Alpha.uid = 1;
+    synth::PluginIdentity auBeta;
+    auBeta.format = "AudioUnit";
+    auBeta.name = "Beta";
+    auBeta.uid = 2;
+    restored.setPlugins({vst3Alpha, auBeta});
+
+    int notifications = 0;
+    restored.onCollapseStateChanged = [&notifications] { ++notifications; };
+
+    restored.setCollapsedSections({ModuleLibraryComponent::subsectionKey("Plugins", "AudioUnit")});
+
+    EXPECT_TRUE(restored.isSectionCollapsed(ModuleLibraryComponent::subsectionKey("Plugins", "AudioUnit")));
+    EXPECT_FALSE(restored.isSectionCollapsed(ModuleLibraryComponent::kPluginsHeader))
+        << "the Plugins header itself must stay expanded";
+
+    int betaIndex = -1;
+    int alphaIndex = -1;
+    for (int i = 0; i < restored.getEntryCount(); ++i) {
+        if (restored.getEntryText(i) == "Beta")
+            betaIndex = i;
+        if (restored.getEntryText(i) == "Alpha")
+            alphaIndex = i;
+    }
+    ASSERT_GE(betaIndex, 0);
+    ASSERT_GE(alphaIndex, 0);
+    EXPECT_EQ(restored.getRowCentreY(betaIndex), -1) << "AudioUnit's plugin rows must be hidden";
+    EXPECT_GT(restored.getRowCentreY(alphaIndex), 0) << "VST3 is a different sub-header and stays expanded";
+
+    // This IS the restore path — it must not fire the persistence-write-back notification.
+    EXPECT_EQ(notifications, 0);
+}
+
 // ============================================================================
 // Snippets section
 // ============================================================================

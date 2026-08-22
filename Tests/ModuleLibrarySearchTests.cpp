@@ -5,8 +5,13 @@
 //   • highlight     — highlightSpansFor reports each case-insensitive hit used when painting
 //   • chrome        — the search editor is pinned above COLLAPSE ALL; filtering does not persist
 //                     a collapse the user never asked for
+//   • theme         — the searchEditor's cached colours must not go stale between construction
+//                     (against whatever theme was active then) and being parented (which is
+//                     always after MainComponent applies the final persisted theme)
 
 #include "../Source/UI/ModuleLibraryComponent.h"
+#include "../Source/UI/Theme/AppLookAndFeel.h"
+#include "../Source/UI/Theme/BuiltInThemes.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -322,4 +327,75 @@ TEST(ModuleLibrarySearchPaint, PaintWithNoMatchesDoesNotCrash) {
     juce::Image img(juce::Image::ARGB, 200, 400, true);
     juce::Graphics g(img);
     EXPECT_NO_THROW(comp.paint(g));
+}
+
+// ============================================================================
+// Theme colour staleness (bug fix: parentHierarchyChanged())
+//
+// Reproduces MainComponent's real ordering: moduleLibrary is a plain member, constructed
+// against whatever theme is the Desktop default AT THAT POINT — the built-in default theme
+// Main.cpp primes before any Component exists. MainComponent's ctor BODY then applies the
+// persisted theme to that SAME LookAndFeel instance, without a live sendLookAndFeelChange()
+// broadcast (that only happens on a user-driven theme switch later). The searchEditor's cached
+// TextEditor colours must therefore only be trusted once the component is actually parented.
+// ============================================================================
+
+TEST(ModuleLibrarySearchTheme, ColoursMatchWhicheverThemeWasActiveAtConstruction) {
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
+    juce::Desktop::getInstance().setDefaultLookAndFeel(&lf);
+
+    ModuleLibraryComponent comp;
+    auto* editor = findSearchEditor(comp);
+    ASSERT_NE(editor, nullptr);
+    EXPECT_EQ(editor->findColour(juce::TextEditor::backgroundColourId), synth::theme::makeObsidian().colors.surface);
+
+    juce::Desktop::getInstance().setDefaultLookAndFeel(nullptr);
+}
+
+TEST(ModuleLibrarySearchTheme, UnparentedColoursDoNotAutoUpdateAfterTheLnFIsMutated) {
+    // Negative control: without a parent (so parentHierarchyChanged() never fires) and without a
+    // live sendLookAndFeelChange() broadcast (so lookAndFeelChanged() never fires either), the
+    // colours cached at construction must stay exactly as they were — proving those two hooks are
+    // the ONLY triggers, with no polling anywhere.
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
+    juce::Desktop::getInstance().setDefaultLookAndFeel(&lf);
+
+    ModuleLibraryComponent comp;
+    auto* editor = findSearchEditor(comp);
+    ASSERT_NE(editor, nullptr);
+    ASSERT_EQ(editor->findColour(juce::TextEditor::backgroundColourId), synth::theme::makeObsidian().colors.surface);
+
+    // Simulate MainComponent's ctor body applying the FINAL persisted theme to the SAME LnF
+    // instance — no sendLookAndFeelChange() call, exactly like AppLookAndFeel::applyTheme().
+    lf.applyTheme(synth::theme::makeNeon());
+
+    EXPECT_EQ(editor->findColour(juce::TextEditor::backgroundColourId), synth::theme::makeObsidian().colors.surface)
+        << "still unparented — must remain stale until parented or told to re-look-and-feel";
+
+    juce::Desktop::getInstance().setDefaultLookAndFeel(nullptr);
+}
+
+TEST(ModuleLibrarySearchTheme, ParentingRepullsColoursOntoTheFinalPersistedTheme) {
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
+    juce::Desktop::getInstance().setDefaultLookAndFeel(&lf);
+
+    ModuleLibraryComponent comp;
+    auto* editor = findSearchEditor(comp);
+    ASSERT_NE(editor, nullptr);
+    ASSERT_EQ(editor->findColour(juce::TextEditor::backgroundColourId), synth::theme::makeObsidian().colors.surface);
+
+    // MainComponent's ctor body corrects the LnF to the persisted theme before moduleLibrary is
+    // ever parented (addAndMakeVisible always runs after that call in every ctor path).
+    lf.applyTheme(synth::theme::makeNeon());
+
+    juce::Component parent;
+    parent.addAndMakeVisible(comp);
+
+    EXPECT_EQ(editor->findColour(juce::TextEditor::backgroundColourId), synth::theme::makeNeon().colors.surface)
+        << "parentHierarchyChanged() must re-pull colours from the now-final theme";
+
+    juce::Desktop::getInstance().setDefaultLookAndFeel(nullptr);
 }

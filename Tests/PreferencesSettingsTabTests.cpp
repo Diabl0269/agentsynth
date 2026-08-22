@@ -223,6 +223,34 @@ TEST_F(PreferencesSettingsTabTest, TogglingTimelineFeaturePersistsAndFiresCallba
     EXPECT_TRUE(fired.back());
 }
 
+// Moved from AppearanceSettingsTab; persistence key ("alignmentGuidesEnabled") is unchanged so
+// existing saved prefs still apply.
+TEST_F(PreferencesSettingsTabTest, AlignmentGuidesDefaultsToEnabledAndPersists) {
+    PreferencesSettingsTab tab(appProperties);
+    EXPECT_TRUE(tab.isAlignmentGuidesEnabled());
+    // Not yet touched by the user — nothing should be written to disk until setToggle/persist runs.
+    EXPECT_FALSE(appProperties.getUserSettings()->containsKey("alignmentGuidesEnabled"));
+
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    tab.setGraphEditor(&editor);
+
+    tab.setAlignmentGuidesEnabled(false);
+    EXPECT_FALSE(tab.isAlignmentGuidesEnabled());
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("alignmentGuidesEnabled"), "0");
+    EXPECT_FALSE(editor.getAlignmentGuidesEnabled());
+
+    tab.setAlignmentGuidesEnabled(true);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("alignmentGuidesEnabled"), "1");
+    EXPECT_TRUE(editor.getAlignmentGuidesEnabled());
+}
+
+TEST_F(PreferencesSettingsTabTest, AlignmentGuidesLoadsPersistedValue) {
+    appProperties.getUserSettings()->setValue("alignmentGuidesEnabled", "0");
+    PreferencesSettingsTab tab(appProperties);
+    EXPECT_FALSE(tab.isAlignmentGuidesEnabled());
+}
+
 TEST_F(PreferencesSettingsTabTest, PaintDoesNotCrash) {
     PreferencesSettingsTab tab(appProperties);
     tab.setSize(500, 400);

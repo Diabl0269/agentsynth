@@ -83,6 +83,12 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         persistDoubleClickPortDisconnect(doubleClickDisconnectToggle.getToggleState());
     };
 
+    addAndMakeVisible(alignmentGuideToggle);
+    alignmentGuideToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true),
+                                        juce::dontSendNotification);
+    alignmentGuideToggle.setTooltip("Shows snap/alignment guides on the canvas while dragging a module.");
+    alignmentGuideToggle.onClick = [this] { persistAlignmentGuidesEnabled(alignmentGuideToggle.getToggleState()); };
+
     addAndMakeVisible(defaultDualIOToggle);
     defaultDualIOToggle.setToggleState(
         appProperties.getUserSettings()->getBoolValue("defaultDualIOForNewModules", false), juce::dontSendNotification);
@@ -184,6 +190,9 @@ void PreferencesSettingsTab::resized() {
     doubleClickDisconnectToggle.setBounds(bounds.removeFromTop(24));
     addDivider();
 
+    alignmentGuideToggle.setBounds(bounds.removeFromTop(24));
+    addDivider();
+
     defaultDualIOToggle.setBounds(bounds.removeFromTop(24));
     bounds.removeFromTop(10);
     perModuleDefaultsButton.setBounds(bounds.removeFromTop(24).removeFromLeft(220));
@@ -212,6 +221,7 @@ void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
         return;
     graphEditor->setSmartConnectionMode(modeFromComboId(smartConnectionCombo.getSelectedId()));
     graphEditor->setDoubleClickPortDisconnectEnabled(doubleClickDisconnectToggle.getToggleState());
+    graphEditor->setAlignmentGuidesEnabled(alignmentGuideToggle.getToggleState());
     graphEditor->setDefaultDualIOForNewModules(defaultDualIOToggle.getToggleState());
 }
 
@@ -231,6 +241,13 @@ bool PreferencesSettingsTab::isDoubleClickPortDisconnectEnabled() const {
 void PreferencesSettingsTab::setDoubleClickPortDisconnectEnabled(bool enabled) {
     doubleClickDisconnectToggle.setToggleState(enabled, juce::dontSendNotification);
     persistDoubleClickPortDisconnect(enabled);
+}
+
+bool PreferencesSettingsTab::isAlignmentGuidesEnabled() const { return alignmentGuideToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setAlignmentGuidesEnabled(bool enabled) {
+    alignmentGuideToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistAlignmentGuidesEnabled(enabled);
 }
 
 bool PreferencesSettingsTab::getDefaultDualIOForNewModules() const { return defaultDualIOToggle.getToggleState(); }
@@ -313,6 +330,13 @@ void PreferencesSettingsTab::persistDoubleClickPortDisconnect(bool enabled) {
     appProperties.getUserSettings()->saveIfNeeded();
     if (graphEditor)
         graphEditor->setDoubleClickPortDisconnectEnabled(enabled);
+}
+
+void PreferencesSettingsTab::persistAlignmentGuidesEnabled(bool enabled) {
+    appProperties.getUserSettings()->setValue("alignmentGuidesEnabled", enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
+    if (graphEditor)
+        graphEditor->setAlignmentGuidesEnabled(enabled);
 }
 
 void PreferencesSettingsTab::persistDefaultDualIOForNewModules(bool enabled) {

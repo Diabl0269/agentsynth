@@ -12,6 +12,16 @@ public:
     /** Row height used by both layout and tests. */
     static constexpr int kRowHeight = 48;
 
+    // Shared column geometry — header labels (paint()) and each ModRow's combo columns
+    // (ModRow::resized()) must stay pixel-aligned, so both read from these instead of
+    // duplicating the same fractions.
+    static constexpr int kRowNumColW = 30;
+    static constexpr float kSourceColFrac = 0.30f;
+    static constexpr float kDestColFrac = 0.35f;
+
+    // 8px-grid gutter used for spacing between columns/controls.
+    static constexpr int kGutter = 8;
+
     /** Returns true for odd rows (zebra striping). */
     static bool isZebraRow(int rowIndex) noexcept { return rowIndex % 2 == 1; }
 
@@ -35,6 +45,20 @@ public:
     /** Hover row index (-1 = none). Set by ModRow mouse callbacks, or from tests. */
     void setHoveredRow(int rowIndex);
     int getHoveredRow() const noexcept { return hoveredRow_; }
+
+    // Test-only: the closed-combobox label text for a given row's source/destination combo.
+    // Exercises the exact JUCE label-resolution path (ComboBox::setSelectedId ->
+    // getItemForId over the root menu) that the grouped-menu label bug hit.
+    juce::String getRowSourceComboTextForTest(int rowIndex) const {
+        if (rowIndex < 0 || rowIndex >= (int)rows.size())
+            return {};
+        return rows[(size_t)rowIndex]->sourceCombo.getText();
+    }
+    juce::String getRowDestComboTextForTest(int rowIndex) const {
+        if (rowIndex < 0 || rowIndex >= (int)rows.size())
+            return {};
+        return rows[(size_t)rowIndex]->destCombo.getText();
+    }
 
 private:
     AudioEngine& audioEngine;
@@ -65,6 +89,11 @@ private:
         void mouseEnter(const juce::MouseEvent& e) override;
         void mouseExit(const juce::MouseEvent& e) override;
         void comboBoxChanged(juce::ComboBox* comboBox) override;
+        void lookAndFeelChanged() override;
+
+        // Re-applies the themed bypass/delete icons; called from the constructor and again from
+        // lookAndFeelChanged() on every theme switch (mirrors ModuleComponent::applyHeaderButtonIcons).
+        void applyButtonIcons();
 
         ModMatrixComponent& owner;
         juce::AudioProcessorGraph::NodeID attenuverterId;
@@ -81,8 +110,9 @@ private:
         juce::ComboBox sourceCombo;
         juce::ComboBox destCombo;
         juce::Slider amountSlider;
-        juce::TextButton bypassToggle{"B"};
-        juce::TextButton deleteButton{"X"};
+        juce::Label amountValueLabel;
+        std::unique_ptr<juce::DrawableButton> bypassToggle;
+        std::unique_ptr<juce::DrawableButton> deleteButton;
 
         std::unique_ptr<juce::SliderParameterAttachment> amountAttachment;
         std::unique_ptr<juce::ButtonParameterAttachment> bypassAttachment;

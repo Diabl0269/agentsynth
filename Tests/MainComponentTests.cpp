@@ -189,6 +189,82 @@ TEST_F(MainComponentTest, ToggleModMatrixHidesAndShows) {
     EXPECT_FALSE(mainComp.getGraphEditor().isModMatrixVisible());
 }
 
+// applyToolbarIcons() must call setToggleState(dontSendNotification) on the panel-toggle
+// buttons so the themed pill (AppLookAndFeel::drawDrawableButton) reflects panel visibility.
+// One click must flip both the visibility flag AND the button's toggle state together; a
+// second click must flip both back. If applyToolbarIcons() ever used sendNotification instead
+// of dontSendNotification, the button's own onClick would re-fire from inside this same click,
+// flipping the flag TWICE and leaving it unchanged after one click — the assertions below that
+// the flag actually flipped after exactly one click are the regression guard for that.
+TEST_F(MainComponentTest, ToggleAiPanelButtonToggleStateFollowsVisibility) {
+    MainComponent mainComp(std::make_unique<MockProvider>());
+    mainComp.setSize(1600, 900);
+
+    juce::Button* toggleBtn = nullptr;
+    for (auto* child : mainComp.getChildren())
+        if (auto* btn = dynamic_cast<juce::Button*>(child))
+            if (btn->getComponentID() == "toggleAiPanel")
+                toggleBtn = btn;
+    ASSERT_NE(toggleBtn, nullptr);
+
+    const bool before = mainComp.isAiPanelConfiguredVisible();
+    EXPECT_EQ(toggleBtn->getToggleState(), before);
+
+    mainComp.simulateToggleAiPanelClick();
+    EXPECT_EQ(mainComp.isAiPanelConfiguredVisible(), !before); // single-fire guard
+    EXPECT_EQ(toggleBtn->getToggleState(), !before);
+
+    mainComp.simulateToggleAiPanelClick();
+    EXPECT_EQ(mainComp.isAiPanelConfiguredVisible(), before);
+    EXPECT_EQ(toggleBtn->getToggleState(), before);
+}
+
+TEST_F(MainComponentTest, ToggleLibraryButtonToggleStateFollowsVisibility) {
+    MainComponent mainComp(std::make_unique<MockProvider>());
+    mainComp.setSize(1600, 900);
+
+    juce::Button* toggleBtn = nullptr;
+    for (auto* child : mainComp.getChildren())
+        if (auto* btn = dynamic_cast<juce::Button*>(child))
+            if (btn->getComponentID() == "toggleLibrary")
+                toggleBtn = btn;
+    ASSERT_NE(toggleBtn, nullptr);
+
+    const bool before = mainComp.isLibraryConfiguredVisible();
+    EXPECT_EQ(toggleBtn->getToggleState(), before);
+
+    mainComp.simulateToggleLibraryClick();
+    EXPECT_EQ(mainComp.isLibraryConfiguredVisible(), !before); // single-fire guard
+    EXPECT_EQ(toggleBtn->getToggleState(), !before);
+
+    mainComp.simulateToggleLibraryClick();
+    EXPECT_EQ(mainComp.isLibraryConfiguredVisible(), before);
+    EXPECT_EQ(toggleBtn->getToggleState(), before);
+}
+
+TEST_F(MainComponentTest, ToggleModMatrixButtonToggleStateFollowsVisibility) {
+    MainComponent mainComp(std::make_unique<MockProvider>());
+    mainComp.setSize(1600, 900);
+
+    juce::Button* toggleBtn = nullptr;
+    for (auto* child : mainComp.getChildren())
+        if (auto* btn = dynamic_cast<juce::Button*>(child))
+            if (btn->getComponentID() == "toggleModMatrix")
+                toggleBtn = btn;
+    ASSERT_NE(toggleBtn, nullptr);
+
+    const bool before = mainComp.getGraphEditor().isModMatrixVisible();
+    EXPECT_EQ(toggleBtn->getToggleState(), before);
+
+    mainComp.simulateToggleModMatrixClick();
+    EXPECT_EQ(mainComp.getGraphEditor().isModMatrixVisible(), !before); // single-fire guard
+    EXPECT_EQ(toggleBtn->getToggleState(), !before);
+
+    mainComp.simulateToggleModMatrixClick();
+    EXPECT_EQ(mainComp.getGraphEditor().isModMatrixVisible(), before);
+    EXPECT_EQ(toggleBtn->getToggleState(), before);
+}
+
 // simulateToggleMinimapClick() must flip the GraphEditor's minimap visibility (issue #159).
 TEST_F(MainComponentTest, SimulateToggleMinimapClickFlipsMinimapVisibility) {
     MainComponent mainComp(std::make_unique<MockProvider>());
