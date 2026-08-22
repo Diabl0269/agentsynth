@@ -881,14 +881,31 @@ bare file names only, never paths or directories.
 ### Response timing marker
 
 Assistant bubbles that end an in-flight wait (successful reply, provider error, cancel, or the
-120 s timeout) show a compact elapsed-time label right-aligned on the same role row as `"AI"`
+request timeout) show a compact elapsed-time label right-aligned on the same role row as `"AI"`
 (e.g. `340ms`, `1.2s`, `1m 5s`). The value is wall-clock ms from send until the wait ends, stored
 on `MessageData::responseMs`. History-restored turns and patch-retry / apply-failure bubbles leave
 `responseMs` at `-1` and omit the marker. Format helper: `AIChatComponent::formatResponseTime`.
 
 While a request is in flight, the `"AI is thinking..."` status line shows the same formatted elapsed
 time and refreshes on a 500 ms `juce::Timer` tick (label text only — not a full chat redraw). That
-timer also enforces the 120 s timeout.
+timer also enforces the request timeout, described next.
+
+### Request timeout
+
+The default request timeout is **4 minutes** (240000 ms), user-configurable via Settings → AI →
+Request Timeout, with presets of 2, 4 (default), 6, and 10 minutes. The persisted key is
+`aiRequestTimeoutMs` (milliseconds, `juce::ApplicationProperties`). Crucially, ONE value now drives
+both halves of the timeout: `AIChatComponent`'s in-flight-request watchdog (the 500 ms timer above,
+comparing elapsed time against `AIChatComponent::requestTimeoutMs`) and the active `AIProvider`'s
+own HTTP connection timeout (`OllamaProvider`/`RemoteProvider::requestTimeoutMs`, pushed via
+`AIProvider::setRequestTimeoutMs()`). `AIIntegrationService` holds the last-configured value and
+re-applies it to any newly installed provider inside `setProvider()` — the same "must survive a
+provider swap" contract as `refreshModels()` (see the Model Discovery Ordering Contract below) —
+so switching providers can never silently reset the timeout to that provider's own hardcoded
+default. Previously these were two independent, hardcoded constants (a 120 s UI watchdog and a
+240 s provider timeout) that had drifted apart: the UI cancelled every request at 120 s, well before
+a local Ollama model on modest hardware could legitimately finish, always producing a misleading
+"timed out" error. They are now the same configurable value everywhere.
 
 ### Bubble sizing and wrapped-height measurement
 

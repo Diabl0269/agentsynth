@@ -18,12 +18,14 @@ constexpr int kIdleWaitMs = 1000;
 // can start. See OllamaProvider's kWorkerHandoverTimeoutMs.
 constexpr int kWorkerHandoverTimeoutMs = 2000;
 
-// Same class of model, same generation-time ceiling as OllamaProvider's kChatRequestTimeoutMs
-// (OllamaProvider.cpp): the service's patch.generate call is non-streaming, so this is the
-// effective bound on how long a model has to produce a full response, not just a connect
-// timeout. Kept identical rather than re-deriving a separate number for a request that is,
-// from the client's point of view, the same shape of wait.
-constexpr int kRequestTimeoutMs = 240000;
+// Same class of model, same generation-time ceiling as OllamaProvider's
+// kDefaultChatRequestTimeoutMs (OllamaProvider.cpp): the service's patch.generate call is
+// non-streaming, so this is the effective bound on how long a model has to produce a full
+// response, not just a connect timeout. Kept identical rather than re-deriving a separate number
+// for a request that is, from the client's point of view, the same shape of wait. This is now
+// just the default — the instance member requestTimeoutMs (RemoteProvider.h) is what's actually
+// used, and is user-configurable via AIIntegrationService::setRequestTimeoutMs().
+constexpr int kDefaultRequestTimeoutMs = 240000;
 
 const char* const kShuttingDownMessage = "Error: Request cancelled - the Remote provider is shutting down.";
 const char* const kCancelledMessage = "Request cancelled.";
@@ -474,6 +476,9 @@ void RemoteProvider::setModel(const juce::String& name) {
 
 juce::String RemoteProvider::getCurrentModel() const { return currentModel; }
 
+void RemoteProvider::setRequestTimeoutMs(int timeoutMs) { requestTimeoutMs = timeoutMs; }
+int RemoteProvider::getRequestTimeoutMs() const { return requestTimeoutMs; }
+
 void RemoteProvider::fetchAvailableModels(std::function<void(const juce::StringArray& models, bool success)> callback) {
     // Nothing to enumerate — see setModel()'s comment — so this is a synchronous "success, empty
     // list" rather than a failure. Delivered the same test-mode/async-aware way as every other
@@ -601,7 +606,7 @@ void RemoteProvider::processRequest(const Request& req) {
     // req.state is only ever null for a default-constructed Request, which is never what the
     // worker pulls off pendingRequests (every enqueued Request gets a freshly made RequestState).
     jassert(req.state != nullptr);
-    const HttpResult result = performHttp(url, requestHeaders, jsonBody, kRequestTimeoutMs, req.state->cancelled);
+    const HttpResult result = performHttp(url, requestHeaders, jsonBody, requestTimeoutMs, req.state->cancelled);
 
     // Checked BEFORE inspecting the HTTP result — same as OllamaProvider checks wasCancelled()
     // right after the network call returns: an aborted transfer looks exactly like a network

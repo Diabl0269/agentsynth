@@ -36,12 +36,15 @@ public:
 
     void setModel(const juce::String& name) override { currentModel = name; }
     juce::String getCurrentModel() const override { return currentModel; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
 
 private:
     // Empty by default (not pre-seeded with a model name) so tests that check
     // getCurrentModel() after refreshModels()/setModel() genuinely prove that a model was
     // selected, rather than being masked by a non-empty default.
     juce::String currentModel;
+    int requestTimeoutMs = 240000;
 };
 
 // Like MockChatProvider, but fetchAvailableModels() does not resolve until the test calls
@@ -73,10 +76,13 @@ public:
 
     void setModel(const juce::String& name) override { currentModel = name; }
     juce::String getCurrentModel() const override { return currentModel; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
 
 private:
     std::function<void(const juce::StringArray&, bool)> pendingCallback;
     juce::String currentModel;
+    int requestTimeoutMs = 240000;
 };
 
 // Holds sendPrompt's CompletionCallback until the test resolves it — used to assert wait-state
@@ -116,10 +122,13 @@ public:
 
     void setModel(const juce::String& name) override { currentModel = name; }
     juce::String getCurrentModel() const override { return currentModel; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
 
 private:
     CompletionCallback pendingPromptCallback;
     juce::String currentModel;
+    int requestTimeoutMs = 240000;
 };
 
 // Synchronously delivers a failed AIResponse with a caller-chosen error kind/message — used to
@@ -151,11 +160,14 @@ public:
 
     void setModel(const juce::String& name) override { currentModel = name; }
     juce::String getCurrentModel() const override { return currentModel; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
 
 private:
     AIErrorKind kind;
     juce::String message;
     juce::String currentModel;
+    int requestTimeoutMs = 240000;
 };
 
 // P4-6: stands in for RemoteProvider without any network dependency — isHosted() true, and
@@ -179,9 +191,12 @@ public:
     void cancel(RequestId) override {}
     void setModel(const juce::String& name) override { currentModel = name; }
     juce::String getCurrentModel() const override { return currentModel; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
 
 private:
     juce::String currentModel;
+    int requestTimeoutMs = 240000;
 };
 
 // Returns an assistant response containing a single fenced ```json patch, so tests can exercise
@@ -209,9 +224,12 @@ public:
     void cancel(RequestId) override {}
     void setModel(const juce::String& name) override { currentModel = name; }
     juce::String getCurrentModel() const override { return currentModel; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
 
 private:
     juce::String currentModel;
+    int requestTimeoutMs = 240000;
 };
 
 // A fenced ```json block that PARSES fine but names a module type that doesn't exist —
@@ -242,9 +260,12 @@ public:
     void cancel(RequestId) override {}
     void setModel(const juce::String& name) override { currentModel = name; }
     juce::String getCurrentModel() const override { return currentModel; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
 
 private:
     juce::String currentModel;
+    int requestTimeoutMs = 240000;
 };
 
 // Every response carries a fixed conversationId (mirrors a Pro-plan hosted backend persisting the
@@ -272,12 +293,15 @@ public:
     void cancel(RequestId) override {}
     void setModel(const juce::String& name) override { currentModel = name; }
     juce::String getCurrentModel() const override { return currentModel; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
     void setConversationId(const juce::String& id) override { setConversationIdCalls.push_back(id); }
 
     std::vector<juce::String> setConversationIdCalls;
 
 private:
     juce::String currentModel;
+    int requestTimeoutMs = 240000;
 };
 
 // P6-9: like MockPatchProvider (a single fenced ```json patch, so PatchCard/thumbs render), but
@@ -309,9 +333,12 @@ public:
     void cancel(RequestId) override {}
     void setModel(const juce::String& name) override { currentModel = name; }
     juce::String getCurrentModel() const override { return currentModel; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
 
 private:
     juce::String currentModel;
+    int requestTimeoutMs = 240000;
 };
 
 // Finds the juce::Viewport AIChatComponent adds as a direct child and returns its viewed
@@ -1099,6 +1126,81 @@ TEST_F(AIChatComponentTest, ThinkingStatusShowsLiveElapsedTime) {
 
     EXPECT_FALSE(chatComponent.isWaiting());
     EXPECT_TRUE(chatComponent.getWaitingStatusText().isEmpty());
+}
+
+// A freshly constructed component (no persisted "aiRequestTimeoutMs" setting) must default the
+// watchdog to 4 minutes (240000 ms), not the old, now-removed 2-minute (120000 ms) constant that
+// used to fire before either provider's own connection timeout ever had a chance to.
+TEST_F(AIChatComponentTest, RequestTimeoutDefaultsToFourMinutes) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    service.setProvider(std::make_unique<MockChatProvider>());
+
+    juce::ApplicationProperties props;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Test";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(options);
+
+    synth::AIChatComponent chatComponent(service, props);
+
+    EXPECT_EQ(chatComponent.getRequestTimeoutMsForTesting(), 240000);
+    EXPECT_EQ(service.getRequestTimeoutMs(), 240000) << "the constructor must push the value into aiService too, "
+                                                        "not just keep it locally";
+}
+
+// Exercises the actual timeout path (mirrors ThinkingStatusShowsLiveElapsedTime's use of a
+// DeferredPromptProvider + runDispatchLoopUntil to drive the real timerCallback()) with a short
+// configured duration, and checks the cancellation message derives its minute count from
+// requestTimeoutMs rather than a hardcoded "2 minutes" string.
+TEST_F(AIChatComponentTest, SetRequestTimeoutMsFiresAtConfiguredDurationWithDynamicMessage) {
+    AudioEngine engine;
+    synth::AIIntegrationService service(engine.getGraph());
+    auto ownedProvider = std::make_unique<DeferredPromptProvider>();
+    service.setProvider(std::move(ownedProvider));
+
+    juce::ApplicationProperties props;
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Test";
+    options.filenameSuffix = "test";
+    options.storageFormat = juce::PropertiesFile::storeAsXML;
+    props.setStorageParameters(options);
+
+    synth::AIChatComponent chatComponent(service, props);
+    chatComponent.setSize(400, 600);
+
+    // Short enough to keep the test fast, while still going through the same
+    // "elapsed >= requestTimeoutMs" / "minutes = requestTimeoutMs / 60000" code path the real
+    // 2/4/6/10-minute presets use.
+    constexpr int kShortTimeoutMs = 700;
+    chatComponent.setRequestTimeoutMs(kShortTimeoutMs);
+    EXPECT_EQ(chatComponent.getRequestTimeoutMsForTesting(), kShortTimeoutMs);
+    EXPECT_EQ(service.getRequestTimeoutMs(), kShortTimeoutMs) << "setRequestTimeoutMs() must forward to aiService too";
+
+    juce::TextEditor* inputField = nullptr;
+    for (auto* child : chatComponent.getChildren()) {
+        if (auto* editor = dynamic_cast<juce::TextEditor*>(child))
+            inputField = editor;
+    }
+    ASSERT_NE(inputField, nullptr);
+
+    inputField->setText("hello");
+    chatComponent.triggerSend();
+    ASSERT_TRUE(chatComponent.isWaiting());
+
+    // The waiting-status timer ticks every 500 ms (kWaitingStatusIntervalMs); wait past both that
+    // and the configured 700 ms timeout so timerCallback() has a chance to fire the timeout branch.
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(1200);
+
+    EXPECT_FALSE(chatComponent.isWaiting());
+
+    auto* messageList = findMessageList(chatComponent);
+    ASSERT_NE(messageList, nullptr);
+    const juce::String expectedMessage =
+        "Error: Request timed out after " + juce::String(kShortTimeoutMs / 60000) + " minutes.";
+    EXPECT_NE(findDescendantWithText<juce::Label>(messageList, expectedMessage), nullptr)
+        << "expected: " << expectedMessage.toStdString();
 }
 
 // ============================================================================
@@ -2009,6 +2111,8 @@ public:
     void cancel(RequestId) override {}
     void setModel(const juce::String& name) override { currentModel = name; }
     juce::String getCurrentModel() const override { return currentModel; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
     bool isHosted() const override { return hosted; }
 
     bool hosted = true; // flip to false to stand in for a local (Ollama-shaped) provider
@@ -2020,6 +2124,7 @@ public:
 
 private:
     juce::String currentModel;
+    int requestTimeoutMs = 240000;
 };
 
 // The recurring ApplicationProperties boilerplate, in one place for the arrange tests.

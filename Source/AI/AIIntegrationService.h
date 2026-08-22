@@ -49,6 +49,25 @@ public:
      */
     void setAuthToken(const juce::String& token);
 
+    /**
+     * @brief Sets the request timeout, in milliseconds, forwarded to the active provider's
+     *        AIProvider::setRequestTimeoutMs().
+     *
+     * Same re-push contract as setAuthToken()/setConversationId(): stored regardless of whether
+     * a provider is currently installed, and setProvider() re-pushes it (unconditionally, since
+     * unlike a token or conversation id there's always a meaningful value) to whatever provider
+     * it installs next — otherwise a provider swap would silently fall back to that provider's
+     * own hardcoded default, re-introducing the exact drift this value exists to prevent (see
+     * docs/AI_Engine.md, request timeout section).
+     */
+    void setRequestTimeoutMs(int timeoutMs);
+
+    /**
+     * @brief The currently configured request timeout, in milliseconds. Defaults to 240000 (4
+     *        minutes) until changed via setRequestTimeoutMs().
+     */
+    int getRequestTimeoutMs() const { return currentRequestTimeoutMs; }
+
 #if SYNTH_ENABLE_TIMELINE
     /**
      * @brief Installs (or clears) the timeline/transport this service reads for arrangement
@@ -391,6 +410,7 @@ private:
     AppUndoManager* undoManager = nullptr;
     juce::String currentAuthToken;
     juce::String currentConversationId;
+    int currentRequestTimeoutMs = 240000;
     juce::String lastPatchError;
     PatchValidationError lastPatchErrorCode = PatchValidationError::None;
     bool lastPatchModeRepaired = false;

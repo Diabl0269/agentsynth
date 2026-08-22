@@ -21,10 +21,21 @@ cmake --build build --target AIPatchHarness
 
 | Flag | Default | Meaning |
 | :--- | :--- | :--- |
-| `--model` | `gemma4:12b-it-qat` | Ollama model tag. Must be one `ollama list` reports. |
+| `--provider` | `ollama` | `ollama` talks directly to a local Ollama instance (existing behavior). `remote` talks through a running synth-platform API server instead (`synth::RemoteProvider`) — that server's own `INFERENCE_PROVIDER` env var decides whether it forwards to local Ollama or AWS Bedrock, so this is how to measure the real production model. |
+| `--model` | `gemma4:12b-it-qat` | Ollama model tag. Must be one `ollama list` reports. Ignored for `--provider remote` — the server picks its own model. |
 | `--runs` | `1` | How many times to replay the whole scenario set. |
-| `--host` | `http://localhost:11434` | Ollama base URL. |
+| `--host` | `http://localhost:11434` | Ollama base URL. Defaults to `http://localhost:8787` instead when `--provider remote` (the synth-platform API server's default port). |
+| `--limit` | `0` (no limit) | Run only the first N scenarios instead of all 20 — use this for a cheap/fast validation pass before a full `remote` sweep, since remote calls cost real (tiny) money via AWS Bedrock. |
 | `--json` | *(none)* | Write per-attempt records to this file for later analysis. |
+
+### Testing against the API server (local or remote/Bedrock)
+
+`--provider remote` requires a synth-platform API server actually running: `cd apps/api && pnpm dev`
+in the synth-platform repo, which listens on port 8787 by default — matching `--host`'s default for
+this mode. To hit real Bedrock instead of local Ollama, start that server with
+`INFERENCE_PROVIDER=bedrock pnpm dev` and valid AWS credentials in the environment. Since Bedrock
+calls cost real (tiny) money, start with `--limit 3` to validate the plumbing before running the
+full 20-scenario set.
 
 ## What it replays
 

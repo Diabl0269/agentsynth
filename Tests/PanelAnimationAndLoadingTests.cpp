@@ -68,12 +68,15 @@ public:
 
     void setModel(const juce::String& name) override { model = name; }
     juce::String getCurrentModel() const override { return model; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
 
     std::vector<uint64_t> cancelledIds;
     uint64_t lastRequestId = 0;
 
 private:
     juce::String model = "MockModel";
+    int requestTimeoutMs = 240000;
     CompletionCallback pendingCallback;
 };
 

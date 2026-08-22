@@ -1014,9 +1014,12 @@ public:
     void cancel(RequestId) override {}
     void setModel(const juce::String& name) override { model = name; }
     juce::String getCurrentModel() const override { return model; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
 
 private:
     juce::String model = "silent-model";
+    int requestTimeoutMs = 240000;
 };
 
 /** The scan list lives in the same shared "Agent Synth" settings file MainComponent uses, so the key

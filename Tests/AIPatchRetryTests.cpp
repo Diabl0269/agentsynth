@@ -49,6 +49,8 @@ public:
     void cancel(RequestId) override {}
     void setModel(const juce::String& name) override { model = name; }
     juce::String getCurrentModel() const override { return model; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
     juce::String getProviderName() const override { return "ScriptedProvider"; }
     void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
         callback({"scripted"}, true);
@@ -69,6 +71,7 @@ public:
     std::vector<std::vector<Message>> conversations;
     int callCount = 0;
     juce::String model;
+    int requestTimeoutMs = 240000;
 };
 
 } // namespace

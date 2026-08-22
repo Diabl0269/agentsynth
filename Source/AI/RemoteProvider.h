@@ -107,6 +107,8 @@ public:
 
     void setModel(const juce::String& name) override;
     juce::String getCurrentModel() const override;
+    void setRequestTimeoutMs(int timeoutMs) override;
+    int getRequestTimeoutMs() const override;
     void fetchAvailableModels(std::function<void(const juce::StringArray& models, bool success)> callback) override;
 
     /** Stores the token; when non-empty, every request carries `Authorization: Bearer <token>`. */
@@ -126,6 +128,9 @@ public:
 private:
     juce::String remoteHost;
     juce::String currentModel; // cosmetic only: the service picks its own model server-side
+    // Default mirrors kDefaultRequestTimeoutMs in RemoteProvider.cpp; kept as a plain literal
+    // here so the header doesn't need to see the .cpp's anonymous-namespace constant.
+    int requestTimeoutMs = 240000;
     juce::String authToken;
     juce::String conversationId;
     // A stable per-install identifier (Source/Auth/DeviceIdStore.h), sent as the X-Device-Id

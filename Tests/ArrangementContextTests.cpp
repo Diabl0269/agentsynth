@@ -198,9 +198,12 @@ public:
     }
     void setModel(const juce::String& name) override { currentModel = name; }
     juce::String getCurrentModel() const override { return currentModel; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
     juce::String getProviderName() const override { return "RecordingMockProvider"; }
 
     juce::String currentModel;
+    int requestTimeoutMs = 240000;
     std::vector<Message> lastConversation;
 };
 

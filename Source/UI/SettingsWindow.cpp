@@ -98,6 +98,33 @@ public:
             appProperties.saveIfNeeded();
         };
 
+        // Request timeout: how long the UI watchdog waits before cancelling an in-flight request
+        // and how long the active provider's own HTTP connection timeout is set to — the SAME
+        // value for both, by construction, so the two mechanisms can't drift apart the way the
+        // old hardcoded 120s (UI)/240s (provider) pair did. See docs/AI_Engine.md.
+        addAndMakeVisible(requestTimeoutLabel);
+        requestTimeoutLabel.setText("Request Timeout:", juce::dontSendNotification);
+
+        addAndMakeVisible(requestTimeoutCombo);
+        requestTimeoutCombo.setTooltip("How long to wait for an AI response before cancelling it. Local "
+                                       "(Ollama) models on modest hardware can legitimately take several "
+                                       "minutes.");
+        requestTimeoutCombo.addItem("2 minutes", kRequestTimeout2MinId);
+        requestTimeoutCombo.addItem("4 minutes (default)", kRequestTimeout4MinId);
+        requestTimeoutCombo.addItem("6 minutes", kRequestTimeout6MinId);
+        requestTimeoutCombo.addItem("10 minutes", kRequestTimeout10MinId);
+
+        const int savedRequestTimeoutMs =
+            appProperties.getUserSettings()->getIntValue("aiRequestTimeoutMs", kDefaultRequestTimeoutMs);
+        requestTimeoutCombo.setSelectedId(itemIdForRequestTimeoutMs(savedRequestTimeoutMs), juce::dontSendNotification);
+        requestTimeoutCombo.onChange = [this] {
+            const int timeoutMs = requestTimeoutMsForItemId(requestTimeoutCombo.getSelectedId());
+            appProperties.getUserSettings()->setValue("aiRequestTimeoutMs", timeoutMs);
+            appProperties.saveIfNeeded();
+            aiChatComponent.setRequestTimeoutMs(timeoutMs);
+            aiService.setRequestTimeoutMs(timeoutMs);
+        };
+
         // P6-7: opt-in prompt collection for product learning. Human review only — never used to
         // train/fine-tune models (see docs/AI_Engine.md, and the "we do not use your prompts to
         // train AI models" promise in the privacy policy this deliberately doesn't touch).
@@ -163,6 +190,11 @@ public:
         auto historyRow = bounds.removeFromTop(25);
         historyRetentionLabel.setBounds(historyRow.removeFromLeft(100));
         historyRetentionCombo.setBounds(historyRow.removeFromLeft(150));
+
+        bounds.removeFromTop(30);
+        auto requestTimeoutRow = bounds.removeFromTop(25);
+        requestTimeoutLabel.setBounds(requestTimeoutRow.removeFromLeft(100));
+        requestTimeoutCombo.setBounds(requestTimeoutRow.removeFromLeft(150));
 
         bounds.removeFromTop(30);
         promptLearningToggle.setBounds(bounds.removeFromTop(40));
@@ -241,6 +273,43 @@ private:
         }
     }
 
+    // ComboBox item ids for the request-timeout control. Same "not the raw value" rationale as
+    // the retention ids above (item id 0 is reserved by JUCE for "no selection").
+    static constexpr int kRequestTimeout2MinId = 1;
+    static constexpr int kRequestTimeout4MinId = 2;
+    static constexpr int kRequestTimeout6MinId = 3;
+    static constexpr int kRequestTimeout10MinId = 4;
+    // Mirrors AIChatComponent::kDefaultRequestTimeoutMs / AIIntegrationService's own default.
+    static constexpr int kDefaultRequestTimeoutMs = 240000;
+
+    static int requestTimeoutMsForItemId(int itemId) {
+        switch (itemId) {
+        case kRequestTimeout2MinId:
+            return 120000;
+        case kRequestTimeout6MinId:
+            return 360000;
+        case kRequestTimeout10MinId:
+            return 600000;
+        case kRequestTimeout4MinId:
+        default:
+            return kDefaultRequestTimeoutMs;
+        }
+    }
+
+    static int itemIdForRequestTimeoutMs(int timeoutMs) {
+        switch (timeoutMs) {
+        case 120000:
+            return kRequestTimeout2MinId;
+        case 360000:
+            return kRequestTimeout6MinId;
+        case 600000:
+            return kRequestTimeout10MinId;
+        case kDefaultRequestTimeoutMs:
+        default:
+            return kRequestTimeout4MinId; // out-of-range persisted value falls back to the 4-minute default
+        }
+    }
+
     const synth::ProviderDescriptor* selectedDescriptor() const {
         int selectedIndex = providerCombo.getSelectedItemIndex();
         if (selectedIndex >= 0 && (size_t)selectedIndex < visibleProviders.size())
@@ -294,6 +363,8 @@ private:
     juce::TextEditor hostEditor;
     juce::Label historyRetentionLabel;
     juce::ComboBox historyRetentionCombo;
+    juce::Label requestTimeoutLabel;
+    juce::ComboBox requestTimeoutCombo;
     juce::ToggleButton promptLearningToggle;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AISettingsTab)

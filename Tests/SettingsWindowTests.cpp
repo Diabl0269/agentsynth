@@ -36,9 +36,12 @@ public:
 
     void setModel(const juce::String& name) override { currentModel = name; }
     juce::String getCurrentModel() const override { return currentModel; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
 
 private:
     juce::String currentModel = "MockModel1";
+    int requestTimeoutMs = 240000;
 };
 
 // ============================================================================
@@ -406,6 +409,76 @@ TEST_F(SettingsWindowTest, HistoryRetentionOutOfRangePersistedValueDisplaysAsDef
     auto* retentionCombo = findHistoryRetentionCombo(aiTab);
     ASSERT_NE(retentionCombo, nullptr);
     EXPECT_EQ(retentionCombo->getText(), "180 days");
+}
+
+// ============================================================================
+// Request timeout control (AI tab, added after the history-retention combo) — the single
+// user-configurable value applied to both AIChatComponent's watchdog and the active provider's
+// connection timeout, so the two mechanisms can no longer drift apart.
+// ============================================================================
+
+namespace {
+// The timeout combo is the THIRD ComboBox in the AI tab's child order (providerCombo first,
+// historyRetentionCombo second — see findHistoryRetentionCombo above and SettingsWindow.cpp's
+// comment on why requestTimeoutCombo is added right after it).
+juce::ComboBox* findRequestTimeoutCombo(juce::Component* aiTab) {
+    int comboIndex = 0;
+    for (auto* child : aiTab->getChildren()) {
+        if (auto* combo = dynamic_cast<juce::ComboBox*>(child)) {
+            if (comboIndex == 2)
+                return combo;
+            ++comboIndex;
+        }
+    }
+    return nullptr;
+}
+} // namespace
+
+TEST_F(SettingsWindowTest, RequestTimeoutLoadsPersistedSelection) {
+    appProperties.getUserSettings()->setValue("aiRequestTimeoutMs", 360000); // 6 minutes
+
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr);
+    settingsWindow.setSize(600, 400);
+    settingsWindow.resized();
+
+    auto* aiTab = settingsWindow.getTabs().getTabContentComponent(1);
+    ASSERT_NE(aiTab, nullptr);
+    auto* timeoutCombo = findRequestTimeoutCombo(aiTab);
+    ASSERT_NE(timeoutCombo, nullptr);
+    EXPECT_EQ(timeoutCombo->getText(), "6 minutes");
+}
+
+TEST_F(SettingsWindowTest, RequestTimeoutPersistsSelectionToAppProperties) {
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr);
+    settingsWindow.setSize(600, 400);
+    settingsWindow.resized();
+
+    auto* aiTab = settingsWindow.getTabs().getTabContentComponent(1);
+    ASSERT_NE(aiTab, nullptr);
+    auto* timeoutCombo = findRequestTimeoutCombo(aiTab);
+    ASSERT_NE(timeoutCombo, nullptr);
+
+    timeoutCombo->setSelectedItemIndex(3, juce::sendNotificationSync); // "10 minutes"
+    EXPECT_EQ(appProperties.getUserSettings()->getIntValue("aiRequestTimeoutMs", -999), 600000);
+    EXPECT_EQ(aiChatComponent->getRequestTimeoutMsForTesting(), 600000);
+    EXPECT_EQ(aiService->getRequestTimeoutMs(), 600000);
+}
+
+TEST_F(SettingsWindowTest, RequestTimeoutOutOfRangePersistedValueDisplaysAsDefault) {
+    appProperties.getUserSettings()->setValue("aiRequestTimeoutMs", 0); // hand-edited/corrupt value
+
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr);
+    settingsWindow.setSize(600, 400);
+    settingsWindow.resized();
+
+    auto* aiTab = settingsWindow.getTabs().getTabContentComponent(1);
+    ASSERT_NE(aiTab, nullptr);
+    auto* timeoutCombo = findRequestTimeoutCombo(aiTab);
+    ASSERT_NE(timeoutCombo, nullptr);
+    EXPECT_EQ(timeoutCombo->getText(), "4 minutes (default)");
 }
 
 TEST_F(SettingsWindowTest, RemembersLastSelectedTab) {

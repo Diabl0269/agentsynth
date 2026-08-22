@@ -15,7 +15,8 @@
     it is excluded from the test target and from CI; build it explicitly with
     -DENABLE_AI_HARNESS=ON.
 
-        ./build/Tools/AIPatchHarness/AIPatchHarness [--model M] [--runs N] [--host URL] [--json OUT]
+        ./build/Tools/AIPatchHarness/AIPatchHarness [--provider ollama|remote] [--model M] [--runs N]
+            [--host URL] [--limit N] [--json OUT]
 
     Exit code is 0 whenever the run completed, whatever the pass rate — the histogram is
     the output, not a pass/fail verdict.
@@ -24,6 +25,7 @@
 #include "AI/AIIntegrationService.h"
 #include "AI/AIStateMapper.h"
 #include "AI/OllamaProvider.h"
+#include "AI/RemoteProvider.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
@@ -118,7 +120,8 @@ struct Outcome {
     juce::String finalError;
 };
 
-Outcome runScenario(const Scenario& scenario, const juce::String& host, const juce::String& model) {
+Outcome runScenario(const Scenario& scenario, const juce::String& host, const juce::String& model,
+                    const juce::String& providerKind) {
     Outcome outcome;
 
     juce::AudioProcessorGraph graph;
@@ -133,9 +136,17 @@ Outcome runScenario(const Scenario& scenario, const juce::String& host, const ju
     }
 
     synth::AIIntegrationService service(graph);
-    auto provider = std::make_unique<synth::OllamaProvider>(host);
-    provider->setTestMode(true); // deliver callbacks synchronously; no message loop here
-    provider->setModel(model);
+    std::unique_ptr<synth::AIProvider> provider;
+    if (providerKind == "remote") {
+        auto remoteProvider = std::make_unique<synth::RemoteProvider>(host);
+        remoteProvider->setTestMode(true); // deliver callbacks synchronously; no message loop here
+        provider = std::move(remoteProvider);
+    } else {
+        auto ollamaProvider = std::make_unique<synth::OllamaProvider>(host);
+        ollamaProvider->setTestMode(true); // deliver callbacks synchronously; no message loop here
+        ollamaProvider->setModel(model);
+        provider = std::move(ollamaProvider);
+    }
     service.setProvider(std::move(provider));
 
     juce::WaitableEvent done;
@@ -204,13 +215,16 @@ int main(int argc, char* argv[]) {
     for (int i = 1; i < argc; ++i)
         args.add(juce::String(argv[i]));
 
-    const juce::String host = argValue(args, "--host", "http://localhost:11434");
+    const juce::String providerKind = argValue(args, "--provider", "ollama");
+    const juce::String defaultHost = providerKind == "remote" ? "http://localhost:8787" : "http://localhost:11434";
+    const juce::String host = argValue(args, "--host", defaultHost);
     const juce::String model = argValue(args, "--model", "gemma4:12b-it-qat");
     const int runs = juce::jmax(1, argValue(args, "--runs", "1").getIntValue());
+    const int limit = argValue(args, "--limit", "0").getIntValue();
     const juce::String jsonOut = argValue(args, "--json", "");
 
-    std::printf("AIPatchHarness  host=%s  model=%s  runs=%d  scenarios=%d\n", host.toRawUTF8(), model.toRawUTF8(), runs,
-                (int)scenarios().size());
+    std::printf("AIPatchHarness  provider=%s  host=%s  model=%s  runs=%d  scenarios=%d\n", providerKind.toRawUTF8(),
+                host.toRawUTF8(), model.toRawUTF8(), runs, (int)scenarios().size());
     std::printf("%-20s %-6s %s\n", "scenario", "run", "outcome");
     std::printf("--------------------------------------------------------------------\n");
 
@@ -219,9 +233,13 @@ int main(int argc, char* argv[]) {
     std::map<juce::String, int> errorTally;
     juce::Array<juce::var> records;
 
+    const auto& allScenarios = scenarios();
+    const int scenarioCount = limit > 0 ? juce::jmin(limit, (int)allScenarios.size()) : (int)allScenarios.size();
+
     for (int run = 1; run <= runs; ++run) {
-        for (const auto& scenario : scenarios()) {
-            const auto outcome = runScenario(scenario, host, model);
+        for (int i = 0; i < scenarioCount; ++i) {
+            const auto& scenario = allScenarios[i];
+            const auto outcome = runScenario(scenario, host, model, providerKind);
             ++total;
 
             juce::String label;

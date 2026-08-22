@@ -22,9 +22,12 @@ public:
     void cancel(RequestId) override {}
     void setModel(const juce::String& name) override { model = name; }
     juce::String getCurrentModel() const override { return model; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
 
 private:
     juce::String model = "MockModel";
+    int requestTimeoutMs = 240000;
 };
 
 // Mock provider that records fetchAvailableModels() calls and honours setModel()/
@@ -45,11 +48,14 @@ public:
     void cancel(RequestId) override {}
     void setModel(const juce::String& name) override { model = name; }
     juce::String getCurrentModel() const override { return model; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
 
     int fetchCallCount = 0;
 
 private:
     juce::String model;
+    int requestTimeoutMs = 240000;
 };
 
 class MainComponentTest : public ::testing::Test {
@@ -72,6 +78,7 @@ protected:
             s->setValue("librarySidebarVisible", "1"); // default: visible
             s->setValue("aiPanelVisible", "0");        // default: hidden
             s->setValue("minimapVisible", "1");        // default: visible
+            s->removeValue("aiRequestTimeoutMs");      // default: AIChatComponent::kDefaultRequestTimeoutMs
             s->saveIfNeeded();
         }
     }
@@ -134,6 +141,37 @@ TEST_F(MainComponentTest, StartupAppliesTheDualIOPreferenceToTheOpeningPatch) {
     }
 
     writeDualIOPref("0"); // leave the shared settings file as it was found
+}
+
+// Regression test for the ORDERING CONTRACT on aiChatComponent's declaration in MainComponent.h:
+// aiChatComponent is a MainComponent member, so its own constructor (which reads
+// "aiRequestTimeoutMs" out of appProperties) runs before appProperties.setStorageParameters() in
+// MainComponent's constructor body has pointed appProperties at the real settings file — the read
+// at that point sees an empty store and falls back to the default. initialiseCommon() must re-read
+// and re-push the real persisted value once the file is actually open, or a user's saved timeout
+// preference silently reverts to the default on every app launch.
+TEST_F(MainComponentTest, StartupRestoresThePersistedAiRequestTimeout) {
+    auto writeTimeoutPref = [](const char* value) {
+        juce::PropertiesFile::Options opts;
+        opts.applicationName = "Agent Synth";
+        opts.folderName = "Agent Synth";
+        opts.filenameSuffix = "settings";
+        opts.osxLibrarySubFolder = "Application Support";
+        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+        juce::ApplicationProperties props;
+        props.setStorageParameters(opts);
+        if (auto* s = props.getUserSettings()) {
+            s->setValue("aiRequestTimeoutMs", value);
+            s->saveIfNeeded();
+        }
+    };
+
+    writeTimeoutPref("360000"); // 6 minutes — not the 240000 default
+    MainComponent mainComp(std::make_unique<MockProvider>());
+    EXPECT_EQ(mainComp.getAiServiceForTest().getRequestTimeoutMs(), 360000)
+        << "the persisted preference must survive construction, not just the in-memory default";
+
+    writeTimeoutPref("240000"); // leave the shared settings file as it was found
 }
 
 TEST_F(MainComponentTest, AIPanelIsHiddenByDefault) {

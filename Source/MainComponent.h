@@ -657,6 +657,16 @@ private:
 
     std::unique_ptr<juce::FileChooser> fileChooser;
 
+    // Declared BEFORE aiChatComponent: its constructor reads a persisted setting straight out of
+    // appProperties (see AIChatComponent's kDefaultRequestTimeoutMs restore), and members are
+    // constructed in declaration order regardless of initializer-list order — appProperties being
+    // any later than aiChatComponent left that read touching a not-yet-constructed object (UB,
+    // observed as a hang inside juce::PropertySet::getIntValue). setStorageParameters() itself
+    // still runs later, in the constructor body (initialiseCommon()'s ORDERING CONTRACT re-syncs
+    // whatever the too-early read missed) — this fixes the crash, not the file-not-loaded-yet gap.
+    juce::ApplicationProperties appProperties;
+    juce::PropertiesFile::Options propertiesOptions;
+
     synth::AIIntegrationService aiService;
     // Declared BEFORE aiChatComponent: members are destroyed in reverse declaration order, so
     // aiChatComponent (which installs AccountService::onStateChanged/onAccessTokenChanged in
@@ -732,9 +742,6 @@ private:
     // Declared BEFORE statusBar so it is fully constructed when statusBar's ctor runs.
     juce::String currentPatchName_{"Default"};
     StatusBarComponent statusBar;
-
-    juce::ApplicationProperties appProperties;
-    juce::PropertiesFile::Options propertiesOptions;
 
     // Declared here (not in AudioEngine or Core) because it is settings-backed and
     // UI-driven; installed into the process-wide DefaultHostedPluginBackend by the constructor and

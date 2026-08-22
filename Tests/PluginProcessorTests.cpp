@@ -51,6 +51,11 @@ public:
     void cancel(RequestId) override {}
     void setModel(const juce::String&) override {}
     juce::String getCurrentModel() const override { return {}; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
+
+private:
+    int requestTimeoutMs = 240000;
 };
 
 // Structural fingerprint of a graph node: its ModuleBase::getModuleType() for module nodes, or
