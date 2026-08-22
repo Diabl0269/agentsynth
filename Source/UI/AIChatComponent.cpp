@@ -753,7 +753,13 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     // rather than only once Settings is opened — see AIProvider::setRequestTimeoutMs()'s and
     // AIIntegrationService::setProvider()'s doc comments for why a value has to be pushed even
     // when nothing has changed it yet.
-    requestTimeoutMs = appProperties.getUserSettings()->getIntValue("aiRequestTimeoutMs", kDefaultRequestTimeoutMs);
+    // getUserSettings() can be null here: a composing owner (MainComponent) constructs this as a
+    // member before calling appProperties.setStorageParameters() in its own constructor body (see
+    // that class's ORDERING CONTRACT comment on aiChatComponent's declaration) — in that case this
+    // falls back to the default, and MainComponent re-reads the real value once its properties file
+    // is actually open.
+    if (auto* settings = appProperties.getUserSettings())
+        requestTimeoutMs = settings->getIntValue("aiRequestTimeoutMs", kDefaultRequestTimeoutMs);
     aiService.setRequestTimeoutMs(requestTimeoutMs);
 
     refreshModels();

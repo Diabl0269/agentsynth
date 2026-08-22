@@ -112,6 +112,11 @@ public:
      */
     void setAccountService(AccountService* service);
 
+    // Public so a composing owner (MainComponent) can pass it as the fallback default when
+    // re-reading the persisted "aiRequestTimeoutMs" setting itself — see the ORDERING CONTRACT
+    // comment on kDefaultRequestTimeoutMs's declaration below for why that re-read exists.
+    static constexpr int kDefaultRequestTimeoutMs = 240000;
+
     /**
      * @brief Sets the request timeout, in milliseconds, used both by this component's own
      *        in-flight-request watchdog (timerCallback()) and forwarded to aiService so the
@@ -309,12 +314,12 @@ private:
     // Null whenever not waiting. Cleared before messageList.deleteAllChildren().
     juce::Label* waitingStatusLabel = nullptr;
 
-    static constexpr int kDefaultRequestTimeoutMs = 240000;
     // Instance value actually compared against in timerCallback(); defaults to
-    // kDefaultRequestTimeoutMs and is overridden by the persisted "aiRequestTimeoutMs" setting
-    // (read in the constructor) and/or setRequestTimeoutMs() (called from Settings). Kept in sync
-    // with AIIntegrationService's own copy so the UI watchdog and the active provider's
-    // connection timeout can never drift apart.
+    // kDefaultRequestTimeoutMs (declared above, public) and is overridden by the persisted
+    // "aiRequestTimeoutMs" setting (read in the constructor) and/or setRequestTimeoutMs() (called
+    // from Settings, or from MainComponent's ORDERING CONTRACT re-sync). Kept in sync with
+    // AIIntegrationService's own copy so the UI watchdog and the active provider's connection
+    // timeout can never drift apart.
     int requestTimeoutMs = kDefaultRequestTimeoutMs;
     // Tick rate for the live thinking timer — updates the status label only (not a full-panel
     // repaint). Matches the AI-thinking spinner exception in the UI perf contract.

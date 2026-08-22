@@ -403,6 +403,13 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // Regression: see #96 / f7cba4a.
     aiChatComponent.refreshModels();
 
+    // Same ORDERING CONTRACT as refreshModels() above: aiChatComponent's constructor read
+    // "aiRequestTimeoutMs" before appProperties.setStorageParameters() (called earlier in this
+    // body) had pointed it at the real settings file, so that read saw an empty store and fell
+    // back to the default. Re-load and re-push now that the file is actually open.
+    aiChatComponent.setRequestTimeoutMs(appProperties.getUserSettings()->getIntValue(
+        "aiRequestTimeoutMs", synth::AIChatComponent::kDefaultRequestTimeoutMs));
+
 #if SYNTH_ENABLE_TIMELINE
     // Gives AIIntegrationService's outgoing-request context builder a way to read the
     // app's one live TimelineDoc/TransportService — see AIIntegrationService::setTimelineContext().
