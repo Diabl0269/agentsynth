@@ -650,7 +650,7 @@ TEST(ThemeMetricsTest, MetricsCodeOnlyFieldsHaveExpectedDefaults) {
     synth::theme::Theme theme;
     const auto& m = theme.metrics;
 
-    EXPECT_EQ(m.toolbarHeight, 36);
+    EXPECT_EQ(m.toolbarHeight, 44);
     EXPECT_EQ(m.statusBarHeight, 24);
     EXPECT_EQ(m.controlPadding, 4);
     EXPECT_EQ(m.minWindowWidth, 480);

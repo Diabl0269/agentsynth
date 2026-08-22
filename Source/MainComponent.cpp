@@ -2391,7 +2391,7 @@ void MainComponent::resized() {
     // CANONICAL LAYOUT (§2.4). Carve top→bottom: toolbar strip, status bar, AI panel (right,
     // if visible), library sidebar (left, if visible), canvas (remainder). Dimensions come
     // from the themed Metrics tokens, with literal fallbacks for the headless test path.
-    int tbH = 36, sbH = 24;
+    int tbH = 44, sbH = 24; // 44 matches Theme::Metrics::toolbarHeight's default (see Theme.h)
     int libW = isLibraryVisible ? 200 : 0;
     int aiW = isAiPanelVisible ? 300 : 0;
     if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
@@ -2446,12 +2446,32 @@ void MainComponent::applyToolbarIcons() {
     // toggle buttons carry stateful text; the rest carry a static label.
     const bool iconOnly = toolbarNarrowMode_;
 
+    // Uniform edge indent so every toolbar icon renders at the SAME optical size (~18 px)
+    // regardless of the button's width — DrawableButton::getImageBounds() is height-bound here
+    // (button height is fixed at Theme::Metrics::toolbarHeight for every slot), so one indent
+    // value is all that's needed for icon-size consistency across the whole strip.
+    static constexpr int kToolbarIconEdgeIndent = 8;
+
     // setImages no-ops (leaves the button blank) when the icon is absent (headless LnF null).
+    // Builds three tinted clones from the SAME cached (muted) base — see retintIcons() — so the
+    // icon glyph steps through the identical rest -> hover -> toggled-on ladder as the label text
+    // AppLookAndFeel::drawDrawableButton draws (muted -> textPrimary -> accent). DrawableButton's
+    // own over/down/on state resolution (getCurrentImage() et al.) picks the right clone per state.
     auto setIcon = [&](juce::DrawableButton& b, Icon id) {
         if (lf == nullptr)
             return;
-        if (auto d = lf->getIcon(id))
-            b.setImages(d.get());
+        auto base = lf->getIcon(id); // fresh clone at its cached rest (muted) tint
+        if (base == nullptr)
+            return;
+
+        const auto& colors = lf->getTheme().colors;
+        auto hoverIcon = base->createCopy();
+        hoverIcon->replaceColour(colors.textMuted, colors.textPrimary);
+        auto onIcon = base->createCopy();
+        onIcon->replaceColour(colors.textMuted, colors.accent);
+
+        b.setEdgeIndent(kToolbarIconEdgeIndent);
+        b.setImages(base.get(), hoverIcon.get(), hoverIcon.get(), nullptr, onIcon.get(), onIcon.get(), onIcon.get());
     };
 
     setIcon(toggleLibraryButton, Icon::ToggleLibrary);
@@ -2549,7 +2569,7 @@ void MainComponent::applyToolbarIcons() {
 // ---- Pure panel-bounds geometry helper ----
 MainComponent::PanelBoundsResult MainComponent::computePanelBounds(bool libVisible, bool aiVisible,
                                                                    bool timelineVisible) const {
-    int tbH = 36, sbH = 24;
+    int tbH = 44, sbH = 24; // 44 matches Theme::Metrics::toolbarHeight's default (see Theme.h)
     int libW = libVisible ? 200 : 0;
     int aiW = aiVisible ? 300 : 0;
     if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {

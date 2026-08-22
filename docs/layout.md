@@ -160,7 +160,7 @@ Cmd+Z once restores every module to its pre-arrange position.
 The application chrome is carved out of `MainComponent::resized()` — the single canonical layout method. It slices top→bottom:
 
 ```
-┌─────────────────────────────────┐  ← toolbar strip  (height: Metrics::toolbarHeight = 36 px)
+┌─────────────────────────────────┐  ← toolbar strip  (height: Metrics::toolbarHeight = 44 px)
 │  [Lib] [Save][Load][Cfg][⟲][⟳][⬜]   ···   [Matrix][AI]  │
 ├──────────┬──────────────────────┤
 │  Library │                      │  ← library sidebar  (width: Metrics::librarySidebarWidth = 200 px, or 0 when hidden)
@@ -211,11 +211,18 @@ ModMatrix, AiPanel, Timeline under its `#if` guard) so the button's toggle state
 panel visibility — always `dontSendNotification`, never `setClickingTogglesState`, so a button's
 own `onClick` never double-fires. The pill's
 hover/press/toggled-on paint states are fully owned by `AppLookAndFeel::drawDrawableButton`
-(`theme.colors.accent`/`surface`/`surfaceHi` + `theme.metrics.pillRadius`/`borderWidth`) rather than
-delegated to `LookAndFeel_V4::drawDrawableButton` — the stock `LookAndFeel_V2` base does an
-unconditional flat `g.fillAll()` keyed only on toggle state, with no hover/press distinction and no
-rounding. Icon paint is separate/untouched (`DrawableButton::paintButton` draws the icon on top of
-this background).
+rather than delegated to `LookAndFeel_V4::drawDrawableButton` — the stock `LookAndFeel_V2` base
+does an unconditional flat `g.fillAll()` keyed only on toggle state, with no hover/press
+distinction and no rounding. The toggled-on state is a ~13/15/20% (rest/hover/press) accent wash
+with a 0.35-alpha 1px stroke — an "active" tint, not a filled button — and icon+label colour steps
+through a `textMuted → textPrimary (hover/press) → accent (on)` / `textDisabled` ladder: the label
+in `drawDrawableButton` (fixed 11px, bottom-docked with a 6px pad, replacing the stock formula
+that starved it at `min(16, 25%·height)`), the icon via tinted `Drawable` clones built in
+`MainComponent::applyToolbarIcons()` (`retintIcons()` tints the base `textMuted`; hover/on
+variants are `replaceColour`'d and wired through `setImages`' state slots). A uniform
+`DrawableButton::setEdgeIndent(8)` on all toolbar buttons is what keeps icon optical size
+(~17-19px) consistent regardless of button width — height, not width, is the binding constraint
+in `getImageBounds()`.
 
 ### Metrics layout tokens (code-only)
 
@@ -223,7 +230,7 @@ The following `Metrics` struct fields govern chrome layout. They are **not parse
 
 | Token | Value | Meaning |
 |---|---|---|
-| `toolbarHeight` | 36 | Toolbar strip height (px) |
+| `toolbarHeight` | 44 | Toolbar strip height (px) — sized so an ~18px icon and an 11px label fit with real breathing room (36px starved the label to ~7-9px via `DrawableButton`'s built-in geometry) |
 | `statusBarHeight` | 24 | Status bar strip height (px) |
 | `controlPadding` | 4 | Inset around toolbar buttons (px) |
 | `minWindowWidth` | 480 | Narrow-mode breakpoint (= minimum window width) |

@@ -384,6 +384,39 @@ TEST(CableColourThemeTest, DaylightMidiAndCategoryColoursAreFixedNotInherited) {
     EXPECT_GE(contrastRatio(daylight.colors.midiWire, daylight.colors.surface), kMinLegibleContrast);
 }
 
+TEST(CableColourThemeTest, LightThemeIdleWireKeepsTokenColourIdentity) {
+    // Pinned regression: the canvas used to draw every idle wire core at 50% brightness — a
+    // dark-theme device (idle blends toward the black canvas, activity brightens) that on a light
+    // canvas darkened every hue toward black, so Daylight's wires read navy/near-black regardless
+    // of their tokens. On a light theme an idle, unhovered wire must draw the resolved token
+    // colour EXACTLY, or theme palettes and user overrides stop meaning what they show.
+    const auto daylight = synth::theme::makeDaylight();
+    ASSERT_FALSE(daylight.isDark);
+    for (int i = 0; i < synth::ui::kCableSignalCount; ++i) {
+        const auto token = synth::ui::themeColourForSignal(daylight.colors, (synth::ui::CableSignal)i);
+        EXPECT_EQ(synth::ui::wireCoreColour(false, token, 0.0f, false), token)
+            << "idle light-theme wire must keep its token colour (signal " << i << ")";
+    }
+}
+
+TEST(CableColourThemeTest, DarkThemeIdleWireStillDimsTowardCanvas) {
+    // The other half of the law must not regress either: dark themes keep the long-standing
+    // idle-dim ramp (50% brightness at idle, token colour at full activity).
+    const auto obsidian = synth::theme::makeObsidian();
+    ASSERT_TRUE(obsidian.isDark);
+    const auto token = obsidian.colors.modWire;
+    EXPECT_EQ(synth::ui::wireCoreColour(true, token, 0.0f, false), token.withMultipliedBrightness(0.5f));
+    EXPECT_EQ(synth::ui::wireCoreColour(true, token, 1.0f, false), token.withMultipliedBrightness(1.0f));
+}
+
+TEST(CableColourThemeTest, HoverEmphasisFollowsThemePolarity) {
+    // Hover must increase contrast against the canvas in both polarities: brighter on dark
+    // themes, darker on light themes (brighter on a near-white canvas would wash the wire out).
+    const juce::Colour token(0xff9333ea);
+    EXPECT_EQ(synth::ui::wireCoreColour(true, token, 0.0f, true), token.brighter(0.3f));
+    EXPECT_EQ(synth::ui::wireCoreColour(false, token, 0.0f, true), token.darker(0.3f));
+}
+
 TEST(CableColourThemeTest, PartialCableCategoryObjectOnlyOverridesNamedKeys) {
     const juce::String partial = R"({
         "name": "Partial",

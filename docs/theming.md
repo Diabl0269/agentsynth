@@ -615,6 +615,18 @@ that washes out on Daylight's near-white background). Guarded by
 floor against both `bg1` and `surface`, every built-in theme) and
 `DaylightMidiAndCategoryColoursAreFixedNotInherited` (pinned regression for this specific bug).
 
+### Wire activity/hover treatment is theme-polarity aware
+
+The core stroke's activity/hover treatment lives in `synth::ui::wireCoreColour`
+(`Source/UI/CableColour.h`), called from `AppLookAndFeel::drawConnectionWire` — never inline a
+brightness ramp at a paint site. Dark themes keep the long-standing idle-dim law (50% brightness
+at idle, token colour at full activity; hover = `brighter(0.3)`). Light themes draw an idle wire
+at its exact token colour — the dark-theme dim law darkened every hue toward black on a light
+canvas (indigo read navy, violet read near-black), destroying the palette's identity — and mark
+activity by darkening a touch (hover = `darker(0.3)`). Pinned by
+`LightThemeIdleWireKeepsTokenColourIdentity`, `DarkThemeIdleWireStillDimsTowardCanvas` and
+`HoverEmphasisFollowsThemePolarity` in `Tests/CableColourTests.cpp`.
+
 ### User overrides
 
 Theme tokens supply the defaults; the settings panel writes a **sparse override layer** on top —

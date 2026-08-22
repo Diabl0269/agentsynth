@@ -126,7 +126,9 @@ void ToolbarComponent::paint(juce::Graphics& g) {
     // this pass never disagrees with layoutButtons()'s FlexItem order. Only consider slots whose
     // button is non-null && isVisible() — the same guard layoutButtons() already applies — so a
     // null ToggleTimeline (SYNTH_ENABLE_TIMELINE=OFF) can't anchor a separator on stale bounds.
-    g.setColour(lnf->getTheme().colors.border.withAlpha(0.5f));
+    // Kept subtle (~45% alpha, inset off the strip's top/bottom edge) so it reads as a quiet
+    // grouping cue rather than a hard divider.
+    g.setColour(lnf->getTheme().colors.border.withAlpha(0.45f));
 
     // Sections match the two layoutButtons() loops (left: Library..AutoArrange, right:
     // ToggleMinimap..ToggleTheme) — the boundary BETWEEN sections is the existing withFlex(1.0f)
@@ -147,7 +149,8 @@ void ToolbarComponent::paint(juce::Graphics& g) {
         if (prevGroup != -1 && group != prevGroup && section == prevSection && prevRight != -1 &&
             bounds.getX() > prevRight) {
             const float midX = 0.5f * (float)(prevRight + bounds.getX());
-            g.drawLine(midX, 8.0f, midX, (float)getHeight() - 8.0f, 1.0f);
+            const float inset = (float)getHeight() * 0.22f; // proportional so it scales with toolbarHeight
+            g.drawLine(midX, inset, midX, (float)getHeight() - inset, 1.0f);
         }
         prevGroup = group;
         prevSection = section;
