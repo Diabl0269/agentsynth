@@ -260,9 +260,12 @@ public:
     void cancel(RequestId) override {}
     void setModel(const juce::String& name) override { currentModel = name; }
     juce::String getCurrentModel() const override { return currentModel; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
 
 private:
     juce::String currentModel;
+    int requestTimeoutMs = 240000;
 };
 
 // Every response carries a fixed conversationId (mirrors a Pro-plan hosted backend persisting the
