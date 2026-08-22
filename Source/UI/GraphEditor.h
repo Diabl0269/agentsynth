@@ -39,6 +39,7 @@ public:
      *  on top of the inner canvas without being affected by the content transform. */
     void paintOverChildren(juce::Graphics& g) override;
     void resized() override;
+    void lookAndFeelChanged() override;
 
     void timerCallback() override;
     void updateComponents();
@@ -481,8 +482,12 @@ public:
         float attenAmount = 0.0f; // AttenuverterChain knob value, -1..1
     };
 
-    /** Enumerates every cable currently drawn on the canvas, in paint order. */
-    std::vector<VisibleCable> buildVisibleCables();
+    /** Enumerates every cable currently drawn on the canvas, in paint order.
+     *  Memoized: the list is rebuilt when the canvas is asked to repaint (repaintCanvas()) and on
+     *  every 30 Hz tick, never per-paint. Cable geometry is CANVAS-space, so zoom and pan cannot
+     *  move a cable — a zoom gesture reuses the same list. Do not store the returned reference
+     *  across a repaintCanvas(), a timerCallback() or any graph edit. */
+    const std::vector<VisibleCable>& buildVisibleCables();
 
     /** The cubic bezier a cable is drawn along. Must stay identical to
      *  AppLookAndFeel::drawConnectionWire's default curve or hit-testing drifts off the wire. */
@@ -522,6 +527,13 @@ public:
     // Test accessors.
     int getVisibleCableCount() { return (int)buildVisibleCables().size(); }
     bool hasHoveredCable() const noexcept { return hoveredCableId.has_value(); }
+    int getCableRebuildCountForTest() const noexcept { return cableRebuildCount; }
+
+    // ---- Zoom gesture (raster freeze) test seams ----
+    bool isZoomGestureActive() const noexcept { return zoomGestureActive; }
+    /** Ends the zoom gesture now, as the settle timer would. Test seam: the VBlank driver does
+     *  not tick in the headless runner. */
+    void settleZoomNowForTest() { endZoomGesture(); }
 
     void mouseMove(const juce::MouseEvent& e) override;
     void mouseExit(const juce::MouseEvent& e) override;
@@ -693,6 +705,29 @@ private:
 
     // Internal: start the drop-landing animation for a newly placed module component.
     void animateDropLanding(ModuleComponent* module, juce::Point<int> fromPos, juce::Point<int> toPos);
+
+    // ---- Cable memo (perf) ----
+    // The actual enumeration; buildVisibleCables() is the memoized public entry point above.
+    std::vector<VisibleCable> rebuildVisibleCables();
+    std::vector<VisibleCable> cablesCache;
+    bool cablesCacheValid = false;
+    int cableRebuildCount = 0; // test seam, see §11 paint-count pattern
+    /** The single "the canvas changed" seam: drops the cable memo, then repaints. Every former
+     *  `content.repaint()` in this file goes through here. */
+    void repaintCanvas();
+
+    // ---- Zoom gesture (raster freeze) ----
+    // While a zoom gesture is in flight every card's raster scale is pinned, so a wheel tick
+    // resamples the cached images instead of re-rendering every panel + slider at a new scale.
+    // The gesture ends kZoomSettleMs after the last zoom event and thaws with exactly one
+    // crisp re-render. Time-bounded per §11: the driver has a no-op onUpdate (it requests zero
+    // repaints of its own) and stops itself at t = 1.
+    bool zoomGestureActive = false;
+    synth::ui::AnimationDriver zoomSettleAnim;
+    static constexpr double kZoomSettleMs = 140.0;
+    void beginOrRefreshZoomGesture();
+    void endZoomGesture();
+    void setModuleRasterFrozen(bool frozen);
 
 public:
     const std::vector<AudioEngine::ModulationDisplayInfo>& getCachedModDisplayInfo() const {

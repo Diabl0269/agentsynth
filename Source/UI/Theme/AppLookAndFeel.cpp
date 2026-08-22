@@ -1,4 +1,5 @@
 #include "AppLookAndFeel.h"
+#include "../CableColour.h"
 
 #ifdef HAS_FONT_ASSETS
 #include "BinaryData.h"
@@ -133,8 +134,14 @@ void AppLookAndFeel::applyTheme(const Theme& newTheme) {
     setColour(juce::TextButton::textColourOffId, c.textPrimary);
     setColour(juce::TextButton::textColourOnId, c.bg0);
 
-    setColour(juce::DrawableButton::textColourId, c.textPrimary);
-    setColour(juce::DrawableButton::textColourOnId, c.textPrimary);
+    // Unused by our custom drawDrawableButton (which computes its own rest/hover/press/toggled
+    // fill + label colour from theme tokens directly — see drawDrawableButton below) but still
+    // set so any stock JUCE draw path that bypasses this LookAndFeel falls back to something
+    // sane rather than an undefined default.
+    setColour(juce::DrawableButton::textColourId, c.textMuted);
+    setColour(juce::DrawableButton::textColourOnId, c.accent);
+    setColour(juce::DrawableButton::backgroundColourId, juce::Colours::transparentBlack);
+    setColour(juce::DrawableButton::backgroundOnColourId, c.accent.withAlpha(0.13f));
 
     setColour(juce::ToggleButton::textColourId, c.textPrimary);
     setColour(juce::ToggleButton::tickColourId, c.accent);
@@ -202,23 +209,32 @@ void AppLookAndFeel::retintIcons() {
     iconLibrary_.setTintColour(Icon::ModuleDelete, c.error);
     iconLibrary_.setTintColour(Icon::ModuleDualIO, c.textMuted);
 
-    // Toolbar actions + transport-stop + panel toggles render as primary chrome.
-    iconLibrary_.setTintColour(Icon::TransportStop, c.textPrimary);
-    iconLibrary_.setTintColour(Icon::ActionNew, c.textPrimary);
-    iconLibrary_.setTintColour(Icon::ActionUndo, c.textPrimary);
-    iconLibrary_.setTintColour(Icon::ActionRedo, c.textPrimary);
-    iconLibrary_.setTintColour(Icon::ActionSave, c.textPrimary);
-    iconLibrary_.setTintColour(Icon::ActionLoad, c.textPrimary);
-    iconLibrary_.setTintColour(Icon::ActionSettings, c.textPrimary);
-    iconLibrary_.setTintColour(Icon::ActionAutoArrange, c.textPrimary);
-    iconLibrary_.setTintColour(Icon::ToggleAI, c.textPrimary);
-    iconLibrary_.setTintColour(Icon::ToggleMatrix, c.textPrimary);
-    iconLibrary_.setTintColour(Icon::ToggleLibrary, c.textPrimary);
-    iconLibrary_.setTintColour(Icon::ThemeToggle, c.textPrimary);
-    iconLibrary_.setTintColour(Icon::ToggleMinimap, c.textPrimary);
+    // Toolbar action + panel-toggle glyphs are tinted MUTED here — this is the rest-state base
+    // that MainComponent::applyToolbarIcons() clones and re-tints (via Drawable::replaceColour)
+    // into the hover (textPrimary) and toggled-on (accent) variants it hands to
+    // DrawableButton::setImages(). Do not tint these textPrimary here: applyToolbarIcons()'s
+    // replaceColour(textMuted, ...) calls assume this exact starting colour.
+    iconLibrary_.setTintColour(Icon::ActionNew, c.textMuted);
+    iconLibrary_.setTintColour(Icon::ActionUndo, c.textMuted);
+    iconLibrary_.setTintColour(Icon::ActionRedo, c.textMuted);
+    iconLibrary_.setTintColour(Icon::ActionSave, c.textMuted);
+    iconLibrary_.setTintColour(Icon::ActionLoad, c.textMuted);
+    iconLibrary_.setTintColour(Icon::ActionSettings, c.textMuted);
+    iconLibrary_.setTintColour(Icon::ActionAutoArrange, c.textMuted);
+    iconLibrary_.setTintColour(Icon::ToggleAI, c.textMuted);
+    iconLibrary_.setTintColour(Icon::ToggleMatrix, c.textMuted);
+    iconLibrary_.setTintColour(Icon::ToggleLibrary, c.textMuted);
+    iconLibrary_.setTintColour(Icon::ThemeToggle, c.textMuted);
+    iconLibrary_.setTintColour(Icon::ToggleMinimap, c.textMuted);
 
-    // TransportPlay is scaffolding only (no DrawableButton wired this phase); tint muted so it
-    // reads as inactive if ever surfaced.
+    // TransportStop is status-bar-only chrome (StatusBarComponent's master-mute button, which
+    // sets only a single "normal" image — no hover/toggled-on variants) — kept at textPrimary,
+    // unlike the toolbar set above.
+    iconLibrary_.setTintColour(Icon::TransportStop, c.textPrimary);
+
+    // TransportPlay is scaffolding (no dedicated glyph yet — see IconLibrary.h) reused as the
+    // ToggleTimeline toolbar button's icon, so it follows the same muted-base convention as the
+    // rest of the toolbar set above.
     iconLibrary_.setTintColour(Icon::TransportPlay, c.textMuted);
 
     // Library category headers are quieter than the action chrome.
@@ -436,9 +452,80 @@ void AppLookAndFeel::drawButtonText(juce::Graphics& g, juce::TextButton& button,
 
 void AppLookAndFeel::drawDrawableButton(juce::Graphics& g, juce::DrawableButton& button,
                                         bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) {
-    button.setColour(juce::DrawableButton::textColourId, findColour(juce::DrawableButton::textColourId));
-    button.setColour(juce::DrawableButton::textColourOnId, findColour(juce::DrawableButton::textColourOnId));
-    LookAndFeel_V4::drawDrawableButton(g, button, shouldDrawButtonAsHighlighted, shouldDrawButtonAsDown);
+    // LookAndFeel_V2::drawDrawableButton (the base every V4 build still falls through to) paints
+    // its background with an unconditional g.fillAll() keyed only on toggle state - no hover/press
+    // distinction and no rounding - so it cannot host the themed pill this component needs. We
+    // fully own the background+label paint here instead. The icon itself is a CHILD Drawable
+    // positioned by DrawableButton::resized()/getImageBounds() and painted separately — its
+    // rest/hover/toggled-on tint comes from the three pre-tinted Drawable variants
+    // MainComponent::applyToolbarIcons() hands to setImages() (muted/textPrimary/accent, mirroring
+    // the label ladder below), not from anything painted in here.
+    const auto& c = theme.colors;
+    const auto& m = theme.metrics;
+
+    const bool isOn = button.getToggleState();
+    const bool isEnabled = button.isEnabled();
+    const bool isHot = shouldDrawButtonAsHighlighted || shouldDrawButtonAsDown; // hover OR press
+    const auto bounds = button.getLocalBounds().toFloat().reduced(1.0f);
+
+    // Background pill. Disabled never fills. Toggled-on reads as "active", not as a big filled
+    // button: a light ~13-15% accent wash, with hover/press only nudging it a couple of points
+    // stronger — never the heavy ~0.22-0.30-alpha fill this replaced. Off-state hover/press get a
+    // soft neutral surface wash instead.
+    juce::Colour fill = juce::Colours::transparentBlack;
+    if (isEnabled) {
+        if (isOn)
+            fill = c.accent.withAlpha(shouldDrawButtonAsDown ? 0.20f : (shouldDrawButtonAsHighlighted ? 0.15f : 0.13f));
+        else if (shouldDrawButtonAsDown)
+            fill = c.surfaceHi.withAlpha(0.85f);
+        else if (shouldDrawButtonAsHighlighted)
+            fill = c.surface.withAlpha(0.6f);
+    }
+
+    if (!fill.isTransparent()) {
+        g.setColour(fill);
+        g.fillRoundedRectangle(bounds, m.pillRadius);
+    }
+
+    // A hairline accent stroke at low alpha reinforces "toggled on" without outlining the whole
+    // pill heavily (the old 0.6-alpha ring read as a button, not a state).
+    if (isEnabled && isOn) {
+        g.setColour(c.accent.withAlpha(0.35f));
+        g.drawRoundedRectangle(bounds, m.pillRadius, m.borderWidth);
+    }
+
+    // Label colour follows the same rest -> hover -> toggled-on ladder as the icon Drawable
+    // variants: muted at rest, textPrimary on hover/press, full accent when toggled on, textDisabled
+    // when disabled. Computed here from theme tokens directly rather than read off the stock
+    // DrawableButton::textColourId/textColourOnId ColourIds (those stay themed in applyTheme()
+    // only as a fallback for any stock JUCE draw path that bypasses this LookAndFeel).
+    juce::Colour textColour = c.textMuted;
+    if (!isEnabled)
+        textColour = c.textDisabled;
+    else if (isOn)
+        textColour = c.accent;
+    else if (isHot)
+        textColour = c.textPrimary;
+
+    // Label geometry: a fixed, readable size docked to the bottom of the strip with a small gap
+    // above it — NOT LookAndFeel_V2's cropped-to-16px-then-25%-of-height formula, which is what
+    // produced unreadable ~7-9px text at the toolbar's old 36px height.
+    if (button.getStyle() == juce::DrawableButton::ImageAboveTextLabel && button.getButtonText().isNotEmpty()) {
+        static constexpr float kLabelSize = 11.0f;
+        static constexpr float kLabelBottomPad = 6.0f; // balances the ~8px top inset the icon gets
+                                                       // from its own edgeIndent (kToolbarIconEdgeIndent
+                                                       // in MainComponent::applyToolbarIcons()), so the
+                                                       // icon+label block reads centred, not top-heavy.
+        static constexpr float kLabelSideInset = 4.0f;
+
+        const auto full = button.getLocalBounds().toFloat();
+        const juce::Rectangle<float> textArea(kLabelSideInset, full.getBottom() - kLabelSize - kLabelBottomPad,
+                                              juce::jmax(0.0f, full.getWidth() - 2.0f * kLabelSideInset), kLabelSize);
+
+        g.setFont(juce::Font(kLabelSize));
+        g.setColour(textColour);
+        g.drawFittedText(button.getButtonText(), textArea.toNearestInt(), juce::Justification::centred, 1);
+    }
 }
 
 void AppLookAndFeel::drawComboBox(juce::Graphics& g, int width, int height, bool isButtonDown, int /*buttonX*/,
@@ -970,8 +1057,12 @@ void AppLookAndFeel::drawModulePanel(juce::Graphics& g, juce::Rectangle<float> b
         juce::String tracked;
         for (auto ch : title.toUpperCase())
             tracked << juce::String::charToString(ch) << " ";
-        g.drawText(tracked.trimEnd(), header.reduced(10.0f, 0.0f).toNearestInt(), juce::Justification::centredLeft,
-                   true);
+        // Asymmetric inset: 22px on the left clears the activity LED (fillEllipse(6,8,8,8) in
+        // ModuleComponent::paint(), right edge 14) plus an 8px grid-aligned gap, regardless of
+        // whether the LED is currently lit — so the title never shifts when RMS crosses the
+        // lit/unlit threshold.
+        g.drawText(tracked.trimEnd(), header.withTrimmedLeft(22.0f).withTrimmedRight(10.0f).toNearestInt(),
+                   juce::Justification::centredLeft, true);
     }
 
     // ---- Border + selection ----
@@ -1028,11 +1119,10 @@ void AppLookAndFeel::drawConnectionWire(juce::Graphics& g, juce::Point<float> p1
             wire, juce::PathStrokeType(coreWidth * 2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
     }
 
-    // Core.
-    auto coreColour = colour.withMultipliedBrightness(0.5f + normalisedActivity * 0.5f);
-    if (hovered)
-        coreColour = colour.brighter(0.3f);
-    g.setColour(coreColour);
+    // Core. The activity/hover treatment lives in synth::ui::wireCoreColour (CableColour.h) so the
+    // theme-aware law — dark themes dim an idle wire toward the canvas, light themes keep the token
+    // colour's identity — is pinned by headless tests rather than only visible on screen.
+    g.setColour(synth::ui::wireCoreColour(theme.isDark, colour, normalisedActivity, hovered));
 
     const float effWidth = hovered ? coreWidth + 1.0f : coreWidth;
     juce::PathStrokeType stroke(effWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded);

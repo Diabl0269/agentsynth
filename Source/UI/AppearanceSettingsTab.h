@@ -4,6 +4,7 @@
 #include "Theme/ThemeManager.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
+#include <vector>
 class GraphEditor; // forward declaration for AppearanceSettingsTab
 
 // The Settings "Appearance" tab. Lists all themes (built-in + user) as selectable rows with
@@ -11,7 +12,6 @@ class GraphEditor; // forward declaration for AppearanceSettingsTab
 // offers "Open Themes Folder" (File::revealToUser) and "Reload Themes"
 // (ThemeManager::loadUserThemesFromFolder). Highlights the active row; updates if the manager
 // broadcasts (it is a ChangeListener so external changes reflect here too).
-// Also contains a toggle for alignment guides.
 class AppearanceSettingsTab
     : public juce::Component
     , private juce::ChangeListener {
@@ -27,9 +27,8 @@ public:
     // itself exposes no getNumRows(); read from the manager, which the model also defers to.)
     int getThemeRowCount() const { return (int)themeManager.getThemes().size(); }
     juce::String getSelectedThemeId() const;
-    void selectThemeRow(int row);                 // simulates a click -> setActiveTheme
-    void setAlignmentGuidesEnabled(bool enabled); // called by MainComponent to sync UI state
-    void setGraphEditor(GraphEditor* ge);         // called by MainComponent; pushes cable config too
+    void selectThemeRow(int row);         // simulates a click -> setActiveTheme
+    void setGraphEditor(GraphEditor* ge); // called by MainComponent; pushes cable config too
 
     // ---- Cable colours (issue #157) ----
     // The tab owns the persisted config; GraphEditor is handed the resolved values and never
@@ -68,6 +67,12 @@ private:
     std::unique_ptr<ThemeListModel> listModel;
     juce::TextButton openFolderButton{"Open Themes Folder"};
     juce::TextButton reloadButton{"Reload Themes"};
+
+    // Section headers, styled identically (see sectionHeaderFont in the .cpp constructor) so
+    // "Theme", "Theme Gallery" and "Cables" read as one family of group titles rather than one-offs.
+    juce::Label themeSectionLabel;
+    juce::Label themeGallerySectionLabel;
+
     juce::Label modeLabel;
     juce::ComboBox modeCombo;
     juce::Label defaultDarkLabel;
@@ -75,7 +80,9 @@ private:
     juce::Label defaultLightLabel;
     juce::ComboBox defaultLightCombo;
 
-    juce::ToggleButton alignmentGuideToggle{"Show Alignment Guides"};
+    // Hairline rules between sections, painted in paint() from these bounds — same pattern as
+    // PreferencesSettingsTab::dividerBounds.
+    std::vector<juce::Rectangle<int>> dividerBounds;
 
     // ---- Cable colour controls ----
     juce::Label cablesTitleLabel;

@@ -28,6 +28,8 @@ public:
     void setSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
     bool isDoubleClickPortDisconnectEnabled() const;
     void setDoubleClickPortDisconnectEnabled(bool enabled);
+    bool isAlignmentGuidesEnabled() const;
+    void setAlignmentGuidesEnabled(bool enabled);
     bool getDefaultDualIOForNewModules() const;
     void setDefaultDualIOForNewModules(bool enabled);
     bool isLoopSelectionArmsEnabled() const;
@@ -47,6 +49,7 @@ public:
 private:
     void persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
     void persistDoubleClickPortDisconnect(bool enabled);
+    void persistAlignmentGuidesEnabled(bool enabled);
     void persistDefaultDualIOForNewModules(bool enabled);
     void persistLoopSelectionArms(bool enabled);
     void persistTimelineFeatureEnabled(bool enabled);
@@ -60,6 +63,10 @@ private:
     juce::Label smartConnectionLabel;
     juce::ComboBox smartConnectionCombo;
     juce::ToggleButton doubleClickDisconnectToggle{"Double-click port to disconnect"};
+    // Moved here from AppearanceSettingsTab: this is canvas-editing behaviour (whether the graph
+    // shows snap guides while dragging), the same family as the two toggles above it, not an
+    // appearance/theme setting. Persistence key ("alignmentGuidesEnabled") is unchanged.
+    juce::ToggleButton alignmentGuideToggle{"Show Alignment Guides"};
     // One line, one control: the old label + two-item ComboBox said the same thing in two widgets
     // and read as a mode picker rather than the on/off it actually is.
     juce::ToggleButton defaultDualIOToggle{"Split Left/Right jacks on new modules"};

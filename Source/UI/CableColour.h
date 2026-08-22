@@ -297,6 +297,19 @@ inline juce::Colour resolveCableColour(CableColourMode mode, CableSignal signal,
     return isBypassed ? c.withAlpha(kBypassedCableAlpha) : c;
 }
 
+// The activity/hover treatment a wire's core stroke applies ON TOP of the resolved colour.
+// The idle-dim ramp is a dark-theme device (an idle wire blends toward the black canvas and
+// brightens with signal); on a light canvas that same ramp darkens every hue toward black and
+// destroys the wire's colour identity, so light themes keep the token colour at idle and darken
+// slightly with activity instead. Lives here (not in the LookAndFeel) so it is headless-testable.
+inline juce::Colour wireCoreColour(bool isDarkTheme, juce::Colour colour, float normalisedActivity,
+                                   bool hovered) noexcept {
+    if (hovered)
+        return isDarkTheme ? colour.brighter(0.3f) : colour.darker(0.3f);
+    return isDarkTheme ? colour.withMultipliedBrightness(0.5f + normalisedActivity * 0.5f)
+                       : colour.darker(normalisedActivity * 0.2f);
+}
+
 //==============================================================================
 // Persistence
 //
