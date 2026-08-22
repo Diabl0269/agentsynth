@@ -90,6 +90,8 @@ public:
 
     void setModel(const juce::String& name) override;
     juce::String getCurrentModel() const override;
+    void setRequestTimeoutMs(int timeoutMs) override;
+    int getRequestTimeoutMs() const override;
     void fetchAvailableModels(std::function<void(const juce::StringArray& models, bool success)> callback) override;
 
     void setTestMode(bool testMode) { isTestMode = testMode; }
@@ -109,6 +111,9 @@ public:
 private:
     juce::String ollamaHost;
     juce::String currentModel;
+    // Default mirrors kDefaultChatRequestTimeoutMs in OllamaProvider.cpp; kept as a plain literal
+    // here so the header doesn't need to see the .cpp's anonymous-namespace constant.
+    int requestTimeoutMs = 240000;
     InputStreamFactory createStream; // Member variable for the stream factory
     bool isTestMode = false;
     SamplingOptions samplingOptions; // all fields unset by default; see setSamplingOptions()

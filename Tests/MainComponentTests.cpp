@@ -22,9 +22,12 @@ public:
     void cancel(RequestId) override {}
     void setModel(const juce::String& name) override { model = name; }
     juce::String getCurrentModel() const override { return model; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
 
 private:
     juce::String model = "MockModel";
+    int requestTimeoutMs = 240000;
 };
 
 // Mock provider that records fetchAvailableModels() calls and honours setModel()/
@@ -45,11 +48,14 @@ public:
     void cancel(RequestId) override {}
     void setModel(const juce::String& name) override { model = name; }
     juce::String getCurrentModel() const override { return model; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
 
     int fetchCallCount = 0;
 
 private:
     juce::String model;
+    int requestTimeoutMs = 240000;
 };
 
 class MainComponentTest : public ::testing::Test {

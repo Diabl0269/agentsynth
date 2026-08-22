@@ -112,6 +112,19 @@ public:
      */
     void setAccountService(AccountService* service);
 
+    /**
+     * @brief Sets the request timeout, in milliseconds, used both by this component's own
+     *        in-flight-request watchdog (timerCallback()) and forwarded to aiService so the
+     *        active provider's connection timeout matches. Called from Settings (AISettingsTab)
+     *        when the user changes the "Request Timeout" preset; the constructor also calls this
+     *        indirectly by assigning requestTimeoutMs from the persisted setting and pushing it
+     *        to aiService directly.
+     */
+    void setRequestTimeoutMs(int timeoutMs) {
+        requestTimeoutMs = timeoutMs;
+        aiService.setRequestTimeoutMs(timeoutMs);
+    }
+
     // Testing hook: directly invokes the cancel action synchronously (mirrors triggerSend).
     // Use in headless tests instead of cancelButton->triggerClick(), which posts async.
     void simulateCancelClick() { handleUserCancel(); }
@@ -124,6 +137,9 @@ public:
 
     // Testing hook: returns the current isWaitingForResponse flag.
     bool isWaiting() const { return isWaitingForResponse; }
+
+    // Testing hook: returns the currently configured request timeout, in milliseconds.
+    int getRequestTimeoutMsForTesting() const { return requestTimeoutMs; }
 
     // Testing hook: responseMs of the most recent assistant message, or -1 if none / unmarked.
     int getLastAssistantResponseMs() const;
@@ -282,7 +298,13 @@ private:
     // Null whenever not waiting. Cleared before messageList.deleteAllChildren().
     juce::Label* waitingStatusLabel = nullptr;
 
-    static constexpr int kRequestTimeoutMs = 120000;
+    static constexpr int kDefaultRequestTimeoutMs = 240000;
+    // Instance value actually compared against in timerCallback(); defaults to
+    // kDefaultRequestTimeoutMs and is overridden by the persisted "aiRequestTimeoutMs" setting
+    // (read in the constructor) and/or setRequestTimeoutMs() (called from Settings). Kept in sync
+    // with AIIntegrationService's own copy so the UI watchdog and the active provider's
+    // connection timeout can never drift apart.
+    int requestTimeoutMs = kDefaultRequestTimeoutMs;
     // Tick rate for the live thinking timer — updates the status label only (not a full-panel
     // repaint). Matches the AI-thinking spinner exception in the UI perf contract.
     static constexpr int kWaitingStatusIntervalMs = 500;

@@ -23,7 +23,7 @@ constexpr int kWorkerHandoverTimeoutMs = 2000;
 // quality. The UI has a real cancel button (AIChatComponent's thinking spinner + Escape), so a
 // longer bound doesn't trap a user who doesn't want to wait — it just stops auto-failing a model
 // that's still working.
-constexpr int kChatRequestTimeoutMs = 240000;
+constexpr int kDefaultChatRequestTimeoutMs = 240000;
 
 const char* const kShuttingDownMessage = "Error: Request cancelled - the Ollama provider is shutting down.";
 
@@ -367,6 +367,8 @@ void OllamaProvider::deliverError(const Request& req, AIErrorKind kind, const ju
 
 void OllamaProvider::setModel(const juce::String& name) { currentModel = name; }
 juce::String OllamaProvider::getCurrentModel() const { return currentModel; }
+void OllamaProvider::setRequestTimeoutMs(int timeoutMs) { requestTimeoutMs = timeoutMs; }
+int OllamaProvider::getRequestTimeoutMs() const { return requestTimeoutMs; }
 
 void OllamaProvider::fetchAvailableModels(std::function<void(const juce::StringArray& models, bool success)> callback) {
     // Run on a separate thread to avoid blocking the caller (the message thread).
@@ -611,7 +613,7 @@ void OllamaProvider::processRequest(const Request& req) {
 
     stream = createStream(url.withPOSTData(jsonString),
                           juce::URL::InputStreamOptions(juce::URL::ParameterHandling::inPostData)
-                              .withConnectionTimeoutMs(kChatRequestTimeoutMs)
+                              .withConnectionTimeoutMs(requestTimeoutMs)
                               .withStatusCode(&httpStatus)
                               .withResponseHeaders(&responseHeaders),
                           publish);

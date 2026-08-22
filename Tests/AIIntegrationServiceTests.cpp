@@ -46,6 +46,15 @@ public:
 
     void setModel(const juce::String& name) override { currentModel = name; }
     juce::String getCurrentModel() const override { return currentModel; }
+
+    // Tracks what AIIntegrationService::setRequestTimeoutMs()/setProvider() forwarded, mirroring
+    // lastAuthToken below — used by the setProvider()-re-push regression test.
+    void setRequestTimeoutMs(int timeoutMs) override {
+        requestTimeoutMs = timeoutMs;
+        setRequestTimeoutMsCalled = true;
+    }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
+
     juce::String getProviderName() const override { return "MockProvider"; }
 
     // Overrides the AIProvider default no-op so tests can observe what
@@ -76,6 +85,8 @@ public:
     bool setConversationIdCalled = false;
     juce::String lastConversationId;
     std::vector<Message> lastConversation;
+    int requestTimeoutMs = 240000;
+    bool setRequestTimeoutMsCalled = false;
 };
 
 // Holds the request instead of answering it, so a test can decide how it ends. cancel() resolves
@@ -124,6 +135,8 @@ public:
 
     void setModel(const juce::String& name) override { currentModel = name; }
     juce::String getCurrentModel() const override { return currentModel; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
     juce::String getProviderName() const override { return "CancellableMockProvider"; }
 
     std::vector<uint64_t> cancelledIds;
@@ -132,6 +145,7 @@ public:
 private:
     CompletionCallback pending;
     juce::String currentModel;
+    int requestTimeoutMs = 240000;
 };
 
 class CountingListener : public AIIntegrationService::Listener {
@@ -256,6 +270,40 @@ TEST_F(AIIntegrationServiceTest, SetAuthTokenBeforeProviderInstalledIsRePushedBy
     service->setProvider(std::move(provider));
 
     EXPECT_EQ(rawProvider->lastAuthToken, "token-xyz");
+}
+
+// REGRESSION LOCK for the request-timeout footgun class described in CLAUDE.md's "AI model
+// discovery ordering" invariant: setProvider() must re-apply the last-configured timeout to
+// whatever provider it installs, exactly like the auth-token/conversation-id re-push above —
+// otherwise a provider swap would silently fall back to that provider's own hardcoded default
+// (e.g. going from a configured 10-minute timeout back to 4 minutes), reintroducing the
+// UI-watchdog/provider-timeout drift the single configurable value exists to prevent.
+TEST_F(AIIntegrationServiceTest, ConfiguredRequestTimeoutSurvivesProviderSwap) {
+    auto firstProvider = std::make_unique<MockAIProvider>();
+    auto* rawFirstProvider = firstProvider.get();
+    service->setProvider(std::move(firstProvider));
+
+    // First provider ends up with the value the FIRST setProvider() call re-pushed
+    // (AIIntegrationService's own default, 240000) — pinned here so the assertion below is
+    // clearly about the SECOND provider inheriting the CONFIGURED value, not just any value.
+    ASSERT_TRUE(rawFirstProvider->setRequestTimeoutMsCalled);
+    EXPECT_EQ(rawFirstProvider->requestTimeoutMs, 240000);
+
+    service->setRequestTimeoutMs(600000); // 10 minutes
+    EXPECT_EQ(rawFirstProvider->requestTimeoutMs, 600000);
+    EXPECT_EQ(service->getRequestTimeoutMs(), 600000);
+
+    // Swap providers (e.g. Settings -> switching from Ollama to the hosted Remote provider).
+    auto secondProvider = std::make_unique<MockAIProvider>();
+    auto* rawSecondProvider = secondProvider.get();
+    EXPECT_FALSE(rawSecondProvider->setRequestTimeoutMsCalled) << "sanity: a fresh mock starts unconfigured";
+
+    service->setProvider(std::move(secondProvider));
+
+    EXPECT_TRUE(rawSecondProvider->setRequestTimeoutMsCalled);
+    EXPECT_EQ(rawSecondProvider->requestTimeoutMs, 600000)
+        << "the newly installed provider must inherit the PREVIOUSLY CONFIGURED timeout, not its "
+           "own hardcoded default";
 }
 
 // P6-8: a successful response carrying a conversation id (the server persisted this exchange —
@@ -935,10 +983,13 @@ public:
     }
     void setModel(const juce::String& name) override { model = name; }
     juce::String getCurrentModel() const override { return model; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
     juce::String getProviderName() const override { return "SchemaCapturingProvider"; }
 
     juce::var lastSchema;
     juce::String model;
+    int requestTimeoutMs = 240000;
 };
 
 bool schemaOffersTimelineOps(const juce::var& schema) {
@@ -1083,6 +1134,8 @@ public:
     }
     void setModel(const juce::String& name) override { model = name; }
     juce::String getCurrentModel() const override { return model; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
     juce::String getProviderName() const override { return "CapabilityCapturingProvider"; }
     void setConversationId(const juce::String& id) override { lastConversationId = id; }
     bool isHosted() const override { return hosted; }
@@ -1098,6 +1151,7 @@ public:
     juce::String mockConversationId;
     juce::String lastConversationId;
     juce::String model;
+    int requestTimeoutMs = 240000;
 };
 
 // Hosted, but WITHOUT a sendCapabilityRequest override — stands in for a hosted provider the
@@ -1119,10 +1173,13 @@ public:
     }
     void setModel(const juce::String& name) override { model = name; }
     juce::String getCurrentModel() const override { return model; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
     juce::String getProviderName() const override { return "HostedNoCapabilityProvider"; }
     bool isHosted() const override { return true; }
 
     juce::String model;
+    int requestTimeoutMs = 240000;
 };
 } // namespace
 

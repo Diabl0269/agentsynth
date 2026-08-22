@@ -25,9 +25,12 @@ public:
     void cancel(RequestId) override {}
     void setModel(const juce::String&) override {}
     juce::String getCurrentModel() const override { return {}; }
+    void setRequestTimeoutMs(int timeoutMs) override { requestTimeoutMs = timeoutMs; }
+    int getRequestTimeoutMs() const override { return requestTimeoutMs; }
 
 private:
     juce::String name;
+    int requestTimeoutMs = 240000;
 };
 
 } // namespace

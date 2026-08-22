@@ -652,6 +652,14 @@ AIChatComponent::AIChatComponent(AIIntegrationService& service, juce::Applicatio
     downgradeStripLabel.setMinimumHorizontalScale(1.0f);
     downgradeStripLabel.setFont(juce::Font(11.0f));
 
+    // Restore the persisted request timeout (falls back to kDefaultRequestTimeoutMs when unset)
+    // and push it into aiService immediately, so the active provider is in sync from app startup
+    // rather than only once Settings is opened — see AIProvider::setRequestTimeoutMs()'s and
+    // AIIntegrationService::setProvider()'s doc comments for why a value has to be pushed even
+    // when nothing has changed it yet.
+    requestTimeoutMs = appProperties.getUserSettings()->getIntValue("aiRequestTimeoutMs", kDefaultRequestTimeoutMs);
+    aiService.setRequestTimeoutMs(requestTimeoutMs);
+
     refreshModels();
     updateUpsellStrip();
 
@@ -726,14 +734,15 @@ void AIChatComponent::timerCallback() {
         return;
 
     const int elapsed = (int)(juce::Time::getMillisecondCounter() - requestStartMs);
-    if (elapsed < kRequestTimeoutMs) {
+    if (elapsed < requestTimeoutMs) {
         refreshWaitingStatusLabel();
         return;
     }
 
     // Request has timed out.
     cancelRequest();
-    messages.push_back({"assistant", "Error: Request timed out after 2 minutes.", ""});
+    messages.push_back(
+        {"assistant", "Error: Request timed out after " + juce::String(requestTimeoutMs / 60000) + " minutes.", ""});
     messages.back().responseMs = elapsed;
     updateChatDisplay();
     inputField.grabKeyboardFocus();

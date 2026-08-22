@@ -339,14 +339,29 @@ protected:
         return std::make_unique<SlowInputStream>(4000);
     }
 
+    // Captures the connection timeout each sendPrompt() call was actually given, so a test can
+    // confirm the instance's configured requestTimeoutMs (not just kDefaultChatRequestTimeoutMs)
+    // reaches the HTTP layer, not just that the getter/setter round-trips.
+    static int lastCapturedTimeoutMs;
+    static std::unique_ptr<juce::InputStream>
+    createTimeoutCapturingStream(const juce::URL& url, const juce::URL::InputStreamOptions& options,
+                                 const synth::OllamaProvider::StreamPublisher& publish) {
+        juce::ignoreUnused(url, publish);
+        lastCapturedTimeoutMs = options.getConnectionTimeoutMs();
+        juce::String jsonResponse = R"({"model":"mock-model","message":{"role":"assistant","content":"ok"}})";
+        return std::make_unique<MockInputStream>(jsonResponse, false);
+    }
+
     synth::OllamaProvider mockProviderFailingStreams{"http://mock-host:11434", createFailingStream};
     synth::OllamaProvider mockProviderSuccessfulModels{"http://mock-host:11434", createSuccessfulModelsStream};
     synth::OllamaProvider mockProviderSuccessfulChat{"http://mock-host:11434", createSuccessfulChatStream};
+    synth::OllamaProvider mockProviderCapturingTimeout{"http://mock-host:11434", createTimeoutCapturingStream};
 
     OllamaProviderTest() {
         mockProviderFailingStreams.setTestMode(true);
         mockProviderSuccessfulModels.setTestMode(true);
         mockProviderSuccessfulChat.setTestMode(true);
+        mockProviderCapturingTimeout.setTestMode(true);
     }
 
     void SetUp() override {
@@ -354,19 +369,51 @@ protected:
         mockProviderFailingStreams.stopThread(5000);
         mockProviderSuccessfulModels.stopThread(5000);
         mockProviderSuccessfulChat.stopThread(5000);
+        mockProviderCapturingTimeout.stopThread(5000);
     }
 
     void TearDown() override {
         mockProviderFailingStreams.stopThread(5000);
         mockProviderSuccessfulModels.stopThread(5000);
         mockProviderSuccessfulChat.stopThread(5000);
+        mockProviderCapturingTimeout.stopThread(5000);
     }
 };
+
+int OllamaProviderTest::lastCapturedTimeoutMs = -1;
 
 TEST_F(OllamaProviderTest, SetAndGetCurrentModel) {
     juce::String modelName = "test-model:latest";
     mockProviderFailingStreams.setModel(modelName);
     ASSERT_EQ(mockProviderFailingStreams.getCurrentModel(), modelName);
+}
+
+TEST_F(OllamaProviderTest, RequestTimeoutMsDefaultsTo240000UnlessChanged) {
+    // No regression vs. current (pre-configurability) behavior: a provider that's never had
+    // setRequestTimeoutMs() called still uses the same 4-minute ceiling it always has.
+    EXPECT_EQ(mockProviderFailingStreams.getRequestTimeoutMs(), 240000);
+}
+
+TEST_F(OllamaProviderTest, SetAndGetRequestTimeoutMsRoundTrips) {
+    mockProviderFailingStreams.setRequestTimeoutMs(60000);
+    EXPECT_EQ(mockProviderFailingStreams.getRequestTimeoutMs(), 60000);
+}
+
+TEST_F(OllamaProviderTest, ConfiguredRequestTimeoutMsReachesTheHttpConnectionTimeout) {
+    mockProviderCapturingTimeout.setModel("mock-model:latest");
+    mockProviderCapturingTimeout.setRequestTimeoutMs(30000);
+
+    std::vector<synth::AIProvider::Message> conversation = {{"user", "hi"}};
+    MockPromptCallback callback;
+    mockProviderCapturingTimeout.sendPrompt(
+        conversation, [&callback](const synth::AIProvider::AIResponse& response) { callback(response); });
+
+    auto result = callback.getResult();
+    mockProviderCapturingTimeout.stopThread(5000);
+    ASSERT_TRUE(result.success);
+    EXPECT_EQ(lastCapturedTimeoutMs, 30000)
+        << "the CONFIGURED timeout must reach withConnectionTimeoutMs(), not just the "
+           "kDefaultChatRequestTimeoutMs default";
 }
 
 TEST_F(OllamaProviderTest, FetchAvailableModelsFailsGracefullyWithMock) {

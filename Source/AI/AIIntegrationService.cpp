@@ -26,6 +26,14 @@ void AIIntegrationService::setProvider(std::unique_ptr<AIProvider> newProvider) 
     // Same re-push shape for the conversation id (see setConversationId()'s doc comment).
     if (provider && currentConversationId.isNotEmpty())
         provider->setConversationId(currentConversationId);
+
+    // Unlike the token/conversation id above, the timeout is always pushed (never gated on
+    // "non-empty") — a provider always has SOME timeout, so failing to re-push here would mean
+    // the newly installed provider silently falls back to its own hardcoded default instead of
+    // whatever the user configured, reintroducing the UI-watchdog/provider-timeout drift this
+    // value exists to prevent.
+    if (provider)
+        provider->setRequestTimeoutMs(currentRequestTimeoutMs);
 }
 
 void AIIntegrationService::setAuthToken(const juce::String& token) {
@@ -38,6 +46,12 @@ void AIIntegrationService::setConversationId(const juce::String& id) {
     currentConversationId = id;
     if (provider)
         provider->setConversationId(currentConversationId);
+}
+
+void AIIntegrationService::setRequestTimeoutMs(int timeoutMs) {
+    currentRequestTimeoutMs = timeoutMs;
+    if (provider)
+        provider->setRequestTimeoutMs(currentRequestTimeoutMs);
 }
 
 AIProvider::RequestId AIIntegrationService::sendMessage(const juce::String& text,

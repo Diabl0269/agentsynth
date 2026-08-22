@@ -156,6 +156,17 @@ public:
     virtual juce::String getCurrentModel() const = 0;
 
     /**
+     * @brief Sets the request timeout, in milliseconds, applied to the provider's HTTP
+     *        connection for sendPrompt()/sendCapabilityRequest() calls.
+     */
+    virtual void setRequestTimeoutMs(int timeoutMs) = 0;
+
+    /**
+     * @brief Returns the currently configured request timeout, in milliseconds.
+     */
+    virtual int getRequestTimeoutMs() const = 0;
+
+    /**
      * @brief Fetches all available models from the provider.
      */
     virtual void fetchAvailableModels(std::function<void(const juce::StringArray& models, bool success)> callback) = 0;

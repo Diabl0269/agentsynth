@@ -893,6 +893,46 @@ TEST_F(RemoteProviderTest, SetAndGetCurrentModelRoundTripsCosmetically) {
     EXPECT_EQ(provider.getCurrentModel(), juce::String("whatever-label"));
 }
 
+TEST_F(RemoteProviderTest, RequestTimeoutMsDefaultsTo240000UnlessChanged) {
+    // No regression vs. current (pre-configurability) behavior: a provider that's never had
+    // setRequestTimeoutMs() called still uses the same 4-minute ceiling it always has.
+    synth::RemoteProvider provider{kMockHost};
+    EXPECT_EQ(provider.getRequestTimeoutMs(), 240000);
+}
+
+TEST_F(RemoteProviderTest, SetAndGetRequestTimeoutMsRoundTrips) {
+    synth::RemoteProvider provider{kMockHost};
+    provider.setRequestTimeoutMs(60000);
+    EXPECT_EQ(provider.getRequestTimeoutMs(), 60000);
+}
+
+TEST_F(RemoteProviderTest, ConfiguredRequestTimeoutMsReachesThePerformHttpCall) {
+    // HttpPerformer's signature carries timeoutMs directly (unlike Ollama's InputStreamOptions,
+    // there's no need for a capturing static), so this asserts the CONFIGURED instance value
+    // reaches performHttp(), not just kDefaultRequestTimeoutMs.
+    int capturedTimeoutMs = -1;
+    auto performer = [&capturedTimeoutMs](const juce::String&, const juce::StringPairArray&, const juce::String&,
+                                          int timeoutMs,
+                                          const std::atomic<bool>&) -> synth::RemoteProvider::HttpResult {
+        capturedTimeoutMs = timeoutMs;
+        return makeSuccess(R"({"data":{}})");
+    };
+
+    synth::RemoteProvider provider{kMockHost, performer};
+    provider.setTestMode(true);
+    provider.setRequestTimeoutMs(30000);
+
+    MockPromptCallback callback;
+    provider.sendPrompt(
+        {{"user", "hi"}}, [&callback](const synth::AIProvider::AIResponse& r) { callback(r); }, makeSchema());
+
+    auto result = callback.getResult();
+    provider.stopThread(5000);
+
+    ASSERT_TRUE(result.success);
+    EXPECT_EQ(capturedTimeoutMs, 30000);
+}
+
 // ============================================================================
 // Capability requests (sendCapabilityRequest — timeline.generate / arrange mode)
 // ============================================================================
