@@ -22,7 +22,10 @@ public:
         enableVisualBuffer(true);
     }
 
+    // Converts incoming note-on/off into poly Pitch/Gate CV (see processBlock); it has no MIDI
+    // output jack of its own.
     bool acceptsMidi() const override { return true; }
+    bool producesMidi() const override { return false; }
 
     void prepareToPlay(double sampleRate, int samplesPerBlock) override {
         juce::ignoreUnused(samplesPerBlock);

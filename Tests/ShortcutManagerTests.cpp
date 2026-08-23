@@ -27,10 +27,12 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "pianoRollTransposeOctaveDown",
         "pianoRollTransposeUp",
         "pianoRollTransposeDown",
+        "pianoRollToggleScalePanel",
         // TimelinePanelComponent::keyPressed (also consults timelineSnapToggle, shared with the roll)
         "timelineSnapToggle",
         "timelineToggleLoop",
         "timelineLoopSelection",
+        "timelineFollowPlayheadToggle",
         "timelineToolSelect",
         "timelineToolSplit",
         "timelineToolGlue",
@@ -621,4 +623,24 @@ TEST_F(ShortcutManagerTest, GetActionDescription_ToggleMinimapIsNonEmpty) {
     const auto description = ShortcutManager::getActionDescription("toggleMinimap");
     EXPECT_FALSE(description.isEmpty());
     EXPECT_EQ(description, "Toggle Minimap");
+}
+
+// ---------------------------------------------------------------------------
+// Piano roll: scale panel toggle (Ctrl+S)
+// ---------------------------------------------------------------------------
+
+TEST_F(ShortcutManagerTest, PianoRollToggleScalePanelDefaultIsRealCtrlS) {
+    const auto kp = manager.getBinding("pianoRollToggleScalePanel");
+    EXPECT_EQ(kp.getKeyCode(), 's');
+    EXPECT_TRUE(kp.getModifiers().isCtrlDown());
+    EXPECT_FALSE(kp.getModifiers().isShiftDown());
+    EXPECT_FALSE(kp.getModifiers().isAltDown());
+#if JUCE_MAC
+    // On macOS Ctrl and Cmd are different physical modifiers, so this must stay Ctrl-only —
+    // "savePreset" already owns Cmd+S, and the two must never be the same chord.
+    EXPECT_FALSE(kp.getModifiers().isCommandDown());
+#endif
+    EXPECT_EQ(ShortcutManager::getCategory("pianoRollToggleScalePanel"), ShortcutCategory::PianoRoll);
+    EXPECT_EQ(ShortcutManager::getActionDescription("pianoRollToggleScalePanel"), "Toggle Scale Panel");
+    EXPECT_TRUE(manager.getActionIds().contains("pianoRollToggleScalePanel"));
 }

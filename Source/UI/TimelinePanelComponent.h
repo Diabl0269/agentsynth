@@ -522,6 +522,18 @@ private:
     // The one thing this panel needs to redo on a theme switch (every other colour it uses is read
     // at paint time through the same dynamic_cast).
     void lookAndFeelChanged() override;
+    // The complement to lookAndFeelChanged() above: re-applies the tool-strip icons whenever this
+    // component's ANCESTOR CHAIN changes, not just when its resolved LookAndFeel does. A themed
+    // LookAndFeel change (setLookAndFeel/sendLookAndFeelChange) only reaches components that are
+    // ALREADY attached as children at the moment it fires; the plugin editor calls
+    // setLookAndFeel(&processor.getLookAndFeel()) on itself BEFORE it adds its MainComponent (and
+    // this panel, several levels further down) as a child — see AgentSynthPluginEditor's
+    // constructor — so that notification never reaches an unattached TimelinePanelComponent, and
+    // its constructor-time applyToolStripTheme() call found no themed LookAndFeel on the ancestor
+    // chain yet either. When the panel IS attached moments later (addAndMakeVisible), JUCE fires
+    // parentHierarchyChanged() down the newly-added subtree — not lookAndFeelChanged() — so this is
+    // the one hook guaranteed to run at that point. Idempotent and cheap either way.
+    void parentHierarchyChanged() override;
 
     // The Viewport's content: a plain container whose height is (track count * row height).
     struct TrackHeaderList : juce::Component {

@@ -685,6 +685,46 @@ TEST(AppearanceSettingsTabNoteColourTest, OverrideRoundTripsThroughLoadNoteColou
     EXPECT_EQ(*loaded.perPitchClass[(size_t)pitchClass], colour);
 }
 
+// Regression test for the "Piano roll notes" swatch section rendering as nothing in the actual
+// Settings window: goes through the REAL instantiation path (SettingsWindow, not a directly
+// constructed AppearanceSettingsTab) at the REAL launch size MainComponent opens the dialog at
+// (settingsComp->setSize(500, 450) in MainComponent.cpp) — the size at which the bug reproduced.
+// Every earlier test above constructs AppearanceSettingsTab directly against its own two deps and
+// never lays it out at a size small enough to starve the trailing sections of space, which is
+// exactly why they all passed while the section was invisible in the running app.
+TEST_F(SettingsWindowTest, AppearanceTabPianoRollNoteColoursSectionHasRealBoundsAtLaunchSize) {
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr);
+    settingsWindow.setSize(500, 450); // matches MainComponent's real Settings dialog size exactly
+    settingsWindow.resized();
+
+    // TabbedComponent::resized() lays out EVERY tab's content component, not just the current one
+    // (see juce_TabbedComponent.cpp), so the Appearance tab is already laid out without switching
+    // to it first — same assumption AITabPersistsProviderSetting etc. make about tab index 1 above.
+    auto* appearanceTab = dynamic_cast<AppearanceSettingsTab*>(settingsWindow.getTabs().getTabContentComponent(4));
+    ASSERT_NE(appearanceTab, nullptr);
+
+    const auto titleBounds = appearanceTab->getNoteColoursTitleBoundsForTest();
+    const auto swatchBounds = appearanceTab->getNoteSwatchRowBoundsForTest();
+    const auto resetButtonBounds = appearanceTab->getResetNoteColoursButtonBoundsForTest();
+
+    EXPECT_FALSE(titleBounds.isEmpty()) << "\"Piano Roll Notes\" header got a zero-area bounds — "
+                                           "present via addAndMakeVisible but nothing to paint";
+    EXPECT_FALSE(swatchBounds.isEmpty()) << "note-colour swatch row got a zero-area bounds — this "
+                                            "is the reported bug: the section exists in the tree "
+                                            "but has no area to paint or click";
+    EXPECT_FALSE(resetButtonBounds.isEmpty()) << "\"Reset Note Colours\" button got a zero-area bounds";
+
+    // Non-empty bounds alone would also pass for a bounds that overflows past whatever area is
+    // actually reachable (e.g. clipped by a Viewport that never grew to cover it) — so also check
+    // each section's bottom edge falls inside the SCROLLABLE content area, not just that its
+    // Rectangle happens to have positive width/height.
+    const int contentHeight = appearanceTab->getContentHeightForTest();
+    EXPECT_LE(titleBounds.getBottom(), contentHeight);
+    EXPECT_LE(swatchBounds.getBottom(), contentHeight);
+    EXPECT_LE(resetButtonBounds.getBottom(), contentHeight);
+}
+
 TEST(AppearanceSettingsTabNoteColourTest, ResetNoteSwatchAndResetAllFallBackToTheActiveThemesNoteFill) {
     IsolatedAppearancePropsGuard guard("Agent Synth Appearance Note Colour Test 3");
     synth::theme::ThemeManager themeManager;

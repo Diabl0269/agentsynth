@@ -121,6 +121,10 @@ public:
 
     int getVisibleInputPortCount() const override { return 2; }
     int getVisibleOutputPortCount() const override { return 2; }
+    // Pure audio/CV utility — processBlock never touches the MIDI buffer.
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Other; }
     ModuleType getModuleType() const override { return ModuleType::Comparator; }
 

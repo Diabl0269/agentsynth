@@ -69,20 +69,23 @@ struct ScalePreset {
 
 inline const std::vector<ScalePreset>& builtInScalePresets() {
     static const std::vector<ScalePreset> presets = {
-        {"Major", 0x0AB5},            // 0,2,4,5,7,9,11
-        {"Natural Minor", 0x05AD},    // 0,2,3,5,7,8,10
-        {"Harmonic Minor", 0x09AD},   // 0,2,3,5,7,8,11
-        {"Melodic Minor", 0x0AAD},    // 0,2,3,5,7,9,11
-        {"Dorian", 0x06AD},           // 0,2,3,5,7,9,10
-        {"Phrygian", 0x05AB},         // 0,1,3,5,7,8,10
-        {"Lydian", 0x0AD5},           // 0,2,4,6,7,9,11
-        {"Mixolydian", 0x06B5},       // 0,2,4,5,7,9,10
-        {"Locrian", 0x056B},          // 0,1,3,5,6,8,10
-        {"Major Pentatonic", 0x0295}, // 0,2,4,7,9
-        {"Minor Pentatonic", 0x04A9}, // 0,3,5,7,10
-        {"Blues", 0x04E9},            // 0,3,5,6,7,10
-        {"Whole Tone", 0x0555},       // 0,2,4,6,8,10
-        {"Chromatic", 0x0FFF},        // all 12
+        {"Major", 0x0AB5},             // 0,2,4,5,7,9,11
+        {"Natural Minor", 0x05AD},     // 0,2,3,5,7,8,10
+        {"Harmonic Minor", 0x09AD},    // 0,2,3,5,7,8,11
+        {"Melodic Minor", 0x0AAD},     // 0,2,3,5,7,9,11
+        {"Dorian", 0x06AD},            // 0,2,3,5,7,9,10
+        {"Phrygian", 0x05AB},          // 0,1,3,5,7,8,10
+        {"Phrygian Dominant", 0x05B3}, // 0,1,4,5,7,8,10 (5th mode of harmonic minor) — grouped next
+                                       // to Phrygian rather than appended, since presets are read
+                                       // top-to-bottom as "the modes" followed by "everything else".
+        {"Lydian", 0x0AD5},            // 0,2,4,6,7,9,11
+        {"Mixolydian", 0x06B5},        // 0,2,4,5,7,9,10
+        {"Locrian", 0x056B},           // 0,1,3,5,6,8,10
+        {"Major Pentatonic", 0x0295},  // 0,2,4,7,9
+        {"Minor Pentatonic", 0x04A9},  // 0,3,5,7,10
+        {"Blues", 0x04E9},             // 0,3,5,6,7,10
+        {"Whole Tone", 0x0555},        // 0,2,4,6,8,10
+        {"Chromatic", 0x0FFF},         // all 12
     };
     return presets;
 }

@@ -16,6 +16,9 @@ public:
         addParameter(octaveParam = new juce::AudioParameterInt(juce::ParameterID("octave", 1), "Octave", -2, 2, 0));
     }
 
+    // A MIDI source (the on-screen keys), like Track In / External MIDI — see ModuleBase's
+    // isMidiInstrumentType comment: nothing should ever be wired into it.
+    bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return true; }
 
     ~MidiKeyboardModule() override = default;

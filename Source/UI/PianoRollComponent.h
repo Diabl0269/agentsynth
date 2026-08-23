@@ -182,9 +182,9 @@ public:
     void setTransport(synth::TransportService* transport) noexcept { transport_ = transport; }
 
     /** The user's keyboard bindings for this surface's OWN keys (nudge, transpose, note navigation,
-     *  quantise, snap toggle). Non-owning and may stay null — with no manager installed keyPressed()
-     *  uses the hardcoded defaults below, which is what every headless test and every embedding that
-     *  has no settings store gets.
+     *  quantise, snap toggle, scale-panel toggle). Non-owning and may stay null — with no manager installed
+     * keyPressed() uses the hardcoded defaults below, which is what every headless test and every embedding that has no
+     * settings store gets.
      *
      *  Resolution is strict when a manager IS installed: an action whose binding is unset or invalid
      *  (including an id this ShortcutManager has never heard of) has NO key, rather than quietly

@@ -440,6 +440,8 @@ void TimelinePanelComponent::applyToolStripTheme() {
 
 void TimelinePanelComponent::lookAndFeelChanged() { applyToolStripTheme(); }
 
+void TimelinePanelComponent::parentHierarchyChanged() { applyToolStripTheme(); }
+
 //==============================================================================
 void TimelinePanelComponent::openPianoRoll(synth::ClipId id) {
     pianoRoll_.openClip(id);
@@ -899,6 +901,14 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
         const auto snap = transport_->getPositionSnapshot();
         transport_->setLoop(snap.loopStartPpq, snap.loopEndPpq, !snap.looping);
         ruler_.repaint();
+        return true;
+    }
+
+    // F = follow playhead on/off — the transport strip's follow button as a key, panel-scoped for
+    // the same reason as Q: it has to work whichever timeline surface has focus, the roll included
+    // (setFollowPlayheadEnabled already persists the choice and forwards the flag into the roll).
+    if (matchesAction(key, "timelineFollowPlayheadToggle", plainKey('f'))) {
+        setFollowPlayheadEnabled(!isFollowPlayheadEnabled());
         return true;
     }
 
@@ -1453,6 +1463,24 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
     // Thin top border separating the panel from the graph editor above it.
     g.setColour(border);
     g.drawHorizontalLine(0, 0.0f, (float)getWidth());
+
+    // Follow-playhead toggle: an always-visible pill outline, drawn HERE in the PARENT's paint()
+    // (which always runs before the child's — same ordering the grid/clip-lane-area comment above
+    // relies on) rather than trusting either the button's own resting-state fill or its icon
+    // having loaded. AppLookAndFeel::drawDrawableButton's off/non-hovered fill is deliberately
+    // transparent for a plain DrawableButton, and applyToolStripTheme() may not have found a
+    // themed LookAndFeel by the time it first ran (see parentHierarchyChanged() above) — or this
+    // build may simply have no icon asset linked at all. Either way the button painted NOTHING at
+    // rest: present in the tree and clickable, but genuinely invisible — the reported bug.
+    // snapToggleButton_ never has this problem because a plain TextButton always gets
+    // AppLookAndFeel::drawButtonBackground's pill+border fill; this gives the one DrawableButton
+    // on the strip with no text label to fall back on that same always-on affordance.
+    if (const auto followBounds = followPlayheadButton_.getBounds().toFloat(); !followBounds.isEmpty()) {
+        g.setColour(border.withAlpha(0.35f));
+        g.fillRoundedRectangle(followBounds, 3.0f);
+        g.setColour(border.withAlpha(0.7f));
+        g.drawRoundedRectangle(followBounds.reduced(0.5f), 3.0f, 1.0f);
+    }
 
     // Bar/beat/subdivision grid across the lanes region (below the ruler), using the SAME shared
     // TimelineViewState the ruler paints from. Colours come from the shared three-level policy in

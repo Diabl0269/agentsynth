@@ -60,6 +60,10 @@ public:
 
     int getVisibleInputPortCount() const override { return 2; }
     int getVisibleOutputPortCount() const override { return 1; }
+    // Pure audio/CV generator — processBlock's midiMessages parameter is unused.
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Oscillator; }
     ModuleType getModuleType() const override { return ModuleType::Noise; }
 

@@ -51,21 +51,21 @@
 // fails if this table drifts from what layoutDefaultContent() actually produces.
 juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Oscillator")
-        return {280, 553}; // +96 in #219: an Audio R output jack row and the Pan knob row
+        return {280, 533}; // +96 in #219: an Audio R output jack row and the Pan knob row
                            // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Filter")
         // +1 knob row: the Level knob took it from 3 sliders to 4 (issue #122).
         // +20 in #219: the Audio L/R input pair adds a jack row to the port gutter.
         // −128: frequency-response chart is opt-in via "Show Response" (was always reserved).
         // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
-        return {280, 463};
+        return {280, 443};
     if (typeName == "LFO")
         return {280, 361}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "VCA")
-        return {280, 273}; // +20 in #219: the Audio L/R input pair adds a jack row
+        return {280, 253}; // +20 in #219: the Audio L/R input pair adds a jack row
                            // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "ADSR" || typeName == "Amp Env" || typeName == "Filter Env")
-        return {280, 359}; // sliders below 2 jacks + threshold control + Poly toggle
+        return {280, 339}; // sliders below 2 jacks + threshold control + Poly toggle
                            // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName.containsIgnoreCase("Sequencer") && !typeName.containsIgnoreCase("Poly"))
         // +26 (one toggle row) for the Sync to Transport switch, appended below the step grid.
@@ -79,16 +79,16 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Poly MIDI" || typeName == "PolyMidi")
         // +48 (one combo row) from the issue #198 Voice Steal selector, then +26 (one toggle row)
         // for the Vel → Gate switch. +8: header-to-first-port gap grew 1px -> 9px (base 30->38).
-        return {280, 205};
+        return {280, 185};
     if (typeName == "Distortion")
-        return {280, 343}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 323}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Ring Modulator")
-        return {280, 411}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 391}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Delay")
-        return {280, 257}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
+        return {280, 237}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
                            // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Reverb")
-        return {280, 257}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
+        return {280, 237}; // Dual I/O off: one Audio jack (not L/R) + Level knob row
                            // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "AudioInput" || typeName == "Audio Input")
         // Height tracks the DEVICE's input channel count at runtime (one jack per channel, up to
@@ -103,45 +103,45 @@ juce::Point<int> GraphEditor::estimateModuleSize(const juce::String& typeName) {
     if (typeName == "Attenuverter")
         return {synth::LayoutUtil::kNarrowWidth, synth::LayoutUtil::kNarrowWidth};
     if (typeName == "Noise")
-        return {280, 301}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 281}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Envelope Follower")
         // Noise's control count (3 floats + a choice) plus a taller port gutter for 4 input jacks.
         // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38).
-        return {280, 315};
+        return {280, 295};
     if (typeName == "Math")
-        return {280, 259}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 239}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Sample & Hold")
-        return {280, 571}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 551}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Comparator")
-        return {280, 205}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 185}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Macros")
         // Height tracks the bank's "Knobs" count at runtime; the drop estimate uses the default.
         return {synth::LayoutUtil::kSingleWidth,
                 synth::LayoutUtil::macroBankHeight(MacroControlModule::kDefaultMacros)};
     if (typeName == "Sampler")
-        return {280, 665}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 645}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Wavetable")
         // Double-width since issue #180. The 16 CV jacks run in two left-hand columns and the 23
         // controls are paged behind a tab strip (only Position and Warp stay pinned), so neither
         // the gutter nor the control count sets the height on its own.
         return {synth::LayoutUtil::kDoubleWidth, 554};
     if (typeName == "Chorus" || typeName == "Phaser" || typeName == "Flanger")
-        return {280, 297}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 277}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Bitcrusher")
-        return {280, 343}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 323}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Pitch Shifter")
-        return {280, 487}; // Dual I/O off: one Audio jack + Level knob row
+        return {280, 467}; // Dual I/O off: one Audio jack + Level knob row
                            // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Parametric EQ")
         // Double-width card: a 150px response curve set between the port-label gutters, then a
         // 4-column band grid (on/off + Freq/Gain/Q). Mirrors parametricEQHeight().
         return {synth::LayoutUtil::kDoubleWidth, 592};
     if (typeName == "Compressor")
-        return {280, 257}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 237}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Limiter")
-        return {280, 181}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 161}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Voice Mixer")
-        return {280, 321}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
+        return {280, 301}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "External MIDI")
         return {280, 146}; // +8: header-to-first-port gap grew 1px -> 9px (base offset 30->38)
     if (typeName == "Track In")

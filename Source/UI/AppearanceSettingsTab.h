@@ -67,6 +67,22 @@ public:
     void resetNoteSwatch(int pitchClass);
     void resetAllNoteColours();
 
+    // ---- Testing hooks: real-layout regression coverage (bug: "Piano roll notes" invisible in
+    // the actual Settings window) ----
+    // Bounds are in the SCROLLED CONTENT's coordinate space (ContentHost below), which is what
+    // resized() actually assigns them — the same space getContentHeightForTest() measures, so a
+    // test can check both "was this laid out with real, non-empty space" and "does the scrollable
+    // content area actually reach that far" without caring whether the Viewport's visible window
+    // happens to be scrolled to it right now.
+    juce::Rectangle<int> getNoteColoursTitleBoundsForTest() const { return noteColoursTitleLabel.getBounds(); }
+    // Defined in the .cpp: NoteSwatchRow is only forward-declared here, so the header cannot
+    // dereference it.
+    juce::Rectangle<int> getNoteSwatchRowBoundsForTest() const;
+    juce::Rectangle<int> getResetNoteColoursButtonBoundsForTest() const { return resetNoteColoursButton.getBounds(); }
+    /** Full height of the scrollable content host — the ceiling a laid-out section's bottom edge
+     *  must fall within for it to be reachable at all (by scrolling, if the viewport is shorter). */
+    int getContentHeightForTest() const { return contentHost.getHeight(); }
+
 private:
     class CableSwatchRow; // strip of clickable colour swatches for the active mode
     class NoteSwatchRow;  // strip of clickable pitch-class swatches (piano roll note colours)
@@ -75,6 +91,26 @@ private:
                           // class here or in an AppearanceSettingsTab.cpp if they prefer; if a
                           // .cpp is added it MUST be added to BOTH CMakeLists (app + tests).
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
+
+    // The scrolled content: a bare host whose paint delegates back to the tab so the section
+    // dividers are drawn in the same coordinate space the controls are laid out in — same idiom as
+    // ShortcutsSettingsTab::RowsHost. Needed because SettingsWindow opens this tab at a FIXED size
+    // (MainComponent's settingsComp->setSize(500, 450), giving this tab roughly 498x419 once the
+    // TabbedComponent's tab bar and outline are subtracted) that is smaller than every section's
+    // combined natural height — without a Viewport, resized() used to lay the trailing sections
+    // (part of Cables, and all of Piano Roll Notes) into an already-exhausted Rectangle, handing
+    // them a zero-height juce::Rectangle: present in the tree via addAndMakeVisible, but with no
+    // area to paint or hit-test, i.e. invisible.
+    struct ContentHost : juce::Component {
+        explicit ContentHost(AppearanceSettingsTab& o)
+            : owner(o) {}
+        void paint(juce::Graphics& g) override { owner.paintContent(g); }
+        AppearanceSettingsTab& owner;
+    };
+    void paintContent(juce::Graphics& g);
+
+    juce::Viewport contentViewport;
+    ContentHost contentHost{*this};
 
     synth::theme::ThemeManager& themeManager;
     juce::ApplicationProperties& appProperties;

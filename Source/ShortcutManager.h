@@ -372,6 +372,8 @@ public:
         bindings["timelineSnapToggle"] = juce::KeyPress('q', juce::ModifierKeys::noModifiers, 0);
         bindings["timelineToggleLoop"] = juce::KeyPress('l', juce::ModifierKeys::noModifiers, 0);
         bindings["timelineLoopSelection"] = juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0);
+        // F mirrors the transport strip's follow-playhead button, panel-scoped like Q/L/P.
+        bindings["timelineFollowPlayheadToggle"] = juce::KeyPress('f', juce::ModifierKeys::noModifiers, 0);
         // Cubase's tool row (see synth::ui::EditTool for why 2, 6 and 9 stay unclaimed). Bare
         // digits: category scoping is what makes that safe next to the Ctrl+Shift+digit grid block
         // below — and modifier equality is exact, so Ctrl+Shift+1 can never match a bare 1.
@@ -428,6 +430,15 @@ public:
         bindings["pianoRollNavPrevNote"] = juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::altModifier, 0);
         bindings["pianoRollNavNextNote"] = juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::altModifier, 0);
         bindings["pianoRollQuantise"] = juce::KeyPress('q', juce::ModifierKeys::shiftModifier, 0);
+        // Real ctrlModifier, deliberately NOT commandModifier — "savePreset" already owns Cmd+S, and
+        // this toggle must never be that shortcut wearing a different hat. On macOS the two chords
+        // are genuinely distinct physical keys. On Windows/Linux, where juce::ModifierKeys::
+        // commandModifier IS ctrlModifier, a bare Ctrl+S while the roll has focus toggles the panel
+        // INSTEAD of saving — the same "whichever surface has focus wins" contract
+        // "timelineSnapToggle" already follows for its own bare 'q', and exactly why this is filed
+        // under PianoRoll (a scoped category) rather than General: EveryDefaultBindingIsUnique only
+        // checks within a category, by design.
+        bindings["pianoRollToggleScalePanel"] = juce::KeyPress('s', juce::ModifierKeys::ctrlModifier, 0);
     }
 
     static juce::String keyPressToDisplayString(const juce::KeyPress& key) {
@@ -549,6 +560,8 @@ public:
             return "Toggle Looping";
         if (actionId == "timelineLoopSelection")
             return "Loop the Selection";
+        if (actionId == "timelineFollowPlayheadToggle")
+            return "Toggle Follow Playhead";
         if (actionId == "timelineToolSelect")
             return "Select Tool";
         if (actionId == "timelineToolSplit")
@@ -601,6 +614,8 @@ public:
             return "Select Next Note";
         if (actionId == "pianoRollQuantise")
             return "Quantise Selected Notes";
+        if (actionId == "pianoRollToggleScalePanel")
+            return "Toggle Scale Panel";
         return actionId;
     }
 
@@ -708,6 +723,7 @@ private:
             {"timelineSnapToggle", ShortcutCategory::Timeline},
             {"timelineToggleLoop", ShortcutCategory::Timeline},
             {"timelineLoopSelection", ShortcutCategory::Timeline},
+            {"timelineFollowPlayheadToggle", ShortcutCategory::Timeline},
             {"timelineToolSelect", ShortcutCategory::Timeline},
             {"timelineToolSplit", ShortcutCategory::Timeline},
             {"timelineToolGlue", ShortcutCategory::Timeline},
@@ -734,6 +750,7 @@ private:
             {"pianoRollNavPrevNote", ShortcutCategory::PianoRoll},
             {"pianoRollNavNextNote", ShortcutCategory::PianoRoll},
             {"pianoRollQuantise", ShortcutCategory::PianoRoll},
+            {"pianoRollToggleScalePanel", ShortcutCategory::PianoRoll},
         };
         return table;
     }

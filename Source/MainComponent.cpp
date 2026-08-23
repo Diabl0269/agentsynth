@@ -3741,9 +3741,14 @@ synth::LaneId MainComponent::addPluginAutomationLane(const synth::ui::TrackHeade
 #endif
 }
 
-// The MIDI-destinations picker's row list — every MIDI-instrument node in the live graph the
-// track's bound Track In node could send its MIDI to, MIDI SOURCES deliberately excluded (see
-// isMidiInstrumentType's own comment: a source generates notes, it does not consume them).
+// The MIDI-destinations picker's row list — every node in the live graph that actually CONSUMES
+// MIDI in its processBlock (ModuleBase::acceptsMidi(), corrected per module by an audit of every
+// module's processBlock — see Tests/ModuleMidiFlagsTests.cpp for the full table — so this is no
+// longer a hardcoded allowlist, and no module can advertise a MIDI jack that silently did
+// nothing). MIDI SOURCES are still deliberately excluded: a pure source
+// (Track In / External MIDI / MIDI Keyboard) has acceptsMidi()==false by construction — see
+// isMidiInstrumentType's own comment for why a source must never be offered as a destination — so
+// checking acceptsMidi() alone already leaves them out without a separate "is it a source" test.
 // Disambiguated exactly like getAvailableTrackInNodes(): "#id" appears only when some other
 // candidate shares its plain display name.
 std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption>
@@ -3764,7 +3769,7 @@ MainComponent::getMidiDestinationOptions(synth::TrackId forTrack) {
         if (node == nullptr)
             continue;
         auto* module = dynamic_cast<ModuleBase*>(node->getProcessor());
-        if (module == nullptr || !isMidiInstrumentType(module->getModuleType()))
+        if (module == nullptr || !module->acceptsMidi())
             continue;
         candidates.push_back(node);
     }
@@ -3779,7 +3784,7 @@ MainComponent::getMidiDestinationOptions(synth::TrackId forTrack) {
             nameOccurrences[name] > 1 ? name + " #" + juce::String((int)node->nodeID.uid) : name;
         const bool connected = graph.isConnected({{trackInNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
                                                   {node->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
-        options.push_back({display, node->nodeID.uid, connected});
+        options.push_back({display, node->nodeID.uid, connected, isMidiInstrumentNode(node->getProcessor())});
     }
 #else
     juce::ignoreUnused(forTrack);

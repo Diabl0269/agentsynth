@@ -202,3 +202,86 @@ TEST(MidiDestinationPickerTest, ToggleOnTheHintRowIsANoOp) {
     picker->toggleRowForTest(0);
     EXPECT_EQ(graph.applyCalls, 0);
 }
+
+// ---- Two-group rendering (Instruments / Other) --------------------------------------------
+
+TEST(MidiDestinationPickerTest, TwoGroupsRenderSectionHeadersInstrumentsFirst) {
+    using Group = MidiDestinationPicker::Option::Group;
+    FakeGraph graph;
+    graph.options = {
+        {"Oscillator 1", 1, false, Group::Instruments},
+        {"Sampler", 2, true, Group::Instruments},
+        {"ADSR", 3, false, Group::Other},
+    };
+    auto picker = makePicker(graph);
+
+    const auto names = picker->getVisibleRowNamesForTest();
+    ASSERT_EQ(names.size(), 5u);
+    EXPECT_EQ(names[0], "Instruments");
+    EXPECT_EQ(names[1], "Oscillator 1");
+    EXPECT_EQ(names[2], "Sampler");
+    EXPECT_EQ(names[3], "Other");
+    EXPECT_EQ(names[4], "ADSR");
+}
+
+TEST(MidiDestinationPickerTest, SingleGroupNeverShowsAHeader) {
+    // Regression guard for every pre-existing caller: none of them ever set Option::group, so
+    // they all default to Group::Instruments and must keep rendering the flat, headerless list
+    // they always did (see every other test in this file, none of which expect a header row).
+    FakeGraph graph;
+    graph.options = {{"Oscillator 1", 1, false}, {"Sampler", 2, true}};
+    auto picker = makePicker(graph);
+
+    const auto names = picker->getVisibleRowNamesForTest();
+    ASSERT_EQ(names.size(), 2u);
+    EXPECT_EQ(names[0], "Oscillator 1");
+    EXPECT_EQ(names[1], "Sampler");
+}
+
+TEST(MidiDestinationPickerTest, SearchFiltersAcrossBothGroupsAndHidesEmptyHeaders) {
+    using Group = MidiDestinationPicker::Option::Group;
+    FakeGraph graph;
+    graph.options = {
+        {"Oscillator 1", 1, false, Group::Instruments},
+        {"Sampler", 2, true, Group::Instruments},
+        {"ADSR", 3, false, Group::Other},
+    };
+    auto picker = makePicker(graph);
+
+    picker->setSearchTextForTest("adsr");
+    auto names = picker->getVisibleRowNamesForTest();
+    // Neither Instruments row matches "adsr", so the Instruments header hides along with them;
+    // the Other header survives because its one row still matches.
+    ASSERT_EQ(names.size(), 2u);
+    EXPECT_EQ(names[0], "Other");
+    EXPECT_EQ(names[1], "ADSR");
+
+    picker->setSearchTextForTest("");
+    names = picker->getVisibleRowNamesForTest();
+    ASSERT_EQ(names.size(), 5u);
+}
+
+TEST(MidiDestinationPickerTest, ToggleIndexingCountsHeaderRowsAsInertVisibleRows) {
+    using Group = MidiDestinationPicker::Option::Group;
+    FakeGraph graph;
+    graph.options = {
+        {"Oscillator 1", 1, false, Group::Instruments},
+        {"ADSR", 2, false, Group::Other},
+    };
+    auto picker = makePicker(graph);
+
+    // Visible rows: ["Instruments", "Oscillator 1", "Other", "ADSR"]. toggleRowForTest() counts
+    // every visible row (headers included, same as the pre-existing hint-row precedent) — index 3
+    // is "ADSR", the second real destination.
+    ASSERT_EQ(picker->getVisibleRowNamesForTest().size(), 4u);
+    picker->toggleRowForTest(3);
+    EXPECT_EQ(graph.applyCalls, 1);
+    EXPECT_EQ(graph.lastNodeUid, 2u);
+    EXPECT_TRUE(graph.lastConnect);
+
+    // A toggle landing exactly on a header row (index 0 or 2) is a silent no-op, exactly like the
+    // hint row.
+    picker->toggleRowForTest(0);
+    picker->toggleRowForTest(2);
+    EXPECT_EQ(graph.applyCalls, 1);
+}

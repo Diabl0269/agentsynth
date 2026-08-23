@@ -69,6 +69,10 @@ public:
     juce::String getInputPortLabel(int i) const override { return i == 0 ? "Signal" : "Amount"; }
     juce::String getOutputPortLabel(int) const override { return "Out"; }
 
+    // Pure audio/CV utility — processBlock never touches the MIDI buffer.
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+
     ModuleType getModuleType() const override { return ModuleType::Attenuverter; }
 
     float getLastOutputPeak() const { return lastOutputPeak.load(std::memory_order_relaxed); }

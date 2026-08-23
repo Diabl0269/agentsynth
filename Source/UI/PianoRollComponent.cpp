@@ -852,13 +852,11 @@ void PianoRollComponent::paintPlayhead(juce::Graphics& g) {
 void PianoRollComponent::paintKeysColumn(juce::Graphics& g) {
     using namespace synth::theme;
     juce::Colour whiteKey, blackKey, sep;
-    float microSize = 8.5f;
     if (auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel())) {
         const auto& c = lf->getTheme().colors;
         whiteKey = c.pianoKeyWhite;
         blackKey = c.pianoKeyBlack;
         sep = c.border;
-        microSize = lf->getTheme().type.micro;
     } else {
         whiteKey = juce::Colours::whitesmoke;
         blackKey = juce::Colours::black;
@@ -872,6 +870,15 @@ void PianoRollComponent::paintKeysColumn(juce::Graphics& g) {
     g.fillRect(keysColumnBounds_);
 
     const int rowHeight = std::max(1, (int)pixelsPerSemitone_);
+    // The label font SCALES with the row height rather than sitting fixed at the theme's micro
+    // size: at the default 10px row a flat ~8.5px caption was unreadably small, and it stayed that
+    // size at every zoom level, so a taller row from zooming in never bought a bigger label.
+    // Clamped to [9, 13] — the floor matches keyLabelFor's own "too short a row for a per-key
+    // label" cutoff (rowHeightPx < 9, below which every label collapses to C-only regardless of
+    // this font size), and the ceiling brackets the theme's `type.label` token (10.5 — "knob
+    // names, port labels, section heads", the nearest built-in size above `micro`) so a tall,
+    // zoomed-in row reads like every other themed label instead of growing past it.
+    const float labelFontPx = juce::jlimit(9.0f, 13.0f, (float)rowHeight - 3.0f);
     const int visibleRows = std::max(0, keysColumnBounds_.getHeight() / rowHeight) + 2;
     const int blackWidth = blackKeyInsetForTest();
     const long long totalRows = (long long)visiblePitches_.size();
@@ -910,7 +917,7 @@ void PianoRollComponent::paintKeysColumn(juce::Graphics& g) {
             // .contrasting so the label holds against BOTH the white and the black key fill, in
             // every theme — never a fixed textCol that could sit invisible on one of the two.
             g.setColour(keyFill.contrasting(0.7f));
-            g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), microSize, juce::Font::plain));
+            g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), labelFontPx, juce::Font::plain));
             g.drawText(label, rowRect.reduced(3, 0), juce::Justification::centredRight, false);
         }
     }
@@ -923,14 +930,21 @@ void PianoRollComponent::paintKeysColumn(juce::Graphics& g) {
 void PianoRollComponent::paintHeader(juce::Graphics& g) {
     using namespace synth::theme;
     juce::Colour bg, border, textCol, accent;
-    float microSize = 8.5f;
+    // The header's drawn button labels ("Clips", "Q", "Scale") used to share the theme's micro
+    // size (~8.5px) with the keys column's captions — unreadably small for text meant to be READ
+    // rather than glanced at as a row hint. Bumped to the theme's next size up: TimelineTransportBar
+    // uses exactly this `type.value + 1.0f` expression (~11px) for its own drawn text (the tempo/
+    // position readout), so this reuses that precedent rather than inventing a second "one size
+    // above micro" constant. The header stays 20px tall and every button rect is reduced to ~16px,
+    // comfortably clearing an 11px font with room to spare.
+    float buttonFontPx = 11.0f;
     if (auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel())) {
         const auto& c = lf->getTheme().colors;
         bg = c.surface;
         border = c.border;
         textCol = c.textPrimary;
         accent = c.accent;
-        microSize = lf->getTheme().type.micro;
+        buttonFontPx = lf->getTheme().type.value + 1.0f;
     } else {
         bg = juce::Colours::darkslategrey;
         border = juce::Colours::grey;
@@ -952,7 +966,7 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
                       (float)arrowArea.getBottom(), (float)arrowArea.getX(), (float)arrowArea.getCentreY());
     g.setColour(textCol);
     g.fillPath(arrow);
-    g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), microSize, juce::Font::plain));
+    g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), buttonFontPx, juce::Font::plain));
     g.drawText("Clips", backButtonBounds_.withTrimmedLeft(12), juce::Justification::centredLeft, false);
     g.setColour(border);
     g.drawRoundedRectangle(backButtonBounds_.toFloat(), 3.0f, 1.0f);
@@ -984,7 +998,7 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
         g.fillRoundedRectangle(scaleButtonBounds_.toFloat(), 3.0f);
     }
     g.setColour(scaleOpen ? accent : textCol.withAlpha(0.85f));
-    g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), microSize, juce::Font::plain));
+    g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), buttonFontPx, juce::Font::plain));
     g.drawText("Scale", scaleButtonBounds_, juce::Justification::centred, false);
     g.setColour(scaleOpen ? accent.withAlpha(0.8f) : border.withAlpha(0.5f));
     g.drawRoundedRectangle(scaleButtonBounds_.toFloat(), 3.0f, 1.0f);
@@ -2587,6 +2601,22 @@ bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {
     if (matchesAction(key, "timelineSnapToggle", plainKey('q'))) {
         flashQuantiseButton();
         toggleSnap();
+        return true;
+    }
+
+    // Ctrl+S (the ACTUAL Control key — modKey(..., ctrlModifier), never Cmd, which is the app's
+    // Save Preset shortcut) toggles the scale-assist panel, the keyboard equivalent of the header's
+    // "Scale" button. Guarded against a focused child TEXT EDITOR (the custom-scale name field is
+    // the only one this surface owns) because juce::TextEditor does not treat a Ctrl-chorded letter
+    // as text input, so an unhandled Ctrl+S bubbles straight up to us mid-typing — toggling the
+    // panel out from under someone naming a scale would be a surprise none of this file's other
+    // bindings risk, since none of them share a key with anything a text field would otherwise
+    // consume.
+    if (matchesAction(key, "pianoRollToggleScalePanel", modKey('s', juce::ModifierKeys::ctrlModifier))) {
+        auto* focused = juce::Component::getCurrentlyFocusedComponent();
+        if (dynamic_cast<juce::TextEditor*>(focused) != nullptr)
+            return false;
+        toggleScalePanel();
         return true;
     }
 

@@ -186,6 +186,11 @@ public:
         }
     }
 
+    // A self-contained step sequencer: every step comes from its own parameters, so processBlock
+    // never reads the incoming MIDI buffer — it only writes note/CC events onto it.
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return true; }
+
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Sequencer; }
     ModuleType getModuleType() const override { return ModuleType::Sequencer; }
 

@@ -94,6 +94,10 @@ public:
         return (i >= 0 && i < 5) ? labels[i] : ModuleBase::getOutputPortLabel(i);
     }
 
+    // Pure audio/CV utility — processBlock never touches the MIDI buffer.
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Other; }
     ModuleType getModuleType() const override { return ModuleType::Math; }
 

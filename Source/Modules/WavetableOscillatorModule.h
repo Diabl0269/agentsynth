@@ -325,6 +325,12 @@ public:
     int getVisibleInputPortCount() const override { return kNumJacks; }
     int getVisibleOutputPortCount() const override { return splitAudioJackCount(); }
     int rightAudioLegChannel() const override { return kRightBase; }
+
+    // processBlock consumes note-on for the mono-mode MIDI pitch fallback, same as
+    // OscillatorModule, but never writes to the MIDI buffer.
+    bool acceptsMidi() const override { return true; }
+    bool producesMidi() const override { return false; }
+
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Oscillator; }
     ModuleType getModuleType() const override { return ModuleType::Wavetable; }
 

@@ -129,6 +129,10 @@ public:
     juce::String getOutputPortLabel(int) const override { return "Env"; }
     int getVisibleInputPortCount() const override { return 4; }
     int getVisibleOutputPortCount() const override { return 1; }
+    // Pure audio/CV utility — processBlock never touches the MIDI buffer.
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Envelope; }
     ModuleType getModuleType() const override { return ModuleType::EnvelopeFollower; }
 

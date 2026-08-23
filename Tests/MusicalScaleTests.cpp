@@ -153,6 +153,26 @@ TEST(MusicalScaleTest, BluesMaskIsExact) {
         EXPECT_EQ(scale.contains(pc), expected.count(pc) > 0) << "pitch class " << pc;
 }
 
+TEST(MusicalScaleTest, PhrygianDominantMaskIsExact) {
+    // 5th mode of harmonic minor: 0,1,4,5,7,8,10 (root, b2, 3, 4, 5, b6, b7).
+    MusicalScale scale = makeScale(0, presetIndexByName("Phrygian Dominant"));
+    ASSERT_NE(presetIndexByName("Phrygian Dominant"), -1) << "the preset must exist at all";
+    const std::set<int> expected = {0, 1, 4, 5, 7, 8, 10};
+    for (int pc = 0; pc < 12; ++pc)
+        EXPECT_EQ(scale.contains(pc), expected.count(pc) > 0) << "pitch class " << pc;
+}
+
+TEST(MusicalScaleTest, EPhrygianDominantContainsGSharpButNotG) {
+    // E Phrygian Dominant: E F G# A B C D (the b2/3/b6/b7 colour that names the scale). G# (the
+    // major 3rd above E) is IN scale; the natural G one semitone below it is NOT — the same
+    // half-step that makes this scale sound so different from E Phrygian.
+    MusicalScale scale = makeScale(4 /* E */, presetIndexByName("Phrygian Dominant"));
+    EXPECT_TRUE(scale.contains(68));  // G#4
+    EXPECT_FALSE(scale.contains(67)); // G4
+    EXPECT_TRUE(scale.contains(64));  // E4, the root
+    EXPECT_TRUE(scale.contains(65));  // F4 (the b2)
+}
+
 //==============================================================================
 // User scale JSON persistence
 //==============================================================================

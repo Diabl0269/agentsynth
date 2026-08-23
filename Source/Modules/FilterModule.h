@@ -148,6 +148,10 @@ public:
     int getVisibleInputPortCount() const override { return splitAudioJackCount() + kNumCVInputs; }
     int getVisibleOutputPortCount() const override { return splitAudioJackCount(); }
     int rightAudioLegChannel() const override { return kRightBase; }
+    // Pure audio/CV processor — processBlock's midiMessages parameter is unused.
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Filter; }
     ModuleType getModuleType() const override { return ModuleType::Filter; }
 

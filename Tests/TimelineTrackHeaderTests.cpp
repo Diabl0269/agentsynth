@@ -288,6 +288,26 @@ TEST(TimelineTrackHeaderTest, ChipMenuMidiDestinationsChoiceInvokesTheOpenHook) 
     EXPECT_EQ(openCalls, 1);
 }
 
+// Regression guard for the bug MainComponent::getMidiDestinationOptions used to have: the
+// component itself must pass through WHATEVER the host offers, with no name-based filtering of
+// its own. "ADSR" is the concrete case that motivated the fix — the old hardcoded
+// isMidiInstrumentType allowlist excluded it even though it genuinely consumes MIDI (see
+// Tests/ModuleMidiFlagsTests.cpp for MainComponent's real enumeration, exercised end-to-end).
+TEST(TimelineTrackHeaderTest, MidiDestinationsPickerPassesThroughWhateverTheHostOffers) {
+    HeaderFixture f;
+    f.host->midiDestinationOptions = {
+        {"Oscillator 1", 1, false},
+        {"ADSR", 2, false},
+    };
+
+    auto picker = f.header->createMidiDestinationPickerForTest();
+    ASSERT_NE(picker, nullptr);
+    const auto names = picker->getVisibleRowNamesForTest();
+    ASSERT_EQ(names.size(), 2u);
+    EXPECT_EQ(names[0], "Oscillator 1");
+    EXPECT_EQ(names[1], "ADSR");
+}
+
 // A binding NEVER changes by itself — not on a reconcile, not by matching a name. Only an explicit
 // menu choice moves it (see docs/layout.md §16).
 TEST(TimelineTrackHeaderTest, OrphanedTrackIsNeverAutoRebound) {

@@ -2261,16 +2261,16 @@ namespace {
 
 juce::KeyPress plainPress(int keyCode) { return juce::KeyPress(keyCode, juce::ModifierKeys::noModifiers, 0); }
 juce::KeyPress shiftPress(int keyCode) { return juce::KeyPress(keyCode, juce::ModifierKeys::shiftModifier, 0); }
+juce::KeyPress ctrlPress(int keyCode) { return juce::KeyPress(keyCode, juce::ModifierKeys::ctrlModifier, 0); }
 
 // Every action id the roll resolves. A test pins ALL of them to an explicitly invalid KeyPress
 // first, then spells out only the one or two it cares about — so nothing here can be rescued (or
 // broken) by whatever ShortcutManager::resetToDefaults() happens to know about these ids in any
 // given build. That matters because the defaults land in ShortcutManager in a separate phase.
-const char* const kRollActionIds[] = {"pianoRollNudgeLeft",         "pianoRollNudgeRight",
-                                      "pianoRollTransposeUp",       "pianoRollTransposeDown",
-                                      "pianoRollTransposeOctaveUp", "pianoRollTransposeOctaveDown",
-                                      "pianoRollNavPrevNote",       "pianoRollNavNextNote",
-                                      "pianoRollQuantise",          "timelineSnapToggle"};
+const char* const kRollActionIds[] = {
+    "pianoRollNudgeLeft",         "pianoRollNudgeRight",          "pianoRollTransposeUp",     "pianoRollTransposeDown",
+    "pianoRollTransposeOctaveUp", "pianoRollTransposeOctaveDown", "pianoRollNavPrevNote",     "pianoRollNavNextNote",
+    "pianoRollQuantise",          "timelineSnapToggle",           "pianoRollToggleScalePanel"};
 
 void clearRollBindings(ShortcutManager& mgr) {
     for (const char* id : kRollActionIds)
@@ -2493,6 +2493,41 @@ TEST(PianoRollShortcutTest, EscapeAndDeleteStayFixedRegardlessOfTheManager) {
     EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::deleteKey)));
     EXPECT_EQ(f.doc.getNote(bed.note), nullptr);
     EXPECT_TRUE(f.undo.canUndo()) << "and it is still one undo step";
+}
+
+// Ctrl+S (the actual Control key — never Cmd, which is Save Preset) toggles the scale-assist
+// panel, with no ShortcutManager installed at all.
+TEST(PianoRollShortcutTest, DefaultCtrlSTogglesTheScalePanel) {
+    PianoRollFixture f;
+    ASSERT_EQ(f.roll.getShortcutManager(), nullptr);
+    ASSERT_FALSE(f.roll.getScaleAssistPanel().isVisible());
+
+    EXPECT_TRUE(f.roll.keyPressed(ctrlPress('s')));
+    EXPECT_TRUE(f.roll.getScaleAssistPanel().isVisible());
+
+    EXPECT_TRUE(f.roll.keyPressed(ctrlPress('s')));
+    EXPECT_FALSE(f.roll.getScaleAssistPanel().isVisible());
+}
+
+// Plain S is bound to nothing here (Ctrl is required), so it must fall straight through.
+TEST(PianoRollShortcutTest, PlainSDoesNothingToTheScalePanel) {
+    PianoRollFixture f;
+    ASSERT_FALSE(f.roll.getScaleAssistPanel().isVisible());
+    EXPECT_FALSE(f.roll.keyPressed(plainPress('s')));
+    EXPECT_FALSE(f.roll.getScaleAssistPanel().isVisible());
+}
+
+// The strict no-fallback contract (setShortcutManager's class comment) applies here exactly like
+// every other roll action: with a manager installed and this binding explicitly cleared, Ctrl+S
+// has NO key at all — it must not quietly resurrect its hardcoded default.
+TEST(PianoRollShortcutTest, WithManagerInstalledAndBindingClearedCtrlSDoesNothing) {
+    PianoRollFixture f;
+    ShortcutManager mgr;
+    clearRollBindings(mgr);
+    f.roll.setShortcutManager(&mgr);
+
+    EXPECT_FALSE(f.roll.keyPressed(ctrlPress('s')));
+    EXPECT_FALSE(f.roll.getScaleAssistPanel().isVisible());
 }
 
 // ============================================================================
@@ -3697,4 +3732,41 @@ TEST(ScaleAssistPanelTest, SetSelectionReflectsStateWithoutFiringCallbacks) {
     EXPECT_TRUE(panel.isPitchVisibilityOn());
     EXPECT_EQ(panel.getRootCombo().getSelectedId(), 3);  // D
     EXPECT_EQ(panel.getScaleCombo().getSelectedId(), 3); // "Natural Minor" is presets[1] -> id 3
+}
+
+// ---- Custom-scale editor: the mini-piano toggle row (labels + layout sanity) ----
+
+TEST(ScaleAssistPanelTest, CustomEditorTogglesAreLabelledWithTheirNoteNames) {
+    static const char* const kNoteNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+    ScaleAssistPanel panel;
+    panel.setSize(220, 400);
+    // Same "Edit custom scales..." row selection every other custom-editor test uses to reveal it.
+    panel.getScaleCombo().setSelectedId(panel.getScaleCombo().getItemId(panel.getScaleCombo().getNumItems() - 1),
+                                        juce::sendNotificationSync);
+    ASSERT_TRUE(panel.isCustomEditorVisibleForTest());
+
+    for (int pc = 0; pc < 12; ++pc)
+        EXPECT_EQ(panel.getCustomPitchToggle(pc).getButtonText(), juce::String(kNoteNames[pc])) << "pitch class " << pc;
+}
+
+// The mini keyboard's 12 toggles must all be reachable (visible, non-empty bounds) and none may
+// overlap another — a sharp centred on the boundary between two naturals is easy to get wrong by
+// a pixel or two, and an overlap would make one of the two keys unclickable.
+TEST(ScaleAssistPanelTest, CustomEditorTwelveToggleBoundsAreVisibleAndNonOverlapping) {
+    ScaleAssistPanel panel;
+    panel.setSize(220, 400); // comfortably wider than kScalePanelWidth (170) so no cell degenerates
+    panel.getScaleCombo().setSelectedId(panel.getScaleCombo().getItemId(panel.getScaleCombo().getNumItems() - 1),
+                                        juce::sendNotificationSync);
+    ASSERT_TRUE(panel.isCustomEditorVisibleForTest());
+
+    for (int pc = 0; pc < 12; ++pc) {
+        EXPECT_TRUE(panel.getCustomPitchToggle(pc).isVisible()) << "pitch class " << pc;
+        EXPECT_FALSE(panel.getCustomPitchToggle(pc).getBounds().isEmpty()) << "pitch class " << pc;
+    }
+
+    for (int a = 0; a < 12; ++a)
+        for (int b = a + 1; b < 12; ++b)
+            EXPECT_FALSE(
+                panel.getCustomPitchToggle(a).getBounds().intersects(panel.getCustomPitchToggle(b).getBounds()))
+                << "pitch classes " << a << " and " << b << " overlap";
 }

@@ -253,12 +253,14 @@ std::unique_ptr<synth::ui::MidiDestinationPicker> TimelineTrackHeaderComponent::
             if (self == nullptr || self->host_ == nullptr)
                 return {};
             // TrackHeaderHost::MidiDestinationOption and MidiDestinationPicker::Option carry the
-            // same three fields by design (the header stays graph-free, so it can't hand the
-            // picker anything richer) — converted here rather than sharing one type, so the
-            // picker's header has no dependency on TimelineDoc/TrackHeaderHost at all.
+            // same fields by design (the header stays graph-free, so it can't hand the picker
+            // anything richer) — converted here rather than sharing one type, so the picker's
+            // header has no dependency on TimelineDoc/TrackHeaderHost at all.
+            using PickerGroup = synth::ui::MidiDestinationPicker::Option::Group;
             std::vector<synth::ui::MidiDestinationPicker::Option> options;
             for (const auto& option : self->host_->getMidiDestinationOptions(self->trackId_))
-                options.push_back({option.displayName, option.nodeUid, option.connected});
+                options.push_back({option.displayName, option.nodeUid, option.connected,
+                                   option.isInstrument ? PickerGroup::Instruments : PickerGroup::Other});
             return options;
         },
         [safeThis](juce::uint32 nodeUid, bool connect) {

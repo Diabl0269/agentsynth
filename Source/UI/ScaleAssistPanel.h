@@ -15,6 +15,7 @@
 // null-degrades-gracefully contract every other timeline sub-component's setter follows.
 
 #include "../Timeline/MusicalScale.h"
+#include "Theme/AppLookAndFeel.h"
 #include <array>
 #include <cstdint>
 #include <functional>
@@ -58,13 +59,13 @@ public:
         bounds.removeFromTop(6);
 
         if (customEditorVisible_) {
-            auto row1 = bounds.removeFromTop(20);
-            auto row2 = bounds.removeFromTop(20);
-            const int toggleWidth = juce::jmax(1, row1.getWidth() / 6);
-            for (int pc = 0; pc < 6; ++pc)
-                customPitchToggles_[(size_t)pc].setBounds(row1.removeFromLeft(toggleWidth).reduced(1, 0));
-            for (int pc = 6; pc < 12; ++pc)
-                customPitchToggles_[(size_t)pc].setBounds(row2.removeFromLeft(toggleWidth).reduced(1, 0));
+            // A mini one-octave keyboard rather than a flat row of checkboxes: sharps get their
+            // own row ABOVE the naturals, each one centred on the boundary between the two
+            // naturals it sits between on a real keyboard — see layoutMiniKeyboard.
+            auto sharpsRow = bounds.removeFromTop(18);
+            bounds.removeFromTop(2);
+            auto naturalsRow = bounds.removeFromTop(24);
+            layoutMiniKeyboard(sharpsRow, naturalsRow);
             bounds.removeFromTop(4);
 
             auto nameRow = bounds.removeFromTop(22);
@@ -157,6 +158,102 @@ private:
     static constexpr int kDefaultMaxPitch = 72; // C5
     static constexpr const char* kUserScalesPropertyKey = "pianoRollUserScales";
 
+    // A custom-scale toggle painted as a small piano KEY rather than a checkbox+label: the app-wide
+    // AppLookAndFeel::drawToggleButton always draws a checkbox (tick box + text to its right, see
+    // Theme/AppLookAndFeel.cpp), which reads nothing like a keyboard, so this overrides
+    // paintButton() directly and never calls into the LookAndFeel at all. isBlack_ picks the
+    // pianoKeyBlack/pianoKeyWhite-derived base fill (set once at construction time in
+    // buildCustomScaleEditor, never touched again); the accent fill on top of it IS the toggled-on
+    // state, so there is no separate tick to draw. Still a plain juce::ToggleButton underneath —
+    // getToggleState()/setToggleState()/onClick/getButtonText() are all untouched, which is what
+    // keeps getCustomPitchToggle(i) returning something callers (and every existing test) can use
+    // exactly as they did before.
+    class PianoKeyToggle : public juce::ToggleButton {
+    public:
+        void setBlackKey(bool isBlack) noexcept { isBlack_ = isBlack; }
+
+        void paintButton(juce::Graphics& g, bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override {
+            juce::Colour keyFill, accent, border;
+            if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
+                const auto& c = lf->getTheme().colors;
+                keyFill = isBlack_ ? c.pianoKeyBlack : c.pianoKeyWhite;
+                accent = c.accent;
+                border = c.border;
+            } else {
+                keyFill = isBlack_ ? juce::Colours::black : juce::Colours::whitesmoke;
+                accent = juce::Colours::cyan;
+                border = juce::Colours::grey;
+            }
+
+            const bool on = getToggleState();
+            const auto bounds = getLocalBounds().toFloat().reduced(0.5f);
+            g.setColour(on ? accent : keyFill);
+            g.fillRoundedRectangle(bounds, 2.5f);
+            if (shouldDrawButtonAsDown || shouldDrawButtonAsHighlighted) {
+                g.setColour(juce::Colours::white.withAlpha(shouldDrawButtonAsDown ? 0.20f : 0.10f));
+                g.fillRoundedRectangle(bounds, 2.5f);
+            }
+            g.setColour(border);
+            g.drawRoundedRectangle(bounds, 2.5f, 1.0f);
+
+            // .contrasting so the note name holds against either key fill AND against the accent
+            // once toggled on, in every theme — the same reasoning PianoRollComponent's own keys
+            // column uses for its row labels (paintKeysColumn).
+            g.setColour((on ? accent : keyFill).contrasting(0.9f));
+            g.setFont(juce::Font(juce::FontOptions(juce::jlimit(7.0f, 10.0f, bounds.getHeight() - 6.0f))));
+            g.drawText(getButtonText(), getLocalBounds(), juce::Justification::centred, false);
+        }
+
+    private:
+        bool isBlack_ = false;
+    };
+
+    static bool isBlackPitchClass(int pitchClass) noexcept {
+        switch (pitchClass) {
+        case 1:
+        case 3:
+        case 6:
+        case 8:
+        case 10:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    // Natural-key pitch classes in KEYBOARD order (C D E F G A B), and, for each of the six gaps
+    // between adjacent naturals, which sharp sits there — kNoSharp marks the two gaps with no black
+    // key at all (E/F, B/C), mirroring isBlackPitchClass above.
+    static constexpr int kNaturalOrder[7] = {0, 2, 4, 5, 7, 9, 11};
+    static constexpr int kNoSharp = -1;
+    static constexpr int kSharpAfterNatural[6] = {1, 3, kNoSharp, 6, 8, 10};
+
+    // Lays the 12 toggles out as a mini one-octave keyboard: naturals fill `naturalsRow` evenly,
+    // sharps sit in their OWN row above (`sharpsRow`), each centred on the boundary between the two
+    // naturals it falls between on a real keyboard. The two rows never share a y-range, so a sharp
+    // and a natural can never overlap regardless of how their x positions land.
+    void layoutMiniKeyboard(juce::Rectangle<int> sharpsRow, juce::Rectangle<int> naturalsRow) {
+        const int naturalWidth = juce::jmax(1, naturalsRow.getWidth() / 7);
+        for (int i = 0; i < 7; ++i) {
+            const int x = naturalsRow.getX() + i * naturalWidth;
+            // The last cell soaks up the rounding remainder so the row's right edge lands exactly on
+            // the panel's own right edge instead of short by a pixel or two.
+            const int w = (i == 6) ? naturalsRow.getRight() - x : naturalWidth;
+            customPitchToggles_[(size_t)kNaturalOrder[i]].setBounds(
+                juce::Rectangle<int>(x, naturalsRow.getY(), w, naturalsRow.getHeight()).reduced(1, 0));
+        }
+
+        const int sharpWidth = juce::jmax(1, naturalWidth * 5 / 8);
+        for (int gap = 0; gap < 6; ++gap) {
+            const int pitchClass = kSharpAfterNatural[gap];
+            if (pitchClass == kNoSharp)
+                continue;
+            const int boundaryX = naturalsRow.getX() + (gap + 1) * naturalWidth;
+            customPitchToggles_[(size_t)pitchClass].setBounds(
+                juce::Rectangle<int>(boundaryX - sharpWidth / 2, sharpsRow.getY(), sharpWidth, sharpsRow.getHeight()));
+        }
+    }
+
     void buildRootAndScaleControls() {
         addAndMakeVisible(rootLabel_);
         rootLabel_.setText("Root", juce::dontSendNotification);
@@ -187,6 +284,7 @@ private:
             addChildComponent(toggle);
             toggle.setComponentID("scaleAssistCustomToggle" + juce::String(pc));
             toggle.setButtonText(pitchClassName(pc));
+            toggle.setBlackKey(isBlackPitchClass(pc));
         }
 
         addChildComponent(customScaleNameEditor_);
@@ -386,7 +484,7 @@ private:
     juce::ComboBox rootCombo_;
     juce::ComboBox scaleCombo_;
 
-    std::array<juce::ToggleButton, 12> customPitchToggles_;
+    std::array<PianoKeyToggle, 12> customPitchToggles_;
     juce::TextEditor customScaleNameEditor_;
     juce::TextButton saveCustomScaleButton_{"Save"};
 

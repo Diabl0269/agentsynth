@@ -2959,6 +2959,98 @@ TEST(TimelineFollowPlayheadTest, ThemeSwitchReskinsTheFollowPlayheadButton) {
     panel.setLookAndFeel(nullptr);
 }
 
+// Regression test for the reported bug: the follow-playhead button never appearing in the running
+// app. Reproduces AgentSynthPluginEditor's EXACT construction order (see PluginEditor.cpp's ctor):
+// a parent has setLookAndFeel() called on it BEFORE the timeline panel is added as its child. At
+// panel-CONSTRUCTION time there is therefore no themed LookAndFeel anywhere on its (nonexistent)
+// ancestor chain, so applyToolStripTheme()'s constructor-time call is a no-op for every icon,
+// including this button's — and juce::Component::sendLookAndFeelChange() only walks components
+// ALREADY in a child list at the moment it fires, so installing the LnF on `parent` first never
+// reaches `panel` either. Only parentHierarchyChanged(), fired when `panel` is attached moments
+// later, can pick the theme up — this is what proves that hook actually does.
+TEST(TimelineFollowPlayheadTest, AttachingUnderAnAncestorThatAlreadyHasAThemedLookAndFeelStillAppliesTheIcon) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 320);
+
+    juce::Component parent;
+    synth::theme::AppLookAndFeel lf;
+    const auto theme = synth::theme::makeObsidian();
+    lf.applyTheme(theme);
+    parent.setLookAndFeel(&lf); // installed BEFORE panel is a child — the plugin editor's order
+
+    parent.addAndMakeVisible(panel);
+
+    EXPECT_EQ(panel.getFollowPlayheadButtonForTest().findColour(juce::DrawableButton::backgroundOnColourId),
+              theme.colors.toolActive)
+        << "parentHierarchyChanged() must re-run applyToolStripTheme() once attached under an "
+           "ancestor that already has a themed LookAndFeel — otherwise the icon/background this "
+           "button needs never gets applied at all";
+
+    parent.setLookAndFeel(nullptr);
+}
+
+// The three explicit checks the bug report asked for: real (non-empty, in-panel, non-overlapping)
+// bounds at a realistic launch size, and visibility all the way up to the panel. Arithmetic-only
+// coverage — TimelinePanelComponentTest.PanelRegionsTile-style — for resized()'s transport-bar
+// carve order, which the strip-width audit in this task's report shows has headroom today but is
+// exactly the kind of change that could silently zero this button out again.
+TEST(TimelineFollowPlayheadTest, ButtonHasRealNonOverlappingBoundsAndIsVisibleAtRealisticSize) {
+    synth::ui::TimelinePanelComponent panel;
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
+    panel.setLookAndFeel(&lf);
+    panel.setVisible(true); // a parentless Component is never visible by default
+    panel.setSize(1200, 320);
+
+    auto& button = panel.getFollowPlayheadButtonForTest();
+    const auto bounds = button.getBounds();
+    EXPECT_FALSE(bounds.isEmpty()) << "follow-playhead button got a zero-area bounds";
+    EXPECT_TRUE(panel.getLocalBounds().contains(bounds)) << "follow-playhead button bounds fall outside the panel";
+
+    const auto snapComboBounds = panel.getSnapCombo().getBounds();
+    const auto snapToggleBounds = panel.getSnapToggleButton().getBounds();
+    EXPECT_FALSE(bounds.intersects(snapComboBounds)) << "follow-playhead button overlaps the snap combo";
+    EXPECT_FALSE(bounds.intersects(snapToggleBounds)) << "follow-playhead button overlaps the snap toggle (Q)";
+
+    // Visible all the way up to the panel — nothing on this path was ever hidden via
+    // addChildComponent (which starts invisible) instead of addAndMakeVisible. isShowing() is
+    // deliberately NOT asserted here: it additionally requires a real OS peer
+    // (Component::addToDesktop()), which this test suite avoids for the same headless-CI
+    // flakiness reason FocusArbitrationTests.cpp's real-focus tests do.
+    EXPECT_TRUE(button.isVisible());
+    EXPECT_TRUE(panel.isVisible());
+
+    panel.setLookAndFeel(nullptr);
+}
+
+// F mirrors the transport strip's follow button, resolved through "timelineFollowPlayheadToggle"
+// exactly like Q/L/P (see PanelLetterKeysResolveThroughTheShortcutManager for the shared idiom):
+// hardcoded fallback with no manager, strict resolution with one installed.
+TEST(TimelineFollowPlayheadTest, FKeyTogglesFollowThroughTheShortcutManager) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 320);
+
+    // No manager: the hardcoded 'f' fallback.
+    ASSERT_FALSE(panel.isFollowPlayheadEnabled());
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('f')));
+    EXPECT_TRUE(panel.isFollowPlayheadEnabled());
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('f')));
+    EXPECT_FALSE(panel.isFollowPlayheadEnabled());
+
+    // With a manager installed, resolution is strict: rebinding moves the key, and the old one
+    // falls through untouched.
+    ShortcutManager shortcuts;
+    panel.setShortcutManager(&shortcuts);
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('f'))) << "default binding is a bare F";
+    EXPECT_TRUE(panel.isFollowPlayheadEnabled());
+
+    shortcuts.setBinding("timelineFollowPlayheadToggle", juce::KeyPress('g', juce::ModifierKeys::noModifiers, 0));
+    EXPECT_FALSE(panel.keyPressed(juce::KeyPress('f'))) << "the old key falls through";
+    EXPECT_TRUE(panel.isFollowPlayheadEnabled()) << "and did not toggle";
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('g')));
+    EXPECT_FALSE(panel.isFollowPlayheadEnabled());
+}
+
 namespace {
 // A minimal fixture for updateFromTransport()'s page-flip: a doc-less panel (the page-flip needs
 // no TimelineDoc at all) with the view state pinned so the expected math below is exact.

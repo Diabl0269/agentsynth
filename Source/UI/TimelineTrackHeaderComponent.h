@@ -108,6 +108,9 @@ struct TrackHeaderHost {
         juce::String displayName;
         juce::uint32 nodeUid = 0;
         bool connected = false;
+        // Instruments list first in the picker; everything else that consumes MIDI (e.g. an
+        // envelope's gate input) goes under "Other". Derived host-side from isMidiInstrumentType.
+        bool isInstrument = true;
     };
 
     /** Every MIDI-instrument node in the live graph the track's bound Track In node could send
