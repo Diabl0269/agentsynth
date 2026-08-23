@@ -725,6 +725,68 @@ TEST_F(SettingsWindowTest, AppearanceTabPianoRollNoteColoursSectionHasRealBounds
     EXPECT_LE(resetButtonBounds.getBottom(), contentHeight);
 }
 
+// ============================================================================
+// Appearance tab: theme-gallery wheel bubbling (bug: "vertical scroll only sometimes works").
+//
+// juce::ListBox::mouseWheelMove (juce_ListBox.cpp) consumes the wheel unconditionally whenever its
+// own vertical scrollbar is merely VISIBLE, with no "did this actually move the list" check the
+// way juce::Viewport's own wheel handling has — so a plain wheel gesture anywhere over the theme
+// gallery (a ListBox nested inside this tab's own taller Viewport) never reached the outer
+// settings page, however far the list itself already was from its own top/bottom. See
+// AppearanceSettingsTab::ThemeListBox.
+// ============================================================================
+
+TEST(AppearanceSettingsTabScrollTest, WheelOverAThemeListAlreadyAtItsScrollLimitBubblesToTheOuterViewport) {
+    IsolatedAppearancePropsGuard guard("Agent Synth Appearance Scroll Test 1");
+    synth::theme::ThemeManager themeManager;
+    AppearanceSettingsTab tab(themeManager, guard.props);
+    tab.setSize(500, 450); // matches MainComponent's real Settings dialog size (see the launch-size test above)
+    tab.resized();
+
+    ASSERT_FALSE(tab.getThemeListBoundsForTest().isEmpty());
+    ASSERT_TRUE(tab.isThemeListScrollbarVisibleForTest())
+        << "test premise: the built-in theme gallery needs its own scrollbar at this row height/box height";
+
+    // Push the list's OWN scroll to its end -- what a fast flick over the list would do. Each call
+    // is a SEPARATE wheel event, exactly like a real trackpad gesture. Stop as soon as a flick no
+    // longer moves the list: every over-limit flick bubbles into the OUTER viewport (the behaviour
+    // under test), and 30 of those would drive the outer to ITS max too, leaving the final
+    // assertion below no room to observe movement.
+    for (int i = 0; i < 30; ++i) {
+        const int before = tab.getThemeListScrollPositionForTest();
+        tab.simulateWheelOverThemeListForTest(-1.0f);
+        if (tab.getThemeListScrollPositionForTest() == before)
+            break;
+    }
+    const int listPositionAtLimit = tab.getThemeListScrollPositionForTest();
+    ASSERT_GT(listPositionAtLimit, 0) << "test premise: the list actually scrolled from these wheel gestures";
+
+    const int outerScrollBefore = tab.getContentScrollYForTest();
+    tab.simulateWheelOverThemeListForTest(-1.0f); // one more -- the list has nowhere further to go
+    EXPECT_EQ(tab.getThemeListScrollPositionForTest(), listPositionAtLimit)
+        << "the list itself is already at its limit in this direction";
+    EXPECT_GT(tab.getContentScrollYForTest(), outerScrollBefore)
+        << "a wheel gesture over an already-fully-scrolled theme list must reach the tab's own "
+           "Viewport instead of doing nothing -- this is the reported bug";
+}
+
+TEST(AppearanceSettingsTabScrollTest, WheelOverTheThemeListStillScrollsItWhenNotAtTheLimit) {
+    IsolatedAppearancePropsGuard guard("Agent Synth Appearance Scroll Test 2");
+    synth::theme::ThemeManager themeManager;
+    AppearanceSettingsTab tab(themeManager, guard.props);
+    tab.setSize(500, 450);
+    tab.resized();
+    ASSERT_TRUE(tab.isThemeListScrollbarVisibleForTest());
+
+    ASSERT_EQ(tab.getThemeListScrollPositionForTest(), 0);
+    const int outerScrollBefore = tab.getContentScrollYForTest();
+    tab.simulateWheelOverThemeListForTest(-1.0f);
+
+    EXPECT_GT(tab.getThemeListScrollPositionForTest(), 0) << "the list still scrolls normally when it can";
+    EXPECT_EQ(tab.getContentScrollYForTest(), outerScrollBefore)
+        << "the outer page must NOT also move while the nested list can still take the gesture";
+}
+
 TEST(AppearanceSettingsTabNoteColourTest, ResetNoteSwatchAndResetAllFallBackToTheActiveThemesNoteFill) {
     IsolatedAppearancePropsGuard guard("Agent Synth Appearance Note Colour Test 3");
     synth::theme::ThemeManager themeManager;

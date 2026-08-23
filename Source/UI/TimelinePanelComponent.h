@@ -59,7 +59,8 @@ namespace synth::ui {
 
 class TimelinePanelComponent
     : public juce::Component
-    , private synth::TimelineDoc::Listener {
+    , private synth::TimelineDoc::Listener
+    , private juce::ChangeListener {
 public:
     TimelinePanelComponent();
     ~TimelinePanelComponent() override;
@@ -372,8 +373,16 @@ public:
      *
      *  Escape is not resolved through here (it is a platform convention, not an app shortcut), and
      *  neither is anything the app dispatches as a command — Cmd+C/V/X/D, Space, and the grid
-     *  commands all reach MainComponent, which owns that half. */
-    void setShortcutManager(const ShortcutManager* manager) noexcept { shortcuts_ = manager; }
+     *  commands all reach MainComponent, which owns that half.
+     *
+     *  Non-const (unlike PianoRollComponent's own copy of this pointer): the tool-strip/snap/
+     *  follow buttons' tooltips are real juce::Button tooltips, which CACHE their text (unlike the
+     *  roll's hand-drawn header, whose tooltip is resolved live on every hover query) — so this
+     *  panel subscribes as a juce::ChangeListener on the installed manager to rebuild them whenever
+     *  a binding changes, and that requires a non-const ShortcutManager* to add/removeChangeListener
+     *  on. Unsubscribes from whichever manager was previously installed first, so re-installing (or
+     *  clearing, with nullptr) never leaves a stale listener registered. */
+    void setShortcutManager(ShortcutManager* manager);
     const ShortcutManager* getShortcutManager() const noexcept { return shortcuts_; }
 
     TimelineViewState& getViewState() noexcept { return viewState_; }
@@ -673,9 +682,27 @@ private:
     // branches in mouseWheelMove XOR this against synth::ui::wheelGestureIsUpward(wheel).
     bool zoomScrollInverted_ = false;
 
-    // Non-owning, may stay null (see setShortcutManager). const because this panel only ever READS
-    // bindings — rebinding belongs to Settings.
-    const ShortcutManager* shortcuts_ = nullptr;
+    // Non-owning, may stay null (see setShortcutManager). Non-const so this panel can
+    // add/removeChangeListener on it (rebinding itself still belongs to Settings — this pointer is
+    // never used to mutate a binding, only to subscribe to changes and read the current one).
+    //
+    // LIFETIME REQUIREMENT: the installed ShortcutManager must outlive this component, exactly
+    // like every other "non-owning, may stay null" pointer here — the destructor's
+    // removeChangeListener call dereferences it. MainComponent.h currently declares `timelinePanel`
+    // BEFORE `shortcutManager`, so MEMBER teardown destroys shortcutManager FIRST and would leave
+    // this pointer dangling by the time ~TimelinePanelComponent() runs; that call site needs an
+    // explicit `timelinePanel.setShortcutManager(nullptr);` in ~MainComponent(), ahead of the
+    // member cascade — the same pattern already used there for themeManager/appProperties — before
+    // this feature is safe to ship. Not added here: MainComponent.cpp is outside this component's
+    // own file boundary.
+    ShortcutManager* shortcuts_ = nullptr;
+    // juce::ChangeListener — rebuilds the tool-strip/snap/follow tooltips on every bindings change.
+    void changeListenerCallback(juce::ChangeBroadcaster*) override;
+    // Rebuilds every dynamic shortcut-hint tooltip this panel owns (see synth::shortcutHintFor):
+    // the six tool-strip buttons, the snap toggle, and the follow-playhead toggle. Called from the
+    // constructor (after those buttons exist), setShortcutManager (both install and clear), and
+    // changeListenerCallback.
+    void refreshShortcutTooltips();
     // True when `key` is what the user has bound to `actionId`. With no manager installed this is
     // `key == fallback`; with one installed the fallback is not consulted at all. The same three
     // lines PianoRollComponent::matchesAction runs — deliberately duplicated rather than shared,

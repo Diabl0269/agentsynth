@@ -4,6 +4,7 @@
 #include "../Transport/TransportService.h"
 #include "ScrollPolicy.h"
 #include "Theme/AppLookAndFeel.h"
+#include "UIAnimation.h"
 #include <algorithm>
 #include <cmath>
 
@@ -139,7 +140,8 @@ TimelinePanelComponent::TimelinePanelComponent() {
         auto button = std::make_unique<juce::DrawableButton>(juce::String(editToolName(tool)) + " Tool",
                                                              juce::DrawableButton::ImageOnButtonBackground);
         button->setComponentID("timelineTool" + juce::String(editToolName(tool)));
-        button->setTooltip(juce::String(editToolName(tool)) + " (" + juce::String(editToolKeyDigit(tool)) + ")");
+        // Tooltip text (the CURRENT binding, not this hardcoded digit) is set by
+        // refreshShortcutTooltips() below, once every tool button exists.
         button->setClickingTogglesState(true);
         button->setRadioGroupId(kEditToolRadioGroupId);
         // A tool button must never become the focused component. juce::Button's constructor opts
@@ -163,7 +165,7 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // a clip — the same switch the piano roll's header "Q" and the panel-wide Q key flip.
     addAndMakeVisible(snapToggleButton_);
     snapToggleButton_.setComponentID("timelineSnapToggle");
-    snapToggleButton_.setTooltip("Snap to grid on/off (Q)");
+    // Tooltip text is set by refreshShortcutTooltips() below.
     snapToggleButton_.setClickingTogglesState(false); // the shared view state is the truth
     snapToggleButton_.setToggleState(viewState_.snapEnabled, juce::dontSendNotification);
     snapToggleButton_.onClick = [this] { setSnapEnabled(!viewState_.snapEnabled); };
@@ -172,7 +174,8 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // never owns followPlayhead_, it only mirrors it.
     addAndMakeVisible(followPlayheadButton_);
     followPlayheadButton_.setComponentID("timelineFollowPlayheadToggle");
-    followPlayheadButton_.setTooltip("Follow playhead");
+    // Tooltip text is set by refreshShortcutTooltips() below — it used to be the bare "Follow
+    // playhead" with no key hint at all, unlike every one of its siblings.
     followPlayheadButton_.setClickingTogglesState(false);
     followPlayheadButton_.setToggleState(followPlayhead_, juce::dontSendNotification);
     followPlayheadButton_.onClick = [this] { setFollowPlayheadEnabled(!followPlayhead_); };
@@ -292,11 +295,67 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // transport-bar strip).
     addAndMakeVisible(resizeHandle_);
     resizeHandle_.setComponentID("timelineResizeHandle");
+
+    // Every tool button, snapToggleButton_ and followPlayheadButton_ now exist — set their initial
+    // (no-manager-installed, hardcoded-default) tooltip text. setShortcutManager re-runs this once
+    // a real manager is wired, and again on every bindings-changed notification.
+    refreshShortcutTooltips();
 }
 
 TimelinePanelComponent::~TimelinePanelComponent() {
     if (doc_ != nullptr)
         doc_->removeListener(this);
+    if (shortcuts_ != nullptr)
+        shortcuts_->removeChangeListener(this);
+}
+
+void TimelinePanelComponent::setShortcutManager(ShortcutManager* manager) {
+    if (shortcuts_ != nullptr)
+        shortcuts_->removeChangeListener(this);
+    shortcuts_ = manager;
+    if (shortcuts_ != nullptr)
+        shortcuts_->addChangeListener(this);
+    refreshShortcutTooltips();
+}
+
+void TimelinePanelComponent::changeListenerCallback(juce::ChangeBroadcaster*) { refreshShortcutTooltips(); }
+
+void TimelinePanelComponent::refreshShortcutTooltips() {
+    // The tool-strip action ids, index-aligned with EditTool — see ShortcutManager::resetToDefaults.
+    auto actionIdForTool = [](EditTool tool) -> juce::String {
+        switch (tool) {
+        case EditTool::Select:
+            return "timelineToolSelect";
+        case EditTool::Split:
+            return "timelineToolSplit";
+        case EditTool::Glue:
+            return "timelineToolGlue";
+        case EditTool::Erase:
+            return "timelineToolErase";
+        case EditTool::Mute:
+            return "timelineToolMute";
+        case EditTool::Draw:
+            return "timelineToolDraw";
+        }
+        return "timelineToolSelect";
+    };
+    for (auto tool : kAllEditTools) {
+        if (auto* button = toolButtons_[(std::size_t)tool].get()) {
+            const auto fallback = juce::KeyPress('0' + editToolKeyDigit(tool), juce::ModifierKeys::noModifiers, 0);
+            button->setTooltip(synth::ui::formatShortcutHint(
+                editToolName(tool), shortcutHintFor(shortcuts_, actionIdForTool(tool), fallback)));
+        }
+    }
+
+    snapToggleButton_.setTooltip(synth::ui::formatShortcutHint(
+        "Snap to grid on/off",
+        shortcutHintFor(shortcuts_, "timelineSnapToggle", juce::KeyPress('q', juce::ModifierKeys::noModifiers, 0))));
+
+    // "Follow playhead" used to carry no key hint at all — the ONE sibling in this strip that
+    // didn't say its own shortcut.
+    followPlayheadButton_.setTooltip(synth::ui::formatShortcutHint(
+        "Follow playhead", shortcutHintFor(shortcuts_, "timelineFollowPlayheadToggle",
+                                           juce::KeyPress('f', juce::ModifierKeys::noModifiers, 0))));
 }
 
 //==============================================================================

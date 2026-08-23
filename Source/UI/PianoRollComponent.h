@@ -8,6 +8,7 @@
 #include "ScaleAssistPanel.h"
 #include "TimelinePlayheadOverlay.h"
 #include "TimelineViewState.h"
+#include "UIAnimation.h"
 #include <array>
 #include <cmath>
 #include <functional>
@@ -112,14 +113,16 @@ public:
     // in the first callback) and repainting only the button's own rect — bounded, never a loop.
     static constexpr int kQuantiseFlashMs = 120;
 
-    static constexpr const char* kQuantiseTooltip =
-        "Snap to grid on/off (Q) \xE2\x80\x94 Shift+click quantizes the selected notes to the grid "
-        "(or all notes when nothing is selected)";
-    static constexpr const char* kScaleTooltip =
-        "Scale assist \xE2\x80\x94 pick a scale, quantize pitches into it, or generate random notes";
+    // getTooltipFor() builds the Q/Scale header buttons' tooltip text dynamically — see
+    // quantiseTooltipText()/scaleTooltipText() below — rather than a static string with a
+    // hardcoded key name that would go stale the moment the user rebinds
+    // "timelineSnapToggle"/"pianoRollToggleScalePanel" (see synth::shortcutHintFor).
 
     explicit PianoRollComponent(TimelineViewState& viewState);
-    ~PianoRollComponent() override = default;
+    // Not '= default': the scale-panel slide's AnimationDriver callbacks capture 'this', so any
+    // in-flight animation must be stopped before the object goes away (mirrors
+    // ModuleLibraryComponent's own destructor for the same reason).
+    ~PianoRollComponent() override;
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -244,6 +247,17 @@ public:
     // pitch / 12 - 1.
     static juce::String keyLabelFor(int pitch, KeyLabelMode mode, int rowHeightPx);
 
+    // The colour paintKeysColumn draws a row's label in, given THAT row's own key fill (pianoKeyWhite
+    // or pianoKeyBlack) — never a single fill shared by both key colours. Factored out of the paint
+    // loop's `.contrasting()` call so a test can assert on it directly: the earlier bug was a sharp
+    // (black-key) label right-aligned across the FULL column width, which is wider than the black
+    // key's own (narrower, flush-left) rect, so a colour chosen to contrast against BLACK ended up
+    // drawn, for the portion past the black key's right edge, over the WHITE fill showing through —
+    // light-on-light, nearly invisible. Confining the black-key label's drawn rect to the black
+    // key's own area (see paintKeysColumn) is what makes every pixel of the label sit over the SAME
+    // fill this colour was chosen against.
+    static juce::Colour labelColourFor(juce::Colour keyFill) noexcept { return keyFill.contrasting(0.7f); }
+
     // ---- Note colouring & scale context ----
 
     // The per-pitch-class colour overrides (NoteColour.h) a note's fill is resolved through. See
@@ -274,6 +288,10 @@ public:
 
     synth::ui::ScaleAssistPanel& getScaleAssistPanel() noexcept { return scalePanel_; }
     const synth::ui::ScaleAssistPanel& getScaleAssistPanel() const noexcept { return scalePanel_; }
+    // The public toggle verb the header button, the Ctrl+S surface key and the tests all share —
+    // one entry point, so the three can never disagree about what "toggle" means (animation
+    // included; see setScalePanelVisible below for the animate/snap split).
+    void toggleScalePanel();
     juce::Rectangle<int> getScaleButtonBounds() const noexcept { return scaleButtonBounds_; }
 
     /** Moves the SELECTED notes (or, with nothing selected, every note in the open clip) to their
@@ -395,13 +413,17 @@ public:
     // the roll is open, so the bar numbers above show the clip's REAL timeline position.
     const TimelineViewState& getRollViewState() const noexcept { return rollView_; }
 
-    // kScalePanelWidth + kKeysColumnWidth while the scale-assist panel is open, kKeysColumnWidth
-    // alone otherwise — the ONE seam beatToX/xToBeat/gridRegion and every hit-test below route the
-    // grid's left offset through (see the class comment). Public because
+    // kKeysColumnWidth plus the scale-assist panel's CURRENT animated width — 0 while fully closed,
+    // kScalePanelWidth at rest open, anything between while the slide (see "Scale assist panel
+    // slide animation" below) is in flight — the ONE seam beatToX/xToBeat/gridRegion and every
+    // hit-test below route the grid's left offset through (see the class comment). Public because
     // TimelineRulerComponent's mapping override reads this SAME offset (via
     // TimelinePanelComponent::openPianoRoll and its onHorizontalViewChanged re-issue), so the
-    // ruler's ticks/scrub hit-testing track the scale panel's width instead of drifting from it.
-    int leftGutterWidth() const noexcept { return (scalePanel_.isVisible() ? kScalePanelWidth : 0) + kKeysColumnWidth; }
+    // ruler's ticks/scrub hit-testing track the scale panel's width — including mid-slide — instead
+    // of drifting from it.
+    int leftGutterWidth() const noexcept {
+        return (int)std::llround((double)scalePanelOpenProgress_ * (double)kScalePanelWidth) + kKeysColumnWidth;
+    }
 
     // Flips the shared snap switch (TimelineViewState::snapEnabled), flashes the Q button and
     // fires onSnapToggled. The Q button and the panel-wide Q key both land here.
@@ -523,6 +545,30 @@ public:
         return dragMode_ == DragMode::DrawNew ? drawLengthBeats_ : 0.0;
     }
 
+    // ---- Scale-panel slide animation test hooks ----
+    //
+    // Mirrors ModuleLibraryComponent::setSectionProgress: drives the SAME per-frame math the real
+    // AnimationDriver callback runs (see setScalePanelVisible), keyed by a normalised progress in
+    // [0, 1] (0 = fully closed, 1 = fully open) rather than a width. A headless test has no real
+    // VBlank reaching an off-screen component (setScalePanelVisible snaps immediately there — see
+    // isShowing()), so this is the only way to exercise the tween's geometry at an intermediate
+    // frame deterministically.
+    void setScalePanelOpenProgressForTest(float progress);
+    float getScalePanelOpenProgressForTest() const noexcept { return scalePanelOpenProgress_; }
+    // The tween's captured START point for whichever toggle/restore most recently ran — what a test
+    // reads to prove a mid-flight toggle reverses from the CURRENT width rather than jumping to an
+    // extreme first (setScalePanelVisible captures this BEFORE deciding whether to animate at all).
+    float getScalePanelAnimFromForTest() const noexcept { return scalePanelAnimFrom_; }
+    bool isScalePanelAnimatingForTest() const noexcept { return scalePanelAnim_.isRunning(); }
+    // The logical (target) open/closed state — what the header button paints as lit/active and
+    // what persists, as opposed to scalePanelOpenProgress_'s mid-slide VISUAL value.
+    bool isScalePanelTargetVisibleForTest() const noexcept { return scalePanelVisible_; }
+
+    // ---- Header button hover test hooks (Task D chip affordance) ----
+    enum class HeaderButtonId { None, Back, Quantise, Scale };
+    HeaderButtonId getHoveredHeaderButtonForTest() const noexcept { return hoveredHeaderButton_; }
+    bool isHeaderButtonHoveredForTest(HeaderButtonId which) const noexcept { return hoveredHeaderButton_ == which; }
+
 protected:
     // THE paint-count seam for the local playhead line, mirroring
     // TimelinePlayheadOverlay::requestRepaintStrip exactly (a test subclasses and counts). Every
@@ -533,6 +579,12 @@ protected:
     // test can count the two independently (a hover that repainted the playhead's strip would be
     // a bug, not a rounding difference). Called ONLY when the previewed cut actually moved.
     virtual void requestRepaintPreviewStrip(juce::Rectangle<int> strip);
+
+    // THE paint-count seam for the header buttons' hover wash (Back/Quantise/Scale — see
+    // updateHeaderButtonHover), same discipline as the two above: called ONLY when the hovered
+    // chip actually changed, once per affected rect (the vacated chip, the newly hovered one),
+    // never per mouse move.
+    virtual void requestRepaintHeaderButtonStrip(juce::Rectangle<int> strip);
 
     // THE edge-auto-scroll timer's seam, mirroring TimelineClipLaneArea::autoScrollTick() exactly
     // (a test subclasses and drives it via tickAutoScrollForTest() rather than a real juce::Timer,
@@ -689,6 +741,16 @@ private:
     void applyToolCursor();
     void updateHoverCursor(juce::Point<int> pos);
 
+    // ---- Header button hover (Back/Quantise/Scale chips — Task D affordance) ----
+    // bounds for `which` (empty for None) — the ONE seam updateHeaderButtonHover and paintHeader's
+    // hover wash both read, so the gated repaint rect and the painted rect can never drift apart.
+    juce::Rectangle<int> headerButtonBoundsFor(HeaderButtonId which) const noexcept;
+    // Recomputes which chip (if any) `pos` is over; a no-op when it hasn't changed (the repaint
+    // invariant — a mouse hovering the SAME chip, or empty grid, costs nothing). On a real change,
+    // repaints the vacated chip's rect and the newly hovered one, through
+    // requestRepaintHeaderButtonStrip so a test can count exactly this.
+    void updateHeaderButtonHover(juce::Point<int> pos);
+
     // ---- Clipboard plumbing ----
     // The selection as clipboard entries (offsets relative to the earliest selected note), plus
     // that earliest start and the block's span (max end - min start). Empty when nothing is
@@ -746,6 +808,13 @@ private:
     // shift-normalizes exactly that case.
     bool matchesAction(const juce::KeyPress& key, const juce::String& actionId, const juce::KeyPress& fallback) const;
 
+    // ---- Dynamic shortcut-hint tooltips (see synth::shortcutHintFor) ----
+    // Rebuilt fresh on every call by reading shortcuts_ live, so a rebind is reflected the very
+    // next time getTooltipFor() is queried — no cache, no listener needed (unlike
+    // TimelinePanelComponent's real juce::Button tooltips, which DO cache and therefore need one).
+    juce::String quantiseTooltipText() const;
+    juce::String scaleTooltipText() const;
+
     // ---- Anchored zoom, shared by the wheel, the pinch and the public zoom API ----
     // `anchorGridX` is measured from the GRID's left edge (x - leftGutterWidth()), which is the
     // coordinate rollView_ maps; `anchorY` is a component y.
@@ -764,12 +833,21 @@ private:
     void timerCallback() override; // one-shot: ends the quantise flash and stops itself
     void requestClose();
 
-    // ---- Scale assist panel plumbing ----
-    void toggleScalePanel();
-    // Shared by the header-button click and setPropertiesFile's restore; a no-op (no resize, no
-    // repaint, no persist write) when `visible` already matches, so restoring the SAME default
-    // (closed) on a fresh PropertiesFile costs nothing.
-    void setScalePanelVisible(bool visible);
+    // ---- Scale assist panel plumbing (toggleScalePanel is public — see the accessors above) ----
+    // Shared by the header-button click (animate=true) and setPropertiesFile's restore
+    // (animate=false — a persisted restore must never itself play a slide). A no-op (no resize, no
+    // repaint, no persist write, no animation) when `visible` already matches the logical target,
+    // so restoring the SAME default (closed) on a fresh PropertiesFile costs nothing.
+    void setScalePanelVisible(bool visible, bool animate = true);
+    // The per-frame tween math (also the test seam's implementation): pins scalePanelOpenProgress_,
+    // re-carves the layout and repaints, and re-issues onHorizontalViewChanged — the mapping
+    // genuinely moves every frame, and TimelinePanelComponent's ruler override has to track it.
+    void applyScalePanelOpenProgress(float progress);
+    // Stops any running tween, pins scalePanelOpenProgress_ to its exact target value, and (only
+    // when the logical target is closed) hides the child component — called by the animation's
+    // own onComplete, by setScalePanelVisible when there is no VBlank to animate with, and by
+    // openClip/closeRoll to snap an in-flight slide instantly across a clip switch.
+    void finishScalePanelAnimation();
     // Pushes clipScaleMemory_[clipId_] (or the "no clip open" defaults) into setScaleContext —
     // the single place both the panel's onScaleChanged/onPitchVisibilityChanged handlers and
     // openClip's restore route through, so the roll's row-visibility/colouring can never disagree
@@ -823,6 +901,13 @@ private:
     // App-level ZOOM-direction preference; false == wheel up zooms in. A separate flag from
     // scrollInverted_ — see setZoomScrollInverted.
     bool zoomScrollInverted_ = false;
+    // Fractional ROWS left over after the plain-wheel pitch-scroll branch truncates its per-event
+    // amount to a whole row (mouseWheelMove). A trackpad's small deltaY scaled by
+    // kPitchScrollSemitonesPerWheelUnit rounds to ZERO rows on almost every individual event —
+    // without this carry, the gesture never moves at all until a single event happens to clear a
+    // whole row on its own ("only sometimes works"). Reset on openClip/closeRoll so a stale
+    // sub-row fraction from one clip never surfaces as a surprise extra row on the next.
+    double pitchScrollRemainder_ = 0.0;
 
     synth::ClipId clipId_;
     NoteSelectionModel selection_;
@@ -932,6 +1017,31 @@ private:
     // handed to it directly in setPropertiesFile.
     juce::PropertiesFile* propertiesFile_ = nullptr;
 
+    // ---- Scale-panel slide animation (in/out — see setScalePanelVisible) ----
+    //
+    // The LOGICAL target (what the header button paints lit and what persists), separate from
+    // scalePanelOpenProgress_'s mid-slide VISUAL value below — the same split
+    // ModuleLibraryComponent's collapsedSections/sectionProgress pair uses for its own fold.
+    bool scalePanelVisible_ = false;
+    // 0 = fully closed, 1 = fully open — leftGutterWidth() is the ONE reader (see its comment).
+    // Animated by scalePanelAnim_'s per-frame callback via applyScalePanelOpenProgress(), or
+    // pinned straight to its target by finishScalePanelAnimation() when there is no VBlank to
+    // animate with (a headless test, a PropertiesFile restore, or a clip switch mid-slide).
+    float scalePanelOpenProgress_ = 0.0f;
+    // The tween's own start/end, captured at the moment a toggle/restore is requested — kept as
+    // members (not lambda captures alone) so a test can assert the START point without a running
+    // VBlank (see getScalePanelAnimFromForTest).
+    float scalePanelAnimFrom_ = 0.0f;
+    float scalePanelAnimTo_ = 0.0f;
+    synth::ui::AnimationDriver scalePanelAnim_;
+    // Lazily created on the FIRST real (on-screen) toggle — mirrors ModuleLibraryComponent's own
+    // vblankUpdater, which is `this` (a juce::Component) and must therefore not exist before the
+    // component does.
+    std::optional<juce::VBlankAnimatorUpdater> scalePanelVblankUpdater_;
+    // Within the house 160-220 ms spec (docs/layout.md §11), matching animatePanelTransition's own
+    // ~190 ms feel for the app's other show/hide sidebars.
+    static constexpr double kScalePanelAnimMs = 200.0;
+
     // Per-clip scale memory: SESSION-ONLY, deliberately never persisted (mirrors rollView_ and
     // firstVisiblePitch_, which are not persisted either) — see setScaleContext's class-comment
     // discussion of why a clip's row/colour context is view state, not document state. A clip id
@@ -982,6 +1092,9 @@ private:
     juce::Rectangle<int> quantiseButtonBounds_;
     juce::Rectangle<int> keysColumnBounds_;
     juce::Rectangle<int> noteGridBounds_;
+
+    // Which header chip (if any) the pointer is currently over — see updateHeaderButtonHover.
+    HeaderButtonId hoveredHeaderButton_ = HeaderButtonId::None;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PianoRollComponent)
 };

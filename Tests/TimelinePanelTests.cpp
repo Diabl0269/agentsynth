@@ -2527,6 +2527,68 @@ TEST(TimelineToolStripTest, PanelLetterKeysResolveThroughTheShortcutManager) {
     EXPECT_EQ(view.snapEnabled, snapNow);
 }
 
+// ============================================================================
+// Dynamic shortcut-hint tooltips (see synth::shortcutHintFor / TimelinePanelComponent::
+// refreshShortcutTooltips) — the tool strip, the snap toggle and the follow-playhead toggle all
+// embed the CURRENT binding rather than a hardcoded key name, and rebuild it on every
+// bindings-changed notification.
+// ============================================================================
+
+// Regression guard for the reported gap: every OTHER button in this strip already named its own
+// key ("Select (1)", "Snap to grid on/off (Q)"); Follow playhead used to be the bare
+// "Follow playhead" with no hint at all.
+TEST(TimelineToolStripTest, FollowPlayheadTooltipNamesItsKeyLikeItsSiblingsDo) {
+    ToolPanelFixture f;
+    EXPECT_TRUE(f.panel.getFollowPlayheadButtonForTest().getTooltip().contains("(f)"))
+        << "no manager installed -- the hardcoded default 'f', lowercase (see shortcutHintFor)";
+}
+
+TEST(TimelineToolStripTest, FollowPlayheadTooltipTracksALiveRebindAndDropsTheOldKey) {
+    ToolPanelFixture f;
+    ShortcutManager shortcuts;
+    f.panel.setShortcutManager(&shortcuts);
+    auto& followButton = f.panel.getFollowPlayheadButtonForTest();
+    ASSERT_TRUE(followButton.getTooltip().contains("(f)"));
+
+    shortcuts.setBinding("timelineFollowPlayheadToggle", juce::KeyPress('g', juce::ModifierKeys::noModifiers, 0));
+    shortcuts.saveToProperties(); // broadcasts the change even with no ApplicationProperties wired
+
+    const auto tooltip = followButton.getTooltip();
+    EXPECT_TRUE(tooltip.contains("(g)")) << "the tooltip now names the current key";
+    EXPECT_FALSE(tooltip.contains("(f)")) << "and not the stale one";
+}
+
+TEST(TimelineToolStripTest, ToolStripAndSnapToggleTooltipsTrackTheirLiveBindings) {
+    ToolPanelFixture f;
+    ShortcutManager shortcuts;
+    f.panel.setShortcutManager(&shortcuts);
+
+    auto* selectButton = f.panel.getToolButton(synth::ui::EditTool::Select);
+    ASSERT_NE(selectButton, nullptr);
+    EXPECT_TRUE(selectButton->getTooltip().contains("(1)"));
+    EXPECT_TRUE(f.panel.getSnapToggleButton().getTooltip().contains("(q)"));
+
+    shortcuts.setBinding("timelineToolSelect", juce::KeyPress('j', juce::ModifierKeys::noModifiers, 0));
+    shortcuts.setBinding("timelineSnapToggle", juce::KeyPress('y', juce::ModifierKeys::noModifiers, 0));
+    shortcuts.saveToProperties();
+
+    EXPECT_TRUE(selectButton->getTooltip().contains("(j)"));
+    EXPECT_FALSE(selectButton->getTooltip().contains("(1)"));
+    EXPECT_TRUE(f.panel.getSnapToggleButton().getTooltip().contains("(y)"));
+}
+
+TEST(TimelineToolStripTest, ClearingTheSharedShortcutManagerRestoresTheHardcodedTooltipDefaults) {
+    ToolPanelFixture f;
+    ShortcutManager shortcuts;
+    f.panel.setShortcutManager(&shortcuts);
+    shortcuts.setBinding("timelineFollowPlayheadToggle", juce::KeyPress('g', juce::ModifierKeys::noModifiers, 0));
+    shortcuts.saveToProperties();
+    ASSERT_TRUE(f.panel.getFollowPlayheadButtonForTest().getTooltip().contains("(g)"));
+
+    f.panel.setShortcutManager(nullptr);
+    EXPECT_TRUE(f.panel.getFollowPlayheadButtonForTest().getTooltip().contains("(f)"));
+}
+
 // TimelineClipLaneArea resolves its own P through the SAME action id the panel's fallback uses, so
 // the two can never end up on different keys.
 TEST(TimelineToolStripTest, ClipLanePLoopSelectionFollowsTheShortcutManager) {
@@ -2576,8 +2638,8 @@ TEST(TimelineToolStripTest, ButtonsMirrorTheActiveToolAndCarryTheirShortcutInThe
     for (auto tool : synth::ui::kAllEditTools)
         ASSERT_NE(f.panel.getToolButton(tool), nullptr) << "every tool has a button, headless included";
 
-    EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Split)->getTooltip(), "Split (3)");
-    EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Draw)->getTooltip(), "Draw (8)");
+    EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Split)->getTooltip(), "Split  (3)");
+    EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Draw)->getTooltip(), "Draw  (8)");
 
     f.panel.setActiveTool(synth::ui::EditTool::Erase);
     for (auto tool : synth::ui::kAllEditTools)

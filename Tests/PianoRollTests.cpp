@@ -66,6 +66,7 @@
 #include "../Source/UI/NoteSelectionModel.h"
 #include "../Source/UI/PianoRollComponent.h"
 #include "../Source/UI/ScaleAssistPanel.h"
+#include "../Source/UI/Theme/BuiltInThemes.h"
 #include "../Source/UI/Theme/Theme.h"
 #include "../Source/UI/TimelineViewState.h"
 #include <algorithm>
@@ -94,6 +95,29 @@ synth::MidiNote makeNote(double startBeat, int pitch, double lengthBeats = 1.0) 
     note.pitch = pitch;
     note.lengthBeats = lengthBeats;
     return note;
+}
+
+// WCAG relative luminance / contrast ratio — same formula NoteColourTests.cpp uses, duplicated
+// (not shared) because it's a handful of pure lines private to a different translation unit.
+double relativeLuminance(juce::Colour c) {
+    auto channel = [](float v) { return v <= 0.03928f ? v / 12.92f : std::pow((v + 0.055f) / 1.055f, 2.4f); };
+    return 0.2126 * channel(c.getFloatRed()) + 0.7152 * channel(c.getFloatGreen()) + 0.0722 * channel(c.getFloatBlue());
+}
+
+double contrastRatio(juce::Colour a, juce::Colour b) {
+    const auto l1 = relativeLuminance(a);
+    const auto l2 = relativeLuminance(b);
+    const auto hi = std::max(l1, l2);
+    const auto lo = std::min(l1, l2);
+    return (hi + 0.05) / (lo + 0.05);
+}
+
+// Plain Euclidean RGB distance — same idiom as NoteColourTests.cpp's rgbDistance.
+double rgbDistance(juce::Colour a, juce::Colour b) {
+    const double dr = (double)a.getRed() - (double)b.getRed();
+    const double dg = (double)a.getGreen() - (double)b.getGreen();
+    const double db = (double)a.getBlue() - (double)b.getBlue();
+    return std::sqrt(dr * dr + dg * dg + db * db);
 }
 } // namespace
 
@@ -258,6 +282,8 @@ struct CountingRoll : PianoRollComponent {
     juce::Rectangle<int> lastStrip;
     int previewRequests = 0;
     juce::Rectangle<int> lastPreviewStrip;
+    int headerButtonRequests = 0;
+    juce::Rectangle<int> lastHeaderButtonStrip;
 
     void requestRepaintStrip(juce::Rectangle<int> strip) override {
         ++requests;
@@ -269,6 +295,12 @@ struct CountingRoll : PianoRollComponent {
         ++previewRequests;
         lastPreviewStrip = strip;
         PianoRollComponent::requestRepaintPreviewStrip(strip);
+    }
+
+    void requestRepaintHeaderButtonStrip(juce::Rectangle<int> strip) override {
+        ++headerButtonRequests;
+        lastHeaderButtonStrip = strip;
+        PianoRollComponent::requestRepaintHeaderButtonStrip(strip);
     }
 };
 
@@ -786,8 +818,11 @@ TEST(PianoRollEditingTest, QuantiseButtonEnabledStateAndTooltip) {
     f.state.snap = TimelineViewState::Snap::Off;
     EXPECT_FALSE(f.roll.isQuantiseEnabled()) << "Snap::Off leaves no grid to quantise to";
 
-    EXPECT_EQ(f.roll.getTooltipFor(f.roll.getQuantiseButtonBounds().getCentre()),
-              juce::String(PianoRollComponent::kQuantiseTooltip));
+    // Dynamic (see synth::shortcutHintFor) — no ShortcutManager installed, so it falls back to the
+    // hardcoded default: "q", lowercase.
+    const auto tooltip = f.roll.getTooltipFor(f.roll.getQuantiseButtonBounds().getCentre());
+    EXPECT_TRUE(tooltip.startsWith("Snap to grid on/off (q)"));
+    EXPECT_TRUE(tooltip.contains("Shift+click quantizes"));
     EXPECT_TRUE(f.roll.getTooltipFor(f.roll.getBackButtonBounds().getCentre()).isEmpty());
 }
 
@@ -2619,6 +2654,73 @@ TEST(PianoRollWheelTest, PitchScrollFollowsTheGestureByDefaultAndFlipsWhenInvert
     EXPECT_EQ(base - inverted, natural - base) << "and by exactly the same number of rows";
 }
 
+// THE regression: a trackpad's small deltaY (often 0.01-0.1 per event) scaled by
+// kPitchScrollSemitonesPerWheelUnit rounds to ZERO whole rows on almost every individual event; a
+// plain per-event round dropped the gesture entirely unless one event happened to be big enough to
+// clear a row on its own — "only sometimes works". pitchScrollRemainder_ carries the leftover
+// fraction across events, so N small events land on exactly the same row count ONE big event of
+// the summed delta would.
+TEST(PianoRollWheelTest, SmallPitchScrollEventsAccumulateToTheSameRowCountAsOneBigEvent) {
+    PianoRollFixture accumulated;
+    const auto trackA = accumulated.doc.addTrack(TrackKind::Midi, "Track 1");
+    accumulated.open(accumulated.doc.addClip(trackA, 0.0, 8.0, "Clip"));
+    const int base = accumulated.roll.getFirstVisiblePitchForTest();
+
+    // Five small events, each individually below what a single-event round would register as a
+    // whole row (0.1 * kPitchScrollSemitonesPerWheelUnit == 0.3 rows -- truncates to 0 alone).
+    for (int i = 0; i < 5; ++i)
+        accumulated.roll.mouseWheelMove(leftClick(accumulated.roll, {300.0f, 90.0f}), wheelOnY(0.1f));
+    const int afterSmallEvents = accumulated.roll.getFirstVisiblePitchForTest();
+    EXPECT_GT(afterSmallEvents, base) << "the gesture must not be dropped just because no single event cleared a row";
+
+    PianoRollFixture oneBig;
+    const auto trackB = oneBig.doc.addTrack(TrackKind::Midi, "Track 1");
+    oneBig.open(oneBig.doc.addClip(trackB, 0.0, 8.0, "Clip"));
+    ASSERT_EQ(oneBig.roll.getFirstVisiblePitchForTest(), base) << "test premise: identical starting state";
+    oneBig.roll.mouseWheelMove(leftClick(oneBig.roll, {300.0f, 90.0f}),
+                               wheelOnY(0.5f)); // the SAME total delta (5 * 0.1)
+    EXPECT_EQ(afterSmallEvents, oneBig.roll.getFirstVisiblePitchForTest())
+        << "five small events summing to 0.5 must land on exactly the same row as one 0.5 event";
+}
+
+TEST(PianoRollWheelTest, PitchScrollAccumulatorCarriesTheFractionalRemainderAcrossEvents) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+    const int base = f.roll.getFirstVisiblePitchForTest();
+
+    // 0.1 * kPitchScrollSemitonesPerWheelUnit (3.0) == 0.3 rows/event -- three events sum to 0.9
+    // (still under a whole row), a FOURTH tips it over 1.0.
+    for (int i = 0; i < 3; ++i) {
+        f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}), wheelOnY(0.1f));
+        EXPECT_EQ(f.roll.getFirstVisiblePitchForTest(), base) << "event " << i << ": still under one row's worth";
+    }
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}), wheelOnY(0.1f));
+    EXPECT_GT(f.roll.getFirstVisiblePitchForTest(), base)
+        << "the 4th event's carried remainder finally clears a whole row";
+}
+
+TEST(PianoRollWheelTest, PitchScrollRemainderResetsAcrossAClipSwitch) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipA = f.doc.addClip(trackId, 0.0, 8.0, "A");
+    const auto clipB = f.doc.addClip(trackId, 8.0, 8.0, "B");
+    f.open(clipA);
+
+    // Leave clip A's remainder at 0.9 rows -- one event short of clearing a row on its own (see
+    // the previous test). If this carried into clip B unreset, a SINGLE further 0.1 event there
+    // (0.3 more) would tip it over 1.0 and move a row; reset to 0, it stays well under.
+    for (int i = 0; i < 3; ++i)
+        f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}), wheelOnY(0.1f));
+
+    f.open(clipB);
+    const int baseB = f.roll.getFirstVisiblePitchForTest();
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}), wheelOnY(0.1f));
+    EXPECT_EQ(f.roll.getFirstVisiblePitchForTest(), baseB)
+        << "clip A's pending 0.9-row fraction must not surface in clip B";
+}
+
 // Shift+wheel (and a trackpad's own deltaX) = horizontal scroll, through the roll's OWN scroll
 // origin. Same natural-by-default / invert-on-request contract as the pitch axis.
 TEST(PianoRollWheelTest, HorizontalScrollFollowsTheGestureByDefaultAndFlipsWhenInverted) {
@@ -2898,6 +3000,26 @@ TEST(PianoRollKeyLabelTest, DefaultModeIsAllNotesAndIsSettable) {
     EXPECT_EQ(f.roll.getKeyLabelMode(), PianoRollComponent::KeyLabelMode::AllNotes);
     f.roll.setKeyLabelMode(PianoRollComponent::KeyLabelMode::OctavesOnly);
     EXPECT_EQ(f.roll.getKeyLabelMode(), PianoRollComponent::KeyLabelMode::OctavesOnly);
+}
+
+// Regression coverage for the "sharp key labels are nearly invisible" bug: labelColourFor
+// contrasts against THAT row's own key fill (never a single fill shared by both key colours), so
+// a black-key label reads near-white and a white-key label reads near-black in every built-in
+// theme, with a healthy margin between the two — the perceived-brightness idiom NoteColourTests.cpp
+// uses for its own theme guard.
+TEST(PianoRollKeyLabelTest, LabelColourContrastsAgainstItsOwnKeyFillInEveryTheme) {
+    for (const auto& t : synth::theme::builtInThemes()) {
+        const auto& c = t.colors;
+        const auto whiteLabel = PianoRollComponent::labelColourFor(c.pianoKeyWhite);
+        const auto blackLabel = PianoRollComponent::labelColourFor(c.pianoKeyBlack);
+
+        EXPECT_GE(contrastRatio(whiteLabel, c.pianoKeyWhite), 3.5) << "Theme '" << t.name << "': white-key label";
+        EXPECT_GE(contrastRatio(blackLabel, c.pianoKeyBlack), 3.5) << "Theme '" << t.name << "': black-key label";
+        // The actual bug: a label colour resolved from ONE shared fill would put the SAME colour
+        // on both key families. The two must land on opposite ends of the brightness scale.
+        EXPECT_GT(rgbDistance(whiteLabel, blackLabel), 80.0)
+            << "Theme '" << t.name << "': white-key and black-key labels must not be the same colour";
+    }
 }
 
 // ============================================================================
@@ -3354,8 +3476,33 @@ TEST(PianoRollScaleAssistTest, HeaderButtonTogglesPanelAndShiftsGutter) {
 
 TEST(PianoRollScaleAssistTest, TooltipReportsForTheScaleButton) {
     PianoRollFixture f;
-    EXPECT_EQ(f.roll.getTooltipFor(centreOf(f.roll.getScaleButtonBounds()).toInt()),
-              juce::String(PianoRollComponent::kScaleTooltip));
+    // Dynamic (see synth::shortcutHintFor) — no ShortcutManager installed, so it falls back to the
+    // hardcoded default: Ctrl + S (a chorded key is never lower-cased).
+    const auto tooltip = f.roll.getTooltipFor(centreOf(f.roll.getScaleButtonBounds()).toInt());
+    EXPECT_TRUE(tooltip.startsWith("Scale assist"));
+    EXPECT_TRUE(tooltip.contains("Ctrl + S"));
+}
+
+TEST(PianoRollScaleAssistTest, QuantiseAndScaleTooltipsTrackALiveRebindAndClearingRestoresTheDefault) {
+    PianoRollFixture f;
+    ShortcutManager mgr;
+    f.roll.setShortcutManager(&mgr);
+
+    // Rebuilt LIVE on every getTooltipFor() call (no cache, no listener needed for this roll — see
+    // its class comment) -- setBinding alone is enough, no saveToProperties() required.
+    mgr.setBinding("timelineSnapToggle", juce::KeyPress('g', juce::ModifierKeys::noModifiers, 0));
+    auto tooltip = f.roll.getTooltipFor(f.roll.getQuantiseButtonBounds().getCentre());
+    EXPECT_TRUE(tooltip.contains("(g)"));
+    EXPECT_FALSE(tooltip.contains("(q)"));
+
+    mgr.setBinding("pianoRollToggleScalePanel", juce::KeyPress('m', juce::ModifierKeys::commandModifier, 0));
+    tooltip = f.roll.getTooltipFor(centreOf(f.roll.getScaleButtonBounds()).toInt());
+    EXPECT_TRUE(tooltip.contains("M")) << "the current binding's key";
+    EXPECT_FALSE(tooltip.contains("Ctrl + S")) << "not the hardcoded default anymore";
+
+    f.roll.setShortcutManager(nullptr);
+    tooltip = f.roll.getTooltipFor(f.roll.getQuantiseButtonBounds().getCentre());
+    EXPECT_TRUE(tooltip.contains("(q)")) << "detached -- back to the hardcoded default";
 }
 
 // ---- quantisePitchesToScale ----
@@ -3568,6 +3715,151 @@ TEST(PianoRollScaleAssistTest, SetPropertiesFileIsNullSafe) {
     PianoRollFixture f;
     EXPECT_NO_THROW(f.roll.setPropertiesFile(nullptr));
     EXPECT_FALSE(f.roll.getScaleAssistPanel().isVisible());
+}
+
+// ============================================================================
+// 18. Scale-panel SLIDE animation (in/out — see setScalePanelVisible / AnimationDriver).
+//
+// The roll here is never added to a real window (isShowing() is false), so every real toggle
+// snaps immediately — the pre-existing gutter tests above rely on exactly that and are left
+// unmodified. The tween's own MATH is exercised directly through the progress test seam
+// (setScalePanelOpenProgressForTest), the same "pump the animator's own per-frame update" idiom
+// ModuleLibraryCollapseAnimationTests.cpp uses for the library sidebar's fold.
+// ============================================================================
+
+TEST(PianoRollScaleAnimationTest, ProgressSweepMovesLeftGutterWidthMonotonicallyAndFiresOnHorizontalViewChanged) {
+    PianoRollFixture f;
+    int viewChanges = 0;
+    f.roll.onHorizontalViewChanged = [&] { ++viewChanges; };
+
+    ASSERT_EQ(f.roll.leftGutterWidth(), PianoRollComponent::kKeysColumnWidth);
+    int previousWidth = f.roll.leftGutterWidth();
+    for (float p : {0.0f, 0.25f, 0.5f, 0.75f, 1.0f}) {
+        f.roll.setScalePanelOpenProgressForTest(p);
+        const int width = f.roll.leftGutterWidth();
+        EXPECT_GE(width, previousWidth) << "progress " << p;
+        previousWidth = width;
+    }
+    EXPECT_EQ(f.roll.leftGutterWidth(), PianoRollComponent::kKeysColumnWidth + PianoRollComponent::kScalePanelWidth);
+    EXPECT_EQ(viewChanges, 5) << "the mapping genuinely moves every frame -- the ruler override has to track it";
+}
+
+TEST(PianoRollScaleAnimationTest, EndpointsMatchTheOldBinaryGutterExactly) {
+    PianoRollFixture f;
+    f.roll.setScalePanelOpenProgressForTest(0.0f);
+    EXPECT_EQ(f.roll.leftGutterWidth(), PianoRollComponent::kKeysColumnWidth);
+    f.roll.setScalePanelOpenProgressForTest(1.0f);
+    EXPECT_EQ(f.roll.leftGutterWidth(), PianoRollComponent::kKeysColumnWidth + PianoRollComponent::kScalePanelWidth);
+}
+
+TEST(PianoRollScaleAnimationTest, ToggleWhileNotShowingSnapsInsteadOfAnimating) {
+    PianoRollFixture f;
+    ASSERT_FALSE(f.roll.isShowing()) << "test premise: headless, no real window";
+
+    f.roll.toggleScalePanel();
+    EXPECT_FALSE(f.roll.isScalePanelAnimatingForTest()) << "no VBlank reaches an off-screen component";
+    EXPECT_FLOAT_EQ(f.roll.getScalePanelOpenProgressForTest(), 1.0f);
+    EXPECT_TRUE(f.roll.isScalePanelTargetVisibleForTest());
+    EXPECT_EQ(f.roll.leftGutterWidth(), PianoRollComponent::kKeysColumnWidth + PianoRollComponent::kScalePanelWidth);
+
+    f.roll.toggleScalePanel();
+    EXPECT_FLOAT_EQ(f.roll.getScalePanelOpenProgressForTest(), 0.0f);
+    EXPECT_FALSE(f.roll.isScalePanelTargetVisibleForTest());
+    EXPECT_EQ(f.roll.leftGutterWidth(), PianoRollComponent::kKeysColumnWidth);
+}
+
+TEST(PianoRollScaleAnimationTest, TogglingMidFlightReversesFromTheCurrentWidthNotFromAnExtreme) {
+    PianoRollFixture f;
+    f.roll.toggleScalePanel(); // opens; headless -> snaps to progress 1.0 immediately
+    ASSERT_FLOAT_EQ(f.roll.getScalePanelOpenProgressForTest(), 1.0f);
+
+    // Simulate catching the slide mid-flight (as a real VBlank frame would have left it, had one
+    // run) before it settled.
+    f.roll.setScalePanelOpenProgressForTest(0.6f);
+    f.roll.toggleScalePanel(); // request CLOSE now
+    EXPECT_FLOAT_EQ(f.roll.getScalePanelAnimFromForTest(), 0.6f)
+        << "the tween's captured start point is the CURRENT width, never an extreme -- no jump";
+    // Still headless, so it lands on the end state immediately either way.
+    EXPECT_FLOAT_EQ(f.roll.getScalePanelOpenProgressForTest(), 0.0f);
+}
+
+TEST(PianoRollScaleAnimationTest, OpenClipAndCloseRollNeverAnimateAcrossTheSwitch) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+
+    f.roll.toggleScalePanel(); // open, snaps immediately (headless)
+    ASSERT_FLOAT_EQ(f.roll.getScalePanelOpenProgressForTest(), 1.0f);
+
+    f.roll.openClip(clipId);
+    EXPECT_FALSE(f.roll.isScalePanelAnimatingForTest());
+    EXPECT_FLOAT_EQ(f.roll.getScalePanelOpenProgressForTest(), 1.0f)
+        << "the panel's own open/closed state is unrelated to which clip is open";
+
+    f.roll.closeRoll();
+    EXPECT_FALSE(f.roll.isScalePanelAnimatingForTest());
+    EXPECT_FLOAT_EQ(f.roll.getScalePanelOpenProgressForTest(), 1.0f);
+}
+
+// A PropertiesFile restore must never itself look like the panel sliding open on launch.
+TEST(PianoRollScaleAnimationTest, PropertiesFileRestoreSnapsEvenThoughAnimateDefaultsToTrue) {
+    auto props = makeScaleAssistTestProps("PianoRollScaleAnimationTest");
+    props->setValue("pianoRollScalePanelVisible", true);
+
+    PianoRollFixture f;
+    f.roll.setPropertiesFile(props.get());
+    EXPECT_FALSE(f.roll.isScalePanelAnimatingForTest());
+    EXPECT_FLOAT_EQ(f.roll.getScalePanelOpenProgressForTest(), 1.0f);
+    EXPECT_TRUE(f.roll.getScaleAssistPanel().isVisible());
+
+    props->getFile().deleteFile();
+}
+
+// ============================================================================
+// 19. Header button chip affordance (Back/Q/Scale — hover wash + resting/active fill).
+// ============================================================================
+
+TEST(PianoRollHeaderButtonTest, HoverEntersAndLeavesGateRepaintsConfinedToTheChipRect) {
+    PianoRollFixture f;
+    ASSERT_EQ(f.roll.getHoveredHeaderButtonForTest(), PianoRollComponent::HeaderButtonId::None);
+    ASSERT_EQ(f.roll.headerButtonRequests, 0);
+
+    f.roll.mouseMove(hover(f.roll, centreOf(f.roll.getQuantiseButtonBounds())));
+    EXPECT_TRUE(f.roll.isHeaderButtonHoveredForTest(PianoRollComponent::HeaderButtonId::Quantise));
+    EXPECT_EQ(f.roll.headerButtonRequests, 1);
+    EXPECT_EQ(f.roll.lastHeaderButtonStrip, f.roll.getQuantiseButtonBounds());
+
+    // Hovering the SAME chip again costs nothing more (the repaint invariant's state-change gate).
+    f.roll.mouseMove(hover(f.roll, centreOf(f.roll.getQuantiseButtonBounds()) + juce::Point<float>(1.0f, 0.0f)));
+    EXPECT_EQ(f.roll.headerButtonRequests, 1);
+
+    // Moving to the Scale chip repaints BOTH the vacated Q rect and the newly hovered one.
+    f.roll.mouseMove(hover(f.roll, centreOf(f.roll.getScaleButtonBounds())));
+    EXPECT_TRUE(f.roll.isHeaderButtonHoveredForTest(PianoRollComponent::HeaderButtonId::Scale));
+    EXPECT_EQ(f.roll.headerButtonRequests, 3);
+
+    // Leaving the header entirely clears the hover and costs exactly one more repaint.
+    f.roll.mouseExit(hover(f.roll, {5.0f, 5.0f}));
+    EXPECT_EQ(f.roll.getHoveredHeaderButtonForTest(), PianoRollComponent::HeaderButtonId::None);
+    EXPECT_EQ(f.roll.headerButtonRequests, 4);
+}
+
+// Resting chips must be distinguishable from the header strip's own background (surfaceHi vs
+// surface), and the active/toggled fill (toolActive) must be distinguishable from resting, in
+// every built-in theme — token-level guards for the "buttons read as bare text" bug (they used to
+// share NO fill at all with the strip, painting only a hairline outline).
+TEST(PianoRollHeaderButtonTest, RestingChipFillIsDistinguishableFromTheHeaderBackgroundInEveryTheme) {
+    for (const auto& t : synth::theme::builtInThemes()) {
+        const auto& c = t.colors;
+        EXPECT_GT(rgbDistance(c.surfaceHi, c.surface), 10.0) << "Theme '" << t.name << "'";
+    }
+}
+
+TEST(PianoRollHeaderButtonTest, ActiveChipFillIsDistinguishableFromRestingFillInEveryTheme) {
+    for (const auto& t : synth::theme::builtInThemes()) {
+        const auto& c = t.colors;
+        EXPECT_GT(rgbDistance(c.toolActive, c.surfaceHi), 40.0) << "Theme '" << t.name << "'";
+    }
 }
 
 // ============================================================================

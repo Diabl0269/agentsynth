@@ -3,6 +3,7 @@
 #include "CableColour.h"
 #include "NoteColour.h"
 #include "Theme/ThemeManager.h"
+#include <cmath>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
 #include <vector>
@@ -83,6 +84,29 @@ public:
      *  must fall within for it to be reachable at all (by scrolling, if the viewport is shorter). */
     int getContentHeightForTest() const { return contentHost.getHeight(); }
 
+    // ---- Testing hooks: theme-gallery wheel bubbling (bug: "vertical scroll only sometimes
+    // works" in the Appearance tab) ----
+    juce::Rectangle<int> getThemeListBoundsForTest() const { return themeList.getBounds(); }
+    bool isThemeListScrollbarVisibleForTest() const { return themeList.getVerticalScrollBar().isVisible(); }
+    int getThemeListScrollPositionForTest() const {
+        return (int)std::llround(themeList.getVerticalScrollBar().getCurrentRangeStart());
+    }
+    /** The outer scrollable content's own vertical scroll position — what a wheel gesture that
+     *  BUBBLES past the theme list (see ThemeListBox) should move. */
+    int getContentScrollYForTest() const { return contentViewport.getViewPositionY(); }
+    /** Synthesizes a wheel gesture over the theme list's own centre and routes it straight to
+     *  `themeList.mouseWheelMove`, the same call juce::Desktop's real dispatch would make when the
+     *  pointer sits there — a headless test has no OS to generate a real wheel event with. */
+    void simulateWheelOverThemeListForTest(float deltaY) {
+        juce::MouseWheelDetails wheel{};
+        wheel.deltaY = deltaY;
+        const auto pos = themeList.getBounds().getCentre().toFloat();
+        juce::MouseEvent e(juce::Desktop::getInstance().getMainMouseSource(), pos, juce::ModifierKeys(), 0.0f, 0.0f,
+                           0.0f, 0.0f, 0.0f, &themeList, &themeList, juce::Time::getCurrentTime(), pos,
+                           juce::Time::getCurrentTime(), 1, false);
+        themeList.mouseWheelMove(e, wheel);
+    }
+
 private:
     class CableSwatchRow; // strip of clickable colour swatches for the active mode
     class NoteSwatchRow;  // strip of clickable pitch-class swatches (piano roll note colours)
@@ -109,13 +133,40 @@ private:
     };
     void paintContent(juce::Graphics& g);
 
+    // juce::ListBox::mouseWheelMove (juce_ListBox.cpp) consumes the wheel whenever its OWN vertical
+    // scrollbar is merely VISIBLE — with no "am I already at the limit" check the way
+    // juce::Viewport itself has for its own wheel handling (Viewport::useMouseWheelMoveIfNeeded
+    // only consumes when the position actually changes, else falls through to bubble). The theme
+    // gallery is a ListBox nested inside this tab's OWN taller Viewport (contentViewport): with the
+    // built-in default row height on ~4+ themes it needs its own scrollbar inside a fixed-height
+    // 160px box, so a plain wheel gesture anywhere over the gallery always scrolled the LIST and
+    // never the outer settings page, however far the list itself already was from its own top/
+    // bottom — reading as "vertical scroll only sometimes works" depending on precisely where the
+    // pointer sat. This restores Viewport's own parity: scroll the list when that would actually
+    // move it, otherwise fall through to the base Component's default bubble-to-parent behaviour.
+    class ThemeListBox : public juce::ListBox {
+    public:
+        void mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& wheel) override {
+            auto& bar = getVerticalScrollBar();
+            if (bar.isVisible()) {
+                const auto before = bar.getCurrentRangeStart();
+                juce::ListBox::mouseWheelMove(e, wheel);
+                if (bar.getCurrentRangeStart() != before)
+                    return; // actually scrolled the list -- consumed
+            }
+            // No internal scrollbar, or already at its limit in this direction: let the tab's own
+            // Viewport have it, exactly like a plain juce::Component would.
+            juce::Component::mouseWheelMove(e, wheel);
+        }
+    };
+
     juce::Viewport contentViewport;
     ContentHost contentHost{*this};
 
     synth::theme::ThemeManager& themeManager;
     juce::ApplicationProperties& appProperties;
     GraphEditor* graphEditor{nullptr}; // weak, owned by MainComponent
-    juce::ListBox themeList;
+    ThemeListBox themeList;
     std::unique_ptr<ThemeListModel> listModel;
     juce::TextButton openFolderButton{"Open Themes Folder"};
     juce::TextButton reloadButton{"Reload Themes"};

@@ -1073,6 +1073,11 @@ MainComponent::~MainComponent() {
     // Unsubscribe before the manager (or our owned copy) is torn down.
     if (themeManager != nullptr)
         themeManager->removeChangeListener(this);
+    // Same reason, one level down: timelinePanel is declared BEFORE shortcutManager, so member
+    // teardown destroys the manager first — detach the panel's ChangeListener subscription (its
+    // dynamic tooltip refresh) while the manager is still alive, or ~TimelinePanelComponent()
+    // dereferences a dangling pointer on quit.
+    timelinePanel.setShortcutManager(nullptr);
     // Same reason: the settings file outlives this component on the plugin path (it is a shared
     // location — see synth::userSettingsOptions()), so a write from any other holder after this
     // point would call back into freed memory.
