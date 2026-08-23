@@ -65,6 +65,7 @@ add_executable(Tests
     AIStateMapperTests.cpp
     AIPatchValidationTests.cpp
     AIPatchRetryTests.cpp
+    AIPatchFixtureReplayTests.cpp
     PatchEvalTests.cpp
     PatchDiffTests.cpp
     AIProviderRegistryTests.cpp
@@ -242,6 +243,10 @@ target_compile_definitions(Tests PRIVATE
     # Same fixture files TimelineOpsHarness replays — one recorded set, asserted here as
     # fast gtest cases so CI covers them without building the harness target.
     TIMELINE_OPS_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/Tools/TimelineOpsHarness/Fixtures"
+    # Real model output recorded once by Tools/AIPatchHarness (--json), replayed offline by
+    # AIPatchFixtureReplayTests.cpp — no live model, no network. See
+    # Tools/AIPatchHarness/README.md "Recording the fixture corpus".
+    AI_PATCH_FIXTURES_DIR="${CMAKE_SOURCE_DIR}/Tests/fixtures/ai-patches"
 )
 
 # Link JUCE specifics if needed

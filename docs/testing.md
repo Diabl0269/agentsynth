@@ -397,6 +397,35 @@ answers synchronously (so no message loop is needed): that the validation messag
 model, that retries stop at `kMaxPatchRetries`, and that the mode repair fires only for a
 rejected, mode-less patch and never in the destructive merge-to-replace direction.
 
+### AI Patch Fixture Replay Tests (corpus-driven, offline)
+
+`Tests/AIPatchFixtureReplayTests.cpp` is a **characterisation test**: it replays real model output,
+recorded once by `Tools/AIPatchHarness` against `gpt-oss:20b` (the confirmed production model,
+P1-12) and at least one other local model, through the exact production path —
+`extractJsonFromResponse -> JSON::parse -> validatePatch -> applyPatchWithRetry` — with no model
+and no network, in milliseconds. `AIPatchValidationTests.cpp` above uses hand-written patches,
+which are cleaner than what a real model emits; this suite is what actually notices a refactor
+breaking the retry loop against real-world model output, and it runs in every CI build (unlike the
+harness itself, which needs a live Ollama and is opt-in only).
+
+The corpus lives at `Tests/fixtures/ai-patches/*.json` — verbatim `--json` output from the harness,
+committed as-is (format documented in `Tools/AIPatchHarness/README.md`). Each record carries the
+raw model text for its first answer (`rawResponse`) and, if `applyPatchWithRetry` needed a
+correction round-trip, the raw text of each retry answer too (`retryResponses`). The test replays
+`rawResponse` through validation directly, then drives `applyPatchWithRetry` against a
+`ReplayProvider` double that hands back `retryResponses` in order (mirroring
+`AIPatchRetryTests.cpp`'s `ScriptedProvider`) instead of calling a real model, and asserts the
+recorded outcome exactly: same parsed/valid/error, same final applied-after-retry result. Scenario
+names are resolved against `Tools/AIPatchHarness/Scenarios.h` — the one shared table both the
+harness and this test use, so a fixture can never silently drift from the prompt that produced it.
+`CorpusIsPopulatedAndContainsARejection` guards against an empty or all-success corpus quietly
+passing.
+
+This is deliberately intolerant: a behaviour change in the retry/validation path **should** fail
+it. A failure is either a real regression (fix the code) or an intended change (re-record — see
+"Recording the fixture corpus" in `Tools/AIPatchHarness/README.md`); never loosen an assertion here
+just to turn the suite green again.
+
 ## Measurement Harness (not a test)
 
 `Tools/AIPatchHarness` measures how often real model output passes `validatePatch`, replaying a
@@ -411,7 +440,9 @@ cmake --build build --target AIPatchHarness
 
 See `Tools/AIPatchHarness/README.md` — in particular that `format` enforcement is backend-dependent
 and that `OllamaProvider` times out at 240 s (`kChatRequestTimeoutMs`), which shows up as a
-provider error rather than a rejection.
+provider error rather than a rejection. `--json` records include the raw model text (`rawResponse`,
+`retryResponses`) behind each outcome — that's the offline corpus the fixture-replay tests above
+are built from.
 
 `Tools/AIEvalHarness` scores a different thing: of the patches that pass validation and apply, are
 they actually usable — has an output, that output is reachable from a real sound source, every
