@@ -5,6 +5,9 @@
 #include <functional>
 #include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+// juce::ColourSelector lives in juce_gui_extra, not juce_gui_basics — without this include the
+// class fails to parse and every juce::Component base call below cascades into bogus errors.
+#include <juce_gui_extra/juce_gui_extra.h>
 #include <vector>
 
 // ColourPickerPopup — a full colour picker (juce::ColourSelector + a favourites shelf) used
@@ -143,7 +146,14 @@ public:
 
     // ---- Test seams (no CallOutBox involved) -----------------------------------------------
     juce::Colour getCurrentColourForTest() const { return lastColour_; }
-    void setCurrentColourForTest(juce::Colour c) { selector_.setCurrentColour(c, juce::sendNotificationSync); }
+    // dontSendNotification + a direct preview call, NOT sendNotificationSync: with sliders shown,
+    // ColourSelector's sync path re-enters itself from the FIRST slider's callback and rebuilds
+    // the colour from the three still-stale sliders (red lands, green/blue keep their old values).
+    // The production path never hits this because a user drags one slider at a time.
+    void setCurrentColourForTest(juce::Colour c) {
+        selector_.setCurrentColour(c, juce::dontSendNotification);
+        previewNow(c);
+    }
     int getFavouriteCountForTest() const { return (int)favourites_.size(); }
     juce::Colour getFavouriteColourForTest(int index) const {
         return (index >= 0 && index < (int)favourites_.size()) ? favourites_[(size_t)index] : juce::Colours::transparentBlack;
@@ -181,7 +191,13 @@ private:
     void changeListenerCallback(juce::ChangeBroadcaster* source) override {
         if (source != &selector_)
             return;
-        lastColour_ = selector_.getCurrentColour();
+        previewNow(selector_.getCurrentColour());
+    }
+
+    // The ONE preview path — the async selector broadcast and the synchronous test seam both land
+    // here, so the two can never disagree about what a "live change" does.
+    void previewNow(juce::Colour c) {
+        lastColour_ = c;
         if (onPreview_)
             onPreview_(lastColour_);
     }

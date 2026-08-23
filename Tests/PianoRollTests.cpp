@@ -2888,7 +2888,7 @@ TEST(PianoRollRowMappingTest, VisibilityOnCollapsesEmptyOutOfScaleRowsButKeepsNo
     PianoRollFixture f;
     const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
     const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
-    // C# (61) is out of C major and has a note; D (62) is out of C major and has none.
+    // C# (61) is out of C major and has a note; D# (63) is out of C major and has none.
     f.doc.addNote(clipId, makeNote(1.0, 61));
     f.open(clipId);
 
@@ -2898,12 +2898,12 @@ TEST(PianoRollRowMappingTest, VisibilityOnCollapsesEmptyOutOfScaleRowsButKeepsNo
     EXPECT_TRUE(std::binary_search(visible.begin(), visible.end(), 60)) << "in-scale pitch stays visible";
     EXPECT_TRUE(std::binary_search(visible.begin(), visible.end(), 61))
         << "out-of-scale pitch with a note in the open clip is never hidden";
-    EXPECT_FALSE(std::binary_search(visible.begin(), visible.end(), 62))
+    EXPECT_FALSE(std::binary_search(visible.begin(), visible.end(), 63))
         << "out-of-scale pitch with no note collapses out of the grid";
 
     // pitchForY must never land on a collapsed row, at any y in the visible component.
     for (int y = PianoRollComponent::kHeaderHeight; y < f.roll.getHeight(); ++y)
-        EXPECT_NE(f.roll.pitchForY(y), 62);
+        EXPECT_NE(f.roll.pitchForY(y), 63);
 }
 
 TEST(PianoRollRowMappingTest, RoundTripThroughVisibleRowsHoldsWithFilteringActive) {

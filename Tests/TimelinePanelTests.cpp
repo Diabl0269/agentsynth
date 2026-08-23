@@ -2903,7 +2903,7 @@ struct FollowPlayheadFixture {
     // The exact width the page-flip's visibleBeats term reads from — clipLaneArea_ fills
     // gridLanesBounds_ exactly (see TimelinePanelComponent::resized()'s comment), so this IS that
     // width without duplicating layout maths.
-    double visibleBeats() const {
+    double visibleBeats() {
         return (double)panel.getClipLaneArea().getWidth() / panel.getViewState().pixelsPerBeat;
     }
 
