@@ -23,9 +23,11 @@
 */
 
 #include "AI/AIIntegrationService.h"
+#include "AI/AIProvider.h"
 #include "AI/AIStateMapper.h"
 #include "AI/OllamaProvider.h"
 #include "AI/RemoteProvider.h"
+#include "Scenarios.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_core/juce_core.h>
@@ -37,65 +39,54 @@
 
 namespace {
 
-// One replayed scenario: what the user types, and what patch (if any) is already on the
-// canvas when they type it. `seedPatch` is applied trusted, exactly as loading a preset
-// would, so merge-mode prompts see realistic pre-existing node ids.
-struct Scenario {
-    const char* name;
-    const char* prompt;
-    bool mergeMode;
-    const char* seedPatch; // nullptr for a from-scratch (replace-mode) request
+using synth::harness::Scenario;
+using synth::harness::scenarios;
+
+// Wraps the real provider (Ollama or remote) and records the raw content of every completion
+// that passes through sendPrompt(), in call order. For a scenario with N applyPatchWithRetry
+// correction round-trips, capturedResponses() ends up [initial answer, retry 1 answer, retry 2
+// answer, ...] — exactly the sequence Tests/AIPatchFixtureReplayTests.cpp needs to feed a
+// provider double that replays this scenario offline. Everything else is a pure pass-through;
+// this must not change provider behaviour, only observe it.
+class RecordingProvider : public synth::AIProvider {
+public:
+    explicit RecordingProvider(std::unique_ptr<synth::AIProvider> providerToWrap)
+        : inner(std::move(providerToWrap)) {}
+
+    RequestId sendPrompt(const std::vector<Message>& conversation, CompletionCallback callback,
+                         const juce::var& responseSchema, std::function<void(const juce::String&)> onDelta) override {
+        return inner->sendPrompt(
+            conversation,
+            [this, callback](const AIResponse& response) {
+                // Only a successful completion has a raw model answer worth replaying; a provider
+                // error (network, timeout) leaves nothing to record and the scenario already
+                // reports it separately.
+                if (response.success)
+                    responses.push_back(response.content);
+                if (callback)
+                    callback(response);
+            },
+            responseSchema, std::move(onDelta));
+    }
+
+    void cancel(RequestId requestId) override { inner->cancel(requestId); }
+    juce::String getProviderName() const override { return inner->getProviderName(); }
+    void setModel(const juce::String& name) override { inner->setModel(name); }
+    juce::String getCurrentModel() const override { return inner->getCurrentModel(); }
+    void setRequestTimeoutMs(int timeoutMs) override { inner->setRequestTimeoutMs(timeoutMs); }
+    int getRequestTimeoutMs() const override { return inner->getRequestTimeoutMs(); }
+    void fetchAvailableModels(std::function<void(const juce::StringArray&, bool)> callback) override {
+        inner->fetchAvailableModels(std::move(callback));
+    }
+    void setAuthToken(const juce::String& token) override { inner->setAuthToken(token); }
+    void setConversationId(const juce::String& id) override { inner->setConversationId(id); }
+    bool isHosted() const override { return inner->isHosted(); }
+
+    std::vector<juce::String> responses;
+
+private:
+    std::unique_ptr<synth::AIProvider> inner;
 };
-
-// A small but real starting patch: MIDI -> Oscillator -> Filter -> VCA -> Output.
-// Node ids here are what a merge-mode prompt must reference correctly.
-constexpr const char* kBasicPatch = R"({
-  "nodes": [
-    {"id": 1, "type": "Poly MIDI"},
-    {"id": 2, "type": "Oscillator", "params": {"waveform": "Saw"}},
-    {"id": 3, "type": "Filter", "params": {"cutoff": 2000.0}},
-    {"id": 4, "type": "VCA"},
-    {"id": 5, "type": "Audio Output"}
-  ],
-  "connections": [
-    {"src": 1, "srcPort": -1, "dst": 2, "dstPort": -1},
-    {"src": 2, "srcPort": 0, "dst": 3, "dstPort": 0},
-    {"src": 3, "srcPort": 0, "dst": 4, "dstPort": 0},
-    {"src": 4, "srcPort": 0, "dst": 5, "dstPort": 0}
-  ]
-})";
-
-// Prompts a real user would plausibly type. Deliberately spans both modes, because
-// merge-mode failures (stale/hallucinated ids) and replace-mode failures (invented
-// module types, bad choice strings) are different populations.
-const std::vector<Scenario>& scenarios() {
-    static const std::vector<Scenario> s = {
-        // --- from scratch (replace mode) ---
-        {"basic-bass", "Create a fat analog bass patch", false, nullptr},
-        {"pluck", "Make a short plucky lead sound", false, nullptr},
-        {"pad", "Build a warm evolving pad with a slow filter sweep", false, nullptr},
-        {"acid", "Create an acid bassline with a resonant filter and a sequencer", false, nullptr},
-        {"bell", "Design a bell-like FM tone", false, nullptr},
-        {"drone", "Make a dark drone with reverb", false, nullptr},
-        {"stab", "Create a bright synth stab with a fast envelope", false, nullptr},
-        {"organ", "Build a simple organ patch with multiple oscillators", false, nullptr},
-        {"noise-sweep", "Make a white noise sweep riser", false, nullptr},
-        {"poly-keys", "Create a polyphonic keys patch with chorus", false, nullptr},
-
-        // --- modify an existing patch (merge mode) ---
-        {"add-reverb", "Add reverb to the end of the chain", true, kBasicPatch},
-        {"add-lfo-cutoff", "Add an LFO modulating the filter cutoff", true, kBasicPatch},
-        {"brighter", "Make it brighter", true, kBasicPatch},
-        {"add-delay", "Add a delay after the filter", true, kBasicPatch},
-        {"change-wave", "Change the oscillator to a square wave", true, kBasicPatch},
-        {"add-env", "Add an amp envelope controlling the VCA", true, kBasicPatch},
-        {"remove-filter", "Remove the filter from the patch", true, kBasicPatch},
-        {"add-distortion", "Add some distortion for grit", true, kBasicPatch},
-        {"detune", "Detune the oscillator slightly for width", true, kBasicPatch},
-        {"add-chorus-delay", "Add chorus and then a delay at the end", true, kBasicPatch},
-    };
-    return s;
-}
 
 juce::String argValue(const juce::StringArray& args, const juce::String& flag, const juce::String& fallback) {
     int i = args.indexOf(flag);
@@ -118,6 +109,18 @@ struct Outcome {
     int retriesUsed = 0;
     bool modeRepaired = false;
     juce::String finalError;
+
+    // The raw model text behind `valid`/`error` above (before extractJsonFromResponse/JSON::parse)
+    // — empty whenever `responded` is false. Recorded so a fixture-replay test can walk the exact
+    // same bytes through the production path offline, with no model in the loop.
+    juce::String rawResponse;
+
+    // The raw answer to each applyPatchWithRetry() correction round-trip, in order — what a
+    // replay's provider double must hand back when the retry loop asks for one. Length equals
+    // `retriesUsed`, unless a retry itself hit a provider error (rare), in which case it is
+    // shorter than retriesUsed; a replay's double should repeat its last scripted entry rather
+    // than require an exact length match, mirroring Tests/AIPatchRetryTests.cpp's ScriptedProvider.
+    std::vector<juce::String> retryResponses;
 };
 
 Outcome runScenario(const Scenario& scenario, const juce::String& host, const juce::String& model,
@@ -147,7 +150,9 @@ Outcome runScenario(const Scenario& scenario, const juce::String& host, const ju
         ollamaProvider->setModel(model);
         provider = std::move(ollamaProvider);
     }
-    service.setProvider(std::move(provider));
+    auto recordingProvider = std::make_unique<RecordingProvider>(std::move(provider));
+    RecordingProvider* recording = recordingProvider.get();
+    service.setProvider(std::move(recordingProvider));
 
     juce::WaitableEvent done;
     juce::String responseText;
@@ -202,6 +207,14 @@ Outcome runScenario(const Scenario& scenario, const juce::String& host, const ju
     if (!applied.wait(600000))
         outcome.finalError = "timed out during retry";
     outcome.modeRepaired = service.didLastPatchRepairMode();
+
+    // recording->responses[0] is the initial sendMessage() answer above (== responseText);
+    // everything after it is one raw answer per applyPatchWithRetry() correction round-trip, in
+    // the order the model was asked for them.
+    if (!recording->responses.empty()) {
+        outcome.rawResponse = recording->responses.front();
+        outcome.retryResponses.assign(recording->responses.begin() + 1, recording->responses.end());
+    }
 
     return outcome;
 }
@@ -291,6 +304,13 @@ int main(int argc, char* argv[]) {
             rec->setProperty("retriesUsed", outcome.retriesUsed);
             rec->setProperty("modeRepaired", outcome.modeRepaired);
             rec->setProperty("finalError", outcome.finalError);
+            // Raw model text, for offline fixture replay — see Tools/AIPatchHarness/README.md
+            // "--json record format". Empty when `responded` is false (nothing to replay).
+            rec->setProperty("rawResponse", outcome.rawResponse);
+            juce::Array<juce::var> retryResponsesJson;
+            for (const auto& r : outcome.retryResponses)
+                retryResponsesJson.add(r);
+            rec->setProperty("retryResponses", retryResponsesJson);
             records.add(juce::var(rec.get()));
         }
     }
@@ -325,13 +345,19 @@ int main(int argc, char* argv[]) {
     if (jsonOut.isNotEmpty()) {
         juce::DynamicObject::Ptr root = new juce::DynamicObject();
         root->setProperty("model", model);
+        // ISO 8601 UTC, so a committed corpus file self-documents when it was recorded without
+        // relying on filesystem/VCS timestamps that don't survive a checkout.
+        root->setProperty("capturedAt", juce::Time::getCurrentTime().toISO8601(true));
         root->setProperty("runs", runs);
         root->setProperty("attempted", attempted);
         root->setProperty("valid", validCount);
         root->setProperty("unparseable", unparseable);
         root->setProperty("providerErrors", providerErrors);
         root->setProperty("records", records);
-        juce::File(jsonOut).replaceWithText(juce::JSON::toString(juce::var(root.get()), true));
+        // Pretty-printed (not allOnOneLine): committed fixtures under Tests/fixtures/ai-patches/
+        // are re-recorded and diffed by a human deciding regression-vs-intended-change — a 50+ KB
+        // single line would make that diff unreadable.
+        juce::File(jsonOut).replaceWithText(juce::JSON::toString(juce::var(root.get()), false));
         std::printf("wrote %s\n", jsonOut.toRawUTF8());
     }
 
