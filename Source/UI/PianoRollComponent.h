@@ -395,6 +395,14 @@ public:
     // the roll is open, so the bar numbers above show the clip's REAL timeline position.
     const TimelineViewState& getRollViewState() const noexcept { return rollView_; }
 
+    // kScalePanelWidth + kKeysColumnWidth while the scale-assist panel is open, kKeysColumnWidth
+    // alone otherwise — the ONE seam beatToX/xToBeat/gridRegion and every hit-test below route the
+    // grid's left offset through (see the class comment). Public because
+    // TimelineRulerComponent's mapping override reads this SAME offset (via
+    // TimelinePanelComponent::openPianoRoll and its onHorizontalViewChanged re-issue), so the
+    // ruler's ticks/scrub hit-testing track the scale panel's width instead of drifting from it.
+    int leftGutterWidth() const noexcept { return (scalePanel_.isVisible() ? kScalePanelWidth : 0) + kKeysColumnWidth; }
+
     // Flips the shared snap switch (TimelineViewState::snapEnabled), flashes the Q button and
     // fires onSnapToggled. The Q button and the panel-wide Q key both land here.
     void toggleSnap();
@@ -570,10 +578,6 @@ private:
     // The grid rect (right of the keys gutter, below the header) — what the local playhead strip
     // and the gridline sweep are clipped to.
     juce::Rectangle<int> gridRegion() const noexcept;
-    // kScalePanelWidth + kKeysColumnWidth while the scale panel is open, kKeysColumnWidth alone
-    // otherwise — the ONE seam beatToX/xToBeat/gridRegion and every hit-test below route the
-    // grid's left offset through. See the class comment.
-    int leftGutterWidth() const noexcept { return (scalePanel_.isVisible() ? kScalePanelWidth : 0) + kKeysColumnWidth; }
 
     // ---- Row mapping (visiblePitches_) ----
 

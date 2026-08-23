@@ -197,8 +197,17 @@ TimelinePanelComponent::TimelinePanelComponent() {
     pianoRoll_.setComponentID("timelinePianoRoll");
     pianoRoll_.onCloseRequested = [this] { closePianoRoll(); };
     // While the roll is open the ruler mirrors the roll's own mapping (installed in
-    // openPianoRoll()), so every roll zoom/scroll must repaint it.
-    pianoRoll_.onHorizontalViewChanged = [this] { ruler_.repaint(); };
+    // openPianoRoll()), so every roll zoom/scroll must repaint it. The scale-assist panel opening/
+    // closing is ALSO a mapping change (it moves leftGutterWidth()), so the override's x-offset has
+    // to be re-issued too, not just repainted — otherwise the ruler keeps the offset it had when
+    // the roll first opened and drifts from the grid the moment the panel toggles. Guarded on
+    // isOpen(): closePianoRoll() clears the override itself and this must never re-install it
+    // behind that call.
+    pianoRoll_.onHorizontalViewChanged = [this] {
+        if (pianoRoll_.isOpen())
+            ruler_.setMappingOverride(&pianoRoll_.getRollViewState(), pianoRoll_.leftGutterWidth());
+        ruler_.repaint();
+    };
     // The roll's Q button / Q key flipped the shared snapEnabled: persist it, sync the transport
     // bar's own Q toggle, and repaint the lanes+ruler that also paint the (now present/absent)
     // snap grid.
@@ -440,9 +449,11 @@ void TimelinePanelComponent::openPianoRoll(synth::ClipId id) {
     clipLaneArea_.setVisible(false);
     pianoRoll_.setVisible(true);
     pianoRoll_.grabKeyboardFocus();
-    // The ruler now labels the ROLL's beats (offset by its keys gutter), so the bar numbers above
-    // show the edited clip's real timeline position instead of wherever the lanes were scrolled.
-    ruler_.setMappingOverride(&pianoRoll_.getRollViewState(), PianoRollComponent::kKeysColumnWidth);
+    // The ruler now labels the ROLL's beats (offset by its keys gutter, plus the scale-assist
+    // panel's width while THAT is open too — see PianoRollComponent::leftGutterWidth), so the bar
+    // numbers above show the edited clip's real timeline position instead of wherever the lanes
+    // were scrolled.
+    ruler_.setMappingOverride(&pianoRoll_.getRollViewState(), pianoRoll_.leftGutterWidth());
     // Which rows of the overlay are still its own just changed — one repaint, on a user action,
     // never per tick.
     playhead_.repaint();

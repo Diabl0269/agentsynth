@@ -6,6 +6,8 @@
 #include "../Source/Auth/InMemoryTokenStore.h"
 #include "../Source/ShortcutManager.h"
 #include "../Source/UI/AIChatComponent.h"
+#include "../Source/UI/AppearanceSettingsTab.h"
+#include "../Source/UI/NoteColour.h"
 #include "../Source/UI/PreferencesSettingsTab.h"
 #include "../Source/UI/SettingsWindow.h"
 #include "../Source/UI/ShortcutsSettingsTab.h"
@@ -610,4 +612,97 @@ TEST_F(SettingsWindowTest, TogglingPromptLearningCheckboxCallsAccountServiceSett
 
     ASSERT_TRUE(waitUntil([&] { return server.promptLearningPutCalls() >= 1; }))
         << "toggling the checkbox never called into AccountService::setPromptLearningOptIn()";
+}
+
+// ============================================================================
+// Appearance tab: piano-roll note-colour swatches (12 pitch-class overrides — see
+// AppearanceSettingsTab.h's "Piano roll note colours" section). Constructed directly against its
+// own two deps (a ThemeManager + an ApplicationProperties) rather than through the full
+// SettingsWindow, the same "build only what the piece under test needs" idiom the AI-tab tests
+// above use with aiService/aiChatComponent.
+// ============================================================================
+
+namespace {
+// Same isolated-PropertiesFile idiom as TimelinePanelTests.cpp's IsolatedPropsGuard (follow-
+// playhead persistence test): delete the underlying file before AND after, so a note-colour
+// override saved by one run/test can never leak into another and this never touches the app's
+// real settings file.
+struct IsolatedAppearancePropsGuard {
+    juce::PropertiesFile::Options opts;
+    juce::ApplicationProperties props;
+
+    explicit IsolatedAppearancePropsGuard(const char* name) {
+        opts.applicationName = name;
+        opts.folderName = name;
+        opts.filenameSuffix = "settings";
+        opts.osxLibrarySubFolder = "Application Support";
+        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+
+        {
+            juce::ApplicationProperties initial;
+            initial.setStorageParameters(opts);
+            if (auto* s = initial.getUserSettings())
+                s->getFile().deleteFile();
+        }
+        props.setStorageParameters(opts);
+    }
+
+    ~IsolatedAppearancePropsGuard() {
+        if (auto* s = props.getUserSettings())
+            s->getFile().deleteFile();
+    }
+};
+} // namespace
+
+TEST(AppearanceSettingsTabNoteColourTest, SetNoteSwatchColourRoundTripsAndMarksItOverridden) {
+    IsolatedAppearancePropsGuard guard("Agent Synth Appearance Note Colour Test 1");
+    synth::theme::ThemeManager themeManager;
+    AppearanceSettingsTab tab(themeManager, guard.props);
+
+    const int pitchClass = 3; // D#
+    const auto colour = juce::Colour(0xffAA33CCu);
+    ASSERT_FALSE(tab.isNoteSwatchOverridden(pitchClass)) << "nothing pinned yet";
+
+    tab.setNoteSwatchColour(pitchClass, colour);
+
+    EXPECT_TRUE(tab.isNoteSwatchOverridden(pitchClass));
+    EXPECT_EQ(tab.getNoteSwatchColour(pitchClass), colour);
+}
+
+TEST(AppearanceSettingsTabNoteColourTest, OverrideRoundTripsThroughLoadNoteColourOverridesOnTheSamePropertiesFile) {
+    IsolatedAppearancePropsGuard guard("Agent Synth Appearance Note Colour Test 2");
+    synth::theme::ThemeManager themeManager;
+    AppearanceSettingsTab tab(themeManager, guard.props);
+
+    const int pitchClass = 7; // G
+    const auto colour = juce::Colour(0xff11EE55u);
+    tab.setNoteSwatchColour(pitchClass, colour);
+
+    ASSERT_NE(guard.props.getUserSettings(), nullptr);
+    const auto loaded = synth::ui::loadNoteColourOverrides(*guard.props.getUserSettings());
+    ASSERT_TRUE(loaded.perPitchClass[(size_t)pitchClass].has_value())
+        << "setNoteSwatchColour must persist through synth::ui::saveNoteColourOverrides";
+    EXPECT_EQ(*loaded.perPitchClass[(size_t)pitchClass], colour);
+}
+
+TEST(AppearanceSettingsTabNoteColourTest, ResetNoteSwatchAndResetAllFallBackToTheActiveThemesNoteFill) {
+    IsolatedAppearancePropsGuard guard("Agent Synth Appearance Note Colour Test 3");
+    synth::theme::ThemeManager themeManager;
+    AppearanceSettingsTab tab(themeManager, guard.props);
+    const auto themeNoteFill = themeManager.getActiveTheme().colors.noteFill;
+
+    // A single reset falls back that ONE pitch class, leaving the others untouched.
+    tab.setNoteSwatchColour(0, juce::Colour(0xffFF0000u));
+    tab.setNoteSwatchColour(1, juce::Colour(0xff00FF00u));
+    tab.resetNoteSwatch(0);
+    EXPECT_FALSE(tab.isNoteSwatchOverridden(0));
+    EXPECT_EQ(tab.getNoteSwatchColour(0), themeNoteFill);
+    EXPECT_TRUE(tab.isNoteSwatchOverridden(1)) << "resetNoteSwatch must not touch other pitch classes";
+
+    // resetAllNoteColours() clears every remaining override, including the one just re-set above.
+    tab.resetAllNoteColours();
+    for (int pitchClass = 0; pitchClass < AppearanceSettingsTab::kNoteSwatchCount; ++pitchClass) {
+        EXPECT_FALSE(tab.isNoteSwatchOverridden(pitchClass));
+        EXPECT_EQ(tab.getNoteSwatchColour(pitchClass), themeNoteFill);
+    }
 }

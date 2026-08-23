@@ -33,6 +33,8 @@
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/Transport/TransportService.h"
 #include "../Source/UI/EdgeAutoScroll.h"
+#include "../Source/UI/Theme/AppLookAndFeel.h"
+#include "../Source/UI/Theme/BuiltInThemes.h"
 #include "../Source/UI/TimelinePanelComponent.h"
 #include "../Source/UI/TrackColour.h"
 #include "../Source/UserSettings.h"
@@ -2364,6 +2366,47 @@ TEST(TimelinePanelComponentTest, PianoRollOpenInstallsTheRulerMappingOverride) {
     EXPECT_FALSE(panel.getRuler().hasMappingOverrideForTest());
 }
 
+// The override's OFFSET (not just its presence) has to track the scale-assist panel's width: the
+// roll's grid starts at leftGutterWidth(), which grows by kScalePanelWidth while that panel is
+// open, and PianoRollComponent::setScalePanelVisible's onHorizontalViewChanged fire (relayed by
+// TimelinePanelComponent's wiring) is what keeps the ruler's ticks/scrub hit-testing from sitting
+// 170px left of the grid whenever the panel is toggled open while the roll is already showing.
+TEST(TimelinePanelComponentTest, PianoRollOpenTracksTheScalePanelWidthInTheRulerOverride) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 320);
+
+    const auto trackId = doc.addTrack(synth::TrackKind::Midi, "Track 1");
+    const auto clipId = doc.addClip(trackId, 20.0, 4.0, "Clip");
+    ASSERT_TRUE(clipId.isValid());
+
+    panel.openPianoRoll(clipId);
+    ASSERT_TRUE(panel.isPianoRollOpen());
+    ASSERT_TRUE(panel.getRuler().hasMappingOverrideForTest());
+    EXPECT_EQ(panel.getRuler().getMappingOverrideOffsetForTest(), synth::ui::PianoRollComponent::kKeysColumnWidth)
+        << "panel closed: the offset is the keys gutter alone";
+
+    auto& roll = panel.getPianoRoll();
+    ASSERT_FALSE(roll.getScaleAssistPanel().isVisible()) << "closed by default";
+    const juce::Point<float> scaleButtonCentre((float)roll.getScaleButtonBounds().getCentreX(),
+                                               (float)roll.getScaleButtonBounds().getCentreY());
+
+    // The roll's mouseDown ignores anything but a left-button press, so the synthetic click has to
+    // carry the button modifier (unlike the ruler, which takes any press).
+    const juce::ModifierKeys leftButton(juce::ModifierKeys::leftButtonModifier);
+    roll.mouseDown(makeClickEvent(roll, scaleButtonCentre, leftButton)); // toggle the scale panel ON
+    ASSERT_TRUE(roll.getScaleAssistPanel().isVisible());
+    EXPECT_EQ(panel.getRuler().getMappingOverrideOffsetForTest(),
+              synth::ui::PianoRollComponent::kKeysColumnWidth + synth::ui::PianoRollComponent::kScalePanelWidth)
+        << "panel open: the offset grows by kScalePanelWidth";
+
+    roll.mouseDown(makeClickEvent(roll, scaleButtonCentre, leftButton)); // toggle it back OFF
+    ASSERT_FALSE(roll.getScaleAssistPanel().isVisible());
+    EXPECT_EQ(panel.getRuler().getMappingOverrideOffsetForTest(), synth::ui::PianoRollComponent::kKeysColumnWidth)
+        << "closing the panel must restore the narrower offset";
+}
+
 // ============================================================================
 // 7. The edit-tool strip + the clip clipboard/arrangement verbs the app's Cut/Copy/Paste/
 //    Duplicate/Select All/Repeat commands delegate to. Panel level, so ungated (see the file
@@ -2884,6 +2927,36 @@ TEST(TimelineFollowPlayheadTest, ChoicePersistsAndIsRestored) {
     panel2.setApplicationProperties(&guard.props);
     EXPECT_TRUE(panel2.isFollowPlayheadEnabled());
     EXPECT_TRUE(panel2.getFollowPlayheadButtonForTest().getToggleState());
+}
+
+// The follow-playhead button re-skins on a theme switch — the SAME sequence (the theme mutates in
+// place, then the app broadcasts via sendLookAndFeelChange(), with no doc/view change in between)
+// TimelineTrackHeaderTest::ThemeSwitchReappliesChipAndMSRColoursWithNoDocChange locks for the
+// track header's chip/M/S/R colours. applyToolStripTheme() is the seam both the constructor and
+// lookAndFeelChanged() run through, and backgroundOnColourId is the exact colour it writes for
+// this button (see TimelinePanelComponent::applyToolStripTheme).
+TEST(TimelineFollowPlayheadTest, ThemeSwitchReskinsTheFollowPlayheadButton) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 320);
+
+    synth::theme::AppLookAndFeel lf;
+    const auto themeA = synth::theme::makeObsidian();
+    const auto themeB = synth::theme::makeNeon();
+
+    lf.applyTheme(themeA);
+    panel.setLookAndFeel(&lf); // installing triggers lookAndFeelChanged() once already
+    EXPECT_EQ(panel.getFollowPlayheadButtonForTest().findColour(juce::DrawableButton::backgroundOnColourId),
+              themeA.colors.toolActive);
+
+    // Theme mutates in place, then the app broadcasts the switch — no doc/view change at all, only
+    // lookAndFeelChanged() to notice the button needs re-tinting.
+    lf.applyTheme(themeB);
+    panel.sendLookAndFeelChange();
+
+    EXPECT_EQ(panel.getFollowPlayheadButtonForTest().findColour(juce::DrawableButton::backgroundOnColourId),
+              themeB.colors.toolActive);
+
+    panel.setLookAndFeel(nullptr);
 }
 
 namespace {

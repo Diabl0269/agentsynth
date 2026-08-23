@@ -377,6 +377,13 @@ void PianoRollComponent::setScalePanelVisible(bool visible) {
     scalePanel_.setVisible(visible);
     resized(); // the gutter width just changed — carve the panel/keys-column/grid split again
     repaint();
+    // leftGutterWidth() just moved by kScalePanelWidth, and that IS the roll's horizontal mapping
+    // (beatToX/xToBeat offset by it) — the same seam a wheel zoom/scroll already fires.
+    // TimelinePanelComponent's wiring re-issues the ruler's mapping-override offset from this while
+    // the roll is open, so both the header button's toggle and setPropertiesFile's restore below
+    // keep the ruler's ticks/hit-testing lined up with the grid.
+    if (onHorizontalViewChanged)
+        onHorizontalViewChanged();
     if (propertiesFile_ != nullptr) {
         propertiesFile_->setValue(kScalePanelVisiblePropertyKey, visible);
         propertiesFile_->saveIfNeeded();
