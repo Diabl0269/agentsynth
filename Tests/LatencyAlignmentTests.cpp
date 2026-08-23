@@ -16,8 +16,7 @@
 // ENGINE (a real AudioEngine driving Audio Input -> Rec Tap -> Audio Output through
 // FakeAudioIODevice by hand — the only layer that sees a real transport playhead on the tap, since
 // juce::AudioProcessorGraph installs it per node per render pass); FLOW (MainComponent's
-// record-on/commit choreography with a count-in, same fake device). Engine and Flow layers are
-// gated #if SYNTH_ENABLE_TIMELINE.
+// record-on/commit choreography with a count-in, same fake device).
 //
 // Headless house rules as everywhere else: no real audio device, no sleeps.
 
@@ -33,11 +32,9 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <vector>
 
-#if SYNTH_ENABLE_TIMELINE
 #include "../Source/AI/AIProvider.h"
 #include "../Source/Timeline/TimelineDoc.h"
 #include "MainComponent.h"
-#endif
 
 namespace {
 
@@ -210,8 +207,6 @@ TEST(TakePlacementTest, EmptyAndAllPreRollTakesCommitNothing) {
 // ============================================================================
 // 2. Engine layer — the anchor, and the impulse
 // ============================================================================
-
-#if SYNTH_ENABLE_TIMELINE
 
 namespace {
 
@@ -415,13 +410,9 @@ TEST(LatencyAlignmentTest, ZeroLatencyDevicesNoShift) {
     engine.audioDeviceStopped();
 }
 
-#endif // SYNTH_ENABLE_TIMELINE
-
 // ============================================================================
 // 3. Flow layer — MainComponent's count-in commit
 // ============================================================================
-
-#if SYNTH_ENABLE_TIMELINE
 
 namespace {
 
@@ -631,8 +622,6 @@ TEST_F(LatencyFlowTest, PlayheadUsesOutputLatencyOnlyNotTheRecordingSum) {
     engine.audioDeviceStopped();
 }
 
-#endif // SYNTH_ENABLE_TIMELINE
-
 // ============================================================================
 // 4. The status bar's round-trip readout
 // ============================================================================
@@ -690,8 +679,6 @@ TEST(StatusBarRoundTripTest, EngineSumsInputGraphAndOutput) {
     EXPECT_EQ(engine.getRecordingLatencySamples(), 0);
 }
 
-#if SYNTH_ENABLE_TIMELINE
-
 TEST_F(LatencyFlowTest, StatusBarShowsRoundTrip) {
     MainComponent mc(std::make_unique<MinimalProviderLA>());
     mc.setSize(1600, 900);
@@ -727,5 +714,3 @@ TEST_F(LatencyFlowTest, StatusBarShowsRoundTrip) {
 
     engine.audioDeviceStopped();
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

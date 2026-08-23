@@ -42,8 +42,6 @@
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <memory>
 
-#if SYNTH_ENABLE_TIMELINE
-
 using synth::AudioClipStreamer;
 using synth::TimelineDoc;
 using synth::TimelineSnapshot;
@@ -912,5 +910,3 @@ TEST_F(AddAudioTrackFlowTest, AddMidiTrackFromTheSameMenuIsUnchanged) {
     EXPECT_EQ(doc.getTracks().back().kind, TrackKind::Midi);
     EXPECT_EQ(countNodesOfType(mc.getAudioEngine().getGraph(), ModuleType::TimelineMidiSource), 1);
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

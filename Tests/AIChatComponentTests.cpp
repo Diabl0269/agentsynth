@@ -2069,7 +2069,6 @@ TEST_F(AIChatComponentTest, BottomBarReservesFullHeightForWrappedDowngradeNotice
     chatComponent.setAccountService(nullptr);
 }
 
-#if SYNTH_ENABLE_TIMELINE
 // ============================================================================
 // Arrange mode: selector gating, explicit routing, and the timeline card flow.
 // ============================================================================
@@ -2339,4 +2338,3 @@ TEST_F(AIChatComponentTest, ArrangeResponseFailingValidationShowsRejectionWithou
     EXPECT_TRUE(chat.getLastTimelineOpsJsonForTesting().isEmpty());
     EXPECT_TRUE(chat.getLastTimelineOpsPreviewForTesting().contains("NOT applied"));
 }
-#endif // SYNTH_ENABLE_TIMELINE

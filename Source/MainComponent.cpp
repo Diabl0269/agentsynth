@@ -20,13 +20,8 @@ namespace {
 // The file filter both patch dialogs use. A `.agsproj` project bundle only exists in a build that
 // has the timeline compiled in — offering it otherwise would let a user save a "project" whose
 // timeline half can never be non-empty.
-#if SYNTH_ENABLE_TIMELINE
 constexpr const char* kPatchFileFilter = "*.json;*.agsproj";
-#else
-constexpr const char* kPatchFileFilter = "*.json";
-#endif
 
-#if SYNTH_ENABLE_TIMELINE
 // Where an UNSAVED project's takes go, under <app data>/<settings folder>. Also the reserved
 // prefix such a take's clip assetRef carries — see chooseTakeFiles and ProjectBundle's asset policy.
 constexpr const char* kRecordingsFolderName = "Recordings";
@@ -84,8 +79,6 @@ bool isOrIsChildOf(const juce::Component* candidate, const juce::Component& ance
     return candidate != nullptr && (candidate == &ancestor || ancestor.isParentOf(candidate));
 }
 
-#endif // SYNTH_ENABLE_TIMELINE
-
 // Human-readable identity for a graph node — the binding chip's base label and the re-bind menu's
 // starting point. Plain processor name only: appending "#id" unconditionally was itself the source
 // of founder confusion (a chip reading "Track In #16" reads like a module name, not a binding), and
@@ -133,7 +126,6 @@ juce::String snapActionIdForCommand(juce::CommandID commandID) {
     }
 }
 
-#if SYNTH_ENABLE_TIMELINE
 // The note-value name for a grid division — the SAME strings TimelinePanelComponent's snap combo
 // shows ("Off", "Bar", "1", "1/2", …), so the status-bar report after a grid shortcut and the
 // selector the user can see never disagree about what the grid is called.
@@ -163,7 +155,6 @@ juce::String snapDivisionLabel(synth::ui::TimelineViewState::Snap snap) {
     }
     return "Off";
 }
-#endif
 
 // GraphEditor's public zoom entry point (zoomAroundCentre) takes a WHEEL DELTA, because that is
 // what its one zoom implementation was written against — it applies zoomLevel *= (1 + step * delta)
@@ -278,7 +269,6 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // initialisers (isLibraryVisible{true}, isAiPanelVisible=false).
     isLibraryVisible = appProperties.getUserSettings()->getBoolValue("librarySidebarVisible", true);
     isAiPanelVisible = appProperties.getUserSettings()->getBoolValue("aiPanelVisible", false);
-#if SYNTH_ENABLE_TIMELINE
     // Gated with the button/command/carve below — reading this in a flag-OFF build would
     // let a value persisted by an earlier flag-ON run silently dock the panel with no button or
     // shortcut left to hide it again.
@@ -295,7 +285,6 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     timelineFeatureEnabled = appProperties.getUserSettings()->getBoolValue("timelineFeatureEnabled", true);
     if (!timelineFeatureEnabled)
         isTimelineVisible = false;
-#endif
     graphEditor.setAlignmentGuidesEnabled(
         appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true));
     graphEditor.setSmartConnectionMode(GraphEditor::smartConnectionModeFromString(
@@ -400,7 +389,6 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     aiChatComponent.setRequestTimeoutMs(appProperties.getUserSettings()->getIntValue(
         "aiRequestTimeoutMs", synth::AIChatComponent::kDefaultRequestTimeoutMs));
 
-#if SYNTH_ENABLE_TIMELINE
     // Gives AIIntegrationService's outgoing-request context builder a way to read the
     // app's one live TimelineDoc/TransportService — see AIIntegrationService::setTimelineContext().
     // Both outlive aiService (declaration order: timelineDoc, then audioEngine's referent, then
@@ -423,7 +411,6 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     aiService.setTimelineOpsApplyCallback([this](const juce::var& envelope) {
         return synth::TimelineOps::apply(envelope, timelineDoc, audioEngine.getGraph(), undoManager);
     });
-#endif
 
     // Wire the account row/dialog up BEFORE attemptSilentSignIn() so the wiring is live for any
     // state changes that arrive from it (P3-2: sign-in surface for the AI panel).
@@ -649,14 +636,11 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         animatePanelTransition(fromResult, toResult, /*hideLib=*/false, /*hideAi=*/!newVisible, /*hideTimeline=*/false);
     };
 
-#if SYNTH_ENABLE_TIMELINE
     // Bottom-docked timeline panel toggle. Mirrors the AI-panel handler above exactly
     // (flip + persist BEFORE animating, applyToolbarIcons, from/to computePanelBounds, synchronous
     // resized() for headless tests, then the shared animated transition) — only the axis differs
     // (bottom slide instead of a side panel).
-    // Wire the panel to the real transport + persisted settings. Gated with the rest of
-    // this block — a SYNTH_ENABLE_TIMELINE=OFF build never shows/carves the panel, so it has no
-    // need of either.
+    // Wire the panel to the real transport + persisted settings.
     timelinePanel.setTransport(&audioEngine.getTransport());
     timelinePanel.setMetronome(&audioEngine.getMetronome());
     timelinePanel.setApplicationProperties(&appProperties);
@@ -904,7 +888,6 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // Initial visibility from the Preferences kill switch read above — a fresh DrawableButton
     // defaults visible, so an existing-off-preference install must not flash the button on launch.
     toggleTimelineButton.setVisible(timelineFeatureEnabled);
-#endif
 
     addAndMakeVisible(toggleMinimapButton);
     toggleMinimapButton.setComponentID("toggleMinimap");
@@ -938,16 +921,10 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     addAndMakeVisible(settingsButton);
     settingsButton.setComponentID("settingsButton");
     settingsButton.onClick = [this]() {
-        auto* settingsComp =
-            new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent,
-                               shortcutManager, *themeManager, &graphEditor, &accountService,
-                               /*showAudioTab=*/!audioEngine.isHosted(),
-#if SYNTH_ENABLE_TIMELINE
-                               [this](bool enabled) { applyTimelineFeatureEnabled(enabled); }
-#else
-                               nullptr
-#endif
-            );
+        auto* settingsComp = new SettingsWindow(
+            audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent, shortcutManager, *themeManager,
+            &graphEditor, &accountService,
+            /*showAudioTab=*/!audioEngine.isHosted(), [this](bool enabled) { applyTimelineFeatureEnabled(enabled); });
         settingsComp->setSize(500, 450);
 
         juce::DialogWindow::LaunchOptions options;
@@ -966,13 +943,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // Calling setSize() before setButtons() leaves all buttons with zero bounds on first launch.
     toolbar.setButtons({&toggleLibraryButton, &newButton, &saveButton, &loadButton, &settingsButton, &undoButton,
                         &redoButton, &autoArrangeButton, &toggleMinimapButton, &toggleModMatrixButton,
-                        &toggleAiPanelButton,
-#if SYNTH_ENABLE_TIMELINE
-                        &toggleTimelineButton,
-#else
-                        nullptr, // ToggleTimeline slot: no button in a flag-OFF build
-#endif
-                        &themeToggleButton});
+                        &toggleAiPanelButton, &toggleTimelineButton, &themeToggleButton});
 
     // Now that buttons are registered, trigger the first layout pass. resized() calls
     // toolbar.layoutButtons() which positions the buttons using their registered pointers.
@@ -1109,7 +1080,6 @@ MainComponent::~MainComponent() {
         settings->removeChangeListener(this);
     stopTimer();
     aiService.removeListener(this);
-#if SYNTH_ENABLE_TIMELINE
     // Order matters: stop listening to the doc first (nothing may republish while we tear down),
     // drop the panel's view of it, unhook the engine from the recorder's audio-visible state, and
     // only then detach the recorder — which commits anything still in flight into the doc and the
@@ -1122,7 +1092,6 @@ MainComponent::~MainComponent() {
     audioEngine.setMidiCaptureSink(nullptr);
     automationRecorder.detach();
     undoManager.setRestoreHooks({}, {});
-#endif
     graphEditor.detachAllModuleComponents();
     // Only tear down an engine we own. On the plugin path the processor's engine must survive
     // the editor being closed and reopened.
@@ -1164,7 +1133,6 @@ void MainComponent::timerCallback() {
     undoButton.setEnabled(undoManager.canUndo());
     redoButton.setEnabled(undoManager.canRedo());
 
-#if SYNTH_ENABLE_TIMELINE
     // Message-thread driver, on the timer we already run: drains the gesture ring and polls
     // the transport (Write spans open on play; every open span commits on stop). Allocation-free
     // and — like everything else in this callback — completely silent.
@@ -1265,7 +1233,6 @@ void MainComponent::timerCallback() {
         }
         timelinePanel.getClipLaneArea().updateLiveRecording(liveInfo);
     }
-#endif
 
     // Status bar polls at 5 Hz (every 2nd tick of the 10 Hz timer). update() is gated — it
     // only repaints the status bar when a displayed value actually changes. ZERO logging.
@@ -1378,9 +1345,7 @@ void MainComponent::openPresetFromFile() {
     // plain `.json` preset is still an ordinary file pick. openFromFile() branches on what comes
     // back, so the two cases never depend on which flag the platform's dialog honoured.
     auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
-#if SYNTH_ENABLE_TIMELINE
     flags |= juce::FileBrowserComponent::canSelectDirectories;
-#endif
     fileChooser->launchAsync(flags, [this](const juce::FileChooser& fc) {
         auto file = fc.getResult();
         if (file != juce::File{})
@@ -1393,7 +1358,6 @@ void MainComponent::openPresetFromFile() {
 void MainComponent::saveToFile(const juce::File& file) {
     statusBar.showMessage("Saving...");
 
-#if SYNTH_ENABLE_TIMELINE
     if (file.getFileExtension() == synth::ProjectBundle::kBundleExtension) {
         // Adopt any Recordings/-convention takes (recorded before this project had ever
         // been saved) into THIS bundle's own Audio/ BEFORE serialising below, so project.json is
@@ -1422,7 +1386,6 @@ void MainComponent::saveToFile(const juce::File& file) {
         statusBar.showMessage("Saved: " + file.getFileNameWithoutExtension());
         return;
     }
-#endif
 
     // Plain preset save — byte-identical to what it has always written.
     graphEditor.savePreset(file);
@@ -1433,7 +1396,6 @@ void MainComponent::saveToFile(const juce::File& file) {
 bool MainComponent::openFromFile(const juce::File& file) {
     statusBar.showMessage("Loading preset...");
 
-#if SYNTH_ENABLE_TIMELINE
     if (file.isDirectory() || file.getFileExtension() == synth::ProjectBundle::kBundleExtension) {
         if (!synth::ProjectBundle::isBundle(file)) {
             statusBar.showMessage("Not a project bundle: " + file.getFileName());
@@ -1478,7 +1440,6 @@ bool MainComponent::openFromFile(const juce::File& file) {
         statusBar.showMessage("Loaded: " + file.getFileNameWithoutExtension());
         return true;
     }
-#endif
 
     ProgrammaticApplyScope guard(*this);
     graphEditor.loadPreset(file);
@@ -1503,12 +1464,11 @@ void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
                        AppCommands::copySelection, AppCommands::pasteSelection, AppCommands::duplicateSelection,
                        AppCommands::cutSelection,
                        // Registered unconditionally alongside togglePlayback below even though only
-                       // the timeline surfaces implement it — a SYNTH_ENABLE_TIMELINE=OFF build
-                       // reports it inactive rather than dropping the row from Settings.
+                       // the timeline surfaces implement it — reported inactive rather than dropping
+                       // the row from Settings.
                        AppCommands::repeatSelection,
-                       // Registered unconditionally (like every command above) so a
-                       // SYNTH_ENABLE_TIMELINE=OFF build still reports it — inactive — rather than
-                       // dropping it from the Settings shortcut list entirely.
+                       // Registered unconditionally (like every command above), reported inactive
+                       // rather than dropping it from the Settings shortcut list entirely.
                        AppCommands::togglePlayback,
                        // The grid block and both zoom pairs follow the same rule: registered in
                        // every build configuration, reported inactive where there is nothing to act
@@ -1520,9 +1480,7 @@ void MainComponent::getAllCommands(juce::Array<juce::CommandID>& commands) {
                        AppCommands::snapSetSixtyFourth, AppCommands::snapSetHundredTwentyEighth,
                        AppCommands::snapCyclePrev, AppCommands::snapCycleNext, AppCommands::zoomInHorizontal,
                        AppCommands::zoomOutHorizontal, AppCommands::zoomInVertical, AppCommands::zoomOutVertical});
-#if SYNTH_ENABLE_TIMELINE
     commands.add(AppCommands::toggleTimelinePanel);
-#endif
 #if JUCE_MAC || JUCE_WINDOWS
     commands.add(AppCommands::checkForUpdates);
 #endif
@@ -1618,7 +1576,6 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.setInfo("Copy", "Copy the selection in the focused editor", "Edit", 0);
         // Routed by resolveEditSurface() — Graph's own behaviour (below) is unchanged; each
         // timeline surface gates on its own selection.
-#if SYNTH_ENABLE_TIMELINE
         switch (resolveEditSurface()) {
         case EditSurface::TimelineClips:
             result.setActive(timelinePanel.getClipSelection().size() > 0);
@@ -1630,16 +1587,12 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             result.setActive(graphEditor.getSelectionCount() > 0);
             break;
         }
-#else
-        result.setActive(graphEditor.getSelectionCount() > 0);
-#endif
         auto kp = shortcutManager.getBinding("copySelection");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
     case AppCommands::pasteSelection: {
         result.setInfo("Paste", "Paste into the focused editor", "Edit", 0);
-#if SYNTH_ENABLE_TIMELINE
         switch (resolveEditSurface()) {
         case EditSurface::TimelineClips:
             result.setActive(timelinePanel.canPasteClips());
@@ -1654,16 +1607,12 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             result.setActive(graphEditor.canPaste());
             break;
         }
-#else
-        result.setActive(graphEditor.canPaste());
-#endif
         auto kp = shortcutManager.getBinding("pasteSelection");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
     case AppCommands::duplicateSelection: {
         result.setInfo("Duplicate", "Duplicate the selection in the focused editor", "Edit", 0);
-#if SYNTH_ENABLE_TIMELINE
         switch (resolveEditSurface()) {
         case EditSurface::TimelineClips:
             result.setActive(timelinePanel.getClipSelection().size() > 0);
@@ -1675,9 +1624,6 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             result.setActive(graphEditor.getSelectionCount() > 0);
             break;
         }
-#else
-        result.setActive(graphEditor.getSelectionCount() > 0);
-#endif
         auto kp = shortcutManager.getBinding("duplicateSelection");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
@@ -1686,7 +1632,6 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.setInfo("Cut", "Cut the selection in the focused editor", "Edit", 0);
         // Same enablement predicate Copy uses on every surface — a cut is a copy that also
         // deletes, so anything copyable is cuttable and the two rows can never disagree.
-#if SYNTH_ENABLE_TIMELINE
         switch (resolveEditSurface()) {
         case EditSurface::TimelineClips:
             result.setActive(timelinePanel.canCutClips());
@@ -1698,9 +1643,6 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             result.setActive(graphEditor.getSelectionCount() > 0);
             break;
         }
-#else
-        result.setActive(graphEditor.getSelectionCount() > 0);
-#endif
         auto kp = shortcutManager.getBinding("cutSelection");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
@@ -1710,7 +1652,6 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         // The ONLY edit verb that is inactive on the Graph surface: "repeat N times, each copy one
         // block further along" is a time-axis idea, and a spatial canvas has no such axis — the
         // graph's answer to "another one of these" is Duplicate. See performRepeatSelection.
-#if SYNTH_ENABLE_TIMELINE
         switch (resolveEditSurface()) {
         case EditSurface::TimelineClips:
             result.setActive(timelinePanel.hasClipSelection());
@@ -1722,24 +1663,16 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             result.setActive(false);
             break;
         }
-#else
-        result.setActive(false);
-#endif
         auto kp = shortcutManager.getBinding("repeatSelection");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
     case AppCommands::togglePlayback: {
         result.setInfo("Toggle Playback", "Play or stop the timeline transport", "Transport", 0);
-        // Space is GLOBAL — no resolveEditSurface() branch, unlike C/V/D above. Inactive
-        // outright in a SYNTH_ENABLE_TIMELINE=OFF build, where there is no transport to toggle,
-        // and inactive when the "Show timeline (experimental)" preference has hidden the
-        // transport too — the transport isn't reachable while hidden, which is intended.
-#if SYNTH_ENABLE_TIMELINE
+        // Space is GLOBAL — no resolveEditSurface() branch, unlike C/V/D above. Inactive when
+        // the "Show timeline (experimental)" preference has hidden the transport — the transport
+        // isn't reachable while hidden, which is intended.
         result.setActive(timelineFeatureEnabled);
-#else
-        result.setActive(false);
-#endif
         auto kp = shortcutManager.getBinding("togglePlayback");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
@@ -1761,11 +1694,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
     case AppCommands::snapCycleNext: {
         const auto actionId = snapActionIdForCommand(commandID);
         result.setInfo(ShortcutManager::getActionDescription(actionId), "Set the timeline's snap grid", "Timeline", 0);
-#if SYNTH_ENABLE_TIMELINE
         result.setActive(isTimelineVisible);
-#else
-        result.setActive(false);
-#endif
         auto kp = shortcutManager.getBinding(actionId);
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
@@ -1787,18 +1716,13 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
             break;
         case EditSurface::TimelineClips:
         case EditSurface::PianoRoll:
-#if SYNTH_ENABLE_TIMELINE
             result.setActive(isTimelineVisible);
-#else
-            result.setActive(false);
-#endif
             break;
         }
         auto kp = shortcutManager.getBinding(actionId);
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
-#if SYNTH_ENABLE_TIMELINE
     case AppCommands::toggleTimelinePanel: {
         result.setInfo("Toggle Timeline Panel", "Toggle the bottom-docked timeline panel", "View", 0);
         result.setActive(timelineFeatureEnabled);
@@ -1806,7 +1730,6 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
     }
-#endif
 #if JUCE_MAC || JUCE_WINDOWS
     case AppCommands::checkForUpdates: {
         result.setInfo("Check for Updates…", "Check for a newer version of the app", "Help", 0);
@@ -1841,12 +1764,10 @@ bool MainComponent::perform(const InvocationInfo& info) {
         // and the post-restore reconcile re-derives the bindings after each.
         clearTimelineForNewPatch();
         graphEditor.newPatch();
-#if SYNTH_ENABLE_TIMELINE
         // A new document is not the old bundle, so the next take goes to app data rather
         // than into a bundle this patch no longer belongs to.
         currentBundleDir_ = juce::File();
         refreshAssetRoots(); // No bundle any more, so no bundle-relative ref resolves
-#endif
         reconcileTimelineAfterGraphChange();
         setCurrentPatchName("Untitled");
         statusBar.showMessage("New patch");
@@ -1879,7 +1800,6 @@ bool MainComponent::perform(const InvocationInfo& info) {
         // Routed by the same resolveEditSurface() the clipboard verbs use. The command id and
         // actionId keep their historical "…Modules" names (persisted bindings resolve by string),
         // but the behaviour is per-surface: Cmd+Shift+A means "everything in whatever I'm editing".
-#if SYNTH_ENABLE_TIMELINE
         switch (resolveEditSurface()) {
         case EditSurface::TimelineClips:
             if (timelinePanel.selectAllClips())
@@ -1896,7 +1816,6 @@ bool MainComponent::perform(const InvocationInfo& info) {
         case EditSurface::Graph:
             break;
         }
-#endif
         graphEditor.selectAllModules();
         statusBar.showMessage("Selected " + juce::String(graphEditor.getSelectionCount()) + " modules");
         return true;
@@ -1909,7 +1828,6 @@ bool MainComponent::perform(const InvocationInfo& info) {
     // there is nothing to act on, and ApplicationCommandTarget::tryToInvoke refuses an inactive
     // command outright, so the menu row greys out and the key never gets this far.
     case AppCommands::copySelection: {
-#if SYNTH_ENABLE_TIMELINE
         // Routed by the SAME resolveEditSurface() getCommandInfo just consulted — the
         // command manager already refused an inactive PianoRoll invocation (see
         // ApplicationCommandTarget::tryToInvoke), so the PianoRoll case below is belt-and-suspenders
@@ -1930,7 +1848,6 @@ bool MainComponent::perform(const InvocationInfo& info) {
         case EditSurface::Graph:
             break;
         }
-#endif
         if (graphEditor.copySelection())
             statusBar.showMessage("Copied " + juce::String(graphEditor.getClipboardModuleCount()) + " modules");
         else
@@ -1938,7 +1855,6 @@ bool MainComponent::perform(const InvocationInfo& info) {
         return true;
     }
     case AppCommands::pasteSelection: {
-#if SYNTH_ENABLE_TIMELINE
         switch (resolveEditSurface()) {
         case EditSurface::TimelineClips:
             if (timelinePanel.pasteClipsAtPlayhead())
@@ -1962,7 +1878,6 @@ bool MainComponent::perform(const InvocationInfo& info) {
         case EditSurface::Graph:
             break;
         }
-#endif
         // Counted AFTER the fact: both leave the new copies selected, so the selection is the
         // authoritative count of what actually landed (ineligible nodes never make it in).
         if (graphEditor.pasteClipboard())
@@ -1972,7 +1887,6 @@ bool MainComponent::perform(const InvocationInfo& info) {
         return true;
     }
     case AppCommands::duplicateSelection: {
-#if SYNTH_ENABLE_TIMELINE
         switch (resolveEditSurface()) {
         case EditSurface::TimelineClips:
             if (timelinePanel.duplicateSelectedClips())
@@ -1989,7 +1903,6 @@ bool MainComponent::perform(const InvocationInfo& info) {
         case EditSurface::Graph:
             break;
         }
-#endif
         if (graphEditor.duplicateSelection())
             statusBar.showMessage("Duplicated " + juce::String(graphEditor.getSelectionCount()) + " modules");
         else
@@ -1997,7 +1910,6 @@ bool MainComponent::perform(const InvocationInfo& info) {
         return true;
     }
     case AppCommands::cutSelection: {
-#if SYNTH_ENABLE_TIMELINE
         switch (resolveEditSurface()) {
         case EditSurface::TimelineClips:
             // The panel's own verb: copy + delete inside ONE recordTimelineChange. Never wrap it —
@@ -2016,7 +1928,6 @@ bool MainComponent::perform(const InvocationInfo& info) {
         case EditSurface::Graph:
             break;
         }
-#endif
         // The graph has no cut verb of its own, so it is composed here from the two that exist —
         // copySelection() fills the clipboard WITHOUT touching the graph or the undo stack, and
         // deleteSelection() then does the whole removal inside its own single
@@ -2035,13 +1946,11 @@ bool MainComponent::perform(const InvocationInfo& info) {
         promptRepeatSelection();
         return true;
     case AppCommands::togglePlayback:
-#if SYNTH_ENABLE_TIMELINE
         // Reuses the transport bar's own play/stop choke point (reads the transport's CURRENT
         // playing state at click time) rather than re-deciding play-vs-stop here, so the bar's
         // button visual and a Space-bar toggle can never disagree — same triggerClick() idiom as
         // toggleModMatrix/toggleMinimap/toggleAiPanel above.
         timelinePanel.getTransportBar().getPlayStopButton().triggerClick();
-#endif
         return true;
     // ---- Grid division ----
     // Every one of these goes through TimelinePanelComponent::setSnapValue / cycleSnapValue, which
@@ -2056,7 +1965,6 @@ bool MainComponent::perform(const InvocationInfo& info) {
     case AppCommands::snapSetThirtySecond:
     case AppCommands::snapSetSixtyFourth:
     case AppCommands::snapSetHundredTwentyEighth: {
-#if SYNTH_ENABLE_TIMELINE
         using Snap = synth::ui::TimelineViewState::Snap;
         const Snap value = info.commandID == AppCommands::snapSetWhole          ? Snap::Whole
                            : info.commandID == AppCommands::snapSetHalf         ? Snap::Half
@@ -2068,18 +1976,15 @@ bool MainComponent::perform(const InvocationInfo& info) {
                                                                                 : Snap::HundredTwentyEighth;
         timelinePanel.setSnapValue(value);
         statusBar.showMessage("Grid: " + snapDivisionLabel(value));
-#endif
         return true;
     }
     case AppCommands::snapCyclePrev:
     case AppCommands::snapCycleNext: {
-#if SYNTH_ENABLE_TIMELINE
         const int direction = info.commandID == AppCommands::snapCycleNext ? 1 : -1;
         timelinePanel.cycleSnapValue(direction);
         // Reports where the grid ENDED UP, not which way it was asked to move: the cycle clamps at
         // both ends, so a held key parked on 1/16 says so instead of implying it moved again.
         statusBar.showMessage("Grid: " + snapDivisionLabel(timelinePanel.getViewState().snap));
-#endif
         return true;
     }
     // ---- Zoom ----
@@ -2094,7 +1999,6 @@ bool MainComponent::perform(const InvocationInfo& info) {
         const double factor = zoomIn ? kZoomInFactor : kZoomOutFactor;
 
         switch (resolveEditSurface()) {
-#if SYNTH_ENABLE_TIMELINE
         case EditSurface::PianoRoll:
             if (vertical)
                 timelinePanel.getPianoRoll().zoomVertical(factor);
@@ -2109,11 +2013,6 @@ bool MainComponent::perform(const InvocationInfo& info) {
                 timelinePanel.zoomTimelineHorizontal(factor);
             statusBar.showMessage(vertical ? "Timeline: track height" : "Timeline: zoom");
             return true;
-#else
-        case EditSurface::PianoRoll:
-        case EditSurface::TimelineClips:
-            return true;
-#endif
         case EditSurface::Graph:
             break;
         }
@@ -2127,11 +2026,9 @@ bool MainComponent::perform(const InvocationInfo& info) {
         statusBar.showMessage("Canvas: zoom");
         return true;
     }
-#if SYNTH_ENABLE_TIMELINE
     case AppCommands::toggleTimelinePanel:
         toggleTimelineButton.triggerClick();
         return true;
-#endif
 #if JUCE_MAC || JUCE_WINDOWS
     case AppCommands::checkForUpdates:
         updateManager.checkForUpdates();
@@ -2273,7 +2170,6 @@ bool MainComponent::performRepeatSelection(int count) {
     // scripting caller), and neither of those goes through the AlertWindow's own validation.
     const int repeats = juce::jlimit(kMinRepeatCount, kMaxRepeatCount, count);
 
-#if SYNTH_ENABLE_TIMELINE
     switch (resolveEditSurface()) {
     case EditSurface::TimelineClips:
         // Both surface verbs own their single recordTimelineChange for the WHOLE repeat — one
@@ -2284,9 +2180,6 @@ bool MainComponent::performRepeatSelection(int count) {
     case EditSurface::Graph:
         break;
     }
-#else
-    juce::ignoreUnused(repeats);
-#endif
     // Graph: deliberately unsupported. Repeat tiles copies along a time axis the canvas doesn't
     // have; Duplicate is the graph's equivalent gesture, and getCommandInfo already reports the
     // command inactive here so the key never reaches this line in normal use.
@@ -2295,7 +2188,6 @@ bool MainComponent::performRepeatSelection(int count) {
 
 void MainComponent::promptRepeatSelection() {
     juce::String subject;
-#if SYNTH_ENABLE_TIMELINE
     switch (resolveEditSurface()) {
     case EditSurface::TimelineClips:
         if (timelinePanel.hasClipSelection())
@@ -2308,7 +2200,6 @@ void MainComponent::promptRepeatSelection() {
     case EditSurface::Graph:
         break;
     }
-#endif
 
     if (subject.isEmpty()) {
         statusBar.showMessage("Repeat works on the timeline - select some clips or notes first");
@@ -2353,7 +2244,6 @@ MainComponent::EditSurface MainComponent::resolveEditSurface() const {
     if (editSurfaceOverrideForTest_.has_value())
         return *editSurfaceOverrideForTest_;
 
-#if SYNTH_ENABLE_TIMELINE
     // A hidden panel never owns the verbs, whatever a stale focus pointer inside it points at —
     // check visibility BEFORE even asking what's focused.
     if (isTimelineVisible) {
@@ -2364,7 +2254,6 @@ MainComponent::EditSurface MainComponent::resolveEditSurface() const {
                 return EditSurface::TimelineClips;
         }
     }
-#endif
     return EditSurface::Graph;
 }
 
@@ -2418,7 +2307,6 @@ void MainComponent::resized() {
 
     statusBar.setBounds(bounds.removeFromBottom(sbH));
 
-#if SYNTH_ENABLE_TIMELINE
     // Full-width panel carved AFTER the status bar and BEFORE the AI/library removals, so
     // it sits directly above the status bar spanning the whole window width.
     if (isTimelineVisible) {
@@ -2427,7 +2315,6 @@ void MainComponent::resized() {
         timelinePanelHeight_ = clampTimelinePanelHeight(timelinePanelHeight_);
         timelinePanel.setBounds(bounds.removeFromBottom(timelinePanelHeight_));
     }
-#endif
 
     // Skip removeFromLeft/Right when hidden so we never setBounds to a zero-width rect.
     if (isAiPanelVisible)
@@ -2487,11 +2374,9 @@ void MainComponent::applyToolbarIcons() {
     setIcon(toggleModMatrixButton, Icon::ToggleMatrix);
     setIcon(toggleMinimapButton, Icon::ToggleMinimap);
     setIcon(toggleAiPanelButton, Icon::ToggleAI);
-#if SYNTH_ENABLE_TIMELINE
     // No dedicated timeline glyph exists yet — reuse TransportPlay, otherwise unused this
     // phase ("scaffolding only — no DrawableButton wired"; see IconLibrary.h).
     setIcon(toggleTimelineButton, Icon::TransportPlay);
-#endif
     setIcon(themeToggleButton, Icon::ThemeToggle);
 
     // Master-mute uses the transport-stop glyph (no real play/stop transport this phase).
@@ -2506,9 +2391,7 @@ void MainComponent::applyToolbarIcons() {
     toggleMinimapButton.setToggleState(graphEditor.isMinimapVisible(), juce::dontSendNotification);
     toggleModMatrixButton.setToggleState(graphEditor.isModMatrixVisible(), juce::dontSendNotification);
     toggleAiPanelButton.setToggleState(isAiPanelVisible, juce::dontSendNotification);
-#if SYNTH_ENABLE_TIMELINE
     toggleTimelineButton.setToggleState(isTimelineVisible, juce::dontSendNotification);
-#endif
 
     // Text: cleared in narrow mode; stateful for the toggles in wide mode.
     newButton.setButtonText(iconOnly ? "" : "New");
@@ -2523,9 +2406,7 @@ void MainComponent::applyToolbarIcons() {
     toggleMinimapButton.setButtonText(iconOnly ? ""
                                                : (graphEditor.isMinimapVisible() ? "Hide Minimap" : "Show Minimap"));
     toggleAiPanelButton.setButtonText(iconOnly ? "" : (isAiPanelVisible ? "Hide AI" : "Show AI"));
-#if SYNTH_ENABLE_TIMELINE
     toggleTimelineButton.setButtonText(iconOnly ? "" : (isTimelineVisible ? "Hide Timeline" : "Show Timeline"));
-#endif
     toggleLibraryButton.setButtonText(iconOnly ? "" : (isLibraryVisible ? "Hide Library" : "Show Library"));
     themeToggleButton.setButtonText(
         iconOnly ? ""
@@ -2559,10 +2440,8 @@ void MainComponent::applyToolbarIcons() {
     const juce::String aiBase = isAiPanelVisible ? "Hide AI Panel" : "Show AI Panel";
     toggleAiPanelButton.setTooltip(hint(aiBase, "toggleAiPanel"));
 
-#if SYNTH_ENABLE_TIMELINE
     const juce::String timelineBase = isTimelineVisible ? "Hide Timeline" : "Show Timeline";
     toggleTimelineButton.setTooltip(hint(timelineBase, "toggleTimelinePanel"));
-#endif
 
     const juce::String libBase = isLibraryVisible ? "Hide Library" : "Show Library";
     toggleLibraryButton.setTooltip(hint(libBase, "toggleLibrary"));
@@ -2587,14 +2466,10 @@ MainComponent::PanelBoundsResult MainComponent::computePanelBounds(bool libVisib
     bounds.removeFromBottom(sbH); // status bar
 
     PanelBoundsResult result;
-#if SYNTH_ENABLE_TIMELINE
     // Carved AFTER the status bar and BEFORE the AI/library removals — full-width, directly
     // above the status bar (see resized(), which carves in the same order).
     if (timelineVisible)
         result.timelineBounds = bounds.removeFromBottom(clampTimelinePanelHeight(timelinePanelHeight_));
-#else
-    (void)timelineVisible;
-#endif
     if (aiVisible)
         result.aiPanelBounds = bounds.removeFromRight(aiW);
     if (libVisible)
@@ -2621,7 +2496,6 @@ int MainComponent::clampTimelinePanelHeight(int desiredHeight) const {
 }
 
 void MainComponent::setTimelinePanelHeight(int desiredHeight, bool persist) {
-#if SYNTH_ENABLE_TIMELINE
     const int clamped = clampTimelinePanelHeight(desiredHeight);
     if (clamped != timelinePanelHeight_) {
         timelinePanelHeight_ = clamped;
@@ -2632,10 +2506,6 @@ void MainComponent::setTimelinePanelHeight(int desiredHeight, bool persist) {
         appProperties.getUserSettings()->setValue(kTimelinePanelHeightKey, timelinePanelHeight_);
         appProperties.saveIfNeeded();
     }
-#else
-    (void)desiredHeight;
-    (void)persist;
-#endif
 }
 
 // ---- Animated panel transition ----
@@ -2749,12 +2619,8 @@ void MainComponent::setCurrentPatchName(const juce::String& name) {
 
 // =============================================================================
 // Timeline app wiring
-//
-// Every body below is gated INSIDE, so a SYNTH_ENABLE_TIMELINE=OFF build compiles them as no-ops
-// and no call site in this file needs an #if of its own.
 // =============================================================================
 
-#if SYNTH_ENABLE_TIMELINE
 void MainComponent::applyTimelineFeatureEnabled(bool enabled) {
     // Disabling while the panel is visible: hide it through the SAME path the toolbar toggle
     // uses (persistence + layout + animation all stay consistent with a manual click), rather
@@ -2776,13 +2642,8 @@ void MainComponent::applyTimelineFeatureEnabled(bool enabled) {
     // switch, so the owner that flipped it re-syncs the selector.
     aiChatComponent.refreshModeControls();
 }
-#endif
 
 void MainComponent::applyNaturalScrollingPreference() {
-    // NOT gated on SYNTH_ENABLE_TIMELINE: the panel and its roll are unconditional members (inert
-    // in an OFF build), and pushing a flag into an inert component is cheaper than an #if plus a
-    // second call site.
-    //
     // The preference is phrased POSITIVELY ("Natural scrolling", default on) because that is how
     // the OS phrases it, while the components carry the inversion flag — so this is the one place
     // the polarity is flipped. Both surfaces get the same value: one preference, not two, because a
@@ -2794,8 +2655,7 @@ void MainComponent::applyNaturalScrollingPreference() {
 }
 
 void MainComponent::applyZoomScrollPreference() {
-    // Same shape as applyNaturalScrollingPreference above, and ungated for the same reason: the panel
-    // is an unconditional member, inert in a SYNTH_ENABLE_TIMELINE=OFF build.
+    // Same shape as applyNaturalScrollingPreference above.
     //
     // Phrased POSITIVELY in Preferences ("Scroll up zooms in", default on) while the components carry
     // the INVERSION flag, so this is the one place the polarity flips — exactly the natural-scrolling
@@ -2810,7 +2670,6 @@ void MainComponent::applyZoomScrollPreference() {
 void MainComponent::timelineChanged(const synth::TimelineDoc&) { publishTimelineAndRebindRecorder(); }
 
 void MainComponent::publishTimelineAndRebindRecorder() {
-#if SYNTH_ENABLE_TIMELINE
     audioEngine.publishTimeline(timelineDoc);
 
     // The recorder's binding table is rebuilt with the SAME resolution AudioEngine::publishTimeline
@@ -2844,28 +2703,22 @@ void MainComponent::publishTimelineAndRebindRecorder() {
                 automationRecorder.bindLane(lane.id, param, found->second);
         }
     }
-#endif
 }
 
 void MainComponent::reconcileTimelineAfterGraphChange() {
-#if SYNTH_ENABLE_TIMELINE
     // reconcileBindings routes through the doc's single mutation choke point when (and only when) a
     // flag actually flips, which fires timelineChanged and therefore publishes. Publishing again
     // here would be a wasted snapshot build, so this only publishes for the "nothing flipped" case
     // — where the graph still changed under us and the recorder's bindings must be re-resolved.
     if (!synth::TimelineReconciler::reconcile(timelineDoc, audioEngine.getGraph()))
         publishTimelineAndRebindRecorder();
-#endif
 }
 
 void MainComponent::reconcileTimelineBindingsOnly() {
-#if SYNTH_ENABLE_TIMELINE
     synth::TimelineReconciler::reconcile(timelineDoc, audioEngine.getGraph());
-#endif
 }
 
 void MainComponent::commitMidiRecording() {
-#if SYNTH_ENABLE_TIMELINE
     // stopAndCommit()'s own return just says whether a clip was created (an empty take commits
     // nothing) — not something either caller (the transport bar's Record-off click, and the 10 Hz
     // poll's auto-commit-on-stop) needs to react to differently, so it is deliberately ignored here.
@@ -2877,13 +2730,11 @@ void MainComponent::commitMidiRecording() {
     // unconditional and idempotent, so a take that was never in a pre-roll to begin with just
     // clears an already-false flag.
     audioEngine.getMetronome().setForcedOn(false);
-#endif
 }
 
 // ---- Audio recording ----
 
 juce::AudioProcessorGraph::Node* MainComponent::ensureMasterRecordTap() {
-#if SYNTH_ENABLE_TIMELINE
     auto& graph = audioEngine.getGraph();
 
     // Already spliced in? THE master tap is a singleton by construction — this function is the only
@@ -2955,13 +2806,9 @@ juce::AudioProcessorGraph::Node* MainComponent::ensureMasterRecordTap() {
 
     graphEditor.updateComponents();
     return created;
-#else
-    return nullptr;
-#endif
 }
 
 RecordTapModule* MainComponent::findMasterRecordTap() const {
-#if SYNTH_ENABLE_TIMELINE
     auto& graph = const_cast<MainComponent*>(this)->audioEngine.getGraph();
     if (auto* node = graph.getNodeForId(audioTake_.tapNode))
         if (auto* tap = dynamic_cast<RecordTapModule*>(node->getProcessor()))
@@ -2973,12 +2820,10 @@ RecordTapModule* MainComponent::findMasterRecordTap() const {
         if (node != nullptr)
             if (auto* tap = dynamic_cast<RecordTapModule*>(node->getProcessor()))
                 return tap;
-#endif
     return nullptr;
 }
 
 bool MainComponent::chooseTakeFiles(AudioTake& take) const {
-#if SYNTH_ENABLE_TIMELINE
     juce::File audioDir;
     juce::File peaksDir;
     juce::String refPrefix;
@@ -3023,14 +2868,9 @@ bool MainComponent::chooseTakeFiles(AudioTake& take) const {
         return true;
     }
     return false;
-#else
-    juce::ignoreUnused(take);
-    return false;
-#endif
 }
 
 void MainComponent::commitAudioRecording() {
-#if SYNTH_ENABLE_TIMELINE
     if (!audioTake_.capturing)
         return;
 
@@ -3095,15 +2935,12 @@ void MainComponent::commitAudioRecording() {
 
     if (result.overran)
         statusBar.showMessage("Dropped audio during recording");
-#endif
 }
 
 void MainComponent::clearTimelineForNewPatch() {
-#if SYNTH_ENABLE_TIMELINE
     if (timelineDoc.isEmpty())
         return; // clear() on an empty doc is a genuine no-op — no undo step for it either
     undoManager.recordTimelineChange(timelineDoc, [this] { timelineDoc.clear(); });
-#endif
 }
 
 juce::AudioProcessorGraph::Node* MainComponent::findNodeByUuid(const juce::String& uuid) const {
@@ -3116,7 +2953,6 @@ juce::AudioProcessorGraph::Node* MainComponent::findNodeByUuid(const juce::Strin
 }
 
 juce::String MainComponent::createTrackInNode() {
-#if SYNTH_ENABLE_TIMELINE
     auto& graph = audioEngine.getGraph();
 
     // Through the factory, not constructed ad hoc: that is what makes the node round-trip through
@@ -3161,13 +2997,9 @@ juce::String MainComponent::createTrackInNode() {
 
     graphEditor.updateComponents();
     return uuid;
-#else
-    return {};
-#endif
 }
 
 juce::String MainComponent::createTrackAudioNode() {
-#if SYNTH_ENABLE_TIMELINE
     auto& graph = audioEngine.getGraph();
 
     // Through the factory, for the same reason createTrackInNode() is: that is what makes the node
@@ -3217,13 +3049,9 @@ juce::String MainComponent::createTrackAudioNode() {
 
     graphEditor.updateComponents();
     return uuid;
-#else
-    return {};
-#endif
 }
 
 void MainComponent::refreshAssetRoots() {
-#if SYNTH_ENABLE_TIMELINE
     // The bundle root is the open .agsproj directory, or invalid when this document has never been
     // saved (in which case only "Recordings/" refs can resolve — see ProjectBundle's asset policy).
     const juce::File bundleRoot =
@@ -3236,11 +3064,9 @@ void MainComponent::refreshAssetRoots() {
                                           .getChildFile(kRecordingsFolderName);
 
     audioEngine.getAudioClipStreamer().setAssetRoots(bundleRoot, recordingsRoot);
-#endif
 }
 
 void MainComponent::promptRelinkClipAsset(synth::ClipId id) {
-#if SYNTH_ENABLE_TIMELINE
     fileChooser = std::make_unique<juce::FileChooser>(
         "Relink Audio", juce::File::getSpecialLocation(juce::File::userDocumentsDirectory),
         "*.wav;*.aiff;*.aif;*.flac;*.ogg");
@@ -3250,13 +3076,9 @@ void MainComponent::promptRelinkClipAsset(synth::ClipId id) {
                                  if (file != juce::File{})
                                      relinkClipAsset(id, file);
                              });
-#else
-    juce::ignoreUnused(id);
-#endif
 }
 
 void MainComponent::relinkClipAsset(synth::ClipId id, const juce::File& chosenFile) {
-#if SYNTH_ENABLE_TIMELINE
     const auto* clip = timelineDoc.getClip(id);
     if (clip == nullptr || clip->assetRef.isEmpty())
         return;
@@ -3305,13 +3127,9 @@ void MainComponent::relinkClipAsset(synth::ClipId id, const juce::File& chosenFi
     });
 
     statusBar.showMessage("Relinked to " + newRef);
-#else
-    juce::ignoreUnused(id, chosenFile);
-#endif
 }
 
 double MainComponent::audioFileLengthInBeats(const juce::File& file) const {
-#if SYNTH_ENABLE_TIMELINE
     juce::AudioFormatManager formats;
     formats.registerBasicFormats();
     std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
@@ -3322,14 +3140,9 @@ double MainComponent::audioFileLengthInBeats(const juce::File& file) const {
     const auto snap = audioEngine.getTransport().getPositionSnapshot();
     const double bpm = snap.bpm > 0.0 ? snap.bpm : 120.0;
     return seconds * bpm / 60.0;
-#else
-    juce::ignoreUnused(file);
-    return 0.0;
-#endif
 }
 
 void MainComponent::importAudioFileToClip(synth::TrackId track, double startBeat, const juce::File& sourceFile) {
-#if SYNTH_ENABLE_TIMELINE
     const auto* trackPtr = timelineDoc.getTrack(track);
     if (trackPtr == nullptr || trackPtr->kind != synth::TrackKind::Audio)
         return;
@@ -3371,23 +3184,15 @@ void MainComponent::importAudioFileToClip(synth::TrackId track, double startBeat
     });
 
     statusBar.showMessage("Imported " + newRef);
-#else
-    juce::ignoreUnused(track, startBeat, sourceFile);
-#endif
 }
 
 int MainComponent::cleanUnusedAssets() {
-#if SYNTH_ENABLE_TIMELINE
     if (currentBundleDir_ == juce::File() || !synth::ProjectBundle::isBundle(currentBundleDir_))
         return 0; // nothing to sweep outside a saved bundle
     return synth::AssetManager::cleanUnusedAssets(timelineDoc, currentBundleDir_);
-#else
-    return 0;
-#endif
 }
 
 void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
-#if SYNTH_ENABLE_TIMELINE
     // The knob menu's "Automate" would force-open the timeline panel — while the runtime "Show
     // timeline" preference has the feature hidden, say so instead of overriding the user's choice.
     if (!timelineFeatureEnabled) {
@@ -3460,9 +3265,6 @@ void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, 
     if (!isTimelineVisible && toggleTimelineButton.onClick)
         toggleTimelineButton.onClick();
     timelinePanel.showAutomationLane(laneId);
-#else
-    juce::ignoreUnused(nodeId, paramId);
-#endif
 }
 
 // ---- TrackHeaderHost ----
@@ -3470,7 +3272,6 @@ void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, 
 std::vector<synth::ui::TrackHeaderHost::BindingOption>
 MainComponent::getAvailableTrackInNodes(synth::TrackId forTrack) {
     std::vector<BindingOption> options;
-#if SYNTH_ENABLE_TIMELINE
     // A Track In node feeds exactly one track, so anything another track already claims is off the
     // menu. This track's own current binding stays on it (ticked), so the menu always shows where
     // it points today.
@@ -3517,9 +3318,6 @@ MainComponent::getAvailableTrackInNodes(synth::TrackId forTrack) {
             nameOccurrences[name] > 1 ? name + " #" + juce::String((int)node->nodeID.uid) : name;
         options.push_back({uuid, display});
     }
-#else
-    juce::ignoreUnused(forTrack);
-#endif
     return options;
 }
 
@@ -3528,7 +3326,6 @@ juce::String MainComponent::getNodeDisplayName(const juce::String& uuid) {
 }
 
 void MainComponent::bindTrackTo(synth::TrackId track, const juce::String& uuid) {
-#if SYNTH_ENABLE_TIMELINE
     if (uuid.isEmpty())
         return;
     // A user gesture, so it goes on the undo stack (unlike reconciliation, which derives runtime
@@ -3537,13 +3334,9 @@ void MainComponent::bindTrackTo(synth::TrackId track, const juce::String& uuid) 
     // Derive the orphan flag against the live graph immediately, so the chip stops reading
     // "Missing" the moment the user picks a node rather than at the next graph change.
     reconcileTimelineAfterGraphChange();
-#else
-    juce::ignoreUnused(track, uuid);
-#endif
 }
 
 void MainComponent::createAndBindTrackInNode(synth::TrackId track) {
-#if SYNTH_ENABLE_TIMELINE
     // Kind-aware for the same reason getAvailableTrackInNodes() is — the chip's "new node"
     // entry must create the node type the track can actually be fed by.
     const auto* existing = timelineDoc.getTrack(track);
@@ -3555,9 +3348,6 @@ void MainComponent::createAndBindTrackInNode(synth::TrackId track) {
             timelineDoc.setTrackBinding(track, uuid);
     });
     reconcileTimelineAfterGraphChange();
-#else
-    juce::ignoreUnused(track);
-#endif
 }
 
 void MainComponent::selectNodeInGraph(const juce::String& uuid) {
@@ -3566,7 +3356,6 @@ void MainComponent::selectNodeInGraph(const juce::String& uuid) {
 }
 
 void MainComponent::deleteTrack(synth::TrackId track) {
-#if SYNTH_ENABLE_TIMELINE
     const auto* existing = timelineDoc.getTrack(track);
     if (existing == nullptr)
         return;
@@ -3585,25 +3374,17 @@ void MainComponent::deleteTrack(synth::TrackId track) {
         timelineDoc.removeTrack(track);
     });
     reconcileTimelineAfterGraphChange();
-#else
-    juce::ignoreUnused(track);
-#endif
 }
 
 void MainComponent::performTrackEdit(const std::function<void()>& mutation) {
     if (!mutation)
         return;
-#if SYNTH_ENABLE_TIMELINE
     // recordTimelineChange pushes nothing when the mutation turns out to be a no-op, so a header
     // that writes the value already in the doc costs no undo step.
     undoManager.recordTimelineChange(timelineDoc, mutation);
-#else
-    mutation();
-#endif
 }
 
 void MainComponent::addMidiTrack() {
-#if SYNTH_ENABLE_TIMELINE
     const int index = (int)timelineDoc.getTracks().size();
 
     // ONE compound undo step: the Track In node, its auto-wire, the track, its binding and its
@@ -3624,11 +3405,9 @@ void MainComponent::addMidiTrack() {
 
     reconcileTimelineAfterGraphChange();
     statusBar.showMessage(pushed ? "Added Track " + juce::String(index + 1) : "Could not add a track");
-#endif
 }
 
 void MainComponent::addAudioTrack() {
-#if SYNTH_ENABLE_TIMELINE
     const int index = (int)timelineDoc.getTracks().size();
 
     // The exact mirror of addMidiTrack(): ONE compound undo step covering the Track Audio node, its
@@ -3648,7 +3427,6 @@ void MainComponent::addAudioTrack() {
 
     reconcileTimelineAfterGraphChange();
     statusBar.showMessage(pushed ? "Added Audio " + juce::String(index + 1) : "Could not add a track");
-#endif
 }
 
 // The automation strip lane picker's "Add lane..." entries — the minimal creation surface
@@ -3658,7 +3436,6 @@ void MainComponent::addAudioTrack() {
 // lane; a bare or still-loading one offers nothing, same as it renders nothing elsewhere in the UI.
 std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> MainComponent::getAvailablePluginLaneOptions() const {
     std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> options;
-#if SYNTH_ENABLE_TIMELINE
     for (auto* node : audioEngine.getGraph().getNodes()) {
         if (node == nullptr)
             continue;
@@ -3682,12 +3459,10 @@ std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> MainComponent::getAvai
             options.push_back(std::move(option));
         }
     }
-#endif
     return options;
 }
 
 synth::LaneId MainComponent::addPluginAutomationLane(const synth::ui::TrackHeaderHost::PluginLaneOption& option) {
-#if SYNTH_ENABLE_TIMELINE
     if (option.nodeUuid.isEmpty() || option.paramId.isEmpty())
         return {};
 
@@ -3735,10 +3510,6 @@ synth::LaneId MainComponent::addPluginAutomationLane(const synth::ui::TrackHeade
         toggleTimelineButton.onClick();
     timelinePanel.showAutomationLane(laneId);
     return laneId;
-#else
-    juce::ignoreUnused(option);
-    return {};
-#endif
 }
 
 // The MIDI-destinations picker's row list — every node in the live graph that actually CONSUMES
@@ -3754,7 +3525,6 @@ synth::LaneId MainComponent::addPluginAutomationLane(const synth::ui::TrackHeade
 std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption>
 MainComponent::getMidiDestinationOptions(synth::TrackId forTrack) {
     std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption> options;
-#if SYNTH_ENABLE_TIMELINE
     const auto* track = timelineDoc.getTrack(forTrack);
     if (track == nullptr || track->bindingUuid.isEmpty())
         return options; // unbound/orphaned: nothing resolvable to wire FROM
@@ -3786,14 +3556,10 @@ MainComponent::getMidiDestinationOptions(synth::TrackId forTrack) {
                                                   {node->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
         options.push_back({display, node->nodeID.uid, connected, isMidiInstrumentNode(node->getProcessor())});
     }
-#else
-    juce::ignoreUnused(forTrack);
-#endif
     return options;
 }
 
 void MainComponent::setMidiDestinationConnected(synth::TrackId forTrack, juce::uint32 nodeUid, bool connect) {
-#if SYNTH_ENABLE_TIMELINE
     const auto* track = timelineDoc.getTrack(forTrack);
     if (track == nullptr || track->bindingUuid.isEmpty())
         return; // stale popup: the track lost its binding since the list was built — no-op, never crash
@@ -3825,7 +3591,4 @@ void MainComponent::setMidiDestinationConnected(synth::TrackId forTrack, juce::u
     });
     graphEditor.updateComponents();
     reconcileTimelineAfterGraphChange();
-#else
-    juce::ignoreUnused(forTrack, nodeUid, connect);
-#endif
 }

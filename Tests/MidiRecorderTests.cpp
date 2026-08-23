@@ -20,10 +20,8 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <memory>
 
-#if SYNTH_ENABLE_TIMELINE
 #include "../Source/AudioEngine.h"
 #include "../Source/Modules/ExternalMidiModule.h"
-#endif
 
 using synth::MidiRecorder;
 using synth::TimelineDoc;
@@ -379,8 +377,6 @@ TEST(MidiRecorderTest, EmptyTakeCommitsNothing) {
 // 8. DoublePathRegression: hosted AudioEngine, both delivery paths, one recorded note
 // ============================================================================
 
-#if SYNTH_ENABLE_TIMELINE
-
 // AudioEngine::handleIncomingMidiMessage forwards every message to TWO places: a direct
 // pushMidiMessage() into any bound ExternalMidiModule, and the buffer that reaches the graph (the
 // collector drain in standalone mode, or — as here — whatever the host hands processHostBlock
@@ -451,5 +447,3 @@ TEST(MidiRecorderTest, DoublePathRegression) {
     engine.releaseFromHost();
     engine.shutdown();
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

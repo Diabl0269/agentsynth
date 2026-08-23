@@ -27,9 +27,9 @@ enum CommandIDs {
     // same way togglePlayback below is, so the Settings shortcut list and ShortcutManager's
     // tripwire tests cover it in every build configuration.
     repeatSelection,
-    // Space play/stop. Always registered (even in a SYNTH_ENABLE_TIMELINE=OFF build,
-    // where getCommandInfo reports it inactive) so ShortcutManager's tripwire tests (unique
-    // default, description, command mapping) cover it unconditionally.
+    // Space play/stop. Always registered (getCommandInfo reports it inactive when there is no
+    // transport to toggle) so ShortcutManager's tripwire tests (unique default, description,
+    // command mapping) cover it unconditionally.
     togglePlayback,
     toggleTimelinePanel,
     // ---- Grid division, set outright (Ctrl+Shift+1..8) ----

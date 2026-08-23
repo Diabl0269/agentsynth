@@ -6,14 +6,12 @@
 // Three groups:
 //   1. synth::ui::AutomationLaneEditor in isolation — pointer/pencil/line/eraser gestures, tension
 //      scrub, curve-toggle hook, double-click-adds-point, the publish-discipline pin (no mutation
-//      during mouseDrag, exactly one revision bump on commit) and a paint smoke test. None of this
-//      is #if SYNTH_ENABLE_TIMELINE-gated — the component compiles and runs unconditionally, same
-//      as TimelineClipLaneArea/PianoRollComponent (only MainComponent's use of it is gated).
+//      during mouseDrag, exactly one revision bump on commit) and a paint smoke test. The
+//      component compiles and runs unconditionally, same as TimelineClipLaneArea/PianoRollComponent.
 //   2. synth::ui::TimelinePanelComponent's automation strip — opens/closes with a lane selection,
-//      shrinks the clip-lane area, and the record-mode selector's headless hook. Also ungated.
+//      shrinks the clip-lane area, and the record-mode selector's headless hook.
 //   3. MainComponent integration — right-click-any-knob's headless hook
-//      (MainComponent::automateParameter), gated #if SYNTH_ENABLE_TIMELINE since the wiring compiles
-//      out entirely with the flag off.
+//      (MainComponent::automateParameter).
 
 #include "../Source/AI/AIProvider.h"
 #include "../Source/AI/AIStateMapper.h"
@@ -447,8 +445,6 @@ TEST(TimelinePanelAutomationStripTest, TrackHeaderAutomationButtonTogglesTheStri
 // 3. MainComponent integration — right-click-any-knob's headless hook.
 // ============================================================================
 
-#if SYNTH_ENABLE_TIMELINE
-
 namespace {
 class MockProviderTL : public synth::AIProvider {
 public:
@@ -562,5 +558,3 @@ TEST_F(AutomationEditorMainComponentTest, KnobAutomateHookCreatesLaneOnAutomatio
     EXPECT_EQ(doc.getTrack(autoTrackId)->lanes.size(), 2u);
     EXPECT_EQ(doc.getLaneForParam(uuid, "cutoff")->id, cutoffLaneId);
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

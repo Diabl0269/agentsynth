@@ -130,7 +130,6 @@ private:
     int requestTimeoutMs = 240000;
 };
 
-#if SYNTH_ENABLE_TIMELINE
 // Pins the one piece of persisted, machine-dependent state the tests below would otherwise inherit.
 // TimelinePanelComponent restores snapEnabled/snap from the REAL user settings file at construction
 // (restoreViewPreferences -> "timelineSnap"/"timelineSnapEnabled"), which is exactly why
@@ -143,7 +142,6 @@ void pinSnapOff(MainComponent& mc) {
     view.snap = synth::ui::TimelineViewState::Snap::Off;
     view.snapEnabled = false;
 }
-#endif
 
 // True when getCommandInfo reports `cmdId` as enabled for whatever surface `mc` currently resolves
 // to. juce::ApplicationCommandInfo carries "disabled" rather than "active", so every call site would
@@ -257,8 +255,6 @@ TEST_F(FocusArbitrationTest, CutInactiveAndRepeatUnsupportedOnGraph) {
     EXPECT_FALSE(cm.invokeDirectly(AppCommands::repeatSelection, false));
     EXPECT_FALSE(mc.performRepeatSelection(3));
 }
-
-#if SYNTH_ENABLE_TIMELINE
 
 // ============================================================================
 // 2. TimelineClips surface — copy/paste rebased at the (snapped) playhead
@@ -797,8 +793,6 @@ TEST_F(FocusArbitrationTest, CutAndRepeatInactiveWithEmptyTimelineSelections) {
     EXPECT_EQ(doc.getRevision(), revisionBefore);
 }
 
-#endif // SYNTH_ENABLE_TIMELINE
-
 // ============================================================================
 // 6. Space — global play/stop toggle
 // ============================================================================
@@ -812,7 +806,6 @@ TEST_F(FocusArbitrationTest, SpaceTogglesPlayback) {
     MainComponent mc(tm, lf, engine, std::make_unique<FocusMockProvider>());
     auto& cm = mc.getCommandManager();
 
-#if SYNTH_ENABLE_TIMELINE
     auto& transport = engine.getTransport();
     juce::AudioBuffer<float> buffer(2, 512);
     juce::MidiBuffer midi;
@@ -839,13 +832,6 @@ TEST_F(FocusArbitrationTest, SpaceTogglesPlayback) {
         engine.processHostBlock(buffer, midi);
         EXPECT_FALSE(transport.getPositionSnapshot().playing) << "surface " << (int)surface;
     }
-#else
-    juce::ApplicationCommandInfo info(AppCommands::togglePlayback);
-    mc.getCommandInfo(AppCommands::togglePlayback, info);
-    EXPECT_NE(info.flags & juce::ApplicationCommandInfo::isDisabled, 0)
-        << "togglePlayback must be inactive when the timeline integration is compiled out";
-    EXPECT_FALSE(cm.invokeDirectly(AppCommands::togglePlayback, false));
-#endif
 }
 
 // ============================================================================
@@ -867,7 +853,6 @@ TEST_F(FocusArbitrationTest, DeletePerSurface) {
 
     const juce::KeyPress deleteKey(juce::KeyPress::deleteKey);
 
-#if SYNTH_ENABLE_TIMELINE
     auto& doc = mc.getTimelineDoc();
     const auto trackA = doc.addTrack(synth::TrackKind::Midi, "A");
     const auto clip1 = doc.addClip(trackA, 0.0, 4.0, "C1");
@@ -887,14 +872,11 @@ TEST_F(FocusArbitrationTest, DeletePerSurface) {
     // A fresh clip must survive a graph-focused Delete below.
     const auto clip2 = doc.addClip(trackA, 0.0, 4.0, "C2");
     ASSERT_TRUE(clip2.isValid());
-#endif
 
     // B) Graph-focused Delete acts ONLY on the graph selection.
     EXPECT_TRUE(editor.keyPressed(deleteKey));
     EXPECT_EQ(graph.getNumNodes(), nodesBefore - 1);
-#if SYNTH_ENABLE_TIMELINE
     EXPECT_NE(doc.getClip(clip2), nullptr) << "clips untouched by a graph-focused Delete";
-#endif
 
     // An empty graph selection falls through rather than eating the key.
     EXPECT_FALSE(editor.keyPressed(deleteKey));
@@ -935,13 +917,11 @@ TEST_F(FocusArbitrationTest, SurfaceResolverRealFocus) {
         << "clearing the override falls back to the real-focus resolver, which is Graph here since "
            "the panel is hidden";
 
-#if SYNTH_ENABLE_TIMELINE
     // Best-effort real-focus attempt: the component is never added to the desktop, so this may
     // silently no-op. Either way the panel-visibility gate must win.
     mc.getTimelinePanel().getClipLaneArea().grabKeyboardFocus();
     EXPECT_EQ(mc.resolveEditSurface(), MainComponent::EditSurface::Graph)
         << "a hidden panel never owns the verbs, whatever the focused component is";
-#endif
 }
 
 // ============================================================================
@@ -992,8 +972,6 @@ TEST_F(FocusArbitrationTest, BareArrowKeyFallsThroughTheGlobalHandlerUntouched) 
                            juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0)})
         EXPECT_FALSE(mc.keyPressed(kp)) << ShortcutManager::keyPressToDisplayString(kp).toStdString();
 }
-
-#if SYNTH_ENABLE_TIMELINE
 
 // ============================================================================
 // 10. Grid (snap) commands — one shared value, gated on the panel being on screen
@@ -1314,5 +1292,3 @@ TEST_F(FocusArbitrationTest, ShiftedPunctuationReachesTheVerticalZoomCommands) {
     EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('_', juce::ModifierKeys(cmdShift), '_')));
     EXPECT_LT(roll.getPixelsPerSemitone(), afterIn) << "'_' is Cmd+Shift+'-', the zoom-OUT half of the pair";
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

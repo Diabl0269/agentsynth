@@ -1,9 +1,9 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager.h`) registers **49 actions** across four categories —
-**General** (22, app-wide or routed per focused editor), **Graph** (2), **Timeline** (16) and
-**Piano Roll** (9) — every one of them rebindable, including keys that used to be hardcoded:
+`ShortcutManager` (`Source/ShortcutManager.h`) registers **51 actions** across four categories —
+**General** (22, app-wide or routed per focused editor), **Graph** (2), **Timeline** (17) and
+**Piano Roll** (10) — every one of them rebindable, including keys that used to be hardcoded:
 nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the six tool
 digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
 any key except Escape commits it, swapping with whatever action in the **same category** already
@@ -33,7 +33,7 @@ when reasoning about a key that "does nothing."
 | Cmd+K | Toggle Minimap |
 | Ctrl+A (macOS) / Cmd+Shift+A (elsewhere) | Toggle AI Panel — moved off Cmd+A so Select All could take the platform-standard chord. One of the very few per-platform defaults: on macOS Ctrl is a real separate modifier, on Windows/Linux JUCE's Cmd IS Ctrl so Ctrl+A would collide with Select All |
 | Cmd+B | Toggle Module Library |
-| Cmd+T | Toggle Timeline Panel (`SYNTH_ENABLE_TIMELINE` builds only — see [`layout.md §16`](layout.md)) |
+| Cmd+T | Toggle Timeline Panel (see [`layout.md §16`](layout.md)) |
 | Cmd+A | Select All in Focused Editor (actionId/`AppCommands` name still `selectAllModules` — see "Surface routing" below) |
 | Cmd+Shift+S | Save Selection as Snippet |
 | Cmd+C | Copy (Selected Modules, or — see "Surface routing" below — the timeline's selected clips/notes) |
@@ -41,13 +41,13 @@ when reasoning about a key that "does nothing."
 | Cmd+D | Duplicate (Selected Modules, or the selected clips/notes) |
 | Cmd+X | Cut — Copy then delete, as ONE undo step (Selected Modules, or the timeline's selected clips/notes; see "Surface routing" below) |
 | Cmd+R | Repeat — prompts for a count (1–64) via an `AlertWindow` and creates that many back-to-back copies of the selection, tiled forward one selection-span at a time, as ONE undo step. Timeline-only: inactive on the Graph surface (see below) |
-| Space | Toggle Playback (play/stop the timeline transport — `SYNTH_ENABLE_TIMELINE` builds only) |
+| Space | Toggle Playback (play/stop the timeline transport) |
 | Cmd+= | Zoom In (routed per focused surface — see [**Zoom**](#zoom) below) |
 | Cmd+- | Zoom Out |
 | Cmd+Shift+= | Zoom In Vertically |
 | Cmd+Shift+- | Zoom Out Vertically |
 
-Cmd+T and Space are also inactive (in addition to a `SYNTH_ENABLE_TIMELINE`-OFF build) whenever
+Cmd+T and Space are also inactive whenever
 Preferences → "Show timeline (experimental)" is turned off — the runtime kill switch described in
 [`layout.md §16`](layout.md). While it's off, the timeline transport simply isn't reachable; that's
 intended, not a bug. The grid and zoom commands below are likewise inactive whenever the panel
@@ -166,6 +166,7 @@ and, for the loop-selection key, `TimelineClipLaneArea::keyPressed()` too):
 |----------|--------|
 | Q | Toggle Snap (grid magnetism) — the chosen division survives underneath; shared with the piano roll (one binding, `timelineSnapToggle`, whichever surface has focus) |
 | L | Toggle Looping, keeping the existing bounds — the transport bar's loop button |
+| F | Toggle Follow Playhead (`timelineFollowPlayheadToggle`) — mirrors the transport strip's follow button; panel-scoped like Q/L/P, so it works whichever timeline surface (lanes or roll) has focus |
 | P | Loop the Selection — sets the transport loop to the selected clips' (or, with the roll open, the edited clip's) span. Whether it also arms looping is `Settings → Preferences → "Timeline: P (loop selection) also switches looping on"` (default on; off = locators only) |
 | 1 / 3 / 4 / 5 / 7 / 8 | Switch the active edit tool: 1 Select, 3 Split, 4 Glue, 5 Erase, 7 Mute, 8 Draw (Cubase's own numbering — see [`layout.md §16`](layout.md)) |
 
@@ -234,6 +235,7 @@ dispatched through `ApplicationCommandManager`:
 | Alt+← / Alt+→ | Select Previous / Next Note — navigates BETWEEN notes in the clip's canonical (start, pitch) order, collapsing a multi-selection onto the outer neighbour; scrolls an off-screen target into view. Selection-only, never a document edit. Alt+↑/↓ is reserved (unclaimed) |
 | Shift+Q | Quantise Selected Notes — one-shot: snap the selected notes (or all notes when nothing is selected) to the chosen grid, even while snap is toggled off. Tested BEFORE the bare-Q toggle below since it's the more specific of the pair |
 | Q | Toggle Snap — same `timelineSnapToggle` action the timeline panel uses; whichever surface has focus |
+| Ctrl+S | Toggle the Scale Assist panel (`pianoRollToggleScalePanel`) — real Control, not Cmd (Cmd+S stays the app's save); inert while a text field inside the panel has focus |
 
 Every arrow/octave/nav action returns `false` (falls through) when nothing is selected, so the key
 keeps whatever meaning it has elsewhere with an empty selection — nudge/transpose EDIT the
@@ -259,9 +261,9 @@ doesn't this key do anything":
   returns a real `juce::CommandID` for these; `MainComponent` implements
   `ApplicationCommandTarget`, so they appear in the native menu bar, drive toolbar tooltip text, and
   their enabled/disabled state is whatever `getCommandInfo` reports.
-- **Surface-resolved** (18 actions) — the timeline panel's own keys (`timelineSnapToggle`,
-  `timelineToggleLoop`, `timelineLoopSelection`, the six `timelineTool*` digits) and all nine piano
-  roll actions. `AppCommands::getCommandForAction` returns `AppCommands::kNoCommand` (`0`,
+- **Surface-resolved** (20 actions) — the timeline panel's own keys (`timelineSnapToggle`,
+  `timelineToggleLoop`, `timelineLoopSelection`, `timelineFollowPlayheadToggle`, the six
+  `timelineTool*` digits) and all ten piano roll actions. `AppCommands::getCommandForAction` returns `AppCommands::kNoCommand` (`0`,
   `juce::ApplicationCommandManager`'s own "not a command" value) for every one of these — they are
   never dispatched through the command manager at all. Instead, the owning component's own
   `keyPressed()` calls a small `matchesAction(key, actionId, fallback)` helper that reads

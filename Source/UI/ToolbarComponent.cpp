@@ -124,8 +124,8 @@ void ToolbarComponent::paint(juce::Graphics& g) {
 
     // Draw a hairline at each sub-group boundary, using the buttons' own post-layout bounds so
     // this pass never disagrees with layoutButtons()'s FlexItem order. Only consider slots whose
-    // button is non-null && isVisible() — the same guard layoutButtons() already applies — so a
-    // null ToggleTimeline (SYNTH_ENABLE_TIMELINE=OFF) can't anchor a separator on stale bounds.
+    // button is non-null && isVisible() — the same guard layoutButtons() already applies, so an
+    // unset slot can't anchor a separator on stale bounds.
     // Kept subtle (~45% alpha, inset off the strip's top/bottom edge) so it reads as a quiet
     // grouping cue rather than a hard divider.
     g.setColour(lnf->getTheme().colors.border.withAlpha(0.45f));

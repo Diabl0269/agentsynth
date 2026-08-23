@@ -10,9 +10,8 @@
 //   3. synth::ui::TimelineClipLaneArea::computeClipRect — pure geometry, no doc/component state.
 //   4. synth::ui::TimelineClipLaneArea interactions — click/marquee select, drag-move, trim,
 //      split/duplicate/delete via the menu hook, the panel-scoped Delete key, doc-change pruning,
-//      and a snapshot smoke test. None of this is #if SYNTH_ENABLE_TIMELINE-gated: the component
-//      compiles and runs unconditionally, exactly like TimelinePanelComponent/
-//      TimelineTrackHeaderComponent (only MainComponent's use of it is gated).
+//      and a snapshot smoke test. The component compiles and runs unconditionally, exactly like
+//      TimelinePanelComponent/TimelineTrackHeaderComponent.
 //   5. Waveform painting from synth::PeaksFile, the peaks cache and its invalidation, the
 //      live-recording strip's repaint-on-arrival rule, and the pure bucketRangeForClip() helper.
 //   6. The missing-asset placeholder — setAssetExistsResolver, its cache (no repeated

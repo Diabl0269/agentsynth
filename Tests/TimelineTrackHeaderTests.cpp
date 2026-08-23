@@ -9,9 +9,7 @@
 // after a restore, .agsproj round trips — lives in TimelinePanelTests.cpp, where a MainComponent
 // harness already exists.
 //
-// Consequently NONE of this file is #if SYNTH_ENABLE_TIMELINE-gated: the components and the
-// resolver compile unconditionally (like TimelinePanelComponent itself); only MainComponent's use
-// of them is gated.
+// The components and the resolver compile unconditionally, like TimelinePanelComponent itself.
 
 #include "../Source/AppUndoManager.h"
 #include "../Source/Timeline/TimelineDoc.h"

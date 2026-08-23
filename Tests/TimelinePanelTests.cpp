@@ -3,28 +3,21 @@
 // Bottom-docked timeline panel shell + toolbar toggle + rebindable shortcut + slide animation.
 //
 // Four groups of coverage:
-//   1. synth::ui::TimelinePanelComponent in isolation — pure layout/paint, no MainComponent, no
-//      SYNTH_ENABLE_TIMELINE gating (the component itself always compiles; only MainComponent's
-//      use of it is gated).
-//   2. MainComponent integration — toggle, persistence, carve geometry. Gated
-//      #if SYNTH_ENABLE_TIMELINE because the toggle button/command/carve compile out entirely
-//      when the flag is OFF (see MainComponent.h/.cpp). HiddenByDefaultAndCarvesNothing is the
-//      exception: it asserts the flag-OFF invariant too (nothing timeline-related visible or
-//      carved), so it is deliberately NOT gated.
+//   1. synth::ui::TimelinePanelComponent in isolation — pure layout/paint, no MainComponent.
+//   2. MainComponent integration — toggle, persistence, carve geometry. HiddenByDefaultAndCarves-
+//      Nothing asserts the default-hidden state (nothing timeline-related visible or carved).
 //   3. Ruler/grid/zoom/scroll/snap/loop-brace — synth::ui::TimelineRulerComponent and the panel's
 //      wheel handling and snap combo, driven with a raw synth::TransportService (never through
-//      MainComponent/AudioEngine), so — same reasoning as group 1 — none of it is gated either.
+//      MainComponent/AudioEngine).
 //   4. Track headers + the app-level timeline wiring MainComponent owns (publish-on-mutation, the
 //      compound add-track flow, reconciliation after an undo/redo restore, .agsproj round trips,
-//      recorder wiring). The panel-level header tests are ungated like groups 1–3; everything that
-//      needs MainComponent's wiring is #if SYNTH_ENABLE_TIMELINE, since that wiring compiles out.
-//      The header ROW itself is covered separately, against a stub host, in
+//      recorder wiring). The header ROW itself is covered separately, against a stub host, in
 //      TimelineTrackHeaderTests.cpp.
-//   5. The resizable panel height — the panel's top-edge grab strip (ungated, panel level) and
+//   5. The resizable panel height — the panel's top-edge grab strip (panel level) and
 //      MainComponent's ownership of the value: default from the theme metric, clamp, live relayout,
-//      persistence (gated, like the rest of group 2).
+//      persistence.
 //   6. Authoring gestures reaching the panel — a double-click on empty MIDI lane space creates a
-//      clip and opens the piano roll on it (ungated, panel level).
+//      clip and opens the piano roll on it (panel level).
 
 #include "../Source/AI/AIProvider.h"
 #include "../Source/AI/AIStateMapper.h"
@@ -163,8 +156,6 @@ TEST_F(TimelinePanelIntegrationTest, HiddenByDefaultAndCarvesNothing) {
     EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(), mc.getStatusBar().getBounds().getY());
 }
 
-#if SYNTH_ENABLE_TIMELINE
-
 TEST_F(TimelinePanelIntegrationTest, ToggleCarvesFullWidthAboveStatusBar) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     mc.setSize(1600, 900);
@@ -272,8 +263,6 @@ TEST_F(TimelinePanelIntegrationTest, CmdTIsInertWhileFeatureDisabled) {
     EXPECT_NE(playbackInfo.flags & juce::ApplicationCommandInfo::isDisabled, 0)
         << "togglePlayback (Space) must be inactive while the timeline feature preference is off";
 }
-
-#endif // SYNTH_ENABLE_TIMELINE
 
 // ============================================================================
 // 3. Ruler/grid/zoom/scroll/snap/loop-brace.
@@ -1291,10 +1280,7 @@ TEST(TimelinePanelTrackHeaderTest, HeaderListScrollsWhenTracksOverflow) {
     EXPECT_TRUE(viewport.isVerticalScrollBarShown());
 }
 
-#if SYNTH_ENABLE_TIMELINE
-
-// MainComponent owns the doc, the recorder and the reconcile hooks — all of which compile out with
-// the flag off, hence the gate (same rule as group 2 above).
+// MainComponent owns the doc, the recorder and the reconcile hooks.
 class TimelineAppWiringTest : public TimelinePanelIntegrationTest {
 protected:
     // An empty canvas plus `polyMidiCount` Poly MIDI modules, and a clean undo stack, so a test's
@@ -1833,8 +1819,6 @@ TEST_F(TimelineAppWiringTest, LoopSelectionKeySetsTransportLoop) {
     EXPECT_DOUBLE_EQ(snap.loopEndPpq, 14.0);
 }
 
-#endif // SYNTH_ENABLE_TIMELINE
-
 // paint() must not crash with a null transport (default-constructed ruler never had setTransport()
 // called), at both a very zoomed-out and a very zoomed-in pixelsPerBeat.
 TEST(TimelineRulerComponentTest, SnapshotSmokeAtTwoZoomsWithNullTransport) {
@@ -2016,8 +2000,6 @@ TEST(TimelinePanelResizeTest, InternalLayoutHoldsAtDoubleHeight) {
     EXPECT_EQ(img.getHeight(), 440);
 }
 
-#if SYNTH_ENABLE_TIMELINE
-
 namespace {
 // Leaves a height in the shared settings file the way an earlier session would have — the same file
 // TimelinePanelIntegrationTest::resetPanelKeys() clears the key from.
@@ -2148,12 +2130,10 @@ TEST_F(TimelinePanelIntegrationTest, HidingThePanelReturnsTheCanvasAndReshowingK
     EXPECT_EQ(mc.getTimelinePanel().getBounds().getBottom(), mc.getStatusBar().getBounds().getY());
 }
 
-#endif // SYNTH_ENABLE_TIMELINE
-
 // ============================================================================
-// 6. Authoring gestures reaching the panel (ungated, like groups 1/3/4 — the panel itself always
-//    compiles). The lane-area half of the gesture (snapping, length, one undo step) lives in
-//    Tests/TimelineClipLaneTests.cpp group 7; the import half in Tests/AssetManagerTests.cpp.
+// 6. Authoring gestures reaching the panel. The lane-area half of the gesture (snapping, length,
+//    one undo step) lives in Tests/TimelineClipLaneTests.cpp group 7; the import half in
+//    Tests/AssetManagerTests.cpp.
 // ============================================================================
 
 // The panel's onClipDoubleClicked -> openPianoRoll wiring has to cover the clip a double-click on

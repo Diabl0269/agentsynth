@@ -20,9 +20,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <vector>
 
-#if SYNTH_ENABLE_TIMELINE
 #include "Transport/TransportService.h"
-#endif
 
 using synth::TimelineDoc;
 using synth::TimelineOps;
@@ -583,8 +581,6 @@ TEST_F(TimelineOpsTest, PatchGrammarStillClosed) {
 // 7. The service seam: detected, previewed, and applied through the host callback
 // =============================================================================
 
-#if SYNTH_ENABLE_TIMELINE
-
 TEST_F(TimelineOpsTest, ServiceDetectsEnvelope) {
     synth::TransportService transport;
     transport.prepare(44100.0, 512);
@@ -655,5 +651,3 @@ TEST_F(TimelineOpsTest, ServiceIgnoresAResponseWithNoEnvelope) {
     ASSERT_FALSE(malformed.isVoid());
     EXPECT_FALSE(TimelineOps::validate(malformed, doc, graph).ok);
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

@@ -21,8 +21,6 @@
 #include <gtest/gtest.h>
 #include <memory>
 
-#if SYNTH_ENABLE_TIMELINE
-
 using synth::AutomationLane;
 using synth::TimelineDoc;
 using synth::TrackKind;
@@ -355,5 +353,3 @@ TEST(AutomationApplierTest, PublishingAnEmptyDocClearsBindings) {
     EXPECT_NEAR(Fixture::denormalised(level), 0.25, 1e-5)
         << "removing a lane must leave the parameter where automation last put it, not reset it";
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

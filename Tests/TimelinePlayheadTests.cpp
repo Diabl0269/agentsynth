@@ -15,8 +15,8 @@
 //
 // Groups:
 //   1. The overlay in isolation, driven with synthetic PositionSnapshots or a raw TransportService.
-//      Nothing here needs MainComponent, so none of it is SYNTH_ENABLE_TIMELINE-gated.
-//   2. MainComponent's 10 Hz poll — gated, because the poll itself compiles out with the flag.
+//      Nothing here needs MainComponent.
+//   2. MainComponent's 10 Hz poll.
 
 #include "../Source/AI/AIProvider.h"
 #include "../Source/Transport/TransportService.h"
@@ -329,8 +329,6 @@ TEST(TimelinePlayheadPanelTest, PollForwardsThePositionToThePlayhead) {
 // 2. MainComponent's 10 Hz poll.
 // ============================================================================
 
-#if SYNTH_ENABLE_TIMELINE
-
 class TimelinePlayheadPollTest : public ::testing::Test {
 protected:
     // Same hermetic reset as TimelinePanelTests.cpp: MainComponent's delegating ctor reads the
@@ -382,5 +380,3 @@ TEST_F(TimelinePlayheadPollTest, TenHzPollOnlyReachesAVisiblePanel) {
 
     mc.simulateToggleTimelineClick();
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

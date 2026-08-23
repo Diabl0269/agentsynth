@@ -1,9 +1,8 @@
 // TimelineViewStateTests.cpp
 //
 // synth::ui::TimelineViewState — the pure, headless beat<->pixel mapping shared by the
-// timeline ruler and lanes grid. No JUCE component involved, so none of this is gated behind
-// SYNTH_ENABLE_TIMELINE: the struct itself always compiles and is testable regardless of the flag
-// (same reasoning TimelinePanelComponent's own isolation tests use).
+// timeline ruler and lanes grid. No JUCE component involved, so the struct itself always compiles
+// and is testable (same reasoning TimelinePanelComponent's own isolation tests use).
 
 #include "../Source/UI/TimelineViewState.h"
 #include <gtest/gtest.h>

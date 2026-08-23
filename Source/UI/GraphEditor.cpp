@@ -3221,7 +3221,6 @@ void GraphEditor::timerCallback() {
     if (minimap.isVisible())
         minimap.setModel(buildMinimapModel());
 
-#if SYNTH_ENABLE_TIMELINE
     // Drain the audio thread's UI reflection ring on the same 30 Hz cadence as everything else in
     // this callback — no separate free-running timer. A drain against an empty ring is just
     // one prepareToRead() call, so this is effectively free on every tick that has nothing queued.
@@ -3238,7 +3237,6 @@ void GraphEditor::timerCallback() {
         // No live component for this NodeID (module hidden mid-teardown or already deleted) —
         // the event is simply discarded.
     });
-#endif
 }
 
 // ============================================================================

@@ -368,13 +368,6 @@ TEST_F(MainComponentTest, CommandManagerHasCommands) {
     for (const auto& actionId : shortcuts.getActionIds())
         if (AppCommands::getCommandForAction(actionId) != AppCommands::kNoCommand)
             expectedActions.add(actionId);
-#if !SYNTH_ENABLE_TIMELINE
-    // toggleTimelinePanel keeps its shortcut-table row in every build (rebindable defaults are
-    // compile-independent) but registers no command when the flag is off — the panel it drives is
-    // compiled out, so the fires-silently risk this invariant guards doesn't apply. togglePlayback
-    // stays registered-but-inactive in OFF builds by deliberate choice, so it stays here.
-    expectedActions.removeString("toggleTimelinePanel");
-#endif
     auto expectedCommandCount = expectedActions.size();
 #if JUCE_MAC
     expectedCommandCount += 1;

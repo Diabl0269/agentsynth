@@ -896,8 +896,6 @@ TEST(TimelineMidiSourceTest, TransportFuzz1000OpsNoStuckNotes) {
 // Engine integration: the whole Track In chain, through a real graph
 // ============================================================================
 
-#if SYNTH_ENABLE_TIMELINE
-
 // Everything the increment added, wired together: a trusted patch creates a Track In node and
 // hands it a uuid (which adoptUuidIfTrusted must MIRROR onto the processor — plumbing piece 2),
 // AudioEngine::renderNextBlock parks the block's snapshot on the transport (piece 1), the module
@@ -975,5 +973,3 @@ TEST(TimelineMidiSourceTest, EngineRendersTimelineNotesAsGateCV) {
     engine.releaseFromHost();
     engine.shutdown();
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

@@ -23,7 +23,7 @@ cmake --build build --target AIEvalHarness
 | `--runs` | `1` | How many times to replay the whole scenario set. |
 | `--host` | `http://localhost:11434` (`ollama`) / `http://localhost:8787` (`remote`) | Base URL of the provider being measured. |
 | `--json` | *(none)* | Write per-attempt records to this file for later analysis. |
-| `--mode` | `patch` | `patch` replays the 40 golden prompts against `getPatchSchema()`. `timeline` (needs `-DSYNTH_ENABLE_TIMELINE=ON`) replays a separate 8-prompt set against `getPatchSchemaWithTimelineOps()` instead — same request path, the extended schema. See P6-13 below. |
+| `--mode` | `patch` | `patch` replays the 40 golden prompts against `getPatchSchema()`. `timeline` replays a separate 8-prompt set against `getPatchSchemaWithTimelineOps()` instead — same request path, the extended schema. See P6-13 below. |
 | `--think` | *(unset)* | `--provider ollama` only. `true`/`false` — sets Ollama's `think` request field. Unset sends today's exact request body (no `think` key at all). |
 | `--temperature` | *(unset)* | `--provider ollama` only. Nests under the request's `options.temperature`. |
 | `--seed` | *(unset)* | `--provider ollama` only. Nests under the request's `options.seed` — pin this alongside `--temperature 0` for a reproducible before/after comparison. |

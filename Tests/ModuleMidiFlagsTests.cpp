@@ -52,11 +52,11 @@ ExpectedMidiFlags expectedFlagsFor(ModuleType type) {
         return {true, false};
 
     // ---- Real MIDI emitters: processBlock writes note/CC events, never reads incoming MIDI ----
-    case ModuleType::Sequencer:           // self-contained step sequencer
-    case ModuleType::PolySequencer:       // same, poly
-    case ModuleType::MidiKeyboard:        // on-screen keys — a source, never a destination
-    case ModuleType::ExternalMidi:        // device input merged in internally, not from the graph
-    case ModuleType::TimelineMidiSource:  // the timeline's "Track In" node
+    case ModuleType::Sequencer:          // self-contained step sequencer
+    case ModuleType::PolySequencer:      // same, poly
+    case ModuleType::MidiKeyboard:       // on-screen keys — a source, never a destination
+    case ModuleType::ExternalMidi:       // device input merged in internally, not from the graph
+    case ModuleType::TimelineMidiSource: // the timeline's "Track In" node
         return {false, true};
 
     // ---- Everything else: pure audio/CV, processBlock never touches the MIDI buffer ----
@@ -126,25 +126,48 @@ TEST(ModuleMidiFlagsTest, EveryFactoryModuleMatchesItsExpectedMidiFlags) {
     // Every module type this audit covers must actually have been reachable through the factory —
     // otherwise the sweep above silently tests nothing for it.
     std::set<ModuleType> requiredTypes = {
-        ModuleType::Oscillator,  ModuleType::Filter,        ModuleType::VCA,           ModuleType::ADSR,
-        ModuleType::LFO,         ModuleType::Sequencer,     ModuleType::PolySequencer, ModuleType::MidiKeyboard,
-        ModuleType::PolyMidi,    ModuleType::ExternalMidi,  ModuleType::Attenuverter,  ModuleType::Delay,
-        ModuleType::Distortion,  ModuleType::Reverb,        ModuleType::Chorus,        ModuleType::Phaser,
-        ModuleType::Compressor,  ModuleType::Flanger,       ModuleType::Limiter,       ModuleType::ParametricEQ,
-        ModuleType::VoiceMixer,  ModuleType::Bitcrusher,    ModuleType::PitchShifter,  ModuleType::RingModulator,
-        ModuleType::Noise,       ModuleType::Math,          ModuleType::Sampler,       ModuleType::Wavetable,
-        ModuleType::MacroControl, ModuleType::SampleHold,   ModuleType::EnvelopeFollower,
-        ModuleType::Comparator,  ModuleType::AudioInput,    ModuleType::HostedPlugin,
+        ModuleType::Oscillator,
+        ModuleType::Filter,
+        ModuleType::VCA,
+        ModuleType::ADSR,
+        ModuleType::LFO,
+        ModuleType::Sequencer,
+        ModuleType::PolySequencer,
+        ModuleType::MidiKeyboard,
+        ModuleType::PolyMidi,
+        ModuleType::ExternalMidi,
+        ModuleType::Attenuverter,
+        ModuleType::Delay,
+        ModuleType::Distortion,
+        ModuleType::Reverb,
+        ModuleType::Chorus,
+        ModuleType::Phaser,
+        ModuleType::Compressor,
+        ModuleType::Flanger,
+        ModuleType::Limiter,
+        ModuleType::ParametricEQ,
+        ModuleType::VoiceMixer,
+        ModuleType::Bitcrusher,
+        ModuleType::PitchShifter,
+        ModuleType::RingModulator,
+        ModuleType::Noise,
+        ModuleType::Math,
+        ModuleType::Sampler,
+        ModuleType::Wavetable,
+        ModuleType::MacroControl,
+        ModuleType::SampleHold,
+        ModuleType::EnvelopeFollower,
+        ModuleType::Comparator,
+        ModuleType::AudioInput,
+        ModuleType::HostedPlugin,
     };
-#if SYNTH_ENABLE_TIMELINE
     requiredTypes.insert(ModuleType::TimelineMidiSource);
     requiredTypes.insert(ModuleType::RecordTap);
     requiredTypes.insert(ModuleType::TimelineAudioSource);
-#endif
 
     for (auto type : requiredTypes)
-        EXPECT_TRUE(seenTypes.count(type) > 0) << "ModuleType " << static_cast<int>(type)
-                                               << " was never reached via the module factory";
+        EXPECT_TRUE(seenTypes.count(type) > 0)
+            << "ModuleType " << static_cast<int>(type) << " was never reached via the module factory";
 }
 
 // ---- Trusted-load compatibility: a stale MIDI wire into a now-non-MIDI module -----------------
@@ -213,10 +236,6 @@ TEST(ModuleMidiFlagsTest, TrustedLoadSkipsAStaleMidiConnectionIntoANowNonMidiMod
 }
 
 // ---- MainComponent::getMidiDestinationOptions now enumerates by ground truth -------------------
-//
-// Gated like every other MainComponent/timeline integration test: the wiring under test compiles
-// out entirely with SYNTH_ENABLE_TIMELINE off.
-#if SYNTH_ENABLE_TIMELINE
 
 namespace {
 
@@ -279,5 +298,3 @@ TEST(ModuleMidiFlagsTest, MidiDestinationOptionsNowIncludeAnADSRNode) {
     EXPECT_TRUE(hasADSR) << "the old hardcoded isMidiInstrumentType allowlist excluded ADSR even "
                             "though it genuinely consumes MIDI (see ADSRModule::acceptsMidi())";
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

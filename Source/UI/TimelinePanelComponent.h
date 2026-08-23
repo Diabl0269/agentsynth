@@ -89,8 +89,8 @@ public:
     // TimelineTransportBar::setMetronome. Non-owning; may be null.
     void setMetronome(synth::Metronome* metronome);
 
-    // THE low-rate transport poll, called from MainComponent's EXISTING 10 Hz timer (gated
-    // #if SYNTH_ENABLE_TIMELINE, and only while this panel is visible). It adds no timer of its own.
+    // THE low-rate transport poll, called from MainComponent's EXISTING 10 Hz timer (only while
+    // this panel is visible). It adds no timer of its own.
     // Two jobs:
     //   - hand the snapshot to the playhead overlay, which owns its 30 Hz playing-only timer from
     //     the play/stop transitions it sees here (see TimelinePlayheadOverlay.h);
@@ -117,8 +117,8 @@ public:
     // ApplicationProperties installed (or none passed to setApplicationProperties yet).
     void reloadPianoRollAppearancePrefs();
 
-    // Non-owning; may be null (a SYNTH_ENABLE_TIMELINE=OFF build never sets one, and the
-    // panel is then an inert shell with an empty header column). The panel listens to the doc and
+    // Non-owning; may be null (before setTimelineDoc is called, the panel is an inert shell with
+    // an empty header column). The panel listens to the doc and
     // rebuilds/refreshes the track headers on every notification — that is the ONLY thing that
     // updates them: no timer, no polling. Also forwarded to the clip-lane area, which runs
     // the same "set doc, refresh once" seam (TimelineClipLaneArea::setTimelineDoc).

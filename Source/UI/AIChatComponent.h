@@ -61,8 +61,7 @@ public:
      * whenever the timeline preference toggles — the service has no listener mechanism for that
      * switch, so the owner that flips it re-syncs this, the same ownership shape as the
      * refreshModels() re-call documented in CLAUDE.md. Hiding the selector also resets it to
-     * Patch: an invisible control must not keep steering requests. Always hides in a
-     * SYNTH_ENABLE_TIMELINE=OFF build.
+     * Patch: an invisible control must not keep steering requests.
      */
     void refreshModeControls();
 

@@ -8,12 +8,10 @@
 //      behaviour, and the start/stop lifecycle. Driven directly (no engine, no device), the same
 //      way MidiRecorderTests drives synth::MidiRecorder.
 //   2. Registration — the internal-only checklist Track In established: absent from the library,
-//      a pinned size estimate, a Utility cable colour. Gated #if SYNTH_ENABLE_TIMELINE, because the
-//      factory entry is (the class itself always compiles).
+//      a pinned size estimate, a Utility cable colour.
 //
 //   3. The record-to-clip FLOW through MainComponent — arming an Audio track, the auto-spliced
 //      master tap, the committed clip and its assetRef, and the MIDI path staying unaffected.
-//      Gated too, for the same reason.
 
 #include "../Source/AI/AIProvider.h"
 #include "../Source/AI/AIStateMapper.h"
@@ -518,8 +516,6 @@ TEST(RecordTapTest, DestructorFinalisesAnInFlightTake) {
 // 6. Registration — the internal-only checklist Track In established
 // ============================================================================
 
-#if SYNTH_ENABLE_TIMELINE
-
 TEST(RecordTapTest, RegisteredButInternalOnly) {
     auto processor = synth::AIStateMapper::createModule("Rec Tap");
     ASSERT_NE(processor, nullptr) << "Rec Tap must be in the factory so a saved patch round-trips it";
@@ -849,5 +845,3 @@ TEST_F(RecordFlowTest, AudioRecordWithoutAnAudioOutputIsRefused) {
         << "a rejected record request must not start the transport";
     EXPECT_TRUE(doc.getTrack(track)->clips.empty());
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

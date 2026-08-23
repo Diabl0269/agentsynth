@@ -86,14 +86,14 @@ The timeline's clock and the headless render harness built on it. No audio devic
 
 ### Audio Input module tests (11 tests)
 
-`Tests/AudioInputModuleTests.cpp` — TL6-2, the module that replaced the graph's raw `audioInputNode`. Two layers: **module-level** tests drive an `AudioInputModule` directly with a bare `synth::TransportService` on its playhead (exactly what the engine does per block, minus the engine), and **engine-level** tests drive the whole path. The engine-level three are `#if SYNTH_ENABLE_TIMELINE`-gated because the playhead itself is — see the flag-OFF caveat in [`architecture.md § AudioEngine`](architecture.md#1-audioengine).
+`Tests/AudioInputModuleTests.cpp` — TL6-2, the module that replaced the graph's raw `audioInputNode`. Two layers: **module-level** tests drive an `AudioInputModule` directly with a bare `synth::TransportService` on its playhead (exactly what the engine does per block, minus the engine — one of them, `NoTransportRendersSilence`, is the no-playhead caveat described in [`architecture.md § AudioEngine`](architecture.md#1-audioengine)), and **engine-level** tests drive the whole path through a real `AudioEngine`, exercising the playhead the engine itself installs.
 
 | What it covers | |
 |-------|-------|
 | `VisiblePortsFollowDevice` | 0 device channels ⇒ 1 jack (the floor), 2 ⇒ 2, more than `kMaxChannels` ⇒ clamped to 8, and shrinking back shrinks the jack count; the raw **channel** count stays 8 throughout |
 | `HiddenChannelsCleared` | a 2-in device leaves channels 2..7 silent every block, and channels 0/1 carry their own input (each channel a differently scaled ramp, so a swap is visible in the value) |
 | `BypassClears` | the pure-source exception — bypass clears instead of passing dry through — plus "there is no `muted` parameter by design" |
-| `NoTransportRendersSilence` | no playhead (a foreign host, a bare unit test, a flag-OFF build) ⇒ silence and a one-jack card, never the buffer's previous contents |
+| `NoTransportRendersSilence` | no playhead (a foreign host, a bare unit test) ⇒ silence and a one-jack card, never the buffer's previous contents |
 | `DeviceInputFlowsThroughModule` | standalone, by-hand device callback: input ch1 → output ch0 **crossed**, so the assertion cannot pass on the callback's own channel-for-channel copy-in; one block also teaches the module the device's width |
 | `HostedInputFlows` | hosted `processHostBlock` on one in/out buffer: the module emits the host's ORIGINAL input even though the graph renders over that buffer — the input-snapshot pin |
 | `DefaultPatchUsesTheModule` | the default patch's "Audio Input" node is an `AudioInputModule`, not an `AudioGraphIOProcessor` |
@@ -104,7 +104,7 @@ The timeline's clock and the headless render harness built on it. No audio devic
 
 ### Rec Tap / audio recording tests (13 tests)
 
-`Tests/RecordTapTests.cpp` — TL6-3. Three layers. **Module-level** tests drive a `RecordTapModule` directly (no engine, no device, no graph), exactly the way `MidiRecorderTests.cpp` drives `synth::MidiRecorder`. **Registration** tests are the internal-only checklist Track In established. **Flow** tests drive `MainComponent` with the device callback suspended, the transport ticked by hand and the tap's `processBlock` called directly. The last two groups are `#if SYNTH_ENABLE_TIMELINE`-gated, since the factory entry and the record wiring both are.
+`Tests/RecordTapTests.cpp` — TL6-3. Three layers. **Module-level** tests drive a `RecordTapModule` directly (no engine, no device, no graph), exactly the way `MidiRecorderTests.cpp` drives `synth::MidiRecorder`. **Registration** tests are the internal-only checklist Track In established. **Flow** tests drive `MainComponent` with the device callback suspended, the transport ticked by hand and the tap's `processBlock` called directly. The last two groups exercise the factory entry and the record wiring, both unconditional, always-compiled code.
 
 | What it covers | |
 |-------|-------|
@@ -122,7 +122,7 @@ The timeline's clock and the headless render harness built on it. No audio devic
 
 ### Audio clip playback tests (24 tests)
 
-`Tests/AudioClipPlaybackTests.cpp` — TL6-4. Five layers, all `#if SYNTH_ENABLE_TIMELINE`-gated. Playback tests render through `synth::OfflineTransportDriver` exactly the way `TimelineE2ETests.cpp` does, but assert **bit-exact sample content** rather than RMS windows, which two things make possible: the test WAV is 32-bit IEEE float carrying exactly-representable values (`n / 65536`), and the streamer's prefetch thread is **paused** (`setPrefetchPausedForTest`) and driven by `pumpForTest()` from the render loop's per-block callback. There is no sleep and no "eventually the ring fills" wait anywhere in the file.
+`Tests/AudioClipPlaybackTests.cpp` — TL6-4. Five layers. Playback tests render through `synth::OfflineTransportDriver` exactly the way `TimelineE2ETests.cpp` does, but assert **bit-exact sample content** rather than RMS windows, which two things make possible: the test WAV is 32-bit IEEE float carrying exactly-representable values (`n / 65536`), and the streamer's prefetch thread is **paused** (`setPrefetchPausedForTest`) and driven by `pumpForTest()` from the render loop's per-block callback. There is no sleep and no "eventually the ring fills" wait anywhere in the file.
 
 | What it covers | |
 |-------|-------|
@@ -162,7 +162,7 @@ The timeline's clock and the headless render harness built on it. No audio devic
 | `RegisteredButInternalOnly` / `AbsentFromTheLibraryWithAPinnedSizeEstimate` | the internal-only checklist: factory key, module type, **16/16** channels, `getFactoryTypeName`, non-authorable, Utility cable colour, void `getExtraState` when bare; absent from the library, with `estimateModuleSize("Hosted Plugin")` measured against the real card |
 | `IdentitySerializationCarriesNoPath` | `PluginIdentity` round-trips through `var`, carries no path, and matches uid-first — a rename still matches, a different format does not |
 
-Three sibling files share `StubPluginInstance.h` and the same message-pump idiom: `HostedPluginEditorWindowTests.cpp` (TL7-5 — editor windows, headless, state not pixels), `HostedPluginLaneTests.cpp` (TL7-6 — a hosted parameter as an automation lane; gated on `SYNTH_ENABLE_TIMELINE`), and `HostedPluginLatencyTests.cpp` (TL7-7). The last one's acceptance test is worth knowing about: it splits an impulse down a **dry** path and a **hosted-plugin** path into Audio Output on a real `AudioEngine` graph, and asserts both copies land on the same output sample — off-by-zero, at two different latencies, across a `rebuild()`. That only tests anything because the stub genuinely delays its audio by the latency it reports; `WithoutARebuildTheParallelPathsDrift` is the negative control that fails if the rebuild is ever removed.
+Three sibling files share `StubPluginInstance.h` and the same message-pump idiom: `HostedPluginEditorWindowTests.cpp` (TL7-5 — editor windows, headless, state not pixels), `HostedPluginLaneTests.cpp` (TL7-6 — a hosted parameter as an automation lane), and `HostedPluginLatencyTests.cpp` (TL7-7). The last one's acceptance test is worth knowing about: it splits an impulse down a **dry** path and a **hosted-plugin** path into Audio Output on a real `AudioEngine` graph, and asserts both copies land on the same output sample — off-by-zero, at two different latencies, across a `rebuild()`. That only tests anything because the stub genuinely delays its audio by the latency it reports; `WithoutARebuildTheParallelPathsDrift` is the negative control that fails if the rebuild is ever removed.
 
 ### Integration Tests (~38 tests)
 
@@ -468,8 +468,7 @@ production knob):
   --json eval-results/my-run.json
 
 # exercise getPatchSchemaWithTimelineOps() instead of getPatchSchema() — same request path
-# (OllamaProvider::processRequest -> `format` field), the extended schema. Needs
-# -DSYNTH_ENABLE_TIMELINE=ON.
+# (OllamaProvider::processRequest -> `format` field), the extended schema. Works on every build.
 ./build/Tools/AIEvalHarness/AIEvalHarness --model gpt-oss:20b --mode timeline --json eval-results/my-timeline-run.json
 ```
 
@@ -629,13 +628,12 @@ What this gives up: a post-merge run no longer catches two PRs that are each gre
 
 A `concurrency` group cancels superseded runs on the same PR (main is never cancelled, since those runs seed the cache).
 
-There are **six jobs**:
+There are **five jobs**:
 
 | Job | Runner | Config | Notes |
 |-----|--------|--------|-------|
 | **Lint** | `ubuntu-latest` | — | Installs the pinned `clang-format` PyPI wheel (version from `.clang-format-version`) via `pip install "clang-format==$(cat .clang-format-version)"` after `actions/setup-python`; runs `--dry-run --Werror` over `Source/` and `Tests/`. Fast (~30 s) — gives formatting feedback without waiting for a full build. |
 | **Build, Test, and Coverage** | `ubuntu-latest` | Debug + clang + `ENABLE_COVERAGE=ON` | Runs tests, then `bash scripts/coverage.sh --report-only` (skips re-build; only merges profdata and checks the 85% line-coverage threshold). |
-| **Build and Test (Timeline OFF)** | `ubuntu-latest` | Release + `SYNTH_ENABLE_TIMELINE=OFF` | PR-only. Asserts the timeline feature's revertibility: the flag-OFF build must reproduce today's app and pass the full suite (timeline-integration tests are compiled out with the flag). Restores the shared `deps3` FetchContent cache but **never saves it**, and keeps ccache in its own `-timeline-off-` key namespace so the flipped compile definition can't dilute the main job's hit rate. Deliberately runs no cache health check — the check's warm-cache expectations are tuned for the main job. |
 | **Build and Test (ASAN)** | `ubuntu-latest` | `RelWithDebInfo` + `-fsanitize=address` | **Label-gated** — only runs when the PR carries the `run-asan` label. `ASAN_OPTIONS=detect_leaks=0`. |
 | **Build and Test (macOS)** | `macos-latest` | Release | Catches UB/segfaults and cross-platform issues. |
 | **Build and Test (Windows)** | `windows-latest` | Release | Catches UB/segfaults and cross-platform issues. |

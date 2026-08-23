@@ -40,11 +40,9 @@
 #include <thread>
 #include <vector>
 
-#if SYNTH_ENABLE_TIMELINE
 #include "../Source/AI/AIProvider.h"
 #include "../Source/Timeline/TimelineDoc.h"
 #include "MainComponent.h"
-#endif
 
 using synth::HostedPluginModule;
 using synth::test::FakeAudioIODevice;
@@ -257,10 +255,9 @@ namespace {
  *  a single chain.
  *
  *  The source is the bare `audioInputNode` IO processor rather than `AudioInputModule`,
- *  deliberately: the module reads the device input off the transport playhead, which the engine only
- *  installs in a `SYNTH_ENABLE_TIMELINE` build, and none of this has anything to do with the
- *  timeline. The IO node reads the render buffer's own input channels, so these tests run in both
- *  builds. */
+ *  deliberately: the module reads the device input off the transport playhead, and none of this has
+ *  anything to do with the timeline. The IO node reads the render buffer's own input channels
+ *  directly, keeping PDC decoupled from playhead installation. */
 struct PdcGraph {
     AudioEngine engine{AudioEngine::HostMode::Standalone};
     HostedPluginModule* hosted = nullptr;
@@ -502,8 +499,6 @@ TEST(HostedPluginLatencyTest, InnerGraphLatencyIsMirroredToTheHost) {
 // 3. Flow — MainComponent's owner wiring
 // ============================================================================
 
-#if SYNTH_ENABLE_TIMELINE
-
 namespace {
 
 // Same minimal provider shape as every other MainComponent-level test (RecordTapTests.cpp,
@@ -703,5 +698,3 @@ TEST_F(HostedPluginLatencyFlowTest, ClosingTheEditorUninstallsTheObservers) {
 
     engine.shutdown();
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

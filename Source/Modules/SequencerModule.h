@@ -86,7 +86,6 @@ public:
 
         juce::ignoreUnused(buffer);
 
-#if SYNTH_ENABLE_TIMELINE
         // Sync-to-Transport (opt-in, default off). Only taken when syncParam is on AND
         // getPlayHead() downcasts to our own TransportService — AudioEngine installs one on every
         // node on every render pass, but a foreign VST/AU host's playhead won't downcast, and
@@ -101,7 +100,6 @@ public:
                 return;
             }
         }
-#endif
 
         const bool running = *runParam;
         if (!running) {

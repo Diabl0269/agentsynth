@@ -28,11 +28,9 @@
 #include <thread>
 #include <vector>
 
-#if SYNTH_ENABLE_TIMELINE
 #include "../Source/AI/AIStateMapper.h"
 #include "../Source/AudioEngine.h"
 #include "../Source/Transport/OfflineTransportDriver.h"
-#endif
 
 using synth::AutomationRecorder;
 using synth::LaneRecordMode;
@@ -740,8 +738,6 @@ TEST(AutomationRecordTest, SnapshotCarriesTheRecordMode) {
     EXPECT_EQ(snapshot->lanes[0].recordMode, mode(LaneRecordMode::Write));
 }
 
-#if SYNTH_ENABLE_TIMELINE
-
 // ============================================================================
 // 11. Engine level: claims really stop the applier, and the applier is inaudible
 //     to the recorder
@@ -881,5 +877,3 @@ TEST(AutomationRecordTest, RecorderNeverHearsTheApplier) {
     EXPECT_FALSE(f.undo.canUndo()) << "playback must never create an undo step";
     EXPECT_FALSE(f.recorder.hadOverrun());
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

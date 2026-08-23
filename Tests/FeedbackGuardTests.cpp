@@ -5,15 +5,13 @@
 //     Output) through FakeAudioIODevice, exactly like Tests/AudioInputTests.cpp /
 //     Tests/AudioInputModuleTests.cpp: audioDeviceAboutToStart once, then
 //     audioDeviceIOCallbackWithContext called BY HAND, block by block. This needs the transport the
-//     ENGINE installs as playhead (SYNTH_ENABLE_TIMELINE only — AudioInputModuleTest's "Engine
-//     layer" note applies here too), so those tests are gated.
+//     ENGINE installs as playhead — AudioInputModuleTest's "Engine layer" note applies here too.
 //   * GUARD-ONLY layer — the guard itself does not care about AudioInputModule at all; it reads
 //     whatever is in the render buffer post-graph. LoudSynthWithoutMonitoringNeverTrips uses a raw
 //     juce::AudioGraphIOProcessor passthrough (nothing to do with the module's own gate) to prove
-//     the guard never evaluates while monitoring is disabled, and needs no flag at all.
+//     the guard never evaluates while monitoring is disabled.
 //   * MAINCOMPONENT layer — the poll wiring: armed-Audio-track derivation, the trip-latches-until-
-//     re-arm rule, and the status-bar message. Gated (SYNTH_ENABLE_TIMELINE only — there is no
-//     TimelineDoc-driven poll without it).
+//     re-arm rule, and the status-bar message.
 //
 // Headless house rules as everywhere else: no real audio device, no sleeps.
 
@@ -25,10 +23,8 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <vector>
 
-#if SYNTH_ENABLE_TIMELINE
 #include "../Source/AI/AIProvider.h"
 #include "MainComponent.h"
-#endif
 
 namespace {
 
@@ -85,8 +81,6 @@ void buildRawPassthrough(AudioEngine& engine, int numChannels) {
 // ============================================================================
 // Engine layer (needs the transport as playhead — see the file header)
 // ============================================================================
-
-#if SYNTH_ENABLE_TIMELINE
 
 TEST(FeedbackGuardTest, MonitoringGateSilencesWhenDisabled) {
     AudioEngine engine(AudioEngine::HostMode::Standalone);
@@ -248,8 +242,6 @@ TEST(FeedbackGuardTest, FalsePositiveCorpus) {
     engine.audioDeviceStopped();
 }
 
-#endif // SYNTH_ENABLE_TIMELINE
-
 // ============================================================================
 // Guard-only layer — no AudioInputModule, no transport dependency
 // ============================================================================
@@ -282,8 +274,6 @@ TEST(FeedbackGuardTest, LoudSynthWithoutMonitoringNeverTrips) {
 // ============================================================================
 // MainComponent layer — the poll wiring
 // ============================================================================
-
-#if SYNTH_ENABLE_TIMELINE
 
 namespace {
 
@@ -433,5 +423,3 @@ TEST_F(MainComponentFeedbackGuardTest, StaysOffAfterTripWhileArmedThenDisarmRear
 
     engine.audioDeviceStopped();
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

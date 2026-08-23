@@ -8,11 +8,9 @@
 #include <memory>
 #include <vector>
 
-#if SYNTH_ENABLE_TIMELINE
 #include "../Timeline/ArrangementContext.h"
 #include "../Timeline/TimelineOps.h"
 #include "../Transport/TransportService.h"
-#endif
 
 class AppUndoManager; // Forward declaration — the service only holds a non-owning pointer.
 
@@ -68,7 +66,6 @@ public:
      */
     int getRequestTimeoutMs() const { return currentRequestTimeoutMs; }
 
-#if SYNTH_ENABLE_TIMELINE
     /**
      * @brief Installs (or clears) the timeline/transport this service reads for arrangement
      *        context. Non-owning — MainComponent owns both for the app's lifetime.
@@ -208,7 +205,6 @@ public:
      * request rather than approximating it.
      */
     juce::var buildArrangeRequestBody(const juce::String& text) const;
-#endif
 
     /**
      * @brief Sets (or clears) the conversation id forwarded to the active provider's
@@ -416,10 +412,9 @@ private:
     bool lastPatchModeRepaired = false;
     juce::ListenerList<Listener> listeners;
 
-#if SYNTH_ENABLE_TIMELINE
     // Non-owning, installed post-construction via setTimelineContext() — see its doc comment.
-    // Either or both may be null (a SYNTH_ENABLE_TIMELINE=OFF build never declares these members
-    // at all, and buildPatchAugmentedContent()'s arrangement section is #if-gated out).
+    // Either or both may be null until setTimelineContext() is called, which is why
+    // buildPatchAugmentedContent()'s arrangement section null-checks both before using them.
     const TimelineDoc* timelineDoc = nullptr;
     const TransportService* transportService = nullptr;
 
@@ -463,17 +458,10 @@ private:
     // composed into one message, section-for-section the way the server's
     // buildTimelineUserMessage composes them for the hosted transport. See sendArrangeMessage().
     juce::String buildArrangeAugmentedContent(const juce::String& text) const;
-#endif
 
     // True while the timeline tool surface should be offered to the model: the switch is on AND
-    // a timeline context is installed. Always false in a SYNTH_ENABLE_TIMELINE=OFF build.
-    bool timelineToolsActive() const {
-#if SYNTH_ENABLE_TIMELINE
-        return timelineToolsEnabled && hasTimelineContext();
-#else
-        return false;
-#endif
-    }
+    // a timeline context is installed.
+    bool timelineToolsActive() const { return timelineToolsEnabled && hasTimelineContext(); }
 
     void initSystemPrompt();
 

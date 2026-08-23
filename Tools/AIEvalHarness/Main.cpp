@@ -33,8 +33,8 @@
     scored through the exact stack a user hits (client -> service -> Ollama/Groq) instead of an
     approximation of it.
 
-    --mode timeline (requires -DSYNTH_ENABLE_TIMELINE=ON) replays a separate scenario set that
-    exercises getPatchSchemaWithTimelineOps() instead of getPatchSchema() — the same request path
+    --mode timeline replays a separate scenario set that exercises
+    getPatchSchemaWithTimelineOps() instead of getPatchSchema() — the same request path
     (OllamaProvider::processRequest -> `format` field), just the extended schema. This exists to
     verify structured-output corruption fixes (P6-13) against BOTH schemas the client actually
     sends locally, not just the plain patch one — they are not separate decoding surfaces.
@@ -147,7 +147,6 @@ const std::vector<Scenario>& scenarios() {
     return s;
 }
 
-#if SYNTH_ENABLE_TIMELINE
 // A separate, small scenario set exercising getPatchSchemaWithTimelineOps() (AIStateMapper.cpp)
 // instead of getPatchSchema() — same request path, extended schema (P6-13). All merge-mode
 // against kBasicPatch so "## Automation targets" has a real uuid to write a lane against.
@@ -166,7 +165,6 @@ const std::vector<Scenario>& timelineScenarios() {
     };
     return s;
 }
-#endif
 
 juce::String argValue(const juce::StringArray& args, const juce::String& flag, const juce::String& fallback) {
     int i = args.indexOf(flag);
@@ -242,16 +240,12 @@ Outcome runScenario(const Scenario& scenario, ProviderKind providerKind, const j
     synth::AIIntegrationService service(graph);
     service.setProvider(makeProvider(providerKind, host, model, sampling));
 
-#if SYNTH_ENABLE_TIMELINE
     synth::TimelineDoc timelineDoc;
     synth::TransportService transport;
     if (timelineMode) {
         service.setTimelineContext(&timelineDoc, &transport);
         service.setTimelineToolsEnabled(true);
     }
-#else
-    juce::ignoreUnused(timelineMode);
-#endif
 
     juce::WaitableEvent done;
     juce::String responseText;
@@ -279,7 +273,6 @@ Outcome runScenario(const Scenario& scenario, ProviderKind providerKind, const j
     }
     outcome.responded = true;
 
-#if SYNTH_ENABLE_TIMELINE
     if (timelineMode) {
         const juce::var envelope = synth::AIIntegrationService::extractTimelineOps(responseText);
         if (!envelope.isVoid()) {
@@ -289,7 +282,6 @@ Outcome runScenario(const Scenario& scenario, ProviderKind providerKind, const j
             outcome.timelineOpsError = tlResult.message;
         }
     }
-#endif
 
     juce::WaitableEvent applied;
     service.applyPatchWithRetry(responseText, scenario.mergeMode, [&](bool ok, const juce::String& error) {
@@ -341,12 +333,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     const bool timelineMode = modeFlag == "timeline";
-#if !SYNTH_ENABLE_TIMELINE
-    if (timelineMode) {
-        std::fprintf(stderr, "--mode timeline needs a -DSYNTH_ENABLE_TIMELINE=ON build\n");
-        return 1;
-    }
-#endif
 
     SamplingArgs sampling;
     const juce::String thinkFlag = argValue(args, "--think", "");
@@ -366,11 +352,7 @@ int main(int argc, char* argv[]) {
     if (providerKind == ProviderKind::remote && (sampling.think || sampling.temperature || sampling.seed))
         std::fprintf(stderr, "warning: --think/--temperature/--seed are --provider ollama only; ignored here\n");
 
-#if SYNTH_ENABLE_TIMELINE
     const auto& activeScenarios = timelineMode ? timelineScenarios() : scenarios();
-#else
-    const auto& activeScenarios = scenarios();
-#endif
 
     std::printf("AIEvalHarness  provider=%s  host=%s  model=%s  runs=%d  mode=%s  scenarios=%d\n",
                 providerFlag.toRawUTF8(), host.toRawUTF8(), model.toRawUTF8(), runs, modeFlag.toRawUTF8(),

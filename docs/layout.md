@@ -1629,16 +1629,14 @@ Keyboard focus is orthogonal to this diagram, not another region: whichever of t
 clip lanes / piano roll the user last clicked owns Cmd+C/V/D, per the **Keyboard & focus**
 subsection at the end of this section (TL5-10).
 
-Inside a `SYNTH_ENABLE_TIMELINE` build, Preferences has a runtime kill switch on top of all of
+Preferences has a runtime kill switch on top of all of
 this: "Show timeline (experimental)" (`PreferencesSettingsTab`, key `timelineFeatureEnabled`,
 default **on**). Turning it off hides the user-facing entry points only — the toolbar button
 (`MainComponent::toggleTimelineButton`), the Cmd+T command, and the Space play/stop transport key
 all become inactive/invisible via `MainComponent::applyTimelineFeatureEnabled()`, which reuses the
 toolbar toggle's own hide path if the panel happens to be open. It deliberately leaves everything
 else alive: the `TimelineDoc`, its audio-thread publishing, and project load/save all keep working
-exactly as before, so turning the preference back on picks up right where the user left off. The
-compile-time `SYNTH_ENABLE_TIMELINE` flag itself stays a build/CI concern — this preference cannot
-turn the feature back on in a flag-OFF build.
+exactly as before, so turning the preference back on picks up right where the user left off.
 
 ### What it is
 
@@ -1709,13 +1707,14 @@ extended to also lerp the timeline panel's bounds; showing the panel starts it f
 rect pinned at its final bottom edge (so it grows upward into place), and hiding it calls
 `setVisible(false)` in `onComplete`, same as the sibling panels.
 
-### Build flag
+### No build-time gating
 
 Everything past the always-present `TimelinePanelComponent` member and `PanelBoundsResult`/
 `computePanelBounds()` plumbing — the toolbar button, the `toggleTimelinePanel` command, and the
-carve itself — is gated `#if SYNTH_ENABLE_TIMELINE`, so a `-DSYNTH_ENABLE_TIMELINE=OFF` build has
-no button, no shortcut effect, and never carves the panel into the layout (see the CMake option's
-own comment in the root `CMakeLists.txt`).
+carve itself — is ordinary, always-compiled code: there is no build configuration that omits the
+button, the shortcut, or the panel carve. The only thing that varies at runtime is the
+`timelineFeatureEnabled` preference described above, which hides the entry points without removing
+them.
 
 Contents (ruler/grid/snap, track headers, the playhead, the transport bar, clip lanes, the piano
 roll, the automation strip, and finally the keyboard/focus rule tying it to the graph editor) are
@@ -1986,11 +1985,15 @@ MIDI-instrument node the track's bound Track In node could send MIDI to — in a
 anchored on the chip, via `openMidiDestinationsPicker()`/`buildMidiDestinationPicker()` (mirroring
 the colour swatch's build/launch split, including `createMidiDestinationPickerForTest()` and a
 `setOpenMidiDestinationsPickerHookForTest()` seam so the menu choice is exercisable without a live
-callout). "MIDI-instrument node" is `ModuleType::PolyMidi | Oscillator | Wavetable | Sampler |
-Sequencer | PolySequencer` — the exact same set `isMidiInstrumentType()` (`Source/Modules/
-ModuleBase.h`) defines for the add-track auto-wire target search above, deliberately excluding
-MIDI *sources* (Track In, External MIDI, MIDI Keyboard: they generate notes, they don't consume
-them). **The graph is the truth**: toggling a row calls `TrackHeaderHost::
+callout). The candidate list is DYNAMIC ground truth, not an allowlist: every live graph node whose
+`ModuleBase`-level `acceptsMidi()` is true (the per-module flags now reflect what each
+`processBlock` actually consumes — see the module MIDI-flag audit in
+`Tests/ModuleMidiFlagsTests.cpp`'s expected table), which automatically excludes MIDI *sources*
+(Track In, External MIDI, MIDI Keyboard: they generate notes, they don't consume them). Rows render
+in two sections: **Instruments** first (`isMidiInstrumentType()`, `Source/Modules/ModuleBase.h` —
+the same set the add-track auto-wire target search uses) and **Other** for the remaining real MIDI
+consumers (e.g. an ADSR's note-gate input); the section headers only appear when both groups are
+present. **The graph is the truth**: toggling a row calls `TrackHeaderHost::
 setMidiDestinationConnected(TrackId, nodeUid, connect)` — `MainComponent`'s implementation performs
 one `recordStructuralChange` (add/remove the MIDI connection) then always calls
 `reconcileTimelineAfterGraphChange()` — and immediately re-pulls `getMidiDestinationOptions(TrackId)`
@@ -2118,7 +2121,7 @@ free are all in §11 — read that before touching this component.
 
 | Rate | Owner | What it does |
 |---|---|---|
-| 10 Hz | `MainComponent::timerCallback` (**existing** timer, `#if SYNTH_ENABLE_TIMELINE`, only while `timelinePanel.isVisible()`) | `TimelinePanelComponent::updateFromTransport(snapshot, outputLatencySeconds)` |
+| 10 Hz | `MainComponent::timerCallback` (**existing** timer, only while `timelinePanel.isVisible()`) | `TimelinePanelComponent::updateFromTransport(snapshot, outputLatencySeconds)` |
 | 30 Hz | `TimelinePlayheadOverlay`'s own `juce::Timer` | re-reads the transport and requests the movement strip — **only while playing** |
 
 The low-rate poll is the **sole** owner of the 30 Hz timer's lifecycle: it sees the play/stop
@@ -2268,7 +2271,7 @@ MIDI track, which only `MainComponent` can see (it owns the `TimelineDoc`). The 
 click computes `!getToggleState()` and reports that as *intent* through
 `std::function<void(bool)> onRecordToggled` — it never flips its own toggle state. `setRecordingState(bool)`
 is the ONE thing that ever does, called back by the owner with the real outcome. `MainComponent`'s
-implementation (installed in `initialiseCommon()`, `#if SYNTH_ENABLE_TIMELINE`):
+implementation (installed in `initialiseCommon()`):
 
 - **ON** — iterates `timelineDoc.getTracks()` for the first `armed && kind == TrackKind::Midi`
   track. None found -> `setRecordingState(false)` + `statusBar.showMessage("Arm a track to
@@ -2402,7 +2405,7 @@ clips in a stable order regardless of click order.
 (`getClipSelection()` / `getClipLaneArea()`); the lane area holds the selection model and the
 shared `TimelineViewState` by reference, exactly the relationship the ruler already has with the
 view state. `MainComponent` forwards its one `AppUndoManager` in (`TimelinePanelComponent::
-setUndoManager`), the same gated `#if SYNTH_ENABLE_TIMELINE` wiring block that installs the doc,
+setUndoManager`), the same wiring block that installs the doc,
 transport and track-header host (TL5-3).
 
 **Z-order, and the one relocation this task makes.** `TimelinePanelComponent::paint()` still paints
@@ -3131,7 +3134,7 @@ click path `simulateToggleTimelineClick()` uses if it's hidden, and opens the st
 Tests: `Tests/AutomationEditorTests.cpp` — `AutomationLaneEditor` gesture/publish-discipline
 coverage (mirrors the `TimelineClipLaneArea`/`PianoRollComponent` hand-built-`juce::MouseEvent`
 idiom against a bare `TimelineDoc` + `AppUndoManager`), the panel's strip open/close/record-mode
-selector, and a `#if SYNTH_ENABLE_TIMELINE`-gated `MainComponent` integration test for the knob
+selector, and a `MainComponent` integration test for the knob
 entry point.
 
 ### TL5-10: keyboard & focus
@@ -3225,8 +3228,8 @@ point the transport bar's own click handler uses — see TL5-5 above — so the 
 and a Space-triggered toggle can never disagree). Safe to claim app-wide for the same reason
 Cmd+C/V is (see `shortcuts.md`): a focused `juce::TextEditor` consumes the spacebar itself (types a
 space character) before `MainComponent::keyPressed`, the sole dispatch point, ever sees it. Inactive
-outright (`getCommandInfo` -> `setActive(false)`) in a `SYNTH_ENABLE_TIMELINE=OFF` build, where
-there is no transport to toggle.
+outright (`getCommandInfo` -> `setActive(timelineFeatureEnabled)`) whenever the "Show timeline
+(experimental)" preference has hidden the transport, since it isn't reachable while hidden.
 
 **Delete stays panel-local.** Unlike C/V/D, Delete/Escape were never routed through
 `ShortcutManager`/`ApplicationCommandManager` at all (see `shortcuts.md`'s reasoning) — each

@@ -276,7 +276,6 @@ TEST_F(ModuleComponentTest, EstimatedModuleSizesMatchTheRealComponents) {
     }
 }
 
-#if SYNTH_ENABLE_TIMELINE
 // Track In is deliberately absent from the library, so the loop above cannot cover it —
 // but estimateModuleSize is still queried for it programmatically (the timeline's add-track flow
 // places the node), and a stale estimate there misplaces the card. Same assertion, one type.
@@ -296,7 +295,6 @@ TEST_F(ModuleComponentTest, TrackInEstimatedSizeMatchesTheRealComponent) {
     EXPECT_EQ(estimate.x, comp.getWidth());
     EXPECT_EQ(estimate.y, comp.getHeight());
 }
-#endif // SYNTH_ENABLE_TIMELINE
 
 // Three knobs per row (the body sits below the ports, so it can use nearly the full card width).
 TEST_F(ModuleComponentTest, KnobsAreLaidOutThreePerRow) {
