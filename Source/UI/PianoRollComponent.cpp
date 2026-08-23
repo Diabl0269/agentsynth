@@ -31,7 +31,9 @@ constexpr double kPitchScrollSemitonesPerWheelUnit = 3.0;
 // TimelineClipLaneArea's kEdgeAutoScrollMaxPxPerTick exactly — the roll's own drag should feel
 // identical. Vertical is ROWS, not pixels (visiblePitches_ can collapse rows to less than
 // pixelsPerSemitone_ apart in screen terms — a row is the unit that means something), and ~1 row
-// per tick at kEdgeScrollHz is a brisk-but-followable walk up/down the keyboard.
+// per tick at kEdgeScrollHz is a brisk-but-followable walk up/down the keyboard. That maximum is
+// only reached at full zone penetration (right at the edge); autoScrollTick applies the
+// shallower-penetration fraction of it straight to topRowPosition_, uncoarsened.
 constexpr double kEdgeAutoScrollMaxPxPerTick = 18.0;
 constexpr double kEdgeAutoScrollMaxRowsPerTick = 1.0;
 
@@ -68,6 +70,11 @@ bool isBlackKeyPitchClass(int pitchClass) noexcept {
 // comparisons. Beats are doubles that have been through a snap multiply-divide, so an exact
 // comparison would reject a cut that IS on a grid line by a few ULPs.
 constexpr double kBeatEpsilon = 1.0e-9;
+
+// Same tolerance, same reasoning, for pitchForY's row-index inversion (see its definition): a
+// should-be-exact row boundary can come out a hair to the wrong side of the integer std::ceil needs
+// to land on after a divide-then-subtract round trip through doubles.
+constexpr double kRowEpsilon = 1.0e-9;
 
 // The themed icon each tool's cursor is rendered from (IconLibrary's table is ordered
 // independently of EditTool, so the mapping is spelled out rather than cast).
@@ -171,9 +178,6 @@ void PianoRollComponent::openClip(synth::ClipId id) {
     // see copySelectedNotes.)
     hasSplitPreview_ = false;
     splitPreviewNote_ = {};
-    // A stale sub-row fraction from scrolling in the OLD clip must never surface as a surprise
-    // extra row the first time the user scrolls in this one.
-    pitchScrollRemainder_ = 0.0;
     // No animation across a clip switch — an in-flight scale-panel slide snaps to its target
     // instantly (the panel's own open/closed state is unrelated to which clip is open).
     if (scalePanelAnim_.isRunning())
@@ -195,6 +199,12 @@ void PianoRollComponent::openClip(synth::ClipId id) {
     const int visibleRows = std::max(1, (getHeight() - kHeaderHeight) / (int)pixelsPerSemitone_);
     const int median = medianPitchOf(clip->notes);
     firstVisiblePitch_ = juce::jlimit(0, 127, median + visibleRows / 2);
+    // A fresh, freshly-computed landing for the clip just opened — never a continuation of
+    // wherever the PREVIOUS clip had scrolled to. rebuildVisiblePitches (below) re-derives
+    // topRowPosition_ from firstVisiblePitch_ against THIS clip's (possibly different) row set,
+    // preserving topRowPosition_'s fractional part across that remap — 0 here, so the landing
+    // comes out on exactly the row firstVisiblePitch_ names, not offset by some leftover scroll.
+    topRowPosition_ = 0.0;
     // The new clip's notes are what pitch-visibility mode keeps visible alongside the scale, so the
     // row set has to be rebuilt against THIS clip before anything below reads visiblePitches_.
     rebuildVisiblePitches();
@@ -222,7 +232,6 @@ void PianoRollComponent::closeRoll() {
     hasPlayheadX_ = false;
     hasSplitPreview_ = false;
     splitPreviewNote_ = {};
-    pitchScrollRemainder_ = 0.0;
     // No animation across the roll closing — see openClip's identical guard.
     if (scalePanelAnim_.isRunning())
         finishScalePanelAnimation();
@@ -319,22 +328,79 @@ int PianoRollComponent::rowShiftedPitch(int originPitch, long long rowDelta) con
 int PianoRollComponent::yForPitch(int pitch) const noexcept {
     if (visiblePitches_.empty())
         return kHeaderHeight;
-    const long long firstRow = (long long)nearestVisibleRowIndex(firstVisiblePitch_);
-    const long long pitchRow = (long long)nearestVisibleRowIndex(pitch);
-    return kHeaderHeight + (int)std::llround((double)(firstRow - pitchRow) * pixelsPerSemitone_);
+    // topRowPosition_ IS the (fractional) row index whose top edge sits at y == kHeaderHeight (see
+    // the class comment) — the exact same formula the old int-only firstRow used, with firstRow
+    // simply replaced by the continuous anchor. An integral topRowPosition_ reproduces today's
+    // pixel-for-pixel result (llround(N * ps) == llround((double)N * ps) for integer N).
+    const double pitchRow = (double)nearestVisibleRowIndex(pitch);
+    return kHeaderHeight + (int)std::llround((topRowPosition_ - pitchRow) * pixelsPerSemitone_);
 }
 
 int PianoRollComponent::pitchForY(int y) const noexcept {
     if (visiblePitches_.empty())
         return firstVisiblePitch_;
-    const long long firstRow = (long long)nearestVisibleRowIndex(firstVisiblePitch_);
-    const long long rowOffset = (long long)std::floor((double)(y - kHeaderHeight) / pixelsPerSemitone_);
+    // Inverts yForPitch's formula: solving y == kHeaderHeight + (topRowPosition_ - row) *
+    // pixelsPerSemitone_ for the INTEGER row whose drawn rect (see yForPitch) contains `y` gives
+    // row == ceil(topRowPosition_ - (y - kHeaderHeight) / pixelsPerSemitone_) — ceil, not floor,
+    // because each row's rect starts AT its own y and extends towards increasing y (decreasing row
+    // index — pitch decreases as y increases). This pins identical to the old
+    // "firstRow - floor((y-kHeaderHeight)/ps)" when topRowPosition_ is itself an integer N:
+    // ceil(N - x) == N - floor(x) for integer N and any real x. kRowEpsilon guards the case where
+    // floating-point noise from the divide pushes a should-be-exact row boundary a hair past the
+    // integer it should ceil down to.
+    const double rowsBelowTop = (double)(y - kHeaderHeight) / pixelsPerSemitone_;
     const long long total = (long long)visiblePitches_.size();
-    const long long targetRow = std::clamp(firstRow - rowOffset, 0LL, total - 1);
+    const long long targetRow =
+        std::clamp((long long)std::ceil(topRowPosition_ - rowsBelowTop - kRowEpsilon), 0LL, total - 1);
     return visiblePitches_[(size_t)targetRow];
 }
 
+bool PianoRollComponent::setTopRowPosition(double raw) noexcept {
+    if (visiblePitches_.empty()) {
+        topRowPosition_ = 0.0;
+        return false;
+    }
+    const double clamped = std::clamp(raw, minTopRowPosition(), maxTopRowPosition());
+    const bool moved = clamped != topRowPosition_;
+    topRowPosition_ = clamped;
+    const long long total = (long long)visiblePitches_.size();
+    // floor, deliberately: firstVisiblePitch_ means "the row whose top edge is at or above the
+    // header line", i.e. the row a user would call the top one — and flooring is the only
+    // derivation under which sub-row scrolling leaves it put until a full row has actually been
+    // crossed. Any integer view of a fractional position quantizes SOMEWHERE, so symmetry claims
+    // about scrolling belong to the continuous position / pixel mapping (yForPitch), never to this
+    // derived legacy value.
+    const long long row = std::clamp((long long)std::floor(topRowPosition_), 0LL, total - 1);
+    firstVisiblePitch_ = visiblePitches_[(size_t)row];
+    return moved;
+}
+
+double PianoRollComponent::maxTopRowPosition() const noexcept {
+    return visiblePitches_.empty() ? 0.0 : (double)visiblePitches_.size() - 1.0;
+}
+
+double PianoRollComponent::minTopRowPosition() const noexcept {
+    if (visiblePitches_.empty())
+        return 0.0;
+    const double totalRows = (double)visiblePitches_.size();
+    // The grid's height expressed in ROWS, at the CURRENT (possibly non-integer) zoom — the same
+    // quantity paintGrid/paintKeysColumn derive (there, floored to an int row-height for their own
+    // loop bounds; here kept exact, since a fractional row of headroom is exactly what should let
+    // the lowest row land a fraction short of the bottom edge rather than snapping early).
+    const double gridRows =
+        pixelsPerSemitone_ > 0.0 ? (double)std::max(0, getHeight() - kHeaderHeight) / pixelsPerSemitone_ : 0.0;
+    return std::max(0.0, maxTopRowPosition() - std::max(0.0, totalRows - gridRows));
+}
+
 void PianoRollComponent::rebuildVisiblePitches() {
+    // Capture the pre-rebuild anchor — the pitch currently at the (possibly fractional) top-row
+    // position, plus exactly how far past its row we had scrolled — before visiblePitches_ is
+    // cleared out from under it. A scale-context change or a note add/remove must not snap the
+    // user's scroll to a whole row: it re-lands on the SAME pitch, at the SAME fractional offset,
+    // remapped onto whatever row that pitch occupies in the new set.
+    const double oldFraction = topRowPosition_ - std::floor(topRowPosition_);
+    const int anchorPitch = firstVisiblePitch_;
+
     visiblePitches_.clear();
     // Empty isInScale_ or visibility off: no filtering at all, so a scale that only affects
     // paintNote's colouring never touches which rows exist.
@@ -363,8 +429,10 @@ void PianoRollComponent::rebuildVisiblePitches() {
         }
     }
 
-    if (!visiblePitches_.empty())
-        firstVisiblePitch_ = visiblePitches_[nearestVisibleRowIndex(firstVisiblePitch_)];
+    // setTopRowPosition re-derives firstVisiblePitch_ from the result and no-ops safely (leaving
+    // firstVisiblePitch_ untouched) if visiblePitches_ somehow ended up empty — the same guard the
+    // old "if (!visiblePitches_.empty())" line used.
+    setTopRowPosition((double)nearestVisibleRowIndex(anchorPitch) + oldFraction);
 }
 
 void PianoRollComponent::setScaleContext(std::function<bool(int)> isInScale, bool pitchVisibilityOn) {
@@ -2415,13 +2483,14 @@ void PianoRollComponent::autoScrollTick() {
         // Sign is INVERTED relative to the horizontal case: edgeScrollVelocity returns negative
         // near the LOW edge (here, the TOP of the grid) and positive near the HIGH edge (the
         // bottom). Near the top the user wants to reveal what is ABOVE — higher pitches, since
-        // pitch increases upward — which means firstVisiblePitch_ (the pitch of the TOP row) must
-        // INCREASE, the opposite sign from the raw velocity.
-        const long long total = (long long)visiblePitches_.size();
-        const long long currentRow = (long long)nearestVisibleRowIndex(firstVisiblePitch_);
-        const long long rowStep = -(long long)std::llround(vVelocityRowsPerTick);
-        const long long newRow = std::clamp(currentRow + rowStep, 0LL, total - 1);
-        firstVisiblePitch_ = visiblePitches_[(size_t)newRow];
+        // pitch increases upward — which means topRowPosition_ (the row at the TOP) must INCREASE,
+        // the opposite sign from the raw velocity. No std::llround here any more: the old
+        // per-tick rounding meant any penetration under half the edge zone rounded to a ZERO row
+        // step — a "dead" outer half of the zone that never scrolled at all, however long the
+        // pointer sat there. Adding the raw fractional velocity straight into topRowPosition_
+        // fixes that (every tick, at any penetration depth, makes SOME progress) and is what makes
+        // a fast run of ticks glide smoothly through rows instead of hopping by whole ones.
+        setTopRowPosition(topRowPosition_ - vVelocityRowsPerTick);
     }
 
     // The pointer hasn't moved (no MouseEvent fired this tick) — the view did, so whichever
@@ -2632,32 +2701,22 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
         // gesture that a juce::Viewport would answer by scrolling towards the top of its content
         // shows higher pitches here, which is the same thing.
         const double amountY = (double)scrollAmount(dominantWheelDelta(wheel), scrollInverted_);
-        // Accumulate the FRACTIONAL row amount across events rather than truncating each one on
-        // its own: a trackpad's small deltaY (often 0.01-0.1) scaled by
-        // kPitchScrollSemitonesPerWheelUnit rounds to ZERO whole rows on almost every individual
-        // event, so a plain std::llround here dropped the gesture entirely until a single event
-        // happened to be big enough to clear a whole row by itself — "only sometimes works". The
-        // remainder carries the leftover fraction to the NEXT event, exactly the accumulator the
-        // horizontal branch above never needed (it moves in PIXELS, a far coarser unit, via
-        // rollView_.scrollBeats taking a plain double with no rounding at all).
-        pitchScrollRemainder_ += -amountY * kPitchScrollSemitonesPerWheelUnit;
-        const int deltaRows = (int)std::trunc(pitchScrollRemainder_);
-        pitchScrollRemainder_ -= (double)deltaRows;
-        // Walks visiblePitches_ by ROW INDEX, not by raw semitone — with pitch-visibility collapsing
-        // out-of-scale rows, "scroll one wheel-unit's worth of rows" has to mean the same number of
-        // ROWS whatever their semitone spacing happens to be (see the class comment).
-        if (deltaRows != 0 && !visiblePitches_.empty()) {
-            const long long total = (long long)visiblePitches_.size();
-            const long long currentRow = (long long)nearestVisibleRowIndex(firstVisiblePitch_);
-            const long long nextRow = std::clamp(currentRow + (long long)deltaRows, 0LL, total - 1);
-            // Gated on the CLAMPED result, not on the delta: a wheel that keeps pushing past the top
-            // row (or a gesture too small to round to a whole row) must cost zero repaints.
-            const int next = visiblePitches_[(size_t)nextRow];
-            if (next != firstVisiblePitch_) {
-                firstVisiblePitch_ = next;
-                repaint();
-            }
-        }
+        // topRowPosition_ moves CONTINUOUSLY, in fractional ROWS — no truncation, no remainder.
+        // Before this, a trackpad's small deltaY (often 0.01-0.1) scaled by
+        // kPitchScrollSemitonesPerWheelUnit rounded to ZERO whole rows on almost every individual
+        // event, and even the accumulator that used to live here (pitchScrollRemainder_) only
+        // rescued those LOST deltas — the visible position still didn't move at all until enough of
+        // them summed to a whole row, which is what read as chunky next to the horizontal axis.
+        // Now the position itself stays fractional, so yForPitch moves a proportionally small
+        // number of PIXELS on every event, exactly like rollView_.scrollBeats above (no rounding at
+        // all): still walked in ROW units, not raw semitone, for the same reason the class comment
+        // gives — "scroll one wheel-unit's worth of rows" must mean the same number of ROWS whatever
+        // pitch-visibility's collapsed semitone spacing happens to be.
+        const double deltaRows = -amountY * kPitchScrollSemitonesPerWheelUnit;
+        // Gated on whether the CLAMPED result actually moved, not on the delta being non-zero: a
+        // wheel that keeps pushing past the top/bottom row must cost zero repaints.
+        if (deltaRows != 0.0 && setTopRowPosition(topRowPosition_ + deltaRows))
+            repaint();
     }
 }
 
@@ -2676,19 +2735,17 @@ void PianoRollComponent::zoomHorizontalAroundX(double factor, double anchorGridX
 void PianoRollComponent::zoomVerticalAroundY(double factor, double anchorY) {
     if (!std::isfinite(factor) || factor <= 0.0 || !std::isfinite(anchorY) || visiblePitches_.empty())
         return;
-    // The anchor is held in ROW-INDEX space, not raw pitch, for the same reason the wheel-scroll
-    // branch walks visiblePitches_ by index: with rows collapsed, "row under the cursor" and
-    // "pitch under the cursor" can disagree, and the row is what visually sits at anchorY.
-    // firstVisiblePitch_ is an int (so is a row index), so the anchor holds to within one row —
-    // enough for a wheel gesture, a pinch, or a zoom command.
-    const double firstRow = (double)nearestVisibleRowIndex(firstVisiblePitch_);
+    // The anchor is held in fractional ROW-INDEX space — topRowPosition_ itself — for the same
+    // reason the wheel-scroll branch walks visiblePitches_ by index: with rows collapsed, "row
+    // under the cursor" and "pitch under the cursor" can disagree, and the row is what visually
+    // sits at anchorY. Unlike before this change, nothing here rounds the result back to a whole
+    // row: the anchored row's y stays pinned across the zoom to floating-point precision instead of
+    // "within one row".
     const double rowsAbove = (anchorY - (double)kHeaderHeight) / pixelsPerSemitone_;
-    const double anchorRow = firstRow - rowsAbove;
+    const double anchorRow = topRowPosition_ - rowsAbove;
     setPixelsPerSemitone(pixelsPerSemitone_ * factor);
     const double newRowsAbove = (anchorY - (double)kHeaderHeight) / pixelsPerSemitone_;
-    const long long total = (long long)visiblePitches_.size();
-    const long long newRow = std::clamp((long long)std::llround(anchorRow + newRowsAbove), 0LL, total - 1);
-    firstVisiblePitch_ = visiblePitches_[(size_t)newRow];
+    setTopRowPosition(anchorRow + newRowsAbove);
     repaint();
 }
 

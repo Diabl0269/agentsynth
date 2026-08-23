@@ -67,10 +67,21 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 // rows) falls back to the nearest visible row's y. visiblePitches_ is rebuilt (see
 // rebuildVisiblePitches) whenever the scale context changes, the roll opens a clip, or a doc
 // mutation could have added/removed the note that was the only thing keeping an out-of-scale pitch
-// visible; firstVisiblePitch_ is re-clamped to the nearest surviving visible pitch on every rebuild,
-// so it is always a member of visiblePitches_. Vertical wheel-scroll and vertical zoom walk
-// visiblePitches_ by INDEX for the same reason — a scroll gesture over collapsed rows must move a
-// consistent number of ROWS, not skip past them at whatever their semitone spacing happens to be.
+// visible.
+//
+// The scroll POSITION itself is `topRowPosition_` — a CONTINUOUS (fractional) index into
+// visiblePitches_: the row whose top edge sits at y == kHeaderHeight. `firstVisiblePitch_` is
+// DERIVED from it (visiblePitches_[floor(topRowPosition_)], reclamped to stay a member of
+// visiblePitches_), kept in sync at the one seam every writer goes through (setTopRowPosition), so
+// it is always a member of visiblePitches_. This split is what makes vertical scrolling sub-pixel
+// smooth like the horizontal axis (rollView_.firstVisibleBeat) instead of snapping to whole rows:
+// yForPitch/pitchForY read the fractional anchor directly, while `firstVisiblePitch_` still only
+// ever reports a whole row — a pitch is a MIDI integer, so anything that hit-tests or paints
+// against a specific PITCH (rather than calling yForPitch for an arbitrary one) necessarily still
+// sees whole-row values. Vertical wheel-scroll, edge auto-scroll and vertical zoom all move
+// topRowPosition_ fractionally, but still walk visiblePitches_ by INDEX rather than semitone — a
+// scroll gesture over collapsed rows must move a consistent number of ROWS, not skip past them at
+// whatever their semitone spacing happens to be.
 //
 // The panel's edit-tool strip pushes the active tool in (setActiveTool). Select is the whole
 // gesture table above; Split / Glue / Erase / Mute / Draw replace it with single-click actions and
@@ -485,6 +496,14 @@ public:
     juce::Rectangle<int> getKeysColumnBounds() const noexcept { return keysColumnBounds_; }
     juce::Rectangle<int> getNoteGridBounds() const noexcept { return noteGridBounds_; }
     int getFirstVisiblePitchForTest() const noexcept { return firstVisiblePitch_; }
+    // The continuous vertical scroll anchor firstVisiblePitch_ is derived from — see the class
+    // comment's "Vertical row mapping" section. setTopRowPositionForTest goes through the same
+    // clamp/re-derive seam (setTopRowPosition) every real writer does, so a test can plant an exact
+    // fractional (or out-of-range) position without bypassing the invariants that seam enforces.
+    double getTopRowPositionForTest() const noexcept { return topRowPosition_; }
+    void setTopRowPositionForTest(double position) noexcept { setTopRowPosition(position); }
+    double getMinTopRowPositionForTest() const noexcept { return minTopRowPosition(); }
+    double getMaxTopRowPositionForTest() const noexcept { return maxTopRowPosition(); }
     bool isMarqueeActiveForTest() const noexcept { return dragMode_ == DragMode::Marquee; }
     NoteSelectionModel& getSelectionForTest() noexcept { return selection_; }
 
@@ -649,6 +668,26 @@ private:
     // visiblePitches_ is unfiltered (the common case) this is exactly semitone arithmetic, because
     // row index == pitch there.
     int rowShiftedPitch(int originPitch, long long rowDelta) const noexcept;
+
+    // ---- topRowPosition_ (the continuous vertical scroll anchor — see the class comment) ----
+
+    // Clamps `raw` into [minTopRowPosition(), maxTopRowPosition()], stores it as the new
+    // topRowPosition_, and re-derives firstVisiblePitch_ from its floor — the ONE seam every write
+    // (the wheel, the edge auto-scroll, the anchored zoom, openClip/rebuildVisiblePitches, the test
+    // hook) goes through, so firstVisiblePitch_ can never read back stale against the continuous
+    // anchor it is derived from.
+    // @return true if topRowPosition_ actually moved — the repaint-gating callers' cue (mirrors the
+    // old "gate on the CLAMPED result" discipline the plain-wheel branch already used).
+    bool setTopRowPosition(double raw) noexcept;
+    // The valid range for topRowPosition_: never scrolls past visiblePitches_.back() (the highest
+    // pitch) at the TOP, nor past visiblePitches_.front() (the lowest) at the BOTTOM — the vertical
+    // mirror of rollView_.firstVisibleBeat's own ">= 0" floor, enforced at BOTH ends here because
+    // (unlike a beat count, which has no defined far end) the pitch axis has a fixed, finite length.
+    // When there is more room on the grid than there are rows to show (a heavily scale-filtered
+    // clip, or zoomed far out), the two bounds collapse to the same value and no scroll is possible
+    // at all — correct, since every row already fits and there is nowhere further to go.
+    double minTopRowPosition() const noexcept;
+    double maxTopRowPosition() const noexcept;
 
     // The colour resolution paintNote and notePaintFor share: builds the Colors value (themed, or a
     // default-constructed fallback with no LookAndFeel installed) and the outOfScale flag, then
@@ -901,23 +940,25 @@ private:
     // App-level ZOOM-direction preference; false == wheel up zooms in. A separate flag from
     // scrollInverted_ — see setZoomScrollInverted.
     bool zoomScrollInverted_ = false;
-    // Fractional ROWS left over after the plain-wheel pitch-scroll branch truncates its per-event
-    // amount to a whole row (mouseWheelMove). A trackpad's small deltaY scaled by
-    // kPitchScrollSemitonesPerWheelUnit rounds to ZERO rows on almost every individual event —
-    // without this carry, the gesture never moves at all until a single event happens to clear a
-    // whole row on its own ("only sometimes works"). Reset on openClip/closeRoll so a stale
-    // sub-row fraction from one clip never surfaces as a surprise extra row on the next.
-    double pitchScrollRemainder_ = 0.0;
-
     synth::ClipId clipId_;
     NoteSelectionModel selection_;
+
+    // The continuous vertical scroll anchor: the FRACTIONAL index into visiblePitches_ of the row
+    // whose top edge sits at y == kHeaderHeight — see the class comment's "Vertical row mapping"
+    // section and setTopRowPosition (the one seam every writer goes through). Replaces the old
+    // "truncate to a whole row, carry the remainder" scheme (a separate pitchScrollRemainder_
+    // accumulator) with the position itself simply staying fractional — the accumulator is
+    // redundant once there is nothing left to round away. Default 60.0 matches
+    // firstVisiblePitch_'s old default (row index == pitch value in the unfiltered/default case).
+    double topRowPosition_ = 60.0;
 
     // firstVisiblePitch_ is the HIGHEST pitch drawn at the grid's top row (y == kHeaderHeight),
     // clamped to [0, 127] — see yForPitch/pitchForY. Named to match the design doc's "scroll
     // position", even though (unlike TimelineViewState::firstVisibleBeat, the beat at x==0) this
     // one is the TOP of the range rather than conceptually its start, because pitch increases
-    // upward while beats increase rightward. Always a member of visiblePitches_ — see the class
-    // comment and rebuildVisiblePitches.
+    // upward while beats increase rightward. DERIVED from topRowPosition_ (never written
+    // directly outside setTopRowPosition) — visiblePitches_[floor(clamp(topRowPosition_))] — so it
+    // is always a member of visiblePitches_, exactly like before; see the class comment.
     int firstVisiblePitch_ = 60;
 
     // ---- Row mapping / scale context ----

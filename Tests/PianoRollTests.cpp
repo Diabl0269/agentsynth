@@ -39,7 +39,10 @@
 //  13. ROW MAPPING — yForPitch/pitchForY through visiblePitches_: the unfiltered round-trip
 //      (unchanged behaviour), a scale context with pitch-visibility OFF (no row ever hidden), ON
 //      (out-of-scale EMPTY rows collapse, a noted out-of-scale pitch never does), the round-trip
-//      once filtered, and firstVisiblePitch_'s "always a member of visiblePitches_" invariant.
+//      once filtered (including at a fractional/half-row scroll position), firstVisiblePitch_'s
+//      "always a member of visiblePitches_" invariant, and the CONTINUOUS topRowPosition_ anchor
+//      firstVisiblePitch_ is derived from: a regression pin against the old whole-row integer math,
+//      and its own clamp at both ends of the pitch range.
 //  14. NOTE COLOURING — notePaintFor's resolveNoteColour path (NoteColour.h), asserted against the
 //      SAME resolver fed the same fallback Colors, rather than against a re-derived formula.
 //  15. KEYS-COLUMN geometry — the black-key inset seam, and a snapshot smoke test with a scale
@@ -47,7 +50,8 @@
 //  16. BEAT-ANCHORED drag math (a mid-drag view scroll folds into the delta rather than being
 //      cancelled out by it), EDGE AUTO-SCROLL (the gated timer's arm/disarm contract and what one
 //      tick does on each axis, including the vertical walk staying inside visiblePitches_ under
-//      an active scale context), and FOLLOW PLAYHEAD (the page-flip, its zero-extra-repaint
+//      an active scale context and advancing FRACTIONALLY — no zero-progress ticks even at
+//      shallow zone penetration), and FOLLOW PLAYHEAD (the page-flip, its zero-extra-repaint
 //      contract while the beat is already visible and unmoved, and the "never fights a drag"
 //      gate).
 //
@@ -61,6 +65,7 @@
 #include "../Source/ShortcutManager.h"
 #include "../Source/Timeline/MusicalScale.h"
 #include "../Source/Timeline/TimelineDoc.h"
+#include "../Source/UI/EdgeAutoScroll.h" // kEdgeZonePx, for a deliberately SHALLOW auto-scroll penetration
 #include "../Source/UI/EditTool.h"
 #include "../Source/UI/NoteColour.h"
 #include "../Source/UI/NoteSelectionModel.h"
@@ -2637,29 +2642,36 @@ TEST(PianoRollWheelTest, PitchScrollFollowsTheGestureByDefaultAndFlipsWhenInvert
     f.open(clipId);
     ASSERT_FALSE(f.roll.isScrollInverted()) << "natural is the default";
 
+    // Distances are asserted in PIXELS via yForPitch, not via getFirstVisiblePitchForTest: the
+    // scroll position is continuous now (topRowPosition_), and the derived legacy int floors it,
+    // so a half-row landing quantizes asymmetrically around an integral start by construction —
+    // the symmetry claim only holds (and only matters) for the real, continuous mapping.
     const int base = f.roll.getFirstVisiblePitchForTest();
+    const int yBase = f.roll.yForPitch(60);
     f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}), wheelOnY(0.5f));
-    const int natural = f.roll.getFirstVisiblePitchForTest();
-    EXPECT_GT(natural, base) << "a +deltaY gesture scrolls towards HIGHER pitches";
+    const int yNatural = f.roll.yForPitch(60);
+    EXPECT_GT(f.roll.getFirstVisiblePitchForTest(), base) << "a +deltaY gesture scrolls towards HIGHER pitches";
+    EXPECT_GT(yNatural, yBase) << "so a fixed pitch's row moves DOWN the screen";
 
     // Undo it, then run the identical gesture inverted: it must land the same distance the other way.
     f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}), wheelOnY(-0.5f));
-    ASSERT_EQ(f.roll.getFirstVisiblePitchForTest(), base);
+    ASSERT_EQ(f.roll.yForPitch(60), yBase);
 
     f.roll.setScrollInverted(true);
     EXPECT_TRUE(f.roll.isScrollInverted());
     f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}), wheelOnY(0.5f));
-    const int inverted = f.roll.getFirstVisiblePitchForTest();
-    EXPECT_LT(inverted, base) << "the same gesture now scrolls the other way";
-    EXPECT_EQ(base - inverted, natural - base) << "and by exactly the same number of rows";
+    const int yInverted = f.roll.yForPitch(60);
+    EXPECT_LT(yInverted, yBase) << "the same gesture now scrolls the other way";
+    EXPECT_EQ(yBase - yInverted, yNatural - yBase) << "and by exactly the same number of pixels";
 }
 
 // THE regression: a trackpad's small deltaY (often 0.01-0.1 per event) scaled by
 // kPitchScrollSemitonesPerWheelUnit rounds to ZERO whole rows on almost every individual event; a
 // plain per-event round dropped the gesture entirely unless one event happened to be big enough to
-// clear a row on its own — "only sometimes works". pitchScrollRemainder_ carries the leftover
-// fraction across events, so N small events land on exactly the same row count ONE big event of
-// the summed delta would.
+// clear a row on its own — "only sometimes works". topRowPosition_ (a continuous double — see the
+// class comment) simply never rounds at all, so N small events land on exactly the same
+// (fractional) position ONE big event of the summed delta would, and hence on the same DERIVED
+// firstVisiblePitch_ row.
 TEST(PianoRollWheelTest, SmallPitchScrollEventsAccumulateToTheSameRowCountAsOneBigEvent) {
     PianoRollFixture accumulated;
     const auto trackA = accumulated.doc.addTrack(TrackKind::Midi, "Track 1");
@@ -2683,6 +2695,33 @@ TEST(PianoRollWheelTest, SmallPitchScrollEventsAccumulateToTheSameRowCountAsOneB
         << "five small events summing to 0.5 must land on exactly the same row as one 0.5 event";
 }
 
+// THE actual smoothness fix (as opposed to the "lost small deltas" fix above): before this, the
+// wheel could DROP a small gesture, but even the fixed ("carry the remainder") version still left
+// firstVisiblePitch_ — the only state yForPitch read — completely UNMOVED while a fraction
+// accumulated, so the grid still visibly snapped in whole ~10px rows. Now topRowPosition_ itself is
+// what moves, so yForPitch of a FIXED pitch takes a proportional, sub-row PIXEL step on every single
+// event, matching the horizontal axis (rollView_.firstVisibleBeat).
+TEST(PianoRollWheelTest, SmallPitchScrollEventsMoveYSmoothlyBelowARow) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+
+    const int fixedPitch = f.roll.getFirstVisiblePitchForTest() - 5; // comfortably inside the grid
+    int previousY = f.roll.yForPitch(fixedPitch);
+    // 0.05 * kPitchScrollSemitonesPerWheelUnit (3.0) == 0.15 rows/event -- well under one row, but
+    // (at the default 10px/row) still more than a pixel, so llround can never tie two consecutive
+    // events to the same y (see the .cpp derivation this test pins).
+    for (int i = 0; i < 5; ++i) {
+        f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}), wheelOnY(0.05f));
+        const int y = f.roll.yForPitch(fixedPitch);
+        EXPECT_GT(y, previousY) << "event " << i
+                                << ": the grid must move a little on EVERY event, never sit "
+                                   "frozen until a whole row accumulates";
+        previousY = y;
+    }
+}
+
 TEST(PianoRollWheelTest, PitchScrollAccumulatorCarriesTheFractionalRemainderAcrossEvents) {
     PianoRollFixture f;
     const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
@@ -2691,26 +2730,30 @@ TEST(PianoRollWheelTest, PitchScrollAccumulatorCarriesTheFractionalRemainderAcro
     const int base = f.roll.getFirstVisiblePitchForTest();
 
     // 0.1 * kPitchScrollSemitonesPerWheelUnit (3.0) == 0.3 rows/event -- three events sum to 0.9
-    // (still under a whole row), a FOURTH tips it over 1.0.
+    // (still under a whole row), a FOURTH tips it over 1.0. firstVisiblePitch_ itself still only
+    // ever reports a WHOLE row (it is derived from floor(topRowPosition_) — see the class comment),
+    // so this whole-row-crossing behaviour is unchanged even though there is no longer a separate
+    // pitchScrollRemainder_ member: topRowPosition_'s own fractional part now plays that role.
     for (int i = 0; i < 3; ++i) {
         f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}), wheelOnY(0.1f));
         EXPECT_EQ(f.roll.getFirstVisiblePitchForTest(), base) << "event " << i << ": still under one row's worth";
     }
     f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}), wheelOnY(0.1f));
     EXPECT_GT(f.roll.getFirstVisiblePitchForTest(), base)
-        << "the 4th event's carried remainder finally clears a whole row";
+        << "the 4th event's carried fraction finally clears a whole row";
 }
 
-TEST(PianoRollWheelTest, PitchScrollRemainderResetsAcrossAClipSwitch) {
+TEST(PianoRollWheelTest, PitchScrollFractionResetsAcrossAClipSwitch) {
     PianoRollFixture f;
     const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
     const auto clipA = f.doc.addClip(trackId, 0.0, 8.0, "A");
     const auto clipB = f.doc.addClip(trackId, 8.0, 8.0, "B");
     f.open(clipA);
 
-    // Leave clip A's remainder at 0.9 rows -- one event short of clearing a row on its own (see
-    // the previous test). If this carried into clip B unreset, a SINGLE further 0.1 event there
-    // (0.3 more) would tip it over 1.0 and move a row; reset to 0, it stays well under.
+    // Leave clip A's topRowPosition_ at a 0.9-row fraction -- one event short of clearing a row on
+    // its own (see the previous test). If this carried into clip B unreset, a SINGLE further 0.1
+    // event there (0.3 more) would tip it over 1.0 and move a row; openClip resets it to a whole
+    // row (see its own comment), so it stays well under.
     for (int i = 0; i < 3; ++i)
         f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}), wheelOnY(0.1f));
 
@@ -2800,9 +2843,10 @@ TEST(PianoRollZoomApiTest, ZoomVerticalKeepsTheCentrePitchAndClampsAtBothEnds) {
 
     f.roll.zoomVertical(2.0);
     EXPECT_DOUBLE_EQ(f.roll.getPixelsPerSemitone(), 20.0);
-    // firstVisiblePitch_ is an int, so the anchor holds to within one row by design — the same
-    // tolerance the wheel and pinch zooms accept.
-    EXPECT_LE(std::abs(f.roll.pitchForY(centreY) - centrePitch), 1) << "the centre pitch stays put";
+    // topRowPosition_ (the continuous anchor zoomVerticalAroundY actually moves) is never rounded
+    // to a whole row mid-zoom any more, so the centre pitch now stays EXACTLY put rather than
+    // merely "within one row".
+    EXPECT_EQ(f.roll.pitchForY(centreY), centrePitch) << "the centre pitch stays put, exactly";
 
     f.roll.zoomVertical(0.0);
     f.roll.zoomVertical(-2.0);
@@ -2819,6 +2863,32 @@ TEST(PianoRollZoomApiTest, ZoomVerticalKeepsTheCentrePitchAndClampsAtBothEnds) {
 
     EXPECT_DOUBLE_EQ(f.state.pixelsPerBeat, 40.0) << "vertical zoom is the roll's alone";
     EXPECT_FALSE(f.undo.canUndo()) << "every zoom here is view-only";
+}
+
+// The case the OLD int-only firstVisiblePitch_ could never even represent: the anchor is
+// FRACTIONAL (mid-row) BEFORE the zoom starts, via the Cmd+Shift+wheel branch — the same public
+// path a real gesture takes, not a direct call into the private zoomVerticalAroundY.
+TEST(PianoRollZoomApiTest, CmdShiftWheelZoomKeepsTheAnchoredYFixedEvenFromAFractionalStart) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+    ASSERT_DOUBLE_EQ(f.roll.getPixelsPerSemitone(), PianoRollComponent::kPixelsPerSemitone);
+
+    f.roll.setTopRowPositionForTest(std::floor(f.roll.getTopRowPositionForTest()) + 0.5);
+    ASSERT_DOUBLE_EQ(f.roll.getTopRowPositionForTest(), std::floor(f.roll.getTopRowPositionForTest()) + 0.5);
+
+    const int anchorY = PianoRollComponent::kHeaderHeight + 37; // an arbitrary point inside the grid
+    const int pitchBefore = f.roll.pitchForY(anchorY);
+
+    const int mods = juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier;
+    juce::MouseWheelDetails wheel{};
+    wheel.deltaY = 0.4f;
+    f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, (float)anchorY}, mods), wheel);
+
+    EXPECT_GT(f.roll.getPixelsPerSemitone(), PianoRollComponent::kPixelsPerSemitone);
+    EXPECT_EQ(f.roll.pitchForY(anchorY), pitchBefore)
+        << "the row under the cursor stays exactly put, even though the pre-zoom anchor was fractional";
 }
 
 // ============================================================================
@@ -3118,6 +3188,99 @@ TEST(PianoRollRowMappingTest, FirstVisiblePitchIsAlwaysAMemberOfVisiblePitches) 
     EXPECT_LE(f.roll.getFirstVisiblePitchForTest(), 127);
 }
 
+// ---- topRowPosition_ — the continuous vertical scroll anchor firstVisiblePitch_ is derived from
+// (see the class comment's "Vertical row mapping" section) ----
+
+// THE regression pin: openClip lands on a whole row, and with topRowPosition_ integral,
+// yForPitch's new formula must produce PIXEL-FOR-PIXEL the same result the old
+// "kHeaderHeight + llround((firstRow - pitchRow) * ps)" int-only math did — reproduced verbatim
+// here as the ground truth, rather than re-deriving it from yForPitch itself.
+TEST(PianoRollRowMappingTest, YForPitchPinsIdenticalToTheOldIntegerMathWhenTopRowPositionIsIntegral) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+    ASSERT_DOUBLE_EQ(f.roll.getTopRowPositionForTest(), std::floor(f.roll.getTopRowPositionForTest()))
+        << "test premise: openClip lands on a whole row";
+
+    const int firstRow = f.roll.getFirstVisiblePitchForTest(); // row index == pitch value, unfiltered
+    const double ps = f.roll.getPixelsPerSemitone();
+    for (int pitch = 0; pitch <= 127; ++pitch) {
+        const int expectedY = PianoRollComponent::kHeaderHeight + (int)std::llround((double)(firstRow - pitch) * ps);
+        EXPECT_EQ(f.roll.yForPitch(pitch), expectedY) << "pitch " << pitch;
+    }
+}
+
+// The round-trip test above (RoundTripThroughVisibleRowsHoldsWithFilteringActive) only ever runs
+// against a WHOLE-row topRowPosition_. Plant a HALF-row one instead (10 px/semitone makes 0.5 row
+// == an exact 5px, so there is no rounding ambiguity to make the round-trip flaky) and require the
+// same invariant to keep holding for every visible pitch.
+TEST(PianoRollRowMappingTest, RoundTripHoldsAtAHalfRowScrollOffset) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+    ASSERT_DOUBLE_EQ(f.roll.getPixelsPerSemitone(), PianoRollComponent::kPixelsPerSemitone);
+
+    f.roll.setTopRowPositionForTest(std::floor(f.roll.getTopRowPositionForTest()) + 0.5);
+    ASSERT_DOUBLE_EQ(f.roll.getTopRowPositionForTest() - std::floor(f.roll.getTopRowPositionForTest()), 0.5);
+
+    for (const int pitch : f.roll.getVisiblePitchesForTest()) {
+        const int y = f.roll.yForPitch(pitch);
+        EXPECT_EQ(f.roll.pitchForY(y), pitch) << "pitch " << pitch;
+    }
+}
+
+// setTopRowPositionForTest goes through the same seam (setTopRowPosition) every real writer does,
+// so planting a wildly out-of-range value exercises exactly the clamp a wheel/zoom/auto-scroll that
+// keeps pushing past an end relies on.
+TEST(PianoRollRowMappingTest, TopRowPositionClampsAtBothExtremes) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+
+    // The fixture's grid (140 px of row space at the default 10px/row -> 14 rows) is far shorter
+    // than the full 128-pitch range, so the lower bound is strictly tighter than the old [0, 127]
+    // int clamp — this is the "never scroll past the first/last visible row" fix.
+    ASSERT_GT(f.roll.getMinTopRowPositionForTest(), 0.0) << "test premise: the grid is shorter than the pitch range";
+
+    f.roll.setTopRowPositionForTest(1.0e6);
+    EXPECT_DOUBLE_EQ(f.roll.getTopRowPositionForTest(), f.roll.getMaxTopRowPositionForTest());
+    EXPECT_EQ(f.roll.getFirstVisiblePitchForTest(), f.roll.getVisiblePitchesForTest().back())
+        << "pinned to the HIGHEST visible pitch at the top — nothing higher to scroll to";
+
+    f.roll.setTopRowPositionForTest(-1.0e6);
+    EXPECT_DOUBLE_EQ(f.roll.getTopRowPositionForTest(), f.roll.getMinTopRowPositionForTest());
+}
+
+// Row-collapse interaction: under an active scale context, small wheel events must still walk
+// topRowPosition_ smoothly (a fixed VISIBLE pitch's y moves on every event, per
+// SmallPitchScrollEventsMoveYSmoothlyBelowARow above) AND every row the scroll ever lands ON must
+// itself be a genuinely visible (never a scale-collapsed) pitch.
+TEST(PianoRollRowMappingTest, PitchScrollUnderAnActiveScaleContextMovesSmoothlyAndNeverSurfacesAHiddenPitch) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+    f.roll.setScaleContext(cMajorContains, /*pitchVisibilityOn*/ true);
+
+    const auto& visible = f.roll.getVisiblePitchesForTest();
+    ASSERT_FALSE(visible.empty());
+    const int fixedPitch = visible.front(); // always below whatever row the scroll below can reach
+
+    int previousY = f.roll.yForPitch(fixedPitch);
+    for (int i = 0; i < 5; ++i) {
+        f.roll.mouseWheelMove(leftClick(f.roll, {300.0f, 90.0f}), wheelOnY(0.05f));
+        const int y = f.roll.yForPitch(fixedPitch);
+        EXPECT_GT(y, previousY) << "event " << i << ": must move smoothly under filtering too";
+        previousY = y;
+
+        EXPECT_TRUE(std::binary_search(visible.begin(), visible.end(), f.roll.getFirstVisiblePitchForTest()))
+            << "event " << i << ": must never step onto a row the scale filter collapsed";
+    }
+}
+
 // ============================================================================
 // 14. Note colouring through synth::ui::resolveNoteColour (NoteColour.h)
 // ============================================================================
@@ -3365,13 +3528,56 @@ TEST(PianoRollAutoScrollTest, VerticalTickWalksOnlyVisibleRowsUnderAnActiveScale
     f.roll.mouseDrag(leftDrag(f.roll, nearTopEdge, anchor));
     ASSERT_TRUE(f.roll.isAutoScrollTimerRunningForTest());
 
-    f.roll.tickAutoScrollForTest();
-    const int afterOneTick = f.roll.getFirstVisiblePitchForTest();
-    EXPECT_GT(afterOneTick, startPitch) << "near the TOP edge the view walks upward (higher pitches)";
+    // This position (2px inside the edge, deep zone penetration) used to move a WHOLE row on the
+    // very first tick, because the old per-tick std::llround rounded its ~0.92-row velocity up to
+    // 1. Now topRowPosition_ accumulates that velocity exactly, uncoarsened, so firstVisiblePitch_
+    // (still an int — see the class comment) may take a couple of ticks to cross a row boundary;
+    // what must hold on EVERY tick is that the continuous anchor itself makes real, monotonic
+    // forward progress (see the dedicated shallow-penetration test below for the "no tick may
+    // contribute zero" half of this).
+    double previousPosition = f.roll.getTopRowPositionForTest();
+    for (int i = 0; i < 4; ++i) {
+        f.roll.tickAutoScrollForTest();
+        const double position = f.roll.getTopRowPositionForTest();
+        EXPECT_GT(position, previousPosition) << "tick " << i;
+        previousPosition = position;
+    }
+    const int afterFourTicks = f.roll.getFirstVisiblePitchForTest();
+    EXPECT_GT(afterFourTicks, startPitch) << "near the TOP edge the view walks upward (higher pitches)";
 
     const auto& visible = f.roll.getVisiblePitchesForTest();
-    EXPECT_TRUE(std::binary_search(visible.begin(), visible.end(), afterOneTick))
+    EXPECT_TRUE(std::binary_search(visible.begin(), visible.end(), afterFourTicks))
         << "the walked-to row must itself be a VISIBLE pitch, never one the scale filter collapsed";
+}
+
+// THE dead-outer-half-of-zone fix: 2px INSIDE the OUTER boundary of the 24px edge zone is shallow
+// penetration (~0.08 of the zone), which the old per-tick std::llround always rounded down to a
+// ZERO row step — the pointer could sit there forever and the view would never move. Every tick
+// must now make SOME progress, however small.
+TEST(PianoRollAutoScrollTest, VerticalAutoScrollAdvancesFractionallyEvenAtShallowZonePenetration) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 64.0, "Clip");
+    f.open(clipId);
+    const auto id = f.doc.addNote(clipId, makeNote(2.0, 60, 1.0));
+    ASSERT_TRUE(id.isValid());
+
+    const auto rect = f.roll.getNoteRect(id);
+    const juce::Point<float> anchor = centreOf(rect);
+    const auto grid = f.roll.getNoteGridBounds();
+    const juce::Point<float> shallowTopEdge(anchor.x, (float)grid.getY() + (float)(synth::ui::kEdgeZonePx - 2));
+
+    f.roll.mouseDown(leftClick(f.roll, anchor));
+    f.roll.mouseDrag(leftDrag(f.roll, shallowTopEdge, anchor));
+    ASSERT_TRUE(f.roll.isAutoScrollTimerRunningForTest()) << "still inside the zone, however shallow";
+
+    double previous = f.roll.getTopRowPositionForTest();
+    for (int i = 0; i < 5; ++i) {
+        f.roll.tickAutoScrollForTest();
+        const double now = f.roll.getTopRowPositionForTest();
+        EXPECT_GT(now, previous) << "tick " << i << ": no tick may contribute zero progress";
+        previous = now;
+    }
 }
 
 // ---- Follow playhead ----
