@@ -104,8 +104,18 @@ public:
     // pattern as AIChatComponent::setAccountService()'s non-owning setter. Also forwarded to the
     // transport bar, which restores/persists ITS OWN two keys ("timelineMetronomeEnabled",
     // "timelineCountInBars") — this panel has no other reason to know either setting exists, so it
-    // is a pure forward, not a third copy of the restore/persist idiom.
+    // is a pure forward, not a third copy of the restore/persist idiom. Also hands the roll its
+    // PropertiesFile (pianoRoll_.setPropertiesFile — scale-panel visibility + user scales) and
+    // runs reloadPianoRollAppearancePrefs() once, below.
     void setApplicationProperties(juce::ApplicationProperties* props);
+
+    // Reads "pianoRollKeyLabels" ("all"/"c", default "all") and NoteColour.h's own
+    // loadNoteColourOverrides, and pushes both into the roll. Called once from
+    // setApplicationProperties, and left PUBLIC so a live settings change (the Preferences tab's
+    // key-labels toggle, a note-colour edit) can re-push without a restart — MainComponent wires
+    // that in a parallel task; this method itself does no listening of its own. A no-op with no
+    // ApplicationProperties installed (or none passed to setApplicationProperties yet).
+    void reloadPianoRollAppearancePrefs();
 
     // Non-owning; may be null (a SYNTH_ENABLE_TIMELINE=OFF build never sets one, and the
     // panel is then an inert shell with an empty header column). The panel listens to the doc and
@@ -380,9 +390,9 @@ public:
     // external-state pattern: setClickingTogglesState(false), the shared bool is the truth, the
     // button only mirrors it). Persisted under "timelineFollowPlayhead", default OFF — an editor
     // that silently starts scrolling under a user who never asked for it is worse than one that
-    // doesn't. The piano roll gets its own wiring to this in a later wave (this panel's arrangement
-    // view only); setFollowPlayheadEnabled/isFollowPlayheadEnabled are public now so that wave has
-    // something to call.
+    // doesn't. Also forwards straight into pianoRoll_.setFollowPlayhead(enabled) — one flag, one
+    // switch, for both the arrangement view and the roll — including from the
+    // setApplicationProperties restore path.
     void setFollowPlayheadEnabled(bool enabled);
     bool isFollowPlayheadEnabled() const noexcept { return followPlayhead_; }
     /** Test seam: no OS mouse source exists headlessly, so a test drives the click via

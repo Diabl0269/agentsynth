@@ -40,6 +40,10 @@ public:
     void setNaturalScrollingEnabled(bool enabled);
     bool isZoomScrollUpZoomsInEnabled() const;
     void setZoomScrollUpZoomsInEnabled(bool enabled);
+    // "all" (every key labelled) vs "c" (only the Cs) — PianoRollComponent::KeyLabelMode, read by
+    // TimelinePanelComponent::reloadPianoRollAppearancePrefs(). true == "all" (the default).
+    bool isPianoRollKeyLabelModeAll() const;
+    void setPianoRollKeyLabelModeAll(bool labelEveryKey);
 
     // Fired from persistTimelineFeatureEnabled() after the value is saved, so a live MainComponent
     // can hide/show the timeline entry points without waiting for a restart. Null in every context
@@ -55,6 +59,7 @@ private:
     void persistTimelineFeatureEnabled(bool enabled);
     void persistNaturalScrolling(bool enabled);
     void persistZoomScrollUpZoomsIn(bool enabled);
+    void persistPianoRollKeyLabelMode(bool labelEveryKey);
 
     juce::ApplicationProperties& appProperties;
     GraphEditor* graphEditor{nullptr}; // weak, owned by MainComponent
@@ -83,6 +88,9 @@ private:
     // the Cmd / Cmd+Shift wheel-ZOOM branches only, which is what its own caption spells out.
     juce::ToggleButton zoomScrollUpZoomsInToggle{"Scroll up zooms in"};
     juce::Label zoomScrollUpZoomsInHint;
+    // On (the default) labels every row in the piano roll's keys column; off labels only the Cs —
+    // PianoRollComponent::KeyLabelMode::AllNotes / OctavesOnly.
+    juce::ToggleButton pianoRollKeyLabelsToggle{"Label every key"};
 
     // Hairline rules between preference groups, painted in paint() from these bounds.
     std::vector<juce::Rectangle<int>> dividerBounds;

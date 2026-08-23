@@ -73,17 +73,7 @@ bool isMidiInstrumentNode(juce::AudioProcessor* processor) {
     if (module == nullptr)
         return false;
 
-    switch (module->getModuleType()) {
-    case ModuleType::PolyMidi:
-    case ModuleType::Oscillator:
-    case ModuleType::Wavetable:
-    case ModuleType::Sampler:
-    case ModuleType::Sequencer:
-    case ModuleType::PolySequencer:
-        return true;
-    default:
-        return false;
-    }
+    return isMidiInstrumentType(module->getModuleType());
 }
 // True when `candidate` IS `ancestor` or sits anywhere inside its component subtree. The
 // "click grabs focus" idiom (GraphEditor::mouseDown and every timeline sub-component that copies
@@ -1152,6 +1142,11 @@ void MainComponent::changeListenerCallback(juce::ChangeBroadcaster* source) {
     if (source != nullptr && source == appProperties.getUserSettings()) {
         applyNaturalScrollingPreference();
         applyZoomScrollPreference();
+        // Piano-roll key-label mode and note colour overrides live in the same properties file —
+        // re-read them on every settings write so an Appearance-tab edit shows up immediately,
+        // the same "re-read on notify" treatment as the two calls above. No startup call needed:
+        // TimelinePanelComponent::setApplicationProperties already does the initial load.
+        timelinePanel.reloadPianoRollAppearancePrefs();
         return;
     }
 
@@ -3743,5 +3738,90 @@ synth::LaneId MainComponent::addPluginAutomationLane(const synth::ui::TrackHeade
 #else
     juce::ignoreUnused(option);
     return {};
+#endif
+}
+
+// The MIDI-destinations picker's row list — every MIDI-instrument node in the live graph the
+// track's bound Track In node could send its MIDI to, MIDI SOURCES deliberately excluded (see
+// isMidiInstrumentType's own comment: a source generates notes, it does not consume them).
+// Disambiguated exactly like getAvailableTrackInNodes(): "#id" appears only when some other
+// candidate shares its plain display name.
+std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption>
+MainComponent::getMidiDestinationOptions(synth::TrackId forTrack) {
+    std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption> options;
+#if SYNTH_ENABLE_TIMELINE
+    const auto* track = timelineDoc.getTrack(forTrack);
+    if (track == nullptr || track->bindingUuid.isEmpty())
+        return options; // unbound/orphaned: nothing resolvable to wire FROM
+
+    auto* trackInNode = findNodeByUuid(track->bindingUuid);
+    if (trackInNode == nullptr)
+        return options; // the bound node is gone — reconcile marks this orphaned elsewhere
+
+    auto& graph = audioEngine.getGraph();
+    std::vector<juce::AudioProcessorGraph::Node*> candidates;
+    for (auto* node : graph.getNodes()) {
+        if (node == nullptr)
+            continue;
+        auto* module = dynamic_cast<ModuleBase*>(node->getProcessor());
+        if (module == nullptr || !isMidiInstrumentType(module->getModuleType()))
+            continue;
+        candidates.push_back(node);
+    }
+
+    std::map<juce::String, int> nameOccurrences;
+    for (auto* node : candidates)
+        ++nameOccurrences[describeNodeForBinding(node)];
+
+    for (auto* node : candidates) {
+        const juce::String name = describeNodeForBinding(node);
+        const juce::String display =
+            nameOccurrences[name] > 1 ? name + " #" + juce::String((int)node->nodeID.uid) : name;
+        const bool connected = graph.isConnected(
+            {{trackInNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+             {node->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
+        options.push_back({display, node->nodeID.uid, connected});
+    }
+#else
+    juce::ignoreUnused(forTrack);
+#endif
+    return options;
+}
+
+void MainComponent::setMidiDestinationConnected(synth::TrackId forTrack, juce::uint32 nodeUid, bool connect) {
+#if SYNTH_ENABLE_TIMELINE
+    const auto* track = timelineDoc.getTrack(forTrack);
+    if (track == nullptr || track->bindingUuid.isEmpty())
+        return; // stale popup: the track lost its binding since the list was built — no-op, never crash
+
+    auto* trackInNode = findNodeByUuid(track->bindingUuid);
+    if (trackInNode == nullptr)
+        return; // stale popup: the bound node is gone
+
+    auto& graph = audioEngine.getGraph();
+    juce::AudioProcessorGraph::Node* targetNode = nullptr;
+    for (auto* node : graph.getNodes()) {
+        if (node != nullptr && node->nodeID.uid == nodeUid) {
+            targetNode = node;
+            break;
+        }
+    }
+    if (targetNode == nullptr)
+        return; // stale popup: the target node no longer resolves
+
+    const juce::AudioProcessorGraph::Connection connection{
+        {trackInNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+        {targetNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex}};
+
+    undoManager.recordStructuralChange(graph, [&graph, connection, connect] {
+        if (connect)
+            graph.addConnection(connection);
+        else
+            graph.removeConnection(connection);
+    });
+    graphEditor.updateComponents();
+    reconcileTimelineAfterGraphChange();
+#else
+    juce::ignoreUnused(forTrack, nodeUid, connect);
 #endif
 }

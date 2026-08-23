@@ -164,6 +164,8 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     bindingChip_.setComponentID("trackBindingChip");
     bindingChip_.onClick = [this] { handleChipClick(true); };
 
+    openMidiDestinationsPickerHook_ = [this] { openMidiDestinationsPicker(); };
+
     refreshFromDoc();
 }
 
@@ -238,6 +240,44 @@ std::unique_ptr<synth::ui::ColourPickerPopup> TimelineTrackHeaderComponent::buil
 
 std::unique_ptr<synth::ui::ColourPickerPopup> TimelineTrackHeaderComponent::createColourPickerForTest() {
     return buildColourPicker();
+}
+
+std::unique_ptr<synth::ui::MidiDestinationPicker> TimelineTrackHeaderComponent::buildMidiDestinationPicker() {
+    if (host_ == nullptr)
+        return nullptr;
+
+    juce::Component::SafePointer<TimelineTrackHeaderComponent> safeThis(this);
+    return std::make_unique<synth::ui::MidiDestinationPicker>(
+        [safeThis]() -> std::vector<synth::ui::MidiDestinationPicker::Option> {
+            auto* self = safeThis.getComponent();
+            if (self == nullptr || self->host_ == nullptr)
+                return {};
+            // TrackHeaderHost::MidiDestinationOption and MidiDestinationPicker::Option carry the
+            // same three fields by design (the header stays graph-free, so it can't hand the
+            // picker anything richer) — converted here rather than sharing one type, so the
+            // picker's header has no dependency on TimelineDoc/TrackHeaderHost at all.
+            std::vector<synth::ui::MidiDestinationPicker::Option> options;
+            for (const auto& option : self->host_->getMidiDestinationOptions(self->trackId_))
+                options.push_back({option.displayName, option.nodeUid, option.connected});
+            return options;
+        },
+        [safeThis](juce::uint32 nodeUid, bool connect) {
+            auto* self = safeThis.getComponent();
+            if (self == nullptr || self->host_ == nullptr)
+                return;
+            self->host_->setMidiDestinationConnected(self->trackId_, nodeUid, connect);
+        });
+}
+
+std::unique_ptr<synth::ui::MidiDestinationPicker> TimelineTrackHeaderComponent::createMidiDestinationPickerForTest() {
+    return buildMidiDestinationPicker();
+}
+
+void TimelineTrackHeaderComponent::openMidiDestinationsPicker() {
+    auto popup = buildMidiDestinationPicker();
+    if (popup == nullptr)
+        return; // no host — nothing to build a picker against
+    juce::CallOutBox::launchAsynchronously(std::move(popup), bindingChip_.getScreenBounds(), nullptr);
 }
 
 //==============================================================================
@@ -404,11 +444,22 @@ void TimelineTrackHeaderComponent::applyBindingMenuChoice(int menuId) {
         return;
     }
 
+    if (menuId == kMidiDestinationsMenuId) {
+        if (openMidiDestinationsPickerHook_)
+            openMidiDestinationsPickerHook_();
+        return;
+    }
+
     const auto options = collectBindingOptions();
     if (menuId < 1 || menuId > (int)options.size())
         return;
     // An explicit user choice — the ONLY way a binding ever changes. Never matched by name.
     host_->bindTrackTo(trackId_, options[(size_t)menuId - 1].uuid);
+}
+
+bool TimelineTrackHeaderComponent::offersMidiDestinationsMenuEntryForTest() const {
+    const auto* t = track();
+    return t != nullptr && t->kind == synth::TrackKind::Midi;
 }
 
 void TimelineTrackHeaderComponent::handleChipClick(bool showMenu) {
@@ -434,6 +485,14 @@ void TimelineTrackHeaderComponent::showBindingMenu() {
     if (!options.empty())
         menu.addSeparator();
     menu.addItem(kNewTrackInNodeMenuId, "New Track In node");
+
+    // MIDI destinations only make sense for a MIDI-kind track — an Audio or Automation track's
+    // binding feeds no MIDI-consuming node, so offering the entry there would open a picker with
+    // nothing it could ever wire.
+    if (t != nullptr && t->kind == synth::TrackKind::Midi) {
+        menu.addSeparator();
+        menu.addItem(kMidiDestinationsMenuId, "MIDI destinations...");
+    }
 
     juce::Component::SafePointer<TimelineTrackHeaderComponent> safeThis(this);
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&bindingChip_), [safeThis](int result) {

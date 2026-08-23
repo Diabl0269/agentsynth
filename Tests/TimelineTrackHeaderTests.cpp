@@ -89,7 +89,21 @@ public:
 
     juce::ApplicationProperties* getAppProperties() override { return appProperties; }
 
+    std::vector<MidiDestinationOption> getMidiDestinationOptions(TrackId /*forTrack*/) override {
+        return midiDestinationOptions;
+    }
+
+    void setMidiDestinationConnected(TrackId /*forTrack*/, juce::uint32 nodeUid, bool connect) override {
+        lastMidiDestinationNodeUid = nodeUid;
+        lastMidiDestinationConnect = connect;
+        ++setMidiDestinationCalls;
+    }
+
     std::vector<BindingOption> options;
+    std::vector<MidiDestinationOption> midiDestinationOptions;
+    juce::uint32 lastMidiDestinationNodeUid = 0;
+    bool lastMidiDestinationConnect = false;
+    int setMidiDestinationCalls = 0;
     std::map<juce::String, juce::String> names;
     juce::String lastBoundUuid;
     juce::String lastSelectedUuid;
@@ -246,6 +260,32 @@ TEST(TimelineTrackHeaderTest, ChipMenuIgnoresAnOutOfRangeChoice) {
     f.header->applyBindingMenuChoice(99); // not an id this menu ever offered
     EXPECT_TRUE(f.host->lastBoundUuid.isEmpty());
     EXPECT_TRUE(f.track()->bindingUuid.isEmpty());
+}
+
+// =============================================================================
+// 2b. Chip menu: "MIDI destinations..." entry (MIDI tracks only)
+// =============================================================================
+
+TEST(TimelineTrackHeaderTest, BindingMenuOffersMidiDestinationsForAMidiTrack) {
+    HeaderFixture f(TrackKind::Midi);
+    EXPECT_TRUE(f.header->offersMidiDestinationsMenuEntryForTest());
+}
+
+TEST(TimelineTrackHeaderTest, BindingMenuOmitsMidiDestinationsForAnAudioOrAutomationTrack) {
+    HeaderFixture audio(TrackKind::Audio);
+    EXPECT_FALSE(audio.header->offersMidiDestinationsMenuEntryForTest());
+
+    HeaderFixture automation(TrackKind::Automation);
+    EXPECT_FALSE(automation.header->offersMidiDestinationsMenuEntryForTest());
+}
+
+TEST(TimelineTrackHeaderTest, ChipMenuMidiDestinationsChoiceInvokesTheOpenHook) {
+    HeaderFixture f;
+    int openCalls = 0;
+    f.header->setOpenMidiDestinationsPickerHookForTest([&openCalls] { ++openCalls; });
+
+    f.header->applyBindingMenuChoice(TimelineTrackHeaderComponent::kMidiDestinationsMenuId);
+    EXPECT_EQ(openCalls, 1);
 }
 
 // A binding NEVER changes by itself — not on a reconcile, not by matching a name. Only an explicit

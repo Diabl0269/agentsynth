@@ -111,6 +111,42 @@ PianoRollComponent::PianoRollComponent(TimelineViewState& viewState)
     // No scale context yet, so this just fills visiblePitches_ with every pitch — see the class
     // comment and rebuildVisiblePitches.
     rebuildVisiblePitches();
+
+    addChildComponent(scalePanel_); // starts INVISIBLE; the header button / persisted flag show it
+    scalePanel_.onScaleChanged = [this](std::optional<synth::MusicalScale> scale) {
+        if (clipId_.isValid())
+            clipScaleMemory_[clipId_].scale = scale;
+        pushScaleContextFromMemory();
+    };
+    scalePanel_.onPitchVisibilityChanged = [this](bool on) {
+        if (clipId_.isValid())
+            clipScaleMemory_[clipId_].pitchVisibilityOn = on;
+        pushScaleContextFromMemory();
+    };
+    scalePanel_.onQuantizePitches = [this] {
+        if (!clipId_.isValid())
+            return;
+        const auto it = clipScaleMemory_.find(clipId_);
+        if (it != clipScaleMemory_.end() && it->second.scale.has_value())
+            quantisePitchesToScale(*it->second.scale);
+    };
+    scalePanel_.onGenerate = [this](int minPitch, int maxPitch) {
+        if (!clipId_.isValid())
+            return;
+        // Copied out rather than kept as a pointer into the map: generateRandomNotesIntoClip
+        // mutates the doc (and can therefore repaint/rebuild things this lambda has no business
+        // reasoning about the lifetime of), so the scale it reads must not depend on the map
+        // entry surviving the call.
+        synth::MusicalScale scaleStorage;
+        const synth::MusicalScale* scalePtr = nullptr;
+        const auto it = clipScaleMemory_.find(clipId_);
+        if (it != clipScaleMemory_.end() && it->second.scale.has_value()) {
+            scaleStorage = *it->second.scale;
+            scalePtr = &scaleStorage;
+        }
+        juce::Random rng; // default-seeded — the panel's Generate button always wants a fresh draw
+        generateRandomNotesIntoClip(scalePtr, minPitch, maxPitch, rng);
+    };
 }
 
 //==============================================================================
@@ -148,9 +184,14 @@ void PianoRollComponent::openClip(synth::ClipId id) {
     // row set has to be rebuilt against THIS clip before anything below reads visiblePitches_.
     rebuildVisiblePitches();
 
+    // Restores THIS clip's remembered scale/pitch-visibility (or "No scale" for a clip never
+    // opened before) into the panel and the roll's own scale context — rebuilds visiblePitches_
+    // again, correctly this time (the call above ran against whichever clip was open previously).
+    restoreScaleMemoryForOpenClip();
+
     // Frame the clip: its start at the keys column's right edge, zoomed so the whole clip fits the
     // grid width (subject to the shared zoom clamps).
-    const double gridWidth = std::max(1.0, (double)(getWidth() - kKeysColumnWidth));
+    const double gridWidth = std::max(1.0, (double)(getWidth() - leftGutterWidth()));
     const double fitted = clip->lengthBeats > 0.0 ? gridWidth / clip->lengthBeats : rollView_.pixelsPerBeat;
     setHorizontalView(fitted, clip->startBeat);
     repaint();
@@ -208,10 +249,10 @@ void PianoRollComponent::refreshFromDoc() {
 // ---- Geometry: the roll's OWN horizontal mapping ----
 
 double PianoRollComponent::beatToX(double absBeat) const noexcept {
-    return (double)kKeysColumnWidth + rollView_.beatToX(absBeat);
+    return (double)leftGutterWidth() + rollView_.beatToX(absBeat);
 }
 
-double PianoRollComponent::xToBeat(double x) const noexcept { return rollView_.xToBeat(x - (double)kKeysColumnWidth); }
+double PianoRollComponent::xToBeat(double x) const noexcept { return rollView_.xToBeat(x - (double)leftGutterWidth()); }
 
 void PianoRollComponent::setHorizontalView(double pixelsPerBeat, double firstVisibleBeat) {
     if (!std::isfinite(pixelsPerBeat) || !std::isfinite(firstVisibleBeat))
@@ -314,6 +355,147 @@ void PianoRollComponent::setScaleContext(std::function<bool(int)> isInScale, boo
     repaint();
 }
 
+//==============================================================================
+// ---- Scale assist panel ----
+
+namespace {
+// The roll's own "was the panel open" flag — the panel's user scales persist under their OWN key
+// (ScaleAssistPanel.h's kUserScalesPropertyKey), set directly via setPropertiesFile below.
+constexpr const char* kScalePanelVisiblePropertyKey = "pianoRollScalePanelVisible";
+} // namespace
+
+void PianoRollComponent::setPropertiesFile(juce::PropertiesFile* props) {
+    propertiesFile_ = props;
+    scalePanel_.setPropertiesFile(props);
+    const bool visible = props != nullptr && props->getBoolValue(kScalePanelVisiblePropertyKey, false);
+    setScalePanelVisible(visible);
+}
+
+void PianoRollComponent::setScalePanelVisible(bool visible) {
+    if (scalePanel_.isVisible() == visible)
+        return; // restoring the default (closed) on a fresh PropertiesFile costs nothing
+    scalePanel_.setVisible(visible);
+    resized(); // the gutter width just changed — carve the panel/keys-column/grid split again
+    repaint();
+    if (propertiesFile_ != nullptr) {
+        propertiesFile_->setValue(kScalePanelVisiblePropertyKey, visible);
+        propertiesFile_->saveIfNeeded();
+    }
+}
+
+void PianoRollComponent::toggleScalePanel() { setScalePanelVisible(!scalePanel_.isVisible()); }
+
+void PianoRollComponent::pushScaleContextFromMemory() {
+    std::optional<synth::MusicalScale> scale;
+    bool pitchVisibilityOn = false;
+    if (clipId_.isValid()) {
+        if (const auto it = clipScaleMemory_.find(clipId_); it != clipScaleMemory_.end()) {
+            scale = it->second.scale;
+            pitchVisibilityOn = it->second.pitchVisibilityOn;
+        }
+    }
+    if (scale.has_value()) {
+        const synth::MusicalScale resolved = *scale;
+        setScaleContext([resolved](int pitch) { return resolved.contains(pitch); }, pitchVisibilityOn);
+    } else {
+        setScaleContext({}, false);
+    }
+}
+
+void PianoRollComponent::restoreScaleMemoryForOpenClip() {
+    std::optional<synth::MusicalScale> scale;
+    bool pitchVisibilityOn = false;
+    if (const auto it = clipScaleMemory_.find(clipId_); it != clipScaleMemory_.end()) {
+        scale = it->second.scale;
+        pitchVisibilityOn = it->second.pitchVisibilityOn;
+    }
+    // A clip never opened before has no entry yet, and reads back exactly as "No scale" /
+    // visibility off without ever inserting one — see clipScaleMemory_'s class comment.
+    scalePanel_.setSelection(scale, pitchVisibilityOn);
+    if (scale.has_value()) {
+        const synth::MusicalScale resolved = *scale;
+        setScaleContext([resolved](int pitch) { return resolved.contains(pitch); }, pitchVisibilityOn);
+    } else {
+        setScaleContext({}, false);
+    }
+}
+
+void PianoRollComponent::quantisePitchesToScale(const synth::MusicalScale& scale) {
+    if (doc_ == nullptr || !clipId_.isValid())
+        return;
+    const auto* clip = doc_->getClip(clipId_);
+    if (clip == nullptr)
+        return;
+
+    // Selected notes if any; every note in the clip otherwise — the same "or all notes when
+    // nothing is selected" contract the Q button's Shift+click quantise follows.
+    std::vector<synth::NoteId> ids = selection_.getSelected();
+    if (ids.empty()) {
+        ids.reserve(clip->notes.size());
+        for (const auto& note : clip->notes)
+            ids.push_back(note.id);
+    }
+    if (ids.empty())
+        return;
+
+    auto mutate = [this, ids, scale] {
+        for (auto id : ids) {
+            const auto* note = doc_->getNote(id);
+            if (note == nullptr)
+                continue;
+            const int snapped = scale.snapPitch(note->pitch);
+            if (snapped != note->pitch)
+                doc_->moveNote(id, note->startBeat, snapped);
+        }
+    };
+    // recordTimelineChange itself pushes no undo step when the mutation changed nothing (every
+    // note already in scale) — the "no-op pushes nothing" half of the contract needs no extra
+    // code here.
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+
+    // Selection is deliberately left untouched: this only ever moves pitches.
+    repaint();
+}
+
+void PianoRollComponent::generateRandomNotesIntoClip(const synth::MusicalScale* scale, int minPitch, int maxPitch,
+                                                     juce::Random& rng) {
+    if (doc_ == nullptr || !clipId_.isValid())
+        return;
+    const auto* clip = doc_->getClip(clipId_);
+    if (clip == nullptr)
+        return;
+
+    // The RAW division, ignoring the on/off toggle (the same "clean up notes drawn free-hand"
+    // reasoning isQuantiseEnabled documents), falling back to a sixteenth when that division is
+    // Off/0 — generation always wants a concrete grid step to place notes on.
+    double gridBeats = viewState_.divisionBeatsRaw(currentBeatsPerBar());
+    if (gridBeats <= 0.0)
+        gridBeats = 0.25;
+
+    const auto notes = synth::generateRandomNotes(clip->lengthBeats, gridBeats, minPitch, maxPitch, scale, rng);
+
+    // "Generate" means "replace": ONE mutation removes every existing note and adds the fresh
+    // batch, so undo restores the old contents in a single step rather than a clear-then-a-paste.
+    std::vector<synth::NoteId> newIds;
+    auto mutate = [this, notes, &newIds] {
+        doc_->clearNotes(clipId_);
+        newIds.clear();
+        for (const auto& note : notes)
+            if (const auto id = doc_->addNote(clipId_, note); id.isValid())
+                newIds.push_back(id);
+    };
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+
+    selection_.setSelection(newIds);
+    repaint();
+}
+
 synth::ui::NotePaint PianoRollComponent::resolveNoteColourFor(int pitch, int velocity, bool selected,
                                                               bool muted) const {
     // Fallback discipline matches every other paint helper in this file: no AppLookAndFeel means no
@@ -347,8 +529,8 @@ juce::String PianoRollComponent::keyLabelFor(int pitch, KeyLabelMode mode, int r
 }
 
 juce::Rectangle<int> PianoRollComponent::gridRegion() const noexcept {
-    return {kKeysColumnWidth, kHeaderHeight, std::max(0, getWidth() - kKeysColumnWidth),
-            std::max(0, getHeight() - kHeaderHeight)};
+    const int gutter = leftGutterWidth();
+    return {gutter, kHeaderHeight, std::max(0, getWidth() - gutter), std::max(0, getHeight() - kHeaderHeight)};
 }
 
 juce::Rectangle<int> PianoRollComponent::computeNoteRect(double absStartBeat, double absLengthBeats, int pitch) const {
@@ -785,6 +967,20 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
     g.drawText("Q", quantiseButtonBounds_, juce::Justification::centred, false);
     g.setColour(snapOn ? accent.withAlpha(0.8f) : border.withAlpha(0.5f));
     g.drawRoundedRectangle(quantiseButtonBounds_.toFloat(), 3.0f, 1.0f);
+
+    // Scale button: same lit/muted treatment as "Q" above, but lit state tracks whether the panel
+    // is OPEN rather than a grid-magnetism switch — an on/off affordance for a child component,
+    // not for a doc mutation.
+    const bool scaleOpen = scalePanel_.isVisible();
+    if (scaleOpen) {
+        g.setColour(accent.withAlpha(0.18f));
+        g.fillRoundedRectangle(scaleButtonBounds_.toFloat(), 3.0f);
+    }
+    g.setColour(scaleOpen ? accent : textCol.withAlpha(0.85f));
+    g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), microSize, juce::Font::plain));
+    g.drawText("Scale", scaleButtonBounds_, juce::Justification::centred, false);
+    g.setColour(scaleOpen ? accent.withAlpha(0.8f) : border.withAlpha(0.5f));
+    g.drawRoundedRectangle(scaleButtonBounds_.toFloat(), 3.0f, 1.0f);
 }
 
 void PianoRollComponent::paintMarquee(juce::Graphics& g) {
@@ -874,6 +1070,16 @@ void PianoRollComponent::resized() {
     backButtonBounds_ = header.removeFromLeft(60).reduced(3, 2);
     header.removeFromLeft(4);
     quantiseButtonBounds_ = header.removeFromLeft(20).reduced(2, 2);
+    header.removeFromLeft(4);
+    scaleButtonBounds_ = header.removeFromLeft(50).reduced(2, 2);
+
+    // The panel sits WEST of the keys column, below the header row (its own controls, not this
+    // header strip's buttons, are how the user works it) — carved BEFORE the keys column so
+    // leftGutterWidth() and this layout can never disagree about where the grid starts.
+    if (scalePanel_.isVisible())
+        scalePanel_.setBounds(bounds.removeFromLeft(kScalePanelWidth));
+    else
+        scalePanel_.setBounds({});
 
     keysColumnBounds_ = bounds.removeFromLeft(kKeysColumnWidth);
     noteGridBounds_ = bounds; // a REAL gutter: beatToX(firstVisibleBeat) == this rect's left edge
@@ -1240,7 +1446,7 @@ void PianoRollComponent::updateSplitPreview(juce::Point<int> pos) {
     bool has = false;
 
     if (activeTool_ == EditTool::Split && doc_ != nullptr && clipId_.isValid() && pos.y >= kHeaderHeight &&
-        pos.x >= kKeysColumnWidth) {
+        pos.x >= leftGutterWidth()) {
         if (auto hit = hitTestNote(pos)) {
             if (const auto* hovered = doc_->getNote(hit->id)) {
                 if (auto cut = splitBeatFor(*hovered, pos.x)) {
@@ -1312,7 +1518,7 @@ void PianoRollComponent::updateHoverCursor(juce::Point<int> pos) {
         return; // the other five tools act on a click — their cursor never changes on hover
 
     bool onEdge = false;
-    if (doc_ != nullptr && clipId_.isValid() && pos.y >= kHeaderHeight && pos.x >= kKeysColumnWidth) {
+    if (doc_ != nullptr && clipId_.isValid() && pos.y >= kHeaderHeight && pos.x >= leftGutterWidth()) {
         if (auto hit = hitTestNote(pos))
             onEdge = hit->onRightEdge;
     }
@@ -1645,7 +1851,7 @@ void PianoRollComponent::scrollNoteIntoView(const synth::MidiNote& note) {
     const auto* clip = doc_ != nullptr ? doc_->getClip(clipId_) : nullptr;
     if (clip == nullptr || rollView_.pixelsPerBeat <= 0.0)
         return;
-    const double gridWidth = (double)std::max(0, getWidth() - kKeysColumnWidth);
+    const double gridWidth = (double)std::max(0, getWidth() - leftGutterWidth());
     if (gridWidth <= 0.0)
         return;
 
@@ -1748,7 +1954,11 @@ void PianoRollComponent::performQuantise() {
 // ---- Tooltips ----
 
 juce::String PianoRollComponent::getTooltipFor(juce::Point<int> pos) const {
-    return quantiseButtonBounds_.contains(pos) ? juce::String(kQuantiseTooltip) : juce::String();
+    if (quantiseButtonBounds_.contains(pos))
+        return juce::String(kQuantiseTooltip);
+    if (scaleButtonBounds_.contains(pos))
+        return juce::String(kScaleTooltip);
+    return {};
 }
 
 juce::String PianoRollComponent::getTooltip() { return getTooltipFor(getMouseXYRelative()); }
@@ -1788,10 +1998,14 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
             toggleSnap(); // plain click: the grid-magnetism switch
         return;
     }
+    if (scaleButtonBounds_.contains(pos)) {
+        toggleScalePanel();
+        return;
+    }
     if (pos.y < kHeaderHeight)
         return; // rest of the header strip: inert
-    if (pos.x < kKeysColumnWidth)
-        return; // keys column: no virtual-keyboard preview in v1
+    if (pos.x < leftGutterWidth())
+        return; // keys column (and scale panel, while open): no virtual-keyboard preview in v1
 
     // Everything below this line is the SELECT tool's gesture table. The other five tools act on
     // the click alone and start no drag at all (see setActiveTool), so they never reach it — no
@@ -2145,7 +2359,7 @@ void PianoRollComponent::mouseDoubleClick(const juce::MouseEvent& e) {
     if (activeTool_ != EditTool::Select)
         return;
     const auto pos = e.getPosition();
-    if (pos.y < kHeaderHeight || pos.x < kKeysColumnWidth)
+    if (pos.y < kHeaderHeight || pos.x < leftGutterWidth())
         return;
 
     // JUCE dispatches this AFTER the second mouseDown/mouseUp pair, so whatever those did (select a
@@ -2208,7 +2422,7 @@ void PianoRollComponent::mouseWheelMove(const juce::MouseEvent& e, const juce::M
         // (wheelZoomFactor) — a modifier-decided branch must never depend on which axis the OS
         // parked the gesture on, and the two zoom branches must never disagree about which way is
         // "in".
-        zoomHorizontalAroundX(wheelZoomFactor(wheel), std::max(0.0, (double)pos.x - (double)kKeysColumnWidth));
+        zoomHorizontalAroundX(wheelZoomFactor(wheel), std::max(0.0, (double)pos.x - (double)leftGutterWidth()));
         return;
     }
 
@@ -2307,7 +2521,7 @@ double PianoRollComponent::wheelZoomFactor(const juce::MouseWheelDetails& wheel)
 
 void PianoRollComponent::zoomHorizontal(double factor) {
     // The view centre, expressed in the same grid-relative coordinate the Cmd+wheel branch hands
-    // over (x - kKeysColumnWidth), so both paths run identical anchor math.
+    // over (x - leftGutterWidth()), so both paths run identical anchor math.
     zoomHorizontalAroundX(factor, (double)gridRegion().getWidth() * 0.5);
 }
 
@@ -2328,7 +2542,7 @@ void PianoRollComponent::mouseMagnify(const juce::MouseEvent& e, float scaleFact
         zoomVerticalAroundY((double)scaleFactor, (double)pos.y);
         return;
     }
-    zoomHorizontalAroundX((double)scaleFactor, std::max(0.0, (double)pos.x - (double)kKeysColumnWidth));
+    zoomHorizontalAroundX((double)scaleFactor, std::max(0.0, (double)pos.x - (double)leftGutterWidth()));
 }
 
 //==============================================================================

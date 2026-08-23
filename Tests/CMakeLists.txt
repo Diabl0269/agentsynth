@@ -144,6 +144,7 @@ add_executable(Tests
     PianoRollTests.cpp
     MusicalScaleTests.cpp
     NoteColourTests.cpp
+    MidiDestinationPickerTests.cpp
     FocusArbitrationTests.cpp
     AutomationEditorTests.cpp
     TimelineTransportBarTests.cpp

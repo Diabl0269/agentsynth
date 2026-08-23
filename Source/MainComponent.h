@@ -466,6 +466,9 @@ private:
     // The colour picker's favourites shelf persists here — the only TrackHeaderHost override
     // that isn't graph/timeline plumbing (see ColourPickerPopup.h).
     juce::ApplicationProperties* getAppProperties() override { return &appProperties; }
+    std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption>
+    getMidiDestinationOptions(synth::TrackId forTrack) override;
+    void setMidiDestinationConnected(synth::TrackId forTrack, juce::uint32 nodeUid, bool connect) override;
 
     // Creates a "Track In" node with a fresh uuid at the canvas' left edge, wires it to the single
     // MIDI instrument in the patch when there is exactly one, and returns its uuid (empty on

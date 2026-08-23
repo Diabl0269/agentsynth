@@ -31,6 +31,10 @@ constexpr const char* kTimelineFollowPlayheadPropertyKey = "timelineFollowPlayhe
 // Item: P (loop the selection) also ARMS looping by default; Preferences can turn the arming off
 // so P only places the locators (Cubase's behaviour). Read at key time — no cached copy to drift.
 constexpr const char* kTimelineLoopSelectionArmsPropertyKey = "timelineLoopSelectionArms";
+// The roll's key-label density (PianoRollComponent::KeyLabelMode). "all" (default) labels every
+// key row; "c" labels only the Cs. Owned by PreferencesSettingsTab's persistX pattern; read here
+// by reloadPianoRollAppearancePrefs().
+constexpr const char* kPianoRollKeyLabelsPropertyKey = "pianoRollKeyLabels";
 
 // the "+ Track" strip at the top of the track-header column. Fixed height — the headers
 // below it scroll, the button never does.
@@ -1060,10 +1064,27 @@ void TimelinePanelComponent::setApplicationProperties(juce::ApplicationPropertie
     followPlayhead_ =
         appProperties_->getUserSettings()->getBoolValue(kTimelineFollowPlayheadPropertyKey, followPlayhead_);
     followPlayheadButton_.setToggleState(followPlayhead_, juce::dontSendNotification);
+    pianoRoll_.setFollowPlayhead(followPlayhead_);
 
     // A pure forward — the transport bar owns and persists its own two keys. See this
     // method's header comment.
     transportBar_.setApplicationProperties(props);
+
+    // Scale-panel visibility + user scales are the ROLL's own PropertiesFile-backed state (see
+    // PianoRollComponent::setPropertiesFile); key-labels and note-colour overrides are read here.
+    pianoRoll_.setPropertiesFile(appProperties_->getUserSettings());
+    reloadPianoRollAppearancePrefs();
+}
+
+void TimelinePanelComponent::reloadPianoRollAppearancePrefs() {
+    if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
+        return;
+    auto& settings = *appProperties_->getUserSettings();
+
+    const auto keyLabels = settings.getValue(kPianoRollKeyLabelsPropertyKey, "all");
+    pianoRoll_.setKeyLabelMode(keyLabels.equalsIgnoreCase("c") ? synth::ui::PianoRollComponent::KeyLabelMode::OctavesOnly
+                                                               : synth::ui::PianoRollComponent::KeyLabelMode::AllNotes);
+    pianoRoll_.setNoteColourOverrides(synth::ui::loadNoteColourOverrides(settings));
 }
 
 bool TimelinePanelComponent::setSnapValue(TimelineViewState::Snap value) {
@@ -1122,6 +1143,7 @@ void TimelinePanelComponent::persistSnapChoice() {
 void TimelinePanelComponent::setFollowPlayheadEnabled(bool enabled) {
     followPlayhead_ = enabled;
     followPlayheadButton_.setToggleState(enabled, juce::dontSendNotification);
+    pianoRoll_.setFollowPlayhead(enabled);
     persistFollowPlayheadChoice();
 }
 

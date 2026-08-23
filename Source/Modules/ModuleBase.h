@@ -82,6 +82,28 @@ enum class ModuleType {
     HostedPlugin
 };
 
+// True for a MIDI-DRIVEN INSTRUMENT type — the shared predicate behind MainComponent's add-track
+// auto-wire target set and the MIDI-destination picker's enumeration. Deliberately excludes MIDI
+// *sources* (Track In, External MIDI, MIDI Keyboard): those generate notes, they don't consume
+// them, so neither flow should ever offer wiring one into another.
+//
+// NOTE: AIStateMapper keeps its own name-keyed midiAcceptingTypes list rather than calling this —
+// that list omits Wavetable, and unifying it would change AI auto-wire behaviour, which is out of
+// scope here.
+inline bool isMidiInstrumentType(ModuleType type) noexcept {
+    switch (type) {
+    case ModuleType::PolyMidi:
+    case ModuleType::Oscillator:
+    case ModuleType::Wavetable:
+    case ModuleType::Sampler:
+    case ModuleType::Sequencer:
+    case ModuleType::PolySequencer:
+        return true;
+    default:
+        return false;
+    }
+}
+
 class ModuleBase : public juce::AudioProcessor {
 public:
     ModuleBase(const juce::String& name, int numInputs, int numOutputs)

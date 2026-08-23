@@ -1,15 +1,18 @@
 #pragma once
 
+#include "../Timeline/MusicalScale.h"
 #include "../Timeline/TimelineDoc.h"
 #include "EditTool.h"
 #include "NoteColour.h"
 #include "NoteSelectionModel.h"
+#include "ScaleAssistPanel.h"
 #include "TimelinePlayheadOverlay.h"
 #include "TimelineViewState.h"
 #include <array>
 #include <cmath>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -33,10 +36,15 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 //
 // Coordinate system: the roll owns its OWN horizontal mapping (beatToX/xToBeat below) — its own
 // zoom and its own scroll origin, independent of the panel-wide TimelineViewState. x ==
-// kKeysColumnWidth is the first visible beat, so the keys column is a real GUTTER and the first bar
-// of a clip is reachable rather than hidden under an opaque strip. The shared TimelineViewState is
-// still consulted for ONE thing: the snap division (snapBeat/divisionBeats), so the roll's grid,
-// its snapped edits and the panel's snap selector never disagree.
+// leftGutterWidth() is the first visible beat, so the keys column (and, while it is open, the
+// scale-assist panel to its LEFT) is a real GUTTER and the first bar of a clip is reachable rather
+// than hidden under an opaque strip. leftGutterWidth() is kKeysColumnWidth alone with the panel
+// closed, kScalePanelWidth + kKeysColumnWidth while it is open — every place that used to hardcode
+// kKeysColumnWidth as "the grid's left offset" now goes through it (see the Scale Assist section
+// below), so opening the panel shifts the grid, the hit-testing and the clip-framing maths
+// together rather than drifting apart. The shared TimelineViewState is still consulted for ONE
+// thing: the snap division (snapBeat/divisionBeats), so the roll's grid, its snapped edits and the
+// panel's snap selector never disagree.
 //
 // Because that mapping differs from the panel's, the panel-wide TimelinePlayheadOverlay would draw
 // the playhead at the wrong x inside this rect. The roll therefore implements
@@ -81,6 +89,9 @@ class PianoRollComponent
 public:
     // Piano-roll-only constants; not shared with Theme::Metrics.
     static constexpr int kKeysColumnWidth = 44;
+    // The scale-assist panel's fixed width when open, carved from the LEFT of the keys column —
+    // see leftGutterWidth() and the class comment.
+    static constexpr int kScalePanelWidth = 170;
     static constexpr int kHeaderHeight = 20;
     // Default vertical zoom, and its clamps (Cmd+Shift+wheel scales it — see mouseWheelMove).
     static constexpr double kPixelsPerSemitone = 10.0;
@@ -104,6 +115,8 @@ public:
     static constexpr const char* kQuantiseTooltip =
         "Snap to grid on/off (Q) \xE2\x80\x94 Shift+click quantizes the selected notes to the grid "
         "(or all notes when nothing is selected)";
+    static constexpr const char* kScaleTooltip =
+        "Scale assist \xE2\x80\x94 pick a scale, quantize pitches into it, or generate random notes";
 
     explicit PianoRollComponent(TimelineViewState& viewState);
     ~PianoRollComponent() override = default;
@@ -251,6 +264,35 @@ public:
     // turning this on. Rebuilds visiblePitches_ and re-clamps firstVisiblePitch_ immediately.
     void setScaleContext(std::function<bool(int)> isInScale, bool pitchVisibilityOn);
 
+    // ---- Scale assist panel ----
+
+    // Non-owning; may stay null (tests pass null). Hands the pointer straight to the panel (its
+    // own user-scale persistence) and restores THIS roll's own "was the panel open" flag under
+    // "pianoRollScalePanelVisible" (default false). Per-clip scale memory is deliberately NOT
+    // persisted here — see the class comment on clipScaleMemory_.
+    void setPropertiesFile(juce::PropertiesFile* props);
+
+    synth::ui::ScaleAssistPanel& getScaleAssistPanel() noexcept { return scalePanel_; }
+    const synth::ui::ScaleAssistPanel& getScaleAssistPanel() const noexcept { return scalePanel_; }
+    juce::Rectangle<int> getScaleButtonBounds() const noexcept { return scaleButtonBounds_; }
+
+    /** Moves the SELECTED notes (or, with nothing selected, every note in the open clip) to their
+     *  nearest in-scale pitch via MusicalScale::snapPitch. ONE undo step for the whole batch, a
+     *  no-op pushes nothing, and the selection is left exactly as it was — this only ever moves
+     *  pitches, never touches which notes are selected. */
+    void quantisePitchesToScale(const synth::MusicalScale& scale);
+
+    /** Replaces the ENTIRE contents of the open clip with a fresh random pattern: `scale` may be
+     *  null (every pitch in [minPitch, maxPitch] is a candidate); the grid step is the snap
+     *  selector's RAW division (ignoring the on/off toggle), falling back to a sixteenth when that
+     *  division is Off/0. ONE undo step removes every existing note and adds the generated ones —
+     *  "generate" means "replace", and undo restores the old contents in one step. The generated
+     *  notes become the selection. `rng` is caller-owned, which is what makes this
+     *  deterministically testable (the panel's Generate button hands it a fresh, default-seeded
+     *  juce::Random). */
+    void generateRandomNotesIntoClip(const synth::MusicalScale* scale, int minPitch, int maxPitch,
+                                     juce::Random& rng);
+
     // ---- Edit tools (Cubase-style; see EditTool.h) ----
 
     /** The active tool. TimelinePanelComponent owns the choice (one strip drives whichever editor
@@ -377,8 +419,9 @@ public:
 
     // ---- The roll's OWN horizontal mapping ----
 
-    // Absolute beat <-> this component's x. x == kKeysColumnWidth is the first visible beat: the
-    // keys column is a gutter, NOT an overlay painted over the grid's leftmost pixels.
+    // Absolute beat <-> this component's x. x == leftGutterWidth() is the first visible beat: the
+    // keys column (plus the scale panel, while open) is a gutter, NOT an overlay painted over the
+    // grid's leftmost pixels.
     double beatToX(double absBeat) const noexcept;
     double xToBeat(double x) const noexcept;
 
@@ -528,6 +571,12 @@ private:
     // The grid rect (right of the keys gutter, below the header) — what the local playhead strip
     // and the gridline sweep are clipped to.
     juce::Rectangle<int> gridRegion() const noexcept;
+    // kScalePanelWidth + kKeysColumnWidth while the scale panel is open, kKeysColumnWidth alone
+    // otherwise — the ONE seam beatToX/xToBeat/gridRegion and every hit-test below route the
+    // grid's left offset through. See the class comment.
+    int leftGutterWidth() const noexcept {
+        return (scalePanel_.isVisible() ? kScalePanelWidth : 0) + kKeysColumnWidth;
+    }
 
     // ---- Row mapping (visiblePitches_) ----
 
@@ -697,7 +746,7 @@ private:
     bool matchesAction(const juce::KeyPress& key, const juce::String& actionId, const juce::KeyPress& fallback) const;
 
     // ---- Anchored zoom, shared by the wheel, the pinch and the public zoom API ----
-    // `anchorGridX` is measured from the GRID's left edge (x - kKeysColumnWidth), which is the
+    // `anchorGridX` is measured from the GRID's left edge (x - leftGutterWidth()), which is the
     // coordinate rollView_ maps; `anchorY` is a component y.
     void zoomHorizontalAroundX(double factor, double anchorGridX);
     void zoomVerticalAroundY(double factor, double anchorY);
@@ -713,6 +762,21 @@ private:
     void flashQuantiseButton();
     void timerCallback() override; // one-shot: ends the quantise flash and stops itself
     void requestClose();
+
+    // ---- Scale assist panel plumbing ----
+    void toggleScalePanel();
+    // Shared by the header-button click and setPropertiesFile's restore; a no-op (no resize, no
+    // repaint, no persist write) when `visible` already matches, so restoring the SAME default
+    // (closed) on a fresh PropertiesFile costs nothing.
+    void setScalePanelVisible(bool visible);
+    // Pushes clipScaleMemory_[clipId_] (or the "no clip open" defaults) into setScaleContext —
+    // the single place both the panel's onScaleChanged/onPitchVisibilityChanged handlers and
+    // openClip's restore route through, so the roll's row-visibility/colouring can never disagree
+    // with what the panel is showing.
+    void pushScaleContextFromMemory();
+    // Restores clipId_'s remembered scale (or "No scale" for a clip never opened before) into the
+    // panel AND the roll's own scale context. Called from openClip, after clipId_ is set.
+    void restoreScaleMemoryForOpenClip();
 
     void paintKeysColumn(juce::Graphics& g);
     void paintHeader(juce::Graphics& g);
@@ -743,7 +807,7 @@ private:
     TimelineViewState& viewState_; // shared: SNAP ONLY (see the class comment)
     // The roll's own zoom/scroll. Reuses TimelineViewState purely for its clamped
     // zoomAroundX/scrollBeats math; its x origin is the GRID's left edge, which beatToX/xToBeat
-    // offset by kKeysColumnWidth.
+    // offset by leftGutterWidth().
     TimelineViewState rollView_;
     double pixelsPerSemitone_ = kPixelsPerSemitone;
 
@@ -853,6 +917,30 @@ private:
     bool followPlayhead_ = false;
 
     bool quantiseFlash_ = false;
+
+    // ---- Scale assist panel ----
+    //
+    // A child component, always present (addChildComponent — so it starts invisible), toggled by
+    // the header's "Scale" button and restored from PropertiesFile in setPropertiesFile. Owned by
+    // value: it outlives openClip/closeRoll exactly like the note clipboard, so switching clips
+    // never rebuilds it.
+    synth::ui::ScaleAssistPanel scalePanel_;
+    juce::Rectangle<int> scaleButtonBounds_;
+    // Non-owning; may stay null (see setPropertiesFile). Only ever used to persist THIS roll's own
+    // "was the panel open" flag — the panel persists its OWN user scales through the same pointer,
+    // handed to it directly in setPropertiesFile.
+    juce::PropertiesFile* propertiesFile_ = nullptr;
+
+    // Per-clip scale memory: SESSION-ONLY, deliberately never persisted (mirrors rollView_ and
+    // firstVisiblePitch_, which are not persisted either) — see setScaleContext's class-comment
+    // discussion of why a clip's row/colour context is view state, not document state. A clip id
+    // absent from this map has never had a scale chosen for it and reads back as "No scale" /
+    // pitch-visibility off, per the class's "a clip never opened starts at No scale" contract.
+    struct ClipScaleMemory {
+        std::optional<synth::MusicalScale> scale;
+        bool pitchVisibilityOn = false;
+    };
+    std::map<synth::ClipId, ClipScaleMemory> clipScaleMemory_;
 
     // ---- Edge auto-scroll timer ----
     //

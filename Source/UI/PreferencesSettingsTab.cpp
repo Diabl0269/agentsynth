@@ -29,6 +29,11 @@ constexpr const char* kNaturalScrollingKey = "naturalScrolling";
 // unaffected.
 constexpr const char* kZoomScrollUpZoomsInKey = "zoomScrollUpZoomsIn";
 
+// The piano roll's key-label density (PianoRollComponent::KeyLabelMode), read by
+// TimelinePanelComponent::reloadPianoRollAppearancePrefs(). "all" is the default and matches the
+// roll's own KeyLabelMode default, so an install that never opens this tab is unaffected.
+constexpr const char* kPianoRollKeyLabelsKey = "pianoRollKeyLabels";
+
 // Group-separator alpha. Softened from 0.18: at that contrast the hairlines read as table borders
 // and boxed each preference in, which is the same complaint that produced the gentler rule under
 // the Keyboard Shortcuts tab's section headers (see its kDividerAlpha — keep the two in step).
@@ -155,6 +160,17 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
     zoomScrollUpZoomsInHint.setFont(juce::Font(juce::FontOptions(11.5f)));
     zoomScrollUpZoomsInHint.setColour(juce::Label::textColourId,
                                       findColour(juce::Label::textColourId).withAlpha(0.65f));
+
+    addAndMakeVisible(pianoRollKeyLabelsToggle);
+    // DEFAULT TRUE ("all"): matches PianoRollComponent::KeyLabelMode::AllNotes, its own default,
+    // so an install that never opens this tab sees no change.
+    pianoRollKeyLabelsToggle.setToggleState(
+        appProperties.getUserSettings()->getValue(kPianoRollKeyLabelsKey, "all").equalsIgnoreCase("all"),
+        juce::dontSendNotification);
+    pianoRollKeyLabelsToggle.setTooltip("On labels every key in the piano roll's keys column. Off labels only the Cs.");
+    pianoRollKeyLabelsToggle.onClick = [this] {
+        persistPianoRollKeyLabelMode(pianoRollKeyLabelsToggle.getToggleState());
+    };
 }
 
 void PreferencesSettingsTab::paint(juce::Graphics& g) {
@@ -213,6 +229,9 @@ void PreferencesSettingsTab::resized() {
     bounds.removeFromTop(10);
     zoomScrollUpZoomsInToggle.setBounds(bounds.removeFromTop(24));
     zoomScrollUpZoomsInHint.setBounds(bounds.removeFromTop(18).withTrimmedLeft(24));
+    addDivider();
+
+    pianoRollKeyLabelsToggle.setBounds(bounds.removeFromTop(24));
 }
 
 void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
@@ -337,6 +356,21 @@ void PreferencesSettingsTab::persistAlignmentGuidesEnabled(bool enabled) {
     appProperties.getUserSettings()->saveIfNeeded();
     if (graphEditor)
         graphEditor->setAlignmentGuidesEnabled(enabled);
+}
+
+bool PreferencesSettingsTab::isPianoRollKeyLabelModeAll() const { return pianoRollKeyLabelsToggle.getToggleState(); }
+
+void PreferencesSettingsTab::setPianoRollKeyLabelModeAll(bool labelEveryKey) {
+    pianoRollKeyLabelsToggle.setToggleState(labelEveryKey, juce::dontSendNotification);
+    persistPianoRollKeyLabelMode(labelEveryKey);
+}
+
+void PreferencesSettingsTab::persistPianoRollKeyLabelMode(bool labelEveryKey) {
+    appProperties.getUserSettings()->setValue(kPianoRollKeyLabelsKey, labelEveryKey ? "all" : "c");
+    appProperties.getUserSettings()->saveIfNeeded();
+    // No live push from here: TimelinePanelComponent::reloadPianoRollAppearancePrefs() reads this
+    // key directly, the same "no onXToggled callback" reasoning persistNaturalScrolling documents
+    // — MainComponent wires the live re-push in a parallel task.
 }
 
 void PreferencesSettingsTab::persistDefaultDualIOForNewModules(bool enabled) {
