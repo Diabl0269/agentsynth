@@ -1,5 +1,11 @@
 #include "AppearanceSettingsTab.h"
+#include "ColourPickerPopup.h"
 #include "GraphEditor.h"
+
+namespace {
+// Pitch-class labels, C first — matches synth::ui::NoteColourOverrides' pitch % 12 indexing.
+const char* const kPitchClassNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+} // namespace
 
 using synth::theme::Theme;
 using synth::theme::ThemeManager;
@@ -153,6 +159,70 @@ private:
 };
 
 //==============================================================================
+// NoteSwatchRow - clickable pitch-class swatches for the piano roll's note colours.
+//
+// Same interaction as CableSwatchRow (left-click opens a picker, right-click resets) but an
+// un-overridden swatch draws hollow/dimmed rather than filled-with-a-thin-ring: a note colour
+// swatch has no "always has a value" theme token backing every entry the way a cable signal kind
+// does, so "not set, currently showing the theme's noteFill" has to read as visually different
+// from "set to a colour that happens to be close to noteFill".
+//==============================================================================
+class AppearanceSettingsTab::NoteSwatchRow
+    : public juce::Component
+    , public juce::SettableTooltipClient {
+public:
+    explicit NoteSwatchRow(AppearanceSettingsTab& t)
+        : owner(t) {}
+
+    void paint(juce::Graphics& g) override {
+        constexpr int n = AppearanceSettingsTab::kNoteSwatchCount;
+        const float w = (float)getWidth() / (float)n;
+        for (int i = 0; i < n; ++i) {
+            juce::Rectangle<float> cell((float)i * w, 0.0f, w, (float)getHeight());
+            auto reducedCell = cell.reduced(3.0f);
+            auto swatch = reducedCell.removeFromTop(16.0f);
+
+            const juce::Colour colour = owner.getNoteSwatchColour(i);
+            const bool overridden = owner.isNoteSwatchOverridden(i);
+            if (overridden) {
+                g.setColour(colour);
+                g.fillRoundedRectangle(swatch, 3.0f);
+                g.setColour(juce::Colours::white.withAlpha(0.9f));
+                g.drawRoundedRectangle(swatch, 3.0f, 1.8f);
+            } else {
+                // Hollow/dimmed: a faint fill plus a faint outline, never the solid+bright-ring
+                // treatment a pinned swatch gets — "not set" must not look like "set to grey".
+                g.setColour(colour.withAlpha(0.2f));
+                g.fillRoundedRectangle(swatch, 3.0f);
+                g.setColour(colour.withAlpha(0.5f));
+                g.drawRoundedRectangle(swatch, 3.0f, 1.0f);
+            }
+
+            g.setColour(owner.themeManager.getActiveTheme().colors.textMuted);
+            g.setFont(juce::Font(juce::FontOptions(9.5f)));
+            g.drawFittedText(owner.getNoteSwatchLabel(i), reducedCell.removeFromBottom(14.0f).toNearestInt(),
+                             juce::Justification::centredTop, 1, 0.8f);
+        }
+    }
+
+    void mouseDown(const juce::MouseEvent& e) override {
+        constexpr int n = AppearanceSettingsTab::kNoteSwatchCount;
+        const int index = juce::jlimit(0, n - 1, (int)((float)e.x / ((float)getWidth() / (float)n)));
+
+        if (e.mods.isPopupMenu()) {
+            owner.resetNoteSwatch(index);
+            return;
+        }
+
+        const int cellW = getWidth() / n;
+        owner.openNoteColourPicker(index, localAreaToGlobal(juce::Rectangle<int>(index * cellW, 0, cellW, 24)));
+    }
+
+private:
+    AppearanceSettingsTab& owner;
+};
+
+//==============================================================================
 // AppearanceSettingsTab
 //==============================================================================
 AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::ApplicationProperties& props)
@@ -296,6 +366,20 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     addAndMakeVisible(resetCableColoursButton);
     resetCableColoursButton.onClick = [this] { resetAllCableColours(); };
 
+    // ---- Piano roll note colours ----
+    noteColourOverrides = synth::ui::loadNoteColourOverrides(*appProperties.getUserSettings());
+
+    addAndMakeVisible(noteColoursTitleLabel);
+    noteColoursTitleLabel.setText("Piano Roll Notes", juce::dontSendNotification);
+    noteColoursTitleLabel.setFont(sectionHeaderFont);
+
+    noteSwatchRow = std::make_unique<NoteSwatchRow>(*this);
+    addAndMakeVisible(*noteSwatchRow);
+    noteSwatchRow->setTooltip("Click a note to pick a colour; right-click to clear the override.");
+
+    addAndMakeVisible(resetNoteColoursButton);
+    resetNoteColoursButton.onClick = [this] { resetAllNoteColours(); };
+
     // Reflect the active theme selection in the list.
     const int activeRow = activeRowIndex(themeManager);
     if (activeRow >= 0)
@@ -353,13 +437,16 @@ void AppearanceSettingsTab::resized() {
     constexpr int kCableModeRowHeight = 26;
     constexpr int kCableSwatchRowHeight = 56;
     constexpr int kResetButtonHeight = 26;
+    constexpr int kNoteHeaderHeight = 20;
+    constexpr int kNoteSwatchRowHeight = 44;
     constexpr int kGap = 10;
     const int fixedHeightBelowGallery = kGap                                 // divider gap before button row
                                         + 1                                  // divider itself
                                         + kGap                               // divider gap after
                                         + kButtonRowHeight + kGap + 1 + kGap // divider after button row
                                         + kCablesHeaderHeight + 6 + kCableModeRowHeight + 6 + kCableSwatchRowHeight +
-                                        6 + kResetButtonHeight;
+                                        6 + kResetButtonHeight + kGap + 1 + kGap // divider after cables section
+                                        + kNoteHeaderHeight + 6 + kNoteSwatchRowHeight + 6 + kResetButtonHeight;
 
     // ---- 2. Theme Gallery (framed, gets the remaining flexible space) ----
     themeGallerySectionLabel.setBounds(bounds.removeFromTop(20));
@@ -388,6 +475,16 @@ void AppearanceSettingsTab::resized() {
     bounds.removeFromTop(6);
 
     resetCableColoursButton.setBounds(bounds.removeFromTop(kResetButtonHeight).removeFromLeft(170));
+    addDivider();
+
+    // ---- 5. Piano roll notes ----
+    noteColoursTitleLabel.setBounds(bounds.removeFromTop(kNoteHeaderHeight));
+    bounds.removeFromTop(6);
+
+    noteSwatchRow->setBounds(bounds.removeFromTop(kNoteSwatchRowHeight));
+    bounds.removeFromTop(6);
+
+    resetNoteColoursButton.setBounds(bounds.removeFromTop(kResetButtonHeight).removeFromLeft(170));
 }
 
 juce::String AppearanceSettingsTab::getSelectedThemeId() const {
@@ -452,6 +549,8 @@ void AppearanceSettingsTab::changeListenerCallback(juce::ChangeBroadcaster* sour
     // Un-overridden swatches follow the theme, so they have to be redrawn too.
     if (cableSwatchRow)
         cableSwatchRow->repaint();
+    if (noteSwatchRow)
+        noteSwatchRow->repaint();
 }
 
 //==============================================================================
@@ -569,4 +668,68 @@ void AppearanceSettingsTab::openCableColourPicker(int index, juce::Rectangle<int
 
     // The callout takes ownership of the selector; we keep only activeSwatchIndex.
     juce::CallOutBox::launchAsynchronously(std::move(selector), screenArea, nullptr);
+}
+
+//==============================================================================
+// Piano roll note colours
+//==============================================================================
+
+juce::String AppearanceSettingsTab::getNoteSwatchLabel(int pitchClass) const {
+    if (pitchClass < 0 || pitchClass >= kNoteSwatchCount)
+        return {};
+    return kPitchClassNames[pitchClass];
+}
+
+juce::Colour AppearanceSettingsTab::getNoteSwatchColour(int pitchClass) const {
+    if (pitchClass < 0 || pitchClass >= kNoteSwatchCount)
+        return juce::Colours::transparentBlack;
+    if (const auto& o = noteColourOverrides.perPitchClass[(size_t)pitchClass])
+        return *o;
+    return themeManager.getActiveTheme().colors.noteFill;
+}
+
+bool AppearanceSettingsTab::isNoteSwatchOverridden(int pitchClass) const noexcept {
+    if (pitchClass < 0 || pitchClass >= kNoteSwatchCount)
+        return false;
+    return noteColourOverrides.perPitchClass[(size_t)pitchClass].has_value();
+}
+
+void AppearanceSettingsTab::setNoteSwatchColour(int pitchClass, juce::Colour colour) {
+    if (pitchClass < 0 || pitchClass >= kNoteSwatchCount)
+        return;
+    noteColourOverrides.set(pitchClass, colour);
+    synth::ui::saveNoteColourOverrides(*appProperties.getUserSettings(), noteColourOverrides);
+    if (noteSwatchRow)
+        noteSwatchRow->repaint();
+}
+
+void AppearanceSettingsTab::resetNoteSwatch(int pitchClass) {
+    if (pitchClass < 0 || pitchClass >= kNoteSwatchCount)
+        return;
+    noteColourOverrides.clear(pitchClass);
+    synth::ui::saveNoteColourOverrides(*appProperties.getUserSettings(), noteColourOverrides);
+    if (noteSwatchRow)
+        noteSwatchRow->repaint();
+}
+
+void AppearanceSettingsTab::resetAllNoteColours() {
+    noteColourOverrides.clearAll();
+    synth::ui::saveNoteColourOverrides(*appProperties.getUserSettings(), noteColourOverrides);
+    if (noteSwatchRow)
+        noteSwatchRow->repaint();
+}
+
+void AppearanceSettingsTab::openNoteColourPicker(int pitchClass, juce::Rectangle<int> screenArea) {
+    if (pitchClass < 0 || pitchClass >= kNoteSwatchCount)
+        return;
+
+    const juce::Colour initial = getNoteSwatchColour(pitchClass);
+    synth::ui::ColourPickerPopup::show(
+        screenArea, initial, appProperties.getUserSettings(),
+        [this, pitchClass](juce::Colour c) { setNoteSwatchColour(pitchClass, c); },
+        [](juce::Colour) {
+            // Every preview already persisted (setNoteSwatchColour saves on each change) — the
+            // final commit here would just repeat the last preview's write, so there is nothing
+            // left to do once the popup closes.
+        });
 }

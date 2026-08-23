@@ -2,10 +2,12 @@
 
 #include "../Timeline/TimelineDoc.h"
 #include "EditTool.h"
+#include "NoteColour.h"
 #include "NoteSelectionModel.h"
 #include "TimelinePlayheadOverlay.h"
 #include "TimelineViewState.h"
 #include <array>
+#include <cmath>
 #include <functional>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <optional>
@@ -46,6 +48,20 @@ class TransportService; // Forward declaration (Source/Transport/TransportServic
 //
 // Notes are clip-relative in the doc (MidiNote::startBeat); every doc read/write here converts to
 // absolute beats via clip->startBeat and back.
+//
+// Vertical row mapping: yForPitch/pitchForY do NOT map pitch directly to y. They map through
+// visiblePitches_ — a sorted, ascending list of every pitch that currently gets a ROW (all 128 when
+// no scale filtering is active). Row distance between two pitches is the distance between their
+// INDICES in that list, not the semitone distance between them, which is what lets pitch-visibility
+// mode collapse the out-of-scale gaps into zero-height rows instead of just recolouring them.
+// yForPitch of a pitch that is not itself visible (an edge case — a note landing between visible
+// rows) falls back to the nearest visible row's y. visiblePitches_ is rebuilt (see
+// rebuildVisiblePitches) whenever the scale context changes, the roll opens a clip, or a doc
+// mutation could have added/removed the note that was the only thing keeping an out-of-scale pitch
+// visible; firstVisiblePitch_ is re-clamped to the nearest surviving visible pitch on every rebuild,
+// so it is always a member of visiblePitches_. Vertical wheel-scroll and vertical zoom walk
+// visiblePitches_ by INDEX for the same reason — a scroll gesture over collapsed rows must move a
+// consistent number of ROWS, not skip past them at whatever their semitone spacing happens to be.
 //
 // The panel's edit-tool strip pushes the active tool in (setActiveTool). Select is the whole
 // gesture table above; Split / Glue / Erase / Mute / Draw replace it with single-click actions and
@@ -196,6 +212,45 @@ public:
      *  view-only, no-undo contract. */
     void zoomVertical(double factor);
 
+    // ---- Keys column labels ----
+
+    // AllNotes labels every key row (subject to the row-height floor below); OctavesOnly labels
+    // only the C rows — the pre-scale-feature behaviour, kept as a mode rather than removed because
+    // a dense keyboard reading is not always what the user wants. See keyLabelFor for the exact
+    // per-row decision, including the shared "too short a row for per-key text" floor.
+    enum class KeyLabelMode { AllNotes, OctavesOnly };
+
+    void setKeyLabelMode(KeyLabelMode mode) noexcept { keyLabelMode_ = mode; }
+    KeyLabelMode getKeyLabelMode() const noexcept { return keyLabelMode_; }
+
+    // Pure: no component, no theme, no LookAndFeel — what paintKeysColumn calls per row and what a
+    // test asserts on directly. Empty string means "draw no label at all". Below a 9px row height a
+    // per-key label becomes unreadable noise at any zoom worth calling "zoomed out", so BOTH modes
+    // fall back to C-only there; at or above it, AllNotes names every row ("C4", "C#4", ...) and
+    // OctavesOnly keeps naming only the Cs. Octave numbering matches the rest of the roll:
+    // pitch / 12 - 1.
+    static juce::String keyLabelFor(int pitch, KeyLabelMode mode, int rowHeightPx);
+
+    // ---- Note colouring & scale context ----
+
+    // The per-pitch-class colour overrides (NoteColour.h) a note's fill is resolved through. See
+    // synth::ui::resolveNoteColour for the precedence (out-of-scale beats an override beats the
+    // theme default).
+    void setNoteColourOverrides(const synth::ui::NoteColourOverrides& overrides) {
+        overrides_ = overrides;
+        repaint();
+    }
+    const synth::ui::NoteColourOverrides& getNoteColourOverrides() const noexcept { return overrides_; }
+
+    // The scale the grid checks notes/rows against. `isInScale` empty (the default) means no scale
+    // at all: nothing is ever out-of-scale and no row is ever hidden, regardless of
+    // `pitchVisibilityOn`. With a scale installed, `pitchVisibilityOn` decides whether out-of-scale
+    // ROWS collapse out of the grid entirely (true) or merely get paintNote's out-of-scale colour
+    // while every row still gets drawn (false) — a pitch that has a note in the OPEN clip is always
+    // kept visible even when it is out of scale, so an existing note can never become unreachable by
+    // turning this on. Rebuilds visiblePitches_ and re-clamps firstVisiblePitch_ immediately.
+    void setScaleContext(std::function<bool(int)> isInScale, bool pitchVisibilityOn);
+
     // ---- Edit tools (Cubase-style; see EditTool.h) ----
 
     /** The active tool. TimelinePanelComponent owns the choice (one strip drives whichever editor
@@ -303,6 +358,17 @@ public:
     // fires onSnapToggled. The Q button and the panel-wide Q key both land here.
     void toggleSnap();
 
+    // ---- Follow playhead ----
+
+    /** When on, setPlayheadBeat page-flips the roll's OWN horizontal view the instant the drawn
+     *  beat would land outside gridRegion() — the roll chases the transport instead of leaving it
+     *  to scroll off the edge. Gated (see setPlayheadBeat) on no drag being in flight and the
+     *  edge-auto-scroll timer being idle, so a Move/Resize/Marquee/DrawNew gesture that is already
+     *  steering the view (or deliberately not) is never yanked out from under the user. Off by
+     *  default: existing embeddings/tests must see no new view movement until this is turned on. */
+    void setFollowPlayhead(bool follow) noexcept { followPlayhead_ = follow; }
+    bool isFollowPlayhead() const noexcept { return followPlayhead_; }
+
     // THE refresh seam, called by the panel's TimelineDoc::Listener on every doc mutation (mirrors
     // TimelineClipLaneArea::refreshFromDoc): prunes the note selection of anything the mutation
     // removed. If the EDITED CLIP itself is gone, closes the roll and fires onCloseRequested() so
@@ -350,6 +416,29 @@ public:
     bool isMarqueeActiveForTest() const noexcept { return dragMode_ == DragMode::Marquee; }
     NoteSelectionModel& getSelectionForTest() noexcept { return selection_; }
 
+    // ---- Edge auto-scroll test hooks (mirrors TimelineClipLaneArea::tickAutoScrollForTest /
+    // isAutoScrollTimerRunningForTest exactly) ----
+    // Drives one autoScrollTick() without a real juce::Timer — a headless test run cannot wait on
+    // wall-clock ticks, so this is the only way to exercise the timer's EFFECT deterministically.
+    void tickAutoScrollForTest() { autoScrollTick(); }
+    // The gating half of the timer contract a test pins: started only while a Move/Resize/
+    // Marquee/DrawNew drag is live AND the last-known pointer sits inside an edge zone of
+    // gridRegion(), stopped the instant either stops being true.
+    bool isAutoScrollTimerRunningForTest() const noexcept { return autoScrollTimer_.isTimerRunning(); }
+
+    // The row-mapping state a scale-context test asserts on directly, without going near paint():
+    // every pitch that currently gets a row, ascending, and whichever of those is at the top.
+    const std::vector<int>& getVisiblePitchesForTest() const noexcept { return visiblePitches_; }
+
+    // The pixel width of the narrower black-key overlay drawn in paintKeysColumn, for the current
+    // keys-column width — a pure geometry seam, no pixel-reading required.
+    int blackKeyInsetForTest() const noexcept { return blackKeyWidthPx(keysColumnBounds_.getWidth()); }
+
+    // The colour paintNote would resolve `note` to right now (its OWN doc fields — never a mid-drag
+    // preview), so a scale-colouring test can assert on the resolved NotePaint instead of reading
+    // pixels.
+    synth::ui::NotePaint notePaintFor(const synth::MidiNote& note) const;
+
     // The snap division the grid currently draws its faintest lines at (0.0 for Snap::Off), and how
     // many lines at a given spacing are inside the grid region — both computed from state alone, so
     // a test can assert "the gridlines follow the snap division" without going near paint().
@@ -395,6 +484,16 @@ protected:
     // a bug, not a rounding difference). Called ONLY when the previewed cut actually moved.
     virtual void requestRepaintPreviewStrip(juce::Rectangle<int> strip);
 
+    // THE edge-auto-scroll timer's seam, mirroring TimelineClipLaneArea::autoScrollTick() exactly
+    // (a test subclasses and drives it via tickAutoScrollForTest() rather than a real juce::Timer,
+    // which a headless run cannot wait on at wall-clock speed). One tick scrolls rollView_/
+    // firstVisiblePitch_ by edgeScrollVelocity's worth on whichever axis (or both) the last-known
+    // pointer sits inside an edge zone of gridRegion() on, re-derives whichever gesture is in
+    // flight from that SAME last-known pointer (an auto-scroll tick has no MouseEvent of its own —
+    // the pointer isn't moving, the view is), fires onHorizontalViewChanged when the horizontal
+    // mapping moved, and repaints.
+    virtual void autoScrollTick();
+
 private:
     enum class DragMode { None, Move, Resize, Marquee, VelocityScrub, DrawNew };
 
@@ -430,6 +529,38 @@ private:
     // and the gridline sweep are clipped to.
     juce::Rectangle<int> gridRegion() const noexcept;
 
+    // ---- Row mapping (visiblePitches_) ----
+
+    // Rebuilds visiblePitches_ from the current scale context (empty function or
+    // pitchVisibilityOn_ == false -> every pitch, unfiltered) plus the open clip's note pitches
+    // (always kept visible, scale or no scale), then re-clamps firstVisiblePitch_ onto whatever
+    // survived. Called from setScaleContext, openClip and refreshFromDoc — see the class comment.
+    void rebuildVisiblePitches();
+    // The index into visiblePitches_ closest to `pitch` — exact when `pitch` is itself visible
+    // (which firstVisiblePitch_ always is, by the invariant above), nearest otherwise. This is the
+    // one seam yForPitch/pitchForY and every vertical-scroll/zoom path route pitch<->row through.
+    size_t nearestVisibleRowIndex(int pitch) const noexcept;
+    // `originPitch` shifted by `rowDelta` VISIBLE ROWS (not semitones) and re-resolved to whatever
+    // pitch sits at that row now — the seam a Move drag's preview and its mouseUp commit BOTH
+    // route through, so a drag can never land a note on a pitch that is not itself a row (out of
+    // scale, with pitch-visibility collapsing the rest). A rowDelta of 0 is the identity; when
+    // visiblePitches_ is unfiltered (the common case) this is exactly semitone arithmetic, because
+    // row index == pitch there.
+    int rowShiftedPitch(int originPitch, long long rowDelta) const noexcept;
+
+    // The colour resolution paintNote and notePaintFor share: builds the Colors value (themed, or a
+    // default-constructed fallback with no LookAndFeel installed) and the outOfScale flag, then
+    // defers to synth::ui::resolveNoteColour.
+    synth::ui::NotePaint resolveNoteColourFor(int pitch, int velocity, bool selected, bool muted) const;
+
+    // Pixel width of the narrower black-key overlay for a keys-column of `columnWidth` px — flush
+    // left, about 62% of the column, so the remaining strip reads as the white-key colour showing
+    // through (the gap between black keys on a real keyboard viewed side-on).
+    static constexpr float kBlackKeyWidthFraction = 0.62f;
+    static int blackKeyWidthPx(int columnWidth) noexcept {
+        return (int)std::llround((double)columnWidth * (double)kBlackKeyWidthFraction);
+    }
+
     // Effective (possibly mid-drag) clip-relative geometry / velocity for one note — read by
     // paint() and by commit-on-mouseUp, exactly like TimelineClipLaneArea::effectiveGeometryFor.
     struct NoteGeometry {
@@ -460,6 +591,23 @@ private:
     void beginMarquee(juce::Point<int> anchor, bool additive);
     void updateMarquee(juce::Point<int> current);
     void endMarquee();
+
+    // ---- Edge auto-scroll (see EdgeAutoScroll.h) ----
+    //
+    // Re-runs whichever gesture's preview math mouseDrag() runs — Move/Resize/DrawNew's beat math
+    // plus Marquee's updateMarquee() — from lastDragPointer_ against the (possibly just-scrolled)
+    // rollView_/firstVisiblePitch_. The one thing a real pointer move and an auto-scroll tick
+    // share, factored out so they can never drift apart (mirrors TimelineClipLaneArea's own
+    // updateDragPreviewFromLastPointer). VelocityScrub's preview is included too — it is a valid
+    // dragMode_ to re-derive from, it simply never gets auto-scroll ARMED (see
+    // updateAutoScrollArming), so this branch of it is unreachable from a tick in practice.
+    void updateDragPreviewFromLastPointer();
+    // Arms/disarms the edge-scroll timer for the CURRENT lastDragPointer_/dragMode_: started only
+    // while a Move/Resize/Marquee/DrawNew drag is live and the pointer sits inside an edge zone of
+    // gridRegion() on EITHER axis, stopped the instant neither holds. Called after every
+    // mouseDrag update; mouseUp always disarms unconditionally instead (the drag it would be
+    // gating on just ended).
+    void updateAutoScrollArming();
 
     // ---- Tool gestures (everything below acts on a single click; see setActiveTool) ----
 
@@ -618,16 +766,58 @@ private:
     // clamped to [0, 127] — see yForPitch/pitchForY. Named to match the design doc's "scroll
     // position", even though (unlike TimelineViewState::firstVisibleBeat, the beat at x==0) this
     // one is the TOP of the range rather than conceptually its start, because pitch increases
-    // upward while beats increase rightward.
+    // upward while beats increase rightward. Always a member of visiblePitches_ — see the class
+    // comment and rebuildVisiblePitches.
     int firstVisiblePitch_ = 60;
+
+    // ---- Row mapping / scale context ----
+    // Every pitch that currently gets a row, ascending. All 128 when no filter is active — see
+    // rebuildVisiblePitches. Populated in the constructor so yForPitch/pitchForY are well-defined
+    // even before openClip or setScaleContext is ever called.
+    std::vector<int> visiblePitches_;
+    // Empty (the default) means "no scale at all" — see setScaleContext.
+    std::function<bool(int)> isInScale_;
+    bool pitchVisibilityOn_ = false;
+
+    // ---- Note colouring ----
+    synth::ui::NoteColourOverrides overrides_;
+
+    // ---- Keys column label density ----
+    KeyLabelMode keyLabelMode_ = KeyLabelMode::AllNotes;
 
     DragMode dragMode_ = DragMode::None;
     synth::NoteId activeNote_;
     juce::Point<int> mouseDownPos_;
+    // The BEAT under the pointer at mouseDown (xToBeat(mouseDownPos_.x)), captured alongside the
+    // pixel position — every Move/DrawNew drag computes its delta as xToBeat(currentX) -
+    // mouseDownBeat_ rather than xToBeat(currentX) - xToBeat(mouseDownPos_.x). The pixel form only
+    // agrees with the beat form while the view is static; a mid-drag edge-scroll (or, in
+    // principle, any other scroll/zoom) moves rollView_'s firstVisibleBeat, and re-deriving
+    // xToBeat(mouseDownPos_.x) at that point would silently reinterpret the anchor at the NEW
+    // scroll position instead of the one the gesture actually started at. Same reasoning as
+    // TimelineClipLaneArea::mouseDownBeat_.
+    double mouseDownBeat_ = 0.0;
+    // The pitch under the pointer at mouseDown (pitchForY(mouseDownPos_.y)) — the Move drag's
+    // vertical anchor, expressed as a PITCH (not a row index) so it survives rebuildVisiblePitches
+    // rebuilding the row set mid-gesture; every read of it goes back through
+    // nearestVisibleRowIndex to recover its row. See previewDeltaPitch_ for why the anchor has to
+    // be row-space at all.
+    int mouseDownPitch_ = 60;
+    // The last pointer position mouseDrag() saw, in this component's local coordinates. An
+    // auto-scroll tick has no MouseEvent of its own — the pointer isn't moving, the view is — so
+    // updateDragPreviewFromLastPointer() re-derives the in-flight preview from this instead of
+    // from a synthesized event.
+    juce::Point<int> lastDragPointer_;
 
-    // ---- Move preview (one or many notes, one shared snapped beat delta + semitone delta) ----
+    // ---- Move preview (one or many notes, one shared snapped beat delta + ROW delta) ----
     std::vector<NoteOrigin> dragNotes_;
     double previewDeltaBeats_ = 0.0;
+    // A delta in visiblePitches_ ROW INDICES, not semitones: with pitch-visibility collapsing
+    // out-of-scale rows, adding a raw semitone count straight to a note's pitch could land it on a
+    // pitch that is not itself a row right now. Every consumer (effectiveGeometryFor's Move
+    // branch, the mouseUp commit) resolves it through rowShiftedPitch, never by direct addition.
+    // In the common unfiltered case (every pitch visible) this is numerically identical to a
+    // semitone delta, because row index == pitch there.
     int previewDeltaPitch_ = 0;
 
     // ---- Resize preview (always the single grabbed note) ----
@@ -659,8 +849,25 @@ private:
     double playheadBeat_ = 0.0;
     int playheadLineX_ = 0;
     bool hasPlayheadX_ = false;
+    // See setFollowPlayhead. Off by default.
+    bool followPlayhead_ = false;
 
     bool quantiseFlash_ = false;
+
+    // ---- Edge auto-scroll timer ----
+    //
+    // A NESTED juce::Timer rather than a second responsibility multiplexed onto the class's own
+    // private juce::Timer base (used above for the one-shot quantise flash, timerCallback()) —
+    // one juce::Timer answering to two unrelated reasons would need a mode flag in every callback,
+    // exactly the kind of "which timer is this tick for" bug a dedicated Timer avoids by
+    // construction. autoScrollTick() (the protected virtual seam a test overrides) does the real
+    // work; this struct only forwards juce::Timer's callback to it.
+    struct AutoScrollTimer final : public juce::Timer {
+        explicit AutoScrollTimer(PianoRollComponent& ownerRef) : owner(ownerRef) {}
+        void timerCallback() override { owner.autoScrollTick(); }
+        PianoRollComponent& owner;
+    };
+    AutoScrollTimer autoScrollTimer_{*this};
 
     // ---- Edit tool + its cursor cache ----
     EditTool activeTool_ = EditTool::Select;

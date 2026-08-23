@@ -33,6 +33,23 @@
 //      natural-vs-inverted scroll sign on both scroll axes, the anchored zoomHorizontal/zoomVertical
 //      commands, and the wheel-zoom DIRECTION convention (wheel UP — the physical gesture,
 //      independent of isReversed — zooms IN by default; setZoomScrollInverted flips it).
+//  12. KEY LABELS — the pure keyLabelFor(pitch, mode, rowHeightPx) helper paintKeysColumn calls per
+//      row: AllNotes vs OctavesOnly, and the shared row-height readability floor both modes fall
+//      back through.
+//  13. ROW MAPPING — yForPitch/pitchForY through visiblePitches_: the unfiltered round-trip
+//      (unchanged behaviour), a scale context with pitch-visibility OFF (no row ever hidden), ON
+//      (out-of-scale EMPTY rows collapse, a noted out-of-scale pitch never does), the round-trip
+//      once filtered, and firstVisiblePitch_'s "always a member of visiblePitches_" invariant.
+//  14. NOTE COLOURING — notePaintFor's resolveNoteColour path (NoteColour.h), asserted against the
+//      SAME resolver fed the same fallback Colors, rather than against a re-derived formula.
+//  15. KEYS-COLUMN geometry — the black-key inset seam, and a snapshot smoke test with a scale
+//      context and AllNotes labels active (on top of the unmodified SnapshotSmoke above).
+//  16. BEAT-ANCHORED drag math (a mid-drag view scroll folds into the delta rather than being
+//      cancelled out by it), EDGE AUTO-SCROLL (the gated timer's arm/disarm contract and what one
+//      tick does on each axis, including the vertical walk staying inside visiblePitches_ under
+//      an active scale context), and FOLLOW PLAYHEAD (the page-flip, its zero-extra-repaint
+//      contract while the beat is already visible and unmoved, and the "never fights a drag"
+//      gate).
 //
 // Every test in 4-6 and 9 configures snap explicitly (never inherits a default), because these are
 // grid-sensitive assertions and a machine-local snap preference must never be able to decide
@@ -44,9 +61,12 @@
 #include "../Source/ShortcutManager.h"
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/UI/EditTool.h"
+#include "../Source/UI/NoteColour.h"
 #include "../Source/UI/NoteSelectionModel.h"
 #include "../Source/UI/PianoRollComponent.h"
+#include "../Source/UI/Theme/Theme.h"
 #include "../Source/UI/TimelineViewState.h"
+#include <algorithm>
 #include <cmath>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -2782,4 +2802,460 @@ TEST(PianoRollWheelZoomDirectionTest, MagnitudeMatchesRegardlessOfIsReversedSign
 
     EXPECT_DOUBLE_EQ(afterNatural, afterReversed)
         << "same physical gesture, same |delta| -> the exact same zoom factor regardless of isReversed";
+}
+
+// ============================================================================
+// 12. Key labels (paintKeysColumn's pure per-row decision)
+// ============================================================================
+
+TEST(PianoRollKeyLabelTest, AllNotesLabelsEveryRowAtOrAboveTheReadabilityFloor) {
+    using Mode = PianoRollComponent::KeyLabelMode;
+    EXPECT_EQ(PianoRollComponent::keyLabelFor(60, Mode::AllNotes, 12), "C4");
+    EXPECT_EQ(PianoRollComponent::keyLabelFor(61, Mode::AllNotes, 12), "C#4");
+    EXPECT_EQ(PianoRollComponent::keyLabelFor(62, Mode::AllNotes, 12), "D4");
+    EXPECT_EQ(PianoRollComponent::keyLabelFor(71, Mode::AllNotes, 12), "B4");
+    EXPECT_EQ(PianoRollComponent::keyLabelFor(72, Mode::AllNotes, 12), "C5") << "octave rolls over at C";
+}
+
+TEST(PianoRollKeyLabelTest, RowsBelowTheReadabilityFloorFallBackToCOnlyEvenInAllNotes) {
+    using Mode = PianoRollComponent::KeyLabelMode;
+    EXPECT_EQ(PianoRollComponent::keyLabelFor(60, Mode::AllNotes, 8), "C4") << "the C row still labels";
+    EXPECT_TRUE(PianoRollComponent::keyLabelFor(61, Mode::AllNotes, 8).isEmpty())
+        << "below the floor, even AllNotes only labels the Cs";
+    EXPECT_TRUE(PianoRollComponent::keyLabelFor(62, Mode::AllNotes, 8).isEmpty());
+}
+
+TEST(PianoRollKeyLabelTest, OctavesOnlyAlwaysLabelsOnlyTheCsRegardlessOfRowHeight) {
+    using Mode = PianoRollComponent::KeyLabelMode;
+    EXPECT_EQ(PianoRollComponent::keyLabelFor(60, Mode::OctavesOnly, 12), "C4");
+    EXPECT_TRUE(PianoRollComponent::keyLabelFor(61, Mode::OctavesOnly, 12).isEmpty());
+    EXPECT_EQ(PianoRollComponent::keyLabelFor(60, Mode::OctavesOnly, 40), "C4")
+        << "OctavesOnly stays C-only even at a tall row height";
+    EXPECT_TRUE(PianoRollComponent::keyLabelFor(64, Mode::OctavesOnly, 40).isEmpty());
+}
+
+TEST(PianoRollKeyLabelTest, OutOfMidiRangePitchYieldsNoLabelInEitherMode) {
+    using Mode = PianoRollComponent::KeyLabelMode;
+    EXPECT_TRUE(PianoRollComponent::keyLabelFor(-1, Mode::AllNotes, 12).isEmpty());
+    EXPECT_TRUE(PianoRollComponent::keyLabelFor(128, Mode::AllNotes, 12).isEmpty());
+    EXPECT_TRUE(PianoRollComponent::keyLabelFor(-1, Mode::OctavesOnly, 12).isEmpty());
+}
+
+TEST(PianoRollKeyLabelTest, DefaultModeIsAllNotesAndIsSettable) {
+    PianoRollFixture f;
+    EXPECT_EQ(f.roll.getKeyLabelMode(), PianoRollComponent::KeyLabelMode::AllNotes);
+    f.roll.setKeyLabelMode(PianoRollComponent::KeyLabelMode::OctavesOnly);
+    EXPECT_EQ(f.roll.getKeyLabelMode(), PianoRollComponent::KeyLabelMode::OctavesOnly);
+}
+
+// ============================================================================
+// 13. Row mapping (visiblePitches_, yForPitch/pitchForY, scale context)
+// ============================================================================
+
+namespace {
+// C major, root C (pitch class 0): C D E F G A B.
+bool cMajorContains(int pitch) {
+    static const bool kInScale[12] = {true, false, true, false, true, true, false, true, false, true, false, true};
+    return kInScale[(size_t)(((pitch % 12) + 12) % 12)];
+}
+} // namespace
+
+TEST(PianoRollRowMappingTest, NoScaleContextEveryPitchIsVisibleAndMappingRoundTrips) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+
+    ASSERT_EQ(f.roll.getVisiblePitchesForTest().size(), 128u);
+    for (int pitch = 0; pitch <= 127; ++pitch) {
+        const int y = f.roll.yForPitch(pitch);
+        EXPECT_EQ(f.roll.pitchForY(y), pitch) << "pitch " << pitch;
+    }
+}
+
+TEST(PianoRollRowMappingTest, ScaleContextWithVisibilityOffNeverHidesARow) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+
+    f.roll.setScaleContext(cMajorContains, /*pitchVisibilityOn*/ false);
+    EXPECT_EQ(f.roll.getVisiblePitchesForTest().size(), 128u)
+        << "a scale that only affects colouring must never collapse a row";
+}
+
+TEST(PianoRollRowMappingTest, VisibilityOnCollapsesEmptyOutOfScaleRowsButKeepsNotedOnes) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    // C# (61) is out of C major and has a note; D (62) is out of C major and has none.
+    f.doc.addNote(clipId, makeNote(1.0, 61));
+    f.open(clipId);
+
+    f.roll.setScaleContext(cMajorContains, /*pitchVisibilityOn*/ true);
+    const auto& visible = f.roll.getVisiblePitchesForTest();
+
+    EXPECT_TRUE(std::binary_search(visible.begin(), visible.end(), 60)) << "in-scale pitch stays visible";
+    EXPECT_TRUE(std::binary_search(visible.begin(), visible.end(), 61))
+        << "out-of-scale pitch with a note in the open clip is never hidden";
+    EXPECT_FALSE(std::binary_search(visible.begin(), visible.end(), 62))
+        << "out-of-scale pitch with no note collapses out of the grid";
+
+    // pitchForY must never land on a collapsed row, at any y in the visible component.
+    for (int y = PianoRollComponent::kHeaderHeight; y < f.roll.getHeight(); ++y)
+        EXPECT_NE(f.roll.pitchForY(y), 62);
+}
+
+TEST(PianoRollRowMappingTest, RoundTripThroughVisibleRowsHoldsWithFilteringActive) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+    f.roll.setScaleContext(cMajorContains, /*pitchVisibilityOn*/ true);
+
+    for (const int pitch : f.roll.getVisiblePitchesForTest()) {
+        const int y = f.roll.yForPitch(pitch);
+        EXPECT_EQ(f.roll.pitchForY(y), pitch) << "pitch " << pitch;
+    }
+}
+
+TEST(PianoRollRowMappingTest, FirstVisiblePitchIsAlwaysAMemberOfVisiblePitches) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.doc.addNote(clipId, makeNote(1.0, 61)); // median pitch 61 -> openClip parks the view above it
+    f.open(clipId);
+
+    const int beforeScale = f.roll.getFirstVisiblePitchForTest();
+    ASSERT_EQ(beforeScale, 68) << "openClip's median-centred framing for this fixture's clip/window size";
+    ASSERT_FALSE(cMajorContains(beforeScale)) << "and it must be OUT of C major for this test to mean anything";
+
+    f.roll.setScaleContext(cMajorContains, /*pitchVisibilityOn*/ true);
+    const auto& visible = f.roll.getVisiblePitchesForTest();
+    EXPECT_TRUE(std::binary_search(visible.begin(), visible.end(), f.roll.getFirstVisiblePitchForTest()))
+        << "firstVisiblePitch_ must be a member of visiblePitches_ right after the rebuild";
+    EXPECT_NE(f.roll.getFirstVisiblePitchForTest(), beforeScale)
+        << "the pre-rebuild pitch was out-of-scale and unnoted, so the rebuild must have moved it";
+
+    // Clearing the scale context rebuilds back to every pitch, and the invariant must still hold.
+    f.roll.setScaleContext({}, false);
+    EXPECT_EQ(f.roll.getVisiblePitchesForTest().size(), 128u);
+    EXPECT_GE(f.roll.getFirstVisiblePitchForTest(), 0);
+    EXPECT_LE(f.roll.getFirstVisiblePitchForTest(), 127);
+}
+
+// ============================================================================
+// 14. Note colouring through synth::ui::resolveNoteColour (NoteColour.h)
+// ============================================================================
+
+TEST(PianoRollNoteColourTest, OutOfScaleNoteResolvesThroughTheSharedResolverToItsOutOfScaleFamily) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    const auto id = f.doc.addNote(clipId, makeNote(1.0, 61, 1.0)); // C#, out of C major
+    f.open(clipId);
+    f.roll.setScaleContext(cMajorContains, /*pitchVisibilityOn*/ false);
+
+    const auto* note = f.doc.getNote(id);
+    ASSERT_NE(note, nullptr);
+    const auto resolved = f.roll.notePaintFor(*note);
+
+    // Ground truth: the SAME resolver, fed the SAME no-LookAndFeel fallback (a default-constructed
+    // Colors — this headless fixture's roll has no AppLookAndFeel installed) and outOfScale=true,
+    // is exactly what paintNote is expected to have produced.
+    const auto expected = synth::ui::resolveNoteColour(synth::theme::Colors{}, note->pitch, note->velocity,
+                                                       /*selected*/ false, /*muted*/ false, /*outOfScale*/ true,
+                                                       synth::ui::NoteColourOverrides{});
+    EXPECT_EQ(resolved.fill, expected.fill);
+    EXPECT_EQ(resolved.border, expected.border);
+
+    // And it must genuinely differ from how the SAME note would resolve if it were in scale —
+    // otherwise the scale context would not be doing anything visible at all.
+    const auto asIfInScale = synth::ui::resolveNoteColour(synth::theme::Colors{}, note->pitch, note->velocity, false,
+                                                          false, /*outOfScale*/ false,
+                                                          synth::ui::NoteColourOverrides{});
+    EXPECT_NE(resolved.fill, asIfInScale.fill);
+}
+
+TEST(PianoRollNoteColourTest, InScaleNoteIsUnaffectedByInstallingTheScaleContext) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    const auto id = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0)); // C, in C major
+    f.open(clipId);
+
+    const auto* note = f.doc.getNote(id);
+    ASSERT_NE(note, nullptr);
+
+    const auto before = f.roll.notePaintFor(*note); // no scale context yet
+    f.roll.setScaleContext(cMajorContains, false);
+    const auto after = f.roll.notePaintFor(*note);
+
+    EXPECT_EQ(before.fill, after.fill);
+    EXPECT_EQ(before.border, after.border);
+}
+
+TEST(PianoRollNoteColourTest, EmptyScaleContextMeansNothingIsEverOutOfScale) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    // Every pitch class in a chromatic run — none of them can be "out of scale" with no scale
+    // installed at all, regardless of pitchVisibilityOn.
+    const auto id = f.doc.addNote(clipId, makeNote(1.0, 61, 1.0));
+    f.open(clipId);
+    f.roll.setScaleContext({}, /*pitchVisibilityOn*/ true);
+
+    const auto* note = f.doc.getNote(id);
+    ASSERT_NE(note, nullptr);
+    const auto resolved = f.roll.notePaintFor(*note);
+    const auto expected = synth::ui::resolveNoteColour(synth::theme::Colors{}, note->pitch, note->velocity, false,
+                                                        false, /*outOfScale*/ false, synth::ui::NoteColourOverrides{});
+    EXPECT_EQ(resolved.fill, expected.fill);
+    EXPECT_EQ(resolved.border, expected.border);
+}
+
+// ============================================================================
+// 15. Keys-column geometry seam (piano-style rendering) and a scale-context snapshot smoke
+// ============================================================================
+
+TEST(PianoRollKeysColumnTest, BlackKeyInsetIsNarrowerThanTheFullColumnWidth) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+
+    const int inset = f.roll.blackKeyInsetForTest();
+    EXPECT_GT(inset, 0);
+    EXPECT_LT(inset, f.roll.getKeysColumnBounds().getWidth())
+        << "a black key must draw narrower than the full column width, so the white-key colour "
+           "still shows through on its right — the gap between black keys on a real keyboard";
+}
+
+TEST(PianoRollKeysColumnTest, SnapshotSmokeWithScaleContextAndAllNotesLabelsActive) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.doc.addNote(clipId, makeNote(1.0, 61, 1.0));
+    f.open(clipId);
+    f.roll.setScaleContext(cMajorContains, /*pitchVisibilityOn*/ true);
+    f.roll.setKeyLabelMode(PianoRollComponent::KeyLabelMode::AllNotes);
+
+    f.roll.setSize(900, 160);
+    const juce::Image img = f.roll.createComponentSnapshot(f.roll.getLocalBounds());
+    EXPECT_FALSE(img.isNull());
+    EXPECT_EQ(img.getWidth(), 900);
+    EXPECT_EQ(img.getHeight(), 160);
+}
+
+// ============================================================================
+// 16. Beat-anchored drag math, edge auto-scroll, and follow-playhead
+// ============================================================================
+
+// ---- Beat-anchored Move drag: xToBeat(currentX) - mouseDownBeat_, not - xToBeat(mouseDownX) ----
+
+TEST(PianoRollDragAnchorTest, MoveDragWithNoScrollLandsExactlyAsBefore) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 32.0, "Clip");
+    f.open(clipId);
+    const auto id = f.doc.addNote(clipId, makeNote(2.0, 60, 1.0));
+    ASSERT_TRUE(id.isValid());
+
+    const auto rect = f.roll.getNoteRect(id);
+    const juce::Point<float> anchor = centreOf(rect);
+    const juce::Point<float> dragged(anchor.x + 80.0f, anchor.y); // +2 beats at 40 px/beat
+
+    f.roll.mouseDown(leftClick(f.roll, anchor));
+    f.roll.mouseDrag(leftDrag(f.roll, dragged, anchor));
+    f.roll.mouseUp(leftDrag(f.roll, dragged, anchor));
+
+    EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 4.0)
+        << "unchanged from the pixel-anchored form when the view never scrolls mid-drag";
+}
+
+TEST(PianoRollDragAnchorTest, MoveDragAbsorbsAMidDragViewScrollIntoTheBeatDelta) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 32.0, "Clip");
+    f.open(clipId);
+    const auto id = f.doc.addNote(clipId, makeNote(2.0, 60, 1.0));
+    ASSERT_TRUE(id.isValid());
+
+    const auto rect = f.roll.getNoteRect(id);
+    const juce::Point<float> anchor = centreOf(rect);
+    const juce::Point<float> dragged(anchor.x + 80.0f, anchor.y); // +2 beats' worth of pixels
+
+    f.roll.mouseDown(leftClick(f.roll, anchor));
+    f.roll.mouseDrag(leftDrag(f.roll, dragged, anchor));
+
+    // Mid-drag the view scrolls forward by 1 beat (an edge-auto-scroll tick, or in principle
+    // anything else) with the pointer never moving on screen at all.
+    f.roll.setHorizontalView(f.roll.getPixelsPerBeat(), f.roll.getFirstVisibleBeat() + 1.0);
+    f.roll.mouseDrag(leftDrag(f.roll, dragged, anchor));
+    f.roll.mouseUp(leftDrag(f.roll, dragged, anchor));
+
+    // The pixel offset (+2 beats) AND the scroll (+1 beat) both count: xToBeat(currentX) -
+    // mouseDownBeat_ folds the scroll into the delta. The old xToBeat(currentX) -
+    // xToBeat(mouseDownX) form would have re-derived xToBeat(mouseDownX) under the NEW scroll too
+    // and the +1 would have cancelled out, landing at 4.0 instead of 5.0.
+    EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 5.0);
+}
+
+// ---- Edge auto-scroll: arm/disarm gating and one tick's effect on each axis ----
+
+TEST(PianoRollAutoScrollTest, TimerArmsInsideTheEdgeZoneDuringAMoveDragAndStopsOnMouseUp) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 64.0, "Clip");
+    f.open(clipId);
+    const auto id = f.doc.addNote(clipId, makeNote(2.0, 60, 1.0));
+    ASSERT_TRUE(id.isValid());
+
+    const auto rect = f.roll.getNoteRect(id);
+    const juce::Point<float> anchor = centreOf(rect);
+    const auto grid = f.roll.getNoteGridBounds();
+    const juce::Point<float> nearRightEdge((float)grid.getRight() - 2.0f, anchor.y);
+
+    f.roll.mouseDown(leftClick(f.roll, anchor));
+    EXPECT_FALSE(f.roll.isAutoScrollTimerRunningForTest())
+        << "arming only happens from mouseDrag's own check, never from mouseDown alone";
+
+    f.roll.mouseDrag(leftDrag(f.roll, nearRightEdge, anchor));
+    EXPECT_TRUE(f.roll.isAutoScrollTimerRunningForTest()) << "the pointer sits inside the right edge zone";
+
+    // Back to the dead middle band disarms it again without a release.
+    f.roll.mouseDrag(leftDrag(f.roll, anchor, anchor));
+    EXPECT_FALSE(f.roll.isAutoScrollTimerRunningForTest());
+
+    // Re-arm, then release: the timer never outlives the drag it belonged to.
+    f.roll.mouseDrag(leftDrag(f.roll, nearRightEdge, anchor));
+    ASSERT_TRUE(f.roll.isAutoScrollTimerRunningForTest());
+    f.roll.mouseUp(leftDrag(f.roll, nearRightEdge, anchor));
+    EXPECT_FALSE(f.roll.isAutoScrollTimerRunningForTest());
+}
+
+TEST(PianoRollAutoScrollTest, EachTickAdvancesTheViewAndReDerivesThePreviewFromTheLastPointer) {
+    // Two independent fixtures, each dragged into the right edge zone and released after a
+    // DIFFERENT number of ticks: if the later mouseUp lands further along, the preview at
+    // commit time really did keep following the LAST tick's scroll rather than a stale delta
+    // captured once when the drag first armed.
+    auto runWithTicks = [](int tickCount) {
+        PianoRollFixture f;
+        const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+        const auto clipId = f.doc.addClip(trackId, 0.0, 64.0, "Clip");
+        f.open(clipId);
+        const auto id = f.doc.addNote(clipId, makeNote(2.0, 60, 1.0));
+
+        int viewChanged = 0;
+        f.roll.onHorizontalViewChanged = [&] { ++viewChanged; };
+
+        const auto rect = f.roll.getNoteRect(id);
+        const juce::Point<float> anchor = centreOf(rect);
+        const auto grid = f.roll.getNoteGridBounds();
+        const juce::Point<float> nearRightEdge((float)grid.getRight() - 2.0f, anchor.y);
+
+        f.roll.mouseDown(leftClick(f.roll, anchor));
+        f.roll.mouseDrag(leftDrag(f.roll, nearRightEdge, anchor));
+
+        const double beatBefore = f.roll.getFirstVisibleBeat();
+        for (int i = 0; i < tickCount; ++i)
+            f.roll.tickAutoScrollForTest();
+        EXPECT_GT(f.roll.getFirstVisibleBeat(), beatBefore) << "near the RIGHT edge the view scrolls FORWARD";
+        EXPECT_GE(viewChanged, tickCount) << "onHorizontalViewChanged fires on every scrolling tick";
+
+        f.roll.mouseUp(leftDrag(f.roll, nearRightEdge, anchor));
+        return f.doc.getNote(id)->startBeat;
+    };
+
+    const double afterOneTick = runWithTicks(1);
+    const double afterThreeTicks = runWithTicks(3);
+    EXPECT_GT(afterThreeTicks, afterOneTick);
+}
+
+TEST(PianoRollAutoScrollTest, VerticalTickWalksOnlyVisibleRowsUnderAnActiveScaleContext) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    const auto id = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0)); // C: in C major
+    f.open(clipId);
+    f.roll.setScaleContext(cMajorContains, /*pitchVisibilityOn*/ true);
+    ASSERT_TRUE(id.isValid());
+
+    const auto rect = f.roll.getNoteRect(id);
+    const juce::Point<float> anchor = centreOf(rect);
+    const auto grid = f.roll.getNoteGridBounds();
+    const juce::Point<float> nearTopEdge(anchor.x, (float)grid.getY() + 2.0f);
+
+    const int startPitch = f.roll.getFirstVisiblePitchForTest();
+    f.roll.mouseDown(leftClick(f.roll, anchor));
+    f.roll.mouseDrag(leftDrag(f.roll, nearTopEdge, anchor));
+    ASSERT_TRUE(f.roll.isAutoScrollTimerRunningForTest());
+
+    f.roll.tickAutoScrollForTest();
+    const int afterOneTick = f.roll.getFirstVisiblePitchForTest();
+    EXPECT_GT(afterOneTick, startPitch) << "near the TOP edge the view walks upward (higher pitches)";
+
+    const auto& visible = f.roll.getVisiblePitchesForTest();
+    EXPECT_TRUE(std::binary_search(visible.begin(), visible.end(), afterOneTick))
+        << "the walked-to row must itself be a VISIBLE pitch, never one the scale filter collapsed";
+}
+
+// ---- Follow playhead ----
+
+TEST(PianoRollFollowPlayheadTest, PageFlipsTheViewWhenTheBeatWouldLeaveIt) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 64.0, "Clip");
+    f.open(clipId, 40.0);
+
+    EXPECT_FALSE(f.roll.isFollowPlayhead()) << "off by default";
+    f.roll.setFollowPlayhead(true);
+    ASSERT_TRUE(f.roll.isFollowPlayhead());
+
+    f.roll.setPlayheadBeat(40.0); // well beyond the current view's right edge
+    EXPECT_GT(f.roll.getFirstVisibleBeat(), 0.0) << "the view paged forward to keep the playhead visible";
+
+    const auto grid = f.roll.getNoteGridBounds();
+    const int x = f.roll.getPlayheadLineX();
+    EXPECT_GE(x, grid.getX());
+    EXPECT_LE(x, grid.getRight());
+}
+
+TEST(PianoRollFollowPlayheadTest, AddsNoExtraRepaintsWhileTheBeatStaysInsideTheView) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 8.0, "Clip");
+    f.open(clipId);
+    f.roll.setFollowPlayhead(true);
+
+    f.roll.setPlayheadBeat(2.0);
+    EXPECT_EQ(f.roll.requests, 1) << "the first position after an open still costs exactly one strip";
+
+    for (int i = 0; i < 5; ++i)
+        f.roll.setPlayheadBeat(2.0);
+    EXPECT_EQ(f.roll.requests, 1)
+        << "follow adds ZERO extra repaints while the beat is unmoved and already inside the view";
+}
+
+TEST(PianoRollFollowPlayheadTest, NeverFlipsWhileADragIsInFlight) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 64.0, "Clip");
+    f.open(clipId, 40.0);
+    const auto id = f.doc.addNote(clipId, makeNote(2.0, 60, 1.0));
+    ASSERT_TRUE(id.isValid());
+    f.roll.setFollowPlayhead(true);
+
+    const auto rect = f.roll.getNoteRect(id);
+    const juce::Point<float> anchor = centreOf(rect);
+    const juce::Point<float> dragged(anchor.x + 40.0f, anchor.y);
+    f.roll.mouseDown(leftClick(f.roll, anchor));
+    f.roll.mouseDrag(leftDrag(f.roll, dragged, anchor));
+
+    const double beatBefore = f.roll.getFirstVisibleBeat();
+    f.roll.setPlayheadBeat(40.0); // way beyond the current view
+    EXPECT_DOUBLE_EQ(f.roll.getFirstVisibleBeat(), beatBefore)
+        << "a Move drag in flight must not be yanked out from under the user by a follow flip";
+
+    f.roll.mouseUp(leftDrag(f.roll, dragged, anchor));
 }

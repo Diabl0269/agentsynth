@@ -13,12 +13,20 @@
 // resolver compile unconditionally (like TimelinePanelComponent itself); only MainComponent's use
 // of them is gated.
 
+#include "../Source/AppUndoManager.h"
 #include "../Source/Timeline/TimelineDoc.h"
+#include "../Source/UI/ColourPickerPopup.h"
+#include "../Source/UI/Theme/AppLookAndFeel.h"
+#include "../Source/UI/Theme/BuiltInThemes.h"
 #include "../Source/UI/TimelineTrackHeaderComponent.h"
 #include "../Source/UI/TrackColour.h"
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
+
+#ifdef HAS_FONT_ASSETS
+#include "BinaryData.h"
+#endif
 
 using synth::TimelineDoc;
 using synth::TrackId;
@@ -27,6 +35,16 @@ using synth::ui::TimelineTrackHeaderComponent;
 using synth::ui::TrackHeaderHost;
 
 namespace {
+
+// True when the icon BinaryData is actually linked in (mirrors IconLibraryTests.cpp's constant):
+// the headless test target links Core, which normally compiles this in, but the #else keeps the
+// icon-badge test meaningful either way rather than assuming one or the other.
+constexpr bool kAssetsPresent =
+#ifdef HAS_FONT_ASSETS
+    true;
+#else
+    false;
+#endif
 
 class StubTrackHeaderHost : public TrackHeaderHost {
 public:
@@ -51,7 +69,13 @@ public:
 
     void performTrackEdit(const std::function<void()>& mutation) override {
         ++editCalls;
-        if (mutation)
+        // When a real AppUndoManager is wired in (the colour-picker commit-once tests), route
+        // through it so those tests exercise the ACTUAL undo/redo contract rather than a stub
+        // that merely counts calls. Every other test in this file leaves undoManager null, which
+        // keeps their existing "editCalls" assertions exactly as they were.
+        if (undoManager != nullptr)
+            undoManager->recordTimelineChange(doc_, mutation);
+        else if (mutation)
             mutation();
     }
 
@@ -63,6 +87,8 @@ public:
     std::vector<PluginLaneOption> getAvailablePluginLaneOptions() const override { return {}; }
     synth::LaneId addPluginAutomationLane(const PluginLaneOption&) override { return {}; }
 
+    juce::ApplicationProperties* getAppProperties() override { return appProperties; }
+
     std::vector<BindingOption> options;
     std::map<juce::String, juce::String> names;
     juce::String lastBoundUuid;
@@ -72,6 +98,11 @@ public:
     int editCalls = 0;
     int addTrackCalls = 0;
     int addAudioTrackCalls = 0;
+    // Null by default (in-memory-only colour picker). A test that needs the real undo contract
+    // sets this to a real AppUndoManager it owns.
+    AppUndoManager* undoManager = nullptr;
+    // Null by default (in-memory-only favourites shelf, per ColourPickerPopup.h's contract).
+    juce::ApplicationProperties* appProperties = nullptr;
 
 private:
     TimelineDoc& doc_;
@@ -299,30 +330,76 @@ TEST(TimelineTrackHeaderTest, NameEditWritesThroughToTheDoc) {
 }
 
 // =============================================================================
-// 5. Colour: swatch cycles the palette, and the value persists in the document
+// 5. Colour: swatch click opens a picker; preview writes live; commit is ONE undo step
 // =============================================================================
 
-TEST(TimelineTrackHeaderTest, ColourSwatchCyclesThePaletteAndPersistsInTheDoc) {
+// The swatch no longer cycles the palette on click (see TrackColour.h's file comment) — it opens
+// synth::ui::ColourPickerPopup. This drives that popup through its OWN test seams
+// (setCurrentColourForTest / commitForTest), never via a real juce::CallOutBox, which cannot run
+// headlessly.
+TEST(TimelineTrackHeaderTest, ColourPickerPreviewWritesLiveWithNoUndoStep) {
     HeaderFixture f;
-    const auto& palette = synth::ui::trackPaletteArgb();
+    AppUndoManager undoManager;
+    f.host->undoManager = &undoManager;
 
-    // A freshly added track carries TimelineDoc's neutral placeholder, which is not in the palette,
-    // so the first click lands on entry 0 rather than "the one after grey".
-    f.header->getColourSwatch().onClick();
-    f.header->refreshFromDoc();
-    EXPECT_EQ(f.track()->colourArgb, palette[0]);
-    EXPECT_EQ(f.header->getResolvedColour(), juce::Colour(palette[0]));
+    auto popup = f.header->createColourPickerForTest();
+    ASSERT_NE(popup, nullptr);
 
-    f.header->getColourSwatch().onClick();
-    f.header->refreshFromDoc();
-    EXPECT_EQ(f.track()->colourArgb, palette[1]);
+    popup->setCurrentColourForTest(juce::Colour(0xff112233));
+    EXPECT_EQ(f.track()->colourArgb, 0xff112233u) << "preview writes the doc directly";
+    EXPECT_FALSE(undoManager.canUndo()) << "a live preview must not push an undo transaction";
+    EXPECT_EQ(f.host->editCalls, 0);
+}
 
-    EXPECT_EQ(f.host->editCalls, 2) << "each cycle is one undoable edit";
+TEST(TimelineTrackHeaderTest, ColourPickerCommitPushesExactlyOneUndoStepRestoringTheOriginal) {
+    HeaderFixture f;
+    AppUndoManager undoManager;
+    f.host->undoManager = &undoManager;
+    const juce::uint32 original = f.track()->colourArgb; // TimelineDoc's neutral placeholder
+
+    auto popup = f.header->createColourPickerForTest();
+    ASSERT_NE(popup, nullptr);
+    popup->setCurrentColourForTest(juce::Colour(0xff445566)); // preview, no undo yet
+    popup->commitForTest();
+
+    EXPECT_EQ(f.track()->colourArgb, 0xff445566u) << "the committed colour sticks";
+    EXPECT_EQ(f.host->editCalls, 1) << "exactly one undoable edit for the whole gesture";
+    ASSERT_TRUE(undoManager.canUndo());
+
+    undoManager.undo();
+    EXPECT_EQ(f.track()->colourArgb, original) << "undoing the ONE step restores the ORIGINAL colour";
+
+    // A second commitForTest() call must not fire again (commit-once).
+    popup->commitForTest();
+    EXPECT_EQ(f.host->editCalls, 1);
+}
+
+TEST(TimelineTrackHeaderTest, ColourPickerCommitWithNoNetChangePushesNoUndoStep) {
+    HeaderFixture f;
+    AppUndoManager undoManager;
+    f.host->undoManager = &undoManager;
+    const juce::uint32 original = f.track()->colourArgb;
+
+    auto popup = f.header->createColourPickerForTest();
+    ASSERT_NE(popup, nullptr);
+    popup->setCurrentColourForTest(juce::Colour(0xff778899)); // preview away from the original...
+    popup->setCurrentColourForTest(juce::Colour(original));   // ...and back again before closing
+    popup->commitForTest();
+
+    EXPECT_EQ(f.track()->colourArgb, original);
+    EXPECT_EQ(f.host->editCalls, 0) << "no NET change must record no undo step";
+    EXPECT_FALSE(undoManager.canUndo());
+}
+
+TEST(TimelineTrackHeaderTest, SwatchClickReturnsNullPickerWhenTrackIsGone) {
+    HeaderFixture f;
+    ASSERT_TRUE(f.doc.removeTrack(f.trackId));
+    EXPECT_EQ(f.header->createColourPickerForTest(), nullptr);
 }
 
 TEST(TimelineTrackHeaderTest, MutedTrackResolvesToADimmedColour) {
     HeaderFixture f;
-    f.header->getColourSwatch().onClick();
+    f.doc.setTrackColour(f.trackId, 0xff4FC1FFu);
     f.header->refreshFromDoc();
     const auto unmuted = f.header->getResolvedColour();
 
@@ -466,6 +543,124 @@ TEST(TimelineTrackHeaderTest, AutomationTrackHasNoBindingChipButMidiTrackKeepsIt
 
     HeaderFixture midi(TrackKind::Midi);
     EXPECT_TRUE(midi.header->getBindingChip().isVisible());
+}
+
+// The kind badge draws a themed icon when one is available, matching the per-kind mapping
+// text badge used to encode 1:1 — TrackMidi/TrackAudio/TrackAutomation — and falls back to the
+// text badge (already covered above) with no AppLookAndFeel installed at all.
+TEST(TimelineTrackHeaderTest, KindBadgeIconPerTrackKindOrTextFallback) {
+    synth::theme::AppLookAndFeel lf;
+
+    HeaderFixture midi(TrackKind::Midi);
+    EXPECT_EQ(midi.header->getKindBadgeIconForTest(), -1) << "no LookAndFeel installed yet — text fallback";
+    midi.header->setLookAndFeel(&lf);
+    EXPECT_EQ(midi.header->getKindBadgeIconForTest(),
+              kAssetsPresent ? (int)synth::theme::Icon::TrackMidi : -1);
+    midi.header->setLookAndFeel(nullptr);
+
+    HeaderFixture audio(TrackKind::Audio);
+    audio.header->setLookAndFeel(&lf);
+    EXPECT_EQ(audio.header->getKindBadgeIconForTest(),
+              kAssetsPresent ? (int)synth::theme::Icon::TrackAudio : -1);
+    audio.header->setLookAndFeel(nullptr);
+
+    HeaderFixture automation(TrackKind::Automation);
+    automation.header->setLookAndFeel(&lf);
+    EXPECT_EQ(automation.header->getKindBadgeIconForTest(),
+              kAssetsPresent ? (int)synth::theme::Icon::TrackAutomation : -1);
+    automation.header->setLookAndFeel(nullptr);
+}
+
+// =============================================================================
+// 7a. Theme-switch bug fix regression: the chip and the M/S/R active colours must follow a theme
+// switch even when nothing about the doc changed (the bug this wave fixes — see
+// TimelineTrackHeaderComponent::applyThemeDerivedColours / lookAndFeelChanged).
+// =============================================================================
+
+TEST(TimelineTrackHeaderTest, ThemeSwitchReappliesChipAndMSRColoursWithNoDocChange) {
+    HeaderFixture f;
+    synth::theme::AppLookAndFeel lf;
+    const auto themeA = synth::theme::makeObsidian();
+    const auto themeB = synth::theme::makeNeon();
+
+    lf.applyTheme(themeA);
+    f.header->setLookAndFeel(&lf); // installing triggers lookAndFeelChanged() once already
+
+    EXPECT_EQ(f.header->getBindingChip().findColour(juce::TextButton::buttonColourId), themeA.colors.warning)
+        << "a freshly-added track is unbound — the chip's WARNING colour, not surface";
+    EXPECT_EQ(f.header->getMuteButton().findColour(juce::TextButton::buttonOnColourId), themeA.colors.trackMuteOn);
+    EXPECT_EQ(f.header->getSoloButton().findColour(juce::TextButton::buttonOnColourId), themeA.colors.trackSoloOn);
+    EXPECT_EQ(f.header->getArmButton().findColour(juce::TextButton::buttonOnColourId), themeA.colors.trackArmOn);
+
+    // Theme mutates in place, then the app broadcasts the switch — exactly the sequence a real
+    // theme switch runs, and exactly the case that had no effect before this fix (no refreshFromDoc
+    // call in between, only lookAndFeelChanged()).
+    lf.applyTheme(themeB);
+    f.header->sendLookAndFeelChange();
+
+    EXPECT_EQ(f.header->getBindingChip().findColour(juce::TextButton::buttonColourId), themeB.colors.warning);
+    EXPECT_EQ(f.header->getMuteButton().findColour(juce::TextButton::buttonOnColourId), themeB.colors.trackMuteOn);
+    EXPECT_EQ(f.header->getSoloButton().findColour(juce::TextButton::buttonOnColourId), themeB.colors.trackSoloOn);
+    EXPECT_EQ(f.header->getArmButton().findColour(juce::TextButton::buttonOnColourId), themeB.colors.trackArmOn);
+
+    // ...and the NORMAL (bound, non-warning) chip variant follows too.
+    f.bindTo("uuid-a", "Track In");
+    EXPECT_EQ(f.header->getBindingChip().findColour(juce::TextButton::buttonColourId), themeB.colors.surface);
+
+    f.header->setLookAndFeel(nullptr);
+}
+
+// =============================================================================
+// 7b. ColourPickerPopup favourites — pure free functions, no juce::Component involved.
+// =============================================================================
+
+TEST(ColourPickerPopupTest, SerializeParseRoundTrips) {
+    const std::vector<juce::Colour> colours{juce::Colour(0xff4FC1FFu), juce::Colour(0xff7FD962u),
+                                             juce::Colour(0x00000000u)};
+    const auto serialized = synth::ui::serializeFavouriteColours(colours);
+    const auto parsed = synth::ui::parseFavouriteColours(serialized);
+
+    ASSERT_EQ(parsed.size(), colours.size());
+    for (size_t i = 0; i < colours.size(); ++i)
+        EXPECT_EQ(parsed[i].getARGB(), colours[i].getARGB());
+}
+
+TEST(ColourPickerPopupTest, ParseToleratesJunkEntriesWithoutLosingTheRest) {
+    const auto parsed = synth::ui::parseFavouriteColours("FF4FC1FF,not-a-colour,,FF7FD962,zzzzzzzz");
+    ASSERT_EQ(parsed.size(), 2u);
+    EXPECT_EQ(parsed[0].getARGB(), 0xFF4FC1FFu);
+    EXPECT_EQ(parsed[1].getARGB(), 0xFF7FD962u);
+}
+
+TEST(ColourPickerPopupTest, ParseEmptyStringIsEmptyList) { EXPECT_TRUE(synth::ui::parseFavouriteColours("").empty()); }
+
+TEST(ColourPickerPopupTest, LoadWithNoPropsSeedsDefaultsFromTrackPalette) {
+    const auto loaded = synth::ui::loadFavouriteColours(nullptr);
+    const auto& palette = synth::ui::trackPaletteArgb();
+    ASSERT_EQ(loaded.size(), palette.size());
+    for (size_t i = 0; i < palette.size(); ++i)
+        EXPECT_EQ(loaded[i].getARGB(), palette[i]);
+}
+
+TEST(ColourPickerPopupTest, AddFavouriteDedupesAndPreservesOrder) {
+    std::vector<juce::Colour> favourites;
+    synth::ui::addFavourite(favourites, juce::Colour(0xff111111u));
+    synth::ui::addFavourite(favourites, juce::Colour(0xff222222u));
+    synth::ui::addFavourite(favourites, juce::Colour(0xff111111u)); // duplicate — must not append again
+
+    ASSERT_EQ(favourites.size(), 2u);
+    EXPECT_EQ(favourites[0].getARGB(), 0xff111111u);
+    EXPECT_EQ(favourites[1].getARGB(), 0xff222222u);
+}
+
+TEST(ColourPickerPopupTest, RemoveFavouriteRemovesOnlyTheMatch) {
+    std::vector<juce::Colour> favourites{juce::Colour(0xff111111u), juce::Colour(0xff222222u),
+                                         juce::Colour(0xff333333u)};
+    synth::ui::removeFavourite(favourites, juce::Colour(0xff222222u));
+
+    ASSERT_EQ(favourites.size(), 2u);
+    EXPECT_EQ(favourites[0].getARGB(), 0xff111111u);
+    EXPECT_EQ(favourites[1].getARGB(), 0xff333333u);
 }
 
 // =============================================================================

@@ -1,8 +1,14 @@
 #pragma once
 
 #include "../Timeline/TimelineDoc.h"
+#include "ColourPickerPopup.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 #include <vector>
+
+namespace juce {
+class ApplicationProperties; // forward declaration — only a pointer crosses this header
+} // namespace juce
 
 // TimelineTrackHeaderComponent — one row in the timeline panel's track-header column.
 //
@@ -89,6 +95,11 @@ struct TrackHeaderHost {
      *  exists) the automation lane for `option` and returns its id. An invalid id means it could not
      *  be created (kMaxTracks/kMaxLanesPerTrack reached, or the option's node no longer resolves). */
     virtual synth::LaneId addPluginAutomationLane(const PluginLaneOption& option) = 0;
+
+    /** The properties file the colour picker's favourites shelf persists to, or nullptr for an
+     *  in-memory-only picker (a header built for a test, or a host that hasn't wired one up yet).
+     *  Non-pure so every existing TrackHeaderHost implementer keeps compiling unchanged. */
+    virtual juce::ApplicationProperties* getAppProperties() { return nullptr; }
 };
 
 class TimelineTrackHeaderComponent : public juce::Component {
@@ -121,6 +132,11 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
     void mouseDown(const juce::MouseEvent& e) override;
+    // Re-derives every colour this component bakes via setColour (the binding chip, M/S/R active
+    // states) from the newly-installed LookAndFeel — see applyThemeDerivedColours(). Without this,
+    // a theme switch left the chip and the M/S/R active colours frozen on whatever theme was
+    // active at the last refreshFromDoc() call.
+    void lookAndFeelChanged() override;
 
     // ---- Binding chip ---------------------------------------------------------
     // The chip shows the bound node's name; it turns amber when the track is UNBOUND (never had a
@@ -136,6 +152,11 @@ public:
     // (a track's kind, unlike its name or colour, never changes after creation).
     juce::String getKindBadgeTextForTest() const;
     juce::Rectangle<int> getKindBadgeBoundsForTest() const noexcept { return kindBadgeBounds_; }
+    // The Icon actually drawn for the current TrackKind, or -1 when there is no themed
+    // AppLookAndFeel (or the asset library is absent) and paint() fell back to the text badge —
+    // matches getKindBadgeTextForTest's "value or empty" idiom rather than std::optional, since
+    // every other test accessor here returns a plain value.
+    int getKindBadgeIconForTest() const;
 
     // ---- Automation open/close button -------------------------------------------
     // Visible only when the track has at least one automation lane. The header never decides
@@ -170,6 +191,12 @@ public:
     juce::Button& getAutomationButton() noexcept { return automationButton_; }
     juce::Colour getResolvedColour() const noexcept { return resolvedColour_; }
 
+    /** Builds a ColourPickerPopup wired with the EXACT same onPreview/onCommit callbacks the real
+     *  colour-swatch click uses (see the constructor), but never launches a juce::CallOutBox —
+     *  a test drives it directly via setCurrentColourForTest()/commitForTest() instead of going
+     *  through a popup menu that cannot run headlessly. */
+    std::unique_ptr<synth::ui::ColourPickerPopup> createColourPickerForTest();
+
 private:
     // A plain filled swatch: a juce::TextButton would route through the LookAndFeel, which the
     // headless test path doesn't install, and this needs no text at all.
@@ -191,6 +218,19 @@ private:
 
     void showBindingMenu();
     void showContextMenu();
+
+    // Shared by the real swatch click and createColourPickerForTest(): builds the popup with the
+    // preview-writes-directly / commit-restores-then-one-undo-step wiring described on the class'
+    // colour-swatch behaviour, WITHOUT launching it in a juce::CallOutBox.
+    std::unique_ptr<synth::ui::ColourPickerPopup> buildColourPicker();
+
+    // Re-applies every colour derived from the active theme: the binding chip's warning/normal
+    // colours (unchanged from before) PLUS the M/S/R buttons' active-state colours. Called from
+    // refreshFromDoc() (so a doc-driven repaint always shows the right colours), from
+    // lookAndFeelChanged() (so a theme switch alone — no doc change — also updates them), and once
+    // at the end of the constructor (so the very first paint isn't relying on refreshFromDoc()
+    // having been called with a LookAndFeel already installed).
+    void applyThemeDerivedColours();
 
     synth::TimelineDoc& doc_;
     synth::TrackId trackId_;

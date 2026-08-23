@@ -463,6 +463,9 @@ private:
     void addAudioTrack() override;
     std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> getAvailablePluginLaneOptions() const override;
     synth::LaneId addPluginAutomationLane(const synth::ui::TrackHeaderHost::PluginLaneOption& option) override;
+    // The colour picker's favourites shelf persists here — the only TrackHeaderHost override
+    // that isn't graph/timeline plumbing (see ColourPickerPopup.h).
+    juce::ApplicationProperties* getAppProperties() override { return &appProperties; }
 
     // Creates a "Track In" node with a fresh uuid at the canvas' left edge, wires it to the single
     // MIDI instrument in the patch when there is exactly one, and returns its uuid (empty on

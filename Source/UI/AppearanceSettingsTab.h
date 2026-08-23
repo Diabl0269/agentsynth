@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CableColour.h"
+#include "NoteColour.h"
 #include "Theme/ThemeManager.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <memory>
@@ -52,8 +53,23 @@ public:
     /** Unpin every swatch in BOTH modes. */
     void resetAllCableColours();
 
+    // ---- Piano roll note colours ----
+    // Twelve pitch-class swatches (C..B), backed by synth::ui::NoteColourOverrides — the same
+    // sparse-override shape PianoRollComponent will read from once the live piano roll wires up
+    // to this wave's persistence (see NoteColour.h's file comment). An unset swatch draws the
+    // active theme's noteFill in a hollow/dimmed treatment so "not set" reads differently from
+    // "set to a colour that happens to look similar".
+    static constexpr int kNoteSwatchCount = 12;
+    juce::String getNoteSwatchLabel(int pitchClass) const;
+    juce::Colour getNoteSwatchColour(int pitchClass) const;
+    bool isNoteSwatchOverridden(int pitchClass) const noexcept;
+    void setNoteSwatchColour(int pitchClass, juce::Colour colour);
+    void resetNoteSwatch(int pitchClass);
+    void resetAllNoteColours();
+
 private:
     class CableSwatchRow; // strip of clickable colour swatches for the active mode
+    class NoteSwatchRow;  // strip of clickable pitch-class swatches (piano roll note colours)
     class ThemeListModel; // juce::ListBoxModel drawing name + swatches; defined in .cpp? No —
                           // header-only tab keeps it inline. Implementers: define as a nested
                           // class here or in an AppearanceSettingsTab.cpp if they prefer; if a
@@ -102,6 +118,15 @@ private:
     void applyCableColoursToEditor();
     /** Opens a ColourSelector callout for swatch `index`. */
     void openCableColourPicker(int index, juce::Rectangle<int> screenArea);
+
+    // ---- Piano roll note colours ----
+    juce::Label noteColoursTitleLabel;
+    std::unique_ptr<NoteSwatchRow> noteSwatchRow;
+    juce::TextButton resetNoteColoursButton{"Reset Note Colours"};
+    synth::ui::NoteColourOverrides noteColourOverrides;
+
+    /** Opens a ColourPickerPopup (with favourites) for pitch class `pitchClass`. */
+    void openNoteColourPicker(int pitchClass, juce::Rectangle<int> screenArea);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AppearanceSettingsTab)
 };

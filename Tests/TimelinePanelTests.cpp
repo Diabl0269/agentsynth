@@ -32,10 +32,12 @@
 #include "../Source/ProjectBundle.h"
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/Transport/TransportService.h"
+#include "../Source/UI/EdgeAutoScroll.h"
 #include "../Source/UI/TimelinePanelComponent.h"
 #include "../Source/UI/TrackColour.h"
 #include "../Source/UserSettings.h"
 #include "MainComponent.h"
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -2795,4 +2797,223 @@ TEST(TimelineClipVerbsTest, RepeatRejectsANonPositiveCountAndAnEmptySelection) {
     EXPECT_FALSE(f.panel.repeatSelectedClips(-1));
     EXPECT_EQ(f.doc.getTrack(track)->clips.size(), 1u);
     EXPECT_FALSE(f.undo.canUndo());
+}
+
+// ============================================================================
+// 8. Follow-playhead: the toggle (state + button mirror + persistence) and the page-flip it
+//    drives inside updateFromTransport(). Panel level, ungated (see the file header) — backfilled
+//    for the already-landed TL implementation (see EdgeAutoScroll.h / TimelineClipLaneArea's
+//    beat-anchored drag, covered in TimelineClipLaneTests.cpp).
+// ============================================================================
+
+namespace {
+// Same isolated-properties-file idiom as TimelinePanelSnapComboTest::SnapChoicePersists above:
+// hermetic regardless of a previous run, and cleaned up on the way out.
+struct IsolatedPropsGuard {
+    juce::PropertiesFile::Options opts;
+    juce::ApplicationProperties props;
+
+    explicit IsolatedPropsGuard(const char* name) {
+        opts.applicationName = name;
+        opts.folderName = name;
+        opts.filenameSuffix = "settings";
+        opts.osxLibrarySubFolder = "Application Support";
+        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+
+        {
+            juce::ApplicationProperties initial;
+            initial.setStorageParameters(opts);
+            if (auto* s = initial.getUserSettings())
+                s->getFile().deleteFile();
+        }
+        props.setStorageParameters(opts);
+    }
+
+    ~IsolatedPropsGuard() {
+        if (auto* s = props.getUserSettings())
+            s->getFile().deleteFile();
+    }
+};
+} // namespace
+
+TEST(TimelineFollowPlayheadTest, ToggleFlipsStateAndButtonMirror) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 320);
+    ASSERT_FALSE(panel.isFollowPlayheadEnabled()) << "documented default: off";
+    EXPECT_FALSE(panel.getFollowPlayheadButtonForTest().getToggleState());
+
+    panel.setFollowPlayheadEnabled(true);
+    EXPECT_TRUE(panel.isFollowPlayheadEnabled());
+    EXPECT_TRUE(panel.getFollowPlayheadButtonForTest().getToggleState()) << "the button only mirrors the state";
+
+    panel.setFollowPlayheadEnabled(false);
+    EXPECT_FALSE(panel.isFollowPlayheadEnabled());
+    EXPECT_FALSE(panel.getFollowPlayheadButtonForTest().getToggleState());
+}
+
+TEST(TimelineFollowPlayheadTest, ButtonClickRoundTripsThroughSetFollowPlayheadEnabled) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 320);
+    ASSERT_FALSE(panel.isFollowPlayheadEnabled());
+
+    panel.getFollowPlayheadButtonForTest().onClick();
+    EXPECT_TRUE(panel.isFollowPlayheadEnabled());
+    EXPECT_TRUE(panel.getFollowPlayheadButtonForTest().getToggleState());
+
+    panel.getFollowPlayheadButtonForTest().onClick();
+    EXPECT_FALSE(panel.isFollowPlayheadEnabled());
+    EXPECT_FALSE(panel.getFollowPlayheadButtonForTest().getToggleState());
+}
+
+// The choice persists under "timelineFollowPlayhead" and is restored by a fresh
+// setApplicationProperties call against the same (isolated) properties file.
+TEST(TimelineFollowPlayheadTest, ChoicePersistsAndIsRestored) {
+    IsolatedPropsGuard guard("Agent Synth Timeline Follow Test");
+
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 320);
+    panel.setApplicationProperties(&guard.props);
+    ASSERT_FALSE(panel.isFollowPlayheadEnabled()) << "documented default, freshly-deleted file";
+
+    panel.setFollowPlayheadEnabled(true);
+    ASSERT_NE(guard.props.getUserSettings(), nullptr);
+    EXPECT_TRUE(guard.props.getUserSettings()->getBoolValue("timelineFollowPlayhead", false));
+
+    synth::ui::TimelinePanelComponent panel2;
+    panel2.setSize(1200, 320);
+    panel2.setApplicationProperties(&guard.props);
+    EXPECT_TRUE(panel2.isFollowPlayheadEnabled());
+    EXPECT_TRUE(panel2.getFollowPlayheadButtonForTest().getToggleState());
+}
+
+namespace {
+// A minimal fixture for updateFromTransport()'s page-flip: a doc-less panel (the page-flip needs
+// no TimelineDoc at all) with the view state pinned so the expected math below is exact.
+struct FollowPlayheadFixture {
+    synth::ui::TimelinePanelComponent panel;
+
+    FollowPlayheadFixture() {
+        panel.setSize(1200, 320);
+        auto& state = panel.getViewState();
+        state.pixelsPerBeat = 40.0;
+        state.firstVisibleBeat = 0.0;
+        panel.setFollowPlayheadEnabled(true);
+    }
+
+    // The exact width the page-flip's visibleBeats term reads from — clipLaneArea_ fills
+    // gridLanesBounds_ exactly (see TimelinePanelComponent::resized()'s comment), so this IS that
+    // width without duplicating layout maths.
+    double visibleBeats() const {
+        return (double)panel.getClipLaneArea().getWidth() / panel.getViewState().pixelsPerBeat;
+    }
+
+    synth::TransportService::PositionSnapshot playingSnapshotAt(double ppq) const {
+        synth::TransportService::PositionSnapshot snap;
+        snap.playing = true;
+        snap.ppq = ppq;
+        return snap;
+    }
+};
+} // namespace
+
+TEST(TimelineFollowPlayheadTest, PageFlipsWhenThePlayheadCrossesTheRightEdge) {
+    FollowPlayheadFixture f;
+    const double visible = f.visibleBeats();
+    // Just past the last visible beat.
+    const double playheadBeat = visible + 1.0;
+
+    f.panel.updateFromTransport(f.playingSnapshotAt(playheadBeat), 0.0);
+
+    // The landed implementation's exact formula: max(0, playheadBeat - 0.1 * visibleBeats).
+    const double expected = std::max(0.0, playheadBeat - 0.1 * visible);
+    EXPECT_DOUBLE_EQ(f.panel.getViewState().firstVisibleBeat, expected);
+}
+
+TEST(TimelineFollowPlayheadTest, NoScrollWhilePlayheadStaysInsideTheVisibleRange) {
+    FollowPlayheadFixture f;
+    const double visible = f.visibleBeats();
+    const double playheadBeat = visible * 0.5; // comfortably inside [0, visible]
+
+    f.panel.updateFromTransport(f.playingSnapshotAt(playheadBeat), 0.0);
+
+    EXPECT_DOUBLE_EQ(f.panel.getViewState().firstVisibleBeat, 0.0);
+}
+
+TEST(TimelineFollowPlayheadTest, NoScrollWhenStopped) {
+    FollowPlayheadFixture f;
+    const double visible = f.visibleBeats();
+    auto snapshot = f.playingSnapshotAt(visible + 1.0);
+    snapshot.playing = false;
+
+    f.panel.updateFromTransport(snapshot, 0.0);
+
+    EXPECT_DOUBLE_EQ(f.panel.getViewState().firstVisibleBeat, 0.0);
+}
+
+TEST(TimelineFollowPlayheadTest, NoScrollWhenFollowIsOff) {
+    FollowPlayheadFixture f;
+    f.panel.setFollowPlayheadEnabled(false);
+    const double visible = f.visibleBeats();
+
+    f.panel.updateFromTransport(f.playingSnapshotAt(visible + 1.0), 0.0);
+
+    EXPECT_DOUBLE_EQ(f.panel.getViewState().firstVisibleBeat, 0.0);
+}
+
+TEST(TimelineFollowPlayheadTest, NoScrollWhileThePianoRollIsOpen) {
+    FollowPlayheadFixture f;
+    synth::TimelineDoc doc;
+    f.panel.setTimelineDoc(&doc);
+    const auto track = doc.addTrack(synth::TrackKind::Midi, "Midi");
+    const auto clip = doc.addClip(track, 0.0, 4.0, "Clip");
+    ASSERT_TRUE(clip.isValid());
+
+    f.panel.openPianoRoll(clip);
+    ASSERT_TRUE(f.panel.isPianoRollOpen());
+
+    const double visible = f.visibleBeats();
+    f.panel.updateFromTransport(f.playingSnapshotAt(visible + 1.0), 0.0);
+
+    EXPECT_DOUBLE_EQ(f.panel.getViewState().firstVisibleBeat, 0.0);
+}
+
+namespace {
+// A local left-button mouse event for the clip-lane area — the same shape
+// TimelineClipLaneTests.cpp's makeClipMouseEvent builds, kept local here since this file's own
+// makeTimelineMouseEvent (above, in the ruler-interaction tests' anonymous namespace) isn't visible
+// this far down.
+juce::MouseEvent leftButtonEventOnLane(juce::Component& comp, juce::Point<float> pos, juce::Point<float> anchor,
+                                       bool wasDragged) {
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos,
+                            juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                            &comp, &comp, juce::Time::getCurrentTime(), anchor, juce::Time::getCurrentTime(), 1,
+                            wasDragged);
+}
+} // namespace
+
+TEST(TimelineFollowPlayheadTest, NoScrollWhileAClipDragIsInProgress) {
+    FollowPlayheadFixture f;
+    synth::TimelineDoc doc;
+    AppUndoManager undo;
+    f.panel.setTimelineDoc(&doc);
+    f.panel.setUndoManager(&undo);
+    const auto track = doc.addTrack(synth::TrackKind::Midi, "Midi");
+    const auto clip = doc.addClip(track, 0.0, 4.0, "Clip");
+    ASSERT_TRUE(clip.isValid());
+
+    auto& lane = f.panel.getClipLaneArea();
+    const auto rect = lane.getClipRect(clip);
+    const juce::Point<float> anchor((float)rect.getCentreX(), (float)rect.getCentreY());
+    const juce::Point<float> dragged(anchor.x + 10.0f, anchor.y);
+
+    lane.mouseDown(leftButtonEventOnLane(lane, anchor, anchor, false));
+    lane.mouseDrag(leftButtonEventOnLane(lane, dragged, anchor, true));
+    ASSERT_TRUE(lane.isDragInProgress());
+
+    const double visible = f.visibleBeats();
+    f.panel.updateFromTransport(f.playingSnapshotAt(visible + 1.0), 0.0);
+
+    EXPECT_DOUBLE_EQ(f.panel.getViewState().firstVisibleBeat, 0.0);
+
+    lane.mouseUp(leftButtonEventOnLane(lane, dragged, anchor, true));
 }

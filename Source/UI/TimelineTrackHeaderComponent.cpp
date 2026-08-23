@@ -1,4 +1,5 @@
 #include "TimelineTrackHeaderComponent.h"
+#include "ColourPickerPopup.h"
 #include "Theme/AppLookAndFeel.h"
 #include "TrackColour.h"
 
@@ -9,9 +10,14 @@ namespace {
 constexpr int kSwatchWidth = 8;
 constexpr int kToggleWidth = 20;
 constexpr int kRowPadding = 3;
-constexpr int kKindBadgeWidth = 34;
+// Narrowed from 34 now that the badge draws a themed icon rather than "MIDI"/"AUD"/"AUTO" text —
+// the icon needs far less width than the longest label did, and the freed space goes to the name.
+constexpr int kKindBadgeWidth = 20;
+constexpr float kKindBadgeIconSize = 14.0f;
 
-// Fixed per-TrackKind label. Never edited, never doc-driven beyond the kind itself.
+// Fixed per-TrackKind label. Never edited, never doc-driven beyond the kind itself. Kept as the
+// fallback badge content for a headless build (no AppLookAndFeel) or one with no asset library —
+// see getKindBadgeIcon()/paint().
 juce::String kindBadgeText(synth::TrackKind kind) {
     switch (kind) {
     case synth::TrackKind::Midi:
@@ -24,6 +30,20 @@ juce::String kindBadgeText(synth::TrackKind kind) {
     return {};
 }
 
+// Fixed per-TrackKind glyph. Automation has no dedicated colour-swatch analogue in the icon set
+// beyond TrackAutomation itself, so the mapping is 1:1 with kindBadgeText's switch.
+synth::theme::Icon kindBadgeIcon(synth::TrackKind kind) {
+    switch (kind) {
+    case synth::TrackKind::Midi:
+        return synth::theme::Icon::TrackMidi;
+    case synth::TrackKind::Audio:
+        return synth::theme::Icon::TrackAudio;
+    case synth::TrackKind::Automation:
+        return synth::theme::Icon::TrackAutomation;
+    }
+    return synth::theme::Icon::TrackMidi;
+}
+
 // Themed colours with literal fallbacks — the headless test path installs no AppLookAndFeel (same
 // pattern as TimelinePanelComponent::paint()).
 struct HeaderColours {
@@ -33,6 +53,10 @@ struct HeaderColours {
     juce::Colour textMuted{juce::Colour(0xff8A93A0)};
     juce::Colour warning{juce::Colour(0xffE0A33D)};
     juce::Colour accent{juce::Colour(0xff00D1FF)};
+    juce::Colour bg0{juce::Colour(0xff0B0D10)};
+    juce::Colour muteOn{juce::Colour(0xffFFA033)};
+    juce::Colour soloOn{juce::Colour(0xffFFD23D)};
+    juce::Colour armOn{juce::Colour(0xffE5484D)};
 };
 
 HeaderColours coloursFor(const juce::Component& component) {
@@ -45,6 +69,10 @@ HeaderColours coloursFor(const juce::Component& component) {
         result.textMuted = c.textMuted;
         result.warning = c.warning;
         result.accent = c.accent;
+        result.bg0 = c.bg0;
+        result.muteOn = c.trackMuteOn;
+        result.soloOn = c.trackSoloOn;
+        result.armOn = c.trackArmOn;
     }
     return result;
 }
@@ -70,11 +98,10 @@ TimelineTrackHeaderComponent::TimelineTrackHeaderComponent(synth::TimelineDoc& d
     colourSwatch_.setComponentID("trackColourSwatch");
     colourSwatch_.setTooltip("Click to change this track's colour");
     colourSwatch_.onClick = [this] {
-        const auto* t = track();
-        if (t == nullptr)
-            return;
-        const juce::uint32 next = nextTrackPaletteColour(t->colourArgb);
-        performEdit([this, next] { doc_.setTrackColour(trackId_, next); });
+        auto popup = buildColourPicker();
+        if (popup == nullptr)
+            return; // the track is gone — nothing to pick a colour for
+        juce::CallOutBox::launchAsynchronously(std::move(popup), colourSwatch_.getScreenBounds(), nullptr);
     };
 
     addAndMakeVisible(nameLabel_);
@@ -154,11 +181,63 @@ juce::String TimelineTrackHeaderComponent::getKindBadgeTextForTest() const {
     return t != nullptr ? kindBadgeText(t->kind) : juce::String();
 }
 
+int TimelineTrackHeaderComponent::getKindBadgeIconForTest() const {
+    const auto* t = track();
+    if (t == nullptr)
+        return -1;
+    auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel());
+    if (lf == nullptr || lf->peekIcon(kindBadgeIcon(t->kind)) == nullptr)
+        return -1; // no themed LnF, or the asset library isn't linked in — paint() falls back to text
+    return (int)kindBadgeIcon(t->kind);
+}
+
 void TimelineTrackHeaderComponent::performEdit(const std::function<void()>& mutation) {
     if (host_ != nullptr)
         host_->performTrackEdit(mutation);
     else
         mutation();
+}
+
+std::unique_ptr<synth::ui::ColourPickerPopup> TimelineTrackHeaderComponent::buildColourPicker() {
+    const auto* t = track();
+    if (t == nullptr)
+        return nullptr;
+    // The colour a no-net-change close restores, and what a "keep the final pick" undo step
+    // restores TO (see the onCommit lambda below).
+    const juce::uint32 originalColour = t->colourArgb;
+
+    juce::ApplicationProperties* props = host_ != nullptr ? host_->getAppProperties() : nullptr;
+    juce::Component::SafePointer<TimelineTrackHeaderComponent> safeThis(this);
+
+    return std::make_unique<synth::ui::ColourPickerPopup>(
+        juce::Colour(originalColour), props != nullptr ? props->getUserSettings() : nullptr,
+        [safeThis](juce::Colour c) {
+            // Live preview: writes the doc directly, no undo — every drag/favourite click
+            // repaints the row immediately, exactly like the old palette-cycle click did.
+            if (auto* self = safeThis.getComponent())
+                self->doc_.setTrackColour(self->trackId_, c.getARGB());
+        },
+        [safeThis, originalColour](juce::Colour finalColour) {
+            auto* self = safeThis.getComponent();
+            if (self == nullptr)
+                return; // the header (or its window) is gone — nothing left to restore or undo
+            if (finalColour.getARGB() == originalColour) {
+                // No net change: put back exactly what was there (a preview may have nudged it)
+                // and record no undo step — matching every other no-op edit in this file.
+                self->doc_.setTrackColour(self->trackId_, originalColour);
+                return;
+            }
+            // ONE undo step whose undo restores the ORIGINAL colour: silently put the original
+            // back first (outside the undo-recorded mutation, so it does not itself become
+            // undoable), then perform the real edit as the one recorded step.
+            self->doc_.setTrackColour(self->trackId_, originalColour);
+            self->performEdit(
+                [self, finalColour] { self->doc_.setTrackColour(self->trackId_, finalColour.getARGB()); });
+        });
+}
+
+std::unique_ptr<synth::ui::ColourPickerPopup> TimelineTrackHeaderComponent::createColourPickerForTest() {
+    return buildColourPicker();
 }
 
 //==============================================================================
@@ -203,14 +282,37 @@ void TimelineTrackHeaderComponent::refreshFromDoc() {
             bindingChip_.setTooltip("This track plays through the '" + displayName +
                                     "' node in the graph. Click to choose a different node.");
         }
-
-        const auto colours = coloursFor(*this);
-        bindingChip_.setColour(juce::TextButton::buttonColourId, chipWarning_ ? colours.warning : colours.surface);
-        bindingChip_.setColour(juce::TextButton::textColourOffId, chipWarning_ ? colours.surface : colours.text);
     }
 
+    applyThemeDerivedColours();
     repaint();
 }
+
+//==============================================================================
+// Every colour this component bakes via setColour rather than reading live in paint(): the
+// binding chip's warning/normal treatment (moved here unchanged from refreshFromDoc(), which
+// used to be the ONLY place that applied it — hence the theme-switch bug this fixes) plus the
+// M/S/R buttons' active-state colours. `chipWarning_` and the chip's visibility are DOC state, so
+// this only ever re-applies colours for whatever state refreshFromDoc() last computed; it never
+// recomputes which state that is.
+void TimelineTrackHeaderComponent::applyThemeDerivedColours() {
+    const auto colours = coloursFor(*this);
+
+    bindingChip_.setColour(juce::TextButton::buttonColourId, chipWarning_ ? colours.warning : colours.surface);
+    bindingChip_.setColour(juce::TextButton::textColourOffId, chipWarning_ ? colours.surface : colours.text);
+
+    // Active-state fill for each of M/S/R, with a dark contrasting label so the button text still
+    // reads once the fill turns bright orange/yellow/red — the same buttonOnColourId/bg0 pairing
+    // AppLookAndFeel's own defaults use for the accent-coloured "on" state everywhere else.
+    muteButton_.setColour(juce::TextButton::buttonOnColourId, colours.muteOn);
+    muteButton_.setColour(juce::TextButton::textColourOnId, colours.bg0);
+    soloButton_.setColour(juce::TextButton::buttonOnColourId, colours.soloOn);
+    soloButton_.setColour(juce::TextButton::textColourOnId, colours.bg0);
+    armButton_.setColour(juce::TextButton::buttonOnColourId, colours.armOn);
+    armButton_.setColour(juce::TextButton::textColourOnId, colours.bg0);
+}
+
+void TimelineTrackHeaderComponent::lookAndFeelChanged() { applyThemeDerivedColours(); }
 
 //==============================================================================
 void TimelineTrackHeaderComponent::resized() {
@@ -247,22 +349,36 @@ void TimelineTrackHeaderComponent::paint(juce::Graphics& g) {
     g.setColour(colours.border);
     g.drawHorizontalLine(getHeight() - 1, 0.0f, (float)getWidth());
 
-    // Track-kind badge: a muted micro-font pill right of the swatch, before the name. Fixed per
-    // TrackKind (see kindBadgeText above) — this is identity chrome, not a control.
+    // Track-kind badge: a themed glyph right of the swatch, before the name. Fixed per TrackKind
+    // (see kindBadgeIcon above) — this is identity chrome, not a control. Falls back to the old
+    // text pill when there's no themed LnF (headless) or the icon asset is absent, so a headless
+    // build/test still gets a legible badge.
     if (const auto* t = track()) {
-        float microSize = 8.5f;
-        if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
-            microSize = lf->getTheme().type.micro;
-
         auto badgeBounds = kindBadgeBounds_.reduced(1, 3).toFloat();
         g.setColour(colours.textMuted.withAlpha(0.15f));
         g.fillRoundedRectangle(badgeBounds, 3.0f);
         g.setColour(colours.textMuted.withAlpha(0.6f));
         g.drawRoundedRectangle(badgeBounds, 3.0f, 1.0f);
 
-        g.setColour(colours.textMuted);
-        g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), microSize, juce::Font::plain));
-        g.drawText(kindBadgeText(t->kind), kindBadgeBounds_, juce::Justification::centred, false);
+        const auto* icon =
+            [this, t]() -> const juce::Drawable* {
+            if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+                return lf->peekIcon(kindBadgeIcon(t->kind));
+            return nullptr;
+        }();
+
+        if (icon != nullptr) {
+            const auto iconArea =
+                juce::Rectangle<float>(kKindBadgeIconSize, kKindBadgeIconSize).withCentre(badgeBounds.getCentre());
+            icon->drawWithin(g, iconArea, juce::RectanglePlacement::centred, 1.0f);
+        } else {
+            float microSize = 8.5f;
+            if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+                microSize = lf->getTheme().type.micro;
+            g.setColour(colours.textMuted);
+            g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), microSize, juce::Font::plain));
+            g.drawText(kindBadgeText(t->kind), kindBadgeBounds_, juce::Justification::centred, false);
+        }
     }
 }
 
