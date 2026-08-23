@@ -43,6 +43,15 @@ Theme makeObsidian() {
     t.colors.meterFill = juce::Colour(0xff00D1FF);
     t.colors.modRingPositive = juce::Colour(0xff00E5FF);
     t.colors.modRingNegative = juce::Colour(0xffFF6E00);
+    t.colors.noteFill = juce::Colour(0xffB48EF5);       // same hue as midiWire
+    t.colors.noteBorder = juce::Colour(0xff4A3B75);      // darker desaturated purple, not a plain .darker()
+    t.colors.noteSelected = juce::Colour(0xff00D1FF);    // = accent
+    t.colors.noteOutOfScale = juce::Colour(0xffFF6B57);  // warm red/orange warning
+    t.colors.pianoKeyWhite = juce::Colour(0xffEDEFF3);
+    t.colors.pianoKeyBlack = juce::Colour(0xff15171C);
+    t.colors.trackMuteOn = juce::Colour(0xffFFA033);
+    t.colors.trackSoloOn = juce::Colour(0xffFFD23D);
+    t.colors.trackArmOn = juce::Colour(0xffE5484D);
 
     // Metrics
     t.metrics.cornerRadius = 10.0f;
@@ -120,6 +129,18 @@ Theme makeNeon() {
     t.colors.meterFill = juce::Colour(0xff22E0FF);
     t.colors.modRingPositive = juce::Colour(0xff22E0FF);
     t.colors.modRingNegative = juce::Colour(0xffFF2BD6);
+    // Neon's bg0/bg1/midiWire are all near-black purple / purple, so notes MUST NOT stay in that
+    // family — an electric green/cyan hue is the only thing that reads instantly against every
+    // other purple element on this theme.
+    t.colors.noteFill = juce::Colour(0xff2BFFB0);
+    t.colors.noteBorder = juce::Colour(0xff0F8F5E);
+    t.colors.noteSelected = juce::Colour(0xffFF2BD6); // = accent
+    t.colors.noteOutOfScale = juce::Colour(0xffFF6B3D);
+    t.colors.pianoKeyWhite = juce::Colour(0xffF4ECFF);
+    t.colors.pianoKeyBlack = juce::Colour(0xff1A0F30);
+    t.colors.trackMuteOn = juce::Colour(0xffFFA23D); // hotter/more saturated than the dark themes
+    t.colors.trackSoloOn = juce::Colour(0xffFFEA3D);
+    t.colors.trackArmOn = juce::Colour(0xffFF3D5C);
 
     // Metrics
     t.metrics.cornerRadius = 14.0f;
@@ -200,6 +221,15 @@ Theme makeWarm() {
     t.colors.meterFill = juce::Colour(0xffFF9E3D);
     t.colors.modRingPositive = juce::Colour(0xffFFC65C);
     t.colors.modRingNegative = juce::Colour(0xffE07A5F);
+    t.colors.noteFill = juce::Colour(0xffCE93B8); // same hue as midiWire
+    t.colors.noteBorder = juce::Colour(0xff6B3A54);
+    t.colors.noteSelected = juce::Colour(0xffFF9E3D); // = accent
+    t.colors.noteOutOfScale = juce::Colour(0xffD9636B); // earthier red than the dark/neon themes
+    t.colors.pianoKeyWhite = juce::Colour(0xffF2E8D5);
+    t.colors.pianoKeyBlack = juce::Colour(0xff231C15);
+    t.colors.trackMuteOn = juce::Colour(0xffCC7A2E); // earthier amber
+    t.colors.trackSoloOn = juce::Colour(0xffD9A83D);
+    t.colors.trackArmOn = juce::Colour(0xffB3452E);
 
     // Metrics
     t.metrics.cornerRadius = 16.0f;
@@ -285,6 +315,18 @@ Theme makeDaylight() {
     t.colors.meterFill = juce::Colour(0xff4C6EF5);    // meter fill
     t.colors.modRingPositive = juce::Colour(0xff4C6EF5);
     t.colors.modRingNegative = juce::Colour(0xffFD7E14);
+    t.colors.noteFill = juce::Colour(0xff9333EA); // same hue as midiWire
+    t.colors.noteBorder = juce::Colour(0xff5B21B6);
+    t.colors.noteSelected = juce::Colour(0xff4C6EF5); // = accent
+    t.colors.noteOutOfScale = juce::Colour(0xffE03131); // = error
+    // Daylight is a LIGHT theme (bg0 0xffE9ECEF) — keep the "white" key slightly off-white so it
+    // still reads as a key rather than vanishing into the page background.
+    t.colors.pianoKeyWhite = juce::Colour(0xffFDFDFE);
+    t.colors.pianoKeyBlack = juce::Colour(0xff2B2B2E);
+    // Darker shades than the dark themes use, so each still holds contrast on a light background.
+    t.colors.trackMuteOn = juce::Colour(0xffB5650A);
+    t.colors.trackSoloOn = juce::Colour(0xffB8960C);
+    t.colors.trackArmOn = juce::Colour(0xffC92A2A);
 
     // Metrics
     t.metrics.cornerRadius = 10.0f;

@@ -52,6 +52,23 @@ struct Colors {
     juce::Colour meterFill{0xff00D1FF};       // output meter fill (top of gradient)
     juce::Colour modRingPositive{0xff00E5FF}; // mod ring, positive modulation
     juce::Colour modRingNegative{0xffFF6E00}; // mod ring, negative modulation
+
+    // Piano-roll note colours (default here mirrors makeObsidian()'s explicit values, same
+    // convention as every other token above — a theme JSON that omits these keys falls back to
+    // this struct's default, and that default IS the Obsidian value).
+    juce::Colour noteFill{0xffB48EF5};       // unselected note body (Obsidian starts from midiWire)
+    juce::Colour noteBorder{0xff4A3B75};     // unselected note outline — distinct from noteFill, not a .darker() of it
+    juce::Colour noteSelected{0xff00D1FF};   // selected-note border/highlight (defaults to accent)
+    juce::Colour noteOutOfScale{0xffFF6B57}; // "outside the active scale" warning fill — red/orange family
+    juce::Colour pianoKeyWhite{0xffEDEFF3};  // piano-roll keyboard gutter: white key fill
+    juce::Colour pianoKeyBlack{0xff15171C};  // piano-roll keyboard gutter: black key fill
+
+    // Timeline track-header M/S/R button active-state colours. Families are fixed across every
+    // theme (mute=amber/orange, solo=yellow, arm/record=red); only the exact shade varies.
+    juce::Colour trackMuteOn{0xffFFA033}; // mute button, active
+    juce::Colour trackSoloOn{0xffFFD23D}; // solo button, active
+    juce::Colour trackArmOn{0xffE5484D};  // arm/record button, active
+
     // Active-tool highlight in the timeline edit-tool strip (Select/Split/Glue/Erase/Mute/Draw
     // — see Source/UI/EditTool.h). Defaults to the same literal as `accent`'s Obsidian default:
     // there is no existing precedent in this struct for one token defaulting FROM another at

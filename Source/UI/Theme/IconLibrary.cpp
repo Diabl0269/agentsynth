@@ -93,6 +93,11 @@ std::pair<const void*, int> IconLibrary::binaryDataForIcon(Icon id) {
         {BinaryData::toolerase_svg, BinaryData::toolerase_svgSize},
         {BinaryData::toolmute_svg, BinaryData::toolmute_svgSize},
         {BinaryData::tooldraw_svg, BinaryData::tooldraw_svgSize},
+        // Timeline track-header kind glyphs + the panel's follow-playhead toggle.
+        {BinaryData::trackmidi_svg, BinaryData::trackmidi_svgSize},
+        {BinaryData::trackaudio_svg, BinaryData::trackaudio_svgSize},
+        {BinaryData::trackautomation_svg, BinaryData::trackautomation_svgSize},
+        {BinaryData::followplayhead_svg, BinaryData::followplayhead_svgSize},
     };
     static_assert(std::size(kTable) == (size_t)Icon::kCount,
                   "kTable size does not match Icon::kCount — update binaryDataForIcon lookup table");

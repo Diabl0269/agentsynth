@@ -4,6 +4,7 @@
 #include "../Timeline/TimelineDoc.h"
 #include "ClipSelectionModel.h"
 #include "EditTool.h"
+#include "EdgeAutoScroll.h"
 #include "TimelineViewState.h"
 #include <array>
 #include <cmath>
@@ -135,7 +136,8 @@ inline juce::Colour gridLineColourFor(GridLineLevel level, juce::Colour base, ju
 
 class TimelineClipLaneArea
     : public juce::Component
-    , public juce::FileDragAndDropTarget {
+    , public juce::FileDragAndDropTarget
+    , private juce::Timer {
 public:
     TimelineClipLaneArea(TimelineViewState& viewState, ClipSelectionModel& selection);
     ~TimelineClipLaneArea() override = default;
@@ -174,6 +176,20 @@ public:
     // read its time signature and must never command it. Non-owning; may be unset, in which case P
     // falls through like any other unhandled key.
     std::function<void(double startBeat, double endBeat)> onLoopRangeRequested;
+
+    // Fired whenever an edge-scroll tick (see below) or any other in-drag mechanism moves the
+    // SHARED TimelineViewState out from under a drag. Non-owning; may be unset. The owner
+    // (TimelinePanelComponent) wires this to its ruler_.repaint() + repaint() pair — the same two
+    // repaints every other viewState_ scroll/zoom writer in that class already issues — because
+    // this component has no reference to the ruler and no business repainting it directly.
+    std::function<void()> onViewScrolledByDrag;
+
+    // Whether a Move/Resize(-Left/-Right) drag is currently in flight — the panel's follow-playhead
+    // guard reads this so a drag in progress and an auto-scroll page-flip never fight over
+    // firstVisibleBeat in the same 100ms. Marquee/Draw are deliberately excluded: neither one drags
+    // an EXISTING clip's position, so neither is what follow-playhead needs to stay clear of.
+    bool isDragInProgress() const noexcept { return dragMode_ == DragMode::Move || dragMode_ == DragMode::ResizeLeft ||
+                                                     dragMode_ == DragMode::ResizeRight; }
 
     // ---- Edit tools (synth::ui::EditTool — the Cubase-style tool row) ----
 
@@ -457,6 +473,27 @@ protected:
     // one snap cell repaints nothing at all.
     virtual void requestToolPreviewRepaint(juce::Rectangle<int> region);
 
+    // ---- Edge auto-scroll (see EdgeAutoScroll.h) ----
+    //
+    // A gated juce::Timer (kEdgeScrollHz): started only when a Move/Resize drag is active AND the
+    // last-known pointer x sits inside an edge zone of this component's width, stopped the moment
+    // either condition stops holding (mouseUp, a tool switch cancelling the drag, or the pointer
+    // dragging back into the dead middle band). One tick scrolls viewState_ by
+    // edgeScrollVelocity(...)/pixelsPerBeat beats, re-derives the drag preview from the LAST known
+    // pointer position (mouseDrag never re-fires on its own), and repaints — through THIS one
+    // virtual seam, mirroring TimelinePlayheadOverlay::timerCallback's protected-for-tests pattern.
+    virtual void autoScrollTick();
+    void timerCallback() override { autoScrollTick(); }
+
+public:
+    // Test seam: drives one autoScrollTick() without a real juce::Timer (see the timer's own
+    // comment for why the callback can't be exercised at wall-clock speed in a headless test run).
+    void tickAutoScrollForTest() { autoScrollTick(); }
+    // Whether the edge-scroll timer is currently armed — the gating half of the timer contract a
+    // test pins (started only inside the zone with a drag live, stopped the instant either isn't
+    // true anymore).
+    bool isAutoScrollTimerRunningForTest() const noexcept { return isTimerRunning(); }
+
 private:
     enum class DragMode { None, Move, ResizeLeft, ResizeRight, Marquee, Draw };
 
@@ -630,6 +667,27 @@ private:
     DragMode dragMode_ = DragMode::None;
     synth::ClipId activeClip_;
     juce::Point<int> mouseDownPos_;
+    // The BEAT under the pointer at mouseDown (viewState_.xToBeat(mouseDownPos_.x)), captured
+    // alongside the pixel position. Every Move/Resize drag computes its delta as
+    // xToBeat(currentX) - mouseDownBeat_ rather than a pixel-delta/pixelsPerBeat conversion: the
+    // pixel form is only correct while the view is static (a mid-drag edge-scroll changes
+    // firstVisibleBeat, which is exactly this member's whole reason to exist), and it drifts under
+    // a zoom change too, which this fixes as a side effect.
+    double mouseDownBeat_ = 0.0;
+    // The last pointer position mouseDrag() saw, in this component's local coordinates. An
+    // auto-scroll tick has no MouseEvent of its own — the pointer isn't moving, the view is — so it
+    // re-derives the drag preview from this rather than from a synthesized one.
+    juce::Point<int> lastDragPointer_;
+
+    // Re-runs the Move/Resize preview maths mouseDrag() runs, from `lastDragPointer_` against the
+    // (possibly just-scrolled) view state — the one thing an auto-scroll tick and a real pointer
+    // move share, factored out so they can't drift apart.
+    void updateDragPreviewFromLastPointer();
+    // Arms/disarms the edge-scroll timer for the CURRENT lastDragPointer_/dragMode_, starting it
+    // only while a Move/Resize drag is live and the pointer sits inside an edge zone of this
+    // component's width, stopping it the instant either stops being true. Called after every
+    // mouseDrag update and once from mouseUp (which always disarms, mouseUp having ended the drag).
+    void updateAutoScrollArming();
 
     // Deferred-deselect (see class comment): a plain press on empty lane space that never becomes
     // a drag clears the selection on mouseUp; one that DOES move promotes to a marquee instead.

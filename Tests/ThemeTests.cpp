@@ -8,6 +8,7 @@
 #include "../Source/UI/Theme/Theme.h"
 #include "../Source/UI/Theme/ThemeLoader.h"
 #include "../Source/UI/Theme/ThemeManager.h"
+#include <algorithm>
 #include <array>
 #include <gtest/gtest.h>
 #include <juce_core/juce_core.h>
@@ -876,4 +877,86 @@ TEST_F(ThemeTest, DefaultThemesAndModeToggle) {
     // Setting mode to Dark
     mgr.setThemeMode(synth::theme::ThemeManager::ThemeMode::Dark);
     EXPECT_EQ(mgr.getActiveThemeId(), "warm");
+}
+
+// ---------------------------------------------------------------------------
+// 25. Piano-roll / track-button colour tokens (task A1) — loader coverage.
+// Resolver + built-in-theme contrast coverage for these tokens lives in NoteColourTests.cpp;
+// this file only owns the loader plumbing (optional-with-default parsing + JSON round-trip).
+// ---------------------------------------------------------------------------
+TEST(ThemeLoaderTest, NoteAndTrackButtonTokensAbsentFallBackToObsidianDefaults) {
+    // A pre-note-colour user theme has none of the new keys; it must still load, and every new
+    // token must come back as the Obsidian default (Colors()' default-constructed value).
+    const juce::String legacy = R"({
+        "name": "Legacy",
+        "colors": {
+            "bg0": "#FF000000", "surface": "#FF111111", "accent": "#FF00D1FF",
+            "textPrimary": "#FFFFFFFF", "audioWire": "#FFEEEEEE", "modWire": "#FF00D1FF"
+        }
+    })";
+
+    const auto parsed = synth::theme::ThemeLoader::parseTheme(juce::JSON::parse(legacy), "legacy");
+    ASSERT_TRUE(parsed.has_value()) << synth::theme::ThemeLoader::getLastError();
+
+    const synth::theme::Colors defaults;
+    EXPECT_EQ(parsed->colors.noteFill, defaults.noteFill);
+    EXPECT_EQ(parsed->colors.noteBorder, defaults.noteBorder);
+    EXPECT_EQ(parsed->colors.noteSelected, defaults.noteSelected);
+    EXPECT_EQ(parsed->colors.noteOutOfScale, defaults.noteOutOfScale);
+    EXPECT_EQ(parsed->colors.pianoKeyWhite, defaults.pianoKeyWhite);
+    EXPECT_EQ(parsed->colors.pianoKeyBlack, defaults.pianoKeyBlack);
+    EXPECT_EQ(parsed->colors.trackMuteOn, defaults.trackMuteOn);
+    EXPECT_EQ(parsed->colors.trackSoloOn, defaults.trackSoloOn);
+    EXPECT_EQ(parsed->colors.trackArmOn, defaults.trackArmOn);
+}
+
+TEST(ThemeLoaderTest, MalformedNoteTokenRejectsWholeTheme) {
+    // A malformed value for any ONE of the new optional tokens must reject the whole theme —
+    // same rule as every other optional colour (see RejectsBadHex).
+    const juce::String bad = R"({
+        "name": "BadNoteFill",
+        "colors": {
+            "bg0": "#FF000000", "surface": "#FF111111", "accent": "#FF00D1FF",
+            "textPrimary": "#FFFFFFFF", "audioWire": "#FFEEEEEE", "modWire": "#FF00D1FF",
+            "noteFill": "not-a-colour"
+        }
+    })";
+    EXPECT_FALSE(synth::theme::ThemeLoader::parseTheme(juce::JSON::parse(bad)).has_value())
+        << "Expected nullopt for malformed noteFill value";
+}
+
+TEST(ThemeLoaderTest, NoteAndTrackButtonTokensSurviveAJsonRoundTrip) {
+    auto original = synth::theme::makeNeon();
+    const auto json = synth::theme::ThemeLoader::themeToJson(original);
+    const auto reparsed = synth::theme::ThemeLoader::parseTheme(json, "neon");
+    ASSERT_TRUE(reparsed.has_value());
+
+    EXPECT_EQ(reparsed->colors.noteFill, original.colors.noteFill);
+    EXPECT_EQ(reparsed->colors.noteBorder, original.colors.noteBorder);
+    EXPECT_EQ(reparsed->colors.noteSelected, original.colors.noteSelected);
+    EXPECT_EQ(reparsed->colors.noteOutOfScale, original.colors.noteOutOfScale);
+    EXPECT_EQ(reparsed->colors.pianoKeyWhite, original.colors.pianoKeyWhite);
+    EXPECT_EQ(reparsed->colors.pianoKeyBlack, original.colors.pianoKeyBlack);
+    EXPECT_EQ(reparsed->colors.trackMuteOn, original.colors.trackMuteOn);
+    EXPECT_EQ(reparsed->colors.trackSoloOn, original.colors.trackSoloOn);
+    EXPECT_EQ(reparsed->colors.trackArmOn, original.colors.trackArmOn);
+}
+
+TEST(ThemeBuiltInsTest, AllFourBuiltInsPopulateNoteAndTrackButtonTokensDistinctly) {
+    // Every built-in must set these explicitly (not silently inherit the Obsidian default via
+    // an omitted assignment in BuiltInThemes.cpp) — Neon in particular must not stay purple.
+    auto themes = synth::theme::builtInThemes();
+    ASSERT_EQ(themes.size(), 4u);
+
+    for (const auto& t : themes) {
+        EXPECT_FALSE(t.colors.noteFill == juce::Colour()) << t.name;
+        EXPECT_NE(t.colors.noteFill, t.colors.noteBorder) << t.name;
+        EXPECT_NE(t.colors.trackMuteOn, t.colors.trackSoloOn) << t.name;
+        EXPECT_NE(t.colors.trackSoloOn, t.colors.trackArmOn) << t.name;
+    }
+
+    // Neon must not ship a purple note colour (matches midiWire's hue family), which is exactly
+    // the bug this token set exists to avoid.
+    const auto& neon = *std::find_if(themes.begin(), themes.end(), [](const auto& t) { return t.id == "neon"; });
+    EXPECT_NE(neon.colors.noteFill.getHue(), neon.colors.midiWire.getHue());
 }

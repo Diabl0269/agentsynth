@@ -377,6 +377,60 @@ std::optional<Theme> ThemeLoader::parseTheme(const juce::var& json, const juce::
             return std::nullopt;
         colors.toolActive = *v;
     }
+    {
+        auto v = parseColourKey(colorsVar, "noteFill", false, defaults.noteFill);
+        if (!v)
+            return std::nullopt;
+        colors.noteFill = *v;
+    }
+    {
+        auto v = parseColourKey(colorsVar, "noteBorder", false, defaults.noteBorder);
+        if (!v)
+            return std::nullopt;
+        colors.noteBorder = *v;
+    }
+    {
+        auto v = parseColourKey(colorsVar, "noteSelected", false, defaults.noteSelected);
+        if (!v)
+            return std::nullopt;
+        colors.noteSelected = *v;
+    }
+    {
+        auto v = parseColourKey(colorsVar, "noteOutOfScale", false, defaults.noteOutOfScale);
+        if (!v)
+            return std::nullopt;
+        colors.noteOutOfScale = *v;
+    }
+    {
+        auto v = parseColourKey(colorsVar, "pianoKeyWhite", false, defaults.pianoKeyWhite);
+        if (!v)
+            return std::nullopt;
+        colors.pianoKeyWhite = *v;
+    }
+    {
+        auto v = parseColourKey(colorsVar, "pianoKeyBlack", false, defaults.pianoKeyBlack);
+        if (!v)
+            return std::nullopt;
+        colors.pianoKeyBlack = *v;
+    }
+    {
+        auto v = parseColourKey(colorsVar, "trackMuteOn", false, defaults.trackMuteOn);
+        if (!v)
+            return std::nullopt;
+        colors.trackMuteOn = *v;
+    }
+    {
+        auto v = parseColourKey(colorsVar, "trackSoloOn", false, defaults.trackSoloOn);
+        if (!v)
+            return std::nullopt;
+        colors.trackSoloOn = *v;
+    }
+    {
+        auto v = parseColourKey(colorsVar, "trackArmOn", false, defaults.trackArmOn);
+        if (!v)
+            return std::nullopt;
+        colors.trackArmOn = *v;
+    }
 
     theme.colors = colors;
 
@@ -504,6 +558,15 @@ juce::var ThemeLoader::themeToJson(const Theme& theme) {
         colors->setProperty("modRingPositive", colourToHex(c.modRingPositive));
         colors->setProperty("modRingNegative", colourToHex(c.modRingNegative));
         colors->setProperty("toolActive", colourToHex(c.toolActive));
+        colors->setProperty("noteFill", colourToHex(c.noteFill));
+        colors->setProperty("noteBorder", colourToHex(c.noteBorder));
+        colors->setProperty("noteSelected", colourToHex(c.noteSelected));
+        colors->setProperty("noteOutOfScale", colourToHex(c.noteOutOfScale));
+        colors->setProperty("pianoKeyWhite", colourToHex(c.pianoKeyWhite));
+        colors->setProperty("pianoKeyBlack", colourToHex(c.pianoKeyBlack));
+        colors->setProperty("trackMuteOn", colourToHex(c.trackMuteOn));
+        colors->setProperty("trackSoloOn", colourToHex(c.trackSoloOn));
+        colors->setProperty("trackArmOn", colourToHex(c.trackArmOn));
 
         // Cable category palette, emitted as a nested object so the round-trip matches the
         // parse shape above.

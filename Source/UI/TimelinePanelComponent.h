@@ -374,6 +374,21 @@ public:
     // play/stop/record/loop + BPM/time-sig editors + the bar:beat readout.
     TimelineTransportBar& getTransportBar() noexcept { return transportBar_; }
 
+    // ---- Follow playhead ----
+    //
+    // "Keep the playhead on screen while it plays" — a toggle next to snapToggleButton_ (same
+    // external-state pattern: setClickingTogglesState(false), the shared bool is the truth, the
+    // button only mirrors it). Persisted under "timelineFollowPlayhead", default OFF — an editor
+    // that silently starts scrolling under a user who never asked for it is worse than one that
+    // doesn't. The piano roll gets its own wiring to this in a later wave (this panel's arrangement
+    // view only); setFollowPlayheadEnabled/isFollowPlayheadEnabled are public now so that wave has
+    // something to call.
+    void setFollowPlayheadEnabled(bool enabled);
+    bool isFollowPlayheadEnabled() const noexcept { return followPlayhead_; }
+    /** Test seam: no OS mouse source exists headlessly, so a test drives the click via
+     *  `getFollowPlayheadButtonForTest().onClick()` rather than synthesising a real click. */
+    juce::DrawableButton& getFollowPlayheadButtonForTest() noexcept { return followPlayheadButton_; }
+
     /** How many times updateFromTransport() has been called. Test hook: it is what proves the
      *  10 Hz poll never reaches a hidden panel. */
     int getTransportUpdateCountForTest() const noexcept { return transportUpdateCount_; }
@@ -572,6 +587,11 @@ private:
     void setSnapEnabled(bool enabled);
     // Left-aligned in the transport-bar strip, the snap combo stays right of it.
     TimelineTransportBar transportBar_;
+
+    // ---- Follow playhead (see the public accessors above) ----
+    bool followPlayhead_ = false;
+    juce::DrawableButton followPlayheadButton_{"Follow Playhead", juce::DrawableButton::ImageOnButtonBackground};
+    void persistFollowPlayheadChoice();
 
     // The slice of transport state the RULER paints, diffed by updateFromTransport. `hasRulerState_`
     // keeps the very first poll from counting as a change (the default-constructed struct below is

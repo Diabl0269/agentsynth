@@ -484,6 +484,12 @@ juce_add_binary_data(Assets SOURCES
     assets/icons/tool-erase.svg
     assets/icons/tool-mute.svg
     assets/icons/tool-draw.svg
+    # Track-header kind glyphs + follow-playhead toggle — 4 SVGs, BinaryData symbols:
+    # trackmidi_svg, trackaudio_svg, trackautomation_svg, followplayhead_svg.
+    assets/icons/track-midi.svg
+    assets/icons/track-audio.svg
+    assets/icons/track-automation.svg
+    assets/icons/follow-playhead.svg
 )
 
 # The themed LookAndFeel lives in Core and pulls typefaces from BinaryData;

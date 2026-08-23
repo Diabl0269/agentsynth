@@ -263,6 +263,14 @@ void AppLookAndFeel::retintIcons() {
     iconLibrary_.setTintColour(Icon::ToolErase, c.textPrimary);
     iconLibrary_.setTintColour(Icon::ToolMute, c.textPrimary);
     iconLibrary_.setTintColour(Icon::ToolDraw, c.textPrimary);
+
+    // Track-header kind glyphs (MIDI/Audio/Automation) are quiet chrome, same convention as the
+    // library category headers above. FollowPlayhead is a toolbar-style toggle, so it follows
+    // the toolbar action set's textPrimary base instead.
+    iconLibrary_.setTintColour(Icon::TrackMidi, c.textMuted);
+    iconLibrary_.setTintColour(Icon::TrackAudio, c.textMuted);
+    iconLibrary_.setTintColour(Icon::TrackAutomation, c.textMuted);
+    iconLibrary_.setTintColour(Icon::FollowPlayhead, c.textPrimary);
 }
 
 void AppLookAndFeel::refreshTypefaces() {

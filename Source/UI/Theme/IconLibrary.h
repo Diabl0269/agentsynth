@@ -58,6 +58,11 @@ enum class Icon : int {
     ToolErase,
     ToolMute,
     ToolDraw,
+    // Timeline track-header kind glyphs + the panel's follow-playhead toggle.
+    TrackMidi,
+    TrackAudio,
+    TrackAutomation,
+    FollowPlayhead,
     kCount
 };
 
