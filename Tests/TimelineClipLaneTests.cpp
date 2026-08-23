@@ -824,7 +824,7 @@ TEST(TimelineClipLaneBeatAnchoredDragTest, MidDragViewScrollKeepsTheClipUnderThe
 // ---- Auto-scroll timer: gated on drag + edge zone, only via tickAutoScrollForTest() ----
 
 TEST(TimelineClipLaneAutoScrollTimerTest, GatedOnDragAndEdgeZoneOnly) {
-    ClipLaneFixture f; // 1200x400, pixelsPerBeat = 40
+    ClipLaneFixture f;              // 1200x400, pixelsPerBeat = 40
     f.state.firstVisibleBeat = 5.0; // room to scroll backward too
     const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
     const auto clipId = f.doc.addClip(trackId, 5.0, 4.0, "Clip"); // lands near the fixture's centre

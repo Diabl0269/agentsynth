@@ -261,8 +261,8 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // purpose still takes focus; only the incidental mouse-click grab is disabled.
     for (juce::Component* chrome :
          {static_cast<juce::Component*>(&addTrackButton_), static_cast<juce::Component*>(&snapToggleButton_),
-          static_cast<juce::Component*>(&followPlayheadButton_),
-          static_cast<juce::Component*>(&snapCombo_), static_cast<juce::Component*>(&automationToolPointerButton_),
+          static_cast<juce::Component*>(&followPlayheadButton_), static_cast<juce::Component*>(&snapCombo_),
+          static_cast<juce::Component*>(&automationToolPointerButton_),
           static_cast<juce::Component*>(&automationToolPencilButton_),
           static_cast<juce::Component*>(&automationToolLineButton_),
           static_cast<juce::Component*>(&automationToolEraserButton_),
@@ -1082,8 +1082,9 @@ void TimelinePanelComponent::reloadPianoRollAppearancePrefs() {
     auto& settings = *appProperties_->getUserSettings();
 
     const auto keyLabels = settings.getValue(kPianoRollKeyLabelsPropertyKey, "all");
-    pianoRoll_.setKeyLabelMode(keyLabels.equalsIgnoreCase("c") ? synth::ui::PianoRollComponent::KeyLabelMode::OctavesOnly
-                                                               : synth::ui::PianoRollComponent::KeyLabelMode::AllNotes);
+    pianoRoll_.setKeyLabelMode(keyLabels.equalsIgnoreCase("c")
+                                   ? synth::ui::PianoRollComponent::KeyLabelMode::OctavesOnly
+                                   : synth::ui::PianoRollComponent::KeyLabelMode::AllNotes);
     pianoRoll_.setNoteColourOverrides(synth::ui::loadNoteColourOverrides(settings));
 }
 

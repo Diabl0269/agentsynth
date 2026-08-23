@@ -55,7 +55,8 @@ struct MusicalScale {
             if (upperOk)
                 return upper;
         }
-        return midiPitch; // no in-scale pitch anywhere in range (mask has bits but none reachable — cannot happen for a non-zero mask, kept as a safe fallback)
+        return midiPitch; // no in-scale pitch anywhere in range (mask has bits but none reachable — cannot happen for a
+                          // non-zero mask, kept as a safe fallback)
     }
 };
 
@@ -68,20 +69,20 @@ struct ScalePreset {
 
 inline const std::vector<ScalePreset>& builtInScalePresets() {
     static const std::vector<ScalePreset> presets = {
-        {"Major", 0x0AB5},              // 0,2,4,5,7,9,11
-        {"Natural Minor", 0x05AD},       // 0,2,3,5,7,8,10
-        {"Harmonic Minor", 0x09AD},      // 0,2,3,5,7,8,11
-        {"Melodic Minor", 0x0AAD},       // 0,2,3,5,7,9,11
-        {"Dorian", 0x06AD},              // 0,2,3,5,7,9,10
-        {"Phrygian", 0x05AB},            // 0,1,3,5,7,8,10
-        {"Lydian", 0x0AD5},              // 0,2,4,6,7,9,11
-        {"Mixolydian", 0x06B5},          // 0,2,4,5,7,9,10
-        {"Locrian", 0x056B},             // 0,1,3,5,6,8,10
-        {"Major Pentatonic", 0x0295},    // 0,2,4,7,9
-        {"Minor Pentatonic", 0x04A9},    // 0,3,5,7,10
-        {"Blues", 0x04E9},               // 0,3,5,6,7,10
-        {"Whole Tone", 0x0555},          // 0,2,4,6,8,10
-        {"Chromatic", 0x0FFF},           // all 12
+        {"Major", 0x0AB5},            // 0,2,4,5,7,9,11
+        {"Natural Minor", 0x05AD},    // 0,2,3,5,7,8,10
+        {"Harmonic Minor", 0x09AD},   // 0,2,3,5,7,8,11
+        {"Melodic Minor", 0x0AAD},    // 0,2,3,5,7,9,11
+        {"Dorian", 0x06AD},           // 0,2,3,5,7,9,10
+        {"Phrygian", 0x05AB},         // 0,1,3,5,7,8,10
+        {"Lydian", 0x0AD5},           // 0,2,4,6,7,9,11
+        {"Mixolydian", 0x06B5},       // 0,2,4,5,7,9,10
+        {"Locrian", 0x056B},          // 0,1,3,5,6,8,10
+        {"Major Pentatonic", 0x0295}, // 0,2,4,7,9
+        {"Minor Pentatonic", 0x04A9}, // 0,3,5,7,10
+        {"Blues", 0x04E9},            // 0,3,5,6,7,10
+        {"Whole Tone", 0x0555},       // 0,2,4,6,8,10
+        {"Chromatic", 0x0FFF},        // all 12
     };
     return presets;
 }
@@ -160,8 +161,7 @@ inline juce::String serializeUserScales(const std::vector<UserScale>& scales) {
 // back to an out-of-range or out-of-scale note. RNG is caller-owned and caller-seeded so this
 // function is deterministic and independently testable.
 inline std::vector<synth::MidiNote> generateRandomNotes(double clipLengthBeats, double gridBeats, int minPitch,
-                                                          int maxPitch, const MusicalScale* scale,
-                                                          juce::Random& rng) {
+                                                        int maxPitch, const MusicalScale* scale, juce::Random& rng) {
     std::vector<synth::MidiNote> notes;
     if (gridBeats <= 0.0 || clipLengthBeats <= 0.0)
         return notes;

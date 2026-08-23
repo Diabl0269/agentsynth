@@ -65,7 +65,8 @@ inline NotePaint resolveNoteColour(const synth::theme::Colors& colors, int pitch
 
     if (muted) {
         fill = fill.withSaturation(fill.getSaturation() * kMutedNoteSaturation).withMultipliedAlpha(kMutedNoteAlpha);
-        border = border.withSaturation(border.getSaturation() * kMutedNoteSaturation).withMultipliedAlpha(kMutedNoteAlpha);
+        border =
+            border.withSaturation(border.getSaturation() * kMutedNoteSaturation).withMultipliedAlpha(kMutedNoteAlpha);
     }
 
     return {fill, border};

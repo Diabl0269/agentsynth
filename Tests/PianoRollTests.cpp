@@ -2988,9 +2988,9 @@ TEST(PianoRollNoteColourTest, OutOfScaleNoteResolvesThroughTheSharedResolverToIt
 
     // And it must genuinely differ from how the SAME note would resolve if it were in scale —
     // otherwise the scale context would not be doing anything visible at all.
-    const auto asIfInScale = synth::ui::resolveNoteColour(synth::theme::Colors{}, note->pitch, note->velocity, false,
-                                                          false, /*outOfScale*/ false,
-                                                          synth::ui::NoteColourOverrides{});
+    const auto asIfInScale =
+        synth::ui::resolveNoteColour(synth::theme::Colors{}, note->pitch, note->velocity, false, false,
+                                     /*outOfScale*/ false, synth::ui::NoteColourOverrides{});
     EXPECT_NE(resolved.fill, asIfInScale.fill);
 }
 
@@ -3026,7 +3026,7 @@ TEST(PianoRollNoteColourTest, EmptyScaleContextMeansNothingIsEverOutOfScale) {
     ASSERT_NE(note, nullptr);
     const auto resolved = f.roll.notePaintFor(*note);
     const auto expected = synth::ui::resolveNoteColour(synth::theme::Colors{}, note->pitch, note->velocity, false,
-                                                        false, /*outOfScale*/ false, synth::ui::NoteColourOverrides{});
+                                                       false, /*outOfScale*/ false, synth::ui::NoteColourOverrides{});
     EXPECT_EQ(resolved.fill, expected.fill);
     EXPECT_EQ(resolved.border, expected.border);
 }
@@ -3507,9 +3507,9 @@ TEST(PianoRollScaleAssistTest, PanelVisibilityAndUserScalesPersistThroughAProper
     EXPECT_TRUE(props->getBoolValue("pianoRollScalePanelVisible", false));
 
     auto& panel = f.roll.getScaleAssistPanel();
-    panel.getCustomPitchToggle(0).setToggleState(true, juce::dontSendNotification);  // C
-    panel.getCustomPitchToggle(4).setToggleState(true, juce::dontSendNotification);  // E
-    panel.getCustomPitchToggle(7).setToggleState(true, juce::dontSendNotification);  // G
+    panel.getCustomPitchToggle(0).setToggleState(true, juce::dontSendNotification); // C
+    panel.getCustomPitchToggle(4).setToggleState(true, juce::dontSendNotification); // E
+    panel.getCustomPitchToggle(7).setToggleState(true, juce::dontSendNotification); // G
     panel.getCustomScaleNameEditor().setText("My Triad", false);
     panel.getSaveCustomScaleButton().onClick();
 
@@ -3695,6 +3695,6 @@ TEST(ScaleAssistPanelTest, SetSelectionReflectsStateWithoutFiringCallbacks) {
     EXPECT_EQ(juce::String(panel.getSelectedScale()->name), "Natural Minor");
     EXPECT_EQ(panel.getSelectedScale()->rootPitchClass, 2);
     EXPECT_TRUE(panel.isPitchVisibilityOn());
-    EXPECT_EQ(panel.getRootCombo().getSelectedId(), 3); // D
+    EXPECT_EQ(panel.getRootCombo().getSelectedId(), 3);  // D
     EXPECT_EQ(panel.getScaleCombo().getSelectedId(), 3); // "Natural Minor" is presets[1] -> id 3
 }

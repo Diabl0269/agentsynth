@@ -47,7 +47,8 @@ double contrastRatio(juce::Colour a, juce::Colour b) {
 juce::Colour compositeOver(juce::Colour fg, juce::Colour bg) {
     const float a = fg.getFloatAlpha();
     auto mix = [a](float f, float b) { return f * a + b * (1.0f - a); };
-    return juce::Colour::fromFloatRGBA(mix(fg.getFloatRed(), bg.getFloatRed()), mix(fg.getFloatGreen(), bg.getFloatGreen()),
+    return juce::Colour::fromFloatRGBA(mix(fg.getFloatRed(), bg.getFloatRed()),
+                                       mix(fg.getFloatGreen(), bg.getFloatGreen()),
                                        mix(fg.getFloatBlue(), bg.getFloatBlue()), 1.0f);
 }
 
@@ -232,8 +233,7 @@ TEST(NoteColourThemeTest, NoteFillIsLegibleAgainstBothRowBackgrounds) {
         const auto& c = t.colors;
         const auto surfaceHiOverBg0 = compositeOver(c.surfaceHi, c.bg0);
 
-        EXPECT_GE(contrastRatio(c.noteFill, c.bg1), 1.5)
-            << "Theme '" << t.name << "': noteFill vs bg1";
+        EXPECT_GE(contrastRatio(c.noteFill, c.bg1), 1.5) << "Theme '" << t.name << "': noteFill vs bg1";
         EXPECT_GE(contrastRatio(c.noteFill, surfaceHiOverBg0), 1.5)
             << "Theme '" << t.name << "': noteFill vs surfaceHi-over-bg0";
     }

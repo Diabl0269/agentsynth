@@ -48,10 +48,8 @@ struct StubbornFakeGraph {
 };
 
 std::unique_ptr<MidiDestinationPicker> makePicker(FakeGraph& graph) {
-    auto picker = std::make_unique<MidiDestinationPicker>([&graph] { return graph.refresh(); },
-                                                           [&graph](juce::uint32 uid, bool connect) {
-                                                               graph.apply(uid, connect);
-                                                           });
+    auto picker = std::make_unique<MidiDestinationPicker>(
+        [&graph] { return graph.refresh(); }, [&graph](juce::uint32 uid, bool connect) { graph.apply(uid, connect); });
     picker->setSize(260, 320);
     return picker;
 }
@@ -158,13 +156,13 @@ TEST(MidiDestinationPickerTest, ToggleWithANoOpApplyLeavesTheGraphsRealStateShow
 
     juce::uint32 lastUid = 0;
     bool lastConnect = false;
-    auto picker = std::make_unique<MidiDestinationPicker>(
-        [&graph] { return graph.refresh(); },
-        [&graph, &lastUid, &lastConnect](juce::uint32 uid, bool connect) {
-            lastUid = uid;
-            lastConnect = connect;
-            graph.apply(uid, connect);
-        });
+    auto picker =
+        std::make_unique<MidiDestinationPicker>([&graph] { return graph.refresh(); },
+                                                [&graph, &lastUid, &lastConnect](juce::uint32 uid, bool connect) {
+                                                    lastUid = uid;
+                                                    lastConnect = connect;
+                                                    graph.apply(uid, connect);
+                                                });
     picker->setSize(260, 320);
 
     picker->toggleRowForTest(0);

@@ -594,14 +594,12 @@ TEST(TimelineTrackHeaderTest, KindBadgeIconPerTrackKindOrTextFallback) {
     HeaderFixture midi(TrackKind::Midi);
     EXPECT_EQ(midi.header->getKindBadgeIconForTest(), -1) << "no LookAndFeel installed yet — text fallback";
     midi.header->setLookAndFeel(&lf);
-    EXPECT_EQ(midi.header->getKindBadgeIconForTest(),
-              kAssetsPresent ? (int)synth::theme::Icon::TrackMidi : -1);
+    EXPECT_EQ(midi.header->getKindBadgeIconForTest(), kAssetsPresent ? (int)synth::theme::Icon::TrackMidi : -1);
     midi.header->setLookAndFeel(nullptr);
 
     HeaderFixture audio(TrackKind::Audio);
     audio.header->setLookAndFeel(&lf);
-    EXPECT_EQ(audio.header->getKindBadgeIconForTest(),
-              kAssetsPresent ? (int)synth::theme::Icon::TrackAudio : -1);
+    EXPECT_EQ(audio.header->getKindBadgeIconForTest(), kAssetsPresent ? (int)synth::theme::Icon::TrackAudio : -1);
     audio.header->setLookAndFeel(nullptr);
 
     HeaderFixture automation(TrackKind::Automation);
@@ -656,7 +654,7 @@ TEST(TimelineTrackHeaderTest, ThemeSwitchReappliesChipAndMSRColoursWithNoDocChan
 
 TEST(ColourPickerPopupTest, SerializeParseRoundTrips) {
     const std::vector<juce::Colour> colours{juce::Colour(0xff4FC1FFu), juce::Colour(0xff7FD962u),
-                                             juce::Colour(0x00000000u)};
+                                            juce::Colour(0x00000000u)};
     const auto serialized = synth::ui::serializeFavouriteColours(colours);
     const auto parsed = synth::ui::parseFavouriteColours(serialized);
 

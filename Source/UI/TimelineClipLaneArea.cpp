@@ -1026,9 +1026,8 @@ void TimelineClipLaneArea::updateDragPreviewFromLastPointer() {
         // illegal drop clamps back to 0 — a same-lane move, i.e. exactly what this drag did before
         // it could cross tracks — rather than dropping the clips that would have fitted.
         const int rowHeight = getRowHeight();
-        int rowDelta = rowHeight > 0
-                           ? (int)std::llround((double)(lastDragPointer_.y - mouseDownPos_.y) / (double)rowHeight)
-                           : 0;
+        int rowDelta =
+            rowHeight > 0 ? (int)std::llround((double)(lastDragPointer_.y - mouseDownPos_.y) / (double)rowHeight) : 0;
         if (rowDelta != 0) {
             const auto& tracks = doc_->getTracks();
             for (const auto& origin : dragClips_) {

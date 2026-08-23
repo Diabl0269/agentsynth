@@ -123,12 +123,8 @@ public:
     std::optional<synth::MusicalScale> getSelectedScale() const noexcept { return selectedScale_; }
     bool isPitchVisibilityOn() const noexcept { return pitchVisibilityOn_; }
 
-    int getMinPitchSelection() const noexcept {
-        return juce::jlimit(0, 127, minNoteCombo_.getSelectedId() - 1);
-    }
-    int getMaxPitchSelection() const noexcept {
-        return juce::jlimit(0, 127, maxNoteCombo_.getSelectedId() - 1);
-    }
+    int getMinPitchSelection() const noexcept { return juce::jlimit(0, 127, minNoteCombo_.getSelectedId() - 1); }
+    int getMaxPitchSelection() const noexcept { return juce::jlimit(0, 127, maxNoteCombo_.getSelectedId() - 1); }
 
     // ---- Callbacks the owner wires (see the class comment) ----
     std::function<void(std::optional<synth::MusicalScale>)> onScaleChanged;

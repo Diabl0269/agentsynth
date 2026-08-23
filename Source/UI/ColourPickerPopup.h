@@ -72,7 +72,7 @@ inline void addFavourite(std::vector<juce::Colour>& colours, juce::Colour colour
 inline void removeFavourite(std::vector<juce::Colour>& colours, juce::Colour colour) {
     colours.erase(std::remove_if(colours.begin(), colours.end(),
                                  [colour](const juce::Colour& c) { return c.getARGB() == colour.getARGB(); }),
-                 colours.end());
+                  colours.end());
 }
 
 /** Loads the persisted favourites, or — when the key is absent (first run) — seeds the default
@@ -156,7 +156,8 @@ public:
     }
     int getFavouriteCountForTest() const { return (int)favourites_.size(); }
     juce::Colour getFavouriteColourForTest(int index) const {
-        return (index >= 0 && index < (int)favourites_.size()) ? favourites_[(size_t)index] : juce::Colours::transparentBlack;
+        return (index >= 0 && index < (int)favourites_.size()) ? favourites_[(size_t)index]
+                                                               : juce::Colours::transparentBlack;
     }
     void clickFavouriteForTest(int index) {
         if (index >= 0 && index < (int)favouriteButtons_.size())

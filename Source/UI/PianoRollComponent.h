@@ -290,8 +290,7 @@ public:
      *  notes become the selection. `rng` is caller-owned, which is what makes this
      *  deterministically testable (the panel's Generate button hands it a fresh, default-seeded
      *  juce::Random). */
-    void generateRandomNotesIntoClip(const synth::MusicalScale* scale, int minPitch, int maxPitch,
-                                     juce::Random& rng);
+    void generateRandomNotesIntoClip(const synth::MusicalScale* scale, int minPitch, int maxPitch, juce::Random& rng);
 
     // ---- Edit tools (Cubase-style; see EditTool.h) ----
 
@@ -574,9 +573,7 @@ private:
     // kScalePanelWidth + kKeysColumnWidth while the scale panel is open, kKeysColumnWidth alone
     // otherwise — the ONE seam beatToX/xToBeat/gridRegion and every hit-test below route the
     // grid's left offset through. See the class comment.
-    int leftGutterWidth() const noexcept {
-        return (scalePanel_.isVisible() ? kScalePanelWidth : 0) + kKeysColumnWidth;
-    }
+    int leftGutterWidth() const noexcept { return (scalePanel_.isVisible() ? kScalePanelWidth : 0) + kKeysColumnWidth; }
 
     // ---- Row mapping (visiblePitches_) ----
 
@@ -951,7 +948,8 @@ private:
     // construction. autoScrollTick() (the protected virtual seam a test overrides) does the real
     // work; this struct only forwards juce::Timer's callback to it.
     struct AutoScrollTimer final : public juce::Timer {
-        explicit AutoScrollTimer(PianoRollComponent& ownerRef) : owner(ownerRef) {}
+        explicit AutoScrollTimer(PianoRollComponent& ownerRef)
+            : owner(ownerRef) {}
         void timerCallback() override { owner.autoScrollTick(); }
         PianoRollComponent& owner;
     };

@@ -3777,9 +3777,8 @@ MainComponent::getMidiDestinationOptions(synth::TrackId forTrack) {
         const juce::String name = describeNodeForBinding(node);
         const juce::String display =
             nameOccurrences[name] > 1 ? name + " #" + juce::String((int)node->nodeID.uid) : name;
-        const bool connected = graph.isConnected(
-            {{trackInNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
-             {node->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
+        const bool connected = graph.isConnected({{trackInNode->nodeID, juce::AudioProcessorGraph::midiChannelIndex},
+                                                  {node->nodeID, juce::AudioProcessorGraph::midiChannelIndex}});
         options.push_back({display, node->nodeID.uid, connected});
     }
 #else

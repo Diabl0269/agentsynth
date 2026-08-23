@@ -400,8 +400,7 @@ void TimelineTrackHeaderComponent::paint(juce::Graphics& g) {
         g.setColour(colours.textMuted.withAlpha(0.6f));
         g.drawRoundedRectangle(badgeBounds, 3.0f, 1.0f);
 
-        const auto* icon =
-            [this, t]() -> const juce::Drawable* {
+        const auto* icon = [this, t]() -> const juce::Drawable* {
             if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
                 return lf->peekIcon(kindBadgeIcon(t->kind));
             return nullptr;

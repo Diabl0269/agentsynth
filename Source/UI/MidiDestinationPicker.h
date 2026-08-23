@@ -140,9 +140,7 @@ private:
         void setConnected(bool connected) { toggle_.setToggleState(connected, juce::dontSendNotification); }
         void setDisplayName(const juce::String& name) { toggle_.setButtonText(name); }
 
-        juce::String getDisplayedText() const {
-            return interactive_ ? toggle_.getButtonText() : hintLabel_.getText();
-        }
+        juce::String getDisplayedText() const { return interactive_ ? toggle_.getButtonText() : hintLabel_.getText(); }
 
         // The hint row (no destinations to offer at all) is never filtered out — there's nothing
         // for the search box to search among, so hiding it on top of that would leave an empty
@@ -182,13 +180,12 @@ private:
         if (refreshProvider_)
             newOptions = refreshProvider_();
 
-        const bool sameShape = newOptions.size() == options_.size() &&
-                               [&] {
-                                   for (size_t i = 0; i < newOptions.size(); ++i)
-                                       if (newOptions[i].nodeUid != options_[i].nodeUid)
-                                           return false;
-                                   return true;
-                               }();
+        const bool sameShape = newOptions.size() == options_.size() && [&] {
+            for (size_t i = 0; i < newOptions.size(); ++i)
+                if (newOptions[i].nodeUid != options_[i].nodeUid)
+                    return false;
+            return true;
+        }();
         const bool wasHintRow = options_.empty();
         const bool isHintRow = newOptions.empty();
 
@@ -214,8 +211,8 @@ private:
             } else {
                 for (const auto& option : options_) {
                     const juce::uint32 nodeUid = option.nodeUid;
-                    auto row = std::make_unique<Row>(option.displayName, true,
-                                                      [this, nodeUid] { onRowToggled(nodeUid); });
+                    auto row =
+                        std::make_unique<Row>(option.displayName, true, [this, nodeUid] { onRowToggled(nodeUid); });
                     row->setConnected(option.connected);
                     rowColumn_.addAndMakeVisible(*row);
                     rows_.push_back(row.get());

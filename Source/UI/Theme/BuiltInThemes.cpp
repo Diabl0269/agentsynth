@@ -44,9 +44,9 @@ Theme makeObsidian() {
     t.colors.modRingPositive = juce::Colour(0xff00E5FF);
     t.colors.modRingNegative = juce::Colour(0xffFF6E00);
     t.colors.noteFill = juce::Colour(0xffB48EF5);       // same hue as midiWire
-    t.colors.noteBorder = juce::Colour(0xff4A3B75);      // darker desaturated purple, not a plain .darker()
-    t.colors.noteSelected = juce::Colour(0xff00D1FF);    // = accent
-    t.colors.noteOutOfScale = juce::Colour(0xffFF6B57);  // warm red/orange warning
+    t.colors.noteBorder = juce::Colour(0xff4A3B75);     // darker desaturated purple, not a plain .darker()
+    t.colors.noteSelected = juce::Colour(0xff00D1FF);   // = accent
+    t.colors.noteOutOfScale = juce::Colour(0xffFF6B57); // warm red/orange warning
     t.colors.pianoKeyWhite = juce::Colour(0xffEDEFF3);
     t.colors.pianoKeyBlack = juce::Colour(0xff15171C);
     t.colors.trackMuteOn = juce::Colour(0xffFFA033);
@@ -223,7 +223,7 @@ Theme makeWarm() {
     t.colors.modRingNegative = juce::Colour(0xffE07A5F);
     t.colors.noteFill = juce::Colour(0xffCE93B8); // same hue as midiWire
     t.colors.noteBorder = juce::Colour(0xff6B3A54);
-    t.colors.noteSelected = juce::Colour(0xffFF9E3D); // = accent
+    t.colors.noteSelected = juce::Colour(0xffFF9E3D);   // = accent
     t.colors.noteOutOfScale = juce::Colour(0xffD9636B); // earthier red than the dark/neon themes
     t.colors.pianoKeyWhite = juce::Colour(0xffF2E8D5);
     t.colors.pianoKeyBlack = juce::Colour(0xff231C15);
@@ -317,7 +317,7 @@ Theme makeDaylight() {
     t.colors.modRingNegative = juce::Colour(0xffFD7E14);
     t.colors.noteFill = juce::Colour(0xff9333EA); // same hue as midiWire
     t.colors.noteBorder = juce::Colour(0xff5B21B6);
-    t.colors.noteSelected = juce::Colour(0xff4C6EF5); // = accent
+    t.colors.noteSelected = juce::Colour(0xff4C6EF5);   // = accent
     t.colors.noteOutOfScale = juce::Colour(0xffE03131); // = error
     // Daylight is a LIGHT theme (bg0 0xffE9ECEF) — keep the "white" key slightly off-white so it
     // still reads as a key rather than vanishing into the page background.

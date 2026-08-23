@@ -2903,9 +2903,7 @@ struct FollowPlayheadFixture {
     // The exact width the page-flip's visibleBeats term reads from — clipLaneArea_ fills
     // gridLanesBounds_ exactly (see TimelinePanelComponent::resized()'s comment), so this IS that
     // width without duplicating layout maths.
-    double visibleBeats() {
-        return (double)panel.getClipLaneArea().getWidth() / panel.getViewState().pixelsPerBeat;
-    }
+    double visibleBeats() { return (double)panel.getClipLaneArea().getWidth() / panel.getViewState().pixelsPerBeat; }
 
     synth::TransportService::PositionSnapshot playingSnapshotAt(double ppq) const {
         synth::TransportService::PositionSnapshot snap;

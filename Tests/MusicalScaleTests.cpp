@@ -185,11 +185,11 @@ TEST(MusicalScaleTest, ParseGarbageYieldsEmpty) {
 
 TEST(MusicalScaleTest, ParseSkipsMalformedEntriesButKeepsValidOnes) {
     juce::String json = "[ {\"name\":\"Good\",\"mask\":100}, "
-                         "{\"name\":\"MissingMask\"}, "
-                         "{\"mask\":50}, "
-                         "\"not an object\", "
-                         "{\"name\":\"BadMask\",\"mask\":9999}, "
-                         "{\"name\":\"Good2\",\"mask\":200} ]";
+                        "{\"name\":\"MissingMask\"}, "
+                        "{\"mask\":50}, "
+                        "\"not an object\", "
+                        "{\"name\":\"BadMask\",\"mask\":9999}, "
+                        "{\"name\":\"Good2\",\"mask\":200} ]";
     auto parsed = parseUserScales(json);
     ASSERT_EQ(parsed.size(), 2u);
     EXPECT_EQ(parsed[0].name, "Good");

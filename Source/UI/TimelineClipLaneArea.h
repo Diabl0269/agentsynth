@@ -3,8 +3,8 @@
 #include "../Timeline/PeaksFile.h"
 #include "../Timeline/TimelineDoc.h"
 #include "ClipSelectionModel.h"
-#include "EditTool.h"
 #include "EdgeAutoScroll.h"
+#include "EditTool.h"
 #include "TimelineViewState.h"
 #include <array>
 #include <cmath>
@@ -188,8 +188,9 @@ public:
     // guard reads this so a drag in progress and an auto-scroll page-flip never fight over
     // firstVisibleBeat in the same 100ms. Marquee/Draw are deliberately excluded: neither one drags
     // an EXISTING clip's position, so neither is what follow-playhead needs to stay clear of.
-    bool isDragInProgress() const noexcept { return dragMode_ == DragMode::Move || dragMode_ == DragMode::ResizeLeft ||
-                                                     dragMode_ == DragMode::ResizeRight; }
+    bool isDragInProgress() const noexcept {
+        return dragMode_ == DragMode::Move || dragMode_ == DragMode::ResizeLeft || dragMode_ == DragMode::ResizeRight;
+    }
 
     // ---- Edit tools (synth::ui::EditTool — the Cubase-style tool row) ----
 

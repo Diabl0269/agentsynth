@@ -2227,7 +2227,7 @@ void PianoRollComponent::autoScrollTick() {
 
     const auto grid = gridRegion();
     const double hVelocityPxPerTick = edgeScrollVelocity(lastDragPointer_.x, grid.getX(), grid.getRight(),
-                                                          synth::ui::kEdgeZonePx, kEdgeAutoScrollMaxPxPerTick);
+                                                         synth::ui::kEdgeZonePx, kEdgeAutoScrollMaxPxPerTick);
     const double vVelocityRowsPerTick = edgeScrollVelocity(lastDragPointer_.y, grid.getY(), grid.getBottom(),
                                                            synth::ui::kEdgeZonePx, kEdgeAutoScrollMaxRowsPerTick);
     if (hVelocityPxPerTick == 0.0 && vVelocityRowsPerTick == 0.0) {
