@@ -221,13 +221,18 @@ void PianoRollComponent::openClip(synth::ClipId id) {
 }
 
 void PianoRollComponent::closeRoll() {
+    // BEFORE clipId_ is cleared, exactly like openClip's ordering — and load-bearing, not just
+    // symmetry: stopAudition() calls out to the owner, and the owner resolves which track to send the
+    // note-off to FROM THE OPEN CLIP. Clearing clipId_ first made isOpen() false while that note-off
+    // was still in flight, so the owner dropped it and the note hung until bypass (audition notes are
+    // deliberately exempt from every positional flush — see TimelineMidiSourceModule).
+    stopAudition();
     clipId_ = {};
     selection_.clear();
     dragMode_ = DragMode::None;
     pendingEmptyClick_ = false;
     resizeNotes_.clear();
     resizeUnquantized_ = false;
-    stopAudition();               // same reasoning as openClip's: no mouse-up is coming for a closed roll
     autoScrollTimer_.stopTimer(); // no clip left for a drag to be scrolling
 
     hasPlayheadX_ = false;
@@ -1923,16 +1928,17 @@ double PianoRollComponent::maxNoteEndAmong(const std::vector<synth::NoteId>& ids
     return maxEnd;
 }
 
-bool PianoRollComponent::extendOpenClipTo(double lengthBeats) {
-    if (doc_ == nullptr || !clipId_.isValid() || !std::isfinite(lengthBeats) || lengthBeats <= 0.0)
+bool PianoRollComponent::extendClipTo(synth::ClipId clipId, double lengthBeats) {
+    // `clipId` is a PARAMETER, never clipId_ — see the declaration. The lookup below is also what
+    // makes "the clip was deleted while the alert was open" a silent no-op rather than a crash.
+    if (doc_ == nullptr || !clipId.isValid() || !std::isfinite(lengthBeats) || lengthBeats <= 0.0)
         return false;
-    const auto* clip = doc_->getClip(clipId_);
+    const auto* clip = doc_->getClip(clipId);
     if (clip == nullptr || clip->lengthBeats >= lengthBeats - kBeatEpsilon)
-        return false; // already long enough — nothing to do, and nothing to push onto the undo stack
+        return false; // gone, or already long enough — nothing to do, and no undo step to push
 
-    const auto id = clipId_;
     bool changed = false;
-    auto mutate = [this, id, lengthBeats, &changed] { changed = doc_->resizeClip(id, lengthBeats); };
+    auto mutate = [this, clipId, lengthBeats, &changed] { changed = doc_->resizeClip(clipId, lengthBeats); };
     // Its OWN undo step, deliberately not merged with the resize that provoked it: the user answered
     // a second question, so undo should take them back one answer at a time. Same
     // recordTimelineChange shape TimelineClipLaneArea's own clip resize uses.
@@ -1944,7 +1950,16 @@ bool PianoRollComponent::extendOpenClipTo(double lengthBeats) {
     return changed;
 }
 
-void PianoRollComponent::promptExtendClipToFitNotes(double requiredLengthBeats) {
+void PianoRollComponent::applyExtendPromptAnswer(synth::ClipId clipId, double requiredLengthBeats, bool extend) {
+    if (!extend)
+        return; // "Keep": the notes stay overrunning, and playback simply truncates them at the clip
+                // boundary (TimelineSnapshot clamps every event end to the clip's end and drops notes
+                // starting past it), so the overrun is inaudible rather than wrong.
+    extendClipTo(clipId, requiredLengthBeats);
+}
+
+void PianoRollComponent::promptExtendClipToFitNotes(synth::ClipId clipId, double requiredLengthBeats) {
+    lastExtendPromptClip_ = clipId;
     lastExtendPromptLength_ = requiredLengthBeats;
 
     auto options = juce::MessageBoxOptions()
@@ -1957,14 +1972,17 @@ void PianoRollComponent::promptExtendClipToFitNotes(double requiredLengthBeats) 
     // message loop there would re-enter the very gesture that opened it. SafePointer because the
     // answer can arrive after the roll has closed or the panel has been destroyed — the same pattern
     // AIChatComponent::confirmAndClearHistory uses.
+    //
+    // `clipId` is captured BY VALUE and is the only thing that decides which clip grows. A modal
+    // window blocks user INPUT, not the message thread: an AI action, an undo/redo or a timer can
+    // openClip() a different clip while this alert is up, so re-deriving the target at answer time
+    // (from clipId_, or from a member) would grow whichever clip happened to be open. It is also why
+    // nothing here reads lastExtendPromptClip_ — that member is a test hook, and a second prompt
+    // would overwrite it before the first was answered.
     juce::Component::SafePointer<PianoRollComponent> safeThis(this);
-    juce::AlertWindow::showAsync(options, [safeThis, requiredLengthBeats](int result) {
-        if (result != 1)
-            return; // "Keep": the notes stay overrunning, and playback simply truncates them at the
-                    // clip boundary (TimelineSnapshot clamps every event end to the clip's end and
-                    // drops notes starting past it), so the overrun is inaudible rather than wrong.
+    juce::AlertWindow::showAsync(options, [safeThis, clipId, requiredLengthBeats](int result) {
         if (auto* self = safeThis.getComponent())
-            self->extendOpenClipTo(requiredLengthBeats);
+            self->applyExtendPromptAnswer(clipId, requiredLengthBeats, result == 1);
     });
 }
 
@@ -2874,7 +2892,7 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent&) {
         // The resize itself has no clip-length clamp any more, so ask about the overrun AFTER
         // committing rather than silently trimming it: the notes are already the length the user
         // dragged, and growing the clip is a SEPARATE answer to a separate question (its own undo
-        // step — see extendOpenClipTo). Read back from the doc, not from `targets`, so a length
+        // step — see extendClipTo). Read back from the doc, not from `targets`, so a length
         // TimelineDoc itself rejected or adjusted can't make us prompt for a clip nobody needs.
         std::vector<synth::NoteId> resizedIds;
         resizedIds.reserve(targets.size());
@@ -2883,7 +2901,9 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent&) {
         const double maxEnd = maxNoteEndAmong(resizedIds);
         const auto* clip = doc_->getClip(clipId_);
         if (clip != nullptr && maxEnd > clip->lengthBeats + kBeatEpsilon)
-            promptExtendClipToFitNotes(maxEnd);
+            // clipId_ read HERE, at prompt time, and carried through the answer — the clip whose
+            // notes overran, not whatever is open when the alert is finally answered.
+            promptExtendClipToFitNotes(clipId_, maxEnd);
     } else if (dragMode_ == DragMode::VelocityScrub && previewDeltaVelocity_ != 0) {
         const auto notes = dragNotes_;
         const int delta = previewDeltaVelocity_;

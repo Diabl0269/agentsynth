@@ -332,8 +332,23 @@ public:
      *  provoked it — the user answered a second question, and undo should take them back one answer
      *  at a time). A no-op when the clip is already at least that long. Public because the async
      *  overrun alert's callback lands here from outside the class (see promptExtendClipToFitNotes).
+     *
+     *  Takes the clip id EXPLICITLY and deliberately does not read clipId_: the async overrun alert
+     *  can be answered arbitrarily long after it was raised, and the roll may have been repointed at a
+     *  different clip in between (a message-thread openClip — an AI action, an undo/redo, a timer —
+     *  is not blocked by a modal window, it just isn't user input). Reading the live member there
+     *  silently grew whichever clip happened to be open instead, which is exactly the "the clip is
+     *  NOT grown behind the user's back" guarantee this feature is built on. A clip id that no longer
+     *  resolves is a no-op.
      *  @return true when the doc was actually mutated. */
-    bool extendOpenClipTo(double lengthBeats);
+    bool extendClipTo(synth::ClipId clipId, double lengthBeats);
+
+    /** What the overrun alert's two arms DO, factored out of the async callback so the real answer
+     *  path is one line there and fully testable here (a headless run has no message loop to answer a
+     *  juce::AlertWindow with, so a test that only drove the virtual seam below would leave this
+     *  logic uncovered). `extend` true is the "Extend" button, false is "Keep" — which is a genuine
+     *  no-op: the notes stay overrunning and playback truncates them at the clip boundary. */
+    void applyExtendPromptAnswer(synth::ClipId clipId, double requiredLengthBeats, bool extend);
 
     /** Fills the open clip with a fresh random pattern: `scale` may be null (every pitch in
      *  [minPitch, maxPitch] is a candidate); the grid step is the snap selector's RAW division
@@ -653,6 +668,8 @@ public:
     // The clip length the last overrun prompt asked for, and whether one was ever raised — see
     // promptExtendClipToFitNotes.
     double getLastExtendPromptLengthForTest() const noexcept { return lastExtendPromptLength_; }
+    // The CLIP the last overrun prompt was raised for — the capture the async answer is routed by.
+    synth::ClipId getLastExtendPromptClipForTest() const noexcept { return lastExtendPromptClip_; }
 
     // ---- Header button hover test hooks (Task D chip affordance) ----
     enum class HeaderButtonId { None, Back, Quantise, QuantisePitches, Scale };
@@ -676,17 +693,22 @@ protected:
     // never per mouse move.
     virtual void requestRepaintHeaderButtonStrip(juce::Rectangle<int> strip);
 
-    /** Raised on mouse-up when a just-committed resize left at least one note ending past the open
+    /** Raised on mouse-up when a just-committed resize left at least one note ending past the edited
      *  clip's end (the resize gesture itself has NO clip-length clamp — see the Resize branch of
-     *  updateDragPreviewFromLastPointer): asks whether to grow the clip to `requiredLengthBeats` so
+     *  updateDragPreviewFromLastPointer): asks whether to grow `clipId` to `requiredLengthBeats` so
      *  the notes fit, or leave them overrunning. The default implementation is an ASYNC
-     *  juce::AlertWindow (never a modal loop — the mouse-up is still unwinding), whose "Extend" arm
-     *  calls extendOpenClipTo(requiredLengthBeats) through a Component::SafePointer.
+     *  juce::AlertWindow (never a modal loop — the mouse-up is still unwinding) whose callback
+     *  forwards to applyExtendPromptAnswer through a Component::SafePointer.
+     *
+     *  `clipId` is CAPTURED here and carried through the answer — it is the clip whose notes
+     *  overran, not "whatever is open when the user finally clicks". See extendClipTo for why that
+     *  distinction is load-bearing rather than tidiness.
      *
      *  A protected virtual for the same reason requestRepaintStrip is one: a headless test has no
-     *  message loop to answer a real alert with, so it overrides this, records the request, and
-     *  drives whichever arm it wants to assert on directly. */
-    virtual void promptExtendClipToFitNotes(double requiredLengthBeats);
+     *  message loop to answer a real alert with, so it overrides this, records the request (the clip
+     *  id included — that is what lets a test pin the capture semantics), and drives whichever arm it
+     *  wants to assert on through applyExtendPromptAnswer. */
+    virtual void promptExtendClipToFitNotes(synth::ClipId clipId, double requiredLengthBeats);
 
     // THE edge-auto-scroll timer's seam, mirroring TimelineClipLaneArea::autoScrollTick() exactly
     // (a test subclasses and drives it via tickAutoScrollForTest() rather than a real juce::Timer,
@@ -1149,6 +1171,10 @@ private:
     // The length the last overrun prompt asked for (0.0 = never prompted) — a test hook, and the one
     // piece of the prompt that outlives the async alert. See promptExtendClipToFitNotes.
     double lastExtendPromptLength_ = 0.0;
+    // The clip that prompt was raised FOR. Recorded alongside the length purely so a test can pin
+    // the capture; the real answer path carries the id in the alert's own callback, not through here
+    // (a member would be overwritten by a second prompt before the first was answered).
+    synth::ClipId lastExtendPromptClip_;
 
     // ---- Note audition (see onAuditionNote) ----
     // auditionActive_ is the single source of truth for "we have emitted a noteOn nobody has matched

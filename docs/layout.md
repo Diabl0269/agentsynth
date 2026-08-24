@@ -783,7 +783,11 @@ Library drags cache a short-lived `AIStateMapper::createModule` probe for jack m
 
 An occupied destination jack is a **hard stop** everywhere except one node: the graph's terminal audio sink. Audio Output is a bare `juce::AudioGraphIOProcessor` (never a `ModuleBase` — the graph's output channel count is tied to it) and is wired in essentially every real patch, so the occupied-destination rule used to mean an FX parked next to it could never be offered anything at all. There, and only there, an occupied jack becomes a **reroute** instead: the cable already on the sink is re-pointed *through* the dragged module.
 
-`SmartSuggestion::isInsert` turns one suggestion record into that reroute. Three cables are in play — the doomed direct one (`upstreamId`:`upstreamJack` → `neighborJack`), and the two replacing it (`upstreamId`:`upstreamJack` → `ghostInJack`, then `ghostJack` → `neighborJack`).
+`SmartSuggestion::isInsert` turns one suggestion record into that reroute. It carries two cable **sets** — `doomedLinks` (upstream → sink, all to be removed) and `upstreamCables` (upstream → ghost, replacing them) — plus the record's own `ghostJack` → `neighborJack`.
+
+Both sets describe the **whole insert group**, not the record's own leg, and both are deduped, so applying them once per suggestion is idempotent. This is load-bearing: a Dual I/O upstream reaches the sink through *two* distinct cables, while a collapsed ghost output fans across both raw legs so only one jack pair survives the dedupe below. Hanging the doomed link off the surviving pair loses the other one, and that cable stays connected — summing into the sink's right leg alongside the ghost's output. Guarded by `SmartConnectionInsertRemovesEveryDoomedLegOfADualIOUpstream`.
+
+`upstreamCables` is deduped by the raw **ghost-input** channels each cable covers — the mirror of the sink-side rule, since a collapsed jack on *either* end fans. Without it, a collapsed upstream's single jack wired into both of a Dual I/O ghost's inputs would duplicate its left leg onto the right. Guarded by `SmartConnectionInsertDoesNotDuplicateOneUpstreamLegOntoADualIOGhost`.
 
 All of these must hold, or nothing is offered and the ordinary drop applies:
 
@@ -793,13 +797,17 @@ All of these must hold, or nothing is offered and the ordinary drop applies:
 - The feeding cable resolves through `findSingleUpstreamAudioLink`, which works at **cable** level (a visible output jack, never a raw graph edge) and returns nothing for a jack summed from several cables or fed through a mod routing / attenuverter chain.
 - The upstream is not the ghost itself (a move that would self-loop).
 
-One insert plan is emitted per **new** ghost→sink cable: a collapsed jack already fans to the whole raw pair, so a second plan for the sink's right leg would sum the ghost's *left* leg into it. Pairs whose raw destinations an earlier one already covers (via `resolvePolyLink`) are dropped.
+One jack pair survives per **new** ghost→sink cable: a collapsed jack already fans to the whole raw pair, so a second pair for the sink's right leg would sum the ghost's *left* leg into it. Pairs whose raw destinations an earlier one already covers (via `resolvePolyLink`) are dropped — the doomed links are collected before this and are unaffected by it.
+
+**Known limitation.** A Dual I/O upstream feeding a *collapsed* ghost routes only its left leg into the ghost: the ghost's single input jack owns both raw channels, so a second cable onto it would fold left and right together. The sink is left correctly wired in either case; the mismatch is inherent to collapsing a split pair.
+
+**Preview vs. real jacks.** The library-drop ghost is an `AIStateMapper::createModule` probe, and the probe does *not* get `applyDefaultDualIOForNewModule` applied — so with the Dual I/O default on, a dropped module's real jack layout can differ from the one the preview measured. Pre-existing, not specific to inserts; it is why the Dual-I/O-ghost test above drives the move path instead of a library drop.
 
 Scoring, the 96 px proximity cap and the left-to-right flow rule are unchanged — the ghost naturally hovers to the **left** of Audio Output, which is the insert position. An insert scores like the plain cable it replaces, so a neighbour offering a free jack can still win.
 
-**Preview.** The doomed cable is stroked first, dashed and dimmed (~18% alpha), underneath the two frosted segments that replace it — otherwise the extra preview reads as "and also", and the user expects the old wire to still be there after the drop. Paint-only; no new timers or repaints.
+**Preview.** *Every* doomed cable is stroked first, dashed and dimmed (~18% alpha), underneath the frosted segments that replace them — otherwise the extra previews read as "and also", and the user expects the old wires to still be there after the drop. Paint-only; no new timers or repaints.
 
-**Apply.** `applySmartSuggestions` drops the direct cable **first** (`disconnectAudioLink`, the exact inverse of `connectPorts`, so a collapsed stereo wire takes both raw legs), then wires upstream → ghost → sink. All three edits share the caller's transaction, so **one** undo restores the original patch.
+**Apply.** `applySmartSuggestions` drops **every** doomed cable first (`disconnectAudioLink`, the exact inverse of `connectPorts`, so a collapsed stereo wire takes both raw legs), then wires each `upstreamCables` entry into the ghost, then the ghost's own leg into the sink. Dropping only the current leg's cable would leave the other summing into the sink. All of it shares the caller's transaction, so **one** undo restores the original patch.
 
 ---
 

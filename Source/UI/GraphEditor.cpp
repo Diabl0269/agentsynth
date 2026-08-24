@@ -814,24 +814,27 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
             }
         };
 
-        // An insert REPLACES a cable, so the doomed one is struck out underneath the two frosted
-        // segments that will take its place — otherwise the extra preview reads as "and also",
-        // and the user expects the old wire to still be there after the drop.
+        // An insert REPLACES cabling, so EVERY doomed cable is struck out underneath the frosted
+        // segments taking their place — otherwise the extra previews read as "and also", and the
+        // user expects the old wires to still be there after the drop. All of them, not just this
+        // leg's: a stereo upstream can have one doomed cable per leg.
         for (const auto& s : editor.smartSuggestions) {
             if (!s.isInsert)
                 continue;
-            const auto doomed = GraphEditor::buildCablePath(s.up1, s.p2);
-            const float dashes[] = {5.0f, 5.0f};
-            juce::Path dashed;
-            juce::PathStrokeType(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::butt)
-                .createDashedStroke(dashed, doomed, dashes, juce::numElementsInArray(dashes));
-            g.setColour(previewColour(s.signal, s.upstreamCategory, 0.18f));
-            g.fillPath(dashed);
+            for (const auto& doomed : s.doomedLinks) {
+                const auto curve = GraphEditor::buildCablePath(doomed.p1, doomed.p2);
+                const float dashes[] = {5.0f, 5.0f};
+                juce::Path dashed;
+                juce::PathStrokeType(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::butt)
+                    .createDashedStroke(dashed, curve, dashes, juce::numElementsInArray(dashes));
+                g.setColour(previewColour(s.signal, s.upstreamCategory, 0.18f));
+                g.fillPath(dashed);
+            }
         }
 
         for (const auto& s : editor.smartSuggestions) {
-            if (s.isInsert)
-                strokePreview(s.up1, s.up2, previewColour(s.signal, s.upstreamCategory, 0.40f), s.signal);
+            for (const auto& cable : s.upstreamCables)
+                strokePreview(cable.p1, cable.p2, previewColour(s.signal, s.upstreamCategory, 0.40f), s.signal);
             strokePreview(s.p1, s.p2, previewColour(s.signal, s.sourceCategory, 0.40f), s.signal);
         }
     }
@@ -1596,12 +1599,12 @@ void GraphEditor::refreshSmartSuggestions() {
     std::vector<Candidate> audioCandidates;
     std::vector<Candidate> midiCandidates;
 
-    /** One rerouted cable, kept parallel to the surviving jack pairs of an insert group. */
+    /** The reroute shared by every surviving jack pair of one insert group. Group-wide rather than
+     *  per-leg: the cable sets must survive the fan dedupe that drops redundant pairs. */
     struct InsertPlan {
         juce::AudioProcessorGraph::NodeID upstreamId{};
-        int upstreamJack = 0;
-        int ghostInJack = 0;
-        juce::Point<float> upstreamOutPoint{}, ghostInPoint{};
+        std::vector<SmartSuggestion::InsertLink> doomedLinks;
+        std::vector<SmartSuggestion::InsertLink> upstreamCables;
         synth::ui::ModuleCategory upstreamCategory = synth::ui::ModuleCategory::Utility;
     };
 
@@ -1694,8 +1697,8 @@ void GraphEditor::refreshSmartSuggestions() {
             // preset lands Reverb on both its legs) — so an FX parked next to it could never be
             // offered anything at all. There, the ask is unambiguously "put me in SERIES", and the
             // cable already there is rerouted through the ghost instead of doubled.
-            // insertPlans stays parallel to `pairs`, or is empty for an ordinary add.
-            std::vector<InsertPlan> insertPlans;
+            // insertPlan is set for the whole group, or left empty for an ordinary add.
+            std::optional<InsertPlan> insertPlan;
             if (checkDstFree && dstNodeIdForFreeCheck.uid != 0) {
                 std::set<int> uniqueDsts;
                 for (const auto& pr : pairs)
@@ -1735,37 +1738,76 @@ void GraphEditor::refreshSmartSuggestions() {
                     if (auto* umb = dynamic_cast<ModuleBase*>(upstreamComp->getModule()))
                         upstreamCategory = synth::ui::categoryFor(umb->getModuleType());
 
-                    // One plan — and one surviving pair — per NEW ghost→sink cable. A collapsed
-                    // ghost jack already fans to the whole raw pair, so a second pair for the sink's
-                    // right leg would sum the ghost's LEFT leg into it. Drop any pair whose raw
-                    // destinations an earlier one already covers.
-                    std::vector<std::pair<int, int>> keptPairs;
-                    std::set<int> claimedRawDsts;
-                    for (size_t i = 0; i < pairs.size(); ++i) {
-                        const auto link = resolvePolyLink(srcMb, pairs[i].first, dstMb, pairs[i].second);
+                    auto* upstreamMb = dynamic_cast<ModuleBase*>(upstreamComp->getModule());
+                    auto* ghostMb = dynamic_cast<ModuleBase*>(ghostProc); // == srcMb here (ghostIsSource)
+                    auto upstreamJackPoint = [&](int jack) {
+                        return (upstreamComp->getBounds().getPosition() +
+                                upstreamComp->getPortCenter(jack, /*isInput=*/false))
+                            .toFloat();
+                    };
+
+                    InsertPlan plan;
+                    plan.upstreamId = *upstreamNode;
+                    plan.upstreamCategory = upstreamCategory;
+
+                    // EVERY occupied sink jack has a doomed cable, collected here — before and
+                    // independently of the fan dedupe below. Hanging these off the surviving pairs
+                    // instead would lose the link of any pair the dedupe drops, and the cable it
+                    // stood for would survive and sum into the sink beside the ghost's output.
+                    for (int d : uniqueDsts) {
+                        SmartSuggestion::InsertLink doomed;
+                        doomed.fromJack = upstreamJackForDst[d];
+                        doomed.toJack = d;
+                        doomed.p1 = upstreamJackPoint(doomed.fromJack);
+                        doomed.p2 = jackPoint(/*fromGhost=*/false, d, true, false);
+                        plan.doomedLinks.push_back(doomed);
+                    }
+
+                    // Upstream → ghost, deduped by the raw GHOST-INPUT channels each cable covers:
+                    // a cable onto a collapsed ghost jack already fans across both raw legs, so a
+                    // second one from the upstream's other leg would duplicate one leg over both.
+                    // (Mirror image of the sink-side dedupe — a collapsed jack on either end folds.)
+                    std::set<int> claimedRawGhostIns;
+                    for (size_t i = 0; i < plan.doomedLinks.size(); ++i) {
+                        const int ghostInJack = ghostInLegs[std::min(i, ghostInLegs.size() - 1)];
+                        const auto fan =
+                            resolvePolyLink(upstreamMb, plan.doomedLinks[i].fromJack, ghostMb, ghostInJack);
                         bool alreadyCovered = true;
-                        for (int v = 0; v < link.voiceCount; ++v)
-                            if (claimedRawDsts.insert(link.destRawChannel + v).second)
+                        for (int v = 0; v < fan.voiceCount; ++v)
+                            if (claimedRawGhostIns.insert(fan.destRawChannel + v).second)
                                 alreadyCovered = false;
                         if (alreadyCovered)
                             continue;
 
-                        InsertPlan plan;
-                        plan.upstreamId = *upstreamNode;
-                        plan.upstreamJack = upstreamJackForDst[pairs[i].second];
-                        plan.ghostInJack = ghostInLegs[std::min(i, ghostInLegs.size() - 1)];
-                        plan.upstreamOutPoint = (upstreamComp->getBounds().getPosition() +
-                                                 upstreamComp->getPortCenter(plan.upstreamJack, /*isInput=*/false))
-                                                    .toFloat();
-                        plan.ghostInPoint = jackPoint(/*fromGhost=*/true, plan.ghostInJack, true, false);
-                        plan.upstreamCategory = upstreamCategory;
-
-                        keptPairs.push_back(pairs[i]);
-                        insertPlans.push_back(plan);
+                        SmartSuggestion::InsertLink cable;
+                        cable.fromJack = plan.doomedLinks[i].fromJack;
+                        cable.toJack = ghostInJack;
+                        cable.p1 = plan.doomedLinks[i].p1;
+                        cable.p2 = jackPoint(/*fromGhost=*/true, ghostInJack, true, false);
+                        plan.upstreamCables.push_back(cable);
                     }
-                    if (insertPlans.empty())
+                    if (plan.upstreamCables.empty())
+                        return;
+
+                    // One surviving pair per NEW ghost→sink cable. A collapsed ghost output jack
+                    // already fans to the whole raw pair, so a second pair for the sink's right leg
+                    // would sum the ghost's LEFT leg into it. Drop any pair whose raw destinations
+                    // an earlier one already covers. The doomed links above are unaffected.
+                    std::vector<std::pair<int, int>> keptPairs;
+                    std::set<int> claimedRawDsts;
+                    for (const auto& pr : pairs) {
+                        const auto fan = resolvePolyLink(srcMb, pr.first, dstMb, pr.second);
+                        bool alreadyCovered = true;
+                        for (int v = 0; v < fan.voiceCount; ++v)
+                            if (claimedRawDsts.insert(fan.destRawChannel + v).second)
+                                alreadyCovered = false;
+                        if (!alreadyCovered)
+                            keptPairs.push_back(pr);
+                    }
+                    if (keptPairs.empty())
                         return;
                     pairs = std::move(keptPairs);
+                    insertPlan = std::move(plan);
                 }
             }
 
@@ -1779,8 +1821,7 @@ void GraphEditor::refreshSmartSuggestions() {
                 }
             }
 
-            for (size_t i = 0; i < pairs.size(); ++i) {
-                const auto [srcJack, dstJack] = pairs[i];
+            for (const auto& [srcJack, dstJack] : pairs) {
                 const int pairScore = scoreSmartPair(srcMb, srcJack, dstMb, dstJack);
                 if (pairScore < 0)
                     continue;
@@ -1805,15 +1846,12 @@ void GraphEditor::refreshSmartSuggestions() {
 
                 // An insert scores like the plain cable it replaces, so it competes with (and can
                 // lose to) a neighbour offering a free jack instead of always winning by novelty.
-                if (i < insertPlans.size()) {
-                    const auto& plan = insertPlans[i];
+                if (insertPlan.has_value()) {
                     s.isInsert = true;
-                    s.upstreamId = plan.upstreamId;
-                    s.upstreamJack = plan.upstreamJack;
-                    s.ghostInJack = plan.ghostInJack;
-                    s.up1 = plan.upstreamOutPoint;
-                    s.up2 = plan.ghostInPoint;
-                    s.upstreamCategory = plan.upstreamCategory;
+                    s.upstreamId = insertPlan->upstreamId;
+                    s.doomedLinks = insertPlan->doomedLinks;
+                    s.upstreamCables = insertPlan->upstreamCables;
+                    s.upstreamCategory = insertPlan->upstreamCategory;
                 }
 
                 audioCandidates.push_back({s, score, srcPt.getDistanceFrom(dstPt), false});
@@ -1931,11 +1969,15 @@ void GraphEditor::applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostN
     auto applyAll = [this, ghostNodeId] {
         for (const auto& s : smartSuggestions) {
             if (s.isInsert) {
-                // Reroute, never double: drop the direct cable FIRST so the sink jack is free for
-                // the ghost's output, then wire upstream → ghost → sink. All three edits share the
-                // caller's transaction, so one undo puts the original cable back.
-                disconnectAudioLink(s.upstreamId, s.upstreamJack, s.neighborId, s.neighborJack);
-                connectPorts(s.upstreamId, s.upstreamJack, ghostNodeId, s.ghostInJack, false, false);
+                // Reroute, never double: drop EVERY doomed cable first so the sink's jacks are free
+                // for the ghost's output, then wire upstream → ghost → sink. Dropping only this
+                // leg's cable would leave the other one summing into the sink beside the ghost.
+                // Both sets are group-wide and deduped, so a second insert suggestion re-running
+                // them is a no-op. All of it shares the caller's transaction — one undo, one step.
+                for (const auto& doomed : s.doomedLinks)
+                    disconnectAudioLink(s.upstreamId, doomed.fromJack, s.neighborId, doomed.toJack);
+                for (const auto& cable : s.upstreamCables)
+                    connectPorts(s.upstreamId, cable.fromJack, ghostNodeId, cable.toJack, false, false);
                 connectPorts(ghostNodeId, s.ghostJack, s.neighborId, s.neighborJack, false, false);
                 continue;
             }

@@ -72,8 +72,10 @@
 #include "../Source/UI/NoteSelectionModel.h"
 #include "../Source/UI/PianoRollComponent.h"
 #include "../Source/UI/ScaleAssistPanel.h"
+// The audition INTEGRATION tests (section 20b) drive the real panel wiring, not just the roll.
 #include "../Source/UI/Theme/BuiltInThemes.h"
 #include "../Source/UI/Theme/Theme.h"
+#include "../Source/UI/TimelinePanelComponent.h"
 #include "../Source/UI/TimelineViewState.h"
 #include <algorithm>
 #include <cmath>
@@ -312,12 +314,17 @@ struct CountingRoll : PianoRollComponent {
 
     // The clip-overrun prompt's seam. Deliberately does NOT call the base implementation: that one
     // opens a real juce::AlertWindow, and a headless run has no message loop to answer it with (nor
-    // any business creating a window). Recording the request is exactly the assertion — whichever
-    // arm a test wants to exercise, it drives extendOpenClipTo() directly.
+    // any business creating a window). It records BOTH halves of the request — the required length
+    // and the CLIP ID the prompt was raised for — because the captured id is what routes the answer,
+    // and a test that only saw the length could not tell a correctly-routed Extend from one that grew
+    // whichever clip happened to be open. Whichever arm a test wants to exercise, it then drives
+    // applyExtendPromptAnswer(), which is exactly what the real alert callback calls.
     int extendPrompts = 0;
     double lastExtendPromptRequest = 0.0;
-    void promptExtendClipToFitNotes(double requiredLengthBeats) override {
+    ClipId lastExtendPromptClipId;
+    void promptExtendClipToFitNotes(ClipId clipId, double requiredLengthBeats) override {
         ++extendPrompts;
+        lastExtendPromptClipId = clipId;
         lastExtendPromptRequest = requiredLengthBeats;
     }
 };
@@ -4295,6 +4302,196 @@ TEST(PianoRollAuditionTest, NonSelectToolClicksDoNotAudition) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// 20b. Audition INTEGRATION — through the real TimelinePanelComponent wiring.
+// ---------------------------------------------------------------------------
+//
+// Everything above wires roll.onAuditionNote straight to a recorder, which tests the ROLL's half of
+// the contract and nothing else. The stuck note this section exists for lived in the OTHER half: the
+// panel's lambda resolves which track to send to FROM THE OPEN CLIP, so any teardown that clears the
+// open clip before the note-off is emitted (or deletes the clip outright) used to drop the off — and
+// an audition note is deliberately exempt from every positional flush in TimelineMidiSourceModule, so
+// nothing downstream would ever release it. These tests drive the whole chain: roll -> panel ->
+// TrackHeaderHost.
+
+namespace {
+
+// Records auditionTrackNote and nothing else; every other TrackHeaderHost member is an inert stub
+// (this file tests the audition path, not the track-header column).
+class AuditionRecordingHost : public synth::ui::TrackHeaderHost {
+public:
+    struct Call {
+        synth::TrackId track;
+        int pitch = 0;
+        int velocity = 0;
+        bool on = false;
+    };
+
+    void auditionTrackNote(synth::TrackId track, int pitch, int velocity, bool noteOn) override {
+        calls.push_back({track, pitch, velocity, noteOn});
+    }
+
+    std::vector<Call> onCalls() const {
+        std::vector<Call> out;
+        for (const auto& c : calls)
+            if (c.on)
+                out.push_back(c);
+        return out;
+    }
+    std::vector<Call> offCalls() const {
+        std::vector<Call> out;
+        for (const auto& c : calls)
+            if (!c.on)
+                out.push_back(c);
+        return out;
+    }
+
+    std::vector<Call> calls;
+
+    // ---- inert stubs ----
+    std::vector<BindingOption> getAvailableTrackInNodes(synth::TrackId) override { return {}; }
+    juce::String getNodeDisplayName(const juce::String&) override { return {}; }
+    void bindTrackTo(synth::TrackId, const juce::String&) override {}
+    void createAndBindTrackInNode(synth::TrackId) override {}
+    void selectNodeInGraph(const juce::String&) override {}
+    void deleteTrack(synth::TrackId) override {}
+    void performTrackEdit(const std::function<void()>& mutation) override {
+        if (mutation)
+            mutation();
+    }
+    void addMidiTrack() override {}
+    void addAudioTrack() override {}
+    std::vector<PluginLaneOption> getAvailablePluginLaneOptions() const override { return {}; }
+    synth::LaneId addPluginAutomationLane(const PluginLaneOption&) override { return {}; }
+};
+
+// A real TimelinePanelComponent with the roll open on one clip holding one note, plus the recording
+// host — i.e. exactly the production wiring, minus the graph.
+struct AuditionIntegrationFixture {
+    TimelineDoc doc;
+    AppUndoManager undo;
+    AuditionRecordingHost host;
+    synth::ui::TimelinePanelComponent panel;
+    synth::TrackId trackId;
+    ClipId clipId;
+    NoteId noteId;
+
+    AuditionIntegrationFixture() {
+        panel.setSize(1200, 320);
+        auto& state = panel.getViewState();
+        state.pixelsPerBeat = 40.0;
+        state.firstVisibleBeat = 0.0;
+        state.snap = TimelineViewState::Snap::Quarter;
+        state.snapEnabled = true;
+        panel.setTimelineDoc(&doc);
+        panel.setUndoManager(&undo);
+        panel.setTrackHeaderHost(&host);
+
+        trackId = doc.addTrack(TrackKind::Midi, "Track 1");
+        clipId = doc.addClip(trackId, 0.0, 8.0, "Clip");
+        noteId = doc.addNote(clipId, makeNote(1.0, 64, 1.0));
+        panel.openPianoRoll(clipId);
+    }
+
+    synth::ui::PianoRollComponent& roll() { return panel.getPianoRoll(); }
+
+    // Presses (and holds) the note — the on edge travels the real chain.
+    void pressAndHoldNote() {
+        auto& r = roll();
+        const auto rect = r.getNoteRect(noteId);
+        r.mouseDown(leftClick(r, centreOf(rect)));
+    }
+};
+
+} // namespace
+
+TEST(PianoRollAuditionIntegrationTest, PressAndReleaseDeliverOneOnAndOneOffToTheBoundTrack) {
+    AuditionIntegrationFixture f;
+    ASSERT_TRUE(f.roll().isOpen());
+    ASSERT_FALSE(f.roll().getNoteRect(f.noteId).isEmpty()) << "the roll must be laid out for the press to land";
+
+    f.pressAndHoldNote();
+    ASSERT_EQ(f.host.onCalls().size(), 1u);
+    EXPECT_EQ(f.host.onCalls()[0].track, f.trackId);
+    EXPECT_EQ(f.host.onCalls()[0].pitch, 64);
+    EXPECT_TRUE(f.host.offCalls().empty());
+
+    auto& r = f.roll();
+    r.mouseUp(leftClick(r, centreOf(r.getNoteRect(f.noteId))));
+    ASSERT_EQ(f.host.offCalls().size(), 1u);
+    EXPECT_EQ(f.host.offCalls()[0].track, f.trackId);
+    EXPECT_EQ(f.host.offCalls()[0].pitch, 64);
+}
+
+// THE regression: closing the roll mid-hold. closeRoll() clears clipId_, so a note-off emitted after
+// that point has no clip to resolve a track from — the off must already have been sent (stopAudition
+// runs FIRST) and, either way, the panel routes it to the LATCHED track rather than re-resolving.
+TEST(PianoRollAuditionIntegrationTest, ClosingTheRollMidHoldStillDeliversExactlyOneOff) {
+    AuditionIntegrationFixture f;
+    f.pressAndHoldNote();
+    ASSERT_EQ(f.host.onCalls().size(), 1u);
+    ASSERT_TRUE(f.host.offCalls().empty());
+
+    f.panel.closePianoRoll();
+    ASSERT_FALSE(f.roll().isOpen());
+
+    ASSERT_EQ(f.host.offCalls().size(), 1u) << "a preview cut short by the roll closing must still be released";
+    EXPECT_EQ(f.host.offCalls()[0].track, f.trackId) << "routed to the track the ON went to";
+    EXPECT_EQ(f.host.offCalls()[0].pitch, 64);
+    EXPECT_EQ(f.host.calls.size(), 2u) << "exactly one on and one off, no duplicates";
+}
+
+// The same hazard reached the other way: the edited clip is DELETED while the note is held, so
+// refreshFromDoc() closes the roll from under the gesture and there is no clip left to resolve at
+// all. The latch is what makes this deliverable.
+TEST(PianoRollAuditionIntegrationTest, DeletingTheEditedClipMidHoldStillDeliversExactlyOneOff) {
+    AuditionIntegrationFixture f;
+    f.pressAndHoldNote();
+    ASSERT_EQ(f.host.onCalls().size(), 1u);
+
+    ASSERT_TRUE(f.doc.removeClip(f.clipId));
+    EXPECT_FALSE(f.roll().isOpen()) << "the roll closes itself when the edited clip disappears";
+    EXPECT_EQ(f.doc.getTrackForClip(f.clipId), nullptr) << "and the clip really is gone from the doc";
+
+    ASSERT_EQ(f.host.offCalls().size(), 1u) << "an unresolvable clip must not swallow the note-off";
+    EXPECT_EQ(f.host.offCalls()[0].track, f.trackId);
+    EXPECT_EQ(f.host.calls.size(), 2u);
+}
+
+// Opening a DIFFERENT clip mid-hold: the off must go to the track the ON went to, never to whichever
+// track happens to own the newly-opened clip.
+TEST(PianoRollAuditionIntegrationTest, OpeningAnotherClipMidHoldRoutesTheOffToTheOriginalTrack) {
+    AuditionIntegrationFixture f;
+    const auto otherTrack = f.doc.addTrack(TrackKind::Midi, "Track 2");
+    const auto otherClip = f.doc.addClip(otherTrack, 16.0, 8.0, "Other");
+    ASSERT_NE(f.trackId, otherTrack);
+
+    f.pressAndHoldNote();
+    ASSERT_EQ(f.host.onCalls().size(), 1u);
+
+    f.panel.openPianoRoll(otherClip);
+    ASSERT_EQ(f.host.offCalls().size(), 1u);
+    EXPECT_EQ(f.host.offCalls()[0].track, f.trackId) << "the ON's track, not the newly-opened clip's";
+    EXPECT_EQ(f.host.calls.size(), 2u);
+}
+
+// A note-OFF with no preceding ON (a stray callback, or one whose ON was refused because the roll
+// was closed) must reach the host as NOTHING — there is no note to release, and an unmatched off
+// could cut a timeline note of the same pitch short downstream.
+TEST(PianoRollAuditionIntegrationTest, AnUnmatchedOffIsNotForwarded) {
+    AuditionIntegrationFixture f;
+    ASSERT_TRUE(f.roll().onAuditionNote != nullptr);
+
+    f.roll().onAuditionNote(64, 1.0f, false);
+    EXPECT_TRUE(f.host.calls.empty());
+
+    // And an ON refused because the roll is closed leaves nothing latched, so its off is inert too.
+    f.panel.closePianoRoll();
+    f.roll().onAuditionNote(64, 1.0f, true);
+    f.roll().onAuditionNote(64, 1.0f, false);
+    EXPECT_TRUE(f.host.calls.empty()) << "a closed roll auditions nothing, and releases nothing";
+}
+
 // ============================================================================
 // 21. MULTI-NOTE RESIZE (11.1), the Cmd unquantized resize (11.2), and the clip-overrun prompt.
 // ============================================================================
@@ -4469,6 +4666,7 @@ TEST(PianoRollResizeTest, ResizePastTheClipEndIsAllowedAndRaisesTheExtendPrompt)
     EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->lengthBeats, 4.0) << "the clip is NOT grown behind the user's back";
     ASSERT_EQ(f.roll.extendPrompts, 1);
     EXPECT_DOUBLE_EQ(f.roll.lastExtendPromptRequest, 6.0) << "the prompt asks for the max note END";
+    EXPECT_EQ(f.roll.lastExtendPromptClipId, clipId) << "and names the clip whose notes overran";
 }
 
 TEST(PianoRollResizeTest, AResizeThatStaysInsideTheClipRaisesNoPrompt) {
@@ -4490,7 +4688,7 @@ TEST(PianoRollResizeTest, AResizeThatStaysInsideTheClipRaisesNoPrompt) {
 }
 
 // "Extend" — its OWN undo step, deliberately not merged with the resize that provoked it.
-TEST(PianoRollResizeTest, ExtendOpenClipToGrowsTheClipInItsOwnUndoStep) {
+TEST(PianoRollResizeTest, ExtendClipToGrowsTheClipInItsOwnUndoStep) {
     PianoRollFixture f;
     const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
     const auto clipId = f.doc.addClip(trackId, 0.0, 4.0, "Clip");
@@ -4498,7 +4696,7 @@ TEST(PianoRollResizeTest, ExtendOpenClipToGrowsTheClipInItsOwnUndoStep) {
     const auto id = f.doc.addNote(clipId, makeNote(3.0, 60, 3.0)); // already overruns
     ASSERT_TRUE(id.isValid());
 
-    EXPECT_TRUE(f.roll.extendOpenClipTo(6.0));
+    EXPECT_TRUE(f.roll.extendClipTo(clipId, 6.0));
     EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->lengthBeats, 6.0);
     ASSERT_TRUE(f.undo.canUndo());
     f.undo.undo();
@@ -4506,8 +4704,89 @@ TEST(PianoRollResizeTest, ExtendOpenClipToGrowsTheClipInItsOwnUndoStep) {
     EXPECT_DOUBLE_EQ(f.doc.getNote(id)->lengthBeats, 3.0) << "undoing the extend leaves the note alone";
 
     // Already long enough: no mutation, no undo step.
-    EXPECT_FALSE(f.roll.extendOpenClipTo(2.0));
+    EXPECT_FALSE(f.roll.extendClipTo(clipId, 2.0));
     EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->lengthBeats, 4.0);
+}
+
+// THE capture regression. A modal alert blocks user INPUT, not the message thread: an AI action, an
+// undo/redo or a timer can openClip() a DIFFERENT clip while the overrun prompt is up. The answer
+// must therefore act on the clip that was captured when the prompt was raised — reading the live
+// clipId_ at answer time silently grew whichever clip happened to be open, which is precisely the
+// "the clip is NOT grown behind the user's back" guarantee this feature rests on.
+TEST(PianoRollResizeTest, ExtendAnswerActsOnTheCapturedClipNotWhicheverIsOpenNow) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipA = f.doc.addClip(trackId, 0.0, 4.0, "A");
+    const auto clipB = f.doc.addClip(trackId, 16.0, 8.0, "B");
+
+    f.open(clipA);
+    const auto id = f.doc.addNote(clipA, makeNote(3.0, 60, 1.0));
+    f.roll.getSelectionForTest().setSelection({id});
+
+    const auto rect = f.roll.getNoteRect(id);
+    const juce::Point<float> edge((float)rect.getRight() - 2.0f, (float)rect.getCentreY());
+    const juce::Point<float> dragged(edge.x + 80.0f, edge.y); // out past A's end
+    f.roll.mouseDown(leftClick(f.roll, edge));
+    f.roll.mouseDrag(leftDrag(f.roll, dragged, edge));
+    f.roll.mouseUp(leftDrag(f.roll, dragged, edge));
+
+    ASSERT_EQ(f.roll.extendPrompts, 1);
+    const auto promptedClip = f.roll.lastExtendPromptClipId;
+    const double promptedLength = f.roll.lastExtendPromptRequest;
+    ASSERT_EQ(promptedClip, clipA);
+
+    // The roll gets repointed at B before the user answers.
+    f.open(clipB);
+    ASSERT_EQ(f.roll.getClipId(), clipB);
+
+    // Answer "Extend" exactly the way the real alert callback does.
+    f.roll.applyExtendPromptAnswer(promptedClip, promptedLength, /*extend=*/true);
+
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipA)->lengthBeats, 6.0) << "the clip that actually overran grew";
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipB)->lengthBeats, 8.0) << "the clip that happens to be OPEN is untouched";
+}
+
+// The captured clip being deleted while the alert is up is a silent no-op, not a crash and not a
+// resurrection: extendClipTo looks the id up in the doc at answer time.
+TEST(PianoRollResizeTest, ExtendAnswerForADeletedClipIsANoOp) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipA = f.doc.addClip(trackId, 0.0, 4.0, "A");
+    f.open(clipA);
+    const auto id = f.doc.addNote(clipA, makeNote(3.0, 60, 1.0));
+    f.roll.getSelectionForTest().setSelection({id});
+
+    const auto rect = f.roll.getNoteRect(id);
+    const juce::Point<float> edge((float)rect.getRight() - 2.0f, (float)rect.getCentreY());
+    const juce::Point<float> dragged(edge.x + 80.0f, edge.y);
+    f.roll.mouseDown(leftClick(f.roll, edge));
+    f.roll.mouseDrag(leftDrag(f.roll, dragged, edge));
+    f.roll.mouseUp(leftDrag(f.roll, dragged, edge));
+    ASSERT_EQ(f.roll.extendPrompts, 1);
+    const auto promptedClip = f.roll.lastExtendPromptClipId;
+    const double promptedLength = f.roll.lastExtendPromptRequest;
+
+    ASSERT_TRUE(f.doc.removeClip(clipA));
+    const int undoDepthBefore = f.undo.canUndo() ? 1 : 0;
+
+    f.roll.applyExtendPromptAnswer(promptedClip, promptedLength, /*extend=*/true);
+    EXPECT_EQ(f.doc.getClip(clipA), nullptr) << "answering must not resurrect the clip";
+    EXPECT_EQ(f.undo.canUndo() ? 1 : 0, undoDepthBefore) << "and must push no undo step";
+}
+
+// The "Keep" arm is a real no-op rather than a differently-shaped write — the notes are already the
+// length the user dragged, and nothing further happens.
+TEST(PianoRollResizeTest, KeepAnswerWritesNothing) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 4.0, "Clip");
+    f.open(clipId);
+    ASSERT_TRUE(f.doc.addNote(clipId, makeNote(3.0, 60, 3.0)).isValid());
+    ASSERT_FALSE(f.undo.canUndo());
+
+    f.roll.applyExtendPromptAnswer(clipId, 6.0, /*extend=*/false);
+    EXPECT_DOUBLE_EQ(f.doc.getClip(clipId)->lengthBeats, 4.0) << "Keep leaves the clip exactly as it was";
+    EXPECT_FALSE(f.undo.canUndo()) << "and writes no undo step";
 }
 
 // "Keep" — the notes stay overrunning, and that is SAFE because playback truncates at the clip

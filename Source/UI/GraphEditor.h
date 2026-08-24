@@ -352,12 +352,27 @@ public:
 
     /** One suggested cable shown as a frosted preview during drag; applied on drop.
      *
-     *  `isInsert` turns the same record into an insert-in-series: the ghost is spliced into a cable
-     *  that already exists rather than given a jack of its own. Three cables are then in play — the
-     *  doomed direct one (upstream out → neighbourJack, drawn dashed), and the two that replace it
-     *  (upstream out → ghostInJack, ghostJack → neighbourJack). Only offered for the graph's terminal
-     *  audio sink; see refreshSmartSuggestions. */
+     *  `isInsert` turns the same record into an insert-in-series: the ghost is spliced into cabling
+     *  that already exists rather than given a jack of its own. Two cable SETS then come with it —
+     *  `doomedLinks` (upstream → sink, to be removed, drawn dashed) and `upstreamCables`
+     *  (upstream → ghost, replacing them) — plus this record's own ghostJack → neighborJack.
+     *
+     *  Both sets describe the WHOLE insert group, not just this record's leg, and both are already
+     *  deduped, so applying them once per suggestion is idempotent. They are deliberately not
+     *  per-leg: a jack pair dropped by the fan dedupe must NOT take its doomed link with it, or the
+     *  cable it represented survives and sums into the sink alongside the ghost's output.
+     *
+     *  Only offered for the graph's terminal audio sink; see refreshSmartSuggestions. */
     struct SmartSuggestion {
+        /** One cable of an insert, at visible-jack level. Endpoints are for preview paint only. */
+        struct InsertLink {
+            int fromJack = 0; // upstream visible OUTPUT jack
+            int toJack = 0;   // sink visible input jack (doomed), or ghost visible input jack (new)
+            juce::Point<float> p1{}, p2{};
+
+            bool operator==(const InsertLink& o) const noexcept { return fromJack == o.fromJack && toJack == o.toJack; }
+        };
+
         /** When true the dragged module is the cable source; when false it is the destination. */
         bool ghostIsSource = true;
         juce::AudioProcessorGraph::NodeID neighborId{};
@@ -370,16 +385,15 @@ public:
 
         // ---- Insert-in-series (audio only; ghostIsSource is always true) ----
         bool isInsert = false;
-        juce::AudioProcessorGraph::NodeID upstreamId{}; // node whose cable gets rerouted
-        int upstreamJack = 0;                           // its visible OUTPUT jack, today feeding neighborJack
-        int ghostInJack = 0;                            // ghost visible INPUT jack that receives it
-        juce::Point<float> up1{}, up2{};                // preview endpoints, upstream out → ghost in
+        juce::AudioProcessorGraph::NodeID upstreamId{}; // node whose cabling gets rerouted
+        std::vector<InsertLink> doomedLinks;            // upstream → sink, every one to remove
+        std::vector<InsertLink> upstreamCables;         // upstream → ghost, replacing them
         synth::ui::ModuleCategory upstreamCategory = synth::ui::ModuleCategory::Utility;
 
         bool operator==(const SmartSuggestion& o) const noexcept {
             return ghostIsSource == o.ghostIsSource && neighborId == o.neighborId && ghostJack == o.ghostJack &&
                    neighborJack == o.neighborJack && isMidi == o.isMidi && isInsert == o.isInsert &&
-                   upstreamId == o.upstreamId && upstreamJack == o.upstreamJack && ghostInJack == o.ghostInJack;
+                   upstreamId == o.upstreamId && doomedLinks == o.doomedLinks && upstreamCables == o.upstreamCables;
         }
         bool operator!=(const SmartSuggestion& o) const noexcept { return !(*this == o); }
     };

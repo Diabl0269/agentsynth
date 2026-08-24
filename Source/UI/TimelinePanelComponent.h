@@ -664,6 +664,16 @@ private:
     // paste time (see pasteClipsAtPlayhead()).
     synth::TransportService* transport_ = nullptr;
 
+    // NOTE AUDITION — the track the currently-sounding preview note was sent TO, latched when the
+    // note-ON was forwarded and cleared when its note-OFF is. Invalid means nothing is sounding.
+    //
+    // Why a latch rather than re-resolving at note-off time: an audition note is exempt from every
+    // positional flush in TimelineMidiSourceModule, so a dropped or misrouted note-off hangs the note
+    // until the node is bypassed. Between the on and the off the edited clip can be deleted, the roll
+    // can close, or a different clip can open — re-resolving would drop the off in the first two cases
+    // and send it to the WRONG track in the third. See the onAuditionNote wiring in the constructor.
+    synth::TrackId auditionTrackLatch_;
+
     // The button opens a MIDI/Audio menu rather than adding a MIDI track outright.
     juce::TextButton addTrackButton_{"+ Track"};
 

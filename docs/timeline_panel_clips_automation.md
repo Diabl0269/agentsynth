@@ -478,6 +478,26 @@ each one only adds what it alone knows:
 1. `TimelinePanelComponent` resolves WHICH TRACK from the edited clip (`TimelineDoc::
    getTrackForClip`) — the roll's callback carries no clip/track on purpose — and calls
    `TrackHeaderHost::auditionTrackNote(trackId, pitch, velocity, on)`.
+
+   **The two edges are handled asymmetrically, and that asymmetry IS the correctness argument.** A
+   note-ON is disposable: no host, no doc, roll closed, or an unresolvable track all just mean
+   silence. A note-OFF is not — an audition note is exempt from every positional flush downstream (see
+   below), so a dropped off hangs the note until the node is bypassed. So the track resolved for the
+   ON is **latched** (`auditionTrackLatch_`), and the matching OFF is routed to that latched track
+   **unconditionally**, never re-resolved. Between the two edges the edited clip can be deleted, the
+   roll can close, or a *different* clip can open — re-resolving would drop the off in the first two
+   cases and send it to the **wrong track** in the third. The latch holds at most one note (the roll
+   sounds one at a time and always emits its own off before a retrigger's on) and is cleared on the
+   off; an unmatched off — one whose ON was refused because the roll was closed — forwards nothing,
+   since a stray off could cut a timeline note of the same pitch short.
+
+   The same hazard is why `PianoRollComponent::closeRoll()` calls `stopAudition()` **before** clearing
+   `clipId_`, matching `openClip()`'s order: clearing first made `isOpen()` false while the teardown
+   note-off was still in flight, and the panel dropped it. Both halves are pinned by
+   `PianoRollAuditionIntegrationTest`, which drives the whole chain through a real
+   `TimelinePanelComponent` and a recording `TrackHeaderHost`. That distinction matters — the
+   roll-only audition tests wire `onAuditionNote` straight to a recorder, so they cannot see this half
+   of the contract at all, which is exactly how the bug got in.
 2. `MainComponent` (the only object that owns the doc and the graph at once) resolves
    `track->bindingUuid` → the live node via `findNodeByUuid`, downcasts to
    `TimelineMidiSourceModule`, and pushes.
@@ -521,14 +541,26 @@ go through, so what is written can never disagree with what was drawn; the commi
 
 The resize has **no clip-length clamp** — that is what makes dragging a note out past the clip's end
 possible at all. On mouse-up, if any resized note now ends past `clip->lengthBeats`, the roll raises
-`promptExtendClipToFitNotes(maxEnd)`: an **async** `juce::AlertWindow` (never a modal loop — the
-mouse-up is still unwinding) guarded by a `Component::SafePointer`, offering **Extend** / **Keep**.
-It is a `protected virtual`, the same test seam `requestRepaintStrip` is, because a headless run has
-no message loop to answer a real alert with.
+`promptExtendClipToFitNotes(clipId, maxEnd)`: an **async** `juce::AlertWindow` (never a modal loop —
+the mouse-up is still unwinding) guarded by a `Component::SafePointer`, offering **Extend** /
+**Keep**. It is a `protected virtual`, the same test seam `requestRepaintStrip` is, because a headless
+run has no message loop to answer a real alert with; the answer itself is handled by
+`applyExtendPromptAnswer(clipId, length, extend)`, factored out of the alert's callback so that the
+real answer path is one line there and fully covered by tests here.
 
-- **Extend** → `extendOpenClipTo(maxEnd)` → `TimelineDoc::resizeClip` in its **own** undo step,
-  deliberately not merged with the resize that provoked it: the user answered a second question, and
-  undo should take them back one answer at a time.
+**The overrunning CLIP ID is captured at prompt time and carried through the answer** — the answer
+never reads the live `clipId_`, which is why `extendClipTo` takes the id as a parameter. A modal
+window blocks user *input*, not the message thread: an AI action, an undo/redo or a timer can
+`openClip()` a different clip while the alert is up, so re-deriving the target at answer time silently
+grew *whichever clip happened to be open* — a direct violation of the "the clip is not grown behind
+the user's back" guarantee. A captured id that no longer resolves (the clip was deleted while the
+alert was up) is a silent no-op, not a crash and not a resurrection. Pinned by
+`PianoRollResizeTest.ExtendAnswerActsOnTheCapturedClipNotWhicheverIsOpenNow` and
+`…ExtendAnswerForADeletedClipIsANoOp`.
+
+- **Extend** → `extendClipTo(capturedClipId, maxEnd)` → `TimelineDoc::resizeClip` in its **own** undo
+  step, deliberately not merged with the resize that provoked it: the user answered a second
+  question, and undo should take them back one answer at a time.
 - **Keep** → the notes stay overrunning, and that is safe rather than merely tolerated:
   `TimelineSnapshot::buildFrom` clamps every emitted event's end to the clip's end and drops any note
   whose start is at or past it, so the overrun is **inaudible**. Pinned by

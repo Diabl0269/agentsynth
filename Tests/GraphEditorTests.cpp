@@ -2992,9 +2992,18 @@ TEST_F(GraphEditorTest, SmartConnectionInsertsFxIntoOccupiedAudioOutput) {
         EXPECT_FALSE(s.isMidi);
         EXPECT_EQ(s.neighborId, outNode->nodeID);
         EXPECT_EQ(s.upstreamId, reverbNode->nodeID) << "the cable already on the sink is what gets rerouted";
-        // The preview needs an upstream leg to draw, or the reroute is invisible.
-        EXPECT_NE(s.up1, juce::Point<float>());
-        EXPECT_NE(s.up2, juce::Point<float>());
+        // The preview needs both a doomed cable to strike out and an upstream leg to draw, or the
+        // reroute is invisible.
+        ASSERT_FALSE(s.doomedLinks.empty());
+        ASSERT_FALSE(s.upstreamCables.empty());
+        for (const auto& d : s.doomedLinks) {
+            EXPECT_NE(d.p1, juce::Point<float>());
+            EXPECT_NE(d.p2, juce::Point<float>());
+        }
+        for (const auto& c : s.upstreamCables) {
+            EXPECT_NE(c.p1, juce::Point<float>());
+            EXPECT_NE(c.p2, juce::Point<float>());
+        }
     }
     editor.endDragPreview();
 }
@@ -3051,6 +3060,130 @@ TEST_F(GraphEditorTest, SmartConnectionInsertAtAudioOutputIsOneUndoStep) {
     ASSERT_NE(restoredOut.uid, 0u);
     EXPECT_EQ(countAudioConnectionsBetween(graph, restoredReverb, restoredOut), 2)
         << "one undo must put the rerouted cable back on both legs";
+}
+
+TEST_F(GraphEditorTest, SmartConnectionInsertRemovesEveryDoomedLegOfADualIOUpstream) {
+    // Regression: a Dual I/O upstream feeds the sink through TWO distinct cables (jack0→raw0,
+    // jack1→raw1). A collapsed ghost's output fans across both raw legs, so the fan dedupe keeps
+    // only one jack pair — and the doomed links used to hang off the surviving pair, so the second
+    // cable was never removed and kept summing into the sink's right leg beside the ghost's output.
+    AudioEngine engine;
+    AppUndoManager undoMgr;
+    GraphEditor editor(engine, &undoMgr);
+    editor.setSize(1200, 700);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto outNode = addAudioOutputNode(graph, 760, 100);
+    auto reverbNode = graph.addNode(std::make_unique<ReverbModule>());
+    reverbNode->properties.set("x", 40);
+    reverbNode->properties.set("y", 100);
+    setDualIOParam(*reverbNode->getProcessor(), true); // split Left/Right BEFORE wiring
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    const auto reverbId = reverbNode->nodeID;
+    const auto outId = outNode->nodeID;
+    editor.connectPorts(reverbId, 0, outId, 0, false, false); // Left  → sink raw0
+    editor.connectPorts(reverbId, 1, outId, 1, false, false); // Right → sink raw1
+    ASSERT_TRUE(graph.isConnected({{reverbId, 0}, {outId, 0}}));
+    ASSERT_TRUE(graph.isConnected({{reverbId, 1}, {outId, 1}}));
+    ASSERT_EQ(countAudioConnectionsBetween(graph, reverbId, outId), 2);
+
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource, juce::Point<int>(440, 100));
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
+    // Both legs must be marked for removal even though only one jack pair survives the dedupe.
+    for (const auto& s : editor.getSmartSuggestions()) {
+        ASSERT_TRUE(s.isInsert);
+        EXPECT_EQ(s.doomedLinks.size(), 2u) << "one doomed cable per occupied sink leg";
+    }
+    editor.itemDropped(details);
+
+    const auto chorusId = findNodeIdByName(graph, "Chorus");
+    ASSERT_NE(chorusId.uid, 0u);
+
+    // The whole point: NO direct upstream→sink edge survives on EITHER raw channel.
+    EXPECT_FALSE(graph.isConnected({{reverbId, 0}, {outId, 0}}));
+    EXPECT_FALSE(graph.isConnected({{reverbId, 1}, {outId, 1}}));
+    EXPECT_EQ(countAudioConnectionsBetween(graph, reverbId, outId), 0)
+        << "a doomed leg left behind would sum into the sink alongside the ghost's output";
+
+    EXPECT_TRUE(graph.isConnected({{chorusId, 0}, {outId, 0}}));
+    EXPECT_TRUE(graph.isConnected({{chorusId, 1}, {outId, 1}}));
+    EXPECT_GT(countAudioConnectionsBetween(graph, reverbId, chorusId), 0) << "the upstream now feeds the ghost";
+
+    // Still one undo step, and it restores both original cables exactly.
+    ASSERT_TRUE(undoMgr.undo());
+    EXPECT_EQ(findNodeIdByName(graph, "Chorus").uid, 0u);
+    const auto restoredReverb = findNodeIdByName(graph, "Reverb");
+    const auto restoredOut = findNodeIdByName(graph, "Audio Output");
+    ASSERT_NE(restoredReverb.uid, 0u);
+    ASSERT_NE(restoredOut.uid, 0u);
+    EXPECT_TRUE(graph.isConnected({{restoredReverb, 0}, {restoredOut, 0}}));
+    EXPECT_TRUE(graph.isConnected({{restoredReverb, 1}, {restoredOut, 1}}));
+    EXPECT_EQ(countAudioConnectionsBetween(graph, restoredReverb, restoredOut), 2);
+}
+
+TEST_F(GraphEditorTest, SmartConnectionInsertDoesNotDuplicateOneUpstreamLegOntoADualIOGhost) {
+    // The mirror image of the test above: a COLLAPSED upstream reaches the sink through one visible
+    // cable that owns both raw legs, while a Dual I/O ghost has two separate input jacks. Wiring
+    // that one upstream jack into each of them would fan its LEFT leg over both ghost legs, summing
+    // on the right. Only one upstream→ghost cable is correct; it already carries L→L and R→R.
+    //
+    // Uses the MOVE path deliberately: the library-drop ghost is an AIStateMapper probe that never
+    // has the Dual I/O default applied, so a dropped module's real jack layout can differ from the
+    // one the preview measured. Dragging a module already on the canvas makes the ghost the real
+    // processor, which is what this shape needs.
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 700);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto outNode = addAudioOutputNode(graph, 760, 100);
+    auto reverbNode = graph.addNode(std::make_unique<ReverbModule>()); // Dual I/O off: collapsed
+    reverbNode->properties.set("x", 40);
+    reverbNode->properties.set("y", 100);
+    auto chorusNode = graph.addNode(std::make_unique<ChorusModule>());
+    chorusNode->properties.set("x", 40);
+    chorusNode->properties.set("y", 600);
+    setDualIOParam(*chorusNode->getProcessor(), true); // ghost splits Left/Right
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    const auto reverbId = reverbNode->nodeID;
+    const auto outId = outNode->nodeID;
+    const auto chorusId = chorusNode->nodeID;
+    editor.connectPorts(reverbId, 0, outId, 0, false, false); // one cable, both raw legs
+    ASSERT_EQ(countAudioConnectionsBetween(graph, reverbId, outId), 2);
+
+    ModuleComponent* chorusComp = nullptr;
+    for (auto* c : editor.getModuleComponents()) {
+        if (c->getNodeId() == chorusId)
+            chorusComp = c;
+    }
+    ASSERT_NE(chorusComp, nullptr);
+
+    editor.beginDragPreview(chorusComp->getWidth(), chorusComp->getHeight(), chorusId);
+    editor.updateDragPreview({440, 100});
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
+    for (const auto& s : editor.getSmartSuggestions()) {
+        ASSERT_TRUE(s.isInsert);
+        EXPECT_EQ(s.upstreamCables.size(), 1u) << "one collapsed upstream jack needs exactly one cable";
+    }
+    editor.finalizeModuleDrag(chorusComp);
+    editor.endDragPreview();
+
+    EXPECT_EQ(countAudioConnectionsBetween(graph, reverbId, outId), 0);
+    EXPECT_TRUE(graph.isConnected({{reverbId, 0}, {chorusId, 0}}));
+    EXPECT_TRUE(graph.isConnected({{reverbId, 1}, {chorusId, 1}}));
+    EXPECT_FALSE(graph.isConnected({{reverbId, 0}, {chorusId, 1}}))
+        << "the upstream's LEFT leg must not also land on the ghost's RIGHT input";
+    EXPECT_TRUE(graph.isConnected({{chorusId, 0}, {outId, 0}}));
+    EXPECT_TRUE(graph.isConnected({{chorusId, 1}, {outId, 1}}));
 }
 
 TEST_F(GraphEditorTest, SmartConnectionDoesNotInsertPureSourceIntoOccupiedAudioOutput) {

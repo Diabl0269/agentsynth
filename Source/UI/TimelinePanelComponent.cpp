@@ -229,16 +229,41 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // NOTE AUDITION. The roll emits a pitch + on/off edge and knows nothing about the graph; the
     // only thing this panel adds is WHICH TRACK — resolved from the edited clip, since the roll's
     // own callback deliberately carries no clip/track (see PianoRollComponent::onAuditionNote) — and
-    // then it is the host's job (MainComponent) to reach the track's bound Track In node. A missing
-    // host, doc or track is silence, never a crash: a preview is the most disposable thing here.
+    // then it is the host's job (MainComponent) to reach the track's bound Track In node.
+    //
+    // ASYMMETRIC BY DESIGN, and this is the whole correctness argument. A note-ON is disposable: no
+    // host, no doc, roll closed or an unresolvable track all mean silence, which is fine. A note-OFF
+    // is NOT — an audition note is deliberately exempt from every positional flush in
+    // TimelineMidiSourceModule, so a dropped off hangs the note until the node is bypassed. So the
+    // track resolved for the ON is LATCHED, and the matching OFF is routed to that latched track
+    // unconditionally (host/doc null aside). It must not re-resolve, because by the time the off
+    // fires the clip may be deleted, the roll closed, or a DIFFERENT clip open — all three of which
+    // would either drop the off or, worse, send it to the wrong track.
+    //
+    // The latch holds at most one note (the roll sounds one note at a time and always emits its own
+    // off before a retrigger's on — see startAudition), so a plain member is enough; it is cleared on
+    // the off.
     pianoRoll_.onAuditionNote = [this](int pitch, float velocity01, bool on) {
-        if (trackHeaderHost_ == nullptr || doc_ == nullptr || !pianoRoll_.isOpen())
+        if (trackHeaderHost_ == nullptr || doc_ == nullptr)
+            return;
+        const int velocity = juce::jlimit(1, 127, (int)std::lround(velocity01 * 127.0f));
+
+        if (!on) {
+            // Whatever the ON went to, the OFF follows it. No isOpen() check, no re-resolution.
+            const auto latched = auditionTrackLatch_;
+            auditionTrackLatch_ = {};
+            if (latched.isValid())
+                trackHeaderHost_->auditionTrackNote(latched, pitch, velocity, false);
+            return;
+        }
+
+        if (!pianoRoll_.isOpen())
             return;
         const auto* track = doc_->getTrackForClip(pianoRoll_.getClipId());
         if (track == nullptr)
             return;
-        const int velocity = juce::jlimit(1, 127, (int)std::lround(velocity01 * 127.0f));
-        trackHeaderHost_->auditionTrackNote(track->id, pitch, velocity, on);
+        auditionTrackLatch_ = track->id;
+        trackHeaderHost_->auditionTrackNote(track->id, pitch, velocity, true);
     };
 
     // Automation strip. All start invisible — resized()/showAutomationLane()/
