@@ -10,7 +10,7 @@ any key except Escape commits it, swapping with whatever action in the **same ca
 held that key. The tab groups rows into one collapsible section per category with a search box
 above them (matches against both the action's description and its current binding text — "cmd"
 finds every Cmd shortcut, "transpose" finds the piano-roll block) and a top strip that flips between
-"COLLAPSE ALL"/"EXPAND ALL"; see [`layout.md §13`](layout.md#13-collapsible-library-sections) for
+"COLLAPSE ALL"/"EXPAND ALL"; see [`layout_selection_canvas.md §2`](layout_selection_canvas.md#2-collapsible-library-sections) for
 the shared collapsible-list pattern it mirrors. Export/import round-trip every binding as JSON;
 Reset restores the defaults below. A native macOS menu bar (File + Edit) provides Undo/Redo via
 `ApplicationCommandManager`.
@@ -33,7 +33,7 @@ when reasoning about a key that "does nothing."
 | Cmd+K | Toggle Minimap |
 | Ctrl+A (macOS) / Cmd+Shift+A (elsewhere) | Toggle AI Panel — moved off Cmd+A so Select All could take the platform-standard chord. One of the very few per-platform defaults: on macOS Ctrl is a real separate modifier, on Windows/Linux JUCE's Cmd IS Ctrl so Ctrl+A would collide with Select All |
 | Cmd+B | Toggle Module Library |
-| Cmd+T | Toggle Timeline Panel (see [`layout.md §16`](layout.md)) |
+| Cmd+T | Toggle Timeline Panel (see [`timeline_panel_core.md §1`](timeline_panel_core.md)) |
 | Cmd+A | Select All in Focused Editor (actionId/`AppCommands` name still `selectAllModules` — see "Surface routing" below) |
 | Cmd+Shift+S | Save Selection as Snippet |
 | Cmd+C | Copy (Selected Modules, or — see "Surface routing" below — the timeline's selected clips/notes) |
@@ -47,7 +47,7 @@ when reasoning about a key that "does nothing."
 | Cmd+Shift+= | Zoom In Vertically |
 | Cmd+Shift+- | Zoom Out Vertically |
 
-Cmd+T and Space are always active — the timeline is GA (see [`layout.md §16`](layout.md)). The grid
+Cmd+T and Space are always active — the timeline is GA (see [`timeline_panel_core.md §1`](timeline_panel_core.md)). The grid
 and zoom commands below are inactive whenever the panel itself isn't open (`isTimelineVisible`),
 the same as any other timeline-only command.
 
@@ -71,7 +71,7 @@ an empty clipboard on the acting surface — see below), which greys the menu ro
 `ApplicationCommandTarget::tryToInvoke` refuse the key outright; Repeat is inactive with no
 selection AND always inactive on the Graph surface.
 
-### Surface routing (TL5-10): who Cmd+C/V/D/X/R and Cmd+A act on
+### Surface routing: who Cmd+C/V/D/X/R and Cmd+A act on
 
 Cmd+C/V/D/X/R and Cmd+A are global commands (`MainComponent::getAllCommands`/
 `getCommandInfo`/`perform`), but "the canvas" is not the only editable surface once the timeline
@@ -101,7 +101,7 @@ What each surface does:
 
 | Surface | Copy | Paste | Duplicate | Cut | Repeat |
 |---|---|---|---|---|---|
-| Graph | Copies the selected modules (unchanged since before TL5-10) | Pastes at the next cascade position | Copies the selection one step down-right, clipboard untouched | Composed from Copy + Delete (`copySelection()` then `deleteSelection()`), one undo step | **Inactive** — a spatial canvas has no time axis to tile copies along; Duplicate is the graph's equivalent gesture (see below) |
+| Graph | Copies the selected modules (unchanged) | Pastes at the next cascade position | Copies the selection one step down-right, clipboard untouched | Composed from Copy + Delete (`copySelection()` then `deleteSelection()`), one undo step | **Inactive** — a spatial canvas has no time axis to tile copies along; Duplicate is the graph's equivalent gesture (see below) |
 | TimelineClips | Serialises the selected clips — notes (each with its own muted flag), name, length, muted flag and every audio field (`assetRef`, gain, both fades, `sourceStartSeconds`) — into the panel's own clip clipboard, starts relative to the earliest selected clip | Re-inserts every clipboard clip onto **its original track**, re-based so the earliest clip lands at the transport's current position (snapped to the view-state's snap setting); the track fallback is **kind-aware** — a clip lands back only on a track that still plays its payload (audio → `TrackKind::Audio`, MIDI → `TrackKind::Midi`), else the doc's first track of the required kind, else the clip is skipped. Audio fields go back through `setClipAsset`/`setClipGainDb`/`setClipFades` (never a raw struct write), so a clipboard `assetRef` is re-validated exactly like a freshly-loaded file's — a clipboard is only as trustworthy as whatever filled it. One undo step for the whole paste; the pasted clips end up selected. | `TimelineDoc::duplicateClip` per selected clip, batched into one undo step; the new clips end up selected | `TimelinePanelComponent::cutSelectedClips()` — copy, then delete the selection, as ONE `recordTimelineChange` (so undo restores it in a single step) | `repeatSelectedClips(count)` — `count` back-to-back copies of the selection's own span (`max end - min start`, not each clip's own length, so a multi-clip rhythm tiles intact), the first starting one span-length after the selection's start. One undo step; every created clip ends up selected. |
 | PianoRoll | Copies the selected notes (each field, `muted` included) into the roll's OWN note clipboard, offsets stored relative to the earliest selected note — the clipboard is a member of the roll, so it survives switching clips (`openClip`), and a block copied in one clip pastes into another | `pasteNotesAtPlayhead()` anchors the block at the **snapped, clip-relative playhead position** when that lands inside `[0, clip length)`, else at 0.0; `MainComponent::perform` primes the playhead from the live transport (`setPlayheadBeat(transport.getPositionSnapshot().ppq)`) immediately before pasting, so a paste with the transport stopped still lands under the position the user can see rather than wherever a stale internal beat was left. Notes at/after the clip's end are skipped, an overrunning note's length is clamped to the clip's end. One undo step; the pasted notes end up selected. | Copies the selection to immediately after its own span (same pitches), one undo step, selects the copies — does NOT touch the clipboard (duplicating isn't copying, and silently stomping a clipboard the user filled deliberately would be a surprise) | `cutSelectedNotes()` — copy then delete, one undo step (fills the clipboard first, so a cut is always paste-able) | `repeatSelectedNotes(count)` — `count` copies of the selection block, each one span further along, **clipped at the clip's end**: placement stops at the first block that would fall entirely outside the clip rather than piling every remaining copy onto the last beat. One undo step; every created note ends up selected. |
 
@@ -125,7 +125,7 @@ and every module (`GraphEditor::selectAllModules()`) on Graph. Unlike the clipbo
 
 Cmd+=/Cmd+- is the platform's own zoom accelerator (every browser, every editor); Cmd+Shift+=/-
 is the vertical axis, mirroring the modifier the mouse wheel already uses (Cmd+wheel = horizontal,
-Cmd+Shift+wheel = vertical — see [`layout.md §16`](layout.md)), so the keyboard and the wheel teach
+Cmd+Shift+wheel = vertical — see [`timeline_panel_core.md §2`](timeline_panel_core.md)), so the keyboard and the wheel teach
 the same shape. All four are `AppCommands`/`ApplicationCommandManager` commands (unlike the
 Timeline/PianoRoll surface keys below) and route by the SAME `resolveEditSurface()` the clipboard
 verbs use, in/out factor `1.25` / `1 / 1.25` (`MainComponent::kZoomInFactor`/`kZoomOutFactor`):
@@ -134,7 +134,7 @@ verbs use, in/out factor `1.25` / `1 / 1.25` (`MainComponent::kZoomInFactor`/`kZ
 |---|---|---|
 | Graph | `GraphEditor::zoomAroundCentre` — the canvas' one zoom level | **Inactive** — the canvas zooms uniformly (one `zoomLevel`, no separate axes), so a second key that did the same thing under a different modifier would be a trap, not a feature |
 | TimelineClips | `TimelinePanelComponent::zoomTimelineHorizontal` — `TimelineViewState::pixelsPerBeat`, anchored at the visible centre | `zoomTimelineVertical` — `TimelineViewState::rowHeightScale` (track row height), anchored at the visible centre |
-| PianoRoll | `PianoRollComponent::zoomHorizontal` — the roll's OWN `pixelsPerBeat` (never the shared `TimelineViewState` — see [`layout.md §16`](layout.md)) | `zoomVertical` — `pixelsPerSemitone_` |
+| PianoRoll | `PianoRollComponent::zoomHorizontal` — the roll's OWN `pixelsPerBeat` (never the shared `TimelineViewState` — see [`timeline_panel_clips_automation.md §2`](timeline_panel_clips_automation.md)) | `zoomVertical` — `pixelsPerSemitone_` |
 
 Each keypress reports its own status-bar message ("Canvas: zoom", "Timeline: zoom" / "Timeline:
 track height", "Piano roll: zoom" / "Piano roll: vertical zoom") so a held key's effect is visible
@@ -166,7 +166,7 @@ and, for the loop-selection key, `TimelineClipLaneArea::keyPressed()` too):
 | L | Toggle Looping, keeping the existing bounds — the transport bar's loop button |
 | F | Toggle Follow Playhead (`timelineFollowPlayheadToggle`) — mirrors the transport strip's follow button; panel-scoped like Q/L/P, so it works whichever timeline surface (lanes or roll) has focus |
 | P | Loop the Selection — sets the transport loop to the selected clips' (or, with the roll open, the edited clip's) span. Whether it also arms looping is `Settings → Preferences → "Timeline: P (loop selection) also switches looping on"` (default on; off = locators only) |
-| 1 / 3 / 4 / 5 / 7 / 8 | Switch the active edit tool: 1 Select, 3 Split, 4 Glue, 5 Erase, 7 Mute, 8 Draw (Cubase's own numbering — see [`layout.md §16`](layout.md)) |
+| 1 / 3 / 4 / 5 / 7 / 8 | Switch the active edit tool: 1 Select, 3 Split, 4 Glue, 5 Erase, 7 Mute, 8 Draw (Cubase's own numbering — see [`timeline_panel_core.md §7`](timeline_panel_core.md)) |
 | Ctrl+Shift+1 | Jump to Locator 1 — parks the cursor on the LEFT loop locator (`timelineJumpToLocator1`) |
 | Ctrl+Shift+2 | Jump to Locator 2 — the RIGHT loop locator (`timelineJumpToLocator2`) |
 
@@ -275,7 +275,7 @@ as the Unicode glyph `œ`, not as `'q'` plus an Alt flag, so both quantise bindi
 (key code + exact modifier set) — the same shape the arrow-key bindings already use, and the reason
 the pair survives the platform's own key translation. The three header chips mirror the three keys
 exactly: a plain click on **"Q"** quantises starts, **Shift+click** on it toggles snap, and the
-**"Q♪"** chip beside it quantises pitches — see [`layout.md §16`](layout.md) (TL5-8).
+**"Q♪"** chip beside it quantises pitches — see [`timeline_panel_clips_automation.md §2`](timeline_panel_clips_automation.md).
 
 2 (Range Selection), 6 (Zoom) and 9 (Play/Scrub) are Cubase tools this app doesn't ship yet and stay
 **unassigned on purpose** — `editToolForKeyChar` (`Source/UI/EditTool.h`) returns `nullopt` for
@@ -335,7 +335,7 @@ find in a rebinding list. Each surface's own `keyPressed()` hardcodes them direc
 
 | Shortcut | Context | Action |
 |----------|---------|--------|
-| Escape | AI panel, request in flight | Cancel the in-flight AI request (same as the Cancel button — actually aborts it, see [`AI_Engine.md`](AI_Engine.md#request-cancellation)) |
+| Escape | AI panel, request in flight | Cancel the in-flight AI request (same as the Cancel button — actually aborts it, see [`AI_Engine_providers_accounts.md`](AI_Engine_providers_accounts.md#10-request-cancellation)) |
 | Escape | Canvas, modules selected | Clear the selection |
 | Delete / Backspace | Canvas, modules selected | Delete every selected module (one undo step) |
 | Escape | Clip lanes, clips selected | Clear the clip selection |
@@ -362,12 +362,12 @@ deliberately does **not** consume the tool digits at all — tool switching belo
 the roll and the panel can never disagree about which tool is active. The whole selection nudges/
 transposes by ONE shared delta (never per-note), clamped so the group stays inside the clip window
 (`[0, clipLength)`) or the pitch range (`[0, 127]`) as a unit — the same "clamp the group together"
-rule `TimelineClipLaneArea`'s cross-track move drag uses (see [`layout.md §16`](layout.md)).
+rule `TimelineClipLaneArea`'s cross-track move drag uses (see [`timeline_panel_clips_automation.md §1`](timeline_panel_clips_automation.md)).
 
 ## Canvas mouse gestures
 
 Multi-select is layered on top of the existing pan gesture rather than replacing it, so no existing
-habit changes. See [`layout.md §12`](layout.md) for the full contract.
+habit changes. See [`layout_selection_canvas.md §1`](layout_selection_canvas.md) for the full contract.
 
 | Gesture | Action |
 |---------|--------|

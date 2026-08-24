@@ -138,11 +138,11 @@ The following `Metrics` fields are **code-only layout constants** — they contr
 | `librarySidebarWidth` | `200` | Library panel width when visible (px) — code-only |
 | `aiPanelWidth` | `300` | AI panel width when visible (px) — code-only |
 | `iconSize` | `16` | Icon render size in library / status bar contexts (px) — code-only |
-| `timelinePanelHeight` | `220` | Timeline panel **default** height and minimum drag height (px) — the live height is the user's, persisted under the `timelinePanelHeight` setting key (see [`layout.md` §16](layout.md)) — code-only (TL5-1) |
-| `timelineTrackHeaderWidth` | `190` | Timeline track-header column width (px) — code-only (TL5-1) |
-| `timelineTransportBarHeight` | `34` | Timeline transport-bar strip height (px) — code-only (TL5-1) |
-| `timelineRulerHeight` | `24` | Timeline ruler strip height, top of the lanes region (px) — code-only (TL5-2) |
-| `timelineTrackRowHeight` | `56` | Row height shared by the track-header column and the clip-lane area (px) — code-only (TL5-7) |
+| `timelinePanelHeight` | `220` | Timeline panel **default** height and minimum drag height (px) — the live height is the user's, persisted under the `timelinePanelHeight` setting key (see [`timeline_panel_core.md` §1](timeline_panel_core.md)) — code-only |
+| `timelineTrackHeaderWidth` | `190` | Timeline track-header column width (px) — code-only |
+| `timelineTransportBarHeight` | `34` | Timeline transport-bar strip height (px) — code-only |
+| `timelineRulerHeight` | `24` | Timeline ruler strip height, top of the lanes region (px) — code-only |
+| `timelineTrackRowHeight` | `56` | Row height shared by the track-header column and the clip-lane area (px) — code-only |
 
 The following `Metrics` fields are **UI rendering constants** — they control the appearance of UI visual effects and are also **not parsed from user JSON**. A user theme that includes these keys will have them silently ignored.
 
@@ -228,15 +228,15 @@ CatIO
 
 The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle`, indices 24–27) are rendered in the Oscillator waveform combo via `AppLookAndFeel::drawPopupMenuItem` (14×14 glyph left of the item text) and `drawComboBox` (selected waveform glyph in the closed combo). `positionComboBoxText` shifts the label right when the selected item has an icon.
 
-**`Icon::ToggleMinimap`** (index 28) is the toolbar toggle for the Graph Editor minimap overlay — see [`layout.md` §15](layout.md#15-minimap-overlay-issue-159).
+**`Icon::ToggleMinimap`** (index 28) is the toolbar toggle for the Graph Editor minimap overlay — see [`layout_selection_canvas.md` §4](layout_selection_canvas.md#4-minimap-overlay-issue-159).
 
 **`Icon::ModuleDualIO`** (index 29) is the module-header toggle that splits a collapsed `"Audio"` jack into separate Left/Right jacks. There is no universal stereo-split glyph; this one is a Y-fork into two jacks. The button's tooltip carries the Dual I/O on/off copy. See [`fx_modules.md` § Stereo I/O](fx_modules.md#stereo-io-dual-io-toggle).
 
 **`Icon::ToolSelect` … `Icon::ToolDraw`** (indices 30–35) are the six glyphs for the timeline edit-tool strip (`synth::ui::EditTool` — Select, Split, Glue, Erase, Mute, Draw; see [`Source/UI/EditTool.h`](../Source/UI/EditTool.h)): a pointer arrow, scissors, a glue bottle, an angled eraser block, a crossed-out speaker (visually distinct from `ModuleMute` — that one is an outlined speaker with a small corner X; this one is a solid-filled speaker with a single strike-through slash), and a pencil at ~45°. `Source/UI/ToolCursors.h`'s `makeToolCursor()` renders these same tinted Drawables into the custom per-tool mouse cursor shown over the clip lanes / piano roll, rather than shipping a second cursor-only asset — see that header's doc comment for the per-tool hotspot table.
 
-**`Icon::TrackMidi`, `Icon::TrackAudio`, `Icon::TrackAutomation`** (indices 36–38) are the timeline track header's kind-badge glyphs — one per `synth::TrackKind`, drawn in place of the old `"MIDI"`/`"AUD"`/`"AUTO"` text pill when a themed `AppLookAndFeel` and the asset library are both present (`TimelineTrackHeaderComponent::kindBadgeIcon`; see [`layout.md` §16 TL5-3](layout.md#tl5-3-track-headers-binding-chips-add-track)). The text pill remains the fallback in a headless build or when the icon asset is missing — the badge is identity chrome either way, never a control.
+**`Icon::TrackMidi`, `Icon::TrackAudio`, `Icon::TrackAutomation`** (indices 36–38) are the timeline track header's kind-badge glyphs — one per `synth::TrackKind`, drawn in place of the old `"MIDI"`/`"AUD"`/`"AUTO"` text pill when a themed `AppLookAndFeel` and the asset library are both present (`TimelineTrackHeaderComponent::kindBadgeIcon`; see [`timeline_panel_core.md` §3](timeline_panel_core.md#3-track-headers-binding-chips-add-track)). The text pill remains the fallback in a headless build or when the icon asset is missing — the badge is identity chrome either way, never a control.
 
-**`Icon::FollowPlayhead`** (index 39) is the toolbar-style toggle button next to the timeline panel's snap selector that page-flips the view to keep the playhead on screen while playing — see [`layout.md` §16](layout.md#tl5-2-ruler-grid-zoomscroll-snap-loop-brace).
+**`Icon::FollowPlayhead`** (index 39) is the toolbar-style toggle button next to the timeline panel's snap selector that page-flips the view to keep the playhead on screen while playing — see [`timeline_panel_core.md` §2](timeline_panel_core.md#2-ruler-grid-zoomscroll-snap-loop-brace).
 
 **`Icon::CatIO`** (index 40) is the speaker glyph for the module library's "I/O" category header (Audio Input / Audio Output — previously fell back to `CatUtility`, which gave the graph's actual source/sink no visual identity of its own) and doubles as the Audio Output card's identity glyph in `ModuleComponent::paint()`. Appended after `FollowPlayhead` rather than grouped with the other `CatXxx` entries so every existing enum ordinal (and the hardcoded spot-checks in `IconLibraryTests.cpp`) stays unchanged — see [`layout.md`'s Audio Output card identity treatment](layout.md#audio-output-card-identity-treatment).
 
@@ -522,7 +522,7 @@ second file is created.
 `applyTheme()` remaps all JUCE ColourIds, then `sendLookAndFeelChangeMessage()` propagates
 `lookAndFeelChanged()` to all child components, then a single `repaint()` is requested.
 Because module cards are buffered via `synth::ui::ZoomFrozenCachedImage` (see
-[`docs/layout.md` §10](layout.md#10-ui-rendering-performance)), only their cached images are
+[`docs/layout_visuals_animation.md` §2](layout_visuals_animation.md#2-ui-rendering-performance)), only their cached images are
 invalidated and re-rendered once. There is no animation loop or per-tick repaint added.
 
 ---
