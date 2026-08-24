@@ -1247,29 +1247,73 @@ TEST_F(FocusArbitrationTest, ShiftedSymbolKeyCodesFromTheRealKeyboardReachTheGri
     auto& view = mc.getTimelinePanel().getViewState();
     view.setSnap(Snap::Quarter);
 
-    const int ctrlShift = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier;
-
-    // THE reported bug: the user pressed Ctrl+Shift+1 and nothing happened.
-    EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('!', juce::ModifierKeys(ctrlShift), '!')));
+    // The grid-set family lives on Ctrl+ALT+digit now (Ctrl+Shift+1/2 went to the locator jumps —
+    // see the test below). Alt is genuinely ignored by macOS's charactersIgnoringModifiers, so these
+    // chords arrive carrying the DIGIT and never needed the shifted-glyph rescue in the first place.
+    const int ctrlAlt = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier;
+    EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('1', juce::ModifierKeys(ctrlAlt), '1')));
     EXPECT_EQ(view.snap, Snap::Whole);
-
-    // The three new divisions, by the shifted glyphs 6/7/8 actually produce.
-    EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('^', juce::ModifierKeys(ctrlShift), '^')));
+    EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('6', juce::ModifierKeys(ctrlAlt), '6')));
     EXPECT_EQ(view.snap, Snap::ThirtySecond);
-    EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('&', juce::ModifierKeys(ctrlShift), '&')));
+    EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('7', juce::ModifierKeys(ctrlAlt), '7')));
     EXPECT_EQ(view.snap, Snap::SixtyFourth);
-    EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('*', juce::ModifierKeys(ctrlShift), '*')));
+    EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('8', juce::ModifierKeys(ctrlAlt), '8')));
     EXPECT_EQ(view.snap, Snap::HundredTwentyEighth);
-
-    // The digit form still dispatches too — a layout (or a platform) that DOES ignore Shift properly
-    // must keep working, since the normalization is an addition to exact matching, not a replacement.
-    EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('5', juce::ModifierKeys(ctrlShift), '5')));
+    EXPECT_TRUE(pressAndPump(mc, juce::KeyPress('5', juce::ModifierKeys(ctrlAlt), '5')));
     EXPECT_EQ(view.snap, Snap::Sixteenth);
 
-    // And the bare tool digits are NOT reachable this way: '&' with no modifiers matches nothing (the
-    // normalization needs Shift on both sides), so keyPressed finds no command and reports unhandled.
+    // The SHIFT-chorded normalization is still live for the chords that remain on Ctrl+Shift — the
+    // grid-CYCLE arrows are unaffected by it (arrows are not characters), so what this proves is the
+    // negative: a Ctrl+Shift shifted digit no longer reaches the grid at all.
+    const int ctrlShift = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier;
+    EXPECT_FALSE(pressAndPump(mc, juce::KeyPress('^', juce::ModifierKeys(ctrlShift), '^')));
+    EXPECT_EQ(view.snap, Snap::Sixteenth) << "Ctrl+Shift+6 belongs to nothing now";
+
+    // And the bare tool digits are NOT reachable this way: '&' with no modifiers matches no command
+    // (the tool digits are surface-resolved), so keyPressed reports unhandled.
     EXPECT_FALSE(pressAndPump(mc, juce::KeyPress('&', juce::ModifierKeys::noModifiers, '&')));
     EXPECT_EQ(view.snap, Snap::Sixteenth) << "and nothing moved the grid either";
+}
+
+// Ctrl+Shift+1 / Ctrl+Shift+2 park the cursor on the loop locators — the chord the grid-set family
+// used to own. SURFACE-resolved (TimelinePanelComponent::keyPressed), so MainComponent::keyPressed
+// deliberately reports it unhandled and lets it fall through to the panel; this test drives the
+// panel directly, which is where the key actually lands in the app.
+TEST_F(FocusArbitrationTest, LocatorJumpKeysMoveTheCursorToTheLoopLocators) {
+    MainComponent mc(std::make_unique<FocusMockProvider>());
+    mc.setSize(1200, 800);
+    mc.simulateToggleTimelineClick();
+    ASSERT_TRUE(mc.isTimelineConfiguredVisible());
+
+    auto& panel = mc.getTimelinePanel();
+    auto& transport = mc.getAudioEngine().getTransport();
+    ASSERT_TRUE(transport.setLoop(4.0, 12.0, true));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+
+    const int ctrlShift = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier;
+
+    // Ctrl+Shift+2 -> the RIGHT locator. Delivered as the shifted glyph the macOS peer produces,
+    // which is what keyPressMatches absorbs.
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('@', juce::ModifierKeys(ctrlShift), '@')));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    EXPECT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 12.0);
+
+    // Ctrl+Shift+1 -> the LEFT locator, by the plain digit this time.
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('1', juce::ModifierKeys(ctrlShift), '1')));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    EXPECT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 4.0);
+
+    // MainComponent must NOT claim the chord: there is no command behind a surface action, and
+    // swallowing it would stop it ever reaching the panel.
+    EXPECT_FALSE(pressAndPump(mc, juce::KeyPress('1', juce::ModifierKeys(ctrlShift), '1')));
+
+    // The locators still bound the jump: disarming looping keeps the RANGE, so the keys keep working
+    // (the same "a range exists independently of whether it is armed" rule the ruler's brace has).
+    ASSERT_TRUE(transport.setLoop(4.0, 12.0, false));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('2', juce::ModifierKeys(ctrlShift), '2')));
+    juce::MessageManager::getInstance()->runDispatchLoopUntil(20);
+    EXPECT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 12.0);
 }
 
 // The vertical zoom pair was dead in the app for exactly the same reason: Cmd+Shift+'=' arrives as

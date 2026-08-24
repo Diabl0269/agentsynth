@@ -1,4 +1,5 @@
 #include "TimelineRulerComponent.h"
+#include "../AppUndoManager.h"
 #include "../Transport/TransportService.h"
 #include "Theme/AppLookAndFeel.h"
 #include <algorithm>
@@ -25,6 +26,10 @@ constexpr float kLoopBraceTickHeight = 8.0f;
 constexpr float kHoverBandAlpha = 0.10f;
 // A disarmed brace stays fully drawn, just greyed — see braceColourFor().
 constexpr float kInactiveBraceAlpha = 0.7f;
+// Marker flag chrome. The hover lift is the only state a flag paints differently — a marker has no
+// "selected", so there is nothing else to distinguish.
+constexpr float kMarkerHoverBrighten = 0.25f;
+constexpr float kMarkerStemAlpha = 0.75f;
 
 // Same formula as TransportService::getPosition() (a beat is always a quarter note, regardless of
 // the file's notated denominator) — kept in sync there rather than shared, since that one lives on
@@ -95,7 +100,319 @@ TimelineRulerComponent::BraceState TimelineRulerComponent::getBraceStateForTest(
 }
 
 //==============================================================================
+// ---- Markers ----
+
+std::vector<TimelineRulerComponent::MarkerFlag> TimelineRulerComponent::buildMarkerFlags() const {
+    std::vector<MarkerFlag> flags;
+    if (doc_ == nullptr || getWidth() <= 0 || getHeight() <= 0)
+        return flags;
+
+    const double widthPx = (double)getWidth();
+    const float top = std::max(0.0f, (float)getHeight() - kMarkerFlagHeight - 1.0f);
+
+    for (const auto& marker : doc_->getMarkers()) {
+        // A drag in flight reports its PREVIEW beat, so the flag the user is looking at is the one
+        // the drop will commit — and hit-testing follows it for free, since both walk this list.
+        const double beat = marker.id == draggingMarker_ ? markerDragBeat_ : marker.beat;
+        const double x = mapBeatToX(beat);
+        const float width = markerFlagWidthFor(marker.text.length());
+        // Culled per flag, not per marker range: a flag whose anchor has scrolled off the left edge
+        // may still have most of its tab on screen.
+        if (x > widthPx || x + (double)width < 0.0)
+            continue;
+
+        MarkerFlag flag;
+        flag.id = marker.id;
+        flag.beat = beat;
+        flag.bounds = {(float)x, top, width, std::min(kMarkerFlagHeight, (float)getHeight())};
+        flag.colour = juce::Colour(marker.colourArgb);
+        flag.text = marker.text;
+        flags.push_back(std::move(flag));
+    }
+    return flags;
+}
+
+synth::MarkerId TimelineRulerComponent::markerAt(juce::Point<float> pos) const {
+    const auto flags = buildMarkerFlags();
+    // Back to front: the later flag is the one paintMarkers drew on top, so it is the one a click
+    // on an overlapping pair must resolve to.
+    for (auto it = flags.rbegin(); it != flags.rend(); ++it)
+        if (it->bounds.contains(pos))
+            return it->id;
+    return {};
+}
+
+void TimelineRulerComponent::performMarkerEdit(const std::function<void()>& mutation) {
+    if (doc_ == nullptr || !mutation)
+        return;
+    if (undoManager_ != nullptr)
+        undoManager_->recordTimelineChange(*doc_, mutation);
+    else
+        mutation();
+}
+
+bool TimelineRulerComponent::handleMarkerMouseDown(const juce::MouseEvent& e) {
+    if (doc_ == nullptr)
+        return false;
+    // Cmd+click is the zone-agnostic "switch looping off" gesture and must keep working over a
+    // flag — a marker would otherwise punch small dead holes in it. (Cmd is not isPopupMenu(): a
+    // Ctrl+click on macOS is a right-click and is handled just below.)
+    if (e.mods.isCommandDown() && !e.mods.isPopupMenu())
+        return false;
+
+    const auto id = markerAt(e.position);
+    if (!id.isValid())
+        return false;
+
+    if (e.mods.isPopupMenu()) {
+        showMarkerContextMenu(id);
+        return true;
+    }
+
+    const auto* marker = doc_->getMarker(id);
+    if (marker == nullptr)
+        return false; // the flag list is rebuilt per query, so this is belt and braces
+
+    draggingMarker_ = id;
+    markerDragBeat_ = marker->beat;
+    // Grab offset in BEATS, so the flag keeps the same relationship to the pointer for the whole
+    // drag instead of jumping its left edge under the cursor on the first move.
+    markerDragGrabOffsetBeats_ = mapXToBeat((double)e.position.x) - marker->beat;
+    markerDragMoved_ = false;
+    return true;
+}
+
+void TimelineRulerComponent::applyHoverCursor() {
+    if (hoveredMarker_.isValid()) {
+        setMouseCursor(juce::MouseCursor::DraggingHandCursor);
+        return;
+    }
+    if (!hoveredZone_.has_value())
+        setMouseCursor(juce::MouseCursor::NormalCursor);
+    else if (*hoveredZone_ == Zone::Playhead)
+        setMouseCursor(juce::MouseCursor::PointingHandCursor);
+    else
+        setMouseCursor(juce::MouseCursor::LeftRightResizeCursor);
+}
+
+void TimelineRulerComponent::setHoveredMarker(synth::MarkerId id) {
+    if (id == hoveredMarker_)
+        return; // repaint on changes only — never once per pixel of mouse movement
+    hoveredMarker_ = id;
+    applyHoverCursor();
+    repaint();
+}
+
+void TimelineRulerComponent::renameMarker(synth::MarkerId id, const juce::String& newText) {
+    if (doc_ == nullptr)
+        return;
+    // setMarkerText refuses an over-long label outright (kMaxMarkerTextLength), which leaves the
+    // marker's current one in place — the same "a rejected edit is not an erase" reading
+    // setClipName's blank-name refusal has.
+    performMarkerEdit([this, id, newText] { doc_->setMarkerText(id, newText); });
+    repaint();
+}
+
+void TimelineRulerComponent::beginRenameMarker(synth::MarkerId id) {
+    if (doc_ == nullptr)
+        return;
+
+    // FIRST: any previous rename commits before a new one opens — and it may mutate the doc, so
+    // nothing may hold a Marker pointer across it.
+    finishMarkerRename(true);
+
+    if (doc_->getMarker(id) == nullptr)
+        return;
+
+    const auto flags = buildMarkerFlags();
+    const auto found = std::find_if(flags.begin(), flags.end(), [id](const MarkerFlag& f) { return f.id == id; });
+    if (found == flags.end())
+        return; // scrolled off screen: there is nowhere to put the editor
+
+    const auto* marker = doc_->getMarker(id);
+    const auto rect = found->bounds.toNearestInt();
+    // The flag can be as narrow as kMarkerMinFlagWidth (an unlabelled marker), which is not a
+    // field anyone can type into — widen it, then pull it back inside the strip.
+    const int width = std::max(96, rect.getWidth());
+    const int height = juce::jlimit(12, 18, std::max(12, getHeight() - 2));
+    const int x = juce::jlimit(0, std::max(0, getWidth() - width), rect.getX());
+    const int y = std::max(0, getHeight() - height - 1);
+
+    renamingMarker_ = id;
+    renameEditor_ = std::make_unique<juce::TextEditor>("markerRenameEditor");
+    renameEditor_->setComponentID("timelineMarkerRenameEditor");
+    renameEditor_->setMultiLine(false);
+    renameEditor_->setReturnKeyStartsNewLine(false);
+    renameEditor_->setText(marker->text, juce::dontSendNotification);
+    renameEditor_->setBounds(x, y, width, height);
+    renameEditor_->onReturnKey = [this] { finishMarkerRename(true); };
+    renameEditor_->onEscapeKey = [this] { finishMarkerRename(false); };
+    // Clicking away is a commit, not a cancel — the same reading every in-place rename in this app
+    // (and every DAW) has. Escape is the cancel.
+    renameEditor_->onFocusLost = [this] { finishMarkerRename(true); };
+    addAndMakeVisible(*renameEditor_);
+    renameEditor_->selectAll();
+    renameEditor_->grabKeyboardFocus();
+}
+
+void TimelineRulerComponent::finishMarkerRename(bool commit) {
+    if (renameEditor_ == nullptr)
+        return;
+    // Detach FIRST: deleting the editor takes focus away from it, which fires onFocusLost, which
+    // re-enters here — and finds a null editor, so it stops.
+    auto editor = std::move(renameEditor_);
+    const auto id = renamingMarker_;
+    renamingMarker_ = {};
+    const juce::String text = editor->getText();
+    editor.reset();
+
+    if (commit && id.isValid())
+        renameMarker(id, text);
+}
+
+std::unique_ptr<synth::ui::ColourPickerPopup> TimelineRulerComponent::buildMarkerColourPicker(synth::MarkerId id) {
+    if (doc_ == nullptr)
+        return nullptr;
+    const auto* marker = doc_->getMarker(id);
+    if (marker == nullptr)
+        return nullptr;
+
+    // The colour a no-net-change close restores, and what a "keep the final pick" undo step
+    // restores TO — the exact shape TimelineTrackHeaderComponent::buildColourPicker uses.
+    const juce::uint32 originalColour = marker->colourArgb;
+    juce::Component::SafePointer<TimelineRulerComponent> safeThis(this);
+
+    return std::make_unique<synth::ui::ColourPickerPopup>(
+        juce::Colour(originalColour), propertiesFile_,
+        [safeThis, id](juce::Colour c) {
+            // Live preview: writes the doc directly, no undo — every drag repaints the flag.
+            if (auto* self = safeThis.getComponent())
+                if (self->doc_ != nullptr)
+                    self->doc_->setMarkerColour(id, c.getARGB());
+        },
+        [safeThis, id, originalColour](juce::Colour finalColour) {
+            auto* self = safeThis.getComponent();
+            if (self == nullptr || self->doc_ == nullptr)
+                return; // the strip (or its window) is gone — nothing left to restore or undo
+            if (finalColour.getARGB() == originalColour) {
+                // No net change: put back exactly what was there (a preview may have nudged it)
+                // and record no undo step.
+                self->doc_->setMarkerColour(id, originalColour);
+                return;
+            }
+            // ONE undo step whose undo restores the ORIGINAL colour: silently put the original
+            // back first (outside the recorded mutation, so it does not itself become undoable),
+            // then perform the real edit as the one recorded step.
+            self->doc_->setMarkerColour(id, originalColour);
+            self->performMarkerEdit(
+                [self, id, finalColour] { self->doc_->setMarkerColour(id, finalColour.getARGB()); });
+        });
+}
+
+std::unique_ptr<synth::ui::ColourPickerPopup>
+TimelineRulerComponent::createMarkerColourPickerForTest(synth::MarkerId id) {
+    return buildMarkerColourPicker(id);
+}
+
+void TimelineRulerComponent::showMarkerContextMenu(synth::MarkerId id) {
+    if (doc_ == nullptr || doc_->getMarker(id) == nullptr)
+        return;
+
+    juce::Component::SafePointer<TimelineRulerComponent> safeThis(this);
+    juce::PopupMenu menu;
+    menu.addItem("Rename\xe2\x80\xa6", [safeThis, id] {
+        if (auto* self = safeThis.getComponent())
+            self->beginRenameMarker(id);
+    });
+    menu.addItem("Change colour\xe2\x80\xa6", [safeThis, id] {
+        auto* self = safeThis.getComponent();
+        if (self == nullptr)
+            return;
+        auto popup = self->buildMarkerColourPicker(id);
+        if (popup == nullptr)
+            return; // the marker is gone — nothing to pick a colour for
+        // Anchored on the flag itself, re-derived NOW rather than captured: the strip may have
+        // scrolled between the right-click and the menu choice.
+        juce::Rectangle<int> anchor = self->getScreenBounds();
+        const auto flags = self->buildMarkerFlags();
+        for (const auto& flag : flags)
+            if (flag.id == id)
+                anchor = self->localAreaToGlobal(flag.bounds.toNearestInt());
+        juce::CallOutBox::launchAsynchronously(std::move(popup), anchor, nullptr);
+    });
+    menu.addSeparator();
+    menu.addItem("Delete", [safeThis, id] {
+        if (auto* self = safeThis.getComponent())
+            self->applyMarkerContextChoice(id, MarkerContextChoice::Delete);
+    });
+
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this));
+}
+
+void TimelineRulerComponent::applyMarkerContextChoice(synth::MarkerId id, MarkerContextChoice choice) {
+    if (doc_ == nullptr)
+        return;
+
+    switch (choice) {
+    case MarkerContextChoice::Delete:
+        performMarkerEdit([this, id] { doc_->removeMarker(id); });
+        // A dragged/hovered id must not outlive the marker it names.
+        if (draggingMarker_ == id)
+            draggingMarker_ = {};
+        if (hoveredMarker_ == id)
+            hoveredMarker_ = {};
+        break;
+    case MarkerContextChoice::Rename:
+    case MarkerContextChoice::ChangeColour:
+        // Deliberately inert: both open UI rather than mutating (see MarkerContextChoice).
+        break;
+    }
+
+    repaint();
+}
+
+void TimelineRulerComponent::paintMarkers(juce::Graphics& g) const {
+    const auto flags = buildMarkerFlags();
+    if (flags.empty())
+        return;
+
+    const juce::Font markerFont{juce::FontOptions(kMarkerFlagFontHeight)};
+    g.setFont(markerFont);
+
+    for (const auto& flag : flags) {
+        const bool lit = flag.id == hoveredMarker_ || flag.id == draggingMarker_;
+        const auto fill = lit ? flag.colour.brighter(kMarkerHoverBrighten) : flag.colour;
+
+        // Full-height stem at the marker's own beat: the tab runs to the right of it, so without
+        // this the exact position would only be readable from the tab's left edge.
+        g.setColour(fill.withAlpha(kMarkerStemAlpha));
+        g.fillRect(flag.bounds.getX(), 0.0f, kMarkerStemWidth, (float)getHeight());
+
+        g.setColour(fill);
+        g.fillRect(flag.bounds);
+
+        if (flag.text.isNotEmpty()) {
+            // Contrast against the USER'S colour, not a theme text token: a marker colour is
+            // arbitrary, so a fixed token would go invisible over half the palette.
+            g.setColour(fill.getPerceivedBrightness() > 0.5f ? juce::Colours::black : juce::Colours::white);
+            g.drawText(flag.text, flag.bounds.reduced(kMarkerFlagPadX, 0.0f).toNearestInt(),
+                       juce::Justification::centredLeft, false);
+        }
+    }
+}
+
+//==============================================================================
 void TimelineRulerComponent::mouseDown(const juce::MouseEvent& e) {
+    // A press anywhere in the strip commits an open rename first (click-away commits) — and that
+    // may mutate the doc, so nothing below may hold a Marker pointer across it.
+    if (renameEditor_ != nullptr)
+        finishMarkerRename(true);
+
+    // Markers are hit-tested BEFORE the zone split and before the transport check: a marker lives
+    // on the doc, so it stays draggable and editable in a build with no transport wired in.
+    if (handleMarkerMouseDown(e))
+        return;
+
     if (transport_ == nullptr)
         return;
 
@@ -124,6 +441,19 @@ void TimelineRulerComponent::mouseDown(const juce::MouseEvent& e) {
 }
 
 void TimelineRulerComponent::mouseDrag(const juce::MouseEvent& e) {
+    // Marker drag: snapped through the SHARED view state, exactly like every other beat this strip
+    // posts, and clamped at 0 because a marker's beat is >= 0 in the model.
+    if (draggingMarker_.isValid()) {
+        markerDragMoved_ = true;
+        const double raw = mapXToBeat((double)e.position.x) - markerDragGrabOffsetBeats_;
+        const double snapped = std::max(0.0, viewState_.snapBeat(raw, currentBeatsPerBar()));
+        if (snapped == markerDragBeat_)
+            return; // no new information — don't repaint once per pixel
+        markerDragBeat_ = snapped;
+        repaint();
+        return;
+    }
+
     if (transport_ == nullptr || e.mods.isCommandDown())
         return;
 
@@ -134,6 +464,21 @@ void TimelineRulerComponent::mouseDrag(const juce::MouseEvent& e) {
 }
 
 void TimelineRulerComponent::mouseUp(const juce::MouseEvent& e) {
+    if (draggingMarker_.isValid()) {
+        const auto id = draggingMarker_;
+        const double beat = markerDragBeat_;
+        const bool moved = markerDragMoved_;
+        draggingMarker_ = {};
+        markerDragMoved_ = false;
+        // A press that never dragged commits nothing: a stray click on a flag must not quietly
+        // re-snap the marker it landed on. moveMarker is a no-op for an unchanged beat anyway, so
+        // this only ever suppresses an undo entry that would have been empty.
+        if (moved)
+            performMarkerEdit([this, id, beat] { doc_->moveMarker(id, beat); });
+        repaint();
+        return;
+    }
+
     if (transport_ == nullptr || e.mods.isCommandDown())
         return; // Cmd+click was already fully handled in mouseDown.
 
@@ -153,24 +498,26 @@ void TimelineRulerComponent::mouseUp(const juce::MouseEvent& e) {
     reArmLoopIfClickOnInactiveBrace(e);
 }
 
-void TimelineRulerComponent::mouseEnter(const juce::MouseEvent& e) { setHoveredZone(zoneAtY(e.position.y)); }
+void TimelineRulerComponent::mouseEnter(const juce::MouseEvent& e) {
+    setHoveredZone(zoneAtY(e.position.y));
+    setHoveredMarker(markerAt(e.position));
+}
 
-void TimelineRulerComponent::mouseMove(const juce::MouseEvent& e) { setHoveredZone(zoneAtY(e.position.y)); }
+void TimelineRulerComponent::mouseMove(const juce::MouseEvent& e) {
+    setHoveredZone(zoneAtY(e.position.y));
+    setHoveredMarker(markerAt(e.position));
+}
 
-void TimelineRulerComponent::mouseExit(const juce::MouseEvent&) { setHoveredZone(std::nullopt); }
+void TimelineRulerComponent::mouseExit(const juce::MouseEvent&) {
+    setHoveredZone(std::nullopt);
+    setHoveredMarker({});
+}
 
 void TimelineRulerComponent::setHoveredZone(std::optional<Zone> zone) {
     if (zone == hoveredZone_)
         return; // repaint on zone changes only — never once per pixel of mouse movement
     hoveredZone_ = zone;
-
-    if (!hoveredZone_.has_value())
-        setMouseCursor(juce::MouseCursor::NormalCursor);
-    else if (*hoveredZone_ == Zone::Playhead)
-        setMouseCursor(juce::MouseCursor::PointingHandCursor);
-    else
-        setMouseCursor(juce::MouseCursor::LeftRightResizeCursor);
-
+    applyHoverCursor();
     repaint();
 }
 
@@ -355,6 +702,10 @@ void TimelineRulerComponent::paint(juce::Graphics& g) {
             g.fillRect(clampedEnd - 1.5f, 0.0f, 1.5f, kLoopBraceTickHeight);
         }
     }
+
+    // Markers last: their flags sit in the lower band (clear of the brace above) and must read on
+    // top of the bar lines and beat ticks they cross.
+    paintMarkers(g);
 }
 
 } // namespace synth::ui

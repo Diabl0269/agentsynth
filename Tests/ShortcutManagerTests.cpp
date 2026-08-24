@@ -19,6 +19,7 @@ const juce::StringArray& surfaceResolvedActionIds() {
     static const juce::StringArray ids{
         // PianoRollComponent::keyPressed
         "pianoRollQuantise",
+        "pianoRollQuantisePitches",
         "pianoRollNavNextNote",
         "pianoRollNavPrevNote",
         "pianoRollNudgeRight",
@@ -39,6 +40,8 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "timelineToolErase",
         "timelineToolMute",
         "timelineToolDraw",
+        "timelineJumpToLocator1",
+        "timelineJumpToLocator2",
         // TimelineClipLaneArea::keyPressed (its P shares timelineLoopSelection with the panel)
     };
     return ids;
@@ -229,9 +232,11 @@ TEST_F(ShortcutManagerTest, SameKeyWithinACategoryIsStillAConflictAndStillAutoSw
     EXPECT_TRUE(manager.getConflictingAction("cutSelection", manager.getBinding("cutSelection")).isEmpty());
 }
 
-// Modifier equality is EXACT, which is what keeps the bare tool digits clear of the Ctrl+Shift grid
+// Modifier equality is EXACT, which is what keeps the bare tool digits clear of the Ctrl+Alt grid
 // commands that share their key codes — the pair most likely to be "fixed" into a collision later.
-TEST_F(ShortcutManagerTest, BareToolDigitsDoNotCollideWithTheCtrlShiftGridCommands) {
+// Three Timeline families now share the digit row (bare = tools, Ctrl+Alt = set the grid,
+// Ctrl+Shift+1/2 = jump to a locator) and only the modifier set separates them.
+TEST_F(ShortcutManagerTest, BareToolDigitsDoNotCollideWithTheGridOrLocatorCommands) {
     struct Pair {
         const char* toolId;
         const char* gridId;
@@ -250,11 +255,51 @@ TEST_F(ShortcutManagerTest, BareToolDigitsDoNotCollideWithTheCtrlShiftGridComman
         EXPECT_EQ(gridBinding.getKeyCode(), pair.digit) << "same digit, different modifiers, by design";
         EXPECT_TRUE(toolBinding.getModifiers().getRawFlags() == 0);
         EXPECT_TRUE(gridBinding.getModifiers().isCtrlDown());
-        EXPECT_TRUE(gridBinding.getModifiers().isShiftDown());
+        EXPECT_TRUE(gridBinding.getModifiers().isAltDown());
+        EXPECT_FALSE(gridBinding.getModifiers().isShiftDown()) << "Shift+digit belongs to the locator jumps now";
         EXPECT_FALSE(toolBinding == gridBinding);
         // Same category, and still no conflict, because the modifiers differ.
         EXPECT_TRUE(manager.getConflictingAction(pair.toolId, toolBinding).isEmpty());
     }
+
+    // The third family on the same key code: all three are distinct stored chords on '1'.
+    const auto tool1 = manager.getBinding("timelineToolSelect");
+    const auto grid1 = manager.getBinding("snapSetWhole");
+    const auto locator1 = manager.getBinding("timelineJumpToLocator1");
+    EXPECT_EQ(tool1.getKeyCode(), '1');
+    EXPECT_EQ(grid1.getKeyCode(), '1');
+    EXPECT_EQ(locator1.getKeyCode(), '1');
+    EXPECT_FALSE(tool1 == grid1);
+    EXPECT_FALSE(grid1 == locator1);
+    EXPECT_FALSE(tool1 == locator1);
+    EXPECT_TRUE(manager.getConflictingAction("timelineJumpToLocator1", locator1).isEmpty());
+}
+
+// ---------------------------------------------------------------------------
+// Locator jumps — the chord the grid-set family used to own
+// ---------------------------------------------------------------------------
+
+TEST_F(ShortcutManagerTest, LocatorJumpsOwnCtrlShiftOneAndTwo) {
+    const int ctrlShift = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier;
+    EXPECT_EQ(manager.getBinding("timelineJumpToLocator1"), juce::KeyPress('1', juce::ModifierKeys(ctrlShift), 0));
+    EXPECT_EQ(manager.getBinding("timelineJumpToLocator2"), juce::KeyPress('2', juce::ModifierKeys(ctrlShift), 0));
+
+    // Timeline category, and SURFACE actions — the panel's keyPressed resolves them, so there must
+    // be no command behind either one (MainComponent would otherwise try to dispatch one).
+    EXPECT_EQ(ShortcutManager::getCategory("timelineJumpToLocator1"), ShortcutCategory::Timeline);
+    EXPECT_EQ(ShortcutManager::getCategory("timelineJumpToLocator2"), ShortcutCategory::Timeline);
+    EXPECT_EQ(AppCommands::getCommandForAction("timelineJumpToLocator1"), AppCommands::kNoCommand);
+    EXPECT_EQ(AppCommands::getCommandForAction("timelineJumpToLocator2"), AppCommands::kNoCommand);
+
+    EXPECT_EQ(ShortcutManager::getActionDescription("timelineJumpToLocator1"), "Jump to Locator 1");
+    EXPECT_EQ(ShortcutManager::getActionDescription("timelineJumpToLocator2"), "Jump to Locator 2");
+
+    // And they really did take the chord: nothing in the grid family answers to it any more.
+    EXPECT_EQ(manager.getActionForKeyPress(juce::KeyPress('1', juce::ModifierKeys(ctrlShift), 0)),
+              "timelineJumpToLocator1");
+    EXPECT_EQ(manager.getActionForKeyPress(juce::KeyPress('2', juce::ModifierKeys(ctrlShift), 0)),
+              "timelineJumpToLocator2");
+    EXPECT_EQ(manager.getActionsForKeyPress(juce::KeyPress('1', juce::ModifierKeys(ctrlShift), 0)).size(), 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -264,9 +309,21 @@ TEST_F(ShortcutManagerTest, BareToolDigitsDoNotCollideWithTheCtrlShiftGridComman
 TEST_F(ShortcutManagerTest, GridCommandsUseRealCtrlNotCommand) {
     // Deliberate: on macOS the Ctrl+digit space is free where Cmd+digit is not. On Windows/Linux
     // juce::ModifierKeys::commandModifier IS ctrlModifier, so this reads as Ctrl there either way.
-    for (const char* actionId :
-         {"snapSetWhole", "snapSetHalf", "snapSetQuarter", "snapSetEighth", "snapSetSixteenth", "snapSetThirtySecond",
-          "snapSetSixtyFourth", "snapSetHundredTwentyEighth", "snapCyclePrev", "snapCycleNext"}) {
+    //
+    // The eight ABSOLUTE grid commands are Ctrl+ALT+digit: Ctrl+Shift+1/2 now belongs to the locator
+    // jumps, and moving the whole family kept it a single coherent block rather than splitting the
+    // digit row across two modifier sets.
+    for (const char* actionId : {"snapSetWhole", "snapSetHalf", "snapSetQuarter", "snapSetEighth", "snapSetSixteenth",
+                                 "snapSetThirtySecond", "snapSetSixtyFourth", "snapSetHundredTwentyEighth"}) {
+        const auto kp = manager.getBinding(actionId);
+        EXPECT_TRUE(kp.getModifiers().isCtrlDown()) << actionId;
+        EXPECT_TRUE(kp.getModifiers().isAltDown()) << actionId;
+        EXPECT_FALSE(kp.getModifiers().isShiftDown()) << actionId;
+    }
+
+    // The two STEPPED ones keep Ctrl+Shift: they are on arrows, so they never shared a key code
+    // with the digits and the locator pair does not touch them.
+    for (const char* actionId : {"snapCyclePrev", "snapCycleNext"}) {
         const auto kp = manager.getBinding(actionId);
         EXPECT_TRUE(kp.getModifiers().isCtrlDown()) << actionId;
         EXPECT_TRUE(kp.getModifiers().isShiftDown()) << actionId;
@@ -309,7 +366,11 @@ TEST_F(ShortcutManagerTest, FinerGridCommandsContinueTheDigitRow) {
 TEST_F(ShortcutManagerTest, KeyPressMatchesRescuesShiftChordedSymbolsFromTheMacPeer) {
     const int ctrlShift = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier;
     const juce::KeyPress storedCtrlShift1('1', juce::ModifierKeys(ctrlShift), 0);
-    ASSERT_EQ(manager.getBinding("snapSetWhole"), storedCtrlShift1) << "precondition: the stored form is the digit";
+    // The Ctrl+Shift+digit chord is now the locator jump's (the grid-set family moved to Ctrl+Alt,
+    // where this bug cannot arise at all — charactersIgnoringModifiers DOES ignore Option). The
+    // regression is about the chord, not about which action happens to own it.
+    ASSERT_EQ(manager.getBinding("timelineJumpToLocator1"), storedCtrlShift1)
+        << "precondition: the stored form is the digit";
 
     // What the peer actually delivers.
     const juce::KeyPress pressedBang('!', juce::ModifierKeys(ctrlShift), '!');
@@ -348,8 +409,8 @@ TEST_F(ShortcutManagerTest, KeyPressMatchesNormalizesOnlyWhenBothSidesCarryShift
     EXPECT_FALSE(ShortcutManager::keyPressMatches(bare7, juce::KeyPress('&', juce::ModifierKeys::shiftModifier, '&')));
     // Shift on the BINDING only.
     EXPECT_FALSE(ShortcutManager::keyPressMatches(juce::KeyPress('&', juce::ModifierKeys::shiftModifier, 0), bare7));
-    // Modifiers still have to agree exactly, normalization or not: Ctrl+Shift+'&' is the 1/64 grid
-    // command, never the Mute tool's bare 7.
+    // Modifiers still have to agree exactly, normalization or not: Ctrl+Shift+'&' is nobody's
+    // binding, and certainly never the Mute tool's bare 7.
     EXPECT_FALSE(ShortcutManager::keyPressMatches(bare7, juce::KeyPress('&', juce::ModifierKeys(ctrlShift), '&')));
     // And an invalid binding (an action the user cleared) matches nothing at all.
     EXPECT_FALSE(
@@ -378,16 +439,27 @@ TEST_F(ShortcutManagerTest, KeyPressMatchesLeavesLettersAndArrowsAlone) {
 // The whole point of the matcher: table lookup, not just the predicate, resolves the peer's event.
 TEST_F(ShortcutManagerTest, GetActionForKeyPressResolvesAShiftedSymbolEvent) {
     const int ctrlShift = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier;
-    EXPECT_EQ(manager.getActionForKeyPress(juce::KeyPress('!', juce::ModifierKeys(ctrlShift), '!')), "snapSetWhole");
-    EXPECT_EQ(manager.getActionForKeyPress(juce::KeyPress('^', juce::ModifierKeys(ctrlShift), '^')),
-              "snapSetThirtySecond");
-    EXPECT_EQ(manager.getActionForKeyPress(juce::KeyPress('&', juce::ModifierKeys(ctrlShift), '&')),
-              "snapSetSixtyFourth");
-    EXPECT_EQ(manager.getActionForKeyPress(juce::KeyPress('*', juce::ModifierKeys(ctrlShift), '*')),
-              "snapSetHundredTwentyEighth");
+    // The two Ctrl+Shift+digit chords the app still ships. On macOS the peer delivers them as '!'
+    // and '@' — the exact bug keyPressMatches exists to absorb.
+    EXPECT_EQ(manager.getActionForKeyPress(juce::KeyPress('!', juce::ModifierKeys(ctrlShift), '!')),
+              "timelineJumpToLocator1");
+    EXPECT_EQ(manager.getActionForKeyPress(juce::KeyPress('@', juce::ModifierKeys(ctrlShift), '@')),
+              "timelineJumpToLocator2");
 
     // Exactly ONE action per shifted event — the normalization must not make a keystroke ambiguous.
-    EXPECT_EQ(manager.getActionsForKeyPress(juce::KeyPress('&', juce::ModifierKeys(ctrlShift), '&')).size(), 1);
+    EXPECT_EQ(manager.getActionsForKeyPress(juce::KeyPress('!', juce::ModifierKeys(ctrlShift), '!')).size(), 1);
+
+    // The grid family, now on Ctrl+ALT, needs no rescue: Option IS ignored by
+    // charactersIgnoringModifiers, so a real Ctrl+Alt+6 arrives carrying '6' and matches directly.
+    const int ctrlAlt = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier;
+    EXPECT_EQ(manager.getActionForKeyPress(juce::KeyPress('1', juce::ModifierKeys(ctrlAlt), '1')), "snapSetWhole");
+    EXPECT_EQ(manager.getActionForKeyPress(juce::KeyPress('6', juce::ModifierKeys(ctrlAlt), '6')),
+              "snapSetThirtySecond");
+    EXPECT_EQ(manager.getActionForKeyPress(juce::KeyPress('8', juce::ModifierKeys(ctrlAlt), '8')),
+              "snapSetHundredTwentyEighth");
+    // ...and the shifted glyph under Ctrl+Shift no longer reaches the grid at all.
+    EXPECT_TRUE(manager.getActionForKeyPress(juce::KeyPress('^', juce::ModifierKeys(ctrlShift), '^')).isEmpty());
+
     // And the bare tool digit is untouched by any of it.
     EXPECT_EQ(manager.getActionForKeyPress(juce::KeyPress('7', juce::ModifierKeys::noModifiers, '7')),
               "timelineToolMute");
@@ -411,6 +483,11 @@ TEST_F(ShortcutManagerTest, ConflictDetectionStaysExactAndDoesNotNormalizeShifte
         manager.getConflictingAction("snapCycleNext", juce::KeyPress('!', juce::ModifierKeys(ctrlShift), 0)).isEmpty())
         << "Ctrl+Shift+'!' stored is not Ctrl+Shift+'1' stored";
     EXPECT_EQ(manager.getConflictingAction("snapCycleNext", juce::KeyPress('1', juce::ModifierKeys(ctrlShift), 0)),
+              "timelineJumpToLocator1");
+
+    // ...and the grid family's own chord reports itself, on its new modifier set.
+    const int ctrlAlt = juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::altModifier;
+    EXPECT_EQ(manager.getConflictingAction("snapCycleNext", juce::KeyPress('1', juce::ModifierKeys(ctrlAlt), 0)),
               "snapSetWhole");
 }
 
@@ -434,7 +511,13 @@ TEST_F(ShortcutManagerTest, SurfaceDefaultsAreExactlyTheComponentsHardcodedFallb
     EXPECT_EQ(manager.getBinding("timelineSnapToggle"), juce::KeyPress('q', juce::ModifierKeys::noModifiers, 0));
     EXPECT_EQ(manager.getBinding("timelineToggleLoop"), juce::KeyPress('l', juce::ModifierKeys::noModifiers, 0));
     EXPECT_EQ(manager.getBinding("timelineLoopSelection"), juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0));
-    EXPECT_EQ(manager.getBinding("pianoRollQuantise"), juce::KeyPress('q', juce::ModifierKeys::shiftModifier, 0));
+    // The quantise family is Option-based (Option+Q starts, Option+Shift+Q pitches) — deliberately
+    // off the old Shift+Q, so the two verbs differ only by Shift. Stored as key code + modifiers, not
+    // as the Unicode glyph macOS delivers for Option+letter.
+    EXPECT_EQ(manager.getBinding("pianoRollQuantise"), juce::KeyPress('q', juce::ModifierKeys::altModifier, 0));
+    EXPECT_EQ(manager.getBinding("pianoRollQuantisePitches"),
+              juce::KeyPress(
+                  'q', juce::ModifierKeys(juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier), 0));
     EXPECT_EQ(manager.getBinding("pianoRollNudgeLeft"),
               juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::noModifiers, 0));
     EXPECT_EQ(manager.getBinding("pianoRollNavPrevNote"),

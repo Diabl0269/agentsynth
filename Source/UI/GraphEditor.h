@@ -158,6 +158,23 @@ public:
      *  re-measure the affected cards. Called from the owner's device-state-changed callback. */
     void refreshIoModulesAfterDeviceChange();
 
+    /** Output-card identity treatment (docs/layout.md — module chrome): installs the callback
+     *  MainComponent uses to describe where the signal actually goes (device name + sample rate +
+     *  channel count, "Host audio" in HostMode::Hosted, or an empty string to hide the line). Set
+     *  once; MainComponent already owns the Standalone-vs-Hosted framing (see how
+     *  StatusBarComponent's device chrome is built) so GraphEditor/ModuleComponent stay ignorant of
+     *  it and just render whatever string comes back. */
+    void setOutputDeviceInfoProvider(std::function<juce::String()> provider) {
+        outputDeviceInfoProvider = std::move(provider);
+    }
+
+    /** MESSAGE THREAD. Calls the provider above (a no-op if none is installed) and pushes the
+     *  result into the Audio Output card's ModuleComponent, which repaints only if the text
+     *  actually changed. Call once right after installing the provider (so the card is populated
+     *  at startup) and again every time AudioEngine::onDeviceStateChanged fires — there is no
+     *  timer polling this. */
+    void refreshOutputDeviceInfo();
+
     // Dual I/O only remaps visible jacks onto raw ch0/ch1. A collapsed Audio cable that only
     // landed on the left leg (typical when the far end is Audio Output, which is not ModuleBase)
     // is completed to L→L / R→R so toggling Dual I/O on shows both jacks wired.
@@ -571,6 +588,8 @@ private:
     };
 
     AudioEngine& audioEngine;
+    // See setOutputDeviceInfoProvider/refreshOutputDeviceInfo above.
+    std::function<juce::String()> outputDeviceInfoProvider;
     GraphContentComponent content;
     ModMatrixComponent modMatrix;
     bool isMatrixVisible = false;

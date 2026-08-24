@@ -91,6 +91,12 @@ public:
         bounds.removeFromTop(6);
 
         generateButton_.setBounds(bounds.removeFromTop(24));
+        bounds.removeFromTop(2);
+        // The mode control sits UNDER Generate rather than beside it: at kScalePanelWidth (170 px,
+        // less the 6 px inset) a button-plus-checkbox row would leave the checkbox's label truncated
+        // to a few characters, and "Add to existing" has to be readable for the button above it to
+        // mean anything.
+        addToExistingToggle_.setBounds(bounds.removeFromTop(20));
     }
 
     // ---- Persistence (user scales only — panel visibility is the ROLL's own key) ----
@@ -126,12 +132,22 @@ public:
 
     int getMinPitchSelection() const noexcept { return juce::jlimit(0, 127, minNoteCombo_.getSelectedId() - 1); }
     int getMaxPitchSelection() const noexcept { return juce::jlimit(0, 127, maxNoteCombo_.getSelectedId() - 1); }
+    /** false (the default) means Generate REPLACES the clip's contents, true means it overlays the
+     *  generated notes on top of whatever is already there. Replace stays the default because it is
+     *  what "generate a pattern" meant before this control existed — a persisted preference would
+     *  make the button's effect depend on invisible state, so this is deliberately session-only and
+     *  starts off on every fresh panel. */
+    bool isAddToExistingSelected() const noexcept { return addToExistingToggle_.getToggleState(); }
 
     // ---- Callbacks the owner wires (see the class comment) ----
     std::function<void(std::optional<synth::MusicalScale>)> onScaleChanged;
     std::function<void(bool)> onPitchVisibilityChanged;
     std::function<void()> onQuantizePitches;
-    std::function<void(int minPitch, int maxPitch)> onGenerate;
+    // `addToExisting` is the toggle's state at the moment Generate was pressed, passed BY VALUE
+    // rather than left for the owner to read back off the panel: the owner's handler mutates the doc
+    // (and can repaint/rebuild), so nothing it needs may depend on this component still being in the
+    // same state — or alive — afterwards.
+    std::function<void(int minPitch, int maxPitch, bool addToExisting)> onGenerate;
 
     // ---- Test accessors (every interactive child also carries its own componentID) ----
     juce::ComboBox& getRootCombo() noexcept { return rootCombo_; }
@@ -139,6 +155,7 @@ public:
     juce::ToggleButton& getPitchVisibilityToggle() noexcept { return pitchVisibilityToggle_; }
     juce::TextButton& getQuantizeButton() noexcept { return quantizeButton_; }
     juce::TextButton& getGenerateButton() noexcept { return generateButton_; }
+    juce::ToggleButton& getAddToExistingToggle() noexcept { return addToExistingToggle_; }
     juce::ComboBox& getMinNoteCombo() noexcept { return minNoteCombo_; }
     juce::ComboBox& getMaxNoteCombo() noexcept { return maxNoteCombo_; }
     juce::TextEditor& getCustomScaleNameEditor() noexcept { return customScaleNameEditor_; }
@@ -340,8 +357,14 @@ private:
         generateButton_.setComponentID("scaleAssistGenerateButton");
         generateButton_.onClick = [this] {
             if (onGenerate)
-                onGenerate(getMinPitchSelection(), getMaxPitchSelection());
+                onGenerate(getMinPitchSelection(), getMaxPitchSelection(), isAddToExistingSelected());
         };
+
+        addAndMakeVisible(addToExistingToggle_);
+        addToExistingToggle_.setComponentID("scaleAssistAddToExistingToggle");
+        addToExistingToggle_.setButtonText("Add to existing");
+        addToExistingToggle_.setTooltip("Off: Generate replaces every note in the clip. On: the generated notes are "
+                                        "added on top of what is already there.");
     }
 
     // "No scale" first, then every built-in preset (synth::builtInScalePresets order), then the
@@ -496,6 +519,8 @@ private:
     juce::ComboBox minNoteCombo_;
     juce::ComboBox maxNoteCombo_;
     juce::TextButton generateButton_{"Generate"};
+    // Session-only, off by default — see isAddToExistingSelected().
+    juce::ToggleButton addToExistingToggle_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ScaleAssistPanel)
 };

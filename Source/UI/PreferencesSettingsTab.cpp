@@ -34,6 +34,12 @@ constexpr const char* kZoomScrollUpZoomsInKey = "zoomScrollUpZoomsIn";
 // roll's own KeyLabelMode default, so an install that never opens this tab is unaffected.
 constexpr const char* kPianoRollKeyLabelsKey = "pianoRollKeyLabels";
 
+// Read at use time by TimelineClipLaneArea::locatorSpanForDoubleClick, and duplicated here for the
+// same reason kNaturalScrollingKey above is. DEFAULT TRUE: authoring a clip that fills the loop you
+// just set is the whole point of the feature, so it ships on and the toggle exists to turn it OFF
+// for anyone who wants the plain one-bar clip back.
+constexpr const char* kTimelineDoubleClickSpansLocatorsKey = "timelineDoubleClickSpansLocators";
+
 // Group-separator alpha. Softened from 0.18: at that contrast the hairlines read as table borders
 // and boxed each preference in, which is the same complaint that produced the gentler rule under
 // the Keyboard Shortcuts tab's section headers (see its kDividerAlpha — keep the two in step).
@@ -113,6 +119,19 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         "When on, pressing P in the timeline both places the loop locators around the selection AND switches "
         "looping on. When off, P only places the locators (use L to toggle looping).");
     loopSelectionArmsToggle.onClick = [this] { persistLoopSelectionArms(loopSelectionArmsToggle.getToggleState()); };
+
+    addAndMakeVisible(doubleClickSpansLocatorsToggle);
+    // DEFAULT TRUE, same idiom as the rows above.
+    doubleClickSpansLocatorsToggle.setToggleState(
+        appProperties.getUserSettings()->getBoolValue(kTimelineDoubleClickSpansLocatorsKey, true),
+        juce::dontSendNotification);
+    doubleClickSpansLocatorsToggle.setTooltip(
+        "When on (the default), double-clicking empty lane space INSIDE the loop locators creates a clip spanning "
+        "them. Outside the locators — or with no locators set — you still get a one-bar clip. Turn it off to always "
+        "get one bar.");
+    doubleClickSpansLocatorsToggle.onClick = [this] {
+        persistDoubleClickSpansLocators(doubleClickSpansLocatorsToggle.getToggleState());
+    };
 
     addAndMakeVisible(naturalScrollingToggle);
     // DEFAULT TRUE: "natural" is the juce::Viewport convention every scrolling surface in the app
@@ -203,6 +222,10 @@ void PreferencesSettingsTab::resized() {
     bounds.removeFromTop(10);
 
     loopSelectionArmsToggle.setBounds(bounds.removeFromTop(24));
+    // Same group as the row above (no divider between them): both are about the loop locators, and
+    // separating them would imply they are unrelated settings.
+    bounds.removeFromTop(10);
+    doubleClickSpansLocatorsToggle.setBounds(bounds.removeFromTop(24));
     addDivider();
 
     naturalScrollingToggle.setBounds(bounds.removeFromTop(24));
@@ -266,6 +289,22 @@ bool PreferencesSettingsTab::isLoopSelectionArmsEnabled() const { return loopSel
 void PreferencesSettingsTab::setLoopSelectionArmsEnabled(bool enabled) {
     loopSelectionArmsToggle.setToggleState(enabled, juce::dontSendNotification);
     persistLoopSelectionArms(enabled);
+}
+
+bool PreferencesSettingsTab::isDoubleClickSpansLocatorsEnabled() const {
+    return doubleClickSpansLocatorsToggle.getToggleState();
+}
+
+void PreferencesSettingsTab::setDoubleClickSpansLocatorsEnabled(bool enabled) {
+    doubleClickSpansLocatorsToggle.setToggleState(enabled, juce::dontSendNotification);
+    persistDoubleClickSpansLocators(enabled);
+}
+
+void PreferencesSettingsTab::persistDoubleClickSpansLocators(bool enabled) {
+    // Nothing live to push: TimelineClipLaneArea reads this key at use time (on the next
+    // double-click), the same way the row above it is read by the timeline's P handler.
+    appProperties.getUserSettings()->setValue(kTimelineDoubleClickSpansLocatorsKey, enabled ? "1" : "0");
+    appProperties.getUserSettings()->saveIfNeeded();
 }
 
 void PreferencesSettingsTab::persistLoopSelectionArms(bool enabled) {

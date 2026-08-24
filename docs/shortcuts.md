@@ -1,9 +1,9 @@
 # Keyboard Shortcuts
 
 Shortcuts are configurable in **Settings → Keyboard Shortcuts** (`Source/UI/ShortcutsSettingsTab.h/.cpp`).
-`ShortcutManager` (`Source/ShortcutManager.h`) registers **51 actions** across four categories —
-**General** (22, app-wide or routed per focused editor), **Graph** (2), **Timeline** (17) and
-**Piano Roll** (10) — every one of them rebindable, including keys that used to be hardcoded:
+`ShortcutManager` (`Source/ShortcutManager.h`) registers **57 actions** across four categories —
+**General** (22, app-wide or routed per focused editor), **Graph** (2), **Timeline** (22) and
+**Piano Roll** (11) — every one of them rebindable, including keys that used to be hardcoded:
 nudge/transpose/octave, note navigation, quantise, the snap toggle, the loop keys and the six tool
 digits. Click a row's binding button to rebind it (button turns orange, "Press a key…"); pressing
 any key except Escape commits it, swapping with whatever action in the **same category** already
@@ -167,39 +167,63 @@ and, for the loop-selection key, `TimelineClipLaneArea::keyPressed()` too):
 | F | Toggle Follow Playhead (`timelineFollowPlayheadToggle`) — mirrors the transport strip's follow button; panel-scoped like Q/L/P, so it works whichever timeline surface (lanes or roll) has focus |
 | P | Loop the Selection — sets the transport loop to the selected clips' (or, with the roll open, the edited clip's) span. Whether it also arms looping is `Settings → Preferences → "Timeline: P (loop selection) also switches looping on"` (default on; off = locators only) |
 | 1 / 3 / 4 / 5 / 7 / 8 | Switch the active edit tool: 1 Select, 3 Split, 4 Glue, 5 Erase, 7 Mute, 8 Draw (Cubase's own numbering — see [`layout.md §16`](layout.md)) |
+| Ctrl+Shift+1 | Jump to Locator 1 — parks the cursor on the LEFT loop locator (`timelineJumpToLocator1`) |
+| Ctrl+Shift+2 | Jump to Locator 2 — the RIGHT loop locator (`timelineJumpToLocator2`) |
+
+**The locator jumps and the grid chord swap.** These two took `Ctrl+Shift+1/2` *from* the grid-set
+family, which moved down to `Ctrl+Alt+digit` (below). Jumping between locators is a per-minute
+gesture and re-picking a grid division is a per-session one, so the shorter chord belongs to the
+frequent verb. Both are **surface**-resolved rather than commands: a locator jump acts on the
+timeline's own transport and means nothing on any other surface. A **degenerate or unset** span
+(`loopEnd <= loopStart`) is a no-op that reports the key unhandled rather than swallowing it, and
+looping being switched OFF does not matter — the locators are a *range*, and disarming them only
+stops playback wrapping (the same rule `TimelineRulerComponent::braceStateFor` follows).
 
 **Grid commands** (`AppCommands`/`ApplicationCommandManager` — dispatched through
 `MainComponent::perform`, active exactly while the timeline panel is on screen):
 
 | Shortcut | Action |
 |----------|--------|
-| Ctrl+Shift+1 | Set Grid to 1 (whole bar) |
-| Ctrl+Shift+2 | Set Grid to 1/2 |
-| Ctrl+Shift+3 | Set Grid to 1/4 |
-| Ctrl+Shift+4 | Set Grid to 1/8 |
-| Ctrl+Shift+5 | Set Grid to 1/16 |
-| Ctrl+Shift+6 | Set Grid to 1/32 |
-| Ctrl+Shift+7 | Set Grid to 1/64 |
-| Ctrl+Shift+8 | Set Grid to 1/128 |
+| Ctrl+Alt+1 | Set Grid to 1 (whole bar) |
+| Ctrl+Alt+2 | Set Grid to 1/2 |
+| Ctrl+Alt+3 | Set Grid to 1/4 |
+| Ctrl+Alt+4 | Set Grid to 1/8 |
+| Ctrl+Alt+5 | Set Grid to 1/16 |
+| Ctrl+Alt+6 | Set Grid to 1/32 |
+| Ctrl+Alt+7 | Set Grid to 1/64 |
+| Ctrl+Alt+8 | Set Grid to 1/128 |
 | Ctrl+Shift+Left | Grid Coarser (step toward Bar) |
 | Ctrl+Shift+Right | Grid Finer (step toward 1/128) |
 
-**Shift-chorded symbol keys and the macOS peer.** These commands only work on a real Mac keyboard
-because binding lookups go through `ShortcutManager::keyPressMatches`, not exact `KeyPress`
-equality: JUCE's macOS peer builds a key code from `charactersIgnoringModifiers`, which — per its
-own source comment — does *not* ignore Shift, so Ctrl+Shift+1 arrives as `!` and Cmd+Shift+`=`
-arrives as `+`. The matcher folds both sides through a US-layout unshift map when both carry Shift
-(other layouts degrade to exact match). Conflict detection deliberately stays exact so two
-different stored chords never merge. Headless tests construct `KeyPress('1', mods)` directly and
-would never catch this class of bug — `FocusArbitrationTest.ShiftedSymbolKeyCodesFromTheRealKeyboardReachTheGridCommands`
-pins the real-event form instead.
+**Why the eight moved but the two cycle keys did not.** The eight absolute bindings share their key
+codes with the bare tool digits and with the locator jumps, so the whole block moved together rather
+than being split across two modifier sets. The cycle pair is on ARROWS — it never shared a key code
+with a digit, and the locator jumps do not touch it — so it stays on Ctrl+Shift. Three Timeline
+families now sit on the digit row (bare = tools, Ctrl+Alt = set the grid, Ctrl+Shift+1/2 = jump to a
+locator) and only the modifier set separates them; `ShortcutManagerTest.BareToolDigitsDoNotCollide-
+WithTheGridOrLocatorCommands` is the tripwire.
+
+**Shift-chorded symbol keys and the macOS peer.** Binding lookups go through
+`ShortcutManager::keyPressMatches`, not exact `KeyPress` equality: JUCE's macOS peer builds a key
+code from `charactersIgnoringModifiers`, which — per its own source comment — does *not* ignore
+Shift, so Ctrl+Shift+1 arrives as `!` and Cmd+Shift+`=` arrives as `+`. The matcher folds both sides
+through a US-layout unshift map when both carry Shift (other layouts degrade to exact match).
+Conflict detection deliberately stays exact so two different stored chords never merge. Headless
+tests construct `KeyPress('1', mods)` directly and would never catch this class of bug —
+`FocusArbitrationTest.LocatorJumpKeysMoveTheCursorToTheLoopLocators` pins the real-event form
+instead, on `Ctrl+Shift+2`/`@`.
+
+Note that `charactersIgnoringModifiers` DOES ignore Option, so the grid family's move to
+`Ctrl+Alt+digit` takes it out of this bug's reach entirely: a real Ctrl+Alt+6 arrives carrying `6`
+and matches directly. The rescue now only matters for the two locator jumps and the Cmd+Shift zoom
+pair.
 
 **Ctrl, not Cmd — deliberately, including on macOS.** `ShortcutManager::resetToDefaults` binds
 these with `juce::ModifierKeys::ctrlModifier`, a REAL Ctrl rather than `commandModifier`. On macOS
 the Ctrl+digit space is genuinely free (Cmd+digit is reserved by hosts and by the native menu bar);
-on Windows/Linux `commandModifier` IS `ctrlModifier`, so these read as Ctrl+Shift+digit on every
+on Windows/Linux `commandModifier` IS `ctrlModifier`, so these read as Ctrl+Alt+digit on every
 platform with no per-platform branch needed. Because the tool-switching digits above are BARE (no
-modifier) and modifier equality in `ShortcutManager::bindingMatches` is exact, Ctrl+Shift+1 can
+modifier) and modifier equality in `ShortcutManager::bindingMatches` is exact, Ctrl+Alt+1 can
 never be mistaken for a bare `1` — category scoping is what makes the two safe to coexist in the
 same section at all.
 
@@ -222,7 +246,7 @@ moved — a held key parked at a clamp says so instead of implying another step 
 
 ## Piano Roll
 
-All nine are surface-resolved — consulted directly by `PianoRollComponent::keyPressed()`, never
+All eleven are surface-resolved — consulted directly by `PianoRollComponent::keyPressed()`, never
 dispatched through `ApplicationCommandManager`:
 
 | Shortcut | Action |
@@ -231,7 +255,8 @@ dispatched through `ApplicationCommandManager`:
 | ↑ / ↓ | Transpose Up / Down a Semitone — the whole selection |
 | Shift+↑ / Shift+↓ | Transpose Up / Down an Octave (12 semitones) — the same octave-jump convention every DAW uses, a separate action rather than a modifier read off the plain one so it can be rebound on its own |
 | Alt+← / Alt+→ | Select Previous / Next Note — navigates BETWEEN notes in the clip's canonical (start, pitch) order, collapsing a multi-selection onto the outer neighbour; scrolls an off-screen target into view. Selection-only, never a document edit. Alt+↑/↓ is reserved (unclaimed) |
-| Shift+Q | Quantise Selected Notes — one-shot: snap the selected notes (or all notes when nothing is selected) to the chosen grid, even while snap is toggled off. Tested BEFORE the bare-Q toggle below since it's the more specific of the pair |
+| Option+Q | Quantise Selected Notes — one-shot: snap the selected notes' STARTS (or all notes when nothing is selected) to the chosen grid, even while snap is toggled off. Moved off the old Shift+Q so the two quantise verbs sit on one modifier and differ only by Shift |
+| Option+Shift+Q | Quantise Note Pitches to Scale (`pianoRollQuantisePitches`) — snaps the selected notes' PITCHES (or all notes when nothing is selected) into the scale picked in Scale Assist, via `MusicalScale::snapPitch`. Falls THROUGH (returns `false`) when no scale is chosen: "No scale" has nothing to quantise into. Matched BEFORE plain Option+Q, since it is the more specific chord |
 | Q | Toggle Snap — same `timelineSnapToggle` action the timeline panel uses; whichever surface has focus |
 | Ctrl+S | Toggle the Scale Assist panel (`pianoRollToggleScalePanel`) — real Control, not Cmd (Cmd+S stays the app's save); inert while a text field inside the panel has focus |
 
@@ -244,6 +269,14 @@ equality is exact on modifiers, which is what keeps Left/Shift+Left/Alt+Left thr
 actions. Digit keys are deliberately absent here — tool switching belongs to the panel (see
 Timeline above), so the roll and the panel can never disagree about which tool is active.
 
+**Option+letter is stored as a key CODE, never as a character.** macOS delivers Option+Q to the app
+as the Unicode glyph `œ`, not as `'q'` plus an Alt flag, so both quantise bindings are
+`juce::KeyPress('q', <modifiers>, 0)` and are matched through `ShortcutManager::keyPressMatches`
+(key code + exact modifier set) — the same shape the arrow-key bindings already use, and the reason
+the pair survives the platform's own key translation. The three header chips mirror the three keys
+exactly: a plain click on **"Q"** quantises starts, **Shift+click** on it toggles snap, and the
+**"Q♪"** chip beside it quantises pitches — see [`layout.md §16`](layout.md) (TL5-8).
+
 2 (Range Selection), 6 (Zoom) and 9 (Play/Scrub) are Cubase tools this app doesn't ship yet and stay
 **unassigned on purpose** — `editToolForKeyChar` (`Source/UI/EditTool.h`) returns `nullopt` for
 them, so those three digits are simply never consumed rather than remapping the six shipped tools
@@ -251,17 +284,18 @@ onto 1–6. Shipping one of the missing three later costs no rebind: the digit i
 
 ## Command vs surface actions
 
-The 49 actions split into two kinds, and telling them apart is the key to reasoning about "why
+The 57 actions split into two kinds, and telling them apart is the key to reasoning about "why
 doesn't this key do anything":
 
-- **Command-dispatched** (31 actions) — every General action, both Graph actions, and the Timeline
-  category's five grid-set + two grid-cycle commands. `AppCommands::getCommandForAction(actionId)`
+- **Command-dispatched** (34 actions) — every General action, both Graph actions, and the Timeline
+  category's eight grid-set + two grid-cycle commands. `AppCommands::getCommandForAction(actionId)`
   returns a real `juce::CommandID` for these; `MainComponent` implements
   `ApplicationCommandTarget`, so they appear in the native menu bar, drive toolbar tooltip text, and
   their enabled/disabled state is whatever `getCommandInfo` reports.
-- **Surface-resolved** (20 actions) — the timeline panel's own keys (`timelineSnapToggle`,
+- **Surface-resolved** (23 actions) — the timeline panel's own keys (`timelineSnapToggle`,
   `timelineToggleLoop`, `timelineLoopSelection`, `timelineFollowPlayheadToggle`, the six
-  `timelineTool*` digits) and all ten piano roll actions. `AppCommands::getCommandForAction` returns `AppCommands::kNoCommand` (`0`,
+  `timelineTool*` digits, and the two `timelineJumpToLocator*` keys) plus every piano roll action.
+  `AppCommands::getCommandForAction` returns `AppCommands::kNoCommand` (`0`,
   `juce::ApplicationCommandManager`'s own "not a command" value) for every one of these — they are
   never dispatched through the command manager at all. Instead, the owning component's own
   `keyPressed()` calls a small `matchesAction(key, actionId, fallback)` helper that reads

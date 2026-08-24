@@ -207,7 +207,7 @@ Agent Synth uses SVG `Drawable` icons — **not** an icon or glyph font. This av
 
 ### Icon enum
 
-40 icons are defined in `synth::theme::Icon` (in `Source/UI/Theme/IconLibrary.h`):
+41 icons are defined in `synth::theme::Icon` (in `Source/UI/Theme/IconLibrary.h`):
 
 ```
 TransportPlay    TransportStop    ActionUndo       ActionRedo
@@ -221,6 +221,7 @@ ToggleMinimap    ModuleDualIO
 ToolSelect       ToolSplit        ToolGlue         ToolErase
 ToolMute         ToolDraw
 TrackMidi        TrackAudio       TrackAutomation  FollowPlayhead
+CatIO
 ```
 
 **`Icon::TransportPlay` is scaffolding** — the SVG asset is present and the enum value exists, but no `DrawableButton` is wired to it. It is tinted to `textMuted` and reserved for a future transport affordance.
@@ -237,6 +238,8 @@ The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `W
 
 **`Icon::FollowPlayhead`** (index 39) is the toolbar-style toggle button next to the timeline panel's snap selector that page-flips the view to keep the playhead on screen while playing — see [`layout.md` §16](layout.md#tl5-2-ruler-grid-zoomscroll-snap-loop-brace).
 
+**`Icon::CatIO`** (index 40) is the speaker glyph for the module library's "I/O" category header (Audio Input / Audio Output — previously fell back to `CatUtility`, which gave the graph's actual source/sink no visual identity of its own) and doubles as the Audio Output card's identity glyph in `ModuleComponent::paint()`. Appended after `FollowPlayhead` rather than grouped with the other `CatXxx` entries so every existing enum ordinal (and the hardcoded spot-checks in `IconLibraryTests.cpp`) stays unchanged — see [`layout.md`'s Audio Output card identity treatment](layout.md#audio-output-card-identity-treatment).
+
 ### Token → tint map
 
 `AppLookAndFeel::retintIcons()` assigns tint colours from `theme_.colors`:
@@ -250,7 +253,7 @@ The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `W
 | `TransportPlay` | `textMuted` (scaffolding; no DrawableButton consumer) |
 | All toolbar actions + transport stop + toggles | `textPrimary` |
 | `ToolSelect` … `ToolDraw` (edit-tool strip) | `textPrimary` — active-tool highlight is a separate `toolActive`-coloured button state, not a different icon tint |
-| Category icons (`CatSources` … `CatUtility`) | `textMuted` |
+| Category icons (`CatSources` … `CatUtility`, `CatIO`) | `textMuted` |
 | `WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle` | `textPrimary` (consumer: Oscillator waveform combo via `drawPopupMenuItem`/`drawComboBox`) |
 | `TrackMidi`, `TrackAudio`, `TrackAutomation` | `textMuted` — quiet identity chrome, same convention as the category icons above |
 | `FollowPlayhead` | `textPrimary` — a toolbar-style toggle, so it follows the toolbar action set's base tint rather than the muted track-badge one |
@@ -291,6 +294,7 @@ JUCE's binary-data name mangler **strips hyphens** and concatenates the remainin
 | `waveform-saw.svg` | `BinaryData::waveformsaw_svg` |
 | `waveform-square.svg` | `BinaryData::waveformsquare_svg` |
 | `waveform-triangle.svg` | `BinaryData::waveformtriangle_svg` |
+| `cat-io.svg` | `BinaryData::catio_svg` |
 
 Note: the spec text says "a-b.svg → `BinaryData::a_b_svg`" — this is incorrect. Hyphens are stripped, not converted to underscores. The `IconLibrary.cpp` lookup table uses the real symbol names. A CMake guard (`file(GLOB)` + `string(FIND ... "_")`) enforces hyphen-only filenames to prevent accidental underscore collisions.
 
@@ -699,11 +703,16 @@ take the other eleven down with it.
 
 **The UI** is the Appearance tab's "Piano Roll Notes" swatch row (`AppearanceSettingsTab`, one
 12-cell row keyed C…B): left-click opens a `synth::ui::ColourPickerPopup` (§ below), right-click
-resets that pitch class's override. An un-overridden swatch draws hollow/dimmed rather than
-filled-with-a-ring — unlike a cable-colour swatch, a note-colour swatch has no "always has a
-value" theme token backing every entry, so "not set, currently showing the theme's `noteFill`"
-has to read as visually distinct from "set to a colour that happens to be close to `noteFill`".
-"Reset all" clears every pitch class in one action.
+resets that pitch class's override. Every swatch — overridden or not — previews the colour through
+`AppearanceSettingsTab::getNoteSwatchPreviewColour()`, which calls the exact same
+`resolveNoteColour()` the roll paints notes with (a representative unselected/in-scale note at a
+fixed velocity chosen so its brightness multiplier is ≈1.0), composited over the panel background
+so the resolver's deliberate fill alpha can't read as a washed-out or darker chip than the real
+note. A previous version drew the un-overridden swatch at a flat, hand-rolled low alpha instead of
+going through the resolver at all, which is exactly what made the preview read as noticeably
+darker than the piano roll's actual notes. "Not set" vs. "pinned" is told apart by the swatch's
+ring instead of the fill now — a brighter ring marks a pinned pitch class, same affordance as the
+cable-colour swatches in §11. "Reset all" clears every pitch class in one action.
 
 ## 13. Colour picker popup
 

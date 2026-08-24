@@ -56,13 +56,25 @@ public:
 
     // ---- Piano roll note colours ----
     // Twelve pitch-class swatches (C..B), backed by synth::ui::NoteColourOverrides — the same
-    // sparse-override shape PianoRollComponent will read from once the live piano roll wires up
-    // to this wave's persistence (see NoteColour.h's file comment). An unset swatch draws the
-    // active theme's noteFill in a hollow/dimmed treatment so "not set" reads differently from
-    // "set to a colour that happens to look similar".
+    // sparse-override shape PianoRollComponent reads from via synth::ui::resolveNoteColour. An
+    // unset swatch previews the active theme's noteFill through that SAME resolver (see
+    // getNoteSwatchPreviewColour below) rather than a hand-dimmed stand-in, so "not set" can never
+    // read as a darker colour than the note the roll actually paints; "not set" vs. "pinned" is
+    // told apart by the swatch's ring instead (bright ring = pinned, subtle ring = theme default).
     static constexpr int kNoteSwatchCount = 12;
+    // Representative velocity for the settings preview: resolveNoteColour's brightness multiplier
+    // is 0.5 + 0.7 * (velocity / 127), which equals 1.0 -- i.e. the swatch reads as the base
+    // colour itself, neither the low-velocity dimming nor the high-velocity boost -- at
+    // velocity / 127 = 5/7 ≈ 0.714286. 127 * 5/7 ≈ 90.7, rounded to the nearest integer velocity.
+    static constexpr int kNoteSwatchPreviewVelocity = 91;
     juce::String getNoteSwatchLabel(int pitchClass) const;
     juce::Colour getNoteSwatchColour(int pitchClass) const;
+    /** The colour actually painted for swatch `pitchClass`: synth::ui::resolveNoteColour's fill at
+     *  a representative, unselected/unmuted/in-scale note state (kNoteSwatchPreviewVelocity),
+     *  composited over the panel background so the resolver's deliberate fill alpha can't read as
+     *  a washed-out/darker chip. Overridden and un-overridden swatches both go through this — the
+     *  SAME resolver the piano roll paints notes with, so the two can never drift apart again. */
+    juce::Colour getNoteSwatchPreviewColour(int pitchClass) const;
     bool isNoteSwatchOverridden(int pitchClass) const noexcept;
     void setNoteSwatchColour(int pitchClass, juce::Colour colour);
     void resetNoteSwatch(int pitchClass);

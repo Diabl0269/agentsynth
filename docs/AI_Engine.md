@@ -569,8 +569,8 @@ accepts, smuggles it into a patch, and asserts `validatePatch` still refuses it.
     into a throwaway `TimelineDoc` to prove it. A var that satisfies every named check and is still
     refused by the loader yields `InternalError` — the validator and `fromVar` have drifted, and the
     caller applies nothing either way. (The one reachable case today is a malformed
-    `nextTrackId`/`nextClipId`/`nextLaneId`/`nextNoteId` counter — the document's own bookkeeping,
-    which a tool payload has no reason to carry.)
+    `nextTrackId`/`nextClipId`/`nextLaneId`/`nextNoteId`/`nextMarkerId` counter — the document's own
+    bookkeeping, which a tool payload has no reason to carry.)
 -   **Rejects where the trusted paths repair.** `fromVar` clamps a breakpoint's tension into
     `[-1, 1]` and its value into the lane's range snapshot, and repairs a broken sort order. None of
     that happens for untrusted data: a value we would have to correct is a value the sender did not
@@ -582,15 +582,19 @@ accepts, smuggles it into a patch, and asserts `validatePatch` still refuses it.
 ### The checks
 
 1.  **Structural** — root is an object of the `TimelineDoc` dialect; `version` present, integer, and
-    no newer than `TimelineDoc::kFormatVersion`; `tracks` (if present) an array; ids present,
-    positive and unique per kind; one lane per `(nodeUuid, paramId)` doc-wide.
+    no newer than `TimelineDoc::kFormatVersion`; `tracks` and `markers` (if present) arrays; ids
+    present, positive and unique per kind; one lane per `(nodeUuid, paramId)` doc-wide.
     **Unknown top-level keys are refused**, where `PatchDocument` deliberately *preserves* the ones
     it does not understand. That asymmetry is the point: forward-compatibility is a property a
     document format needs and an untrusted payload does not, and an ignored key is exactly how a
-    later build starts honouring a field today's gate never inspected.
+    later build starts honouring a field today's gate never inspected. The allowlist is `version`,
+    `tracks`, `markers` and the five next-id counters — and a key earns its place there **only** by
+    having a per-item check written for it (see 9 below). Adding one without that check defeats this
+    whole paragraph.
 2.  **Caps** — the per-container limits are `TimelineDoc`'s own constants, referenced and never
     duplicated: `kMaxTracks` (256), `kMaxClipsPerTrack` (4096), `kMaxNotesPerClip` (16384),
-    `kMaxLanesPerTrack` (512), `kMaxBreakpointsPerLane` (16384). Two more exist only on this path,
+    `kMaxLanesPerTrack` (512), `kMaxBreakpointsPerLane` (16384), `kMaxMarkers` (1024),
+    `kMaxMarkerTextLength` (128). Two more exist only on this path,
     because they bound the whole payload rather than one container:
     `kMaxTotalNotesUntrusted = 65536` (notes summed across every clip) and
     `kMaxPpqUntrusted = 100000.0` (the largest beat position or length in beats — ~14 hours at
@@ -616,6 +620,24 @@ accepts, smuggles it into a patch, and asserts `validatePatch` still refuses it.
 8.  **Track kinds** — `Midi` (0), `Audio` (1) and `Automation` (2); reserved kinds 3..15 are refused
     (`ReservedKindNotAllowed`). An audio *track* is a legal shape — what makes it unauthorable in
     practice is check 6, since an audio track with no asset-bearing clip is just an empty row.
+9.  **Markers** — the `"markers"` array (`TimelineDoc::Marker`: `id`, `beat`, `text`, `colourArgb`)
+    is allow-listed at the top level *because* it is checked here, field by field. A marker carries
+    no binding, no asset and nothing executable — it is a beat, a label and a colour — so the rules
+    are entirely about bounds and shape:
+    - `id` required, positive, unique across markers (`MalformedRoot`), like a note's;
+    - `beat` finite, `>= 0` and `<= kMaxPpqUntrusted` (`BeatOutOfBounds`) — the same bound every
+      other beat in the document gets;
+    - `text` a string of at most `kMaxMarkerTextLength` (128) characters, **rejected not truncated**
+      (`MarkerTextTooLong`) — the same rule note pitch 128 gets: a label we would have to shorten is
+      not the label the sender meant. An EMPTY label is legal (an unlabelled flag);
+    - `colourArgb` an integer in the full 32-bit range `0 .. 4294967295` — inert display data, so
+      every value is legal and only the *type* and the range are checked;
+    - array size at most `kMaxMarkers` (`TooManyMarkers`);
+    - **unknown keys inside a marker object are refused.** Markers are the one container checked with
+      a *closed key set* — tracks, clips and notes only reject unknown keys at the top level. The
+      reasoning is check 1's, one level down, and markers got the stricter rule from the start
+      because that reasoning was already known when they were added; retro-fitting it onto the older
+      containers is a separate change with its own compatibility question.
 
 ### Trusted-only forever
 

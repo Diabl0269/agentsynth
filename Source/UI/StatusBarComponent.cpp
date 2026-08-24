@@ -1,8 +1,38 @@
 #include "StatusBarComponent.h"
 #include "Theme/AppLookAndFeel.h"
 
+namespace {
+// Mute-button slot (matches resized()'s `getWidth() - kMuteSlotWidth` and the `padH` every text
+// segment in paint() insets from the edges).
+constexpr int kMuteSlotWidth = 28;
+constexpr int kPadH = 6;
+// Matches the voice-count draw's own width in paint() (`rightEdge - kVoiceSlotWidth`).
+constexpr int kVoiceSlotWidth = 80;
+
+// Transport cluster geometry: play/stop glyph button + "bar.beat.ticks   BPM" readout, placed
+// right after the round-trip segment (x=236, width 90 — see paint()). Named constants here (unlike
+// the older segments' inline literals) because, unlike the round-trip TEXT, the play/stop button is
+// a live child component: resized() has to run the exact same fit check paint() uses so it can
+// actually hide the button, not merely skip drawing over it.
+constexpr int kRoundTripX = 236;
+constexpr int kRoundTripWidth = 90;
+constexpr int kTransportGap = 6;
+constexpr int kTransportX = kRoundTripX + kRoundTripWidth + kTransportGap;
+constexpr int kTransportButtonSize = 16;
+constexpr int kTransportTextGap = 4;
+constexpr int kTransportTextWidth = 118;
+constexpr int kTransportClusterWidth = kTransportButtonSize + kTransportTextGap + kTransportTextWidth;
+} // namespace
+
 // ---------------------------------------------------------------------------
-StatusBarComponent::StatusBarComponent() { addAndMakeVisible(masterMuteButton_); }
+StatusBarComponent::StatusBarComponent() {
+    addAndMakeVisible(masterMuteButton_);
+
+    addAndMakeVisible(transportButton_);
+    transportButton_.setComponentID("statusBarTransportPlayStop");
+    transportButton_.setClickingTogglesState(false); // the transport is the truth — see updateTransport()
+    transportButton_.setTooltip("Play / Stop");
+}
 
 // ---------------------------------------------------------------------------
 void StatusBarComponent::update(float cpuPct, int voices, const juce::String& patch) {
@@ -32,6 +62,57 @@ void StatusBarComponent::updateRoundTripLatency(double milliseconds, bool availa
 }
 
 // ---------------------------------------------------------------------------
+void StatusBarComponent::updateTransport(bool playing, const juce::String& positionText, double bpm) {
+    const juce::String text = positionText + "   " + juce::String(bpm, 1) + " BPM";
+    const bool changed = (playing != transportPlaying_) || (text != transportDisplayText_);
+    if (!changed)
+        return;
+
+    transportPlaying_ = playing;
+    transportDisplayText_ = text;
+    transportButton_.setToggleState(playing, juce::dontSendNotification);
+    ++transportRepaintCount_;
+    repaint();
+}
+
+// ---------------------------------------------------------------------------
+// TransportButton::paintButton — the play/stop glyph. Same triangle/square shapes as
+// TimelineTransportBar::GlyphButton's PlayStop case (Source/UI/TimelineTransportBar.cpp),
+// reproduced rather than shared — see the class comment in the header. getToggleState() is playing
+// (true draws the stop square, false draws the play triangle); accent while playing is the
+// "obviously running" cue the always-visible cluster exists for.
+void StatusBarComponent::TransportButton::paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool) {
+    using namespace synth::theme;
+
+    juce::Colour accent = juce::Colours::cyan;
+    juce::Colour textPrimary = juce::Colours::white;
+    if (auto* lf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel())) {
+        accent = lf->getTheme().colors.accent;
+        textPrimary = lf->getTheme().colors.textPrimary;
+    }
+
+    if (shouldDrawHighlighted) {
+        g.setColour(textPrimary.withAlpha(0.08f));
+        g.fillRoundedRectangle(getLocalBounds().toFloat(), 3.0f);
+    }
+
+    const auto bounds = getLocalBounds().toFloat();
+    const float side = juce::jmin(bounds.getWidth(), bounds.getHeight());
+    const auto glyphArea = juce::Rectangle<float>(side, side).withCentre(bounds.getCentre()).reduced(side * 0.2f);
+
+    g.setColour(getToggleState() ? accent : textPrimary.withAlpha(0.75f));
+    if (getToggleState()) {
+        g.fillRoundedRectangle(glyphArea.reduced(glyphArea.getWidth() * 0.06f), 1.5f); // stop = square
+    } else {
+        // Optical centring, same nudge TimelineTransportBar's PlayStop triangle uses.
+        const auto tri = glyphArea.withTrimmedLeft(glyphArea.getWidth() * 0.12f);
+        juce::Path triangle;
+        triangle.addTriangle(tri.getX(), tri.getY(), tri.getX(), tri.getBottom(), tri.getRight(), tri.getCentreY());
+        g.fillPath(triangle);
+    }
+}
+
+// ---------------------------------------------------------------------------
 void StatusBarComponent::showMessage(const juce::String& msg) {
     transientMessage_ = msg;
     repaint();
@@ -53,7 +134,7 @@ void StatusBarComponent::paint(juce::Graphics& g) {
     auto* lnf = dynamic_cast<AppLookAndFeel*>(&getLookAndFeel());
 
     // --- Resolve colours: themed if LnF present, otherwise JUCE fallback ---
-    juce::Colour bg0, border, textPrimary, textMuted, warningColour;
+    juce::Colour bg0, border, textPrimary, textMuted, warningColour, accentColour;
     if (lnf) {
         const auto& c = lnf->getTheme().colors;
         bg0 = c.bg0;
@@ -61,12 +142,14 @@ void StatusBarComponent::paint(juce::Graphics& g) {
         textPrimary = c.textPrimary;
         textMuted = c.textMuted;
         warningColour = c.warning;
+        accentColour = c.accent;
     } else {
         bg0 = findColour(juce::DocumentWindow::backgroundColourId);
         border = juce::Colours::grey;
         textPrimary = findColour(juce::Label::textColourId);
         textMuted = textPrimary.withAlpha(0.6f);
         warningColour = juce::Colours::orange;
+        accentColour = juce::Colours::cyan;
     }
 
     const auto bounds = getLocalBounds().toFloat();
@@ -78,12 +161,12 @@ void StatusBarComponent::paint(juce::Graphics& g) {
     g.setColour(border);
     g.drawHorizontalLine(0, bounds.getX(), bounds.getRight());
 
-    const int padH = 6;
+    const int padH = kPadH;
     const int textY = 1;
     const int textH = getHeight() - 2;
 
     // Reserve space for mute button on the right (28 px wide slot)
-    const int muteSlotWidth = 28;
+    const int muteSlotWidth = kMuteSlotWidth;
     const int rightEdge = getWidth() - muteSlotWidth - padH;
 
     g.setFont(juce::Font(11.0f));
@@ -108,22 +191,48 @@ void StatusBarComponent::paint(juce::Graphics& g) {
 
         // Round trip — after CPU, and only while it actually fits before the voice count's
         // own slot. A cramped window drops this segment rather than overlapping two readings.
-        const int roundTripX = 236;
-        const int roundTripW = 90;
-        if (roundTripText_.isNotEmpty() && roundTripX + roundTripW <= rightEdge - 80 - padH) {
+        if (roundTripText_.isNotEmpty() && kRoundTripX + kRoundTripWidth <= rightEdge - kVoiceSlotWidth - padH) {
             g.setColour(textMuted);
-            g.drawText(roundTripText_, roundTripX, textY, roundTripW, textH, juce::Justification::centredLeft, true);
+            g.drawText(roundTripText_, kRoundTripX, textY, kRoundTripWidth, textH, juce::Justification::centredLeft,
+                       true);
+        }
+
+        // Transport cluster readout ("001.1.000   120.0 BPM") — after the play/stop glyph button
+        // (see resized() for its bounds), and only while the whole cluster fits before the
+        // voice-count slot; transportClusterFits_ is computed once in resized() rather than here
+        // because the button is a live child component that resized() must actually hide, not just
+        // skip drawing over — see the header comment. Accent while playing, same "obviously
+        // running" cue as the button's own glyph colour.
+        if (transportClusterFits_ && transportDisplayText_.isNotEmpty()) {
+            g.setColour(transportPlaying_ ? accentColour : textMuted);
+            const int transportTextX = kTransportX + kTransportButtonSize + kTransportTextGap;
+            g.drawText(transportDisplayText_, transportTextX, textY, kTransportTextWidth, textH,
+                       juce::Justification::centredLeft, true);
         }
 
         // Voice count — right-aligned before mute button
         const juce::String voiceStr = formatVoices(voices_);
         g.setColour(textMuted);
-        g.drawText(voiceStr, rightEdge - 80, textY, 80, textH, juce::Justification::centredRight, true);
+        g.drawText(voiceStr, rightEdge - kVoiceSlotWidth, textY, kVoiceSlotWidth, textH,
+                   juce::Justification::centredRight, true);
     }
 }
 
 // ---------------------------------------------------------------------------
-void StatusBarComponent::resized() { masterMuteButton_.setBounds(getWidth() - 28, 2, 20, getHeight() - 4); }
+void StatusBarComponent::resized() {
+    masterMuteButton_.setBounds(getWidth() - kMuteSlotWidth, 2, 20, getHeight() - 4);
+
+    // Transport cluster fit check — the SAME "does it fit before the voice-count slot" gate the
+    // round-trip segment uses in paint(), evaluated here too because the play/stop button is a live
+    // child component and paint() alone cannot hide it (see the header's class comment).
+    const int rightEdge = getWidth() - kMuteSlotWidth - kPadH;
+    transportClusterFits_ = kTransportX + kTransportClusterWidth <= rightEdge - kVoiceSlotWidth - kPadH;
+    transportButton_.setVisible(transportClusterFits_);
+    if (transportClusterFits_) {
+        const int buttonY = (getHeight() - kTransportButtonSize) / 2;
+        transportButton_.setBounds(kTransportX, buttonY, kTransportButtonSize, kTransportButtonSize);
+    }
+}
 
 // ---------------------------------------------------------------------------
 juce::String StatusBarComponent::formatCpu(float fraction) {

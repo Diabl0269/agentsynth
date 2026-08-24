@@ -598,6 +598,443 @@ TEST(TimelineRulerInteractionTest, ClickOnDimmedBraceReArmsLooping) {
     EXPECT_TRUE(transport.getPositionSnapshot().looping);
 }
 
+// ---------------------------------------------------------------------------
+// 3b. Ruler markers — flags, hit-testing, drag-to-move, the context menu's
+//     verbs and the undo shape.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// A ruler wired to a doc + transport, at 40 px/beat with Beat snap — the same mapping every ruler
+// test above uses, so a pixel figure means the same thing throughout this file.
+struct MarkerRulerFixture {
+    synth::ui::TimelineViewState state;
+    synth::TransportService transport;
+    synth::TimelineDoc doc;
+    AppUndoManager undo;
+    std::unique_ptr<synth::ui::TimelineRulerComponent> ruler;
+
+    MarkerRulerFixture(bool withUndoManager = true) {
+        state.pixelsPerBeat = 40.0;
+        state.firstVisibleBeat = 0.0;
+        state.snap = synth::ui::TimelineViewState::Snap::Quarter;
+        transport.prepare(48000.0, 512);
+
+        ruler = std::make_unique<synth::ui::TimelineRulerComponent>(state);
+        ruler->setTransport(&transport);
+        ruler->setTimelineDoc(&doc);
+        if (withUndoManager)
+            ruler->setUndoManager(&undo);
+        ruler->setSize(800, 24);
+    }
+};
+
+// The centre of a marker's flag, which is what a click has to land on.
+juce::Point<float> flagCentre(const synth::ui::TimelineRulerComponent& ruler, synth::MarkerId id) {
+    for (const auto& flag : ruler.buildMarkerFlags())
+        if (flag.id == id)
+            return flag.bounds.getCentre();
+    return {-1.0f, -1.0f};
+}
+
+} // namespace
+
+TEST(TimelineRulerMarkerTest, FlagsFollowTheDocAndSitInTheLowerBand) {
+    MarkerRulerFixture f;
+    EXPECT_TRUE(f.ruler->buildMarkerFlags().empty()) << "no markers, no flags";
+
+    const auto intro = f.doc.addMarker(2.0, "Intro", 0xffE0A33D);
+    const auto chorus = f.doc.addMarker(10.0, "Chorus", 0xff44AA88);
+
+    const auto flags = f.ruler->buildMarkerFlags();
+    ASSERT_EQ(flags.size(), 2u);
+    // Doc (beat, id) order, and anchored at the marker's own beat: 2 * 40 = 80, 10 * 40 = 400.
+    EXPECT_EQ(flags[0].id, intro);
+    EXPECT_FLOAT_EQ(flags[0].bounds.getX(), 80.0f);
+    EXPECT_EQ(flags[1].id, chorus);
+    EXPECT_FLOAT_EQ(flags[1].bounds.getX(), 400.0f);
+    EXPECT_EQ(flags[0].colour, juce::Colour(0xffE0A33D));
+    EXPECT_EQ(flags[0].text, "Intro");
+
+    // Lower band: at 24 px tall the flag runs y = 12..23, clear of the loop brace (which occupies
+    // the top 8 px of the strip) and inside the component.
+    for (const auto& flag : flags) {
+        EXPECT_FLOAT_EQ(flag.bounds.getY(), 24.0f - synth::ui::kMarkerFlagHeight - 1.0f);
+        EXPECT_GE(flag.bounds.getY(), 8.0f) << "a flag must not sit under the loop brace";
+        EXPECT_LE(flag.bounds.getBottom(), 24.0f);
+    }
+
+    // Width comes from the label's character COUNT, never from measured text.
+    EXPECT_FLOAT_EQ(flags[0].bounds.getWidth(), synth::ui::markerFlagWidthFor(5));
+    // An unlabelled marker still gets a grabbable tab.
+    const auto blank = f.doc.addMarker(20.0, "", 0xff112233);
+    const auto withBlank = f.ruler->buildMarkerFlags();
+    ASSERT_EQ(withBlank.size(), 3u);
+    EXPECT_EQ(withBlank[2].id, blank);
+    EXPECT_FLOAT_EQ(withBlank[2].bounds.getWidth(), synth::ui::kMarkerMinFlagWidth);
+}
+
+TEST(TimelineRulerMarkerTest, FlagsAreCulledPerFlagNotPerRange) {
+    MarkerRulerFixture f;
+    f.doc.addMarker(2.0, "Visible", 0xff000000);
+    f.doc.addMarker(500.0, "Way off to the right", 0xff000000);
+    // 800 px / 40 = 20 visible beats, so only the first is on screen.
+    EXPECT_EQ(f.ruler->buildMarkerFlags().size(), 1u);
+
+    // Scrolled so the marker's anchor is just LEFT of x = 0 but its tab still overlaps the strip:
+    // culling by the anchor alone would wrongly drop it.
+    f.state.firstVisibleBeat = 2.05; // anchor at -2 px, tab runs ~30 px to the right
+    const auto scrolled = f.ruler->buildMarkerFlags();
+    ASSERT_EQ(scrolled.size(), 1u) << "a partly-visible flag stays in the list";
+    EXPECT_LT(scrolled[0].bounds.getX(), 0.0f);
+    EXPECT_GT(scrolled[0].bounds.getRight(), 0.0f);
+}
+
+TEST(TimelineRulerMarkerTest, HitTestResolvesTheFlagUnderThePointerAndNothingElse) {
+    MarkerRulerFixture f;
+    const auto intro = f.doc.addMarker(2.0, "Intro", 0xff000000);
+
+    const auto centre = flagCentre(*f.ruler, intro);
+    EXPECT_EQ(f.ruler->markerAt(centre), intro);
+    // Just above the flag is the ruler, not the marker.
+    EXPECT_FALSE(f.ruler->markerAt({centre.x, 2.0f}).isValid());
+    // Left of the anchor is not the marker either — the tab runs RIGHT of the beat.
+    EXPECT_FALSE(f.ruler->markerAt({70.0f, centre.y}).isValid());
+    EXPECT_FALSE(f.ruler->markerAt({600.0f, centre.y}).isValid());
+
+    // Two overlapping flags: the later (topmost drawn) one wins.
+    const auto overlapping = f.doc.addMarker(2.05, "Overlap", 0xff000000);
+    EXPECT_EQ(f.ruler->markerAt(flagCentre(*f.ruler, overlapping)), overlapping);
+}
+
+TEST(TimelineRulerMarkerTest, DragMovesTheMarkerSnappedAsOneUndoStep) {
+    MarkerRulerFixture f;
+    const auto intro = f.doc.addMarker(2.0, "Intro", 0xff000000);
+    const auto revisionBefore = f.doc.getRevision();
+
+    const auto press = flagCentre(*f.ruler, intro);
+    f.ruler->mouseDown(makeClickEvent(*f.ruler, press));
+    EXPECT_EQ(f.ruler->getDraggingMarkerForTest(), intro);
+    EXPECT_DOUBLE_EQ(f.doc.getMarker(intro)->beat, 2.0) << "the press itself must not move anything";
+
+    // +160 px == +4 beats, snapped to the Quarter grid (a whole beat here).
+    f.ruler->mouseDrag(makeDragEvent(*f.ruler, {press.x + 160.0f, press.y}, press));
+    EXPECT_DOUBLE_EQ(f.ruler->getMarkerDragBeatForTest(), 6.0);
+    EXPECT_DOUBLE_EQ(f.doc.getMarker(intro)->beat, 2.0) << "a drag in flight is a preview only";
+    // The PREVIEW is what the flag (and therefore the hit test) follows mid-drag.
+    EXPECT_FLOAT_EQ(f.ruler->buildMarkerFlags()[0].bounds.getX(), 240.0f);
+
+    f.ruler->mouseUp(makeDragEvent(*f.ruler, {press.x + 160.0f, press.y}, press));
+    EXPECT_FALSE(f.ruler->getDraggingMarkerForTest().isValid());
+    EXPECT_DOUBLE_EQ(f.doc.getMarker(intro)->beat, 6.0);
+    EXPECT_EQ(f.doc.getRevision(), revisionBefore + 1) << "one mutation for the whole drag";
+
+    // ONE undo step, and it puts the marker back.
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_DOUBLE_EQ(f.doc.getMarker(intro)->beat, 2.0);
+}
+
+TEST(TimelineRulerMarkerTest, DragNeverGoesNegativeAndAPressThatNeverMovedCommitsNothing) {
+    MarkerRulerFixture f;
+    const auto marker = f.doc.addMarker(2.0, "M", 0xff000000);
+    const auto revisionBefore = f.doc.getRevision();
+
+    const auto press = flagCentre(*f.ruler, marker);
+    f.ruler->mouseDown(makeClickEvent(*f.ruler, press));
+    f.ruler->mouseUp(makeClickEvent(*f.ruler, press)); // mouseWasDragged == false
+    EXPECT_DOUBLE_EQ(f.doc.getMarker(marker)->beat, 2.0);
+    EXPECT_EQ(f.doc.getRevision(), revisionBefore) << "a stray click must not re-snap the marker";
+    EXPECT_FALSE(f.undo.canUndo());
+
+    // Dragged far left: clamped at beat 0, never negative (the model would refuse it).
+    f.ruler->mouseDown(makeClickEvent(*f.ruler, press));
+    f.ruler->mouseDrag(makeDragEvent(*f.ruler, {-500.0f, press.y}, press));
+    EXPECT_DOUBLE_EQ(f.ruler->getMarkerDragBeatForTest(), 0.0);
+    f.ruler->mouseUp(makeDragEvent(*f.ruler, {-500.0f, press.y}, press));
+    EXPECT_DOUBLE_EQ(f.doc.getMarker(marker)->beat, 0.0);
+}
+
+// A marker press must not also scrub or set a loop — and the reverse: the zone gestures still work
+// everywhere a flag is not.
+TEST(TimelineRulerMarkerTest, AMarkerPressConsumesTheGestureButLeavesTheRestOfTheStripAlone) {
+    MarkerRulerFixture f;
+    const auto marker = f.doc.addMarker(2.0, "M", 0xff000000);
+
+    const auto onFlag = flagCentre(*f.ruler, marker);
+    f.ruler->mouseDown(makeClickEvent(*f.ruler, onFlag));
+    f.ruler->mouseDrag(makeDragEvent(*f.ruler, {onFlag.x + 80.0f, onFlag.y}, onFlag));
+    f.ruler->mouseUp(makeDragEvent(*f.ruler, {onFlag.x + 80.0f, onFlag.y}, onFlag));
+    f.transport.tick(512);
+    EXPECT_EQ(f.ruler->getSeekPostCountForTest(), 0) << "a marker drag never scrubs";
+    EXPECT_FALSE(f.transport.getPositionSnapshot().looping) << "and never sets a loop";
+
+    // The playhead zone, clear of every flag, still scrubs exactly as before.
+    const juce::Point<float> emptyPlayheadZone(600.0f, kPlayheadZoneY);
+    ASSERT_FALSE(f.ruler->markerAt(emptyPlayheadZone).isValid());
+    f.ruler->mouseDown(makeClickEvent(*f.ruler, emptyPlayheadZone));
+    f.transport.tick(512);
+    EXPECT_EQ(f.ruler->getSeekPostCountForTest(), 1);
+    EXPECT_DOUBLE_EQ(f.transport.getPositionSnapshot().ppq, 15.0);
+}
+
+// Cmd+click stays the "switch looping off" gesture even over a flag — a marker must not punch dead
+// holes in it.
+TEST(TimelineRulerMarkerTest, CommandClickOverAFlagStillTogglesLooping) {
+    MarkerRulerFixture f;
+    const auto marker = f.doc.addMarker(2.0, "M", 0xff000000);
+    ASSERT_TRUE(f.transport.setLoop(0.0, 8.0, true));
+    f.transport.tick(512);
+
+    const auto onFlag = flagCentre(*f.ruler, marker);
+    f.ruler->mouseDown(makeClickEvent(*f.ruler, onFlag, juce::ModifierKeys::commandModifier));
+    f.transport.tick(512);
+    EXPECT_FALSE(f.transport.getPositionSnapshot().looping);
+    EXPECT_FALSE(f.ruler->getDraggingMarkerForTest().isValid()) << "no marker drag was started";
+    EXPECT_DOUBLE_EQ(f.doc.getMarker(marker)->beat, 2.0);
+}
+
+TEST(TimelineRulerMarkerTest, HoverTracksTheFlagUnderThePointerAndClearsOnExit) {
+    MarkerRulerFixture f;
+    const auto marker = f.doc.addMarker(2.0, "Intro", 0xff000000);
+    const auto onFlag = flagCentre(*f.ruler, marker);
+
+    f.ruler->mouseEnter(makeClickEvent(*f.ruler, onFlag));
+    EXPECT_EQ(f.ruler->getHoveredMarkerForTest(), marker);
+
+    f.ruler->mouseMove(makeClickEvent(*f.ruler, {600.0f, onFlag.y}));
+    EXPECT_FALSE(f.ruler->getHoveredMarkerForTest().isValid());
+
+    f.ruler->mouseMove(makeClickEvent(*f.ruler, onFlag));
+    EXPECT_EQ(f.ruler->getHoveredMarkerForTest(), marker);
+    f.ruler->mouseExit(makeClickEvent(*f.ruler, onFlag));
+    EXPECT_FALSE(f.ruler->getHoveredMarkerForTest().isValid());
+}
+
+TEST(TimelineRulerMarkerTest, ContextMenuDeleteIsOneUndoStepAndTheOtherTwoChoicesMutateNothing) {
+    using Choice = synth::ui::TimelineRulerComponent::MarkerContextChoice;
+    MarkerRulerFixture f;
+    const auto marker = f.doc.addMarker(2.0, "Intro", 0xff112233);
+    const auto revisionAfterAdd = f.doc.getRevision();
+
+    // Rename and ChangeColour open UI; neither is a mutation.
+    f.ruler->applyMarkerContextChoice(marker, Choice::Rename);
+    f.ruler->applyMarkerContextChoice(marker, Choice::ChangeColour);
+    EXPECT_EQ(f.doc.getRevision(), revisionAfterAdd);
+    EXPECT_NE(f.doc.getMarker(marker), nullptr);
+
+    f.ruler->applyMarkerContextChoice(marker, Choice::Delete);
+    EXPECT_EQ(f.doc.getMarker(marker), nullptr);
+    EXPECT_TRUE(f.doc.getMarkers().empty());
+    EXPECT_FALSE(f.ruler->getHoveredMarkerForTest().isValid());
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    ASSERT_EQ(f.doc.getMarkers().size(), 1u);
+    EXPECT_EQ(f.doc.getMarkers().front().text, "Intro");
+
+    // A choice naming a marker that is already gone is inert, not a crash.
+    f.ruler->applyMarkerContextChoice(synth::MarkerId{999}, Choice::Delete);
+    EXPECT_EQ(f.doc.getMarkers().size(), 1u);
+}
+
+TEST(TimelineRulerMarkerTest, RenameCommitsThroughTheDocAndRefusesAnOverLongLabel) {
+    MarkerRulerFixture f;
+    const auto marker = f.doc.addMarker(2.0, "Intro", 0xff000000);
+
+    f.ruler->renameMarker(marker, "Verse 1");
+    EXPECT_EQ(f.doc.getMarker(marker)->text, "Verse 1");
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getMarker(marker)->text, "Intro");
+
+    // Over the cap: refused by the doc, which leaves the existing label in place.
+    f.ruler->renameMarker(marker, juce::String::repeatedString("x", synth::TimelineDoc::kMaxMarkerTextLength + 1));
+    EXPECT_EQ(f.doc.getMarker(marker)->text, "Intro");
+}
+
+TEST(TimelineRulerMarkerTest, InlineRenameEditorCommitsOnReturnAndCancelsOnEscape) {
+    MarkerRulerFixture f;
+    const auto marker = f.doc.addMarker(2.0, "Intro", 0xff000000);
+
+    f.ruler->beginRenameMarker(marker);
+    auto* editor = f.ruler->getMarkerRenameEditorForTest();
+    ASSERT_NE(editor, nullptr);
+    EXPECT_EQ(editor->getText(), "Intro") << "the editor opens on the current label";
+    // Inside the strip, and wide enough to type into.
+    EXPECT_TRUE(f.ruler->getLocalBounds().contains(editor->getBounds()));
+    EXPECT_GE(editor->getWidth(), 96);
+
+    editor->setText("Bridge", juce::dontSendNotification);
+    editor->onReturnKey();
+    EXPECT_EQ(f.ruler->getMarkerRenameEditorForTest(), nullptr) << "committing closes the editor";
+    EXPECT_EQ(f.doc.getMarker(marker)->text, "Bridge");
+
+    // Escape is the cancel.
+    f.ruler->beginRenameMarker(marker);
+    editor = f.ruler->getMarkerRenameEditorForTest();
+    ASSERT_NE(editor, nullptr);
+    editor->setText("Discarded", juce::dontSendNotification);
+    editor->onEscapeKey();
+    EXPECT_EQ(f.ruler->getMarkerRenameEditorForTest(), nullptr);
+    EXPECT_EQ(f.doc.getMarker(marker)->text, "Bridge");
+
+    // A marker scrolled off screen has nowhere to put an editor.
+    f.state.firstVisibleBeat = 500.0;
+    f.ruler->beginRenameMarker(marker);
+    EXPECT_EQ(f.ruler->getMarkerRenameEditorForTest(), nullptr);
+}
+
+TEST(TimelineRulerMarkerTest, ColourPickerPreviewsLiveAndCommitsOneUndoStep) {
+    MarkerRulerFixture f;
+    const auto marker = f.doc.addMarker(2.0, "Intro", 0xff112233);
+
+    // Driven through the popup's OWN test seams, never a real juce::CallOutBox — the same way
+    // TimelineTrackHeaderTests drives the track-colour swatch.
+    auto picker = f.ruler->createMarkerColourPickerForTest(marker);
+    ASSERT_NE(picker, nullptr);
+
+    picker->setCurrentColourForTest(juce::Colour(0xff445566));
+    EXPECT_EQ(f.doc.getMarker(marker)->colourArgb, 0xff445566u) << "a preview writes the doc directly";
+    EXPECT_FALSE(f.undo.canUndo()) << "...and records nothing";
+
+    picker->setCurrentColourForTest(juce::Colour(0xff778899));
+    picker->commitForTest();
+    EXPECT_EQ(f.doc.getMarker(marker)->colourArgb, 0xff778899u);
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getMarker(marker)->colourArgb, 0xff112233u) << "undo restores the ORIGINAL, not the preview";
+
+    // Closing on the colour it started with records no step at all.
+    auto noChange = f.ruler->createMarkerColourPickerForTest(marker);
+    ASSERT_NE(noChange, nullptr);
+    noChange->setCurrentColourForTest(juce::Colour(0xffabcdef));
+    noChange->setCurrentColourForTest(juce::Colour(0xff112233));
+    noChange->commitForTest();
+    EXPECT_EQ(f.doc.getMarker(marker)->colourArgb, 0xff112233u);
+    EXPECT_FALSE(f.undo.canUndo());
+
+    EXPECT_EQ(f.ruler->createMarkerColourPickerForTest(synth::MarkerId{999}), nullptr);
+}
+
+// Without an undo manager every marker edit still applies — it just does not land on a stack.
+TEST(TimelineRulerMarkerTest, MarkerEditsWorkWithNoUndoManagerInstalled) {
+    MarkerRulerFixture f(/*withUndoManager=*/false);
+    const auto marker = f.doc.addMarker(2.0, "Intro", 0xff000000);
+
+    f.ruler->renameMarker(marker, "Renamed");
+    EXPECT_EQ(f.doc.getMarker(marker)->text, "Renamed");
+    f.ruler->applyMarkerContextChoice(marker, synth::ui::TimelineRulerComponent::MarkerContextChoice::Delete);
+    EXPECT_TRUE(f.doc.getMarkers().empty());
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+// Markers live on the DOC, so they stay editable in a build with no transport wired in — and
+// clearing the doc drops every gesture that named it.
+TEST(TimelineRulerMarkerTest, MarkersWorkWithoutATransportAndSwappingTheDocResetsGestureState) {
+    synth::ui::TimelineViewState state;
+    state.pixelsPerBeat = 40.0;
+    state.snap = synth::ui::TimelineViewState::Snap::Quarter;
+    synth::TimelineDoc doc;
+    synth::ui::TimelineRulerComponent ruler(state);
+    ruler.setTimelineDoc(&doc);
+    ruler.setSize(800, 24);
+    ASSERT_EQ(ruler.getTransport(), nullptr);
+
+    const auto marker = doc.addMarker(2.0, "Intro", 0xff000000);
+    const auto press = flagCentre(ruler, marker);
+    ruler.mouseDown(makeClickEvent(ruler, press));
+    EXPECT_EQ(ruler.getDraggingMarkerForTest(), marker) << "no transport, but the marker still drags";
+    ruler.mouseDrag(makeDragEvent(ruler, {press.x + 160.0f, press.y}, press));
+    ruler.mouseUp(makeDragEvent(ruler, {press.x + 160.0f, press.y}, press));
+    EXPECT_DOUBLE_EQ(doc.getMarker(marker)->beat, 6.0);
+
+    // Re-pointing at another doc drops the drag/hover ids and any open rename.
+    ruler.mouseEnter(makeClickEvent(ruler, flagCentre(ruler, marker)));
+    ruler.beginRenameMarker(marker);
+    ASSERT_NE(ruler.getMarkerRenameEditorForTest(), nullptr);
+    synth::TimelineDoc other;
+    ruler.setTimelineDoc(&other);
+    EXPECT_EQ(ruler.getMarkerRenameEditorForTest(), nullptr);
+    EXPECT_FALSE(ruler.getHoveredMarkerForTest().isValid());
+    EXPECT_TRUE(ruler.buildMarkerFlags().empty());
+
+    // No doc at all: every gesture is inert rather than a crash.
+    ruler.setTimelineDoc(nullptr);
+    ruler.mouseDown(makeClickEvent(ruler, {80.0f, kPlayheadZoneY}));
+    EXPECT_FALSE(ruler.getDraggingMarkerForTest().isValid());
+    EXPECT_TRUE(ruler.buildMarkerFlags().empty());
+}
+
+// The panel is what repaints the strip when a marker changes — there is no timer under it.
+TEST(TimelineRulerMarkerTest, PanelPaintsMarkersWithNoTimerAndTheAddMarkerMenuEntryWorks) {
+    synth::TimelineDoc doc;
+    AppUndoManager undo;
+    synth::TransportService transport;
+    transport.prepare(48000.0, 512);
+
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setUndoManager(&undo);
+    panel.setTransport(&transport);
+    panel.setSize(1200, 220);
+
+    // The ruler got the doc through the panel's own forward.
+    EXPECT_EQ(panel.getRuler().getTimelineDoc(), &doc);
+
+    transport.locateBeat(6.0);
+    transport.tick(512);
+    ASSERT_DOUBLE_EQ(transport.getPositionSnapshot().ppq, 6.0);
+
+    const auto added = panel.addMarkerAtPlayhead();
+    ASSERT_TRUE(added.isValid());
+    ASSERT_EQ(doc.getMarkers().size(), 1u);
+    EXPECT_DOUBLE_EQ(doc.getMarkers().front().beat, 6.0) << "at the playhead, unsnapped";
+    EXPECT_EQ(doc.getMarkers().front().text, "Marker 1");
+    EXPECT_FALSE(panel.getRuler().buildMarkerFlags().empty());
+
+    // One undo step, and the whole "+ Track" menu route lands on the same method.
+    ASSERT_TRUE(undo.canUndo());
+    undo.undo();
+    EXPECT_TRUE(doc.getMarkers().empty());
+
+    panel.applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddMarkerMenuId);
+    ASSERT_EQ(doc.getMarkers().size(), 1u);
+    // ...and a second one counts up from what is already there.
+    panel.applyAddTrackMenuChoice(synth::ui::TimelinePanelComponent::kAddMarkerMenuId);
+    ASSERT_EQ(doc.getMarkers().size(), 2u);
+    EXPECT_EQ(doc.getMarkers()[1].text, "Marker 2");
+
+    // Paint smoke: the flags are drawn by the ruler's own paint(), no timer involved.
+    juce::Image image(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true);
+    juce::Graphics g(image);
+    EXPECT_NO_THROW(panel.paintEntireComponent(g, true));
+
+    panel.setTimelineDoc(nullptr);
+    panel.setUndoManager(nullptr);
+    panel.setTransport(nullptr);
+}
+
+// Adding a marker with no doc (or a doc at kMaxMarkers) is a refusal, not a crash.
+TEST(TimelineRulerMarkerTest, AddMarkerAtPlayheadRefusesCleanly) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 220);
+    EXPECT_FALSE(panel.addMarkerAtPlayhead().isValid()) << "no doc: nothing to add to";
+
+    synth::TimelineDoc doc;
+    panel.setTimelineDoc(&doc);
+    // With no transport the playhead is beat 0.
+    const auto first = panel.addMarkerAtPlayhead();
+    ASSERT_TRUE(first.isValid());
+    EXPECT_DOUBLE_EQ(doc.getMarkers().front().beat, 0.0);
+
+    while ((int)doc.getMarkers().size() < synth::TimelineDoc::kMaxMarkers)
+        ASSERT_TRUE(doc.addMarker(1.0, "filler", 0xff000000).isValid());
+    EXPECT_FALSE(panel.addMarkerAtPlayhead().isValid()) << "at the cap: refused";
+
+    panel.setTimelineDoc(nullptr);
+}
+
 // Wheel bindings (Cubase-style): plain vertical wheel scrolls the TRACK rows, Shift+wheel (or a
 // trackpad's own deltaX) scrolls horizontally, Cmd+wheel zooms horizontally around the cursor
 // (keeping the beat under it fixed), Cmd+Shift+wheel zooms the row height.

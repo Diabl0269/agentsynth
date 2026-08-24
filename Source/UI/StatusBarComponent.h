@@ -3,7 +3,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 // StatusBarComponent  §4.1
-// Bottom chrome strip: patch name, CPU %, voice count, master-mute button.
+// Bottom chrome strip: patch name, CPU %, voice count, transport cluster, master-mute button.
 //
 // Headless-safe: all paint paths dynamic_cast<AppLookAndFeel*> and fall back to plain
 // JUCE colours when the cast returns null (test runner has no themed LnF installed).
@@ -13,6 +13,14 @@
 //
 // showMessage() displays a transient status message that auto-clears after ~2.5 s.
 // While active it overrides the normal patch/cpu/voice text in the centre of the bar.
+//
+// Transport cluster: a play/stop glyph button + a "bar.beat.ticks   BPM" readout, ALWAYS visible
+// regardless of the timeline panel's visibility — before this, play/stop/position only existed
+// inside TimelineTransportBar, a child of the (often-hidden) timeline panel. Fed by
+// updateTransport() from MainComponent::timerCallback's existing unconditional transport poll; see
+// that method's comment. This class lives in Core, which cannot depend on AppUI (where
+// TimelineTransportBar and its formatBarBeat() helper live), so updateTransport() takes an
+// already-formatted position string rather than formatting one itself.
 class StatusBarComponent
     : public juce::Component
     , private juce::Timer {
@@ -37,10 +45,26 @@ public:
     // then auto-clear and restore normal status. Safe to call from any message-thread code.
     void showMessage(const juce::String& msg);
 
+    // Push play-state + a pre-formatted position readout + BPM into the transport cluster. See the
+    // class comment for why `positionText` arrives pre-formatted (typically the caller's own
+    // synth::ui::TimelineTransportBar::formatBarBeat(ppq, tsNumerator, tsDenominator)).
+    //
+    // Gated independently of update()/updateRoundTripLatency(): a diff on (playing, positionText,
+    // bpm) is what triggers a repaint, so an unchanged tick costs nothing extra, same shape as the
+    // round-trip segment's own string-diff gate.
+    void updateTransport(bool playing, const juce::String& positionText, double bpm);
+
     void paint(juce::Graphics& g) override;
     void resized() override;
 
     juce::DrawableButton& getMasterMuteButton() noexcept { return masterMuteButton_; }
+
+    // The play/stop button. "The transport is the truth": its toggle state is set ONLY by
+    // updateTransport() above, never by the click itself (setClickingTogglesState(false) in the
+    // ctor) — same idiom as TimelineTransportBar::getPlayStopButton(). The owner (MainComponent)
+    // wires onClick to the same TransportService play()/stop() calls the timeline transport bar
+    // uses.
+    juce::Button& getTransportButton() noexcept { return transportButton_; }
 
     // Test-only: the currently-displayed transient message ("" when none is active). Production
     // code never reads this back — showMessage() is fire-and-forget.
@@ -51,6 +75,18 @@ public:
     // its own gating — two updates with the same value must cost exactly one repaint.
     const juce::String& getRoundTripTextForTest() const noexcept { return roundTripText_; }
     int getRoundTripRepaintCountForTest() const noexcept { return roundTripRepaintCount_; }
+
+    // Test-only: the transport cluster's rendered readout ("001.1.000   120.0 BPM") and how many
+    // times it actually changed (and so requested a repaint) — same counting idiom as
+    // getRoundTripRepaintCountForTest().
+    const juce::String& getTransportDisplayTextForTest() const noexcept { return transportDisplayText_; }
+    int getTransportRepaintCountForTest() const noexcept { return transportRepaintCount_; }
+
+    // Test-only: whether the transport cluster currently fits before the voice-count slot (the
+    // cramped-width drop, computed in resized() — see its comment). Unlike the round-trip TEXT, the
+    // play/stop button is a live child component, so resized() has to actually hide it, not just
+    // skip drawing over it.
+    bool isTransportClusterVisibleForTest() const noexcept { return transportClusterFits_; }
 
     // --- Static format helpers (headless-testable, no JUCE GUI deps) ---
     // formatCpu: 0.756f -> "75.6%"
@@ -85,6 +121,25 @@ private:
     // Empty until the first updateRoundTripLatency(), and drawn as nothing while it is.
     juce::String roundTripText_;
     int roundTripRepaintCount_{0};
+
+    // A small juce::Button subclass that draws the play/stop glyph as a plain path — the same
+    // triangle/square shapes TimelineTransportBar::GlyphButton::paintButton draws for its own
+    // PlayStop glyph, reproduced here rather than shared (that class is private to AppUI; this bar
+    // lives in Core — see the class comment).
+    class TransportButton : public juce::Button {
+    public:
+        TransportButton()
+            : juce::Button("statusBarTransportPlayStop") {}
+        void paintButton(juce::Graphics& g, bool shouldDrawHighlighted, bool shouldDrawDown) override;
+    };
+
+    TransportButton transportButton_;
+
+    // Transport cluster state, written by updateTransport(), read by paint()/resized().
+    bool transportPlaying_{false};
+    juce::String transportDisplayText_;
+    int transportRepaintCount_{0};
+    bool transportClusterFits_{true};
 
     juce::DrawableButton masterMuteButton_{"MasterMute", juce::DrawableButton::ImageFitted};
 

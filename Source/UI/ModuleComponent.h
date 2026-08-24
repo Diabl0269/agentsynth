@@ -56,6 +56,17 @@ public:
      *  steps applyMacroCountChange takes for the Macro bank's "Knobs" parameter. */
     void refreshPortLayout();
 
+    /** Output-card identity treatment only: repoints the muted destination line drawn under the
+     *  Audio Output card's title (device name + sample rate + channel count, or "Host audio" in
+     *  HostMode::Hosted, or empty to hide the line entirely). A no-op on every other module —
+     *  callers do not need to check isAudioOutputIONode() first. Pushed in by
+     *  GraphEditor::refreshOutputDeviceInfo() (MainComponent -> GraphEditor -> here) whenever
+     *  AudioEngine's device state changes; never polled. MESSAGE THREAD ONLY. Repaints (the single
+     *  ZoomFrozenCachedImage refresh seam — see refreshPortLayout above) only when the text
+     *  actually changed. */
+    void setOutputDeviceInfoText(const juce::String& text);
+    const juce::String& getOutputDeviceInfoTextForTest() const noexcept { return outputDeviceInfoText; }
+
     // Interaction Logic
     struct Port {
         juce::Rectangle<int> area;
@@ -224,6 +235,11 @@ private:
     float lastPaintedRMS = -1.0f;
     std::vector<float> rmsReadBuffer;
     int lastActiveStep = -1;
+
+    // Output-card identity treatment (Audio Output only — see setOutputDeviceInfoText). Empty
+    // means "nothing to show yet" (before the first refresh, or a Hosted build that returned
+    // nothing), which paint() treats as "draw no subtitle line" rather than an empty line.
+    juce::String outputDeviceInfoText;
 
     void createControls();
     void updateLayout();

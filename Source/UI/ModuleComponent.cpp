@@ -36,6 +36,17 @@ static ModuleType getType(juce::AudioProcessor* module) {
     return ModuleType::Oscillator;
 }
 
+/** True for the graph's terminal audio sink (Audio Output). Mirrors GraphEditor.cpp's
+ *  isTerminalAudioSink — detected by TYPE, not by name, so a ModuleBase happening to be titled
+ *  "Audio Output" cannot impersonate it. A bare juce::AudioGraphIOProcessor is never a ModuleBase,
+ *  so getType() above always falls back to Oscillator for it; this is the one place in this file
+ *  that actually cares which IO node it is (the output-card identity treatment in paint()). */
+static bool isAudioOutputIONode(juce::AudioProcessor* module) {
+    using IOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
+    auto* io = dynamic_cast<IOProcessor*>(module);
+    return io != nullptr && io->getType() == IOProcessor::audioOutputNode;
+}
+
 ModuleComponent::ModuleComponent(juce::AudioProcessor* m, juce::AudioProcessorGraph::NodeID nId, GraphEditor& owner,
                                  AppUndoManager* undoMgr)
     : module(m)
@@ -1832,6 +1843,30 @@ void ModuleComponent::paint(juce::Graphics& g) {
         g.fillEllipse(6.0f, 8.0f, 8.0f, 8.0f);
     }
 
+    // Output-card identity treatment (user request: "a better way to represent the output module
+    // and its destinations"). Audio Output is a bare juce::AudioGraphIOProcessor and otherwise
+    // renders through the exact same generic path as every card above — this is the one additive
+    // block that gives it its own identity. The glyph reuses the activity LED's slot: Audio Output
+    // is never a ModuleBase, so it never has a VisualBuffer and cachedRMS above stays 0.0f forever
+    // for this card, leaving that slot permanently dark otherwise. The destination line is pushed
+    // in by GraphEditor::refreshOutputDeviceInfo (MainComponent -> GraphEditor -> here) whenever
+    // AudioEngine's device state changes; an empty string (no device open yet, headless build, or
+    // Hosted mode with nothing to report) means "draw no line" rather than an empty one.
+    if (isAudioOutputIONode(module)) {
+        if (lf != nullptr) {
+            if (const auto* ioIcon = lf->peekIcon(synth::theme::Icon::CatIO))
+                ioIcon->drawWithin(g, juce::Rectangle<float>(4.0f, 4.0f, 16.0f, 16.0f),
+                                   juce::RectanglePlacement::centred, 1.0f);
+        }
+        if (outputDeviceInfoText.isNotEmpty()) {
+            auto mutedColour = (lf != nullptr) ? lf->getTheme().colors.textMuted : juce::Colours::grey;
+            g.setColour(mutedColour);
+            g.setFont(juce::Font(juce::FontOptions((lf != nullptr) ? lf->getTheme().type.micro : 9.0f)));
+            g.drawFittedText(outputDeviceInfoText, kContentMargin, 27, getWidth() - kContentMargin * 2, 14,
+                             juce::Justification::centredLeft, 1);
+        }
+    }
+
     // --- PORTS ---
     // Theme-derived jack/label colors (guarded: headless tests have no themed LnF).
     // Audio-signal jacks (MIDI in/out) -> audioWire; mod-capable input/output jacks -> accent;
@@ -2362,6 +2397,17 @@ void ModuleComponent::refreshPortLayout() {
 
     updateLayout();
     owner.handleModuleResized(this);
+    repaint();
+}
+
+void ModuleComponent::setOutputDeviceInfoText(const juce::String& text) {
+    // A no-op on every module except Audio Output: the card layout never changes (this only
+    // affects a paint-time text draw), so unlike refreshPortLayout above there is nothing to
+    // re-measure — just invalidate the cached image if the text actually changed.
+    if (module == nullptr || !isAudioOutputIONode(module) || outputDeviceInfoText == text)
+        return;
+
+    outputDeviceInfoText = text;
     repaint();
 }
 

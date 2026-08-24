@@ -3,6 +3,7 @@
 #include "AI/AIStateMapper.h"
 #include "Branding.h"
 #include "Modules/TimelineAudioSourceModule.h"
+#include "Modules/TimelineMidiSourceModule.h" // auditionTrackNote pushes into the bound Track In node
 #include "Plugin/Hosting/HostedPluginModule.h"
 #include "ProjectBundle.h"
 #include "Timeline/AssetManager.h"
@@ -12,6 +13,7 @@
 #include "UI/SettingsWindow.h"
 #include "UI/TrackColour.h"
 #include <algorithm>
+#include <cmath>
 #include <map>
 #include <set>
 
@@ -942,6 +944,19 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         statusBar.repaint();
     };
 
+    // Status bar play/stop: the SAME TransportService actions TimelineTransportBar's own play/stop
+    // button uses (see its onClick), so the transport responds identically whether the click came
+    // from here or from inside the (possibly-hidden) timeline panel. "The transport is the truth" —
+    // this button's visual is never flipped directly; timerCallback()'s statusBar.updateTransport()
+    // call is what sets it, from the same PositionSnapshot poll TimelineTransportBar uses.
+    statusBar.getTransportButton().onClick = [this] {
+        auto& transport = audioEngine.getTransport();
+        if (transport.getPositionSnapshot().playing)
+            transport.stop();
+        else
+            transport.play();
+    };
+
     // One unconditional icon/text pass at startup (subsequent calls only fire on narrow-mode flips).
     applyToolbarIcons();
     setCurrentPatchName("Default");
@@ -968,6 +983,11 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
             // card's jacks (plus any cable on a jack that just vanished) have to follow it.
             graphEditor.refreshIoModulesAfterDeviceChange();
 
+            // Same reasoning for the Audio Output card's destination line (docs/layout.md —
+            // module chrome): a device/rate/channel change is exactly what it needs to reflect,
+            // and it must not wait for a repaint that has no other reason to happen.
+            graphEditor.refreshOutputDeviceInfo();
+
             // Null until the user has explicitly chosen a device setup — see the declaration of
             // onDeviceStateChanged. Persisting nothing then is the point: the absent key is what
             // keeps the next launch on the inputs-off defaults.
@@ -979,6 +999,13 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         };
     }
 
+    // Output-card identity treatment: installed unconditionally (both Standalone and Hosted use
+    // it — computeOutputDeviceInfoText() branches on AudioEngine::isHosted() itself), then primed
+    // once below so the card is populated at startup rather than waiting for the first device
+    // change, which on a fresh install may never come (see onDeviceStateChanged's own comment
+    // about staying null until the user explicitly touches the Audio tab).
+    graphEditor.setOutputDeviceInfoProvider([this] { return computeOutputDeviceInfoText(); });
+
     // Engine lifecycle is the owner's job. On the plugin path the processor already called
     // initialise() (and will call shutdown()), and its graph may already hold host-restored
     // state — re-initialising here would overwrite the user's session with the default patch.
@@ -987,6 +1014,7 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
         // their own saved dualIO value. Forcing the preference over that would rewrite the user's
         // session, which is exactly what restoring state is supposed to avoid.
         graphEditor.updateComponents();
+        graphEditor.refreshOutputDeviceInfo();
         return;
     }
 
@@ -997,12 +1025,14 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
                 audioEngine.initialise();
                 applyStoredDualIOPreferenceToPatch();
                 graphEditor.updateComponents();
+                graphEditor.refreshOutputDeviceInfo();
             }
         });
     } else {
         audioEngine.initialise();
         applyStoredDualIOPreferenceToPatch();
         graphEditor.updateComponents();
+        graphEditor.refreshOutputDeviceInfo();
     }
 }
 
@@ -1017,6 +1047,32 @@ void MainComponent::applyStoredDualIOPreferenceToPatch() {
     // applyJSONToGraph, so this governs the factory patch rather than a reload of their own work.
     graphEditor.applyDualIOToExistingModules(
         appProperties.getUserSettings()->getBoolValue("defaultDualIOForNewModules", false));
+}
+
+juce::String MainComponent::computeOutputDeviceInfoText() const {
+    // Hosted mode (plugin): AudioEngine never opens a device or touches deviceManager — the host
+    // owns the clock and the hardware (see HostMode::Hosted in docs/architecture.md) — so there is
+    // no device to describe, only which world this editor is running in.
+    if (audioEngine.isHosted())
+        return "Host audio";
+
+    auto* device = audioEngine.getDeviceManager().getCurrentAudioDevice();
+    if (device == nullptr)
+        return {}; // No device open yet (headless/CI, or between devices) — the card hides the line.
+
+    const double sampleRateHz = device->getCurrentSampleRate();
+    const double khz = sampleRateHz / 1000.0;
+    // "48 kHz" for a whole number, "44.1 kHz" when it isn't — matches how the format is normally
+    // spoken, rather than always showing a decimal point.
+    const juce::String khzText =
+        (std::abs(khz - std::round(khz)) < 0.01) ? juce::String((int)std::round(khz)) : juce::String(khz, 1);
+
+    const int numOutputChannels = device->getActiveOutputChannels().countNumberOfSetBits();
+
+    // "\xc2\xb7" is the UTF-8 encoding of U+00B7 MIDDLE DOT (matches the "·" separator used
+    // elsewhere in this codebase, e.g. EQWindow.h / docs/layout.md's status-line examples), spelled
+    // as an escape rather than a literal byte so it survives any non-UTF-8 build/editor pipeline.
+    return device->getName() + " \xc2\xb7 " + khzText + " kHz \xc2\xb7 " + juce::String(numOutputChannels) + "ch";
 }
 
 MainComponent::~MainComponent() {
@@ -1228,6 +1284,17 @@ void MainComponent::timerCallback() {
 
         // The round-trip readout, on the same 5 Hz tick.
         updateRoundTripLatencyReadout();
+
+        // The always-visible transport cluster (play/stop + position + BPM) — fed from `position`,
+        // which is read UNCONDITIONALLY above (before the timelinePanel.isVisible() guard), so this
+        // is identical whether the timeline panel is open or closed; see docs/layout.md §5. Reuses
+        // TimelineTransportBar's own static formatBarBeat() for the "bar.beat.ticks" text rather
+        // than reimplementing it — StatusBarComponent can't call it itself (Core cannot depend on
+        // AppUI), so this is the one call site that does the formatting.
+        statusBar.updateTransport(position.playing,
+                                  synth::ui::TimelineTransportBar::formatBarBeat(
+                                      position.ppq, position.timeSigNumerator, position.timeSigDenominator),
+                                  position.bpm);
     }
 }
 
@@ -3541,4 +3608,27 @@ void MainComponent::setMidiDestinationConnected(synth::TrackId forTrack, juce::u
     });
     graphEditor.updateComponents();
     reconcileTimelineAfterGraphChange();
+}
+
+void MainComponent::auditionTrackNote(synth::TrackId forTrack, int pitch, int velocity, bool noteOn) {
+    // Deliberately the SAME resolution the two functions above use — track -> bindingUuid -> live
+    // node — because that node's MIDI output is where the track's destinations are wired FROM. Going
+    // anywhere else (AudioEngine's own midiMessageCollector, say) would reach the global MIDI-in
+    // path instead of this track's instruments, so the preview would play the wrong thing or nothing.
+    const auto* track = timelineDoc.getTrack(forTrack);
+    if (track == nullptr || track->bindingUuid.isEmpty())
+        return; // an unbound track plays nowhere, so a preview on it is silence
+
+    auto* trackInNode = findNodeByUuid(track->bindingUuid);
+    if (trackInNode == nullptr)
+        return; // orphaned binding — the chip already says so; a preview must not crash on it
+
+    auto* source = dynamic_cast<TimelineMidiSourceModule*>(trackInNode->getProcessor());
+    if (source == nullptr)
+        return; // the uuid resolves to something that is not a Track In node
+
+    // NO structural change, NO undo step and NO doc mutation: a preview is not an edit. The push is
+    // wait-free and a full FIFO simply drops the event (see pushAuditionNote) — nothing here may
+    // block, because this is the mouse-down that is still unwinding.
+    source->pushAuditionNote(pitch, velocity, noteOn);
 }

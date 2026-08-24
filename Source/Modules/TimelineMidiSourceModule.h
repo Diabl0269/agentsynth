@@ -3,20 +3,37 @@
 #include "../Timeline/TimelineSnapshot.h"
 #include "../Transport/TransportService.h"
 #include "ModuleBase.h"
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <juce_audio_basics/juce_audio_basics.h>
+#include <limits>
 
 /**
  * @brief "Track In" — the graph-side end of a timeline MIDI track.
  *
- * One node per MIDI track, bound by uuid at creation. Nothing schedules events into it: every
+ * One node per MIDI track, bound by uuid at creation. Playback schedules nothing into it: every
  * block it reads the transport's BlockTimeInfo and TimelineSnapshot off the playhead
  * (TransportService::setCurrentTimelineSnapshot), finds the track whose bindingUuid matches its
  * own node uuid, and emits the notes whose start or end falls inside the block's beat range —
  * a pure function of (block position, snapshot, currently-held notes), so a locate/tempo/edit
  * takes effect next block with no invalidation step.
+ *
+ * AUDITION is the ONE exception, and the only thing anything outside pushes IN:
+ * pushAuditionNote() lets the piano roll sound a note the user clicked. It emits from THIS node,
+ * which is what makes "audition reaches the same modules the track plays through" true by
+ * construction rather than by re-deriving the destination list — a track's MIDI destinations are
+ * graph connections whose SOURCE is this node's MIDI output (MainComponent::
+ * setMidiDestinationConnected), so anything leaving here goes exactly where the clip's notes go.
+ * The handoff is a fixed-capacity juce::AbstractFifo of POD events (TransportService's command-FIFO
+ * idiom), drained once per block: no lock, no allocation and no logging on the audio thread, and a
+ * full FIFO DROPS the event rather than blocking. An auditioned note is parked in the same
+ * active_ table a played note is, with an INFINITE end beat (kAuditionEndBeat) so emitRange's
+ * end-beat scan can never release it — its own note-off does, and so does every hygiene flush
+ * below, which is what keeps a held preview from surviving a stop/locate/bypass/loop wrap.
+ * Deliberately NOT gated on the track's mute/solo: audition is a monitor path, the same way
+ * clicking a key on a MIDI Keyboard module is.
  *
  * INTERNAL-ONLY: not in the module library, not offered by the replace menu, and explicitly
  * non-authorable by the AI (kNonAuthorableModuleTypes) — a model could otherwise wire itself to a
@@ -44,6 +61,11 @@ public:
     // to DROP the note-on (never the note-off of something already sounding, and never a resize).
     static constexpr int kMaxActiveNotes = 128;
 
+    // The audition hand-off FIFO's depth. A preview is one event per mouse-down/up/drag-step, so
+    // even a frantic drag posts a handful per audio block; 64 is generous and keeps the slot array
+    // trivially small. Mirrors TransportService::kFifoCapacity's role exactly.
+    static constexpr int kAuditionFifoCapacity = 64;
+
     TimelineMidiSourceModule()
         : ModuleBase("Track In", 0, 0) {
         enableVisualBuffer(true);
@@ -58,6 +80,40 @@ public:
         wasBypassed_ = false;
         wasPlaying_ = false;
         wasSuppressed_ = false;
+    }
+
+    /** AUDITION — pushes one preview note edge into this track's MIDI stream, to be emitted at
+     *  sample 0 of the next block. Callable from ANY non-audio thread (in practice the message
+     *  thread: the piano roll's note click, via TrackHeaderHost::auditionTrackNote) — the transfer is
+     *  a wait-free single-producer FIFO write, so it never blocks the audio thread and never
+     *  allocates on it.
+     *
+     *  A note-on for a pitch already being auditioned releases the old one first, so the held-note
+     *  table cannot drift however the caller sequences a drag retrigger. A note-off for a pitch that
+     *  is NOT currently auditioned emits nothing — it can only mean the note was already released by
+     *  a hygiene flush, and a stray note-off would cut a timeline note of the same pitch short.
+     *
+     *  @return false when the FIFO is full and the event was DROPPED. The caller may re-post; it must
+     *  not block. (A dropped note-ON is silence, which is survivable; a dropped note-OFF cannot
+     *  strand a note, because every flush path releases audition notes too.) */
+    bool pushAuditionNote(int pitch, int velocity, bool noteOn, int channel = 1) noexcept {
+        int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
+        auditionFifo_.prepareToWrite(1, start1, size1, start2, size2);
+        if (size1 + size2 < 1)
+            return false;
+        auditionSlots_[(std::size_t)start1] = {pitch, velocity, channel, noteOn};
+        auditionFifo_.finishedWrite(1);
+        return true;
+    }
+
+    /** How many auditioned notes are held right now (a subset of getActiveNoteCount()).
+     *  Diagnostics and tests — not part of the audio contract. */
+    int getAuditionNoteCount() const noexcept {
+        int count = 0;
+        for (int i = 0; i < numActive_; ++i)
+            if (isAuditionNote(active_[i]))
+                ++count;
+        return count;
     }
 
     void processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages) override {
@@ -76,6 +132,10 @@ public:
                 flushActiveNotes(midiMessages);
                 wasBypassed_ = true;
             }
+            // A bypassed source emits nothing, so anything the UI posted while we were bypassed is
+            // DISCARDED rather than queued: replaying a stale click the moment bypass comes off
+            // would be a note nobody asked for. The flush above already released whatever was held.
+            discardAuditionEvents();
             haveLastBlock_ = false; // resuming is a discontinuity, not a continuation
             wasPlaying_ = false;
             buffer.clear();
@@ -87,8 +147,11 @@ public:
         auto* transport = dynamic_cast<synth::TransportService*>(getPlayHead());
         if (transport == nullptr) {
             // No transport at all (a foreign host's playhead, or none): nothing can be positioned,
-            // so release anything held and go quiet.
+            // so release anything held and go quiet. Audition goes with it — this node is not
+            // usable at all in that state, and queueing the events for whenever a transport shows up
+            // would sound a click the user made minutes ago.
             flushActiveNotes(midiMessages);
+            discardAuditionEvents();
             haveLastBlock_ = false;
             wasPlaying_ = false;
             pushActivity(numSamples);
@@ -115,11 +178,17 @@ public:
         const std::int64_t nextBlockStart = predictNextBlockStart(info);
         const bool discontinuous = haveLastBlock_ && info.blockStartSample != expectedNextBlockStart_;
         if ((!info.playing && wasPlaying_) || (info.playing && discontinuous))
-            flushActiveNotes(midiMessages);
+            flushTimelineNotes(midiMessages);
 
         wasPlaying_ = info.playing;
         haveLastBlock_ = info.playing;
         expectedNextBlockStart_ = nextBlockStart;
+
+        // AUDITION, drained here — AFTER the stop/locate hygiene flush above (so a flush can never
+        // land on top of a preview the same block started) and BEFORE every early return below, so a
+        // click sounds with the transport STOPPED, on an unbound track, and on a muted one. That is
+        // the point of a monitor path: the user asked to hear this note, not to hear the timeline.
+        drainAuditionEvents(midiMessages);
 
         if (!info.playing || snapshot == nullptr || numSamples <= 0) {
             pushActivity(numSamples);
@@ -129,7 +198,7 @@ public:
         const synth::TimelineSnapshot::TrackInfo* track = findMyTrack(*snapshot);
         if (track == nullptr) {
             // The track was deleted, unbound or re-bound elsewhere while we held notes down.
-            flushActiveNotes(midiMessages);
+            flushTimelineNotes(midiMessages);
             wasSuppressed_ = false;
             pushActivity(numSamples);
             return;
@@ -138,7 +207,7 @@ public:
         const bool suppressed = track->muted || (snapshot->anySoloed && !track->soloed);
         if (suppressed) {
             if (!wasSuppressed_)
-                flushActiveNotes(midiMessages);
+                flushTimelineNotes(midiMessages);
             wasSuppressed_ = true;
             pushActivity(numSamples);
             return;
@@ -207,7 +276,7 @@ private:
         // otherwise land outside the loop and never be reached. The wrapped range below then starts
         // the next pass from scratch, so a note that spans the boundary re-articulates rather than
         // being sustained through it.
-        flushActiveNotes(midiMessages, wrapOffset);
+        flushTimelineNotes(midiMessages, wrapOffset);
 
         // WRAPPED range: from the loop start to where the transport ACTUALLY lands after this block
         // — which is also where the next block's primary range begins, so the two tile exactly with
@@ -333,12 +402,102 @@ private:
 
     // Every held note released — one note-off each, never a blanket CC 123 — then forgotten. The one
     // place the note-on/note-off promise is honoured when the normal end-beat path can't run. The
-    // offset is 0 for the hygiene flushes (stop, locate, bypass, track lost) and loopWrapSample for
-    // the loop-boundary release.
+    // offset is 0 for the hygiene flushes and loopWrapSample for the loop-boundary release.
+    //
+    // Used only where this node is about to stop being usable at all (bypass, no transport), because
+    // it takes AUDITION notes with it — see flushTimelineNotes for everything else.
     void flushActiveNotes(juce::MidiBuffer& midiMessages, int offset = 0) {
         for (int i = 0; i < numActive_; ++i)
             midiMessages.addEvent(juce::MidiMessage::noteOff(active_[i].channel, active_[i].pitch), offset);
         numActive_ = 0;
+    }
+
+    // The same release, restricted to notes that came from the TIMELINE. Every positional hygiene
+    // flush (stop, locate, loop wrap, track lost/muted/soloed away) uses this one: those events say
+    // something about where the transport is, and an audition note is not on the transport's clock
+    // at all — cutting a preview short because the user pressed Stop, or because their track is
+    // muted, would break exactly the monitor path audition exists to provide. The preview's own
+    // note-off (or a bypass) is what ends it.
+    void flushTimelineNotes(juce::MidiBuffer& midiMessages, int offset = 0) {
+        for (int i = numActive_ - 1; i >= 0; --i) {
+            if (isAuditionNote(active_[i]))
+                continue;
+            midiMessages.addEvent(juce::MidiMessage::noteOff(active_[i].channel, active_[i].pitch), offset);
+            removeActiveAt(i);
+        }
+    }
+
+    // ---- Audition (see pushAuditionNote and the class comment) ----
+
+    // An end beat no beat range can ever reach, so emitRange's "endBeat < rangeEnd" release scan
+    // never fires for an auditioned note. It is also the MARKER that tells the two flush variants
+    // apart — a timeline note always carries a finite end beat.
+    static constexpr double kAuditionEndBeat = std::numeric_limits<double>::infinity();
+
+    static bool isAuditionNote(const ActiveNote& note) noexcept { return !std::isfinite(note.endBeat); }
+
+    struct AuditionEvent {
+        int pitch = 60;
+        int velocity = 100;
+        int channel = 1;
+        bool on = false;
+    };
+
+    // One FIFO read per event, applied immediately: the whole batch lands at sample 0 of this block,
+    // which is the correct granularity for a gesture the user made between two callbacks.
+    void drainAuditionEvents(juce::MidiBuffer& midiMessages) {
+        for (;;) {
+            int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
+            auditionFifo_.prepareToRead(1, start1, size1, start2, size2);
+            if (size1 + size2 < 1)
+                return;
+            const AuditionEvent event = auditionSlots_[(std::size_t)(size1 > 0 ? start1 : start2)];
+            auditionFifo_.finishedRead(1);
+            applyAuditionEvent(event, midiMessages);
+        }
+    }
+
+    // Empties the FIFO without emitting anything — the bypass / no-transport path (see their
+    // comments). Reads through the same finishedRead accounting, never by resetting the FIFO.
+    void discardAuditionEvents() {
+        for (;;) {
+            int start1 = 0, size1 = 0, start2 = 0, size2 = 0;
+            auditionFifo_.prepareToRead(1, start1, size1, start2, size2);
+            if (size1 + size2 < 1)
+                return;
+            auditionFifo_.finishedRead(1);
+        }
+    }
+
+    void applyAuditionEvent(const AuditionEvent& event, juce::MidiBuffer& midiMessages) {
+        const int pitch = juce::jlimit(0, 127, event.pitch);
+        const int channel = juce::jlimit(1, 16, event.channel);
+
+        // A second note-on for the same pitch (a drag retrigger the caller sequenced without a
+        // release, or a lost note-off) releases the old one first: off-then-on is the order Poly
+        // MIDI's same-pitch retrigger contract needs, and it keeps active_ from accumulating.
+        releaseAuditionNote(pitch, channel, midiMessages);
+        if (!event.on)
+            return;
+
+        if (!pushActive({pitch, channel, kAuditionEndBeat}))
+            return; // overflow: drop the on rather than owe an off we cannot track
+        midiMessages.addEvent(
+            juce::MidiMessage::noteOn(channel, pitch, (juce::uint8)juce::jlimit(1, 127, event.velocity)), 0);
+    }
+
+    // Releases a held AUDITION note of this pitch/channel and nothing else. The isAuditionNote guard
+    // is load-bearing: a clip sounding the same pitch must not be cut short because the user let go
+    // of a note they clicked.
+    void releaseAuditionNote(int pitch, int channel, juce::MidiBuffer& midiMessages) {
+        for (int i = numActive_ - 1; i >= 0; --i) {
+            const ActiveNote& note = active_[i];
+            if (note.pitch != pitch || note.channel != channel || !isAuditionNote(note))
+                continue;
+            midiMessages.addEvent(juce::MidiMessage::noteOff(channel, pitch), 0);
+            removeActiveAt(i);
+            return;
+        }
     }
 
     // Activity LED, same shape as ExternalMidiModule's: high while anything is sounding.
@@ -352,6 +511,12 @@ private:
 
     ActiveNote active_[kMaxActiveNotes];
     int numActive_ = 0;
+
+    // Message thread -> audio thread, single producer / single consumer. Same shape as
+    // TransportService's command FIFO: a fixed POD slot array plus a juce::AbstractFifo, so a push
+    // is wait-free and the drain allocates nothing.
+    juce::AbstractFifo auditionFifo_{kAuditionFifoCapacity};
+    std::array<AuditionEvent, (std::size_t)kAuditionFifoCapacity> auditionSlots_{};
 
     std::int64_t expectedNextBlockStart_ = 0;
     bool haveLastBlock_ = false;

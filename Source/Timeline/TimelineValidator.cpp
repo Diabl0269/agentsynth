@@ -426,6 +426,59 @@ TimelineValidationResult validateLane(const juce::var& laneVar, const juce::Stri
     return {};
 }
 
+// A marker carries no binding, no asset and nothing executable — it is a beat, a label and a
+// colour. So the rules here are entirely about BOUNDS and SHAPE, and the shape check is a closed
+// key set: unlike a track/clip/note, an unrecognised property inside a marker object is refused
+// (see TimelineValidator.h for why this container gets the stricter rule).
+TimelineValidationResult validateMarker(const juce::var& markerVar, std::set<std::int64_t>& seenMarkerIds) {
+    auto* mObj = markerVar.getDynamicObject();
+    if (mObj == nullptr)
+        return fail(Error::MalformedRoot, "A marker entry is not an object.");
+
+    std::int64_t markerId = 0;
+    if (!readId(mObj->getProperty("id"), markerId))
+        return fail(Error::MalformedRoot, "A marker is missing a positive integer \"id\".");
+    if (!seenMarkerIds.insert(markerId).second)
+        return fail(Error::MalformedRoot,
+                    "Duplicate marker id " + juce::String(markerId) + ". Marker ids must be unique.");
+
+    const juce::String markerText = "Marker " + juce::String(markerId);
+
+    for (int i = 0; i < mObj->getProperties().size(); ++i) {
+        const juce::String key = mObj->getProperties().getName(i).toString();
+        if (key != "id" && key != "beat" && key != "text" && key != "colourArgb")
+            return fail(Error::MalformedRoot, markerText + " has an unknown key \"" + key +
+                                                  "\". A marker carries only \"id\", \"beat\", \"text\" and "
+                                                  "\"colourArgb\".");
+    }
+
+    double beat = 0.0;
+    if (!readOptionalDouble(mObj->getProperty("beat"), beat))
+        return fail(Error::MalformedRoot, markerText + " has a non-numeric \"beat\".");
+    if (!isBeatInBounds(beat))
+        return fail(Error::BeatOutOfBounds, markerText + " sits at beat " + juce::String(beat) +
+                                                ", which is not a finite beat between " + beatRangeText() + ".");
+
+    // Rejected, not truncated — the same rule note pitch 128 gets: a label this long is not the
+    // label the caller meant, and quietly shortening it ships something nobody asked for.
+    juce::String text;
+    if (!readOptionalString(mObj->getProperty("text"), text))
+        return fail(Error::MalformedRoot, markerText + " has a non-string \"text\".");
+    if (text.length() > TimelineDoc::kMaxMarkerTextLength)
+        return fail(Error::MarkerTextTooLong,
+                    markerText + " has a " + juce::String(text.length()) + "-character \"text\", over the limit of " +
+                        juce::String(TimelineDoc::kMaxMarkerTextLength) + ". Shorten the label.");
+
+    std::int64_t colourArgb = 0;
+    if (!readOptionalInt64(mObj->getProperty("colourArgb"), colourArgb))
+        return fail(Error::MalformedRoot, markerText + " has a non-integer \"colourArgb\".");
+    if (colourArgb < 0 || colourArgb > 0xffffffffLL)
+        return fail(Error::MalformedRoot,
+                    markerText + " has a \"colourArgb\" outside the 32-bit range 0 to 4294967295.");
+
+    return {};
+}
+
 TimelineValidationResult validateTrack(const juce::var& trackVar,
                                        const std::map<juce::String, juce::AudioProcessor*>& graphByUuid,
                                        std::set<std::int64_t>& seenTrackIds, std::set<std::int64_t>& seenClipIds,
@@ -534,6 +587,10 @@ juce::String timelineValidationErrorName(TimelineValidationError error) {
         return "TooManyLanes";
     case TimelineValidationError::TooManyBreakpoints:
         return "TooManyBreakpoints";
+    case TimelineValidationError::TooManyMarkers:
+        return "TooManyMarkers";
+    case TimelineValidationError::MarkerTextTooLong:
+        return "MarkerTextTooLong";
     case TimelineValidationError::BeatOutOfBounds:
         return "BeatOutOfBounds";
     case TimelineValidationError::NoteOutOfRange:
@@ -577,13 +634,17 @@ TimelineValidationResult validateTimeline(const juce::var& timelineVar, const ju
     // format needs and an untrusted payload does not. An ignored key is precisely how a later
     // build starts honouring a field that today's gate never inspected — the failure the
     // "timeline" refusal exists to prevent, one level down.
+    //
+    // "markers" is on the list because it is checked, field by field, by validateMarker below —
+    // that is the ONLY thing that earns a key a place here. Adding a key to this allowlist without
+    // a matching per-item check would defeat the whole paragraph above.
     for (int i = 0; i < rootObj->getProperties().size(); ++i) {
         const juce::String key = rootObj->getProperties().getName(i).toString();
-        if (key != "version" && key != "tracks" && key != "nextTrackId" && key != "nextClipId" && key != "nextLaneId" &&
-            key != "nextNoteId")
-            return fail(Error::MalformedRoot,
-                        "Unknown top-level timeline key \"" + key +
-                            "\". Only \"version\", \"tracks\" and the next-id counters are accepted.");
+        if (key != "version" && key != "tracks" && key != "markers" && key != "nextTrackId" && key != "nextClipId" &&
+            key != "nextLaneId" && key != "nextNoteId" && key != "nextMarkerId")
+            return fail(Error::MalformedRoot, "Unknown top-level timeline key \"" + key +
+                                                  "\". Only \"version\", \"tracks\", \"markers\" and the next-id "
+                                                  "counters are accepted.");
     }
 
     const auto graphByUuid = indexGraphByUuid(graph);
@@ -596,6 +657,7 @@ TimelineValidationResult validateTimeline(const juce::var& timelineVar, const ju
     std::set<std::int64_t> seenClipIds;
     std::set<std::int64_t> seenNoteIds;
     std::set<std::int64_t> seenLaneIds;
+    std::set<std::int64_t> seenMarkerIds;
     std::set<std::pair<juce::String, juce::String>> seenLaneParams;
     std::int64_t totalNotes = 0;
 
@@ -608,6 +670,23 @@ TimelineValidationResult validateTimeline(const juce::var& timelineVar, const ju
         for (const auto& trackVar : *trackList) {
             const auto result = validateTrack(trackVar, graphByUuid, seenTrackIds, seenClipIds, seenNoteIds,
                                               seenLaneIds, seenLaneParams, totalNotes);
+            if (!result.ok)
+                return result;
+        }
+    }
+
+    const juce::Array<juce::var>* markerList = nullptr;
+    if (!readOptionalArray(rootObj->getProperty("markers"), markerList))
+        return fail(Error::MalformedRoot, "Timeline \"markers\" must be an array.");
+
+    if (markerList != nullptr) {
+        if (markerList->size() > TimelineDoc::kMaxMarkers)
+            return fail(Error::TooManyMarkers, "Timeline has " + juce::String(markerList->size()) +
+                                                   " markers, exceeding the limit of " +
+                                                   juce::String(TimelineDoc::kMaxMarkers) + ".");
+
+        for (const auto& markerVar : *markerList) {
+            const auto result = validateMarker(markerVar, seenMarkerIds);
             if (!result.ok)
                 return result;
         }
@@ -631,7 +710,8 @@ TimelineValidationResult validateTimeline(const juce::var& timelineVar, const ju
         return fail(Error::InternalError,
                     "The timeline passed every validation check but was still refused by the loader, which means it "
                     "carries something this gate does not model (a malformed \"nextTrackId\"/\"nextClipId\"/"
-                    "\"nextLaneId\"/\"nextNoteId\" counter is the known case). It has not been applied.");
+                    "\"nextLaneId\"/\"nextNoteId\"/\"nextMarkerId\" counter is the known case). It has not been "
+                    "applied.");
 
     return {};
 }

@@ -246,6 +246,10 @@ void AppLookAndFeel::retintIcons() {
     iconLibrary_.setTintColour(Icon::CatTimeFX, c.textMuted);
     iconLibrary_.setTintColour(Icon::CatDynamics, c.textMuted);
     iconLibrary_.setTintColour(Icon::CatUtility, c.textMuted);
+    // CatIO (I/O category header + the Audio Output card's identity glyph) is appended after
+    // FollowPlayhead in the enum (see IconLibrary.h), but tints the same as every other category
+    // icon above.
+    iconLibrary_.setTintColour(Icon::CatIO, c.textMuted);
 
     // Waveform glyphs: rendered as inline combo-box item icons. Tinted the same as the combo
     // text colour so they remain legible across all themes.

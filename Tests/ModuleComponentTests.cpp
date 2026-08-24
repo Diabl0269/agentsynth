@@ -1040,3 +1040,89 @@ TEST_F(ModuleComponentTest, MidiKeyboardKeysFollowThemeChange) {
 
     moduleComponent.setLookAndFeel(nullptr);
 }
+
+// --- Output-card identity treatment (module chrome) --------------------------
+// Audio Output is a bare juce::AudioGraphIOProcessor, not a ModuleBase — setOutputDeviceInfoText
+// / getOutputDeviceInfoTextForTest are the seam GraphEditor::refreshOutputDeviceInfo drives
+// (MainComponent -> GraphEditor -> here). See docs/layout.md's module chrome section.
+
+namespace {
+/** Adds the graph's terminal audio sink the way AudioEngine does — the channel layout has to be
+ *  set BEFORE the node is added (AudioGraphIOProcessor snapshots it once, in setParentGraph). */
+juce::AudioProcessorGraph::Node::Ptr addAudioOutputNode(juce::AudioProcessorGraph& graph) {
+    using IOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
+    graph.setPlayConfigDetails(0, 2, 44100.0, 512);
+    return graph.addNode(std::make_unique<IOProcessor>(IOProcessor::audioOutputNode));
+}
+} // namespace
+
+TEST_F(ModuleComponentTest, AudioOutputCardHasNoDeviceInfoTextUntilSet) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    auto node = addAudioOutputNode(engine.getGraph());
+    ModuleComponent moduleComponent(node->getProcessor(), node->nodeID, editor);
+
+    EXPECT_TRUE(moduleComponent.getOutputDeviceInfoTextForTest().isEmpty());
+
+    // Headless: no themed LookAndFeel, so the CatIO icon is absent — must still not crash.
+    juce::Image img(juce::Image::ARGB, moduleComponent.getWidth(), moduleComponent.getHeight(), true);
+    juce::Graphics g(img);
+    EXPECT_NO_THROW(moduleComponent.paint(g));
+}
+
+TEST_F(ModuleComponentTest, AudioOutputCardStoresAndPaintsDeviceInfoText) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    auto node = addAudioOutputNode(engine.getGraph());
+    ModuleComponent moduleComponent(node->getProcessor(), node->nodeID, editor);
+
+    const juce::String deviceText("Test Device \xc2\xb7 48 kHz \xc2\xb7 2ch");
+    moduleComponent.setOutputDeviceInfoText(deviceText);
+    EXPECT_EQ(moduleComponent.getOutputDeviceInfoTextForTest(), deviceText);
+
+    // Setting the same text again is not a change (mirrors setModDropTargetChannel's contract) —
+    // just confirms it stays idempotent rather than asserting an internal repaint count.
+    moduleComponent.setOutputDeviceInfoText(deviceText);
+    EXPECT_EQ(moduleComponent.getOutputDeviceInfoTextForTest(), deviceText);
+
+    juce::Image img(juce::Image::ARGB, moduleComponent.getWidth(), moduleComponent.getHeight(), true);
+    juce::Graphics g(img);
+    EXPECT_NO_THROW(moduleComponent.paint(g));
+
+    // Real themed LnF: the identity glyph + muted subtitle path must also survive (see
+    // MidiKeyboardKeysFollowThemeChange above for the same real-AppLookAndFeel pattern).
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
+    moduleComponent.setLookAndFeel(&lf);
+    EXPECT_NO_THROW(moduleComponent.paint(g));
+    moduleComponent.setLookAndFeel(nullptr);
+
+    // Empty string (e.g. Hosted mode, or the device closing) hides the line again.
+    moduleComponent.setOutputDeviceInfoText({});
+    EXPECT_TRUE(moduleComponent.getOutputDeviceInfoTextForTest().isEmpty());
+}
+
+TEST_F(ModuleComponentTest, SetOutputDeviceInfoTextIsANoOpOnNonOutputModules) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    OscillatorModule processor;
+    ModuleComponent moduleComponent(&processor, juce::AudioProcessorGraph::NodeID(1), editor);
+
+    moduleComponent.setOutputDeviceInfoText("should not apply to a regular module");
+    EXPECT_TRUE(moduleComponent.getOutputDeviceInfoTextForTest().isEmpty());
+}
+
+// The type-not-name idiom: Audio Input is also a bare AudioGraphIOProcessor, but the WRONG
+// IODeviceType, and must not pick up the output-only identity treatment.
+TEST_F(ModuleComponentTest, SetOutputDeviceInfoTextIsANoOpOnAudioInputNode) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    auto& graph = engine.getGraph();
+    using IOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
+    graph.setPlayConfigDetails(2, 0, 44100.0, 512);
+    auto node = graph.addNode(std::make_unique<IOProcessor>(IOProcessor::audioInputNode));
+    ModuleComponent moduleComponent(node->getProcessor(), node->nodeID, editor);
+
+    moduleComponent.setOutputDeviceInfoText("should not apply to Audio Input");
+    EXPECT_TRUE(moduleComponent.getOutputDeviceInfoTextForTest().isEmpty());
+}

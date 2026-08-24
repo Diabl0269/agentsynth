@@ -34,6 +34,8 @@ public:
     void setDefaultDualIOForNewModules(bool enabled);
     bool isLoopSelectionArmsEnabled() const;
     void setLoopSelectionArmsEnabled(bool enabled);
+    bool isDoubleClickSpansLocatorsEnabled() const;
+    void setDoubleClickSpansLocatorsEnabled(bool enabled);
     bool isNaturalScrollingEnabled() const;
     void setNaturalScrollingEnabled(bool enabled);
     bool isZoomScrollUpZoomsInEnabled() const;
@@ -49,6 +51,7 @@ private:
     void persistAlignmentGuidesEnabled(bool enabled);
     void persistDefaultDualIOForNewModules(bool enabled);
     void persistLoopSelectionArms(bool enabled);
+    void persistDoubleClickSpansLocators(bool enabled);
     void persistNaturalScrolling(bool enabled);
     void persistZoomScrollUpZoomsIn(bool enabled);
     void persistPianoRollKeyLabelMode(bool labelEveryKey);
@@ -69,6 +72,10 @@ private:
     juce::ToggleButton defaultDualIOToggle{"Split Left/Right jacks on new modules"};
     juce::TextButton perModuleDefaultsButton{"Per-module I/O defaults..."};
     juce::ToggleButton loopSelectionArmsToggle{"Timeline: P (loop selection) also switches looping on"};
+    // The other half of the same locator conversation, so it sits in the same group as the row
+    // above rather than getting a divider of its own: one is "make the locators from a selection",
+    // this one is "make a clip from the locators".
+    juce::ToggleButton doubleClickSpansLocatorsToggle{"Timeline: double-click inside the locators spans them"};
     juce::ToggleButton naturalScrollingToggle{"Natural scrolling"};
     // The one preference whose label needs a second line to explain WHICH surfaces it touches — a
     // bare "Natural scrolling" toggle in an app that also has a pannable canvas would read as

@@ -30,6 +30,13 @@ constexpr double kEdgeAutoScrollMaxPxPerTick = 18.0;
 // so a right-edge trim can never collapse a clip past what the grid itself can represent.
 constexpr double kMinClipLengthBeats = 0.0625;
 
+// Whether a double-click inside the loop locators authors a clip spanning them instead of the
+// one-bar default. Duplicated as a string rather than shared with PreferencesSettingsTab (which
+// WRITES it) for the same reason "timelineLoopSelectionArms" is: a one-line string constant is not
+// worth a header dependency between a settings tab and a lanes view. DEFAULT TRUE — see
+// TimelineClipLaneArea::locatorSpanForDoubleClick.
+constexpr const char* kTimelineDoubleClickSpansLocatorsKey = "timelineDoubleClickSpansLocators";
+
 constexpr int kMinWidthForName = 40;
 constexpr int kMinWidthForNotePreview = 24;
 
@@ -1237,11 +1244,18 @@ void TimelineClipLaneArea::mouseDoubleClick(const juce::MouseEvent& e) {
         return;
 
     const auto& track = doc_->getTracks()[(std::size_t)*row];
-    const double startBeat = floorSnappedBeatAt(viewState_.xToBeat((double)e.getPosition().x));
+    const double rawBeat = viewState_.xToBeat((double)e.getPosition().x);
+    const double startBeat = floorSnappedBeatAt(rawBeat);
 
     switch (track.kind) {
     case synth::TrackKind::Midi:
-        createMidiClipAt(track.id, startBeat);
+        // Preference ON + a real locator span the click landed inside => the new clip spans the
+        // locators exactly. Otherwise the one-bar default, unchanged (see
+        // locatorSpanForDoubleClick).
+        if (const auto span = locatorSpanForDoubleClick(rawBeat))
+            createMidiClipAt(track.id, span->first, span->second - span->first);
+        else
+            createMidiClipAt(track.id, startBeat);
         break;
     case synth::TrackKind::Audio:
         requestAudioFileFor(track.id, startBeat);
@@ -1251,7 +1265,35 @@ void TimelineClipLaneArea::mouseDoubleClick(const juce::MouseEvent& e) {
     }
 }
 
-void TimelineClipLaneArea::createMidiClipAt(synth::TrackId track, double startBeat) {
+std::optional<std::pair<double, double>> TimelineClipLaneArea::locatorSpanForDoubleClick(double clickedBeat) const {
+    if (transport_ == nullptr)
+        return std::nullopt;
+
+    // Read at use time, defaulting to ON: an install that never opens the Preferences tab gets the
+    // new behaviour, which is the point of shipping it as the default. Duplicated string key rather
+    // than a shared header, exactly like "timelineLoopSelectionArms".
+    bool enabled = true;
+    if (appProperties_ != nullptr)
+        if (auto* settings = appProperties_->getUserSettings())
+            enabled = settings->getBoolValue(kTimelineDoubleClickSpansLocatorsKey, true);
+    if (!enabled)
+        return std::nullopt;
+
+    const auto snap = transport_->getPositionSnapshot();
+    // A degenerate span (end <= start) is also what "no locators set yet" looks like — either way
+    // there is nothing to span, so the one-bar default stands.
+    if (!(snap.loopEndPpq > snap.loopStartPpq))
+        return std::nullopt;
+    // Half-open on purpose: a click exactly ON the right locator is a click in the bar AFTER the
+    // loop, and authoring a locator-length clip there would run past where the user pointed.
+    if (!(clickedBeat >= snap.loopStartPpq && clickedBeat < snap.loopEndPpq))
+        return std::nullopt;
+
+    return std::make_pair(snap.loopStartPpq, snap.loopEndPpq);
+}
+
+void TimelineClipLaneArea::createMidiClipAt(synth::TrackId track, double startBeat,
+                                            std::optional<double> lengthOverride) {
     if (doc_ == nullptr)
         return;
     const auto* trackPtr = doc_->getTrack(track);
@@ -1259,8 +1301,11 @@ void TimelineClipLaneArea::createMidiClipAt(synth::TrackId track, double startBe
         return;
 
     // One bar at the transport's current time signature (4 beats with no transport) — the same
-    // beatsPerBar the Snap::Bar grid uses, so a bar-snapped clip fills exactly one grid cell.
-    const double lengthBeats = currentBeatsPerBar();
+    // beatsPerBar the Snap::Bar grid uses, so a bar-snapped clip fills exactly one grid cell —
+    // unless the caller asked for a specific length (the locator span). A non-positive override is
+    // ignored rather than passed to addClip, which would reject it and author nothing.
+    const double lengthBeats =
+        lengthOverride.has_value() && *lengthOverride > 0.0 ? *lengthOverride : currentBeatsPerBar();
     const juce::String name = "Clip " + juce::String((int)trackPtr->clips.size() + 1);
 
     synth::ClipId newId;

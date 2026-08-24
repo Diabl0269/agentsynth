@@ -226,6 +226,20 @@ TimelinePanelComponent::TimelinePanelComponent() {
         ruler_.repaint();
         repaint();
     };
+    // NOTE AUDITION. The roll emits a pitch + on/off edge and knows nothing about the graph; the
+    // only thing this panel adds is WHICH TRACK — resolved from the edited clip, since the roll's
+    // own callback deliberately carries no clip/track (see PianoRollComponent::onAuditionNote) — and
+    // then it is the host's job (MainComponent) to reach the track's bound Track In node. A missing
+    // host, doc or track is silence, never a crash: a preview is the most disposable thing here.
+    pianoRoll_.onAuditionNote = [this](int pitch, float velocity01, bool on) {
+        if (trackHeaderHost_ == nullptr || doc_ == nullptr || !pianoRoll_.isOpen())
+            return;
+        const auto* track = doc_->getTrackForClip(pianoRoll_.getClipId());
+        if (track == nullptr)
+            return;
+        const int velocity = juce::jlimit(1, 127, (int)std::lround(velocity01 * 127.0f));
+        trackHeaderHost_->auditionTrackNote(track->id, pitch, velocity, on);
+    };
 
     // Automation strip. All start invisible — resized()/showAutomationLane()/
     // closeAutomationStrip() are the only things that flip visibility, driven by
@@ -438,6 +452,9 @@ void TimelinePanelComponent::setTimelineDoc(synth::TimelineDoc* doc) {
     clipLaneArea_.setTimelineDoc(doc_);
     pianoRoll_.setTimelineDoc(doc_);
     automationEditor_.setTimelineDoc(doc_);
+    // The ruler draws (and edits) the doc's MARKERS — see TimelineRulerComponent's class comment
+    // for why it never listens to the doc itself: this panel's timelineChanged() repaints it.
+    ruler_.setTimelineDoc(doc_);
     // A lane id selected against the OLD doc can't mean anything against a new one (a fresh
     // preset/bundle load, or the flag-OFF null-doc case) — close outright rather than trying to
     // re-resolve it.
@@ -451,6 +468,8 @@ void TimelinePanelComponent::setUndoManager(AppUndoManager* undoManager) {
     clipLaneArea_.setUndoManager(undoManager);
     pianoRoll_.setUndoManager(undoManager);
     automationEditor_.setUndoManager(undoManager);
+    // Marker drag/rename/recolour/delete are real edits and belong on the same one undo stack.
+    ruler_.setUndoManager(undoManager);
 }
 
 //==============================================================================
@@ -977,6 +996,27 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
         return true;
     }
 
+    // Ctrl+Shift+1 / Ctrl+Shift+2 = park the cursor on the left / right loop locator. The chord the
+    // grid-set family used to own (that whole family moved to Ctrl+Alt+digit) — jumping between
+    // locators is the gesture a user reaches for far more often than re-picking a grid division.
+    //
+    // Surface-resolved, not a command: it acts on the timeline's own transport, and there is
+    // nothing for it to do on any other surface. A DEGENERATE or unset span (end <= start, which is
+    // also what "no locators yet" looks like) is a no-op that returns false, so the keystroke stays
+    // available to whatever else might claim it rather than being silently swallowed.
+    if (transport_ != nullptr) {
+        const juce::ModifierKeys ctrlShift{juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier};
+        const bool toStart = matchesAction(key, "timelineJumpToLocator1", juce::KeyPress('1', ctrlShift, 0));
+        const bool toEnd = matchesAction(key, "timelineJumpToLocator2", juce::KeyPress('2', ctrlShift, 0));
+        if (toStart || toEnd) {
+            const auto snap = transport_->getPositionSnapshot();
+            if (!(snap.loopEndPpq > snap.loopStartPpq))
+                return false;
+            transport_->locateBeat(toStart ? snap.loopStartPpq : snap.loopEndPpq);
+            return true;
+        }
+    }
+
     // P = loop the selection. With the roll open the "selection" is the edited clip; otherwise the
     // lane area already handles P itself when focused — this is the fallback for other focus
     // targets inside the panel (same span, same setLoop the lane's callback performs).
@@ -1012,6 +1052,13 @@ void TimelinePanelComponent::setTrackHeaderHost(TrackHeaderHost* host) {
 }
 
 void TimelinePanelComponent::applyAddTrackMenuChoice(int menuId) {
+    // Marker first: it is the one entry that needs no TrackHeaderHost (a marker is document data
+    // with no graph node behind it), so it must not be gated on the host check below.
+    if (menuId == kAddMarkerMenuId) {
+        addMarkerAtPlayhead();
+        return;
+    }
+
     if (trackHeaderHost_ == nullptr)
         return;
 
@@ -1021,10 +1068,48 @@ void TimelinePanelComponent::applyAddTrackMenuChoice(int menuId) {
         trackHeaderHost_->addAudioTrack();
 }
 
+synth::MarkerId TimelinePanelComponent::addMarkerAtPlayhead() {
+    if (doc_ == nullptr)
+        return {};
+
+    // The transport's CURRENT position, unsnapped: a marker is a cue for something the user just
+    // heard, so it belongs exactly where the playhead is rather than on the nearest grid line
+    // (a drag afterwards DOES snap — see TimelineRulerComponent::mouseDrag).
+    const double beat = transport_ != nullptr ? std::max(0.0, transport_->getPositionSnapshot().ppq) : 0.0;
+    // "Marker N" counted off the existing markers, the same shape createMidiClipAt's "Clip N" uses.
+    // Not unique by construction (deleting #2 of three makes the next one a second "Marker 3") —
+    // a marker is identified by its id and its position, and a name collision is the user's to
+    // resolve by renaming, not something to paper over with a hunt for a free number.
+    const juce::String name = "Marker " + juce::String((int)doc_->getMarkers().size() + 1);
+
+    synth::MarkerId newId;
+    auto mutate = [this, beat, name, &newId] { newId = doc_->addMarker(beat, name, defaultMarkerColourArgb()); };
+    if (undoManager_ != nullptr)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+
+    // The doc notification already repainted the ruler (timelineChanged) — nothing else to do.
+    return newId;
+}
+
+juce::uint32 TimelinePanelComponent::defaultMarkerColourArgb() const {
+    // A theme token, not a literal, so a marker lands in the palette the rest of the panel draws
+    // in. `warning` is the amber family — deliberately NOT `accent`, which is what the loop brace
+    // and the playhead already use in this same 24 px strip.
+    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel()))
+        return lf->getTheme().colors.warning.getARGB();
+    return synth::Marker{}.colourArgb; // headless: the model's own amber default
+}
+
 void TimelinePanelComponent::showAddTrackMenu() {
     juce::PopupMenu menu;
     menu.addItem(kAddMidiTrackMenuId, "MIDI Track");
     menu.addItem(kAddAudioTrackMenuId, "Audio Track");
+    // Separated because it is not a track at all: a marker adds no row to the header column and
+    // nothing to the graph, it drops a flag on the ruler.
+    menu.addSeparator();
+    menu.addItem(kAddMarkerMenuId, "Add Marker");
 
     juce::Component::SafePointer<TimelinePanelComponent> safeThis(this);
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&addTrackButton_), [safeThis](int result) {
@@ -1036,6 +1121,9 @@ void TimelinePanelComponent::showAddTrackMenu() {
 void TimelinePanelComponent::timelineChanged(const synth::TimelineDoc&) {
     syncTrackHeaders();
     clipLaneArea_.refreshFromDoc();
+    // The ruler's marker flags come straight off the doc, so a mutation is the ONLY thing that can
+    // move them — this is the repaint that replaces polling them (see TimelineRulerComponent).
+    ruler_.repaint();
     // If the roll is open on a clip this mutation just removed, refreshFromDoc() closes it
     // itself and fires onCloseRequested -> closePianoRoll() (wired in the constructor), which is
     // what swaps clipLaneArea_ back into view.
@@ -1133,8 +1221,18 @@ void TimelinePanelComponent::layoutTrackHeaders() {
 
 void TimelinePanelComponent::setApplicationProperties(juce::ApplicationProperties* props) {
     appProperties_ = props;
-    if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
+    // Forwarded even when there is no user-settings file: both of these degrade to "in-memory
+    // only" / "read the default" rather than needing one, and the early return below would
+    // otherwise leave them holding a stale pointer.
+    clipLaneArea_.setApplicationProperties(props);
+    if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr) {
+        ruler_.setPropertiesFile(nullptr);
         return;
+    }
+
+    // Where the marker colour picker's favourites shelf persists to — the same shelf the track
+    // header's swatch uses, so a colour saved from one is offered by the other.
+    ruler_.setPropertiesFile(appProperties_->getUserSettings());
 
     int saved = appProperties_->getUserSettings()->getIntValue(kTimelineSnapPropertyKey, (int)viewState_.snap);
     saved = juce::jlimit((int)TimelineViewState::Snap::Off, (int)TimelineViewState::Snap::HundredTwentyEighth, saved);

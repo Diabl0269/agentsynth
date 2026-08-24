@@ -4,6 +4,7 @@
 #include "../Source/AudioEngine.h"
 #include "../Source/Modules/PolyMidiModule.h"
 #include "../Source/UI/StatusBarComponent.h"
+#include "../Source/UI/TimelineTransportBar.h"
 #include <gtest/gtest.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -116,6 +117,108 @@ TEST(StatusBarTest, GatedRepaintFiresOnPatchChange) {
 
     bar.update(25.0f, 3, "Patch A");
     EXPECT_NO_THROW(bar.update(25.0f, 3, "Patch B"));
+}
+
+// ---------------------------------------------------------------------------
+// Transport cluster — play/stop glyph + "bar.beat.ticks   BPM" readout, always visible regardless
+// of the timeline panel's visibility (see the class comment on updateTransport()).
+// ---------------------------------------------------------------------------
+
+TEST(StatusBarTest, TransportButtonDefaultsToStoppedGlyph) {
+    StatusBarComponent bar;
+    bar.setSize(800, 24);
+    EXPECT_FALSE(bar.getTransportButton().getToggleState());
+}
+
+TEST(StatusBarTest, UpdateTransport_GatesOnUnchangedValues) {
+    StatusBarComponent bar;
+    bar.setSize(800, 24);
+    EXPECT_EQ(bar.getTransportRepaintCountForTest(), 0);
+
+    bar.updateTransport(false, "001.1.000", 120.0);
+    EXPECT_EQ(bar.getTransportRepaintCountForTest(), 1);
+    EXPECT_FALSE(bar.getTransportButton().getToggleState());
+
+    // Identical values a second time must not repaint — same string-diff gate updateRoundTripLatency() uses.
+    bar.updateTransport(false, "001.1.000", 120.0);
+    EXPECT_EQ(bar.getTransportRepaintCountForTest(), 1) << "an unchanged reading must not repaint";
+}
+
+TEST(StatusBarTest, UpdateTransport_FiresOnPlayingChange) {
+    StatusBarComponent bar;
+    bar.setSize(800, 24);
+    bar.updateTransport(false, "001.1.000", 120.0);
+    const int before = bar.getTransportRepaintCountForTest();
+
+    bar.updateTransport(true, "001.1.000", 120.0);
+    EXPECT_EQ(bar.getTransportRepaintCountForTest(), before + 1);
+    EXPECT_TRUE(bar.getTransportButton().getToggleState())
+        << "the button's toggle state is set by updateTransport(), never by a click directly";
+}
+
+TEST(StatusBarTest, UpdateTransport_FiresOnPositionOrBpmChange) {
+    StatusBarComponent bar;
+    bar.setSize(800, 24);
+    bar.updateTransport(true, "001.1.000", 120.0);
+    const int afterFirst = bar.getTransportRepaintCountForTest();
+
+    // Position moved, playing/bpm unchanged.
+    bar.updateTransport(true, "001.2.000", 120.0);
+    EXPECT_EQ(bar.getTransportRepaintCountForTest(), afterFirst + 1);
+
+    // BPM moved, playing/position unchanged.
+    bar.updateTransport(true, "001.2.000", 128.0);
+    EXPECT_EQ(bar.getTransportRepaintCountForTest(), afterFirst + 2);
+}
+
+TEST(StatusBarTest, UpdateTransport_UsesFormatBarBeatOutputVerbatim) {
+    // formatBarBeat is TimelineTransportBar's own static/pure helper. StatusBarComponent cannot call
+    // it itself (this class lives in Core, which cannot depend on AppUI — see the class comment), so
+    // updateTransport() takes the caller's output pre-formatted. This proves that string round-trips
+    // into the rendered readout unchanged.
+    StatusBarComponent bar;
+    bar.setSize(800, 24);
+
+    const juce::String posText = synth::ui::TimelineTransportBar::formatBarBeat(1920.0, 4, 4); // one bar in
+    bar.updateTransport(true, posText, 128.5);
+
+    EXPECT_TRUE(bar.getTransportDisplayTextForTest().contains(posText));
+    EXPECT_TRUE(bar.getTransportDisplayTextForTest().contains("128.5"));
+}
+
+TEST(StatusBarTest, TransportButtonClickFiresOwnerWiredCallback) {
+    // StatusBarComponent never touches TransportService itself — the owner (MainComponent) wires
+    // onClick (see MainComponent's ctor). Verify the button fires whatever callback is assigned and
+    // does NOT flip its own toggle state: setClickingTogglesState(false) means "the transport is the
+    // truth" — only updateTransport() may set the visual.
+    StatusBarComponent bar;
+    bar.setSize(800, 24);
+
+    int clicks = 0;
+    bar.getTransportButton().onClick = [&clicks] { ++clicks; };
+    bar.getTransportButton().onClick(); // NOT triggerClick(): that posts a message, never dispatched headlessly
+
+    EXPECT_EQ(clicks, 1);
+    EXPECT_FALSE(bar.getTransportButton().getToggleState()) << "a click must not itself change the visual";
+}
+
+TEST(StatusBarTest, TransportClusterDropsWhenCramped) {
+    StatusBarComponent bar;
+    bar.setSize(800, 24);
+    bar.updateTransport(false, "001.1.000", 120.0);
+    EXPECT_TRUE(bar.isTransportClusterVisibleForTest());
+    EXPECT_TRUE(bar.getTransportButton().isVisible());
+
+    // Narrow enough that even the round-trip segment's own fit check would fail — the transport
+    // cluster sits further right, so it must drop at least as early (same fit-check-then-drop
+    // pattern as the round-trip segment; see resized()).
+    bar.setSize(300, 24);
+    EXPECT_FALSE(bar.isTransportClusterVisibleForTest());
+    EXPECT_FALSE(bar.getTransportButton().isVisible());
+
+    bar.setSize(800, 24);
+    EXPECT_TRUE(bar.isTransportClusterVisibleForTest());
+    EXPECT_TRUE(bar.getTransportButton().isVisible());
 }
 
 // ---------------------------------------------------------------------------

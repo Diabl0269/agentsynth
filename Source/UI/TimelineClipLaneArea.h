@@ -10,6 +10,7 @@
 #include <cmath>
 #include <functional>
 #include <juce_audio_formats/juce_audio_formats.h>
+#include <juce_data_structures/juce_data_structures.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <map>
 #include <memory>
@@ -159,11 +160,15 @@ public:
     void lookAndFeelChanged() override;
     // Double-clicking a clip opens the piano roll for it (onClipDoubleClicked with the hit clip's
     // id). Double-clicking EMPTY lane space authors content on the row under the pointer instead:
-    // a Midi track gets a one-bar clip at the floor-snapped beat, selected, and fires
-    // onClipDoubleClicked for it too (so "double-click empty space" lands straight in the note
-    // editor); an Audio track asks for a file through audioFileChooser_ and reports the choice as
-    // onAudioFileDropped, the same seam a file drop uses. An Automation row, and a double-click
-    // below the last row, do nothing.
+    // a Midi track gets a clip at the floor-snapped beat, selected, and fires onClipDoubleClicked
+    // for it too (so "double-click empty space" lands straight in the note editor); an Audio track
+    // asks for a file through audioFileChooser_ and reports the choice as onAudioFileDropped, the
+    // same seam a file drop uses. An Automation row, and a double-click below the last row, do
+    // nothing.
+    //
+    // The MIDI clip's span is one bar, EXCEPT when the click lands inside a real loop-locator span
+    // and the "double-click spans locators" preference is on (default) — it then spans the locators
+    // exactly. See locatorSpanForDoubleClick for the full set of conditions.
     void mouseDoubleClick(const juce::MouseEvent& e) override;
 
     // Non-owning callback; may be unset. TimelinePanelComponent wires this to
@@ -318,9 +323,27 @@ public:
     void setUndoManager(AppUndoManager* undoManager) noexcept { undoManager_ = undoManager; }
     AppUndoManager* getUndoManager() const noexcept { return undoManager_; }
 
-    // Non-owning; may be null. Only consulted for its current time signature (beatsPerBar, for
-    // Snap::Bar) — the same reasoning TimelinePanelComponent::paint()'s grid loop already uses.
+    // Non-owning; may be null. Consulted for its current time signature (beatsPerBar, for
+    // Snap::Bar) — the same reasoning TimelinePanelComponent::paint()'s grid loop already uses —
+    // and, since the double-click-spans-locators preference landed, for the LOOP LOCATORS. Still
+    // read-only: this class must never command the transport (see onLoopRangeRequested).
     void setTransport(synth::TransportService* transport) noexcept { transport_ = transport; }
+
+    /** Non-owning, may be null. Only the double-click-spans-locators preference is read from here,
+     *  and it is read AT USE TIME (`mouseDoubleClick`) rather than cached, so flipping it in
+     *  Settings takes effect on the next double-click with nothing to re-push — the same
+     *  read-at-use-time idiom `timelineLoopSelectionArms` follows in TimelinePanelComponent::
+     *  keyPressed. Null (or no user-settings file) means "take the default", which is ON. */
+    void setApplicationProperties(juce::ApplicationProperties* props) noexcept { appProperties_ = props; }
+
+    /** The clip span a double-click at `clickedBeat` should author on a MIDI row: the loop-locator
+     *  span when the preference is on, the transport has one (`loopEnd > loopStart`) and
+     *  `clickedBeat` lands inside `[loopStart, loopEnd)`; otherwise nullopt, meaning "the one-bar
+     *  default". `clickedBeat` is the RAW (unsnapped) beat under the pointer: snapping first could
+     *  push a click that landed outside the span into it (or the reverse), and the question being
+     *  asked is where the user actually clicked. Public and pure so a test can ask it directly
+     *  instead of synthesising a double-click. */
+    std::optional<std::pair<double, double>> locatorSpanForDoubleClick(double clickedBeat) const;
 
     // Re-derives the doc-backed truth: prunes the selection of any clip id that no longer exists
     // (synth::ui::ClipSelectionModel::retainOnly) and repaints. THE refresh seam — called once by
@@ -551,9 +574,12 @@ private:
     juce::Rectangle<int> rowBounds(int trackIndex, int rowHeight) const;
 
     // ---- Authoring (double-click on empty lane space) ----
-    // One-bar clip on `track` at `startBeat`, as ONE recordTimelineChange, selected, then
-    // onClipDoubleClicked so the caller opens the piano roll on it.
-    void createMidiClipAt(synth::TrackId track, double startBeat);
+    // A clip on `track` at `startBeat`, as ONE recordTimelineChange, selected, then
+    // onClipDoubleClicked so the caller opens the piano roll on it. `lengthOverride` is the
+    // locator-span length the double-click path may ask for (see locatorSpanForDoubleClick);
+    // unset — which is what the Draw tool and every other caller pass — means the historical
+    // ONE BAR at the transport's current time signature.
+    void createMidiClipAt(synth::TrackId track, double startBeat, std::optional<double> lengthOverride = std::nullopt);
     // Asks audioFileChooser_ for a file and reports it through onAudioFileDropped.
     void requestAudioFileFor(synth::TrackId track, double startBeat);
     // The real async chooser audioFileChooser_ defaults to (see setAudioFileChooser).
@@ -662,6 +688,8 @@ private:
     synth::TimelineDoc* doc_ = nullptr;
     AppUndoManager* undoManager_ = nullptr;
     synth::TransportService* transport_ = nullptr;
+    // Non-owning, may stay null (see setApplicationProperties). Read at use time, never cached.
+    juce::ApplicationProperties* appProperties_ = nullptr;
     // Non-owning, may stay null (see setShortcutManager). const — this component only reads.
     const ShortcutManager* shortcuts_ = nullptr;
 

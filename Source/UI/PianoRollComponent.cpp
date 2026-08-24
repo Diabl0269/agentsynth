@@ -130,33 +130,27 @@ PianoRollComponent::PianoRollComponent(TimelineViewState& viewState)
             clipScaleMemory_[clipId_].pitchVisibilityOn = on;
         pushScaleContextFromMemory();
     };
-    scalePanel_.onQuantizePitches = [this] {
-        if (!clipId_.isValid())
-            return;
-        const auto it = clipScaleMemory_.find(clipId_);
-        if (it != clipScaleMemory_.end() && it->second.scale.has_value())
-            quantisePitchesToScale(*it->second.scale);
-    };
-    scalePanel_.onGenerate = [this](int minPitch, int maxPitch) {
+    // Straight through the shared resolver, so the panel button, the header chip and the
+    // "pianoRollQuantisePitches" key are one code path (see quantisePitchesToActiveScale).
+    scalePanel_.onQuantizePitches = [this] { quantisePitchesToActiveScale(); };
+    scalePanel_.onGenerate = [this](int minPitch, int maxPitch, bool addToExisting) {
         if (!clipId_.isValid())
             return;
         // Copied out rather than kept as a pointer into the map: generateRandomNotesIntoClip
         // mutates the doc (and can therefore repaint/rebuild things this lambda has no business
         // reasoning about the lifetime of), so the scale it reads must not depend on the map
         // entry surviving the call.
-        synth::MusicalScale scaleStorage;
-        const synth::MusicalScale* scalePtr = nullptr;
-        const auto it = clipScaleMemory_.find(clipId_);
-        if (it != clipScaleMemory_.end() && it->second.scale.has_value()) {
-            scaleStorage = *it->second.scale;
-            scalePtr = &scaleStorage;
-        }
+        const auto scale = activeScaleForOpenClip();
         juce::Random rng; // default-seeded — the panel's Generate button always wants a fresh draw
-        generateRandomNotesIntoClip(scalePtr, minPitch, maxPitch, rng);
+        generateRandomNotesIntoClip(scale.has_value() ? &*scale : nullptr, minPitch, maxPitch, rng, addToExisting);
     };
 }
 
 PianoRollComponent::~PianoRollComponent() {
+    // A note this roll auditioned must not outlive it: the owner's synth has no way to learn the
+    // component went away, so the noteOff has to be emitted here (see onAuditionNote's contract).
+    // Before the animation teardown, because the callback is the thing with a deadline.
+    stopAudition();
     // The AnimationDriver's callbacks capture 'this' indirectly (see setScalePanelVisible); an
     // animation still running when this object goes away would call back into a destroyed
     // component, exactly the hazard ModuleLibraryComponent's own destructor guards against.
@@ -170,6 +164,10 @@ PianoRollComponent::~PianoRollComponent() {
 void PianoRollComponent::openClip(synth::ClipId id) {
     dragMode_ = DragMode::None;
     pendingEmptyClick_ = false;
+    resizeNotes_.clear();
+    resizeUnquantized_ = false;
+    // A note auditioned in the OLD clip has no mouse-up coming — this IS the end of that gesture.
+    stopAudition();
     autoScrollTimer_.stopTimer(); // a drag from the PREVIOUS clip cannot still be scrolling this one
     selection_.clear();
     // The line has to be re-announced against the new framing before it is drawn again.
@@ -227,6 +225,9 @@ void PianoRollComponent::closeRoll() {
     selection_.clear();
     dragMode_ = DragMode::None;
     pendingEmptyClick_ = false;
+    resizeNotes_.clear();
+    resizeUnquantized_ = false;
+    stopAudition();               // same reasoning as openClip's: no mouse-up is coming for a closed roll
     autoScrollTimer_.stopTimer(); // no clip left for a drag to be scrolling
 
     hasPlayheadX_ = false;
@@ -518,6 +519,15 @@ void PianoRollComponent::finishScalePanelAnimation() {
 
 void PianoRollComponent::toggleScalePanel() { setScalePanelVisible(!scalePanelVisible_); }
 
+std::optional<synth::MusicalScale> PianoRollComponent::activeScaleForOpenClip() const {
+    if (!clipId_.isValid())
+        return std::nullopt;
+    const auto it = clipScaleMemory_.find(clipId_);
+    if (it == clipScaleMemory_.end())
+        return std::nullopt; // a clip never opened before starts at "No scale" without inserting
+    return it->second.scale;
+}
+
 void PianoRollComponent::pushScaleContextFromMemory() {
     std::optional<synth::MusicalScale> scale;
     bool pitchVisibilityOn = false;
@@ -593,8 +603,29 @@ void PianoRollComponent::quantisePitchesToScale(const synth::MusicalScale& scale
     repaint();
 }
 
+bool PianoRollComponent::quantisePitchesToActiveScale() {
+    if (!isPitchQuantiseEnabled())
+        return false;
+    const auto scale = activeScaleForOpenClip();
+    if (!scale.has_value())
+        return false;
+    // By value (see activeScaleForOpenClip): quantisePitchesToScale mutates the doc, so the scale it
+    // is handed must not be a reference into clipScaleMemory_.
+    quantisePitchesToScale(*scale);
+    return true;
+}
+
+bool PianoRollComponent::isPitchQuantiseEnabled() const {
+    if (doc_ == nullptr || !clipId_.isValid())
+        return false;
+    if (!activeScaleForOpenClip().has_value())
+        return false; // "No scale" has nothing to quantise INTO — a no-op, not an identity pass
+    const auto* clip = doc_->getClip(clipId_);
+    return clip != nullptr && !clip->notes.empty();
+}
+
 void PianoRollComponent::generateRandomNotesIntoClip(const synth::MusicalScale* scale, int minPitch, int maxPitch,
-                                                     juce::Random& rng) {
+                                                     juce::Random& rng, bool addToExisting) {
     if (doc_ == nullptr || !clipId_.isValid())
         return;
     const auto* clip = doc_->getClip(clipId_);
@@ -608,13 +639,32 @@ void PianoRollComponent::generateRandomNotesIntoClip(const synth::MusicalScale* 
     if (gridBeats <= 0.0)
         gridBeats = 0.25;
 
-    const auto notes = synth::generateRandomNotes(clip->lengthBeats, gridBeats, minPitch, maxPitch, scale, rng);
+    auto notes = synth::generateRandomNotes(clip->lengthBeats, gridBeats, minPitch, maxPitch, scale, rng);
 
-    // "Generate" means "replace": ONE mutation removes every existing note and adds the fresh
-    // batch, so undo restores the old contents in a single step rather than a clear-then-a-paste.
+    if (addToExisting) {
+        // OVERLAY. Duplicate suppression is by exact (pitch, startBeat), which is precisely the key
+        // a re-run collides on: generation walks the same grid steps every time, so without this a
+        // second Generate would stack unison notes at the same offsets — invisible in the roll (one
+        // rect drawn over another) and unclickable apart. A note at the same start but a DIFFERENT
+        // pitch is a chord and is kept; different lengths at the same (pitch, start) are still the
+        // same note as far as the user can tell, so the incoming one is dropped rather than merged.
+        const auto isDuplicate = [clip](const synth::MidiNote& candidate) {
+            for (const auto& existing : clip->notes)
+                if (existing.pitch == candidate.pitch && std::abs(existing.startBeat - candidate.startBeat) < 1.0e-9)
+                    return true;
+            return false;
+        };
+        notes.erase(std::remove_if(notes.begin(), notes.end(), isDuplicate), notes.end());
+    }
+
+    // ONE mutation either way — the difference is only whether it starts by clearing. Replace means
+    // undo restores the old contents in a single step rather than unwinding a clear-then-paste; add
+    // means the existing notes were never touched, so undo just removes what was added.
+    const bool clearFirst = !addToExisting;
     std::vector<synth::NoteId> newIds;
-    auto mutate = [this, notes, &newIds] {
-        doc_->clearNotes(clipId_);
+    auto mutate = [this, notes, clearFirst, &newIds] {
+        if (clearFirst)
+            doc_->clearNotes(clipId_);
         newIds.clear();
         for (const auto& note : notes)
             if (const auto id = doc_->addNote(clipId_, note); id.isValid())
@@ -625,6 +675,8 @@ void PianoRollComponent::generateRandomNotesIntoClip(const synth::MusicalScale* 
     else
         mutate();
 
+    // Only the notes that were actually ADDED — which is what makes "generate again" reviewable: the
+    // selection is the diff, not the whole clip.
     selection_.setSelection(newIds);
     repaint();
 }
@@ -732,14 +784,30 @@ double PianoRollComponent::snappedBeatAt(double rawBeat) const {
     return viewState_.snapBeat(rawBeat, currentBeatsPerBar());
 }
 
+double PianoRollComponent::resizePreviewLengthFor(const NoteOrigin& origin) const noexcept {
+    // The grabbed note takes the pointer's own value verbatim: snapping, the grid floor and the Cmd
+    // bypass have all already been applied to it, and re-deriving it here from the delta could
+    // disagree by a rounding step with what the mouse is on.
+    if (origin.id == activeNote_)
+        return previewLength_;
+    // Everyone else: their OWN original length plus the shared delta, floored so a shortening drag
+    // can never invert a note. The floor is the editor's absolute minimum rather than the grid — a
+    // note already shorter than one division must not get LONGER because the group was trimmed.
+    return std::max(origin.lengthBeats + previewLengthDelta_, kMinNoteLengthBeats);
+}
+
 PianoRollComponent::NoteGeometry PianoRollComponent::effectiveGeometryFor(const synth::MidiNote& note) const {
     if (dragMode_ == DragMode::Move) {
         for (const auto& origin : dragNotes_)
             if (origin.id == note.id)
                 return {origin.startBeat + previewDeltaBeats_, origin.lengthBeats,
                         rowShiftedPitch(origin.pitch, previewDeltaPitch_), origin.velocity};
-    } else if (dragMode_ == DragMode::Resize && activeNote_ == note.id) {
-        return {note.startBeat, previewLength_, note.pitch, note.velocity};
+    } else if (dragMode_ == DragMode::Resize) {
+        // Every note the gesture snapshotted, not just the grabbed one — a resize inside a
+        // multi-selection previews the whole group by the shared delta (see resizeNotes_).
+        for (const auto& origin : resizeNotes_)
+            if (origin.id == note.id)
+                return {note.startBeat, resizePreviewLengthFor(origin), note.pitch, note.velocity};
     } else if (dragMode_ == DragMode::VelocityScrub) {
         for (const auto& origin : dragNotes_)
             if (origin.id == note.id)
@@ -1148,6 +1216,20 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
     g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), buttonFontPx, juce::Font::plain));
     g.drawText("Q", quantiseButtonBounds_, juce::Justification::centred, false);
 
+    // Pitch-quantize chip: an ACTION (like Back), not a toggle, so it never paints lit — but it does
+    // paint dimmed when there is nothing to quantise into (no scale chosen, or an empty clip), the
+    // same "the control tells you it would be a no-op" treatment isQuantiseEnabled drives for "Q".
+    const bool pitchEnabled = isPitchQuantiseEnabled();
+    const auto pitchFill = paintChip(quantisePitchButtonBounds_, /*active=*/false,
+                                     hoveredHeaderButton_ == HeaderButtonId::QuantisePitches);
+    g.setColour(pitchFill.contrasting(0.9f).withMultipliedAlpha(pitchEnabled ? 1.0f : 0.45f));
+    g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), buttonFontPx, juce::Font::plain));
+    // Drawn text, never an icon asset — the same "draw it, don't asset it" rule the Back arrow
+    // follows. U+266A (eighth note) is a plain BMP glyph the app's mono family carries, so unlike a
+    // themed icon it needs no IconLibrary entry and cannot go missing on a theme switch.
+    g.drawText(juce::String::fromUTF8("Q\xE2\x99\xAA"), quantisePitchButtonBounds_, juce::Justification::centred,
+               false);
+
     // Scale button: same lit/muted treatment as "Q" above, but lit state tracks the LOGICAL target
     // (scalePanelVisible_ — what the panel is animating TOWARDS) rather than the child component's
     // own on-screen flag, which stays true for the whole close slide too (see setScalePanelVisible).
@@ -1204,6 +1286,8 @@ juce::Rectangle<int> PianoRollComponent::headerButtonBoundsFor(HeaderButtonId wh
         return backButtonBounds_;
     case HeaderButtonId::Quantise:
         return quantiseButtonBounds_;
+    case HeaderButtonId::QuantisePitches:
+        return quantisePitchButtonBounds_;
     case HeaderButtonId::Scale:
         return scaleButtonBounds_;
     case HeaderButtonId::None:
@@ -1218,6 +1302,8 @@ void PianoRollComponent::updateHeaderButtonHover(juce::Point<int> pos) {
         next = HeaderButtonId::Back;
     else if (quantiseButtonBounds_.contains(pos))
         next = HeaderButtonId::Quantise;
+    else if (quantisePitchButtonBounds_.contains(pos))
+        next = HeaderButtonId::QuantisePitches;
     else if (scaleButtonBounds_.contains(pos))
         next = HeaderButtonId::Scale;
 
@@ -1281,6 +1367,11 @@ void PianoRollComponent::resized() {
     backButtonBounds_ = header.removeFromLeft(60).reduced(3, 2);
     header.removeFromLeft(4);
     quantiseButtonBounds_ = header.removeFromLeft(20).reduced(2, 2);
+    header.removeFromLeft(2);
+    // Wider than "Q" because it carries two glyphs ("Q" + the note sign), and immediately next to it
+    // with a tighter gap than the other chips get: the two quantise verbs are one family, and their
+    // spacing is what says so.
+    quantisePitchButtonBounds_ = header.removeFromLeft(28).reduced(2, 2);
     header.removeFromLeft(4);
     scaleButtonBounds_ = header.removeFromLeft(50).reduced(2, 2);
 
@@ -1381,6 +1472,23 @@ void PianoRollComponent::beginMoveOrResize(const NoteHit& hit, juce::Point<int> 
             dragMode_ = DragMode::Resize;
             resizeOriginalLength_ = note->lengthBeats;
             previewLength_ = resizeOriginalLength_;
+            previewLengthDelta_ = 0.0;
+
+            // Snapshot every SELECTED note's origin, exactly like the Move branch below, so a resize
+            // grabbed inside a multi-selection trims the whole group by ONE shared length delta
+            // (11.1). By the time we get here mouseDown has already made the grabbed note part of
+            // the selection (it replaces the selection with just that note when it wasn't in it), so
+            // "the selection" IS the right set in both cases — the fallback below only covers a
+            // caller that reached this function some other way.
+            resizeNotes_.clear();
+            if (selection_.contains(hit.id)) {
+                for (auto id : selection_.getSelected())
+                    if (const auto* selected = doc_->getNote(id))
+                        resizeNotes_.push_back(
+                            {id, selected->startBeat, selected->lengthBeats, selected->pitch, selected->velocity});
+            } else {
+                resizeNotes_.push_back({hit.id, note->startBeat, note->lengthBeats, note->pitch, note->velocity});
+            }
         }
         return;
     }
@@ -1452,12 +1560,18 @@ void PianoRollComponent::setActiveTool(EditTool tool) {
     dragMode_ = DragMode::None;
     pendingEmptyClick_ = false;
     dragNotes_.clear();
+    resizeNotes_.clear();
+    resizeUnquantized_ = false;
     previewDeltaBeats_ = 0.0;
     previewDeltaPitch_ = 0;
     previewDeltaVelocity_ = 0;
+    previewLengthDelta_ = 0.0;
     drawLengthBeats_ = 0.0;
     clearSplitPreview();
     autoScrollTimer_.stopTimer(); // the auto-scroll timer's drag just got cancelled too
+    // The cancelled gesture's preview note goes with it — this is a drag that will never see a
+    // mouseUp, which is exactly the no-stuck-note case stopAudition exists for.
+    stopAudition();
 
     applyToolCursor();
     repaint();
@@ -1746,6 +1860,112 @@ void PianoRollComponent::lookAndFeelChanged() {
     // The cursors are rasterised from the THEMED icons, so a theme switch invalidates all six.
     toolCursorsBuilt_ = false;
     applyToolCursor();
+}
+
+void PianoRollComponent::visibilityChanged() {
+    // Going away mid-gesture means no mouseUp is coming (the panel swapped the clip lanes back in,
+    // the timeline panel collapsed, the window closed) — the one path a stuck note would otherwise
+    // come from. Becoming visible is a no-op: nothing can be sounding yet.
+    if (!isVisible())
+        stopAudition();
+}
+
+//==============================================================================
+// ---- Note audition (see onAuditionNote) ----
+
+void PianoRollComponent::startAudition(int pitch, int velocity) {
+    if (!onAuditionNote)
+        return;
+    // Release first, unconditionally: a second note-on without a release cannot be right, and
+    // leaving the old one sounding would break the one-off-per-on contract for it.
+    stopAudition();
+    const int clamped = juce::jlimit(0, 127, pitch);
+    auditionVelocity_ = juce::jlimit(1, 127, velocity);
+    auditionPitch_ = clamped;
+    auditionActive_ = true;
+    onAuditionNote(clamped, (float)auditionVelocity_ / 127.0f, true);
+}
+
+void PianoRollComponent::retriggerAudition(int pitch) {
+    if (!auditionActive_)
+        return; // nothing sounding: a drag that never started a preview must not start one now
+    const int clamped = juce::jlimit(0, 127, pitch);
+    if (clamped == auditionPitch_)
+        return; // the gate that makes a horizontal drag inside one row cost nothing
+    // Carries the velocity the gesture started on (see auditionVelocity_) — a Move drag changes
+    // pitch, never velocity.
+    startAudition(clamped, auditionVelocity_);
+}
+
+void PianoRollComponent::stopAudition() {
+    if (!auditionActive_)
+        return;
+    const int pitch = auditionPitch_;
+    const int velocity = auditionVelocity_;
+    // Cleared BEFORE the callback: the owner's handler is free to do anything (including something
+    // that re-enters this component), and it must never see a note this call has already ended.
+    auditionActive_ = false;
+    auditionPitch_ = -1;
+    if (onAuditionNote)
+        onAuditionNote(pitch, (float)velocity / 127.0f, false);
+}
+
+//==============================================================================
+// ---- Clip overrun after a resize ----
+
+double PianoRollComponent::maxNoteEndAmong(const std::vector<synth::NoteId>& ids) const {
+    if (doc_ == nullptr)
+        return 0.0;
+    double maxEnd = 0.0;
+    for (auto id : ids)
+        if (const auto* note = doc_->getNote(id))
+            maxEnd = std::max(maxEnd, note->startBeat + note->lengthBeats);
+    return maxEnd;
+}
+
+bool PianoRollComponent::extendOpenClipTo(double lengthBeats) {
+    if (doc_ == nullptr || !clipId_.isValid() || !std::isfinite(lengthBeats) || lengthBeats <= 0.0)
+        return false;
+    const auto* clip = doc_->getClip(clipId_);
+    if (clip == nullptr || clip->lengthBeats >= lengthBeats - kBeatEpsilon)
+        return false; // already long enough — nothing to do, and nothing to push onto the undo stack
+
+    const auto id = clipId_;
+    bool changed = false;
+    auto mutate = [this, id, lengthBeats, &changed] { changed = doc_->resizeClip(id, lengthBeats); };
+    // Its OWN undo step, deliberately not merged with the resize that provoked it: the user answered
+    // a second question, so undo should take them back one answer at a time. Same
+    // recordTimelineChange shape TimelineClipLaneArea's own clip resize uses.
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+    repaint();
+    return changed;
+}
+
+void PianoRollComponent::promptExtendClipToFitNotes(double requiredLengthBeats) {
+    lastExtendPromptLength_ = requiredLengthBeats;
+
+    auto options = juce::MessageBoxOptions()
+                       .withIconType(juce::MessageBoxIconType::QuestionIcon)
+                       .withTitle("Notes Past the Clip End")
+                       .withMessage("Extend clip to fit the resized notes?")
+                       .withButton("Extend")
+                       .withButton("Keep");
+    // ASYNC, never a modal loop: this runs while the mouse-up is still unwinding, and a nested
+    // message loop there would re-enter the very gesture that opened it. SafePointer because the
+    // answer can arrive after the roll has closed or the panel has been destroyed — the same pattern
+    // AIChatComponent::confirmAndClearHistory uses.
+    juce::Component::SafePointer<PianoRollComponent> safeThis(this);
+    juce::AlertWindow::showAsync(options, [safeThis, requiredLengthBeats](int result) {
+        if (result != 1)
+            return; // "Keep": the notes stay overrunning, and playback simply truncates them at the
+                    // clip boundary (TimelineSnapshot clamps every event end to the clip's end and
+                    // drops notes starting past it), so the overrun is inaudible rather than wrong.
+        if (auto* self = safeThis.getComponent())
+            self->extendOpenClipTo(requiredLengthBeats);
+    });
 }
 
 //==============================================================================
@@ -2169,6 +2389,8 @@ void PianoRollComponent::performQuantise() {
 juce::String PianoRollComponent::getTooltipFor(juce::Point<int> pos) const {
     if (quantiseButtonBounds_.contains(pos))
         return quantiseTooltipText();
+    if (quantisePitchButtonBounds_.contains(pos))
+        return quantisePitchTooltipText();
     if (scaleButtonBounds_.contains(pos))
         return scaleTooltipText();
     return {};
@@ -2179,16 +2401,32 @@ juce::String PianoRollComponent::getTooltip() { return getTooltipFor(getMouseXYR
 // Rebuilt fresh on every call (see the header comment) — reading shortcuts_ live is what makes a
 // rebind visible the very next time either tooltip is queried, with no cache and no listener.
 juce::String PianoRollComponent::quantiseTooltipText() const {
-    // "timelineSnapToggle" is the plain click/keypress half — shared with the panel-wide Q key.
-    // "Shift+click" (the one-shot quantise) is a MOUSE-MODIFIER convention on this button, not a
-    // registered ShortcutManager action (mouseDown checks e.mods.isShiftDown() directly), so it
-    // stays literal text rather than a second dynamic hint.
+    // BOTH halves are real registered actions now, so both hints are dynamic: a plain click
+    // quantises ("pianoRollQuantise", Option+Q by default) and Shift+click toggles grid magnetism
+    // ("timelineSnapToggle", the bare q shared with the panel). The verbs are this way round because
+    // a chip labelled "Q" reads as "quantise" — a toggle hiding behind the more obvious click was
+    // the surprise this swap fixes.
+    const auto quantiseHint =
+        shortcutHintFor(shortcuts_, "pianoRollQuantise", modKey('q', juce::ModifierKeys::altModifier));
     const auto snapHint = shortcutHintFor(shortcuts_, "timelineSnapToggle", plainKey('q'));
-    juce::String text = "Snap to grid on/off";
+    juce::String text = "Quantize note starts to the grid";
+    if (quantiseHint.isNotEmpty())
+        text += " (" + quantiseHint + ")";
+    text += juce::String::fromUTF8(" \xE2\x80\x94 the selected notes, or all notes when nothing is selected");
+    text += "; Shift+click toggles snap to grid on/off";
     if (snapHint.isNotEmpty())
         text += " (" + snapHint + ")";
-    text += juce::String::fromUTF8(" \xE2\x80\x94 Shift+click quantizes the selected notes to the grid "
-                                   "(or all notes when nothing is selected)");
+    return text;
+}
+
+juce::String PianoRollComponent::quantisePitchTooltipText() const {
+    const auto hint = shortcutHintFor(shortcuts_, "pianoRollQuantisePitches",
+                                      modKey('q', juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier));
+    juce::String text = "Quantize note pitches into the scale";
+    if (hint.isNotEmpty())
+        text += " (" + hint + ")";
+    text += juce::String::fromUTF8(" \xE2\x80\x94 the selected notes, or all notes when nothing is selected. "
+                                   "Needs a scale picked in Scale Assist");
     return text;
 }
 
@@ -2209,6 +2447,9 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
     grabKeyboardFocus();
     dragMode_ = DragMode::None;
     pendingEmptyClick_ = false;
+    // Latched per gesture (see resizeUnquantized_): cleared here so a previous Cmd+resize can never
+    // leak its grid bypass into the next, plain, resize.
+    resizeUnquantized_ = false;
 
     if (doc_ == nullptr || !clipId_.isValid() || doc_->getClip(clipId_) == nullptr)
         return;
@@ -2231,10 +2472,20 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
     }
     if (quantiseButtonBounds_.contains(pos)) {
         flashQuantiseButton(); // feedback even when the click is a no-op
+        // SWAPPED relative to the original chip: a plain click now QUANTISES (a chip labelled "Q" on
+        // a note editor reads as "quantise", and burying the verb behind Shift was the surprise),
+        // and Shift+click is the grid-magnetism toggle. The toggle keeps a home here rather than
+        // moving off the chip entirely because it is still the thing the chip paints LIT.
         if (e.mods.isShiftDown())
-            performQuantise(); // one-shot: snap the existing notes to the grid
+            toggleSnap();
         else
-            toggleSnap(); // plain click: the grid-magnetism switch
+            performQuantise();
+        return;
+    }
+    if (quantisePitchButtonBounds_.contains(pos)) {
+        // Straight to the shared verb — no modifier variants: there is only one thing to do here,
+        // and it is a no-op (silently, exactly like the "Q" chip's) when no scale is chosen.
+        quantisePitchesToActiveScale();
         return;
     }
     if (scaleButtonBounds_.contains(pos)) {
@@ -2255,6 +2506,28 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
     }
 
     auto hit = hitTestNote(pos);
+
+    // AUDITION — before any of the branches below, so every note-hit gesture sounds the note
+    // identically (select, move, resize, velocity scrub, even a Shift-click that deselects it):
+    // "clicking a note plays it" must not depend on which modifier happened to be down. Confined to
+    // the Select tool — an Erase/Mute/Split/Glue click is not a request to hear anything, and those
+    // tools returned above. The velocity is the note's OWN, so a quiet note previews quiet.
+    if (hit) {
+        if (const auto* note = doc_->getNote(hit->id))
+            startAudition(note->pitch, note->velocity);
+    }
+
+    if (hit && hit->onRightEdge && e.mods.isCommandDown() && !e.mods.isShiftDown()) {
+        // Cmd on a RIGHT EDGE is an unquantized resize (11.2) — tested before the velocity-scrub
+        // branch below precisely because it is the more specific of the two Cmd gestures. Cmd
+        // anywhere else on the note still scrubs velocity, unchanged.
+        if (!selection_.contains(hit->id))
+            selection_.setSelection({hit->id});
+        resizeUnquantized_ = true;
+        beginMoveOrResize(*hit, pos);
+        repaint();
+        return;
+    }
 
     if (hit && e.mods.isCommandDown() && !e.mods.isShiftDown()) {
         // Cmd is ADDITIVE on a note (never a toggle — the drag that may follow scrubs the whole
@@ -2416,17 +2689,33 @@ void PianoRollComponent::updateDragPreviewFromLastPointer() {
         else
             rowDeltaRaw = 0;
         previewDeltaPitch_ = (int)rowDeltaRaw;
+
+        // AUDITION retrigger: the preview pitch of the GRABBED note (never the whole group — one
+        // sounding note per gesture, the same way a keyboard plays the key you are on). Resolved
+        // through the SAME rowShiftedPitch the drawn preview uses, and gated on the pitch actually
+        // changing by retriggerAudition, so dragging horizontally inside one row costs nothing.
+        for (const auto& origin : dragNotes_) {
+            if (origin.id != activeNote_)
+                continue;
+            retriggerAudition(rowShiftedPitch(origin.pitch, previewDeltaPitch_));
+            break;
+        }
     } else if (dragMode_ == DragMode::Resize) {
         const auto* note = doc_->getNote(activeNote_);
         if (note == nullptr)
             return;
         const double grid = currentGridBeats();
-        const double minLen = grid > 0.0 ? grid : kMinNoteLengthBeats;
         const double rawEnd = xToBeat((double)pos.x) - clip->startBeat;
-        const double snappedEnd = snappedBeatAt(rawEnd);
-        double length = std::max(snappedEnd - note->startBeat, minLen);
-        length = std::min(length, std::max(0.0, clip->lengthBeats - note->startBeat));
-        previewLength_ = length;
+        // Cmd bypasses the grid ENTIRELY (11.2): the raw beat under the pointer, and the floor drops
+        // to the editor's absolute minimum, so the drag is continuous rather than stepping. Latched
+        // at mouse-down (resizeUnquantized_), never re-read from the live modifiers.
+        const double targetEnd = resizeUnquantized_ ? rawEnd : snappedBeatAt(rawEnd);
+        const double minLen = (resizeUnquantized_ || grid <= 0.0) ? kMinNoteLengthBeats : grid;
+        // NO upper clamp to the clip's length (11.1): a note may be dragged out past the clip's end,
+        // and the mouse-up asks whether to grow the clip to fit (promptExtendClipToFitNotes). The
+        // old clamp here is what used to make that gesture impossible.
+        previewLength_ = std::max(targetEnd - note->startBeat, minLen);
+        previewLengthDelta_ = previewLength_ - resizeOriginalLength_;
     } else if (dragMode_ == DragMode::VelocityScrub) {
         // ~1 per px, up = louder (screen y decreases as pitch/velocity "increases" — matching
         // yForPitch's convention). Clamped per-note (independently) in effectiveGeometryFor. Pixel
@@ -2509,6 +2798,9 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent&) {
     // outlives it — stopped unconditionally rather than only from the branches below, since a
     // marquee/pendingEmptyClick release reaches this point too and the timer must not care which.
     autoScrollTimer_.stopTimer();
+    // Same "unconditional, before any branch returns" reasoning, and for a sharper reason: EVERY
+    // early return below is a path a note-on must not survive. A no-op when nothing is sounding.
+    stopAudition();
 
     if (dragMode_ == DragMode::Marquee) {
         endMarquee();
@@ -2562,13 +2854,36 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent&) {
         else
             mutate();
     } else if (dragMode_ == DragMode::Resize && std::abs(previewLength_ - resizeOriginalLength_) > 1e-9) {
-        const auto id = activeNote_;
-        const double newLength = previewLength_;
-        auto mutate = [this, id, newLength] { doc_->resizeNote(id, newLength); };
+        // ONE undo step for however many notes the gesture snapshotted (11.1). The per-note lengths
+        // are resolved through resizePreviewLengthFor — the SAME function the preview painted with,
+        // so what is committed can never disagree with what was drawn.
+        std::vector<std::pair<synth::NoteId, double>> targets;
+        targets.reserve(resizeNotes_.size());
+        for (const auto& origin : resizeNotes_)
+            targets.emplace_back(origin.id, resizePreviewLengthFor(origin));
+
+        auto mutate = [this, targets] {
+            for (const auto& target : targets)
+                doc_->resizeNote(target.first, target.second);
+        };
         if (undoManager_)
             undoManager_->recordTimelineChange(*doc_, mutate);
         else
             mutate();
+
+        // The resize itself has no clip-length clamp any more, so ask about the overrun AFTER
+        // committing rather than silently trimming it: the notes are already the length the user
+        // dragged, and growing the clip is a SEPARATE answer to a separate question (its own undo
+        // step — see extendOpenClipTo). Read back from the doc, not from `targets`, so a length
+        // TimelineDoc itself rejected or adjusted can't make us prompt for a clip nobody needs.
+        std::vector<synth::NoteId> resizedIds;
+        resizedIds.reserve(targets.size());
+        for (const auto& target : targets)
+            resizedIds.push_back(target.first);
+        const double maxEnd = maxNoteEndAmong(resizedIds);
+        const auto* clip = doc_->getClip(clipId_);
+        if (clip != nullptr && maxEnd > clip->lengthBeats + kBeatEpsilon)
+            promptExtendClipToFitNotes(maxEnd);
     } else if (dragMode_ == DragMode::VelocityScrub && previewDeltaVelocity_ != 0) {
         const auto notes = dragNotes_;
         const int delta = previewDeltaVelocity_;
@@ -2584,9 +2899,12 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent&) {
 
     dragMode_ = DragMode::None;
     dragNotes_.clear();
+    resizeNotes_.clear();
+    resizeUnquantized_ = false;
     previewDeltaBeats_ = 0.0;
     previewDeltaPitch_ = 0;
     previewDeltaVelocity_ = 0;
+    previewLengthDelta_ = 0.0;
     repaint();
 }
 
@@ -2807,15 +3125,30 @@ bool PianoRollComponent::matchesAction(const juce::KeyPress& key, const juce::St
 }
 
 bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {
-    // Shift+Q = one-shot quantise; Q = toggle grid magnetism (same pair as the header button's
-    // Shift+click / click). Handled here so both work while the roll has focus; the panel handles
-    // the same keys for every other focus target inside the timeline.
+    // The quantise family, coarsest chord last: Option+Shift+Q quantises PITCHES into the scale,
+    // Option+Q quantises note STARTS to the grid, and a bare Q toggles grid magnetism (the same
+    // three verbs the header's "Q♪" chip, "Q" chip and Shift+click on "Q" perform). Handled here so
+    // all three work while the roll has focus; the panel handles the bare Q for every other focus
+    // target inside the timeline.
     //
-    // Quantise is tested FIRST because it is the more specific of the two: with the defaults the
-    // snap toggle is a bare Q and quantise is Shift+Q, and a user is free to rebind them into any
-    // other pair. The snap toggle shares "timelineSnapToggle" with the panel — one binding, one key,
-    // whichever surface has focus.
-    if (matchesAction(key, "pianoRollQuantise", modKey('q', juce::ModifierKeys::shiftModifier))) {
+    // Option (altModifier) rather than Shift for the two quantise verbs: they are one family and
+    // should differ only by Shift, which frees the plain Shift+Q chord. macOS delivers Option+letter
+    // as a Unicode glyph rather than the letter, which is exactly why these are stored and matched as
+    // KEY CODE + modifier set (see matchesAction/ShortcutManager::keyPressMatches) and never as a
+    // character.
+    //
+    // The snap toggle shares "timelineSnapToggle" with the panel — one binding, one key, whichever
+    // surface has focus.
+    // Option+Shift+Q first: it is the most specific of the three (Option+Q is the start quantise and
+    // a bare q is the snap toggle), so a user who rebinds only one of the family cannot end up with
+    // a less specific one swallowing it — the same ordering rule the Shift+Up/Up pair follows below.
+    if (matchesAction(key, "pianoRollQuantisePitches",
+                      modKey('q', juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier))) {
+        // Returns the action's OWN applicability, so the key falls through when there is no scale to
+        // quantise into rather than being silently swallowed.
+        return quantisePitchesToActiveScale();
+    }
+    if (matchesAction(key, "pianoRollQuantise", modKey('q', juce::ModifierKeys::altModifier))) {
         flashQuantiseButton();
         performQuantise();
         return true;

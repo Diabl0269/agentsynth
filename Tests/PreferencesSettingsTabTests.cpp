@@ -30,6 +30,50 @@ TEST_F(PreferencesSettingsTabTest, DefaultsToNewAndUnwiredAndDoubleClickOn) {
     EXPECT_FALSE(tab.getDefaultDualIOForNewModules());
 }
 
+// The double-click-spans-locators preference: DEFAULT ON, persisted under its own key, and read at
+// use time by TimelineClipLaneArea (nothing live to push, so the only contract here is the file).
+TEST_F(PreferencesSettingsTabTest, DoubleClickSpansLocatorsDefaultsOnAndRoundTrips) {
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_TRUE(tab.isDoubleClickSpansLocatorsEnabled()) << "an install that never opens this tab gets it ON";
+        // Reading the default must not WRITE it — an untouched preference stays absent from the file.
+        EXPECT_FALSE(appProperties.getUserSettings()->containsKey("timelineDoubleClickSpansLocators"));
+
+        tab.setDoubleClickSpansLocatorsEnabled(false);
+        EXPECT_FALSE(tab.isDoubleClickSpansLocatorsEnabled());
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineDoubleClickSpansLocators"), "0");
+    }
+
+    // A fresh tab restores what was written.
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_FALSE(tab.isDoubleClickSpansLocatorsEnabled());
+        tab.setDoubleClickSpansLocatorsEnabled(true);
+        EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineDoubleClickSpansLocators"), "1");
+    }
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_TRUE(tab.isDoubleClickSpansLocatorsEnabled());
+    }
+}
+
+// Clicking the real button (not the programmatic setter) is what exercises the onClick wiring.
+TEST_F(PreferencesSettingsTabTest, ClickingTheLocatorSpanToggleWritesTheSetting) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 480);
+    ASSERT_TRUE(tab.isDoubleClickSpansLocatorsEnabled());
+
+    // The row is laid out (a 24 px toggle) rather than left at zero size, which is what a user has
+    // to be able to click.
+    tab.setDoubleClickSpansLocatorsEnabled(false);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineDoubleClickSpansLocators"), "0");
+    tab.setDoubleClickSpansLocatorsEnabled(true);
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("timelineDoubleClickSpansLocators"), "1");
+
+    // The neighbouring locator preference is untouched by either flip — two keys, two settings.
+    EXPECT_TRUE(tab.isLoopSelectionArmsEnabled());
+}
+
 TEST_F(PreferencesSettingsTabTest, LoadsPersistedValues) {
     appProperties.getUserSettings()->setValue("smartConnectionMode", "Off");
     appProperties.getUserSettings()->setValue("doubleClickPortDisconnect", "0");

@@ -3914,6 +3914,22 @@ void GraphEditor::refreshIoModulesAfterDeviceChange() {
         repaintCanvas();
 }
 
+void GraphEditor::refreshOutputDeviceInfo() {
+    // MESSAGE THREAD. The provider (installed by MainComponent) is the only thing that knows
+    // Standalone-vs-Hosted framing; this just finds the card and pushes whatever it returns.
+    // setOutputDeviceInfoText is itself a no-op on every module except Audio Output, so there is
+    // no need to filter with isTerminalAudioSink twice — but doing it here too skips the
+    // (identical, cheap) text comparison on every other card on the canvas.
+    if (!outputDeviceInfoProvider)
+        return;
+
+    const juce::String text = outputDeviceInfoProvider();
+    for (auto* comp : content.getModules()) {
+        if (comp != nullptr && isTerminalAudioSink(comp->getModule()))
+            comp->setOutputDeviceInfoText(text);
+    }
+}
+
 void GraphEditor::applyDualIOToExistingModules(bool dual) {
     auto& graph = audioEngine.getGraph();
 

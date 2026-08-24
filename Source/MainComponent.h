@@ -451,6 +451,7 @@ private:
     std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption>
     getMidiDestinationOptions(synth::TrackId forTrack) override;
     void setMidiDestinationConnected(synth::TrackId forTrack, juce::uint32 nodeUid, bool connect) override;
+    void auditionTrackNote(synth::TrackId forTrack, int pitch, int velocity, bool noteOn) override;
 
     // Creates a "Track In" node with a fresh uuid at the canvas' left edge, wires it to the single
     // MIDI instrument in the patch when there is exactly one, and returns its uuid (empty on
@@ -532,6 +533,15 @@ private:
      *  modules with no knowledge of preferences. Standalone only; the plugin keeps its
      *  host-restored session. */
     void applyStoredDualIOPreferenceToPatch();
+
+    /** Output-card identity treatment: the text GraphEditor's Audio Output card shows under its
+     *  title (see GraphEditor::setOutputDeviceInfoProvider). HostMode::Hosted has no device
+     *  manager — see AudioEngine's HostMode doc comment — so that path returns a fixed "Host
+     *  audio" string instead of touching it. MESSAGE THREAD ONLY (reads AudioEngine's
+     *  AudioDeviceManager, same thread AudioDeviceManager itself requires). Returns an empty
+     *  string when there is genuinely nothing to report (no device open yet), which the card
+     *  treats as "no line" rather than a blank one. */
+    juce::String computeOutputDeviceInfoText() const;
 
     // Collapse/expand the library sidebar. Animates to the target layout.
     void setLibraryVisible(bool v);

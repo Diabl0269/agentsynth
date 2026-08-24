@@ -21,6 +21,8 @@ enum class TimelineValidationError {
     TooManyNotes,
     TooManyLanes,
     TooManyBreakpoints,
+    TooManyMarkers,
+    MarkerTextTooLong,
     BeatOutOfBounds,
     NoteOutOfRange,
     ValueOutOfParamRange,
@@ -107,6 +109,12 @@ inline constexpr double kMaxPpqUntrusted = 100000.0;
  *    refused, because nothing on the untrusted side needs forward-compatibility and an ignored key
  *    is exactly how a future build starts honouring something today's gate never inspected.
  *  - Reserved track kinds, and any value out of the caps above.
+ *  - Unknown keys INSIDE a marker object. Markers are the one container checked field-by-field
+ *    with a closed key set (tracks/clips/notes only reject unknown *top-level* keys), for the
+ *    reason spelled out at the top-level check: a key this gate never inspects is how a later
+ *    build starts honouring untrusted data nobody validated. Markers arrived with that rule
+ *    already known, so they got it from the start; retro-fitting it onto the older containers is
+ *    a separate change with its own compatibility question.
  *
  * @param timelineVar the candidate document, in the dialect TimelineDoc::toVar writes.
  * @param graph       the LIVE graph, used to resolve bindings. A lane's value bounds come from the

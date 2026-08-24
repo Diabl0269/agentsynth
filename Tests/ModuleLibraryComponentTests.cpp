@@ -107,6 +107,36 @@ TEST(ModuleLibraryDescriptionFor, LookupIsCaseInsensitive) {
 }
 
 // ============================================================================
+// categoryIconForHeader — pure static helper, no GUI needed
+// ============================================================================
+
+TEST(ModuleLibraryCategoryIconForHeader, IOHeaderResolvesToCatIOIcon) {
+    // Audio Input / Audio Output's singleton section — previously fell back to CatUtility.
+    EXPECT_EQ(ModuleLibraryComponent::categoryIconForHeader("I/O"), synth::theme::Icon::CatIO);
+    // Case-insensitive, same as every other header lookup below.
+    EXPECT_EQ(ModuleLibraryComponent::categoryIconForHeader("i/o"), synth::theme::Icon::CatIO);
+}
+
+TEST(ModuleLibraryCategoryIconForHeader, KnownHeadersResolveToTheirOwnIcon) {
+    EXPECT_EQ(ModuleLibraryComponent::categoryIconForHeader("Sources"), synth::theme::Icon::CatSources);
+    EXPECT_EQ(ModuleLibraryComponent::categoryIconForHeader("Sequencing"), synth::theme::Icon::CatSequencing);
+    EXPECT_EQ(ModuleLibraryComponent::categoryIconForHeader("Envelopes & Control"), synth::theme::Icon::CatEnvelopes);
+    EXPECT_EQ(ModuleLibraryComponent::categoryIconForHeader("Filters"), synth::theme::Icon::CatFilters);
+    EXPECT_EQ(ModuleLibraryComponent::categoryIconForHeader("Modulation FX"), synth::theme::Icon::CatModulationFX);
+    EXPECT_EQ(ModuleLibraryComponent::categoryIconForHeader("Time FX"), synth::theme::Icon::CatTimeFX);
+    EXPECT_EQ(ModuleLibraryComponent::categoryIconForHeader("Dynamics"), synth::theme::Icon::CatDynamics);
+}
+
+TEST(ModuleLibraryCategoryIconForHeader, UtilityAndUnknownHeadersFallBackToCatUtility) {
+    EXPECT_EQ(ModuleLibraryComponent::categoryIconForHeader("Utility"), synth::theme::Icon::CatUtility);
+    EXPECT_EQ(ModuleLibraryComponent::categoryIconForHeader("Snippets"), synth::theme::Icon::CatUtility);
+    EXPECT_EQ(ModuleLibraryComponent::categoryIconForHeader("Plugins"), synth::theme::Icon::CatUtility);
+    EXPECT_EQ(ModuleLibraryComponent::categoryIconForHeader("SomeUnknownHeader"), synth::theme::Icon::CatUtility);
+    // I/O must NOT collapse into the generic fallback anymore (the regression this feature fixes).
+    EXPECT_NE(ModuleLibraryComponent::categoryIconForHeader("I/O"), synth::theme::Icon::CatUtility);
+}
+
+// ============================================================================
 // Hover index mapping — tests the y-to-entry-index logic exposed by the
 // component's public getEntryIndexAt (via mouseMove). We test it indirectly
 // through a real component instance, exercising getHoveredIndex() after

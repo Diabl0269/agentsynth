@@ -1332,7 +1332,10 @@ private:
         g.fillPath(p);
     }
 
-    // Map a category header string to its Icon enum value.
+public:
+    /** Maps a category header string to its Icon enum value. Public (rather than the private
+     *  section every other static paint helper here lives in) so IconLibrary/ModuleLibrary tests
+     *  can assert the mapping directly instead of rendering a row and inspecting pixels. */
     static synth::theme::Icon categoryIconForHeader(const juce::String& header) {
         if (header.equalsIgnoreCase(kSnippetsHeader) || header.equalsIgnoreCase(kPluginsHeader))
             return synth::theme::Icon::CatUtility;
@@ -1350,10 +1353,15 @@ private:
             return synth::theme::Icon::CatTimeFX;
         if (header.equalsIgnoreCase("Dynamics"))
             return synth::theme::Icon::CatDynamics;
+        // Audio Input / Audio Output's singleton section — previously fell back to CatUtility,
+        // which gave the graph's actual source/sink no visual identity of its own.
+        if (header.equalsIgnoreCase("I/O"))
+            return synth::theme::Icon::CatIO;
         // "Utility" and any unrecognised headers fall back to CatUtility.
         return synth::theme::Icon::CatUtility;
     }
 
+private:
     /** Rebuilds the flat entry list: the Snippets section first (it holds what the user just made
      *  and reaches for most), then the fixed module catalogue. */
     void rebuildEntries() {

@@ -3210,3 +3210,88 @@ TEST_F(GraphEditorTest, DoubleClickUnconnectedPortIsANoOp) {
     EXPECT_EQ(engine.getGraph().getConnections().size(), 0u);
     EXPECT_FALSE(editor.isPortConnected(oscComp, 0, false, false));
 }
+
+// --- Output-card identity treatment (module chrome) --------------------------
+// GraphEditor::setOutputDeviceInfoProvider / refreshOutputDeviceInfo: MainComponent -> GraphEditor
+// -> the Audio Output ModuleComponent, refreshed only when told to (no polling — see
+// ModuleComponent::setOutputDeviceInfoText and docs/layout.md's module chrome section).
+
+TEST_F(GraphEditorTest, RefreshOutputDeviceInfoPushesProviderTextToTheOutputCard) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto outNode = addAudioOutputNode(engine.getGraph(), 400, 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    auto* outComp = findModuleComp(editor, outNode->getProcessor());
+    ASSERT_NE(outComp, nullptr);
+    EXPECT_TRUE(outComp->getOutputDeviceInfoTextForTest().isEmpty()) << "nothing pushed in yet";
+
+    editor.setOutputDeviceInfoProvider([] { return juce::String("Test Device \xc2\xb7 48 kHz \xc2\xb7 2ch"); });
+    editor.refreshOutputDeviceInfo();
+
+    EXPECT_EQ(outComp->getOutputDeviceInfoTextForTest(), juce::String("Test Device \xc2\xb7 48 kHz \xc2\xb7 2ch"));
+}
+
+TEST_F(GraphEditorTest, RefreshOutputDeviceInfoLeavesOtherCardsUntouched) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto outNode = addAudioOutputNode(engine.getGraph(), 400, 100);
+    auto oscNode = engine.getGraph().addNode(std::make_unique<OscillatorModule>());
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    auto* oscComp = findModuleComp(editor, oscNode->getProcessor());
+    ASSERT_NE(oscComp, nullptr);
+    juce::ignoreUnused(outNode);
+
+    editor.setOutputDeviceInfoProvider([] { return juce::String("Test Device \xc2\xb7 48 kHz \xc2\xb7 2ch"); });
+    editor.refreshOutputDeviceInfo();
+
+    EXPECT_TRUE(oscComp->getOutputDeviceInfoTextForTest().isEmpty())
+        << "the identity treatment (and the text it carries) is Audio-Output-only";
+}
+
+TEST_F(GraphEditorTest, RefreshOutputDeviceInfoWithNoProviderIsANoOp) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto outNode = addAudioOutputNode(engine.getGraph(), 400, 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    auto* outComp = findModuleComp(editor, outNode->getProcessor());
+    ASSERT_NE(outComp, nullptr);
+
+    // No provider installed (e.g. before MainComponent wires one up) — must not crash.
+    EXPECT_NO_THROW(editor.refreshOutputDeviceInfo());
+    EXPECT_TRUE(outComp->getOutputDeviceInfoTextForTest().isEmpty());
+}
+
+// Hosted mode (or a device that just closed) degrades to an empty provider result, which must
+// clear a previously-shown line rather than leaving it stale.
+TEST_F(GraphEditorTest, RefreshOutputDeviceInfoClearsTextWhenProviderReturnsEmpty) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+
+    auto outNode = addAudioOutputNode(engine.getGraph(), 400, 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    auto* outComp = findModuleComp(editor, outNode->getProcessor());
+    ASSERT_NE(outComp, nullptr);
+
+    editor.setOutputDeviceInfoProvider([] { return juce::String("Test Device \xc2\xb7 48 kHz \xc2\xb7 2ch"); });
+    editor.refreshOutputDeviceInfo();
+    ASSERT_FALSE(outComp->getOutputDeviceInfoTextForTest().isEmpty());
+
+    editor.setOutputDeviceInfoProvider([] { return juce::String(); }); // e.g. HostMode::Hosted
+    editor.refreshOutputDeviceInfo();
+    EXPECT_TRUE(outComp->getOutputDeviceInfoTextForTest().isEmpty());
+}

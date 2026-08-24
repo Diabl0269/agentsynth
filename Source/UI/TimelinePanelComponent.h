@@ -413,10 +413,21 @@ public:
     int getTransportUpdateCountForTest() const noexcept { return transportUpdateCount_; }
 
     // ---- Track headers ----
-    // Menu ids for the "+ Track" button's two-item menu. Numbered from 1 because
-    // juce::PopupMenu reserves 0 for "dismissed".
+    // Menu ids for the "+ Track" button's menu. Numbered from 1 because juce::PopupMenu reserves 0
+    // for "dismissed".
     static constexpr int kAddMidiTrackMenuId = 1;
     static constexpr int kAddAudioTrackMenuId = 2;
+    // Below a separator, because a marker is NOT a track: it adds no header row and no graph node.
+    // It shares this menu because "+ Track" is where a user reaches for "add something to the
+    // arrangement", and a second button for one item would not earn its pixels.
+    static constexpr int kAddMarkerMenuId = 3;
+
+    /** Adds a marker at the transport's current position, named "Marker N", coloured from the
+     *  theme (see defaultMarkerColourArgb) — ONE recordTimelineChange when an undo manager is
+     *  installed. Returns the new id, or an invalid one when there is no doc or the doc refused
+     *  (kMaxMarkers). Public because it IS the "+ Track" menu's Add Marker action and the seam a
+     *  test drives instead of the async menu. */
+    synth::MarkerId addMarkerAtPlayhead();
 
     juce::TextButton& getAddTrackButton() noexcept { return addTrackButton_; }
 
@@ -657,6 +668,9 @@ private:
     juce::TextButton addTrackButton_{"+ Track"};
 
     void showAddTrackMenu();
+    // The theme's colour for a NEW marker (see addMarkerAtPlayhead). Falls back to the model's own
+    // default with no themed LookAndFeel installed, like every other paint-time resolve here.
+    juce::uint32 defaultMarkerColourArgb() const;
 
     // ---- Vertical track scroll/zoom (shared TimelineViewState::trackScrollY/rowHeightScale) ----
     // The themed row height with the shared vertical-zoom factor applied — the SAME value
