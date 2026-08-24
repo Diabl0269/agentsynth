@@ -25,9 +25,34 @@ owns both raw legs, so the extra wire lands on that same jack rather than waitin
 to split. The control is a header icon (`Icon::ModuleDualIO`, a Y-fork into two jacks) with an
 on/off tooltip — not a labelled checkbox.
 
+**Splitting hands the right leg over; collapsing hands it back.** The two directions are mirror
+images, and both are `GraphEditor::completeStereoPairConnections`:
+
+| Direction | What happens to the cable |
+|---|---|
+| **Split (off → on)** | The peer's right leg is wired to our new `Audio R`, **and the collapsed jack's duplicate of `Audio L` is removed from it**. While we were collapsed, one drawn cable fanned `L` onto both of the peer's raw legs; leaving that edge behind after the split sums `L+R` into the peer's right leg — +6 dB on one side, invisible, because both edges draw as the same cable. |
+| **Collapse (on → off)** | A cable on a hidden right block is **re-pointed onto the surviving left leg** (same offset in the left block, so poly voice *v* pairs with voice *v*), not deleted — wherever the far end still exposes that channel. If it does not (the peer collapsed its own split block), the cable is dropped as before. |
+
+The re-point is what keeps a collapse level across the stereo field. Without it, collapsing the
+default patch's VCA dropped `VCA kRightBase → Distortion ch1` and every right channel downstream of
+it rendered silence — the mix jumped left with nothing on screen to explain it. It re-points at
+**unity**: `ModuleBase::panGains` keeps a centred module's left leg at full level, so the surviving
+mono leg is exactly as loud as it was, and no gain compensation is applied (an equal-power law
+would have made every collapse 3 dB quiet). The input side is deliberately **not** symmetric — our
+left input is normally fed by the same upstream already, and re-pointing there too would sum `L+R`
+into one mono jack — so an input-side cable only moves when the left leg has nothing at all.
+
+Two rules a wiring call site has to respect, both enforced by `GraphEditor::rightAudioLegOf`:
+ask `ModuleBase::rightAudioLegChannel()` for the channel (never assume ch1), and then require it to
+be **reachable from a visible jack** (`GraphEditor::audioChannelReachableFromJack`). A collapsed
+split-block module still reports `PortRole::Audio` on its hidden block, so the role alone is not
+enough — wiring it would create a cable that is audible and impossible to unplug. A collapsed FX
+pair still passes, because its one `Audio` jack owns raw ch1 through `voiceSpan == 2`.
+
 Wavetable and Sampler used to keep permanent `Audio L` / `Audio R` jacks. Since issue #219 they are
 on this toggle too, along with Oscillator, Filter and VCA — see below for what "off" means on a
-module whose right leg is not the contiguous ch0/ch1 pair.
+module whose right leg is not the contiguous ch0/ch1 pair. The Ring Modulator joined the toggle
+later, having shipped with permanent `Left`/`Right` output jacks that no preference could reach.
 
 ### Split-block modules share the toggle, not the channel layout
 
@@ -37,8 +62,14 @@ lives, and that changes what "off" means:
 
 | Layout | Modules | Dual I/O off |
 |---|---|---|
-| **Contiguous pair** (raw ch0/ch1) | FX, Voice Mixer out, Sampler | One `"Audio"` jack **owning both raw legs** — a mono source fans onto L and R. |
+| **Contiguous pair** (raw ch0/ch1) | FX, Voice Mixer out, Ring Modulator out, Sampler | One `"Audio"` jack **owning both raw legs** — a mono source fans onto L and R. |
 | **Split block** (`kRightBase`) | Oscillator, Wavetable, Filter, VCA | One `"Audio"` jack carrying the **left leg only**; the right block is hidden and unpatchable. |
+
+Voice Mixer and Ring Modulator are **output-only**: their input jacks are not a stereo pair (eight
+voice inputs; Carrier + Modulator + three CV), so only the output pair collapses. On the Ring
+Modulator that also means raw ch1 must keep a non-`Audio` input role — it is the Modulator jack, and
+calling it audio would make `rightAudioLegChannel()`'s ch1 look like an input right leg, so the Dual
+I/O toggle would wire a neighbour's `Audio R` into the modulator input.
 
 The split-block modules cannot collapse the FX way: a collapsed jack can only fan to *adjacent* raw
 channels, and their right leg deliberately sits above the mod-CV inputs because ch1 is Waveform /
@@ -48,7 +79,7 @@ Position / Cutoff / gain CV. So on those modules the toggle picks between "one j
 
 Two consequences worth knowing:
 
-- Collapsing a split-block module **drops the cables on its right leg** (`GraphEditor::completeStereoPairConnections`), because an invisible jack cannot be unplugged. Collapsing an FX module drops nothing — its collapsed jack still owns both legs.
+- Collapsing a split-block module **unhooks its right leg** (`GraphEditor::dropHiddenRightLegConnections`, reached from `completeStereoPairConnections`), because an invisible jack cannot be unplugged — re-pointing each cable onto the surviving left leg where the far end still exposes it, and dropping it where it does not (see the split/collapse table above). Collapsing an FX module unhooks nothing — its collapsed jack still owns both legs.
 - Merge-mode auto-connect (and smart-connection drops onto a mono destination) wires `Audio L` only, matching what Wavetable has always done.
 
 Anything pairing two modules' legs must ask `ModuleBase::rightAudioLegChannel()` rather than
@@ -61,7 +92,17 @@ patch in front of you, which never changed.
 
 **Preferences → "Per-module I/O defaults..."** sits next to the toggle above (same row) and opens a
 popup listing every module type from the table above (FX plus Oscillator, Wavetable, Filter, VCA,
-Sampler and Voice Mixer). Each row is a 3-state choice — Follow global (the default), Always on,
+Sampler and Voice Mixer). That list is **derived, never hand-written**:
+`AIStateMapper::dualIOCapableModuleTypes()` probes the module factory once and keeps every type whose
+module answers `ModuleBase::hasDualIOParameter()`, and `PreferencesSettingsTab::getDualIOModuleTypes()`
+is a thin wrapper over it. It used to be a literal list, and the Ring Modulator was missing from it —
+the module had a stereo output pair, the popup had no row for it, the global toggle skipped it, and
+nothing in the build noticed. A module that gains `addDualIOParameter()` now appears with no second
+edit; `PreferencesSettingsTabTest.DualIOModuleTypesIsDerivedFromTheModulesThemselves` and
+`…EveryDualIOCapableTypeReachesBothThePopupAndTheNewModulePath` walk the factory and check both
+consumers (the popup rows and `applyDefaultDualIOForNewModule`) for every type on it, and
+`ModuleComponentTest.DualIOHeaderButtonOnEveryStereoCapableModule` checks the header control.
+Each row is a 3-state choice — Follow global (the default), Always on,
 Always off — that overrides the global toggle for just that type. Unlike the global toggle, this is
 **new-modules-only**: it does not re-lay modules already on the canvas, and there is no per-module
 counterpart to `applyDualIOToExistingModules`. Both are read from the same place,
@@ -135,7 +176,8 @@ CV control of Level is deliberately **not** implemented — it would need a new 
   `out = d(m + c/2) + d(-m + c/2) - d(m - c/2) - d(-m - c/2)`. This is **not** a clean multiply — Math's `Mult` output already covers that. The diode dead-zone is what gives the metallic, gated, bell-like character.
 - **Oversampling**: Same real-time-safe scheme as Distortion. `Off` / `2x` / `4x` (default `2x`); both oversamplers are pre-allocated in `prepareToPlay` and swapped via an `AudioProcessorParameter::Listener`. A latency-compensation delay line keeps the dry carrier aligned for wet/dry mixing. Oversampling is excluded from `getModulationTargets()`.
 - **I/O**: Carrier (ch0), Modulator (ch1), Mix CV (ch2), Drive CV (ch3), Character CV (ch4). Stereo out is the mono ring-mod result duplicated to Left/Right. Dry is the unprocessed carrier. No internal carrier oscillator — patch an Oscillator into Carrier.
-- **Parameters**: Drive (0.5–8, default 1), Mix (0–1, default 1), Character (0–1, default 0.5), Oversampling (Off/2x/4x), Level (0–1). Character maps the diode forward-bias / linear-region breakpoints (`vb` / `vl`) from near-clean multiply (`vb≈0.02`, `vl≈0.05`) to hard gated (`vb≈0.5`, `vl≈1.0`). Parker's typical `vb≈0.2` / `vl≈0.4` sits at the default.
+- **Dual I/O**: **output-only** (the Voice Mixer's shape, not the usual FX one — the input pair is Carrier + Modulator, two unrelated mono jacks). Off by default like every other FX: one `"Audio"` jack owning raw ch0/ch1, split into `Left`/`Right` when on. Purely a jack-layout change — both legs already carry the same wet signal, so `RingModulatorModuleTest.DualIODoesNotChangeWhatItRenders` pins the DSP as untouched. The input map is deliberately left on `ModuleBase`'s default so ch1 (Modulator) never reports `PortRole::Audio`; see § Stereo I/O for why that matters.
+- **Parameters**: Drive (0.5–8, default 1), Mix (0–1, default 1), Character (0–1, default 0.5), Oversampling (Off/2x/4x), Dual I/O (layout toggle), Level (0–1). Character maps the diode forward-bias / linear-region breakpoints (`vb` / `vl`) from near-clean multiply (`vb≈0.02`, `vl≈0.05`) to hard gated (`vb≈0.5`, `vl≈1.0`). Parker's typical `vb≈0.2` / `vl≈0.4` sits at the default.
 - **CV Inputs**: Mix (ch2), Drive (ch3), Character (ch4). Every continuous parameter has a CV jack; Oversampling does not.
 
 ## Delay Module

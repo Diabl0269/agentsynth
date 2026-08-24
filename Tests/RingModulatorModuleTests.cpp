@@ -20,6 +20,12 @@ void setFloat(juce::AudioProcessor& module, const juce::String& id, float value)
     *p = value;
 }
 
+void setBool(juce::AudioProcessor& module, const juce::String& id, bool value) {
+    auto* p = dynamic_cast<juce::AudioParameterBool*>(paramByID(module, id));
+    ASSERT_NE(p, nullptr) << "no bool parameter named " << id;
+    p->setValueNotifyingHost(value ? 1.0f : 0.0f);
+}
+
 void setChoice(juce::AudioProcessor& module, const juce::String& id, int index) {
     auto* p = dynamic_cast<juce::AudioParameterChoice*>(paramByID(module, id));
     ASSERT_NE(p, nullptr) << "no choice parameter named " << id;
@@ -96,8 +102,8 @@ TEST_F(RingModulatorModuleTest, PortLabelsAndModulationTargets) {
     EXPECT_EQ(module->getInputPortLabel(2), "Mix");
     EXPECT_EQ(module->getInputPortLabel(3), "Drive");
     EXPECT_EQ(module->getInputPortLabel(4), "Character");
-    EXPECT_EQ(module->getOutputPortLabel(0), "Left");
-    EXPECT_EQ(module->getOutputPortLabel(1), "Right");
+    // Dual I/O defaults OFF, like every other FX: one "Audio" output jack owning both raw legs.
+    EXPECT_EQ(module->getOutputPortLabel(0), "Audio");
 
     auto targets = module->getModulationTargets();
     ASSERT_EQ(targets.size(), 3u);
@@ -107,6 +113,123 @@ TEST_F(RingModulatorModuleTest, PortLabelsAndModulationTargets) {
     EXPECT_EQ(targets[1].channelIndex, 3);
     EXPECT_EQ(targets[2].name, "Character");
     EXPECT_EQ(targets[2].channelIndex, 4);
+}
+
+// ---------------------------------------------------------------------------
+// Dual I/O (the module was missing the toggle entirely, and therefore missing from the global
+// "Split Left/Right jacks" preference and from the per-module defaults popup)
+// ---------------------------------------------------------------------------
+
+TEST_F(RingModulatorModuleTest, DualIOSplitsTheOutputPairAndNothingElse) {
+    ASSERT_TRUE(module->hasDualIOParameter()) << "the Ring Modulator is a stereo-out FX; it carries the toggle";
+    EXPECT_FALSE(module->isDualIO()) << "collapsed by default, like every other FX";
+    EXPECT_FALSE(module->hasSplitBlockStereo()) << "the right leg is the contiguous ch1, not a kRightBase block";
+
+    // Collapsed: one Audio jack that owns raw ch0 AND ch1.
+    EXPECT_EQ(module->getVisibleOutputPortCount(), 1);
+    EXPECT_EQ(module->getOutputPortLabel(0), "Audio");
+    const auto collapsedHead = module->mapOutputChannel(0);
+    EXPECT_TRUE(collapsedHead.isPolyGroupHead);
+    EXPECT_EQ(collapsedHead.polyVoiceSpan, 2);
+    EXPECT_EQ(collapsedHead.role, PortRole::Audio);
+    EXPECT_FALSE(module->mapOutputChannel(1).isPolyGroupHead);
+    ASSERT_EQ(module->getJackTargets(0, /*isInput=*/false).size(), 1u);
+    EXPECT_EQ(module->getJackTargets(0, false)[0].voiceSpan, 2);
+
+    // The five INPUT jacks are untouched in both states — Carrier and Modulator are two unrelated
+    // mono inputs, not a stereo pair, so splitting the output must not relabel or remap them.
+    for (bool dual : {false, true}) {
+        setBool(*module, "dualIO", dual);
+        EXPECT_EQ(module->getVisibleInputPortCount(), 5) << "dual=" << dual;
+        EXPECT_EQ(module->getInputPortLabel(0), "Carrier") << "dual=" << dual;
+        EXPECT_EQ(module->getInputPortLabel(1), "Modulator") << "dual=" << dual;
+        EXPECT_NE(module->mapInputChannel(1).role, PortRole::Audio)
+            << "the Modulator input must never look like an audio right leg, or the Dual I/O toggle "
+               "would wire a neighbour's Audio R into it";
+        auto targets = module->getModulationTargets();
+        ASSERT_EQ(targets.size(), 3u) << "dual=" << dual;
+        EXPECT_EQ(targets[0].channelIndex, 2) << "CV raw channels must not move, dual=" << dual;
+    }
+
+    setBool(*module, "dualIO", true);
+    EXPECT_EQ(module->getVisibleOutputPortCount(), 2);
+    EXPECT_EQ(module->getOutputPortLabel(0), "Left");
+    EXPECT_EQ(module->getOutputPortLabel(1), "Right");
+    EXPECT_TRUE(module->mapOutputChannel(1).isPolyGroupHead);
+    EXPECT_EQ(module->mapOutputChannel(1).visibleJackIndex, 1);
+    EXPECT_EQ(module->rightAudioLegChannel(), 1);
+}
+
+TEST_F(RingModulatorModuleTest, DualIODoesNotChangeWhatItRenders) {
+    // A layout toggle, not a mono/stereo switch: both legs already carry the same wet signal, so
+    // collapsing must be sample-identical on both channels.
+    auto renderWith = [](bool dual) {
+        RingModulatorModule m;
+        setBool(m, "dualIO", dual);
+        setChoice(m, "oversampling", 0);
+        m.prepareToPlay(kSampleRate, kBlockSize);
+        return render(m, 440.0f, 220.0f, kBlockSize * 2);
+    };
+
+    const auto split = renderWith(true);
+    const auto collapsed = renderWith(false);
+
+    float maxDiff = 0.0f;
+    float peak = 0.0f;
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < split.getNumSamples(); ++i) {
+            maxDiff = std::max(maxDiff, std::abs(split.getSample(ch, i) - collapsed.getSample(ch, i)));
+            peak = std::max(peak, std::abs(split.getSample(ch, i)));
+        }
+    ASSERT_GT(peak, 0.01f) << "nothing was rendered, so nothing is proven";
+    EXPECT_LT(maxDiff, 1.0e-7f) << "the Dual I/O toggle must not touch the DSP";
+
+    // ...and the two legs are equal, which is what makes the collapsed single jack honest.
+    for (int i = 0; i < collapsed.getNumSamples(); ++i)
+        ASSERT_NEAR(collapsed.getSample(0, i), collapsed.getSample(1, i), 1.0e-7f) << "sample " << i;
+}
+
+TEST_F(RingModulatorModuleTest, BypassAndMuteAreUnaffectedByDualIO) {
+    // The bypass/mute contract, in both jack layouts: bypass passes the two audio channels dry and
+    // clears ONLY the CV block; mute clears everything.
+    for (bool dual : {false, true}) {
+        SCOPED_TRACE(dual ? "dual" : "collapsed");
+
+        RingModulatorModule bypassed;
+        setBool(bypassed, "dualIO", dual);
+        bypassed.prepareToPlay(kSampleRate, kBlockSize);
+        bypassed.setBypassed(true);
+
+        juce::AudioBuffer<float> buffer(5, kBlockSize);
+        buffer.clear();
+        fillSines(buffer, 440.0f, 220.0f, kSampleRate);
+        for (int ch = 2; ch < 5; ++ch)
+            for (int i = 0; i < kBlockSize; ++i)
+                buffer.setSample(ch, i, 0.5f);
+        const juce::AudioBuffer<float> dry(buffer);
+
+        juce::MidiBuffer midi;
+        bypassed.processBlock(buffer, midi);
+
+        for (int ch = 0; ch < 2; ++ch)
+            for (int i = 0; i < kBlockSize; ++i)
+                ASSERT_FLOAT_EQ(buffer.getSample(ch, i), dry.getSample(ch, i)) << "ch " << ch << " sample " << i;
+        for (int ch = 2; ch < 5; ++ch)
+            for (int i = 0; i < kBlockSize; ++i)
+                ASSERT_FLOAT_EQ(buffer.getSample(ch, i), 0.0f) << "CV ch " << ch << " must be cleared on bypass";
+
+        RingModulatorModule muted;
+        setBool(muted, "dualIO", dual);
+        muted.prepareToPlay(kSampleRate, kBlockSize);
+        muted.setMuted(true);
+
+        juce::AudioBuffer<float> mutedBuffer(5, kBlockSize);
+        mutedBuffer.clear();
+        fillSines(mutedBuffer, 440.0f, 220.0f, kSampleRate);
+        muted.processBlock(mutedBuffer, midi);
+        for (int ch = 0; ch < 5; ++ch)
+            EXPECT_LT(mutedBuffer.getRMSLevel(ch, 0, kBlockSize), 1.0e-9f) << "ch " << ch << " must be silent on mute";
+    }
 }
 
 TEST_F(RingModulatorModuleTest, OversamplingNotInModulationTargets) {

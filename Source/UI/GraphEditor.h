@@ -322,10 +322,26 @@ public:
      *  the dual layout in both states. */
     void applyDualIOToExistingModules(bool dual);
 
-    /** Removes any cable still attached to a collapsed split-block module's hidden right leg.
-     *  Graph-level, so it works before the cards exist. No-op for FX pairs, whose collapsed jack
-     *  legitimately still owns both raw legs. */
+    /** Unhooks a collapsed split-block module's hidden right leg, RE-POINTING each cable onto the
+     *  matching channel of the surviving left block wherever the far end still exposes it (and
+     *  simply dropping it where it does not). Graph-level, so it works before the cards exist.
+     *  No-op for FX pairs, whose collapsed jack legitimately still owns both raw legs.
+     *
+     *  The re-point is what keeps a collapse level across the stereo field: without it, collapsing
+     *  the default patch's VCA starved the whole FX tail's right channel and the mix jumped left. */
     void dropHiddenRightLegConnections(juce::AudioProcessorGraph::NodeID nodeId);
+
+    /** The raw channel carrying `proc`'s right audio leg for wiring purposes, or -1 when it has none
+     *  the user can reach. Asks the module (FX use ch1, split-block modules their own kRightBase),
+     *  then requires the channel to be reachable from a VISIBLE jack — a collapsed split-block
+     *  module still reports PortRole::Audio on its hidden block, and wiring that would create a
+     *  cable nobody can unplug. Static so tests can pin it directly. */
+    static int rightAudioLegOf(juce::AudioProcessor* proc, bool asInput);
+
+    /** True when `rawChannel` is covered by one of the module's currently VISIBLE jacks (a jack's
+     *  JackTarget spans `voiceSpan` consecutive raw channels, which is how a collapsed FX jack owns
+     *  both of its legs). The wiring-side counterpart of handleModuleResized's exposure check. */
+    static bool audioChannelReachableFromJack(const ModuleBase& mb, int rawChannel, bool isInput);
     bool getDefaultDualIOForNewModules() const noexcept { return defaultDualIOForNewModules; }
 
     /** Per-module-type overrides of the default above, keyed by module type (ModuleBase::getName(),
@@ -400,6 +416,20 @@ public:
 
     void setSmartConnectionMode(SmartConnectionMode mode) { smartConnectionMode = mode; }
     SmartConnectionMode getSmartConnectionMode() const noexcept { return smartConnectionMode; }
+
+    /** Cmd/Ctrl turns a proximity suggestion into an insert-in-series. Sampled LIVE on every
+     *  drag tick rather than latched at mouse-down, and that is load-bearing: Cmd at mouse-down
+     *  already means "toggle selection membership" (`ModuleComponent::mouseDown`, issue #156),
+     *  which returns before a body drag ever starts — so a Cmd-held press can never reach the
+     *  drag path at all. Pressing Cmd part-way through an already-started drag is unambiguous and
+     *  leaves the selection semantics untouched.
+     *
+     *  Tests set the override; production leaves it empty and reads the real keyboard. */
+    void setInsertModifierOverrideForTests(std::optional<bool> down) { insertModifierOverride = down; }
+    bool isInsertModifierDown() const {
+        return insertModifierOverride.has_value() ? *insertModifierOverride
+                                                  : juce::ModifierKeys::getCurrentModifiersRealtime().isCommandDown();
+    }
 
     /** Persist / restore helpers (Preferences tab + MainComponent launch restore). */
     static SmartConnectionMode smartConnectionModeFromString(const juce::String& s);
@@ -652,6 +682,7 @@ private:
 
     // Smart-connection suggestions for the active drag preview.
     SmartConnectionMode smartConnectionMode = SmartConnectionMode::NewAndUnwired;
+    std::optional<bool> insertModifierOverride; // tests only; empty means read the real keyboard
     std::vector<SmartSuggestion> smartSuggestions;
     static constexpr float kSmartConnectionProximityPx = 96.0f;
 

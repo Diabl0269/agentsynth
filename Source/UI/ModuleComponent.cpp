@@ -1854,9 +1854,15 @@ void ModuleComponent::paint(juce::Graphics& g) {
     // Hosted mode with nothing to report) means "draw no line" rather than an empty one.
     if (isAudioOutputIONode(module)) {
         if (lf != nullptr) {
-            if (const auto* ioIcon = lf->peekIcon(synth::theme::Icon::CatIO))
-                ioIcon->drawWithin(g, juce::Rectangle<float>(4.0f, 4.0f, 16.0f, 16.0f),
-                                   juce::RectanglePlacement::centred, 1.0f);
+            if (auto ioIcon = lf->getIcon(synth::theme::Icon::CatIO)) {
+                // Owned clone (not peekIcon's shared view): retinted below to the TITLE's colour,
+                // not the library sidebar's fixed textMuted, so glyph + title read as one lockup —
+                // this must never touch the shared IconLibrary cache other cards/rows also read.
+                const auto& c = lf->getTheme().colors;
+                const auto titleColour = isSelected ? c.accent : (isBypassed ? c.textDisabled : c.textPrimary);
+                ioIcon->replaceColour(c.textMuted, titleColour); // c.textMuted is retintIcons()'s baked-in tint
+                ioIcon->drawWithin(g, outputCardIconBoundsForTest(*lf), juce::RectanglePlacement::centred, 1.0f);
+            }
         }
         if (outputDeviceInfoText.isNotEmpty()) {
             auto mutedColour = (lf != nullptr) ? lf->getTheme().colors.textMuted : juce::Colours::grey;
@@ -2409,6 +2415,36 @@ void ModuleComponent::setOutputDeviceInfoText(const juce::String& text) {
 
     outputDeviceInfoText = text;
     repaint();
+}
+
+juce::Rectangle<float> ModuleComponent::outputCardIconBoundsForTest(const synth::theme::AppLookAndFeel& lf) {
+    // Mirrors the title's own font — theme.type.h2, bold — set in AppLookAndFeel::drawModulePanel.
+    const juce::Font titleFont(juce::FontOptions(lf.getTheme().type.h2, juce::Font::bold));
+
+    // JUCE exposes no direct cap-height accessor. 0.72x ascent is the standard sans-serif
+    // approximation (Inter — embedded for every UI face here, see docs/theming.md — sits close to
+    // this) and tracks the visible glyph ink far more closely than the full ascent+descent box
+    // drawText centres text within: an all-caps, all-punctuation-free title (the title is upper-
+    // cased + letter-spaced in drawModulePanel) never touches the descender clearance that box
+    // reserves, so centring on THAT box reads slightly low against the glyphs actually on screen.
+    const float capHeight = titleFont.getAscent() * 0.72f;
+
+    // Header band geometry, copied from AppLookAndFeel::drawModulePanel (body = bounds.reduced(2);
+    // header = body.withHeight(24), passed down from paint() below as literal 24): the same
+    // vertically-centred text-box math drawText itself uses, so this converges on the same
+    // baseline drawText would place the title on.
+    constexpr float kHeaderTop = 2.0f;
+    constexpr float kHeaderHeight = 24.0f;
+    const float textBoxTop = kHeaderTop + (kHeaderHeight - titleFont.getHeight()) * 0.5f;
+    const float baseline = textBoxTop + titleFont.getAscent();
+    const float capCentreY = baseline - capHeight * 0.5f;
+
+    // Sized to the title's cap-height (not the full header band) and right-aligned to the activity
+    // LED's own right edge — fillEllipse(6, 8, 8, 8) a few lines below, right edge at x=14 — so the
+    // gap to the title's left inset (22, see drawModulePanel) stays the same 8px the LED's absence
+    // already reserves, whatever the icon's resulting width turns out to be.
+    constexpr float kIconRightEdge = 14.0f;
+    return juce::Rectangle<float>(kIconRightEdge - capHeight, capCentreY - capHeight * 0.5f, capHeight, capHeight);
 }
 
 void ModuleComponent::applyMacroCountChange() {

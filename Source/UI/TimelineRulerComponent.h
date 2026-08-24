@@ -55,15 +55,35 @@ constexpr double kMinBeatLabelSpacingPx = 48.0; // "80.2" needs this much room b
 
 // ---- Marker flags (pure geometry; paint() and hit-testing share it) ----
 //
-// A flag is a small filled tab in the LOWER band of the strip, anchored at the marker's beat and
-// running right, with a full-height 1 px stem at the beat itself so the exact position stays
-// readable when the label is clipped.
+// A flag is a small filled tab in the strip's own MARKER BAND — a dedicated sub-band along the
+// bottom edge, below the bar/beat numbers row — anchored at the marker's beat and running right,
+// with a full-height 1 px stem at the beat itself so the exact position stays readable when the
+// label is clipped.
+//
+// THE BAND IS WHY: flags used to be drawn in the lower half of the strip, which is where the bar
+// numbers are vertically centred, so a marker at beat 4 sat on top of the "4". The numbers row and
+// the marker band now tile the strip's height instead of overlapping it — `rulerLabelRowHeight()`
+// is the height the numbers are centred in, and everything below it belongs to markers. A bar
+// number is never covered; the stem is the one thing that crosses the boundary, deliberately,
+// because it is what names the exact beat.
 //
 // The flag's WIDTH is derived from the label's character COUNT, never from measured text: the
 // clickable rect and the painted rect are the same rect (see markerFlagWidthFor), and a
 // font-measured width would make a hit-test assertion mean something different on every platform —
 // the same reason the bar-label stride above is computed from a constant.
-constexpr float kMarkerFlagHeight = 11.0f;
+constexpr float kMarkerFlagHeight = 9.0f;
+// The band the flags live in: the flag plus the 1 px hairline the strip draws along its bottom
+// edge, which the band sits clear of.
+constexpr float kMarkerBandHeight = kMarkerFlagHeight + 1.0f;
+
+/** The height the bar/beat NUMBERS are centred in: everything above the marker band. Pure, and the
+ *  ONE place the split lives — paint() centres its labels in it and buildMarkerFlags() starts the
+ *  band where it ends, so a number and a flag can never be handed overlapping rows. Degrades to the
+ *  full height on a strip too short to carve a band out of (nothing to protect there anyway). */
+inline float rulerLabelRowHeight(int componentHeight) noexcept {
+    const float full = (float)juce::jmax(0, componentHeight);
+    return full > kMarkerBandHeight * 2.0f ? full - kMarkerBandHeight : full;
+}
 constexpr float kMarkerStemWidth = 1.0f;
 constexpr float kMarkerFlagPadX = 3.0f;
 constexpr float kMarkerCharWidthPx = 5.5f; // nominal advance for the 9 pt label font
@@ -222,6 +242,12 @@ public:
     void mouseDown(const juce::MouseEvent& e) override;
     void mouseDrag(const juce::MouseEvent& e) override;
     void mouseUp(const juce::MouseEvent& e) override;
+
+    /** Double-click ON A MARKER FLAG opens the inline rename editor — the discoverable path to a
+     *  rename, next to the right-click menu's "Rename…" rather than replacing it. Scoped to flag
+     *  hits: the ruler had NO double-click handler before this, so off a flag the gesture stays
+     *  exactly what it was (two ordinary clicks, i.e. a seek or the start of a loop drag). */
+    void mouseDoubleClick(const juce::MouseEvent& e) override;
 
     // Hover affordance only: sets the per-zone mouse cursor and paints a faint band over the
     // hovered half. Repaints only when the hovered zone actually changes.

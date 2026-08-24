@@ -620,10 +620,13 @@ private:
     // roll; spans ruler + lanes and intercepts no mouse clicks (see TimelinePlayheadOverlay's ctor).
     TimelinePlayheadOverlay playhead_{viewState_};
     juce::ComboBox snapCombo_;
-    // The transport-bar twin of the piano roll's "Q": toggles TimelineViewState::snapEnabled from
-    // the panel chrome, so the switch is discoverable without opening a clip. Toggle STATE mirrors
-    // the shared flag via setSnapEnabled() — the button never owns it.
-    juce::TextButton snapToggleButton_{"Q"};
+    // Toggles TimelineViewState::snapEnabled from the panel chrome, so the switch is discoverable
+    // without opening a clip. Toggle STATE mirrors the shared flag via setSnapEnabled() — the
+    // button never owns it. Labelled "Snap" rather than with its key: the key moved from Q to J
+    // (Cubase's snap key — Q is Cubase's *quantise*, which is what the roll uses it for), and a
+    // button that spells its own letter goes stale the moment the binding is rebound. The live key
+    // is in the tooltip, through synth::shortcutHintFor.
+    juce::TextButton snapToggleButton_{"Snap"};
     // The one writer for the snap switch from panel chrome/keys: flips the flag, persists, syncs
     // the button's lit state, and repaints every grid painter.
     void setSnapEnabled(bool enabled);

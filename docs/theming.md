@@ -734,3 +734,14 @@ records nothing; closing on a different colour first silently restores the origi
 undo-recorded mutation) and then performs the real edit as the ONE undo step whose undo target is
 the original colour — so dragging through a dozen preview colours before landing on a choice costs
 exactly one `Cmd+Z`, not a dozen.
+
+Committing always reconciles with `juce::ColourSelector::getCurrentColour()` rather than trusting
+whatever the last dispatched preview happened to be. A real slider drag or hex-field edit updates
+the selector's own displayed state (the header swatch and the R/G/B/hex fields) synchronously, but
+only reaches this popup's preview callback once `ColourSelector`'s change broadcast is actually
+*dispatched* — which is asynchronous. If the popup is torn down between "the user finishes an
+edit" and "that broadcast arrives" (the same click that commits a hex-field edit via focus-loss
+can also be the click that dismisses the `juce::CallOutBox`), a commit that only replayed the last
+preview would apply a stale, one-edit-old colour while the header/fields already showed the new
+one. `commitOnce()` re-previews from the selector's live colour immediately before firing the
+commit callback, closing that gap for every consumer of this shared component.

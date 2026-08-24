@@ -21,8 +21,18 @@
 // that method's comment. This class lives in Core, which cannot depend on AppUI (where
 // TimelineTransportBar and its formatBarBeat() helper live), so updateTransport() takes an
 // already-formatted position string rather than formatting one itself.
+// Tooltips: the patch/CPU/round-trip/transport segments are PAINTED TEXT, not child components, so
+// there is nothing for juce::TooltipWindow to hit-test individually. StatusBarComponent is instead
+// itself a juce::TooltipClient — MainComponent already owns the app's one shared
+// juce::TooltipWindow (docs/theming.md's "TooltipWindow" entry), which finds any TooltipClient it
+// is the exact component under the mouse (juce::TooltipWindow::getTipFor() does not walk up
+// parents — see juce_TooltipWindow.cpp), which is true here for the painted segments since no
+// child covers that area. Hovering the masterMuteButton_/transportButton_ children instead reaches
+// THEIR OWN tooltip text (both are juce::Button, i.e. already SettableTooltipClient) — getTooltip()
+// below is never even called there.
 class StatusBarComponent
     : public juce::Component
+    , public juce::TooltipClient
     , private juce::Timer {
 public:
     StatusBarComponent();
@@ -56,6 +66,19 @@ public:
 
     void paint(juce::Graphics& g) override;
     void resized() override;
+
+    // juce::TooltipClient — delegates to the pure, testable helper below using the real mouse
+    // position (relative to this component). Never called for the two child buttons; see the class
+    // comment.
+    juce::String getTooltip() override;
+
+    // The segment -> tooltip-text mapping, factored out of getTooltip() so it is headlessly
+    // testable with a synthetic point (JUCE's real mouse position isn't available/movable in a
+    // unit test). Mirrors paint()'s own x-ranges exactly (round-trip and transport-cluster text are
+    // only "hit" while paint() would actually be drawing them — a hidden segment has no tooltip).
+    // Returns "" for anywhere without an explanation (patch name, voice count, blank space, or
+    // while a transient message covers the row).
+    juce::String getTooltipForPosition(juce::Point<int> localPosition) const;
 
     juce::DrawableButton& getMasterMuteButton() noexcept { return masterMuteButton_; }
 
@@ -102,6 +125,12 @@ public:
 private:
     // juce::Timer override — fires once after ~2.5 s to clear the transient message.
     void timerCallback() override;
+
+    // Whether the round-trip segment is CURRENTLY drawn — the single source of truth for its own
+    // fit-check-then-drop gate, shared by paint() and getTooltipForPosition() so they can never
+    // drift apart (a hidden segment must never answer a tooltip query). Defined in the .cpp because
+    // the geometry constants it reads live there (anonymous namespace).
+    bool isRoundTripSegmentVisible() const noexcept;
 
     // Transient message state. Empty string means no transient message is active.
     juce::String transientMessage_;

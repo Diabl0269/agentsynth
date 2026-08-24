@@ -639,7 +639,7 @@ juce::Point<float> flagCentre(const synth::ui::TimelineRulerComponent& ruler, sy
 
 } // namespace
 
-TEST(TimelineRulerMarkerTest, FlagsFollowTheDocAndSitInTheLowerBand) {
+TEST(TimelineRulerMarkerTest, FlagsSitInTheirOwnBandBelowTheNumbersRow) {
     MarkerRulerFixture f;
     EXPECT_TRUE(f.ruler->buildMarkerFlags().empty()) << "no markers, no flags";
 
@@ -656,13 +656,20 @@ TEST(TimelineRulerMarkerTest, FlagsFollowTheDocAndSitInTheLowerBand) {
     EXPECT_EQ(flags[0].colour, juce::Colour(0xffE0A33D));
     EXPECT_EQ(flags[0].text, "Intro");
 
-    // Lower band: at 24 px tall the flag runs y = 12..23, clear of the loop brace (which occupies
-    // the top 8 px of the strip) and inside the component.
+    // THE regression this pins: a flag must start where the NUMBERS ROW ENDS, so a marker at beat 4
+    // cannot be drawn over the ruler's own "4". At 24 px tall that is y = 14..23.
+    const float labelRow = synth::ui::rulerLabelRowHeight(24);
+    EXPECT_FLOAT_EQ(labelRow, 24.0f - synth::ui::kMarkerBandHeight);
     for (const auto& flag : flags) {
-        EXPECT_FLOAT_EQ(flag.bounds.getY(), 24.0f - synth::ui::kMarkerFlagHeight - 1.0f);
-        EXPECT_GE(flag.bounds.getY(), 8.0f) << "a flag must not sit under the loop brace";
+        EXPECT_FLOAT_EQ(flag.bounds.getY(), labelRow) << "the band starts exactly where the numbers row ends";
+        EXPECT_GE(flag.bounds.getY(), 8.0f) << "a flag must not sit under the loop brace either";
         EXPECT_LE(flag.bounds.getBottom(), 24.0f);
     }
+
+    // A strip too short to carve a band out of keeps its full height for the numbers rather than
+    // ending up with a negative row.
+    EXPECT_FLOAT_EQ(synth::ui::rulerLabelRowHeight(8), 8.0f);
+    EXPECT_FLOAT_EQ(synth::ui::rulerLabelRowHeight(0), 0.0f);
 
     // Width comes from the label's character COUNT, never from measured text.
     EXPECT_FLOAT_EQ(flags[0].bounds.getWidth(), synth::ui::markerFlagWidthFor(5));
@@ -885,6 +892,54 @@ TEST(TimelineRulerMarkerTest, InlineRenameEditorCommitsOnReturnAndCancelsOnEscap
     EXPECT_EQ(f.ruler->getMarkerRenameEditorForTest(), nullptr);
 }
 
+// The simpler rename path: double-click the FLAG. Scoped to flag hits — the ruler had no
+// double-click handler at all before, so everywhere else the two clicks keep their old meaning.
+TEST(TimelineRulerMarkerTest, DoubleClickOnAFlagOpensTheRenameEditor) {
+    MarkerRulerFixture f;
+    const auto marker = f.doc.addMarker(2.0, "Intro", 0xff000000);
+    const auto onFlag = flagCentre(*f.ruler, marker);
+
+    // JUCE's real order for a double-click: down, up, down, doubleClick, up. Drive all of it, so
+    // the interaction between the latched marker drag and the rename is exercised for real.
+    f.ruler->mouseDown(makeClickEvent(*f.ruler, onFlag));
+    f.ruler->mouseUp(makeClickEvent(*f.ruler, onFlag));
+    f.ruler->mouseDown(makeClickEvent(*f.ruler, onFlag));
+    f.ruler->mouseDoubleClick(makeClickEvent(*f.ruler, onFlag));
+
+    auto* editor = f.ruler->getMarkerRenameEditorForTest();
+    ASSERT_NE(editor, nullptr) << "double-clicking a flag opens the inline rename editor";
+    EXPECT_EQ(editor->getText(), "Intro");
+
+    // The trailing mouseUp must neither commit a move nor seek the cursor out from under the editor.
+    f.ruler->mouseUp(makeClickEvent(*f.ruler, onFlag));
+    f.transport.tick(512);
+    EXPECT_NE(f.ruler->getMarkerRenameEditorForTest(), nullptr) << "the editor survives the trailing mouseUp";
+    EXPECT_DOUBLE_EQ(f.doc.getMarker(marker)->beat, 2.0) << "no move was committed";
+    EXPECT_EQ(f.ruler->getSeekPostCountForTest(), 0) << "and the playhead never moved";
+    EXPECT_FALSE(f.undo.canUndo());
+
+    editor = f.ruler->getMarkerRenameEditorForTest();
+    editor->setText("Verse", juce::dontSendNotification);
+    editor->onReturnKey();
+    EXPECT_EQ(f.doc.getMarker(marker)->text, "Verse");
+}
+
+TEST(TimelineRulerMarkerTest, DoubleClickOffAFlagOpensNothing) {
+    MarkerRulerFixture f;
+    f.doc.addMarker(2.0, "Intro", 0xff000000);
+
+    // In the numbers row directly above the flag, and far to the right of every flag.
+    f.ruler->mouseDoubleClick(makeClickEvent(*f.ruler, {84.0f, 3.0f}));
+    EXPECT_EQ(f.ruler->getMarkerRenameEditorForTest(), nullptr);
+    f.ruler->mouseDoubleClick(makeClickEvent(*f.ruler, {600.0f, kPlayheadZoneY}));
+    EXPECT_EQ(f.ruler->getMarkerRenameEditorForTest(), nullptr);
+
+    // A right-button double-click is the context menu's business, not the rename's.
+    f.ruler->mouseDoubleClick(makeClickEvent(*f.ruler, flagCentre(*f.ruler, f.doc.getMarkers().front().id),
+                                             juce::ModifierKeys::popupMenuClickModifier));
+    EXPECT_EQ(f.ruler->getMarkerRenameEditorForTest(), nullptr);
+}
+
 TEST(TimelineRulerMarkerTest, ColourPickerPreviewsLiveAndCommitsOneUndoStep) {
     MarkerRulerFixture f;
     const auto marker = f.doc.addMarker(2.0, "Intro", 0xff112233);
@@ -964,6 +1019,34 @@ TEST(TimelineRulerMarkerTest, MarkersWorkWithoutATransportAndSwappingTheDocReset
     ruler.mouseDown(makeClickEvent(ruler, {80.0f, kPlayheadZoneY}));
     EXPECT_FALSE(ruler.getDraggingMarkerForTest().isValid());
     EXPECT_TRUE(ruler.buildMarkerFlags().empty());
+}
+
+// Toggling snap OFF must not change which grid lines are DRAWN — it turns MAGNETISM off. The lanes
+// grid reads divisionBeatsRaw() for exactly that reason; divisionBeats() collapses to 0 with the
+// switch off and used to make the subdivision lines vanish under the user.
+TEST(TimelinePanelGridDrawingTest, SnapOffKeepsTheSubdivisionLinesDrawn) {
+    synth::ui::TimelinePanelComponent panel;
+    auto& view = panel.getViewState();
+    view.pixelsPerBeat = 120.0; // wide enough for a 1/8 subdivision to clear the readability guard
+    view.setSnap(synth::ui::TimelineViewState::Snap::Eighth);
+    panel.setSize(1200, 220);
+
+    // The two helpers the paint site chooses between, at the same division.
+    ASSERT_TRUE(view.snapEnabled);
+    const double drawn = view.divisionBeatsRaw(4.0);
+    EXPECT_DOUBLE_EQ(view.divisionBeats(4.0), drawn) << "with snap on the two agree";
+
+    view.snapEnabled = false;
+    EXPECT_DOUBLE_EQ(view.divisionBeatsRaw(4.0), drawn) << "the CHOSEN division is unchanged by the switch";
+    EXPECT_DOUBLE_EQ(view.divisionBeats(4.0), 0.0) << "...while magnetism collapses to no grid";
+
+    // Paint both ways: the point is that it does not throw and the panel keeps drawing. The pure
+    // assertion above is what actually pins which helper the paint site must use.
+    juce::Image image(juce::Image::ARGB, panel.getWidth(), panel.getHeight(), true);
+    juce::Graphics g(image);
+    EXPECT_NO_THROW(panel.paintEntireComponent(g, true));
+    view.snapEnabled = true;
+    EXPECT_NO_THROW(panel.paintEntireComponent(g, true));
 }
 
 // The panel is what repaints the strip when a marker changes — there is no timer under it.
@@ -2574,23 +2657,28 @@ TEST(TimelinePanelComponentTest, DoubleClickOnEmptyMidiLaneCreatesAClipAndOpensT
 }
 
 // ============================================================================
-// Panel-scoped keys (Q = snap toggle, L = loop toggle, P = loop the selection) and the ruler's
+// Panel-scoped keys (J = snap toggle, L = loop toggle, P = loop the selection) and the ruler's
 // piano-roll mapping override.
 // ============================================================================
 
-TEST(TimelinePanelComponentTest, QKeyTogglesSnapEnabled) {
+// J, Cubase's snap key. Q used to do this and now belongs to the roll's quantise, so a bare Q must
+// no longer reach the snap switch at all.
+TEST(TimelinePanelComponentTest, JKeyTogglesSnapEnabledAndQNoLongerDoes) {
     synth::ui::TimelinePanelComponent panel;
     panel.setSize(1000, 300);
     ASSERT_TRUE(panel.getViewState().snapEnabled);
 
-    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('q')));
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('j')));
     EXPECT_FALSE(panel.getViewState().snapEnabled);
-    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('q')));
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('j')));
     EXPECT_TRUE(panel.getViewState().snapEnabled);
+
+    EXPECT_FALSE(panel.keyPressed(juce::KeyPress('q'))) << "Q is the roll's quantise now, not snap";
+    EXPECT_TRUE(panel.getViewState().snapEnabled) << "and it left the switch alone";
 }
 
-// The transport bar's own Q button flips the same shared switch and mirrors its state — including
-// when the flip came from somewhere else (the Q key here).
+// The transport bar's own Snap button flips the same shared switch and mirrors its state — including
+// when the flip came from somewhere else (the J key here).
 TEST(TimelinePanelComponentTest, SnapToggleButtonFlipsAndMirrorsSnapEnabled) {
     synth::ui::TimelinePanelComponent panel;
     panel.setSize(1000, 300);
@@ -2602,8 +2690,8 @@ TEST(TimelinePanelComponentTest, SnapToggleButtonFlipsAndMirrorsSnapEnabled) {
     EXPECT_FALSE(panel.getViewState().snapEnabled);
     EXPECT_FALSE(button.getToggleState());
 
-    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('q')));
-    EXPECT_TRUE(button.getToggleState()) << "a Q-key flip re-lights the button";
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('j')));
+    EXPECT_TRUE(button.getToggleState()) << "a J-key flip re-lights the button";
 }
 
 TEST(TimelinePanelComponentTest, PickingADivisionReEnablesSnap) {
@@ -2910,8 +2998,8 @@ TEST(TimelineToolStripTest, ToolDigitsFollowARebindAndTheOldDigitStopsWorking) {
     EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('2'))) << "2/6/9 stay reserved on the fallback path";
 }
 
-// The panel's three letter keys go through the same resolution. Q is shared with the piano roll
-// ("timelineSnapToggle" — one binding, one key, whichever surface has focus).
+// The panel's three letter keys go through the same resolution. J is the snap toggle
+// ("timelineSnapToggle"), Cubase's snap key — Q belongs to the roll's quantise.
 TEST(TimelineToolStripTest, PanelLetterKeysResolveThroughTheShortcutManager) {
     ToolPanelFixture f;
     ShortcutManager shortcuts;
@@ -2919,20 +3007,20 @@ TEST(TimelineToolStripTest, PanelLetterKeysResolveThroughTheShortcutManager) {
 
     auto& view = f.panel.getViewState();
     const bool snapBefore = view.snapEnabled;
-    ASSERT_TRUE(f.panel.keyPressed(juce::KeyPress('q')));
+    ASSERT_TRUE(f.panel.keyPressed(juce::KeyPress('j')));
     EXPECT_EQ(view.snapEnabled, !snapBefore);
 
     shortcuts.setBinding("timelineSnapToggle", juce::KeyPress('y', juce::ModifierKeys::noModifiers, 0));
-    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('q'))) << "the old key falls through";
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('j'))) << "the old key falls through";
     EXPECT_EQ(view.snapEnabled, !snapBefore) << "and did not toggle again";
     EXPECT_TRUE(f.panel.keyPressed(juce::KeyPress('y')));
     EXPECT_EQ(view.snapEnabled, snapBefore);
 
-    // Shift+Q is the ROLL's quantise, a different action: it must not reach the panel's snap toggle
-    // (the pre-shortcut code matched Q on the key code alone, ignoring modifiers entirely).
+    // A MODIFIED J is a different chord and must not reach the panel's snap toggle (the
+    // pre-shortcut code matched its letter on the key code alone, ignoring modifiers entirely).
     f.panel.setShortcutManager(nullptr);
     const bool snapNow = view.snapEnabled;
-    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('q', juce::ModifierKeys::shiftModifier, 0)));
+    EXPECT_FALSE(f.panel.keyPressed(juce::KeyPress('j', juce::ModifierKeys::shiftModifier, 0)));
     EXPECT_EQ(view.snapEnabled, snapNow);
 }
 
@@ -2975,13 +3063,13 @@ TEST(TimelineToolStripTest, ToolStripAndSnapToggleTooltipsTrackTheirLiveBindings
     auto* selectButton = f.panel.getToolButton(synth::ui::EditTool::Select);
     ASSERT_NE(selectButton, nullptr);
     EXPECT_TRUE(selectButton->getTooltip().contains("(1)"));
-    EXPECT_TRUE(f.panel.getSnapToggleButton().getTooltip().contains("(q)"));
+    EXPECT_TRUE(f.panel.getSnapToggleButton().getTooltip().contains("(j)")) << "snap is J now, not Q";
 
-    shortcuts.setBinding("timelineToolSelect", juce::KeyPress('j', juce::ModifierKeys::noModifiers, 0));
+    shortcuts.setBinding("timelineToolSelect", juce::KeyPress('k', juce::ModifierKeys::noModifiers, 0));
     shortcuts.setBinding("timelineSnapToggle", juce::KeyPress('y', juce::ModifierKeys::noModifiers, 0));
     shortcuts.saveToProperties();
 
-    EXPECT_TRUE(selectButton->getTooltip().contains("(j)"));
+    EXPECT_TRUE(selectButton->getTooltip().contains("(k)"));
     EXPECT_FALSE(selectButton->getTooltip().contains("(1)"));
     EXPECT_TRUE(f.panel.getSnapToggleButton().getTooltip().contains("(y)"));
 }

@@ -222,6 +222,85 @@ TEST(StatusBarTest, TransportClusterDropsWhenCramped) {
 }
 
 // ---------------------------------------------------------------------------
+// Tooltips — the patch/CPU/round-trip/transport segments are painted text, not child components
+// (see the class comment on getTooltip()/getTooltipForPosition()), so the segment -> text mapping
+// is tested directly with synthetic points rather than a simulated mouse.
+// ---------------------------------------------------------------------------
+
+TEST(StatusBarTest, TooltipOverCpuSegmentExplainsDspLoad) {
+    StatusBarComponent bar;
+    bar.setSize(800, 24);
+
+    const juce::String tip = bar.getTooltipForPosition({190, 10}); // inside the CPU % segment
+    EXPECT_TRUE(tip.isNotEmpty());
+    EXPECT_TRUE(tip.containsIgnoreCase("DSP")) << tip;
+}
+
+TEST(StatusBarTest, TooltipOverRoundTripSegmentExplainsLatencyWhenVisible) {
+    StatusBarComponent bar;
+    bar.setSize(800, 24);
+
+    // Before the first reading, the segment isn't drawn -> no tooltip either.
+    EXPECT_TRUE(bar.getTooltipForPosition({250, 10}).isEmpty());
+
+    bar.updateRoundTripLatency(4.0, true);
+    const juce::String tip = bar.getTooltipForPosition({250, 10}); // inside "RT 4.0 ms"
+    EXPECT_TRUE(tip.isNotEmpty());
+    EXPECT_TRUE(tip.containsIgnoreCase("round-trip") || tip.containsIgnoreCase("latency")) << tip;
+}
+
+TEST(StatusBarTest, TooltipOverRoundTripSegmentEmptyWhenCramped) {
+    StatusBarComponent bar;
+    bar.updateRoundTripLatency(4.0, true);
+    bar.setSize(300, 24); // narrow enough that isRoundTripSegmentVisible() is false — see paint()
+
+    EXPECT_TRUE(bar.getTooltipForPosition({250, 10}).isEmpty()) << "a hidden segment must never answer a tooltip query";
+}
+
+TEST(StatusBarTest, TooltipOverTransportReadoutExplainsPositionAndTempo) {
+    StatusBarComponent bar;
+    bar.setSize(800, 24);
+    bar.updateTransport(true, "001.1.000", 120.0);
+
+    const juce::String tip = bar.getTooltipForPosition({400, 10}); // inside the transport readout
+    EXPECT_TRUE(tip.isNotEmpty());
+    EXPECT_TRUE(tip.containsIgnoreCase("position") || tip.containsIgnoreCase("tempo")) << tip;
+}
+
+TEST(StatusBarTest, TooltipEmptyOverPatchNameVoiceCountAndBlankSpace) {
+    StatusBarComponent bar;
+    bar.setSize(800, 24);
+    bar.updateRoundTripLatency(4.0, true);
+    bar.updateTransport(true, "001.1.000", 120.0);
+
+    EXPECT_TRUE(bar.getTooltipForPosition({10, 10}).isEmpty()) << "patch name has no explanation needed";
+    EXPECT_TRUE(bar.getTooltipForPosition({760, 10}).isEmpty()) << "voice count has no explanation needed";
+    EXPECT_TRUE(bar.getTooltipForPosition({500, 10}).isEmpty()) << "blank space between segments";
+    EXPECT_TRUE(bar.getTooltipForPosition({190, -1}).isEmpty()) << "above the strip";
+    EXPECT_TRUE(bar.getTooltipForPosition({190, 24}).isEmpty()) << "below the strip";
+}
+
+TEST(StatusBarTest, TooltipSuppressedWhileTransientMessageShowing) {
+    StatusBarComponent bar;
+    bar.setSize(800, 24);
+    bar.updateRoundTripLatency(4.0, true);
+    bar.updateTransport(true, "001.1.000", 120.0);
+    bar.showMessage("Saving...");
+
+    EXPECT_TRUE(bar.getTooltipForPosition({190, 10}).isEmpty()) << "CPU segment covered by the transient message";
+    EXPECT_TRUE(bar.getTooltipForPosition({250, 10}).isEmpty()) << "round-trip segment covered too";
+    EXPECT_TRUE(bar.getTooltipForPosition({400, 10}).isEmpty()) << "transport readout covered too";
+}
+
+TEST(StatusBarTest, TransportButtonHasATooltip) {
+    // The button (unlike the readout text next to it) is a real child component, so it carries its
+    // own tooltip via juce::Button's inherited SettableTooltipClient — getTooltip() above is never
+    // even reached for it (see the class comment).
+    StatusBarComponent bar;
+    EXPECT_TRUE(bar.getTransportButton().getTooltip().isNotEmpty());
+}
+
+// ---------------------------------------------------------------------------
 // AudioEngine — getActiveVoiceInfo with no PolyMidiModule
 // ---------------------------------------------------------------------------
 

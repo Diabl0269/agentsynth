@@ -22,6 +22,10 @@ namespace synth::ui {
 class ZoomFrozenCachedImage; // Forward declaration — see ZoomFrozenCachedImage.h
 }
 
+namespace synth::theme {
+class AppLookAndFeel; // Forward declaration — see Theme/AppLookAndFeel.h
+}
+
 class ModuleComponent
     : public juce::Component
     , public juce::Timer
@@ -132,6 +136,13 @@ public:
     void setRasterFrozen(bool frozen);
     bool isRasterFrozen() const noexcept;
     const synth::ui::ZoomFrozenCachedImage* getRasterCacheForTest() const noexcept { return rasterCache; }
+
+    /** Output-card identity glyph bounds (see paint()'s isAudioOutputIONode block): proportional
+     *  to the title's own cap-height rather than the full 24px header band, right-aligned to the
+     *  activity LED's own right edge so the gap before the title text matches the header's
+     *  existing padding rhythm. A pure function of the title font, pulled out of paint() so a test
+     *  can assert the exact geometry painted without inspecting pixels. */
+    static juce::Rectangle<float> outputCardIconBoundsForTest(const synth::theme::AppLookAndFeel& lf);
 
 private:
     // Non-owning: the juce::Component base owns this via setCachedComponentImage(). See

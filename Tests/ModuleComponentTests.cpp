@@ -472,6 +472,23 @@ TEST_F(ModuleComponentTest, DualIOHeaderButtonOnEveryStereoCapableModule) {
     ASSERT_NE(oscDual, nullptr) << "voice modules are stereo-capable and expose the same toggle";
     EXPECT_FALSE(oscDual->getTooltip().isEmpty());
 
+    // Data-driven over the authoritative list, so a module that gains the Dual I/O parameter cannot
+    // ship without the header control that operates it. (The Ring Modulator carried a stereo output
+    // pair with no toggle at all until the list stopped being hand-written.)
+    for (const auto& type : synth::AIStateMapper::dualIOCapableModuleTypes()) {
+        SCOPED_TRACE(type.toStdString());
+        auto processor = synth::AIStateMapper::createModule(type);
+        ASSERT_NE(processor, nullptr);
+        ModuleComponent card(processor.get(), juce::AudioProcessorGraph::NodeID(9), editor);
+        card.setSize(280, 400);
+        bool hasToggle = false;
+        for (auto* child : card.getChildren())
+            if (auto* db = dynamic_cast<juce::DrawableButton*>(child))
+                if (db->getName() == "Dual I/O")
+                    hasToggle = true;
+        EXPECT_TRUE(hasToggle) << "no Dual I/O header button on a stereo-capable module";
+    }
+
     // A module with no second audio leg must NOT grow the control.
     LFOModule lfo;
     ModuleComponent lfoComp(&lfo, juce::AudioProcessorGraph::NodeID(3), editor);
@@ -1125,4 +1142,121 @@ TEST_F(ModuleComponentTest, SetOutputDeviceInfoTextIsANoOpOnAudioInputNode) {
 
     moduleComponent.setOutputDeviceInfoText("should not apply to Audio Input");
     EXPECT_TRUE(moduleComponent.getOutputDeviceInfoTextForTest().isEmpty());
+}
+
+// --- Output-card identity glyph alignment/sizing (visual follow-up) ----------
+// outputCardIconBoundsForTest() is the exact geometry ModuleComponent::paint() draws the CatIO
+// glyph into — see docs/layout.md's "Audio Output card identity treatment". These tests recompute
+// the same public JUCE font-metric calls independently (never reach into ModuleComponent's private
+// paint code) so they pin the FORMULA/contract, not a platform-specific pixel constant.
+
+TEST(ModuleComponentOutputIconBounds, IconIsSquareAndProportionalToTitleCapHeightNotTheFullHeaderBand) {
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
+
+    const auto bounds = ModuleComponent::outputCardIconBoundsForTest(lf);
+
+    const juce::Font titleFont(juce::FontOptions(lf.getTheme().type.h2, juce::Font::bold));
+    const float expectedCapHeight = titleFont.getAscent() * 0.72f;
+
+    EXPECT_FLOAT_EQ(bounds.getWidth(), bounds.getHeight()) << "the glyph must stay square";
+    EXPECT_NEAR(bounds.getHeight(), expectedCapHeight, 0.01f);
+    // Proportional to the title, not the header band: strictly smaller than both the previous
+    // fixed 16px box and the header's own 24px height.
+    EXPECT_LT(bounds.getHeight(), 16.0f);
+    EXPECT_LT(bounds.getHeight(), 24.0f);
+    EXPECT_LT(bounds.getHeight(), titleFont.getHeight())
+        << "must not be sized off the full ascent+descent box the title's own text is drawn in";
+}
+
+TEST(ModuleComponentOutputIconBounds, IconRightEdgeMatchesTheActivityLEDsRightEdgeForAnEightPxTextGap) {
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeNeon()); // a different theme: the geometry must not be theme-dependent
+
+    const auto bounds = ModuleComponent::outputCardIconBoundsForTest(lf);
+
+    // The activity LED is fillEllipse(6, 8, 8, 8) in ModuleComponent::paint() -> right edge x=14.
+    // The title's own left inset is 22 (AppLookAndFeel::drawModulePanel). Pinning the icon's right
+    // edge to the LED's is what keeps that established 8px gap regardless of the icon's width.
+    EXPECT_NEAR(bounds.getRight(), 14.0f, 0.001f);
+    constexpr float kTitleLeftInset = 22.0f;
+    EXPECT_NEAR(kTitleLeftInset - bounds.getRight(), 8.0f, 0.001f);
+}
+
+TEST(ModuleComponentOutputIconBounds, IconIsVerticallyCentredOnTheTitlesCapHeightNotTheHeaderBandsMidline) {
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
+
+    const auto bounds = ModuleComponent::outputCardIconBoundsForTest(lf);
+
+    const juce::Font titleFont(juce::FontOptions(lf.getTheme().type.h2, juce::Font::bold));
+    const float capHeight = titleFont.getAscent() * 0.72f;
+    constexpr float kHeaderTop = 2.0f;
+    constexpr float kHeaderHeight = 24.0f;
+    const float textBoxTop = kHeaderTop + (kHeaderHeight - titleFont.getHeight()) * 0.5f;
+    const float baseline = textBoxTop + titleFont.getAscent();
+    const float expectedCapCentreY = baseline - capHeight * 0.5f;
+
+    EXPECT_NEAR(bounds.getCentreY(), expectedCapCentreY, 0.01f);
+    // Sanity: still fully inside the 24px header band ([2, 26] in local coordinates), whatever the
+    // exact resolved font metrics turn out to be on this platform.
+    EXPECT_GE(bounds.getY(), kHeaderTop);
+    EXPECT_LE(bounds.getBottom(), kHeaderTop + kHeaderHeight);
+}
+
+// Colour lockup: the glyph must follow the title's own colour token, not the library sidebar's
+// fixed textMuted bake — rendered end-to-end through paint() (not the bounds helper), because the
+// tint swap happens at paint time on a per-call clone.
+TEST_F(ModuleComponentTest, AudioOutputCardIconTintsToTheTitleColourNotTheLibraryMutedTint) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    auto node = addAudioOutputNode(engine.getGraph());
+    ModuleComponent moduleComponent(node->getProcessor(), node->nodeID, editor);
+
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
+    moduleComponent.setLookAndFeel(&lf);
+
+    juce::Image img(juce::Image::ARGB, moduleComponent.getWidth(), moduleComponent.getHeight(), true);
+    juce::Graphics g(img);
+    EXPECT_NO_THROW(moduleComponent.paint(g));
+
+    const auto bounds = ModuleComponent::outputCardIconBoundsForTest(lf).getSmallestIntegerContainer().expanded(1);
+    // titleColour (not selected, not bypassed) is textPrimary — near-white — checked inline below.
+    const auto libraryMutedTint = synth::theme::makeObsidian().colors.textMuted; // the OLD (wrong) tint
+
+    // Counts, not a single any-pixel boolean: the icon is tiny (~cap-height px) against a dark
+    // header, so its anti-aliased edges sweep through every grey between white and the background
+    // on the way down — a LOOSE proximity check against an arbitrary mid-grey reference will always
+    // find some blended edge pixel near it, tint bug or not. A near-EXACT match (tight tolerance)
+    // over a MEANINGFUL fraction of the sampled pixels is what actually distinguishes "still solid-
+    // filled with the old textMuted tint" from ordinary antialiasing.
+    int nearWhiteCount = 0;
+    int exactMutedCount = 0;
+    int opaqueSamples = 0;
+    for (int y = bounds.getY(); y < bounds.getBottom(); ++y) {
+        for (int x = bounds.getX(); x < bounds.getRight(); ++x) {
+            if (!img.getBounds().contains(x, y))
+                continue;
+            const auto p = img.getPixelAt(x, y);
+            if (p.getAlpha() < 200)
+                continue; // skip transparent pixels (the header is opaque, so this rarely fires)
+            ++opaqueSamples;
+            if (p.getRed() > 200 && p.getGreen() > 200 && p.getBlue() > 200)
+                ++nearWhiteCount; // textPrimary (0xffEAEEF3) is near-white
+            if (std::abs((int)p.getRed() - (int)libraryMutedTint.getRed()) <= 3 &&
+                std::abs((int)p.getGreen() - (int)libraryMutedTint.getGreen()) <= 3 &&
+                std::abs((int)p.getBlue() - (int)libraryMutedTint.getBlue()) <= 3)
+                ++exactMutedCount;
+        }
+    }
+    ASSERT_GT(opaqueSamples, 0);
+    EXPECT_GT(nearWhiteCount, 0) << "the glyph should render in the title's (near-white) colour";
+    // A regression that dropped the replaceColour() call would leave the WHOLE glyph solid-filled
+    // in textMuted, not one stray edge pixel — so even a generous few-percent allowance still fails
+    // that case hard while tolerating antialiasing.
+    EXPECT_LE(exactMutedCount, opaqueSamples / 10)
+        << "the glyph must not still be (mostly) solid-filled in the library sidebar's muted grey";
+
+    moduleComponent.setLookAndFeel(nullptr);
 }

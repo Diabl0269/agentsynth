@@ -8,6 +8,10 @@ constexpr int kMuteSlotWidth = 28;
 constexpr int kPadH = 6;
 // Matches the voice-count draw's own width in paint() (`rightEdge - kVoiceSlotWidth`).
 constexpr int kVoiceSlotWidth = 80;
+// The CPU % segment, right after the patch name. Named (unlike when it was inline in paint()) so
+// getTooltipForPosition() can hit-test the exact same range paint() draws into.
+constexpr int kCpuX = 170;
+constexpr int kCpuWidth = 60;
 
 // Transport cluster geometry: play/stop glyph button + "bar.beat.ticks   BPM" readout, placed
 // right after the round-trip segment (x=236, width 90 — see paint()). Named constants here (unlike
@@ -113,6 +117,51 @@ void StatusBarComponent::TransportButton::paintButton(juce::Graphics& g, bool sh
 }
 
 // ---------------------------------------------------------------------------
+bool StatusBarComponent::isRoundTripSegmentVisible() const noexcept {
+    const int rightEdge = getWidth() - kMuteSlotWidth - kPadH;
+    return roundTripText_.isNotEmpty() && kRoundTripX + kRoundTripWidth <= rightEdge - kVoiceSlotWidth - kPadH;
+}
+
+// ---------------------------------------------------------------------------
+// getTooltip()/getTooltipForPosition() — see the header's class comment and the two methods' own
+// comments for why this exists (painted text has no component of its own for juce::TooltipWindow
+// to hit-test) and why the mapping is split into a pure, testable half.
+juce::String StatusBarComponent::getTooltip() { return getTooltipForPosition(getMouseXYRelative()); }
+
+juce::String StatusBarComponent::getTooltipForPosition(juce::Point<int> localPosition) const {
+    if (transientMessage_.isNotEmpty())
+        return {}; // the transient message covers this row; nothing painted underneath to explain
+
+    if (localPosition.y < 0 || localPosition.y >= getHeight())
+        return {};
+
+    const int x = localPosition.x;
+
+    // CPU % — AudioEngine::isHosted() ? 0.0f : deviceManager.getCpuUsage() * 100.0, read at
+    // MainComponent::timerCallback's 5 Hz status-bar poll (see docs/layout.md §5). getCpuUsage() is
+    // JUCE's own "proportion of the audio callback's time budget spent in the callback" figure.
+    if (x >= kCpuX && x < kCpuX + kCpuWidth)
+        return "Audio-engine DSP load: percentage of the audio callback's time budget spent "
+               "rendering this block.";
+
+    // Round trip — AudioEngine::getRecordingLatencySamples() (input device + graph + output
+    // device), converted to ms at the transport's sample rate; see updateRoundTripLatencyReadout()
+    // and this class's own updateRoundTripLatency() doc comment. Only "hit" while actually drawn.
+    if (isRoundTripSegmentVisible() && x >= kRoundTripX && x < kRoundTripX + kRoundTripWidth)
+        return "Round-trip latency: input device + audio graph + output device delay - the amount "
+               "a recorded take is shifted back to line it up.";
+
+    // Transport position + tempo readout — only "hit" while the cluster fits and has a reading.
+    if (transportClusterFits_ && transportDisplayText_.isNotEmpty()) {
+        const int transportTextX = kTransportX + kTransportButtonSize + kTransportTextGap;
+        if (x >= transportTextX && x < transportTextX + kTransportTextWidth)
+            return "Playback position (bar.beat.ticks) and tempo (BPM).";
+    }
+
+    return {};
+}
+
+// ---------------------------------------------------------------------------
 void StatusBarComponent::showMessage(const juce::String& msg) {
     transientMessage_ = msg;
     repaint();
@@ -187,11 +236,12 @@ void StatusBarComponent::paint(juce::Graphics& g) {
         // CPU — after patch name, warning colour if > 80 %
         const juce::String cpuStr = formatCpu(cpuPct_ / 100.0f);
         g.setColour(cpuPct_ > 80.0f ? warningColour : textMuted);
-        g.drawText(cpuStr, 170, textY, 60, textH, juce::Justification::centredLeft, true);
+        g.drawText(cpuStr, kCpuX, textY, kCpuWidth, textH, juce::Justification::centredLeft, true);
 
-        // Round trip — after CPU, and only while it actually fits before the voice count's
-        // own slot. A cramped window drops this segment rather than overlapping two readings.
-        if (roundTripText_.isNotEmpty() && kRoundTripX + kRoundTripWidth <= rightEdge - kVoiceSlotWidth - padH) {
+        // Round trip — after CPU, and only while it actually fits before the voice count's own
+        // slot (isRoundTripSegmentVisible() — shared with getTooltipForPosition() so the two can
+        // never disagree about whether this segment is on screen).
+        if (isRoundTripSegmentVisible()) {
             g.setColour(textMuted);
             g.drawText(roundTripText_, kRoundTripX, textY, kRoundTripWidth, textH, juce::Justification::centredLeft,
                        true);

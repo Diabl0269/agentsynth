@@ -1184,7 +1184,7 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
                            "Step 5 Chord, Step 5 Root, Step 6 Chord, Step 6 Root, Step 7 Chord, Step 7 Root, "
                            "Step 8 Chord, Step 8 Root, bpm, bypassed, run, syncToTransport"},
         {"Reverb", "bypassed, damping, dry, dualIO, muted, outputLevel, roomSize, wet, width"},
-        {"Ring Modulator", "bypassed, character, drive, mix, muted, outputLevel, oversampling"},
+        {"Ring Modulator", "bypassed, character, drive, dualIO, mix, muted, outputLevel, oversampling"},
         {"Sample & Hold", "bypassed, clock, holdMode, level, muted, offset, rate, slew, source, trigThreshold"},
         {"Sampler",
          "bypassed, density, dualIO, grainSize, level, loop, muted, pitch, playMode, rootNote, spray, start"},

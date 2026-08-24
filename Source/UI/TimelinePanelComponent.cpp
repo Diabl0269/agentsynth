@@ -26,7 +26,9 @@ constexpr double kScrollPixelsPerWheelUnit = 200.0;
 constexpr int kSnapComboWidth = 90;
 // 30 (was 26): part of the timeline-panel button-size sweep — both buttons are .reduced(2) at
 // their setBounds() call site, so the effective on-screen size grows from 22 to 26 px.
-constexpr int kSnapToggleButtonWidth = 30;
+// Wide enough for the word "Snap" (it used to read "Q" and be 30 px) — see the member's comment in
+// TimelinePanelComponent.h for why the label is the verb and not the key.
+constexpr int kSnapToggleButtonWidth = 46;
 constexpr int kFollowPlayheadButtonWidth = 30;
 constexpr const char* kTimelineSnapPropertyKey = "timelineSnap";
 constexpr const char* kTimelineSnapEnabledPropertyKey = "timelineSnapEnabled";
@@ -393,8 +395,8 @@ void TimelinePanelComponent::refreshShortcutTooltips() {
     }
 
     snapToggleButton_.setTooltip(synth::ui::formatShortcutHint(
-        "Snap to grid on/off",
-        shortcutHintFor(shortcuts_, "timelineSnapToggle", juce::KeyPress('q', juce::ModifierKeys::noModifiers, 0))));
+        "Snap on/off",
+        shortcutHintFor(shortcuts_, "timelineSnapToggle", juce::KeyPress('j', juce::ModifierKeys::noModifiers, 0))));
 
     // "Follow playhead" used to carry no key hint at all — the ONE sibling in this strip that
     // didn't say its own shortcut.
@@ -998,9 +1000,11 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
     // child (JUCE bubbles unhandled keys up the parent chain), so they cover every focus target
     // inside the timeline — track headers, the lanes, the roll (which consumes Q itself).
 
-    // Q = toggle grid magnetism (Shift+Q one-shot quantise lives on the roll, where the notes are).
-    // Shares "timelineSnapToggle" with the roll: one binding, one key, whichever surface has focus.
-    if (matchesAction(key, "timelineSnapToggle", plainKey('q'))) {
+    // J = toggle grid magnetism (Cubase's snap key). Shares "timelineSnapToggle" with the roll: one
+    // binding, one key, whichever surface has focus. Deliberately NOT Q any more — Q is Cubase's
+    // quantise, which is what the roll uses it for, so one letter meant two verbs depending on
+    // which timeline surface happened to have focus.
+    if (matchesAction(key, "timelineSnapToggle", plainKey('j'))) {
         setSnapEnabled(!viewState_.snapEnabled);
         return true;
     }
@@ -1021,23 +1025,31 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
         return true;
     }
 
-    // Ctrl+Shift+1 / Ctrl+Shift+2 = park the cursor on the left / right loop locator. The chord the
-    // grid-set family used to own (that whole family moved to Ctrl+Alt+digit) — jumping between
-    // locators is the gesture a user reaches for far more often than re-picking a grid division.
+    // Option+1 / Option+2 = park the cursor on the left / right loop locator.
     //
     // Surface-resolved, not a command: it acts on the timeline's own transport, and there is
     // nothing for it to do on any other surface. A DEGENERATE or unset span (end <= start, which is
     // also what "no locators yet" looks like) is a no-op that returns false, so the keystroke stays
     // available to whatever else might claim it rather than being silently swallowed.
+    //
+    // REACHABILITY, and it is the whole bug these keys shipped with: this method only runs when the
+    // focused component is INSIDE this panel's subtree (JUCE bubbles an unhandled key up the parent
+    // chain), and the only thing under this panel that takes keyboard focus is the clip lane area
+    // (and the roll). Setting locators by dragging the RULER — the obvious way to do it — leaves
+    // focus wherever it was, so the keystroke never reached here at all.
+    // MainComponent::keyPressed forwards these two ids back to this panel as its last act for
+    // exactly that reason; see its `forwardsToTimelinePanel` list.
     if (transport_ != nullptr) {
-        const juce::ModifierKeys ctrlShift{juce::ModifierKeys::ctrlModifier | juce::ModifierKeys::shiftModifier};
-        const bool toStart = matchesAction(key, "timelineJumpToLocator1", juce::KeyPress('1', ctrlShift, 0));
-        const bool toEnd = matchesAction(key, "timelineJumpToLocator2", juce::KeyPress('2', ctrlShift, 0));
+        const juce::ModifierKeys alt{juce::ModifierKeys::altModifier};
+        const bool toStart = matchesAction(key, "timelineJumpToLocator1", juce::KeyPress('1', alt, 0));
+        const bool toEnd = matchesAction(key, "timelineJumpToLocator2", juce::KeyPress('2', alt, 0));
         if (toStart || toEnd) {
             const auto snap = transport_->getPositionSnapshot();
             if (!(snap.loopEndPpq > snap.loopStartPpq))
                 return false;
             transport_->locateBeat(toStart ? snap.loopStartPpq : snap.loopEndPpq);
+            // The playhead overlay picks the new position up on the panel's next 10 Hz poll; the
+            // ruler needs no repaint (the locators themselves did not move).
             return true;
         }
     }
@@ -1706,7 +1718,14 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
         // Requiring drawBeatLines keeps the hierarchy monotonic: a subdivision may never be
         // visible while its parent beat level is hidden (possible otherwise, because the beat
         // gate is ~8 px/beat while the readability guard is ~3 px/line).
-        const double division = viewState_.divisionBeats(beatsPerBar);
+        //
+        // divisionBeatsRAW, never divisionBeats(): the snap SWITCH must not change which lines are
+        // DRAWN. Snap off means "don't magnetise to the grid", not "hide the grid" — a ruler that
+        // loses its subdivision lines the moment you turn magnetism off leaves you eyeballing
+        // positions against nothing, and the chosen division is still what the roll and the lanes
+        // are showing. Same split PianoRollComponent draws with (see its own note: magnetism reads
+        // divisionBeats, drawing reads divisionBeatsRaw).
+        const double division = viewState_.divisionBeatsRaw(beatsPerBar);
         const bool drawSubdivisionLines = drawBeatLines && division > 0.0 && division < 1.0 &&
                                           synth::ui::gridLevelIsReadable(division, viewState_.pixelsPerBeat);
 

@@ -57,10 +57,13 @@ public:
     void setDualIOOverrideForType(const juce::String& moduleType, std::optional<bool> overrideValue);
 
     // Every module type that carries the Dual I/O parameter (ModuleBase::addDualIOParameter), in
-    // the per-module popup's row order: the FX modules plus the five split-block voice modules
-    // (docs/modules.md, docs/fx_modules.md § Stereo I/O). Kept as one static list rather than
-    // discovered at runtime because building every factory module just to ask hasDualIOParameter()
-    // would be a lot of machinery for a list that changes only when a module gains the parameter.
+    // the per-module popup's row order: the FX modules plus the split-block voice modules
+    // (docs/modules.md, docs/fx_modules.md § Stereo I/O).
+    //
+    // DISCOVERED, not hand-listed — a thin wrapper over synth::AIStateMapper::dualIOCapableModuleTypes(),
+    // which probes the module factory and asks each module hasDualIOParameter(). This was a literal
+    // list until the Ring Modulator turned out to be missing from it: the module is stereo, the
+    // popup had no row for it, and nothing in the build noticed.
     static const std::vector<juce::String>& getDualIOModuleTypes();
 
     // Parses the "dualIOPerModuleDefaults" key straight from ApplicationProperties, independent of

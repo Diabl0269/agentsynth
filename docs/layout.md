@@ -281,6 +281,17 @@ The status bar (`Source/UI/StatusBarComponent.h/.cpp`) is a 24 px high strip ren
 
 `updateTransport(bool playing, const juce::String& positionText, double bpm)` is another **sibling** setter, gated independently on `(playing, positionText, bpm)`: it builds `positionText + "   " + bpm (1 dp) + " BPM"` and only repaints (and calls `transportButton_.setToggleState(playing, dontSendNotification)`) when that diff changes. `positionText` arrives **pre-formatted** by the caller — normally `synth::ui::TimelineTransportBar::formatBarBeat(ppq, tsNumerator, tsDenominator)` — because `StatusBarComponent` is compiled into the `Core` CMake target, which cannot depend on `AppUI` (where `TimelineTransportBar` lives); `MainComponent` (in `AppUI`) is the one call site that does the formatting. Fed from `MainComponent::timerCallback`'s existing 5 Hz status-bar sub-tick, using the `PositionSnapshot` already read **unconditionally** every 10 Hz tick (before the `timelinePanel.isVisible()` guard) — see `docs/architecture.md`'s timerCallback inventory. The play/stop button's own click is wired by `MainComponent` to the same `TransportService::play()`/`stop()` calls `TimelineTransportBar`'s button uses; the button never flips its own toggle state (`setClickingTogglesState(false)` — "the transport is the truth", `updateTransport()` is the only setter).
 
+**Tooltips:**
+The patch name, CPU %, round-trip, and transport-readout segments are **painted text, not child components**, so there is nothing for `juce::TooltipWindow` (the one instance MainComponent owns — `docs/theming.md`'s "TooltipWindow" entry) to hit-test individually. `StatusBarComponent` is instead itself a `juce::TooltipClient`: `getTooltip()` delegates to `getTooltipForPosition(juce::Point<int>)`, a pure/const helper that maps a LOCAL point to tooltip text using the exact same x-ranges `paint()` draws into (`isRoundTripSegmentVisible()` is shared by both, so the two can never disagree about whether a segment is currently on screen). `juce::TooltipWindow::getTipFor()` checks only the exact component the mouse is over and does not walk up parents, so hovering `masterMuteButton_`/`transportButton_` (both real child components, both already `SettableTooltipClient` via `juce::Button`) reaches THEIR OWN tooltip text — `getTooltip()` is never invoked for them.
+
+Tooltip text (verified against what each value actually reads):
+- **CPU %**: "Audio-engine DSP load: percentage of the audio callback's time budget spent rendering this block." — the value itself is `audioEngine.isHosted() ? 0.0f : deviceManager.getCpuUsage() * 100.0` (JUCE's own callback-time-budget figure; hosted mode has no device of its own, so it shows 0 rather than a misleading reading).
+- **Round trip**: "Round-trip latency: input device + audio graph + output device delay - the amount a recorded take is shifted back to line it up." — the value is `AudioEngine::getRecordingLatencySamples()` converted to ms (see `updateRoundTripLatency`'s doc comment above and `architecture.md`'s "Latency alignment" section). Only answered while `isRoundTripSegmentVisible()` is true — a hidden segment has no tooltip.
+- **Transport readout**: "Playback position (bar.beat.ticks) and tempo (BPM)."
+- **Transport play/stop button**: "Play / Stop" (`setTooltip()` in the ctor — same text `TimelineTransportBar`'s own play/stop button uses).
+
+A transient message (`showMessage()`) suppresses every tooltip on the row (`getTooltipForPosition` returns `""` immediately) since it visually covers the segments it would otherwise explain.
+
 **Polling rate:**
 The status bar polls at 5 Hz, driven by `MainComponent`'s 10 Hz timer via an every-other-tick guard (`statusBarTickCount_`).
 
@@ -368,7 +379,7 @@ The header area of each module card (`Source/UI/ModuleComponent.cpp`) contains `
 | `deleteButton` | `(w-26, 2, 22, 20)` | Calls `owner.requestDeleteModule(nodeId)` — tooltip "Delete module" |
 | `bypassButton` | `(w-50, 2, 22, 20)` | Toggles bypass state — tooltip "Bypass" |
 | `muteButton` | `(w-74, 2, 22, 20)` | Toggles mute state — tooltip "Mute" |
-| `dualIOButton` | `(w-98, 2, 22, 20)` | FX / Voice Mixer only — splits or merges the stereo jack pair. Tooltip names Dual I/O. |
+| `dualIOButton` | `(w-98, 2, 22, 20)` | Stereo-capable modules only — every type in `AIStateMapper::dualIOCapableModuleTypes()` (the FX, Voice Mixer and Ring Modulator outputs, and the split-block voice modules). Splits or merges the stereo jack pair; tooltip names Dual I/O. |
 
 `requestDeleteModule(NodeID)` is the canonical delete entry point — `deleteButton.onClick` delegates here.
 
@@ -389,9 +400,33 @@ local `isAudioOutputIONode(juce::AudioProcessor*)` helper (`dynamic_cast` to
 `isTerminalAudioSink` in `GraphEditor.cpp` uses for cable routing, so a `ModuleBase` named "Audio
 Output" cannot impersonate the sink):
 
-- **Identity glyph** — the `synth::theme::Icon::CatIO` speaker glyph, drawn in the activity LED's
-  slot (`{4, 4, 16, 16}`). Audio Output is never a `ModuleBase`, so it never has a `VisualBuffer`
-  and `cachedRMS` never leaves `0.0f` for this card — that slot is otherwise always dark.
+- **Identity glyph** — the `synth::theme::Icon::CatIO` speaker glyph, in the activity LED's slot
+  (Audio Output is never a `ModuleBase`, so it never has a `VisualBuffer` and `cachedRMS` never
+  leaves `0.0f` for this card — that slot is otherwise always dark) but sized and positioned by
+  `ModuleComponent::outputCardIconBoundsForTest()` (public purely so a test can assert the exact
+  geometry `paint()` draws) rather than a fixed box:
+  - **Size** — a square equal to the title's cap-height, computed as `titleFont.getAscent() *
+    0.72f` for the title's own font (`theme.type.h2`, bold — JUCE has no direct cap-height query,
+    and 0.72× ascent is the standard sans-serif approximation, close to Inter's real ratio). This
+    keeps the glyph proportional to the title (roughly cap-height, e.g. ~9–10px at the default
+    13pt title size) instead of the header's full 24px band, which read "a touch large/heavy"
+    next to the letter-spaced caps.
+  - **Vertical position** — centred on the title's cap-height optical centre, derived from the
+    SAME centred-text-box math `drawText` uses to place the title (`textBoxTop =
+    headerTop + (headerHeight - titleFont.getHeight()) / 2`, `baseline = textBoxTop +
+    titleFont.getAscent()`, `capCentreY = baseline - capHeight / 2`) rather than the header
+    band's raw geometric middle — the previous fixed placement centred on the full ascent+descent
+    box the title is drawn in, which reads slightly low against cap-height-only glyphs (an
+    all-caps title never touches the descender clearance that box reserves).
+  - **Horizontal position** — right edge pinned to `x = 14`, the activity LED's own right edge
+    (`fillEllipse(6, 8, 8, 8)`), so the gap to the title's left inset (`x = 22`) stays the
+    established 8px rhythm regardless of the glyph's resulting width.
+  - **Colour** — re-tinted per paint from the library's baked-in `textMuted` to whichever colour
+    token the title itself is using this frame (`accent` when selected, `textDisabled` when
+    bypassed, `textPrimary` otherwise — mirrors `drawModulePanel`'s title-colour logic exactly) via
+    `Drawable::replaceColour` on an owned clone from `AppLookAndFeel::getIcon()`, never the shared
+    `peekIcon()` view other cards/the library sidebar also read — so the glyph and the title always
+    read as one lockup instead of a fixed muted tint next to a colour-shifting title.
 - **Destination line** — one muted (`theme.type.micro`, `colors.textMuted`) text line under the
   header, e.g. `"MacBook Pro Speakers · 48 kHz · 2ch"`. Sourced **message-thread-only** from
   `AudioEngine`'s device state and pushed in through a small chain rather than read directly:
@@ -768,7 +803,7 @@ Persisted as `smartConnectionMode` in `juce::ApplicationProperties`. Default: **
 | **When main I/O is free** (default) | Yes | Yes, when the jacks that would be wired are still free (source output and dest input) |
 | **All module moves** | Yes | Yes (dest input must be free; a source that already fans out may still tap a free dest) |
 
-Group multi-select drags never smart-connect. Snippet drops are excluded. "Dest input must be free" has exactly one exception — the terminal audio sink, which offers an insert instead (see below).
+Group multi-select drags never smart-connect. Snippet drops are excluded. "Dest input must be free" has two exceptions, both below: the terminal audio sink takes a parallel cable anyway, and Cmd turns any occupied destination into an insert.
 
 ### Behaviour
 
@@ -779,35 +814,49 @@ Group multi-select drags never smart-connect. Snippet drops are excluded. "Dest 
 
 Library drags cache a short-lived `AIStateMapper::createModule` probe for jack metadata before a real `ModuleComponent` exists.
 
-### Insert-in-series at the terminal audio sink
+### Occupied destinations: parallel add, and Cmd to insert
 
-An occupied destination jack is a **hard stop** everywhere except one node: the graph's terminal audio sink. Audio Output is a bare `juce::AudioGraphIOProcessor` (never a `ModuleBase` — the graph's output channel count is tied to it) and is wired in essentially every real patch, so the occupied-destination rule used to mean an FX parked next to it could never be offered anything at all. There, and only there, an occupied jack becomes a **reroute** instead: the cable already on the sink is re-pointed *through* the dragged module.
+An already-wired destination jack is not one rule but three, depending on the modifier and the node:
 
-`SmartSuggestion::isInsert` turns one suggestion record into that reroute. It carries two cable **sets** — `doomedLinks` (upstream → sink, all to be removed) and `upstreamCables` (upstream → ghost, replacing them) — plus the record's own `ghostJack` → `neighborJack`.
+| Drag | Occupied destination | Result |
+|---|---|---|
+| no modifier | terminal audio sink (Audio Output) | **additive parallel cable** — ghost's audio out joins what is already there, existing cables untouched |
+| no modifier | any other module | **nothing** (hard stop, unchanged) |
+| **Cmd/Ctrl held** | **any** module | **insert in series** — the upstream cabling is rerouted *through* the ghost |
 
-Both sets describe the **whole insert group**, not the record's own leg, and both are deduped, so applying them once per suggestion is idempotent. This is load-bearing: a Dual I/O upstream reaches the sink through *two* distinct cables, while a collapsed ghost output fans across both raw legs so only one jack pair survives the dedupe below. Hanging the doomed link off the surviving pair loses the other one, and that cable stays connected — summing into the sink's right leg alongside the ghost's output. Guarded by `SmartConnectionInsertRemovesEveryDoomedLegOfADualIOUpstream`.
+**Why the sink is special without a modifier.** Audio Output is a bare `juce::AudioGraphIOProcessor` (never a `ModuleBase` — the graph's output channel count is tied to it) and is wired in essentially every real patch, so a hard stop there meant a module parked next to it could never be offered anything at all. Summing into the mix bus is also exactly what dragging a cable there by hand already does, so a parallel add is the unsurprising default. Every other occupied jack stays a hard stop: silently summing into something the user wired mid-patch is not a suggestion worth making.
 
-`upstreamCables` is deduped by the raw **ghost-input** channels each cable covers — the mirror of the sink-side rule, since a collapsed jack on *either* end fans. Without it, a collapsed upstream's single jack wired into both of a Dual I/O ghost's inputs would duplicate its left leg onto the right. Guarded by `SmartConnectionInsertDoesNotDuplicateOneUpstreamLegOntoADualIOGhost`.
+**Why Cmd is sampled live, not latched at mouse-down.** Cmd at mouse-down already means "toggle selection membership" (`ModuleComponent::mouseDown`, issue #156) — and that path `return`s *before* a body drag begins, so `beginDragPreview` is never called. A Cmd-held press therefore cannot reach the drag path at all, and latching the modifier at press time would make canvas-move inserts impossible. `GraphEditor::isInsertModifierDown()` instead reads the keyboard on every drag tick, so the user starts an ordinary drag and presses Cmd once the ghost is where they want it. Selection semantics are untouched. Library drags have no such conflict and work either way.
 
-All of these must hold, or nothing is offered and the ordinary drop applies:
+### Insert-in-series
 
-- The sink is detected **by type** (`AudioGraphIOProcessor::audioOutputNode`), not by the `"Audio Output"` name `isSingletonIOModule` matches on, so a `ModuleBase` that happened to carry that name cannot impersonate it.
-- The ghost is the cable **source**, and has at least one audio **input** leg. A pure source (Oscillator, LFO) is refused: it cannot go in series, and offering it would be the silent parallel sum the drop rule exists to prevent.
+`SmartSuggestion::isInsert` turns one suggestion record into the reroute. It carries two cable **sets** — `doomedLinks` (upstream → destination, all to be removed) and `upstreamCables` (upstream → ghost, replacing them) — plus the record's own `ghostJack` → `neighborJack`.
+
+Both sets describe the **whole insert group**, not the record's own leg, and both are deduped, so applying them once per suggestion is idempotent. This is load-bearing: a Dual I/O upstream reaches the destination through *two* distinct cables, while a collapsed ghost output fans across both raw legs so only one jack pair survives the dedupe below. Hanging the doomed link off the surviving pair loses the other one, and that cable stays connected — summing into the destination's right leg alongside the ghost's output. Guarded by `SmartConnectionCmdInsertRemovesEveryDoomedLegOfADualIOUpstream`.
+
+`upstreamCables` is deduped by the raw **ghost-input** channels each cable covers — the mirror of the destination-side rule, since a collapsed jack on *either* end fans. Without it, a collapsed upstream's single jack wired into both of a Dual I/O ghost's inputs would duplicate its left leg onto the right. Guarded by `SmartConnectionCmdInsertDoesNotDuplicateOneUpstreamLegOntoADualIOGhost`.
+
+All of these must hold, or nothing is offered:
+
+- **Cmd is held.** Nothing ever inserts without it.
+- The ghost is the cable **source**, and has at least one audio **input** leg. A pure source (Oscillator, LFO) is refused: there is nothing for the rerouted upstream to feed. (At the sink, a source instead gets the parallel add above.)
 - **Every** leg of the group is occupied, by one and the same upstream node — both-or-neither, mirroring the stereo group rule. A mix of free and occupied legs, or two different feeds, would change the summing.
 - The feeding cable resolves through `findSingleUpstreamAudioLink`, which works at **cable** level (a visible output jack, never a raw graph edge) and returns nothing for a jack summed from several cables or fed through a mod routing / attenuverter chain.
 - The upstream is not the ghost itself (a move that would self-loop).
 
-One jack pair survives per **new** ghost→sink cable: a collapsed jack already fans to the whole raw pair, so a second pair for the sink's right leg would sum the ghost's *left* leg into it. Pairs whose raw destinations an earlier one already covers (via `resolvePolyLink`) are dropped — the doomed links are collected before this and are unaffected by it.
+**Hit-testing keys on the destination's input side** already: the jack-to-jack filter measures the ghost's output jack against the destination's *input* jack centre and rejects a source sitting to its right, so the ghost has to be approaching from the left — which is the natural insert position.
 
-**Known limitation.** A Dual I/O upstream feeding a *collapsed* ghost routes only its left leg into the ghost: the ghost's single input jack owns both raw channels, so a second cable onto it would fold left and right together. The sink is left correctly wired in either case; the mismatch is inherent to collapsing a split pair.
+One jack pair survives per distinct set of raw destination channels: a collapsed jack already fans across the whole raw pair, so when the destination fronts two legs (the sink is the only node that does) a second pair for its right leg would wire the source's *left* leg there too. Applied to plain adds and inserts alike, and a no-op wherever the pairs already claim distinct raws; the doomed links are collected before it and are deliberately unaffected.
+
+Scoring and the 96 px proximity cap are unchanged. An insert scores like the plain cable it replaces, so a neighbour offering a free jack can still win.
+
+**Known limitation.** A Dual I/O upstream feeding a *collapsed* ghost routes only its left leg into the ghost: the ghost's single input jack owns both raw channels, so a second cable onto it would fold left and right together. The destination is left correctly wired in either case; the mismatch is inherent to collapsing a split pair.
 
 **Preview vs. real jacks.** The library-drop ghost is an `AIStateMapper::createModule` probe, and the probe does *not* get `applyDefaultDualIOForNewModule` applied — so with the Dual I/O default on, a dropped module's real jack layout can differ from the one the preview measured. Pre-existing, not specific to inserts; it is why the Dual-I/O-ghost test above drives the move path instead of a library drop.
 
-Scoring, the 96 px proximity cap and the left-to-right flow rule are unchanged — the ghost naturally hovers to the **left** of Audio Output, which is the insert position. An insert scores like the plain cable it replaces, so a neighbour offering a free jack can still win.
-
 **Preview.** *Every* doomed cable is stroked first, dashed and dimmed (~18% alpha), underneath the frosted segments that replace them — otherwise the extra previews read as "and also", and the user expects the old wires to still be there after the drop. Paint-only; no new timers or repaints.
 
-**Apply.** `applySmartSuggestions` drops **every** doomed cable first (`disconnectAudioLink`, the exact inverse of `connectPorts`, so a collapsed stereo wire takes both raw legs), then wires each `upstreamCables` entry into the ghost, then the ghost's own leg into the sink. Dropping only the current leg's cable would leave the other summing into the sink. All of it shares the caller's transaction, so **one** undo restores the original patch.
+**Apply.** `applySmartSuggestions` drops **every** doomed cable first (`disconnectAudioLink`, the exact inverse of `connectPorts`, so a collapsed stereo wire takes both raw legs), then wires each `upstreamCables` entry into the ghost, then the ghost's own leg into the destination. Dropping only the current leg's cable would leave the other summing in. All of it shares the caller's transaction, so **one** undo restores the original patch.
 
 ---
 

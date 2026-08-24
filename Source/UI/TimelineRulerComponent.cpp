@@ -108,7 +108,9 @@ std::vector<TimelineRulerComponent::MarkerFlag> TimelineRulerComponent::buildMar
         return flags;
 
     const double widthPx = (double)getWidth();
-    const float top = std::max(0.0f, (float)getHeight() - kMarkerFlagHeight - 1.0f);
+    // The band starts where the numbers row ends — ONE split, shared with paint() through
+    // rulerLabelRowHeight(), so a bar number and a flag can never be handed overlapping rows.
+    const float top = std::max(0.0f, rulerLabelRowHeight(getHeight()));
 
     for (const auto& marker : doc_->getMarkers()) {
         // A drag in flight reports its PREVIEW beat, so the flag the user is looking at is the one
@@ -124,7 +126,7 @@ std::vector<TimelineRulerComponent::MarkerFlag> TimelineRulerComponent::buildMar
         MarkerFlag flag;
         flag.id = marker.id;
         flag.beat = beat;
-        flag.bounds = {(float)x, top, width, std::min(kMarkerFlagHeight, (float)getHeight())};
+        flag.bounds = {(float)x, top, width, std::min(kMarkerFlagHeight, (float)getHeight() - top)};
         flag.colour = juce::Colour(marker.colourArgb);
         flag.text = marker.text;
         flags.push_back(std::move(flag));
@@ -498,6 +500,25 @@ void TimelineRulerComponent::mouseUp(const juce::MouseEvent& e) {
     reArmLoopIfClickOnInactiveBrace(e);
 }
 
+void TimelineRulerComponent::mouseDoubleClick(const juce::MouseEvent& e) {
+    // Scoped to marker flags ONLY: this component had no double-click handler at all before, so
+    // anywhere else in the strip the gesture keeps behaving as the two ordinary clicks it already
+    // was (a seek in the playhead zone, the start of a loop drag in the loop zone).
+    if (doc_ == nullptr || e.mods.isPopupMenu())
+        return;
+    const auto id = markerAt(e.position);
+    if (!id.isValid())
+        return;
+
+    // The second press of the double-click has already latched a drag on this flag. LEAVE it
+    // latched and only clear the "moved" flag: the mouseUp that follows then takes the marker
+    // branch, commits nothing (a press that never dragged is a no-op) and tidies up. Clearing
+    // draggingMarker_ here instead would send that mouseUp into the loop/playhead branch under a
+    // STALE latched gestureZone_ and seek the cursor out from under the editor we are opening.
+    markerDragMoved_ = false;
+    beginRenameMarker(id);
+}
+
 void TimelineRulerComponent::mouseEnter(const juce::MouseEvent& e) {
     setHoveredZone(zoneAtY(e.position.y));
     setHoveredMarker(markerAt(e.position));
@@ -629,6 +650,11 @@ void TimelineRulerComponent::paint(juce::Graphics& g) {
     const juce::Font beatFont{juce::FontOptions(kBeatLabelFontHeight)};
     const juce::Colour beatLabelColour = textMuted.withAlpha(kBeatLabelAlpha);
 
+    // The numbers row: everything ABOVE the marker band. Labels are centred in THIS height rather
+    // than in the strip's full height, which is what keeps a bar number readable when a marker sits
+    // on the same beat (see rulerLabelRowHeight — flags used to be drawn straight over the numbers).
+    const int labelRowHeight = (int)std::llround(rulerLabelRowHeight(getHeight()));
+
     g.setFont(barFont);
     for (juce::int64 bar = firstBar; bar <= lastBar; ++bar) {
         const double barBeat = (double)bar * beatsPerBar;
@@ -644,7 +670,7 @@ void TimelineRulerComponent::paint(juce::Graphics& g) {
 
             if (bar >= 0 && (bar % labelEveryNBars) == 0) {
                 g.setColour(textMuted);
-                g.drawText(juce::String(bar + 1), (int)std::llround(x) + 3, 0, kBarLabelWidth, bounds.getHeight(),
+                g.drawText(juce::String(bar + 1), (int)std::llround(x) + 3, 0, kBarLabelWidth, labelRowHeight,
                            juce::Justification::centredLeft, false);
             }
         }
@@ -667,7 +693,7 @@ void TimelineRulerComponent::paint(juce::Graphics& g) {
                     g.setFont(beatFont);
                     g.setColour(beatLabelColour);
                     g.drawText(juce::String(bar + 1) + "." + juce::String(beatInBar + 1), (int)std::llround(beatX) + 3,
-                               0, kBeatLabelWidth, bounds.getHeight(), juce::Justification::centredLeft, false);
+                               0, kBeatLabelWidth, labelRowHeight, juce::Justification::centredLeft, false);
                     g.setFont(barFont);
                 }
             }

@@ -1,4 +1,5 @@
 #include "PreferencesSettingsTab.h"
+#include "../AI/AIStateMapper.h"
 #include "Theme/AppLookAndFeel.h"
 #include <functional>
 
@@ -60,16 +61,22 @@ constexpr int kDualIOChoiceAlwaysOn = 2;
 constexpr int kDualIOChoiceAlwaysOff = 3;
 
 // Every module type that carries the Dual I/O parameter (ModuleBase::addDualIOParameter): the FX
-// modules plus the five split-block voice modules (docs/fx_modules.md § Stereo I/O). Names must
-// match ModuleBase::getName() exactly — they are what GraphEditor::addModuleAtCanvasPosition
-// receives as the "name" it creates and what applyDefaultDualIOForNewModule matches overrides
-// against.
+// modules plus the split-block voice modules (docs/fx_modules.md § Stereo I/O).
+//
+// DERIVED, never hand-listed: synth::AIStateMapper::dualIOCapableModuleTypes() probes the module
+// factory and asks each module hasDualIOParameter(), so the popup below cannot go stale. It used to
+// be a literal vector here, and the Ring Modulator was missing from it — the module supported a
+// stereo pair but no row existed to set its default, and nothing failed.
+//
+// The names are factory keys, which is exactly what GraphEditor::addModuleAtCanvasPosition receives
+// as the "name" it creates and what applyDefaultDualIOForNewModule matches overrides against.
 const std::vector<juce::String>& dualIOModuleTypes() {
-    static const std::vector<juce::String> types{
-        "Oscillator", "Wavetable", "Filter",        "VCA",           "Voice Mixer", "Sampler",
-        "Distortion", "Delay",     "Chorus",        "Bitcrusher",    "Limiter",     "Reverb",
-        "Flanger",    "Phaser",    "Pitch Shifter", "Parametric EQ", "Compressor",
-    };
+    static const std::vector<juce::String> types = [] {
+        std::vector<juce::String> v;
+        for (const auto& name : synth::AIStateMapper::dualIOCapableModuleTypes())
+            v.push_back(name);
+        return v;
+    }();
     return types;
 }
 
@@ -77,8 +84,9 @@ const std::vector<juce::String>& dualIOModuleTypes() {
 // juce::Label + juce::ComboBox pair per module type, flat children (no per-row wrapper) so tests
 // can find the Nth juce::ComboBox the same way ClickingTheToggleReachesTheEditorAndNewModules
 // finds the Dual I/O ToggleButton — by walking getChildren() and dynamic_cast. No search box and
-// no viewport, unlike MidiDestinationPicker: seventeen rows at kRowHeight fit comfortably inside a
-// CallOutBox on any real screen, and a popup this rarely opened does not earn that rig.
+// no viewport, unlike MidiDestinationPicker: one row per stereo-capable module at kRowHeight fits
+// comfortably inside a CallOutBox on any real screen, and a popup this rarely opened does not earn
+// that rig.
 class DualIOPerModulePopupContent : public juce::Component {
 public:
     DualIOPerModulePopupContent(const std::vector<juce::String>& moduleTypes,

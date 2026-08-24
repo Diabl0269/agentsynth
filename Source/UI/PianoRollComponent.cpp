@@ -130,9 +130,8 @@ PianoRollComponent::PianoRollComponent(TimelineViewState& viewState)
             clipScaleMemory_[clipId_].pitchVisibilityOn = on;
         pushScaleContextFromMemory();
     };
-    // Straight through the shared resolver, so the panel button, the header chip and the
-    // "pianoRollQuantisePitches" key are one code path (see quantisePitchesToActiveScale).
-    scalePanel_.onQuantizePitches = [this] { quantisePitchesToActiveScale(); };
+    // Pitch-quantize has NO panel button any more — the header chip and "pianoRollQuantisePitches"
+    // are its only entry points (see the ScaleAssistPanel class comment).
     scalePanel_.onGenerate = [this](int minPitch, int maxPitch, bool addToExisting) {
         if (!clipId_.isValid())
             return;
@@ -166,6 +165,8 @@ void PianoRollComponent::openClip(synth::ClipId id) {
     pendingEmptyClick_ = false;
     resizeNotes_.clear();
     resizeUnquantized_ = false;
+    moveUnquantized_ = false;
+    cmdToggleNote_ = {};
     // A note auditioned in the OLD clip has no mouse-up coming — this IS the end of that gesture.
     stopAudition();
     autoScrollTimer_.stopTimer(); // a drag from the PREVIOUS clip cannot still be scrolling this one
@@ -233,6 +234,8 @@ void PianoRollComponent::closeRoll() {
     pendingEmptyClick_ = false;
     resizeNotes_.clear();
     resizeUnquantized_ = false;
+    moveUnquantized_ = false;
+    cmdToggleNote_ = {};
     autoScrollTimer_.stopTimer(); // no clip left for a drag to be scrolling
 
     hasPlayheadX_ = false;
@@ -439,6 +442,28 @@ void PianoRollComponent::rebuildVisiblePitches() {
     // firstVisiblePitch_ untouched) if visiblePitches_ somehow ended up empty — the same guard the
     // old "if (!visiblePitches_.empty())" line used.
     setTopRowPosition((double)nearestVisibleRowIndex(anchorPitch) + oldFraction);
+}
+
+bool PianoRollComponent::isScaleFilterOn() const noexcept {
+    if (!clipId_.isValid())
+        return false;
+    const auto it = clipScaleMemory_.find(clipId_);
+    return it != clipScaleMemory_.end() && it->second.pitchVisibilityOn;
+}
+
+void PianoRollComponent::toggleScaleFilter() {
+    if (!clipId_.isValid())
+        return;
+    const bool next = !isScaleFilterOn();
+    // The clip's memory is the single source of truth (see clipScaleMemory_); the panel's checkbox and
+    // this chip are both VIEWS of it, which is what stops the two from drifting apart.
+    clipScaleMemory_[clipId_].pitchVisibilityOn = next;
+    pushScaleContextFromMemory();
+    // Reflect it back into the panel. setSelection fires NO callback by contract — it is a reflection
+    // of state the owner already applied, not a user edit — so this cannot loop back through
+    // onPitchVisibilityChanged into here again.
+    scalePanel_.setSelection(activeScaleForOpenClip(), next);
+    repaint(); // the chip's lit state, plus whatever rows just appeared or collapsed
 }
 
 void PianoRollComponent::setScaleContext(std::function<bool(int)> isInScale, bool pitchVisibilityOn) {
@@ -785,6 +810,8 @@ double PianoRollComponent::currentBeatsPerBar() const {
 
 double PianoRollComponent::currentGridBeats() const { return viewState_.divisionBeats(currentBeatsPerBar()); }
 
+double PianoRollComponent::drawnGridBeats() const { return viewState_.divisionBeatsRaw(currentBeatsPerBar()); }
+
 double PianoRollComponent::snappedBeatAt(double rawBeat) const {
     return viewState_.snapBeat(rawBeat, currentBeatsPerBar());
 }
@@ -898,9 +925,15 @@ void PianoRollComponent::paintGridLines(juce::Graphics& g, juce::Colour lineColo
 
     // BEAT lines are drawn unconditionally (subject only to the density guard), including when the
     // snap division is COARSER than a beat — Snap::Bar/Whole/Half must not cost the user the beat
-    // grid they read tempo from. The subdivision level is the snap division and only exists when it
+    // grid they read tempo from. The subdivision level is the chosen division and only exists when it
     // is finer than a beat; visibleLineRange drops it when its lines would land under ~3 px apart.
-    const double division = currentGridBeats(); // 0.0 == Snap::Off: no sub-beat level to draw
+    //
+    // drawnGridBeats(), NOT currentGridBeats(): the RAW division, so switching snap OFF no longer
+    // erases the sub-beat lines. It used to, and that was backwards — free-hand editing is exactly
+    // when the user needs to SEE the grid they are placing notes against. Snap decides whether edits
+    // are magnetic; it has no business deciding what the canvas shows. Only Snap::Off (no division
+    // chosen at all) has no sub-beat level, which is what the > 0.0 test still covers.
+    const double division = drawnGridBeats();
     if (division > 0.0 && division < 1.0)
         drawLevel(division, GridLineLevel::Subdivision);
     drawLevel(1.0, GridLineLevel::Beat);
@@ -1206,43 +1239,175 @@ void PianoRollComponent::paintHeader(juce::Graphics& g) {
     g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), buttonFontPx, juce::Font::plain));
     g.drawText("Clips", backButtonBounds_.withTrimmedLeft(12), juce::Justification::centredLeft, false);
 
-    // Snap toggle ("Q"): lit while grid magnetism is on (snapEnabled AND a division to snap to),
-    // muted while off — a real on/off switch, not an action button.
+    // SNAP toggle: the one chip here that paints lit for grid magnetism (snapEnabled AND a division to
+    // snap to) — a real on/off switch, not an action. It used to be labelled "Q", which was the bug
+    // this glyph fixes: "Q" is the letter the TIMELINE binds to snap, so the same letter meant "snap"
+    // on one surface and "quantise" on the other. A drawn magnet says which it is in any language.
     const bool snapOn = viewState_.snapEnabled && viewState_.snap != TimelineViewState::Snap::Off;
-    const auto qFill = paintChip(quantiseButtonBounds_, snapOn, hoveredHeaderButton_ == HeaderButtonId::Quantise);
-    // The momentary press flash — ended by the one-shot timer in timerCallback() — still
-    // acknowledges every press, including Shift+click's one-shot quantise, ON TOP of whichever
-    // base fill (resting/hover/active) is currently showing.
+    const auto snapFill = paintChip(snapButtonBounds_, snapOn, hoveredHeaderButton_ == HeaderButtonId::Snap);
+    drawSnapGlyph(g, snapButtonBounds_, snapFill.contrasting(0.9f));
+
+    // QUANTISE (note starts -> grid): an ACTION, never lit, but dimmed when it would do nothing (no
+    // division chosen, or an empty clip). The momentary press flash — ended by the one-shot timer in
+    // timerCallback() — sits ON TOP of whichever base fill is showing, so every press is acknowledged
+    // even when the click is a no-op.
+    const auto quantiseFill =
+        paintChip(quantiseButtonBounds_, /*active=*/false, hoveredHeaderButton_ == HeaderButtonId::Quantise);
     if (quantiseFlash_) {
         g.setColour(juce::Colours::white.withAlpha(0.25f));
         g.fillRoundedRectangle(quantiseButtonBounds_.toFloat(), pillRadius);
     }
-    g.setColour(qFill.contrasting(0.9f));
-    g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), buttonFontPx, juce::Font::plain));
-    g.drawText("Q", quantiseButtonBounds_, juce::Justification::centred, false);
+    drawQuantiseGlyph(g, quantiseButtonBounds_,
+                      quantiseFill.contrasting(0.9f).withMultipliedAlpha(isQuantiseEnabled() ? 1.0f : 0.45f));
 
-    // Pitch-quantize chip: an ACTION (like Back), not a toggle, so it never paints lit — but it does
-    // paint dimmed when there is nothing to quantise into (no scale chosen, or an empty clip), the
-    // same "the control tells you it would be a no-op" treatment isQuantiseEnabled drives for "Q".
-    const bool pitchEnabled = isPitchQuantiseEnabled();
+    // QUANTISE PITCHES (note pitches -> scale): the same action-and-dimmed treatment, and a glyph
+    // that differs from the one above on the AXIS it snaps along — horizontal blocks onto vertical
+    // gridlines up there, a note head onto horizontal rows here.
     const auto pitchFill = paintChip(quantisePitchButtonBounds_, /*active=*/false,
                                      hoveredHeaderButton_ == HeaderButtonId::QuantisePitches);
-    g.setColour(pitchFill.contrasting(0.9f).withMultipliedAlpha(pitchEnabled ? 1.0f : 0.45f));
-    g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), buttonFontPx, juce::Font::plain));
-    // Drawn text, never an icon asset — the same "draw it, don't asset it" rule the Back arrow
-    // follows. U+266A (eighth note) is a plain BMP glyph the app's mono family carries, so unlike a
-    // themed icon it needs no IconLibrary entry and cannot go missing on a theme switch.
-    g.drawText(juce::String::fromUTF8("Q\xE2\x99\xAA"), quantisePitchButtonBounds_, juce::Justification::centred,
-               false);
+    drawQuantisePitchGlyph(g, quantisePitchButtonBounds_,
+                           pitchFill.contrasting(0.9f).withMultipliedAlpha(isPitchQuantiseEnabled() ? 1.0f : 0.45f));
 
-    // Scale button: same lit/muted treatment as "Q" above, but lit state tracks the LOGICAL target
-    // (scalePanelVisible_ — what the panel is animating TOWARDS) rather than the child component's
-    // own on-screen flag, which stays true for the whole close slide too (see setScalePanelVisible).
+    // Scale button: keeps its word, because "Scale" is the one label here that names a NOUN (a panel)
+    // rather than a verb, and a glyph for "the scale picker" would be a guess. Lit state tracks the
+    // LOGICAL target (scalePanelVisible_ — what the panel is animating TOWARDS) rather than the child
+    // component's own on-screen flag, which stays true for the whole close slide too.
     const auto scaleFill =
         paintChip(scaleButtonBounds_, scalePanelVisible_, hoveredHeaderButton_ == HeaderButtonId::Scale);
     g.setColour(scaleFill.contrasting(0.9f));
     g.setFont(juce::Font(juce::Font::getDefaultMonospacedFontName(), buttonFontPx, juce::Font::plain));
     g.drawText("Scale", scaleButtonBounds_, juce::Justification::centred, false);
+
+    // SHOW ONLY SCALE NOTES: a toggle, so it paints lit like Snap does. Dimmed with no scale chosen —
+    // the flag is still remembered (arm it first, pick the scale second), it simply has no visible
+    // effect yet, and saying so is better than a control that looks live and does nothing.
+    const auto filterFill =
+        paintChip(scaleFilterButtonBounds_, isScaleFilterOn(), hoveredHeaderButton_ == HeaderButtonId::ScaleFilter);
+    drawScaleFilterGlyph(
+        g, scaleFilterButtonBounds_,
+        filterFill.contrasting(0.9f).withMultipliedAlpha(activeScaleForOpenClip().has_value() ? 1.0f : 0.45f));
+}
+
+//==============================================================================
+// ---- Header chip glyphs ----
+//
+// All four are pure drawing against the chip's rect: no theme lookup (the caller resolves the colour
+// against the fill it actually painted), no state, no font. Stroke widths are fixed at 1.0-1.6 px
+// because these are ~16x16 px chips — a themed line-width token would round to the same pixel and
+// only add a way for them to disagree with each other.
+
+void PianoRollComponent::drawSnapGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour) {
+    // A MAGNET, horseshoe up: a half-annulus arc with two legs, the universal "magnetic snap" mark
+    // (Cubase, Blender, every CAD tool). Reads as a distinct silhouette at 16 px, which a letter
+    // sharing its shape with the timeline's own snap key did not.
+    const auto area = chip.toFloat().reduced(4.5f, 4.0f);
+    if (area.getWidth() < 4.0f || area.getHeight() < 4.0f)
+        return;
+
+    const float cx = area.getCentreX();
+    const float legTop = area.getCentreY() + area.getHeight() * 0.05f;
+    const float radius = area.getWidth() * 0.5f;
+    const float thickness = juce::jmax(1.2f, area.getWidth() * 0.28f);
+
+    juce::Path arc;
+    // Outer half-circle across the top, then back along the inner radius — one closed shape, so the
+    // horseshoe's opening is a real hole rather than a stroke that thins at the crown.
+    arc.addCentredArc(cx, legTop, radius, radius, 0.0f, -juce::MathConstants<float>::halfPi,
+                      juce::MathConstants<float>::halfPi, true);
+    arc.addCentredArc(cx, legTop, radius - thickness, radius - thickness, 0.0f, juce::MathConstants<float>::halfPi,
+                      -juce::MathConstants<float>::halfPi, false);
+    arc.closeSubPath();
+    g.setColour(colour);
+    g.fillPath(arc);
+
+    // The two poles below the crown, one per leg.
+    const float legBottom = area.getBottom();
+    g.fillRect(juce::Rectangle<float>(cx - radius, legTop, thickness, legBottom - legTop));
+    g.fillRect(juce::Rectangle<float>(cx + radius - thickness, legTop, thickness, legBottom - legTop));
+}
+
+void PianoRollComponent::drawQuantiseGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour) {
+    // Note blocks LANDED on VERTICAL gridlines: two faint full-height lines, and two small filled
+    // blocks sitting flush on them at different heights. The axis is the whole point — this verb moves
+    // notes horizontally in time, so the grid it snaps to is vertical.
+    const auto area = chip.toFloat().reduced(3.5f, 3.0f);
+    if (area.getWidth() < 5.0f || area.getHeight() < 5.0f)
+        return;
+
+    const float leftLine = area.getX() + area.getWidth() * 0.22f;
+    const float rightLine = area.getX() + area.getWidth() * 0.72f;
+    g.setColour(colour.withMultipliedAlpha(0.45f));
+    g.fillRect(juce::Rectangle<float>(leftLine, area.getY(), 1.0f, area.getHeight()));
+    g.fillRect(juce::Rectangle<float>(rightLine, area.getY(), 1.0f, area.getHeight()));
+
+    // Flush-LEFT on each line (their leading edge is what a start quantise aligns), and vertically
+    // staggered so the pair reads as two separate notes rather than one bar.
+    const float blockW = juce::jmax(3.0f, area.getWidth() * 0.28f);
+    const float blockH = juce::jmax(2.0f, area.getHeight() * 0.26f);
+    g.setColour(colour);
+    g.fillRect(juce::Rectangle<float>(leftLine, area.getY() + area.getHeight() * 0.12f, blockW, blockH));
+    g.fillRect(juce::Rectangle<float>(rightLine, area.getBottom() - area.getHeight() * 0.12f - blockH, blockW, blockH));
+}
+
+void PianoRollComponent::drawQuantisePitchGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour) {
+    // A note head landing on a HORIZONTAL row, with a down arrow pushing it there: three faint row
+    // lines, a filled ellipse on the bottom one, an arrow above it. Same "snapped onto the grid" idea
+    // as the chip to its left, rotated 90 degrees — which is exactly the difference between the two
+    // verbs, and the reason a viewer can tell them apart without the tooltip.
+    const auto area = chip.toFloat().reduced(3.0f, 3.0f);
+    if (area.getWidth() < 5.0f || area.getHeight() < 6.0f)
+        return;
+
+    const float rowSpacing = area.getHeight() / 3.0f;
+    g.setColour(colour.withMultipliedAlpha(0.45f));
+    for (int i = 1; i <= 3; ++i)
+        g.fillRect(
+            juce::Rectangle<float>(area.getX(), area.getY() + rowSpacing * (float)i - 0.5f, area.getWidth(), 1.0f));
+
+    const float headW = juce::jmax(3.5f, area.getWidth() * 0.46f);
+    const float headH = juce::jmax(2.5f, rowSpacing * 0.9f);
+    const float headY = area.getY() + rowSpacing * 3.0f - headH * 0.5f;
+    g.setColour(colour);
+    g.fillEllipse(area.getX(), headY, headW, headH);
+
+    // The arrow shares the note head's x centre and points DOWN at it, so the glyph reads as one
+    // motion rather than two unrelated marks.
+    const float ax = area.getX() + headW * 0.5f;
+    const float arrowTop = area.getY();
+    const float arrowTip = headY - 1.0f;
+    if (arrowTip > arrowTop) {
+        g.fillRect(juce::Rectangle<float>(ax - 0.5f, arrowTop, 1.0f, arrowTip - arrowTop));
+        juce::Path head;
+        const float halfSpan = juce::jmax(1.5f, area.getWidth() * 0.16f);
+        head.addTriangle(ax - halfSpan, arrowTip - halfSpan, ax + halfSpan, arrowTip - halfSpan, ax, arrowTip);
+        g.fillPath(head);
+    }
+}
+
+void PianoRollComponent::drawScaleFilterGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour) {
+    // A FUNNEL: the one mark that reads as "filter" everywhere, and what this toggle does — it filters
+    // which pitch ROWS the grid offers. Deliberately not an eye (that would say "hide/show a layer",
+    // and the out-of-scale rows are removed from the row mapping, not merely made invisible) and not a
+    // keyboard (indistinguishable from the keys column two pixels below it).
+    const auto area = chip.toFloat().reduced(4.0f, 3.5f);
+    if (area.getWidth() < 4.0f || area.getHeight() < 5.0f)
+        return;
+
+    const float mouthY = area.getY() + area.getHeight() * 0.52f;
+    const float stemHalf = juce::jmax(0.75f, area.getWidth() * 0.10f);
+    const float cx = area.getCentreX();
+
+    juce::Path funnel;
+    funnel.startNewSubPath(area.getX(), area.getY());
+    funnel.lineTo(area.getRight(), area.getY());
+    funnel.lineTo(cx + stemHalf, mouthY);
+    funnel.lineTo(cx + stemHalf, area.getBottom());
+    funnel.lineTo(cx - stemHalf, area.getBottom());
+    funnel.lineTo(cx - stemHalf, mouthY);
+    funnel.closeSubPath();
+
+    g.setColour(colour);
+    g.fillPath(funnel);
 }
 
 void PianoRollComponent::paintMarquee(juce::Graphics& g) {
@@ -1289,10 +1454,14 @@ juce::Rectangle<int> PianoRollComponent::headerButtonBoundsFor(HeaderButtonId wh
     switch (which) {
     case HeaderButtonId::Back:
         return backButtonBounds_;
+    case HeaderButtonId::Snap:
+        return snapButtonBounds_;
     case HeaderButtonId::Quantise:
         return quantiseButtonBounds_;
     case HeaderButtonId::QuantisePitches:
         return quantisePitchButtonBounds_;
+    case HeaderButtonId::ScaleFilter:
+        return scaleFilterButtonBounds_;
     case HeaderButtonId::Scale:
         return scaleButtonBounds_;
     case HeaderButtonId::None:
@@ -1305,10 +1474,14 @@ void PianoRollComponent::updateHeaderButtonHover(juce::Point<int> pos) {
     HeaderButtonId next = HeaderButtonId::None;
     if (backButtonBounds_.contains(pos))
         next = HeaderButtonId::Back;
+    else if (snapButtonBounds_.contains(pos))
+        next = HeaderButtonId::Snap;
     else if (quantiseButtonBounds_.contains(pos))
         next = HeaderButtonId::Quantise;
     else if (quantisePitchButtonBounds_.contains(pos))
         next = HeaderButtonId::QuantisePitches;
+    else if (scaleFilterButtonBounds_.contains(pos))
+        next = HeaderButtonId::ScaleFilter;
     else if (scaleButtonBounds_.contains(pos))
         next = HeaderButtonId::Scale;
 
@@ -1371,14 +1544,18 @@ void PianoRollComponent::resized() {
     auto header = bounds.removeFromTop(kHeaderHeight);
     backButtonBounds_ = header.removeFromLeft(60).reduced(3, 2);
     header.removeFromLeft(4);
-    quantiseButtonBounds_ = header.removeFromLeft(20).reduced(2, 2);
+    // Six chips. The GAPS carry meaning: 4 px separates groups, 2 px separates members of one group,
+    // so "snap + the two quantise verbs" read as one cluster and "scale + its row filter" as another.
+    // Every glyph chip is the same 24 px so the row reads as a toolbar rather than a ransom note.
+    snapButtonBounds_ = header.removeFromLeft(24).reduced(2, 2);
     header.removeFromLeft(2);
-    // Wider than "Q" because it carries two glyphs ("Q" + the note sign), and immediately next to it
-    // with a tighter gap than the other chips get: the two quantise verbs are one family, and their
-    // spacing is what says so.
-    quantisePitchButtonBounds_ = header.removeFromLeft(28).reduced(2, 2);
+    quantiseButtonBounds_ = header.removeFromLeft(24).reduced(2, 2);
+    header.removeFromLeft(2);
+    quantisePitchButtonBounds_ = header.removeFromLeft(24).reduced(2, 2);
     header.removeFromLeft(4);
     scaleButtonBounds_ = header.removeFromLeft(50).reduced(2, 2);
+    header.removeFromLeft(2);
+    scaleFilterButtonBounds_ = header.removeFromLeft(24).reduced(2, 2);
 
     // The panel sits WEST of the keys column, below the header row (its own controls, not this
     // header strip's buttons, are how the user works it) — carved BEFORE the keys column, at its
@@ -1567,6 +1744,9 @@ void PianoRollComponent::setActiveTool(EditTool tool) {
     dragNotes_.clear();
     resizeNotes_.clear();
     resizeUnquantized_ = false;
+    moveUnquantized_ = false;
+    cmdToggleNote_ = {};
+    cmdToggleWasSelected_ = false;
     previewDeltaBeats_ = 0.0;
     previewDeltaPitch_ = 0;
     previewDeltaVelocity_ = 0;
@@ -2263,6 +2443,51 @@ bool PianoRollComponent::transposeSelectedNotes(int semitones) {
     return true;
 }
 
+bool PianoRollComponent::transposeSelectedNotesByRow(int rowDelta) {
+    if (doc_ == nullptr || !clipId_.isValid() || rowDelta == 0)
+        return false;
+    const long long totalRows = (long long)visiblePitches_.size();
+    if (totalRows <= 0)
+        return false;
+
+    std::vector<NoteOrigin> origins;
+    long long minRow = 0, maxRow = 0;
+    bool first = true;
+    for (auto id : selection_.getSelected()) {
+        const auto* note = doc_->getNote(id);
+        if (note == nullptr)
+            continue;
+        origins.push_back({id, note->startBeat, note->lengthBeats, note->pitch, note->velocity});
+        const long long row = (long long)nearestVisibleRowIndex(note->pitch);
+        if (first || row < minRow)
+            minRow = row;
+        if (first || row > maxRow)
+            maxRow = row;
+        first = false;
+    }
+    if (origins.empty())
+        return false;
+
+    // ONE shared row delta for the whole selection, clamped so the GROUP stays inside
+    // visiblePitches_ — never per-note clamping, which would collapse a chord at either extreme. The
+    // exact clamp the Move drag's row half uses.
+    const long long delta = std::clamp((long long)rowDelta, -minRow, totalRows - 1 - maxRow);
+    if (delta == 0)
+        return true; // fully clamped: the key WAS applicable, it simply had nowhere left to go
+
+    auto mutate = [this, origins, delta] {
+        for (const auto& origin : origins)
+            doc_->moveNote(origin.id, origin.startBeat, rowShiftedPitch(origin.pitch, delta));
+    };
+    if (undoManager_)
+        undoManager_->recordTimelineChange(*doc_, mutate);
+    else
+        mutate();
+
+    repaint();
+    return true;
+}
+
 bool PianoRollComponent::selectAdjacentNote(bool forward) {
     const auto* clip = doc_ != nullptr && clipId_.isValid() ? doc_->getClip(clipId_) : nullptr;
     if (clip == nullptr || clip->notes.empty())
@@ -2405,12 +2630,16 @@ void PianoRollComponent::performQuantise() {
 // ---- Tooltips ----
 
 juce::String PianoRollComponent::getTooltipFor(juce::Point<int> pos) const {
+    if (snapButtonBounds_.contains(pos))
+        return snapTooltipText();
     if (quantiseButtonBounds_.contains(pos))
         return quantiseTooltipText();
     if (quantisePitchButtonBounds_.contains(pos))
         return quantisePitchTooltipText();
     if (scaleButtonBounds_.contains(pos))
         return scaleTooltipText();
+    if (scaleFilterButtonBounds_.contains(pos))
+        return scaleFilterTooltipText();
     return {};
 }
 
@@ -2418,22 +2647,24 @@ juce::String PianoRollComponent::getTooltip() { return getTooltipFor(getMouseXYR
 
 // Rebuilt fresh on every call (see the header comment) — reading shortcuts_ live is what makes a
 // rebind visible the very next time either tooltip is queried, with no cache and no listener.
+juce::String PianoRollComponent::snapTooltipText() const {
+    // "Snap" is the word everywhere in the roll now (Cubase parity): the chip, this tooltip, the docs.
+    // Still the SHARED "timelineSnapToggle" action (now J, not Q) — one binding for one switch.
+    const auto hint = shortcutHintFor(shortcuts_, "timelineSnapToggle", plainKey('j'));
+    juce::String text = "Snap to grid on/off";
+    if (hint.isNotEmpty())
+        text += " (" + hint + ")";
+    text += juce::String::fromUTF8(" \xE2\x80\x94 magnetism only: the chosen grid stays VISIBLE either way");
+    return text;
+}
+
 juce::String PianoRollComponent::quantiseTooltipText() const {
-    // BOTH halves are real registered actions now, so both hints are dynamic: a plain click
-    // quantises ("pianoRollQuantise", Option+Q by default) and Shift+click toggles grid magnetism
-    // ("timelineSnapToggle", the bare q shared with the panel). The verbs are this way round because
-    // a chip labelled "Q" reads as "quantise" — a toggle hiding behind the more obvious click was
-    // the surprise this swap fixes.
-    const auto quantiseHint =
-        shortcutHintFor(shortcuts_, "pianoRollQuantise", modKey('q', juce::ModifierKeys::altModifier));
-    const auto snapHint = shortcutHintFor(shortcuts_, "timelineSnapToggle", plainKey('q'));
+    const auto hint = shortcutHintFor(shortcuts_, "pianoRollQuantise", plainKey('q'));
     juce::String text = "Quantize note starts to the grid";
-    if (quantiseHint.isNotEmpty())
-        text += " (" + quantiseHint + ")";
-    text += juce::String::fromUTF8(" \xE2\x80\x94 the selected notes, or all notes when nothing is selected");
-    text += "; Shift+click toggles snap to grid on/off";
-    if (snapHint.isNotEmpty())
-        text += " (" + snapHint + ")";
+    if (hint.isNotEmpty())
+        text += " (" + hint + ")";
+    text += juce::String::fromUTF8(" \xE2\x80\x94 the selected notes, or all notes when nothing is selected. "
+                                   "Works even while snap is off");
     return text;
 }
 
@@ -2454,7 +2685,18 @@ juce::String PianoRollComponent::scaleTooltipText() const {
     juce::String text = "Scale assist";
     if (hint.isNotEmpty())
         text += " (" + hint + ")";
-    text += juce::String::fromUTF8(" \xE2\x80\x94 pick a scale, quantize pitches into it, or generate random notes");
+    text += juce::String::fromUTF8(" \xE2\x80\x94 pick a scale, or generate random notes");
+    return text;
+}
+
+juce::String PianoRollComponent::scaleFilterTooltipText() const {
+    const auto hint =
+        shortcutHintFor(shortcuts_, "pianoRollToggleScaleFilter", modKey('s', juce::ModifierKeys::altModifier));
+    juce::String text = "Show only scale notes";
+    if (hint.isNotEmpty())
+        text += " (" + hint + ")";
+    text += juce::String::fromUTF8(" \xE2\x80\x94 collapses the out-of-scale rows, and makes Up/Down step by scale "
+                                   "degree. Needs a scale picked in Scale Assist");
     return text;
 }
 
@@ -2465,9 +2707,12 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
     grabKeyboardFocus();
     dragMode_ = DragMode::None;
     pendingEmptyClick_ = false;
-    // Latched per gesture (see resizeUnquantized_): cleared here so a previous Cmd+resize can never
-    // leak its grid bypass into the next, plain, resize.
+    // Latched per gesture (see resizeUnquantized_/moveUnquantized_): cleared here so a previous
+    // Cmd+drag can never leak its grid bypass into the next, plain, one.
     resizeUnquantized_ = false;
+    moveUnquantized_ = false;
+    cmdToggleNote_ = {};
+    cmdToggleWasSelected_ = false;
 
     if (doc_ == nullptr || !clipId_.isValid() || doc_->getClip(clipId_) == nullptr)
         return;
@@ -2488,26 +2733,28 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
         requestClose();
         return;
     }
+    // Each chip now does exactly ONE thing on a plain click — no modifier variants anywhere in the
+    // header. Snap and quantise used to share the single "Q" chip (plain click vs Shift+click), which
+    // is precisely the ambiguity the split into separate glyph chips removes.
+    if (snapButtonBounds_.contains(pos)) {
+        toggleSnap();
+        return;
+    }
     if (quantiseButtonBounds_.contains(pos)) {
         flashQuantiseButton(); // feedback even when the click is a no-op
-        // SWAPPED relative to the original chip: a plain click now QUANTISES (a chip labelled "Q" on
-        // a note editor reads as "quantise", and burying the verb behind Shift was the surprise),
-        // and Shift+click is the grid-magnetism toggle. The toggle keeps a home here rather than
-        // moving off the chip entirely because it is still the thing the chip paints LIT.
-        if (e.mods.isShiftDown())
-            toggleSnap();
-        else
-            performQuantise();
+        performQuantise();
         return;
     }
     if (quantisePitchButtonBounds_.contains(pos)) {
-        // Straight to the shared verb — no modifier variants: there is only one thing to do here,
-        // and it is a no-op (silently, exactly like the "Q" chip's) when no scale is chosen.
-        quantisePitchesToActiveScale();
+        quantisePitchesToActiveScale(); // silently a no-op with no scale chosen, like the chip's dim
         return;
     }
     if (scaleButtonBounds_.contains(pos)) {
         toggleScalePanel();
+        return;
+    }
+    if (scaleFilterButtonBounds_.contains(pos)) {
+        toggleScaleFilter();
         return;
     }
     if (pos.y < kHeaderHeight)
@@ -2535,21 +2782,39 @@ void PianoRollComponent::mouseDown(const juce::MouseEvent& e) {
             startAudition(note->pitch, note->velocity);
     }
 
-    if (hit && hit->onRightEdge && e.mods.isCommandDown() && !e.mods.isShiftDown()) {
-        // Cmd on a RIGHT EDGE is an unquantized resize (11.2) — tested before the velocity-scrub
-        // branch below precisely because it is the more specific of the two Cmd gestures. Cmd
-        // anywhere else on the note still scrubs velocity, unchanged.
-        if (!selection_.contains(hit->id))
-            selection_.setSelection({hit->id});
-        resizeUnquantized_ = true;
+    // CMD now means ONE thing on a note, whichever part of it you grab: "do this without the grid".
+    // Right edge -> unsnapped resize, body -> unsnapped move. That consistency is why velocity scrub
+    // moved off Cmd and onto Option below; a single modifier meaning "smooth" on one half of a note
+    // and "change the volume" on the other half was the thing worth fixing.
+    if (hit && e.mods.isCommandDown() && !e.mods.isShiftDown()) {
+        if (hit->onRightEdge) {
+            if (!selection_.contains(hit->id))
+                selection_.setSelection({hit->id});
+            resizeUnquantized_ = true;
+            beginMoveOrResize(*hit, pos);
+            repaint();
+            return;
+        }
+
+        // Note BODY. Cmd+CLICK is an additive-select toggle and Cmd+DRAG is an unsnapped move, and at
+        // mouse-down those are indistinguishable — so the note is ADDED now (the move needs it in the
+        // selection) and mouse-up completes the toggle if nothing actually moved. See cmdToggleNote_.
+        cmdToggleNote_ = hit->id;
+        cmdToggleWasSelected_ = selection_.contains(hit->id);
+        selection_.add(hit->id);
+        moveUnquantized_ = true;
         beginMoveOrResize(*hit, pos);
         repaint();
         return;
     }
 
-    if (hit && e.mods.isCommandDown() && !e.mods.isShiftDown()) {
-        // Cmd is ADDITIVE on a note (never a toggle — the drag that may follow scrubs the whole
-        // selection's velocity, and yanking the grabbed note out of it mid-gesture is never wanted).
+    if (hit && e.mods.isAltDown() && !e.mods.isShiftDown()) {
+        // Velocity scrub, moved here from Cmd (see above). Option is free for a mouse drag on this
+        // surface: the only other Option bindings the roll owns are KEY chords (Alt+arrows navigate
+        // notes, Option+S toggles the row filter), and a modifier can mean one thing for the keyboard
+        // and another for the mouse without either being ambiguous. Still ADDITIVE, never a toggle —
+        // the drag scrubs the whole selection's velocity, so yanking the grabbed note out of it
+        // mid-gesture is never what was wanted.
         selection_.add(hit->id);
         beginVelocityScrub(pos);
         repaint();
@@ -2659,8 +2924,13 @@ void PianoRollComponent::updateDragPreviewFromLastPointer() {
         // computed against the scroll position that was current at mouseDown. See
         // mouseDownBeat_'s comment.
         const double deltaBeatsRaw = xToBeat((double)pos.x) - mouseDownBeat_;
-        const double snappedAnchorStart = snappedBeatAt(anchorOriginalStart + deltaBeatsRaw);
-        double delta = snappedAnchorStart - anchorOriginalStart;
+        // Cmd bypasses the grid entirely (the note follows the pointer continuously), the same way it
+        // does for a right-edge resize. Latched at mouse-down (moveUnquantized_), never re-read from
+        // the live modifiers — a gesture must not change meaning half way through because Cmd was
+        // released.
+        const double targetAnchorStart =
+            moveUnquantized_ ? anchorOriginalStart + deltaBeatsRaw : snappedBeatAt(anchorOriginalStart + deltaBeatsRaw);
+        double delta = targetAnchorStart - anchorOriginalStart;
 
         // Clamp the shared delta so the WHOLE group stays inside [0, clipLength) — the same
         // clamp-the-group-together reasoning TimelineClipLaneArea::mouseDrag's Move branch uses
@@ -2857,6 +3127,24 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent&) {
         return;
     }
 
+    // A Cmd press on a note BODY that never actually moved anything was a Cmd+CLICK, not a
+    // Cmd+drag: finish the additive-select TOGGLE the press could only half-commit. A note that was
+    // already selected before the press comes back out; one that wasn't simply stays added. Tested
+    // before the Move commit below and short-circuits it, because "nothing moved" is exactly the
+    // condition that commit already declines to act on.
+    if (cmdToggleNote_.isValid() && dragMode_ == DragMode::Move && std::abs(previewDeltaBeats_) <= 1e-9 &&
+        previewDeltaPitch_ == 0) {
+        if (cmdToggleWasSelected_)
+            selection_.remove(cmdToggleNote_);
+        cmdToggleNote_ = {};
+        cmdToggleWasSelected_ = false;
+        dragMode_ = DragMode::None;
+        dragNotes_.clear();
+        moveUnquantized_ = false;
+        repaint();
+        return;
+    }
+
     if (dragMode_ == DragMode::Move && (std::abs(previewDeltaBeats_) > 1e-9 || previewDeltaPitch_ != 0)) {
         const auto notes = dragNotes_;
         const double delta = previewDeltaBeats_;
@@ -2921,6 +3209,9 @@ void PianoRollComponent::mouseUp(const juce::MouseEvent&) {
     dragNotes_.clear();
     resizeNotes_.clear();
     resizeUnquantized_ = false;
+    moveUnquantized_ = false;
+    cmdToggleNote_ = {};
+    cmdToggleWasSelected_ = false;
     previewDeltaBeats_ = 0.0;
     previewDeltaPitch_ = 0;
     previewDeltaVelocity_ = 0;
@@ -3145,37 +3436,42 @@ bool PianoRollComponent::matchesAction(const juce::KeyPress& key, const juce::St
 }
 
 bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {
-    // The quantise family, coarsest chord last: Option+Shift+Q quantises PITCHES into the scale,
-    // Option+Q quantises note STARTS to the grid, and a bare Q toggles grid magnetism (the same
-    // three verbs the header's "Q♪" chip, "Q" chip and Shift+click on "Q" perform). Handled here so
-    // all three work while the roll has focus; the panel handles the bare Q for every other focus
-    // target inside the timeline.
+    // Q IS QUANTISE HERE, and J is snap. Cubase parity, and the user's call: on a note editor the
+    // bare, most reachable key should be the verb you reach for constantly, not an on/off switch you
+    // set once a session. Snap is still the SHARED "timelineSnapToggle" action rather than a
+    // piano-roll one of its own — two rebindable "Toggle Snap" actions defaulting to the same key and
+    // flipping the same TimelineViewState flag would be a Settings list nobody could reason about —
+    // so this is one binding for one switch, whichever surface has focus; only the key it sits on
+    // moved (Q -> J), and it moved for BOTH surfaces at once, which is the point.
     //
-    // Option (altModifier) rather than Shift for the two quantise verbs: they are one family and
-    // should differ only by Shift, which frees the plain Shift+Q chord. macOS delivers Option+letter
-    // as a Unicode glyph rather than the letter, which is exactly why these are stored and matched as
-    // KEY CODE + modifier set (see matchesAction/ShortcutManager::keyPressMatches) and never as a
-    // character.
-    //
-    // The snap toggle shares "timelineSnapToggle" with the panel — one binding, one key, whichever
-    // surface has focus.
-    // Option+Shift+Q first: it is the most specific of the three (Option+Q is the start quantise and
-    // a bare q is the snap toggle), so a user who rebinds only one of the family cannot end up with
-    // a less specific one swallowing it — the same ordering rule the Shift+Up/Up pair follows below.
+    // Option+Shift+Q (pitch quantise) is matched FIRST because it is the most specific chord of the
+    // family, so a user who rebinds only one member cannot end up with a broader one swallowing it —
+    // the same ordering rule the Shift+Up/Up pair follows below. macOS delivers Option+letter as a
+    // Unicode glyph rather than the letter, which is why it is stored and matched as KEY CODE +
+    // modifier set (see matchesAction/ShortcutManager::keyPressMatches) and never as a character.
     if (matchesAction(key, "pianoRollQuantisePitches",
                       modKey('q', juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier))) {
         // Returns the action's OWN applicability, so the key falls through when there is no scale to
         // quantise into rather than being silently swallowed.
         return quantisePitchesToActiveScale();
     }
-    if (matchesAction(key, "pianoRollQuantise", modKey('q', juce::ModifierKeys::altModifier))) {
+    if (matchesAction(key, "pianoRollQuantise", plainKey('q'))) {
         flashQuantiseButton();
         performQuantise();
         return true;
     }
-    if (matchesAction(key, "timelineSnapToggle", plainKey('q'))) {
-        flashQuantiseButton();
+    if (matchesAction(key, "timelineSnapToggle", plainKey('j'))) {
         toggleSnap();
+        return true;
+    }
+
+    // Option+S: "show only scale notes", the keyboard twin of the header's funnel chip. Clear of
+    // Ctrl+S (the scale PANEL toggle below) on every platform — different modifier, and modifier
+    // equality is exact — including Windows/Linux, where JUCE's Cmd IS Ctrl but Alt is still Alt.
+    if (matchesAction(key, "pianoRollToggleScaleFilter", modKey('s', juce::ModifierKeys::altModifier))) {
+        if (!clipId_.isValid())
+            return false; // nothing open to filter: let the key mean whatever it means elsewhere
+        toggleScaleFilter();
         return true;
     }
 
@@ -3259,10 +3555,14 @@ bool PianoRollComponent::keyPressed(const juce::KeyPress& key) {
     if (matchesAction(key, "pianoRollTransposeOctaveDown",
                       modKey(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier)))
         return transposeSelectedNotes(-12);
+    // Up/Down step by one VISIBLE ROW, not one semitone — which is a scale DEGREE while "show only
+    // scale notes" is on and a plain semitone while it is off (visiblePitches_ is all 128 then, so a
+    // row step IS a semitone step). One implementation, so the two cannot drift; the octave pair above
+    // deliberately stays in semitones. See transposeSelectedNotesByRow.
     if (matchesAction(key, "pianoRollTransposeUp", plainKey(juce::KeyPress::upKey)))
-        return transposeSelectedNotes(1);
+        return transposeSelectedNotesByRow(1);
     if (matchesAction(key, "pianoRollTransposeDown", plainKey(juce::KeyPress::downKey)))
-        return transposeSelectedNotes(-1);
+        return transposeSelectedNotesByRow(-1);
 
     return false;
 }

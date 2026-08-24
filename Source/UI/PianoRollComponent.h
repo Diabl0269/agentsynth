@@ -501,9 +501,29 @@ public:
         return (int)std::llround((double)scalePanelOpenProgress_ * (double)kScalePanelWidth) + kKeysColumnWidth;
     }
 
-    // Flips the shared snap switch (TimelineViewState::snapEnabled), flashes the Q button and
-    // fires onSnapToggled. The Q button and the panel-wide Q key both land here.
+    // Flips the shared snap switch (TimelineViewState::snapEnabled), flashes the Snap chip and fires
+    // onSnapToggled. The Snap chip and the roll's "pianoRollSnapToggle" key (J by default) both land
+    // here. The switch itself is still the SHARED TimelineViewState one — only the KEY that reaches it
+    // is per-surface (the timeline panel keeps its own bare-Q binding), so snap is never on in one
+    // editor and off in the other.
     void toggleSnap();
+
+    /** "Show only scale notes" — the row filter (see setScaleContext's `pitchVisibilityOn`). THE one
+     *  entry point the header chip, the "pianoRollToggleScaleFilter" key (Option+S) and the scale
+     *  panel's own checkbox all share, so the three can never disagree about the state: it writes the
+     *  open clip's ClipScaleMemory, pushes the context, and reflects the new value back INTO the panel
+     *  (setSelection, which fires no callback — it is a reflection, not an edit).
+     *
+     *  A no-op with no clip open. Deliberately NOT gated on a scale being chosen: the flag is
+     *  remembered per clip either way and simply has no visible effect until a scale exists, which is
+     *  what lets the user arm it first and pick the scale second. */
+    void toggleScaleFilter();
+    /** The filter's logical state for the open clip — what the chip paints lit. False with no clip. */
+    bool isScaleFilterOn() const noexcept;
+    /** Whether rows are ACTUALLY being filtered right now: the flag above AND a real scale to filter
+     *  by. This — not the flag — is what makes Up/Down step by scale degree (see
+     *  transposeSelectedNotesByRow). */
+    bool isRowFilterActive() const noexcept { return pitchVisibilityOn_ && (bool)isInScale_; }
 
     // ---- Follow playhead ----
 
@@ -557,8 +577,10 @@ public:
 
     // ---- Test hooks (mirrors TimelineClipLaneArea's getClipRect / isMarqueeActiveForTest) ----
     juce::Rectangle<int> getBackButtonBounds() const noexcept { return backButtonBounds_; }
+    juce::Rectangle<int> getSnapButtonBounds() const noexcept { return snapButtonBounds_; }
     juce::Rectangle<int> getQuantiseButtonBounds() const noexcept { return quantiseButtonBounds_; }
     juce::Rectangle<int> getQuantisePitchButtonBounds() const noexcept { return quantisePitchButtonBounds_; }
+    juce::Rectangle<int> getScaleFilterButtonBounds() const noexcept { return scaleFilterButtonBounds_; }
     juce::Rectangle<int> getKeysColumnBounds() const noexcept { return keysColumnBounds_; }
     juce::Rectangle<int> getNoteGridBounds() const noexcept { return noteGridBounds_; }
     int getFirstVisiblePitchForTest() const noexcept { return firstVisiblePitch_; }
@@ -600,6 +622,9 @@ public:
     // many lines at a given spacing are inside the grid region — both computed from state alone, so
     // a test can assert "the gridlines follow the snap division" without going near paint().
     double getGridDivisionForTest() const noexcept { return currentGridBeats(); }
+    // The division the grid is DRAWN at, which (unlike the one above) survives the snap switch going
+    // off — see drawnGridBeats().
+    double getDrawnGridDivisionForTest() const noexcept { return drawnGridBeats(); }
     int getGridLineCountForTest(double spacingBeats) const noexcept;
 
     // True while the "Q" button is showing its momentary pressed highlight, and whether it would do
@@ -672,7 +697,9 @@ public:
     synth::ClipId getLastExtendPromptClipForTest() const noexcept { return lastExtendPromptClip_; }
 
     // ---- Header button hover test hooks (Task D chip affordance) ----
-    enum class HeaderButtonId { None, Back, Quantise, QuantisePitches, Scale };
+    // Six chips, left to right: Back ("Clips"), Snap, Quantise, QuantisePitches, Scale,
+    // ScaleFilter. Snap and ScaleFilter are TOGGLES (they paint lit); the other four are actions.
+    enum class HeaderButtonId { None, Back, Snap, Quantise, QuantisePitches, Scale, ScaleFilter };
     HeaderButtonId getHoveredHeaderButtonForTest() const noexcept { return hoveredHeaderButton_; }
     bool isHeaderButtonHoveredForTest(HeaderButtonId which) const noexcept { return hoveredHeaderButton_ == which; }
 
@@ -745,7 +772,15 @@ private:
     // Absolute-beat span + pitch -> the note's rect, through the roll's OWN mapping (beatToX).
     juce::Rectangle<int> computeNoteRect(double absStartBeat, double absLengthBeats, int pitch) const;
     double currentBeatsPerBar() const;
-    double currentGridBeats() const; // viewState_.divisionBeats(currentBeatsPerBar())
+    // MAGNETISM only: viewState_.divisionBeats(...), which is 0.0 while the snap switch is off. Every
+    // caller that snaps an edit reads this; nothing that PAINTS may.
+    double currentGridBeats() const;
+    // DRAWING only: viewState_.divisionBeatsRaw(...) — the chosen division regardless of the snap
+    // switch. The two used to be the same function, which made turning snap off erase the sub-beat
+    // gridlines: the user lost the grid they were reading while free-hand editing, which is exactly
+    // when they need to see it. Snap governs whether edits are magnetic, never whether the grid is
+    // visible.
+    double drawnGridBeats() const;
     double snappedBeatAt(double rawBeat) const;
     // Clamps a clip-relative [start, start+length) span into [0, clip->lengthBeats) — notes can
     // only exist inside the clip. TimelineDoc itself has no upper clamp (only startBeat >= 0), so
@@ -916,6 +951,22 @@ private:
     // / inside [0, 127] — never per-note clamping, which would silently reshape a chord.
     bool nudgeSelectedNotes(int direction);
     bool transposeSelectedNotes(int semitones);
+    /** Up/Down by ONE VISIBLE ROW rather than one semitone: `rowDelta` is a step through
+     *  visiblePitches_, resolved per note by rowShiftedPitch — the SAME seam a Move drag's vertical
+     *  half uses, so an arrow key and a drag can never land a note on a pitch the other one couldn't.
+     *
+     *  That single implementation is what makes Up/Down scale-aware for free. With "show only scale
+     *  notes" ON, visiblePitches_ is the scale's pitches (plus any the clip already uses), so a step
+     *  is the next SCALE DEGREE and an arrow key can no longer strand a note on a hidden
+     *  out-of-scale row. With the filter off, visiblePitches_ is all 128 and a row step IS a
+     *  semitone step — chromatic, bit for bit what it always was, by construction rather than by a
+     *  parallel code path that could drift.
+     *
+     *  One SHARED row delta for the whole selection, clamped so the group stays inside
+     *  visiblePitches_ (never per-note clamping, which would silently reshape a chord — the same rule
+     *  the drag's row clamp follows). The OCTAVE actions stay on transposeSelectedNotes(±12): an
+     *  octave is twelve semitones by definition, not twelve scale degrees. */
+    bool transposeSelectedNotesByRow(int rowDelta);
 
     // ---- Alt+Left/Right note navigation (selection only — never a mutation, never an undo step) ----
     // Selects the note next to the current selection in the clip's CANONICAL order — (startBeat,
@@ -956,9 +1007,26 @@ private:
     // Rebuilt fresh on every call by reading shortcuts_ live, so a rebind is reflected the very
     // next time getTooltipFor() is queried — no cache, no listener needed (unlike
     // TimelinePanelComponent's real juce::Button tooltips, which DO cache and therefore need one).
+    juce::String snapTooltipText() const;
     juce::String quantiseTooltipText() const;
     juce::String quantisePitchTooltipText() const;
     juce::String scaleTooltipText() const;
+    juce::String scaleFilterTooltipText() const;
+
+    // ---- Header chip glyphs (drawn vector paths — see paintHeader) ----
+    //
+    // Four one-off shapes, drawn rather than assetted (the "draw it, don't asset it" rule the Back
+    // arrow follows) and rendered in a colour the caller derives from the chip's ACTUAL fill, so they
+    // stay legible on the resting, hover and lit fills in every theme. No font is involved: the
+    // letters they replace were the problem — "Q" for the grid toggle was the same letter the timeline
+    // uses for snap, and a second "Q" beside it for pitch-quantize told the user nothing about which
+    // was which.
+    //
+    // Each takes the chip's rect and insets itself, so a chip-width change needs no glyph edit.
+    static void drawSnapGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour);
+    static void drawQuantiseGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour);
+    static void drawQuantisePitchGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour);
+    static void drawScaleFilterGlyph(juce::Graphics& g, juce::Rectangle<int> chip, juce::Colour colour);
 
     // The in-flight resize's length for one snapshotted note: the grabbed note gets previewLength_
     // verbatim (it is what the pointer says, snap and floor already applied), every other note gets
@@ -1168,6 +1236,17 @@ private:
     // Latched at mouse-down and never re-read from the live modifiers — a gesture must not change
     // meaning half way through because the user let go of Cmd.
     bool resizeUnquantized_ = false;
+    // Cmd+drag on a note BODY: the move ignores the grid, the same way Cmd+drag on the right EDGE
+    // ignores it for a resize (one modifier, one meaning — "do this smoothly"). Latched at mouse-down
+    // for the same reason resizeUnquantized_ is.
+    bool moveUnquantized_ = false;
+    // Cmd+CLICK on a note is an additive-select TOGGLE, but Cmd+DRAG is an unsnapped move — and at
+    // mouse-down the two are indistinguishable. So the note is ADDED immediately (the drag needs it in
+    // the selection) and, if the gesture turns out not to have moved anything, mouse-up undoes that:
+    // a note that was ALREADY selected before the press is removed, completing the toggle. Same
+    // deferred-classification trick pendingEmptyClick_ uses for the empty-grid press.
+    synth::NoteId cmdToggleNote_;
+    bool cmdToggleWasSelected_ = false;
     // The length the last overrun prompt asked for (0.0 = never prompted) — a test hook, and the one
     // piece of the prompt that outlives the async alert. See promptExtendClipToFitNotes.
     double lastExtendPromptLength_ = 0.0;
@@ -1302,9 +1381,16 @@ private:
     std::vector<ClipboardNote> noteClipboard_;
 
     juce::Rectangle<int> backButtonBounds_;
+    // The grid-magnetism TOGGLE (a drawn magnet glyph) — the only chip here that paints lit for snap.
+    juce::Rectangle<int> snapButtonBounds_;
+    // Quantise note STARTS to the grid (a drawn "blocks aligned on gridlines" glyph). An action.
     juce::Rectangle<int> quantiseButtonBounds_;
-    // The pitch-quantize chip ("Q♪"), immediately right of the start-quantize "Q" — see paintHeader.
+    // Quantise note PITCHES into the scale (a drawn "note head snapping onto a row" glyph).
     juce::Rectangle<int> quantisePitchButtonBounds_;
+    // "Show only scale notes" — the row filter, surfaced here as its PRIMARY control (a drawn funnel
+    // glyph). A toggle, so it paints lit; shares one state with the scale panel — see
+    // toggleScaleFilter().
+    juce::Rectangle<int> scaleFilterButtonBounds_;
     juce::Rectangle<int> keysColumnBounds_;
     juce::Rectangle<int> noteGridBounds_;
 

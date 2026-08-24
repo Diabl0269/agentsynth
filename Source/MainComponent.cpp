@@ -2293,6 +2293,27 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
             continue;
         return commandManager.invokeDirectly(cmdId, true);
     }
+
+    // LAST-CHANCE FORWARD for a short, explicit list of timeline-panel surface actions.
+    //
+    // The bug this fixes: a surface action only runs if the focused component is inside the owning
+    // panel's subtree, because that is how JUCE bubbles an unhandled key. Under the timeline panel
+    // the ONLY things that take keyboard focus are the clip lane area and the piano roll — the
+    // ruler, the track headers and the transport bar do not. So setting the loop locators by
+    // dragging the ruler (the obvious way to do it) leaves focus on the canvas, and
+    // TimelinePanelComponent::keyPressed never saw the locator-jump keystroke at all: it died here,
+    // silently, because a surface action has no command to dispatch.
+    //
+    // Deliberately a WHITELIST of two ids rather than a blanket forward. Forwarding everything the
+    // panel resolves would make its bare letters and tool digits (J/L/P/F, 1/3/4/5/7/8) fire while
+    // the graph canvas has focus, which is a different feature with its own design question. These
+    // two act on the transport, are chorded, and mean nothing on any other surface.
+    if (isTimelineVisible) {
+        static const juce::StringArray forwardsToTimelinePanel{"timelineJumpToLocator1", "timelineJumpToLocator2"};
+        for (const auto& action : shortcutManager.getActionsForKeyPress(key))
+            if (forwardsToTimelinePanel.contains(action))
+                return timelinePanel.keyPressed(key);
+    }
     return false;
 }
 

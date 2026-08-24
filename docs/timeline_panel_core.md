@@ -164,9 +164,19 @@ reinterpret every saved grid choice). `Bar` snaps to
 multiples of `beatsPerBar` (`tsNum * 4 / tsDen` off the transport's time signature — same formula
 `TransportService::getPosition()` already uses). Ties round up (toward +infinity, beats are never
 negative in practice). On top of the division sits a master switch, `TimelineViewState::snapEnabled`
-— the piano roll's `Q` button and the panel-wide `Q` key toggle it; `divisionBeats()` (the effective
-grid every magnetic edit and grid paint reads) returns 0.0 while it is off, and
-`divisionBeatsRaw()` keeps returning the chosen division (what the roll's one-shot quantise uses).
+— the panel's `Snap` button and the panel-wide **`J`** key toggle it (Cubase's snap key; `Q` is
+Cubase's *quantise*, which is what the roll uses it for, so one letter no longer means two verbs
+depending on which timeline surface has focus).
+
+**The switch governs MAGNETISM, not the grid.** `divisionBeats()` — what every magnetic edit reads —
+returns 0.0 while the switch is off; `divisionBeatsRaw()` keeps returning the chosen division, and
+**every grid PAINT site reads the raw one**. Turning snap off must not change which lines are drawn:
+it stops edits being pulled onto the division, and a ruler that dropped its subdivision lines at the
+same moment left the user eyeballing positions against nothing. The lanes-grid painter
+(`TimelinePanelComponent::paint()`) and the piano roll's gridlines both take `divisionBeatsRaw()`
+for that reason; `TimelineClipLaneArea::floorSnappedBeatAt`/`ceilSnappedBeatAt`/`minDrawLengthBeats`
+take `divisionBeats()`, because those ARE the magnetism. `TimelinePanelGridDrawingTest.SnapOffKeeps-
+TheSubdivisionLinesDrawn` pins the split.
 Picking a division from the combo flips the switch back on. The snap choice lives in a
 `juce::ComboBox` docked in the transport bar's right-hand side (items `Off/Bar/1/1⁄2/1⁄4/1⁄8/1⁄16`;
 `synth::ui::TimelineTransportBar` fills the rest of that strip, left-aligned — see §5 below) and
@@ -272,10 +282,21 @@ playhead already use in this same 24 px strip). One `recordTimelineChange`. It n
 **How they draw.** `buildMarkerFlags()` is the single enumeration `paint()` and hit-testing both walk
 — computing them separately is how a drawn flag drifts from the clickable one, the same rule
 `GraphEditor::buildVisibleCables` exists to enforce for wires (`docs/layout_selection_canvas.md` §3). Each flag is a filled tab in the
-strip's LOWER band (`y = height - kMarkerFlagHeight - 1`, clear of the loop brace above it), anchored
-at the marker's beat and running right, plus a full-height 1 px stem at the beat itself so the exact
-position stays readable when the label is clipped. Culling is **per flag**, not per marker: a flag
-whose anchor has scrolled off the left edge may still have most of its tab on screen.
+strip's own **marker band** — a dedicated sub-band along the bottom edge — anchored at the marker's
+beat and running right, plus a full-height 1 px stem at the beat itself so the exact position stays
+readable when the label is clipped. Culling is **per flag**, not per marker: a flag whose anchor has
+scrolled off the left edge may still have most of its tab on screen.
+
+**The band, and why it exists.** Flags were first drawn in the strip's lower HALF — which is where
+the bar numbers are vertically centred, so a marker at beat 4 was painted straight over the ruler's
+own "4". The numbers row and the marker band now **tile** the strip's height instead of overlapping
+it: `rulerLabelRowHeight(componentHeight)` is the height the bar/beat labels are centred in
+(`height - kMarkerBandHeight`, or the full height on a strip too short to carve a band out of), and
+everything below it belongs to markers. That helper is the ONE place the split lives — `paint()`
+centres its labels in it and `buildMarkerFlags()` starts the band where it ends, so a number and a
+flag can never be handed overlapping rows. At the themed 24 px the numbers get `0..14` and a flag
+gets `14..23`. The **stem** is the one thing that deliberately crosses the boundary: it is what
+names the exact beat, and it is 1 px.
 
 The tab's WIDTH comes from the label's character COUNT (`markerFlagWidthFor(textLength)`, clamped to
 `[kMarkerMinFlagWidth, kMarkerMaxFlagWidth]`), never from measured text — the clickable rect and the
@@ -298,7 +319,20 @@ outside a flag rect behaves exactly as it did.
 | Drag a flag | Moves the marker, snapped through the shared `TimelineViewState` and clamped at beat 0. The drag is a **preview** (`markerDragBeat_`); the drop commits it as ONE `moveMarker` undo step. `buildMarkerFlags()` reports the preview beat, so the flag the user is looking at is the one the drop commits — and hit-testing follows it for free |
 | Press a flag with no drag | **Nothing.** A stray click must not quietly re-snap the marker it landed on |
 | Cmd+click a flag | Falls through to the zone gesture (switch looping off). A marker must not punch small dead holes in a strip-wide gesture — and Cmd is not `isPopupMenu()`, so a macOS Ctrl+click still opens the menu below |
+| **Double-click a flag** | Opens the inline rename editor directly — the discoverable path, next to the menu's `Rename…` rather than replacing it |
 | Right-click a flag | **Rename… / Change colour… / Delete** (`MarkerContextChoice`) |
+
+**Double-click to rename** is scoped to flag hits only. The ruler had **no** `mouseDoubleClick`
+override at all before this, so nothing was taken: off a flag the gesture still behaves as the two
+ordinary clicks it always was (a seek in the playhead zone, the start of a loop drag in the loop
+zone), and a right-button double-click stays the context menu's business.
+
+One ordering detail is load-bearing. JUCE delivers a double-click as *down, up, down, doubleClick,
+up* — so by the time `mouseDoubleClick` runs, the second press has already latched a marker drag.
+The handler therefore **leaves the latch alone** and only clears `markerDragMoved_`: the trailing
+`mouseUp` then takes the marker branch, commits nothing (a press that never dragged is a no-op) and
+tidies up. Clearing `draggingMarker_` instead would send that `mouseUp` into the loop/playhead branch
+under a STALE latched `gestureZone_` and seek the cursor out from under the editor being opened.
 
 `Rename…` opens an inline `juce::TextEditor` over the flag (`beginRenameMarker`), widened to at least
 96 px because an unlabelled flag's tab is 9 px and nobody can type into that, and pulled back inside
@@ -669,9 +703,11 @@ restricts; asking for a repaint is.
 
 **Follow playhead.** A toggle button sits immediately next to the snap toggle in the panel's
 snap/tool strip (`followPlayheadButton_`, tinted via `Icon::FollowPlayhead` — see [`theming.md`
-§3](theming.md#3-icon-tinting)). Both `kFollowPlayheadButtonWidth` and the `"Q"` snap toggle's
-`kSnapToggleButtonWidth` are 30 px now (up from 26, from the timeline-panel button-size sweep) —
-grown together since the two sit side by side and read as one group. Backed by the boolean
+§3](theming.md#3-icon-tinting)). `kFollowPlayheadButtonWidth` is 30 px (up from 26, from the
+timeline-panel button-size sweep); the snap toggle's `kSnapToggleButtonWidth` is **46 px**, wide
+enough for the word `"Snap"`. The button is labelled with the VERB, not with its key: the key moved
+from Q to J, and a button that spells its own letter goes stale the moment a user rebinds it — the
+live key is in the tooltip, resolved through `synth::shortcutHintFor`. Backed by the boolean
 preference `"timelineFollowPlayhead"`
 (loaded/persisted the same way the snap-enabled flag is). Turning it on page-flips the panel's
 view horizontally so the playhead never scrolls off screen while playing. The check rides the

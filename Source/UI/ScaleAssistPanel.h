@@ -1,7 +1,10 @@
 #pragma once
 
-// Scale-assist panel for the piano roll: root/scale pickers, a custom-scale editor, the pitch-
-// visibility toggle, the quantize action and a random-generation block. Deliberately dumb — it
+// Scale-assist panel for the piano roll: root/scale pickers, a custom-scale editor, the
+// show-only-scale-notes toggle and a random-generation block. Pitch-quantize is deliberately NOT
+// here: it has exactly one entry point now, the roll's header chip (plus its Option+Shift+Q key). A
+// button that duplicated it inside a panel the user has to open first was a second door to the same
+// room, and the two could only ever disagree about their enabled state. Deliberately dumb — it
 // holds no reference to the roll, no TimelineDoc and no undo manager. Every action the roll needs
 // to react to travels OUT through a std::function callback, and every piece of state the roll
 // needs to push BACK in (switching clips, restoring a persisted scale) travels IN through
@@ -32,7 +35,7 @@ public:
         setComponentID("scaleAssistPanel");
         buildRootAndScaleControls();
         buildCustomScaleEditor();
-        buildPitchVisibilityAndQuantizeControls();
+        buildPitchVisibilityControl();
         buildRandomGenerationControls();
         rebuildScaleCombo();
         showCustomEditor(false);
@@ -76,8 +79,6 @@ public:
         }
 
         pitchVisibilityToggle_.setBounds(bounds.removeFromTop(22));
-        bounds.removeFromTop(6);
-        quantizeButton_.setBounds(bounds.removeFromTop(24));
         bounds.removeFromTop(10);
 
         auto minRow = bounds.removeFromTop(22);
@@ -122,7 +123,6 @@ public:
         }
         selectScaleComboForCurrentSelection();
         pitchVisibilityToggle_.setToggleState(pitchVisibilityOn_, juce::dontSendNotification);
-        quantizeButton_.setEnabled(selectedScale_.has_value());
         showCustomEditor(false);
         repaint();
     }
@@ -142,7 +142,6 @@ public:
     // ---- Callbacks the owner wires (see the class comment) ----
     std::function<void(std::optional<synth::MusicalScale>)> onScaleChanged;
     std::function<void(bool)> onPitchVisibilityChanged;
-    std::function<void()> onQuantizePitches;
     // `addToExisting` is the toggle's state at the moment Generate was pressed, passed BY VALUE
     // rather than left for the owner to read back off the panel: the owner's handler mutates the doc
     // (and can repaint/rebuild), so nothing it needs may depend on this component still being in the
@@ -153,7 +152,6 @@ public:
     juce::ComboBox& getRootCombo() noexcept { return rootCombo_; }
     juce::ComboBox& getScaleCombo() noexcept { return scaleCombo_; }
     juce::ToggleButton& getPitchVisibilityToggle() noexcept { return pitchVisibilityToggle_; }
-    juce::TextButton& getQuantizeButton() noexcept { return quantizeButton_; }
     juce::TextButton& getGenerateButton() noexcept { return generateButton_; }
     juce::ToggleButton& getAddToExistingToggle() noexcept { return addToExistingToggle_; }
     juce::ComboBox& getMinNoteCombo() noexcept { return minNoteCombo_; }
@@ -313,22 +311,17 @@ private:
         saveCustomScaleButton_.onClick = [this] { handleSaveCustomScale(); };
     }
 
-    void buildPitchVisibilityAndQuantizeControls() {
+    void buildPitchVisibilityControl() {
         addAndMakeVisible(pitchVisibilityToggle_);
         pitchVisibilityToggle_.setComponentID("scaleAssistPitchVisibilityToggle");
-        pitchVisibilityToggle_.setButtonText("Show only scale pitches");
+        // Named to match the header chip's tooltip word for word — they are two views of ONE piece of
+        // state (the roll's toggleScaleFilter is the single writer), and two names for one switch is
+        // how a user ends up believing they are two switches.
+        pitchVisibilityToggle_.setButtonText("Show only scale notes");
         pitchVisibilityToggle_.onClick = [this] {
             pitchVisibilityOn_ = pitchVisibilityToggle_.getToggleState();
             if (onPitchVisibilityChanged)
                 onPitchVisibilityChanged(pitchVisibilityOn_);
-        };
-
-        addAndMakeVisible(quantizeButton_);
-        quantizeButton_.setComponentID("scaleAssistQuantizeButton");
-        quantizeButton_.setEnabled(false); // no scale selected yet — nothing to quantize into
-        quantizeButton_.onClick = [this] {
-            if (onQuantizePitches)
-                onQuantizePitches();
         };
     }
 
@@ -478,7 +471,6 @@ private:
     }
 
     void notifyScaleChanged() {
-        quantizeButton_.setEnabled(selectedScale_.has_value());
         if (onScaleChanged)
             onScaleChanged(selectedScale_);
         repaint();
@@ -512,7 +504,6 @@ private:
     juce::TextButton saveCustomScaleButton_{"Save"};
 
     juce::ToggleButton pitchVisibilityToggle_;
-    juce::TextButton quantizeButton_{"Quantize pitches"};
 
     juce::Label minNoteLabel_;
     juce::Label maxNoteLabel_;

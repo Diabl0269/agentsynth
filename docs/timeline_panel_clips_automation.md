@@ -443,23 +443,72 @@ so a multi-note move/scrub/delete is one undo step):
 | **Double-click a note** | Deletes it, one step (standard DAW idiom — the mirror of double-click-to-create) |
 | Delete / Backspace | Deletes the selection, one step; returns `false` when the selection is empty |
 | Escape | Clears the selection; closes the roll when nothing is selected |
-| Cmd+vertical-drag on a note | Scrubs velocity, ~1/px, clamped to `[1, 127]` independently per note (multi-selection scrubs all by the same delta) |
-| "Q" button (plain click, or `Option+Q`) | **One-shot quantise**: snaps the SELECTED notes' starts to the chosen division (per-note `moveNote`, one mutation lambda — `TimelineDoc::quantiseNotes` has no note-subset overload); with **nothing selected it quantises every note in the clip** via `quantiseNotes` directly. Reads `divisionBeatsRaw()`, so it works even while the snap toggle is off (cleaning up free-hand notes is its whole point). Flashes on every press, and writes NO undo step when the clip is already quantised (`recordTimelineChange` drops no-op mutations). **This is the PLAIN click** — swapped with the snap toggle below, because a chip labelled "Q" on a note editor reads as "quantise" and burying the verb behind Shift was the surprise. |
-| Shift+click on "Q" (or the bare `Q` key) | **Toggles snap** — flips the shared `TimelineViewState::snapEnabled`, so grid magnetism switches off/on everywhere (roll, clip lanes, ruler) while the chosen division survives underneath. The chip still paints lit (accent fill/border) while snap is effective and muted while off, which is why the toggle keeps a home here rather than moving off the chip entirely. A view-state toggle, never a document edit — no undo step. Fires `onSnapToggled` so the panel persists the choice and repaints the other grid painters. The KEY is unchanged: it is `timelineSnapToggle`, shared with the panel. |
-| "Q♪" button (or `Option+Shift+Q`) | **Quantise pitches into the scale**: `quantisePitchesToActiveScale()` snaps the selected notes' PITCHES (or every note in the clip when nothing is selected) via `MusicalScale::snapPitch`, leaving starts and the selection untouched. An ACTION chip, never lit — but painted dimmed (`isPitchQuantiseEnabled()`) when it would do nothing: no scale chosen for this clip, or an empty clip. A click with no scale is silently inert; the KEY falls THROUGH (`keyPressed` returns `false`) in the same case, so it keeps whatever meaning it has elsewhere. |
+| **Cmd**+drag on a note's BODY | Moves it (and the rest of the selection) with the grid **BYPASSED** — the note follows the raw beat under the pointer. One modifier, one meaning: Cmd on a note says "do this smoothly", whichever part of it you grabbed (body -> unsnapped move, right edge -> unsnapped resize). Latched at mouse-down (`moveUnquantized_`), never re-read from the live modifiers |
+| **Cmd**+CLICK on a note (no drag) | Additive-select **toggle**: adds an unselected note, removes an already-selected one. Cmd+click and Cmd+drag are indistinguishable at mouse-down, so the note is ADDED immediately (the move needs it in the selection) and mouse-up completes the toggle *only if nothing moved* — the same deferred-classification trick `pendingEmptyClick_` uses for the empty-grid press. A Cmd+drag therefore never deselects what it is moving |
+| **Option**+vertical-drag on a note | Scrubs velocity, ~1/px, clamped to `[1, 127]` independently per note (multi-selection scrubs all by the same delta). **Moved here off Cmd**, which now means "unsnapped" on both halves of a note; one modifier meaning "smooth" on the right edge and "change the volume" two pixels to its left was the thing worth fixing. Option is free for a mouse drag on this surface — the roll's other Option bindings are KEY chords, and a modifier may mean different things to the keyboard and the mouse without ambiguity |
+| **Quantise** chip (or the bare `Q` key) | **One-shot quantise**: snaps the SELECTED notes' starts to the chosen division (per-note `moveNote`, one mutation lambda — `TimelineDoc::quantiseNotes` has no note-subset overload); with **nothing selected it quantises every note in the clip** via `quantiseNotes` directly. Reads `divisionBeatsRaw()`, so it works even while snap is off (cleaning up free-hand notes is its whole point). Flashes on every press, and writes NO undo step when the clip is already quantised (`recordTimelineChange` drops no-op mutations) |
+| **Snap** chip (or the `J` key) | **Toggles grid magnetism** — flips the shared `TimelineViewState::snapEnabled`, so it switches off/on everywhere (roll, clip lanes, ruler) while the chosen division survives underneath. The key is the SHARED `timelineSnapToggle` (the timeline's own snap key moved off Q to J too), not a piano-roll duplicate of it. The only chip here that paints lit for snap. A view-state toggle, never a document edit — no undo step. Fires `onSnapToggled` so the panel persists the choice and repaints the other grid painters. **Magnetism only — the grid stays drawn** (see *Snap is magnetism, not visibility* below) |
+| **Quantise Pitches** chip (or `Option+Shift+Q`) | **Quantise pitches into the scale**: `quantisePitchesToActiveScale()` snaps the selected notes' PITCHES (or every note in the clip when nothing is selected) via `MusicalScale::snapPitch`, leaving starts and the selection untouched. An ACTION chip, never lit — but painted dimmed (`isPitchQuantiseEnabled()`) when it would do nothing: no scale chosen for this clip, or an empty clip. A click with no scale is silently inert; the KEY falls THROUGH (`keyPressed` returns `false`) in the same case. **This chip is its ONLY entry point** besides the key — the duplicate button inside the Scale Assist panel is gone |
+| **Show Only Scale Notes** chip (or `Option+S`) | Toggles the pitch-ROW filter for the open clip (`toggleScaleFilter()`): out-of-scale rows collapse out of the grid, and ↑/↓ start stepping by scale degree. A toggle, so it paints lit; dimmed with no scale chosen (the flag is still remembered — arm it first, pick the scale second). Shares ONE piece of state with the Scale Assist panel's checkbox |
 
-**Header chips.** Five drawn chips (not child `juce::Button`s — they are painted shapes hit-tested by
-position, `HeaderButtonId`): "Clips" (back), **"Q"** (quantise starts / Shift+click snap toggle),
-**"Q♪"** (quantise pitches) and "Scale". Each one is a `juce::Rectangle<int>` member carved in
+**Header chips.** **Six** drawn chips (not child `juce::Button`s — they are painted shapes hit-tested
+by position, `HeaderButtonId`), left to right: **"Clips"** (back), **Snap**, **Quantise**, **Quantise
+Pitches**, **"Scale"**, **Show Only Scale Notes**. Each is a `juce::Rectangle<int>` member carved in
 `resized()` and resolved through the single seam `headerButtonBoundsFor(which)`, which
 `updateHeaderButtonHover()` and `paintHeader()`'s hover wash BOTH read — compute them separately and
-the lit rect drifts from the clickable one. The two quantise chips sit next to each other with a
-tighter 2 px gap than the other chips get (4 px): they are one family, and their spacing is what says
-so. "Q♪" is drawn text (`"Q" + U+266A`), never a themed icon — the same "draw it, don't asset it"
-rule the back arrow follows, and a plain BMP glyph the app's mono family carries, so it cannot go
-missing on a theme switch. Every tooltip is rebuilt per query through `synth::shortcutHintFor`
-(`quantiseTooltipText()` / `quantisePitchTooltipText()` / `scaleTooltipText()`), so a rebind shows up
-the very next time it is asked for, with no cache and no listener.
+the lit rect drifts from the clickable one. Every chip does exactly ONE thing on a plain click; there
+are no modifier variants left in the header at all (snap and quantise used to share one chip that
+way, which is the ambiguity the split removes). The GAPS carry meaning: 4 px between groups, 2 px
+within one, so "snap + the two quantise verbs" reads as a cluster and "scale + its row filter" as
+another. Only **Snap** and **Show Only Scale Notes** are toggles, so they are the only two that ever
+paint lit; the rest are actions and merely dim when they would be a no-op.
+
+**Four of them carry drawn vector glyphs rather than letters**, because letters were the problem:
+"Q" for the grid toggle was the *same letter the timeline binds to snap*, and a second "Q" beside it
+for pitch-quantize told the user nothing about which was which. All four are pure `juce::Path` /
+`fillRect` drawing against the chip's rect, in a colour the caller derives from the fill it actually
+painted (so they stay legible on resting, hover and lit fills in every theme), and no font or
+`IconLibrary` entry is involved — the same "draw it, don't asset it" rule the back arrow follows:
+
+| Chip | Glyph | Why it reads |
+|---|---|---|
+| Snap | A **magnet** (half-annulus horseshoe + two poles) | The universal magnetic-snap mark (Cubase, Blender, CAD). A distinct silhouette at 16 px, which a letter sharing its shape with the timeline's own snap key was not |
+| Quantise | Two small blocks landed flush on two faint **vertical** gridlines, vertically staggered | The axis IS the meaning: this verb moves notes horizontally in time, so the grid it snaps to is vertical. Staggering the pair reads as two notes rather than one bar |
+| Quantise Pitches | A **note head** on the lowest of three faint **horizontal** rows, with a down arrow pushing it there | The same "snapped onto the grid" idea rotated 90°, which is exactly the difference between the two verbs — so they are tellable apart without the tooltip |
+| Show Only Scale Notes | A **funnel** | The one mark that reads as "filter" everywhere. Deliberately not an eye (the rows are *removed from the row mapping*, not merely hidden) and not a keyboard (indistinguishable from the keys column two pixels below) |
+
+"Scale" keeps its word: it is the one label here naming a NOUN (a panel) rather than a verb, and a
+glyph for "the scale picker" would be a guess. Every tooltip is rebuilt per query through
+`synth::shortcutHintFor` (`snapTooltipText()` / `quantiseTooltipText()` /
+`quantisePitchTooltipText()` / `scaleTooltipText()` / `scaleFilterTooltipText()`), so a rebind shows
+up the very next time it is asked for, with no cache and no listener.
+
+**Snap is magnetism, not visibility.** `currentGridBeats()` (snap-aware, `0.0` while the switch is
+off) is read ONLY by code that snaps an edit; `drawnGridBeats()` (`divisionBeatsRaw` — the chosen
+division regardless of the switch) is what `paintGridLines` draws. They used to be the same function,
+so turning snap off *erased the sub-beat gridlines* — backwards, since free-hand editing is exactly
+when the user needs to see the grid they are placing notes against. Only `Snap::Off` (no division
+chosen at all) genuinely has no sub-beat level; the beat and bar levels are unconditional either way.
+Pinned by `PianoRollGridVisibilityTest`.
+
+**Show Only Scale Notes has ONE writer.** The header chip, `Option+S` and the Scale Assist panel's
+checkbox are three views of one flag, and all three route through `PianoRollComponent::
+toggleScaleFilter()`: it writes the open clip's `ClipScaleMemory`, pushes the scale context, and
+reflects the new value back into the panel via `setSelection()` (which fires no callback by
+contract — it is a reflection, not an edit — so it cannot loop back in). The flag is remembered per
+clip alongside the scale, and is deliberately NOT gated on a scale being chosen: arming it first and
+picking the scale second is a real order of operations, and `isRowFilterActive()` (flag AND a real
+scale) is the separate question anything behavioural asks.
+
+**↑/↓ step by ROW, which makes them scale-aware for free.** `transposeSelectedNotesByRow(±1)` walks
+`visiblePitches_` and resolves each note through the same `rowShiftedPitch` seam a Move drag's
+vertical half uses, with ONE shared row delta clamped so the group stays in range (never per-note
+clamping, which would reshape a chord). With the filter ON the row set IS the scale, so a step is the
+next **scale degree** — C→D is two semitones, E→F is one, and an arrow key can no longer strand a
+note on a hidden out-of-scale row. With the filter OFF `visiblePitches_` is all 128 and a row step
+*is* a semitone step, so chromatic behaviour is preserved **by construction** rather than by a
+parallel code path that could drift. The octave actions stay on `transposeSelectedNotes(±12)`: an
+octave is twelve semitones by definition, not twelve degrees.
 
 **Note audition — "clicking a note plays it."** `PianoRollComponent::onAuditionNote(int pitch, float
 velocity01, bool on)` fires `true` on a mouse-down that hits a note (Select tool only — an Erase /
@@ -686,9 +735,9 @@ to bottom: a Root combo (C…B) and a Scale combo ("No scale" first, then every 
 `synth::builtInScalePresets()` in order — Major, Natural/Harmonic/Melodic Minor, Dorian, Phrygian,
 Lydian, Mixolydian, Locrian, Major/Minor Pentatonic, Blues, Whole Tone, Chromatic — then the user's
 saved scales, then "Edit custom scales..." which reveals a 12-toggle pitch-class + name + Save
-editor rather than being itself a scale choice); a "Show only scale pitches" toggle; a "Quantize
-pitches" button (enabled only with a real scale selected); and a Min/Max note range pair plus a
-"Generate" button with an **"Add to existing"** toggle under it (see **Random generation** below —
+editor rather than being itself a scale choice); a "Show only scale notes" toggle (the same flag the
+header's funnel chip drives — see **Show Only Scale Notes has ONE writer** above); and a Min/Max note
+range pair plus a "Generate" button with an **"Add to existing"** toggle under it (see **Random generation** below —
 the toggle sits under the button rather than beside it because at `kScalePanelWidth` a
 button-plus-checkbox row would truncate the label the button's meaning depends on).
 
@@ -719,7 +768,7 @@ clip never opened before) back into the panel and the roll's own scale context, 
 `visiblePitches_` against it.
 
 **Pitch-visibility row collapse.** `visiblePitches_` — the sorted, ascending list of every pitch
-that currently gets a drawn row — is normally all 128 pitches, but "Show only scale pitches" (with
+that currently gets a drawn row — is normally all 128 pitches, but "Show only scale notes" (with
 a real scale selected) collapses it to exactly the scale's in-scale pitches **plus every pitch any
 note in the open clip already uses** — the "notes stay visible" rule: turning the toggle on must
 never hide a note that is already there, only change which *additional*, currently-empty rows are
@@ -730,8 +779,12 @@ one-row move can be a multi-semitone jump, and indexing by semitone would silent
 hidden rows instead of the next drawn one. `firstVisiblePitch_` is re-clamped to the nearest member
 of `visiblePitches_` immediately on any rebuild, so it is always a real, currently-drawn row.
 
-**Quantize-to-scale.** "Quantize pitches" (`onQuantizePitches`) calls
-`quantisePitchesToScale(scale)`, which snaps every note's pitch via `MusicalScale::snapPitch` and
+**Quantize-to-scale.** Reached from the header's **Quantise Pitches** chip or `Option+Shift+Q` — and
+from nowhere else. The panel used to carry a duplicate "Quantize pitches" button; it is **gone**,
+because a second door to the same room inside a panel the user has to open first could only ever
+disagree with the chip about its own enabled state. Both entry points go through
+`quantisePitchesToActiveScale()`, which resolves the clip's scale via `activeScaleForOpenClip()` and
+defers to `quantisePitchesToScale(scale)` — that snaps every note's pitch via `MusicalScale::snapPitch` and
 writes back only the notes that actually moved (`TimelineDoc::moveNote`, one
 `recordTimelineChange` — a mutation that changes nothing pushes no undo step, so an already-quantised
 clip costs zero history entries). The selection is deliberately left untouched: this only ever

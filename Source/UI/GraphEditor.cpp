@@ -1691,12 +1691,19 @@ void GraphEditor::refreshSmartSuggestions() {
             if (beforeProximity >= 2 && pairs.size() != beforeProximity)
                 return;
 
-            // An occupied destination jack is normally a hard stop: silently summing into a jack the
-            // user already wired is never something to suggest. The one exception is the graph's
-            // terminal audio sink, which is wired in essentially every real patch (the factory
-            // preset lands Reverb on both its legs) — so an FX parked next to it could never be
-            // offered anything at all. There, the ask is unambiguously "put me in SERIES", and the
-            // cable already there is rerouted through the ghost instead of doubled.
+            // What an already-occupied destination jack means depends on the modifier and the node:
+            //
+            //   * Cmd held  → INSERT IN SERIES, at ANY module. The upstream cabling is rerouted
+            //                 through the ghost. This is the only way to insert; nothing inserts
+            //                 without the modifier.
+            //   * No Cmd, terminal audio sink → plain ADDITIVE parallel connection. The sink is
+            //                 wired in essentially every real patch, so a hard stop there means a
+            //                 module parked next to it can never be offered anything; and summing
+            //                 into the mix bus is exactly what dragging a cable there by hand does.
+            //                 Existing cables are left alone.
+            //   * No Cmd, any other module → hard stop, unchanged. Silently summing into a jack the
+            //                 user wired mid-patch is never something to suggest.
+            //
             // insertPlan is set for the whole group, or left empty for an ordinary add.
             std::optional<InsertPlan> insertPlan;
             if (checkDstFree && dstNodeIdForFreeCheck.uid != 0) {
@@ -1709,11 +1716,18 @@ void GraphEditor::refreshSmartSuggestions() {
                         anyOccupied = true;
                 }
 
-                if (anyOccupied) {
-                    // A ghost with no audio input cannot go in series — inserting a pure source
-                    // there would mean summing, which is exactly what the drop rule exists to stop.
+                // Proximity to the destination's INPUT side is already what gates us here: the
+                // jack-to-jack filter above measures the ghost's output jack against
+                // jackPoint(dstJack, isInput=true), and rejects a source sitting to the right of it.
+                if (anyOccupied && !isInsertModifierDown()) {
+                    // Parallel add is offered at the terminal sink only.
+                    if (!(ghostIsSource && isTerminalAudioSink(dstProc)))
+                        return;
+                } else if (anyOccupied) {
+                    // A ghost with no audio input cannot go in series — there would be nothing for
+                    // the rerouted upstream to feed.
                     const auto ghostInLegs = collectSmartAudioLegs(ghostProc, true);
-                    if (!ghostIsSource || !isTerminalAudioSink(dstProc) || ghostInLegs.empty())
+                    if (!ghostIsSource || ghostInLegs.empty())
                         return;
 
                     // Both-or-neither, mirroring the stereo group rule above: every leg of the group
@@ -1789,26 +1803,31 @@ void GraphEditor::refreshSmartSuggestions() {
                     if (plan.upstreamCables.empty())
                         return;
 
-                    // One surviving pair per NEW ghost→sink cable. A collapsed ghost output jack
-                    // already fans to the whole raw pair, so a second pair for the sink's right leg
-                    // would sum the ghost's LEFT leg into it. Drop any pair whose raw destinations
-                    // an earlier one already covers. The doomed links above are unaffected.
-                    std::vector<std::pair<int, int>> keptPairs;
-                    std::set<int> claimedRawDsts;
-                    for (const auto& pr : pairs) {
-                        const auto fan = resolvePolyLink(srcMb, pr.first, dstMb, pr.second);
-                        bool alreadyCovered = true;
-                        for (int v = 0; v < fan.voiceCount; ++v)
-                            if (claimedRawDsts.insert(fan.destRawChannel + v).second)
-                                alreadyCovered = false;
-                        if (!alreadyCovered)
-                            keptPairs.push_back(pr);
-                    }
-                    if (keptPairs.empty())
-                        return;
-                    pairs = std::move(keptPairs);
                     insertPlan = std::move(plan);
                 }
+            }
+
+            // One surviving pair per distinct set of raw destination channels. A collapsed jack
+            // already fans across the whole raw pair, so when the destination fronts two legs (the
+            // terminal sink is the only node that does — it has no ModuleBase to group them) a
+            // second pair for its right leg would wire the source's LEFT leg there too, summing.
+            // A no-op wherever the pairs already claim distinct raws. Insert plans are built above
+            // and deliberately unaffected: a doomed link must not vanish with the pair that named it.
+            {
+                std::vector<std::pair<int, int>> keptPairs;
+                std::set<int> claimedRawDsts;
+                for (const auto& pr : pairs) {
+                    const auto fan = resolvePolyLink(srcMb, pr.first, dstMb, pr.second);
+                    bool alreadyCovered = true;
+                    for (int v = 0; v < fan.voiceCount; ++v)
+                        if (claimedRawDsts.insert(fan.destRawChannel + v).second)
+                            alreadyCovered = false;
+                    if (!alreadyCovered)
+                        keptPairs.push_back(pr);
+                }
+                if (keptPairs.empty())
+                    return;
+                pairs = std::move(keptPairs);
             }
 
             if (requireSourceFree && srcNodeIdForFreeCheck.uid != 0) {
@@ -4055,30 +4074,8 @@ void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
         return false;
     };
 
-    // Which raw channel is each end's right leg? FX put it on ch1; the voice modules put it on
-    // their own kRightBase block, so asking the module beats assuming ch1 — assuming would have
-    // wired an Oscillator's Waveform CV channel as if it were audio.
-    auto rightLegOf = [](juce::AudioProcessor* proc, bool asInput) -> int {
-        if (proc == nullptr)
-            return -1;
-        auto* peerMb = dynamic_cast<ModuleBase*>(proc);
-        if (peerMb == nullptr) {
-            // Graph I/O (Audio Input/Output) is a plain contiguous pair.
-            const int channels = asInput ? proc->getTotalNumInputChannels() : proc->getTotalNumOutputChannels();
-            return channels >= 2 ? 1 : -1;
-        }
-        const int leg = peerMb->rightAudioLegChannel();
-        if (leg < 0)
-            return -1;
-        const int channels = asInput ? proc->getTotalNumInputChannels() : proc->getTotalNumOutputChannels();
-        if (leg >= channels)
-            return -1;
-        const LogicalPort port = asInput ? peerMb->mapInputChannel(leg) : peerMb->mapOutputChannel(leg);
-        return port.role == PortRole::Audio ? leg : -1;
-    };
-
-    const int myOutputLeg = rightLegOf(mb, /*asInput=*/false);
-    const int myInputLeg = rightLegOf(mb, /*asInput=*/true);
+    const int myOutputLeg = rightAudioLegOf(mb, /*asInput=*/false);
+    const int myInputLeg = rightAudioLegOf(mb, /*asInput=*/true);
 
     const auto connections = graph.getConnections();
     for (const auto& c : connections) {
@@ -4090,22 +4087,77 @@ void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
         if (c.source.nodeID == nodeId && c.source.channelIndex == 0 && c.destination.channelIndex == 0 &&
             myOutputLeg >= 0) {
             auto* destNode = graph.getNodeForId(c.destination.nodeID);
-            const int destLeg = destNode != nullptr ? rightLegOf(destNode->getProcessor(), /*asInput=*/true) : -1;
+            const int destLeg = destNode != nullptr ? rightAudioLegOf(destNode->getProcessor(), /*asInput=*/true) : -1;
             if (destLeg >= 0 && !hasEdge(nodeId, myOutputLeg, destNode->nodeID, destLeg))
                 graph.addConnection({{nodeId, myOutputLeg}, {destNode->nodeID, destLeg}});
+
+            // Our right leg now feeds the dest's right leg, so the LEFT leg must stop feeding it as
+            // well. While we were collapsed, resolvePolyLink duplicated our one Audio jack onto both
+            // of the dest's raw legs (the mono→collapsed-pair fan); leaving that edge in place after
+            // the split sums L+R into the dest's right leg — audibly right-heavy, and invisible,
+            // since both edges draw as the same cable. Mirror of the re-point in
+            // dropHiddenRightLegConnections, which is what puts the duplicate back on collapse.
+            if (destLeg > 0 && destNode != nullptr && hasEdge(nodeId, myOutputLeg, destNode->nodeID, destLeg))
+                graph.removeConnection({{nodeId, 0}, {destNode->nodeID, destLeg}});
         }
 
         // Incoming: source's left leg is patched to ours, and the source is itself a stereo pair.
         if (c.destination.nodeID == nodeId && c.destination.channelIndex == 0 && c.source.channelIndex == 0 &&
             myInputLeg >= 0) {
             auto* srcNode = graph.getNodeForId(c.source.nodeID);
-            const int srcLeg = srcNode != nullptr ? rightLegOf(srcNode->getProcessor(), /*asInput=*/false) : -1;
+            const int srcLeg = srcNode != nullptr ? rightAudioLegOf(srcNode->getProcessor(), /*asInput=*/false) : -1;
             if (srcLeg >= 0 && !hasEdge(srcNode->nodeID, srcLeg, nodeId, myInputLeg))
                 graph.addConnection({{srcNode->nodeID, srcLeg}, {nodeId, myInputLeg}});
+
+            // Same de-duplication from the other end: once the source's own right leg reaches our
+            // right input, its left leg must not still be wired there too.
+            if (srcLeg > 0 && srcNode != nullptr && hasEdge(srcNode->nodeID, srcLeg, nodeId, myInputLeg))
+                graph.removeConnection({{srcNode->nodeID, 0}, {nodeId, myInputLeg}});
         }
     }
 
     dropHiddenRightLegConnections(nodeId);
+}
+
+int GraphEditor::rightAudioLegOf(juce::AudioProcessor* proc, bool asInput) {
+    // Which raw channel is this end's right leg? FX put it on ch1; the voice modules put it on their
+    // own kRightBase block, so asking the module beats assuming ch1 — assuming would have wired an
+    // Oscillator's Waveform CV channel as if it were audio.
+    if (proc == nullptr)
+        return -1;
+    auto* peerMb = dynamic_cast<ModuleBase*>(proc);
+    if (peerMb == nullptr) {
+        // Graph I/O (Audio Input/Output) is a plain contiguous pair.
+        const int channels = asInput ? proc->getTotalNumInputChannels() : proc->getTotalNumOutputChannels();
+        return channels >= 2 ? 1 : -1;
+    }
+    const int leg = peerMb->rightAudioLegChannel();
+    if (leg < 0)
+        return -1;
+    const int channels = asInput ? proc->getTotalNumInputChannels() : proc->getTotalNumOutputChannels();
+    if (leg >= channels)
+        return -1;
+    const LogicalPort port = asInput ? peerMb->mapInputChannel(leg) : peerMb->mapOutputChannel(leg);
+    if (port.role != PortRole::Audio)
+        return -1;
+
+    // ...and it has to be a leg the user can actually SEE. A collapsed split-block module keeps
+    // rendering its kRightBase block but exposes no jack for it, and FilterModule/VCAModule report
+    // PortRole::Audio for those channels either way — so a role check alone would let the toggle
+    // wire a cable onto a hidden jack, which is exactly the routing the invariant in CLAUDE.md
+    // ("an invisible jack cannot be unplugged") forbids. A collapsed FX pair still passes: its
+    // single Audio jack owns raw ch1 through voiceSpan 2.
+    return audioChannelReachableFromJack(*peerMb, leg, asInput) ? leg : -1;
+}
+
+bool GraphEditor::audioChannelReachableFromJack(const ModuleBase& mb, int rawChannel, bool isInput) {
+    const int visible = isInput ? mb.getVisibleInputPortCount() : mb.getVisibleOutputPortCount();
+    for (int jack = 0; jack < visible; ++jack)
+        for (const auto& t : mb.getJackTargets(jack, isInput))
+            for (int v = 0; v < t.voiceSpan; ++v)
+                if (t.rawHeadChannel + v == rawChannel)
+                    return true;
+    return false;
 }
 
 void GraphEditor::dropHiddenRightLegConnections(juce::AudioProcessorGraph::NodeID nodeId) {
@@ -4130,6 +4182,22 @@ void GraphEditor::dropHiddenRightLegConnections(juce::AudioProcessorGraph::NodeI
     const int inputCount = mb->getTotalNumInputChannels();
     const int outputCount = mb->getTotalNumOutputChannels();
 
+    auto hasEdge = [&graph](const juce::AudioProcessorGraph::Connection& c) {
+        for (const auto& existing : graph.getConnections())
+            if (existing == c)
+                return true;
+        return false;
+    };
+
+    // Does anything at all feed this raw input channel of ours? Used below to decide whether a
+    // dropped right-leg INPUT cable has a left leg to fall back onto or would double-feed it.
+    auto inputChannelIsFed = [&graph, nodeId](int rawChannel) {
+        for (const auto& c : graph.getConnections())
+            if (c.destination.nodeID == nodeId && !c.destination.isMIDI() && c.destination.channelIndex == rawChannel)
+                return true;
+        return false;
+    };
+
     for (const auto& c : graph.getConnections()) {
         if (c.source.isMIDI() || c.destination.isMIDI())
             continue;
@@ -4137,8 +4205,51 @@ void GraphEditor::dropHiddenRightLegConnections(juce::AudioProcessorGraph::NodeI
             c.source.nodeID == nodeId && c.source.channelIndex >= hiddenBase && c.source.channelIndex < outputCount;
         const bool intoHiddenInput = c.destination.nodeID == nodeId && c.destination.channelIndex >= hiddenBase &&
                                      c.destination.channelIndex < inputCount;
-        if (fromHiddenOutput || intoHiddenInput)
-            graph.removeConnection(c);
+        if (!fromHiddenOutput && !intoHiddenInput)
+            continue;
+
+        graph.removeConnection(c);
+
+        // RE-POINT, don't just delete. Collapsing hides the right block, but the cable hanging off
+        // it was drawn by the user and its far end is still there — so it moves to the leg that
+        // survives, which is the same raw offset in the LEFT block (voice v of the right block
+        // pairs with voice v of the left one).
+        //
+        // This is the missing link behind "toggling Dual I/O off biases the mix left": in the
+        // default patch the VCA's right leg feeds Distortion ch1, and dropping that cable left the
+        // whole collapsed FX tail (Distortion → Delay → Reverb → Audio Output) rendering silence on
+        // every right channel. Re-pointing sends the surviving mono leg there instead, at UNITY —
+        // ModuleBase::panGains keeps a centred module's left leg at full level, so a collapsed
+        // module is exactly as loud in both channels as it was in the left one before (no gain
+        // compensation, and none wanted: an equal-power law would have made it 3 dB quiet).
+        if (fromHiddenOutput) {
+            const int leftCh = c.source.channelIndex - hiddenBase;
+            auto* destNode = graph.getNodeForId(c.destination.nodeID);
+            if (destNode == nullptr || !audioChannelReachableFromJack(*mb, leftCh, /*isInput=*/false))
+                continue;
+            // The far end must still expose the channel we are re-pointing onto — a collapsed peer's
+            // own hidden right block is not a legal target, and neither end may gain a cable it
+            // cannot show.
+            if (auto* destMb = dynamic_cast<ModuleBase*>(destNode->getProcessor())) {
+                if (!audioChannelReachableFromJack(*destMb, c.destination.channelIndex, /*isInput=*/true))
+                    continue;
+            } else if (c.destination.channelIndex >= destNode->getProcessor()->getTotalNumInputChannels()) {
+                continue;
+            }
+            const juce::AudioProcessorGraph::Connection moved{{nodeId, leftCh}, c.destination};
+            if (!hasEdge(moved))
+                graph.addConnection(moved);
+        } else {
+            // Input side: our left leg is normally already fed by the same upstream, and adding a
+            // second feed there would sum L+R into one mono jack (+6 dB). So re-point ONLY when the
+            // left leg has nothing at all — otherwise the collapse legitimately drops the cable.
+            const int leftCh = c.destination.channelIndex - hiddenBase;
+            if (!audioChannelReachableFromJack(*mb, leftCh, /*isInput=*/true) || inputChannelIsFed(leftCh))
+                continue;
+            const juce::AudioProcessorGraph::Connection moved{c.source, {nodeId, leftCh}};
+            if (!hasEdge(moved))
+                graph.addConnection(moved);
+        }
     }
 }
 

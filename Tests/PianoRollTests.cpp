@@ -661,9 +661,9 @@ TEST(PianoRollEditingTest, VelocityScrub) {
     const juce::Point<float> anchor((float)rect.getCentreX(), (float)rect.getCentreY());
     const juce::Point<float> dragged(anchor.x, anchor.y - 15.0f); // up 15 px -> +15 velocity
 
-    f.roll.mouseDown(leftClick(f.roll, anchor, juce::ModifierKeys::commandModifier));
-    f.roll.mouseDrag(leftDrag(f.roll, dragged, anchor, juce::ModifierKeys::commandModifier));
-    f.roll.mouseUp(leftDrag(f.roll, dragged, anchor, juce::ModifierKeys::commandModifier));
+    f.roll.mouseDown(leftClick(f.roll, anchor, juce::ModifierKeys::altModifier));
+    f.roll.mouseDrag(leftDrag(f.roll, dragged, anchor, juce::ModifierKeys::altModifier));
+    f.roll.mouseUp(leftDrag(f.roll, dragged, anchor, juce::ModifierKeys::altModifier));
 
     const auto* updated = f.doc.getNote(id);
     ASSERT_NE(updated, nullptr);
@@ -677,9 +677,9 @@ TEST(PianoRollEditingTest, VelocityScrub) {
     // Clamped at 127.
     f.roll.getSelectionForTest().setSelection({id});
     const juce::Point<float> draggedFar(anchor.x, anchor.y - 400.0f);
-    f.roll.mouseDown(leftClick(f.roll, anchor, juce::ModifierKeys::commandModifier));
-    f.roll.mouseDrag(leftDrag(f.roll, draggedFar, anchor, juce::ModifierKeys::commandModifier));
-    f.roll.mouseUp(leftDrag(f.roll, draggedFar, anchor, juce::ModifierKeys::commandModifier));
+    f.roll.mouseDown(leftClick(f.roll, anchor, juce::ModifierKeys::altModifier));
+    f.roll.mouseDrag(leftDrag(f.roll, draggedFar, anchor, juce::ModifierKeys::altModifier));
+    f.roll.mouseUp(leftDrag(f.roll, draggedFar, anchor, juce::ModifierKeys::altModifier));
     EXPECT_EQ(f.doc.getNote(id)->velocity, 127);
 }
 
@@ -779,11 +779,10 @@ TEST(PianoRollEditingTest, QuantiseNoOpWritesNoUndoStep) {
     EXPECT_FALSE(f.undo.canUndo());
 }
 
-// SHIFT+click on Q (and the plain q key) toggles grid magnetism — the shared snapEnabled switch —
-// and moves no note. A plain click is what quantises (covered above): the two swapped, because a
-// chip labelled "Q" on a note editor reads as "quantise" and burying the verb behind Shift was the
-// surprise. The bare q KEY is unchanged — it is "timelineSnapToggle", shared with the panel.
-TEST(PianoRollEditingTest, ShiftClickOnQTogglesSnapWithoutMovingNotes) {
+// The SNAP chip (its own magnet-glyph chip now, no longer multiplexed onto the quantise chip by a
+// modifier) toggles grid magnetism — the shared snapEnabled switch — and moves no note. Its key is
+// the roll's OWN "pianoRollSnapToggle" (J); bare Q is the quantise verb, covered above.
+TEST(PianoRollEditingTest, SnapChipTogglesSnapWithoutMovingNotes) {
     PianoRollFixture f;
     const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
     const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
@@ -795,26 +794,29 @@ TEST(PianoRollEditingTest, ShiftClickOnQTogglesSnapWithoutMovingNotes) {
     int toggles = 0;
     f.roll.onSnapToggled = [&] { ++toggles; };
 
-    f.roll.mouseDown(leftClick(f.roll, centreOf(f.roll.getQuantiseButtonBounds()), juce::ModifierKeys::shiftModifier));
-    EXPECT_FALSE(f.state.snapEnabled) << "Shift+click flips the switch off";
+    f.roll.mouseDown(leftClick(f.roll, centreOf(f.roll.getSnapButtonBounds())));
+    EXPECT_FALSE(f.state.snapEnabled) << "a plain click on the Snap chip flips the switch off";
     EXPECT_EQ(toggles, 1);
     EXPECT_DOUBLE_EQ(f.doc.getNote(idA)->startBeat, 1.1) << "toggling never moves notes";
     EXPECT_FALSE(f.undo.canUndo()) << "a view-state toggle is not a document edit";
-    EXPECT_TRUE(f.roll.isQuantiseFlashingForTest()) << "the press still flashes the button";
+    EXPECT_FALSE(f.roll.isQuantiseFlashingForTest())
+        << "the flash belongs to the QUANTISE chip; a snap toggle has its own lit state to show";
 
-    // With the switch off the effective grid is gone (edits go free-hand)…
+    // With the switch off the effective (MAGNETIC) grid is gone — edits go free-hand…
     EXPECT_DOUBLE_EQ(f.roll.getGridDivisionForTest(), 0.0);
+    // …but the DRAWN grid is untouched, which is the whole point of the split (see drawnGridBeats).
+    EXPECT_DOUBLE_EQ(f.roll.getDrawnGridDivisionForTest(), 1.0) << "snap governs magnetism, never visibility";
 
-    // …and the Q key toggles it right back.
-    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress('q')));
+    // …and the J key toggles it right back.
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress('j')));
     EXPECT_TRUE(f.state.snapEnabled);
     EXPECT_EQ(toggles, 2);
     EXPECT_DOUBLE_EQ(f.roll.getGridDivisionForTest(), 1.0);
 }
 
-// Option+Q (the key) is the one-shot start-quantise, and it works from the CHOSEN division even
-// while the magnetism switch is off — that is the whole point of a one-shot clean-up.
-TEST(PianoRollEditingTest, OptionQKeyQuantisesEvenWhileSnapToggledOff) {
+// Bare Q (the key) is the one-shot start-quantise, and it works from the CHOSEN division even while
+// the magnetism switch is off — that is the whole point of a one-shot clean-up.
+TEST(PianoRollEditingTest, QKeyQuantisesEvenWhileSnapToggledOff) {
     PianoRollFixture f;
     const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
     const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
@@ -825,9 +827,9 @@ TEST(PianoRollEditingTest, OptionQKeyQuantisesEvenWhileSnapToggledOff) {
     f.state.snapEnabled = false;
     EXPECT_TRUE(f.roll.isQuantiseEnabled()) << "the one-shot reads the RAW division, not the switch";
 
-    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress('q', juce::ModifierKeys::altModifier, 0)));
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress('q')));
     EXPECT_DOUBLE_EQ(f.doc.getNote(idA)->startBeat, 1.0);
-    EXPECT_FALSE(f.state.snapEnabled) << "Option+Q never flips the switch";
+    EXPECT_FALSE(f.state.snapEnabled) << "Q quantises and never flips the switch";
     ASSERT_TRUE(f.undo.canUndo());
 }
 
@@ -846,12 +848,13 @@ TEST(PianoRollEditingTest, QuantiseButtonEnabledStateAndTooltip) {
     f.state.snap = TimelineViewState::Snap::Off;
     EXPECT_FALSE(f.roll.isQuantiseEnabled()) << "Snap::Off leaves no grid to quantise to";
 
-    // Dynamic (see synth::shortcutHintFor) — no ShortcutManager installed, so both halves fall back
-    // to their hardcoded defaults: Option+Q for the quantise verb (chorded, so NOT lower-cased) and
-    // the bare "q" for the snap toggle.
+    // Dynamic (see synth::shortcutHintFor) — no ShortcutManager installed, so it falls back to the
+    // hardcoded default: bare "q", lower-cased.
     const auto tooltip = f.roll.getTooltipFor(f.roll.getQuantiseButtonBounds().getCentre());
-    EXPECT_TRUE(tooltip.startsWith("Quantize note starts to the grid (Alt + Q)")) << tooltip;
-    EXPECT_TRUE(tooltip.contains("Shift+click toggles snap to grid on/off (q)")) << tooltip;
+    EXPECT_TRUE(tooltip.startsWith("Quantize note starts to the grid (q)")) << tooltip;
+    // Snap is a SEPARATE chip now, with its own word and its own key.
+    const auto snapTip = f.roll.getTooltipFor(f.roll.getSnapButtonBounds().getCentre());
+    EXPECT_TRUE(snapTip.startsWith("Snap to grid on/off (j)")) << snapTip;
     EXPECT_TRUE(f.roll.getTooltipFor(f.roll.getBackButtonBounds().getCentre()).isEmpty());
 }
 
@@ -2334,7 +2337,8 @@ juce::KeyPress ctrlPress(int keyCode) { return juce::KeyPress(keyCode, juce::Mod
 const char* const kRollActionIds[] = {
     "pianoRollNudgeLeft",         "pianoRollNudgeRight",          "pianoRollTransposeUp", "pianoRollTransposeDown",
     "pianoRollTransposeOctaveUp", "pianoRollTransposeOctaveDown", "pianoRollNavPrevNote", "pianoRollNavNextNote",
-    "pianoRollQuantise",          "pianoRollQuantisePitches",     "timelineSnapToggle",   "pianoRollToggleScalePanel"};
+    "pianoRollQuantise",          "pianoRollQuantisePitches",     "timelineSnapToggle",   "pianoRollToggleScalePanel",
+    "pianoRollToggleScaleFilter"};
 
 void clearRollBindings(ShortcutManager& mgr) {
     for (const char* id : kRollActionIds)
@@ -2382,8 +2386,10 @@ TEST(PianoRollShortcutTest, WithNoShortcutManagerTheHardcodedDefaultsStillApply)
     EXPECT_EQ(f.doc.getNote(bed.note)->pitch, 60);
 
     ASSERT_TRUE(f.state.snapEnabled);
-    EXPECT_TRUE(f.roll.keyPressed(plainPress('q'))) << "bare Q is still the snap toggle";
+    EXPECT_TRUE(f.roll.keyPressed(plainPress('j'))) << "bare J is the snap toggle";
     EXPECT_FALSE(f.state.snapEnabled);
+    EXPECT_TRUE(f.roll.keyPressed(plainPress('q'))) << "and bare Q is quantise";
+    EXPECT_FALSE(f.state.snapEnabled) << "quantise never flips the switch";
 }
 
 // Rebinding one action moves the gesture WHOLESALE: the factory key stops doing anything (it is no
@@ -2447,9 +2453,9 @@ TEST(PianoRollShortcutTest, AnUnboundActionHasNoKeyAndNeverFallsBackToItsDefault
     EXPECT_FALSE(f.roll.isQuantiseFlashingForTest()) << "an unbound Q never even flashes the button";
 }
 
-// The snap toggle and the one-shot quantise are two independent bindings, and the quantise action
-// is resolved FIRST — so a user who mirrors the factory pair (X / Shift+X) onto another letter gets
-// the same behaviour rather than the toggle swallowing both.
+// The snap toggle and the one-shot quantise are two independent PianoRoll-category bindings — the
+// roll resolves its OWN "pianoRollSnapToggle" and no longer consults the timeline's, so rebinding
+// either one moves only that one.
 TEST(PianoRollShortcutTest, SnapToggleAndQuantiseFollowTheirOwnBindings) {
     PianoRollFixture f;
     const auto bed = makeKeyBed(f, /*startBeat*/ 1.1); // off-grid, so a quantise is observable
@@ -2466,7 +2472,7 @@ TEST(PianoRollShortcutTest, SnapToggleAndQuantiseFollowTheirOwnBindings) {
     ASSERT_TRUE(f.state.snapEnabled);
 
     EXPECT_FALSE(f.roll.keyPressed(plainPress('q'))) << "Q is no longer either of these actions";
-    EXPECT_FALSE(f.roll.keyPressed(shiftPress('q')));
+    EXPECT_FALSE(f.roll.keyPressed(plainPress('j'))) << "nor is J";
     EXPECT_EQ(toggles, 0);
     EXPECT_DOUBLE_EQ(f.doc.getNote(bed.note)->startBeat, 1.1);
 
@@ -3720,10 +3726,14 @@ TEST(PianoRollScaleAssistTest, QuantiseAndScaleTooltipsTrackALiveRebindAndCleari
 
     // Rebuilt LIVE on every getTooltipFor() call (no cache, no listener needed for this roll — see
     // its class comment) -- setBinding alone is enough, no saveToProperties() required.
-    mgr.setBinding("timelineSnapToggle", juce::KeyPress('g', juce::ModifierKeys::noModifiers, 0));
+    mgr.setBinding("pianoRollQuantise", juce::KeyPress('g', juce::ModifierKeys::noModifiers, 0));
     auto tooltip = f.roll.getTooltipFor(f.roll.getQuantiseButtonBounds().getCentre());
     EXPECT_TRUE(tooltip.contains("(g)"));
     EXPECT_FALSE(tooltip.contains("(q)"));
+
+    // The Snap chip reads the SHARED snap action, so rebinding quantise above left it alone.
+    mgr.setBinding("timelineSnapToggle", juce::KeyPress('k', juce::ModifierKeys::noModifiers, 0));
+    EXPECT_TRUE(f.roll.getTooltipFor(f.roll.getSnapButtonBounds().getCentre()).contains("(k)"));
 
     mgr.setBinding("pianoRollToggleScalePanel", juce::KeyPress('m', juce::ModifierKeys::commandModifier, 0));
     tooltip = f.roll.getTooltipFor(centreOf(f.roll.getScaleButtonBounds()).toInt());
@@ -4046,7 +4056,7 @@ TEST(PianoRollScaleAnimationTest, PropertiesFileRestoreSnapsEvenThoughAnimateDef
 }
 
 // ============================================================================
-// 19. Header button chip affordance (Back/Q/Scale — hover wash + resting/active fill).
+// 19. Header button chip affordance (six chips — hover wash + resting/active fill).
 // ============================================================================
 
 TEST(PianoRollHeaderButtonTest, HoverEntersAndLeavesGateRepaintsConfinedToTheChipRect) {
@@ -4063,7 +4073,7 @@ TEST(PianoRollHeaderButtonTest, HoverEntersAndLeavesGateRepaintsConfinedToTheChi
     f.roll.mouseMove(hover(f.roll, centreOf(f.roll.getQuantiseButtonBounds()) + juce::Point<float>(1.0f, 0.0f)));
     EXPECT_EQ(f.roll.headerButtonRequests, 1);
 
-    // Moving to the Scale chip repaints BOTH the vacated Q rect and the newly hovered one.
+    // Moving to the Scale chip repaints BOTH the vacated quantise rect and the newly hovered one.
     f.roll.mouseMove(hover(f.roll, centreOf(f.roll.getScaleButtonBounds())));
     EXPECT_TRUE(f.roll.isHeaderButtonHoveredForTest(PianoRollComponent::HeaderButtonId::Scale));
     EXPECT_EQ(f.roll.headerButtonRequests, 3);
@@ -4633,10 +4643,10 @@ TEST(PianoRollResizeTest, CmdOnTheNoteBodyStillScrubsVelocityRatherThanResizing)
 
     const auto anchor = centreOf(f.roll.getNoteRect(id));
     const juce::Point<float> up(anchor.x, anchor.y - 10.0f);
-    f.roll.mouseDown(leftClick(f.roll, anchor, juce::ModifierKeys::commandModifier));
+    f.roll.mouseDown(leftClick(f.roll, anchor, juce::ModifierKeys::altModifier));
     EXPECT_EQ(f.roll.getResizeNoteCountForTest(), 0) << "this is a velocity scrub, not a resize";
-    f.roll.mouseDrag(leftDrag(f.roll, up, anchor, juce::ModifierKeys::commandModifier));
-    f.roll.mouseUp(leftDrag(f.roll, up, anchor, juce::ModifierKeys::commandModifier));
+    f.roll.mouseDrag(leftDrag(f.roll, up, anchor, juce::ModifierKeys::altModifier));
+    f.roll.mouseUp(leftDrag(f.roll, up, anchor, juce::ModifierKeys::altModifier));
 
     EXPECT_DOUBLE_EQ(f.doc.getNote(id)->lengthBeats, 2.0) << "the length is untouched";
     EXPECT_EQ(f.doc.getNote(id)->velocity, 90);
@@ -4908,7 +4918,7 @@ TEST(PianoRollPitchQuantiseTest, ChipTooltipCarriesTheDynamicShortcutHint) {
 // CODE plus modifiers, which is what makes them survive macOS delivering Option+letter as a Unicode
 // glyph — the same reasoning FocusArbitrationTests' ShiftedSymbolKeyCodes case pins for the grid
 // commands.
-TEST(PianoRollPitchQuantiseTest, OptionQAndOptionShiftQDispatchTheTwoQuantiseVerbs) {
+TEST(PianoRollPitchQuantiseTest, QAndOptionShiftQDispatchTheTwoQuantiseVerbs) {
     PianoRollFixture f;
     const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
     const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
@@ -4918,23 +4928,25 @@ TEST(PianoRollPitchQuantiseTest, OptionQAndOptionShiftQDispatchTheTwoQuantiseVer
     const auto id = f.doc.addNote(clipId, makeNote(1.1, 61, 1.0));
     ASSERT_TRUE(id.isValid());
 
-    const juce::KeyPress optionQ('q', juce::ModifierKeys::altModifier, 0);
+    const juce::KeyPress bareQ('q', juce::ModifierKeys::noModifiers, 0);
     const juce::KeyPress optionShiftQ(
         'q', juce::ModifierKeys(juce::ModifierKeys::altModifier | juce::ModifierKeys::shiftModifier), 0);
 
-    // The MORE SPECIFIC chord is matched first, so Option+Shift+Q is never swallowed by Option+Q.
+    // The MORE SPECIFIC chord is matched first, so Option+Shift+Q is never swallowed by bare Q.
     EXPECT_TRUE(f.roll.keyPressed(optionShiftQ));
     EXPECT_EQ(f.doc.getNote(id)->pitch, 60);
     EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 1.1) << "pitch quantise never touches the start";
 
-    EXPECT_TRUE(f.roll.keyPressed(optionQ));
+    EXPECT_TRUE(f.roll.keyPressed(bareQ));
     EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 1.0);
     EXPECT_EQ(f.doc.getNote(id)->pitch, 60) << "start quantise never touches the pitch";
 
-    // The bare q is still the snap toggle, and neither Option chord flips it.
+    // Neither quantise key flips the snap switch — J is what does that.
     int toggles = 0;
     f.roll.onSnapToggled = [&] { ++toggles; };
-    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress('q')));
+    EXPECT_TRUE(f.roll.keyPressed(bareQ));
+    EXPECT_EQ(toggles, 0);
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress('j')));
     EXPECT_EQ(toggles, 1);
 }
 
@@ -5081,6 +5093,432 @@ TEST(PianoRollGenerateTest, PanelToggleDrivesTheAddPathThroughTheRollsOwnHandler
     EXPECT_EQ(f.doc.getNote(kept), nullptr) << "unticked: Generate replaced the clip";
 }
 
+// ---------------------------------------------------------------------------
+// 23b. The six header chips: distinct, non-overlapping, independently hit-testable.
+// ---------------------------------------------------------------------------
+//
+// The glyphs themselves are pixels and not worth asserting on, but the GEOMETRY is: six drawn chips
+// hit-tested by position means one chip creeping over another silently steals its clicks, and the
+// header only has ~220 px to lay them out in.
+TEST(PianoRollHeaderButtonTest, AllSixChipsAreDistinctNonOverlappingAndInReadingOrder) {
+    PianoRollFixture f;
+    const std::vector<std::pair<const char*, juce::Rectangle<int>>> chips{
+        {"Clips", f.roll.getBackButtonBounds()},        {"Snap", f.roll.getSnapButtonBounds()},
+        {"Quantise", f.roll.getQuantiseButtonBounds()}, {"QuantisePitches", f.roll.getQuantisePitchButtonBounds()},
+        {"Scale", f.roll.getScaleButtonBounds()},       {"ScaleFilter", f.roll.getScaleFilterButtonBounds()},
+    };
+
+    for (const auto& [name, rect] : chips) {
+        EXPECT_FALSE(rect.isEmpty()) << name;
+        EXPECT_GE(rect.getY(), 0) << name;
+        EXPECT_LE(rect.getBottom(), PianoRollComponent::kHeaderHeight) << name << " must stay inside the header strip";
+    }
+
+    for (size_t i = 0; i + 1 < chips.size(); ++i) {
+        EXPECT_LT(chips[i].second.getRight(), chips[i + 1].second.getX())
+            << chips[i].first << " overlaps or touches " << chips[i + 1].first;
+    }
+
+    // Each chip resolves to its OWN hover id — the same seam paintHeader's lit rect reads, so a
+    // mismatch here would mean the drawn wash and the clickable area had drifted apart.
+    const std::vector<std::pair<PianoRollComponent::HeaderButtonId, juce::Rectangle<int>>> ids{
+        {PianoRollComponent::HeaderButtonId::Back, f.roll.getBackButtonBounds()},
+        {PianoRollComponent::HeaderButtonId::Snap, f.roll.getSnapButtonBounds()},
+        {PianoRollComponent::HeaderButtonId::Quantise, f.roll.getQuantiseButtonBounds()},
+        {PianoRollComponent::HeaderButtonId::QuantisePitches, f.roll.getQuantisePitchButtonBounds()},
+        {PianoRollComponent::HeaderButtonId::Scale, f.roll.getScaleButtonBounds()},
+        {PianoRollComponent::HeaderButtonId::ScaleFilter, f.roll.getScaleFilterButtonBounds()},
+    };
+    for (const auto& [id, rect] : ids) {
+        f.roll.mouseMove(hover(f.roll, centreOf(rect)));
+        EXPECT_TRUE(f.roll.isHeaderButtonHoveredForTest(id)) << "chip id " << (int)id;
+    }
+
+    // And every one of them carries a tooltip except Back (an unlabelled arrow needs none).
+    for (const auto& [id, rect] : ids) {
+        if (id == PianoRollComponent::HeaderButtonId::Back)
+            continue;
+        EXPECT_FALSE(f.roll.getTooltipFor(rect.getCentre()).isEmpty()) << "chip id " << (int)id;
+    }
+}
+
+// ============================================================================
+// 24. SNAP vs the DRAWN grid (3.3): the chosen division stays visible with snap off.
+// ============================================================================
+
+TEST(PianoRollGridVisibilityTest, TurningSnapOffKeepsEveryGridlineButStopsMagnetism) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    f.open(clipId);
+    // A division FINER than a beat, so there is a subdivision level to lose in the first place.
+    f.state.snap = TimelineViewState::Snap::Sixteenth;
+    f.state.snapEnabled = true;
+
+    const double division = f.roll.getDrawnGridDivisionForTest();
+    ASSERT_GT(division, 0.0);
+    ASSERT_LT(division, 1.0) << "the bug only shows on a sub-beat level";
+    const int linesWithSnapOn = f.roll.getGridLineCountForTest(division);
+    ASSERT_GT(linesWithSnapOn, 0);
+
+    f.roll.toggleSnap();
+    ASSERT_FALSE(f.state.snapEnabled);
+
+    EXPECT_DOUBLE_EQ(f.roll.getDrawnGridDivisionForTest(), division) << "the DRAWN division is snap-independent";
+    EXPECT_EQ(f.roll.getGridLineCountForTest(division), linesWithSnapOn)
+        << "turning snap off must not erase a single gridline";
+    // Magnetism, and only magnetism, went away.
+    EXPECT_DOUBLE_EQ(f.roll.getGridDivisionForTest(), 0.0);
+}
+
+// Snap::Off is different from "snap switched off": no division is CHOSEN, so there genuinely is no
+// sub-beat level to draw. The beat and bar levels are unconditional and stay.
+TEST(PianoRollGridVisibilityTest, SnapOffAsADivisionChoiceHasNoSubBeatLevelAtAll) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    f.open(clipId);
+
+    f.state.snap = TimelineViewState::Snap::Off;
+    EXPECT_DOUBLE_EQ(f.roll.getDrawnGridDivisionForTest(), 0.0);
+    EXPECT_GT(f.roll.getGridLineCountForTest(1.0), 0) << "beat lines are unconditional";
+}
+
+// ============================================================================
+// 25. SHOW ONLY SCALE NOTES as a header chip + Option+S (item 1), and the scale-aware
+//     Up/Down transpose it enables (item 2).
+// ============================================================================
+
+TEST(PianoRollScaleFilterTest, ChipKeyAndPanelCheckboxAllDriveOneSharedState) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    f.open(clipId);
+    chooseMajorScaleForOpenClip(f);
+
+    auto& toggle = f.roll.getScaleAssistPanel().getPitchVisibilityToggle();
+    ASSERT_FALSE(f.roll.isScaleFilterOn());
+    ASSERT_FALSE(toggle.getToggleState());
+    ASSERT_FALSE(f.roll.getScaleFilterButtonBounds().isEmpty()) << "the chip has a real rect";
+
+    // 1) The CHIP. The panel's checkbox must follow it — they are two views of one flag.
+    f.roll.mouseDown(leftClick(f.roll, centreOf(f.roll.getScaleFilterButtonBounds())));
+    EXPECT_TRUE(f.roll.isScaleFilterOn());
+    EXPECT_TRUE(toggle.getToggleState()) << "the panel checkbox reflects the chip";
+    EXPECT_TRUE(f.roll.isRowFilterActive());
+
+    // 2) The KEY (Option+S), which must toggle the SAME flag back off.
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress('s', juce::ModifierKeys::altModifier, 0)));
+    EXPECT_FALSE(f.roll.isScaleFilterOn());
+    EXPECT_FALSE(toggle.getToggleState());
+
+    // 3) The PANEL CHECKBOX, still wired the other way round.
+    toggle.setToggleState(true, juce::sendNotificationSync);
+    EXPECT_TRUE(f.roll.isScaleFilterOn());
+    EXPECT_TRUE(f.roll.isRowFilterActive());
+}
+
+// Option+S must not be the scale PANEL's Ctrl+S wearing a different hat.
+TEST(PianoRollScaleFilterTest, OptionSDoesNotToggleTheScalePanelAndCtrlSDoesNotToggleTheFilter) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    f.open(clipId);
+    chooseMajorScaleForOpenClip(f);
+
+    ASSERT_FALSE(f.roll.isScalePanelTargetVisibleForTest());
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress('s', juce::ModifierKeys::altModifier, 0)));
+    EXPECT_TRUE(f.roll.isScaleFilterOn());
+    EXPECT_FALSE(f.roll.isScalePanelTargetVisibleForTest()) << "Option+S is the FILTER, not the panel";
+
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress('s', juce::ModifierKeys::ctrlModifier, 0)));
+    EXPECT_TRUE(f.roll.isScalePanelTargetVisibleForTest());
+    EXPECT_TRUE(f.roll.isScaleFilterOn()) << "Ctrl+S is the PANEL, and left the filter alone";
+}
+
+TEST(PianoRollScaleFilterTest, TheChipIsANoOpWithNoClipOpenAndTheKeyFallsThrough) {
+    PianoRollFixture f;
+    ASSERT_FALSE(f.roll.isOpen());
+    f.roll.mouseDown(leftClick(f.roll, centreOf(f.roll.getScaleFilterButtonBounds())));
+    EXPECT_FALSE(f.roll.isScaleFilterOn());
+    EXPECT_FALSE(f.roll.keyPressed(juce::KeyPress('s', juce::ModifierKeys::altModifier, 0)))
+        << "nothing open to filter: the key keeps whatever meaning it has elsewhere";
+}
+
+// The filter is remembered PER CLIP, like the scale it goes with.
+TEST(PianoRollScaleFilterTest, TheFlagIsRememberedPerClip) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipA = f.doc.addClip(trackId, 0.0, 8.0, "A");
+    const auto clipB = f.doc.addClip(trackId, 8.0, 8.0, "B");
+
+    f.open(clipA);
+    chooseMajorScaleForOpenClip(f);
+    f.roll.toggleScaleFilter();
+    ASSERT_TRUE(f.roll.isScaleFilterOn());
+
+    f.open(clipB);
+    EXPECT_FALSE(f.roll.isScaleFilterOn()) << "a clip never filtered before starts off";
+
+    f.open(clipA);
+    EXPECT_TRUE(f.roll.isScaleFilterOn()) << "clip A remembered";
+    EXPECT_TRUE(f.roll.getScaleAssistPanel().getPitchVisibilityToggle().getToggleState())
+        << "and the panel was re-reflected on reopen";
+}
+
+// ---- Item 2: Up/Down steps by SCALE DEGREE while the filter is on ----
+
+TEST(PianoRollScaleFilterTest, ArrowUpDownStepsByScaleDegreeWithTheFilterOn) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    f.open(clipId);
+    chooseMajorScaleForOpenClip(f); // C Major: C D E F G A B == 60 62 64 65 67 69 71
+
+    const auto id = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0)); // C4
+    ASSERT_TRUE(id.isValid());
+    f.roll.getSelectionForTest().setSelection({id});
+    f.roll.toggleScaleFilter();
+    ASSERT_TRUE(f.roll.isRowFilterActive());
+
+    // C -> D is TWO semitones, and the old chromatic step would have landed on C#, a row that is not
+    // even drawn any more.
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::upKey)));
+    EXPECT_EQ(f.doc.getNote(id)->pitch, 62) << "next scale degree up, not next semitone";
+
+    // D -> E, also two semitones.
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::upKey)));
+    EXPECT_EQ(f.doc.getNote(id)->pitch, 64);
+
+    // E -> F is ONE semitone: the step follows the SCALE's own spacing, not a fixed interval.
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::upKey)));
+    EXPECT_EQ(f.doc.getNote(id)->pitch, 65);
+
+    // And back down again, through the same uneven spacing.
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::downKey)));
+    EXPECT_EQ(f.doc.getNote(id)->pitch, 64);
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::downKey)));
+    EXPECT_EQ(f.doc.getNote(id)->pitch, 62);
+
+    // Every landing pitch was a DRAWN row — the property the whole change exists to guarantee.
+    const auto& rows = f.roll.getVisiblePitchesForTest();
+    EXPECT_NE(std::find(rows.begin(), rows.end(), f.doc.getNote(id)->pitch), rows.end());
+}
+
+TEST(PianoRollScaleFilterTest, ArrowUpDownStaysChromaticWithTheFilterOff) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    f.open(clipId);
+    // A scale IS chosen — only the filter is off, which is the case that must stay chromatic.
+    chooseMajorScaleForOpenClip(f);
+    ASSERT_FALSE(f.roll.isRowFilterActive());
+
+    const auto id = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0));
+    f.roll.getSelectionForTest().setSelection({id});
+
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::upKey)));
+    EXPECT_EQ(f.doc.getNote(id)->pitch, 61) << "C# — out of scale, and that is correct with the filter off";
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::downKey)));
+    EXPECT_EQ(f.doc.getNote(id)->pitch, 60);
+}
+
+// The octave pair is unchanged: twelve SEMITONES, never twelve degrees, filter or no filter.
+TEST(PianoRollScaleFilterTest, ShiftUpDownStaysAnOctaveEvenWithTheFilterOn) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    f.open(clipId);
+    chooseMajorScaleForOpenClip(f);
+    const auto id = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0));
+    f.roll.getSelectionForTest().setSelection({id});
+    f.roll.toggleScaleFilter();
+    ASSERT_TRUE(f.roll.isRowFilterActive());
+
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::shiftModifier, 0)));
+    EXPECT_EQ(f.doc.getNote(id)->pitch, 72) << "an octave is 12 semitones by definition";
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::downKey, juce::ModifierKeys::shiftModifier, 0)));
+    EXPECT_EQ(f.doc.getNote(id)->pitch, 60);
+}
+
+// A chord keeps its SHAPE in row space, and clamps as a group at the extremes.
+TEST(PianoRollScaleFilterTest, DegreeStepMovesAChordTogetherAndClampsAsAGroup) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    f.open(clipId);
+    chooseMajorScaleForOpenClip(f);
+
+    const auto lo = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0));  // C
+    const auto mid = f.doc.addNote(clipId, makeNote(1.0, 64, 1.0)); // E
+    const auto hi = f.doc.addNote(clipId, makeNote(1.0, 67, 1.0));  // G
+    f.roll.getSelectionForTest().setSelection({lo, mid, hi});
+    f.roll.toggleScaleFilter();
+
+    EXPECT_TRUE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::upKey)));
+    // Each note moves ONE DEGREE: C->D, E->F, G->A. The semitone intervals change (that is what a
+    // diatonic step does); the row spacing does not.
+    EXPECT_EQ(f.doc.getNote(lo)->pitch, 62);
+    EXPECT_EQ(f.doc.getNote(mid)->pitch, 65);
+    EXPECT_EQ(f.doc.getNote(hi)->pitch, 69);
+
+    ASSERT_TRUE(f.undo.canUndo());
+    f.undo.undo();
+    EXPECT_EQ(f.doc.getNote(lo)->pitch, 60);
+    EXPECT_EQ(f.doc.getNote(mid)->pitch, 64);
+    EXPECT_EQ(f.doc.getNote(hi)->pitch, 67);
+    EXPECT_FALSE(f.undo.canUndo()) << "the whole chord moved in ONE undo step";
+}
+
+TEST(PianoRollScaleFilterTest, DegreeStepFallsThroughWithNothingSelected) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    f.open(clipId);
+    ASSERT_TRUE(f.doc.addNote(clipId, makeNote(1.0, 60, 1.0)).isValid());
+    f.roll.getSelectionForTest().clear();
+
+    EXPECT_FALSE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::upKey)));
+    EXPECT_FALSE(f.roll.keyPressed(juce::KeyPress(juce::KeyPress::downKey)));
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+// ============================================================================
+// 26. CMD+DRAG = unsnapped MOVE, and the velocity scrub's move to Option (3.4).
+// ============================================================================
+
+TEST(PianoRollCmdMoveTest, CmdDragOnANoteBodyMovesItWithoutSnapping) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    f.open(clipId);
+    ASSERT_DOUBLE_EQ(f.roll.getGridDivisionForTest(), 1.0) << "the fixture pins a 1-beat grid";
+
+    const auto id = f.doc.addNote(clipId, makeNote(2.0, 60, 1.0));
+    f.roll.getSelectionForTest().setSelection({id});
+
+    const auto anchor = centreOf(f.roll.getNoteRect(id));
+    const juce::Point<float> nudged(anchor.x + 10.0f, anchor.y); // +0.25 beats: a QUARTER division
+
+    // Plain drag snaps back to where it started — a sub-division move rounds away entirely.
+    f.roll.mouseDown(leftClick(f.roll, anchor));
+    f.roll.mouseDrag(leftDrag(f.roll, nudged, anchor));
+    f.roll.mouseUp(leftDrag(f.roll, nudged, anchor));
+    EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 2.0);
+    EXPECT_FALSE(f.undo.canUndo());
+
+    // Cmd+drag lands exactly where the pointer went.
+    f.roll.mouseDown(leftClick(f.roll, anchor, juce::ModifierKeys::commandModifier));
+    f.roll.mouseDrag(leftDrag(f.roll, nudged, anchor, juce::ModifierKeys::commandModifier));
+    f.roll.mouseUp(leftDrag(f.roll, nudged, anchor, juce::ModifierKeys::commandModifier));
+    EXPECT_NEAR(f.doc.getNote(id)->startBeat, 2.25, 1.0e-9) << "Cmd bypassed the grid";
+    EXPECT_EQ(f.doc.getNote(id)->pitch, 60) << "a horizontal drag changed no pitch";
+    EXPECT_TRUE(f.undo.canUndo());
+}
+
+// Cmd+CLICK (a press that never crossed the drag threshold) is still an additive-select TOGGLE, and
+// it must not move anything or write an undo step.
+TEST(PianoRollCmdMoveTest, CmdClickTogglesSelectionWithoutMovingOrRecording) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    f.open(clipId);
+
+    const auto a = f.doc.addNote(clipId, makeNote(1.0, 60, 1.0));
+    const auto b = f.doc.addNote(clipId, makeNote(5.0, 64, 1.0));
+    f.roll.getSelectionForTest().setSelection({a});
+
+    // Cmd+click an UNSELECTED note: adds it.
+    const auto bCentre = centreOf(f.roll.getNoteRect(b));
+    f.roll.mouseDown(leftClick(f.roll, bCentre, juce::ModifierKeys::commandModifier));
+    f.roll.mouseUp(leftClick(f.roll, bCentre, juce::ModifierKeys::commandModifier));
+    EXPECT_TRUE(f.roll.getSelectionForTest().contains(a));
+    EXPECT_TRUE(f.roll.getSelectionForTest().contains(b));
+    EXPECT_DOUBLE_EQ(f.doc.getNote(b)->startBeat, 5.0) << "a click moves nothing";
+    EXPECT_FALSE(f.undo.canUndo()) << "selection is not document state";
+
+    // Cmd+click it AGAIN: removes it. That is the toggle half the drag has to share the modifier with.
+    f.roll.mouseDown(leftClick(f.roll, bCentre, juce::ModifierKeys::commandModifier));
+    f.roll.mouseUp(leftClick(f.roll, bCentre, juce::ModifierKeys::commandModifier));
+    EXPECT_TRUE(f.roll.getSelectionForTest().contains(a));
+    EXPECT_FALSE(f.roll.getSelectionForTest().contains(b)) << "Cmd+click toggled it back out";
+    EXPECT_FALSE(f.undo.canUndo());
+}
+
+// A Cmd+DRAG on an already-selected note must NOT toggle it out from under the gesture — the toggle
+// only fires when nothing moved.
+TEST(PianoRollCmdMoveTest, CmdDragOnASelectedNoteKeepsItSelected) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    f.open(clipId);
+    const auto id = f.doc.addNote(clipId, makeNote(2.0, 60, 1.0));
+    f.roll.getSelectionForTest().setSelection({id});
+
+    const auto anchor = centreOf(f.roll.getNoteRect(id));
+    const juce::Point<float> moved(anchor.x + 40.0f, anchor.y);
+    f.roll.mouseDown(leftClick(f.roll, anchor, juce::ModifierKeys::commandModifier));
+    f.roll.mouseDrag(leftDrag(f.roll, moved, anchor, juce::ModifierKeys::commandModifier));
+    f.roll.mouseUp(leftDrag(f.roll, moved, anchor, juce::ModifierKeys::commandModifier));
+
+    EXPECT_TRUE(f.roll.getSelectionForTest().contains(id)) << "the drag must not deselect what it moved";
+    EXPECT_NEAR(f.doc.getNote(id)->startBeat, 3.0, 1.0e-9);
+}
+
+TEST(PianoRollCmdMoveTest, OptionDragScrubsVelocityAndCmdDragNoLongerDoes) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    f.open(clipId);
+
+    auto n = makeNote(2.0, 60, 1.0);
+    n.velocity = 80;
+    const auto id = f.doc.addNote(clipId, n);
+    f.roll.getSelectionForTest().setSelection({id});
+
+    const auto anchor = centreOf(f.roll.getNoteRect(id));
+    const juce::Point<float> up(anchor.x, anchor.y - 10.0f);
+
+    // Option = velocity, and it changes no geometry.
+    f.roll.mouseDown(leftClick(f.roll, anchor, juce::ModifierKeys::altModifier));
+    f.roll.mouseDrag(leftDrag(f.roll, up, anchor, juce::ModifierKeys::altModifier));
+    f.roll.mouseUp(leftDrag(f.roll, up, anchor, juce::ModifierKeys::altModifier));
+    EXPECT_EQ(f.doc.getNote(id)->velocity, 90);
+    EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 2.0);
+    EXPECT_EQ(f.doc.getNote(id)->pitch, 60);
+
+    // Cmd = move, and it changes no velocity. A vertical Cmd drag moves the PITCH now, which is the
+    // clearest proof the two gestures really did swap.
+    f.roll.mouseDown(leftClick(f.roll, anchor, juce::ModifierKeys::commandModifier));
+    f.roll.mouseDrag(leftDrag(f.roll, up, anchor, juce::ModifierKeys::commandModifier));
+    f.roll.mouseUp(leftDrag(f.roll, up, anchor, juce::ModifierKeys::commandModifier));
+    EXPECT_EQ(f.doc.getNote(id)->velocity, 90) << "unchanged: Cmd is not the velocity gesture any more";
+    EXPECT_EQ(f.doc.getNote(id)->pitch, 61) << "one row up";
+}
+
+// Cmd on the right EDGE still resizes (the more specific of the two Cmd gestures), so the body case
+// above cannot have swallowed it.
+TEST(PianoRollCmdMoveTest, CmdOnTheRightEdgeStillResizesRatherThanMoving) {
+    PianoRollFixture f;
+    const auto trackId = f.doc.addTrack(TrackKind::Midi, "Track 1");
+    const auto clipId = f.doc.addClip(trackId, 0.0, 16.0, "Clip");
+    f.open(clipId);
+    const auto id = f.doc.addNote(clipId, makeNote(2.0, 60, 1.0));
+    f.roll.getSelectionForTest().setSelection({id});
+
+    const auto rect = f.roll.getNoteRect(id);
+    const juce::Point<float> edge((float)rect.getRight() - 2.0f, (float)rect.getCentreY());
+    const juce::Point<float> dragged(edge.x + 10.0f, edge.y);
+
+    f.roll.mouseDown(leftClick(f.roll, edge, juce::ModifierKeys::commandModifier));
+    EXPECT_TRUE(f.roll.isResizeUnquantizedForTest()) << "still the resize gesture, not the move";
+    f.roll.mouseDrag(leftDrag(f.roll, dragged, edge, juce::ModifierKeys::commandModifier));
+    f.roll.mouseUp(leftDrag(f.roll, dragged, edge, juce::ModifierKeys::commandModifier));
+
+    EXPECT_DOUBLE_EQ(f.doc.getNote(id)->startBeat, 2.0) << "a resize never moves the start";
+    EXPECT_GT(f.doc.getNote(id)->lengthBeats, 1.0);
+}
+
 // ============================================================================
 // ScaleAssistPanel — the component in isolation, via its own accessors.
 // ============================================================================
@@ -5143,16 +5581,12 @@ TEST(ScaleAssistPanelTest, PitchVisibilityToggleFiresCallbackWithItsState) {
     EXPECT_FALSE(fired.back());
 }
 
-TEST(ScaleAssistPanelTest, QuantizeAndGenerateButtonsFireTheirCallbacks) {
+// Pitch-quantize has NO button here any more — its only entry points are the roll's header chip and
+// Option+Shift+Q (see the ScaleAssistPanel class comment). Generate is what remains.
+TEST(ScaleAssistPanelTest, GenerateButtonFiresItsCallback) {
     ScaleAssistPanel panel;
-    int quantiseCount = 0;
-    panel.onQuantizePitches = [&] { ++quantiseCount; };
     std::vector<std::tuple<int, int, bool>> generated;
     panel.onGenerate = [&](int lo, int hi, bool add) { generated.emplace_back(lo, hi, add); };
-
-    panel.getQuantizeButton().setEnabled(true); // no scale selected yet in this bare-panel test
-    panel.getQuantizeButton().onClick();
-    EXPECT_EQ(quantiseCount, 1);
 
     panel.getMinNoteCombo().setSelectedId(37, juce::dontSendNotification); // pitch 36 == C2
     panel.getMaxNoteCombo().setSelectedId(73, juce::dontSendNotification); // pitch 72 == C5

@@ -245,6 +245,20 @@ public:
     static juce::StringArray moduleFactoryTypeNames();
 
     /**
+     * @brief Every factory type whose module carries the Dual I/O parameter, sorted.
+     *
+     * THE authoritative answer to "does this module type support the Dual I/O toggle" — derived by
+     * probing the factory (one throwaway instance per type, computed once and cached) and asking
+     * each module `ModuleBase::hasDualIOParameter()`, never from a hand-kept list. Both consumers
+     * of that question read it: `PreferencesSettingsTab::getDualIOModuleTypes()` (the per-module
+     * defaults popup) and the Dual I/O default that `GraphEditor::applyDefaultDualIOForNewModule`
+     * applies to a newly created module. A module that gains `addDualIOParameter()` therefore
+     * appears in the Preferences popup with no second edit — the Ring Modulator was missing from
+     * the popup for exactly as long as that list was written out by hand.
+     */
+    static const juce::StringArray& dualIOCapableModuleTypes();
+
+    /**
      * @brief The module types a model is allowed to author, sorted.
      *
      * Derived from the factory minus the non-authorable set, so registering a module makes it

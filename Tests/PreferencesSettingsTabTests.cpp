@@ -1,3 +1,5 @@
+#include "../Source/AI/AIStateMapper.h"
+#include "../Source/Modules/ModuleBase.h"
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/PreferencesSettingsTab.h"
 #include <algorithm>
@@ -352,17 +354,83 @@ TEST_F(PreferencesSettingsTabTest, DualIOPerModuleOverrideDefaultsToFollowGlobal
     }
 }
 
-// The canonical module-type list: every FX plus the five split-block voice modules
-// (docs/fx_modules.md § Stereo I/O), and nothing else duplicated or missing.
-TEST_F(PreferencesSettingsTabTest, DualIOModuleTypesListsEveryStereoCapableModuleExactlyOnce) {
+// The canonical module-type list, DERIVED FROM THE MODULES: the expectation is computed by walking
+// the module factory and asking each module hasDualIOParameter(), never written out by hand — the
+// Ring Modulator was missing from the hand-written version, with no test able to notice. Data-driven
+// over the factory, so a module added later is covered without touching this file.
+TEST_F(PreferencesSettingsTabTest, DualIOModuleTypesIsDerivedFromTheModulesThemselves) {
     const auto& types = PreferencesSettingsTab::getDualIOModuleTypes();
-    const std::vector<juce::String> expected{"Oscillator",    "Wavetable",  "Filter",  "VCA",    "Voice Mixer",
-                                             "Sampler",       "Distortion", "Delay",   "Chorus", "Bitcrusher",
-                                             "Limiter",       "Reverb",     "Flanger", "Phaser", "Pitch Shifter",
-                                             "Parametric EQ", "Compressor"};
-    ASSERT_EQ(types.size(), expected.size());
-    for (const auto& name : expected)
-        EXPECT_EQ(std::count(types.begin(), types.end(), name), 1) << name << " must appear exactly once";
+
+    for (const auto& name : synth::AIStateMapper::moduleFactoryTypeNames()) {
+        SCOPED_TRACE(name.toStdString());
+        auto probe = synth::AIStateMapper::createModule(name);
+        ASSERT_NE(probe, nullptr);
+        auto* mb = dynamic_cast<ModuleBase*>(probe.get());
+        const bool supportsDualIO = mb != nullptr && mb->hasDualIOParameter();
+        const auto occurrences = std::count(types.begin(), types.end(), name);
+        EXPECT_EQ(occurrences, supportsDualIO ? 1 : 0)
+            << (supportsDualIO ? "a module with the Dual I/O parameter must appear exactly once"
+                               : "a module without the Dual I/O parameter must not appear");
+    }
+
+    // Anchors: the module that was missing, plus one of each family that always belonged.
+    EXPECT_EQ(std::count(types.begin(), types.end(), juce::String("Ring Modulator")), 1);
+    EXPECT_EQ(std::count(types.begin(), types.end(), juce::String("Oscillator")), 1);
+    EXPECT_EQ(std::count(types.begin(), types.end(), juce::String("Reverb")), 1);
+    EXPECT_EQ(std::count(types.begin(), types.end(), juce::String("LFO")), 0) << "the LFO has no second audio leg";
+}
+
+// Both consumers of "does this type support Dual I/O" must agree with that one list, for EVERY type
+// on it: the Preferences popup (a row to set the default) and GraphEditor::applyDefaultDualIOForNewModule
+// (the code that applies it to a module the user creates). Looped over the derived list rather than
+// spot-checked, so a future module cannot reach main covered by one consumer and missed by the other.
+TEST_F(PreferencesSettingsTabTest, EveryDualIOCapableTypeReachesBothThePopupAndTheNewModulePath) {
+    const auto& types = PreferencesSettingsTab::getDualIOModuleTypes();
+    ASSERT_GT(types.size(), 10u) << "expected the full stereo-capable set";
+
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 460);
+    auto popup = tab.createDualIOPerModuleDefaultsPopupForTest();
+    ASSERT_NE(popup, nullptr);
+    popup->setSize(400, 1200);
+
+    std::vector<juce::String> rowLabels;
+    for (auto* child : popup->getChildren())
+        if (auto* l = dynamic_cast<juce::Label*>(child))
+            rowLabels.push_back(l->getText());
+
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+    tab.setGraphEditor(&editor);
+    // Global default deliberately the OPPOSITE of every override below, so a type whose override is
+    // ignored shows up as the global's value rather than accidentally matching.
+    tab.setDefaultDualIOForNewModules(false);
+
+    int y = 100;
+    for (const auto& type : types) {
+        SCOPED_TRACE(type.toStdString());
+
+        // Consumer 1: the popup offers a row for this type.
+        EXPECT_EQ(std::count(rowLabels.begin(), rowLabels.end(), type), 1) << "no row in the per-module defaults popup";
+
+        // Consumer 2: the override for this type reaches a module the user creates.
+        tab.setDualIOOverrideForType(type, true);
+        editor.addModuleAtCanvasPosition(type, juce::Point<int>(100, y), nullptr);
+        y += 40;
+
+        juce::AudioProcessor* created = nullptr;
+        for (auto* node : engine.getGraph().getNodes())
+            if (synth::AIStateMapper::getFactoryTypeName(node->getProcessor()) == type ||
+                node->getProcessor()->getName() == type)
+                created = node->getProcessor();
+        ASSERT_NE(created, nullptr) << "the type could not be created on the canvas";
+        auto* mb = dynamic_cast<ModuleBase*>(created);
+        ASSERT_NE(mb, nullptr);
+        EXPECT_TRUE(mb->isDualIO()) << "the per-module override never reached applyDefaultDualIOForNewModule";
+
+        tab.setDualIOOverrideForType(type, std::nullopt);
+    }
 }
 
 // Test seam for the popup: button state plus the exact content component a real click would open,

@@ -2,6 +2,18 @@
 
 Detailed specifications for Agent Synth's primary synthesis modules.
 
+> **Which modules are stereo-capable is a question with one answer.** A module declares that it can
+> split its audio jacks by calling `ModuleBase::addDualIOParameter()` in its constructor, and
+> `AIStateMapper::dualIOCapableModuleTypes()` is the single authoritative list — probed from the
+> module factory (one throwaway instance per type, asked `hasDualIOParameter()`), cached, and read by
+> both consumers of the question: the Preferences per-module defaults popup
+> (`PreferencesSettingsTab::getDualIOModuleTypes()`) and the default a newly created module gets
+> (`GraphEditor::applyDefaultDualIOForNewModule`). Never re-list those types by hand — the Ring
+> Modulator sat outside a hand-written copy of the list for a whole release: it had a stereo output
+> pair, but no Preferences row, no global "Split Left/Right jacks" coverage, and no failing test.
+> The toggle's semantics (what "off" means per layout, what happens to existing cables in each
+> direction) live in [`fx_modules.md § Stereo I/O`](fx_modules.md#stereo-io-dual-io-toggle).
+
 > **Level parameters.** There is no universal per-module gain. Modules that output audio expose a level control: Oscillator, LFO, Noise and Voice Mixer have their own `level`; VCA has `gain`; Filter and the FX modules use the shared opt-in output-level stage documented in [`fx_modules.md § Output Level`](fx_modules.md#output-level-shared-stage). Modules that output **pitch/gate CV or MIDI** (Sequencer, Poly Sequencer, ADSR, Poly MIDI, MIDI Keyboard, External MIDI) deliberately have none — scaling a V/oct pitch CV transposes it, and scaling a gate drops it below the `> 0.5f` trigger threshold. Attenuverter has none because it already is a gain stage.
 
 ## Oscillator Module
@@ -193,7 +205,8 @@ Loads an audio file from disk and plays it back one of two ways.
 - **Implementation**: `LPF24/12`, `HPF24/12`, `BPF24/12` use `juce::dsp::LadderFilter`; `Notch` uses `juce::dsp::StateVariableTPTFilter` (notch computed as input minus bandpass).
 - **Parameters**: Cutoff (20–20000 Hz), Resonance (0–1), Drive (1–10), Filter Type (choice), Poly (bool), Level (0–1, default 1.0 — the shared output-level stage; see [`fx_modules.md § Output Level`](fx_modules.md#output-level-shared-stage)). Level scales ch0 in mono mode and all 8 voice channels in poly mode, plus the matching `Audio R` block, never the CV inputs. It goes through `ModuleBase::applyOutputLevelSplit` so **one** smoothing ramp covers both legs — two `applyOutputLevel` calls would advance the smoother twice and leave the right leg a block behind the left.
 - **Stereo (issue #219)**: two audio input jacks (`Audio L`, `Audio R`) and two output jacks. Unlike a pure source, a filter needs the right leg as an **input** as well as an output, so `kRightBase` (ch11, fanning to ch11-18 in poly) is both. Each leg has its own `juce::dsp::LadderFilter` (and notch SVF) per voice — `ladders[leg][voice]` — because a stereo signal through a single shared ladder collapses back to mono. Both legs get identical per-sample coefficients; only their state is separate.
-- **Why not FX-style Dual I/O**: that toggle assumes a contiguous ch0/ch1 audio pair, and ch1 here is the Cutoff CV input. Moving Cutoff would break every saved patch that modulates it, so the right leg goes on its own block above the CV inputs instead. Dual I/O stays FX-only.
+- **Why not FX-style Dual I/O**: the Filter carries the same Dual I/O toggle as the FX (defaulting to *on*), but not their channel layout. The FX collapse assumes a contiguous ch0/ch1 audio pair, and ch1 here is the Cutoff CV input — moving Cutoff would break every saved patch that modulates it, so the right leg goes on its own block above the CV inputs instead. Consequence: "off" on this module shows the **left leg only** (the right block is hidden and unpatchable), where "off" on an FX shows one jack owning *both* legs. See [`fx_modules.md § Split-block modules share the toggle, not the channel layout`](fx_modules.md#split-block-modules-share-the-toggle-not-the-channel-layout).
+- **Collapsing hands the right leg's cables back, it does not silence them**: a cable on the hidden `kRightBase` block is re-pointed onto the matching channel of the left block wherever the far end still exposes it (`GraphEditor::dropHiddenRightLegConnections`), and splitting again takes it back off the left leg. Without that, collapsing the default patch's voice chain left every right channel downstream rendering silence — the mix jumped left.
 - **A silent `Audio R` costs nothing.** The right leg is skipped per block when its input is silent, so a mono insert performs as it did before #219 and emits silence on `Audio R`. Patch both jacks to get a stereo path.
 - **CV inputs (mono mode)**: Cutoff = ch1, Resonance = ch2, Drive = ch3 — unchanged by #219. Visible jack *order* changed (Audio L, Audio R, then the CV jacks), but connections persist by raw channel index, so no saved patch is affected.
 - **CV inputs (poly mode)**: Cutoff = ch8, Resonance = ch9, Drive = ch10.
@@ -265,6 +278,7 @@ Hand-played MIDI rarely repeats a pitch inside an envelope's attack; **machine-g
 - **Purpose**: Explicit 8-to-stereo voice summing with level control and soft saturation. An alternative to VCA's internal poly summing for patches that need a separate mix stage.
 - **Inputs**: ch0-7 (up to 8 voice signals).
 - **Outputs**: ch0 (Left), ch1 (Right) — stereo copy of the mono sum.
+- **Dual I/O**: output-only (the inputs are eight voice jacks, not a stereo pair), off by default — one `"Audio"` jack owning ch0/ch1. Same shape as the Ring Modulator's; see [`fx_modules.md § Stereo I/O`](fx_modules.md#stereo-io-dual-io-toggle).
 - **Processing**: Sums all 8 input channels, scales by Level parameter (0–1, default 0.125), then applies `std::tanh` soft saturation for gentle clip protection. Level smoothed over 10 ms to prevent clicks.
 - **Parameter**: `Level` (0.0–1.0, default 0.125).
 
