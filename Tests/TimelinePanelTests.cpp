@@ -131,11 +131,10 @@ protected:
         juce::ApplicationProperties props;
         props.setStorageParameters(opts);
         if (auto* s = props.getUserSettings()) {
-            s->setValue("librarySidebarVisible", "1");  // default: visible
-            s->setValue("aiPanelVisible", "0");         // default: hidden
-            s->setValue("minimapVisible", "1");         // default: visible
-            s->setValue("timelinePanelVisible", "0");   // default: hidden
-            s->setValue("timelineFeatureEnabled", "1"); // default: enabled (the kill switch is off)
+            s->setValue("librarySidebarVisible", "1"); // default: visible
+            s->setValue("aiPanelVisible", "0");        // default: hidden
+            s->setValue("minimapVisible", "1");        // default: visible
+            s->setValue("timelinePanelVisible", "0");  // default: hidden
             // Removed, not defaulted: absent is what makes the theme metric the default height.
             s->removeValue(MainComponent::kTimelinePanelHeightKey);
             s->saveIfNeeded();
@@ -211,57 +210,30 @@ TEST_F(TimelinePanelIntegrationTest, VisibilityPersists) {
 }
 
 // ----------------------------------------------------------------------------
-// Preferences "Show timeline (experimental)" kill switch — hides the user-facing entry points
-// (toolbar button, Cmd+T, Space) without touching the timeline doc or audio-engine playback.
-// See MainComponent::applyTimelineFeatureEnabled().
+// The timeline is GA (the old Preferences "Show timeline (experimental)" kill switch and its
+// MainComponent::applyTimelineFeatureEnabled() plumbing are gone): the toolbar button, Cmd+T and
+// Space must never be gated off again.
 // ----------------------------------------------------------------------------
 
-TEST_F(TimelinePanelIntegrationTest, DisablingFeatureHidesVisiblePanelAndButton) {
+TEST_F(TimelinePanelIntegrationTest, ToggleTimelinePanelAndPlaybackCommandsAreAlwaysActive) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     mc.setSize(1600, 900);
-    mc.simulateToggleTimelineClick();
-    ASSERT_TRUE(mc.isTimelineConfiguredVisible());
-    ASSERT_TRUE(mc.getTimelinePanel().isVisible());
-
-    mc.applyTimelineFeatureEnabled(false);
-    EXPECT_FALSE(mc.isTimelineFeatureEnabledForTest());
-    // Hidden via the SAME path as a manual toolbar click — persisted, not just visually hidden.
-    EXPECT_FALSE(mc.isTimelineConfiguredVisible());
-    EXPECT_FALSE(mc.getTimelinePanel().isVisible());
-    EXPECT_FALSE(mc.getAppPropertiesForTest().getUserSettings()->getBoolValue("timelinePanelVisible", true));
-}
-
-TEST_F(TimelinePanelIntegrationTest, ReenablingFeatureRestoresButtonNotPanel) {
-    MainComponent mc(std::make_unique<MockProviderTL>());
-    mc.setSize(1600, 900);
-
-    mc.applyTimelineFeatureEnabled(false);
-    ASSERT_FALSE(mc.isTimelineFeatureEnabledForTest());
-
-    mc.applyTimelineFeatureEnabled(true);
-    EXPECT_TRUE(mc.isTimelineFeatureEnabledForTest());
-    // Re-enabling brings the button back but does not itself reopen the panel — that stays a
-    // separate, explicit user action (toolbar click / Cmd+T).
-    EXPECT_FALSE(mc.isTimelineConfiguredVisible());
-}
-
-TEST_F(TimelinePanelIntegrationTest, CmdTIsInertWhileFeatureDisabled) {
-    MainComponent mc(std::make_unique<MockProviderTL>());
-    mc.setSize(1600, 900);
-    mc.applyTimelineFeatureEnabled(false);
 
     auto& cm = mc.getCommandManager();
     juce::ApplicationCommandInfo info(AppCommands::toggleTimelinePanel);
     mc.getCommandInfo(AppCommands::toggleTimelinePanel, info);
-    EXPECT_NE(info.flags & juce::ApplicationCommandInfo::isDisabled, 0)
-        << "toggleTimelinePanel must be inactive while the timeline feature preference is off";
-    EXPECT_FALSE(cm.invokeDirectly(AppCommands::toggleTimelinePanel, false));
-    EXPECT_FALSE(mc.isTimelineConfiguredVisible());
+    EXPECT_EQ(info.flags & juce::ApplicationCommandInfo::isDisabled, 0) << "toggleTimelinePanel must always be active";
+    // invokeDirectly() only proves perform() ran (returns true) — its actual effect is
+    // toggleTimelineButton.triggerClick(), which POSTS a message and never dispatches in a
+    // headless test (see PreferencesSettingsTabTests.cpp's ClickingTheToggleReachesTheEditorAnd
+    // NewModules comment), so it is not asserted here. simulateToggleTimelineClick() (used by the
+    // tests above) is the synchronous path for observing the panel's actual visibility.
+    EXPECT_TRUE(cm.invokeDirectly(AppCommands::toggleTimelinePanel, false));
 
     juce::ApplicationCommandInfo playbackInfo(AppCommands::togglePlayback);
     mc.getCommandInfo(AppCommands::togglePlayback, playbackInfo);
-    EXPECT_NE(playbackInfo.flags & juce::ApplicationCommandInfo::isDisabled, 0)
-        << "togglePlayback (Space) must be inactive while the timeline feature preference is off";
+    EXPECT_EQ(playbackInfo.flags & juce::ApplicationCommandInfo::isDisabled, 0)
+        << "togglePlayback (Space) must always be active";
 }
 
 // ============================================================================
@@ -1982,7 +1954,7 @@ TEST(TimelinePanelResizeTest, InternalLayoutHoldsAtDoubleHeight) {
     const auto trackHeader = panel.getTrackHeaderBounds();
     const auto lanes = panel.getLanesBounds();
     EXPECT_EQ(transport.getUnion(trackHeader).getUnion(lanes), panel.getLocalBounds());
-    EXPECT_EQ(transport.getHeight(), 28) << "the transport strip keeps its metric height";
+    EXPECT_EQ(transport.getHeight(), 34) << "the transport strip keeps its metric height";
     EXPECT_EQ(lanes.getHeight(), lanesAtDefault + 220) << "the extra height all goes to the lanes";
     EXPECT_EQ(panel.getResizeHandle().getWidth(), 1200);
 

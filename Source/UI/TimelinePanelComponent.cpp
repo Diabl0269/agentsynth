@@ -24,8 +24,10 @@ constexpr double kZoomWheelSensitivity = 2.0;
 constexpr double kScrollPixelsPerWheelUnit = 200.0;
 
 constexpr int kSnapComboWidth = 90;
-constexpr int kSnapToggleButtonWidth = 26;
-constexpr int kFollowPlayheadButtonWidth = 26;
+// 30 (was 26): part of the timeline-panel button-size sweep — both buttons are .reduced(2) at
+// their setBounds() call site, so the effective on-screen size grows from 22 to 26 px.
+constexpr int kSnapToggleButtonWidth = 30;
+constexpr int kFollowPlayheadButtonWidth = 30;
 constexpr const char* kTimelineSnapPropertyKey = "timelineSnap";
 constexpr const char* kTimelineSnapEnabledPropertyKey = "timelineSnapEnabled";
 constexpr const char* kTimelineFollowPlayheadPropertyKey = "timelineFollowPlayhead";
@@ -44,7 +46,9 @@ constexpr int kAddTrackButtonHeight = 22;
 // Automation strip chrome geometry. Code-only (mirrors the rest of this file's literal
 // fallbacks); the strip's own height comes from the themed Metrics::timelineAutomationStripHeight.
 constexpr int kAutomationStripHeaderHeight = 24;
-constexpr int kAutomationToolButtonWidth = 24;
+// 28 (was 24): timeline-panel button-size sweep — .reduced(2) at the setBounds() call site takes
+// the effective width from 20 to 24 px.
+constexpr int kAutomationToolButtonWidth = 28;
 constexpr int kAutomationRecordModeComboWidth = 90;
 constexpr int kAutomationCloseButtonWidth = 24;
 constexpr int kAutomationToolRadioGroupId = 4200;
@@ -53,7 +57,9 @@ constexpr int kAutomationToolRadioGroupId = 4200;
 // (4300 — distinct from the automation strip's 4200, which is a different set of tools entirely
 // and must not untoggle these).
 constexpr int kEditToolRadioGroupId = 4300;
-constexpr int kEditToolButtonWidth = 24;
+// 28 (was 24): timeline-panel button-size sweep — .reduced(2) at the setBounds() call site takes
+// the effective width from 20 to 24 px.
+constexpr int kEditToolButtonWidth = 28;
 
 // The icon each edit tool's button paints — the SAME glyph synth::ui::makeToolCursor renders the
 // tool's cursor from, so button and cursor can never disagree.
@@ -1398,8 +1404,8 @@ void TimelinePanelComponent::syncTrackScroll() {
 void TimelinePanelComponent::resized() {
     // Themed metrics with literal fallbacks for the headless test path (same pattern as
     // MainComponent::resized()/computePanelBounds()).
-    int transportBarHeight = 28;
-    int trackHeaderWidth = 160;
+    int transportBarHeight = 34;
+    int trackHeaderWidth = 190;
     int rulerHeight = 24;
     int automationStripHeight = 72;
     if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {

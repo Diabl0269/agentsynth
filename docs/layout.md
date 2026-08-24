@@ -713,16 +713,38 @@ Persisted as `smartConnectionMode` in `juce::ApplicationProperties`. Default: **
 | **When main I/O is free** (default) | Yes | Yes, when the jacks that would be wired are still free (source output and dest input) |
 | **All module moves** | Yes | Yes (dest input must be free; a source that already fans out may still tap a free dest) |
 
-Group multi-select drags never smart-connect. Snippet drops are excluded.
+Group multi-select drags never smart-connect. Snippet drops are excluded. "Dest input must be free" has exactly one exception — the terminal audio sink, which offers an insert instead (see below).
 
 ### Behaviour
 
 1. During `updateDragPreview()`, if the mode allows it, cull neighbors whose **module** rects are more than **96 px** edge-to-edge, then score **jack-to-jack** distance (same 96 px cap). A pair is rejected when the source jack sits to the right of the dest jack — that stops wrap-around cables from a neighbor on the right into the dragged module’s left inputs.
 2. Score compatible jack pairs with `scoreJackPair` role matching and free destination jacks. In **When main I/O is free** the source output must also be unwired. Stereo requires explicit Left/Right (or Audio L/R) labels — two unlabeled ports (e.g. Math A/B) are never treated as L/R. Cap at the best neighbor’s audio group (stereo L→L / R→R, or mono↔stereo fan of both legs, both-or-neither when a stereo dest has a taken leg) plus one MIDI suggestion. Mod-matrix / attenuverter destinations are skipped in v1. MIDI suggestions are limited to known MIDI sources/destinations (Sequencer, Poly MIDI, MIDI Keyboard, Oscillator, …) because `ModuleBase` defaults `producesMidi()`/`acceptsMidi()` to true for almost every card.
-3. Frosted preview cables are drawn in `paintOverChildren` (~40% alpha via `drawConnectionWire`).
+3. Frosted preview cables are drawn in `paintOverChildren` (~40% alpha via `drawConnectionWire`). Colours resolve **only** through `GraphEditor::colourForCable` → `synth::ui::resolveCableColour`, so the cable-colour mode and user overrides apply to previews too.
 4. On drop / `finalizeModuleDrag`, pending suggestions are applied through `connectPorts` (same path as a manual cable drag: poly fans, MIDI, structural pitch/gate).
 
 Library drags cache a short-lived `AIStateMapper::createModule` probe for jack metadata before a real `ModuleComponent` exists.
+
+### Insert-in-series at the terminal audio sink
+
+An occupied destination jack is a **hard stop** everywhere except one node: the graph's terminal audio sink. Audio Output is a bare `juce::AudioGraphIOProcessor` (never a `ModuleBase` — the graph's output channel count is tied to it) and is wired in essentially every real patch, so the occupied-destination rule used to mean an FX parked next to it could never be offered anything at all. There, and only there, an occupied jack becomes a **reroute** instead: the cable already on the sink is re-pointed *through* the dragged module.
+
+`SmartSuggestion::isInsert` turns one suggestion record into that reroute. Three cables are in play — the doomed direct one (`upstreamId`:`upstreamJack` → `neighborJack`), and the two replacing it (`upstreamId`:`upstreamJack` → `ghostInJack`, then `ghostJack` → `neighborJack`).
+
+All of these must hold, or nothing is offered and the ordinary drop applies:
+
+- The sink is detected **by type** (`AudioGraphIOProcessor::audioOutputNode`), not by the `"Audio Output"` name `isSingletonIOModule` matches on, so a `ModuleBase` that happened to carry that name cannot impersonate it.
+- The ghost is the cable **source**, and has at least one audio **input** leg. A pure source (Oscillator, LFO) is refused: it cannot go in series, and offering it would be the silent parallel sum the drop rule exists to prevent.
+- **Every** leg of the group is occupied, by one and the same upstream node — both-or-neither, mirroring the stereo group rule. A mix of free and occupied legs, or two different feeds, would change the summing.
+- The feeding cable resolves through `findSingleUpstreamAudioLink`, which works at **cable** level (a visible output jack, never a raw graph edge) and returns nothing for a jack summed from several cables or fed through a mod routing / attenuverter chain.
+- The upstream is not the ghost itself (a move that would self-loop).
+
+One insert plan is emitted per **new** ghost→sink cable: a collapsed jack already fans to the whole raw pair, so a second plan for the sink's right leg would sum the ghost's *left* leg into it. Pairs whose raw destinations an earlier one already covers (via `resolvePolyLink`) are dropped.
+
+Scoring, the 96 px proximity cap and the left-to-right flow rule are unchanged — the ghost naturally hovers to the **left** of Audio Output, which is the insert position. An insert scores like the plain cable it replaces, so a neighbour offering a free jack can still win.
+
+**Preview.** The doomed cable is stroked first, dashed and dimmed (~18% alpha), underneath the two frosted segments that replace it — otherwise the extra preview reads as "and also", and the user expects the old wire to still be there after the drop. Paint-only; no new timers or repaints.
+
+**Apply.** `applySmartSuggestions` drops the direct cable **first** (`disconnectAudioLink`, the exact inverse of `connectPorts`, so a collapsed stereo wire takes both raw legs), then wires upstream → ghost → sink. All three edits share the caller's transaction, so **one** undo restores the original patch.
 
 ---
 
@@ -1629,14 +1651,10 @@ Keyboard focus is orthogonal to this diagram, not another region: whichever of t
 clip lanes / piano roll the user last clicked owns Cmd+C/V/D, per the **Keyboard & focus**
 subsection at the end of this section (TL5-10).
 
-Preferences has a runtime kill switch on top of all of
-this: "Show timeline (experimental)" (`PreferencesSettingsTab`, key `timelineFeatureEnabled`,
-default **on**). Turning it off hides the user-facing entry points only — the toolbar button
-(`MainComponent::toggleTimelineButton`), the Cmd+T command, and the Space play/stop transport key
-all become inactive/invisible via `MainComponent::applyTimelineFeatureEnabled()`, which reuses the
-toolbar toggle's own hide path if the panel happens to be open. It deliberately leaves everything
-else alive: the `TimelineDoc`, its audio-thread publishing, and project load/save all keep working
-exactly as before, so turning the preference back on picks up right where the user left off.
+The timeline is GA: the toolbar button (`MainComponent::toggleTimelineButton`), the Cmd+T command,
+and the Space play/stop transport key are always available. (An earlier "Show timeline
+(experimental)" Preferences kill switch has been removed; a stale `timelineFeatureEnabled` key left
+over from it in an existing install's `ApplicationProperties` is simply ignored.)
 
 ### What it is
 
@@ -1707,14 +1725,12 @@ extended to also lerp the timeline panel's bounds; showing the panel starts it f
 rect pinned at its final bottom edge (so it grows upward into place), and hiding it calls
 `setVisible(false)` in `onComplete`, same as the sibling panels.
 
-### No build-time gating
+### No build-time (or runtime) gating
 
 Everything past the always-present `TimelinePanelComponent` member and `PanelBoundsResult`/
 `computePanelBounds()` plumbing — the toolbar button, the `toggleTimelinePanel` command, and the
-carve itself — is ordinary, always-compiled code: there is no build configuration that omits the
-button, the shortcut, or the panel carve. The only thing that varies at runtime is the
-`timelineFeatureEnabled` preference described above, which hides the entry points without removing
-them.
+carve itself — is ordinary, always-compiled, always-active code: there is no build configuration
+and no runtime preference that omits the button, the shortcut, or the panel carve.
 
 Contents (ruler/grid/snap, track headers, the playhead, the transport bar, clip lanes, the piano
 roll, the automation strip, and finally the keyboard/focus rule tying it to the graph editor) are
@@ -1929,6 +1945,13 @@ column. The column is a fixed
 `"+ Track"` strip (22 px) at the top plus a `juce::Viewport` below it, so a project with more
 tracks than fit **scrolls**; rows are never compressed. Both live inside `getTrackHeaderBounds()`,
 so the panel's three regions still tile exactly.
+
+**Toggle sizing.** The `M`/`S`/`R`/`A` toggles are `kToggleWidth` (24 px, up from 20) with an
+explicit `kToggleGap` (4 px) between adjacent buttons — laid out edge-to-edge with no gap read as
+one fused block, the worst offender in the timeline-panel button-size sweep.
+`Metrics::timelineTrackHeaderWidth` grew alongside them (190 px, up from 160) so the wider,
+gapped toggle group doesn't crush the name label down to single-digit pixel widths when a track's
+`A` button is visible (4 toggles showing rather than 3).
 
 **The document is the truth.** A header stores no state of its own: it re-reads name, colour,
 mute/solo/arm and binding from the doc in `refreshFromDoc()`, and every edit is written back
@@ -2159,7 +2182,10 @@ restricts; asking for a repaint is.
 
 **Follow playhead.** A toggle button sits immediately next to the snap toggle in the panel's
 snap/tool strip (`followPlayheadButton_`, tinted via `Icon::FollowPlayhead` — see [`theming.md`
-§3](theming.md#3-icon-tinting)), backed by the boolean preference `"timelineFollowPlayhead"`
+§3](theming.md#3-icon-tinting)). Both `kFollowPlayheadButtonWidth` and the `"Q"` snap toggle's
+`kSnapToggleButtonWidth` are 30 px now (up from 26, from the timeline-panel button-size sweep) —
+grown together since the two sit side by side and read as one group. Backed by the boolean
+preference `"timelineFollowPlayhead"`
 (loaded/persisted the same way the snap-enabled flag is). Turning it on page-flips the panel's
 view horizontally so the playhead never scrolls off screen while playing. The check rides the
 SAME 10 Hz poll every other transport-driven repaint in `updateFromTransport` already uses — no
@@ -2191,9 +2217,12 @@ two independent view states.
 
 `Source/UI/TimelineTransportBar.h/.cpp` (`synth::ui::TimelineTransportBar`) — play/stop, record,
 loop, BPM and time-signature editors, and the bar:beat readout, left-aligned in the transport-bar
-strip (the snap combo stays docked right, TL5-2 above). Buttons are **square** — `min(22 px, the
+strip (the snap combo stays docked right, TL5-2 above). Buttons are **square** — `min(26 px, the
 strip height after padding)`, centred in their slot — with `kGap = 7px` between them and `kGap * 2`
-between groups; the two editable labels and the readout follow, in that order.
+between groups; the two editable labels and the readout follow, in that order. `kButtonSize` (26,
+up from 22) and `Metrics::timelineTransportBarHeight` (34, up from 28) were grown together in the
+timeline-panel button-size sweep, so the glyphs actually render larger instead of being clamped
+back down by `min(kButtonSize, bounds.getHeight())`.
 
 **No SVG assets.** All three buttons are one `GlyphButton` (a `juce::Button` subclass) drawing a
 plain `juce::Path` per glyph in `paintButton` — a triangle/square for play-stop, a circle for
@@ -2366,7 +2395,8 @@ the full command-vs-surface split and the tripwire test that guards it.
 in `TimelinePanelComponent`'s constructor (a headless build simply has no icon to draw in them —
 `getToolButton(tool)` is never null once the panel exists), one shared radio group id so clicking one
 un-toggles the rest, each with a tooltip that carries the digit (`"Split (3)"`, etc. —
-`editToolName(tool) + " (" + editToolKeyDigit(tool) + ")"`). Laid out left-to-right in `kAllEditTools`
+`editToolName(tool) + " (" + editToolKeyDigit(tool) + ")"`). `kEditToolButtonWidth` is 28 px (up
+from 24, from the timeline-panel button-size sweep). Laid out left-to-right in `kAllEditTools`
 order (1, 3, 4, 5, 7, 8) immediately left of the snap combo/toggle in the transport bar — both are
 "how the next edit behaves" chrome, so they read as one group without pushing the transport controls
 off their left-aligned home. `applyToolStripTheme()` (constructor + `lookAndFeelChanged()`) re-applies
@@ -3058,7 +3088,8 @@ timelineAutomationStripHeight` (72, code-only) off the bottom of `gridLanesBound
 shrink by that much — never the other way around, and the ruler/track-header column are untouched.
 
 **Strip chrome** (`TimelinePanelComponent`'s own members, laid out in `resized()`): a header row —
-four tool `juce::TextButton`s (glyphs `P` / `✎` / `╱` / `⌫`, radio-grouped so exactly one is down),
+four tool `juce::TextButton`s (glyphs `P` / `✎` / `╱` / `⌫`, radio-grouped so exactly one is down;
+`kAutomationToolButtonWidth` is 28 px, up from 24, from the timeline-panel button-size sweep),
 a lane-picker `juce::ComboBox` (every doc lane, labelled `"NodeName · paramId"` via
 `TrackHeaderHost::getNodeDisplayName(lane.nodeUuid)` — falling back to the uuid's first 8
 characters when it doesn't resolve — the SAME interface the track-header binding chip already
@@ -3227,9 +3258,9 @@ default binding: bare spacebar, no modifiers) is deliberately NOT routed by `res
 point the transport bar's own click handler uses — see TL5-5 above — so the button's visual state
 and a Space-triggered toggle can never disagree). Safe to claim app-wide for the same reason
 Cmd+C/V is (see `shortcuts.md`): a focused `juce::TextEditor` consumes the spacebar itself (types a
-space character) before `MainComponent::keyPressed`, the sole dispatch point, ever sees it. Inactive
-outright (`getCommandInfo` -> `setActive(timelineFeatureEnabled)`) whenever the "Show timeline
-(experimental)" preference has hidden the transport, since it isn't reachable while hidden.
+space character) before `MainComponent::keyPressed`, the sole dispatch point, ever sees it. Always
+active — the timeline is GA, so there is no preference that can hide the transport out from under
+this command.
 
 **Delete stays panel-local.** Unlike C/V/D, Delete/Escape were never routed through
 `ShortcutManager`/`ApplicationCommandManager` at all (see `shortcuts.md`'s reasoning) — each

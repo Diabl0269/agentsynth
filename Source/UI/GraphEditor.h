@@ -318,7 +318,13 @@ public:
     // library-only / free-main-I/O moves / all moves (see SmartConnectionMode).
     enum class SmartConnectionMode { Off, NewOnly, NewAndUnwired, AllMoves };
 
-    /** One suggested cable shown as a frosted preview during drag; applied on drop. */
+    /** One suggested cable shown as a frosted preview during drag; applied on drop.
+     *
+     *  `isInsert` turns the same record into an insert-in-series: the ghost is spliced into a cable
+     *  that already exists rather than given a jack of its own. Three cables are then in play — the
+     *  doomed direct one (upstream out → neighbourJack, drawn dashed), and the two that replace it
+     *  (upstream out → ghostInJack, ghostJack → neighbourJack). Only offered for the graph's terminal
+     *  audio sink; see refreshSmartSuggestions. */
     struct SmartSuggestion {
         /** When true the dragged module is the cable source; when false it is the destination. */
         bool ghostIsSource = true;
@@ -330,9 +336,18 @@ public:
         synth::ui::CableSignal signal = synth::ui::CableSignal::Audio;
         synth::ui::ModuleCategory sourceCategory = synth::ui::ModuleCategory::Utility;
 
+        // ---- Insert-in-series (audio only; ghostIsSource is always true) ----
+        bool isInsert = false;
+        juce::AudioProcessorGraph::NodeID upstreamId{}; // node whose cable gets rerouted
+        int upstreamJack = 0;                           // its visible OUTPUT jack, today feeding neighborJack
+        int ghostInJack = 0;                            // ghost visible INPUT jack that receives it
+        juce::Point<float> up1{}, up2{};                // preview endpoints, upstream out → ghost in
+        synth::ui::ModuleCategory upstreamCategory = synth::ui::ModuleCategory::Utility;
+
         bool operator==(const SmartSuggestion& o) const noexcept {
             return ghostIsSource == o.ghostIsSource && neighborId == o.neighborId && ghostJack == o.ghostJack &&
-                   neighborJack == o.neighborJack && isMidi == o.isMidi;
+                   neighborJack == o.neighborJack && isMidi == o.isMidi && isInsert == o.isInsert &&
+                   upstreamId == o.upstreamId && upstreamJack == o.upstreamJack && ghostInJack == o.ghostInJack;
         }
         bool operator!=(const SmartSuggestion& o) const noexcept { return !(*this == o); }
     };
@@ -604,6 +619,23 @@ private:
     bool isOutputJackFree(juce::AudioProcessorGraph::NodeID nodeId, int jack, bool isMidi) const;
     bool areJacksAlreadyConnected(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
                                   juce::AudioProcessorGraph::NodeID dstId, int dstJack, bool isMidi) const;
+
+    /** The one cable feeding an audio input jack, at CABLE level (a visible output jack of the
+     *  feeding node, never a raw graph edge). */
+    struct UpstreamLink {
+        juce::AudioProcessorGraph::NodeID nodeId{};
+        int jack = 0;
+    };
+
+    /** Resolves the single cable currently feeding `dstJack`, or nullopt when the jack is free, is
+     *  summed from more than one visible jack, or is fed through a mod routing / attenuverter chain
+     *  (neither is ever silently rerouted). Insert-in-series is only offered when this succeeds. */
+    std::optional<UpstreamLink> findSingleUpstreamAudioLink(juce::AudioProcessorGraph::NodeID dstId, int dstJack) const;
+
+    /** Removes the audio cable between two visible jacks — the exact inverse of connectPorts, so a
+     *  collapsed stereo wire drops both raw legs. Caller owns the undo transaction. */
+    void disconnectAudioLink(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
+                             juce::AudioProcessorGraph::NodeID dstId, int dstJack);
 
     juce::AudioProcessorGraph::NodeID draggingAttenuverterNodeId;
     float attenDragStartValue = 0.0f;

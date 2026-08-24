@@ -8,7 +8,15 @@ namespace synth::ui {
 namespace {
 
 constexpr int kSwatchWidth = 8;
-constexpr int kToggleWidth = 20;
+// Widened from 20 (laid out edge-to-edge, no gap): the four M/S/R/A toggles read as one fused
+// block at that width, and this row was the worst offender in the timeline-panel button-size
+// sweep. Paired with kToggleGap below rather than just grown, so the buttons are also visually
+// separable now.
+constexpr int kToggleWidth = 24;
+// Inter-toggle gap, applied only BETWEEN adjacent M/S/R/A buttons (never before the first or after
+// the last) — see TimelineTrackHeaderComponent::resized(). Growing kToggleWidth alone would have
+// left them still touching.
+constexpr int kToggleGap = 4;
 constexpr int kRowPadding = 3;
 // Narrowed from 34 now that the badge draws a themed icon rather than "MIDI"/"AUD"/"AUTO" text —
 // the icon needs far less width than the longest label did, and the freed space goes to the name.
@@ -367,10 +375,14 @@ void TimelineTrackHeaderComponent::resized() {
     // chip, full width (hidden entirely for Automation-kind tracks — see refreshFromDoc()).
     auto topRow = bounds.removeFromTop(bounds.getHeight() / 2);
     armButton_.setBounds(topRow.removeFromRight(kToggleWidth));
+    topRow.removeFromRight(kToggleGap);
     soloButton_.setBounds(topRow.removeFromRight(kToggleWidth));
+    topRow.removeFromRight(kToggleGap);
     muteButton_.setBounds(topRow.removeFromRight(kToggleWidth));
-    if (automationButton_.isVisible())
+    if (automationButton_.isVisible()) {
+        topRow.removeFromRight(kToggleGap);
         automationButton_.setBounds(topRow.removeFromRight(kToggleWidth));
+    }
 
     kindBadgeBounds_ = topRow.removeFromLeft(kKindBadgeWidth);
     nameLabel_.setBounds(topRow);

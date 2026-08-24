@@ -81,8 +81,11 @@ public:
     }
 
     /**
-     * @brief Switches the LOCAL model's timeline/automation authoring on or off — the runtime
-     *        "Show timeline" preference's AI half, driven by MainComponent.
+     * @brief Switches the LOCAL model's timeline/automation authoring on or off. `MainComponent`
+     *        sets this unconditionally on at startup now that the timeline is GA (there is no more
+     *        Preferences toggle to drive it). Kept as its own switch, separate from
+     *        setTimelineContext(), so tests can flip authoring on/off without standing up or
+     *        tearing down a timeline context.
      *
      * On (and with a timeline context installed): the system prompt teaches the `timelineOps`
      * grammar, the structured-output schema handed to the provider grows an optional

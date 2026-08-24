@@ -69,9 +69,9 @@ its answer — the safest note data the AI can hand back, since a `.mid` blob ca
 
 ### The Patch / Arrange selector
 
-With the timeline feature switched on (Preferences → Show timeline), a small **Patch / Arrange**
-selector appears next to the model picker — in Hosted and local (Ollama) mode alike. It decides —
-explicitly, with no keyword guessing — what your message asks for:
+A small **Patch / Arrange** selector appears next to the model picker — in Hosted and local
+(Ollama) mode alike, once a timeline is open. It decides — explicitly, with no keyword guessing —
+what your message asks for:
 
 - **Patch** (the default): patch creation and editing, exactly as before. With a local model,
   timeline suggestions can still ride along on a patch answer when the model volunteers them.

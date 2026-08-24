@@ -791,21 +791,48 @@ void GraphEditor::GraphContentComponent::paintOverChildren(juce::Graphics& g) {
     // ---- Smart-connection frosted preview cables ----
     if (editor.dragPreviewActive && !editor.smartSuggestions.empty()) {
         auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel());
-        for (const auto& s : editor.smartSuggestions) {
+
+        // Colours resolve only through colourForCable (→ synth::ui::resolveCableColour), so the
+        // cable-colour mode and any user override keep applying to a preview too.
+        auto previewColour = [this](synth::ui::CableSignal signal, synth::ui::ModuleCategory category, float alpha) {
             GraphEditor::VisibleCable preview;
-            preview.signal = s.signal;
-            preview.sourceCategory = s.sourceCategory;
-            auto colour = editor.colourForCable(preview).withAlpha(0.40f);
-            auto path = GraphEditor::buildCablePath(s.p1, s.p2);
+            preview.signal = signal;
+            preview.sourceCategory = category;
+            return editor.colourForCable(preview).withAlpha(alpha);
+        };
+        auto strokePreview = [&](juce::Point<float> p1, juce::Point<float> p2, juce::Colour colour,
+                                 synth::ui::CableSignal signal) {
+            auto path = GraphEditor::buildCablePath(p1, p2);
             if (lf != nullptr)
-                lf->drawConnectionWire(g, s.p1, s.p2, path, colour,
-                                       /*isModulation*/ s.signal == synth::ui::CableSignal::ModCV,
+                lf->drawConnectionWire(g, p1, p2, path, colour,
+                                       /*isModulation*/ signal == synth::ui::CableSignal::ModCV,
                                        /*activity*/ 0.0f, /*hovered*/ false);
             else {
                 g.setColour(colour);
                 g.strokePath(path,
                              juce::PathStrokeType(2.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
             }
+        };
+
+        // An insert REPLACES a cable, so the doomed one is struck out underneath the two frosted
+        // segments that will take its place — otherwise the extra preview reads as "and also",
+        // and the user expects the old wire to still be there after the drop.
+        for (const auto& s : editor.smartSuggestions) {
+            if (!s.isInsert)
+                continue;
+            const auto doomed = GraphEditor::buildCablePath(s.up1, s.p2);
+            const float dashes[] = {5.0f, 5.0f};
+            juce::Path dashed;
+            juce::PathStrokeType(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::butt)
+                .createDashedStroke(dashed, doomed, dashes, juce::numElementsInArray(dashes));
+            g.setColour(previewColour(s.signal, s.upstreamCategory, 0.18f));
+            g.fillPath(dashed);
+        }
+
+        for (const auto& s : editor.smartSuggestions) {
+            if (s.isInsert)
+                strokePreview(s.up1, s.up2, previewColour(s.signal, s.upstreamCategory, 0.40f), s.signal);
+            strokePreview(s.p1, s.p2, previewColour(s.signal, s.sourceCategory, 0.40f), s.signal);
         }
     }
 }
@@ -1281,6 +1308,73 @@ bool GraphEditor::areJacksAlreadyConnected(juce::AudioProcessorGraph::NodeID src
     return false;
 }
 
+std::optional<GraphEditor::UpstreamLink>
+GraphEditor::findSingleUpstreamAudioLink(juce::AudioProcessorGraph::NodeID dstId, int dstJack) const {
+    auto& graph = audioEngine.getGraph();
+    auto* dstNode = graph.getNodeForId(dstId);
+    if (dstNode == nullptr)
+        return std::nullopt;
+
+    // Visible jack → raw channel(s), the same expansion isInputJackFree uses.
+    auto* dstMb = dynamic_cast<ModuleBase*>(dstNode->getProcessor());
+    std::vector<int> rawChannels;
+    if (dstMb != nullptr) {
+        for (const auto& t : dstMb->getJackTargets(dstJack, true))
+            for (int v = 0; v < t.voiceSpan; ++v)
+                rawChannels.push_back(t.rawHeadChannel + v);
+    } else {
+        rawChannels.push_back(dstJack); // Audio I/O identity mapping
+    }
+    const auto coversRaw = [&rawChannels](int ch) {
+        return std::find(rawChannels.begin(), rawChannels.end(), ch) != rawChannels.end();
+    };
+
+    // A mod routing is a cable with a hidden attenuverter node in it; splicing an FX into that is
+    // not what the user asked for, so the jack is treated as un-reroutable.
+    for (const auto& r : audioEngine.getModulationRoutings()) {
+        if (r.hasDest && r.destNodeID == dstId && coversRaw(r.destChannelIndex))
+            return std::nullopt;
+    }
+
+    std::optional<UpstreamLink> found;
+    for (const auto& c : graph.getConnections()) {
+        if (c.destination.nodeID != dstId || c.destination.isMIDI() || !coversRaw(c.destination.channelIndex))
+            continue;
+
+        auto* srcNode = graph.getNodeForId(c.source.nodeID);
+        if (srcNode == nullptr || dynamic_cast<AttenuverterModule*>(srcNode->getProcessor()) != nullptr)
+            return std::nullopt;
+
+        auto* srcMb = dynamic_cast<ModuleBase*>(srcNode->getProcessor());
+        const int srcJack =
+            srcMb != nullptr ? srcMb->mapOutputChannel(c.source.channelIndex).visibleJackIndex : c.source.channelIndex;
+        const UpstreamLink link{c.source.nodeID, srcJack};
+
+        if (!found.has_value())
+            found = link;
+        else if (found->nodeId != link.nodeId || found->jack != link.jack)
+            return std::nullopt; // summed from several cables — rerouting would change the mix
+    }
+    return found;
+}
+
+void GraphEditor::disconnectAudioLink(juce::AudioProcessorGraph::NodeID srcId, int srcJack,
+                                      juce::AudioProcessorGraph::NodeID dstId, int dstJack) {
+    auto& graph = audioEngine.getGraph();
+    auto* srcNode = graph.getNodeForId(srcId);
+    auto* dstNode = graph.getNodeForId(dstId);
+    if (srcNode == nullptr || dstNode == nullptr)
+        return;
+
+    // Same fan expansion connectPorts and disconnectCable use, so a collapsed stereo wire takes
+    // both raw legs with it rather than leaving a half-connected pair behind.
+    const auto link = resolvePolyLink(dynamic_cast<ModuleBase*>(srcNode->getProcessor()), srcJack,
+                                      dynamic_cast<ModuleBase*>(dstNode->getProcessor()), dstJack);
+    for (int v = 0; v < link.voiceCount; ++v)
+        graph.removeConnection(
+            {{srcId, link.sourceRawChannel + v * link.sourceStride}, {dstId, link.destRawChannel + v}});
+}
+
 namespace {
 float edgeToEdgeDistance(juce::Rectangle<float> a, juce::Rectangle<float> b) {
     if (a.intersects(b))
@@ -1369,6 +1463,17 @@ bool audioJackIsModCvDest(const ModuleBase* dest, int visibleJack) {
                 return true;
         }
     }
+    return false;
+}
+
+/** True for the graph's terminal audio sink. Audio Output is a bare juce::AudioGraphIOProcessor —
+ *  never a ModuleBase — because the graph's output channel count is tied to that node. Detected by
+ *  type rather than by the "Audio Output" name isSingletonIOModule matches on, so a ModuleBase that
+ *  happened to be called that could not impersonate the sink. */
+bool isTerminalAudioSink(const juce::AudioProcessor* proc) {
+    using IOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
+    if (auto* io = dynamic_cast<const IOProcessor*>(proc))
+        return io->getType() == IOProcessor::audioOutputNode;
     return false;
 }
 
@@ -1491,6 +1596,22 @@ void GraphEditor::refreshSmartSuggestions() {
     std::vector<Candidate> audioCandidates;
     std::vector<Candidate> midiCandidates;
 
+    /** One rerouted cable, kept parallel to the surviving jack pairs of an insert group. */
+    struct InsertPlan {
+        juce::AudioProcessorGraph::NodeID upstreamId{};
+        int upstreamJack = 0;
+        int ghostInJack = 0;
+        juce::Point<float> upstreamOutPoint{}, ghostInPoint{};
+        synth::ui::ModuleCategory upstreamCategory = synth::ui::ModuleCategory::Utility;
+    };
+
+    auto componentForNode = [this](juce::AudioProcessorGraph::NodeID id) -> ModuleComponent* {
+        for (auto* c : content.getModules())
+            if (c != nullptr && c->getNodeId() == id)
+                return c;
+        return nullptr;
+    };
+
     const bool ghostAcceptsMidi = ghostProc->acceptsMidi();
     const bool ghostProducesMidi = ghostProc->producesMidi();
 
@@ -1567,13 +1688,84 @@ void GraphEditor::refreshSmartSuggestions() {
             if (beforeProximity >= 2 && pairs.size() != beforeProximity)
                 return;
 
+            // An occupied destination jack is normally a hard stop: silently summing into a jack the
+            // user already wired is never something to suggest. The one exception is the graph's
+            // terminal audio sink, which is wired in essentially every real patch (the factory
+            // preset lands Reverb on both its legs) — so an FX parked next to it could never be
+            // offered anything at all. There, the ask is unambiguously "put me in SERIES", and the
+            // cable already there is rerouted through the ghost instead of doubled.
+            // insertPlans stays parallel to `pairs`, or is empty for an ordinary add.
+            std::vector<InsertPlan> insertPlans;
             if (checkDstFree && dstNodeIdForFreeCheck.uid != 0) {
                 std::set<int> uniqueDsts;
                 for (const auto& pr : pairs)
                     uniqueDsts.insert(pr.second);
+                bool anyOccupied = false;
                 for (int d : uniqueDsts) {
                     if (!isInputJackFree(dstNodeIdForFreeCheck, d, false))
+                        anyOccupied = true;
+                }
+
+                if (anyOccupied) {
+                    // A ghost with no audio input cannot go in series — inserting a pure source
+                    // there would mean summing, which is exactly what the drop rule exists to stop.
+                    const auto ghostInLegs = collectSmartAudioLegs(ghostProc, true);
+                    if (!ghostIsSource || !isTerminalAudioSink(dstProc) || ghostInLegs.empty())
                         return;
+
+                    // Both-or-neither, mirroring the stereo group rule above: every leg of the group
+                    // must be fed by one and the same upstream node, or nothing is offered. A mix of
+                    // free and occupied legs, or two different feeds, would change the summing.
+                    std::optional<juce::AudioProcessorGraph::NodeID> upstreamNode;
+                    std::unordered_map<int, int> upstreamJackForDst;
+                    for (int d : uniqueDsts) {
+                        const auto up = findSingleUpstreamAudioLink(dstNodeIdForFreeCheck, d);
+                        if (!up.has_value() || up->nodeId == dragPreviewSelfId)
+                            return;
+                        if (upstreamNode.has_value() && *upstreamNode != up->nodeId)
+                            return;
+                        upstreamNode = up->nodeId;
+                        upstreamJackForDst[d] = up->jack;
+                    }
+
+                    auto* upstreamComp = upstreamNode.has_value() ? componentForNode(*upstreamNode) : nullptr;
+                    if (upstreamComp == nullptr || upstreamComp->getModule() == ghostProc)
+                        return;
+                    auto upstreamCategory = synth::ui::ModuleCategory::Utility;
+                    if (auto* umb = dynamic_cast<ModuleBase*>(upstreamComp->getModule()))
+                        upstreamCategory = synth::ui::categoryFor(umb->getModuleType());
+
+                    // One plan — and one surviving pair — per NEW ghost→sink cable. A collapsed
+                    // ghost jack already fans to the whole raw pair, so a second pair for the sink's
+                    // right leg would sum the ghost's LEFT leg into it. Drop any pair whose raw
+                    // destinations an earlier one already covers.
+                    std::vector<std::pair<int, int>> keptPairs;
+                    std::set<int> claimedRawDsts;
+                    for (size_t i = 0; i < pairs.size(); ++i) {
+                        const auto link = resolvePolyLink(srcMb, pairs[i].first, dstMb, pairs[i].second);
+                        bool alreadyCovered = true;
+                        for (int v = 0; v < link.voiceCount; ++v)
+                            if (claimedRawDsts.insert(link.destRawChannel + v).second)
+                                alreadyCovered = false;
+                        if (alreadyCovered)
+                            continue;
+
+                        InsertPlan plan;
+                        plan.upstreamId = *upstreamNode;
+                        plan.upstreamJack = upstreamJackForDst[pairs[i].second];
+                        plan.ghostInJack = ghostInLegs[std::min(i, ghostInLegs.size() - 1)];
+                        plan.upstreamOutPoint = (upstreamComp->getBounds().getPosition() +
+                                                 upstreamComp->getPortCenter(plan.upstreamJack, /*isInput=*/false))
+                                                    .toFloat();
+                        plan.ghostInPoint = jackPoint(/*fromGhost=*/true, plan.ghostInJack, true, false);
+                        plan.upstreamCategory = upstreamCategory;
+
+                        keptPairs.push_back(pairs[i]);
+                        insertPlans.push_back(plan);
+                    }
+                    if (insertPlans.empty())
+                        return;
+                    pairs = std::move(keptPairs);
                 }
             }
 
@@ -1587,7 +1779,8 @@ void GraphEditor::refreshSmartSuggestions() {
                 }
             }
 
-            for (const auto& [srcJack, dstJack] : pairs) {
+            for (size_t i = 0; i < pairs.size(); ++i) {
+                const auto [srcJack, dstJack] = pairs[i];
                 const int pairScore = scoreSmartPair(srcMb, srcJack, dstMb, dstJack);
                 if (pairScore < 0)
                     continue;
@@ -1609,6 +1802,19 @@ void GraphEditor::refreshSmartSuggestions() {
                 int score = pairScore;
                 if (srcLegs.size() >= 2 && dstLegs.size() >= 2 && srcJack == srcLegs[0] && dstJack == dstLegs[0])
                     score += 2;
+
+                // An insert scores like the plain cable it replaces, so it competes with (and can
+                // lose to) a neighbour offering a free jack instead of always winning by novelty.
+                if (i < insertPlans.size()) {
+                    const auto& plan = insertPlans[i];
+                    s.isInsert = true;
+                    s.upstreamId = plan.upstreamId;
+                    s.upstreamJack = plan.upstreamJack;
+                    s.ghostInJack = plan.ghostInJack;
+                    s.up1 = plan.upstreamOutPoint;
+                    s.up2 = plan.ghostInPoint;
+                    s.upstreamCategory = plan.upstreamCategory;
+                }
 
                 audioCandidates.push_back({s, score, srcPt.getDistanceFrom(dstPt), false});
             }
@@ -1724,6 +1930,16 @@ void GraphEditor::applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostN
 
     auto applyAll = [this, ghostNodeId] {
         for (const auto& s : smartSuggestions) {
+            if (s.isInsert) {
+                // Reroute, never double: drop the direct cable FIRST so the sink jack is free for
+                // the ghost's output, then wire upstream → ghost → sink. All three edits share the
+                // caller's transaction, so one undo puts the original cable back.
+                disconnectAudioLink(s.upstreamId, s.upstreamJack, s.neighborId, s.neighborJack);
+                connectPorts(s.upstreamId, s.upstreamJack, ghostNodeId, s.ghostInJack, false, false);
+                connectPorts(ghostNodeId, s.ghostJack, s.neighborId, s.neighborJack, false, false);
+                continue;
+            }
+
             const auto srcId = s.ghostIsSource ? ghostNodeId : s.neighborId;
             const auto dstId = s.ghostIsSource ? s.neighborId : ghostNodeId;
             const int srcJack = s.ghostIsSource ? s.ghostJack : s.neighborJack;

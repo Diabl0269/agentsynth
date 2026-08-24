@@ -211,7 +211,7 @@ TEST(TimelineTransportBarTest, RecordReadsRedWhenEngaged) {
 TEST(TimelineTransportBarTest, GlyphButtonsAreSquareAndSpaced) {
     synth::ui::TimelineTransportBar bar;
 
-    for (const int height : {28, 23}) {
+    for (const int height : {34, 29}) {
         bar.setSize(500, height);
 
         for (auto* button :

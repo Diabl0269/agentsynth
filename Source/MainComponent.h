@@ -157,13 +157,6 @@ public:
         if (toggleTimelineButton.onClick)
             toggleTimelineButton.onClick();
     }
-    // The Preferences "Show timeline (experimental)" kill switch. Hides/shows the timeline's
-    // user-facing entry points (toolbar button, Cmd+T, Space) without touching the timeline doc,
-    // audio-engine publishing, or project load/save — see PreferencesSettingsTab::
-    // onTimelineFeatureToggled for the live-wiring call site.
-    void applyTimelineFeatureEnabled(bool enabled);
-    bool isTimelineFeatureEnabledForTest() const { return timelineFeatureEnabled; }
-
     /** The Preferences "Natural scrolling" key. DEFAULT TRUE (natural) — the value every scrolling
      *  surface in the app already behaves as, so an install that never opens Preferences is
      *  unaffected. Owned here rather than by the tab because MainComponent is what applies it. */
@@ -673,11 +666,6 @@ private:
     // Bottom-docked timeline panel shell.
     synth::ui::TimelinePanelComponent timelinePanel;
     bool isTimelineVisible = false;
-    // The user-facing kill switch (Preferences: "Show timeline (experimental)"), distinct from
-    // isTimelineVisible above (whether the panel happens to be docked open). DEFAULT TRUE — must
-    // not change behaviour for an existing install that has never opened Preferences. See
-    // applyTimelineFeatureEnabled().
-    bool timelineFeatureEnabled = true;
     // The panel's docked height. Resolved in initialiseCommon() from kTimelinePanelHeightKey (theme
     // metric when absent) and moved by the panel's top-edge drag; 0 only before that, and forever in
     // a flag-OFF build, where nothing carries it into a layout.

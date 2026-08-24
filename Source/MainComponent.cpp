@@ -269,22 +269,11 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // initialisers (isLibraryVisible{true}, isAiPanelVisible=false).
     isLibraryVisible = appProperties.getUserSettings()->getBoolValue("librarySidebarVisible", true);
     isAiPanelVisible = appProperties.getUserSettings()->getBoolValue("aiPanelVisible", false);
-    // Gated with the button/command/carve below — reading this in a flag-OFF build would
-    // let a value persisted by an earlier flag-ON run silently dock the panel with no button or
-    // shortcut left to hide it again.
     isTimelineVisible = appProperties.getUserSettings()->getBoolValue("timelinePanelVisible", false);
     // The theme metric is the DEFAULT height, not the law: a height the user dragged wins. Clamped
     // here and on every resized() — see clampTimelinePanelHeight().
     timelinePanelHeight_ = clampTimelinePanelHeight(
         appProperties.getUserSettings()->getIntValue(kTimelinePanelHeightKey, defaultTimelinePanelHeight()));
-    // The Preferences kill switch (PreferencesSettingsTab::isTimelineFeatureEnabled(), same key).
-    // DEFAULT TRUE — an existing install that has never opened Preferences must restore exactly
-    // as before. If a run somehow persisted the panel open while the feature was off (e.g. a
-    // crash between the two writes in applyTimelineFeatureEnabled), never restore a docked panel
-    // with no button/shortcut left to close it.
-    timelineFeatureEnabled = appProperties.getUserSettings()->getBoolValue("timelineFeatureEnabled", true);
-    if (!timelineFeatureEnabled)
-        isTimelineVisible = false;
     graphEditor.setAlignmentGuidesEnabled(
         appProperties.getUserSettings()->getBoolValue("alignmentGuidesEnabled", true));
     graphEditor.setSmartConnectionMode(GraphEditor::smartConnectionModeFromString(
@@ -394,9 +383,9 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // Both outlive aiService (declaration order: timelineDoc, then audioEngine's referent, then
     // aiService), so this pointer never dangles for aiService's lifetime.
     aiService.setTimelineContext(&timelineDoc, &audioEngine.getTransport());
-    // The AI's timeline/automation authoring surface follows the runtime "Show timeline"
-    // preference from first launch, not only from the next Preferences toggle.
-    aiService.setTimelineToolsEnabled(timelineFeatureEnabled);
+    // The timeline is GA: the AI's timeline/automation authoring surface is on unconditionally
+    // from first launch (no Preferences toggle left to react to).
+    aiService.setTimelineToolsEnabled(true);
     // The chat's Patch/Arrange selector reads this switch but gets no notification of it — the
     // refreshModels() call above ran BEFORE the switch (and before the timeline context existed),
     // so its gate check saw "off". Re-sync now that both are installed; same ownership shape as
@@ -885,9 +874,6 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
             timelinePanel.setVisible(false);
         animatePanelTransition(fromResult, toResult, /*hideLib=*/false, /*hideAi=*/false, /*hideTimeline=*/!newVisible);
     };
-    // Initial visibility from the Preferences kill switch read above — a fresh DrawableButton
-    // defaults visible, so an existing-off-preference install must not flash the button on launch.
-    toggleTimelineButton.setVisible(timelineFeatureEnabled);
 
     addAndMakeVisible(toggleMinimapButton);
     toggleMinimapButton.setComponentID("toggleMinimap");
@@ -921,10 +907,10 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     addAndMakeVisible(settingsButton);
     settingsButton.setComponentID("settingsButton");
     settingsButton.onClick = [this]() {
-        auto* settingsComp = new SettingsWindow(
-            audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent, shortcutManager, *themeManager,
-            &graphEditor, &accountService,
-            /*showAudioTab=*/!audioEngine.isHosted(), [this](bool enabled) { applyTimelineFeatureEnabled(enabled); });
+        auto* settingsComp =
+            new SettingsWindow(audioEngine.getDeviceManager(), appProperties, aiService, aiChatComponent,
+                               shortcutManager, *themeManager, &graphEditor, &accountService,
+                               /*showAudioTab=*/!audioEngine.isHosted());
         settingsComp->setSize(500, 450);
 
         juce::DialogWindow::LaunchOptions options;
@@ -960,17 +946,9 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     applyToolbarIcons();
     setCurrentPatchName("Default");
 
-    // Runtime timeline enable/disable: push the persisted preference onto the engine's
-    // transport toggle. No settings-UI toggle exists yet, so this only ever reads the default.
-    // Guarded the same way the engine-lifecycle
-    // block below is: on the plugin path the processor owns the engine across editor open/close, so
-    // this app's local settings file doesn't apply to it yet either.
-    if (ownedAudioEngine != nullptr) {
-        audioEngine.setTransportEnabled(appProperties.getUserSettings()->getBoolValue("timelineEnabled", true));
-    }
-
-    // Audio device state. Guarded like the block above: on the plugin path the host owns
-    // the device (there is not even an Audio tab), so this app's settings file has no say over it.
+    // Audio device state. Guarded the same way the engine-lifecycle block below is: on the plugin
+    // path the host owns the device (there is not even an Audio tab), so this app's settings file
+    // has no say over it.
     //
     // ORDERING CONTRACT: both halves must be in place BEFORE audioEngine.initialise() below — the
     // saved state because initialise() is what restores it, the callback because opening a device
@@ -1674,10 +1652,7 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
     }
     case AppCommands::togglePlayback: {
         result.setInfo("Toggle Playback", "Play or stop the timeline transport", "Transport", 0);
-        // Space is GLOBAL — no resolveEditSurface() branch, unlike C/V/D above. Inactive when
-        // the "Show timeline (experimental)" preference has hidden the transport — the transport
-        // isn't reachable while hidden, which is intended.
-        result.setActive(timelineFeatureEnabled);
+        // Space is GLOBAL — no resolveEditSurface() branch, unlike C/V/D above.
         auto kp = shortcutManager.getBinding("togglePlayback");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
@@ -1730,7 +1705,6 @@ void MainComponent::getCommandInfo(juce::CommandID commandID, juce::ApplicationC
     }
     case AppCommands::toggleTimelinePanel: {
         result.setInfo("Toggle Timeline Panel", "Toggle the bottom-docked timeline panel", "View", 0);
-        result.setActive(timelineFeatureEnabled);
         auto kp = shortcutManager.getBinding("toggleTimelinePanel");
         result.addDefaultKeypress(kp.getKeyCode(), kp.getModifiers());
         break;
@@ -2626,28 +2600,6 @@ void MainComponent::setCurrentPatchName(const juce::String& name) {
 // Timeline app wiring
 // =============================================================================
 
-void MainComponent::applyTimelineFeatureEnabled(bool enabled) {
-    // Disabling while the panel is visible: hide it through the SAME path the toolbar toggle
-    // uses (persistence + layout + animation all stay consistent with a manual click), rather
-    // than reaching into isTimelineVisible/appProperties/resized() directly here and duplicating
-    // that logic — same idiom as the two existing "force-open" call sites in this file.
-    if (!enabled && isTimelineVisible && toggleTimelineButton.onClick)
-        toggleTimelineButton.onClick();
-
-    toggleTimelineButton.setVisible(enabled);
-    timelineFeatureEnabled = enabled;
-    resized();
-
-    // The AI's timeline/automation authoring follows the same switch: off means the local model's
-    // prompt, schema and targets context revert to the pure patch surface (see
-    // AIIntegrationService::setTimelineToolsEnabled — extraction/apply stay wired, gated by the
-    // user's own Apply click either way).
-    aiService.setTimelineToolsEnabled(enabled);
-    // The chat's Patch/Arrange selector follows it too; the service has no listener for this
-    // switch, so the owner that flipped it re-syncs the selector.
-    aiChatComponent.refreshModeControls();
-}
-
 void MainComponent::applyNaturalScrollingPreference() {
     // The preference is phrased POSITIVELY ("Natural scrolling", default on) because that is how
     // the OS phrases it, while the components carry the inversion flag — so this is the one place
@@ -3198,13 +3150,6 @@ int MainComponent::cleanUnusedAssets() {
 }
 
 void MainComponent::automateParameter(juce::AudioProcessorGraph::NodeID nodeId, const juce::String& paramId) {
-    // The knob menu's "Automate" would force-open the timeline panel — while the runtime "Show
-    // timeline" preference has the feature hidden, say so instead of overriding the user's choice.
-    if (!timelineFeatureEnabled) {
-        statusBar.showMessage("Timeline is disabled - enable it in Settings > Preferences to automate parameters");
-        return;
-    }
-
     auto* node = audioEngine.getGraph().getNodeForId(nodeId);
     auto* module = node != nullptr ? dynamic_cast<ModuleBase*>(node->getProcessor()) : nullptr;
     if (module == nullptr) {

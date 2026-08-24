@@ -2,6 +2,7 @@
 #include "../Source/AppUndoManager.h"
 #include "../Source/Modules/ADSRModule.h"
 #include "../Source/Modules/AttenuverterModule.h"
+#include "../Source/Modules/FX/ChorusModule.h"
 #include "../Source/Modules/FX/DelayModule.h"
 #include "../Source/Modules/FX/ReverbModule.h"
 #include "../Source/Modules/FilterModule.h"
@@ -2923,6 +2924,201 @@ TEST_F(GraphEditorTest, SmartConnectionMonoToStereoIsBothOrNeither) {
     editor.itemDragEnter(details);
     editor.itemDragMove(details);
     // Left taken → both-or-neither: no mono→stereo fan onto Right alone.
+    EXPECT_EQ(editor.getSmartSuggestionCount(), 0);
+    editor.endDragPreview();
+}
+
+// --- Insert-in-series at the terminal audio sink -----------------------------
+// Audio Output is wired in essentially every real patch, so the occupied-destination rule used to
+// mean an FX parked next to it could never be offered anything. Only for that one node does an
+// occupied jack turn into a reroute instead of a hard stop.
+
+/** Adds the graph's terminal audio sink the way AudioEngine does. The channel layout has to be set
+ *  BEFORE the node is added: AudioGraphIOProcessor snapshots it once, in setParentGraph, and an
+ *  unconfigured graph reports 0 channels — every connection into the node would then be rejected. */
+static juce::AudioProcessorGraph::Node::Ptr addAudioOutputNode(juce::AudioProcessorGraph& graph, int x, int y) {
+    using IOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
+    graph.setPlayConfigDetails(0, 2, 44100.0, 512);
+    auto node = graph.addNode(std::make_unique<IOProcessor>(IOProcessor::audioOutputNode));
+    node->properties.set("x", x);
+    node->properties.set("y", y);
+    return node;
+}
+
+static juce::AudioProcessorGraph::NodeID findNodeIdByName(juce::AudioProcessorGraph& graph, const juce::String& name) {
+    for (auto* node : graph.getNodes())
+        if (node->getProcessor() != nullptr && node->getProcessor()->getName() == name)
+            return node->nodeID;
+    return {};
+}
+
+TEST_F(GraphEditorTest, SmartConnectionInsertsFxIntoOccupiedAudioOutput) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 700);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto outNode = addAudioOutputNode(graph, 760, 100);
+    auto reverbNode = graph.addNode(std::make_unique<ReverbModule>());
+    reverbNode->properties.set("x", 40);
+    reverbNode->properties.set("y", 100);
+    // The unwired FX being dragged, parked well clear of everything else.
+    auto chorusNode = graph.addNode(std::make_unique<ChorusModule>());
+    chorusNode->properties.set("x", 40);
+    chorusNode->properties.set("y", 600);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    // Reverb → Audio Output on both legs, exactly like the factory preset.
+    editor.connectPorts(reverbNode->nodeID, 0, outNode->nodeID, 0, false, false);
+    ASSERT_TRUE(graph.isConnected({{reverbNode->nodeID, 0}, {outNode->nodeID, 0}}));
+    ASSERT_TRUE(graph.isConnected({{reverbNode->nodeID, 1}, {outNode->nodeID, 1}}));
+
+    ModuleComponent* chorusComp = nullptr;
+    for (auto* c : editor.getModuleComponents()) {
+        if (c->getNodeId() == chorusNode->nodeID)
+            chorusComp = c;
+    }
+    ASSERT_NE(chorusComp, nullptr);
+
+    editor.beginDragPreview(chorusComp->getWidth(), chorusComp->getHeight(), chorusComp->getNodeId());
+    editor.updateDragPreview({440, 100}); // just left of Audio Output — the natural insert position
+
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "an FX next to a wired Audio Output must be offered an insert";
+    for (const auto& s : editor.getSmartSuggestions()) {
+        EXPECT_TRUE(s.isInsert);
+        EXPECT_TRUE(s.ghostIsSource);
+        EXPECT_FALSE(s.isMidi);
+        EXPECT_EQ(s.neighborId, outNode->nodeID);
+        EXPECT_EQ(s.upstreamId, reverbNode->nodeID) << "the cable already on the sink is what gets rerouted";
+        // The preview needs an upstream leg to draw, or the reroute is invisible.
+        EXPECT_NE(s.up1, juce::Point<float>());
+        EXPECT_NE(s.up2, juce::Point<float>());
+    }
+    editor.endDragPreview();
+}
+
+TEST_F(GraphEditorTest, SmartConnectionInsertAtAudioOutputIsOneUndoStep) {
+    AudioEngine engine;
+    AppUndoManager undoMgr;
+    GraphEditor editor(engine, &undoMgr);
+    editor.setSize(1200, 700);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto outNode = addAudioOutputNode(graph, 760, 100);
+    auto reverbNode = graph.addNode(std::make_unique<ReverbModule>());
+    reverbNode->properties.set("x", 40);
+    reverbNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    editor.connectPorts(reverbNode->nodeID, 0, outNode->nodeID, 0, false, false);
+    const auto reverbId = reverbNode->nodeID;
+    const auto outId = outNode->nodeID;
+    ASSERT_EQ(countAudioConnectionsBetween(graph, reverbId, outId), 2);
+
+    // Library drop, which is the path that owns the structural undo transaction.
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource, juce::Point<int>(440, 100));
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0);
+    editor.itemDropped(details);
+
+    const auto chorusId = findNodeIdByName(graph, "Chorus");
+    ASSERT_NE(chorusId.uid, 0u);
+
+    // Rerouted, not doubled: the direct Reverb → Out cable is gone and both legs now run through
+    // the Chorus.
+    EXPECT_EQ(countAudioConnectionsBetween(graph, reverbId, outId), 0)
+        << "the cable being rerouted must be removed, not left summing alongside the insert";
+    EXPECT_TRUE(graph.isConnected({{reverbId, 0}, {chorusId, 0}}));
+    EXPECT_TRUE(graph.isConnected({{reverbId, 1}, {chorusId, 1}}));
+    EXPECT_TRUE(graph.isConnected({{chorusId, 0}, {outId, 0}}));
+    EXPECT_TRUE(graph.isConnected({{chorusId, 1}, {outId, 1}}));
+    EXPECT_FALSE(graph.isConnected({{chorusId, 0}, {outId, 1}}))
+        << "a collapsed jack already fans both legs — a second cable would sum Left into Right";
+
+    // Disconnect + both reconnects share one transaction, so ONE undo restores the original patch.
+    ASSERT_TRUE(undoMgr.undo());
+
+    EXPECT_EQ(findNodeIdByName(graph, "Chorus").uid, 0u) << "the inserted module is gone again";
+    const auto restoredReverb = findNodeIdByName(graph, "Reverb");
+    const auto restoredOut = findNodeIdByName(graph, "Audio Output");
+    ASSERT_NE(restoredReverb.uid, 0u);
+    ASSERT_NE(restoredOut.uid, 0u);
+    EXPECT_EQ(countAudioConnectionsBetween(graph, restoredReverb, restoredOut), 2)
+        << "one undo must put the rerouted cable back on both legs";
+}
+
+TEST_F(GraphEditorTest, SmartConnectionDoesNotInsertPureSourceIntoOccupiedAudioOutput) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 700);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto outNode = addAudioOutputNode(graph, 760, 100);
+    auto reverbNode = graph.addNode(std::make_unique<ReverbModule>());
+    reverbNode->properties.set("x", 40);
+    reverbNode->properties.set("y", 100);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Oscillator"), &dummySource, juce::Point<int>(440, 100));
+
+    // Positive control first, so the assertion below cannot pass just because the ghost landed out
+    // of range: while the sink is FREE this very drag does get a suggestion.
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "geometry check: Osc → free Audio Output is in range";
+    editor.endDragPreview();
+
+    editor.connectPorts(reverbNode->nodeID, 0, outNode->nodeID, 0, false, false);
+
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    // An Oscillator has no audio input, so there is nothing to put IN series — and summing it into
+    // a jack the user already wired is exactly what the occupied-destination rule exists to stop.
+    EXPECT_EQ(editor.getSmartSuggestionCount(), 0);
+    editor.endDragPreview();
+}
+
+TEST_F(GraphEditorTest, SmartConnectionDoesNotInsertIntoOccupiedOrdinaryModule) {
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(1200, 700);
+    editor.setSmartConnectionMode(GraphEditor::SmartConnectionMode::NewAndUnwired);
+
+    auto& graph = engine.getGraph();
+    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
+    filterNode->properties.set("x", 760);
+    filterNode->properties.set("y", 100);
+    auto oscNode = graph.addNode(std::make_unique<OscillatorModule>());
+    oscNode->properties.set("x", 40);
+    oscNode->properties.set("y", 600);
+    editor.updateComponents();
+    sizeModuleComponents(editor);
+
+    DummyDragSource dummySource;
+    juce::DragAndDropTarget::SourceDetails details(juce::var("Chorus"), &dummySource, juce::Point<int>(440, 100));
+
+    // Positive control, as above: the same drag onto a FREE Filter input is suggested, so the zero
+    // below is the occupancy rule and not a geometry accident.
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    ASSERT_GT(editor.getSmartSuggestionCount(), 0) << "geometry check: Chorus → free Filter input is in range";
+    editor.endDragPreview();
+
+    editor.connectPorts(oscNode->nodeID, 0, filterNode->nodeID, 0, false, false);
+
+    editor.itemDragEnter(details);
+    editor.itemDragMove(details);
+    // Insert-in-series is scoped to the terminal sink. Any other occupied destination stays a hard
+    // stop, so a surprise reroute can never happen mid-patch.
     EXPECT_EQ(editor.getSmartSuggestionCount(), 0);
     editor.endDragPreview();
 }

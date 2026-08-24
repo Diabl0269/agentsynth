@@ -47,11 +47,9 @@ when reasoning about a key that "does nothing."
 | Cmd+Shift+= | Zoom In Vertically |
 | Cmd+Shift+- | Zoom Out Vertically |
 
-Cmd+T and Space are also inactive whenever
-Preferences → "Show timeline (experimental)" is turned off — the runtime kill switch described in
-[`layout.md §16`](layout.md). While it's off, the timeline transport simply isn't reachable; that's
-intended, not a bug. The grid and zoom commands below are likewise inactive whenever the panel
-itself isn't open (`isTimelineVisible`), the same as any other timeline-only command.
+Cmd+T and Space are always active — the timeline is GA (see [`layout.md §16`](layout.md)). The grid
+and zoom commands below are inactive whenever the panel itself isn't open (`isTimelineVisible`),
+the same as any other timeline-only command.
 
 `Cmd+A` is the platform-standard Select All (the way Cubase and every text field read it), so it
 owns the bare chord and the AI panel sits on a REAL `Ctrl+A` on macOS (Ctrl is a distinct physical

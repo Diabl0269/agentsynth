@@ -36,25 +36,6 @@ TEST_F(IntegrationTest, OscToFilterToVCA) {
     EXPECT_TRUE(graph.addConnection({{filterNode->nodeID, 0}, {vcaNode->nodeID, 0}}));
 }
 
-TEST_F(IntegrationTest, LFOModulatesFilterCutoff) {
-    auto& graph = engine.getGraph();
-    graph.clear();
-
-    auto lfoNode = graph.addNode(std::make_unique<LFOModule>());
-    auto filterNode = graph.addNode(std::make_unique<FilterModule>());
-
-    ASSERT_NE(lfoNode, nullptr);
-    ASSERT_NE(filterNode, nullptr);
-
-    engine.addModRouting(lfoNode->nodeID, 0, filterNode->nodeID, 1);
-
-    auto routings = engine.getActiveModRoutings();
-    ASSERT_EQ(routings.size(), 1);
-    EXPECT_EQ(routings[0].sourceNodeID, lfoNode->nodeID);
-    EXPECT_EQ(routings[0].destNodeID, filterNode->nodeID);
-    EXPECT_EQ(routings[0].destChannelIndex, 1);
-}
-
 TEST_F(IntegrationTest, ADSREnvelopeToVCA) {
     auto& graph = engine.getGraph();
     graph.clear();

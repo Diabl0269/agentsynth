@@ -114,18 +114,6 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
         "looping on. When off, P only places the locators (use L to toggle looping).");
     loopSelectionArmsToggle.onClick = [this] { persistLoopSelectionArms(loopSelectionArmsToggle.getToggleState()); };
 
-    addAndMakeVisible(timelineFeatureToggle);
-    // DEFAULT TRUE: existing users already have the timeline visible/hidden per their own
-    // "timelinePanelVisible" choice — this is a higher-level kill switch on top of that, and must
-    // not itself change behaviour for anyone who has never touched it.
-    timelineFeatureToggle.setToggleState(appProperties.getUserSettings()->getBoolValue("timelineFeatureEnabled", true),
-                                         juce::dontSendNotification);
-    timelineFeatureToggle.setTooltip(
-        "When off, the timeline panel, its toolbar button, and Cmd+T / Space are hidden — the "
-        "timeline document and audio-engine playback are untouched, so turning this back on "
-        "restores exactly where you left off.");
-    timelineFeatureToggle.onClick = [this] { persistTimelineFeatureEnabled(timelineFeatureToggle.getToggleState()); };
-
     addAndMakeVisible(naturalScrollingToggle);
     // DEFAULT TRUE: "natural" is the juce::Viewport convention every scrolling surface in the app
     // already follows, so an install that never touches this preference behaves exactly as before.
@@ -215,9 +203,6 @@ void PreferencesSettingsTab::resized() {
     bounds.removeFromTop(10);
 
     loopSelectionArmsToggle.setBounds(bounds.removeFromTop(24));
-    bounds.removeFromTop(10);
-
-    timelineFeatureToggle.setBounds(bounds.removeFromTop(24));
     addDivider();
 
     naturalScrollingToggle.setBounds(bounds.removeFromTop(24));
@@ -290,20 +275,6 @@ void PreferencesSettingsTab::persistLoopSelectionArms(bool enabled) {
     appProperties.getUserSettings()->saveIfNeeded();
 }
 
-bool PreferencesSettingsTab::isTimelineFeatureEnabled() const { return timelineFeatureToggle.getToggleState(); }
-
-void PreferencesSettingsTab::setTimelineFeatureEnabled(bool enabled) {
-    timelineFeatureToggle.setToggleState(enabled, juce::dontSendNotification);
-    persistTimelineFeatureEnabled(enabled);
-}
-
-void PreferencesSettingsTab::persistTimelineFeatureEnabled(bool enabled) {
-    appProperties.getUserSettings()->setValue("timelineFeatureEnabled", enabled ? "1" : "0");
-    appProperties.getUserSettings()->saveIfNeeded();
-    if (onTimelineFeatureToggled)
-        onTimelineFeatureToggled(enabled);
-}
-
 bool PreferencesSettingsTab::isNaturalScrollingEnabled() const { return naturalScrollingToggle.getToggleState(); }
 
 void PreferencesSettingsTab::setNaturalScrollingEnabled(bool enabled) {
@@ -319,7 +290,7 @@ void PreferencesSettingsTab::persistNaturalScrolling(bool enabled) {
     // reaches the timeline and the piano roll without this tab having to know they exist (see
     // MainComponent::applyNaturalScrollingPreference). That is also why there is no
     // onNaturalScrollingToggled callback for SettingsWindow to wire — one constructor argument per
-    // preference does not scale, and the "Show timeline" kill switch already needs the one it has.
+    // preference does not scale.
 }
 
 bool PreferencesSettingsTab::isZoomScrollUpZoomsInEnabled() const { return zoomScrollUpZoomsInToggle.getToggleState(); }

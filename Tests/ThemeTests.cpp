@@ -661,8 +661,8 @@ TEST(ThemeMetricsTest, MetricsCodeOnlyFieldsHaveExpectedDefaults) {
     EXPECT_EQ(m.aiPanelWidth, 300);
     EXPECT_EQ(m.iconSize, 16);
     EXPECT_EQ(m.timelinePanelHeight, 220);
-    EXPECT_EQ(m.timelineTrackHeaderWidth, 160);
-    EXPECT_EQ(m.timelineTransportBarHeight, 28);
+    EXPECT_EQ(m.timelineTrackHeaderWidth, 190);
+    EXPECT_EQ(m.timelineTransportBarHeight, 34);
     EXPECT_EQ(m.timelineRulerHeight, 24);
     EXPECT_EQ(m.timelineTrackRowHeight, 56);
 }

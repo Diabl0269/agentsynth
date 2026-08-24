@@ -7,13 +7,16 @@
 namespace synth::ui {
 
 namespace {
-constexpr int kButtonSize = 22;
+// 26 (was 22): timeline-panel button-size sweep, paired with growing
+// Metrics::timelineTransportBarHeight (28->34) so the glyphs actually render larger instead of
+// being clamped straight back down by resized()'s `min(kButtonSize, bounds.getHeight())`.
+constexpr int kButtonSize = 26;
 // Inter-control spacing. Widened from 4 px: the row read as one dense block of glyphs rather than
 // four separate buttons. Group separations are kGap * 2.
 constexpr int kGap = 7;
 // The bar's own padding inside its strip. The panel already trims the 5 px resize grab strip off
 // the top before handing us our bounds, so this is plain breathing room — kept tight vertically so
-// the square buttons get as much of the 28 px strip as possible.
+// the square buttons get as much of the 34 px strip as possible.
 constexpr int kEdgePaddingX = 4;
 constexpr int kEdgePaddingY = 2;
 constexpr int kBpmLabelWidth = 52;

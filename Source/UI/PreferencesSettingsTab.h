@@ -34,8 +34,6 @@ public:
     void setDefaultDualIOForNewModules(bool enabled);
     bool isLoopSelectionArmsEnabled() const;
     void setLoopSelectionArmsEnabled(bool enabled);
-    bool isTimelineFeatureEnabled() const;
-    void setTimelineFeatureEnabled(bool enabled);
     bool isNaturalScrollingEnabled() const;
     void setNaturalScrollingEnabled(bool enabled);
     bool isZoomScrollUpZoomsInEnabled() const;
@@ -45,18 +43,12 @@ public:
     bool isPianoRollKeyLabelModeAll() const;
     void setPianoRollKeyLabelModeAll(bool labelEveryKey);
 
-    // Fired from persistTimelineFeatureEnabled() after the value is saved, so a live MainComponent
-    // can hide/show the timeline entry points without waiting for a restart. Null in every context
-    // that doesn't wire it (e.g. a headless test that only checks persistence).
-    std::function<void(bool)> onTimelineFeatureToggled;
-
 private:
     void persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
     void persistDoubleClickPortDisconnect(bool enabled);
     void persistAlignmentGuidesEnabled(bool enabled);
     void persistDefaultDualIOForNewModules(bool enabled);
     void persistLoopSelectionArms(bool enabled);
-    void persistTimelineFeatureEnabled(bool enabled);
     void persistNaturalScrolling(bool enabled);
     void persistZoomScrollUpZoomsIn(bool enabled);
     void persistPianoRollKeyLabelMode(bool labelEveryKey);
@@ -77,7 +69,6 @@ private:
     juce::ToggleButton defaultDualIOToggle{"Split Left/Right jacks on new modules"};
     juce::TextButton perModuleDefaultsButton{"Per-module I/O defaults..."};
     juce::ToggleButton loopSelectionArmsToggle{"Timeline: P (loop selection) also switches looping on"};
-    juce::ToggleButton timelineFeatureToggle{"Show timeline (experimental)"};
     juce::ToggleButton naturalScrollingToggle{"Natural scrolling"};
     // The one preference whose label needs a second line to explain WHICH surfaces it touches — a
     // bare "Natural scrolling" toggle in an app that also has a pannable canvas would read as

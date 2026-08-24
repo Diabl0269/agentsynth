@@ -707,10 +707,9 @@ capability schema the model actually emits against, the counterpart of `getPatch
 patches. Nothing here trusts that schema: an envelope is re-validated locally whatever produced it.
 
 **The LOCAL (Ollama) path can author this envelope too**, behind
-`AIIntegrationService::setTimelineToolsEnabled` — driven by the runtime "Show timeline
-(experimental)" preference via `MainComponent::applyTimelineFeatureEnabled`, and additionally gated
-on a timeline context being installed (`hasTimelineContext()`). While active, three things change
-and nothing else:
+`AIIntegrationService::setTimelineToolsEnabled` — set unconditionally on by `MainComponent` now
+that the timeline is GA, and additionally gated on a timeline context being installed
+(`hasTimelineContext()`). While active, three things change and nothing else:
 
 - the system prompt gains a "TIMELINE & AUTOMATION OPERATIONS" section teaching the four ops
   (swapped into the existing history **in place** — a mid-conversation toggle never clears the
@@ -1668,16 +1667,16 @@ its final JSON string on the *enqueuing* thread (`Request::capabilityBodyJson`) 
 `juce::var` ever crosses to the worker.
 
 **The arrange path, end to end — one intent, two transports.** `AIChatComponent` shows a
-Patch/Arrange selector in the model row, visible while the timeline feature preference is on
-(`areTimelineToolsEnabled()` + a live `setTimelineContext()`). The gate is deliberately
-**provider-agnostic** — the local/remote parity rule: arrange mode works on both transports, so
-the provider never gates the UI. Routing is the selector's call **alone — never a keyword
-heuristic**; `shouldUseStructuredOutput()` stays a patch-path concern. The selector's gate
-re-syncs at `refreshModels()` (a convenient known resync point) and at
-`AIChatComponent::refreshModeControls()` called by `MainComponent::applyTimelineFeatureEnabled` /
-`initialiseCommon` (the service has no listener for the preference switch, so the owner that
-flips it re-syncs the selector). Hiding the selector resets it to Patch — an invisible control
-must not keep steering requests.
+Patch/Arrange selector in the model row, visible while its gate is satisfied
+(`areTimelineToolsEnabled()`, unconditionally on now that the timeline is GA, + a live
+`setTimelineContext()`). The gate is deliberately **provider-agnostic** — the local/remote parity
+rule: arrange mode works on both transports, so the provider never gates the UI. Routing is the
+selector's call **alone — never a keyword heuristic**; `shouldUseStructuredOutput()` stays a
+patch-path concern. The selector's gate re-syncs at `refreshModels()` (a convenient known resync
+point) and at `AIChatComponent::refreshModeControls()` called by `MainComponent::initialiseCommon`
+once the timeline context is installed (the service has no listener mechanism for that, so the
+owner that installs it re-syncs the selector). Hiding the selector resets it to Patch — an
+invisible control must not keep steering requests.
 
 An Arrange send goes through `AIIntegrationService::sendArrangeMessage()`, which absorbs the
 transport difference so it is never a behaviour difference:
