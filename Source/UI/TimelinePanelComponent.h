@@ -31,7 +31,7 @@ class Metronome; // Forward declaration (Source/Transport/Metronome.h)
 //
 // MainComponent docks this full-width, above the status bar, toggled via the toolbar button /
 // Cmd+T shortcut and slid in/out through the same coordinated AnimationDriver that already
-// animates the library/AI panels (see MainComponent::animatePanelTransition()). This class owns
+// animates the library/AI panels (see MainComponent::beginPanelSlide()). This class owns
 // none of that: it is layout + paint, with no timer and no animation of its own — updateFromTransport()
 // is driven by MainComponent's EXISTING 10 Hz timer, and the only timer anywhere under this panel
 // is the playhead overlay's, which runs only while the transport plays (see

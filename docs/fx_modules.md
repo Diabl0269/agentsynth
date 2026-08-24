@@ -59,6 +59,20 @@ canvas *and* to anything created afterwards, overriding each module's own defaul
 modules only made it look broken — the obvious way to check a setting is to flip it and watch the
 patch in front of you, which never changed.
 
+**Preferences → "Per-module I/O defaults..."** sits next to the toggle above (same row) and opens a
+popup listing every module type from the table above (FX plus Oscillator, Wavetable, Filter, VCA,
+Sampler and Voice Mixer). Each row is a 3-state choice — Follow global (the default), Always on,
+Always off — that overrides the global toggle for just that type. Unlike the global toggle, this is
+**new-modules-only**: it does not re-lay modules already on the canvas, and there is no per-module
+counterpart to `applyDualIOToExistingModules`. Both are read from the same place,
+`GraphEditor::applyDefaultDualIOForNewModule`, called once from `addModuleAtCanvasPosition` when a
+module is created — an override wins when the two disagree; a type with no override falls through
+to the global toggle. Persisted as one `ApplicationProperties` key,
+`"dualIOPerModuleDefaults"`, holding a compact JSON object (`{"Reverb": true}`) — a type absent
+from the object follows the global default. `PreferencesSettingsTab::loadDualIOPerModuleOverrides`
+is the one parser, used by the tab itself and by `MainComponent` to push the map into the real
+`GraphEditor` at startup, the same as it re-reads `"defaultDualIOForNewModules"` there.
+
 It is also applied once at startup, to the patch the app opens with — `MainComponent::
 applyStoredDualIOPreferenceToPatch()`. That has to run **after** `AudioEngine::initialise()`, which
 is what builds the default preset: the preset loader constructs its modules knowing nothing about

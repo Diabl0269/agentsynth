@@ -5,12 +5,13 @@
 //
 // Namespace: synth::ui
 //
-// Three sections:
+// Four sections:
 //   1. Pure easing math   — <cmath> only, headless-testable, no JUCE/GUI deps.
 //   2. AnimationDriver    — time-bounded 0→1 tween built on juce_animation.
-//   3. formatShortcutHint — pure string helper, headless-testable.
+//   3. PanelSlide         — one sliding panel's [0..1] open fraction (pure state).
+//   4. formatShortcutHint — pure string helper, headless-testable.
 //
-// Section 1 and 3 are #include-able from headless (non-GUI) translation units.
+// Sections 1, 3 and 4 are #include-able from headless (non-GUI) translation units.
 // Section 2 requires juce_animation + juce_gui_basics (VBlankAttachment).
 // ============================================================================
 
@@ -172,7 +173,118 @@ private:
 };
 
 // ============================================================================
-// Section 3 — formatShortcutHint
+// Section 3 — PanelSlide
+//
+// The [0..1] open fraction of ONE sliding panel, plus the from/to snapshot of
+// the tween currently moving it.  Pure float state: no animator, no VBlank, no
+// GUI — which is the point twice over.
+//
+//   * The owner's layout derives the panel's GEOMETRY from the fraction rather
+//     than from its visible/hidden bool, so a layout pass lands correctly
+//     whenever it runs (window resize, theme change, a drag mid-slide) and a
+//     toggle only has to move the fraction and re-lay-out.  Flipping the bool
+//     and laying out the FINAL bounds before starting a tween from the old ones
+//     is what makes a panel appear open for a frame and then yank back — the
+//     "jump" this type exists to remove.
+//   * Holding no animator means a window with several sliding panels drives ALL
+//     of them from ONE AnimationDriver, instead of racing one animator per
+//     panel and freezing whichever slide the next toggle didn't mention.
+//
+// Owner shape (see MainComponent::beginPanelSlide for the real one):
+//
+//     synth::ui::PanelSlide librarySlide_, aiSlide_;      // members
+//     synth::ui::AnimationDriver panelSlideAnim_;
+//
+//     void resized() override {
+//         const int libW = librarySlide_.sizeBetween(0, kLibraryWidth);  // fraction -> px
+//         ...
+//     }
+//
+//     void togglePanel() {
+//         showing_ = ! showing_;
+//         if (! librarySlide_.retarget(showing_ ? 1.0f : 0.0f, isShowing())) {
+//             resized();   // snapped: no VBlank to wait for, land NOW
+//             return;
+//         }
+//         resized();       // frame 0, before the first VBlank can paint stale bounds
+//         panelSlideAnim_.start(updater, 190.0, easeInOutCubic,
+//                               [this](float t) { librarySlide_.applyTweenAt(t); resized(); },
+//                               [this] { librarySlide_.finish(); resized(); });
+//     }
+// ============================================================================
+
+class PanelSlide {
+public:
+    /** 0 = fully closed, 1 = fully open.  The only value layout may read. */
+    float getProgress() const noexcept { return progress_; }
+
+    /** Land on `target` with no tween — a restore from settings, or a test seam standing in for
+     *  the VBlank frame that would have left the slide here. */
+    void snapTo(float target) noexcept {
+        progress_ = from_ = to_ = clamp(target);
+        tweening_ = false;
+    }
+
+    /** Point the slide at `target`, starting from WHEREVER it is right now — a mid-flight
+     *  re-toggle reverses from there rather than jumping to an extreme first.
+     *
+     *  @returns true when the caller should start (or restart) its animation driver; false when
+     *           the slide has ALREADY landed on the target, either because `canAnimate` is false
+     *           (no VBlank reaches an off-screen component: headless tests, or a restore before
+     *           the window exists — both must land synchronously) or because it was there
+     *           anyway.
+     */
+    bool retarget(float target, bool canAnimate) noexcept {
+        from_ = progress_;
+        to_ = clamp(target);
+        tweening_ = canAnimate && from_ != to_;
+        if (!tweening_) {
+            progress_ = to_;
+            return false;
+        }
+        return true;
+    }
+
+    /** Per-frame: `t` is the driver's eased 0→1 progress through the CURRENT tween. */
+    void applyTweenAt(float t) noexcept { progress_ = clamp(from_ + (to_ - from_) * t); }
+
+    /** Pin the exact end value.  A driver's last frame is not guaranteed to land on t == 1, so
+     *  the completion callback settles the fraction here rather than leaving it a hair short. */
+    void finish() noexcept {
+        progress_ = to_;
+        tweening_ = false;
+    }
+
+    /** True while a tween is in flight for THIS panel (the others sharing the driver may be
+     *  standing still — their from == to makes applyTweenAt a no-op). */
+    bool isMoving() const noexcept { return tweening_; }
+
+    /** The value the current tween is heading for (or resting on). */
+    float getTarget() const noexcept { return to_; }
+
+    /** The value the LAST retarget started from — kept after the slide settles, because it is the
+     *  anti-jump property in test terms: a mid-flight reversal must show the panel's mid-slide
+     *  fraction here, never 0 or 1. */
+    float getTweenStart() const noexcept { return from_; }
+
+    /** The interpolated size in px of a panel measuring `closedPx` when shut and `openPx` when
+     *  fully open.  Both endpoints are exact: fraction 0 gives `closedPx`, 1 gives `openPx`. */
+    int sizeBetween(int closedPx, int openPx) const noexcept {
+        return closedPx +
+               static_cast<int>(std::lround(static_cast<double>(openPx - closedPx) * static_cast<double>(progress_)));
+    }
+
+private:
+    static float clamp(float v) noexcept { return juce::jlimit(0.0f, 1.0f, v); }
+
+    float progress_ = 0.0f;
+    float from_ = 0.0f;
+    float to_ = 0.0f;
+    bool tweening_ = false;
+};
+
+// ============================================================================
+// Section 4 — formatShortcutHint
 //   Pure, no JUCE/GUI deps (only juce::String).
 // ============================================================================
 

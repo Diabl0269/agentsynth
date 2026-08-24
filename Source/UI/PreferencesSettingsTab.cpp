@@ -1,4 +1,6 @@
 #include "PreferencesSettingsTab.h"
+#include "Theme/AppLookAndFeel.h"
+#include <functional>
 
 namespace {
 int comboIdFromMode(GraphEditor::SmartConnectionMode mode) {
@@ -44,6 +46,120 @@ constexpr const char* kTimelineDoubleClickSpansLocatorsKey = "timelineDoubleClic
 // and boxed each preference in, which is the same complaint that produced the gentler rule under
 // the Keyboard Shortcuts tab's section headers (see its kDividerAlpha — keep the two in step).
 constexpr float kDividerAlpha = 0.12f;
+
+// Per-module overrides of "defaultDualIOForNewModules", one compact JSON object: {"TypeName":
+// true|false}. A type absent from the object follows the global default — that is the whole
+// reason this is a JSON blob under one key rather than one key per module type, the same way
+// ShortcutManager keeps its rebinds as one object instead of one property per action.
+constexpr const char* kDualIOPerModuleDefaultsKey = "dualIOPerModuleDefaults";
+
+// Combo item ids for the per-module popup's 3-state choice (0 is reserved by juce::ComboBox for
+// "nothing selected", so these start at 1 like every other combo in this file).
+constexpr int kDualIOChoiceFollowGlobal = 1;
+constexpr int kDualIOChoiceAlwaysOn = 2;
+constexpr int kDualIOChoiceAlwaysOff = 3;
+
+// Every module type that carries the Dual I/O parameter (ModuleBase::addDualIOParameter): the FX
+// modules plus the five split-block voice modules (docs/fx_modules.md § Stereo I/O). Names must
+// match ModuleBase::getName() exactly — they are what GraphEditor::addModuleAtCanvasPosition
+// receives as the "name" it creates and what applyDefaultDualIOForNewModule matches overrides
+// against.
+const std::vector<juce::String>& dualIOModuleTypes() {
+    static const std::vector<juce::String> types{
+        "Oscillator", "Wavetable", "Filter",        "VCA",           "Voice Mixer", "Sampler",
+        "Distortion", "Delay",     "Chorus",        "Bitcrusher",    "Limiter",     "Reverb",
+        "Flanger",    "Phaser",    "Pitch Shifter", "Parametric EQ", "Compressor",
+    };
+    return types;
+}
+
+// Popup content for the "Per-module I/O defaults..." button: a plain themed column, one
+// juce::Label + juce::ComboBox pair per module type, flat children (no per-row wrapper) so tests
+// can find the Nth juce::ComboBox the same way ClickingTheToggleReachesTheEditorAndNewModules
+// finds the Dual I/O ToggleButton — by walking getChildren() and dynamic_cast. No search box and
+// no viewport, unlike MidiDestinationPicker: seventeen rows at kRowHeight fit comfortably inside a
+// CallOutBox on any real screen, and a popup this rarely opened does not earn that rig.
+class DualIOPerModulePopupContent : public juce::Component {
+public:
+    DualIOPerModulePopupContent(const std::vector<juce::String>& moduleTypes,
+                                const std::function<std::optional<bool>(const juce::String&)>& getOverride,
+                                const std::function<void(const juce::String&, std::optional<bool>)>& setOverride) {
+        rows.reserve(moduleTypes.size());
+        for (const auto& type : moduleTypes) {
+            auto label = std::make_unique<juce::Label>();
+            label->setText(type, juce::dontSendNotification);
+            label->setFont(juce::Font(juce::FontOptions(12.5f)));
+            addAndMakeVisible(*label);
+
+            auto combo = std::make_unique<juce::ComboBox>();
+            combo->addItem("Follow global", kDualIOChoiceFollowGlobal);
+            combo->addItem("Always on", kDualIOChoiceAlwaysOn);
+            combo->addItem("Always off", kDualIOChoiceAlwaysOff);
+            const auto current = getOverride(type);
+            combo->setSelectedId(current.has_value() ? (*current ? kDualIOChoiceAlwaysOn : kDualIOChoiceAlwaysOff)
+                                                     : kDualIOChoiceFollowGlobal,
+                                 juce::dontSendNotification);
+            combo->onChange = [c = combo.get(), type, setOverride] {
+                switch (c->getSelectedId()) {
+                case kDualIOChoiceAlwaysOn:
+                    setOverride(type, true);
+                    break;
+                case kDualIOChoiceAlwaysOff:
+                    setOverride(type, false);
+                    break;
+                default:
+                    setOverride(type, std::nullopt);
+                    break;
+                }
+            };
+            addAndMakeVisible(*combo);
+
+            rows.push_back({std::move(label), std::move(combo)});
+        }
+        setSize(kWidth, kPadding * 2 + kRowHeight * static_cast<int>(rows.size()));
+    }
+
+    void resized() override {
+        auto bounds = getLocalBounds().reduced(kPadding);
+        for (auto& row : rows) {
+            auto r = bounds.removeFromTop(kRowHeight);
+            row.label->setBounds(r.removeFromLeft(kLabelWidth));
+            row.combo->setBounds(r);
+        }
+    }
+
+    // Opaque themed panel, mirroring MidiDestinationPicker's paint(): a CallOutBox launched with no
+    // parent (see this file's onClick lambda) becomes a top-level window that does not necessarily
+    // inherit synth::theme::AppLookAndFeel.
+    void paint(juce::Graphics& g) override {
+        juce::Colour bg = juce::Colours::darkgrey.darker(0.4f);
+        juce::Colour border = juce::Colours::grey.darker();
+        float radius = 6.0f;
+        if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
+            const auto& c = lf->getTheme().colors;
+            bg = c.surface;
+            border = c.border;
+            radius = lf->getTheme().metrics.cornerRadius;
+        }
+        auto b = getLocalBounds().toFloat();
+        g.setColour(bg);
+        g.fillRoundedRectangle(b, radius);
+        g.setColour(border);
+        g.drawRoundedRectangle(b.reduced(0.5f), radius, 1.0f);
+    }
+
+private:
+    static constexpr int kWidth = 320;
+    static constexpr int kPadding = 8;
+    static constexpr int kRowHeight = 26;
+    static constexpr int kLabelWidth = 150;
+
+    struct Row {
+        std::unique_ptr<juce::Label> label;
+        std::unique_ptr<juce::ComboBox> combo;
+    };
+    std::vector<Row> rows;
+};
 
 GraphEditor::SmartConnectionMode modeFromComboId(int id) {
     switch (id) {
@@ -108,9 +224,16 @@ PreferencesSettingsTab::PreferencesSettingsTab(juce::ApplicationProperties& prop
                                    "canvas as well as new ones. Card heights do not change.");
     defaultDualIOToggle.onClick = [this] { persistDefaultDualIOForNewModules(defaultDualIOToggle.getToggleState()); };
 
+    dualIOPerModuleOverrides = loadDualIOPerModuleOverrides(appProperties);
+
     addAndMakeVisible(perModuleDefaultsButton);
-    perModuleDefaultsButton.setEnabled(false);
-    perModuleDefaultsButton.setTooltip("Per-module I/O default overrides are planned in a follow-up preference.");
+    perModuleDefaultsButton.setTooltip(
+        "Per-module overrides of the Split Left/Right default above — Follow global, Always on, or Always off for "
+        "each module type. Applies to modules created after the change, same as the toggle.");
+    perModuleDefaultsButton.onClick = [this] {
+        auto popup = buildDualIOPerModuleDefaultsPopup();
+        juce::CallOutBox::launchAsynchronously(std::move(popup), perModuleDefaultsButton.getScreenBounds(), nullptr);
+    };
 
     addAndMakeVisible(loopSelectionArmsToggle);
     loopSelectionArmsToggle.setToggleState(
@@ -216,10 +339,18 @@ void PreferencesSettingsTab::resized() {
     alignmentGuideToggle.setBounds(bounds.removeFromTop(24));
     addDivider();
 
-    defaultDualIOToggle.setBounds(bounds.removeFromTop(24));
-    bounds.removeFromTop(10);
-    perModuleDefaultsButton.setBounds(bounds.removeFromTop(24).removeFromLeft(220));
-    bounds.removeFromTop(10);
+    // One line, one row (see the toggle's declaration comment): the button is sized to its own
+    // text via changeWidthToFitText rather than a fixed guess, so the toggle keeps as much of the
+    // row as it can for its own (longer) label.
+    {
+        auto dualIORow = bounds.removeFromTop(24);
+        perModuleDefaultsButton.changeWidthToFitText(24);
+        const int buttonWidth = juce::jmax(perModuleDefaultsButton.getWidth(), 160);
+        perModuleDefaultsButton.setBounds(dualIORow.removeFromRight(buttonWidth));
+        dualIORow.removeFromRight(12);
+        defaultDualIOToggle.setBounds(dualIORow);
+    }
+    addDivider();
 
     loopSelectionArmsToggle.setBounds(bounds.removeFromTop(24));
     // Same group as the row above (no divider between them): both are about the loop locators, and
@@ -250,6 +381,7 @@ void PreferencesSettingsTab::setGraphEditor(GraphEditor* ge) {
     graphEditor->setDoubleClickPortDisconnectEnabled(doubleClickDisconnectToggle.getToggleState());
     graphEditor->setAlignmentGuidesEnabled(alignmentGuideToggle.getToggleState());
     graphEditor->setDefaultDualIOForNewModules(defaultDualIOToggle.getToggleState());
+    graphEditor->setDualIOPerModuleOverrides(dualIOPerModuleOverrides);
 }
 
 GraphEditor::SmartConnectionMode PreferencesSettingsTab::getSmartConnectionMode() const {
@@ -394,4 +526,63 @@ void PreferencesSettingsTab::persistDefaultDualIOForNewModules(bool enabled) {
         // retro-applies — setGraphEditor() and the startup restore must not touch the patch.
         graphEditor->applyDualIOToExistingModules(enabled);
     }
+}
+
+const std::vector<juce::String>& PreferencesSettingsTab::getDualIOModuleTypes() { return dualIOModuleTypes(); }
+
+std::map<juce::String, bool> PreferencesSettingsTab::loadDualIOPerModuleOverrides(juce::ApplicationProperties& props) {
+    std::map<juce::String, bool> overrides;
+    // getValue's default ("{}") is never written back — reading it must not create the key, the
+    // same discipline every other "not yet touched" preference in this file follows.
+    const auto raw = props.getUserSettings()->getValue(kDualIOPerModuleDefaultsKey, "{}");
+    // Held in a named var rather than chained straight into getDynamicObject(): a temporary var's
+    // ReferenceCountedObjectPtr releases the DynamicObject the moment the temporary is destroyed
+    // (end of this statement), which would leave `obj` dangling for the loop below.
+    const juce::var parsed = juce::JSON::parse(raw);
+    if (auto* obj = parsed.getDynamicObject()) {
+        for (const auto& prop : obj->getProperties())
+            overrides[prop.name.toString()] = static_cast<bool>(prop.value);
+    }
+    return overrides;
+}
+
+std::optional<bool> PreferencesSettingsTab::getDualIOOverrideForType(const juce::String& moduleType) const {
+    auto it = dualIOPerModuleOverrides.find(moduleType);
+    return it != dualIOPerModuleOverrides.end() ? std::optional<bool>(it->second) : std::nullopt;
+}
+
+void PreferencesSettingsTab::setDualIOOverrideForType(const juce::String& moduleType,
+                                                      std::optional<bool> overrideValue) {
+    if (overrideValue.has_value())
+        dualIOPerModuleOverrides[moduleType] = *overrideValue;
+    else
+        dualIOPerModuleOverrides.erase(moduleType);
+    persistDualIOPerModuleOverrides();
+}
+
+void PreferencesSettingsTab::persistDualIOPerModuleOverrides() {
+    juce::DynamicObject::Ptr obj = new juce::DynamicObject();
+    for (const auto& [type, dual] : dualIOPerModuleOverrides)
+        obj->setProperty(type, dual);
+    // Compact (allOnOneLine=true): this is a single ApplicationProperties value, not a file meant
+    // to be read by a human.
+    appProperties.getUserSettings()->setValue(kDualIOPerModuleDefaultsKey,
+                                              juce::JSON::toString(juce::var(obj.get()), true));
+    appProperties.getUserSettings()->saveIfNeeded();
+    // New-modules-only, exactly like the global default above: no retro-apply to the canvas, and
+    // no separate startup-restore step to write here — MainComponent calls
+    // loadDualIOPerModuleOverrides() itself and pushes straight into the real GraphEditor, the same
+    // way it re-reads "defaultDualIOForNewModules" rather than waiting on this tab to exist.
+    if (graphEditor)
+        graphEditor->setDualIOPerModuleOverrides(dualIOPerModuleOverrides);
+}
+
+std::unique_ptr<juce::Component> PreferencesSettingsTab::buildDualIOPerModuleDefaultsPopup() {
+    return std::make_unique<DualIOPerModulePopupContent>(
+        getDualIOModuleTypes(), [this](const juce::String& type) { return getDualIOOverrideForType(type); },
+        [this](const juce::String& type, std::optional<bool> value) { setDualIOOverrideForType(type, value); });
+}
+
+std::unique_ptr<juce::Component> PreferencesSettingsTab::createDualIOPerModuleDefaultsPopupForTest() {
+    return buildDualIOPerModuleDefaultsPopup();
 }

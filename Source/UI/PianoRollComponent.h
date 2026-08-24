@@ -1225,8 +1225,8 @@ private:
     // vblankUpdater, which is `this` (a juce::Component) and must therefore not exist before the
     // component does.
     std::optional<juce::VBlankAnimatorUpdater> scalePanelVblankUpdater_;
-    // Within the house 160-220 ms spec (docs/layout.md §11), matching animatePanelTransition's own
-    // ~190 ms feel for the app's other show/hide sidebars.
+    // Within the house 160-220 ms spec (docs/layout.md §11), matching MainComponent's own
+    // kPanelSlideMs (~190 ms) feel for the app's other show/hide sidebars.
     static constexpr double kScalePanelAnimMs = 200.0;
 
     // Per-clip scale memory: SESSION-ONLY, deliberately never persisted (mirrors rollView_ and

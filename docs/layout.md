@@ -171,6 +171,13 @@ The application chrome is carved out of `MainComponent::resized()` — the singl
 └─────────────────────────────────┘
 ```
 
+The three dockable panels (library, AI, timeline) are carved at **their open fraction times their
+full size**, not at a binary read of their visible/hidden flag: "or 0 when hidden" above is the
+fraction resting at 0, and any value in between is a frame of the panel's slide. That is what makes
+this method safe to call at any moment — a window resize, a theme change or a timeline height drag
+*during* a slide re-derives the same proportions — and it is the whole animation mechanism: a
+toggle moves the fraction and calls back in here. See §11's `PanelSlide` subsection.
+
 ### ToolbarComponent `paint()`
 
 `paint()` fills the toolbar background with `theme.colors.bg0` via a `dynamic_cast<AppLookAndFeel*>`. When the cast returns null (headless tests or non-themed context), it falls back to the hardcoded colour `0xff0B0D10`.
@@ -1018,6 +1025,86 @@ if (!driver_.isRunning())
 - `isRunning()` returns `false` once `t` reaches `1.0` — the driver stops itself and fires no further repaints.
 - `AnimationDriver::lerpBounds(from, to, t)` is a static helper that interpolates a `juce::Rectangle<int>` linearly between two positions.
 
+### `PanelSlide` — fraction-driven panel layout
+
+A sliding panel does **not** animate by tweening its `Rectangle`. It owns a `synth::ui::PanelSlide`
+— a `[0..1]` open fraction plus the from/to snapshot of the tween moving it — and the owner's
+`resized()` derives the panel's *size* from that fraction:
+
+```cpp
+// Members:
+synth::ui::PanelSlide librarySlide_, aiPanelSlide_, timelineSlide_;
+synth::ui::AnimationDriver panelSlideAnim_;          // ONE driver for all three
+juce::VBlankAnimatorUpdater vblankUpdater{ this };
+
+void resized() override {
+    const int libW = librarySlide_.sizeBetween(collapsedW, fullW);   // fraction -> px
+    const int aiW  = aiPanelSlide_.sizeBetween(0, aiPanelWidth);
+    ...                                                              // carve, then setBounds
+}
+```
+
+Two properties follow, and both are the point:
+
+- **A layout pass is correct whenever it runs.** A window resize, a theme change, a timeline
+  height drag or a `setSize()` *in the middle of a slide* re-derives the same proportions instead
+  of snapping the panel to an endpoint. `resized()` is the single geometry authority — there is no
+  second "compute the target bounds" function to keep in step with it.
+- **A toggle only moves the fraction.** It flips the logical flag, persists it, refreshes the
+  toolbar, and calls one seam. The old shape — flip the flag, call `resized()` (which snapped
+  every panel to its FINAL bounds), *then* start a tween from the pre-toggle bounds — is what made
+  a panel appear fully open for one frame and yank back before easing. That jump is a property of
+  the call order, not of the easing.
+
+`MainComponent::beginPanelSlide()` is that seam, and the shape to copy:
+
+```cpp
+void MainComponent::beginPanelSlide() {
+    if (isLibraryVisible) moduleLibrary.setVisible(true);      // opening: visible before frame 0
+    ...                                                        // closing: hidden in finish…()
+
+    const bool canAnimate = isShowing();                       // no VBlank reaches an off-screen
+    const bool a = librarySlide_ .retarget(isLibraryVisible  ? 1.0f : 0.0f, canAnimate);
+    const bool b = aiPanelSlide_ .retarget(isAiPanelVisible  ? 1.0f : 0.0f, canAnimate);
+    const bool c = timelineSlide_.retarget(isTimelineVisible ? 1.0f : 0.0f, canAnimate);
+    if (! (a || b || c)) { finishPanelSlide(); return; }        // landed synchronously
+
+    resized();                                                 // frame 0, before the first VBlank
+    panelSlideAnim_.start(vblankUpdater, kPanelSlideMs, synth::ui::easeInOutCubic,
+                         [this](float t) { applyPanelSlideFrame(t); },
+                         [this]          { finishPanelSlide(); });
+}
+```
+
+Four rules live in there:
+
+1. **`retarget()` starts from the fraction's CURRENT value.** Re-toggling mid-flight reverses from
+   where the panel *is*, never from an extreme — the same contract
+   `PianoRollComponent::setScalePanelVisible` states for the scale panel's slide.
+2. **`canAnimate == false` lands immediately.** No VBlank reaches an off-screen component, so a
+   headless toggle (and a persisted restore before the window exists — `initialiseCommon()` snaps
+   the fractions rather than sliding them) must be synchronous. That is the contract
+   `Tests/PanelAnimationAndLoadingTests.cpp` asserts with no message pump at all, and the reason
+   the whole test suite sees final bounds the instant a `simulate*Click()` returns.
+3. **Every slide is retargeted, not just the one whose flag moved.** The three panels share one
+   `AnimationDriver` (they share a window, so they must share a clock), and restarting it has to
+   carry any slide already in flight to *its* target. One animator per panel would leave whichever
+   slide the next toggle didn't mention frozen half-open.
+4. **A close is a slide too.** The panel is hidden in `finishPanelSlide()`, not at toggle time —
+   hiding it up front is what used to make "close" not an animation at all.
+
+`applyPanelSlideFrame(t)` advances all three fractions and calls `resized()`; it adds **no**
+`repaint()` (moving a child's bounds already invalidates the region it left and the one it arrived
+at — a full-window repaint per frame is exactly what §10 forbids). `finishPanelSlide()` stops the
+driver, `finish()`es each fraction on its exact endpoint (a driver's last frame is not guaranteed
+to be `t == 1`), hides whatever finished closing, and lays out once more.
+
+`PanelSlide` holds no animator and no JUCE GUI state, so its math is unit-tested headlessly
+(`Tests/UIAnimationTests.cpp`) and it is reusable by any multi-panel surface.
+`GraphEditor::toggleModMatrixVisibility` and `PianoRollComponent::setScalePanelVisible` already
+implement the same pattern by hand and are **not** ported to it — they are single-panel surfaces
+and correct as they stand.
+
 ### `formatShortcutHint`
 
 ```cpp
@@ -1032,10 +1119,11 @@ Composes tooltip text with an optional keyboard shortcut hint appended in `[brac
 | Feature | Animation | Note |
 |---|---|---|
 | **Module drop landing** | Eased tween from drop position → snapped + anti-overlapped final position (`easeOutBack`); `computeDropFinalPosition` is a pure helper | `GraphEditor` |
-| **Mod-matrix show/hide** | Bounds tween, `easeInOutCubic` | `GraphEditor` |
-| **Library sidebar show/hide** | Bounds tween, `easeInOutCubic` | `MainComponent` |
+| **Mod-matrix show/hide** | Open-fraction tween, `easeInOutCubic` | `GraphEditor` |
+| **Library sidebar show/hide** | `PanelSlide` fraction tween (190 ms, `easeInOutCubic`), shared driver | `MainComponent` |
 | **Library section collapse/expand** | Band-height fold (150 ms), `easeInOutCubic` | `ModuleLibraryComponent` |
-| **AI panel show/hide** | Bounds tween, `easeInOutCubic` | `MainComponent` |
+| **AI panel show/hide** | `PanelSlide` fraction tween (190 ms, `easeInOutCubic`), shared driver | `MainComponent` |
+| **Timeline panel show/hide** | `PanelSlide` fraction tween (190 ms, `easeInOutCubic`), shared driver — same slide, bottom axis | `MainComponent` |
 | **Empty-canvas first-run hint** | Static drawn text; no animation — drawn only when `isCanvasEmpty(nodeCount)` returns `true` | `GraphEditor` |
 | **ModuleLibraryComponent rows** | Row hover-highlight; grab/dragging-hand cursor on draggable rows; per-module descriptions via `descriptionFor(name)` surfaced as `setTooltip()`; search-query substring highlight on matching labels | `ModuleLibraryComponent` |
 | **Preset-load feedback** | Status bar text updated during load; no spinner | `MainComponent` → `StatusBarComponent` |
@@ -1712,10 +1800,12 @@ and TL5-9's knob-entry-point aside, each scoped to its own subsection below).
 
 ### Docking, toggle, shortcut
 
-`MainComponent` carves the panel full-width, directly above the status bar: `resized()` and its
-pure-geometry twin `computePanelBounds()` (§ see `PanelBoundsResult::timelineBounds`) remove it
-from the bottom AFTER the status bar and BEFORE the AI-panel/library removals, so it spans the
-whole window width regardless of which side panels are open.
+`MainComponent` carves the panel full-width, directly above the status bar: `resized()` — the one
+geometry authority, see §11's `PanelSlide` subsection — removes it from the bottom AFTER the status
+bar and BEFORE the AI-panel/library removals, so it spans the whole window width regardless of
+which side panels are open. The height it removes is `timelineSlide_.sizeBetween(0,
+timelinePanelHeight_)`, i.e. the user's height scaled by the panel's open fraction, so the same
+carve serves both the docked panel and every frame of its slide.
 
 A toolbar toggle (`ToolbarComponent::Slot::ToggleTimeline`, right-hand group, immediately before
 `ToggleTheme`) and the **Cmd+T** shortcut (action id `toggleTimelinePanel`; see
@@ -1728,8 +1818,9 @@ The panel's height is **not** fixed. `Metrics::timelinePanelHeight` (220) is the
 minimum**, no longer the law:
 
 - **`MainComponent` owns the value** (`timelinePanelHeight_`), and it is the only thing that lays
-  the panel out. `resized()`, `computePanelBounds()` and therefore **both ends of the show/hide
-  slide** all read the member, never the metric directly.
+  the panel out. `resized()` — and therefore **every frame of the show/hide slide**, which is just
+  `resized()` at a moving fraction — reads the member, never the metric directly. A height drag
+  landing mid-slide needs no special case for the same reason.
 - **Clamp rule**, applied in `MainComponent::clampTimelinePanelHeight()` on every layout pass, not
   only when the user drags: `[Metrics::timelinePanelHeight, max(metric, 75% of the window height)]`.
   Re-clamping per pass is what stops a height saved on a large window from swallowing a smaller
@@ -1755,19 +1846,21 @@ minimum**, no longer the law:
 
 ### Animation
 
-The slide in/out reuses the **same** coordinated `AnimationDriver` that already animates the
-library and AI panels (`MainComponent::animatePanelTransition()`, ~190 ms ease-in-out-cubic, one
-shared `VBlankAnimatorUpdater`) — no new animator or timer was added. The transition lambda was
-extended to also lerp the timeline panel's bounds; showing the panel starts it from a zero-height
-rect pinned at its final bottom edge (so it grows upward into place), and hiding it calls
-`setVisible(false)` in `onComplete`, same as the sibling panels.
+The slide in/out is the **same** `PanelSlide` + one shared `AnimationDriver` the library and AI
+panels use (`MainComponent::beginPanelSlide()`, ~190 ms ease-in-out-cubic, one shared
+`VBlankAnimatorUpdater`) — no animator or timer of its own, and no timeline-specific animation code
+at all: only the axis differs, and that lives in `resized()`'s carve order. `timelineSlide_`'s
+fraction drives the height against a pinned bottom edge, so the panel grows upward into place and
+shrinks back down the same way; `setVisible(false)` happens in `finishPanelSlide()`, once the slide
+is actually done, same as the sibling panels. See §11 for the full contract (mid-flight reversal,
+the synchronous off-screen path, why one driver serves all three).
 
 ### No build-time (or runtime) gating
 
-Everything past the always-present `TimelinePanelComponent` member and `PanelBoundsResult`/
-`computePanelBounds()` plumbing — the toolbar button, the `toggleTimelinePanel` command, and the
-carve itself — is ordinary, always-compiled, always-active code: there is no build configuration
-and no runtime preference that omits the button, the shortcut, or the panel carve.
+Everything past the always-present `TimelinePanelComponent` member and the `resized()` carve — the
+toolbar button and the `toggleTimelinePanel` command included — is ordinary, always-compiled,
+always-active code: there is no build configuration and no runtime preference that omits the
+button, the shortcut, or the panel carve.
 
 Contents (ruler/grid/snap, track headers, the playhead, the transport bar, clip lanes, the piano
 roll, the automation strip, and finally the keyboard/focus rule tying it to the graph editor) are

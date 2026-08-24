@@ -1,5 +1,6 @@
 #include "../Source/UI/GraphEditor.h"
 #include "../Source/UI/PreferencesSettingsTab.h"
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -312,4 +313,243 @@ TEST_F(PreferencesSettingsTabTest, PaintDoesNotCrash) {
     juce::Graphics g(img);
     EXPECT_NO_THROW(tab.paint(g));
     EXPECT_NO_THROW(tab.resized());
+}
+
+// ---- Per-module Dual I/O defaults ("Per-module I/O defaults..." button) ----------------------
+
+// Round-trips the persisted per-type override map: absent means Follow global, set/clear/re-read
+// across a fresh tab instance, mirroring the "not yet touched" + "fresh tab restores it" pattern
+// DoubleClickSpansLocatorsDefaultsOnAndRoundTrips above uses for a plain bool preference.
+TEST_F(PreferencesSettingsTabTest, DualIOPerModuleOverrideDefaultsToFollowGlobalAndRoundTrips) {
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_FALSE(tab.getDualIOOverrideForType("Reverb").has_value())
+            << "an untouched module type follows the global default";
+        // Reading the default must not WRITE it — same discipline as every other preference here.
+        EXPECT_FALSE(appProperties.getUserSettings()->containsKey("dualIOPerModuleDefaults"));
+
+        tab.setDualIOOverrideForType("Reverb", true);
+        ASSERT_TRUE(tab.getDualIOOverrideForType("Reverb").has_value());
+        EXPECT_TRUE(*tab.getDualIOOverrideForType("Reverb"));
+
+        tab.setDualIOOverrideForType("Filter", false);
+        ASSERT_TRUE(tab.getDualIOOverrideForType("Filter").has_value());
+        EXPECT_FALSE(*tab.getDualIOOverrideForType("Filter"));
+
+        // Clearing an override (picking "Follow global" again) removes it, not just zeroes it.
+        tab.setDualIOOverrideForType("Reverb", std::nullopt);
+        EXPECT_FALSE(tab.getDualIOOverrideForType("Reverb").has_value());
+    }
+
+    // A fresh tab restores exactly what was persisted.
+    {
+        PreferencesSettingsTab tab(appProperties);
+        EXPECT_FALSE(tab.getDualIOOverrideForType("Reverb").has_value());
+        ASSERT_TRUE(tab.getDualIOOverrideForType("Filter").has_value());
+        EXPECT_FALSE(*tab.getDualIOOverrideForType("Filter"));
+        // Never touched at all, in either tab instance.
+        EXPECT_FALSE(tab.getDualIOOverrideForType("Delay").has_value());
+    }
+}
+
+// The canonical module-type list: every FX plus the five split-block voice modules
+// (docs/fx_modules.md § Stereo I/O), and nothing else duplicated or missing.
+TEST_F(PreferencesSettingsTabTest, DualIOModuleTypesListsEveryStereoCapableModuleExactlyOnce) {
+    const auto& types = PreferencesSettingsTab::getDualIOModuleTypes();
+    const std::vector<juce::String> expected{"Oscillator",    "Wavetable",  "Filter",  "VCA",    "Voice Mixer",
+                                             "Sampler",       "Distortion", "Delay",   "Chorus", "Bitcrusher",
+                                             "Limiter",       "Reverb",     "Flanger", "Phaser", "Pitch Shifter",
+                                             "Parametric EQ", "Compressor"};
+    ASSERT_EQ(types.size(), expected.size());
+    for (const auto& name : expected)
+        EXPECT_EQ(std::count(types.begin(), types.end(), name), 1) << name << " must appear exactly once";
+}
+
+// Test seam for the popup: button state plus the exact content component a real click would open,
+// without launching the CallOutBox (see the class's header comment for why).
+TEST_F(PreferencesSettingsTabTest, PerModuleButtonIsEnabledAndPopupReflectsPersistedOverrides) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 460);
+    tab.setDualIOOverrideForType("Reverb", true);
+    tab.setDualIOOverrideForType("Filter", false);
+
+    juce::TextButton* perModuleButton = nullptr;
+    for (auto* child : tab.getChildren())
+        if (auto* btn = dynamic_cast<juce::TextButton*>(child))
+            if (btn->getButtonText().containsIgnoreCase("Per-module"))
+                perModuleButton = btn;
+    ASSERT_NE(perModuleButton, nullptr) << "the per-module defaults control must be a labelled TextButton";
+    EXPECT_TRUE(perModuleButton->isEnabled()) << "the popup button must be clickable, not the permanent placeholder";
+
+    auto popup = tab.createDualIOPerModuleDefaultsPopupForTest();
+    ASSERT_NE(popup, nullptr);
+    popup->setSize(400, 900);
+
+    std::vector<juce::Label*> labels;
+    std::vector<juce::ComboBox*> combos;
+    for (auto* child : popup->getChildren()) {
+        if (auto* l = dynamic_cast<juce::Label*>(child))
+            labels.push_back(l);
+        if (auto* c = dynamic_cast<juce::ComboBox*>(child))
+            combos.push_back(c);
+    }
+    ASSERT_EQ(labels.size(), PreferencesSettingsTab::getDualIOModuleTypes().size());
+    ASSERT_EQ(combos.size(), PreferencesSettingsTab::getDualIOModuleTypes().size());
+
+    auto comboForType = [&](const juce::String& type) -> juce::ComboBox* {
+        for (size_t i = 0; i < labels.size(); ++i)
+            if (labels[i]->getText() == type)
+                return combos[i];
+        return nullptr;
+    };
+
+    auto* reverbCombo = comboForType("Reverb");
+    ASSERT_NE(reverbCombo, nullptr);
+    EXPECT_EQ(reverbCombo->getText(), "Always on");
+
+    auto* filterCombo = comboForType("Filter");
+    ASSERT_NE(filterCombo, nullptr);
+    EXPECT_EQ(filterCombo->getText(), "Always off");
+
+    auto* oscCombo = comboForType("Oscillator");
+    ASSERT_NE(oscCombo, nullptr);
+    EXPECT_EQ(oscCombo->getText(), "Follow global") << "an untouched type must show Follow global, not a stale state";
+}
+
+// Driving the actual ComboBox (not the setter) is what a real click in the popup does — mirrors
+// ClickingTheToggleReachesTheEditorAndNewModules driving the real ToggleButton for the global pref.
+TEST_F(PreferencesSettingsTabTest, ChangingAPopupRowWritesThroughToPersistence) {
+    PreferencesSettingsTab tab(appProperties);
+    auto popup = tab.createDualIOPerModuleDefaultsPopupForTest();
+    popup->setSize(400, 900);
+
+    std::vector<juce::Label*> labels;
+    std::vector<juce::ComboBox*> combos;
+    for (auto* child : popup->getChildren()) {
+        if (auto* l = dynamic_cast<juce::Label*>(child))
+            labels.push_back(l);
+        if (auto* c = dynamic_cast<juce::ComboBox*>(child))
+            combos.push_back(c);
+    }
+    ASSERT_EQ(labels.size(), combos.size());
+
+    juce::ComboBox* oscCombo = nullptr;
+    for (size_t i = 0; i < labels.size(); ++i)
+        if (labels[i]->getText() == "Oscillator")
+            oscCombo = combos[i];
+    ASSERT_NE(oscCombo, nullptr) << "could not locate the Oscillator row's ComboBox";
+
+    oscCombo->setSelectedId(2 /* Always on */, juce::sendNotificationSync);
+    ASSERT_TRUE(tab.getDualIOOverrideForType("Oscillator").has_value());
+    EXPECT_TRUE(*tab.getDualIOOverrideForType("Oscillator"));
+    EXPECT_TRUE(appProperties.getUserSettings()->getValue("dualIOPerModuleDefaults").contains("Oscillator"));
+
+    oscCombo->setSelectedId(3 /* Always off */, juce::sendNotificationSync);
+    ASSERT_TRUE(tab.getDualIOOverrideForType("Oscillator").has_value());
+    EXPECT_FALSE(*tab.getDualIOOverrideForType("Oscillator"));
+
+    oscCombo->setSelectedId(1 /* Follow global */, juce::sendNotificationSync);
+    EXPECT_FALSE(tab.getDualIOOverrideForType("Oscillator").has_value());
+}
+
+// Layout: the toggle and the button share one row (not two stacked rows), and a divider separates
+// this group from the next preference (loop-selection-arms) — the two bugs from the report.
+TEST_F(PreferencesSettingsTabTest, DualIOGroupIsOneLineWithADividerBelow) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 460);
+
+    juce::ToggleButton* dualToggle = nullptr;
+    juce::TextButton* perModuleButton = nullptr;
+    for (auto* child : tab.getChildren()) {
+        if (auto* tb = dynamic_cast<juce::ToggleButton*>(child))
+            if (tb->getButtonText().containsIgnoreCase("Split"))
+                dualToggle = tb;
+        if (auto* btn = dynamic_cast<juce::TextButton*>(child))
+            if (btn->getButtonText().containsIgnoreCase("Per-module"))
+                perModuleButton = btn;
+    }
+    ASSERT_NE(dualToggle, nullptr);
+    ASSERT_NE(perModuleButton, nullptr);
+    ASSERT_FALSE(dualToggle->getBounds().isEmpty());
+    ASSERT_FALSE(perModuleButton->getBounds().isEmpty());
+
+    // Same row: same top edge, side by side without overlapping.
+    EXPECT_EQ(dualToggle->getBounds().getY(), perModuleButton->getBounds().getY())
+        << "the toggle and the per-module button must be on one line";
+    EXPECT_LE(dualToggle->getBounds().getRight(), perModuleButton->getBounds().getX())
+        << "the toggle and the per-module button must not overlap";
+
+    const int rowBottom = std::max(dualToggle->getBounds().getBottom(), perModuleButton->getBounds().getBottom());
+    bool hasDividerBelowRow = false;
+    for (const auto& divider : tab.getDividerBoundsForTest())
+        if (divider.getY() >= rowBottom)
+            hasDividerBelowRow = true;
+    EXPECT_TRUE(hasDividerBelowRow) << "missing divider between the Dual I/O group and the next preference";
+}
+
+// The consumption path: GraphEditor::applyDefaultDualIOForNewModule (called from
+// addModuleAtCanvasPosition, exactly like ClickingTheToggleReachesTheEditorAndNewModules exercises
+// for the global default) must let a per-type override win over a global default that disagrees,
+// and must fall through to the global default for a type with no override.
+TEST_F(PreferencesSettingsTabTest, NewModuleHonoursPerModuleOverrideEvenWhenItDisagreesWithGlobal) {
+    PreferencesSettingsTab tab(appProperties);
+    AudioEngine engine;
+    GraphEditor editor(engine);
+    editor.setSize(800, 600);
+    tab.setGraphEditor(&editor);
+
+    // Global says dual, but Filter is overridden to always stay single...
+    tab.setDualIOOverrideForType("Filter", false);
+    // ...and Reverb is overridden to always be dual, even before the global agrees.
+    tab.setDualIOOverrideForType("Reverb", true);
+    tab.setDefaultDualIOForNewModules(true);
+
+    editor.addModuleAtCanvasPosition("Filter", juce::Point<int>(100, 100), nullptr);
+    editor.addModuleAtCanvasPosition("Reverb", juce::Point<int>(400, 100), nullptr);
+    editor.addModuleAtCanvasPosition("Delay", juce::Point<int>(700, 100), nullptr); // no override
+
+    auto isDual = [&engine](const juce::String& type) {
+        for (auto* node : engine.getGraph().getNodes())
+            if (node->getProcessor()->getName() == type)
+                return dynamic_cast<ModuleBase*>(node->getProcessor())->isDualIO();
+        ADD_FAILURE() << type << " was not created";
+        return false;
+    };
+
+    EXPECT_FALSE(isDual("Filter")) << "a per-module override must win over a global default that disagrees";
+    EXPECT_TRUE(isDual("Reverb")) << "a per-module override must win even when it already agrees with the global";
+    EXPECT_TRUE(isDual("Delay")) << "a type with no override must still follow the global default";
+
+    // Flip the global the other way: the overrides must still hold, and the un-overridden type
+    // must follow the global to its new value.
+    tab.setDefaultDualIOForNewModules(false);
+    editor.addModuleAtCanvasPosition("Filter", juce::Point<int>(100, 300), nullptr);
+    editor.addModuleAtCanvasPosition("Chorus", juce::Point<int>(400, 300), nullptr); // no override
+
+    int filterDualCount = 0, filterSingleCount = 0;
+    bool chorusIsDual = true;
+    for (auto* node : engine.getGraph().getNodes()) {
+        const auto name = node->getProcessor()->getName();
+        auto* mb = dynamic_cast<ModuleBase*>(node->getProcessor());
+        if (name == "Filter")
+            (mb->isDualIO() ? filterDualCount : filterSingleCount)++;
+        if (name == "Chorus")
+            chorusIsDual = mb->isDualIO();
+    }
+    EXPECT_EQ(filterDualCount, 0) << "every Filter, old and new, must respect the override";
+    EXPECT_GE(filterSingleCount, 2);
+    EXPECT_FALSE(chorusIsDual) << "Chorus has no override, so it must follow the global's new value";
+}
+
+// MainComponent pushes loadDualIOPerModuleOverrides() straight into the GraphEditor at startup
+// (see MainComponent's constructor), independent of any PreferencesSettingsTab instance — this
+// pins the parser it relies on.
+TEST_F(PreferencesSettingsTabTest, LoadDualIOPerModuleOverridesParsesWithoutATabInstance) {
+    appProperties.getUserSettings()->setValue("dualIOPerModuleDefaults", R"({"Reverb":true,"Filter":false})");
+    auto overrides = PreferencesSettingsTab::loadDualIOPerModuleOverrides(appProperties);
+    ASSERT_EQ(overrides.count("Reverb"), 1u);
+    EXPECT_TRUE(overrides.at("Reverb"));
+    ASSERT_EQ(overrides.count("Filter"), 1u);
+    EXPECT_FALSE(overrides.at("Filter"));
+    EXPECT_EQ(overrides.count("Delay"), 0u);
 }

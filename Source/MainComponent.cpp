@@ -10,6 +10,7 @@
 #include "Timeline/AutomationBinding.h"
 #include "Timeline/TakePlacement.h"
 #include "Timeline/TimelineReconciler.h"
+#include "UI/PreferencesSettingsTab.h"
 #include "UI/SettingsWindow.h"
 #include "UI/TrackColour.h"
 #include <algorithm>
@@ -272,6 +273,12 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     isLibraryVisible = appProperties.getUserSettings()->getBoolValue("librarySidebarVisible", true);
     isAiPanelVisible = appProperties.getUserSettings()->getBoolValue("aiPanelVisible", false);
     isTimelineVisible = appProperties.getUserSettings()->getBoolValue("timelinePanelVisible", false);
+    // ...and snap the fractions resized() lays the panels out from onto them. A restore must never
+    // itself look like a panel sliding open, and the first resized() (setSize() at the end of this
+    // function) runs before any window exists — see beginPanelSlide().
+    librarySlide_.snapTo(isLibraryVisible ? 1.0f : 0.0f);
+    aiPanelSlide_.snapTo(isAiPanelVisible ? 1.0f : 0.0f);
+    timelineSlide_.snapTo(isTimelineVisible ? 1.0f : 0.0f);
     // The theme metric is the DEFAULT height, not the law: a height the user dragged wins. Clamped
     // here and on every resized() — see clampTimelinePanelHeight().
     timelinePanelHeight_ = clampTimelinePanelHeight(
@@ -287,6 +294,9 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     // applyStoredDualIOPreferenceToPatch().
     graphEditor.setDefaultDualIOForNewModules(
         appProperties.getUserSettings()->getBoolValue("defaultDualIOForNewModules", false));
+    // Per-module overrides of the default above (Preferences → "Per-module I/O defaults..."),
+    // same new-modules-only scope as the toggle just above — no patch to retro-apply here either.
+    graphEditor.setDualIOPerModuleOverrides(PreferencesSettingsTab::loadDualIOPerModuleOverrides(appProperties));
 
     // Minimap overlay visibility (issue #159), defaults to visible.
     const bool minimapVisible = appProperties.getUserSettings()->getBoolValue("minimapVisible", true);
@@ -601,36 +611,19 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     addAndMakeVisible(toggleAiPanelButton);
     toggleAiPanelButton.setComponentID("toggleAiPanel");
     toggleAiPanelButton.onClick = [this] {
-        const bool newVisible = !isAiPanelVisible;
-        isAiPanelVisible = newVisible;
-        // Persist BEFORE animation so a crash during layout doesn't lose the user's choice.
+        isAiPanelVisible = !isAiPanelVisible;
+        // Persist BEFORE the slide so a crash during layout doesn't lose the user's choice.
         appProperties.getUserSettings()->setValue("aiPanelVisible", isAiPanelVisible ? "1" : "0");
         appProperties.getUserSettings()->saveIfNeeded();
         applyToolbarIcons();
-
-        auto fromResult = computePanelBounds(isLibraryVisible, !newVisible, isTimelineVisible); // previous layout
-        if (newVisible) {
-            // Showing: make visible before animating in.
-            aiChatComponent.setVisible(true);
-            if (fromResult.aiPanelBounds.isEmpty())
-                fromResult.aiPanelBounds =
-                    juce::Rectangle<int>(fromResult.graphEditorBounds.getRight(), fromResult.graphEditorBounds.getY(),
-                                         0, fromResult.graphEditorBounds.getHeight());
-        }
-        // Apply the FINAL layout immediately so headless tests (no VBlank) see correct bounds.
-        // The animation below is cosmetic only — it starts from fromResult and converges to the
-        // same toResult that resized() already applied.
-        auto toResult = computePanelBounds(isLibraryVisible, newVisible, isTimelineVisible);
-        resized();
-        if (!newVisible)
-            aiChatComponent.setVisible(false);
-        animatePanelTransition(fromResult, toResult, /*hideLib=*/false, /*hideAi=*/!newVisible, /*hideTimeline=*/false);
+        // Everything geometric — showing/hiding the panel, the slide, the synchronous landing when
+        // there is no VBlank to slide on — belongs to the one shared seam.
+        beginPanelSlide();
     };
 
-    // Bottom-docked timeline panel toggle. Mirrors the AI-panel handler above exactly
-    // (flip + persist BEFORE animating, applyToolbarIcons, from/to computePanelBounds, synchronous
-    // resized() for headless tests, then the shared animated transition) — only the axis differs
-    // (bottom slide instead of a side panel).
+    // Bottom-docked timeline panel toggle. Mirrors the AI-panel handler above exactly (flip +
+    // persist BEFORE the slide, applyToolbarIcons, then beginPanelSlide) — the axis it slides on
+    // is resized()'s business, not the toggle's.
     // Wire the panel to the real transport + persisted settings.
     timelinePanel.setTransport(&audioEngine.getTransport());
     timelinePanel.setMetronome(&audioEngine.getMetronome());
@@ -848,33 +841,12 @@ void MainComponent::initialiseCommon(std::unique_ptr<synth::AIProvider> provider
     addAndMakeVisible(toggleTimelineButton);
     toggleTimelineButton.setComponentID("toggleTimeline");
     toggleTimelineButton.onClick = [this] {
-        const bool newVisible = !isTimelineVisible;
-        isTimelineVisible = newVisible;
-        // Persist BEFORE animation so a crash during layout doesn't lose the user's choice.
+        isTimelineVisible = !isTimelineVisible;
+        // Persist BEFORE the slide so a crash during layout doesn't lose the user's choice.
         appProperties.getUserSettings()->setValue("timelinePanelVisible", isTimelineVisible ? "1" : "0");
         appProperties.getUserSettings()->saveIfNeeded();
         applyToolbarIcons();
-
-        auto fromResult = computePanelBounds(isLibraryVisible, isAiPanelVisible, !newVisible); // previous layout
-        if (newVisible) {
-            // Showing: make visible before animating in, sliding up from a zero-height rect
-            // pinned at the panel's final y (bottom edge fixed, height 0 -> timelinePanelHeight_,
-            // i.e. the user's current height, not the theme metric).
-            timelinePanel.setVisible(true);
-            if (fromResult.timelineBounds.isEmpty()) {
-                auto finalBounds = computePanelBounds(isLibraryVisible, isAiPanelVisible, true).timelineBounds;
-                fromResult.timelineBounds =
-                    juce::Rectangle<int>(finalBounds.getX(), finalBounds.getBottom(), finalBounds.getWidth(), 0);
-            }
-        }
-        // Apply the FINAL layout immediately so headless tests (no VBlank) see correct bounds.
-        // The animation below is cosmetic only — it starts from fromResult and converges to the
-        // same toResult that resized() already applied.
-        auto toResult = computePanelBounds(isLibraryVisible, isAiPanelVisible, newVisible);
-        resized();
-        if (!newVisible)
-            timelinePanel.setVisible(false);
-        animatePanelTransition(fromResult, toResult, /*hideLib=*/false, /*hideAi=*/false, /*hideTimeline=*/!newVisible);
+        beginPanelSlide();
     };
 
     addAndMakeVisible(toggleMinimapButton);
@@ -2325,19 +2297,28 @@ bool MainComponent::keyPressed(const juce::KeyPress& key) {
 }
 
 void MainComponent::resized() {
-    // CANONICAL LAYOUT (§2.4). Carve top→bottom: toolbar strip, status bar, AI panel (right,
-    // if visible), library sidebar (left, if visible), canvas (remainder). Dimensions come
+    // CANONICAL LAYOUT (§2.4). Carve top→bottom: toolbar strip, status bar, timeline panel
+    // (bottom), AI panel (right), library sidebar (left), canvas (remainder). Dimensions come
     // from the themed Metrics tokens, with literal fallbacks for the headless test path.
+    //
+    // Each panel's SIZE is its open fraction times its full size, NOT a binary read of its
+    // visible/hidden flag (docs/layout.md §11). That is what makes this pass correct whenever it
+    // runs — window resize, theme change, a timeline height drag mid-slide — and what lets a
+    // toggle animate by moving the fraction and calling straight back in here (see
+    // beginPanelSlide()). A fraction resting at 0 or 1 lays out pixel-identically to the old
+    // binary carve; sidebarCollapsedWidth is the library's own 0.
     int tbH = 44, sbH = 24; // 44 matches Theme::Metrics::toolbarHeight's default (see Theme.h)
-    int libW = isLibraryVisible ? 200 : 0;
-    int aiW = isAiPanelVisible ? 300 : 0;
+    int libClosedW = 0, libOpenW = 200, aiOpenW = 300;
     if (auto* lf = dynamic_cast<synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
         const auto& m = lf->getTheme().metrics;
         tbH = m.toolbarHeight;
         sbH = m.statusBarHeight;
-        libW = isLibraryVisible ? m.librarySidebarWidth : m.sidebarCollapsedWidth;
-        aiW = isAiPanelVisible ? m.aiPanelWidth : 0;
+        libClosedW = m.sidebarCollapsedWidth;
+        libOpenW = m.librarySidebarWidth;
+        aiOpenW = m.aiPanelWidth;
     }
+    const int libW = librarySlide_.sizeBetween(libClosedW, libOpenW);
+    const int aiW = aiPanelSlide_.sizeBetween(0, aiOpenW);
 
     auto bounds = getLocalBounds();
     auto toolbarBounds = bounds.removeFromTop(tbH);
@@ -2354,18 +2335,25 @@ void MainComponent::resized() {
     statusBar.setBounds(bounds.removeFromBottom(sbH));
 
     // Full-width panel carved AFTER the status bar and BEFORE the AI/library removals, so
-    // it sits directly above the status bar spanning the whole window width.
-    if (isTimelineVisible) {
+    // it sits directly above the status bar spanning the whole window width. Its height is the
+    // USER's height (not the theme metric) scaled by the fraction, so the slide is up from — and
+    // back down to — a zero-height rect against a pinned bottom edge.
+    //
+    // The `|| isVisible()` on each panel below is the frame-0 case: a panel that has just been
+    // made visible for an opening slide still measures 0 px, and must be pinned to a zero-size
+    // rect at its docked edge rather than left showing the bounds it had when it was last open.
+    // A panel that is both closed AND hidden is skipped entirely — its bounds are dead state, and
+    // removeFrom*(0) would carve nothing from the canvas anyway.
+    if (timelineSlide_.getProgress() > 0.0f || timelinePanel.isVisible()) {
         // Re-clamped every pass: the window may have shrunk since the height was set (or persisted
         // on a larger one), and the canvas must stay usable.
         timelinePanelHeight_ = clampTimelinePanelHeight(timelinePanelHeight_);
-        timelinePanel.setBounds(bounds.removeFromBottom(timelinePanelHeight_));
+        timelinePanel.setBounds(bounds.removeFromBottom(timelineSlide_.sizeBetween(0, timelinePanelHeight_)));
     }
 
-    // Skip removeFromLeft/Right when hidden so we never setBounds to a zero-width rect.
-    if (isAiPanelVisible)
+    if (aiW > 0 || aiChatComponent.isVisible())
         aiChatComponent.setBounds(bounds.removeFromRight(aiW));
-    if (isLibraryVisible)
+    if (libW > 0 || moduleLibrary.isVisible())
         moduleLibrary.setBounds(bounds.removeFromLeft(libW));
 
     graphEditor.setBounds(bounds);
@@ -2493,37 +2481,6 @@ void MainComponent::applyToolbarIcons() {
     toggleLibraryButton.setTooltip(hint(libBase, "toggleLibrary"));
 }
 
-// ---- Pure panel-bounds geometry helper ----
-MainComponent::PanelBoundsResult MainComponent::computePanelBounds(bool libVisible, bool aiVisible,
-                                                                   bool timelineVisible) const {
-    int tbH = 44, sbH = 24; // 44 matches Theme::Metrics::toolbarHeight's default (see Theme.h)
-    int libW = libVisible ? 200 : 0;
-    int aiW = aiVisible ? 300 : 0;
-    if (auto* lf = dynamic_cast<const synth::theme::AppLookAndFeel*>(&getLookAndFeel())) {
-        const auto& m = lf->getTheme().metrics;
-        tbH = m.toolbarHeight;
-        sbH = m.statusBarHeight;
-        libW = libVisible ? m.librarySidebarWidth : m.sidebarCollapsedWidth;
-        aiW = aiVisible ? m.aiPanelWidth : 0;
-    }
-
-    auto bounds = getLocalBounds();
-    bounds.removeFromTop(tbH);    // toolbar
-    bounds.removeFromBottom(sbH); // status bar
-
-    PanelBoundsResult result;
-    // Carved AFTER the status bar and BEFORE the AI/library removals — full-width, directly
-    // above the status bar (see resized(), which carves in the same order).
-    if (timelineVisible)
-        result.timelineBounds = bounds.removeFromBottom(clampTimelinePanelHeight(timelinePanelHeight_));
-    if (aiVisible)
-        result.aiPanelBounds = bounds.removeFromRight(aiW);
-    if (libVisible)
-        result.libraryBounds = bounds.removeFromLeft(libW);
-    result.graphEditorBounds = bounds;
-    return result;
-}
-
 // ---- Timeline panel height (user-resizable, persisted) ----
 
 int MainComponent::defaultTimelinePanelHeight() const {
@@ -2554,69 +2511,92 @@ void MainComponent::setTimelinePanelHeight(int desiredHeight, bool persist) {
     }
 }
 
-// ---- Animated panel transition ----
-void MainComponent::animatePanelTransition(const PanelBoundsResult& fromResult, const PanelBoundsResult& toResult,
-                                           bool hideLibraryOnComplete, bool hideAiPanelOnComplete,
-                                           bool hideTimelineOnComplete) {
-    // Snapshot from-bounds for the lambdas.
-    libraryAnimFrom = fromResult.libraryBounds.isEmpty() ? toResult.libraryBounds : fromResult.libraryBounds;
-    aiPanelAnimFrom = fromResult.aiPanelBounds.isEmpty() ? toResult.aiPanelBounds : fromResult.aiPanelBounds;
-    // timelineBounds stays the default-constructed empty rect in a flag-OFF build (the
-    // carve that would populate it is gated in computePanelBounds()), so this — and every other
-    // timeline-specific line below — is inert there rather than needing its own #if.
-    timelineAnimFrom = fromResult.timelineBounds.isEmpty() ? toResult.timelineBounds : fromResult.timelineBounds;
-    graphEditorAnimFrom = fromResult.graphEditorBounds;
+// ---- Panel slides (one driver, three fractions) ----
 
-    const auto libTo = toResult.libraryBounds.isEmpty() ? libraryAnimFrom : toResult.libraryBounds;
-    const auto aiTo = toResult.aiPanelBounds.isEmpty() ? aiPanelAnimFrom : toResult.aiPanelBounds;
-    const auto timelineTo = toResult.timelineBounds.isEmpty() ? timelineAnimFrom : toResult.timelineBounds;
-    const auto graphTo = toResult.graphEditorBounds;
-
-    // Stop both animators first — we're doing a single coordinated anim on aiPanelAnim,
-    // with libraryAnim as backup for the library bounds.
-    libraryAnim.stop(vblankUpdater);
-    aiPanelAnim.stop(vblankUpdater);
-
-    // Capture for lambdas.
-    auto libFrom = libraryAnimFrom;
-    auto aipFrom = aiPanelAnimFrom;
-    auto tlFrom = timelineAnimFrom;
-    auto graphFrom = graphEditorAnimFrom;
-
-    // Single animator drives all four panels.
-    aiPanelAnim.start(
-        vblankUpdater,
-        190.0, // ~190 ms — within the 160–220 ms spec
-        synth::ui::easeInOutCubic,
-        [this, libFrom, libTo, aipFrom, aiTo, tlFrom, timelineTo, graphFrom, graphTo](float t) {
-            if (!libFrom.isEmpty() || !libTo.isEmpty())
-                moduleLibrary.setBounds(synth::ui::AnimationDriver::lerpBounds(libFrom, libTo, t));
-            if (!aipFrom.isEmpty() || !aiTo.isEmpty())
-                aiChatComponent.setBounds(synth::ui::AnimationDriver::lerpBounds(aipFrom, aiTo, t));
-            if (!tlFrom.isEmpty() || !timelineTo.isEmpty())
-                timelinePanel.setBounds(synth::ui::AnimationDriver::lerpBounds(tlFrom, timelineTo, t));
-            graphEditor.setBounds(synth::ui::AnimationDriver::lerpBounds(graphFrom, graphTo, t));
-        },
-        [this, hideLibraryOnComplete, hideAiPanelOnComplete, hideTimelineOnComplete, libTo, aiTo, timelineTo,
-         graphTo]() {
-            // Snap to exact final bounds and apply visibility.
-            if (!libTo.isEmpty())
-                moduleLibrary.setBounds(libTo);
-            if (!aiTo.isEmpty())
-                aiChatComponent.setBounds(aiTo);
-            if (!timelineTo.isEmpty())
-                timelinePanel.setBounds(timelineTo);
-            graphEditor.setBounds(graphTo);
-            if (hideLibraryOnComplete)
-                moduleLibrary.setVisible(false);
-            if (hideAiPanelOnComplete)
-                aiChatComponent.setVisible(false);
-            if (hideTimelineOnComplete)
-                timelinePanel.setVisible(false);
-        });
+const synth::ui::PanelSlide& MainComponent::panelSlide(SlidingPanel p) const noexcept {
+    switch (p) {
+    case SlidingPanel::Library:
+        return librarySlide_;
+    case SlidingPanel::AiChat:
+        return aiPanelSlide_;
+    case SlidingPanel::Timeline:
+        break;
+    }
+    return timelineSlide_;
 }
 
-// ---- Collapsible library sidebar (animated, persisted) ----
+synth::ui::PanelSlide& MainComponent::panelSlide(SlidingPanel p) noexcept {
+    return const_cast<synth::ui::PanelSlide&>(static_cast<const MainComponent*>(this)->panelSlide(p));
+}
+
+void MainComponent::beginPanelSlide() {
+    // A panel that is OPENING must be visible before its first frame; a panel that is CLOSING
+    // stays visible for the whole slide and disappears only in finishPanelSlide(). Hiding it here
+    // instead is what used to make "close" not an animation at all — it just vanished.
+    if (isLibraryVisible)
+        moduleLibrary.setVisible(true);
+    if (isAiPanelVisible)
+        aiChatComponent.setVisible(true);
+    if (isTimelineVisible)
+        timelinePanel.setVisible(true);
+
+    // No VBlank reaches an off-screen component, so an off-screen toggle has to land NOW rather
+    // than wait for frames that will never arrive (headless tests; a restore before the window
+    // exists). Every slide is retargeted, not just the one whose flag moved: they share a driver,
+    // so restarting it must carry any slide already in flight to its own target instead of
+    // stranding it half-open. Each retarget starts from the fraction's CURRENT value — a
+    // mid-flight reversal, not a jump to an extreme.
+    const bool canAnimate = isShowing();
+    const bool libTweening = librarySlide_.retarget(isLibraryVisible ? 1.0f : 0.0f, canAnimate);
+    const bool aiTweening = aiPanelSlide_.retarget(isAiPanelVisible ? 1.0f : 0.0f, canAnimate);
+    const bool timelineTweening = timelineSlide_.retarget(isTimelineVisible ? 1.0f : 0.0f, canAnimate);
+
+    if (!(libTweening || aiTweening || timelineTweening)) {
+        finishPanelSlide();
+        return;
+    }
+
+    // Lay out once at the fractions' current values BEFORE the first frame: a panel that just
+    // became visible would otherwise be painted at the bounds it had when it was last open, in
+    // the gap before the next VBlank — the flash this whole path exists to remove.
+    resized();
+    panelSlideAnim_.start(
+        vblankUpdater, kPanelSlideMs, synth::ui::easeInOutCubic, [this](float t) { applyPanelSlideFrame(t); },
+        [this] { finishPanelSlide(); });
+}
+
+void MainComponent::applyPanelSlideFrame(float t) {
+    librarySlide_.applyTweenAt(t);
+    aiPanelSlide_.applyTweenAt(t);
+    timelineSlide_.applyTweenAt(t);
+    // The single geometry authority: every panel's size comes back out of the fractions, and the
+    // canvas gets whatever is left. No repaint() call — moving a child's bounds already
+    // invalidates both the region it left and the one it arrived at, and a full-window repaint per
+    // frame is exactly what the no-free-running-repaint rule forbids.
+    resized();
+}
+
+void MainComponent::finishPanelSlide() {
+    // Time-bounded by construction: the driver auto-stops at t == 1 and this drops it, so nothing
+    // is left registered with the VBlank updater between slides.
+    panelSlideAnim_.stop(vblankUpdater);
+    librarySlide_.finish(); // pin the EXACT end fractions — the last frame need not be t == 1
+    aiPanelSlide_.finish();
+    timelineSlide_.finish();
+
+    // Closed at rest: hidden only once the slide is actually done, and BEFORE the final layout so
+    // a fully-closed panel keeps its bounds out of the canvas carve entirely.
+    if (!isLibraryVisible)
+        moduleLibrary.setVisible(false);
+    if (!isAiPanelVisible)
+        aiChatComponent.setVisible(false);
+    if (!isTimelineVisible)
+        timelinePanel.setVisible(false);
+
+    resized();
+}
+
+// ---- Collapsible library sidebar (slides, persisted) ----
 void MainComponent::setLibraryVisible(bool v) {
     isLibraryVisible = v;
     appProperties.getUserSettings()->setValue("librarySidebarVisible", v ? "1" : "0");
@@ -2629,26 +2609,7 @@ void MainComponent::setLibraryVisible(bool v) {
         v ? "Hide Library" : "Show Library",
         ShortcutManager::keyPressToDisplayString(shortcutManager.getBinding("toggleLibrary"))));
 
-    // Compute from/to layouts.
-    auto fromResult = computePanelBounds(!v, isAiPanelVisible, isTimelineVisible); // previous layout
-    if (v) {
-        // Showing: make visible at the from-position before animating.
-        moduleLibrary.setVisible(true);
-        if (fromResult.libraryBounds.isEmpty())
-            fromResult.libraryBounds =
-                juce::Rectangle<int>(fromResult.graphEditorBounds.getX(), fromResult.graphEditorBounds.getY(), 0,
-                                     fromResult.graphEditorBounds.getHeight());
-    }
-    auto toResult = computePanelBounds(v, isAiPanelVisible, isTimelineVisible);
-
-    // Apply the FINAL layout immediately so headless tests (no VBlank) see correct bounds.
-    // The animation below is cosmetic only — it starts from fromResult and converges to the
-    // same toResult that resized() already applied.
-    resized();
-    if (!v)
-        moduleLibrary.setVisible(false);
-
-    animatePanelTransition(fromResult, toResult, /*hideLib=*/!v, /*hideAi=*/false, /*hideTimeline=*/false);
+    beginPanelSlide();
 }
 
 // ---- Alignment guides toggle (UI Phase 7 - Item 4) ----

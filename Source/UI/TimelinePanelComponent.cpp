@@ -1501,7 +1501,7 @@ void TimelinePanelComponent::syncTrackScroll() {
 //==============================================================================
 void TimelinePanelComponent::resized() {
     // Themed metrics with literal fallbacks for the headless test path (same pattern as
-    // MainComponent::resized()/computePanelBounds()).
+    // MainComponent::resized()).
     int transportBarHeight = 34;
     int trackHeaderWidth = 190;
     int rulerHeight = 24;

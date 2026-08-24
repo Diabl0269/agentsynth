@@ -10,6 +10,7 @@
 #include "SelectionModel.h"
 #include "UIAnimation.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -327,6 +328,20 @@ public:
     void dropHiddenRightLegConnections(juce::AudioProcessorGraph::NodeID nodeId);
     bool getDefaultDualIOForNewModules() const noexcept { return defaultDualIOForNewModules; }
 
+    /** Per-module-type overrides of the default above, keyed by module type (ModuleBase::getName(),
+     *  e.g. "Reverb"). A type with no entry follows the global default. Read only from
+     *  applyDefaultDualIOForNewModule — new modules only, exactly like the global default itself:
+     *  changing this does NOT retro-apply to modules already on the canvas (there is no
+     *  per-module counterpart to applyDualIOToExistingModules). Set from
+     *  PreferencesSettingsTab::setGraphEditor / setDualIOOverrideForType, and from MainComponent at
+     *  startup via PreferencesSettingsTab::loadDualIOPerModuleOverrides. */
+    void setDualIOPerModuleOverrides(std::map<juce::String, bool> overrides) {
+        dualIOPerModuleOverrides = std::move(overrides);
+    }
+    const std::map<juce::String, bool>& getDualIOPerModuleOverrides() const noexcept {
+        return dualIOPerModuleOverrides;
+    }
+
     /** True when the visible jack already has at least one graph edge or mod routing. */
     bool isPortConnected(ModuleComponent* module, int portIndex, bool isInput, bool isMidi) const;
 
@@ -630,7 +645,7 @@ private:
     void applySmartSuggestions(juce::AudioProcessorGraph::NodeID ghostNodeId, bool recordUndo);
     void clearSmartSuggestions();
     bool shouldOfferSmartConnections() const;
-    void applyDefaultDualIOForNewModule(juce::AudioProcessor& processor) const;
+    void applyDefaultDualIOForNewModule(juce::AudioProcessor& processor, const juce::String& moduleType) const;
     /** Port centre inside a bounds rect — mirrors ModuleComponent::getPortCenter for ghost previews. */
     static juce::Point<int> estimatePortCenter(juce::AudioProcessor* proc, juce::Rectangle<int> bounds, int jack,
                                                bool isInput, bool isMidi);
@@ -746,6 +761,7 @@ private:
     bool alignmentGuidesEnabled = true;
     bool doubleClickPortDisconnectEnabled = true;
     bool defaultDualIOForNewModules = false;
+    std::map<juce::String, bool> dualIOPerModuleOverrides;
 
     void updateTransform();
 

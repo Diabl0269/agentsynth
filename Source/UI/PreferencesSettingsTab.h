@@ -2,6 +2,9 @@
 
 #include "GraphEditor.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <map>
+#include <memory>
+#include <optional>
 #include <vector>
 
 // The Settings "Preferences" tab (issues #216 / #217).
@@ -45,6 +48,40 @@ public:
     bool isPianoRollKeyLabelModeAll() const;
     void setPianoRollKeyLabelModeAll(bool labelEveryKey);
 
+    // Per-module overrides of getDefaultDualIOForNewModules() above ("Per-module I/O defaults..."
+    // button). Keyed by module type (ModuleBase::getName(), e.g. "Reverb", "Filter"); a type with
+    // no entry follows the global default — nullopt here means exactly that. Consumed by
+    // GraphEditor::applyDefaultDualIOForNewModule, the same new-modules-only site the global
+    // default itself is read from (see docs/fx_modules.md § Stereo I/O).
+    std::optional<bool> getDualIOOverrideForType(const juce::String& moduleType) const;
+    void setDualIOOverrideForType(const juce::String& moduleType, std::optional<bool> overrideValue);
+
+    // Every module type that carries the Dual I/O parameter (ModuleBase::addDualIOParameter), in
+    // the per-module popup's row order: the FX modules plus the five split-block voice modules
+    // (docs/modules.md, docs/fx_modules.md § Stereo I/O). Kept as one static list rather than
+    // discovered at runtime because building every factory module just to ask hasDualIOParameter()
+    // would be a lot of machinery for a list that changes only when a module gains the parameter.
+    static const std::vector<juce::String>& getDualIOModuleTypes();
+
+    // Parses the "dualIOPerModuleDefaults" key straight from ApplicationProperties, independent of
+    // any PreferencesSettingsTab instance. MainComponent calls this at startup to push the map into
+    // the real GraphEditor before any tab exists — the same reason it re-reads
+    // "defaultDualIOForNewModules" itself rather than waiting for Settings to be opened once.
+    static std::map<juce::String, bool> loadDualIOPerModuleOverrides(juce::ApplicationProperties& props);
+
+    // Test seam for the "Per-module I/O defaults..." popup: builds the exact content component the
+    // button's onClick hands to a juce::CallOutBox, without launching the CallOutBox itself (which
+    // needs real screen coordinates and, like every other control in this tab, cannot be driven
+    // through a headless click — see the "NOT triggerClick()" comment on the tests above). One
+    // juce::Label + juce::ComboBox pair per entry of getDualIOModuleTypes(), so a test can find the
+    // Nth juce::ComboBox (or match by label text) and drive it with setSelectedId(id,
+    // sendNotificationSync), exactly as it would a real click.
+    std::unique_ptr<juce::Component> createDualIOPerModuleDefaultsPopupForTest();
+
+    // Test-only: the hairline dividers paint() draws between preference groups, so a test can
+    // assert one falls where the Dual I/O row ends without reaching into paint() itself.
+    const std::vector<juce::Rectangle<int>>& getDividerBoundsForTest() const { return dividerBounds; }
+
 private:
     void persistSmartConnectionMode(GraphEditor::SmartConnectionMode mode);
     void persistDoubleClickPortDisconnect(bool enabled);
@@ -55,6 +92,11 @@ private:
     void persistNaturalScrolling(bool enabled);
     void persistZoomScrollUpZoomsIn(bool enabled);
     void persistPianoRollKeyLabelMode(bool labelEveryKey);
+    void persistDualIOPerModuleOverrides();
+
+    // Shared by the real button and createDualIOPerModuleDefaultsPopupForTest() so the test seam
+    // exercises the exact component a click would open, not a lookalike.
+    std::unique_ptr<juce::Component> buildDualIOPerModuleDefaultsPopup();
 
     juce::ApplicationProperties& appProperties;
     GraphEditor* graphEditor{nullptr}; // weak, owned by MainComponent
@@ -68,8 +110,13 @@ private:
     // appearance/theme setting. Persistence key ("alignmentGuidesEnabled") is unchanged.
     juce::ToggleButton alignmentGuideToggle{"Show Alignment Guides"};
     // One line, one control: the old label + two-item ComboBox said the same thing in two widgets
-    // and read as a mode picker rather than the on/off it actually is.
+    // and read as a mode picker rather than the on/off it actually is. The per-module override
+    // button below shares this row (see resized()) rather than stacking under it — the two are one
+    // group and read as one line, not a toggle followed by an unrelated row.
     juce::ToggleButton defaultDualIOToggle{"Split Left/Right jacks on new modules"};
+    // Per-module overrides (Follow global / Always on / Always off) of the toggle above, one per
+    // module type that carries the Dual I/O parameter — see buildDualIOPerModuleDefaultsPopup() and
+    // the "dualIOPerModuleDefaults" JSON key.
     juce::TextButton perModuleDefaultsButton{"Per-module I/O defaults..."};
     juce::ToggleButton loopSelectionArmsToggle{"Timeline: P (loop selection) also switches looping on"};
     // The other half of the same locator conversation, so it sits in the same group as the row
@@ -92,6 +139,12 @@ private:
 
     // Hairline rules between preference groups, painted in paint() from these bounds.
     std::vector<juce::Rectangle<int>> dividerBounds;
+
+    // Per-module Dual I/O overrides, keyed by module type. Loaded once in the constructor via
+    // loadDualIOPerModuleOverrides() and mutated only through setDualIOOverrideForType(), which
+    // re-persists the whole map — small enough (one bool per module type) that there is no reason
+    // to diff and write just the changed key.
+    std::map<juce::String, bool> dualIOPerModuleOverrides;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PreferencesSettingsTab)
 };

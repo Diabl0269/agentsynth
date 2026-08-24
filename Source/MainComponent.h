@@ -157,6 +157,28 @@ public:
         if (toggleTimelineButton.onClick)
             toggleTimelineButton.onClick();
     }
+
+    /** The three sliding panels this component docks, for the slide test seams below. */
+    enum class SlidingPanel { Library, AiChat, Timeline };
+
+    /** Panel-slide test seams, mirroring PianoRollComponent's scale-panel ones (and used the same
+     *  way: the component is never added to a real window in the test suite, so every toggle takes
+     *  the SNAP path — the tween's own per-frame geometry is exercised by writing a fraction here
+     *  and reading the resulting bounds back).
+     *
+     *  The fractions ARE the layout: resized() derives every panel's size from them (see
+     *  synth::ui::PanelSlide), so setPanelOpenProgressForTest() also re-lays-out. */
+    float getPanelOpenProgressForTest(SlidingPanel p) const noexcept { return panelSlide(p).getProgress(); }
+    void setPanelOpenProgressForTest(SlidingPanel p, float progress) {
+        panelSlide(p).snapTo(progress);
+        resized();
+    }
+    /** The fraction the in-flight tween STARTED from — 'no jump' means this is the panel's
+     *  mid-slide value at the moment of the re-toggle, never 0 or 1. */
+    float getPanelSlideStartForTest(SlidingPanel p) const noexcept { return panelSlide(p).getTweenStart(); }
+    /** True only while the shared slide driver is actually running (it auto-stops at t == 1 —
+     *  there is exactly one driver for all three panels). */
+    bool isPanelSlideAnimatingForTest() const noexcept { return panelSlideAnim_.isRunning(); }
     /** The Preferences "Natural scrolling" key. DEFAULT TRUE (natural) — the value every scrolling
      *  surface in the app already behaves as, so an install that never opens Preferences is
      *  unaffected. Owned here rather than by the tab because MainComponent is what applies it. */
@@ -249,6 +271,9 @@ public:
     GraphEditor& getGraphEditor() { return graphEditor; }
     ToolbarComponent& getToolbar() { return toolbar; }
     StatusBarComponent& getStatusBar() { return statusBar; }
+    // The docked AI chat panel — same plain-accessor role getGraphEditor()/getTimelinePanel() play
+    // (the panel-slide tests read its bounds mid-slide).
+    synth::AIChatComponent& getAiChatComponent() { return aiChatComponent; }
     ShortcutManager& getShortcutManager() { return shortcutManager; }
     void simulateNewPatchClick() {
         if (newButton.onClick)
@@ -543,18 +568,8 @@ private:
      *  treats as "no line" rather than a blank one. */
     juce::String computeOutputDeviceInfoText() const;
 
-    // Collapse/expand the library sidebar. Animates to the target layout.
+    // Collapse/expand the library sidebar. Slides to the target layout (beginPanelSlide()).
     void setLibraryVisible(bool v);
-
-    // Compute the target bounds for the library and AI panel in the current layout.
-    // Pure geometry — no side effects; used by animation and tests.
-    struct PanelBoundsResult {
-        juce::Rectangle<int> libraryBounds;  // empty rect when hidden
-        juce::Rectangle<int> aiPanelBounds;  // empty rect when hidden
-        juce::Rectangle<int> timelineBounds; // empty rect when hidden
-        juce::Rectangle<int> graphEditorBounds;
-    };
-    PanelBoundsResult computePanelBounds(bool libVisible, bool aiVisible, bool timelineVisible) const;
 
     // ---- Timeline panel height (user-resizable, persisted) ----
 
@@ -743,22 +758,40 @@ private:
     synth::update::UpdateManager updateManager;
 #endif
 
-    // ---- Panel slide animations (time-bounded, auto-stop) ----
-    // One VBlankAnimatorUpdater shared by both panel animations (driven by MainComponent).
+    // ---- Panel slide animations (fraction-driven, time-bounded, auto-stop) ----
+    //
+    // Each sliding panel owns a [0..1] open fraction; resized() derives its size from that
+    // fraction, so a layout pass is correct whenever it runs and a toggle only has to move the
+    // fraction (docs/layout.md §11). ONE driver moves ALL THREE fractions — the panels share a
+    // window, so their slides must share a clock: a per-panel animator would leave whichever
+    // slide the next toggle didn't mention frozen half-open.
     juce::VBlankAnimatorUpdater vblankUpdater{this};
-    synth::ui::AnimationDriver libraryAnim;
-    synth::ui::AnimationDriver aiPanelAnim;
+    synth::ui::AnimationDriver panelSlideAnim_;
+    synth::ui::PanelSlide librarySlide_;
+    synth::ui::PanelSlide aiPanelSlide_;
+    synth::ui::PanelSlide timelineSlide_;
 
-    // During animation, track the "from" bounds so lerpBounds() can interpolate.
-    juce::Rectangle<int> libraryAnimFrom;
-    juce::Rectangle<int> aiPanelAnimFrom;
-    juce::Rectangle<int> timelineAnimFrom; // unused (always empty) when the flag is OFF
-    juce::Rectangle<int> graphEditorAnimFrom;
+    /** ~190 ms, inside the house 160–220 ms spec (docs/layout.md §11) — the duration the panels
+     *  have always slid for, now shared by all three of them. */
+    static constexpr double kPanelSlideMs = 190.0;
 
-    // Start a coordinated bounds animation for library + AI panel + timeline panel + graph editor.
-    // fromResult is the current layout; toResult is the target layout.
-    void animatePanelTransition(const PanelBoundsResult& fromResult, const PanelBoundsResult& toResult,
-                                bool hideLibraryOnComplete, bool hideAiPanelOnComplete, bool hideTimelineOnComplete);
+    // The three fractions, addressed by name (test seams above; nothing else needs this).
+    const synth::ui::PanelSlide& panelSlide(SlidingPanel p) const noexcept;
+    synth::ui::PanelSlide& panelSlide(SlidingPanel p) noexcept;
+
+    /** THE panel-toggle seam: point every slide at the current visibility flags and run one
+     *  coordinated tween — or land immediately when nothing can animate (an off-screen component
+     *  gets no VBlank, so a headless toggle must be synchronous; that is the contract
+     *  Tests/PanelAnimationAndLoadingTests.cpp asserts with no message pump at all).
+     *  Callers flip the flag, persist it, refresh the toolbar, then call this. */
+    void beginPanelSlide();
+
+    // Per-frame body of the slide above: advance all three fractions, then re-lay-out.
+    void applyPanelSlideFrame(float t);
+
+    // End of the slide (its completion callback, and the synchronous path's whole body): stop the
+    // driver, pin the exact end fractions, hide whatever finished closing, lay out.
+    void finishPanelSlide();
 
     // Alignment guides toggle (UI Phase 7 - Item 4)
     void setAlignmentGuidesEnabled(bool enabled);

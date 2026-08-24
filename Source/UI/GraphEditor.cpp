@@ -3777,7 +3777,7 @@ void GraphEditor::addModuleAtCanvasPosition(const juce::String& name, juce::Poin
     auto newProcessor = synth::AIStateMapper::createModule(name);
 
     if (newProcessor) {
-        applyDefaultDualIOForNewModule(*newProcessor);
+        applyDefaultDualIOForNewModule(*newProcessor, name);
         if (configure)
             configure(*newProcessor);
 
@@ -3968,7 +3968,8 @@ void GraphEditor::applyDualIOToExistingModules(bool dual) {
     }
 }
 
-void GraphEditor::applyDefaultDualIOForNewModule(juce::AudioProcessor& processor) const {
+void GraphEditor::applyDefaultDualIOForNewModule(juce::AudioProcessor& processor,
+                                                 const juce::String& moduleType) const {
     auto* mb = dynamic_cast<ModuleBase*>(&processor);
     if (mb == nullptr || !mb->hasDualIOParameter())
         return;
@@ -3977,8 +3978,17 @@ void GraphEditor::applyDefaultDualIOForNewModule(juce::AudioProcessor& processor
     // preference could not express "I want single jacks" for a module whose own default is dual —
     // and the voice modules default to dual since #219. The preference is the user's stated intent
     // for anything they create, so it wins over the module's constructor default either way.
-    if (auto* dual = findParameterByID(&processor, "dualIO"))
-        dual->setValueNotifyingHost(defaultDualIOForNewModules ? 1.0f : 0.0f);
+    //
+    // The per-module override (Preferences → "Per-module I/O defaults...") wins over the global
+    // default when the two disagree — it exists specifically to say "everything follows the
+    // toggle EXCEPT this one type". A type with no entry in the map is untouched by the override
+    // and falls through to the global default, same as before that popup existed.
+    bool dual = defaultDualIOForNewModules;
+    if (auto it = dualIOPerModuleOverrides.find(moduleType); it != dualIOPerModuleOverrides.end())
+        dual = it->second;
+
+    if (auto* param = findParameterByID(&processor, "dualIO"))
+        param->setValueNotifyingHost(dual ? 1.0f : 0.0f);
 }
 
 void GraphEditor::completeStereoPairConnections(ModuleComponent* moduleComp) {
