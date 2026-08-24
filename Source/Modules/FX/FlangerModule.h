@@ -119,6 +119,10 @@ public:
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
 
     std::vector<ModulationTarget> getModulationTargets() const override { return {{"Rate", 2}, {"Depth", 3}}; }
+    // Pure audio FX — processBlock never touches the MIDI buffer.
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+
     ModulationCategory getModulationCategory() const override { return ModulationCategory::FX; }
     ModuleType getModuleType() const override { return ModuleType::Flanger; }
 

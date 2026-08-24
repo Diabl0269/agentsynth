@@ -6,9 +6,8 @@
 // Two groups of coverage, the same split TimelinePanelTests.cpp/TimelinePlayheadTests.cpp use:
 //   1. synth::ui::TimelineTransportBar in isolation, driven with a raw synth::TransportService (or,
 //      for the pure formatBarBeat table and the readout's repaint-count seam, no transport at all).
-//      None of this is SYNTH_ENABLE_TIMELINE-gated — the bar itself always compiles.
-//   2. MainComponent's record wiring — gated, because MidiRecorder's app-level wiring (the armed-
-//      track lookup, the auto-commit-on-stop poll) compiles out with the flag off.
+//   2. MainComponent's record wiring — MidiRecorder's app-level wiring (the armed-track lookup, the
+//      auto-commit-on-stop poll).
 
 #include "../Source/AI/AIProvider.h"
 #include "../Source/Timeline/TimelineDoc.h"
@@ -232,8 +231,6 @@ TEST(TimelineTransportBarTest, GlyphButtonsAreSquareAndSpaced) {
 // 2. MainComponent's record wiring.
 // ============================================================================
 
-#if SYNTH_ENABLE_TIMELINE
-
 class MockProviderTB : public synth::AIProvider {
 public:
     juce::String getProviderName() const override { return "MockTB"; }
@@ -375,5 +372,3 @@ TEST_F(TimelineTransportBarAppWiringTest, StopWhileRecordingCommitsOnce) {
     mc.timerCallback();
     EXPECT_EQ(doc.getTrack(trackId)->clips.size(), 1u);
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

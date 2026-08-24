@@ -91,6 +91,10 @@ public:
         repaint();
     }
     bool hasMappingOverrideForTest() const noexcept { return overrideView_ != nullptr; }
+    // The offset an installed override is currently using — what a test asserts against directly
+    // rather than inferring it from painted tick positions (0 with no override installed, though
+    // hasMappingOverrideForTest() is what actually gates whether that 0 means anything).
+    int getMappingOverrideOffsetForTest() const noexcept { return overrideOffsetPx_; }
 
     void paint(juce::Graphics& g) override;
 

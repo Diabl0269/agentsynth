@@ -532,9 +532,6 @@ TEST(TimelineSnapshotTest, StressPublishAcquire) {
 // ============================================================================
 // Engine integration — the epoch ticks once per rendered block
 // ============================================================================
-// Gated like the other timeline-integration tests: with SYNTH_ENABLE_TIMELINE=OFF the engine never
-// opens a block, which the flag-OFF counterpart below asserts instead.
-#if SYNTH_ENABLE_TIMELINE
 
 TEST(TimelineSnapshotTest, EngineEpochAdvancesPerBlock) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
@@ -572,39 +569,3 @@ TEST(TimelineSnapshotTest, EngineEpochAdvancesPerBlock) {
     engine.shutdown();
     EXPECT_EQ(liveSnapshots(), baseline) << "shutdown must reclaim the published snapshot";
 }
-
-#endif // SYNTH_ENABLE_TIMELINE
-
-// Compiled only with the flag OFF: proves the integration really is compiled out rather than merely
-// idle — no block is opened, so the epoch never moves and nothing is ever reclaimable.
-#if !SYNTH_ENABLE_TIMELINE
-
-TEST(TimelineSnapshotTest, FlagOffEngineNeverAdvancesEpoch) {
-    AudioEngine engine(AudioEngine::HostMode::Hosted);
-    engine.initialise();
-    engine.prepareForHost(kSampleRate, kBlockSize, 0, 2);
-
-    auto& exchange = engine.getTimelineSnapshots();
-    const int baseline = liveSnapshots();
-
-    TimelineDoc doc;
-    doc.addTrack(TrackKind::Midi, "Lead");
-
-    exchange.publish(TimelineSnapshot::buildFrom(doc));
-    exchange.publish(TimelineSnapshot::buildFrom(doc)); // retires the first, tagged at epoch 0
-    ASSERT_EQ(exchange.retiredCount(), 1);
-
-    processHostBlocks(engine, 5);
-
-    EXPECT_EQ(exchange.getAudioEpoch(), 0)
-        << "SYNTH_ENABLE_TIMELINE=OFF must compile out the per-block beginAudioBlock() call";
-    exchange.reap();
-    EXPECT_EQ(exchange.retiredCount(), 1) << "with the epoch frozen nothing may be reclaimed";
-    EXPECT_EQ(liveSnapshots(), baseline + 2);
-
-    engine.releaseFromHost();
-    engine.shutdown();
-    EXPECT_EQ(liveSnapshots(), baseline) << "shutdown reclaims regardless of the flag";
-}
-
-#endif // !SYNTH_ENABLE_TIMELINE

@@ -144,11 +144,8 @@ TEST_F(AssetManagerImportTest, ImportCopiesAndDedupes) {
 // 2. Relink — through MainComponent::relinkClipAssetForTest
 // ============================================================================
 //
-// Gated, unlike the rest of this file: this group goes through MainComponent's project save, whose
-// body compiles away with the timeline flag off — so with the flag off there is no bundle to relink
-// anything in. Everything else here is AssetManager on its own and runs in both builds.
-
-#if SYNTH_ENABLE_TIMELINE
+// Unlike the rest of this file, this group goes through MainComponent's project save. Everything
+// else here is AssetManager on its own.
 
 namespace {
 class MockProviderAM : public synth::AIProvider {
@@ -389,8 +386,6 @@ TEST_F(AssetManagerRelinkTest, FailedImportMutatesNothing) {
     EXPECT_TRUE(doc.getTrack(midiTrack)->clips.empty());
     EXPECT_FALSE(mc.getUndoManager().canUndo());
 }
-
-#endif // SYNTH_ENABLE_TIMELINE
 
 // ============================================================================
 // 3. collectUnusedAssets / cleanUnusedAssets

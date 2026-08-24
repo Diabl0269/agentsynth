@@ -4,13 +4,9 @@
 // Two layers, deliberately:
 //   * MODULE layer — an AudioInputModule driven directly, with a bare synth::TransportService
 //     installed as its playhead. That is exactly what AudioEngine does per block, minus the engine,
-//     so these tests pin the module's own contract (copy, clear, clamp, bypass) in any build.
-//   * ENGINE layer — the whole path, standalone and hosted. These need the playhead the ENGINE
-//     installs, which is compiled out of a SYNTH_ENABLE_TIMELINE=OFF build (AudioEngine's ctor
-//     gates setPlayHead; AudioEngineTransportTest.FlagOffTransportNeverAdvances pins that it must
-//     stay gated). So they are gated too, and the OFF build's Audio Input node renders silence —
-//     acceptable because OFF is a revertibility check, not a shipping configuration. See the note
-//     in docs/architecture.md.
+//     so these tests pin the module's own contract (copy, clear, clamp, bypass).
+//   * ENGINE layer — the whole path, standalone and hosted, exercising the playhead the ENGINE
+//     itself installs (see AudioEngine's constructor).
 //
 // Headless house rules as everywhere else: no real device (Tests/FakeAudioIODevice.h), no sleeps.
 
@@ -180,8 +176,8 @@ TEST(AudioInputModuleTest, BypassClears) {
 }
 
 TEST(AudioInputModuleTest, NoTransportRendersSilence) {
-    // A foreign host's playhead, no playhead at all, or a SYNTH_ENABLE_TIMELINE=OFF build: there is
-    // no context to read, so the module goes quiet rather than replaying whatever was in the buffer.
+    // A foreign host's playhead, or no playhead at all: there is no context to read, so the
+    // module goes quiet rather than replaying whatever was in the buffer.
     AudioInputModule module;
     module.prepareToPlay(kSampleRate, kBlockSize);
 
@@ -198,10 +194,8 @@ TEST(AudioInputModuleTest, NoTransportRendersSilence) {
 }
 
 // ============================================================================
-// Engine layer — the whole path (see the file header for the flag gate)
+// Engine layer — the whole path (see the file header)
 // ============================================================================
-
-#if SYNTH_ENABLE_TIMELINE
 
 TEST(AudioInputModuleTest, DeviceInputFlowsThroughModule) {
     // Standalone, never initialise()d: the device callback is called by hand, so no real device is
@@ -299,8 +293,6 @@ TEST(AudioInputModuleTest, DefaultPatchUsesTheModule) {
 
     engine.shutdown();
 }
-
-#endif // SYNTH_ENABLE_TIMELINE
 
 // ============================================================================
 // Compatibility: the factory key, the on-disk type name, the singleton rule

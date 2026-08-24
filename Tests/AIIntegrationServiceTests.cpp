@@ -958,7 +958,6 @@ TEST_F(AIIntegrationServiceTest, WorkedExamplePromptsDoNotOverlapEvalScenarios) 
     }
 }
 
-#if SYNTH_ENABLE_TIMELINE
 // ============================================================================
 // Timeline tools toggle: the local model's automation/timeline authoring surface.
 // ============================================================================
@@ -1418,6 +1417,5 @@ TEST_F(AIIntegrationServiceTest, ArrangeMessageOnLocalProviderComposesPromptWith
     ASSERT_GE(history.size(), 2u);
     EXPECT_EQ(history[1].content, "automate the cutoff over 8 bars");
 }
-#endif // SYNTH_ENABLE_TIMELINE
 
 } // namespace synth

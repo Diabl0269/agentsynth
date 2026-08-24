@@ -14,8 +14,16 @@
 namespace synth::ui {
 
 namespace {
-// Edge-drag zones (right = resize length, left = move+resize keeping the end fixed).
-constexpr int kEdgeZonePx = 6;
+// Edge-drag zones (right = resize length, left = move+resize keeping the end fixed) — a clip's
+// own resize-grab width, unrelated to (and deliberately distinctly named from) the
+// component-edge auto-scroll zone in EdgeAutoScroll.h's synth::ui::kEdgeZonePx.
+constexpr int kResizeEdgeZonePx = 6;
+
+// The fastest an edge-drag can scroll the view, in pixels per kEdgeScrollHz tick (at the pointer
+// pinned to or beyond the component's edge). Chosen to feel brisk without outrunning the eye at a
+// typical zoom — the same "fast but still readable" target TimelinePlayheadOverlay's 30 Hz line
+// aims for.
+constexpr double kEdgeAutoScrollMaxPxPerTick = 18.0;
 
 // TimelineDoc has no explicit minimum clip length; this mirrors TimelineViewState::Snap's own
 // finest grid (Sixteenth = 1/16 beat, the same unit TransportService's kMinLoopLengthBeats uses)
@@ -303,9 +311,9 @@ std::optional<TimelineClipLaneArea::ClipHit> TimelineClipLaneArea::hitTestClip(j
                 continue;
 
             ClipHit hit{clip.id, rect, ClipHit::Zone::Body};
-            if (pos.x <= rect.getX() + kEdgeZonePx)
+            if (pos.x <= rect.getX() + kResizeEdgeZonePx)
                 hit.zone = ClipHit::Zone::LeftEdge;
-            else if (pos.x >= rect.getRight() - kEdgeZonePx)
+            else if (pos.x >= rect.getRight() - kResizeEdgeZonePx)
                 hit.zone = ClipHit::Zone::RightEdge;
             return hit;
         }
@@ -847,6 +855,11 @@ void TimelineClipLaneArea::mouseDown(const juce::MouseEvent& e) {
     grabKeyboardFocus();
     dragMode_ = DragMode::None;
     pendingEmptyClick_ = false;
+    // The beat under the pointer right now — every Move/Resize drag anchors its delta to THIS,
+    // not to the pixel it was pressed at, so the drag stays correct if the view scrolls mid-drag
+    // (see mouseDownBeat_'s comment).
+    mouseDownBeat_ = viewState_.xToBeat((double)e.getPosition().x);
+    lastDragPointer_ = e.getPosition();
 
     if (e.mods.isPopupMenu()) {
         auto hit = hitTestClip(e.getPosition());
@@ -967,7 +980,22 @@ void TimelineClipLaneArea::mouseDrag(const juce::MouseEvent& e) {
     if (dragMode_ == DragMode::None || doc_ == nullptr)
         return;
 
-    const double deltaBeats = (double)(e.getPosition().x - mouseDownPos_.x) / viewState_.pixelsPerBeat;
+    lastDragPointer_ = e.getPosition();
+    updateDragPreviewFromLastPointer();
+    updateAutoScrollArming();
+    repaint();
+}
+
+void TimelineClipLaneArea::updateDragPreviewFromLastPointer() {
+    if (dragMode_ == DragMode::None || doc_ == nullptr)
+        return;
+
+    // BEAT-anchored, not pixel-anchored: the delta is xToBeat(current x) - xToBeat(the beat the
+    // pointer was over at mouseDown), so a view scroll that happens mid-drag (an edge-scroll tick,
+    // or in principle any other scroll) is baked into xToBeat's OWN firstVisibleBeat term rather
+    // than silently invalidating a pixel-space delta computed against the OLD scroll position. It
+    // also happens to fix the same latent drift under a mid-drag zoom change, for the same reason.
+    const double deltaBeats = viewState_.xToBeat((double)lastDragPointer_.x) - mouseDownBeat_;
     const double beatsPerBar = currentBeatsPerBar();
 
     if (dragMode_ == DragMode::Move) {
@@ -999,7 +1027,7 @@ void TimelineClipLaneArea::mouseDrag(const juce::MouseEvent& e) {
         // it could cross tracks — rather than dropping the clips that would have fitted.
         const int rowHeight = getRowHeight();
         int rowDelta =
-            rowHeight > 0 ? (int)std::llround((double)(e.getPosition().y - mouseDownPos_.y) / (double)rowHeight) : 0;
+            rowHeight > 0 ? (int)std::llround((double)(lastDragPointer_.y - mouseDownPos_.y) / (double)rowHeight) : 0;
         if (rowDelta != 0) {
             const auto& tracks = doc_->getTracks();
             for (const auto& origin : dragClips_) {
@@ -1029,11 +1057,56 @@ void TimelineClipLaneArea::mouseDrag(const juce::MouseEvent& e) {
         previewStart_ = juce::jlimit(0.0, end - kMinClipLengthBeats, snappedStart);
         previewLength_ = end - previewStart_;
     }
+}
 
+void TimelineClipLaneArea::updateAutoScrollArming() {
+    const bool dragging =
+        dragMode_ == DragMode::Move || dragMode_ == DragMode::ResizeLeft || dragMode_ == DragMode::ResizeRight;
+    // maxPerTick=1.0 here only to probe zero-vs-nonzero — the real magnitude is read again inside
+    // autoScrollTick() (which needs the SIGNED value, not just "is it armed").
+    const bool insideEdgeZone =
+        dragging && edgeScrollVelocity(lastDragPointer_.x, 0, getWidth(), kEdgeZonePx, 1.0) != 0.0;
+    if (insideEdgeZone && !isTimerRunning())
+        startTimer(1000 / kEdgeScrollHz);
+    else if (!insideEdgeZone && isTimerRunning())
+        stopTimer();
+}
+
+void TimelineClipLaneArea::autoScrollTick() {
+    // The drag can have ended (mouseUp) or moved out of the zone since the last arming check
+    // without another tick having run updateAutoScrollArming() itself — re-check both here rather
+    // than trusting the timer's own "it was armed a tick ago" state.
+    const bool dragging =
+        dragMode_ == DragMode::Move || dragMode_ == DragMode::ResizeLeft || dragMode_ == DragMode::ResizeRight;
+    if (!dragging) {
+        stopTimer();
+        return;
+    }
+
+    const double velocityPxPerTick =
+        edgeScrollVelocity(lastDragPointer_.x, 0, getWidth(), kEdgeZonePx, kEdgeAutoScrollMaxPxPerTick);
+    if (velocityPxPerTick == 0.0) {
+        stopTimer(); // the pointer drifted back into the dead middle band
+        return;
+    }
+    if (viewState_.pixelsPerBeat <= 0.0)
+        return;
+
+    viewState_.scrollBeats(velocityPxPerTick / viewState_.pixelsPerBeat);
+    // The pointer hasn't moved (no MouseEvent fired this tick) — the view did, so the preview has
+    // to be re-derived against the NEW firstVisibleBeat from the same last-known pointer position.
+    updateDragPreviewFromLastPointer();
+    if (onViewScrolledByDrag)
+        onViewScrolledByDrag();
     repaint();
 }
 
 void TimelineClipLaneArea::mouseUp(const juce::MouseEvent& e) {
+    // The release always ends whatever drag was in flight, so the edge-scroll timer never outlives
+    // it — stopped unconditionally rather than only from the Move/Resize branches below, since a
+    // marquee/pendingEmptyClick release reaches this point too and the timer must not care which.
+    stopTimer();
+
     if (dragMode_ == DragMode::Draw) {
         commitDrawGesture();
         return;
@@ -1458,6 +1531,7 @@ void TimelineClipLaneArea::setActiveTool(EditTool tool) {
     pendingEmptyClick_ = false;
     marqueeRect_ = {};
     clearToolPreviews();
+    stopTimer(); // the auto-scroll timer's drag just got cancelled too
 
     applyToolCursor();
     repaint();

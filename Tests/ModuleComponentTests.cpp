@@ -187,7 +187,7 @@ TEST_F(ModuleComponentTest, SamplerHasLoadButtonWaveformAndKnownHeight) {
     EXPECT_TRUE(foundNameLabel) << "an empty Sampler should say so rather than showing a blank label";
 
     EXPECT_EQ(moduleComponent.getWidth(), 280);
-    EXPECT_EQ(moduleComponent.getHeight(), 665)
+    EXPECT_EQ(moduleComponent.getHeight(), 645)
         << "keep estimateModuleSize(\"Sampler\") in GraphEditor.cpp in sync with this";
 
     EXPECT_NO_THROW(moduleComponent.timerCallback());
@@ -230,9 +230,12 @@ TEST_F(ModuleComponentTest, BodyContentClearsEveryPortLabel) {
 TEST_F(ModuleComponentTest, MidiInDotClearsHeaderHairlineWithBreathingRoom) {
     AudioEngine engine;
     GraphEditor editor(engine);
-    MathModule math; // accepts MIDI via ModuleBase's default (not overridden by MathModule)
-    ASSERT_TRUE(math.acceptsMidi());
-    ModuleComponent moduleComponent(&math, juce::AudioProcessorGraph::NodeID(1), editor);
+    // ADSR is a real MIDI-accepting module (its gate falls back to note-on/off — see
+    // ADSRModule::acceptsMidi()), unlike Math, which used to accept MIDI only by inheriting
+    // ModuleBase's true/true default before the per-module MIDI-flag audit corrected it.
+    ADSRModule adsr;
+    ASSERT_TRUE(adsr.acceptsMidi());
+    ModuleComponent moduleComponent(&adsr, juce::AudioProcessorGraph::NodeID(1), editor);
 
     // Hit-test near the documented MIDI-in position rather than hardcoding its bounds, so this
     // keeps working if the x/y literals ever move together again.
@@ -273,7 +276,6 @@ TEST_F(ModuleComponentTest, EstimatedModuleSizesMatchTheRealComponents) {
     }
 }
 
-#if SYNTH_ENABLE_TIMELINE
 // Track In is deliberately absent from the library, so the loop above cannot cover it —
 // but estimateModuleSize is still queried for it programmatically (the timeline's add-track flow
 // places the node), and a stale estimate there misplaces the card. Same assertion, one type.
@@ -293,7 +295,6 @@ TEST_F(ModuleComponentTest, TrackInEstimatedSizeMatchesTheRealComponent) {
     EXPECT_EQ(estimate.x, comp.getWidth());
     EXPECT_EQ(estimate.y, comp.getHeight());
 }
-#endif // SYNTH_ENABLE_TIMELINE
 
 // Three knobs per row (the body sits below the ports, so it can use nearly the full card width).
 TEST_F(ModuleComponentTest, KnobsAreLaidOutThreePerRow) {

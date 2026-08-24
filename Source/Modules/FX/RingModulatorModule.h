@@ -203,6 +203,10 @@ public:
         return {{"Mix", 2}, {"Drive", 3}, {"Character", 4}};
     }
 
+    // Pure audio FX — processBlock never touches the MIDI buffer.
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+
     ModulationCategory getModulationCategory() const override { return ModulationCategory::FX; }
     ModuleType getModuleType() const override { return ModuleType::RingModulator; }
 

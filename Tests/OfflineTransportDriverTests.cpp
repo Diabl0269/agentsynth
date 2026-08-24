@@ -66,7 +66,6 @@ double endPpqOf(const AudioEngine& engine) { return engine.getTransport().getCur
 // ============================================================================
 // Asserts the timeline integration (the transport must actually tick for these positions to
 // advance); compiled out with the flag so the flag-OFF CI job stays green.
-#if SYNTH_ENABLE_TIMELINE
 
 TEST(OfflineTransportDriverTest, RendersExactlyNBlocks) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
@@ -120,7 +119,6 @@ TEST(OfflineTransportDriverTest, RenderToBeatCoversTheBeat) {
     engine.releaseFromHost();
     engine.shutdown();
 }
-#endif // SYNTH_ENABLE_TIMELINE
 
 // Not gated: the driver never calls play(), so this test's "never advances" expectations hold
 // whether or not the flag (and thus tick()) is compiled in.
@@ -143,7 +141,6 @@ TEST(OfflineTransportDriverTest, RenderToBeatWhileStoppedReturnsEmpty) {
 
 // Asserts the timeline integration (locateBeat/tick must actually move the position);
 // compiled out with the flag so the flag-OFF CI job stays green.
-#if SYNTH_ENABLE_TIMELINE
 
 TEST(OfflineTransportDriverTest, RenderToBeatBehindPositionReturnsEmpty) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
@@ -225,7 +222,6 @@ TEST(OfflineTransportDriverTest, BeforeBlockGateEndsStreamToBeatWithoutRendering
     engine.releaseFromHost();
     engine.shutdown();
 }
-#endif // SYNTH_ENABLE_TIMELINE
 
 TEST(OfflineTransportDriverTest, BeforeBlockGateStopsStreamBlocksEarly) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);

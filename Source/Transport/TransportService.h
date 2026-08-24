@@ -95,8 +95,7 @@ public:
     // The same carrier idea as the timeline snapshot above, for a different payload and for a
     // reason that has nothing to do with the timeline: the playhead is the only handle every module
     // already has, so it is also how AudioInputModule reaches the audio the device (or the host)
-    // delivered for this block. Deliberately NOT gated on SYNTH_ENABLE_TIMELINE — device input is
-    // not a timeline feature.
+    // delivered for this block. Device input is not a timeline feature.
     //
     // The pointers are into the engine's own preallocated INPUT SNAPSHOT, taken before the graph
     // runs — never into the render buffer. The graph renders IN PLACE over that buffer, so a module
@@ -133,8 +132,8 @@ public:
     // once per render pass, whether AudioInputModule's graph output should be gated (recording taps
     // the graph, so "monitoring enabled" IS the record path for input chains — this is what keeps an
     // idle mic out of the speakers) and parks the answer here so the module can read it off the
-    // playhead it already has, with no per-node injection. Deliberately NOT gated on
-    // SYNTH_ENABLE_TIMELINE — like device input, this is an input-path property, not a timeline one.
+    // playhead it already has, with no per-node injection. Like device input above, this is an
+    // input-path property, not a timeline one.
     //
     // Threading and lifetime: written and read on the AUDIO THREAD ONLY, within one render pass —
     // AudioEngine::renderPass sets it before the graph runs, right alongside the device-input
@@ -142,8 +141,7 @@ public:
     // stale bool carries no dangling-pointer risk), so it is not reset at the end of the pass.
     //
     // Defaults to false, which is exactly the silent behaviour every reader already falls back to
-    // when there is no transport at all (a foreign host, a bare TransportService in a unit test, or
-    // a SYNTH_ENABLE_TIMELINE=OFF build that never calls the setter that would flip it).
+    // when there is no transport at all (a foreign host, or a bare TransportService in a unit test).
     void setInputMonitoringEnabledForBlock(bool enabled) noexcept { inputMonitoringEnabledForBlock = enabled; }
     bool isInputMonitoringEnabledForBlock() const noexcept { return inputMonitoringEnabledForBlock; }
 

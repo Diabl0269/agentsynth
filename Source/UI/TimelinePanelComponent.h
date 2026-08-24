@@ -59,7 +59,8 @@ namespace synth::ui {
 
 class TimelinePanelComponent
     : public juce::Component
-    , private synth::TimelineDoc::Listener {
+    , private synth::TimelineDoc::Listener
+    , private juce::ChangeListener {
 public:
     TimelinePanelComponent();
     ~TimelinePanelComponent() override;
@@ -89,8 +90,8 @@ public:
     // TimelineTransportBar::setMetronome. Non-owning; may be null.
     void setMetronome(synth::Metronome* metronome);
 
-    // THE low-rate transport poll, called from MainComponent's EXISTING 10 Hz timer (gated
-    // #if SYNTH_ENABLE_TIMELINE, and only while this panel is visible). It adds no timer of its own.
+    // THE low-rate transport poll, called from MainComponent's EXISTING 10 Hz timer (only while
+    // this panel is visible). It adds no timer of its own.
     // Two jobs:
     //   - hand the snapshot to the playhead overlay, which owns its 30 Hz playing-only timer from
     //     the play/stop transitions it sees here (see TimelinePlayheadOverlay.h);
@@ -104,11 +105,21 @@ public:
     // pattern as AIChatComponent::setAccountService()'s non-owning setter. Also forwarded to the
     // transport bar, which restores/persists ITS OWN two keys ("timelineMetronomeEnabled",
     // "timelineCountInBars") — this panel has no other reason to know either setting exists, so it
-    // is a pure forward, not a third copy of the restore/persist idiom.
+    // is a pure forward, not a third copy of the restore/persist idiom. Also hands the roll its
+    // PropertiesFile (pianoRoll_.setPropertiesFile — scale-panel visibility + user scales) and
+    // runs reloadPianoRollAppearancePrefs() once, below.
     void setApplicationProperties(juce::ApplicationProperties* props);
 
-    // Non-owning; may be null (a SYNTH_ENABLE_TIMELINE=OFF build never sets one, and the
-    // panel is then an inert shell with an empty header column). The panel listens to the doc and
+    // Reads "pianoRollKeyLabels" ("all"/"c", default "all") and NoteColour.h's own
+    // loadNoteColourOverrides, and pushes both into the roll. Called once from
+    // setApplicationProperties, and left PUBLIC so a live settings change (the Preferences tab's
+    // key-labels toggle, a note-colour edit) can re-push without a restart — MainComponent wires
+    // that in a parallel task; this method itself does no listening of its own. A no-op with no
+    // ApplicationProperties installed (or none passed to setApplicationProperties yet).
+    void reloadPianoRollAppearancePrefs();
+
+    // Non-owning; may be null (before setTimelineDoc is called, the panel is an inert shell with
+    // an empty header column). The panel listens to the doc and
     // rebuilds/refreshes the track headers on every notification — that is the ONLY thing that
     // updates them: no timer, no polling. Also forwarded to the clip-lane area, which runs
     // the same "set doc, refresh once" seam (TimelineClipLaneArea::setTimelineDoc).
@@ -362,8 +373,16 @@ public:
      *
      *  Escape is not resolved through here (it is a platform convention, not an app shortcut), and
      *  neither is anything the app dispatches as a command — Cmd+C/V/X/D, Space, and the grid
-     *  commands all reach MainComponent, which owns that half. */
-    void setShortcutManager(const ShortcutManager* manager) noexcept { shortcuts_ = manager; }
+     *  commands all reach MainComponent, which owns that half.
+     *
+     *  Non-const (unlike PianoRollComponent's own copy of this pointer): the tool-strip/snap/
+     *  follow buttons' tooltips are real juce::Button tooltips, which CACHE their text (unlike the
+     *  roll's hand-drawn header, whose tooltip is resolved live on every hover query) — so this
+     *  panel subscribes as a juce::ChangeListener on the installed manager to rebuild them whenever
+     *  a binding changes, and that requires a non-const ShortcutManager* to add/removeChangeListener
+     *  on. Unsubscribes from whichever manager was previously installed first, so re-installing (or
+     *  clearing, with nullptr) never leaves a stale listener registered. */
+    void setShortcutManager(ShortcutManager* manager);
     const ShortcutManager* getShortcutManager() const noexcept { return shortcuts_; }
 
     TimelineViewState& getViewState() noexcept { return viewState_; }
@@ -373,6 +392,21 @@ public:
     juce::TextButton& getSnapToggleButton() noexcept { return snapToggleButton_; }
     // play/stop/record/loop + BPM/time-sig editors + the bar:beat readout.
     TimelineTransportBar& getTransportBar() noexcept { return transportBar_; }
+
+    // ---- Follow playhead ----
+    //
+    // "Keep the playhead on screen while it plays" — a toggle next to snapToggleButton_ (same
+    // external-state pattern: setClickingTogglesState(false), the shared bool is the truth, the
+    // button only mirrors it). Persisted under "timelineFollowPlayhead", default OFF — an editor
+    // that silently starts scrolling under a user who never asked for it is worse than one that
+    // doesn't. Also forwards straight into pianoRoll_.setFollowPlayhead(enabled) — one flag, one
+    // switch, for both the arrangement view and the roll — including from the
+    // setApplicationProperties restore path.
+    void setFollowPlayheadEnabled(bool enabled);
+    bool isFollowPlayheadEnabled() const noexcept { return followPlayhead_; }
+    /** Test seam: no OS mouse source exists headlessly, so a test drives the click via
+     *  `getFollowPlayheadButtonForTest().onClick()` rather than synthesising a real click. */
+    juce::DrawableButton& getFollowPlayheadButtonForTest() noexcept { return followPlayheadButton_; }
 
     /** How many times updateFromTransport() has been called. Test hook: it is what proves the
      *  10 Hz poll never reaches a hidden panel. */
@@ -497,6 +531,18 @@ private:
     // The one thing this panel needs to redo on a theme switch (every other colour it uses is read
     // at paint time through the same dynamic_cast).
     void lookAndFeelChanged() override;
+    // The complement to lookAndFeelChanged() above: re-applies the tool-strip icons whenever this
+    // component's ANCESTOR CHAIN changes, not just when its resolved LookAndFeel does. A themed
+    // LookAndFeel change (setLookAndFeel/sendLookAndFeelChange) only reaches components that are
+    // ALREADY attached as children at the moment it fires; the plugin editor calls
+    // setLookAndFeel(&processor.getLookAndFeel()) on itself BEFORE it adds its MainComponent (and
+    // this panel, several levels further down) as a child — see AgentSynthPluginEditor's
+    // constructor — so that notification never reaches an unattached TimelinePanelComponent, and
+    // its constructor-time applyToolStripTheme() call found no themed LookAndFeel on the ancestor
+    // chain yet either. When the panel IS attached moments later (addAndMakeVisible), JUCE fires
+    // parentHierarchyChanged() down the newly-added subtree — not lookAndFeelChanged() — so this is
+    // the one hook guaranteed to run at that point. Idempotent and cheap either way.
+    void parentHierarchyChanged() override;
 
     // The Viewport's content: a plain container whose height is (track count * row height).
     struct TrackHeaderList : juce::Component {
@@ -573,6 +619,11 @@ private:
     // Left-aligned in the transport-bar strip, the snap combo stays right of it.
     TimelineTransportBar transportBar_;
 
+    // ---- Follow playhead (see the public accessors above) ----
+    bool followPlayhead_ = false;
+    juce::DrawableButton followPlayheadButton_{"Follow Playhead", juce::DrawableButton::ImageOnButtonBackground};
+    void persistFollowPlayheadChoice();
+
     // The slice of transport state the RULER paints, diffed by updateFromTransport. `hasRulerState_`
     // keeps the very first poll from counting as a change (the default-constructed struct below is
     // not what a live transport reports — its loop end starts at 4 beats).
@@ -631,9 +682,27 @@ private:
     // branches in mouseWheelMove XOR this against synth::ui::wheelGestureIsUpward(wheel).
     bool zoomScrollInverted_ = false;
 
-    // Non-owning, may stay null (see setShortcutManager). const because this panel only ever READS
-    // bindings — rebinding belongs to Settings.
-    const ShortcutManager* shortcuts_ = nullptr;
+    // Non-owning, may stay null (see setShortcutManager). Non-const so this panel can
+    // add/removeChangeListener on it (rebinding itself still belongs to Settings — this pointer is
+    // never used to mutate a binding, only to subscribe to changes and read the current one).
+    //
+    // LIFETIME REQUIREMENT: the installed ShortcutManager must outlive this component, exactly
+    // like every other "non-owning, may stay null" pointer here — the destructor's
+    // removeChangeListener call dereferences it. MainComponent.h currently declares `timelinePanel`
+    // BEFORE `shortcutManager`, so MEMBER teardown destroys shortcutManager FIRST and would leave
+    // this pointer dangling by the time ~TimelinePanelComponent() runs; that call site needs an
+    // explicit `timelinePanel.setShortcutManager(nullptr);` in ~MainComponent(), ahead of the
+    // member cascade — the same pattern already used there for themeManager/appProperties — before
+    // this feature is safe to ship. Not added here: MainComponent.cpp is outside this component's
+    // own file boundary.
+    ShortcutManager* shortcuts_ = nullptr;
+    // juce::ChangeListener — rebuilds the tool-strip/snap/follow tooltips on every bindings change.
+    void changeListenerCallback(juce::ChangeBroadcaster*) override;
+    // Rebuilds every dynamic shortcut-hint tooltip this panel owns (see synth::shortcutHintFor):
+    // the six tool-strip buttons, the snap toggle, and the follow-playhead toggle. Called from the
+    // constructor (after those buttons exist), setShortcutManager (both install and clear), and
+    // changeListenerCallback.
+    void refreshShortcutTooltips();
     // True when `key` is what the user has bound to `actionId`. With no manager installed this is
     // `key == fallback`; with one installed the fallback is not consulted at all. The same three
     // lines PianoRollComponent::matchesAction runs — deliberately duplicated rather than shared,

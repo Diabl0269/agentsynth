@@ -251,6 +251,46 @@ TEST_F(PreferencesSettingsTabTest, AlignmentGuidesLoadsPersistedValue) {
     EXPECT_FALSE(tab.isAlignmentGuidesEnabled());
 }
 
+TEST_F(PreferencesSettingsTabTest, PianoRollKeyLabelsDefaultsToAllAndPersists) {
+    PreferencesSettingsTab tab(appProperties);
+    EXPECT_TRUE(tab.isPianoRollKeyLabelModeAll());
+    // Not yet touched by the user — nothing should be written to disk until setToggle/persist runs.
+    EXPECT_FALSE(appProperties.getUserSettings()->containsKey("pianoRollKeyLabels"));
+
+    tab.setPianoRollKeyLabelModeAll(false);
+    EXPECT_FALSE(tab.isPianoRollKeyLabelModeAll());
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("pianoRollKeyLabels"), "c");
+
+    tab.setPianoRollKeyLabelModeAll(true);
+    EXPECT_TRUE(tab.isPianoRollKeyLabelModeAll());
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("pianoRollKeyLabels"), "all");
+}
+
+TEST_F(PreferencesSettingsTabTest, PianoRollKeyLabelsLoadsPersistedValue) {
+    appProperties.getUserSettings()->setValue("pianoRollKeyLabels", "c");
+    PreferencesSettingsTab tab(appProperties);
+    EXPECT_FALSE(tab.isPianoRollKeyLabelModeAll());
+}
+
+// The tests above drive the programmatic setter. This one clicks the actual button, which is what
+// a user does.
+TEST_F(PreferencesSettingsTabTest, ClickingPianoRollKeyLabelsToggleReachesPersistence) {
+    PreferencesSettingsTab tab(appProperties);
+    tab.setSize(500, 460);
+
+    juce::ToggleButton* labelToggle = nullptr;
+    for (auto* child : tab.getChildren())
+        if (auto* tb = dynamic_cast<juce::ToggleButton*>(child))
+            if (tb->getButtonText().containsIgnoreCase("Label every key"))
+                labelToggle = tb;
+    ASSERT_NE(labelToggle, nullptr) << "the piano-roll key-labels preference must be a labelled toggle";
+    ASSERT_TRUE(labelToggle->getToggleState());
+
+    labelToggle->setToggleState(false, juce::sendNotificationSync);
+    EXPECT_FALSE(tab.isPianoRollKeyLabelModeAll());
+    EXPECT_EQ(appProperties.getUserSettings()->getValue("pianoRollKeyLabels"), "c");
+}
+
 TEST_F(PreferencesSettingsTabTest, PaintDoesNotCrash) {
     PreferencesSettingsTab tab(appProperties);
     tab.setSize(500, 400);

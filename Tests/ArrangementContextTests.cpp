@@ -174,8 +174,6 @@ TEST(ArrangementContextTest, FilePathsNeverLeak) {
 // 5. Seam-level: the outgoing request gains an "## Arrangement" section
 // =============================================================================
 
-#if SYNTH_ENABLE_TIMELINE
-
 namespace {
 
 // Minimal stand-in for a real provider, same idiom as MockAIProvider in
@@ -234,5 +232,3 @@ TEST(ArrangementContextTest, InjectionAppendsWhenNonEmpty) {
     EXPECT_TRUE(content.contains("\"Lead\""));
     EXPECT_TRUE(content.contains("Add a filter"));
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

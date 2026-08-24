@@ -34,8 +34,6 @@
 #include <initializer_list>
 #include <memory>
 
-#if SYNTH_ENABLE_TIMELINE
-
 using synth::MidiNote;
 using synth::TimelineDoc;
 using synth::TimelineSnapshot;
@@ -311,5 +309,3 @@ TEST(TimelineE2ETest, BypassedTrackInRendersSilence) {
     EXPECT_TRUE(TestAudioHelpers::isSilent(rendered, 0, kSilenceThreshold));
     EXPECT_TRUE(TestAudioHelpers::isSilent(rendered, 1, kSilenceThreshold));
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

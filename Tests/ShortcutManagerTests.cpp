@@ -27,10 +27,12 @@ const juce::StringArray& surfaceResolvedActionIds() {
         "pianoRollTransposeOctaveDown",
         "pianoRollTransposeUp",
         "pianoRollTransposeDown",
+        "pianoRollToggleScalePanel",
         // TimelinePanelComponent::keyPressed (also consults timelineSnapToggle, shared with the roll)
         "timelineSnapToggle",
         "timelineToggleLoop",
         "timelineLoopSelection",
+        "timelineFollowPlayheadToggle",
         "timelineToolSelect",
         "timelineToolSplit",
         "timelineToolGlue",
@@ -621,4 +623,96 @@ TEST_F(ShortcutManagerTest, GetActionDescription_ToggleMinimapIsNonEmpty) {
     const auto description = ShortcutManager::getActionDescription("toggleMinimap");
     EXPECT_FALSE(description.isEmpty());
     EXPECT_EQ(description, "Toggle Minimap");
+}
+
+// ---------------------------------------------------------------------------
+// Piano roll: scale panel toggle (Ctrl+S)
+// ---------------------------------------------------------------------------
+
+TEST_F(ShortcutManagerTest, PianoRollToggleScalePanelDefaultIsRealCtrlS) {
+    const auto kp = manager.getBinding("pianoRollToggleScalePanel");
+    EXPECT_EQ(kp.getKeyCode(), 's');
+    EXPECT_TRUE(kp.getModifiers().isCtrlDown());
+    EXPECT_FALSE(kp.getModifiers().isShiftDown());
+    EXPECT_FALSE(kp.getModifiers().isAltDown());
+#if JUCE_MAC
+    // On macOS Ctrl and Cmd are different physical modifiers, so this must stay Ctrl-only —
+    // "savePreset" already owns Cmd+S, and the two must never be the same chord.
+    EXPECT_FALSE(kp.getModifiers().isCommandDown());
+#endif
+    EXPECT_EQ(ShortcutManager::getCategory("pianoRollToggleScalePanel"), ShortcutCategory::PianoRoll);
+    EXPECT_EQ(ShortcutManager::getActionDescription("pianoRollToggleScalePanel"), "Toggle Scale Panel");
+    EXPECT_TRUE(manager.getActionIds().contains("pianoRollToggleScalePanel"));
+}
+
+// ---------------------------------------------------------------------------
+// shortcutHintFor — the shared tooltip-hint helper every dynamic shortcut hint routes through.
+// ---------------------------------------------------------------------------
+
+TEST_F(ShortcutManagerTest, ShortcutHintForRendersABareLetterLowercase) {
+    manager.setBinding("timelineSnapToggle", juce::KeyPress('q', juce::ModifierKeys::noModifiers, 0));
+    EXPECT_EQ(shortcutHintFor(&manager, "timelineSnapToggle", juce::KeyPress()), "q");
+}
+
+TEST_F(ShortcutManagerTest, ShortcutHintForRendersAModifierComboAsKeyPressToDisplayStringSpellsIt) {
+    manager.setBinding("pianoRollToggleScalePanel", juce::KeyPress('s', juce::ModifierKeys::ctrlModifier, 0));
+    const auto hint = shortcutHintFor(&manager, "pianoRollToggleScalePanel", juce::KeyPress());
+    EXPECT_EQ(hint, ShortcutManager::keyPressToDisplayString(manager.getBinding("pianoRollToggleScalePanel")));
+    EXPECT_TRUE(hint.contains("S")) << "a chorded letter is NOT lower-cased, only a bare one is";
+}
+
+TEST_F(ShortcutManagerTest, ShortcutHintForAClearedBindingIsEmptyRatherThanTheFallback) {
+    manager.setBinding("timelineFollowPlayheadToggle", juce::KeyPress());
+    EXPECT_EQ(shortcutHintFor(&manager, "timelineFollowPlayheadToggle",
+                              juce::KeyPress('f', juce::ModifierKeys::noModifiers, 0)),
+              juce::String())
+        << "an installed manager is the ONLY source once one exists -- a cleared binding has no key";
+}
+
+TEST_F(ShortcutManagerTest, ShortcutHintForWithNoManagerUsesTheFallback) {
+    EXPECT_EQ(shortcutHintFor(nullptr, "timelineFollowPlayheadToggle",
+                              juce::KeyPress('f', juce::ModifierKeys::noModifiers, 0)),
+              "f");
+    EXPECT_EQ(shortcutHintFor(nullptr, "anything", juce::KeyPress()), juce::String())
+        << "an invalid fallback is also a real 'no key' state";
+}
+
+// ---------------------------------------------------------------------------
+// ChangeBroadcaster — additive alongside the pre-existing single-slot onBindingsChanged, so
+// MULTIPLE surfaces (not just MainComponent) can react to a rebind.
+// ---------------------------------------------------------------------------
+
+TEST_F(ShortcutManagerTest, SaveToPropertiesBroadcastsAChangeEvenWithNoPropertiesFileWired) {
+    struct CountingListener : juce::ChangeListener {
+        int count = 0;
+        void changeListenerCallback(juce::ChangeBroadcaster*) override { ++count; }
+    } listener;
+    manager.addChangeListener(&listener);
+
+    // The mutation itself broadcasts (see setBinding) ...
+    manager.setBinding("timelineFollowPlayheadToggle", juce::KeyPress('g', juce::ModifierKeys::noModifiers, 0));
+    EXPECT_EQ(listener.count, 1);
+    // ... and so does the save, even with no ApplicationProperties ever wired — the documented
+    // (idempotent) double-fire on the Settings tab's rebind path.
+    manager.saveToProperties();
+    EXPECT_EQ(listener.count, 2);
+
+    manager.removeChangeListener(&listener);
+}
+
+TEST_F(ShortcutManagerTest, OnBindingsChangedSingleSlotStillFiresAlongsideTheBroadcaster) {
+    int legacyCallbackCount = 0;
+    manager.onBindingsChanged = [&] { ++legacyCallbackCount; };
+    struct CountingListener : juce::ChangeListener {
+        int count = 0;
+        void changeListenerCallback(juce::ChangeBroadcaster*) override { ++count; }
+    } listener;
+    manager.addChangeListener(&listener);
+
+    manager.saveToProperties();
+    EXPECT_EQ(legacyCallbackCount, 1)
+        << "the pre-existing single-slot callback (MainComponent's own) must be untouched";
+    EXPECT_EQ(listener.count, 1);
+
+    manager.removeChangeListener(&listener);
 }

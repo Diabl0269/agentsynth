@@ -87,9 +87,6 @@ public:
     // in the post-graph buffer it renders. bounce() forces it off explicitly (user toggle and
     // count-in forced-on flag) for the duration and restores it via an RAII guard — see
     // MetronomeForceOffGuard in BounceExporter.cpp.
-    //
-    // In a SYNTH_ENABLE_TIMELINE=0 build the transport never ticks, so a bounce renders one block
-    // plus the tail and stops.
     static BounceResult bounce(AudioEngine& engine, const juce::File& outFile, const BounceOptions& options,
                                const ProgressCallback& progress = {});
 

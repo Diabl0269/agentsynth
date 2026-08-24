@@ -204,6 +204,10 @@ public:
     std::vector<ModulationTarget> getModulationTargets() const override {
         return {{"B2 Freq", 2}, {"B2 Gain", 3}, {"B3 Freq", 4}, {"B3 Gain", 5}};
     }
+    // Pure audio FX — processBlock never touches the MIDI buffer.
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Filter; }
     ModuleType getModuleType() const override { return ModuleType::ParametricEQ; }
 

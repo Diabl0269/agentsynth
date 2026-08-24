@@ -35,9 +35,7 @@ public:
         ToggleMinimap,
         ToggleModMatrix,
         ToggleAiPanel,
-        // Timeline panel toggle, right before the theme toggle. Present unconditionally
-        // here even when SYNTH_ENABLE_TIMELINE is OFF — MainComponent simply leaves this slot's
-        // button pointer null in that build, and layoutButtons() already skips null slots.
+        // Timeline panel toggle, right before the theme toggle.
         ToggleTimeline,
         ToggleTheme,
         NumSlots

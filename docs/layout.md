@@ -1629,16 +1629,14 @@ Keyboard focus is orthogonal to this diagram, not another region: whichever of t
 clip lanes / piano roll the user last clicked owns Cmd+C/V/D, per the **Keyboard & focus**
 subsection at the end of this section (TL5-10).
 
-Inside a `SYNTH_ENABLE_TIMELINE` build, Preferences has a runtime kill switch on top of all of
+Preferences has a runtime kill switch on top of all of
 this: "Show timeline (experimental)" (`PreferencesSettingsTab`, key `timelineFeatureEnabled`,
 default **on**). Turning it off hides the user-facing entry points only — the toolbar button
 (`MainComponent::toggleTimelineButton`), the Cmd+T command, and the Space play/stop transport key
 all become inactive/invisible via `MainComponent::applyTimelineFeatureEnabled()`, which reuses the
 toolbar toggle's own hide path if the panel happens to be open. It deliberately leaves everything
 else alive: the `TimelineDoc`, its audio-thread publishing, and project load/save all keep working
-exactly as before, so turning the preference back on picks up right where the user left off. The
-compile-time `SYNTH_ENABLE_TIMELINE` flag itself stays a build/CI concern — this preference cannot
-turn the feature back on in a flag-OFF build.
+exactly as before, so turning the preference back on picks up right where the user left off.
 
 ### What it is
 
@@ -1709,13 +1707,14 @@ extended to also lerp the timeline panel's bounds; showing the panel starts it f
 rect pinned at its final bottom edge (so it grows upward into place), and hiding it calls
 `setVisible(false)` in `onComplete`, same as the sibling panels.
 
-### Build flag
+### No build-time gating
 
 Everything past the always-present `TimelinePanelComponent` member and `PanelBoundsResult`/
 `computePanelBounds()` plumbing — the toolbar button, the `toggleTimelinePanel` command, and the
-carve itself — is gated `#if SYNTH_ENABLE_TIMELINE`, so a `-DSYNTH_ENABLE_TIMELINE=OFF` build has
-no button, no shortcut effect, and never carves the panel into the layout (see the CMake option's
-own comment in the root `CMakeLists.txt`).
+carve itself — is ordinary, always-compiled code: there is no build configuration that omits the
+button, the shortcut, or the panel carve. The only thing that varies at runtime is the
+`timelineFeatureEnabled` preference described above, which hides the entry points without removing
+them.
 
 Contents (ruler/grid/snap, track headers, the playhead, the transport bar, clip lanes, the piano
 roll, the automation strip, and finally the keyboard/focus rule tying it to the graph editor) are
@@ -1938,12 +1937,76 @@ through the doc. Headers are rebuilt/refreshed **only** from `TimelineDoc::Liste
 is unchanged refreshes the existing rows in place; only an added/removed/reordered track rebuilds
 them, so a mute click doesn't destroy the row the user is typing a name into.
 
-**Row contents:** colour swatch (click cycles the palette), a track-kind badge (`"MIDI"` / `"AUD"` /
-`"AUTO"`, fixed per `TrackKind` — identity chrome, not a control), name label (double-click to
-edit), an `A` button (visible only when `Track::lanes` is non-empty), `M` / `S` / `R` toggles, and
-the binding chip. `R` flips `Track::armed` in the document and nothing else — arming is not
-recording; the record button and `MidiRecorder::startRecording` live on the transport bar (TL5-5,
-below), which looks for the first `armed` track when it starts a take.
+**Row contents:** colour swatch (click opens a full colour picker — see **Colour swatch** below), a
+track-kind badge (`"MIDI"` / `"AUD"` / `"AUTO"`, fixed per `TrackKind` — identity chrome, not a
+control), name label (double-click to edit), an `A` button (visible only when `Track::lanes` is
+non-empty), `M` / `S` / `R` toggles, and the binding chip. `R` flips `Track::armed` in the document
+and nothing else — arming is not recording; the record button and `MidiRecorder::startRecording`
+live on the transport bar (TL5-5, below), which looks for the first `armed` track when it starts a
+take.
+
+**Kind-badge icon.** The `"MIDI"`/`"AUD"`/`"AUTO"` text is the fallback: when a themed
+`AppLookAndFeel` is installed and the corresponding asset is linked in, `paint()` draws
+`Icon::TrackMidi`/`TrackAudio`/`TrackAutomation` (`kindBadgeIcon(TrackKind)`) instead — the same
+"draw the glyph when the library has it, fall back to text otherwise" contract every other icon
+consumer in the app follows. `getKindBadgeIconForTest()` mirrors `getKindBadgeTextForTest()`'s
+"value or empty" idiom (returning `-1` for "fell back to text") so a test can assert on which path
+ran without decoding pixels. A track's kind never changes after creation, so this is a one-time
+paint decision, not something `refreshFromDoc()` has to re-derive.
+
+**M/S/R active-state colours and the binding-chip theme fix.** `applyThemeDerivedColours()` is the
+one place every colour this component bakes via `setColour` — the binding chip's warning/normal
+fill and the `M`/`S`/`R` buttons' active-state colours (`theme.colors.trackMuteOn`/`trackSoloOn`/
+`trackArmOn`) — gets (re-)derived from the currently installed `LookAndFeel`. It runs from three
+call sites: the end of the constructor (so the very first paint isn't relying on a later call),
+`refreshFromDoc()` (so a doc-driven repaint always shows the right colours), and the component's
+own `lookAndFeelChanged()` override (new in this change) — without that last call site, a theme
+switch alone, with no accompanying doc change, left the chip and the M/S/R active colours frozen
+on whatever theme was active the last time `refreshFromDoc()` ran.
+
+**Colour swatch.** Clicking it builds a `synth::ui::ColourPickerPopup` (`Source/UI/
+ColourPickerPopup.h` — see [`theming.md` §13](theming.md#13-colour-picker-popup)) via
+`buildColourPicker()` and launches it in a `juce::CallOutBox` anchored on the swatch, replacing the
+old palette-cycle click. Its favourites shelf persists through `TrackHeaderHost::
+getAppProperties()` (a new, non-pure `TrackHeaderHost` method defaulting to `nullptr` so every
+existing implementer keeps compiling) — `nullptr` degrades to an in-memory-only picker, same as a
+headless test gets. Preview writes the doc directly with no undo step on every drag/favourite
+click; closing the popup either restores the original colour with no undo step (no net change) or
+performs the real edit as ONE undo step whose undo target is the original colour (see
+`theming.md` §13 for the exact preview/commit contract). `createColourPickerForTest()` exposes
+`buildColourPicker()`'s exact wiring without ever launching the `CallOutBox`.
+
+**"MIDI destinations..." menu entry.** The chip's context menu (see below) gains one more item,
+`kMidiDestinationsMenuId`, offered only when `offersMidiDestinationsMenuEntryForTest()` says the
+track's binding resolves to something with MIDI to send. Choosing it (or a test calling
+`applyBindingMenuChoice(kMidiDestinationsMenuId)`) opens a `synth::ui::MidiDestinationPicker`
+(`Source/UI/MidiDestinationPicker.h`) — a searchable, multi-select list of every live
+MIDI-instrument node the track's bound Track In node could send MIDI to — in a `juce::CallOutBox`
+anchored on the chip, via `openMidiDestinationsPicker()`/`buildMidiDestinationPicker()` (mirroring
+the colour swatch's build/launch split, including `createMidiDestinationPickerForTest()` and a
+`setOpenMidiDestinationsPickerHookForTest()` seam so the menu choice is exercisable without a live
+callout). The candidate list is DYNAMIC ground truth, not an allowlist: every live graph node whose
+`ModuleBase`-level `acceptsMidi()` is true (the per-module flags now reflect what each
+`processBlock` actually consumes — see the module MIDI-flag audit in
+`Tests/ModuleMidiFlagsTests.cpp`'s expected table), which automatically excludes MIDI *sources*
+(Track In, External MIDI, MIDI Keyboard: they generate notes, they don't consume them). Rows render
+in two sections: **Instruments** first (`isMidiInstrumentType()`, `Source/Modules/ModuleBase.h` —
+the same set the add-track auto-wire target search uses) and **Other** for the remaining real MIDI
+consumers (e.g. an ADSR's note-gate input); the section headers only appear when both groups are
+present. **The graph is the truth**: toggling a row calls `TrackHeaderHost::
+setMidiDestinationConnected(TrackId, nodeUid, connect)` — `MainComponent`'s implementation performs
+one `recordStructuralChange` (add/remove the MIDI connection) then always calls
+`reconcileTimelineAfterGraphChange()` — and immediately re-pulls `getMidiDestinationOptions(TrackId)`
+to rebuild every row from what the graph now actually reports, rather than trusting the click. Both
+host methods are non-pure with inert defaults (empty list / no-op) for the same
+keep-every-implementer-compiling reason `getAppProperties()` is, and both no-op cleanly on a stale
+popup (the track's binding or the target node no longer resolves) rather than crashing.
+
+> **Known divergence, left alone deliberately.** `AIStateMapper` keeps its own, separately
+> name-keyed `midiAcceptingTypes` list for the AI auto-wire path, and that list omits `Wavetable`.
+> Unifying it with `isMidiInstrumentType()` would change AI auto-wire behaviour, which is out of
+> scope for this change — the destination picker and the add-track auto-wire search both go
+> through `isMidiInstrumentType()`; `AIStateMapper` does not.
 
 **The `A` button** toggles this track's automation lane in the (single, doc-wide) automation strip.
 The header only reports the click via `onAutomationToggleRequested` — it never tracks open/closed
@@ -2058,7 +2121,7 @@ free are all in §11 — read that before touching this component.
 
 | Rate | Owner | What it does |
 |---|---|---|
-| 10 Hz | `MainComponent::timerCallback` (**existing** timer, `#if SYNTH_ENABLE_TIMELINE`, only while `timelinePanel.isVisible()`) | `TimelinePanelComponent::updateFromTransport(snapshot, outputLatencySeconds)` |
+| 10 Hz | `MainComponent::timerCallback` (**existing** timer, only while `timelinePanel.isVisible()`) | `TimelinePanelComponent::updateFromTransport(snapshot, outputLatencySeconds)` |
 | 30 Hz | `TimelinePlayheadOverlay`'s own `juce::Timer` | re-reads the transport and requests the movement strip — **only while playing** |
 
 The low-rate poll is the **sole** owner of the 30 Hz timer's lifecycle: it sees the play/stop
@@ -2093,6 +2156,36 @@ one strip spanning the jump.
 **Stopped** the overlay asks for nothing, but it still *draws*: `paint()` renders the line at the
 current position whenever the panel paints for any other reason. Painting is not what the contract
 restricts; asking for a repaint is.
+
+**Follow playhead.** A toggle button sits immediately next to the snap toggle in the panel's
+snap/tool strip (`followPlayheadButton_`, tinted via `Icon::FollowPlayhead` — see [`theming.md`
+§3](theming.md#3-icon-tinting)), backed by the boolean preference `"timelineFollowPlayhead"`
+(loaded/persisted the same way the snap-enabled flag is). Turning it on page-flips the panel's
+view horizontally so the playhead never scrolls off screen while playing. The check rides the
+SAME 10 Hz poll every other transport-driven repaint in `updateFromTransport` already uses — no
+new timer — and is gated on **all four** of: the transport actually playing, the preference on,
+the piano roll **closed** (the roll's own follow wiring, below, takes over while it's open), and
+no clip drag in progress (`!clipLaneArea_.isDragInProgress()` — a follow flip landing mid-drag
+would fight the gesture the user is mid-way through). Any one of the four false costs zero work.
+When the (latency-compensated) drawn playhead beat moves outside `[firstVisibleBeat,
+firstVisibleBeat + visibleBeats)`, the view re-centres so the beat lands **10% into the new page**
+rather than flush against its edge — landing exactly on the edge would immediately re-trigger the
+same flip on the very next poll once the beat advances one more sample.
+
+**Roll-local variant.** `PianoRollComponent::setFollowPlayhead(bool)` mirrors the same feature
+inside the roll's own horizontal view (`rollView_`), independent of the panel's — the roll has its
+own zoom/scroll (see TL5-8 above) and therefore its own follow decision. It runs from inside
+`setPlayheadBeat()` itself (the same seam the roll's local-playhead delegation, above, already
+pushes a drawn beat through), gated on `followPlayhead_` on, no drag in flight
+(`dragMode_ == DragMode::None`), and the edge-auto-scroll timer idle (TL5-8's own auto-scroll is
+already steering `rollView_` on its own terms — a follow flip on top of it would fight that
+gesture the same way it would fight a clip drag in the panel). It runs BEFORE the strip-diff repaint
+calculation below it in the same function, so that diff is computed against the mapping the line
+will actually draw at, and it costs nothing while the beat is already inside the view — the common,
+playing-and-visible case never calls `setHorizontalView` at all, so the zero-repaint-while-unmoved
+contract above is untouched. `TimelinePanelComponent::setApplicationProperties()` pushes the shared
+preference into the roll via `pianoRoll_.setFollowPlayhead(followPlayhead_)` — one preference,
+two independent view states.
 
 ### TL5-5: the transport bar
 
@@ -2178,7 +2271,7 @@ MIDI track, which only `MainComponent` can see (it owns the `TimelineDoc`). The 
 click computes `!getToggleState()` and reports that as *intent* through
 `std::function<void(bool)> onRecordToggled` — it never flips its own toggle state. `setRecordingState(bool)`
 is the ONE thing that ever does, called back by the owner with the real outcome. `MainComponent`'s
-implementation (installed in `initialiseCommon()`, `#if SYNTH_ENABLE_TIMELINE`):
+implementation (installed in `initialiseCommon()`):
 
 - **ON** — iterates `timelineDoc.getTracks()` for the first `armed && kind == TrackKind::Midi`
   track. None found -> `setRecordingState(false)` + `statusBar.showMessage("Arm a track to
@@ -2312,7 +2405,7 @@ clips in a stable order regardless of click order.
 (`getClipSelection()` / `getClipLaneArea()`); the lane area holds the selection model and the
 shared `TimelineViewState` by reference, exactly the relationship the ruler already has with the
 view state. `MainComponent` forwards its one `AppUndoManager` in (`TimelinePanelComponent::
-setUndoManager`), the same gated `#if SYNTH_ENABLE_TIMELINE` wiring block that installs the doc,
+setUndoManager`), the same wiring block that installs the doc,
 transport and track-header host (TL5-3).
 
 **Z-order, and the one relocation this task makes.** `TimelinePanelComponent::paint()` still paints
@@ -2381,6 +2474,32 @@ the original slides while its row holds), so the destinations paint as transluce
 blur would be per-frame image filtering, which §10–11 rules out) while the source clips keep
 painting where they are. Ghost geometry comes from one helper (`dragGhostRectFor`) shared with
 `getDragGhostRectsForTest()`, the same single-enumeration reasoning as `buildVisibleCables()`.
+
+**Edge auto-scroll during a drag.** `Source/UI/EdgeAutoScroll.h` is a small pure helper — one
+function, `edgeScrollVelocity(pos, lo, hi, zonePx, maxPerTick)`, plus the two shared constants
+`kEdgeZonePx` (24 px edge-zone width) and `kEdgeScrollHz` (30 Hz gated-timer rate) — deliberately
+holding no state, no timer and no component reference, so "how fast does an edge-drag scroll" is
+one decision the clip lanes and the piano roll (TL5-8 below) both read rather than two that could
+silently drift apart. Velocity is 0 in the dead middle band, ramps linearly with penetration depth
+from 0 at the zone's inner edge to `maxPerTick` right at the component edge, and clamps at
+`maxPerTick` beyond it (a pointer JUCE still reports after being dragged off the component
+entirely must not fly the view away). `TimelineClipLaneArea::updateAutoScrollArming()` starts/stops
+a `juce::Timer` at `kEdgeScrollHz` gated on **both** a Move/Resize drag being active AND the last
+known pointer sitting inside the edge zone — the timer never runs for any other reason, including
+a marquee or a plain hover. Each `autoScrollTick()` re-checks both conditions (the drag can have
+ended, or the pointer moved back to the dead zone, since the last check), scrolls
+`TimelineViewState` by `velocityPxPerTick / pixelsPerBeat` beats, and — because no `MouseEvent`
+fired this tick, only the view moved — calls `updateDragPreviewFromLastPointer()` to re-derive the
+in-flight drag preview against the same last-known pointer position but the NEW scroll offset. That
+re-derivation only works because the drag-delta maths is **beat-anchored, not pixel-anchored**:
+`deltaBeats = viewState_.xToBeat(pointer.x) - mouseDownBeat_` reads the delta through `xToBeat`'s
+own `firstVisibleBeat` term every time, rather than caching a pixel offset computed against the view
+position at `mouseDown` — a scroll mid-drag (from an auto-scroll tick, or in principle any other
+scroll) is absorbed by that term instead of silently invalidating a stale pixel delta. Every scroll
+tick fires `onViewScrolledByDrag` so `TimelinePanelComponent` repaints the ruler and itself (the
+ruler has no other way to learn the shared view state moved — it isn't a drag participant).
+Headless seams: `tickAutoScrollForTest()` drives one tick without a real timer, and
+`isAutoScrollTimerRunningForTest()` observes the gating.
 
 **Inline rename.** `beginRenameClip(ClipId)` (reached from the context menu's **Rename…**) opens a
 `juce::TextEditor` over the clip's name area, pre-filled and `selectAll()`ed: Return commits through
@@ -2565,14 +2684,42 @@ and the playhead overlay stays topmost and untouched either way (same bounds, sa
 `viewState_.beatToX` mapping it always had).
 
 **Coordinate system — the roll owns its own horizontal mapping.** The keys column is a real 44 px
-GUTTER: `PianoRollComponent::beatToX(absBeat)` is `kKeysColumnWidth + (beat - firstVisibleBeat) *
-pixelsPerBeat` against the roll's OWN `TimelineViewState` member (`rollView_`), so `x ==
-kKeysColumnWidth` is the first visible beat and the clip's opening bar is reachable. (It previously
-was not: the column was an opaque strip painted OVER the leftmost 44 px of the shared mapping, with
-clicks there ignored — the first bar of a clip parked at x == 0 was unclickable and half-hidden.)
-The roll's zoom and scroll are its own; the panel-wide `TimelineViewState` is still shared, but for
-exactly ONE thing — the **snap division** (`snapBeat`/`divisionBeats`), so the roll's gridlines, its
-snapped edits and the panel's snap selector can never disagree.
+GUTTER (`kKeysColumnWidth`): `PianoRollComponent::beatToX(absBeat)` is `leftGutterWidth() + (beat -
+firstVisibleBeat) * pixelsPerBeat` against the roll's OWN `TimelineViewState` member (`rollView_`),
+so `x == leftGutterWidth()` is the first visible beat and the clip's opening bar is reachable. (It
+previously was not: the column was an opaque strip painted OVER the leftmost 44 px of the shared
+mapping, with clicks there ignored — the first bar of a clip parked at x == 0 was unclickable and
+half-hidden.) `leftGutterWidth()` — `kKeysColumnWidth` alone, or `kScalePanelWidth +
+kKeysColumnWidth` (170 + 44 px) while the Scale Assist panel (below) is open — is now the single
+function every place that used to hardcode `kKeysColumnWidth` as "the grid's left offset" goes
+through instead, so the panel opening/closing can never leave one call site reading the old offset
+while another reads the new one. The roll's zoom and scroll are its own; the panel-wide
+`TimelineViewState` is still shared, but for exactly ONE thing — the **snap division**
+(`snapBeat`/`divisionBeats`), so the roll's gridlines, its snapped edits and the panel's snap
+selector can never disagree.
+
+**Piano-style keys column + key labels.** The keys column paints alternating white/black-key row
+tints from `colors.pianoKeyWhite`/`pianoKeyBlack` (see [`theming.md` §2](theming.md#2-token-reference))
+rather than the earlier plain `bg1`/`surfaceHi` alternation, so the column reads as an actual
+keyboard. `PianoRollComponent::KeyLabelMode` (`AllNotes` default, `OctavesOnly`) controls label
+density: `AllNotes` labels every visible key row (subject to the readability floor below);
+`OctavesOnly` labels only the C rows, matching the octave-label-only behaviour the column always
+had. `keyLabelFor(pitch, mode, rowHeightPx)` is the single, static, headless-testable decision
+point both the paint call site and tests assert on directly — an empty string means "draw no label
+at all". **Below a 9 px row height, every mode collapses to C-only labels** — `OctavesOnly`
+behaviour, in effect, regardless of what the toggle says — since a name doesn't fit a row that
+short and a half-drawn label is worse than none. The mode is set via
+`setKeyLabelMode()`/`getKeyLabelMode()`, persisted under the preference described just below.
+
+**"pianoRollKeyLabels" preference.** `PreferencesSettingsTab` gets one new toggle ("On labels every
+key in the piano roll's keys column. Off labels only the Cs."), backed by the string key
+`"pianoRollKeyLabels"` (`"all"` default / `"c"`), read by
+`TimelinePanelComponent::reloadPianoRollAppearancePrefs()` — called once from
+`setApplicationProperties()` and again from `MainComponent::changeListenerCallback` on every
+settings-file write (the same "re-read on notify" treatment `applyNaturalScrollingPreference`/
+`applyZoomScrollPreference` already get), so an Appearance/Preferences-tab edit shows up in an
+already-open roll immediately, no restart needed. `"all"` matches `KeyLabelMode::AllNotes`'s own
+default, so an install that never opens the tab is unaffected.
 
 **Playhead delegation** is the consequence, and the rule. `TimelinePlayheadOverlay` maps beats
 through the SHARED view state, so inside the roll's rect its x is simply wrong. Instead of adding a
@@ -2618,13 +2765,17 @@ computation `paintGridLines` and the `getGridLineCountForTest` seam both walk, s
 never drift from the paint. Changing the snap selector repaints the roll (`TimelinePanelComponent`'s
 `snapCombo_.onChange`); no timer.
 
-**Rendering.** Row backgrounds alternate white/black-key tint (`colors.bg1` / `colors.surfaceHi`,
-the same tokens `ModuleComponent`'s themed `MidiKeyboardComponent` uses), a C-octave label per
-octave in the keys column (mono font via `juce::Font::getDefaultMonospacedFontName()`, resolved to
-the theme's mono family by `AppLookAndFeel::getTypefaceForFont` — never a raw family string), and
-the clip's span outside `[clipStart, clipEnd)` dimmed. Notes are rounded rects tinted by velocity
-(`colors.midiWire`, brightened by `velocity/127`), selected notes get an accent border. Repaints
-happen only on doc/listener refresh, interaction, and view-state changes — no timer.
+**Rendering.** Grid-row backgrounds alternate white/black-key tint (`colors.bg1` / `colors.
+surfaceHi` — the keys column itself uses `colors.pianoKeyWhite`/`pianoKeyBlack`, see above), a
+per-key or C-only label in the keys column per `KeyLabelMode` (mono font via `juce::Font::
+getDefaultMonospacedFontName()`, resolved to the theme's mono family by `AppLookAndFeel::
+getTypefaceForFont` — never a raw family string), and the clip's span outside `[clipStart,
+clipEnd)` dimmed. Notes are rounded rects whose fill/border colours come from the single resolver
+`synth::ui::resolveNoteColour()` (`Source/UI/NoteColour.h` — see [`theming.md` §12](theming.md#12-note-colours)):
+velocity brightens the fill, a note the active scale (Scale Assist, below) flags as outside it
+gets `noteOutOfScale` regardless of any per-pitch-class override, and selected notes get a
+`noteSelected`-coloured border. Repaints happen only on doc/listener refresh, interaction, and
+view-state changes — no timer.
 
 **Gestures (Select tool)** — everything below is `EditTool::Select`'s table; the other five tools replace it entirely (see **Edit tools** further below) (each previews locally — a member delta/length/velocity read back by `paint()` through
 `effectiveGeometryFor()` — and commits ONCE via `AppUndoManager::recordTimelineChange` on mouse-up,
@@ -2752,6 +2903,100 @@ its shared delta so the group's earliest start never goes below 0 and its latest
 `clipLength` (the same clamp-the-group-together reasoning as `TimelineClipLaneArea::mouseDrag`'s
 Move branch, extended with an upper bound because notes, unlike clips, live inside one). A note
 whose available room shrinks to zero-length is rejected by `TimelineDoc::addNote`'s own validation.
+
+**Scale Assist panel.** `Source/UI/ScaleAssistPanel.h` (`synth::ui::ScaleAssistPanel`) is a
+deliberately dumb, `kScalePanelWidth` = 170 px wide sibling docked left of the keys column, shown
+by a header "Scale" button and hidden by default (persisted, see below). It holds no reference to
+the roll, the doc, or any undo manager — every user action travels OUT through a
+`std::function` callback (`onScaleChanged`, `onPitchVisibilityChanged`, `onQuantizePitches`,
+`onGenerate`) and every piece of state the roll needs to push back IN (switching clips, restoring a
+persisted scale) travels IN through `setSelection()` — the same "panel owns presentation, owner
+owns the doc" split `PianoRollComponent` itself follows for `TimelineViewState`. Its contents, top
+to bottom: a Root combo (C…B) and a Scale combo ("No scale" first, then every entry from
+`synth::builtInScalePresets()` in order — Major, Natural/Harmonic/Melodic Minor, Dorian, Phrygian,
+Lydian, Mixolydian, Locrian, Major/Minor Pentatonic, Blues, Whole Tone, Chromatic — then the user's
+saved scales, then "Edit custom scales..." which reveals a 12-toggle pitch-class + name + Save
+editor rather than being itself a scale choice); a "Show only scale pitches" toggle; a "Quantize
+pitches" button (enabled only with a real scale selected); and a Min/Max note range pair plus a
+"Generate" button.
+
+**The scale engine** (`Source/Timeline/MusicalScale.h`) is deliberately header-only and free of any
+UI or `TimelineDoc`-mutation dependency: `synth::MusicalScale` is a root pitch class (0=C…11=B)
+plus a 12-bit, root-RELATIVE interval mask (bit *i* set means "root + i semitones, mod 12, is in
+the scale" — the same mask value describes a scale's shape at any root). `contains(midiPitch)` and
+`snapPitch(midiPitch)` are the two queries every caller needs; `snapPitch` walks outward from the
+pitch by increasing semitone distance and, on an exact tie between an equidistant in-scale pitch
+above and below, resolves to the **lower** one. A degenerate mask of 0 ("nothing is in scale") is
+handled explicitly everywhere rather than left to loop or crash: `contains` returns `false` for
+every pitch and `snapPitch` passes its input straight through. `builtInScalePresets()` is the
+fixed, indexed preset list above; user scales (`synth::UserScale { name, mask }`) round-trip through
+`parseUserScales`/`serializeUserScales` (tolerant JSON — a malformed entry is skipped individually,
+a whole-string parse failure yields an empty list) under the single properties key
+`"pianoRollUserScales"` — read/written by `ScaleAssistPanel::setPropertiesFile()`, the same
+one-key idiom `NoteColour.h`'s own persistence (§ theming.md §12) follows. `setPropertiesFile
+(nullptr)` is a legal, permanent state: Save still works for the session, it just never reaches
+disk — the same null-degrades-gracefully contract every other timeline sub-component's setter
+follows.
+
+**Per-clip, session-only scale memory.** `PianoRollComponent` keeps `clipScaleMemory_`, a
+`std::map<ClipId, {scale, pitchVisibilityOn}>` populated only as clips get their scale touched —
+NOT persisted to disk, and deliberately so: a scale choice is a per-editing-session aid, not
+document state that would need its own undo/redo or bundle-format entry. `openClip()` calls
+`restoreScaleMemoryForOpenClip()`, which pushes whatever this clip remembers (or "No scale" for a
+clip never opened before) back into the panel and the roll's own scale context, rebuilding
+`visiblePitches_` against it.
+
+**Pitch-visibility row collapse.** `visiblePitches_` — the sorted, ascending list of every pitch
+that currently gets a drawn row — is normally all 128 pitches, but "Show only scale pitches" (with
+a real scale selected) collapses it to exactly the scale's in-scale pitches **plus every pitch any
+note in the open clip already uses** — the "notes stay visible" rule: turning the toggle on must
+never hide a note that is already there, only change which *additional*, currently-empty rows are
+offered for new ones. Every row-index-based operation (vertical wheel-scroll, vertical zoom, the
+Up/Down/Shift+Up/Down transpose-by-row deltas used while dragging a note) walks `visiblePitches_`
+by INDEX rather than raw semitone arithmetic for exactly this reason — with rows collapsed, a
+one-row move can be a multi-semitone jump, and indexing by semitone would silently walk through
+hidden rows instead of the next drawn one. `firstVisiblePitch_` is re-clamped to the nearest member
+of `visiblePitches_` immediately on any rebuild, so it is always a real, currently-drawn row.
+
+**Quantize-to-scale.** "Quantize pitches" (`onQuantizePitches`) calls
+`quantisePitchesToScale(scale)`, which snaps every note's pitch via `MusicalScale::snapPitch` and
+writes back only the notes that actually moved (`TimelineDoc::moveNote`, one
+`recordTimelineChange` — a mutation that changes nothing pushes no undo step, so an already-quantised
+clip costs zero history entries). The selection is deliberately left untouched: this only ever
+moves pitches, never adds/removes/reselects notes.
+
+**Random generation replaces the clip.** "Generate" (`onGenerate(minPitch, maxPitch)`) calls
+`generateRandomNotesIntoClip`, which reads the RAW snap division regardless of the snap on/off
+toggle (`TimelineViewState::divisionBeatsRaw` — the same "clean up notes drawn free-hand" reasoning
+`isQuantiseEnabled` documents elsewhere), falling back to a sixteenth (0.25 beats) when that
+division is Off/0, since generation always needs a concrete grid step to place notes on. `synth::
+generateRandomNotes` (`MusicalScale.h`) then places one note per grid step from beat 0 until the
+step's start would fall at or past the clip's length, picking a pitch uniformly among the in-scale
+pitches inside `[minPitch, maxPitch]` (every pitch in range when the scale is null or chromatic);
+if no candidate pitch exists in that range at all, it returns an empty note list rather than
+falling back to an out-of-range or out-of-scale pitch. **"Generate" means "replace"**: ONE
+mutation clears every existing note in the clip and adds the fresh batch, so undo restores the
+old contents in a single step rather than unwinding a clear-then-paste. The RNG is caller-owned
+and default-seeded here — the panel's Generate button always wants a fresh draw, never a
+reproducible one.
+
+**Panel visibility persistence.** The panel's own open/closed state persists under the boolean key
+`"pianoRollScalePanelVisible"` (default `false`) — distinct from the user-scales key above, and
+owned by the roll/panel rather than `ScaleAssistPanel` itself, since visibility is a roll-chrome
+decision, not scale data.
+
+**Edge auto-scroll (roll side).** The piano roll runs the identical gated-timer contract
+`TimelineClipLaneArea` established for the clip lanes (see **Edge auto-scroll during a drag** in
+TL5-7 above) via the same `Source/UI/EdgeAutoScroll.h` helper and constants, extended to BOTH axes:
+`updateAutoScrollArming()`/`autoScrollTick()` check `edgeScrollVelocity` against the grid rect's
+horizontal AND vertical edges (`kEdgeAutoScrollMaxPxPerTick` horizontal, matching the clip lanes'
+value exactly so a drag that crosses from one editor to the other feels identical; a separate
+`kEdgeAutoScrollMaxRowsPerTick` = 1.0 for the vertical axis, since pitch scroll moves by rows, not
+pixels). A drag mid-scroll re-derives its preview from the same beat-anchored maths TL5-7
+describes, plus the equivalent row-anchored logic vertically. `openClip()`, `closeRoll()` and a
+cancelled drag all stop the timer explicitly — a drag from the PREVIOUS clip, or from before a
+cancel, must never keep scrolling the current one. Headless seams mirror the clip lanes':
+`tickAutoScrollForTest()` and `isAutoScrollTimerRunningForTest()`.
 
 **Wheel.** All four bindings are handled here and NOTHING bubbles to the panel — the roll's
 zoom/scroll are its own, so the shared `TimelineViewState` must not move when the wheel lands inside
@@ -2889,7 +3134,7 @@ click path `simulateToggleTimelineClick()` uses if it's hidden, and opens the st
 Tests: `Tests/AutomationEditorTests.cpp` — `AutomationLaneEditor` gesture/publish-discipline
 coverage (mirrors the `TimelineClipLaneArea`/`PianoRollComponent` hand-built-`juce::MouseEvent`
 idiom against a bare `TimelineDoc` + `AppUndoManager`), the panel's strip open/close/record-mode
-selector, and a `#if SYNTH_ENABLE_TIMELINE`-gated `MainComponent` integration test for the knob
+selector, and a `MainComponent` integration test for the knob
 entry point.
 
 ### TL5-10: keyboard & focus
@@ -2983,8 +3228,8 @@ point the transport bar's own click handler uses — see TL5-5 above — so the 
 and a Space-triggered toggle can never disagree). Safe to claim app-wide for the same reason
 Cmd+C/V is (see `shortcuts.md`): a focused `juce::TextEditor` consumes the spacebar itself (types a
 space character) before `MainComponent::keyPressed`, the sole dispatch point, ever sees it. Inactive
-outright (`getCommandInfo` -> `setActive(false)`) in a `SYNTH_ENABLE_TIMELINE=OFF` build, where
-there is no transport to toggle.
+outright (`getCommandInfo` -> `setActive(timelineFeatureEnabled)`) whenever the "Show timeline
+(experimental)" preference has hidden the transport, since it isn't reachable while hidden.
 
 **Delete stays panel-local.** Unlike C/V/D, Delete/Escape were never routed through
 `ShortcutManager`/`ApplicationCommandManager` at all (see `shortcuts.md`'s reasoning) — each

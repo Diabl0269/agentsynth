@@ -153,7 +153,6 @@ public:
         if (toggleLibraryButton.onClick)
             toggleLibraryButton.onClick();
     }
-#if SYNTH_ENABLE_TIMELINE
     void simulateToggleTimelineClick() {
         if (toggleTimelineButton.onClick)
             toggleTimelineButton.onClick();
@@ -164,7 +163,6 @@ public:
     // onTimelineFeatureToggled for the live-wiring call site.
     void applyTimelineFeatureEnabled(bool enabled);
     bool isTimelineFeatureEnabledForTest() const { return timelineFeatureEnabled; }
-#endif
 
     /** The Preferences "Natural scrolling" key. DEFAULT TRUE (natural) — the value every scrolling
      *  surface in the app already behaves as, so an install that never opens Preferences is
@@ -340,8 +338,7 @@ private:
     void aiPatchAboutToApply() override;
     void aiPatchApplied() override;
 
-    // ---- Timeline app wiring. Every body below is #if SYNTH_ENABLE_TIMELINE inside;
-    //      a flag-OFF build compiles them as no-ops so no call site needs its own #if. ----
+    // ---- Timeline app wiring. ----
 
     // TimelineDoc::Listener — fired once per effective doc mutation. THE publish seam: republishes
     // the timeline to the audio thread and rebuilds the automation recorder's lane bindings.
@@ -436,19 +433,11 @@ private:
     // call it unconditionally.
     void commitAudioRecording();
 
-    // RAII suspension of automation capture for the duration of a programmatic rewrite. Compiles to
-    // an empty object in a SYNTH_ENABLE_TIMELINE=OFF build, so call sites stay #if-free.
+    // RAII suspension of automation capture for the duration of a programmatic rewrite.
     struct ProgrammaticApplyScope {
         explicit ProgrammaticApplyScope(MainComponent& owner)
-#if SYNTH_ENABLE_TIMELINE
-            : guard(owner.automationRecorder)
-#endif
-        {
-            juce::ignoreUnused(owner);
-        }
-#if SYNTH_ENABLE_TIMELINE
+            : guard(owner.automationRecorder) {}
         synth::AutomationRecorder::ScopedProgrammaticApply guard;
-#endif
     };
 
     // ---- TrackHeaderHost ----
@@ -463,6 +452,12 @@ private:
     void addAudioTrack() override;
     std::vector<synth::ui::TrackHeaderHost::PluginLaneOption> getAvailablePluginLaneOptions() const override;
     synth::LaneId addPluginAutomationLane(const synth::ui::TrackHeaderHost::PluginLaneOption& option) override;
+    // The colour picker's favourites shelf persists here — the only TrackHeaderHost override
+    // that isn't graph/timeline plumbing (see ColourPickerPopup.h).
+    juce::ApplicationProperties* getAppProperties() override { return &appProperties; }
+    std::vector<synth::ui::TrackHeaderHost::MidiDestinationOption>
+    getMidiDestinationOptions(synth::TrackId forTrack) override;
+    void setMidiDestinationConnected(synth::TrackId forTrack, juce::uint32 nodeUid, bool connect) override;
 
     // Creates a "Track In" node with a fresh uuid at the canvas' left edge, wires it to the single
     // MIDI instrument in the patch when there is exactly one, and returns its uuid (empty on
@@ -556,9 +551,6 @@ private:
         juce::Rectangle<int> timelineBounds; // empty rect when hidden
         juce::Rectangle<int> graphEditorBounds;
     };
-    // timelineVisible is always accepted (even in a SYNTH_ENABLE_TIMELINE=OFF build, callers pass
-    // the always-false isTimelineVisible member) so every call site has one uniform signature;
-    // the carve driven by it is what's actually gated, inside the .cpp.
     PanelBoundsResult computePanelBounds(bool libVisible, bool aiVisible, bool timelineVisible) const;
 
     // ---- Timeline panel height (user-resizable, persisted) ----
@@ -599,8 +591,7 @@ private:
     // it: a TimelineSnapshotAction sitting on the undo stack holds a reference to this doc (see
     // AppUndoManager::recordTimelineChange), and members are destroyed in reverse declaration
     // order. The recorder likewise must not be destroyed while an undo action could still commit
-    // into it. Both members exist in a SYNTH_ENABLE_TIMELINE=OFF build too (inert: nothing ever
-    // mutates the doc, and the recorder is never attached) — only the wiring is gated.
+    // into it.
     synth::TimelineDoc timelineDoc;
     synth::AutomationRecorder automationRecorder;
     // The app's one live MidiRecorder — no lifetime constraint against undoManager the way
@@ -648,11 +639,8 @@ private:
     juce::DrawableButton toggleMinimapButton{"toggleMinimap", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton autoArrangeButton{"autoArrange", juce::DrawableButton::ImageAboveTextLabel};
     juce::DrawableButton toggleLibraryButton{"toggleLibrary", juce::DrawableButton::ImageAboveTextLabel};
-#if SYNTH_ENABLE_TIMELINE
-    // Timeline panel toggle. Gated so a -DSYNTH_ENABLE_TIMELINE=OFF build has no button,
-    // no toolbar slot wiring, and no command — see ToolbarComponent::Slot::ToggleTimeline.
+    // Timeline panel toggle — see ToolbarComponent::Slot::ToggleTimeline.
     juce::DrawableButton toggleTimelineButton{"toggleTimeline", juce::DrawableButton::ImageAboveTextLabel};
-#endif
     juce::DrawableButton themeToggleButton{"toggleTheme", juce::DrawableButton::ImageAboveTextLabel};
 
     std::unique_ptr<juce::FileChooser> fileChooser;
@@ -682,19 +670,14 @@ private:
     bool isLibraryVisible{true};
     bool isAlignmentGuidesEnabled{true}; // NEW: default TRUE for backward compatibility
 
-    // Bottom-docked timeline panel shell. The member exists unconditionally (harmless
-    // when SYNTH_ENABLE_TIMELINE is OFF — never made visible, never carved into the layout);
-    // only the toolbar button/command/carve that could ever flip isTimelineVisible are gated.
+    // Bottom-docked timeline panel shell.
     synth::ui::TimelinePanelComponent timelinePanel;
     bool isTimelineVisible = false;
-#if SYNTH_ENABLE_TIMELINE
     // The user-facing kill switch (Preferences: "Show timeline (experimental)"), distinct from
     // isTimelineVisible above (whether the panel happens to be docked open). DEFAULT TRUE — must
-    // not change behaviour for an existing install that has never opened Preferences. Only ever
-    // read/written on this #if path: a flag-OFF build has no toolbar button/command/transport key
-    // to gate in the first place. See applyTimelineFeatureEnabled().
+    // not change behaviour for an existing install that has never opened Preferences. See
+    // applyTimelineFeatureEnabled().
     bool timelineFeatureEnabled = true;
-#endif
     // The panel's docked height. Resolved in initialiseCommon() from kTimelinePanelHeightKey (theme
     // metric when absent) and moved by the panel's top-edge drag; 0 only before that, and forever in
     // a flag-OFF build, where nothing carries it into a layout.
@@ -706,9 +689,7 @@ private:
     // The feedback-guard re-arm latch. True from a guard trip until the explicit reset
     // gesture — the armed-Audio-track set going from NONE armed to at least one armed again (disarm
     // then re-arm). While true, the poll keeps input monitoring off even though an Audio track is
-    // still armed; simply staying armed must not re-enable it. Exists unconditionally (inert with
-    // the flag off, like every member in this block); only the poll that writes it is
-    // #if SYNTH_ENABLE_TIMELINE.
+    // still armed; simply staying armed must not re-enable it.
     bool feedbackGuardLatched_ = false;
     // Previous poll's "is any Audio-kind track armed" result — the FALSE -> TRUE edge is what
     // clears the latch above.

@@ -25,8 +25,6 @@
 #include <memory>
 #include <vector>
 
-#if SYNTH_ENABLE_TIMELINE
-
 using synth::BounceExporter;
 using synth::BounceOptions;
 using synth::BounceResult;
@@ -789,5 +787,3 @@ TEST(BounceExporterTest, CancellingDuringTheTailStopsTheRender) {
     const auto after = f.engine.getTransport().getPositionSnapshot();
     EXPECT_FALSE(after.playing);
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

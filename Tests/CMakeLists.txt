@@ -143,6 +143,10 @@ add_executable(Tests
     TimelineTrackHeaderTests.cpp
     TimelineClipLaneTests.cpp
     PianoRollTests.cpp
+    MusicalScaleTests.cpp
+    NoteColourTests.cpp
+    MidiDestinationPickerTests.cpp
+    ModuleMidiFlagsTests.cpp
     FocusArbitrationTests.cpp
     AutomationEditorTests.cpp
     TimelineTransportBarTests.cpp

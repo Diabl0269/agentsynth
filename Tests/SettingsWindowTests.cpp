@@ -6,6 +6,8 @@
 #include "../Source/Auth/InMemoryTokenStore.h"
 #include "../Source/ShortcutManager.h"
 #include "../Source/UI/AIChatComponent.h"
+#include "../Source/UI/AppearanceSettingsTab.h"
+#include "../Source/UI/NoteColour.h"
 #include "../Source/UI/PreferencesSettingsTab.h"
 #include "../Source/UI/SettingsWindow.h"
 #include "../Source/UI/ShortcutsSettingsTab.h"
@@ -610,4 +612,199 @@ TEST_F(SettingsWindowTest, TogglingPromptLearningCheckboxCallsAccountServiceSett
 
     ASSERT_TRUE(waitUntil([&] { return server.promptLearningPutCalls() >= 1; }))
         << "toggling the checkbox never called into AccountService::setPromptLearningOptIn()";
+}
+
+// ============================================================================
+// Appearance tab: piano-roll note-colour swatches (12 pitch-class overrides — see
+// AppearanceSettingsTab.h's "Piano roll note colours" section). Constructed directly against its
+// own two deps (a ThemeManager + an ApplicationProperties) rather than through the full
+// SettingsWindow, the same "build only what the piece under test needs" idiom the AI-tab tests
+// above use with aiService/aiChatComponent.
+// ============================================================================
+
+namespace {
+// Same isolated-PropertiesFile idiom as TimelinePanelTests.cpp's IsolatedPropsGuard (follow-
+// playhead persistence test): delete the underlying file before AND after, so a note-colour
+// override saved by one run/test can never leak into another and this never touches the app's
+// real settings file.
+struct IsolatedAppearancePropsGuard {
+    juce::PropertiesFile::Options opts;
+    juce::ApplicationProperties props;
+
+    explicit IsolatedAppearancePropsGuard(const char* name) {
+        opts.applicationName = name;
+        opts.folderName = name;
+        opts.filenameSuffix = "settings";
+        opts.osxLibrarySubFolder = "Application Support";
+        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+
+        {
+            juce::ApplicationProperties initial;
+            initial.setStorageParameters(opts);
+            if (auto* s = initial.getUserSettings())
+                s->getFile().deleteFile();
+        }
+        props.setStorageParameters(opts);
+    }
+
+    ~IsolatedAppearancePropsGuard() {
+        if (auto* s = props.getUserSettings())
+            s->getFile().deleteFile();
+    }
+};
+} // namespace
+
+TEST(AppearanceSettingsTabNoteColourTest, SetNoteSwatchColourRoundTripsAndMarksItOverridden) {
+    IsolatedAppearancePropsGuard guard("Agent Synth Appearance Note Colour Test 1");
+    synth::theme::ThemeManager themeManager;
+    AppearanceSettingsTab tab(themeManager, guard.props);
+
+    const int pitchClass = 3; // D#
+    const auto colour = juce::Colour(0xffAA33CCu);
+    ASSERT_FALSE(tab.isNoteSwatchOverridden(pitchClass)) << "nothing pinned yet";
+
+    tab.setNoteSwatchColour(pitchClass, colour);
+
+    EXPECT_TRUE(tab.isNoteSwatchOverridden(pitchClass));
+    EXPECT_EQ(tab.getNoteSwatchColour(pitchClass), colour);
+}
+
+TEST(AppearanceSettingsTabNoteColourTest, OverrideRoundTripsThroughLoadNoteColourOverridesOnTheSamePropertiesFile) {
+    IsolatedAppearancePropsGuard guard("Agent Synth Appearance Note Colour Test 2");
+    synth::theme::ThemeManager themeManager;
+    AppearanceSettingsTab tab(themeManager, guard.props);
+
+    const int pitchClass = 7; // G
+    const auto colour = juce::Colour(0xff11EE55u);
+    tab.setNoteSwatchColour(pitchClass, colour);
+
+    ASSERT_NE(guard.props.getUserSettings(), nullptr);
+    const auto loaded = synth::ui::loadNoteColourOverrides(*guard.props.getUserSettings());
+    ASSERT_TRUE(loaded.perPitchClass[(size_t)pitchClass].has_value())
+        << "setNoteSwatchColour must persist through synth::ui::saveNoteColourOverrides";
+    EXPECT_EQ(*loaded.perPitchClass[(size_t)pitchClass], colour);
+}
+
+// Regression test for the "Piano roll notes" swatch section rendering as nothing in the actual
+// Settings window: goes through the REAL instantiation path (SettingsWindow, not a directly
+// constructed AppearanceSettingsTab) at the REAL launch size MainComponent opens the dialog at
+// (settingsComp->setSize(500, 450) in MainComponent.cpp) — the size at which the bug reproduced.
+// Every earlier test above constructs AppearanceSettingsTab directly against its own two deps and
+// never lays it out at a size small enough to starve the trailing sections of space, which is
+// exactly why they all passed while the section was invisible in the running app.
+TEST_F(SettingsWindowTest, AppearanceTabPianoRollNoteColoursSectionHasRealBoundsAtLaunchSize) {
+    SettingsWindow settingsWindow(deviceManager, appProperties, *aiService, *aiChatComponent, shortcutManager,
+                                  themeManager, nullptr);
+    settingsWindow.setSize(500, 450); // matches MainComponent's real Settings dialog size exactly
+    settingsWindow.resized();
+
+    // TabbedComponent::resized() lays out EVERY tab's content component, not just the current one
+    // (see juce_TabbedComponent.cpp), so the Appearance tab is already laid out without switching
+    // to it first — same assumption AITabPersistsProviderSetting etc. make about tab index 1 above.
+    auto* appearanceTab = dynamic_cast<AppearanceSettingsTab*>(settingsWindow.getTabs().getTabContentComponent(4));
+    ASSERT_NE(appearanceTab, nullptr);
+
+    const auto titleBounds = appearanceTab->getNoteColoursTitleBoundsForTest();
+    const auto swatchBounds = appearanceTab->getNoteSwatchRowBoundsForTest();
+    const auto resetButtonBounds = appearanceTab->getResetNoteColoursButtonBoundsForTest();
+
+    EXPECT_FALSE(titleBounds.isEmpty()) << "\"Piano Roll Notes\" header got a zero-area bounds — "
+                                           "present via addAndMakeVisible but nothing to paint";
+    EXPECT_FALSE(swatchBounds.isEmpty()) << "note-colour swatch row got a zero-area bounds — this "
+                                            "is the reported bug: the section exists in the tree "
+                                            "but has no area to paint or click";
+    EXPECT_FALSE(resetButtonBounds.isEmpty()) << "\"Reset Note Colours\" button got a zero-area bounds";
+
+    // Non-empty bounds alone would also pass for a bounds that overflows past whatever area is
+    // actually reachable (e.g. clipped by a Viewport that never grew to cover it) — so also check
+    // each section's bottom edge falls inside the SCROLLABLE content area, not just that its
+    // Rectangle happens to have positive width/height.
+    const int contentHeight = appearanceTab->getContentHeightForTest();
+    EXPECT_LE(titleBounds.getBottom(), contentHeight);
+    EXPECT_LE(swatchBounds.getBottom(), contentHeight);
+    EXPECT_LE(resetButtonBounds.getBottom(), contentHeight);
+}
+
+// ============================================================================
+// Appearance tab: theme-gallery wheel bubbling (bug: "vertical scroll only sometimes works").
+//
+// juce::ListBox::mouseWheelMove (juce_ListBox.cpp) consumes the wheel unconditionally whenever its
+// own vertical scrollbar is merely VISIBLE, with no "did this actually move the list" check the
+// way juce::Viewport's own wheel handling has — so a plain wheel gesture anywhere over the theme
+// gallery (a ListBox nested inside this tab's own taller Viewport) never reached the outer
+// settings page, however far the list itself already was from its own top/bottom. See
+// AppearanceSettingsTab::ThemeListBox.
+// ============================================================================
+
+TEST(AppearanceSettingsTabScrollTest, WheelOverAThemeListAlreadyAtItsScrollLimitBubblesToTheOuterViewport) {
+    IsolatedAppearancePropsGuard guard("Agent Synth Appearance Scroll Test 1");
+    synth::theme::ThemeManager themeManager;
+    AppearanceSettingsTab tab(themeManager, guard.props);
+    tab.setSize(500, 450); // matches MainComponent's real Settings dialog size (see the launch-size test above)
+    tab.resized();
+
+    ASSERT_FALSE(tab.getThemeListBoundsForTest().isEmpty());
+    ASSERT_TRUE(tab.isThemeListScrollbarVisibleForTest())
+        << "test premise: the built-in theme gallery needs its own scrollbar at this row height/box height";
+
+    // Push the list's OWN scroll to its end -- what a fast flick over the list would do. Each call
+    // is a SEPARATE wheel event, exactly like a real trackpad gesture. Stop as soon as a flick no
+    // longer moves the list: every over-limit flick bubbles into the OUTER viewport (the behaviour
+    // under test), and 30 of those would drive the outer to ITS max too, leaving the final
+    // assertion below no room to observe movement.
+    for (int i = 0; i < 30; ++i) {
+        const int before = tab.getThemeListScrollPositionForTest();
+        tab.simulateWheelOverThemeListForTest(-1.0f);
+        if (tab.getThemeListScrollPositionForTest() == before)
+            break;
+    }
+    const int listPositionAtLimit = tab.getThemeListScrollPositionForTest();
+    ASSERT_GT(listPositionAtLimit, 0) << "test premise: the list actually scrolled from these wheel gestures";
+
+    const int outerScrollBefore = tab.getContentScrollYForTest();
+    tab.simulateWheelOverThemeListForTest(-1.0f); // one more -- the list has nowhere further to go
+    EXPECT_EQ(tab.getThemeListScrollPositionForTest(), listPositionAtLimit)
+        << "the list itself is already at its limit in this direction";
+    EXPECT_GT(tab.getContentScrollYForTest(), outerScrollBefore)
+        << "a wheel gesture over an already-fully-scrolled theme list must reach the tab's own "
+           "Viewport instead of doing nothing -- this is the reported bug";
+}
+
+TEST(AppearanceSettingsTabScrollTest, WheelOverTheThemeListStillScrollsItWhenNotAtTheLimit) {
+    IsolatedAppearancePropsGuard guard("Agent Synth Appearance Scroll Test 2");
+    synth::theme::ThemeManager themeManager;
+    AppearanceSettingsTab tab(themeManager, guard.props);
+    tab.setSize(500, 450);
+    tab.resized();
+    ASSERT_TRUE(tab.isThemeListScrollbarVisibleForTest());
+
+    ASSERT_EQ(tab.getThemeListScrollPositionForTest(), 0);
+    const int outerScrollBefore = tab.getContentScrollYForTest();
+    tab.simulateWheelOverThemeListForTest(-1.0f);
+
+    EXPECT_GT(tab.getThemeListScrollPositionForTest(), 0) << "the list still scrolls normally when it can";
+    EXPECT_EQ(tab.getContentScrollYForTest(), outerScrollBefore)
+        << "the outer page must NOT also move while the nested list can still take the gesture";
+}
+
+TEST(AppearanceSettingsTabNoteColourTest, ResetNoteSwatchAndResetAllFallBackToTheActiveThemesNoteFill) {
+    IsolatedAppearancePropsGuard guard("Agent Synth Appearance Note Colour Test 3");
+    synth::theme::ThemeManager themeManager;
+    AppearanceSettingsTab tab(themeManager, guard.props);
+    const auto themeNoteFill = themeManager.getActiveTheme().colors.noteFill;
+
+    // A single reset falls back that ONE pitch class, leaving the others untouched.
+    tab.setNoteSwatchColour(0, juce::Colour(0xffFF0000u));
+    tab.setNoteSwatchColour(1, juce::Colour(0xff00FF00u));
+    tab.resetNoteSwatch(0);
+    EXPECT_FALSE(tab.isNoteSwatchOverridden(0));
+    EXPECT_EQ(tab.getNoteSwatchColour(0), themeNoteFill);
+    EXPECT_TRUE(tab.isNoteSwatchOverridden(1)) << "resetNoteSwatch must not touch other pitch classes";
+
+    // resetAllNoteColours() clears every remaining override, including the one just re-set above.
+    tab.resetAllNoteColours();
+    for (int pitchClass = 0; pitchClass < AppearanceSettingsTab::kNoteSwatchCount; ++pitchClass) {
+        EXPECT_FALSE(tab.isNoteSwatchOverridden(pitchClass));
+        EXPECT_EQ(tab.getNoteSwatchColour(pitchClass), themeNoteFill);
+    }
 }

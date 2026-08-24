@@ -174,6 +174,11 @@ public:
     int getVisibleInputPortCount() const override { return splitAudioJackCount() + 1; }
     int getVisibleOutputPortCount() const override { return splitAudioJackCount(); }
     int rightAudioLegChannel() const override { return kRightBase; }
+
+    // Pure audio/CV processor — processBlock's midiMessages parameter is unused.
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+
     ModuleType getModuleType() const override { return ModuleType::VCA; }
 
     LogicalPort mapInputChannel(int raw) const override {

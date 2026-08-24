@@ -65,9 +65,22 @@ shorthand, each digit doubled, full alpha).
 | `modRingPositive` | `#FF00E5FF` | Modulation ring, positive modulation |
 | `modRingNegative` | `#FFFF6E00` | Modulation ring, negative modulation |
 | `toolActive` | `#FF00D1FF` | Timeline edit-tool strip — active-tool button highlight. Defaults to the same literal as `accent`'s Obsidian default (no token in this table dynamically re-reads another token's *live* value at construction — `accent2` is the closest precedent and it likewise just repeats `accent`'s literal — so this is a static default, not a derived one) |
+| `noteFill` | `#FFB48EF5` | Piano-roll note body, unselected — see [§12 Note colours](#12-note-colours). Obsidian's default starts from the same literal as `midiWire` |
+| `noteBorder` | `#FF4A3B75` | Piano-roll note outline, unselected — deliberately a distinct literal, not a `.darker()` derivation of `noteFill` |
+| `noteSelected` | `#FF00D1FF` | Piano-roll note border/highlight when selected — defaults to `accent`'s literal |
+| `noteOutOfScale` | `#FFFF6B57` | Piano-roll note fill when Scale Assist flags it outside the active scale — a warning colour, wins over any per-pitch-class override or `noteFill` |
+| `pianoKeyWhite` | `#FFEDEFF3` | Piano-roll keys column — white-key fill |
+| `pianoKeyBlack` | `#FF15171C` | Piano-roll keys column — black-key fill |
+| `trackMuteOn` | `#FFFFA033` | Timeline track header — `M` button, active state |
+| `trackSoloOn` | `#FFFFD23D` | Timeline track header — `S` button, active state |
+| `trackArmOn` | `#FFE5484D` | Timeline track header — `R` (arm/record) button, active state |
 
 **Required minimum:** `bg0`, `surface`, `accent`, `textPrimary`, `audioWire`, `modWire`.
-All other colour tokens are optional and fall back to the Obsidian defaults listed above.
+All other colour tokens are optional and fall back to the Obsidian defaults listed above — this
+includes all nine tokens above: `ThemeLoader::parseTheme` treats each as an independent optional
+key (`parseColourKey(..., required=false, defaults.<token>)`), so a theme JSON written before
+these tokens existed keeps loading unchanged and simply renders piano-roll notes and track M/S/R
+buttons in Obsidian's colours until the theme author opts in.
 
 #### `cableCategory` — cable colours by module category
 
@@ -194,7 +207,7 @@ Agent Synth uses SVG `Drawable` icons — **not** an icon or glyph font. This av
 
 ### Icon enum
 
-36 icons are defined in `synth::theme::Icon` (in `Source/UI/Theme/IconLibrary.h`):
+40 icons are defined in `synth::theme::Icon` (in `Source/UI/Theme/IconLibrary.h`):
 
 ```
 TransportPlay    TransportStop    ActionUndo       ActionRedo
@@ -207,6 +220,7 @@ WaveformSine     WaveformSaw      WaveformSquare   WaveformTriangle
 ToggleMinimap    ModuleDualIO
 ToolSelect       ToolSplit        ToolGlue         ToolErase
 ToolMute         ToolDraw
+TrackMidi        TrackAudio       TrackAutomation  FollowPlayhead
 ```
 
 **`Icon::TransportPlay` is scaffolding** — the SVG asset is present and the enum value exists, but no `DrawableButton` is wired to it. It is tinted to `textMuted` and reserved for a future transport affordance.
@@ -218,6 +232,10 @@ The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `W
 **`Icon::ModuleDualIO`** (index 29) is the module-header toggle that splits a collapsed `"Audio"` jack into separate Left/Right jacks. There is no universal stereo-split glyph; this one is a Y-fork into two jacks. The button's tooltip carries the Dual I/O on/off copy. See [`fx_modules.md` § Stereo I/O](fx_modules.md#stereo-io-dual-io-toggle).
 
 **`Icon::ToolSelect` … `Icon::ToolDraw`** (indices 30–35) are the six glyphs for the timeline edit-tool strip (`synth::ui::EditTool` — Select, Split, Glue, Erase, Mute, Draw; see [`Source/UI/EditTool.h`](../Source/UI/EditTool.h)): a pointer arrow, scissors, a glue bottle, an angled eraser block, a crossed-out speaker (visually distinct from `ModuleMute` — that one is an outlined speaker with a small corner X; this one is a solid-filled speaker with a single strike-through slash), and a pencil at ~45°. `Source/UI/ToolCursors.h`'s `makeToolCursor()` renders these same tinted Drawables into the custom per-tool mouse cursor shown over the clip lanes / piano roll, rather than shipping a second cursor-only asset — see that header's doc comment for the per-tool hotspot table.
+
+**`Icon::TrackMidi`, `Icon::TrackAudio`, `Icon::TrackAutomation`** (indices 36–38) are the timeline track header's kind-badge glyphs — one per `synth::TrackKind`, drawn in place of the old `"MIDI"`/`"AUD"`/`"AUTO"` text pill when a themed `AppLookAndFeel` and the asset library are both present (`TimelineTrackHeaderComponent::kindBadgeIcon`; see [`layout.md` §16 TL5-3](layout.md#tl5-3-track-headers-binding-chips-add-track)). The text pill remains the fallback in a headless build or when the icon asset is missing — the badge is identity chrome either way, never a control.
+
+**`Icon::FollowPlayhead`** (index 39) is the toolbar-style toggle button next to the timeline panel's snap selector that page-flips the view to keep the playhead on screen while playing — see [`layout.md` §16](layout.md#tl5-2-ruler-grid-zoomscroll-snap-loop-brace).
 
 ### Token → tint map
 
@@ -234,6 +252,8 @@ The four **waveform icons** (`WaveformSine`, `WaveformSaw`, `WaveformSquare`, `W
 | `ToolSelect` … `ToolDraw` (edit-tool strip) | `textPrimary` — active-tool highlight is a separate `toolActive`-coloured button state, not a different icon tint |
 | Category icons (`CatSources` … `CatUtility`) | `textMuted` |
 | `WaveformSine`, `WaveformSaw`, `WaveformSquare`, `WaveformTriangle` | `textPrimary` (consumer: Oscillator waveform combo via `drawPopupMenuItem`/`drawComboBox`) |
+| `TrackMidi`, `TrackAudio`, `TrackAutomation` | `textMuted` — quiet identity chrome, same convention as the category icons above |
+| `FollowPlayhead` | `textPrimary` — a toolbar-style toggle, so it follows the toolbar action set's base tint rather than the muted track-badge one |
 
 `retintIcons()` is called from `applyTheme()` — it is part of the single re-skin pass triggered by every theme switch.
 
@@ -652,3 +672,56 @@ the tab would mean the canvas ignored the user's saved colours until they went l
 `resolveCableColour()` applies `kBypassedCableAlpha` (0.3) to a bypassed modulation cable, after
 mode and overrides. `resolveCableBaseColour()` is the same resolution *without* the bypass alpha —
 that is what the settings swatches render, so a pinned colour is shown at full strength.
+
+## 12. Note colours
+
+Piano-roll note bodies are coloured through a single resolver, `synth::ui::resolveNoteColour()`
+in `Source/UI/NoteColour.h` — the note-colour analogue of §11's `resolveCableColour()`. Nothing in
+`PianoRollComponent::paint()` picks a note fill or border directly; the resolver is a pure
+function of `(theme colours, pitch, velocity, selected, muted, outOfScale, per-pitch-class
+overrides)` with no GUI state, so it is headless-testable on its own (`Tests/NoteColourTests.cpp`).
+
+**Precedence**, highest first: an out-of-scale note (Scale Assist's pitch-visibility/quantize
+context) always forces `noteOutOfScale` — a warning wins over any colour choice, including a
+per-pitch-class override; otherwise a per-pitch-class override wins over the theme's `noteFill`;
+otherwise `noteFill`. Velocity brightness and the selected/muted treatments then apply on top of
+whichever fill won.
+
+**Per-pitch-class overrides** are a sparse layer, exactly like the cable-colour override layer in
+§11: `synth::ui::NoteColourOverrides` holds up to 12 entries, indexed by `pitch % 12` (0 = C … 11 =
+B) rather than by MIDI note number, so one override recolours a pitch class across every octave.
+An unset entry means "follow the theme's `noteFill`", so a theme switch still moves any pitch
+class the user has not explicitly pinned. They persist under the single properties key
+`"pianoRollNoteColourOverrides"` (12 comma-separated slots, empty or a `juce::Colour::toString()`
+value each) via `loadNoteColourOverrides`/`saveNoteColourOverrides` — a malformed slot count is
+treated as "no overrides at all" rather than partially applied, so one corrupted slot can never
+take the other eleven down with it.
+
+**The UI** is the Appearance tab's "Piano Roll Notes" swatch row (`AppearanceSettingsTab`, one
+12-cell row keyed C…B): left-click opens a `synth::ui::ColourPickerPopup` (§ below), right-click
+resets that pitch class's override. An un-overridden swatch draws hollow/dimmed rather than
+filled-with-a-ring — unlike a cable-colour swatch, a note-colour swatch has no "always has a
+value" theme token backing every entry, so "not set, currently showing the theme's `noteFill`"
+has to read as visually distinct from "set to a colour that happens to be close to `noteFill`".
+"Reset all" clears every pitch class in one action.
+
+## 13. Colour picker popup
+
+`synth::ui::ColourPickerPopup` (`Source/UI/ColourPickerPopup.h`) is the one full colour picker in
+the app — a `juce::ColourSelector` plus a favourites shelf — shared by the timeline track header's
+colour swatch and the Appearance tab's note-colour swatches (§12) rather than each rolling its own
+`juce::CallOutBox` + `ColourSelector`. Favourites persist under the single properties key
+`"favouriteColoursArgb"` (comma-separated `AARRGGBB` hex; a malformed token is dropped rather than
+corrupting the whole list) via a caller-owned `juce::PropertiesFile*` — `nullptr` is legal and
+means "in-memory only for this popup instance", which is what keeps the class usable from a
+headless test with no `ApplicationProperties` at all. A first run with no persisted favourites
+seeds the shelf from the existing track palette so it is never empty on a fresh install.
+
+The popup exposes two callbacks: a live-preview one (fired on every drag/favourite click, writing
+straight into the caller's target with no undo step) and a commit-once one (fired when the popup
+closes, deciding the final colour). The track-header colour swatch is the reference caller for the
+commit-once half's undo semantics: closing with no net change restores the original colour and
+records nothing; closing on a different colour first silently restores the original (outside any
+undo-recorded mutation) and then performs the real edit as the ONE undo step whose undo target is
+the original colour — so dragging through a dozen preview colours before landing on a choice costs
+exactly one `Cmd+Z`, not a dozen.

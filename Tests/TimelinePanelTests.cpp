@@ -3,28 +3,21 @@
 // Bottom-docked timeline panel shell + toolbar toggle + rebindable shortcut + slide animation.
 //
 // Four groups of coverage:
-//   1. synth::ui::TimelinePanelComponent in isolation — pure layout/paint, no MainComponent, no
-//      SYNTH_ENABLE_TIMELINE gating (the component itself always compiles; only MainComponent's
-//      use of it is gated).
-//   2. MainComponent integration — toggle, persistence, carve geometry. Gated
-//      #if SYNTH_ENABLE_TIMELINE because the toggle button/command/carve compile out entirely
-//      when the flag is OFF (see MainComponent.h/.cpp). HiddenByDefaultAndCarvesNothing is the
-//      exception: it asserts the flag-OFF invariant too (nothing timeline-related visible or
-//      carved), so it is deliberately NOT gated.
+//   1. synth::ui::TimelinePanelComponent in isolation — pure layout/paint, no MainComponent.
+//   2. MainComponent integration — toggle, persistence, carve geometry. HiddenByDefaultAndCarves-
+//      Nothing asserts the default-hidden state (nothing timeline-related visible or carved).
 //   3. Ruler/grid/zoom/scroll/snap/loop-brace — synth::ui::TimelineRulerComponent and the panel's
 //      wheel handling and snap combo, driven with a raw synth::TransportService (never through
-//      MainComponent/AudioEngine), so — same reasoning as group 1 — none of it is gated either.
+//      MainComponent/AudioEngine).
 //   4. Track headers + the app-level timeline wiring MainComponent owns (publish-on-mutation, the
 //      compound add-track flow, reconciliation after an undo/redo restore, .agsproj round trips,
-//      recorder wiring). The panel-level header tests are ungated like groups 1–3; everything that
-//      needs MainComponent's wiring is #if SYNTH_ENABLE_TIMELINE, since that wiring compiles out.
-//      The header ROW itself is covered separately, against a stub host, in
+//      recorder wiring). The header ROW itself is covered separately, against a stub host, in
 //      TimelineTrackHeaderTests.cpp.
-//   5. The resizable panel height — the panel's top-edge grab strip (ungated, panel level) and
+//   5. The resizable panel height — the panel's top-edge grab strip (panel level) and
 //      MainComponent's ownership of the value: default from the theme metric, clamp, live relayout,
-//      persistence (gated, like the rest of group 2).
+//      persistence.
 //   6. Authoring gestures reaching the panel — a double-click on empty MIDI lane space creates a
-//      clip and opens the piano roll on it (ungated, panel level).
+//      clip and opens the piano roll on it (panel level).
 
 #include "../Source/AI/AIProvider.h"
 #include "../Source/AI/AIStateMapper.h"
@@ -32,10 +25,14 @@
 #include "../Source/ProjectBundle.h"
 #include "../Source/Timeline/TimelineDoc.h"
 #include "../Source/Transport/TransportService.h"
+#include "../Source/UI/EdgeAutoScroll.h"
+#include "../Source/UI/Theme/AppLookAndFeel.h"
+#include "../Source/UI/Theme/BuiltInThemes.h"
 #include "../Source/UI/TimelinePanelComponent.h"
 #include "../Source/UI/TrackColour.h"
 #include "../Source/UserSettings.h"
 #include "MainComponent.h"
+#include <algorithm>
 #include <gtest/gtest.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -159,8 +156,6 @@ TEST_F(TimelinePanelIntegrationTest, HiddenByDefaultAndCarvesNothing) {
     EXPECT_EQ(mc.getGraphEditor().getBounds().getBottom(), mc.getStatusBar().getBounds().getY());
 }
 
-#if SYNTH_ENABLE_TIMELINE
-
 TEST_F(TimelinePanelIntegrationTest, ToggleCarvesFullWidthAboveStatusBar) {
     MainComponent mc(std::make_unique<MockProviderTL>());
     mc.setSize(1600, 900);
@@ -268,8 +263,6 @@ TEST_F(TimelinePanelIntegrationTest, CmdTIsInertWhileFeatureDisabled) {
     EXPECT_NE(playbackInfo.flags & juce::ApplicationCommandInfo::isDisabled, 0)
         << "togglePlayback (Space) must be inactive while the timeline feature preference is off";
 }
-
-#endif // SYNTH_ENABLE_TIMELINE
 
 // ============================================================================
 // 3. Ruler/grid/zoom/scroll/snap/loop-brace.
@@ -1287,10 +1280,7 @@ TEST(TimelinePanelTrackHeaderTest, HeaderListScrollsWhenTracksOverflow) {
     EXPECT_TRUE(viewport.isVerticalScrollBarShown());
 }
 
-#if SYNTH_ENABLE_TIMELINE
-
-// MainComponent owns the doc, the recorder and the reconcile hooks — all of which compile out with
-// the flag off, hence the gate (same rule as group 2 above).
+// MainComponent owns the doc, the recorder and the reconcile hooks.
 class TimelineAppWiringTest : public TimelinePanelIntegrationTest {
 protected:
     // An empty canvas plus `polyMidiCount` Poly MIDI modules, and a clean undo stack, so a test's
@@ -1829,8 +1819,6 @@ TEST_F(TimelineAppWiringTest, LoopSelectionKeySetsTransportLoop) {
     EXPECT_DOUBLE_EQ(snap.loopEndPpq, 14.0);
 }
 
-#endif // SYNTH_ENABLE_TIMELINE
-
 // paint() must not crash with a null transport (default-constructed ruler never had setTransport()
 // called), at both a very zoomed-out and a very zoomed-in pixelsPerBeat.
 TEST(TimelineRulerComponentTest, SnapshotSmokeAtTwoZoomsWithNullTransport) {
@@ -2012,8 +2000,6 @@ TEST(TimelinePanelResizeTest, InternalLayoutHoldsAtDoubleHeight) {
     EXPECT_EQ(img.getHeight(), 440);
 }
 
-#if SYNTH_ENABLE_TIMELINE
-
 namespace {
 // Leaves a height in the shared settings file the way an earlier session would have — the same file
 // TimelinePanelIntegrationTest::resetPanelKeys() clears the key from.
@@ -2144,12 +2130,10 @@ TEST_F(TimelinePanelIntegrationTest, HidingThePanelReturnsTheCanvasAndReshowingK
     EXPECT_EQ(mc.getTimelinePanel().getBounds().getBottom(), mc.getStatusBar().getBounds().getY());
 }
 
-#endif // SYNTH_ENABLE_TIMELINE
-
 // ============================================================================
-// 6. Authoring gestures reaching the panel (ungated, like groups 1/3/4 — the panel itself always
-//    compiles). The lane-area half of the gesture (snapping, length, one undo step) lives in
-//    Tests/TimelineClipLaneTests.cpp group 7; the import half in Tests/AssetManagerTests.cpp.
+// 6. Authoring gestures reaching the panel. The lane-area half of the gesture (snapping, length,
+//    one undo step) lives in Tests/TimelineClipLaneTests.cpp group 7; the import half in
+//    Tests/AssetManagerTests.cpp.
 // ============================================================================
 
 // The panel's onClipDoubleClicked -> openPianoRoll wiring has to cover the clip a double-click on
@@ -2362,6 +2346,47 @@ TEST(TimelinePanelComponentTest, PianoRollOpenInstallsTheRulerMappingOverride) {
     EXPECT_FALSE(panel.getRuler().hasMappingOverrideForTest());
 }
 
+// The override's OFFSET (not just its presence) has to track the scale-assist panel's width: the
+// roll's grid starts at leftGutterWidth(), which grows by kScalePanelWidth while that panel is
+// open, and PianoRollComponent::setScalePanelVisible's onHorizontalViewChanged fire (relayed by
+// TimelinePanelComponent's wiring) is what keeps the ruler's ticks/scrub hit-testing from sitting
+// 170px left of the grid whenever the panel is toggled open while the roll is already showing.
+TEST(TimelinePanelComponentTest, PianoRollOpenTracksTheScalePanelWidthInTheRulerOverride) {
+    synth::TimelineDoc doc;
+    synth::ui::TimelinePanelComponent panel;
+    panel.setTimelineDoc(&doc);
+    panel.setSize(1200, 320);
+
+    const auto trackId = doc.addTrack(synth::TrackKind::Midi, "Track 1");
+    const auto clipId = doc.addClip(trackId, 20.0, 4.0, "Clip");
+    ASSERT_TRUE(clipId.isValid());
+
+    panel.openPianoRoll(clipId);
+    ASSERT_TRUE(panel.isPianoRollOpen());
+    ASSERT_TRUE(panel.getRuler().hasMappingOverrideForTest());
+    EXPECT_EQ(panel.getRuler().getMappingOverrideOffsetForTest(), synth::ui::PianoRollComponent::kKeysColumnWidth)
+        << "panel closed: the offset is the keys gutter alone";
+
+    auto& roll = panel.getPianoRoll();
+    ASSERT_FALSE(roll.getScaleAssistPanel().isVisible()) << "closed by default";
+    const juce::Point<float> scaleButtonCentre((float)roll.getScaleButtonBounds().getCentreX(),
+                                               (float)roll.getScaleButtonBounds().getCentreY());
+
+    // The roll's mouseDown ignores anything but a left-button press, so the synthetic click has to
+    // carry the button modifier (unlike the ruler, which takes any press).
+    const juce::ModifierKeys leftButton(juce::ModifierKeys::leftButtonModifier);
+    roll.mouseDown(makeClickEvent(roll, scaleButtonCentre, leftButton)); // toggle the scale panel ON
+    ASSERT_TRUE(roll.getScaleAssistPanel().isVisible());
+    EXPECT_EQ(panel.getRuler().getMappingOverrideOffsetForTest(),
+              synth::ui::PianoRollComponent::kKeysColumnWidth + synth::ui::PianoRollComponent::kScalePanelWidth)
+        << "panel open: the offset grows by kScalePanelWidth";
+
+    roll.mouseDown(makeClickEvent(roll, scaleButtonCentre, leftButton)); // toggle it back OFF
+    ASSERT_FALSE(roll.getScaleAssistPanel().isVisible());
+    EXPECT_EQ(panel.getRuler().getMappingOverrideOffsetForTest(), synth::ui::PianoRollComponent::kKeysColumnWidth)
+        << "closing the panel must restore the narrower offset";
+}
+
 // ============================================================================
 // 7. The edit-tool strip + the clip clipboard/arrangement verbs the app's Cut/Copy/Paste/
 //    Duplicate/Select All/Repeat commands delegate to. Panel level, so ungated (see the file
@@ -2502,6 +2527,68 @@ TEST(TimelineToolStripTest, PanelLetterKeysResolveThroughTheShortcutManager) {
     EXPECT_EQ(view.snapEnabled, snapNow);
 }
 
+// ============================================================================
+// Dynamic shortcut-hint tooltips (see synth::shortcutHintFor / TimelinePanelComponent::
+// refreshShortcutTooltips) — the tool strip, the snap toggle and the follow-playhead toggle all
+// embed the CURRENT binding rather than a hardcoded key name, and rebuild it on every
+// bindings-changed notification.
+// ============================================================================
+
+// Regression guard for the reported gap: every OTHER button in this strip already named its own
+// key ("Select (1)", "Snap to grid on/off (Q)"); Follow playhead used to be the bare
+// "Follow playhead" with no hint at all.
+TEST(TimelineToolStripTest, FollowPlayheadTooltipNamesItsKeyLikeItsSiblingsDo) {
+    ToolPanelFixture f;
+    EXPECT_TRUE(f.panel.getFollowPlayheadButtonForTest().getTooltip().contains("(f)"))
+        << "no manager installed -- the hardcoded default 'f', lowercase (see shortcutHintFor)";
+}
+
+TEST(TimelineToolStripTest, FollowPlayheadTooltipTracksALiveRebindAndDropsTheOldKey) {
+    ToolPanelFixture f;
+    ShortcutManager shortcuts;
+    f.panel.setShortcutManager(&shortcuts);
+    auto& followButton = f.panel.getFollowPlayheadButtonForTest();
+    ASSERT_TRUE(followButton.getTooltip().contains("(f)"));
+
+    shortcuts.setBinding("timelineFollowPlayheadToggle", juce::KeyPress('g', juce::ModifierKeys::noModifiers, 0));
+    shortcuts.saveToProperties(); // broadcasts the change even with no ApplicationProperties wired
+
+    const auto tooltip = followButton.getTooltip();
+    EXPECT_TRUE(tooltip.contains("(g)")) << "the tooltip now names the current key";
+    EXPECT_FALSE(tooltip.contains("(f)")) << "and not the stale one";
+}
+
+TEST(TimelineToolStripTest, ToolStripAndSnapToggleTooltipsTrackTheirLiveBindings) {
+    ToolPanelFixture f;
+    ShortcutManager shortcuts;
+    f.panel.setShortcutManager(&shortcuts);
+
+    auto* selectButton = f.panel.getToolButton(synth::ui::EditTool::Select);
+    ASSERT_NE(selectButton, nullptr);
+    EXPECT_TRUE(selectButton->getTooltip().contains("(1)"));
+    EXPECT_TRUE(f.panel.getSnapToggleButton().getTooltip().contains("(q)"));
+
+    shortcuts.setBinding("timelineToolSelect", juce::KeyPress('j', juce::ModifierKeys::noModifiers, 0));
+    shortcuts.setBinding("timelineSnapToggle", juce::KeyPress('y', juce::ModifierKeys::noModifiers, 0));
+    shortcuts.saveToProperties();
+
+    EXPECT_TRUE(selectButton->getTooltip().contains("(j)"));
+    EXPECT_FALSE(selectButton->getTooltip().contains("(1)"));
+    EXPECT_TRUE(f.panel.getSnapToggleButton().getTooltip().contains("(y)"));
+}
+
+TEST(TimelineToolStripTest, ClearingTheSharedShortcutManagerRestoresTheHardcodedTooltipDefaults) {
+    ToolPanelFixture f;
+    ShortcutManager shortcuts;
+    f.panel.setShortcutManager(&shortcuts);
+    shortcuts.setBinding("timelineFollowPlayheadToggle", juce::KeyPress('g', juce::ModifierKeys::noModifiers, 0));
+    shortcuts.saveToProperties();
+    ASSERT_TRUE(f.panel.getFollowPlayheadButtonForTest().getTooltip().contains("(g)"));
+
+    f.panel.setShortcutManager(nullptr);
+    EXPECT_TRUE(f.panel.getFollowPlayheadButtonForTest().getTooltip().contains("(f)"));
+}
+
 // TimelineClipLaneArea resolves its own P through the SAME action id the panel's fallback uses, so
 // the two can never end up on different keys.
 TEST(TimelineToolStripTest, ClipLanePLoopSelectionFollowsTheShortcutManager) {
@@ -2551,8 +2638,8 @@ TEST(TimelineToolStripTest, ButtonsMirrorTheActiveToolAndCarryTheirShortcutInThe
     for (auto tool : synth::ui::kAllEditTools)
         ASSERT_NE(f.panel.getToolButton(tool), nullptr) << "every tool has a button, headless included";
 
-    EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Split)->getTooltip(), "Split (3)");
-    EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Draw)->getTooltip(), "Draw (8)");
+    EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Split)->getTooltip(), "Split  (3)");
+    EXPECT_EQ(f.panel.getToolButton(synth::ui::EditTool::Draw)->getTooltip(), "Draw  (8)");
 
     f.panel.setActiveTool(synth::ui::EditTool::Erase);
     for (auto tool : synth::ui::kAllEditTools)
@@ -2795,4 +2882,343 @@ TEST(TimelineClipVerbsTest, RepeatRejectsANonPositiveCountAndAnEmptySelection) {
     EXPECT_FALSE(f.panel.repeatSelectedClips(-1));
     EXPECT_EQ(f.doc.getTrack(track)->clips.size(), 1u);
     EXPECT_FALSE(f.undo.canUndo());
+}
+
+// ============================================================================
+// 8. Follow-playhead: the toggle (state + button mirror + persistence) and the page-flip it
+//    drives inside updateFromTransport(). Panel level, ungated (see the file header) — backfilled
+//    for the already-landed TL implementation (see EdgeAutoScroll.h / TimelineClipLaneArea's
+//    beat-anchored drag, covered in TimelineClipLaneTests.cpp).
+// ============================================================================
+
+namespace {
+// Same isolated-properties-file idiom as TimelinePanelSnapComboTest::SnapChoicePersists above:
+// hermetic regardless of a previous run, and cleaned up on the way out.
+struct IsolatedPropsGuard {
+    juce::PropertiesFile::Options opts;
+    juce::ApplicationProperties props;
+
+    explicit IsolatedPropsGuard(const char* name) {
+        opts.applicationName = name;
+        opts.folderName = name;
+        opts.filenameSuffix = "settings";
+        opts.osxLibrarySubFolder = "Application Support";
+        opts.storageFormat = juce::PropertiesFile::storeAsXML;
+
+        {
+            juce::ApplicationProperties initial;
+            initial.setStorageParameters(opts);
+            if (auto* s = initial.getUserSettings())
+                s->getFile().deleteFile();
+        }
+        props.setStorageParameters(opts);
+    }
+
+    ~IsolatedPropsGuard() {
+        if (auto* s = props.getUserSettings())
+            s->getFile().deleteFile();
+    }
+};
+} // namespace
+
+TEST(TimelineFollowPlayheadTest, ToggleFlipsStateAndButtonMirror) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 320);
+    ASSERT_FALSE(panel.isFollowPlayheadEnabled()) << "documented default: off";
+    EXPECT_FALSE(panel.getFollowPlayheadButtonForTest().getToggleState());
+
+    panel.setFollowPlayheadEnabled(true);
+    EXPECT_TRUE(panel.isFollowPlayheadEnabled());
+    EXPECT_TRUE(panel.getFollowPlayheadButtonForTest().getToggleState()) << "the button only mirrors the state";
+
+    panel.setFollowPlayheadEnabled(false);
+    EXPECT_FALSE(panel.isFollowPlayheadEnabled());
+    EXPECT_FALSE(panel.getFollowPlayheadButtonForTest().getToggleState());
+}
+
+TEST(TimelineFollowPlayheadTest, ButtonClickRoundTripsThroughSetFollowPlayheadEnabled) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 320);
+    ASSERT_FALSE(panel.isFollowPlayheadEnabled());
+
+    panel.getFollowPlayheadButtonForTest().onClick();
+    EXPECT_TRUE(panel.isFollowPlayheadEnabled());
+    EXPECT_TRUE(panel.getFollowPlayheadButtonForTest().getToggleState());
+
+    panel.getFollowPlayheadButtonForTest().onClick();
+    EXPECT_FALSE(panel.isFollowPlayheadEnabled());
+    EXPECT_FALSE(panel.getFollowPlayheadButtonForTest().getToggleState());
+}
+
+// The choice persists under "timelineFollowPlayhead" and is restored by a fresh
+// setApplicationProperties call against the same (isolated) properties file.
+TEST(TimelineFollowPlayheadTest, ChoicePersistsAndIsRestored) {
+    IsolatedPropsGuard guard("Agent Synth Timeline Follow Test");
+
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 320);
+    panel.setApplicationProperties(&guard.props);
+    ASSERT_FALSE(panel.isFollowPlayheadEnabled()) << "documented default, freshly-deleted file";
+
+    panel.setFollowPlayheadEnabled(true);
+    ASSERT_NE(guard.props.getUserSettings(), nullptr);
+    EXPECT_TRUE(guard.props.getUserSettings()->getBoolValue("timelineFollowPlayhead", false));
+
+    synth::ui::TimelinePanelComponent panel2;
+    panel2.setSize(1200, 320);
+    panel2.setApplicationProperties(&guard.props);
+    EXPECT_TRUE(panel2.isFollowPlayheadEnabled());
+    EXPECT_TRUE(panel2.getFollowPlayheadButtonForTest().getToggleState());
+}
+
+// The follow-playhead button re-skins on a theme switch — the SAME sequence (the theme mutates in
+// place, then the app broadcasts via sendLookAndFeelChange(), with no doc/view change in between)
+// TimelineTrackHeaderTest::ThemeSwitchReappliesChipAndMSRColoursWithNoDocChange locks for the
+// track header's chip/M/S/R colours. applyToolStripTheme() is the seam both the constructor and
+// lookAndFeelChanged() run through, and backgroundOnColourId is the exact colour it writes for
+// this button (see TimelinePanelComponent::applyToolStripTheme).
+TEST(TimelineFollowPlayheadTest, ThemeSwitchReskinsTheFollowPlayheadButton) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 320);
+
+    synth::theme::AppLookAndFeel lf;
+    const auto themeA = synth::theme::makeObsidian();
+    const auto themeB = synth::theme::makeNeon();
+
+    lf.applyTheme(themeA);
+    panel.setLookAndFeel(&lf); // installing triggers lookAndFeelChanged() once already
+    EXPECT_EQ(panel.getFollowPlayheadButtonForTest().findColour(juce::DrawableButton::backgroundOnColourId),
+              themeA.colors.toolActive);
+
+    // Theme mutates in place, then the app broadcasts the switch — no doc/view change at all, only
+    // lookAndFeelChanged() to notice the button needs re-tinting.
+    lf.applyTheme(themeB);
+    panel.sendLookAndFeelChange();
+
+    EXPECT_EQ(panel.getFollowPlayheadButtonForTest().findColour(juce::DrawableButton::backgroundOnColourId),
+              themeB.colors.toolActive);
+
+    panel.setLookAndFeel(nullptr);
+}
+
+// Regression test for the reported bug: the follow-playhead button never appearing in the running
+// app. Reproduces AgentSynthPluginEditor's EXACT construction order (see PluginEditor.cpp's ctor):
+// a parent has setLookAndFeel() called on it BEFORE the timeline panel is added as its child. At
+// panel-CONSTRUCTION time there is therefore no themed LookAndFeel anywhere on its (nonexistent)
+// ancestor chain, so applyToolStripTheme()'s constructor-time call is a no-op for every icon,
+// including this button's — and juce::Component::sendLookAndFeelChange() only walks components
+// ALREADY in a child list at the moment it fires, so installing the LnF on `parent` first never
+// reaches `panel` either. Only parentHierarchyChanged(), fired when `panel` is attached moments
+// later, can pick the theme up — this is what proves that hook actually does.
+TEST(TimelineFollowPlayheadTest, AttachingUnderAnAncestorThatAlreadyHasAThemedLookAndFeelStillAppliesTheIcon) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 320);
+
+    juce::Component parent;
+    synth::theme::AppLookAndFeel lf;
+    const auto theme = synth::theme::makeObsidian();
+    lf.applyTheme(theme);
+    parent.setLookAndFeel(&lf); // installed BEFORE panel is a child — the plugin editor's order
+
+    parent.addAndMakeVisible(panel);
+
+    EXPECT_EQ(panel.getFollowPlayheadButtonForTest().findColour(juce::DrawableButton::backgroundOnColourId),
+              theme.colors.toolActive)
+        << "parentHierarchyChanged() must re-run applyToolStripTheme() once attached under an "
+           "ancestor that already has a themed LookAndFeel — otherwise the icon/background this "
+           "button needs never gets applied at all";
+
+    parent.setLookAndFeel(nullptr);
+}
+
+// The three explicit checks the bug report asked for: real (non-empty, in-panel, non-overlapping)
+// bounds at a realistic launch size, and visibility all the way up to the panel. Arithmetic-only
+// coverage — TimelinePanelComponentTest.PanelRegionsTile-style — for resized()'s transport-bar
+// carve order, which the strip-width audit in this task's report shows has headroom today but is
+// exactly the kind of change that could silently zero this button out again.
+TEST(TimelineFollowPlayheadTest, ButtonHasRealNonOverlappingBoundsAndIsVisibleAtRealisticSize) {
+    synth::ui::TimelinePanelComponent panel;
+    synth::theme::AppLookAndFeel lf;
+    lf.applyTheme(synth::theme::makeObsidian());
+    panel.setLookAndFeel(&lf);
+    panel.setVisible(true); // a parentless Component is never visible by default
+    panel.setSize(1200, 320);
+
+    auto& button = panel.getFollowPlayheadButtonForTest();
+    const auto bounds = button.getBounds();
+    EXPECT_FALSE(bounds.isEmpty()) << "follow-playhead button got a zero-area bounds";
+    EXPECT_TRUE(panel.getLocalBounds().contains(bounds)) << "follow-playhead button bounds fall outside the panel";
+
+    const auto snapComboBounds = panel.getSnapCombo().getBounds();
+    const auto snapToggleBounds = panel.getSnapToggleButton().getBounds();
+    EXPECT_FALSE(bounds.intersects(snapComboBounds)) << "follow-playhead button overlaps the snap combo";
+    EXPECT_FALSE(bounds.intersects(snapToggleBounds)) << "follow-playhead button overlaps the snap toggle (Q)";
+
+    // Visible all the way up to the panel — nothing on this path was ever hidden via
+    // addChildComponent (which starts invisible) instead of addAndMakeVisible. isShowing() is
+    // deliberately NOT asserted here: it additionally requires a real OS peer
+    // (Component::addToDesktop()), which this test suite avoids for the same headless-CI
+    // flakiness reason FocusArbitrationTests.cpp's real-focus tests do.
+    EXPECT_TRUE(button.isVisible());
+    EXPECT_TRUE(panel.isVisible());
+
+    panel.setLookAndFeel(nullptr);
+}
+
+// F mirrors the transport strip's follow button, resolved through "timelineFollowPlayheadToggle"
+// exactly like Q/L/P (see PanelLetterKeysResolveThroughTheShortcutManager for the shared idiom):
+// hardcoded fallback with no manager, strict resolution with one installed.
+TEST(TimelineFollowPlayheadTest, FKeyTogglesFollowThroughTheShortcutManager) {
+    synth::ui::TimelinePanelComponent panel;
+    panel.setSize(1200, 320);
+
+    // No manager: the hardcoded 'f' fallback.
+    ASSERT_FALSE(panel.isFollowPlayheadEnabled());
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('f')));
+    EXPECT_TRUE(panel.isFollowPlayheadEnabled());
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('f')));
+    EXPECT_FALSE(panel.isFollowPlayheadEnabled());
+
+    // With a manager installed, resolution is strict: rebinding moves the key, and the old one
+    // falls through untouched.
+    ShortcutManager shortcuts;
+    panel.setShortcutManager(&shortcuts);
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('f'))) << "default binding is a bare F";
+    EXPECT_TRUE(panel.isFollowPlayheadEnabled());
+
+    shortcuts.setBinding("timelineFollowPlayheadToggle", juce::KeyPress('g', juce::ModifierKeys::noModifiers, 0));
+    EXPECT_FALSE(panel.keyPressed(juce::KeyPress('f'))) << "the old key falls through";
+    EXPECT_TRUE(panel.isFollowPlayheadEnabled()) << "and did not toggle";
+    EXPECT_TRUE(panel.keyPressed(juce::KeyPress('g')));
+    EXPECT_FALSE(panel.isFollowPlayheadEnabled());
+}
+
+namespace {
+// A minimal fixture for updateFromTransport()'s page-flip: a doc-less panel (the page-flip needs
+// no TimelineDoc at all) with the view state pinned so the expected math below is exact.
+struct FollowPlayheadFixture {
+    synth::ui::TimelinePanelComponent panel;
+
+    FollowPlayheadFixture() {
+        panel.setSize(1200, 320);
+        auto& state = panel.getViewState();
+        state.pixelsPerBeat = 40.0;
+        state.firstVisibleBeat = 0.0;
+        panel.setFollowPlayheadEnabled(true);
+    }
+
+    // The exact width the page-flip's visibleBeats term reads from — clipLaneArea_ fills
+    // gridLanesBounds_ exactly (see TimelinePanelComponent::resized()'s comment), so this IS that
+    // width without duplicating layout maths.
+    double visibleBeats() { return (double)panel.getClipLaneArea().getWidth() / panel.getViewState().pixelsPerBeat; }
+
+    synth::TransportService::PositionSnapshot playingSnapshotAt(double ppq) const {
+        synth::TransportService::PositionSnapshot snap;
+        snap.playing = true;
+        snap.ppq = ppq;
+        return snap;
+    }
+};
+} // namespace
+
+TEST(TimelineFollowPlayheadTest, PageFlipsWhenThePlayheadCrossesTheRightEdge) {
+    FollowPlayheadFixture f;
+    const double visible = f.visibleBeats();
+    // Just past the last visible beat.
+    const double playheadBeat = visible + 1.0;
+
+    f.panel.updateFromTransport(f.playingSnapshotAt(playheadBeat), 0.0);
+
+    // The landed implementation's exact formula: max(0, playheadBeat - 0.1 * visibleBeats).
+    const double expected = std::max(0.0, playheadBeat - 0.1 * visible);
+    EXPECT_DOUBLE_EQ(f.panel.getViewState().firstVisibleBeat, expected);
+}
+
+TEST(TimelineFollowPlayheadTest, NoScrollWhilePlayheadStaysInsideTheVisibleRange) {
+    FollowPlayheadFixture f;
+    const double visible = f.visibleBeats();
+    const double playheadBeat = visible * 0.5; // comfortably inside [0, visible]
+
+    f.panel.updateFromTransport(f.playingSnapshotAt(playheadBeat), 0.0);
+
+    EXPECT_DOUBLE_EQ(f.panel.getViewState().firstVisibleBeat, 0.0);
+}
+
+TEST(TimelineFollowPlayheadTest, NoScrollWhenStopped) {
+    FollowPlayheadFixture f;
+    const double visible = f.visibleBeats();
+    auto snapshot = f.playingSnapshotAt(visible + 1.0);
+    snapshot.playing = false;
+
+    f.panel.updateFromTransport(snapshot, 0.0);
+
+    EXPECT_DOUBLE_EQ(f.panel.getViewState().firstVisibleBeat, 0.0);
+}
+
+TEST(TimelineFollowPlayheadTest, NoScrollWhenFollowIsOff) {
+    FollowPlayheadFixture f;
+    f.panel.setFollowPlayheadEnabled(false);
+    const double visible = f.visibleBeats();
+
+    f.panel.updateFromTransport(f.playingSnapshotAt(visible + 1.0), 0.0);
+
+    EXPECT_DOUBLE_EQ(f.panel.getViewState().firstVisibleBeat, 0.0);
+}
+
+TEST(TimelineFollowPlayheadTest, NoScrollWhileThePianoRollIsOpen) {
+    FollowPlayheadFixture f;
+    synth::TimelineDoc doc;
+    f.panel.setTimelineDoc(&doc);
+    const auto track = doc.addTrack(synth::TrackKind::Midi, "Midi");
+    const auto clip = doc.addClip(track, 0.0, 4.0, "Clip");
+    ASSERT_TRUE(clip.isValid());
+
+    f.panel.openPianoRoll(clip);
+    ASSERT_TRUE(f.panel.isPianoRollOpen());
+
+    const double visible = f.visibleBeats();
+    f.panel.updateFromTransport(f.playingSnapshotAt(visible + 1.0), 0.0);
+
+    EXPECT_DOUBLE_EQ(f.panel.getViewState().firstVisibleBeat, 0.0);
+}
+
+namespace {
+// A local left-button mouse event for the clip-lane area — the same shape
+// TimelineClipLaneTests.cpp's makeClipMouseEvent builds, kept local here since this file's own
+// makeTimelineMouseEvent (above, in the ruler-interaction tests' anonymous namespace) isn't visible
+// this far down.
+juce::MouseEvent leftButtonEventOnLane(juce::Component& comp, juce::Point<float> pos, juce::Point<float> anchor,
+                                       bool wasDragged) {
+    return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), pos,
+                            juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                            &comp, &comp, juce::Time::getCurrentTime(), anchor, juce::Time::getCurrentTime(), 1,
+                            wasDragged);
+}
+} // namespace
+
+TEST(TimelineFollowPlayheadTest, NoScrollWhileAClipDragIsInProgress) {
+    FollowPlayheadFixture f;
+    synth::TimelineDoc doc;
+    AppUndoManager undo;
+    f.panel.setTimelineDoc(&doc);
+    f.panel.setUndoManager(&undo);
+    const auto track = doc.addTrack(synth::TrackKind::Midi, "Midi");
+    const auto clip = doc.addClip(track, 0.0, 4.0, "Clip");
+    ASSERT_TRUE(clip.isValid());
+
+    auto& lane = f.panel.getClipLaneArea();
+    const auto rect = lane.getClipRect(clip);
+    const juce::Point<float> anchor((float)rect.getCentreX(), (float)rect.getCentreY());
+    const juce::Point<float> dragged(anchor.x + 10.0f, anchor.y);
+
+    lane.mouseDown(leftButtonEventOnLane(lane, anchor, anchor, false));
+    lane.mouseDrag(leftButtonEventOnLane(lane, dragged, anchor, true));
+    ASSERT_TRUE(lane.isDragInProgress());
+
+    const double visible = f.visibleBeats();
+    f.panel.updateFromTransport(f.playingSnapshotAt(visible + 1.0), 0.0);
+
+    EXPECT_DOUBLE_EQ(f.panel.getViewState().firstVisibleBeat, 0.0);
+
+    lane.mouseUp(leftButtonEventOnLane(lane, dragged, anchor, true));
 }

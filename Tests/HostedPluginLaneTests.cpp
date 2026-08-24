@@ -38,8 +38,6 @@
 #include <memory>
 #include <vector>
 
-#if SYNTH_ENABLE_TIMELINE
-
 using synth::AutomationLane;
 using synth::AutomationRecorder;
 using synth::HostedPluginModule;
@@ -509,5 +507,3 @@ TEST(HostedPluginLaneTest, SerializationAdditive) {
     ASSERT_NE(legacyLoaded.getLane(laneId), nullptr);
     EXPECT_EQ(legacyLoaded.getLane(laneId)->paramIndexHint, -1) << "absent -> the -1 'no hint' default";
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

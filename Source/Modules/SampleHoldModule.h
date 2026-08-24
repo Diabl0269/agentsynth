@@ -232,6 +232,10 @@ public:
     juce::String getOutputPortLabel(int) const override { return "CV"; }
 
     int getVisibleOutputPortCount() const override { return 1; }
+    // Pure audio/CV utility — processBlock never touches the MIDI buffer.
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+
     ModulationCategory getModulationCategory() const override { return ModulationCategory::LFO; }
     ModuleType getModuleType() const override { return ModuleType::SampleHold; }
 

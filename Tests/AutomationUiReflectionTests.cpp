@@ -31,8 +31,6 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <vector>
 
-#if SYNTH_ENABLE_TIMELINE
-
 using synth::AutomationApplier;
 using synth::AutomationBindingTable;
 using synth::AutomationUiEvent;
@@ -296,5 +294,3 @@ TEST(AutomationUiReflectionTest, RingOverflowIsSilent) {
     feed.drain([&](const AutomationUiEvent&) { ++secondDrainCount; });
     EXPECT_EQ(secondDrainCount, 0) << "a second drain against an empty ring must be a safe no-op";
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

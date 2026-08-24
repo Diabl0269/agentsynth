@@ -151,14 +151,12 @@ juce::String AIIntegrationService::buildPatchAugmentedContent(const juce::String
     // report. See ArrangementContext::summarize() (Source/Timeline/ArrangementContext.h) for the
     // security model (read-path only; name-only file references; no plugin identifiers).
     juce::String arrangementSection;
-#if SYNTH_ENABLE_TIMELINE
     if (timelineDoc != nullptr && transportService != nullptr && !timelineDoc->isEmpty()) {
         const juce::String summary =
             ArrangementContext::summarize(*timelineDoc, audioGraph, transportService->getPositionSnapshot());
         if (summary.isNotEmpty())
             arrangementSection = "## Arrangement\n" + summary;
     }
-#endif
 
     juce::String content;
     if (patchSection.isNotEmpty())
@@ -171,18 +169,15 @@ juce::String AIIntegrationService::buildPatchAugmentedContent(const juce::String
         content << "Current patch is empty.\n\n";
     if (arrangementSection.isNotEmpty())
         content << arrangementSection << "\n\n";
-#if SYNTH_ENABLE_TIMELINE
     if (timelineToolsActive()) {
         const juce::String targets = buildAutomationTargetsSection();
         if (targets.isNotEmpty())
             content << targets << "\n\n";
     }
-#endif
     content << "User request: " << text;
     return content;
 }
 
-#if SYNTH_ENABLE_TIMELINE
 std::vector<AIIntegrationService::AutomationTargetInfo> AIIntegrationService::enumerateAutomationTargets() const {
     // Float parameters only — that is what an automation lane drives — and only nodes that carry
     // a uuid (a node without one is not addressable by writeLane at all). See the header doc
@@ -361,7 +356,6 @@ juce::String AIIntegrationService::buildArrangeAugmentedContent(const juce::Stri
     content << "Respond ONLY with a JSON object containing a \"timelineOps\" array. No patch, no prose.";
     return content;
 }
-#endif
 
 void AIIntegrationService::trimHistory() {
     if (chatHistory.empty())
@@ -687,7 +681,6 @@ juce::String AIIntegrationService::extractJsonFromResponse(const juce::String& r
     return response.trim();
 }
 
-#if SYNTH_ENABLE_TIMELINE
 juce::var AIIntegrationService::extractTimelineOps(const juce::String& response) {
     const juce::var parsed = juce::JSON::parse(extractJsonFromResponse(response));
     // Presence, not well-formedness: a malformed "timelineOps" must reach previewTimelineOps() and
@@ -714,7 +707,6 @@ TimelineOpsResult AIIntegrationService::applyTimelineOps(const juce::var& envelo
                              result.message);
     return result;
 }
-#endif
 
 juce::String AIIntegrationService::getPatchContext() {
     juce::var json = AIStateMapper::graphToJSON(audioGraph);
@@ -977,7 +969,6 @@ juce::String AIIntegrationService::buildSystemPrompt() const {
         "Removing a node is not enough on its own — the chain must be rewired around the gap, or the patch "
         "ends up with 501 dangling and nothing reaching Audio Output.";
 
-#if SYNTH_ENABLE_TIMELINE
     // The timeline tool section exists only while the runtime switch is on AND a timeline context
     // is installed — off, this prompt is byte-identical to the pre-timeline one (pinned by
     // AIIntegrationServiceTest.TimelineToolsToggleGatesThePromptAndSchema).
@@ -1022,7 +1013,6 @@ juce::String AIIntegrationService::buildSystemPrompt() const {
             "\"pitch\": 67, \"velocity\": 100}]}]}]}\n"
             "```";
     }
-#endif
 
     return systemMsg;
 }

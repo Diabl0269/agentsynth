@@ -50,14 +50,12 @@ struct ScopedRenderPass {
 
 AudioEngine::AudioEngine(HostMode mode)
     : hostMode_(mode) {
-#if SYNTH_ENABLE_TIMELINE
     // Install the transport as the graph's playhead exactly once, here. JUCE's
     // AudioProcessorGraph re-applies graph.getPlayHead() to every node processor on every render
     // pass, so every module — including nodes re-created later by a preset load or an undo restore
     // — sees it through the standard getPlayHead() API. No per-node injection, and nothing to
     // re-wire when the graph's node set changes.
     mainProcessorGraph.setPlayHead(&transport);
-#endif
 }
 
 AudioEngine::~AudioEngine() { shutdown(); }
@@ -166,11 +164,9 @@ void AudioEngine::shutdown() {
     mainProcessorGraph.clear();
 
     // Last, after the device callback is gone and the graph is empty: nothing can call
-    // beginAudioBlock() any more, which is the precondition reclaimAllUnsafe() demands. Ungated by
-    // SYNTH_ENABLE_TIMELINE — with the flag off nothing was ever published, so this frees nothing
-    // and costs a null check. The binding tables go too: each holds refcounted Node::Ptrs, so
-    // leaving them until the destructor would keep the just-cleared graph's processors alive for
-    // no reason.
+    // beginAudioBlock() any more, which is the precondition reclaimAllUnsafe() demands. The
+    // binding tables go too: each holds refcounted Node::Ptrs, so leaving them until the
+    // destructor would keep the just-cleared graph's processors alive for no reason.
     timelineSnapshots.reclaimAllUnsafe();
     automationBindings_.reclaimAllUnsafe();
     // Same precondition and same place: nothing can render any more, so the streamer's
@@ -179,7 +175,6 @@ void AudioEngine::shutdown() {
 }
 
 void AudioEngine::publishTimeline(const synth::TimelineDoc& doc) {
-#if SYNTH_ENABLE_TIMELINE
     auto snapshot = synth::TimelineSnapshot::buildFrom(doc);
 
     // The snapshot's address is stable across the move into publish() (unique_ptr moves the
@@ -244,9 +239,6 @@ void AudioEngine::publishTimeline(const synth::TimelineDoc& doc) {
     // this order — do not reorder these two lines.
     timelineSnapshots.publish(std::move(snapshot));
     automationBindings_.publish(std::move(table));
-#else
-    juce::ignoreUnused(doc);
-#endif
 }
 
 void AudioEngine::ensureMidiDeviceOpen(const juce::String& deviceName) {
@@ -860,7 +852,6 @@ void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
     // drainAudioCallbacks(), which is what an owner destroying either of them waits on.
     const ScopedRenderPass renderPassGuard(renderPassesStarted_, renderPassesFinished_);
 
-#if SYNTH_ENABLE_TIMELINE
     // Off by default, in which case this is one pass over the whole buffer and the
     // behaviour is byte-identical to what it was before slicing existed. The scratch check is a
     // belt-and-braces fallback: a callback arriving with more channels than prepare() sized for
@@ -873,9 +864,6 @@ void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
         renderSliced(buffer, midiMessages);
     else
         renderPass(buffer, midiMessages);
-#else
-    renderPass(buffer, midiMessages);
-#endif
 
     // Zero-fill AFTER the graph has run (and after every slice, not per slice) so sequencers /
     // LFOs / envelopes keep advancing.
@@ -884,7 +872,6 @@ void AudioEngine::renderNextBlock(juce::AudioBuffer<float>& buffer, juce::MidiBu
 }
 
 void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages, int inputSampleOffset) {
-#if SYNTH_ENABLE_TIMELINE
     // The one clock site: both the standalone device callback and the hosted processBlock funnel
     // through here, so the transport advances exactly once per render pass in either mode. Must run
     // before the graph so every node renders against this pass's position. Gated on the runtime
@@ -933,7 +920,6 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // GraphEditor around to do so, so a headless render pass just fills a ring nobody reads.
     automationApplier_.applyBlock(automationBindings_.beginAudioBlock(), transport.getCurrentBlockInfo(),
                                   automationRecordState_.load(std::memory_order_acquire), &automationUiFeed_);
-#endif
 
     // Deliberately OUTSIDE the timeline flag: device input is not a timeline feature.
     // Point the playhead at this pass's slice of the captured input before the graph runs, and
@@ -951,7 +937,6 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
 
     transport.setDeviceInputForBlock(nullptr, 0, 0);
 
-#if SYNTH_ENABLE_TIMELINE
     // The metronome click, generated from the transport and summed POST-graph — after the
     // graph has produced its own output (so the click can never appear in anything the graph itself
     // taps or that a bounce renders from inside the graph — see BounceExporter's force-off guard)
@@ -959,7 +944,6 @@ void AudioEngine::renderPass(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // return. That ordering is deliberate: master mute clears the WHOLE buffer, so it silences the
     // click along with everything else the engine produces, exactly as it silences the graph.
     metronome_.renderClicks(buffer, transport.getCurrentBlockInfo());
-#endif
 
     // The feedback guard. Post-graph (so it sees exactly what would reach the speakers,
     // metronome click included) and pre-master-mute (renderNextBlock's zero-fill runs after this

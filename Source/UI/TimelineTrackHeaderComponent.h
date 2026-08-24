@@ -1,8 +1,15 @@
 #pragma once
 
 #include "../Timeline/TimelineDoc.h"
+#include "ColourPickerPopup.h"
+#include "MidiDestinationPicker.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <memory>
 #include <vector>
+
+namespace juce {
+class ApplicationProperties; // forward declaration — only a pointer crosses this header
+} // namespace juce
 
 // TimelineTrackHeaderComponent — one row in the timeline panel's track-header column.
 //
@@ -89,6 +96,34 @@ struct TrackHeaderHost {
      *  exists) the automation lane for `option` and returns its id. An invalid id means it could not
      *  be created (kMaxTracks/kMaxLanesPerTrack reached, or the option's node no longer resolves). */
     virtual synth::LaneId addPluginAutomationLane(const PluginLaneOption& option) = 0;
+
+    /** The properties file the colour picker's favourites shelf persists to, or nullptr for an
+     *  in-memory-only picker (a header built for a test, or a host that hasn't wired one up yet).
+     *  Non-pure so every existing TrackHeaderHost implementer keeps compiling unchanged. */
+    virtual juce::ApplicationProperties* getAppProperties() { return nullptr; }
+
+    /** One entry in the MIDI-destinations picker: a live MIDI-instrument node the track's bound
+     *  Track In node could (or already does) send MIDI to. */
+    struct MidiDestinationOption {
+        juce::String displayName;
+        juce::uint32 nodeUid = 0;
+        bool connected = false;
+        // Instruments list first in the picker; everything else that consumes MIDI (e.g. an
+        // envelope's gate input) goes under "Other". Derived host-side from isMidiInstrumentType.
+        bool isInstrument = true;
+    };
+
+    /** Every MIDI-instrument node in the live graph the track's bound Track In node could send
+     *  MIDI to, with `connected` reflecting today's actual graph wiring. Empty when the track's
+     *  binding doesn't resolve (unbound or orphaned) — there is nothing to wire from. Non-pure
+     *  with an inert default so every existing TrackHeaderHost implementer keeps compiling. */
+    virtual std::vector<MidiDestinationOption> getMidiDestinationOptions(synth::TrackId) { return {}; }
+
+    /** Connects or disconnects the track's bound Track In node's MIDI output from `nodeUid`, as
+     *  one undoable structural change. A no-op when the track's binding or the target node no
+     *  longer resolves (a stale popup must never crash). Non-pure with an inert default so every
+     *  existing TrackHeaderHost implementer keeps compiling. */
+    virtual void setMidiDestinationConnected(synth::TrackId, juce::uint32, bool) {}
 };
 
 class TimelineTrackHeaderComponent : public juce::Component {
@@ -108,6 +143,10 @@ public:
     // (TimelineDoc::kMaxTracks is 256, and there can be no more Track In nodes than that in a sane
     // patch) so the two ranges can never collide.
     static constexpr int kNewTrackInNodeMenuId = 1000;
+    // Sits between the candidate range (1..N, N well under 1000 — see kNewTrackInNodeMenuId's own
+    // comment) and kDeleteTrackMenuId's separate context-menu id space, so it can never collide
+    // with either.
+    static constexpr int kMidiDestinationsMenuId = 1001;
     static constexpr int kDeleteTrackMenuId = 2000;
 
     TimelineTrackHeaderComponent(synth::TimelineDoc& doc, synth::TrackId trackId, TrackHeaderHost* host);
@@ -121,6 +160,11 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
     void mouseDown(const juce::MouseEvent& e) override;
+    // Re-derives every colour this component bakes via setColour (the binding chip, M/S/R active
+    // states) from the newly-installed LookAndFeel — see applyThemeDerivedColours(). Without this,
+    // a theme switch left the chip and the M/S/R active colours frozen on whatever theme was
+    // active at the last refreshFromDoc() call.
+    void lookAndFeelChanged() override;
 
     // ---- Binding chip ---------------------------------------------------------
     // The chip shows the bound node's name; it turns amber when the track is UNBOUND (never had a
@@ -136,6 +180,11 @@ public:
     // (a track's kind, unlike its name or colour, never changes after creation).
     juce::String getKindBadgeTextForTest() const;
     juce::Rectangle<int> getKindBadgeBoundsForTest() const noexcept { return kindBadgeBounds_; }
+    // The Icon actually drawn for the current TrackKind, or -1 when there is no themed
+    // AppLookAndFeel (or the asset library is absent) and paint() fell back to the text badge —
+    // matches getKindBadgeTextForTest's "value or empty" idiom rather than std::optional, since
+    // every other test accessor here returns a plain value.
+    int getKindBadgeIconForTest() const;
 
     // ---- Automation open/close button -------------------------------------------
     // Visible only when the track has at least one automation lane. The header never decides
@@ -149,8 +198,22 @@ public:
     std::vector<TrackHeaderHost::BindingOption> collectBindingOptions() const;
 
     /** Applies a chip-menu choice: 1..N binds to collectBindingOptions()[id - 1],
-     *  kNewTrackInNodeMenuId creates a node and binds to it. Anything else is ignored. */
+     *  kNewTrackInNodeMenuId creates a node and binds to it, kMidiDestinationsMenuId opens the
+     *  MIDI-destinations picker. Anything else is ignored. */
     void applyBindingMenuChoice(int menuId);
+
+    /** Whether showBindingMenu() would add the "MIDI destinations..." entry — a synchronous query
+     *  seam for the same rule the (async, non-headless) juce::PopupMenu build uses, so a test can
+     *  assert on it without opening a real menu. */
+    bool offersMidiDestinationsMenuEntryForTest() const;
+
+    /** Replaces what kMidiDestinationsMenuId's chip-menu choice does, in place of the real
+     *  openMidiDestinationsPicker() (which launches a juce::CallOutBox and so cannot run in a
+     *  headless test). Defaults to the real behaviour; a test installs its own hook to observe
+     *  the "open" event without a live callout. */
+    void setOpenMidiDestinationsPickerHookForTest(std::function<void()> hook) {
+        openMidiDestinationsPickerHook_ = hook ? std::move(hook) : [this] { openMidiDestinationsPicker(); };
+    }
 
     /** The chip's click behaviour, split from the button so tests can exercise the selection
      *  affordance without opening an async menu. `showMenu` false does the highlight only. */
@@ -169,6 +232,17 @@ public:
     juce::Button& getBindingChip() noexcept { return bindingChip_; }
     juce::Button& getAutomationButton() noexcept { return automationButton_; }
     juce::Colour getResolvedColour() const noexcept { return resolvedColour_; }
+
+    /** Builds a ColourPickerPopup wired with the EXACT same onPreview/onCommit callbacks the real
+     *  colour-swatch click uses (see the constructor), but never launches a juce::CallOutBox —
+     *  a test drives it directly via setCurrentColourForTest()/commitForTest() instead of going
+     *  through a popup menu that cannot run headlessly. */
+    std::unique_ptr<synth::ui::ColourPickerPopup> createColourPickerForTest();
+
+    /** Builds a MidiDestinationPicker wired with the EXACT same provider/apply callbacks the real
+     *  "MIDI destinations..." menu entry uses (see openMidiDestinationsPicker()), but never
+     *  launches a juce::CallOutBox — mirrors createColourPickerForTest()'s split. */
+    std::unique_ptr<synth::ui::MidiDestinationPicker> createMidiDestinationPickerForTest();
 
 private:
     // A plain filled swatch: a juce::TextButton would route through the LookAndFeel, which the
@@ -192,9 +266,36 @@ private:
     void showBindingMenu();
     void showContextMenu();
 
+    // Shared by the real swatch click and createColourPickerForTest(): builds the popup with the
+    // preview-writes-directly / commit-restores-then-one-undo-step wiring described on the class'
+    // colour-swatch behaviour, WITHOUT launching it in a juce::CallOutBox.
+    std::unique_ptr<synth::ui::ColourPickerPopup> buildColourPicker();
+
+    // The "MIDI destinations..." menu entry's handler: builds the picker via
+    // createMidiDestinationPickerForTest()'s exact same builder and launches it in a
+    // juce::CallOutBox anchored on the binding chip.
+    void openMidiDestinationsPicker();
+    // Shared by openMidiDestinationsPicker() and createMidiDestinationPickerForTest() — builds a
+    // MidiDestinationPicker whose provider/apply callbacks route through host_, WITHOUT launching
+    // it in a juce::CallOutBox.
+    std::unique_ptr<synth::ui::MidiDestinationPicker> buildMidiDestinationPicker();
+
+    // Re-applies every colour derived from the active theme: the binding chip's warning/normal
+    // colours (unchanged from before) PLUS the M/S/R buttons' active-state colours. Called from
+    // refreshFromDoc() (so a doc-driven repaint always shows the right colours), from
+    // lookAndFeelChanged() (so a theme switch alone — no doc change — also updates them), and once
+    // at the end of the constructor (so the very first paint isn't relying on refreshFromDoc()
+    // having been called with a LookAndFeel already installed).
+    void applyThemeDerivedColours();
+
     synth::TimelineDoc& doc_;
     synth::TrackId trackId_;
     TrackHeaderHost* host_ = nullptr;
+
+    // Set in the constructor to `[this] { openMidiDestinationsPicker(); }`; a test replaces it via
+    // setOpenMidiDestinationsPickerHookForTest() so applyBindingMenuChoice(kMidiDestinationsMenuId)
+    // is exercisable without a live juce::CallOutBox.
+    std::function<void()> openMidiDestinationsPickerHook_;
 
     juce::Label nameLabel_;
     SwatchButton colourSwatch_;

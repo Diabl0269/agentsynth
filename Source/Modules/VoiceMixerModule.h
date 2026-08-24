@@ -60,6 +60,10 @@ public:
     juce::String getOutputPortLabel(int i) const override { return stereoOutputLabel(i); }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
     LogicalPort mapOutputChannel(int raw) const override { return mapStereoPairOutput(raw); }
+    // Pure audio utility — processBlock's midiMessages parameter is unused.
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+
     ModuleType getModuleType() const override { return ModuleType::VoiceMixer; }
 
 private:

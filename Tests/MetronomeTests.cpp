@@ -22,11 +22,9 @@
 #include <memory>
 #include <vector>
 
-#if SYNTH_ENABLE_TIMELINE
 #include "../Source/AI/AIProvider.h"
 #include "../Source/Timeline/TimelineDoc.h"
 #include "MainComponent.h"
-#endif
 
 using synth::BlockTimeInfo;
 using synth::Metronome;
@@ -88,9 +86,7 @@ BlockTimeInfo makeInfo(double sampleRate, double bpm, int timeSigNumerator, int 
 // 1. ClicksAtExactBeatCrossings
 // ============================================================================
 
-// Engine-driven: these assert the flag-gated integration (renderPass only calls the metronome
-// under SYNTH_ENABLE_TIMELINE), so they compile out with the flag to keep the OFF CI job green.
-#if SYNTH_ENABLE_TIMELINE
+// Engine-driven: these assert the integration where renderPass calls the metronome.
 
 TEST(MetronomeTest, ClicksAtExactBeatCrossings) {
     Fixture f;
@@ -168,8 +164,6 @@ TEST(MetronomeTest, DownbeatAccented) {
 // 3. ClickSpansBlockBoundary
 // ============================================================================
 
-#endif // SYNTH_ENABLE_TIMELINE (engine-driven crossing/accent tests)
-
 // A downbeat click 5 samples before a 512-sample block boundary must continue into the next call
 // with no discontinuity — proven by comparing a two-call (block-split) render against a single
 // uninterrupted render of the identical click, driving synth::Metronome directly (no engine needed:
@@ -218,7 +212,6 @@ TEST(MetronomeTest, ClickSpansBlockBoundary) {
 // ============================================================================
 
 // Engine-driven like sections 1-2: compiled out with the flag.
-#if SYNTH_ENABLE_TIMELINE
 
 TEST(MetronomeTest, LoopWrapClicks) {
     Fixture f;
@@ -250,13 +243,9 @@ TEST(MetronomeTest, LoopWrapClicks) {
     }
 }
 
-#endif // SYNTH_ENABLE_TIMELINE (LoopWrapClicks)
-
 // ============================================================================
 // 5. NeverInABounce
 // ============================================================================
-
-#if SYNTH_ENABLE_TIMELINE
 
 namespace {
 
@@ -337,8 +326,6 @@ TEST(MetronomeTest, NeverInABounce) {
     EXPECT_TRUE(f.engine.getMetronome().isForcedOn());
 }
 
-#endif // SYNTH_ENABLE_TIMELINE
-
 // ============================================================================
 // 6. MasterMuteKillsClick
 // ============================================================================
@@ -385,8 +372,6 @@ TEST(MetronomeTest, DisabledMetronomeIsSilentAndFree) {
 // ============================================================================
 // 7/8. Count-in choreography — MainComponent-level.
 // ============================================================================
-
-#if SYNTH_ENABLE_TIMELINE
 
 namespace {
 
@@ -600,5 +585,3 @@ TEST_F(MetronomeCountInTest, RecordWhilePlayingSkipsCountIn) {
     EXPECT_FALSE(bar.isRecordingForTest());
     EXPECT_FALSE(metronome.isForcedOn());
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

@@ -32,8 +32,6 @@
 #include <iostream>
 #include <memory>
 
-#if SYNTH_ENABLE_TIMELINE
-
 namespace {
 
 using AudioGraphIOProcessor = juce::AudioProcessorGraph::AudioGraphIOProcessor;
@@ -325,5 +323,3 @@ TEST(AutomationSlicingTest, SlicingCostTripwire) {
     EXPECT_LT(onMs, 4.0 * std::max(offMs, 1.0)) << "slicing cost " << onMs << " ms vs " << offMs
                                                 << " ms unsliced — something is scaling far worse than 8x overhead";
 }
-
-#endif // SYNTH_ENABLE_TIMELINE

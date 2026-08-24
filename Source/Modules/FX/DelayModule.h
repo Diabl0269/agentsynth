@@ -92,6 +92,10 @@ public:
     std::vector<ModulationTarget> getModulationTargets() const override {
         return {{"Time", 2}, {"Feedback", 3}, {"Mix", 4}};
     }
+    // Pure audio FX — processBlock never touches the MIDI buffer.
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+
     ModulationCategory getModulationCategory() const override { return ModulationCategory::FX; }
     ModuleType getModuleType() const override { return ModuleType::Delay; }
 

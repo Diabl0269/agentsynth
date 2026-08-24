@@ -58,8 +58,7 @@ using ModuleFactoryFunc = std::function<std::unique_ptr<juce::AudioProcessor>()>
 // Factory map for module creation
 static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory = {
     // A real module, not the graph's audioInputNode — same factory key and same display name, so
-    // every patch already saved with an "Audio Input" node loads onto the module unchanged. Not
-    // gated on SYNTH_ENABLE_TIMELINE: device input is independent of the timeline feature.
+    // every patch already saved with an "Audio Input" node loads onto the module unchanged.
     {"Audio Input", []() { return std::make_unique<AudioInputModule>(); }},
     {"Audio Output", []() { return std::make_unique<AudioGraphIOProcessor>(AudioGraphIOProcessor::audioOutputNode); }},
     {"Midi Input", []() { return std::make_unique<AudioGraphIOProcessor>(AudioGraphIOProcessor::midiInputNode); }},
@@ -98,29 +97,19 @@ static const std::unordered_map<juce::String, ModuleFactoryFunc> moduleFactory =
     {"Sampler", []() { return std::make_unique<SamplerModule>(); }},
     {"Wavetable", []() { return std::make_unique<WavetableOscillatorModule>(); }},
     {"External MIDI", []() { return std::make_unique<ExternalMidiModule>(); }},
-    // A third-party VST3/AU plugin as a module. Deliberately NOT gated on SYNTH_ENABLE_TIMELINE —
-    // hosting is independent of the timeline feature, and a -DSYNTH_ENABLE_TIMELINE=OFF build must
-    // still round-trip a patch that hosts a plugin. In the factory so our own saves reload it (the
+    // A third-party VST3/AU plugin as a module. In the factory so our own saves reload it (the
     // node comes back as a placeholder and re-loads its plugin asynchronously);
     // kNonAuthorableModuleTypes below keeps it away from the model.
     {"Hosted Plugin", []() { return std::make_unique<HostedPluginModule>(); }},
-#if SYNTH_ENABLE_TIMELINE
-    // The class itself compiles unconditionally (like every other Timeline source); only this
-    // INTEGRATION POINT is gated, so a -DSYNTH_ENABLE_TIMELINE=OFF build cannot create a Track In
-    // node at all — not from a preset, not from undo, not from a patch. It is in the factory
-    // (rather than constructed ad hoc by the add-track flow) purely so our own saves round-trip
-    // it; kNonAuthorableModuleTypes below keeps it away from the model.
+    // In the factory (rather than constructed ad hoc by the add-track flow) purely so our own
+    // saves round-trip it; kNonAuthorableModuleTypes below keeps it away from the model.
     {"Track In", []() { return std::make_unique<TimelineMidiSourceModule>(); }},
-    // Gated for exactly the same reason as Track In above: the class compiles unconditionally, but
-    // only a timeline build can create the node — from a preset, from undo or from the record
-    // flow. In the factory so our own saves round-trip a patch that has one;
-    // kNonAuthorableModuleTypes below keeps it away from the model.
+    // In the factory so our own saves round-trip a patch that has one; kNonAuthorableModuleTypes
+    // below keeps it away from the model.
     {"Rec Tap", []() { return std::make_unique<RecordTapModule>(); }},
-    // Gated for exactly the same reason as the two above: the class compiles unconditionally, but
-    // only a timeline build can create the node. In the factory so our own saves round-trip a
-    // patch that has one; kNonAuthorableModuleTypes below keeps it away from the model.
+    // In the factory so our own saves round-trip a patch that has one; kNonAuthorableModuleTypes
+    // below keeps it away from the model.
     {"Track Audio", []() { return std::make_unique<TimelineAudioSourceModule>(); }},
-#endif
 };
 
 namespace {

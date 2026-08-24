@@ -56,6 +56,9 @@ public:
         addParameter(syncParam = new juce::AudioParameterBool("syncToTransport", "Sync to Transport", false));
     }
 
+    // Same self-contained design as SequencerModule: every step comes from its own parameters,
+    // so processBlock never reads the incoming MIDI buffer — it only writes note/CC events onto it.
+    bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return true; }
 
     // Exposed for UI
@@ -81,7 +84,6 @@ public:
 
         juce::ignoreUnused(buffer);
 
-#if SYNTH_ENABLE_TIMELINE
         // Sync-to-Transport (opt-in, default off). Only taken when syncParam is on AND
         // getPlayHead() downcasts to our own TransportService — AudioEngine installs one on every
         // node on every render pass, but a foreign VST/AU host's playhead won't downcast, and
@@ -96,7 +98,6 @@ public:
                 return;
             }
         }
-#endif
 
         const bool running = *runParam;
         if (!running) {

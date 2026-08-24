@@ -640,7 +640,7 @@ outgoing AI request the current patch JSON already rides on.
 `AIIntegrationService::buildPatchAugmentedContent` (the function `sendMessage` calls to build the
 structured-output request) is the one seam patch context reaches the model through today ("Current
 patch state:\n\`\`\`json...\`\`\`"). TL8-3 adds a second, independent section right beside it,
-under its own "## Arrangement" delimiter, gated `#if SYNTH_ENABLE_TIMELINE` and included only when
+under its own "## Arrangement" delimiter, included only when
 `ArrangementContext::summarize` returns non-empty text (an empty/absent timeline adds nothing, the
 same "say nothing rather than say empty" rule the patch section already follows). `AIIntegrationService`
 does not own a `TimelineDoc`/`TransportService` itself — `MainComponent::initialiseCommon` installs
@@ -810,7 +810,7 @@ for it; a person agrees to it first, having read a summary of what it does.
 
 ### The chat seam
 
-`AIIntegrationService` (gated `#if SYNTH_ENABLE_TIMELINE`, and only once
+`AIIntegrationService` (once
 `setTimelineContext()` has wired the live timeline in) gains:
 `extractTimelineOps()` — the same extraction `applyPatch` performs, returning the parsed root when
 it carries a `timelineOps` key (**presence**, not well-formedness, so a malformed envelope is

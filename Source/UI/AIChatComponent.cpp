@@ -1116,9 +1116,8 @@ void AIChatComponent::sendButtonClicked() {
 
     // EXPLICIT routing, decided by the user's mode selector alone — arrange mode is never
     // inferred from the message text. (arrangeModeActive() is always false when the selector is
-    // hidden, including in a SYNTH_ENABLE_TIMELINE=OFF build.) In arrange mode the patch-path
-    // keyword heuristic is bypassed entirely: the request carries no patch schema and the
-    // response is a timelineOps envelope, not a patch.
+    // hidden.) In arrange mode the patch-path keyword heuristic is bypassed entirely: the request
+    // carries no patch schema and the response is a timelineOps envelope, not a patch.
     const bool arrangeMode = arrangeModeActive();
 
     bool useStructuredOutput = !arrangeMode && shouldUseStructuredOutput(text, AIStateMapper::moduleFactoryTypeNames());
@@ -1220,7 +1219,6 @@ void AIChatComponent::sendButtonClicked() {
                 // when they click.
                 juce::String timelineOpsJson;
                 juce::String timelineOpsPreview;
-#if SYNTH_ENABLE_TIMELINE
                 if (self->aiService.hasTimelineContext()) {
                     const juce::var envelope = AIIntegrationService::extractTimelineOps(response);
                     if (!envelope.isVoid()) {
@@ -1236,7 +1234,6 @@ void AIChatComponent::sendButtonClicked() {
                         }
                     }
                 }
-#endif
 
                 // Arrange mode's whole response body IS the envelope JSON (timeline.generate's
                 // output schema) — the timeline card below is the real rendering, so the
@@ -1288,14 +1285,10 @@ void AIChatComponent::sendButtonClicked() {
         });
     };
 
-#if SYNTH_ENABLE_TIMELINE
     // Arrange mode routes to the hosted timeline.generate capability; everything downstream of
     // the response (extraction, preview card, user-gated Apply) is the same seam either way.
     const auto requestId = arrangeMode ? aiService.sendArrangeMessage(text, std::move(completion))
                                        : aiService.sendMessage(text, std::move(completion), useStructuredOutput);
-#else
-    const auto requestId = aiService.sendMessage(text, std::move(completion), useStructuredOutput);
-#endif
 
     // Only record the handle if we are still waiting. A provider that answers synchronously (test
     // doubles, or the "no provider selected" path) has already run the teardown above by now, and
@@ -1486,7 +1479,6 @@ void AIChatComponent::updateChatDisplay() {
             // so the only failures left here are the ones the live doc/graph moved under — worth
             // reporting, not worth re-asking the model about.
             [this](const juce::String& envelopeJson) {
-#if SYNTH_ENABLE_TIMELINE
                 juce::Component::SafePointer<AIChatComponent> safeThis(this);
                 const auto result = aiService.applyTimelineOps(juce::JSON::parse(envelopeJson));
                 if (result.ok)
@@ -1502,9 +1494,6 @@ void AIChatComponent::updateChatDisplay() {
                     if (auto* self = safeThis.getComponent())
                         self->updateChatDisplay();
                 });
-#else
-                juce::ignoreUnused(envelopeJson);
-#endif
             });
         messageList.addAndMakeVisible(bubble);
     }
@@ -1635,7 +1624,6 @@ void AIChatComponent::updateHostedModeNotice() {
 }
 
 void AIChatComponent::refreshModeControls() {
-#if SYNTH_ENABLE_TIMELINE
     // PROVIDER-AGNOSTIC on purpose (the local/remote parity rule): arrange mode is served by
     // whichever transport the active provider has (AIIntegrationService::sendArrangeMessage), so
     // the selector's gate is the timeline preference alone — never the provider.
@@ -1645,9 +1633,6 @@ void AIChatComponent::refreshModeControls() {
     // In the real app the context is installed whenever the feature is on (MainComponent wires
     // both), so this is one gate in practice and a safety net in tests.
     const bool show = aiService.areTimelineToolsEnabled() && aiService.hasTimelineContext();
-#else
-    const bool show = false;
-#endif
 
     if (modeSelector.isVisible() == show)
         return;

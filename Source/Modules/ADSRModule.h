@@ -190,6 +190,11 @@ public:
             triggerCount.fetch_add(firedThisBlock, std::memory_order_relaxed);
     }
 
+    // processBlock consumes note-on/off to drive midiGateHeld (a MIDI fallback for the Gate
+    // input) but never writes to the MIDI buffer.
+    bool acceptsMidi() const override { return true; }
+    bool producesMidi() const override { return false; }
+
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Envelope; }
     juce::String getInputPortLabel(int i) const override {
         return i == 0 ? "Gate" : i == 1 ? "Threshold" : ModuleBase::getInputPortLabel(i);

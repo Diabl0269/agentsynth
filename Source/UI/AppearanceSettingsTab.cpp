@@ -1,5 +1,11 @@
 #include "AppearanceSettingsTab.h"
+#include "ColourPickerPopup.h"
 #include "GraphEditor.h"
+
+namespace {
+// Pitch-class labels, C first — matches synth::ui::NoteColourOverrides' pitch % 12 indexing.
+const char* const kPitchClassNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+} // namespace
 
 using synth::theme::Theme;
 using synth::theme::ThemeManager;
@@ -153,6 +159,70 @@ private:
 };
 
 //==============================================================================
+// NoteSwatchRow - clickable pitch-class swatches for the piano roll's note colours.
+//
+// Same interaction as CableSwatchRow (left-click opens a picker, right-click resets) but an
+// un-overridden swatch draws hollow/dimmed rather than filled-with-a-thin-ring: a note colour
+// swatch has no "always has a value" theme token backing every entry the way a cable signal kind
+// does, so "not set, currently showing the theme's noteFill" has to read as visually different
+// from "set to a colour that happens to be close to noteFill".
+//==============================================================================
+class AppearanceSettingsTab::NoteSwatchRow
+    : public juce::Component
+    , public juce::SettableTooltipClient {
+public:
+    explicit NoteSwatchRow(AppearanceSettingsTab& t)
+        : owner(t) {}
+
+    void paint(juce::Graphics& g) override {
+        constexpr int n = AppearanceSettingsTab::kNoteSwatchCount;
+        const float w = (float)getWidth() / (float)n;
+        for (int i = 0; i < n; ++i) {
+            juce::Rectangle<float> cell((float)i * w, 0.0f, w, (float)getHeight());
+            auto reducedCell = cell.reduced(3.0f);
+            auto swatch = reducedCell.removeFromTop(16.0f);
+
+            const juce::Colour colour = owner.getNoteSwatchColour(i);
+            const bool overridden = owner.isNoteSwatchOverridden(i);
+            if (overridden) {
+                g.setColour(colour);
+                g.fillRoundedRectangle(swatch, 3.0f);
+                g.setColour(juce::Colours::white.withAlpha(0.9f));
+                g.drawRoundedRectangle(swatch, 3.0f, 1.8f);
+            } else {
+                // Hollow/dimmed: a faint fill plus a faint outline, never the solid+bright-ring
+                // treatment a pinned swatch gets — "not set" must not look like "set to grey".
+                g.setColour(colour.withAlpha(0.2f));
+                g.fillRoundedRectangle(swatch, 3.0f);
+                g.setColour(colour.withAlpha(0.5f));
+                g.drawRoundedRectangle(swatch, 3.0f, 1.0f);
+            }
+
+            g.setColour(owner.themeManager.getActiveTheme().colors.textMuted);
+            g.setFont(juce::Font(juce::FontOptions(9.5f)));
+            g.drawFittedText(owner.getNoteSwatchLabel(i), reducedCell.removeFromBottom(14.0f).toNearestInt(),
+                             juce::Justification::centredTop, 1, 0.8f);
+        }
+    }
+
+    void mouseDown(const juce::MouseEvent& e) override {
+        constexpr int n = AppearanceSettingsTab::kNoteSwatchCount;
+        const int index = juce::jlimit(0, n - 1, (int)((float)e.x / ((float)getWidth() / (float)n)));
+
+        if (e.mods.isPopupMenu()) {
+            owner.resetNoteSwatch(index);
+            return;
+        }
+
+        const int cellW = getWidth() / n;
+        owner.openNoteColourPicker(index, localAreaToGlobal(juce::Rectangle<int>(index * cellW, 0, cellW, 24)));
+    }
+
+private:
+    AppearanceSettingsTab& owner;
+};
+
+//==============================================================================
 // AppearanceSettingsTab
 //==============================================================================
 AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::ApplicationProperties& props)
@@ -160,23 +230,30 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     , appProperties(props) {
     listModel = std::make_unique<ThemeListModel>(themeManager, *this);
 
+    // The tab itself only hosts the Viewport; every actual control below is a child of
+    // contentHost, which is free to grow taller than the tab and scroll (see ContentHost's
+    // comment in the header for why this exists).
+    addAndMakeVisible(contentViewport);
+    contentViewport.setViewedComponent(&contentHost, false);
+    contentViewport.setScrollBarsShown(true, false);
+
     // Section headers. Same font for all three (13pt bold, matching modeLabel's existing weight)
     // so "Theme" / "Theme Gallery" / "Cables" read as one family of group titles.
     auto sectionHeaderFont = juce::Font(juce::FontOptions(13.0f, juce::Font::bold));
-    addAndMakeVisible(themeSectionLabel);
+    contentHost.addAndMakeVisible(themeSectionLabel);
     themeSectionLabel.setText("Theme", juce::dontSendNotification);
     themeSectionLabel.setFont(sectionHeaderFont);
 
-    addAndMakeVisible(themeGallerySectionLabel);
+    contentHost.addAndMakeVisible(themeGallerySectionLabel);
     themeGallerySectionLabel.setText("Theme Gallery", juce::dontSendNotification);
     themeGallerySectionLabel.setFont(sectionHeaderFont);
 
     // Mode selector
-    addAndMakeVisible(modeLabel);
+    contentHost.addAndMakeVisible(modeLabel);
     modeLabel.setText("Theme Mode:", juce::dontSendNotification);
     modeLabel.setFont(juce::Font(juce::FontOptions(13.0f, juce::Font::bold)));
 
-    addAndMakeVisible(modeCombo);
+    contentHost.addAndMakeVisible(modeCombo);
     modeCombo.addItem("Dark", 1);
     modeCombo.addItem("Light", 2);
     modeCombo.addItem("System", 3);
@@ -195,11 +272,11 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     };
 
     // Default Dark Theme selector
-    addAndMakeVisible(defaultDarkLabel);
+    contentHost.addAndMakeVisible(defaultDarkLabel);
     defaultDarkLabel.setText("Default Dark Theme:", juce::dontSendNotification);
     defaultDarkLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
 
-    addAndMakeVisible(defaultDarkCombo);
+    contentHost.addAndMakeVisible(defaultDarkCombo);
     const auto& themes = themeManager.getThemes();
     for (int i = 0; i < (int)themes.size(); ++i) {
         defaultDarkCombo.addItem(themes[(size_t)i].name, i + 1);
@@ -221,11 +298,11 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     };
 
     // Default Light Theme selector
-    addAndMakeVisible(defaultLightLabel);
+    contentHost.addAndMakeVisible(defaultLightLabel);
     defaultLightLabel.setText("Default Light Theme:", juce::dontSendNotification);
     defaultLightLabel.setFont(juce::Font(juce::FontOptions(13.0f)));
 
-    addAndMakeVisible(defaultLightCombo);
+    contentHost.addAndMakeVisible(defaultLightCombo);
     for (int i = 0; i < (int)themes.size(); ++i) {
         defaultLightCombo.addItem(themes[(size_t)i].name, i + 1);
     }
@@ -245,7 +322,7 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
         }
     };
 
-    addAndMakeVisible(themeList);
+    contentHost.addAndMakeVisible(themeList);
     themeList.setModel(listModel.get());
     themeList.setRowHeight(48);
     // A real fill (instead of transparentBlack) is what makes the list read as a distinct,
@@ -256,10 +333,10 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     themeList.setColour(juce::ListBox::outlineColourId, themeManager.getActiveTheme().colors.border);
     themeList.setOutlineThickness(1);
 
-    addAndMakeVisible(openFolderButton);
+    contentHost.addAndMakeVisible(openFolderButton);
     openFolderButton.onClick = [this] { themeManager.getUserThemesFolder().revealToUser(); };
 
-    addAndMakeVisible(reloadButton);
+    contentHost.addAndMakeVisible(reloadButton);
     reloadButton.onClick = [this] {
         themeManager.loadUserThemesFromFolder();
         themeList.updateContent();
@@ -270,16 +347,16 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     cableColourMode = synth::ui::loadCableColourMode(*appProperties.getUserSettings());
     cableColourOverrides = synth::ui::loadCableColourOverrides(*appProperties.getUserSettings());
 
-    addAndMakeVisible(cablesTitleLabel);
+    contentHost.addAndMakeVisible(cablesTitleLabel);
     cablesTitleLabel.setText("Cables", juce::dontSendNotification);
     // Same section-header style as "Theme" / "Theme Gallery" above, not a one-off 15pt.
     cablesTitleLabel.setFont(sectionHeaderFont);
 
-    addAndMakeVisible(cableModeLabel);
+    contentHost.addAndMakeVisible(cableModeLabel);
     cableModeLabel.setText("Colour by", juce::dontSendNotification);
     cableModeLabel.setFont(juce::Font(juce::FontOptions(12.0f)));
 
-    addAndMakeVisible(cableModeCombo);
+    contentHost.addAndMakeVisible(cableModeCombo);
     cableModeCombo.addItem("Signal type", 1);
     cableModeCombo.addItem("Source module", 2);
     cableModeCombo.setSelectedId(cableColourMode == synth::ui::CableColourMode::BySourceCategory ? 2 : 1,
@@ -290,11 +367,25 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
     };
 
     cableSwatchRow = std::make_unique<CableSwatchRow>(*this);
-    addAndMakeVisible(*cableSwatchRow);
+    contentHost.addAndMakeVisible(*cableSwatchRow);
     cableSwatchRow->setTooltip("Click a swatch to pick a colour; right-click to reset it to the theme.");
 
-    addAndMakeVisible(resetCableColoursButton);
+    contentHost.addAndMakeVisible(resetCableColoursButton);
     resetCableColoursButton.onClick = [this] { resetAllCableColours(); };
+
+    // ---- Piano roll note colours ----
+    noteColourOverrides = synth::ui::loadNoteColourOverrides(*appProperties.getUserSettings());
+
+    contentHost.addAndMakeVisible(noteColoursTitleLabel);
+    noteColoursTitleLabel.setText("Piano Roll Notes", juce::dontSendNotification);
+    noteColoursTitleLabel.setFont(sectionHeaderFont);
+
+    noteSwatchRow = std::make_unique<NoteSwatchRow>(*this);
+    contentHost.addAndMakeVisible(*noteSwatchRow);
+    noteSwatchRow->setTooltip("Click a note to pick a colour; right-click to clear the override.");
+
+    contentHost.addAndMakeVisible(resetNoteColoursButton);
+    resetNoteColoursButton.onClick = [this] { resetAllNoteColours(); };
 
     // Reflect the active theme selection in the list.
     const int activeRow = activeRowIndex(themeManager);
@@ -307,8 +398,13 @@ AppearanceSettingsTab::AppearanceSettingsTab(ThemeManager& manager, juce::Applic
 AppearanceSettingsTab::~AppearanceSettingsTab() { themeManager.removeChangeListener(this); }
 
 void AppearanceSettingsTab::paint(juce::Graphics& g) {
+    // contentHost draws the section dividers in its OWN coordinate space via paintContent() below
+    // — this fill is what shows through any part of the Viewport contentHost's bounds don't reach
+    // (e.g. the scrollbar gutter, or a content area shorter than the viewport itself).
     g.fillAll(findColour(juce::ResizableWindow::backgroundColourId));
+}
 
+void AppearanceSettingsTab::paintContent(juce::Graphics& g) {
     // Group separators — same alpha-on-text-colour hairline as PreferencesSettingsTab, so both
     // tabs' dividers look and behave identically.
     g.setColour(findColour(juce::Label::textColourId).withAlpha(0.18f));
@@ -317,7 +413,26 @@ void AppearanceSettingsTab::paint(juce::Graphics& g) {
 }
 
 void AppearanceSettingsTab::resized() {
-    auto bounds = getLocalBounds().reduced(12);
+    contentViewport.setBounds(getLocalBounds());
+
+    // Width the controls are laid out to: the viewport minus its scrollbar gutter, so a swatch row
+    // or the theme gallery never sits under the thumb — same rationale, and the same
+    // jmax(layoutWidth, viewport width) idiom for the HOST's own width below, as
+    // ShortcutsSettingsTab::rebuildLayout(). Reserved unconditionally rather than measured: whether
+    // the bar is shown depends on the content height this very pass computes.
+    const int layoutWidth = juce::jmax(1, contentViewport.getWidth() - contentViewport.getScrollBarThickness());
+
+    // Laid out in a scratch rectangle taller than this tab could ever need, then trimmed to the
+    // height actually consumed below — contentHost (NOT this tab) owns that height, and the
+    // Viewport clips/scrolls it. This is the fix for the "Piano Roll Notes" section rendering as
+    // nothing: SettingsWindow opens this tab at a FIXED size (MainComponent's
+    // settingsComp->setSize(500, 450), which becomes roughly 498x419 for this tab once
+    // TabbedComponent's tab bar depth and outline are subtracted) that is shorter than every
+    // section's combined natural height. Before this Viewport existed, resized() laid the trailing
+    // sections out into an already-exhausted Rectangle and handed some of them a zero-height
+    // bounds: present in the tree via addAndMakeVisible, but with no area to paint or hit-test.
+    constexpr int kScratchHeight = 1 << 16;
+    auto bounds = juce::Rectangle<int>(0, 0, layoutWidth, kScratchHeight).reduced(12);
     dividerBounds.clear();
 
     // Each group is followed by a hairline rule, matching PreferencesSettingsTab's addDivider().
@@ -346,48 +461,53 @@ void AppearanceSettingsTab::resized() {
     defaultLightCombo.setBounds(lightRow.removeFromLeft(160));
     addDivider();
 
-    // ---- Fixed-height controls below the gallery, computed up front so the gallery gets
-    // whatever is left over rather than being squeezed by a bottom-up layout pass. ----
-    constexpr int kButtonRowHeight = 30;
-    constexpr int kCablesHeaderHeight = 20;
-    constexpr int kCableModeRowHeight = 26;
-    constexpr int kCableSwatchRowHeight = 56;
-    constexpr int kResetButtonHeight = 26;
-    constexpr int kGap = 10;
-    const int fixedHeightBelowGallery = kGap                                 // divider gap before button row
-                                        + 1                                  // divider itself
-                                        + kGap                               // divider gap after
-                                        + kButtonRowHeight + kGap + 1 + kGap // divider after button row
-                                        + kCablesHeaderHeight + 6 + kCableModeRowHeight + 6 + kCableSwatchRowHeight +
-                                        6 + kResetButtonHeight;
-
-    // ---- 2. Theme Gallery (framed, gets the remaining flexible space) ----
+    // ---- 2. Theme Gallery ----
+    // FIXED height now that the tab scrolls (rather than "whatever's left once every other
+    // section's needs are met") — tall enough for ~3 rows of the 48px-high theme list without the
+    // gallery itself immediately demanding a scroll.
+    constexpr int kGalleryHeight = 160;
     themeGallerySectionLabel.setBounds(bounds.removeFromTop(20));
     bounds.removeFromTop(6);
-    const int galleryHeight = juce::jmax(80, bounds.getHeight() - fixedHeightBelowGallery);
-    themeList.setBounds(bounds.removeFromTop(galleryHeight));
+    themeList.setBounds(bounds.removeFromTop(kGalleryHeight));
     addDivider();
 
     // ---- 3. Theme actions ----
-    auto buttonRow = bounds.removeFromTop(kButtonRowHeight);
+    auto buttonRow = bounds.removeFromTop(30);
     openFolderButton.setBounds(buttonRow.removeFromLeft(160));
     buttonRow.removeFromLeft(8);
     reloadButton.setBounds(buttonRow.removeFromLeft(130));
     addDivider();
 
     // ---- 4. Cables ----
-    cablesTitleLabel.setBounds(bounds.removeFromTop(kCablesHeaderHeight));
+    cablesTitleLabel.setBounds(bounds.removeFromTop(20));
     bounds.removeFromTop(6);
 
-    auto cableModeRow = bounds.removeFromTop(kCableModeRowHeight);
+    auto cableModeRow = bounds.removeFromTop(26);
     cableModeLabel.setBounds(cableModeRow.removeFromLeft(70));
     cableModeCombo.setBounds(cableModeRow.removeFromLeft(180));
     bounds.removeFromTop(6);
 
-    cableSwatchRow->setBounds(bounds.removeFromTop(kCableSwatchRowHeight));
+    cableSwatchRow->setBounds(bounds.removeFromTop(56));
     bounds.removeFromTop(6);
 
-    resetCableColoursButton.setBounds(bounds.removeFromTop(kResetButtonHeight).removeFromLeft(170));
+    resetCableColoursButton.setBounds(bounds.removeFromTop(26).removeFromLeft(170));
+    addDivider();
+
+    // ---- 5. Piano roll notes ----
+    noteColoursTitleLabel.setBounds(bounds.removeFromTop(20));
+    bounds.removeFromTop(6);
+
+    noteSwatchRow->setBounds(bounds.removeFromTop(44));
+    bounds.removeFromTop(6);
+
+    resetNoteColoursButton.setBounds(bounds.removeFromTop(26).removeFromLeft(170));
+
+    // No explicit trailing margin needed: the initial .reduced(12) above already reserved 12px at
+    // BOTH the top and the bottom of the scratch rect, so kScratchHeight - bounds.getHeight() below
+    // already includes that bottom margin even though nothing was laid out into it.
+    const int consumedHeight = kScratchHeight - bounds.getHeight();
+    contentHost.setBounds(0, 0, juce::jmax(layoutWidth, contentViewport.getWidth()),
+                          juce::jmax(consumedHeight, contentViewport.getHeight()));
 }
 
 juce::String AppearanceSettingsTab::getSelectedThemeId() const {
@@ -452,6 +572,8 @@ void AppearanceSettingsTab::changeListenerCallback(juce::ChangeBroadcaster* sour
     // Un-overridden swatches follow the theme, so they have to be redrawn too.
     if (cableSwatchRow)
         cableSwatchRow->repaint();
+    if (noteSwatchRow)
+        noteSwatchRow->repaint();
 }
 
 //==============================================================================
@@ -569,4 +691,72 @@ void AppearanceSettingsTab::openCableColourPicker(int index, juce::Rectangle<int
 
     // The callout takes ownership of the selector; we keep only activeSwatchIndex.
     juce::CallOutBox::launchAsynchronously(std::move(selector), screenArea, nullptr);
+}
+
+//==============================================================================
+// Piano roll note colours
+//==============================================================================
+
+juce::String AppearanceSettingsTab::getNoteSwatchLabel(int pitchClass) const {
+    if (pitchClass < 0 || pitchClass >= kNoteSwatchCount)
+        return {};
+    return kPitchClassNames[pitchClass];
+}
+
+juce::Colour AppearanceSettingsTab::getNoteSwatchColour(int pitchClass) const {
+    if (pitchClass < 0 || pitchClass >= kNoteSwatchCount)
+        return juce::Colours::transparentBlack;
+    if (const auto& o = noteColourOverrides.perPitchClass[(size_t)pitchClass])
+        return *o;
+    return themeManager.getActiveTheme().colors.noteFill;
+}
+
+bool AppearanceSettingsTab::isNoteSwatchOverridden(int pitchClass) const noexcept {
+    if (pitchClass < 0 || pitchClass >= kNoteSwatchCount)
+        return false;
+    return noteColourOverrides.perPitchClass[(size_t)pitchClass].has_value();
+}
+
+void AppearanceSettingsTab::setNoteSwatchColour(int pitchClass, juce::Colour colour) {
+    if (pitchClass < 0 || pitchClass >= kNoteSwatchCount)
+        return;
+    noteColourOverrides.set(pitchClass, colour);
+    synth::ui::saveNoteColourOverrides(*appProperties.getUserSettings(), noteColourOverrides);
+    if (noteSwatchRow)
+        noteSwatchRow->repaint();
+}
+
+void AppearanceSettingsTab::resetNoteSwatch(int pitchClass) {
+    if (pitchClass < 0 || pitchClass >= kNoteSwatchCount)
+        return;
+    noteColourOverrides.clear(pitchClass);
+    synth::ui::saveNoteColourOverrides(*appProperties.getUserSettings(), noteColourOverrides);
+    if (noteSwatchRow)
+        noteSwatchRow->repaint();
+}
+
+void AppearanceSettingsTab::resetAllNoteColours() {
+    noteColourOverrides.clearAll();
+    synth::ui::saveNoteColourOverrides(*appProperties.getUserSettings(), noteColourOverrides);
+    if (noteSwatchRow)
+        noteSwatchRow->repaint();
+}
+
+juce::Rectangle<int> AppearanceSettingsTab::getNoteSwatchRowBoundsForTest() const {
+    return noteSwatchRow ? noteSwatchRow->getBounds() : juce::Rectangle<int>();
+}
+
+void AppearanceSettingsTab::openNoteColourPicker(int pitchClass, juce::Rectangle<int> screenArea) {
+    if (pitchClass < 0 || pitchClass >= kNoteSwatchCount)
+        return;
+
+    const juce::Colour initial = getNoteSwatchColour(pitchClass);
+    synth::ui::ColourPickerPopup::show(
+        screenArea, initial, appProperties.getUserSettings(),
+        [this, pitchClass](juce::Colour c) { setNoteSwatchColour(pitchClass, c); },
+        [](juce::Colour) {
+            // Every preview already persisted (setNoteSwatchColour saves on each change) — the
+            // final commit here would just repeat the last preview's write, so there is nothing
+            // left to do once the popup closes.
+        });
 }

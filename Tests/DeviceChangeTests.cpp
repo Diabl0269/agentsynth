@@ -37,7 +37,6 @@
 #include <memory>
 #include <vector>
 
-#if SYNTH_ENABLE_TIMELINE
 #include "../Source/AI/AIProvider.h"
 #include "../Source/AI/AIStateMapper.h"
 #include "../Source/Modules/TimelineAudioSourceModule.h"
@@ -46,7 +45,6 @@
 #include "../Source/Timeline/TimelineDoc.h"
 #include "MainComponent.h"
 #include <juce_audio_formats/juce_audio_formats.h>
-#endif
 
 namespace {
 
@@ -128,8 +126,6 @@ TEST(DeviceChangeTest, MusicalPositionSurvivesRateChange_Stopped) {
 // ============================================================================
 // 2. The streamer's explicit invalidate
 // ============================================================================
-
-#if SYNTH_ENABLE_TIMELINE
 
 namespace {
 
@@ -317,13 +313,9 @@ TEST(DeviceChangeTest, StreamerRefillsAtNewMappingWithoutGarbage) {
                       << " — the refilled ring must serve the NEW rate's mapping exactly";
 }
 
-#endif // SYNTH_ENABLE_TIMELINE
-
 // ============================================================================
 // 3/4. In-flight takes finalized at the change (MainComponent's record flow)
 // ============================================================================
-
-#if SYNTH_ENABLE_TIMELINE
 
 namespace {
 
@@ -662,8 +654,6 @@ TEST_F(DeviceChangeFlowTest, MidiTakeCommittedAtFormatChange) {
     engine.audioDeviceStopped();
 }
 
-#endif // SYNTH_ENABLE_TIMELINE
-
 // ============================================================================
 // 5. Duplex refusal's reachable half: zero active input channels survive
 // ============================================================================
@@ -708,8 +698,6 @@ TEST(DeviceChangeTest, ZeroInputDeviceSurvives) {
 // 6. Metronome voice pool reset on rate change
 // ============================================================================
 
-#if SYNTH_ENABLE_TIMELINE
-
 TEST(DeviceChangeTest, MetronomeVoicesResetOnRateChange) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
     engine.initialise();
@@ -735,8 +723,6 @@ TEST(DeviceChangeTest, MetronomeVoicesResetOnRateChange) {
     engine.releaseFromHost();
     engine.shutdown();
 }
-
-#endif // SYNTH_ENABLE_TIMELINE
 
 // ============================================================================
 // 7. Hook order pinned

@@ -154,9 +154,8 @@ public:
     static constexpr float kFeedbackPeakThreshold = 0.97f;
     static constexpr double kFeedbackSustainSeconds = 0.25;
 
-    // Runtime companion to SYNTH_ENABLE_TIMELINE: lets the transport be frozen/resumed without
-    // a rebuild. Only meaningful when the flag is compiled in — see renderNextBlock(). Default true
-    // (today's ticking behaviour) so a build that never touches this setting is unaffected.
+    // Lets the transport be frozen/resumed at runtime — see renderNextBlock(). Default true
+    // (today's ticking behaviour) so a caller that never touches this setting is unaffected.
     void setTransportEnabled(bool enabled) noexcept;
     bool isTransportEnabled() const noexcept;
 
@@ -211,9 +210,8 @@ public:
 
     // The audio -> UI reflection ring. AutomationApplier::applyBlock (renderPass, audio
     // thread) pushes into it; GraphEditor's 30 Hz timer drains it on the message thread to move
-    // sliders without looping back through a parameter write. Always present (even in a
-    // SYNTH_ENABLE_TIMELINE=0 build) so callers never need to null-check it — nothing pushes to it
-    // in that build, so it simply stays empty.
+    // sliders without looping back through a parameter write. Always present so callers never
+    // need to null-check it — if nothing drains it, it simply stays empty.
     synth::AutomationUiFeed& getAutomationUiFeed() noexcept { return automationUiFeed_; }
     const synth::AutomationUiFeed& getAutomationUiFeed() const noexcept { return automationUiFeed_; }
 
@@ -228,8 +226,6 @@ public:
     // stale table keeps automating the nodes it already resolved — safe, because each binding holds
     // a refcounted Node::Ptr, but a node added since the last publish is not automated until the
     // next one. Re-calling it with an unchanged doc is cheap and always correct.
-    //
-    // A no-op in a SYNTH_ENABLE_TIMELINE=0 build.
     void publishTimeline(const synth::TimelineDoc& doc);
 
     // Run the whole per-block sequence (transport tick, snapshot open, MIDI capture,
@@ -260,8 +256,8 @@ public:
     void drainAudioCallbacks() noexcept;
 
     // Registers the sink that records external MIDI into timeline clips. Null by default —
-    // capture is then a no-op. The recorder is called from exactly one site, renderNextBlock's
-    // SYNTH_ENABLE_TIMELINE block, against the SAME buffer the graph itself renders — the collector-
+    // capture is then a no-op. The recorder is called from exactly one site, renderPass's
+    // MIDI-capture step, against the SAME buffer the graph itself renders — the collector-
     // drained (standalone) or host-delivered (hosted) stream, never the ExternalMidiModule push-path
     // copies handleIncomingMidiMessage also makes. See docs/architecture.md's "MIDI recording" note.
     //
@@ -491,8 +487,7 @@ private:
     // Message-thread writes (MainComponent's poll) and audio-thread writes (the guard, on a
     // trip); read on the audio thread each render pass to publish to the transport carrier, and on
     // the message thread by isInputMonitoringEnabled(). Default false: with nothing ever calling
-    // setInputMonitoringEnabled(true) — a SYNTH_ENABLE_TIMELINE=OFF build, or a build with the flag
-    // on but nothing armed — this is exactly today's silent-input behaviour.
+    // setInputMonitoringEnabled(true), this is exactly today's silent-input behaviour.
     std::atomic<bool> inputMonitoringEnabled_{false};
     // Set true by the guard (audio thread) on a trip; consumed (and reset) by
     // consumeFeedbackGuardTripped() (message thread poll).

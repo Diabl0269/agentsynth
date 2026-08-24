@@ -52,9 +52,7 @@ int nodesMissingPlayHead(AudioEngine& engine) {
 // The one clock: tick() happens exactly once per rendered block
 // ============================================================================
 
-// Asserts the timeline integration (tick advances the transport); compiled out with the
-// flag so the flag-OFF CI job stays green.
-#if SYNTH_ENABLE_TIMELINE
+// Asserts the timeline integration: tick advances the transport.
 TEST(AudioEngineTransportTest, HostedEngineTicksTransportOncePerBlock) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
     engine.initialise();
@@ -85,10 +83,8 @@ TEST(AudioEngineTransportTest, HostedEngineTicksTransportOncePerBlock) {
     engine.releaseFromHost();
     engine.shutdown();
 }
-#endif // SYNTH_ENABLE_TIMELINE
 
-// Not gated: prepare() (unlike tick()) always runs regardless of SYNTH_ENABLE_TIMELINE, so this
-// test's assertion holds in both flag states.
+// prepare() (unlike tick()) always runs.
 TEST(AudioEngineTransportTest, PrepareForHostPreparesTransport) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
     engine.initialise();
@@ -105,9 +101,7 @@ TEST(AudioEngineTransportTest, PrepareForHostPreparesTransport) {
 // ============================================================================
 // Playhead installation — once on the graph, re-applied by JUCE to every node
 // ============================================================================
-// Asserts the timeline integration (the playhead is only installed when the flag is on);
-// compiled out with the flag so the flag-OFF CI job stays green.
-#if SYNTH_ENABLE_TIMELINE
+// Asserts the timeline integration: the playhead is installed on the graph.
 
 TEST(AudioEngineTransportTest, PlayHeadInstalledOnEveryNode) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
@@ -189,7 +183,6 @@ TEST(AudioEngineTransportTest, NodeSeesTransportPositionThroughPlayHead) {
     engine.releaseFromHost();
     engine.shutdown();
 }
-#endif // SYNTH_ENABLE_TIMELINE
 
 // ============================================================================
 // Latency is reported, never compensated by us
@@ -214,9 +207,7 @@ TEST(AudioEngineTransportTest, GraphLatencyIsReportedNotCompensated) {
 // ============================================================================
 // Runtime setTransportEnabled() — freeze/resume without a rebuild
 // ============================================================================
-// Not gated: always on, since it exercises the runtime companion to the compile-time flag, which
-// only does anything when the flag is compiled in.
-#if SYNTH_ENABLE_TIMELINE
+// Exercises setTransportEnabled()/isTransportEnabled(), the runtime freeze/resume switch.
 
 TEST(AudioEngineTransportTest, SetTransportEnabledFreezesAndResumesPosition) {
     AudioEngine engine(AudioEngine::HostMode::Hosted);
@@ -246,30 +237,3 @@ TEST(AudioEngineTransportTest, SetTransportEnabledFreezesAndResumesPosition) {
     engine.releaseFromHost();
     engine.shutdown();
 }
-#endif // SYNTH_ENABLE_TIMELINE
-
-// ============================================================================
-// Flag OFF pins "OFF really means off"
-// ============================================================================
-// Compiled only when the flag is OFF: with it on, the transport ticks and this would (correctly)
-// fail, which is exactly why it must not build in the normal (flag-ON) configuration.
-#if !SYNTH_ENABLE_TIMELINE
-
-TEST(AudioEngineTransportTest, FlagOffTransportNeverAdvances) {
-    AudioEngine engine(AudioEngine::HostMode::Hosted);
-    engine.initialise();
-    engine.prepareForHost(kSampleRate, kBlockSize, 0, 2);
-
-    ASSERT_TRUE(engine.getTransport().play());
-    processHostBlocks(engine, 5);
-
-    EXPECT_EQ(samplePositionOf(engine), 0)
-        << "SYNTH_ENABLE_TIMELINE=OFF must compile out the tick — the transport must never advance "
-           "no matter how many blocks render";
-    EXPECT_EQ(engine.getGraph().getPlayHead(), nullptr)
-        << "the playhead must never be installed on the graph when the flag is off";
-
-    engine.releaseFromHost();
-    engine.shutdown();
-}
-#endif // !SYNTH_ENABLE_TIMELINE

@@ -417,6 +417,11 @@ public:
 
     int getVisibleInputPortCount() const override { return kNumChannels; }
     int getVisibleOutputPortCount() const override { return stereoVisibleOutputCount(); }
+    // processBlock consumes note-on/off (see "MIDI: note-on retriggers and transposes" above)
+    // but never writes to the MIDI buffer.
+    bool acceptsMidi() const override { return true; }
+    bool producesMidi() const override { return false; }
+
     ModulationCategory getModulationCategory() const override { return ModulationCategory::Oscillator; }
     ModuleType getModuleType() const override { return ModuleType::Sampler; }
 

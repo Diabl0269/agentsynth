@@ -4,6 +4,7 @@
 #include "../Transport/TransportService.h"
 #include "ScrollPolicy.h"
 #include "Theme/AppLookAndFeel.h"
+#include "UIAnimation.h"
 #include <algorithm>
 #include <cmath>
 
@@ -24,11 +25,17 @@ constexpr double kScrollPixelsPerWheelUnit = 200.0;
 
 constexpr int kSnapComboWidth = 90;
 constexpr int kSnapToggleButtonWidth = 26;
+constexpr int kFollowPlayheadButtonWidth = 26;
 constexpr const char* kTimelineSnapPropertyKey = "timelineSnap";
 constexpr const char* kTimelineSnapEnabledPropertyKey = "timelineSnapEnabled";
+constexpr const char* kTimelineFollowPlayheadPropertyKey = "timelineFollowPlayhead";
 // Item: P (loop the selection) also ARMS looping by default; Preferences can turn the arming off
 // so P only places the locators (Cubase's behaviour). Read at key time — no cached copy to drift.
 constexpr const char* kTimelineLoopSelectionArmsPropertyKey = "timelineLoopSelectionArms";
+// The roll's key-label density (PianoRollComponent::KeyLabelMode). "all" (default) labels every
+// key row; "c" labels only the Cs. Owned by PreferencesSettingsTab's persistX pattern; read here
+// by reloadPianoRollAppearancePrefs().
+constexpr const char* kPianoRollKeyLabelsPropertyKey = "pianoRollKeyLabels";
 
 // the "+ Track" strip at the top of the track-header column. Fixed height — the headers
 // below it scroll, the button never does.
@@ -133,7 +140,8 @@ TimelinePanelComponent::TimelinePanelComponent() {
         auto button = std::make_unique<juce::DrawableButton>(juce::String(editToolName(tool)) + " Tool",
                                                              juce::DrawableButton::ImageOnButtonBackground);
         button->setComponentID("timelineTool" + juce::String(editToolName(tool)));
-        button->setTooltip(juce::String(editToolName(tool)) + " (" + juce::String(editToolKeyDigit(tool)) + ")");
+        // Tooltip text (the CURRENT binding, not this hardcoded digit) is set by
+        // refreshShortcutTooltips() below, once every tool button exists.
         button->setClickingTogglesState(true);
         button->setRadioGroupId(kEditToolRadioGroupId);
         // A tool button must never become the focused component. juce::Button's constructor opts
@@ -157,16 +165,33 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // a clip — the same switch the piano roll's header "Q" and the panel-wide Q key flip.
     addAndMakeVisible(snapToggleButton_);
     snapToggleButton_.setComponentID("timelineSnapToggle");
-    snapToggleButton_.setTooltip("Snap to grid on/off (Q)");
+    // Tooltip text is set by refreshShortcutTooltips() below.
     snapToggleButton_.setClickingTogglesState(false); // the shared view state is the truth
     snapToggleButton_.setToggleState(viewState_.snapEnabled, juce::dontSendNotification);
     snapToggleButton_.onClick = [this] { setSnapEnabled(!viewState_.snapEnabled); };
+
+    // Follow-playhead — sits next to the snap toggle, same external-state pattern: the button
+    // never owns followPlayhead_, it only mirrors it.
+    addAndMakeVisible(followPlayheadButton_);
+    followPlayheadButton_.setComponentID("timelineFollowPlayheadToggle");
+    // Tooltip text is set by refreshShortcutTooltips() below — it used to be the bare "Follow
+    // playhead" with no key hint at all, unlike every one of its siblings.
+    followPlayheadButton_.setClickingTogglesState(false);
+    followPlayheadButton_.setToggleState(followPlayhead_, juce::dontSendNotification);
+    followPlayheadButton_.onClick = [this] { setFollowPlayheadEnabled(!followPlayhead_); };
 
     // Added after everything else but BEFORE the playhead below, so clips draw above the
     // grid (painted by this component's own paint(), which — as a parent — always paints before
     // its children) and below the playhead.
     addAndMakeVisible(clipLaneArea_);
     clipLaneArea_.onClipDoubleClicked = [this](synth::ClipId id) { openPianoRoll(id); };
+    // Edge-scroll during a clip drag moves the SHARED view state; the ruler has no other way to
+    // learn its beats moved (it isn't a drag participant), so this is the one pair-of-repaints
+    // seam every other viewState_ scroll/zoom writer in this class already uses.
+    clipLaneArea_.onViewScrolledByDrag = [this] {
+        ruler_.repaint();
+        repaint();
+    };
 
     // Same slot as clipLaneArea_ (added right after it, before the playhead), but starts
     // invisible — addChildComponent (not addAndMakeVisible) keeps it hidden until openPianoRoll()
@@ -175,8 +200,17 @@ TimelinePanelComponent::TimelinePanelComponent() {
     pianoRoll_.setComponentID("timelinePianoRoll");
     pianoRoll_.onCloseRequested = [this] { closePianoRoll(); };
     // While the roll is open the ruler mirrors the roll's own mapping (installed in
-    // openPianoRoll()), so every roll zoom/scroll must repaint it.
-    pianoRoll_.onHorizontalViewChanged = [this] { ruler_.repaint(); };
+    // openPianoRoll()), so every roll zoom/scroll must repaint it. The scale-assist panel opening/
+    // closing is ALSO a mapping change (it moves leftGutterWidth()), so the override's x-offset has
+    // to be re-issued too, not just repainted — otherwise the ruler keeps the offset it had when
+    // the roll first opened and drifts from the grid the moment the panel toggles. Guarded on
+    // isOpen(): closePianoRoll() clears the override itself and this must never re-install it
+    // behind that call.
+    pianoRoll_.onHorizontalViewChanged = [this] {
+        if (pianoRoll_.isOpen())
+            ruler_.setMappingOverride(&pianoRoll_.getRollViewState(), pianoRoll_.leftGutterWidth());
+        ruler_.repaint();
+    };
     // The roll's Q button / Q key flipped the shared snapEnabled: persist it, sync the transport
     // bar's own Q toggle, and repaint the lanes+ruler that also paint the (now present/absent)
     // snap grid.
@@ -239,7 +273,8 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // purpose still takes focus; only the incidental mouse-click grab is disabled.
     for (juce::Component* chrome :
          {static_cast<juce::Component*>(&addTrackButton_), static_cast<juce::Component*>(&snapToggleButton_),
-          static_cast<juce::Component*>(&snapCombo_), static_cast<juce::Component*>(&automationToolPointerButton_),
+          static_cast<juce::Component*>(&followPlayheadButton_), static_cast<juce::Component*>(&snapCombo_),
+          static_cast<juce::Component*>(&automationToolPointerButton_),
           static_cast<juce::Component*>(&automationToolPencilButton_),
           static_cast<juce::Component*>(&automationToolLineButton_),
           static_cast<juce::Component*>(&automationToolEraserButton_),
@@ -260,11 +295,67 @@ TimelinePanelComponent::TimelinePanelComponent() {
     // transport-bar strip).
     addAndMakeVisible(resizeHandle_);
     resizeHandle_.setComponentID("timelineResizeHandle");
+
+    // Every tool button, snapToggleButton_ and followPlayheadButton_ now exist — set their initial
+    // (no-manager-installed, hardcoded-default) tooltip text. setShortcutManager re-runs this once
+    // a real manager is wired, and again on every bindings-changed notification.
+    refreshShortcutTooltips();
 }
 
 TimelinePanelComponent::~TimelinePanelComponent() {
     if (doc_ != nullptr)
         doc_->removeListener(this);
+    if (shortcuts_ != nullptr)
+        shortcuts_->removeChangeListener(this);
+}
+
+void TimelinePanelComponent::setShortcutManager(ShortcutManager* manager) {
+    if (shortcuts_ != nullptr)
+        shortcuts_->removeChangeListener(this);
+    shortcuts_ = manager;
+    if (shortcuts_ != nullptr)
+        shortcuts_->addChangeListener(this);
+    refreshShortcutTooltips();
+}
+
+void TimelinePanelComponent::changeListenerCallback(juce::ChangeBroadcaster*) { refreshShortcutTooltips(); }
+
+void TimelinePanelComponent::refreshShortcutTooltips() {
+    // The tool-strip action ids, index-aligned with EditTool — see ShortcutManager::resetToDefaults.
+    auto actionIdForTool = [](EditTool tool) -> juce::String {
+        switch (tool) {
+        case EditTool::Select:
+            return "timelineToolSelect";
+        case EditTool::Split:
+            return "timelineToolSplit";
+        case EditTool::Glue:
+            return "timelineToolGlue";
+        case EditTool::Erase:
+            return "timelineToolErase";
+        case EditTool::Mute:
+            return "timelineToolMute";
+        case EditTool::Draw:
+            return "timelineToolDraw";
+        }
+        return "timelineToolSelect";
+    };
+    for (auto tool : kAllEditTools) {
+        if (auto* button = toolButtons_[(std::size_t)tool].get()) {
+            const auto fallback = juce::KeyPress('0' + editToolKeyDigit(tool), juce::ModifierKeys::noModifiers, 0);
+            button->setTooltip(synth::ui::formatShortcutHint(
+                editToolName(tool), shortcutHintFor(shortcuts_, actionIdForTool(tool), fallback)));
+        }
+    }
+
+    snapToggleButton_.setTooltip(synth::ui::formatShortcutHint(
+        "Snap to grid on/off",
+        shortcutHintFor(shortcuts_, "timelineSnapToggle", juce::KeyPress('q', juce::ModifierKeys::noModifiers, 0))));
+
+    // "Follow playhead" used to carry no key hint at all — the ONE sibling in this strip that
+    // didn't say its own shortcut.
+    followPlayheadButton_.setTooltip(synth::ui::formatShortcutHint(
+        "Follow playhead", shortcutHintFor(shortcuts_, "timelineFollowPlayheadToggle",
+                                           juce::KeyPress('f', juce::ModifierKeys::noModifiers, 0))));
 }
 
 //==============================================================================
@@ -285,6 +376,25 @@ void TimelinePanelComponent::updateFromTransport(const synth::TransportService::
     ++transportUpdateCount_;
     playhead_.updateFromTransport(snapshot, outputLatencySeconds);
     transportBar_.updateFromTransport(snapshot);
+
+    // Follow playhead: page-flip the view so the (latency-compensated) playhead stays on screen —
+    // gated on all four of playing/enabled/roll-closed/no-drag-in-flight, so a stopped transport,
+    // the feature switched off, the piano roll open (its own follow wiring lands in a later wave)
+    // or a clip drag in progress all cost zero work here. No new timer: this rides the SAME 10 Hz
+    // poll every other transport-driven repaint in this class does.
+    if (followPlayhead_ && snapshot.playing && !pianoRoll_.isOpen() && !clipLaneArea_.isDragInProgress() &&
+        viewState_.pixelsPerBeat > 0.0) {
+        const double playheadBeat = playhead_.getDrawnBeat();
+        const double visibleBeats = (double)gridLanesBounds_.getWidth() / viewState_.pixelsPerBeat;
+        const double lastVisibleBeat = viewState_.firstVisibleBeat + visibleBeats;
+        if (playheadBeat < viewState_.firstVisibleBeat || playheadBeat > lastVisibleBeat) {
+            // The playhead lands ~10% into the new page rather than flush against its left edge,
+            // so the music that follows it is immediately visible instead of starting at the seam.
+            viewState_.firstVisibleBeat = std::max(0.0, playheadBeat - 0.1 * visibleBeats);
+            ruler_.repaint();
+            repaint();
+        }
+    }
 
     // Nothing else repaints the ruler when the time signature or the loop range changes from
     // OUTSIDE its own mouse gestures (a preset/bundle load, a host tempo map, the transport
@@ -376,9 +486,20 @@ void TimelinePanelComponent::applyToolStripTheme() {
             button->setColour(juce::DrawableButton::backgroundOnColourId, lf->getTheme().colors.toolActive);
         }
     }
+
+    // Same theme re-skin for the follow-playhead toggle: null-guarded on both counts (no themed
+    // LnF in a headless build; getIcon returns nullptr when the asset library isn't linked in), so
+    // the button stays imageless but fully functional either way.
+    if (lf != nullptr) {
+        if (auto icon = lf->getIcon(synth::theme::Icon::FollowPlayhead))
+            followPlayheadButton_.setImages(icon.get());
+        followPlayheadButton_.setColour(juce::DrawableButton::backgroundOnColourId, lf->getTheme().colors.toolActive);
+    }
 }
 
 void TimelinePanelComponent::lookAndFeelChanged() { applyToolStripTheme(); }
+
+void TimelinePanelComponent::parentHierarchyChanged() { applyToolStripTheme(); }
 
 //==============================================================================
 void TimelinePanelComponent::openPianoRoll(synth::ClipId id) {
@@ -389,9 +510,11 @@ void TimelinePanelComponent::openPianoRoll(synth::ClipId id) {
     clipLaneArea_.setVisible(false);
     pianoRoll_.setVisible(true);
     pianoRoll_.grabKeyboardFocus();
-    // The ruler now labels the ROLL's beats (offset by its keys gutter), so the bar numbers above
-    // show the edited clip's real timeline position instead of wherever the lanes were scrolled.
-    ruler_.setMappingOverride(&pianoRoll_.getRollViewState(), PianoRollComponent::kKeysColumnWidth);
+    // The ruler now labels the ROLL's beats (offset by its keys gutter, plus the scale-assist
+    // panel's width while THAT is open too — see PianoRollComponent::leftGutterWidth), so the bar
+    // numbers above show the edited clip's real timeline position instead of wherever the lanes
+    // were scrolled.
+    ruler_.setMappingOverride(&pianoRoll_.getRollViewState(), pianoRoll_.leftGutterWidth());
     // Which rows of the overlay are still its own just changed — one repaint, on a user action,
     // never per tick.
     playhead_.repaint();
@@ -840,6 +963,14 @@ bool TimelinePanelComponent::keyPressed(const juce::KeyPress& key) {
         return true;
     }
 
+    // F = follow playhead on/off — the transport strip's follow button as a key, panel-scoped for
+    // the same reason as Q: it has to work whichever timeline surface has focus, the roll included
+    // (setFollowPlayheadEnabled already persists the choice and forwards the flag into the roll).
+    if (matchesAction(key, "timelineFollowPlayheadToggle", plainKey('f'))) {
+        setFollowPlayheadEnabled(!isFollowPlayheadEnabled());
+        return true;
+    }
+
     // P = loop the selection. With the roll open the "selection" is the edited clip; otherwise the
     // lane area already handles P itself when focused — this is the fallback for other focus
     // targets inside the panel (same span, same setLoop the lane's callback performs).
@@ -1010,9 +1141,31 @@ void TimelinePanelComponent::setApplicationProperties(juce::ApplicationPropertie
         appProperties_->getUserSettings()->getBoolValue(kTimelineSnapEnabledPropertyKey, viewState_.snapEnabled);
     snapToggleButton_.setToggleState(viewState_.snapEnabled, juce::dontSendNotification);
 
+    followPlayhead_ =
+        appProperties_->getUserSettings()->getBoolValue(kTimelineFollowPlayheadPropertyKey, followPlayhead_);
+    followPlayheadButton_.setToggleState(followPlayhead_, juce::dontSendNotification);
+    pianoRoll_.setFollowPlayhead(followPlayhead_);
+
     // A pure forward — the transport bar owns and persists its own two keys. See this
     // method's header comment.
     transportBar_.setApplicationProperties(props);
+
+    // Scale-panel visibility + user scales are the ROLL's own PropertiesFile-backed state (see
+    // PianoRollComponent::setPropertiesFile); key-labels and note-colour overrides are read here.
+    pianoRoll_.setPropertiesFile(appProperties_->getUserSettings());
+    reloadPianoRollAppearancePrefs();
+}
+
+void TimelinePanelComponent::reloadPianoRollAppearancePrefs() {
+    if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
+        return;
+    auto& settings = *appProperties_->getUserSettings();
+
+    const auto keyLabels = settings.getValue(kPianoRollKeyLabelsPropertyKey, "all");
+    pianoRoll_.setKeyLabelMode(keyLabels.equalsIgnoreCase("c")
+                                   ? synth::ui::PianoRollComponent::KeyLabelMode::OctavesOnly
+                                   : synth::ui::PianoRollComponent::KeyLabelMode::AllNotes);
+    pianoRoll_.setNoteColourOverrides(synth::ui::loadNoteColourOverrides(settings));
 }
 
 bool TimelinePanelComponent::setSnapValue(TimelineViewState::Snap value) {
@@ -1065,6 +1218,20 @@ void TimelinePanelComponent::persistSnapChoice() {
         return;
     appProperties_->getUserSettings()->setValue(kTimelineSnapPropertyKey, (int)viewState_.snap);
     appProperties_->getUserSettings()->setValue(kTimelineSnapEnabledPropertyKey, viewState_.snapEnabled);
+    appProperties_->saveIfNeeded();
+}
+
+void TimelinePanelComponent::setFollowPlayheadEnabled(bool enabled) {
+    followPlayhead_ = enabled;
+    followPlayheadButton_.setToggleState(enabled, juce::dontSendNotification);
+    pianoRoll_.setFollowPlayhead(enabled);
+    persistFollowPlayheadChoice();
+}
+
+void TimelinePanelComponent::persistFollowPlayheadChoice() {
+    if (appProperties_ == nullptr || appProperties_->getUserSettings() == nullptr)
+        return;
+    appProperties_->getUserSettings()->setValue(kTimelineFollowPlayheadPropertyKey, followPlayhead_);
     appProperties_->saveIfNeeded();
 }
 
@@ -1324,6 +1491,8 @@ void TimelinePanelComponent::resized() {
     auto transportBar = transportBarBounds_.withTrimmedTop(kResizeHandleHeight);
     snapCombo_.setBounds(transportBar.removeFromRight(kSnapComboWidth).reduced(2));
     snapToggleButton_.setBounds(transportBar.removeFromRight(kSnapToggleButtonWidth).reduced(2));
+    // Follow-playhead sits immediately left of the snap toggle — see its member comment.
+    followPlayheadButton_.setBounds(transportBar.removeFromRight(kFollowPlayheadButtonWidth).reduced(2));
     // The tool strip sits immediately left of the snap controls: both are "how the next edit
     // behaves" chrome, so they read as one group, and neither pushes the transport controls off
     // their left-aligned home. Laid out left-to-right in EditTool order (1, 3, 4, 5, 7, 8).
@@ -1353,6 +1522,24 @@ void TimelinePanelComponent::paint(juce::Graphics& g) {
     // Thin top border separating the panel from the graph editor above it.
     g.setColour(border);
     g.drawHorizontalLine(0, 0.0f, (float)getWidth());
+
+    // Follow-playhead toggle: an always-visible pill outline, drawn HERE in the PARENT's paint()
+    // (which always runs before the child's — same ordering the grid/clip-lane-area comment above
+    // relies on) rather than trusting either the button's own resting-state fill or its icon
+    // having loaded. AppLookAndFeel::drawDrawableButton's off/non-hovered fill is deliberately
+    // transparent for a plain DrawableButton, and applyToolStripTheme() may not have found a
+    // themed LookAndFeel by the time it first ran (see parentHierarchyChanged() above) — or this
+    // build may simply have no icon asset linked at all. Either way the button painted NOTHING at
+    // rest: present in the tree and clickable, but genuinely invisible — the reported bug.
+    // snapToggleButton_ never has this problem because a plain TextButton always gets
+    // AppLookAndFeel::drawButtonBackground's pill+border fill; this gives the one DrawableButton
+    // on the strip with no text label to fall back on that same always-on affordance.
+    if (const auto followBounds = followPlayheadButton_.getBounds().toFloat(); !followBounds.isEmpty()) {
+        g.setColour(border.withAlpha(0.35f));
+        g.fillRoundedRectangle(followBounds, 3.0f);
+        g.setColour(border.withAlpha(0.7f));
+        g.drawRoundedRectangle(followBounds.reduced(0.5f), 3.0f, 1.0f);
+    }
 
     // Bar/beat/subdivision grid across the lanes region (below the ruler), using the SAME shared
     // TimelineViewState the ruler paints from. Colours come from the shared three-level policy in

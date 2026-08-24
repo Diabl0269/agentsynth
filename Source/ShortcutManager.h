@@ -27,9 +27,9 @@ enum CommandIDs {
     // same way togglePlayback below is, so the Settings shortcut list and ShortcutManager's
     // tripwire tests cover it in every build configuration.
     repeatSelection,
-    // Space play/stop. Always registered (even in a SYNTH_ENABLE_TIMELINE=OFF build,
-    // where getCommandInfo reports it inactive) so ShortcutManager's tripwire tests (unique
-    // default, description, command mapping) cover it unconditionally.
+    // Space play/stop. Always registered (getCommandInfo reports it inactive when there is no
+    // transport to toggle) so ShortcutManager's tripwire tests (unique default, description,
+    // command mapping) cover it unconditionally.
     togglePlayback,
     toggleTimelinePanel,
     // ---- Grid division, set outright (Ctrl+Shift+1..8) ----
@@ -160,7 +160,15 @@ inline juce::CommandID getCommandForAction(const juce::String& actionId) {
  *  focus. Graph holds only the verbs that have no meaning anywhere else. */
 enum class ShortcutCategory { General, Graph, Timeline, PianoRoll };
 
-class ShortcutManager {
+// Public juce::ChangeBroadcaster so MULTIPLE surfaces can each react to a rebind independently —
+// TimelinePanelComponent's tool-strip/snap/follow tooltips and (in a future cached-tooltip surface)
+// anyone else, all via addChangeListener(this)/removeChangeListener(this), unsubscribing in their
+// destructors since a ShortcutManager (owned by MainComponent) outlives them. This is DELIBERATELY
+// additive alongside the pre-existing single-slot `onBindingsChanged` callback below (which
+// MainComponent's own ctor already claims for updateCommandShortcuts()) rather than replacing it —
+// a second listener assigning onBindingsChanged would silently clobber MainComponent's own
+// subscription, since a bare std::function has exactly one slot.
+class ShortcutManager : public juce::ChangeBroadcaster {
 public:
     ShortcutManager() {
         for (const auto& entry : getActionTable())
@@ -182,18 +190,25 @@ public:
     }
 
     void saveToProperties() {
-        if (appProperties == nullptr)
-            return;
-        auto* settings = appProperties->getUserSettings();
-        if (settings == nullptr)
-            return;
-
-        for (auto& actionId : actionIds) {
-            settings->setValue("shortcut_" + actionId, encodeKeyPress(bindings.at(actionId)));
+        // Persistence is opt-in (no appProperties/no user-settings file is a legal, permanent
+        // state — see loadFromProperties), but a binding that just changed in memory is real
+        // either way, so the notification below is UNCONDITIONAL: a caller with nothing to persist
+        // to disk still has every live listener told about the change, rather than being silently
+        // skipped alongside the persistence it never asked for.
+        if (appProperties != nullptr) {
+            if (auto* settings = appProperties->getUserSettings()) {
+                for (auto& actionId : actionIds)
+                    settings->setValue("shortcut_" + actionId, encodeKeyPress(bindings.at(actionId)));
+                appProperties->saveIfNeeded();
+            }
         }
-        appProperties->saveIfNeeded();
         if (onBindingsChanged)
             onBindingsChanged();
+        // Synchronous on purpose: binding edits only ever happen on the message thread (the
+        // Settings tab), and the subscribers rebuild tooltip strings — an async post would leave a
+        // window where a just-rebound key shows its old hint, and makes headless tests
+        // non-deterministic (nothing pumps the queue mid-test).
+        sendSynchronousChangeMessage();
     }
 
     juce::KeyPress getBinding(const juce::String& actionId) const {
@@ -264,7 +279,14 @@ public:
         return matches.isEmpty() ? juce::String() : matches[0];
     }
 
-    void setBinding(const juce::String& actionId, const juce::KeyPress& key) { bindings[actionId] = key; }
+    // Broadcasts synchronously (see saveToProperties for why sync): the MUTATION is what the
+    // tooltip subscribers care about, and a caller that rebinds without persisting (tests, any
+    // future programmatic rebind) must still refresh them. A Settings-tab rebind therefore fires
+    // listeners twice (here and in saveToProperties) — the refresh is idempotent and cheap.
+    void setBinding(const juce::String& actionId, const juce::KeyPress& key) {
+        bindings[actionId] = key;
+        sendSynchronousChangeMessage();
+    }
 
     /** The action already using `key` IN THE SAME CATEGORY as `actionId`, or an empty string.
      *
@@ -372,6 +394,8 @@ public:
         bindings["timelineSnapToggle"] = juce::KeyPress('q', juce::ModifierKeys::noModifiers, 0);
         bindings["timelineToggleLoop"] = juce::KeyPress('l', juce::ModifierKeys::noModifiers, 0);
         bindings["timelineLoopSelection"] = juce::KeyPress('p', juce::ModifierKeys::noModifiers, 0);
+        // F mirrors the transport strip's follow-playhead button, panel-scoped like Q/L/P.
+        bindings["timelineFollowPlayheadToggle"] = juce::KeyPress('f', juce::ModifierKeys::noModifiers, 0);
         // Cubase's tool row (see synth::ui::EditTool for why 2, 6 and 9 stay unclaimed). Bare
         // digits: category scoping is what makes that safe next to the Ctrl+Shift+digit grid block
         // below — and modifier equality is exact, so Ctrl+Shift+1 can never match a bare 1.
@@ -428,6 +452,15 @@ public:
         bindings["pianoRollNavPrevNote"] = juce::KeyPress(juce::KeyPress::leftKey, juce::ModifierKeys::altModifier, 0);
         bindings["pianoRollNavNextNote"] = juce::KeyPress(juce::KeyPress::rightKey, juce::ModifierKeys::altModifier, 0);
         bindings["pianoRollQuantise"] = juce::KeyPress('q', juce::ModifierKeys::shiftModifier, 0);
+        // Real ctrlModifier, deliberately NOT commandModifier — "savePreset" already owns Cmd+S, and
+        // this toggle must never be that shortcut wearing a different hat. On macOS the two chords
+        // are genuinely distinct physical keys. On Windows/Linux, where juce::ModifierKeys::
+        // commandModifier IS ctrlModifier, a bare Ctrl+S while the roll has focus toggles the panel
+        // INSTEAD of saving — the same "whichever surface has focus wins" contract
+        // "timelineSnapToggle" already follows for its own bare 'q', and exactly why this is filed
+        // under PianoRoll (a scoped category) rather than General: EveryDefaultBindingIsUnique only
+        // checks within a category, by design.
+        bindings["pianoRollToggleScalePanel"] = juce::KeyPress('s', juce::ModifierKeys::ctrlModifier, 0);
     }
 
     static juce::String keyPressToDisplayString(const juce::KeyPress& key) {
@@ -549,6 +582,8 @@ public:
             return "Toggle Looping";
         if (actionId == "timelineLoopSelection")
             return "Loop the Selection";
+        if (actionId == "timelineFollowPlayheadToggle")
+            return "Toggle Follow Playhead";
         if (actionId == "timelineToolSelect")
             return "Select Tool";
         if (actionId == "timelineToolSplit")
@@ -601,6 +636,8 @@ public:
             return "Select Next Note";
         if (actionId == "pianoRollQuantise")
             return "Quantise Selected Notes";
+        if (actionId == "pianoRollToggleScalePanel")
+            return "Toggle Scale Panel";
         return actionId;
     }
 
@@ -708,6 +745,7 @@ private:
             {"timelineSnapToggle", ShortcutCategory::Timeline},
             {"timelineToggleLoop", ShortcutCategory::Timeline},
             {"timelineLoopSelection", ShortcutCategory::Timeline},
+            {"timelineFollowPlayheadToggle", ShortcutCategory::Timeline},
             {"timelineToolSelect", ShortcutCategory::Timeline},
             {"timelineToolSplit", ShortcutCategory::Timeline},
             {"timelineToolGlue", ShortcutCategory::Timeline},
@@ -734,6 +772,7 @@ private:
             {"pianoRollNavPrevNote", ShortcutCategory::PianoRoll},
             {"pianoRollNavNextNote", ShortcutCategory::PianoRoll},
             {"pianoRollQuantise", ShortcutCategory::PianoRoll},
+            {"pianoRollToggleScalePanel", ShortcutCategory::PianoRoll},
         };
         return table;
     }
@@ -800,3 +839,32 @@ private:
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ShortcutManager)
 };
+
+/** Display text for `actionId`'s CURRENT binding — the shared helper every tooltip that names a
+ *  rebindable key routes through, so a rebind can never leave a tooltip showing a stale key.
+ *
+ *  - `manager` non-null: uses its LIVE binding. An unset/cleared binding is a real state (the user
+ *    deliberately removed the key) and returns an EMPTY string — a tooltip must not claim a key
+ *    that does nothing.
+ *  - `manager` null: uses `fallback` — the same "no manager installed -> the component's own
+ *    hardcoded default" contract every surface's keyPressed()/matchesAction() already follows.
+ *
+ *  Formatting reuses ShortcutManager::keyPressToDisplayString (the "Ctrl + X" / "Shift + X" family
+ *  this app's tooltips already show everywhere via synth::ui::formatShortcutHint) with ONE
+ *  deliberate change: a BARE, unmodified letter renders lowercase ("q", "f", "l", "p") rather than
+ *  upper — every one of this app's single-letter DAW-convention keys (Q/L/P/F, the tool digits) is
+ *  conventionally shown lowercase, and keyPressToDisplayString's upper-casing exists for the
+ *  modifier-chord case, not the bare-letter one. Anything carrying a modifier, or a non-letter key
+ *  (an arrow, a digit, space…), is returned exactly as keyPressToDisplayString spells it. */
+inline juce::String shortcutHintFor(const ShortcutManager* manager, const juce::String& actionId,
+                                    const juce::KeyPress& fallback) {
+    const juce::KeyPress key = manager != nullptr ? manager->getBinding(actionId) : fallback;
+    if (!key.isValid())
+        return {};
+
+    const auto display = ShortcutManager::keyPressToDisplayString(key);
+    const auto code = key.getKeyCode();
+    const bool bareLetter =
+        key.getModifiers() == juce::ModifierKeys() && ((code >= 'a' && code <= 'z') || (code >= 'A' && code <= 'Z'));
+    return bareLetter ? display.toLowerCase() : display;
+}

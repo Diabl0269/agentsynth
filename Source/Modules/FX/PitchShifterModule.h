@@ -256,6 +256,10 @@ public:
         return {{"Pitch", 2}, {"Shift", 3}, {"Mix", 4}, {"Feedback", 5}};
     }
 
+    // Pure audio FX — processBlock never touches the MIDI buffer.
+    bool acceptsMidi() const override { return false; }
+    bool producesMidi() const override { return false; }
+
     ModulationCategory getModulationCategory() const override { return ModulationCategory::FX; }
     ModuleType getModuleType() const override { return ModuleType::PitchShifter; }
 

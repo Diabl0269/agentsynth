@@ -1175,12 +1175,10 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Pitch Shifter",
          "bypassed, dualIO, feedback, fine, mix, muted, outputLevel, pitch, shiftHz, shiftMode, window"},
         {"Poly MIDI", "bypassed, velToGate, voiceSteal"},
-#if SYNTH_ENABLE_TIMELINE
-        // Gated with its factory entry, like Track In below. A pass-through has nothing to
-        // tweak: the inherited bypass is the whole parameter set (and there is deliberately no
-        // mute — muting a tap would silence the patch, which is not what a recorder is for).
+        // A pass-through has nothing to tweak: the inherited bypass is the whole parameter set
+        // (and there is deliberately no mute — muting a tap would silence the patch, which is
+        // not what a recorder is for).
         {"Rec Tap", "bypassed"},
-#endif
         {"Poly Sequencer", "Gate 1, Gate 2, Gate 3, Gate 4, Gate 5, Gate 6, Gate 7, Gate 8, Step 1 Chord, Step 1 Root, "
                            "Step 2 Chord, Step 2 Root, Step 3 Chord, Step 3 Root, Step 4 Chord, Step 4 Root, "
                            "Step 5 Chord, Step 5 Root, Step 6 Chord, Step 6 Root, Step 7 Chord, Step 7 Root, "
@@ -1193,15 +1191,11 @@ TEST(AIStateMapperTest, ParamIdsGolden) {
         {"Sequencer", "F.Env 1, F.Env 2, F.Env 3, F.Env 4, F.Env 5, F.Env 6, F.Env 7, F.Env 8, Gate 1, Gate 2, "
                       "Gate 3, Gate 4, Gate 5, Gate 6, Gate 7, Gate 8, Pitch 1, Pitch 2, Pitch 3, Pitch 4, Pitch 5, "
                       "Pitch 6, Pitch 7, Pitch 8, bpm, bypassed, run, syncToTransport"},
-#if SYNTH_ENABLE_TIMELINE
-        // Gated with its factory entry, like the two above. Every playback value it needs
-        // (gain, fades, trim) lives on the CLIP, not on the node, so the inherited bypass is the
-        // whole parameter set — and there is deliberately no mute, since a muted track is a document
-        // state the module already honours.
+        // Every playback value it needs (gain, fades, trim) lives on the CLIP, not on the node,
+        // so the inherited bypass is the whole parameter set — and there is deliberately no mute,
+        // since a muted track is a document state the module already honours.
         {"Track Audio", "bypassed"},
-        // Gated on the timeline flag, so the row is gated too.
         {"Track In", "bypassed"},
-#endif
         {"VCA", "bypassed, dualIO, gain, muted, poly"},
         {"Voice Mixer", "bypassed, dualIO, level"},
         {"Wavetable", "blend, bypassed, coarse, detune, dualIO, fine, importMode, interpolation, level, muted, "
@@ -1319,14 +1313,12 @@ TEST(AIStateMapperTest, AuthorableModuleTypesGolden) {
 TEST(AIStateMapperTest, UntrustedPatchRejectsInternalOnlyModuleTypes) {
     juce::AudioProcessorGraph graph;
 
-    // "Hosted Plugin" is NOT inside the SYNTH_ENABLE_TIMELINE guard below: hosting is independent
-    // of the timeline, so the type is registered — and must therefore be refused — in every build.
+    // "Hosted Plugin" is unrelated to the timeline: hosting is independent of it, so the type is
+    // registered — and must therefore be refused — regardless.
     juce::StringArray internalTypes = {"Attenuverter", "Mod Slot", "Hosted Plugin"};
-#if SYNTH_ENABLE_TIMELINE
     internalTypes.add("Track In");
     internalTypes.add("Rec Tap");
     internalTypes.add("Track Audio");
-#endif
 
     for (const auto& type : internalTypes) {
         const juce::var json =
@@ -1346,7 +1338,6 @@ TEST(AIStateMapperTest, UntrustedPatchRejectsInternalOnlyModuleTypes) {
     }
 }
 
-#if SYNTH_ENABLE_TIMELINE
 // The other half of the same rule: our OWN saves must still round-trip a Track In node, uuid
 // intact — that uuid is what the timeline track binds to, so losing it orphans the track.
 TEST(AIStateMapperTest, TrustedApplyRoundTripsTrackInWithStableUuid) {
@@ -1379,7 +1370,6 @@ TEST(AIStateMapperTest, TrustedApplyRoundTripsTrackInWithStableUuid) {
 
     EXPECT_EQ(uuidsOf(synth::AIStateMapper::graphToJSON(reloaded)).joinIntoString(","), uuids.joinIntoString(","));
 }
-#endif // SYNTH_ENABLE_TIMELINE
 
 TEST(AIStateMapperTest, GraphToJSONEmitsSchemaVersionAndNodeUuids) {
     juce::AudioProcessorGraph graph;
