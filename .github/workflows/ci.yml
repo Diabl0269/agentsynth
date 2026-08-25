@@ -111,6 +111,10 @@ jobs:
       # ("Rename…" rendered "Renameâ€¦"). A compiler cannot catch it and no test asserted on it.
       # Same deal as the two above: ~1s, no compiler.
       run: bash scripts/tests/check-nonascii-literals.test.sh
+    - name: Test AI eval ratchet
+      # Guards the nightly/manual AIPatchHarness ratchet (P1-11), which never runs here itself
+      # (needs a live model) but is cheap and deterministic to unit test. ~1s, no model, no network.
+      run: bash scripts/tests/ai-eval-ratchet.test.sh
 
   build-and-test:
     name: Build, Test, and Coverage

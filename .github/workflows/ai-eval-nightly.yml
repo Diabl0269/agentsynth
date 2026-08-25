@@ -1,0 +1,139 @@
+# P1-11 — nightly live-model AI patch eval, OFF by default.
+#
+# WHY this exists: Tools/AIPatchHarness measures how often real model output passes
+# validatePatch(). Tests/AIPatchFixtureReplayTests.cpp (P1-10) froze one recording as an offline
+# corpus, which catches a regression in OUR code but can never notice the MODEL getting worse, a
+# prompt edit quietly degrading output, or a new provider behaving differently — that needs real
+# inference. This workflow runs that live measurement on a schedule, with the cost/safety
+# properties below load-bearing, not incidental:
+#
+#   - OFF BY DEFAULT, at the job level. `vars.AI_EVAL_ENABLED` is a repository variable; unset (a
+#     fresh clone, every fork) means the job's `if:` never evaluates true, so `runs-on` never even
+#     resolves and NOTHING here costs anything until a human deliberately flips it on in the repo's
+#     Settings -> Secrets and variables -> Actions -> Variables. Turning it off again is the same
+#     one step in reverse.
+#   - Runs on a SELF-HOSTED runner by default (`vars.AI_EVAL_RUNNER`, default label
+#     "self-hosted"), because the free path is local Ollama on hardware someone already owns and
+#     is paying electricity for either way — see "What this costs" below. Registering that runner
+#     (Settings -> Actions -> Runners -> New self-hosted runner) is a separate, deliberate step;
+#     nothing here does it automatically.
+#   - workflow_dispatch always exists so this can be run by hand — including against local
+#     Ollama with the schedule left off entirely — which is the normal way to use this before
+#     there is revenue to justify a schedule.
+#   - Hard ceilings independent of the switch: AIPatchHarness itself caps --runs at 10 and
+#     requires --max-requests for --provider remote (see Tools/AIPatchHarness/Main.cpp), and this
+#     workflow adds a job-level timeout. A runaway loop cannot bill or run past these regardless
+#     of what triggered the run.
+#   - Reports, never gates. This workflow is not on `pull_request`/`push` and must never become a
+#     required status check — a low/dropping pass rate is a job summary and a ratchet failure
+#     here, never a blocked merge.
+#
+# What this costs:
+#   FREE  — --provider ollama (the default) against a local Ollama instance: only the runner's
+#           own electricity. This is the schedule's intended path.
+#   NOT FREE — --provider remote routes through a running synth-platform API server, which (per
+#           its own INFERENCE_PROVIDER env var) may forward to AWS Bedrock — real, tiny, per-token
+#           spend. --max-requests is mandatory for this path for exactly that reason. Manual
+#           dispatch only; never the schedule.
+#
+# To turn this OFF again: unset (or set to anything other than "true") the AI_EVAL_ENABLED
+# repository variable. The schedule trigger can stay in this file — the job-level `if:` is what
+# actually stops the work.
+
+name: Nightly AI Patch Eval (opt-in)
+
+on:
+  schedule:
+    # 06:00 UTC daily. Inert unless AI_EVAL_ENABLED == 'true' — see the job-level `if:` below.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: 'ollama (free, local) or remote (routes through a synth-platform API server; can reach paid AWS Bedrock)'
+        type: choice
+        options: [ollama, remote]
+        default: ollama
+      model:
+        description: 'Ollama model tag (ignored for provider=remote, which picks its own model server-side)'
+        type: string
+        default: 'gpt-oss:20b'
+      host:
+        description: 'Provider base URL. Leave blank for the harness default (localhost:11434 for ollama, localhost:8787 for remote).'
+        type: string
+        default: ''
+      maxRequests:
+        description: 'Hard request budget for this run. Required by the harness for provider=remote (no silent unlimited default against a paid vendor).'
+        type: string
+        default: '300'
+
+# One run at a time — a live model and (for provider=remote) a metered vendor should never have
+# two invocations racing each other's budget or wall clock.
+concurrency:
+  group: ai-eval-nightly
+  cancel-in-progress: false
+
+jobs:
+  eval:
+    name: AI Patch Eval
+    # The switch. Unset/false means this job — and everything it could cost — never runs, for
+    # BOTH the schedule and a manual dispatch click. This is deliberate: a fork or a fresh clone
+    # must never spend anything just because someone found the "Run workflow" button.
+    if: ${{ vars.AI_EVAL_ENABLED == 'true' }}
+    runs-on: ${{ vars.AI_EVAL_RUNNER || 'self-hosted' }}
+    # Generous but finite: 20 scenarios x up to 10 runs x up to 3 attempts (initial + 2 retries)
+    # each, at up to 240s/request, is a real upper bound — this is the ceiling that stops a stuck
+    # request from holding the runner (and, for provider=remote, the metered vendor call) open
+    # indefinitely, not a tuned expectation of how long a normal run takes.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build AIPatchHarness
+        run: |
+          cmake -S . -B build -DENABLE_AI_HARNESS=ON -DENABLE_TESTS=OFF -DENABLE_PLUGIN=OFF
+          cmake --build build --target AIPatchHarness --parallel
+
+      - name: Run nightly eval
+        id: run_eval
+        env:
+          EVAL_PROVIDER: ${{ inputs.provider || 'ollama' }}
+          EVAL_MODEL: ${{ inputs.model || 'gpt-oss:20b' }}
+          EVAL_HOST: ${{ inputs.host }}
+          EVAL_MAX_REQUESTS: ${{ inputs.maxRequests || '300' }}
+        run: |
+          mkdir -p eval-results
+          args=(--provider "$EVAL_PROVIDER" --model "$EVAL_MODEL" --runs 3 \
+                --max-requests "$EVAL_MAX_REQUESTS" --json eval-results/nightly-run.json)
+          if [ -n "$EVAL_HOST" ]; then
+            args+=(--host "$EVAL_HOST")
+          fi
+          set -o pipefail
+          ./build/Tools/AIPatchHarness/AIPatchHarness "${args[@]}" | tee eval-results/nightly-run.log
+
+      - name: Ratchet against committed baseline
+        if: always() && steps.run_eval.outcome == 'success'
+        env:
+          CURRENT_JSON: eval-results/nightly-run.json
+          # Committed manually once a human is happy with a run — see scripts/ai-eval-ratchet.sh.
+          # Absent today: this step reports and exits 0 until that first baseline exists.
+          BASELINE_JSON: eval-results/ai-eval-baseline.json
+        run: bash scripts/ai-eval-ratchet.sh
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## AI Patch Eval — nightly (provider=${{ inputs.provider || 'ollama' }}, model=${{ inputs.model || 'gpt-oss:20b' }})"
+            echo '```'
+            cat eval-results/nightly-run.log 2>/dev/null || echo "(no output captured — the run step did not complete)"
+            echo '```'
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Upload raw results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-eval-nightly-results
+          path: eval-results/nightly-run.json
+          if-no-files-found: ignore
+          retention-days: 30
