@@ -181,10 +181,16 @@ TEST(ModuleLibraryHelpPopupSeam, ComponentPassesItsShortcutManagerIntoThePopup) 
     auto* popup = dynamic_cast<ModuleLibraryHelpPopup*>(content.get());
     ASSERT_NE(popup, nullptr);
 
+    // The command modifier renders "Cmd" on macOS and "Ctrl" elsewhere — resolve the expected
+    // text through the same formatter the popup uses instead of hard-coding one platform's name.
+    const auto cmdU =
+        ShortcutManager::keyPressToDisplayString(juce::KeyPress('u', juce::ModifierKeys::commandModifier, 0));
+    const auto cmdZ =
+        ShortcutManager::keyPressToDisplayString(juce::KeyPress('z', juce::ModifierKeys::commandModifier, 0));
     const auto lines = popup->getSectionLinesForTest(ModuleLibraryHelpPopup::KeyShortcuts);
     const juce::String joined = lines.joinIntoString(" | ");
-    EXPECT_TRUE(joined.contains("Cmd + U"));
-    EXPECT_FALSE(joined.contains("Cmd + Z"));
+    EXPECT_TRUE(joined.contains(cmdU));
+    EXPECT_FALSE(joined.contains(cmdZ));
 }
 
 // ============================================================================
@@ -229,10 +235,12 @@ TEST(ModuleLibraryHelpContent, ShortcutLinesCountIsWithinTheCuratedRange) {
 }
 
 TEST(ModuleLibraryHelpContent, ShortcutLinesWithNoManagerUseTheDocumentedDefaults) {
+    const auto cmdZ =
+        ShortcutManager::keyPressToDisplayString(juce::KeyPress('z', juce::ModifierKeys::commandModifier, 0));
     const auto lines = ModuleLibraryHelpPopup::shortcutLines(nullptr);
     const juce::String joined = lines.joinIntoString(" | ");
     EXPECT_TRUE(joined.contains("Undo"));
-    EXPECT_TRUE(joined.contains("Cmd + Z"));
+    EXPECT_TRUE(joined.contains(cmdZ));
     EXPECT_TRUE(joined.contains("Redo"));
     EXPECT_TRUE(joined.contains("Toggle Playback"));
     EXPECT_TRUE(joined.contains("Space"));
@@ -249,14 +257,18 @@ TEST(ModuleLibraryHelpContent, RebindingAShortcutChangesItsLineImmediately) {
     for (int i = 0; i < before.size(); ++i)
         if (before[i].startsWith(ShortcutManager::getActionDescription("undo")))
             undoIndex = i;
+    const auto cmdZ =
+        ShortcutManager::keyPressToDisplayString(juce::KeyPress('z', juce::ModifierKeys::commandModifier, 0));
+    const auto cmdU =
+        ShortcutManager::keyPressToDisplayString(juce::KeyPress('u', juce::ModifierKeys::commandModifier, 0));
     ASSERT_GE(undoIndex, 0);
-    EXPECT_TRUE(before[undoIndex].contains("Cmd + Z"));
+    EXPECT_TRUE(before[undoIndex].contains(cmdZ));
 
     manager.setBinding("undo", juce::KeyPress('u', juce::ModifierKeys::commandModifier, 0));
     const auto after = ModuleLibraryHelpPopup::shortcutLines(&manager);
 
-    EXPECT_TRUE(after[undoIndex].contains("Cmd + U"));
-    EXPECT_FALSE(after[undoIndex].contains("Cmd + Z"));
+    EXPECT_TRUE(after[undoIndex].contains(cmdU));
+    EXPECT_FALSE(after[undoIndex].contains(cmdZ));
 }
 
 TEST(ModuleLibraryHelpContent, ClearingAShortcutDropsItsKeyButKeepsTheLabel) {
