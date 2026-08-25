@@ -471,6 +471,18 @@ public:
                    : nullptr;
     }
 
+protected:
+    /** Opens the "+ Track" button's menu (MIDI Track / Audio Track / Add Marker). The default
+     *  implementation shows a real `juce::PopupMenu` via `showMenuAsync`.
+     *
+     *  Protected virtual for the same display-less-runner reason as
+     *  `TimelineRulerComponent::openMarkerContextMenu`: a real menu window needs a display to be
+     *  positioned on, and JUCE dereferences a null one on a headless CI runner. No test reaches this
+     *  today (they all drive `applyAddTrackMenuChoice` directly, which is the documented headless
+     *  seam), but a test that clicked the button would crash exactly the way the marker menu did —
+     *  so the override point exists before someone writes that test. */
+    virtual void openAddTrackMenu();
+
 private:
     // TimelineDoc::Listener — the single trigger for a header rebuild/refresh, AND the
     // clip-lane area's refresh (prunes the clip selection of anything the mutation removed).
@@ -680,7 +692,6 @@ private:
     // The button opens a MIDI/Audio menu rather than adding a MIDI track outright.
     juce::TextButton addTrackButton_{"+ Track"};
 
-    void showAddTrackMenu();
     // The theme's colour for a NEW marker (see addMarkerAtPlayhead). Falls back to the model's own
     // default with no themed LookAndFeel installed, like every other paint-time resolve here.
     juce::uint32 defaultMarkerColourArgb() const;

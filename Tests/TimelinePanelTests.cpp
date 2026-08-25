@@ -607,12 +607,32 @@ namespace {
 
 // A ruler wired to a doc + transport, at 40 px/beat with Beat snap — the same mapping every ruler
 // test above uses, so a pixel figure means the same thing throughout this file.
+// Records the marker context-menu REQUEST instead of opening a real one. A live juce::PopupMenu
+// creates a top-level window, and JUCE positions it against a display it looks up from the mouse
+// point — on a display-less CI runner (the Linux Debug coverage job) that lookup returns null and
+// MenuWindow::calculateWindowPos dereferences it, so a test that reaches the real path SIGSEGVs
+// there while passing on macOS/Windows. Same seam idiom as
+// PianoRollComponent::promptExtendClipToFitNotes.
+class RecordingMarkerRuler : public synth::ui::TimelineRulerComponent {
+public:
+    using synth::ui::TimelineRulerComponent::TimelineRulerComponent;
+
+    int menuRequests = 0;
+    synth::MarkerId lastMenuMarker;
+
+protected:
+    void openMarkerContextMenu(synth::MarkerId id) override {
+        ++menuRequests;
+        lastMenuMarker = id;
+    }
+};
+
 struct MarkerRulerFixture {
     synth::ui::TimelineViewState state;
     synth::TransportService transport;
     synth::TimelineDoc doc;
     AppUndoManager undo;
-    std::unique_ptr<synth::ui::TimelineRulerComponent> ruler;
+    std::unique_ptr<RecordingMarkerRuler> ruler;
 
     MarkerRulerFixture(bool withUndoManager = true) {
         state.pixelsPerBeat = 40.0;
@@ -620,7 +640,7 @@ struct MarkerRulerFixture {
         state.snap = synth::ui::TimelineViewState::Snap::Quarter;
         transport.prepare(48000.0, 512);
 
-        ruler = std::make_unique<synth::ui::TimelineRulerComponent>(state);
+        ruler = std::make_unique<RecordingMarkerRuler>(state);
         ruler->setTransport(&transport);
         ruler->setTimelineDoc(&doc);
         if (withUndoManager)
@@ -944,6 +964,8 @@ TEST(TimelineRulerMarkerTest, RightClickOnAFlagLatchesNothingAndPostsNothing) {
     const auto rightClick = makeClickEvent(*f.ruler, onFlag, juce::ModifierKeys::popupMenuClickModifier);
 
     f.ruler->mouseDown(rightClick);
+    EXPECT_EQ(f.ruler->menuRequests, 1) << "the press opens the menu";
+    EXPECT_EQ(f.ruler->lastMenuMarker, marker) << "...for the marker that was clicked";
     EXPECT_FALSE(f.ruler->getDraggingMarkerForTest().isValid()) << "a right-click must not latch a marker drag";
 
     // The whole release path: this is what used to run postSeekIfChanged() under a STALE latched
@@ -953,6 +975,9 @@ TEST(TimelineRulerMarkerTest, RightClickOnAFlagLatchesNothingAndPostsNothing) {
     f.ruler->mouseUp(rightClick);
     f.transport.tick(512);
 
+    // The release must not open a SECOND menu either, and — the actual regression — must not have
+    // run the scrub path that used to dismiss the first one.
+    EXPECT_EQ(f.ruler->menuRequests, 1);
     EXPECT_EQ(f.ruler->getSeekPostCountForTest(), 0) << "a right-click never scrubs the playhead";
     EXPECT_DOUBLE_EQ(f.transport.getPositionSnapshot().ppq, posBefore);
     EXPECT_DOUBLE_EQ(f.transport.getPositionSnapshot().loopStartPpq, 1.0) << "and never moves a locator";
@@ -978,6 +1003,7 @@ TEST(TimelineRulerMarkerTest, RightClickOffAFlagDoesNotSeekOrLoop) {
     }
     f.transport.tick(512);
 
+    EXPECT_EQ(f.ruler->menuRequests, 0) << "off a flag there is no marker menu to open";
     EXPECT_EQ(f.ruler->getSeekPostCountForTest(), 0);
     EXPECT_DOUBLE_EQ(f.transport.getPositionSnapshot().ppq, posBefore);
     EXPECT_DOUBLE_EQ(f.transport.getPositionSnapshot().loopStartPpq, 1.0);

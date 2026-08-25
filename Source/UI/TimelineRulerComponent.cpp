@@ -167,7 +167,7 @@ bool TimelineRulerComponent::handleMarkerMouseDown(const juce::MouseEvent& e) {
         return false;
 
     if (e.mods.isPopupMenu()) {
-        showMarkerContextMenu(id);
+        openMarkerContextMenu(id);
         return true;
     }
 
@@ -316,7 +316,7 @@ TimelineRulerComponent::createMarkerColourPickerForTest(synth::MarkerId id) {
     return buildMarkerColourPicker(id);
 }
 
-void TimelineRulerComponent::showMarkerContextMenu(synth::MarkerId id) {
+void TimelineRulerComponent::openMarkerContextMenu(synth::MarkerId id) {
     if (doc_ == nullptr || doc_->getMarker(id) == nullptr)
         return;
 

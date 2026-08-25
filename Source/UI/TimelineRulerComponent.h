@@ -290,13 +290,29 @@ public:
     // How many locateBeat() calls the scrub path has actually posted — proves the dedupe throttle.
     int getSeekPostCountForTest() const noexcept { return seekPostCount_; }
 
+protected:
+    /** Opens the marker's right-click menu (Rename… / Change colour… / Delete). The default
+     *  implementation builds a `juce::PopupMenu` and shows it with `showMenuAsync`.
+     *
+     *  A protected virtual for the same reason `PianoRollComponent::promptExtendClipToFitNotes` and
+     *  `requestRepaintStrip` are: this creates a REAL top-level window, and a display-less CI runner
+     *  has no display for JUCE to position it on — `MenuWindow::calculateWindowPos` calls
+     *  `getParentArea`, `getDisplayForPoint` returns null there, and the positioning maths
+     *  dereferences it (SIGSEGV on the Linux Debug coverage job, green on macOS/Windows where a
+     *  display exists). A headless test therefore overrides this, records the request and the marker
+     *  id it was asked for, and asserts through `applyMarkerContextChoice` — never through a real
+     *  window. Production behaviour is unchanged.
+     *
+     *  `id` is CAPTURED here and carried into every menu item, so each acts on the marker that was
+     *  right-clicked rather than on whatever is under the pointer when the item is finally chosen. */
+    virtual void openMarkerContextMenu(synth::MarkerId id);
+
 private:
     // ---- Markers ----
     // The ONE undo seam every marker mutation goes through: with a manager installed the mutation
     // is one recordTimelineChange step, without one it applies directly. Same shape as
     // TimelineTrackHeaderComponent::performEdit.
     void performMarkerEdit(const std::function<void()>& mutation);
-    void showMarkerContextMenu(synth::MarkerId id);
     std::unique_ptr<synth::ui::ColourPickerPopup> buildMarkerColourPicker(synth::MarkerId id);
     void finishMarkerRename(bool commit);
     void cancelMarkerRename() { finishMarkerRename(false); }

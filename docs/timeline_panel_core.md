@@ -355,13 +355,32 @@ The marker context menu appeared for a split second and then dismissed itself, b
 `TimelineClipLaneArea` never had the problem because its `mouseDown` gates the whole gesture path
 behind `if (!e.mods.isLeftButtonDown()) return;`, so a right-click there latches nothing and its
 `mouseDrag`/`mouseUp` are structurally inert. The ruler now mirrors that: `mouseDown`, `mouseDrag`
-and `mouseUp` all return early on `e.mods.isPopupMenu()`, and `showMarkerContextMenu` uses a plain
+and `mouseUp` all return early on `e.mods.isPopupMenu()`, and `openMarkerContextMenu` uses a plain
 `juce::PopupMenu::Options()` exactly as `showClipContextMenu` does — no `withTargetComponent`, which
 on a full-width 24-to-30 px strip also anchored the menu somewhere unrelated to the flag clicked.
 A side effect worth naming: right-clicking the ruler used to **seek the playhead**, for the same
 reason. It no longer does. Pinned by `TimelineRulerMarkerTest.RightClickOnAFlagLatchesNothingAnd-
-PostsNothing` and `RightClickOffAFlagDoesNotSeekOrLoop` (the harness cannot observe a
-`juce::PopupMenu`'s lifetime, so these pin the gesture-state invariant instead).
+PostsNothing` and `RightClickOffAFlagDoesNotSeekOrLoop`.
+
+**Opening the menu is a protected virtual (`openMarkerContextMenu`), and that is a CI requirement,
+not a style choice.** A live `juce::PopupMenu` creates a real top-level window, and JUCE positions it
+against a display it looks up from the mouse point. On a display-less runner — the Linux Debug
+coverage job — that lookup returns null and `MenuWindow::calculateWindowPos` dereferences it:
+**SIGSEGV**, while macOS and Windows stay green because they have a display. The first version of the
+right-click tests reached the real path and crashed CI for exactly this reason (round 2's tests never
+exercised it, which is why the trap only sprang once the gesture was covered). The tests now
+subclass the ruler and override this to record `(menuRequests, lastMenuMarker)`, asserting *which
+marker the menu was requested for* alongside the gesture-state invariants, and drive the outcomes
+through `applyMarkerContextChoice`. Production behaviour is unchanged. Same seam idiom as
+`PianoRollComponent::promptExtendClipToFitNotes` and `requestRepaintStrip`.
+
+`TimelinePanelComponent::openAddTrackMenu` is the same seam for the `"+ Track"` menu. No test reaches
+it today (they all drive `applyAddTrackMenuChoice`, the documented headless entry point), but a test
+that clicked the button would crash identically — the override point exists before someone writes
+that test. Those two are the only real-window creations under the panel and the ruler; the marker
+colour picker's `CallOutBox` is launched from inside `openMarkerContextMenu`'s own menu item, so the
+override covers it too, and both inline rename editors are ordinary child components with no window
+of their own.
 
 | Gesture | Effect |
 |---|---|

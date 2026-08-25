@@ -497,6 +497,18 @@ protected:
     // one snap cell repaints nothing at all.
     virtual void requestToolPreviewRepaint(juce::Rectangle<int> region);
 
+    /** Opens a clip's right-click menu. The default implementation shows a real
+     *  `juce::PopupMenu` via `showMenuAsync`.
+     *
+     *  Protected virtual for the display-less-runner reason spelled out on
+     *  `TimelineRulerComponent::openMarkerContextMenu`: a real menu window has no display to be
+     *  positioned against on the Linux CI job, and JUCE dereferences the null it gets back. No test
+     *  reaches this today — the one right-click in the suite lands on empty lane space, which
+     *  returns before any menu is built, and every menu OUTCOME is driven through
+     *  `applyClipContextChoice` instead — but a test that right-clicked an actual clip would
+     *  SIGSEGV there while passing locally. */
+    virtual void showClipContextMenu(synth::ClipId id, juce::Point<int> localPos);
+
     // ---- Edge auto-scroll (see EdgeAutoScroll.h) ----
     //
     // A gated juce::Timer (kEdgeScrollHz): started only when a Move/Resize drag is active AND the
@@ -639,7 +651,6 @@ private:
     void updateMarquee(juce::Point<int> current);
     void endMarquee();
 
-    void showClipContextMenu(synth::ClipId id, juce::Point<int> localPos);
     void paintClip(juce::Graphics& g, const synth::Clip& clip, const synth::Track& track, int trackIndex,
                    int rowHeight);
     void paintMarquee(juce::Graphics& g);

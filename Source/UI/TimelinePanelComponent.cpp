@@ -105,7 +105,7 @@ TimelinePanelComponent::TimelinePanelComponent() {
     addAndMakeVisible(addTrackButton_);
     addTrackButton_.setComponentID("timelineAddTrackButton");
     addTrackButton_.setTooltip("Add a MIDI or Audio track");
-    addTrackButton_.onClick = [this] { showAddTrackMenu(); };
+    addTrackButton_.onClick = [this] { openAddTrackMenu(); };
 
     addAndMakeVisible(trackHeaderViewport_);
     trackHeaderViewport_.setComponentID("timelineTrackHeaderViewport");
@@ -1148,7 +1148,7 @@ juce::uint32 TimelinePanelComponent::defaultMarkerColourArgb() const {
     return synth::Marker{}.colourArgb; // headless: the model's own amber default
 }
 
-void TimelinePanelComponent::showAddTrackMenu() {
+void TimelinePanelComponent::openAddTrackMenu() {
     juce::PopupMenu menu;
     menu.addItem(kAddMidiTrackMenuId, "MIDI Track");
     menu.addItem(kAddAudioTrackMenuId, "Audio Track");
